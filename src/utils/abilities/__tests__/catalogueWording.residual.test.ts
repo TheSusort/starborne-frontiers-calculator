@@ -161,7 +161,7 @@ describe('residual — Hermes charged (ruled)', () => {
     it('the charge goes to every ally in the pattern, not to Hermes alone', () => {
         const abilities = parseSlot('charged', text);
         expect(sigs(abilities)).toEqual([
-            'buff|ally|on-cast|Cheat Death',
+            'buff|all-allies|on-cast|Cheat Death',
             'charge|all-allies|on-cast|charge',
             'heal|all-allies|on-cast|heal',
         ]);
@@ -170,24 +170,15 @@ describe('residual — Hermes charged (ruled)', () => {
         expect(charge.conditions).toEqual([]);
     });
 
-    // KNOWN GAP: "any ally in the pattern below 40% HP" needs the HP gate read per RECIPIENT. A
-    // cast-path grant's conditions are checked once, against the caster's turn context, whose
-    // target HP is the heal target's (playerTurn.ts's timed-status loop), so the gate here still
-    // asks about that one ally: below 40% grants it to every recipient, above 40% to none.
-    it('Cheat Death keeps the cast-time target-HP gate', () => {
+    // The HP test is asked of EACH recipient (`recipientFilter`), read after the cast's repair
+    // (clause order). Engine behaviour: hermesCheatDeathPerRecipient.integration.test.ts.
+    it('Cheat Death reaches every ally in the pattern, each gated on its own HP below 40%', () => {
         const cheatDeath = parseSlot('charged', text).find((a) => a.type === 'buff')!;
         expect(cheatDeath).toMatchObject({
-            target: 'ally',
+            target: 'all-allies',
             trigger: 'on-cast',
-            conditions: [
-                {
-                    subject: 'hp-threshold',
-                    derivable: true,
-                    hpComparator: 'below',
-                    hpPercent: 40,
-                    hpSubject: 'target',
-                },
-            ],
+            conditions: [],
+            recipientFilter: { hpBelowPct: 40 },
             config: { type: 'buff', buffName: 'Cheat Death' },
         });
     });

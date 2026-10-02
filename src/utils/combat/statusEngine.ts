@@ -1,5 +1,5 @@
 import { ParsedBuffEffects, SelectedGameBuff, StackTrigger } from '../../types/calculator';
-import { Condition, SkillSlot } from '../../types/abilities';
+import { Condition, RecipientFilter, SkillSlot } from '../../types/abilities';
 import type { FactionName } from '../../constants/factions';
 import { conditionsMet, ConditionContext } from '../abilities/evaluateConditions';
 import { isPersistentByName, persistentCapFor } from '../../constants/oneShotPersistentBuffs';
@@ -90,6 +90,11 @@ interface AbilityStatusBase {
      *  per-slot timed loop → `resolveSupportRecipients`), where the engine's actor→faction map is
      *  in scope. Absent → no faction narrowing. */
     factionFilter?: FactionName[];
+    /** Recipient STATE filter copied off the source `Ability.recipientFilter` (Hermes's charged
+     *  "if an ally has less than 40% HP, it grants that ally Cheat Death"). Read live, per
+     *  recipient, by playerTurn's per-slot timed loop at application time — the same seam
+     *  `factionFilter` is intersected at. Absent → no state narrowing. */
+    recipientFilter?: RecipientFilter;
     /** Recipient BOARD-ADJACENCY scope, copied off the source ability's `target`. Set ONLY for
      *  `'adjacent-allies'`; absent for every other target.
      *
@@ -146,6 +151,13 @@ export type RegisteredAbilityStatus =
            *  clause order directly (`buildShipAbilities` sorts each slot by text position).
            *  Enemy-side firing-slot statuses only; absent → applies inline exactly as before. */
           afterDamageClause?: boolean;
+          /** Intra-cast clause order, the self-side twin of `afterDamageClause`: true when THIS
+           *  status carries a recipient HP filter (`recipientFilter.hpBelowPct`) and its clause
+           *  sits AFTER a repair clause in the same firing slot. "Repairs 37% … If an ally has less
+           *  than 40% HP, it grants that ally Cheat Death" reads each recipient's HP once the
+           *  cast's repair has landed, so playerTurn applies a flagged status after its support
+           *  pass. Firing-slot self-side statuses only; absent → applies at the timed loop. */
+          afterHealClause?: boolean;
           /** Hit-counted lifecycle (Quixilver R2 / "Barrier for 1 hit"). When set, the status
            *  additionally expires after this many qualifying hits, spent via consumeStatusHit.
            *  Orthogonal to `duration`: a status with both expires on whichever comes first. A

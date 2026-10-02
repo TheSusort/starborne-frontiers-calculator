@@ -246,7 +246,7 @@ function registerActorAbilityStatuses(
     // actors the engine passes the enemy team's ids so cross-enemy buffs land on the enemy side.
     playerIds: string[],
     // Heal target id (healing mode) — the recipient a single-`ally`/`lowest-hp-ally`
-    // Cheat-Death-family firing-slot grant narrows to (Hermes shape). Absent (DPS mode / no heal
+    // Cheat-Death-family firing-slot grant narrows to (an authored-kit shape). Absent (DPS mode / no heal
     // target): the `'ally'` carve-out falls back to [ownerId], but the `'lowest-hp-ally'`
     // carve-out falls back to [] — the owner is the one answer that selector forbids (see the
     // fence's own comment at the recipients computation below). Irrelevant for every
@@ -292,11 +292,15 @@ function registerActorAbilityStatuses(
         // (its statuses are seeded, not cast), so the tracker stays false there.
         const isFiringSlot = slot.slot === 'active' || slot.slot === 'charged';
         let sawDamageClause = false;
+        // Same walk for a REPAIR clause: a per-recipient HP filter written after it reads the HP
+        // that repair left behind (see the `afterHealClause` stamp below).
+        let sawHealClause = false;
         for (const ability of slot.abilities) {
             const cfg = ability.config;
             // A real damage-dealing clause. A 0-multiplier entry is a structural no-op (the
             // fixtures' "took a turn" placeholder) and orders nothing.
             if (isFiringSlot && cfg.type === 'damage' && cfg.multiplier > 0) sawDamageClause = true;
+            if (isFiringSlot && cfg.type === 'heal' && cfg.pct > 0) sawHealClause = true;
             if (cfg.type !== 'buff' && cfg.type !== 'debuff') continue;
             // #399: the store side comes from the ONE classifier (abilityTargetSide.ts), not a
             // local list. The list this replaced omitted the three selector targets, so a
@@ -356,10 +360,11 @@ function registerActorAbilityStatuses(
             const accumulating = !hitCounted && !!cfg.stackTrigger && cfg.isStackable;
             // Cheat-Death-family grants from a FIRING slot (Hermes/Hayyan charged skills) are
             // cast-path persistent grants, NOT always-on auras: they apply when the slot fires
-            // (per-slot timed loop in playerTurn, gated by conditionsMet at cast time) and never
-            // expire (duration Infinity; the intercept consumes them via cheatDeathConsumed).
-            // Scoped to CHEAT_DEATH_BUFFS — other firing-slot recurring buffs (Panon, Sansi,
-            // Sentinel, Oleander…) keep the aura model (documented in coverage §5).
+            // (per-slot timed loop in playerTurn, gated by conditionsMet at cast time and by any
+            // per-recipient `recipientFilter`) and never expire (duration Infinity; the intercept
+            // consumes them via cheatDeathConsumed). Scoped to CHEAT_DEATH_BUFFS — other
+            // firing-slot recurring buffs (Panon, Sansi, Sentinel, Oleander…) keep the aura model
+            // (documented in coverage §5).
             const castPathCheatDeath =
                 !accumulating &&
                 CHEAT_DEATH_BUFFS.has(cfg.buffName) &&
@@ -367,23 +372,17 @@ function registerActorAbilityStatuses(
             // Player-side recipients (self vs ally/all-allies). Enemy-side statuses ignore this
             // (recipients are only consulted on the self side). Self → caster only; ally/all-allies
             // → every player actor (fixed source order). `playerIds` already includes the caster.
-            // CARVE-OUT (castPathCheatDeath only): a single-`ally` grant narrows to the heal target
-            // (Hermes "grants Cheat Death to the lowest-HP ally"), fallback [ownerId] when no heal
-            // target; `all-allies` (Hayyan) keeps every player. The global ally → all-players rule
-            // for every OTHER cast-path buff is UNCHANGED.
+            // CARVE-OUT (castPathCheatDeath only): a single-`ally` grant narrows to the heal target,
+            // fallback [ownerId] when no heal target; `all-allies` keeps every player (Hayyan, and
+            // Hermes, whose per-recipient HP test rides `recipientFilter`). The global ally →
+            // all-players rule for every OTHER cast-path buff is UNCHANGED. No parsed kit carries
+            // the single-`ally` shape (both corpora, 2026-10-02); it serves authored kits.
             //
             // `'lowest-hp-ally'` joins BOTH ally arms. On the CARVE-OUT arm the match is
-            // purely DEFENSIVE and is expected to stay dead — do not read it as a Hermes fix.
-            // Measured against the corpus (`docs/ship-skills.csv`, 2026-08-20): the only
-            // firing-slot Cheat Death grants are Hermes (charged, `'ally'`) and Hayyan (charged,
-            // `'all-allies'`); Tycho's and Yazid's are passive-slot, which `castPathCheatDeath`
-            // already excludes. Hermes's charged text is "This Unit repairs 37% of its Max HP and
-            // adds 1 charge to the Charged Skill. / If the target has less than 40% HP, it grants
-            // Cheat Death." — it names NO ally selector (no "most missing health" / "lowest
-            // current health" / "the other ally" in any of its five rows), so the parser
-            // cannot turn it into `'lowest-hp-ally'`. `castPathCheatDeath` is keyed on the BUFF
-            // NAME, so nothing else can reach this arm with the variant either. The match exists
-            // so the two single-ally flavours cannot diverge if a future kit does land here.
+            // purely DEFENSIVE: the parser cannot produce a `'lowest-hp-ally'` Cheat Death (no
+            // firing-slot Cheat Death text names an ally selector), and `castPathCheatDeath` is
+            // keyed on the BUFF NAME, so nothing else can reach this arm with the variant either.
+            // The match exists so the two single-ally flavours cannot diverge if a kit lands here.
             //
             // NO OWNER FALLBACK FOR THE SELECTOR. The `'ally'` flavour names the heal ANCHOR, and
             // `[ownerId]` is a sane stand-in for it when there is no anchor (DPS mode —
@@ -482,6 +481,10 @@ function registerActorAbilityStatuses(
                 // here — this function runs at actor construction. Attached only when the ability
                 // carries one; every other ship's status object omits the key entirely.
                 ...(ability.factionFilter ? { factionFilter: ability.factionFilter } : {}),
+                // Recipient STATE filter (held status / HP), narrowed at application time for the
+                // same reason as factionFilter: it is a per-recipient LIVE reading. Attached only
+                // when the ability carries one.
+                ...(ability.recipientFilter ? { recipientFilter: ability.recipientFilter } : {}),
                 // Board-adjacency scope, same shape and same reason as factionFilter above: the
                 // roster-wide `recipients` is narrowed to LIVING board-neighbours at application
                 // time, which is the only place a live roster exists. Attached only for
@@ -540,6 +543,13 @@ function registerActorAbilityStatuses(
                     // victim's incoming damage, so deferring one would change nothing but its
                     // event order). Consumed by playerTurn's timed-enemy application loop.
                     ...(side === 'enemy' && sawDamageClause ? { afterDamageClause: true } : {}),
+                    // Self-side twin: a per-recipient HP filter written after a repair clause
+                    // reads post-repair HP. Consumed by playerTurn's timed-self application loop.
+                    ...(side === 'self' &&
+                    sawHealClause &&
+                    ability.recipientFilter?.hpBelowPct !== undefined
+                        ? { afterHealClause: true }
+                        : {}),
                 };
                 (side === 'self' ? timedSelfBySlot : timedEnemyBySlot).push(status);
             }
@@ -2646,7 +2656,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         'attacker',
         playerIds,
         // Heal target (healing mode) — narrows a single-`ally` Cheat-Death-family firing-slot
-        // grant to the tank (Hermes). Undefined in DPS mode → falls back to the caster.
+        // grant to the tank. Undefined in DPS mode → falls back to the caster.
         input.healTargetId,
         factionOf,
         staticAdjacentAllyIdsFor(playerIds)

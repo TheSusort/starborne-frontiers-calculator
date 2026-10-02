@@ -3404,30 +3404,19 @@ function crossing(rowText: string, pos: number, ability: Ability): boolean {
 }
 
 /**
- * Phase 4c PR 3 (Task 7): Hermes charged "If the target has less than N% HP, it grants Cheat
- * Death". On a match, attaches a derivable TARGET hp-threshold condition (evaluated against the
- * heal recipient's live HP) and narrows the parser's all-allies grant to the single heal target.
- * Caller gates this to the Cheat-Death family; sentence-scoped at the grant's anchor `pos`, so
- * the preceding repair/charge sentence (no target gate) never matches. Returns true when it
- * handled the buff. Reference data: docs/ship-skills.csv.
+ * Hermes charged "If the target / an ally has less than N% HP, it grants (that ally) Cheat
+ * Death". The grant reaches every ally the cast targets (his support pattern, himself included —
+ * owner ruling 2026-10-02: the pattern targets them all equally, so "the target" is each of them),
+ * and the HP test is asked of EACH recipient: an `all-allies` grant carrying
+ * `recipientFilter.hpBelowPct`, not a single cast-time condition. Caller gates this to the
+ * Cheat-Death family; sentence-scoped at the grant's anchor `pos`, so the preceding repair/charge
+ * sentence (no gate) never matches. Returns true when it handled the buff.
  */
 function targetGate(rowText: string, pos: number, ability: Ability): boolean {
     const gate = detectTargetHpGate(rowText, pos);
     if (!gate) return false;
-    // Safe overwrite: the Hermes Cheat-Death grant sentence ("If the target has less than N% HP,
-    // it grants Cheat Death") carries no other parsed condition — detectGrantConditions has no
-    // rule matching the "target has less than N% HP" phrasing, so ability.conditions is always
-    // empty before this point — verified corpus-wide.
-    ability.conditions = [
-        {
-            subject: 'hp-threshold',
-            derivable: true,
-            hpComparator: 'below',
-            hpPercent: gate.hpBelowPct,
-            hpSubject: 'target',
-        },
-    ];
-    if (ability.target === 'all-allies') ability.target = 'ally';
+    ability.target = 'all-allies';
+    ability.recipientFilter = { ...ability.recipientFilter, hpBelowPct: gate.hpBelowPct };
     return true;
 }
 
@@ -3788,10 +3777,10 @@ export function buildShipAbilities(rawShip: Ship): ShipSkills {
         ) {
             // crossing grant handled in the helper; nothing further to do for this buff.
         } else if (
-            // Phase 4c PR 3 (Task 7): Hermes charged "If the target has less than N% HP, it grants
-            // Cheat Death" — the clause names "the target", so spec PR 3 narrows the grant to the
-            // heal target. Only the Cheat-Death family is target-gated; the preceding repair/charge
-            // sentence has no target gate, so detectTargetHpGate returns undefined there.
+            // Hermes charged "If the target / an ally has less than N% HP, it grants Cheat Death" —
+            // a per-recipient HP filter on the all-allies grant (see `targetGate`). Only the
+            // Cheat-Death family is gated this way; the preceding repair/charge sentence has no
+            // such gate, so detectTargetHpGate returns undefined there.
             rowText &&
             pos >= 0 &&
             CHEAT_DEATH_BUFFS.has(buff.buffName) &&

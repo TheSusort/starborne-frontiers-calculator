@@ -105,12 +105,12 @@ export function narrowByFaction(
  *
  * ⚠️ NOT applied at every site `factionFilter` is. That one runs at FOUR (the registration
  * fan-out, the cast-path timed loop, the passive-slot combat-start seed, and the reactive
- * resolver); this one has exactly ONE caller — `footprintFilteredRecipients` in triggers.ts, the
- * REACTIVE path. Both corpus clauses that carry the field (Chimei's R2) are reactive, so nothing
- * is dropped today, and `recipientFilterIsReactiveOnly.test.ts` is the standing guard that keeps
- * it that way. An ability that reached a cast-path seam carrying this field would be silently
- * UN-narrowed — it would over-reach, not vanish, which is the less-bad of the two directions but
- * still wrong. Widen the wiring, don't widen the parser, if a cast clause ever needs it.
+ * resolver); this one runs at TWO — `footprintFilteredRecipients` in triggers.ts (the REACTIVE
+ * path: Chimei's R2) and playerTurn's cast-path timed loop (`applyTimedSelfStatus`: Hermes's
+ * charged Cheat Death). An ability that reached any other seam carrying this field would be
+ * silently UN-narrowed — it would over-reach, not vanish. `recipientFilterCarriers.test.ts` is the
+ * standing guard that keeps every corpus carrier on one of the two wired seams. Widen the wiring,
+ * don't widen the parser, if another clause ever needs it.
  */
 export function narrowByRecipientFilter(
     ids: string[],

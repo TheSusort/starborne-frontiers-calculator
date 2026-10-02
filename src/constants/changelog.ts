@@ -18,6 +18,7 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator and DPS calculator: Judge's defense penetration is no longer counted twice.",
     'Combat simulator: Lingshe gains Stealth only when one of her Bombs lands.',
     'Combat simulator and DPS calculator: Insidiousness also rolls for debuffs a passive inflicts in reaction.',
+    "Combat simulator and healing calculator: Hermes's charged grants Cheat Death to each low ally in range.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

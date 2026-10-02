@@ -92,6 +92,9 @@ const ungatedEffects = (abilities: Ability[]) =>
             // instead of a condition, so they aren't "ungated" (Enforcer, Wusheng, Valkyrie,
             // Lingshe, and the Phase 4c damage-reaction ships: Warden, Guardian, Makoli, …).
             a.trigger === 'on-cast' &&
+            // A per-recipient state filter (Hermes's "if an ally has less than 40% HP, it grants
+            // that ally Cheat Death") IS the gate, read per recipient instead of once per cast.
+            a.recipientFilter === undefined &&
             // Recurring per-turn grants are unconditional by design (not a missing gate).
             a.config.duration !== 'recurring'
     );
@@ -432,8 +435,8 @@ const TRIGGER_RE =
 //
 // HP-threshold nuance (Phase 4c PR 3): the reactive "when HP drops/falls below N%" CROSSING
 // grants (Tycho/Shelter/Los/Kafa/Redeemer) AND Hermes's "If the target has less than N% HP"
-// Cheat-Death gate are parser-modeled (on-hp-threshold-crossed trigger / derivable target-HP
-// condition), so their effects never reach `ungatedEffects` and any that DOES parse ungated is
+// Cheat-Death gate are parser-modeled (on-hp-threshold-crossed trigger / per-recipient
+// `recipientFilter`), so their effects never reach `ungatedEffects` and any that DOES parse ungated is
 // flagged by the detectHpCrossingTrigger / detectTargetHpGate parity guards in `ungatedFinding`
 // before this regex is consulted. The STATIC "while its HP is below N%" gates below stay
 // unmodeled — they carry no (drops|falls) verb, so HP_CROSSING_RE skips them (Los's standing
@@ -489,8 +492,8 @@ export function ungatedFinding(abilities: Ability[], plain: string): string | nu
         if (detectDamageReactionTrigger(plain, namePos)) return clause.trim().slice(0, 160);
         // Parity guard (Phase 4c PR 3): "when HP drops/falls below N%" crossing reactives
         // (Tycho/Shelter/Los/Kafa/Redeemer) ride the LIVE on-hp-threshold-crossed trigger, and
-        // Hermes's "If the target has less than N% HP" Cheat-Death grant carries a derivable
-        // target-HP gate — both are parser-modeled (the trigger/gate IS the gate), so an effect
+        // Hermes's "If the target has less than N% HP" Cheat-Death grant carries a per-recipient
+        // HP filter — both are parser-modeled (the trigger/gate IS the gate), so an effect
         // that parsed UNGATED on-cast from a clause either detector classifies is a regression —
         // flag it BEFORE the reactive skip below can hide it. Both detectors do their own
         // sentence-scoping with Inc./Out. abbreviation masking (same discipline as clauseFor),

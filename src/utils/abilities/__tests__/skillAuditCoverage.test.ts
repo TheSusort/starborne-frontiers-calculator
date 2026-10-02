@@ -79,7 +79,7 @@ describe('ungatedFinding damage-reaction parity', () => {
 /**
  * HP-threshold parity (Phase 4c PR 3): "when HP drops/falls below N%" CROSSING grants
  * (Tycho/Shelter/Los/Kafa/Redeemer) ride the on-hp-threshold-crossed trigger and Hermes's
- * "If the target has less than N% HP" Cheat-Death grant carries a derivable target-HP gate —
+ * "If the target has less than N% HP" Cheat-Death grant carries a per-recipient HP filter —
  * both parser-modeled, so an effect from such a clause that parses UNGATED on-cast is a parser
  * regression the audit must FLAG via the detectHpCrossingTrigger / detectTargetHpGate parity
  * guards. STATIC "while its HP is below N%" gates (no drops/falls verb) stay skipped.

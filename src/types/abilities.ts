@@ -1287,10 +1287,14 @@ export interface Ability {
      *  what every other ship carries. Read LIVE at application time — the whole point is that a
      *  recipient's Stealth/HP changes between one round and the next.
      *
-     *  ⚠️ REACTIVE PATH ONLY. Unlike `factionFilter`, which is honoured at four seams, this is
-     *  intersected in exactly one — `footprintFilteredRecipients` (triggers.ts). Both clauses that
-     *  carry it are live-triggered, so nothing is dropped; `recipientFilterIsReactiveOnly.test.ts`
-     *  is the standing guard. On a cast-path ability the field would be silently ignored. */
+     *  Hermes's charged names the HP axis on a CAST: "If an ally has less than 40% HP, it grants
+     *  that ally Cheat Death" — each ally the cast reaches is asked about its own HP.
+     *
+     *  ⚠️ TWO SEAMS ONLY. Unlike `factionFilter`, which is honoured at four seams, this is
+     *  intersected in `footprintFilteredRecipients` (triggers.ts, the reactive path) and in
+     *  playerTurn's per-slot timed loop (the cast path's timed grants). On any other route (an
+     *  aura, an accumulating status, a passive combat-start seed, a cast heal/shield) the field
+     *  would be silently ignored; `recipientFilterCarriers.test.ts` is the standing guard. */
     recipientFilter?: RecipientFilter;
     /** D-PR14 Bulwark: this reactive applies at most once per round per (owner, ability).
      *  Gated executor-side via IntentExecContext.oncePerRoundConsumed (check BEFORE the

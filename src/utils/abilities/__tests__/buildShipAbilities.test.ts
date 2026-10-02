@@ -3199,7 +3199,7 @@ describe('buildShipAbilities', () => {
             expect(shield.trigger).not.toBe('on-hp-threshold-crossed');
         });
 
-        it('Hermes charged: Cheat Death narrows to the heal target with a derivable below-40% target hp-threshold; heal + charge unchanged', () => {
+        it('Hermes charged: Cheat Death is an all-allies grant with a per-recipient below-40% HP filter; heal + charge unchanged', () => {
             const s = ship({
                 chargeSkillText:
                     'This Unit <unit-damage>repairs 37%</unit-damage> of its Max HP and <unit-aid>adds 1 charge</unit-aid> to the Charged Skill.<br /><br />If the target has less than 40% HP, it grants <unit-skill>Cheat Death</unit-skill>.',
@@ -3211,21 +3211,14 @@ describe('buildShipAbilities', () => {
             )!;
             expect(cheatDeath).toMatchObject({
                 type: 'buff',
-                target: 'ally',
+                target: 'all-allies',
                 trigger: 'on-cast',
-                conditions: [
-                    {
-                        subject: 'hp-threshold',
-                        derivable: true,
-                        hpComparator: 'below',
-                        hpPercent: 40,
-                        hpSubject: 'target',
-                    },
-                ],
+                conditions: [],
+                recipientFilter: { hpBelowPct: 40 },
             });
             expect(cheatDeath.config).toMatchObject({ duration: 'recurring' });
             // The 37% repair is an AoE all-allies heal (support footprint); the 1 charge is
-            // unchanged. (Cheat Death above still narrows to the single low-HP ally.)
+            // unchanged. Cheat Death reaches the same allies, each one asked about its own HP.
             const heal = charged.abilities.find((a) => a.type === 'heal')!;
             expect(heal).toMatchObject({
                 type: 'heal',
