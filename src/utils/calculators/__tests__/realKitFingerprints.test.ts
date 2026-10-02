@@ -255,8 +255,8 @@ describe('suite health', () => {
     // books 0 at the instant of the hit even though it demonstrably IS being hit (it carries a
     // `dot-ticked` token it would not otherwise have); Huanying "When this Unit inflicts a debuff
     // it gains Stealth ... for 2 turns", and every cast lands a Bomb on this board, so she is
-    // Stealthed every round and no enemy attack reaches her. Her grant needs a LANDED infliction:
-    // against enemies that resist her Bombs the Stealth lapses and she takes damage.
+    // Stealthed every round and no enemy attack reaches her. Her Stealth grant needs a
+    // LANDED infliction.
     const KNOWN_ZERO_DAMAGE: readonly string[] = ['Meiying', 'Voron', 'Huanying'];
 
     it('every corpus ship takes real incoming damage and survives all 20 rounds, in every scenario', () => {

@@ -71,7 +71,7 @@ describe('parseExtendStatus — named arm (#363)', () => {
         });
     });
 
-    it('leaves the generic active-voice arm alone (Ripper)', () => {
+    it('leaves the generic active-voice arm alone', () => {
         expect(parseExtendStatus('All allies extend their active Buffs by 1 turn.')).toEqual({
             turns: 1,
             statusKind: 'buff',
