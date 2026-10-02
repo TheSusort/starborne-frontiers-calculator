@@ -248,13 +248,16 @@ describe('suite health', () => {
         }
     });
 
-    // Two corpus ships are documented, kit-explained exceptions to "the focus takes real incoming
-    // damage" — not a fixture failure (see final-fix-report.md's "before → after measurements"):
+    // These corpus ships are documented, kit-explained exceptions to "the focus takes real incoming
+    // damage" — not a fixture failure:
     // Meiying gains Stealth "at the start of combat and every turn", so it is permanently
-    // untargetable; Voron "transforms the damage into a Damage over Time effect", so its intake
+    // untargetable; Voron "transforms the damage into a damage over time effect", so its intake
     // books 0 at the instant of the hit even though it demonstrably IS being hit (it carries a
-    // `dot-ticked` token it would not otherwise have).
-    const KNOWN_ZERO_DAMAGE: readonly string[] = ['Meiying', 'Voron'];
+    // `dot-ticked` token it would not otherwise have); Huanying "When this Unit inflicts a debuff
+    // it gains Stealth ... for 2 turns", and every cast lands a Bomb on this board, so she is
+    // Stealthed every round and no enemy attack reaches her. Her grant needs a LANDED infliction:
+    // against enemies that resist her Bombs the Stealth lapses and she takes damage.
+    const KNOWN_ZERO_DAMAGE: readonly string[] = ['Meiying', 'Voron', 'Huanying'];
 
     it('every corpus ship takes real incoming damage and survives all 20 rounds, in every scenario', () => {
         // The corpus-wide version of the two-ship spot-check in kitFingerprintScenarios.test.ts's
@@ -291,8 +294,8 @@ describe('suite health', () => {
     it('every KNOWN_ZERO_DAMAGE exemption is STILL warranted (a kit/board fix must remove the ship, not leave a stale exemption)', () => {
         // KNOWN_ZERO_DAMAGE is the last hand-maintained exemption list in this suite — its sibling,
         // KNOWN_UNREACHABLE, was replaced by a derivation (see kitFingerprintScenarios.test.ts's
-        // 'pattern reachability'). Without this guard, a kit or board change that makes Meiying or
-        // Voron take real damage would pass silently: the exemption would keep suppressing a
+        // 'pattern reachability'). Without this guard, a kit or board change that makes an exempted
+        // ship take real damage would pass silently: the exemption would keep suppressing a
         // failure that no longer exists to suppress.
         //
         // `some`, not `every`: the exemption asserts "this ship takes no damage", a claim `some`
