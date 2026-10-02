@@ -5006,8 +5006,9 @@ describe('on-debuff-inflicted damage branch (debuffVictimId routing)', () => {
 });
 
 // ----------------------------------------------------------------------
-// procScope:'per-attack' — Insidiousness rolls ONCE per attack and every debuff event
-// in that attack reuses the verdict (all debuffed enemies take the hit, or none do).
+// procScope:'per-attack' — ONE roll per attack, and every event in that attack reuses the
+// verdict (every enemy it covers takes the hit, or none do). Insidiousness itself declares
+// 'per-cast' (insidiousnessPerCastRoll.integration.test.ts).
 // ----------------------------------------------------------------------
 describe("procScope 'per-attack' verdict cache", () => {
     const ownerRuntime = (): PlayerActorRuntime =>

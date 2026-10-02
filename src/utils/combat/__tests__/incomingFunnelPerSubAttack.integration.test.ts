@@ -733,7 +733,7 @@ describe('PR6 Tier 2 — damage reflection fires per sub-attack', () => {
 //
 // task-3-brief.md's correction #3 pointed at triggers.ts's `reactionFiredThisAttack` key
 // (`ownerId:abilityId:victimId:subAttackIndex`) as the guard to watch — but that key belongs to
-// the SIBLING 'damage'-type reactive branch (procScope:'per-attack', e.g. Insidiousness), NOT
+// the SIBLING 'damage'-type reactive branch (procScope:'per-attack'), NOT
 // the 'counter' ability type this block exercises. The COUNTER branch guards with its OWN set,
 // `ctx.counterFiredThisTurn`, cleared only at every actor TURN-START (engine.ts, unconditionally,
 // once per actor whose turn begins) — never per-sub-attack.

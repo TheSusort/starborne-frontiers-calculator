@@ -10,26 +10,24 @@
  * by way of another of the owner's reactions), and every other ability on the trigger still sees
  * the reactive infliction.
  *
- * Insidiousness declares `procScope:'per-attack'`: one verdict shared by every enemy debuffed in
- * the same memo bucket, at most one hit per enemy per bucket. KNOWN GAP: on this trigger the
- * listener stamps no `subAttackIndex`, so the bucket is the actor's whole turn, not one attack as
- * the locked proc rule requires — a 2-hit cast that debuffs on each hit gets one roll where the
- * rule gives two (see `Intent.eventCtx.subAttackIndex` in triggers.ts). A reactive infliction on
- * the SAME enemy, in the same turn, as the infliction that triggered it therefore shares that
- * verdict and adds no second hit; the boards
- * below make the reaction land on a DIFFERENT enemy (an `enemy-highest-attack` follow-up), or
- * narrow Insidiousness to the reaction's status, which is where the change is visible.
+ * Insidiousness declares `procScope:'per-cast'`: one roll for the cast's own inflictions, one
+ * more for each reaction firing that inflicts during the cast, and at most one successful roll per
+ * cast (the roll rule itself is pinned in `insidiousnessPerCastRoll.integration.test.ts`). So a
+ * reactive infliction is visible here only when the cast's roll fails: the boards below either
+ * script the proc stream (`scriptProcs`: the cast's roll fails, the reaction's passes) and make the
+ * reaction land on a DIFFERENT enemy (an `enemy-highest-attack` follow-up), or narrow
+ * Insidiousness to the reaction's status so the cast's infliction never wakes it.
  *
  * Real engine (runCombat), real Insidiousness ability (buildEquipmentAbilities on a legendary
- * implant piece) with its proc chance raised to 1 so every board is deterministic. Hacking 200 vs
- * security 0 lands every roll.
+ * implant piece). The unscripted boards raise its proc chance to 1 so they are deterministic.
+ * Hacking 200 vs security 0 lands every roll.
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import { runCombat, CombatEngineInput } from '../engine';
 import { createEventBus, CombatEvent } from '../events';
 import { buildEquipmentAbilities } from '../../abilities/buildEquipmentAbilities';
 import { buildShipAbilities } from '../../abilities/buildShipAbilities';
-import { setupKeyedRng } from '../../calculators/rateAccumulator';
+import { setupKeyedRng, setKeyedRng } from '../../calculators/rateAccumulator';
 import type { Ability, ShipSkills } from '../../../types/abilities';
 import type { GearPiece } from '../../../types/gear';
 import type { Ship } from '../../../types/ship';
@@ -39,8 +37,8 @@ import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
 type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 type TeamActor = NonNullable<CombatEngineInput['teamActors']>[number];
 
-/** The real legendary Insidiousness ability, with its proc chance raised to 1. */
-const insidiousness = (): Ability => {
+/** The real legendary Insidiousness ability (21%), unmodified. */
+const realInsidiousness = (): Ability => {
     const pieceId = 'insid-piece';
     const piece = {
         id: pieceId,
@@ -56,8 +54,27 @@ const insidiousness = (): Ability => {
     const built = buildEquipmentAbilities(ship, (g) => (g === pieceId ? piece : undefined));
     const a = built.find((x) => x.trigger === 'on-debuff-inflicted');
     if (!a) throw new Error('Insidiousness ability missing');
-    return { ...a, procChance: 1 };
+    return a;
 };
+/** The real ability with its proc chance raised to 1. */
+const insidiousness = (): Ability => ({ ...realInsidiousness(), procChance: 1 });
+
+const FAIL = 0.99;
+const PASS = 0;
+/** Scripts `owner`'s proc sub-stream (Insidiousness's rolls) with `draws`, then FAIL; every other
+ *  keyed gate draws 0 (every debuff lands, nothing crits). Returns a counter of proc draws. */
+function scriptProcs(owner: string, draws: number[]): () => number {
+    const queue = [...draws];
+    let taken = 0;
+    setKeyedRng((key) => {
+        if (key !== `${owner}:proc`) return 0;
+        taken++;
+        return queue.shift() ?? FAIL;
+    });
+    return () => taken;
+}
+/** Per cast: the cast's own roll fails, the reaction's passes. */
+const CAST_FAILS_REACTION_PASSES = [FAIL, PASS, FAIL, PASS, FAIL, PASS];
 
 const plainHit = (): Ability => ({
     id: 'plain-hit',
@@ -195,7 +212,7 @@ describe('Insidiousness — the implant ability', () => {
             type: 'damage',
             trigger: 'on-debuff-inflicted',
             procChance: 0.21,
-            procScope: 'per-attack',
+            procScope: 'per-cast',
             config: { type: 'damage', multiplier: 100, hits: 1 },
         });
     });
@@ -203,18 +220,25 @@ describe('Insidiousness — the implant ability', () => {
 
 describe('Insidiousness — rolls on a reactively inflicted debuff (player side)', () => {
     it('the reaction’s Chain Down on the strong enemy wakes Insidiousness on that enemy', () => {
-        const events = run(BASE());
+        const draws = scriptProcs('attacker', CAST_FAILS_REACTION_PASSES);
+        const events = run(
+            BASE({ shipSkills: kit([reaction('reaction-a', CHAIN), realInsidiousness()]) })
+        );
         expect(landings(events, 'attacker', 'front', 'Seed Down')).toEqual([1, 2, 3]);
         expect(landings(events, 'attacker', 'strong', CHAIN)).toEqual([1, 2, 3]);
-        expect(procHits(events, 'attacker', 'front')).toEqual([1, 2, 3]);
+        expect(procHits(events, 'attacker', 'front')).toEqual([]);
         expect(procHits(events, 'attacker', 'strong')).toEqual([1, 2, 3]);
+        expect(draws()).toBe(6);
     });
 
     it('control: without the reaction the strong enemy is never debuffed and never hit', () => {
-        const events = run(BASE({ shipSkills: kit([insidiousness()]) }));
-        expect(procHits(events, 'attacker', 'front')).toEqual([1, 2, 3]);
+        const draws = scriptProcs('attacker', CAST_FAILS_REACTION_PASSES);
+        const events = run(BASE({ shipSkills: kit([realInsidiousness()]) }));
         expect(landings(events, 'attacker', 'strong', CHAIN)).toEqual([]);
         expect(procHits(events, 'attacker', 'strong')).toEqual([]);
+        // One roll per cast; the scripted PASSes land on the next casts' rolls.
+        expect(procHits(events, 'attacker', 'front')).toEqual([2]);
+        expect(draws()).toBe(3);
     });
 
     it('the reaction never re-triggers itself: one Chain Down per cast infliction, no throw', () => {
@@ -243,13 +267,27 @@ describe('Insidiousness — rolls on a reactively inflicted debuff (player side)
         // Per cast: Seed Down wakes a and b once each; a's output wakes b, b's output wakes a.
         expect(perRound(CHAIN)).toBe(6);
         expect(perRound('Echo Down')).toBe(6);
-        expect(procHits(events, 'attacker', 'strong')).toEqual([1, 2, 3]);
+    });
+
+    it('two such reactions: each of the four reaction firings per cast is a roll of its own', () => {
+        const draws = scriptProcs('attacker', []);
+        const events = run(
+            BASE({
+                shipSkills: kit([
+                    reaction('reaction-a', CHAIN),
+                    reaction('reaction-b', 'Echo Down'),
+                    realInsidiousness(),
+                ]),
+            })
+        );
+        // Every roll fails: per cast, the cast's own roll plus four reaction firings.
+        expect(draws()).toBe(15);
+        expect(procHits(events, 'attacker', 'strong')).toEqual([]);
     });
 });
 
-// The real kits' reactions land on the SAME enemy as the infliction that triggered them, so the
-// reactive landing joins that attack's verdict and adds no hit of its own. To see the reactive
-// landing by itself, these boards narrow Insidiousness to the reaction's status family
+// The real kits' reactions land on the SAME enemy as the infliction that triggered them. To see
+// the reactive landing by itself, these boards narrow Insidiousness to the reaction's status family
 // (`triggerStatusFilter`): the narrowed copy cannot see the cast-side infliction, so every hit it
 // deals comes from the reactive one.
 const narrowed = (family: string): Ability => ({ ...insidiousness(), triggerStatusFilter: family });
@@ -308,12 +346,13 @@ describe('Insidiousness — real Warden kit (OLD R2 text), debuff arm', () => {
         expect(procHits(events, 'attacker', 'hitter')).toEqual([]);
     });
 
-    it('the real implant: one hit per attack that debuffed the hitter — the reactive landing adds none', () => {
+    it('the real implant: her turn hits once; the hitter’s turn hits for Corrosion I and its Out. Damage Down II', () => {
         const events = run(board(wardenSkills([insidiousness()])));
         expect(landings(events, 'attacker', 'hitter', OUT_DD)).toEqual([1, 2, 3]);
-        // Her own turn (Provoke) and the hitter's turn (Corrosion I, then the reactive Out. Damage
-        // Down II) each debuff the hitter once per round.
-        expect(procHits(events, 'attacker', 'hitter')).toEqual([1, 1, 2, 2, 3, 3]);
+        // Her own turn (Provoke) is one cast: one hit. In the hitter's turn her Corrosion I and
+        // the Out. Damage Down II it sets off are two reaction firings outside her cast, each with
+        // its own roll and cap (the unconfirmed default — `perCastProcKeys` in triggers.ts).
+        expect(procHits(events, 'attacker', 'hitter')).toEqual([1, 1, 1, 2, 2, 2, 3, 3, 3]);
     });
 });
 
@@ -489,16 +528,20 @@ describe('Insidiousness — team symmetry (enemy-side carrier)', () => {
         });
 
     it('an enemy carrier’s reactive Chain Down on the strong player ally wakes Insidiousness on it', () => {
-        const events = run(enemyBoard([reaction('reaction-a', CHAIN), insidiousness()]));
+        const draws = scriptProcs('carrier', CAST_FAILS_REACTION_PASSES);
+        const events = run(enemyBoard([reaction('reaction-a', CHAIN), realInsidiousness()]));
         expect(landings(events, 'carrier', 'attacker', 'Seed Down')).toEqual([1, 2, 3]);
         expect(landings(events, 'carrier', 'strong-ally', CHAIN)).toEqual([1, 2, 3]);
-        expect(procHits(events, 'carrier', 'attacker')).toEqual([1, 2, 3]);
+        expect(procHits(events, 'carrier', 'attacker')).toEqual([]);
         expect(procHits(events, 'carrier', 'strong-ally')).toEqual([1, 2, 3]);
+        expect(draws()).toBe(6);
     });
 
     it('control: without the reaction the strong player ally is never hit', () => {
-        const events = run(enemyBoard([insidiousness()]));
-        expect(procHits(events, 'carrier', 'attacker')).toEqual([1, 2, 3]);
+        const draws = scriptProcs('carrier', CAST_FAILS_REACTION_PASSES);
+        const events = run(enemyBoard([realInsidiousness()]));
         expect(procHits(events, 'carrier', 'strong-ally')).toEqual([]);
+        expect(procHits(events, 'carrier', 'attacker')).toEqual([2]);
+        expect(draws()).toBe(3);
     });
 });

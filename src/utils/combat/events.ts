@@ -147,15 +147,12 @@ export type CombatEvent =
      *  re-trigger itself, directly or through another of the owner's reactions (an unbounded
      *  chain would otherwise hit MAX_INTENT_GENERATIONS). Every OTHER on-debuff-inflicted
      *  ability of the owner still sees the debuff: the Insidiousness implant reacts to Warden's
-     *  reactive Out. Damage Down II as to a cast-inflicted one. KNOWN GAP: on this trigger
-     *  Insidiousness's verdict and per-victim dedupe are per actor turn, not per attack as the
-     *  locked proc rule requires (see `Intent.eventCtx.subAttackIndex` in triggers.ts), so a
-     *  reactive landing on the same enemy in the same turn shares the triggering infliction's
-     *  verdict and adds no second hit. Each ability in a chain fires at most once, so chain
+     *  reactive Out. Damage Down II as to a cast-inflicted one, and rolls for it separately
+     *  from the cast (`Ability.procScope` `'per-cast'`). Each ability in a chain fires at most once, so chain
      *  LENGTH is bounded by the owner's count of such abilities; MAX_INTENT_GENERATIONS bounds
      *  only the depth of a drain, not the number of firings.
-     *  Debuffs from OTHER reactive triggers (on-crit/on-attacked) carry no chain and feed
-     *  on-debuff-inflicted like a cast infliction.
+     *  Debuffs from OTHER reactive triggers (on-crit/on-attacked) carry no chain, so the chain
+     *  guard lets every on-debuff-inflicted ability see them.
      *  `viaAllyDebuffInflictedReaction`: the sibling brand for `on-ally-debuff-inflicted`
      *  reactions — set when this debuff was applied by an ability whose OWN trigger is
      *  `on-ally-debuff-inflicted`. A separate field from `debuffInflictedReactionChain`
@@ -199,6 +196,11 @@ export type CombatEvent =
            *  it; an unstamped event never satisfies a present filter. */
           sourceSlot?: SkillSlot;
           debuffInflictedReactionChain?: readonly string[];
+          /** Set on every debuff a REACTION lands (any trigger): the id of that one reaction
+           *  firing, shared by everything the firing lands and distinct from every other firing in
+           *  the combat. Absent on a cast's own inflictions. `procScope:'per-cast'` (Insidiousness)
+           *  gives each firing its own roll. */
+          reactionFiringId?: number;
           viaAllyDebuffInflictedReaction?: true;
           viaOtherAllyDebuffInflictedReaction?: true;
       } & ReactiveStamp)
@@ -260,6 +262,8 @@ export type CombatEvent =
            *  `on-debuff-inflicted`, so that listener's `dot-applied` arm skips a reaction already in
            *  the chain exactly as its `debuff-applied` arm does. */
           debuffInflictedReactionChain?: readonly string[];
+          /** The `debuff-applied` sibling's `reactionFiringId` — see that field's doc. */
+          reactionFiringId?: number;
           /** The `debuff-applied` sibling's self-chain brand — see that field's doc. Set when
            *  this DoT was applied by an ability whose OWN trigger is `on-ally-debuff-inflicted`,
            *  so the `on-ally-debuff-inflicted` listener's `dot-applied` arm can skip its own

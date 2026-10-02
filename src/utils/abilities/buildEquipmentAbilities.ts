@@ -737,10 +737,11 @@ const IMPLANT_ABILITIES: Partial<Record<string, ImplantAbilityBuilder>> = {
         };
     },
     // D-PR4: reactive-damage-on-debuff implants
-    // Insidiousness: X% chance to deal Y% damage when debuffing an enemy. In game the roll
-    // happens ONCE per attack and then applies to every enemy that attack debuffed (all or
-    // none) — `procScope:'per-attack'` gives exactly that, and the on-debuff-inflicted
-    // listener's `debuffVictimId` stamp puts each hit on its own debuffed enemy.
+    // Insidiousness: X% chance to deal Y% damage when debuffing an enemy. One roll per skill
+    // cast plus one per reaction firing that cast sets off, at most one success per cast
+    // (`procScope:'per-cast'` — that field's doc has the rule). A successful roll hits each enemy
+    // it covers once; the on-debuff-inflicted listener's `debuffVictimId` stamp puts each hit on
+    // its own debuffed enemy.
     INSIDIOUSNESS: (rarity) => {
         const m = INSIDIOUSNESS_MULT[rarity];
         const pc = INSIDIOUSNESS_PROC[rarity];
@@ -751,7 +752,7 @@ const IMPLANT_ABILITIES: Partial<Record<string, ImplantAbilityBuilder>> = {
             trigger: 'on-debuff-inflicted',
             conditions: [],
             procChance: pc,
-            procScope: 'per-attack',
+            procScope: 'per-cast',
             config: { type: 'damage', multiplier: m, hits: 1 },
             autoFilled: true,
         };

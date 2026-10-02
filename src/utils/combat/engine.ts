@@ -3794,12 +3794,12 @@ export function runCombat(rawInput: CombatEngineInput): {
     // `${ownerId}:${abilityId}`; each gate is a RateGate that fires with the ability's
     // procChance probability on each draw (random, like the crit/landing gates).
     const procChanceGates = new Map<string, RateGate>();
-    // Per-SUB-ATTACK verdict cache for procScope:'per-attack' proc abilities (Insidiousness).
-    // Keyed `${ownerId}:${abilityId}:${subAttackIndex}` — the sub-attack index is load-bearing:
-    // keyed on `${ownerId}:${abilityId}` alone the cache would be per-TURN, and a hits:N skill
-    // would replay sub-attack #1's verdict for all N. Cleared at each actor turn-start beside
-    // reactionFiredThisAttack so a later attack rolls afresh.
+    // Verdict cache for scoped proc abilities: procScope:'per-attack' keys it per sub-attack,
+    // procScope:'per-cast' (Insidiousness) per roll and per cap — see each gate in triggers.ts.
+    // Cleared at each actor turn-start beside reactionFiredThisAttack so a later turn rolls afresh.
     const procDecisionThisSubAttack = new Map<string, boolean>();
+    // Numbers every reactive-intent resolution (`IntentExecContext.reactionFiringId`).
+    let reactionFiringSeq = 0;
     // Dedicated crit-gate for counterattacks — a SEPARATE map, never any existing per-actor
     // crit gate, so it only ever creates keys for counter-carriers and draws no numbers from
     // another actor's stream.
@@ -10274,6 +10274,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                         // emission with this so a later builder nests the reaction under the
                         // triggering turn, not the reactor's own turn.
                         duringTurnOf: actingActorId,
+                        reactionFiringId: ++reactionFiringSeq,
                         corrosionEntries,
                         infernoEntries,
                         genericDoTEntries,
@@ -10341,8 +10342,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                         // Combat-lifetime proc-chance gates: equipment reactive procs
                         // that carry a procChance fire at their stated rate via this accumulator.
                         procChanceGates,
-                        // Per-attack proc verdict cache (Insidiousness): one roll per attack,
-                        // replayed for every debuff event that attack inflicts.
+                        // Scoped proc verdict cache (Insidiousness: one roll per cast, plus one
+                        // per reaction firing that cast sets off).
                         procDecisionThisSubAttack,
                         // Live lowest-speed-ally gate. UNCONDITIONAL — with a lone attacker the set
                         // is {attacker}, so it resolves true.
@@ -10979,10 +10980,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // Reset the self-rider once-per-attack guard beside the counter guard so a
                 // later attack re-applies Hermes's Everliving Regeneration / charge.
                 reactionFiredThisAttack.clear();
-                // Insidiousness: drop the per-sub-attack proc verdicts so each sub-attack of this
-                // turn draws its own single roll (and every debuff ONE sub-attack inflicts shares
-                // that sub-attack's verdict). Keys carry the sub-attack index, so this clear is
-                // what stops turn N+1's sub-attack 0 reading turn N's verdict.
+                // Drop the scoped proc verdicts so this turn rolls afresh (Insidiousness: this
+                // turn's cast gets its own roll and its own one-success cap).
                 procDecisionThisSubAttack.clear();
 
                 // Set the active carrier for the own-turn self-buff reprieve: a TIMED self-buff

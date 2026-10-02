@@ -1371,19 +1371,24 @@ export interface Ability {
      *  ability) RateGate (deterministic accumulator, like crit/landing). Absent or out of (0,1)
      *  → fires on every qualifying trigger. */
     procChance?: number;
-    /** Proc-roll granularity for a probabilistic reactive ability. `'per-attack'` draws the
-     *  gate ONCE per ATTACK and reuses that verdict for every qualifying trigger event in that
-     *  same attack, via IntentExecContext.procDecisionThisSubAttack — so Insidiousness either
-     *  damages EVERY enemy its attack debuffed or none of them, matching the game. Absent →
-     *  per-event draws, the historical behaviour of every other procChance ability (Adaptive
-     *  Plating, Smokescreen, Ambush, Bloodthirst, Reactive Ward, Tenacity, Bulwark).
+    /** Proc-roll granularity for a probabilistic reactive ability. Absent → per-event draws, the
+     *  behaviour of every other procChance ability (Adaptive Plating, Smokescreen, Ambush,
+     *  Bloodthirst, Reactive Ward, Tenacity, Bulwark).
      *
-     *  "Attack" here means ONE attack, and a `hits: N` skill is N consecutive full-walk attacks
-     *  (multi-hit full-walk epic, R1), so a 3-hit skill draws THREE verdicts — one per sub-attack,
-     *  each shared across that sub-attack's footprint. Until PR4 the verdict was keyed without the
-     *  sub-attack and cleared only at actor turn-start, making this per-TURN and replaying
-     *  sub-attack #1's verdict for all N. */
-    procScope?: 'per-attack';
+     *  `'per-cast'` (Insidiousness, `on-debuff-inflicted`; user + Solid Clouds dev, 2026-10-02):
+     *  ONE roll for everything the owner's skill cast inflicts itself, however many debuffs and
+     *  however many hits (an exception to the per-attack proc rule); ONE extra roll for each
+     *  reaction firing that inflicts during that cast (Warden's passive Out. Damage Down II off her
+     *  charged Corrosion II); and at most ONE successful roll per cast. The cast's roll, when it
+     *  succeeds, hits every enemy the cast's own inflictions landed on, once each; a reaction's
+     *  roll hits the enemies that reaction landed on. See `passesPerCastProcGate` in triggers.ts.
+     *
+     *  `'per-attack'` draws the gate ONCE per ATTACK and reuses that verdict for every qualifying
+     *  trigger event in that same attack, via IntentExecContext.procDecisionThisSubAttack. A
+     *  `hits: N` skill is N consecutive full-walk attacks (R1), so a 3-hit skill draws THREE
+     *  verdicts — one per sub-attack, each shared across that sub-attack's footprint. No shipped
+     *  ability declares it; `subAttackProcGates.integration.test.ts` pins it on an on-crit rider. */
+    procScope?: 'per-attack' | 'per-cast';
     /** Reactive event-frequency gate: fire this ability only every Nth qualifying trigger
      *  event, counted per SOURCE (the triggering actor). N=2 → every second event. Gated
      *  executor-side via IntentExecContext.repairCountBySource, keyed

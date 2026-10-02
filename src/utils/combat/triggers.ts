@@ -174,12 +174,16 @@ export interface Intent {
          *  (start-of-round / end-of-round) — those keep per-turn gating, which is correct for them.
          *  Read by `passesProcChanceGate`'s memo key, so `procScope:'per-attack'` means per
          *  sub-attack rather than per turn.
-         *  KNOWN GAP: undefined on `on-debuff-inflicted` too — its `debuff-applied` /
-         *  `dot-applied` events carry no sub-attack index, so Insidiousness's verdict and
-         *  per-victim dedupe there are per actor turn. That diverges from the locked rule that an
-         *  outgoing proc rolls once per ATTACK (a multi-hit skill is N attacks): a 2-hit cast that
-         *  debuffs on each hit gets one roll where the rule gives two. */
+         *  Undefined on `on-debuff-inflicted` too — its `debuff-applied` / `dot-applied` events
+         *  carry no sub-attack index. Insidiousness, that trigger's proc, rolls per SKILL CAST by
+         *  rule (`procScope:'per-cast'`, keyed by `inflictionReaction` below), not per attack. */
         subAttackIndex?: number;
+        /** Stamped by the `on-debuff-inflicted` listener when the triggering infliction was
+         *  landed by a REACTION (`e.reactive`) rather than by the owner's cast: `firingId` is that
+         *  reaction firing's `reactionFiringId`, and `duringOwnTurn` says the reaction fired
+         *  during the owner's own turn — i.e. the owner's cast set it off. Absent for the cast's
+         *  own inflictions. Read only by `passesPerCastProcGate`. */
+        inflictionReaction?: { firingId?: number; duringOwnTurn: boolean };
         /** The damage of the triggering event, used by a reactive heal/shield to scale off
          *  that hit rather than the owner's max HP. Two consumers: `basis:'damage-dealt'`
          *  (ability-performed — damage the owner DEALT, e.g. Bloodthirst) and
@@ -880,6 +884,7 @@ export function registerReactiveListeners(args: {
                                     ...intent.eventCtx,
                                     debuffVictimId: e.targetId,
                                     debuffInflictedReactionChain: e.debuffInflictedReactionChain,
+                                    ...inflictionReactionCtx(e, ownerId),
                                 },
                             });
                     });
@@ -910,6 +915,7 @@ export function registerReactiveListeners(args: {
                                     ...intent.eventCtx,
                                     debuffVictimId: e.targetId,
                                     debuffInflictedReactionChain: e.debuffInflictedReactionChain,
+                                    ...inflictionReactionCtx(e, ownerId),
                                 },
                             });
                     });
@@ -2028,6 +2034,10 @@ export interface IntentExecContext {
      *  active (round-1 start-of-round reactive, post-round death drain) → events carry
      *  `reactive:true` with an undefined `duringTurnOf`. */
     duringTurnOf?: string;
+    /** This reactive-intent resolution's id, unique per combat (the engine numbers every
+     *  `executeIntent` call). Stamped as `reactionFiringId` on each debuff / DoT the resolution
+     *  lands, so a consumer can tell one reaction firing from another. Absent in unit ctxs. */
+    reactionFiringId?: number;
     corrosionEntries: ActiveDoTStack[];
     infernoEntries: ActiveDoTStack[];
     pendingBombs: PendingBomb[];
@@ -2284,9 +2294,10 @@ export interface IntentExecContext {
      *  (see oncePerAttackGuardKey + the heal branch). Absent → no guard (unit ctxs without the
      *  engine keep firing per intent). */
     reactionFiredThisAttack?: Set<string>;
-    /** Per-SUB-ATTACK verdict cache for `procScope:'per-attack'` abilities (Insidiousness).
-     *  Keyed `ownerId:abilityId:subAttackIndex` → the single roll's outcome; the map is cleared at
-     *  each actor turn-start (engine) beside `reactionFiredThisAttack`.
+    /** Proc verdict cache for scoped proc abilities. `procScope:'per-attack'`: keyed
+     *  `ownerId:abilityId:subAttackIndex` → the single roll's outcome. `procScope:'per-cast'`
+     *  (Insidiousness): keyed per roll and per cap — see `passesPerCastProcGate`. The map is
+     *  cleared at each actor turn-start (engine) beside `reactionFiredThisAttack`.
      *
      *  Named `…ThisSubAttack` deliberately: keying on `ownerId:abilityId` alone would make it a
      *  per-TURN cache, replaying sub-attack #1's verdict for all N of a `hits: N` skill.
@@ -3590,6 +3601,77 @@ function debuffInflictedReactionChainStamp(intent: Intent): {
     };
 }
 
+/** `reactionFiringId` for a debuff / DoT this resolution lands — see that event field's doc. */
+function reactionFiringStamp(ctx: IntentExecContext): { reactionFiringId?: number } {
+    return ctx.reactionFiringId !== undefined ? { reactionFiringId: ctx.reactionFiringId } : {};
+}
+
+/** The `on-debuff-inflicted` listener's `eventCtx.inflictionReaction` for an infliction event:
+ *  present only when a reaction landed it (see that field's doc). */
+function inflictionReactionCtx(
+    e: { reactive?: true; duringTurnOf?: string; reactionFiringId?: number },
+    ownerId: string
+): { inflictionReaction?: { firingId?: number; duringOwnTurn: boolean } } {
+    if (e.reactive !== true) return {};
+    return {
+        inflictionReaction: {
+            firingId: e.reactionFiringId,
+            duringOwnTurn: e.duringTurnOf === ownerId,
+        },
+    };
+}
+
+/** The roll and the one-success cap a `procScope:'per-cast'` intent belongs to.
+ *  - The owner's cast's own inflictions (no `inflictionReaction`): roll = cap = the cast.
+ *  - A reaction firing during the owner's own turn: its own roll, under the cast's cap.
+ *  - A reaction firing outside the owner's turn (round start/end, another actor's turn): its own
+ *    roll and its own cap. This is the UNCONFIRMED default — the game rule (user + Solid Clouds
+ *    dev, 2026-10-02) covers only reactions a skill cast sets off.
+ *  The cast is keyed by the owner's `turnsTaken`, so an extra action is a cast of its own. */
+function perCastProcKeys(intent: Intent, ctx: IntentExecContext): { roll: string; cap: string } {
+    const cast = `cast:${ctx.turnsTakenFor?.(intent.ownerId) ?? 0}`;
+    const reaction = intent.eventCtx?.inflictionReaction;
+    if (!reaction) return { roll: cast, cap: cast };
+    const firing = `reaction:${reaction.firingId ?? 'unstamped'}`;
+    return { roll: firing, cap: reaction.duringOwnTurn ? cast : firing };
+}
+
+/**
+ * The `procScope:'per-cast'` gate (Insidiousness — see that field's doc for the rule). One draw per
+ * roll (`perCastProcKeys`), replayed for every later event of the same roll so a successful roll
+ * covers every enemy it debuffed; once any roll under a cap has succeeded, every OTHER roll under
+ * that cap fails without drawing. A `procChance` of 1 or more succeeds without drawing and still
+ * takes the cap. Draws from the owner's shared proc sub-stream, as `passesProcChanceGate` does.
+ * Absent verdict map (unit ctxs) → `passesProcChanceGate`'s per-event draws.
+ */
+function passesPerCastProcGate(intent: Intent, ctx: IntentExecContext): boolean {
+    const memo = ctx.procDecisionThisSubAttack;
+    if (!memo) return passesProcChanceGate(intent, ctx);
+    const gateKey = `${intent.ownerId}:${intent.ability.id}`;
+    const keys = perCastProcKeys(intent, ctx);
+    const rollKey = `${gateKey}:per-cast-roll:${keys.roll}`;
+    const capKey = `${gateKey}:per-cast-cap:${keys.cap}`;
+    const cached = memo.get(rollKey);
+    if (cached !== undefined) return cached;
+    if (memo.get(capKey) === true) {
+        memo.set(rollKey, false);
+        return false;
+    }
+    const pc = intent.ability.procChance;
+    let verdict = true;
+    if (pc !== undefined && pc > 0 && pc < 1) {
+        let gate = ctx.procChanceGates?.get(gateKey);
+        if (ctx.procChanceGates && !gate) {
+            gate = makeRateGate(`${intent.ownerId}:proc`);
+            ctx.procChanceGates.set(gateKey, gate);
+        }
+        verdict = !gate || gate(pc);
+    }
+    memo.set(rollKey, verdict);
+    if (verdict) memo.set(capKey, true);
+    return verdict;
+}
+
 /**
  * Per-(owner,ability) proc-chance gate, shared by the heal/shield and damage reactive branches.
  * Pass-through when procChance is undefined / <=0 / >=1, or when the gate map is absent (unit-test
@@ -3601,10 +3683,10 @@ function passesProcChanceGate(intent: Intent, ctx: IntentExecContext): boolean {
     const pc = intent.ability.procChance;
     if (pc === undefined || pc <= 0 || pc >= 1) return true;
     const gateKey = `${intent.ownerId}:${intent.ability.id}`;
-    // procScope:'per-attack' (Insidiousness): one roll for the whole attack. The verdict is
-    // memoized per (owner, ability) and replayed for every later event this attack, so an AoE
-    // debuffer's four debuff applications share ONE 21% roll and all-or-none holds across every
-    // debuffed enemy. Opt-in by design — this gate is shared with the heal/shield/buff/debuff
+    // procScope:'per-attack': one roll for the whole attack. The verdict is memoized per
+    // (owner, ability) and replayed for every later event this attack, so every event of one
+    // attack shares ONE roll and all-or-none holds across its footprint. (`'per-cast'` —
+    // Insidiousness — has its own gate, `passesPerCastProcGate`.) Opt-in by design — this gate is shared with the heal/shield/buff/debuff
     // branches, and memoizing unconditionally would silently convert every other proc ability
     // (Adaptive Plating, Smokescreen, Ambush, Bloodthirst, Reactive Ward, Tenacity) to per-turn.
     const memo =
@@ -4688,6 +4770,7 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                     application: cfg.application,
                     sourceSlot: intent.sourceSlot,
                     ...debuffInflictedReactionChainStamp(intent),
+                    ...reactionFiringStamp(ctx),
                     ...(intent.ability.trigger === 'on-ally-debuff-inflicted'
                         ? { viaAllyDebuffInflictedReaction: true as const }
                         : {}),
@@ -4821,6 +4904,7 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 tier: cfg.tier,
                 sourceSlot: intent.sourceSlot,
                 ...debuffInflictedReactionChainStamp(intent),
+                ...reactionFiringStamp(ctx),
                 ...(intent.ability.trigger === 'on-ally-debuff-inflicted'
                     ? { viaAllyDebuffInflictedReaction: true as const }
                     : {}),
@@ -5564,7 +5648,11 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
     }
 
     if (cfg.type === 'damage') {
-        if (!passesProcChanceGate(intent, ctx)) return;
+        const procPasses =
+            intent.ability.procScope === 'per-cast'
+                ? passesPerCastProcGate(intent, ctx)
+                : passesProcChanceGate(intent, ctx);
+        if (!procPasses) return;
         // HP/Shield-basis reactive (Vindicator on-resist HP / Xcellence on-resist Shield):
         // REQUIRES a routed retaliation target (counterTargetId) and has no fallback — you cannot
         // retaliate against no-one.
@@ -5747,14 +5835,23 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 : undefined;
         for (const victimId of victimIds) {
             if (victimId === undefined) continue;
-            // procScope:'per-attack' (Insidiousness): ONE hit per victim per attack. The trigger
-            // fires once per debuff APPLICATION, so a cast inflicting two debuffs on the same
-            // enemy (Curator's Attack Down III + Crit Power Down III) would otherwise hit that
-            // enemy twice under the single shared verdict — 200% damage for a 100% implant.
-            // Keyed with the victim so a DIFFERENT debuffed enemy still takes its own hit; rides
-            // `reactionFiredThisAttack`, which the engine clears at each actor turn-start beside
-            // the proc verdict cache. Absent set (unit ctxs) → no dedupe.
+            // procScope:'per-cast' (Insidiousness): ONE hit per victim per ROLL. The trigger fires
+            // once per debuff APPLICATION, so a cast inflicting two debuffs on one enemy (Curator's
+            // Attack Down III + Crit Power Down III) would otherwise hit that enemy twice under its
+            // one shared verdict — 200% damage for a 100% implant. Keyed with the victim so a
+            // DIFFERENT enemy the roll covers still takes its own hit; the gate above already let
+            // only one roll per cast succeed. Rides `reactionFiredThisAttack`, which the engine
+            // clears at each actor turn-start beside the verdict cache. Absent set (unit ctxs) →
+            // no dedupe.
+            if (intent.ability.procScope === 'per-cast') {
+                const firedKey = `${intent.ownerId}:${intent.ability.id}:${victimId}:${
+                    perCastProcKeys(intent, ctx).roll
+                }`;
+                if (ctx.reactionFiredThisAttack?.has(firedKey)) continue;
+                ctx.reactionFiredThisAttack?.add(firedKey);
+            }
             if (intent.ability.procScope === 'per-attack') {
+                // procScope:'per-attack': ONE hit per victim per attack, for the same reason.
                 // The key carries the SUB-ATTACK too. `reactionFiredThisAttack` is cleared
                 // only at actor turn-start, so without the index a victim would be suppressed for
                 // sub-attacks #2..#N of a multi-hit cast, collapsing three attacks into one hit.

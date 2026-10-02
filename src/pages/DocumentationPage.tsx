@@ -4366,7 +4366,9 @@ const DocumentationPage: React.FC = () => {
                                     <strong>Giant Slayer</strong> (chance to amplify a hit&apos;s
                                     damage against an enemy with higher attack), and{' '}
                                     <strong>Insidiousness</strong> (chance to deal bonus damage when
-                                    you apply a debuff to an enemy). Three heal implants are also
+                                    you apply a debuff to an enemy: one roll per skill cast, plus
+                                    one for each debuff your passives inflict in reaction, and at
+                                    most one successful roll per cast). Three heal implants are also
                                     modeled: <strong>Second Wind</strong> (chance to repair itself
                                     when it takes a critical hit), <strong>Nourishment</strong>{' '}
                                     (stronger repairs on allies with less HP than the healer), and{' '}
