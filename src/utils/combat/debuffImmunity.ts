@@ -79,8 +79,8 @@ export const controlEffectLabel = (effect: ControlEffect): string => CONTROL_EFF
 /** Emit a `debuff-resisted` event for a DoT that did not land.
  *
  *  ⚠️ THE NAME IS NARROWER THAN THE FUNCTION. It is NOT called only on the Block-Debuff path:
- *  `playerTurn`'s DoT LANDING-ROLL FAILURE arm (the `else` that draws `roundDebuffLanded`) calls it
- *  too, so the combat log can show "Inferno III resisted" symmetrically with stat-debuff resists.
+ *  every DoT landing FAILURE (cast or reactive) calls it too, so the combat log can show
+ *  "Inferno III resisted" symmetrically with stat-debuff resists.
  *  Tagging every call here as a Block-Debuff auto-resist would drop exactly the rolled DoT resists
  *  that #413's `viaLandingRoll` gate is supposed to keep.
  *

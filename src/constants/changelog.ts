@@ -24,6 +24,8 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator and healing calculator: Hermes's charged skill now adds a charge to every ally in range.",
     'Combat simulator and healing calculator: Hermes now grants Cheat Death to each ally in range below 40%.',
     'Combat simulator: reference Liberator, Prophet and others now have correct shield penetration.',
+    'Combat log: gear and passive DoTs that fail to land now show as resisted.',
+    "Combat simulator: a resisted passive DoT now triggers resist reactions like Prophet's.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

@@ -27,10 +27,12 @@ import { buildShipAbilities } from '../../abilities/buildShipAbilities';
 import { Ship } from '../../../types/ship';
 import { Ability, ShipSkills } from '../../../types/abilities';
 import type { CombatActor } from '../state';
+import { dotResistLabel } from '../debuffImmunity';
 
 type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 type TeamActor = NonNullable<CombatEngineInput['teamActors']>[number];
 type DotApplied = Extract<CombatEvent, { type: 'dot-applied' }>;
+type Resisted = Extract<CombatEvent, { type: 'debuff-resisted' }>;
 
 function ship(over: Partial<Ship>): Ship {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -109,10 +111,11 @@ const enemyAt = (
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     position: any,
     slots: ShipSkills['slots'],
-    speed: number
+    speed: number,
+    security = 0
 ): EnemyAttacker => ({
     id,
-    stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000, speed, security: 0 },
+    stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000, speed, security },
     chargeCount: 0,
     startCharged: false,
     position,
@@ -233,6 +236,48 @@ describe('Pestilence (player-side) — Corrosion II lands on EVERY cleansed enem
         // Both real enemies actually carry a Corrosion stack from the focus.
         expect(foe1.corrosionEntries.some((e) => e.sourceId === 'attacker')).toBe(true);
         expect(foe2.corrosionEntries.some((e) => e.sourceId === 'attacker')).toBe(true);
+    });
+
+    it('#599: a cleansed enemy that resists the Corrosion roll is logged as resisted, per enemy', () => {
+        // Security = the focus's hacking → a 0% landing chance on both foes. The focus's own
+        // Attack Down is an 'apply' (affinity only), so it still lands and gives foe1 a debuff to
+        // cleanse.
+        const bus = createEventBus();
+        const dotsApplied: DotApplied[] = [];
+        const resisted: Resisted[] = [];
+        bus.on('dot-applied', (e) => dotsApplied.push(e));
+        bus.on('debuff-resisted', (e) => resisted.push(e));
+        runCombat(
+            BASE({
+                bus,
+                enemyAttackers: [
+                    enemyAt(
+                        'foe1',
+                        'M4',
+                        [{ slot: 'active', abilities: [allAlliesCleanse('e-cl')] }],
+                        10,
+                        1000
+                    ),
+                    enemyAt(
+                        'foe2',
+                        'M3',
+                        [{ slot: 'active', abilities: [noopActive('e-noop')] }],
+                        5,
+                        1000
+                    ),
+                ],
+            })
+        );
+
+        expect(
+            dotsApplied.some((e) => e.dotType === 'corrosion' && e.sourceId === 'attacker')
+        ).toBe(false);
+        const corrosionResists = resisted.filter(
+            (e) => e.sourceId === 'attacker' && e.buffName === dotResistLabel('corrosion', 6)
+        );
+        expect(new Set(corrosionResists.map((e) => e.targetId))).toEqual(new Set(['foe1', 'foe2']));
+        // A drawn-and-failed roll: on-resist reactions (Prophet, Vindicator) may react to it.
+        expect(corrosionResists.every((e) => e.viaLandingRoll === true)).toBe(true);
     });
 });
 

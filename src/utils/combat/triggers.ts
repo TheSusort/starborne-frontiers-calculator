@@ -4943,6 +4943,20 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
             });
         };
 
+        // A DoT that failed its landing check surfaces as a resist, like the sibling `debuff`
+        // branch's failure arm, so the combat log shows it. `viaLandingRoll` follows that branch's
+        // `drewLandingRoll`: an 'apply' DoT (Burner) fails on affinity alone and draws no roll, so
+        // it must not proc an on-resist reaction (#413); an inflicted DoT drew and failed one.
+        const emitFailedDotLanding = (victimId: string): void =>
+            emitBlockDebuffResist(
+                ctx.bus,
+                intent.ownerId,
+                victimId,
+                ctx.round,
+                dotResistLabel(cfg.dotType, cfg.tier),
+                cfg.application !== 'apply'
+            );
+
         // Pestilence: a reactive DoT whose ability targets 'all-enemies' and whose triggering
         // event stamped cleansedEnemyIds fans out over EVERY cleansed enemy ("inflicts
         // Corrosion II … on all cleansed enemies"), keyed off the reactive event's actual cleansed
@@ -4993,8 +5007,10 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                         ctx.affinityOf?.(victimId),
                         ctx.liveDebuffLandingChanceFor?.(intent.ownerId, victimId)
                     )
-                )
+                ) {
+                    emitFailedDotLanding(victimId);
                     continue;
+                }
                 landDotOn(victim, victimId);
             }
             return;
@@ -5029,9 +5045,8 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // knows the id — keep using it rather than inventing a target.
         const victimId = victim?.id ?? routedVictimId;
         // Block Debuff: an immune target auto-resists this reactive DoT — block
-        // it AND emit a resist event (block path ONLY; a normal landing failure below stays
-        // silent). Placed AFTER the inert-DoT guard above so a zero-stack/tier DoT doesn't
-        // surface a spurious resist.
+        // it AND emit a resist event. Placed AFTER the inert-DoT guard above so a
+        // zero-stack/tier DoT doesn't surface a spurious resist.
         if (targetCarriesBlockDebuff(ctx.statusEngine, victimId)) {
             // #413: block path — no landing gate drawn, so no on-resist proc.
             emitBlockDebuffResist(
@@ -5059,8 +5074,10 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 ctx.affinityOf?.(victimId),
                 ctx.liveDebuffLandingChanceFor?.(intent.ownerId, victimId)
             )
-        )
+        ) {
+            emitFailedDotLanding(victimId);
             return;
+        }
         landDotOn(victim, victimId);
         return;
     }
