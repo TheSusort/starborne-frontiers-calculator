@@ -2,25 +2,16 @@ import { describe, it, expect } from 'vitest';
 import { buildShipAbilities } from '../buildShipAbilities';
 import { parseSkillEffects } from '../../skillTextParser';
 import type { Ship } from '../../../types/ship';
-import { parseSlot, sigs, canonical, type RewordPair } from './helpers/catalogueWording';
+import {
+    parseSlot,
+    sigs,
+    canonical,
+    type RewordPair,
+    type SlotName,
+} from './helpers/catalogueWording';
 
-// FrontLine R2 is a number row whose numbers did not change, only reordered. Lingshe charged's
-// extra number is the "reduced to 0 turns" sentence the catalogue drops.
+// Lingshe charged's extra number is the "reduced to 0 turns" sentence the catalogue drops.
 const PAIRS: RewordPair[] = [
-    {
-        ship: 'Akula',
-        slot: 'passive',
-        old: "This Unit's attacks don't break <unit-skill>Stasis</unit-skill>. Increases outgoing direct damage by up to 30% based on the target's current HP percentage; the higher the percentage, the more the damage.",
-        new: "This Unit's attacks do not reduce <unit-skill>Stasis</unit-skill>, and also ignore <unit-skill>Taunt</unit-skill> and <unit-skill>Provoke</unit-skill> effects. <br /><br />This Unit <unit-damage>increases outgoing direct damage</unit-damage> based on the enemies current HP, up to <unit-damage>30%</unit-damage> when the enemy is at full HP.",
-        expects: 'modifier|self|on-cast|modifier',
-    },
-    {
-        ship: 'Akula',
-        slot: 'passive',
-        old: "This Unit's attacks don't break <unit-skill>Stasis</unit-skill>. Starts combat fully Charged. Increases outgoing direct damage by up to 30% based on the target's current HP percentage; the higher the percentage, the more the damage.",
-        new: "This Unit's attacks do not reduce <unit-skill>Stasis</unit-skill>, and also ignore <unit-skill>Taunt</unit-skill> and <unit-skill>Provoke</unit-skill> effects. <br /><br />This Unit <unit-damage>increases outgoing direct damage</unit-damage> based on the enemies current HP, up to <unit-damage>30%</unit-damage> when the enemy is at full HP.<br /><br />This Unit starts combat <unit-skill>fully charged</unit-skill>.",
-        expects: 'modifier|self|on-cast|modifier',
-    },
     {
         ship: 'Demolisher',
         slot: 'passive',
@@ -43,20 +34,6 @@ const PAIRS: RewordPair[] = [
         expects: 'counter|enemy|on-attacked|counter',
     },
     {
-        ship: 'Panon',
-        slot: 'passive',
-        old: 'If this Unit is directly damaged and does not have <unit-skill>Barrier Recharging</unit-skill>, it gains <unit-skill>Barrier</unit-skill> for 1 turn and applies <unit-skill>Barrier Recharging</unit-skill> to itself for 3 turns.<br /><br />This Unit reduces all incoming damage by 20% when affected by <unit-skill>Barrier Recharging</unit-skill>.',
-        new: 'If this Unit is directly damaged and does not have <unit-skill>Barrier Recharging</unit-skill>, it gains <unit-skill>Barrier</unit-skill> for 1 turn and applies <unit-skill>Barrier Recharging</unit-skill> to itself for 3 turns.<br /><br />This Unit gains <unit-damage>20% damage reduction</unit-damage> from all sources when affected by <unit-skill>Barrier Recharging</unit-skill>.',
-        expects: 'incoming-reduction|self|on-cast|incoming-reduction',
-    },
-    {
-        ship: 'Malvex',
-        slot: 'passive',
-        old: 'When Shielded, this Ship takes <unit-damage>10% less damage</unit-damage>. When directly damaged as a primary target, this Unit gains <unit-damage>Shield equal to 15%</unit-damage> of the Damage dealt to them.',
-        new: 'When directly damaged as a primary target, this Unit gains <unit-damage>shield equal to 15%</unit-damage> of the damage dealt.<br /><br />When this Unit has an active shield, it gains <unit-damage>10% damage reduction</unit-damage>.',
-        expects: 'incoming-reduction|self|on-cast|incoming-reduction',
-    },
-    {
         ship: 'Orel',
         slot: 'passive',
         old: 'When directly damaged by an enemy effected by <unit-skill>Taunt</unit-skill> or <unit-skill>Provoke</unit-skill>, this unit transforms the damage into a <unit-skill>Damage over Time effect</unit-skill> for 2 turns.',
@@ -69,13 +46,6 @@ const PAIRS: RewordPair[] = [
         old: 'When directly damaged by an enemy effected by <unit-skill>Taunt</unit-skill> or <unit-skill>Provoke</unit-skill>, this unit transforms the damage into a <unit-skill>Damage over Time effect</unit-skill> for 3 turns.',
         new: 'When directly damaged by an enemy effected by <unit-skill>Taunt</unit-skill> or <unit-skill>Provoke</unit-skill>, this Unit transforms the damage into a <unit-skill>damage over time effect</unit-skill> lasting 3 turns.',
         expects: 'transform-incoming-to-dot|self|on-attacked|transform-incoming-to-dot',
-    },
-    {
-        ship: 'Tormenter',
-        slot: 'passive',
-        old: 'This Unit always lands critical hits and gains up to <unit-damage>30% damage</unit-damage> reduction as its health decreases.',
-        new: "This Unit's attacks always critically hit and gains up to <unit-damage>30% damage reduction</unit-damage> as its health decreases.",
-        expects: 'incoming-reduction|self|on-cast|incoming-reduction',
     },
     {
         ship: 'Rikra',
@@ -112,18 +82,51 @@ const PAIRS: RewordPair[] = [
         new: 'When this Unit deals damage to a defender it <unit-skill>purges 1 buff</unit-skill> from that enemy.',
         expects: 'purge|enemy|on-deal-damage|purge',
     },
+];
+
+// Rows whose catalogue sentence is the only wording the parser reads: the parse must carry
+// `expects`.
+const CATALOGUE_ROWS: { ship: string; slot: SlotName; text: string; expects: string }[] = [
+    {
+        ship: 'Akula',
+        slot: 'passive',
+        text: "This Unit's attacks do not reduce <unit-skill>Stasis</unit-skill>, and also ignore <unit-skill>Taunt</unit-skill> and <unit-skill>Provoke</unit-skill> effects. <br /><br />This Unit <unit-damage>increases outgoing direct damage</unit-damage> based on the enemies current HP, up to <unit-damage>30%</unit-damage> when the enemy is at full HP.",
+        expects: 'modifier|self|on-cast|modifier',
+    },
+    {
+        ship: 'Akula',
+        slot: 'passive',
+        text: "This Unit's attacks do not reduce <unit-skill>Stasis</unit-skill>, and also ignore <unit-skill>Taunt</unit-skill> and <unit-skill>Provoke</unit-skill> effects. <br /><br />This Unit <unit-damage>increases outgoing direct damage</unit-damage> based on the enemies current HP, up to <unit-damage>30%</unit-damage> when the enemy is at full HP.<br /><br />This Unit starts combat <unit-skill>fully charged</unit-skill>.",
+        expects: 'modifier|self|on-cast|modifier',
+    },
+    {
+        ship: 'Panon',
+        slot: 'passive',
+        text: 'If this Unit is directly damaged and does not have <unit-skill>Barrier Recharging</unit-skill>, it gains <unit-skill>Barrier</unit-skill> for 1 turn and applies <unit-skill>Barrier Recharging</unit-skill> to itself for 3 turns.<br /><br />This Unit gains <unit-damage>20% damage reduction</unit-damage> from all sources when affected by <unit-skill>Barrier Recharging</unit-skill>.',
+        expects: 'incoming-reduction|self|on-cast|incoming-reduction',
+    },
+    {
+        ship: 'Malvex',
+        slot: 'passive',
+        text: 'When directly damaged as a primary target, this Unit gains <unit-damage>shield equal to 15%</unit-damage> of the damage dealt.<br /><br />When this Unit has an active shield, it gains <unit-damage>10% damage reduction</unit-damage>.',
+        expects: 'incoming-reduction|self|on-cast|incoming-reduction',
+    },
+    {
+        ship: 'Tormenter',
+        slot: 'passive',
+        text: "This Unit's attacks always critically hit and gains up to <unit-damage>30% damage reduction</unit-damage> as its health decreases.",
+        expects: 'incoming-reduction|self|on-cast|incoming-reduction',
+    },
     {
         ship: 'Zeolite',
         slot: 'passive',
-        old: 'This Unit increases <unit-damage>damage by 30%</unit-damage> when hitting a Defender and <unit-aid>purges 1</unit-aid> buff from the enemy when dealing damage to a Defender.',
-        new: 'When this Unit deals damage to a defender it <unit-skill>purges 1 buff</unit-skill> from that enemy.<br /><br />This Unit deals <unit-damage>30% more damage</unit-damage> when hitting a defender.',
+        text: 'When this Unit deals damage to a defender it <unit-skill>purges 1 buff</unit-skill> from that enemy.<br /><br />This Unit deals <unit-damage>30% more damage</unit-damage> when hitting a defender.',
         expects: 'purge|enemy|on-deal-damage|purge',
     },
     {
         ship: 'FrontLine',
         slot: 'passive',
-        old: 'This ship has 20% Shield Penetration.<br />While Shielded, it gains 2500 additional Defense.<br />This Unit gains <unit-damage>Shield equal to 25%</unit-damage> of its Max HP at the start of combat.<br /><br />When an enemy uses their Charged skill, it deals <unit-damage>80%</unit-damage> and gains a Shield equal to <unit-damage>30%</unit-damage> of the damage dealt, once per round.',
-        new: 'This ship has <unit-damage>20% shield penetration</unit-damage>.<br /><br />At the start of combat this Unit gains a <unit-damage>shield equal to 25%</unit-damage> of its max HP and while it has an active shield, it gains 2500 defense.<br /><br />When an enemy uses their charged skill, this Unit deals <unit-damage>80% damage</unit-damage> and gains a <unit-damage>shield equal to 30%</unit-damage> of the damage dealt, once per round.',
+        text: 'This ship has <unit-damage>20% shield penetration</unit-damage>.<br /><br />At the start of combat this Unit gains a <unit-damage>shield equal to 25%</unit-damage> of its max HP and while it has an active shield, it gains 2500 defense.<br /><br />When an enemy uses their charged skill, this Unit deals <unit-damage>80% damage</unit-damage> and gains a <unit-damage>shield equal to 30%</unit-damage> of the damage dealt, once per round.',
         expects: 'damage|enemy|on-enemy-charged-cast|damage',
     },
 ];
@@ -134,9 +137,17 @@ describe('damage, defence and charge clauses — catalogue wording parses like o
         expect(sigs(before)).toContain(expects); // the reference parse is not vacuous
         expect(canonical(parseSlot(slot, next))).toEqual(canonical(before));
     });
+
+    it.each(CATALOGUE_ROWS)(
+        '$ship $slot: the catalogue sentence carries its parse',
+        ({ slot, text, expects }) => {
+            expect(sigs(parseSlot(slot, text))).toContain(expects);
+        }
+    );
 });
 
-const pairText = (ship: string, n = 0): string => PAIRS.filter((p) => p.ship === ship)[n].new;
+const pairText = (ship: string): string => PAIRS.filter((p) => p.ship === ship)[0].new;
+const rowText = (ship: string): string => CATALOGUE_ROWS.filter((p) => p.ship === ship)[0].text;
 
 // A percentage that names a damage REDUCTION, a damage share or an enemy-side condition is not an
 // attack of its own.
@@ -146,11 +157,11 @@ describe('damage, defence and charge clauses — the catalogue sentence mints no
         { ship: 'Malvex', slot: 'passive' as const },
         { ship: 'Tormenter', slot: 'passive' as const },
     ])('$ship: "damage reduction" is not an on-cast hit', ({ ship, slot }) => {
-        expect(sigs(parseSlot(slot, pairText(ship)))).not.toContain('damage|enemy|on-cast|damage');
+        expect(sigs(parseSlot(slot, rowText(ship)))).not.toContain('damage|enemy|on-cast|damage');
     });
 
     it('FrontLine R2: the enemy-charged-cast hit is not also an on-cast hit', () => {
-        const s = sigs(parseSlot('passive', pairText('FrontLine')));
+        const s = sigs(parseSlot('passive', rowText('FrontLine')));
         expect(s).toContain('damage|enemy|on-enemy-charged-cast|damage');
         expect(s).not.toContain('damage|enemy|on-cast|damage');
     });

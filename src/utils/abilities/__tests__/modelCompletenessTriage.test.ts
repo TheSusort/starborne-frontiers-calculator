@@ -52,9 +52,9 @@ describe('SP0 triage — corpus scaffold', () => {
 describe('SP-A — incoming-reduction condition gates', () => {
     // Verbatim from docs/ship-skills.csv (second_passive_skill_text field).
     const MALVEX_P2 =
-        'When Shielded, this Ship takes <unit-damage>10% less damage</unit-damage>. When directly damaged as a primary target, this Unit gains <unit-damage>Shield equal to 15%</unit-damage> of the Damage dealt to them.';
+        'When directly damaged as a primary target, this Unit gains <unit-damage>shield equal to 15%</unit-damage> of the damage dealt.<br /><br />When this Unit has an active shield, it gains <unit-damage>10% damage reduction</unit-damage>.';
 
-    it('Malvex: "When Shielded, takes 10% less damage" builds a shield-gated incoming-reduction', () => {
+    it('Malvex: "When this Unit has an active shield, it gains 10% damage reduction" builds a shield-gated incoming-reduction', () => {
         const abilities = abilitiesFor({ secondPassiveSkillText: MALVEX_P2 }, 'passive');
         expect(
             abilities.some(
@@ -862,16 +862,16 @@ describe('confirm-GREEN-only — locked FPs', () => {
         expect(abilities[0].conditions).toEqual([{ subject: 'self-crit', derivable: true }]);
     });
 
-    // ── Tormenter: "always lands critical hits" (same data-layer fact) + base-damage clause ──
+    // ── Tormenter: "attacks always critically hit" (same data-layer fact) + base-damage clause ──
     // Verbatim from docs/ship-skills.csv (second_passive_skill_text field).
     const TORMENTER_P2 =
-        'This Unit always lands critical hits and gains up to <unit-damage>30% damage</unit-damage> reduction as its health decreases.';
+        "This Unit's attacks always critically hit and gains up to <unit-damage>30% damage reduction</unit-damage> as its health decreases.";
 
-    it('Tormenter: "always lands critical hits" mints no phantom always-crit ability — only the two hp-scaled incoming-reduction abilities build (FP: same data-layer fact as Asphodel)', () => {
+    it('Tormenter: "attacks always critically hit" mints no phantom always-crit ability — only the two hp-scaled incoming-reduction abilities build (FP: same data-layer fact as Asphodel)', () => {
         const abilities = abilitiesFor({ secondPassiveSkillText: TORMENTER_P2 }, 'passive');
         // Dry-run confirmed: exactly TWO abilities build (a 'direct'-scope and a 'dot'-scope
-        // incoming-reduction, both carrying the same hpScaling) — nothing else. The "always
-        // lands critical hits" clause contributes no third ability and no crit-flag field on
+        // incoming-reduction, both carrying the same hpScaling) — nothing else. The "attacks
+        // always critically hit" clause contributes no third ability and no crit-flag field on
         // either of these two.
         expect(abilities.length).toBeGreaterThan(0);
         expect(abilities.every((a) => a.type === 'incoming-reduction')).toBe(true);

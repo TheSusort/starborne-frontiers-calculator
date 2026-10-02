@@ -49,15 +49,15 @@ describe('PR6a conditional-branch phrasing', () => {
     });
 
     describe('self-crit conditional', () => {
-        it('Crucialis charged: "when it is critical, deals and additional 190%" → self-crit scaling', () => {
+        it('Crucialis charged: "if a critical hit, deals an additional 210%" → self-crit scaling', () => {
             const s = ship({
                 chargeSkillText:
-                    'This Unit deals <unit-damage>200% damage</unit-damage> and when it is critical, deals and additional <unit-damage>190%</unit-damage> damage.',
+                    'This Unit deals <unit-damage>200% damage</unit-damage> and, if a critical hit, deals an additional <unit-damage>210% damage</unit-damage>.',
                 chargeSkillCharge: 3,
             });
             const dmg = damageOf(slot(buildShipAbilities(s).slots, 'charged')!.abilities)!;
             expect(dmg.config).toMatchObject({ type: 'damage', multiplier: 200 });
-            expect(dmg.scaling).toMatchObject({ conditionIndex: 0, perUnit: 190 });
+            expect(dmg.scaling).toMatchObject({ conditionIndex: 0, perUnit: 210 });
             expect(dmg.conditions[0]).toMatchObject({ subject: 'self-crit', derivable: true });
         });
     });

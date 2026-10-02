@@ -120,7 +120,7 @@ describe('parseSkillDamage', () => {
     // outgoing hit. Exact clauses from docs/ship-skills.csv.
     it('skips "X% damage reduction" (Tormenter p2 — incoming HP-scaled reduction, not an attack)', () => {
         const text =
-            'This Unit always lands critical hits and gains up to <unit-damage>30% damage</unit-damage> reduction as its health decreases.';
+            "This Unit's attacks always critically hit and gains up to <unit-damage>30% damage reduction</unit-damage> as its health decreases.";
         expect(parseSkillDamage(text)).toBe(0);
     });
 
@@ -1247,11 +1247,11 @@ describe('parseConditionalDamage', () => {
         expect(parseConditionalDamage(null)).toBeNull();
     });
 
-    it('parses "if critical, additionally deals N% damage" as a self-crit bonus (Crucialis)', () => {
+    it('parses "if a critical hit, deals an additional N% damage" as a self-crit bonus (Crucialis)', () => {
         const text =
-            'This Unit deals <unit-damage>80% damage</unit-damage> and, if critical, additionally deals <unit-damage>75%</unit-damage> damage.';
+            'This Unit deals <unit-damage>80% damage</unit-damage> and, if a critical hit, deals an additional <unit-damage>90% damage</unit-damage>.';
         expect(parseConditionalDamage(text)).toEqual({
-            pct: 75,
+            pct: 90,
             condition: 'self-crit',
             derivable: true,
         });
@@ -2605,11 +2605,11 @@ describe('detectGrantConditions', () => {
         ]);
     });
 
-    it('parseConditionalDamage: IonScorp "but when attacking a Defender, it deals 200%" → +10 delta gated Defender', () => {
+    it('parseConditionalDamage: IonScorp "but when attacking a defender, it instead deals 220%" → +30 delta gated Defender', () => {
         const text =
-            'This Unit deals <unit-damage>190% damage</unit-damage>, but when attacking a Defender, it deals <unit-damage>200%</unit-damage> damage and inflicts <unit-skill>Disable</unit-skill> for 1 turn.';
+            'This Unit deals <unit-damage>190% damage</unit-damage>, but when attacking a defender, it instead deals <unit-damage>220% damage</unit-damage> and inflicts <unit-skill>Disable</unit-skill> for 1 turn.';
         expect(parseConditionalDamage(text)).toEqual({
-            pct: 10,
+            pct: 30,
             condition: 'enemy-type',
             derivable: true,
             requiredEnemyType: 'Defender',

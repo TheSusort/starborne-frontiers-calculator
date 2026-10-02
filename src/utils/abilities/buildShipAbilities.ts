@@ -427,10 +427,9 @@ function forEveryEnemyStealthCondition(sentence: string, rawText: string): Condi
 
 /**
  * Detects an HP-proportional "up to X%" bonus: the value scales linearly with the
- * target's CURRENT HP% (Akula — "based on the target's current HP percentage; the
- * higher the percentage, the more", or "based on the enemies current HP, up to X% when the
- * enemy is at full HP") or MISSING HP% (Tithonus — "based on the
- * target's missing HP, with the maximum achieved when the target is below 10% HP").
+ * target's CURRENT HP% (Akula — "based on the enemies current HP, up to X% when the enemy is
+ * at full HP") or MISSING HP% (Tithonus — "based on the target's missing HP, with the maximum
+ * achieved when the target is below 10% HP").
  * Returns the count condition + scaling rule (perUnit per HP point, capped at the
  * full value), or null when the sentence has no HP-proportional phrasing. The
  * "below N% HP" anchor in the missing-HP form sets where the maximum is reached
@@ -440,7 +439,7 @@ function hpProportionalScaling(
     sentence: string,
     value: number
 ): { condition: Condition; scaling: ScalingRule } | null {
-    if (/based on the (?:target|enem(?:y|ies))'?s?\s+current\s+hp/i.test(sentence)) {
+    if (/based on the enem(?:y|ies)'?s?\s+current\s+hp/i.test(sentence)) {
         return {
             condition: { subject: 'enemy-hp-pct', derivable: true },
             scaling: { conditionIndex: 0, perUnit: value / 100, cap: value },
@@ -699,18 +698,15 @@ function parseModifiers(text: string): ParsedModifier[] {
         });
     }
 
-    // "increases [outgoing] [direct] Damage by [up to] N% [to enemies with <effect> / below X% HP]"
-    // → an outgoing-damage bonus (Obsidian). HP-proportional phrasings (Akula's "up to 30%
-    // based on the target's current HP percentage") become a scaling modifier on the live
-    // enemy-hp-pct count — the sim derives enemy HP from cumulative damage per round.
-    // The amount follows "by" ("increases damage by up to 30% based on…") or the HP basis
-    // ("increases outgoing direct damage based on the enemies current HP, up to 30%…").
+    // "increases outgoing direct damage based on the enemies current HP, up to N%" (Akula) → a
+    // scaling modifier on the live enemy-hp-pct count — the sim derives enemy HP from cumulative
+    // damage per round.
     const incM = plain.match(
-        /increases?\s+(?:outgoing\s+)?(?:direct\s+)?damage\s+(?:by\s+(?:up\s+to\s+)?(\d+(?:\.\d+)?)%|based\s+on\s+the\s+enem(?:y|ies)'?s?\s+current\s+hp,?\s+up\s+to\s+(\d+(?:\.\d+)?)%)/i
+        /increases?\s+(?:outgoing\s+)?(?:direct\s+)?damage\s+based\s+on\s+the\s+enem(?:y|ies)'?s?\s+current\s+hp,?\s+up\s+to\s+(\d+(?:\.\d+)?)%/i
     );
     if (incM) {
         const sentence = sentenceContaining(plain, incM.index!);
-        const incValue = parseFloat(incM[1] ?? incM[2]);
+        const incValue = parseFloat(incM[1]);
         const incTarget: AbilityTarget = /friendly|all allies|allies/i.test(sentence)
             ? 'all-allies'
             : 'self';
@@ -847,9 +843,8 @@ function parseModifiers(text: string): ParsedModifier[] {
 }
 
 /**
- * Detects Iridium's crit reduction — "takes N% less damage from Critical hits" or "has N% damage
- * reduction from critical hits" — and returns the reduction percentage, or null when the phrase
- * is absent.
+ * Detects Iridium's crit reduction — "has N% damage reduction from critical hits" — and returns
+ * the reduction percentage, or null when the phrase is absent.
  *
  * The match is intentionally narrow: only a reduction stated "from critical hits" maps to the
  * crit-family incoming-reduction ability. A generic "less damage" clause (e.g. "takes 20% less
@@ -860,11 +855,9 @@ function parseModifiers(text: string): ParsedModifier[] {
  */
 function parseIncomingCritReduction(text: string): number | null {
     const plain = stripTags(text).replace(/<br\s*\/?>/gi, '. ');
-    const m = plain.match(
-        /(?:takes\s+(\d+(?:\.\d+)?)%\s+less\s+damage|has\s+(\d+(?:\.\d+)?)%\s+damage\s+reduction)\s+from\s+critical\s+hits/i
-    );
+    const m = plain.match(/has\s+(\d+(?:\.\d+)?)%\s+damage\s+reduction\s+from\s+critical\s+hits/i);
     if (!m) return null;
-    return parseFloat(m[1] ?? m[2]);
+    return parseFloat(m[1]);
 }
 
 /** One parsed incoming-damage-reduction directive. `scopes` lists every
@@ -895,11 +888,11 @@ interface ParsedIncomingDamageReduction {
  * AbilityConfig / IncomingCondition (the crit-family reduction is parseIncomingCritReduction):
  *  - Anemone: "takes N% less direct damage from enemies debuffed with a Damage over Time
  *    effect" — the ATTACKER carries a live DoT (`attacker-has-dot`).
- *  - Panon: "reduces all incoming damage by N%" / "gains N% damage reduction from all sources"
- *    "when affected by Barrier Recharging" — the VICTIM carries its own named self-status
- *    (`self-barrier-recharging`). Every incoming source → both scope:'direct' and scope:'dot'.
- *  - Wusheng: "reduces direct damage by N%" / "takes N% less direct damage" "while Stealth is
- *    active" — `self-stealth`, direct only.
+ *  - Panon: "gains N% damage reduction from all sources when affected by Barrier Recharging" —
+ *    the VICTIM carries its own named self-status (`self-barrier-recharging`). Every incoming
+ *    source → both scope:'direct' and scope:'dot'.
+ *  - Wusheng: "takes N% less direct damage while Stealth is active" — `self-stealth`, direct
+ *    only.
  *  - Tormenter: "gains up to N% damage reduction as its health decreases" — no status gate,
  *    continuous HP-proportional scaling (`hpScaling`, condition 'always'). perUnit = cap/100 so
  *    the reduction reaches exactly `cap`% at 0 HP (the Revenge gear set's self-hp-missing-pct
@@ -922,30 +915,29 @@ function parseIncomingDamageReductionPhrasings(text: string): ParsedIncomingDama
         });
     }
 
-    // "reduces all incoming damage by N%" and "gains N% damage reduction from all sources" both
-    // cover every incoming source.
+    // "gains N% damage reduction from all sources" covers every incoming source.
     const panonM =
-        /(?:reduces\s+all\s+incoming\s+damage\s+by\s+(\d+(?:\.\d+)?)%|gains\s+(\d+(?:\.\d+)?)%\s+damage\s+reduction\s+from\s+all\s+sources)\s+when\s+affected\s+by\s+barrier\s+recharging/i.exec(
+        /gains\s+(\d+(?:\.\d+)?)%\s+damage\s+reduction\s+from\s+all\s+sources\s+when\s+affected\s+by\s+barrier\s+recharging/i.exec(
             plain
         );
     if (panonM) {
         out.push({
             scopes: ['direct', 'dot'],
             condition: 'self-barrier-recharging',
-            pct: parseFloat(panonM[1] ?? panonM[2]),
+            pct: parseFloat(panonM[1]),
             matchIndex: panonM.index,
         });
     }
 
     const wushengM =
-        /(?:reduces\s+direct\s+damage\s+by\s+(\d+(?:\.\d+)?)%|takes\s+(\d+(?:\.\d+)?)%\s+less\s+direct\s+damage)\s+while\s+stealth\s+is\s+active/i.exec(
+        /takes\s+(\d+(?:\.\d+)?)%\s+less\s+direct\s+damage\s+while\s+stealth\s+is\s+active/i.exec(
             plain
         );
     if (wushengM) {
         out.push({
             scopes: ['direct'],
             condition: 'self-stealth',
-            pct: parseFloat(wushengM[1] ?? wushengM[2]),
+            pct: parseFloat(wushengM[1]),
             matchIndex: wushengM.index,
         });
     }
@@ -980,20 +972,19 @@ function parseIncomingDamageReductionPhrasings(text: string): ParsedIncomingDama
         });
     }
 
-    // Malvex: "When Shielded, this Ship takes N% less damage" / "When this Unit has an active
-    // shield, it gains N% damage reduction" — a self-shield-gated flat reduction. The
-    // self-shielded IncomingCondition is evaluated per-hit against the victim's live shieldPool.
-    // Anchored on the shield gate so it never matches Voron's DoT phrasing or a bare "takes N%
-    // less damage".
+    // Malvex: "When this Unit has an active shield, it gains N% damage reduction" — a
+    // self-shield-gated flat reduction. The self-shielded IncomingCondition is evaluated per-hit
+    // against the victim's live shieldPool. Anchored on the shield gate so it never matches a
+    // bare "N% damage reduction".
     const malvexM =
-        /(?:when\s+shielded,?\s+this\s+(?:ship|unit)\s+takes\s+(\d+(?:\.\d+)?)%\s+less\s+damage|when\s+this\s+unit\s+has\s+an\s+active\s+shield,?\s+it\s+gains\s+(\d+(?:\.\d+)?)%\s+damage\s+reduction)/i.exec(
+        /when\s+this\s+unit\s+has\s+an\s+active\s+shield,?\s+it\s+gains\s+(\d+(?:\.\d+)?)%\s+damage\s+reduction/i.exec(
             plain
         );
     if (malvexM) {
         out.push({
             scopes: ['direct'],
             condition: 'self-shielded',
-            pct: parseFloat(malvexM[1] ?? malvexM[2]),
+            pct: parseFloat(malvexM[1]),
             matchIndex: malvexM.index,
         });
     }
@@ -3168,7 +3159,7 @@ function abilitiesFromText(
     const critReductionPct = parseIncomingCritReduction(text);
     if (critReductionPct !== null) {
         const critRedPos = text.search(
-            /(?:less\s+damage|damage\s+reduction)(?:<\/unit-damage>)?\s+from\s+critical\s+hits/i
+            /damage\s+reduction(?:<\/unit-damage>)?\s+from\s+critical\s+hits/i
         );
         out.push({
             ability: {

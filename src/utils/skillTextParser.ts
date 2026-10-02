@@ -166,21 +166,17 @@ export function extractSkillNames(skillText: string | null | undefined): string[
     return [...new Set(matches)]; // Remove duplicates
 }
 
-// Epic PR1 (skill-model gap, finding family 1): a <unit-damage> tag whose CONTENT says "X% less
-// damage" is an INCOMING-damage reduction (Voron "takes 20% less damage from DoTs", Malvex "takes
-// 10% less damage"), never an outgoing attack multiplier.
+// A <unit-damage> tag whose CONTENT says "X% less damage" is an INCOMING-damage reduction (Voron
+// "takes 20% less damage from damage over time effects", Fuying/Wusheng "N% less direct damage"),
+// never an outgoing attack multiplier.
 //
-// A bare `\bless\b`, deliberately mirroring the `\bmore\b` guard in parseSkillDamage: the previous
-// /\bless\s+damage\b/ required the two words ADJACENT, so Fuying's "30% less direct damage" slipped
-// through and parseInt minted a phantom outgoing damage{30} from a damage-reduction aura (#363).
-// Measured over all 149 corpus ships: every <unit-damage> tag whose content contains "less" is
-// incoming reduction (Fuying x3, Malvex, Voron) — there is no legitimate attack tag for the wider
-// pattern to suppress.
+// A bare `\bless\b`, deliberately mirroring the `\bmore\b` guard in parseSkillDamage: requiring
+// "less damage" ADJACENT lets "30% less direct damage" through, and parseInt then mints a phantom
+// outgoing damage{30} from a damage-reduction aura (#363). No legitimate attack tag in the corpus
+// contains "less", so the wider pattern suppresses nothing it should keep.
 const LESS_DAMAGE_RE = /\bless\b/i;
-// "X% damage reduction" is the same incoming-reduction family, whether the "reduction" noun sits
-// just outside the tag ("<unit-damage>30% damage</unit-damage> reduction") or inside it
-// ("<unit-damage>30% damage reduction</unit-damage>").
-const DAMAGE_REDUCTION_FOLLOWING_RE = /^\s*reduction\b/i;
+// "X% damage reduction" ("<unit-damage>30% damage reduction</unit-damage>") is the same
+// incoming-reduction family.
 const DAMAGE_REDUCTION_IN_TAG_RE = /\bdamage\s+reduction\b/i;
 // A bare percentage tag ("<unit-damage>30%</unit-damage>") preceded by "Shield equal to " is a
 // shield-scaling clause ("gains a Shield equal to 30% of the damage dealt", FrontLine) — the
@@ -212,10 +208,9 @@ export function parseSkillDamage(text: string): number {
         // "X% more (direct) damage" is a passive output MODIFIER, not a base skill
         // multiplier — skip it (parseModifier handles it). e.g. Thresh's passive.
         if (/\bmore\b/i.test(match[1])) continue;
-        // Incoming-damage reduction ("X% less damage", "X% damage reduction" with the noun
-        // inside or just outside the tag) — not an outgoing attack.
+        // Incoming-damage reduction ("X% less damage", "X% damage reduction") — not an
+        // outgoing attack.
         if (LESS_DAMAGE_RE.test(match[1])) continue;
-        if (DAMAGE_REDUCTION_FOLLOWING_RE.test(following)) continue;
         if (DAMAGE_REDUCTION_IN_TAG_RE.test(match[1])) continue;
         // "Shield equal to X%" lead-in immediately before the tag — a shield scaled off damage
         // dealt, not the damage itself.
@@ -606,14 +601,14 @@ export function parseConditionalDamage(text: string | null | undefined): Conditi
             };
         }
     }
-    // "deals X% damage, but when attacking a <class>, it [instead] deals Y% damage" and "deals X%
+    // "deals X% damage, but when attacking a <class>, it instead deals Y% damage" and "deals X%
     // damage, if the target is a <class> it instead deals Y% damage" — the same replacement shape
     // as "increased to" above, worded with a class clause before "deals Y%". Modeled identically:
     // base X plus a conditional (Y − X) bonus gated on the enemy class. Placed alongside incTo —
     // these phrasings have no "additional" either.
     const butWhen =
         stripUnitTags(text).match(
-            /(\d+(?:\.\d+)?)\s*%\s*damage,?\s*but\s+when\s+(?:attacking|targeting|damaging|against)\s+an?\s+(attacker|defender|debuffer|supporter)s?,?\s*(?:it\s+)?(?:instead\s+)?deals?\s+(\d+(?:\.\d+)?)\s*%/i
+            /(\d+(?:\.\d+)?)\s*%\s*damage,?\s*but\s+when\s+(?:attacking|targeting|damaging|against)\s+an?\s+(attacker|defender|debuffer|supporter)s?,?\s*(?:it\s+)?instead\s+deals?\s+(\d+(?:\.\d+)?)\s*%/i
         ) ?? IF_TARGET_IS_CLASS_INSTEAD_RE.exec(stripUnitTags(text));
     if (butWhen) {
         const delta = parseFloat(butWhen[3]) - parseFloat(butWhen[1]);
@@ -801,11 +796,10 @@ export function parseDotEntryDamageScaling(
     return { perUnit: pct / n };
 }
 
-// "if/when [this unit|it is|a] critical[ly hits], … additional[ly] … N% damage" — extra damage
-// dealt on a crit: "if critical, additionally deals 75%", "when it is critical, deals and
-// additional 190%" (a typo phrasing) and "if a critical hit, deals an additional 90%".
+// "if/when a critical[ly hits], … additional[ly] … N% damage" — extra damage dealt on a crit:
+// "if a critical hit, deals an additional 90%".
 const CRIT_BONUS_RE =
-    /\b(?:if|when)\s+(?:this\s+(?:unit\s+)?|it\s+is\s+|a\s+)?critical(?:ly\s+(?:hits?|damages?))?\b[^.]*?\badditional(?:ly)?\b[^.]*?(\d+(?:\.\d+)?)\s*%\s*damage/i;
+    /\b(?:if|when)\s+a\s+critical(?:ly\s+(?:hits?|damages?))?\b[^.]*?\badditional(?:ly)?\b[^.]*?(\d+(?:\.\d+)?)\s*%\s*damage/i;
 
 // "deals N% damage to <targets> with less/more than X% HP" — the damage itself is gated by an
 // enemy-HP threshold (Judge's "deals 60% damage to all enemies with less than 50% HP"). Scoped
@@ -3852,14 +3846,14 @@ export function parseDefenseSubstitution(text: string | null | undefined): boole
     return DEFENSE_SUBSTITUTION_RE.test(normalised);
 }
 
-// FrontLine's passive: "While Shielded, it gains 2500 additional Defense." / "while it has an
-// active shield, it gains 2500 defense". A flat-points DEFENSIVE stat grant, gated on the owner
-// CURRENTLY holding a shield — distinct from the percentage-of-a-stat DAMAGE "additional damage
-// equal to N% of its Defense/Shield" (parseSecondaryDamage). Both forms require the "while"
-// shield gate immediately before "gains N … defense", so an unrelated "additional damage" or
-// "if this Unit has an active shield" sentence in the same passive text cannot match.
+// FrontLine's passive: "while it has an active shield, it gains 2500 defense". A flat-points
+// DEFENSIVE stat grant, gated on the owner CURRENTLY holding a shield — distinct from the
+// percentage-of-a-stat DAMAGE "additional damage equal to N% of its Defense/Shield"
+// (parseSecondaryDamage). The "while" shield gate must sit immediately before "gains N … defense",
+// so an unrelated "additional damage" or "if this Unit has an active shield" sentence in the same
+// passive text cannot match.
 const WHILE_SHIELDED_FLAT_DEFENCE_RE =
-    /while\s+(?:shielded|it\s+has\s+an\s+active\s+shield)[,]?\s+(?:it\s+)?gains\s+(\d+)\s+(?:additional\s+)?defen[cs]e/i;
+    /while\s+it\s+has\s+an\s+active\s+shield[,]?\s+(?:it\s+)?gains\s+(\d+)\s+defen[cs]e/i;
 
 /**
  * Returns the flat Defense points granted by a while-shielded clause

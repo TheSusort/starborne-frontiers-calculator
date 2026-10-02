@@ -37,21 +37,14 @@ const PAIRS: RewordPair[] = [
         new: 'This Unit ignores <unit-skill>Stealth</unit-skill> effects.<br /><br />This Unit deals <unit-damage>10% more direct damage</unit-damage> for every enemy with <unit-skill>Stealth</unit-skill>.<br /><br />At the start of each round, this Unit applies <unit-skill>Concentrate Fire</unit-skill> for 1 turn to the enemy with the highest attack.',
         expects: 'debuff|enemy-highest-attack|start-of-round|Concentrate Fire',
     },
-    // Crucialis, FrontLine and Defiant: no numbers substituted — old and new carry the same
-    // values in a different order.
+    // Crucialis and Defiant: no numbers substituted — old and new carry the same values in a
+    // different order.
     {
         ship: 'Crucialis',
         slot: 'passive',
         old: 'At the start of combat, this Unit gains a <unit-damage>Shield equal to 20%</unit-damage> of its Max HP and gains <unit-skill>Atlas Coordination I</unit-skill> for 6 turns.<br />This Unit has 20% Shield Penetration.',
         new: 'This Unit has <unit-damage>20% shield penetration</unit-damage>.<br /><br />At the start of combat, this Unit gains a <unit-damage>shield equal to 20%</unit-damage> of its max HP and gains <unit-skill>Atlas Coordination I</unit-skill> for 6 turns.',
         expects: 'shield|self|pre-combat|shield',
-    },
-    {
-        ship: 'FrontLine',
-        slot: 'passive',
-        old: 'This ship has 20% Shield Penetration.<br />While Shielded, it gains 2500 additional Defense.<br />This Unit gains <unit-damage>Shield equal to 25%</unit-damage> of its Max HP at the start of combat.',
-        new: 'This ship has <unit-damage>20% shield penetration</unit-damage>.<br /><br />At the start of combat this Unit gains a <unit-damage>shield equal to 25%</unit-damage> of its max HP and while it has an active shield, it gains 2500 defense.',
-        expects: 'conditional-stat|self|on-cast|conditional-stat',
     },
     {
         ship: 'Defiant',
@@ -67,6 +60,14 @@ describe('timing phrases — catalogue wording parses like ours', () => {
         const before = parseSlot(slot, old);
         expect(sigs(before)).toContain(expects); // the reference parse is not vacuous
         expect(canonical(parseSlot(slot, next))).toEqual(canonical(before));
+    });
+
+    it('FrontLine passive R0: the catalogue sentence carries the self-shield stat', () => {
+        const text =
+            'This ship has <unit-damage>20% shield penetration</unit-damage>.<br /><br />At the start of combat this Unit gains a <unit-damage>shield equal to 25%</unit-damage> of its max HP and while it has an active shield, it gains 2500 defense.';
+        expect(sigs(parseSlot('passive', text))).toContain(
+            'conditional-stat|self|on-cast|conditional-stat'
+        );
     });
 });
 
@@ -129,10 +130,10 @@ describe('timing phrases — a bare "Start of combat" is the pre-combat grant', 
         });
     });
 
-    it('Iridium passive R2: the catalogue wording parses like ours', () => {
-        const before = parseSlot('passive', OLD);
-        expect(sigs(before)).toContain('buff|self|pre-combat|Taunt');
-        expect(canonical(parseSlot('passive', NEW))).toEqual(canonical(before));
+    it('Iridium passive R2: the catalogue wording is the pre-combat Taunt grant', () => {
+        const s = sigs(parseSlot('passive', NEW));
+        expect(s).toContain('buff|self|pre-combat|Taunt');
+        expect(s).not.toContain('buff|self|on-cast|Taunt');
     });
 });
 
