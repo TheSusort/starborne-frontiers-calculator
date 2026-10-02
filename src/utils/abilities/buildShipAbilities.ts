@@ -97,7 +97,6 @@ import {
     PURGE_MORE_RE,
     parseControlInflicts,
     detectAllyCritTrigger,
-    detectEnemyBuffedTrigger,
     detectAllyShieldDestroyedTrigger,
     detectCleanseOncePerRound,
     parseNoCrit,
@@ -2567,8 +2566,8 @@ function abilitiesFromText(
                     ? { triggerApplicationFilter: 'inflict' as const }
                     : {}),
                 // APEX: the shield's own sentence carries the trigger clause, so its verb is the
-                // filter — catalogue "gets inflicted with a debuff" → 'inflict'; OLD "gets
-                // debuffed" names no verb and stays unfiltered.
+                // filter — "gets inflicted with a debuff" → 'inflict'. A clause naming no verb
+                // stays unfiltered.
                 ...(reactiveTrigger === 'on-debuff-inflicted'
                     ? (() => {
                           const verb = debuffTriggerVerb(healSentence);
@@ -2620,9 +2619,7 @@ function abilitiesFromText(
         //    trigger doc block) and is routed to the crit-er via eventCtx.damagedAllyId.
         //  - every-turn ("Every turn this Unit cleanses ...") is a per-turn cleanse: the leading
         //    "every turn" governs the cleanse and a trailing "when" clause governs only the grants
-        //    after it, so this check runs BEFORE the enemy-buffed one when a sentence carries both.
-        //  - enemy-buffed ("cleanses ... when an enemy gains a buff") -> on-enemy-buffed
-        //    (opposing-scoped trigger).
+        //    after it.
         //  - ally-shield-destroyed ("cleanses all debuffs when an ally has their Shield
         //    destroyed") -> on-ally-shield-destroyed.
         //  - a PASSIVE-slot cleanse whose sentence carries a direct-damage reaction phrase ->
@@ -2631,7 +2628,6 @@ function abilitiesFromText(
             detectCritRepairTrigger(text, cleansePos) ??
             detectAllyCritTrigger(text, cleansePos) ??
             detectEveryTurnTrigger(text, cleansePos) ??
-            detectEnemyBuffedTrigger(text, cleansePos) ??
             detectAllyShieldDestroyedTrigger(text, cleansePos) ??
             (slot === 'passive' &&
             detectDamageReactionTrigger(text, cleansePos)?.trigger === 'on-attacked'
@@ -2645,7 +2641,8 @@ function abilitiesFromText(
             reactiveTrigger === 'on-ally-shield-destroyed'
                 ? 'ally'
                 : flipBareSupportTarget(c.target, c.explicitTarget, slot, mult > 0);
-        // Nuqtu's "(once per round)" cap — the plain self-scoped Ability.oncePerRound flag.
+        // Nuqtu's "cleanses 1 debuff, once per round" cap — the plain self-scoped
+        // Ability.oncePerRound flag.
         const cleanseOncePerRound = detectCleanseOncePerRound(text, cleansePos);
         out.push({
             ability: {
@@ -3664,18 +3661,10 @@ export function buildShipAbilities(rawShip: Ship): ShipSkills {
             ability.conditions = ability.conditions.filter(
                 (c) =>
                     c.subject !== 'self-crit' &&
-                    // Phase 3 PR-I (COLLISION-SCOPE / "PR-E Provider lesson"): drop the now-
-                    // redundant manual enemy-buff condition once the clause is promoted to the
-                    // on-enemy-buffed trigger — the trigger IS the gate. Without this, Nuqtu's
-                    // Terran Bolster III would carry BOTH the reactive trigger AND the stale
-                    // manual condition (harmless today since a manual condition with no
-                    // manualCount defaults to "met", but leaving it is misleading and the
-                    // brief calls it out explicitly).
-                    !(reactiveTrigger === 'on-enemy-buffed' && c.subject === 'enemy-buff') &&
-                    // SP-G G4 (same COLLISION-SCOPE pattern): "On inflicting a debuff, gains X"
-                    // is double-classified — detectReactiveTrigger promotes it to on-debuff-inflicted
-                    // (APPLYING_DEBUFF_RE) AND detectGrantConditions' appliesDebuffGate emits a
-                    // redundant enemy-debuff condition from the SAME phrase. The trigger already
+                    // "On inflicting a debuff, gains X" is double-classified: detectReactiveTrigger
+                    // promotes it to on-debuff-inflicted (APPLYING_DEBUFF_RE) AND
+                    // detectGrantConditions' appliesDebuffGate emits a redundant enemy-debuff
+                    // condition from the SAME phrase. The trigger already
                     // proves a debuff was inflicted, so drop the enemy-debuff condition. Leaving it
                     // is not harmless here: enemy-debuff is `derivable:true`, so at reactive drain it
                     // gates against the enemy's LIVE debuff store. That store is populated on the
@@ -3687,8 +3676,8 @@ export function buildShipAbilities(rawShip: Ship): ShipSkills {
                     // Provider (#590): detectGrantConditions' rule 4a independently attaches the
                     // manual ally-inflicts-debuff condition from the SAME "another ally inflicts a
                     // debuff" clause the on-other-ally-debuff-inflicted trigger above just
-                    // resolved from. Same COLLISION-SCOPE pattern as the two drops above — drop
-                    // the now-redundant condition since the trigger is the gate.
+                    // resolved from. Same pattern as the drop above — drop the now-redundant
+                    // condition since the trigger is the gate.
                     !(
                         reactiveTrigger === 'on-other-ally-debuff-inflicted' &&
                         c.subject === 'ally-inflicts-debuff'

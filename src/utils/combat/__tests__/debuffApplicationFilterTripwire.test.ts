@@ -20,8 +20,8 @@
  * parser never stamps `application` on a ship DoT, so every one lands and reacts as an inflict —
  * an apply-worded one would need that stamp, and this test is where it would surface.
  *
- * A small, named, per-corpus ALLOWLIST covers genuinely verb-less clauses (OLD APEX's "gets
- * debuffed") — adding a ship here is a deliberate, reviewed decision, not a silent gap.
+ * A small, named, per-corpus ALLOWLIST covers genuinely verb-less clauses (empty today) — adding a
+ * ship here is a deliberate, reviewed decision, not a silent gap.
  *
  * CORPUS ACCESS: both CSVs are gitignored reference data. The OLD census must read the real corpus
  * — a synthetic fallback would turn a missing-data worktree into a green vacuous run. The
@@ -67,11 +67,11 @@ const FAMILY = new Set<AbilityTrigger>([
 const VERB_RE = /\binflict\w*\b|\bappl(?:y|ies|ying|ied)\b/i;
 
 // Ships whose on-debuff-inflicted-family ability rides a clause with NO "inflict"/"apply" verb of
-// its own (OLD APEX's "when an enemy gets debuffed") — a reviewed, deliberate exception, not a
-// gap. Per corpus: the catalogue rewords APEX to "gets inflicted with a debuff", so it is NOT
-// exempt there. Adding a name here is a conscious call: read the ship's row text first and confirm
-// it really carries no landing verb before assuming this tripwire is wrong.
-const NO_VERB_ALLOWLIST = new Set(['APEX']);
+// its own — a reviewed, deliberate exception, not a gap. Empty: every family clause in both
+// corpora names its verb (APEX reads "gets inflicted with a debuff"). Adding a name here is a
+// conscious call: read the ship's row text first and confirm it really carries no landing verb
+// before assuming this tripwire is wrong.
+const NO_VERB_ALLOWLIST = new Set<string>();
 const CATALOGUE_NO_VERB_ALLOWLIST = new Set<string>();
 
 const REFIT_LEVELS: RefitLevel[] = [0, 2, 4];
@@ -137,23 +137,6 @@ describe('debuff-inflicted trigger family — triggerApplicationFilter tripwire'
         // Belladonna/Hayyan/Yuyan all carry a literal verb and a family trigger at some refit.
         expect(checked).toBeGreaterThan(0);
         expect(violations).toEqual([]);
-    });
-
-    it('the NO_VERB_ALLOWLIST members still resolve to the family (not silently falling off it)', () => {
-        for (const name of NO_VERB_ALLOWLIST) {
-            let sawFamilyTrigger = false;
-            for (const refitLevel of REFIT_LEVELS) {
-                const ship = buildTraceShip(name, { refitLevel });
-                if (!ship) continue;
-                const skills = buildShipAbilities(ship);
-                for (const slotEntry of skills.slots) {
-                    for (const ability of slotEntry.abilities) {
-                        if (FAMILY.has(ability.trigger)) sawFamilyTrigger = true;
-                    }
-                }
-            }
-            expect(sawFamilyTrigger).toBe(true);
-        }
     });
 });
 

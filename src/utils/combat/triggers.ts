@@ -5604,7 +5604,7 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // gate tick the healing-on pass does not, desynchronizing the proc stream across sims.
         if (!ctx.healing) return; // healing mode off → not-simulated follow-up
         if (!passesProcChanceGate(intent, ctx)) return;
-        // "(once per round)" cap (Nuqtu's self-cleanse). Mirrors the heal/shield branch's
+        // "once per round" cap (Nuqtu's self-cleanse). Mirrors the heal/shield branch's
         // ordering (procChance, THEN oncePerRound). Every other cleanse ability leaves
         // `oncePerRound` unset and passes through.
         if (!passesOncePerRoundGate(intent, ctx)) return;

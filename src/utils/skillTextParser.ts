@@ -883,9 +883,6 @@ const OTHER_ALLY_INFLICTS_DEBUFF_RE =
 // Exported: buildShipAbilities.ts's mergeBuff path tests it directly against the buff's clause.
 export const ONCE_PER_ALLY_PER_ROUND_RE = /\bonce per ally per round\b/i;
 
-// "at the start of (the|its|each|every) turn" — read by detectReactiveTrigger to route a buff
-// grant in that clause onto the start-of-turn trigger.
-const START_OF_TURN_CHARGE_RE = /\bat the start of (?:the|its|each|every)\s+turn\b/i;
 // "at full HP" — parseChargeGain's Cobalt branch pairs it with EVERY_TURN_RE.
 const AT_FULL_HP_RE = /\bat full (?:hp|health)\b/i;
 
@@ -1408,16 +1405,6 @@ export function detectGrantConditions(
         return [{ subject: 'enemy-debuff', derivable: true }];
     }
 
-    // 4b. "when an enemy gets/is buffed" — a reactive enemy-buff trigger (Nuqtu's
-    // Terran Bolster III). Manual, matching Amartya/Panon's Taunt-style enemy-buff
-    // conditions: the single-ship sim derives no enemy buffs, so the user toggles it.
-    // Fires before rule 5 deliberately: Taunt is also an enemy buff, but no ship text
-    // combines "gets buffed" with a named buff — if one ever does, rule 5's named
-    // condition is the better classification and this rule should move below it.
-    if (/\benem(?:y|ies)\b[^.]*?\b(?:gets?|is|are|becomes?)\s+buffed\b/i.test(low)) {
-        return [{ subject: 'enemy-buff', derivable: false }];
-    }
-
     // 5. Taunt / Provoke targeting status (reactive → manual "assume active").
     // statusEffectCondition resolves these against the CASTER (Taunt = self-buff, Provoke =
     // self-debuff), so the rule must only fire for SELF-attributed phrasing ("if this Unit is
@@ -1478,9 +1465,8 @@ const START_OF_ROUND_RE =
 // the ASCII ' and the curly ’ the CSV uses inconsistently across rows (see maskAbbrev's sibling
 // convention). Reference data: docs/ship-skills.csv (Quixilver's third-passive clause).
 const END_OF_OWN_TURN_RE = /\bat\s+the\s+end\s+of\s+this\s+unit['’]s\s+turn\b/i;
-// "every turn" / "each turn" — a per-own-turn recurring self-grant. Distinct from
-// START_OF_TURN_CHARGE_RE ("at the start of the turn"): the trailing-phrase form Kinetik's
-// per-turn shield and Cinya's per-turn heal use (docs/ship-skills.csv). SP-G G1a.
+// "every turn" / "each turn" — a per-own-turn recurring self-grant: the trailing-phrase form
+// Kinetik's per-turn shield and Cinya's per-turn heal use (docs/ship-skills.csv).
 const EVERY_TURN_RE = /\b(?:each|every)\s+turn\b/i;
 // "starts (each|every|the) round with <buff>" — a start-of-round self-grant whose governing
 // phrase uses no application verb (Chakara's R2 passive; unique in the corpus). findVerb treats
@@ -1530,11 +1516,10 @@ const ENEMY_CLEANSE_RE = /\bwhen\s+an?\s+enemy\b[^.]*?\bcleanses?\b[^.]*?\bdebuf
 const OWN_CLEANSE_TRIGGER_RE =
     /\b(?:when\s+this\s+unit\s+cleanses\s+a\s+debuff|(?:when|upon)\s+cleansing\s+a\s+debuff|when\s+this\s+unit\s+removes\s+a\s+debuff)\b/i;
 // "when an enemy gains a buff" — Nuqtu's enemy-buff reaction, a LIVE reactive trigger for the
-// team simulator. Needs the generic "a buff" noun (tagged or not), so "when an enemy defender
+// team simulator. Needs the generic "a buff" noun, so "when an enemy defender
 // gains Taunt" (ENEMY_GAINS_TAUNT_RE) and "for each buff on the enemy" per-count scaling stay out.
-// Tested on raw sentences (detectEnemyBuffedTrigger) and tag-stripped clauses
-// (detectReactiveTrigger).
-const ENEMY_BUFFED_RE = /\bwhen\s+an?\s+enemy\s+gains\s+an?\s+(?:<unit-\w+>\s*)?buff\b/i;
+// Tested on tag-stripped clauses (detectReactiveTrigger).
+const ENEMY_BUFFED_RE = /\bwhen\s+an?\s+enemy\s+gains\s+an?\s+buff\b/i;
 // Enemy-death phrasings that resolve a buff grant/removal, a self charge gain or a self-repair
 // to on-enemy-destroyed: "when an enemy dies", "upon destroying an enemy", "when this Unit
 // destroys an enemy", "when an enemy is destroyed". The "destroys" alternate is anchored on the
@@ -1755,9 +1740,6 @@ export function detectReactiveTrigger(
     // end-of-turn is a LIVE trigger (triggers.ts), so partitionReactiveAbilities routes it onto
     // the reactive path instead — it re-fires every one of the owner's turns, not just round 1.
     if (END_OF_OWN_TURN_RE.test(clause)) return 'end-of-turn';
-    // "at the start of (the|its|each|every) turn" → start-of-turn. Start-of-turn heals and
-    // shields use their own, non-buff parse paths.
-    if (START_OF_TURN_CHARGE_RE.test(clause)) return 'start-of-turn';
     // DETONATOR-scoped "this Unit detonates a Bomb" (Lingshe) is checked BEFORE the
     // victim-scoped "bomb explodes" family — the two are mutually exclusive by phrasing, but this
     // ordering makes the detonator reading win unambiguously.
@@ -2403,23 +2385,9 @@ export function detectAllyCritTrigger(
 }
 
 /**
- * Returns 'on-enemy-buffed' when `anchorPos` falls inside the sentence carrying the "when an
- * enemy gains a buff" phrase; otherwise undefined. Position-scoped on the RAW text (mirrors
- * detectCritRepairTrigger) — used by the CLEANSE builder, which has no buff name to resolve a
- * clause on (unlike the buff-grant path, which reuses ENEMY_BUFFED_RE directly inside
- * detectReactiveTrigger). Reference data: docs/ship-skills.csv (Nuqtu only).
- */
-export function detectEnemyBuffedTrigger(
-    text: string | null | undefined,
-    anchorPos: number
-): AbilityTrigger | undefined {
-    return phrasePosTrigger(text, ENEMY_BUFFED_RE, anchorPos, 'on-enemy-buffed');
-}
-
-/**
  * Returns 'on-ally-shield-destroyed' when `anchorPos` falls inside the sentence carrying the
  * "when an ally ... has their Shield destroyed" phrase; otherwise undefined. Position-scoped on
- * the RAW text (mirrors detectEnemyBuffedTrigger) — used by the CLEANSE builder (AEGIS's "cleanses
+ * the RAW text (mirrors detectCritRepairTrigger) — used by the CLEANSE builder (AEGIS's "cleanses
  * all debuffs" half), which has no buff name to resolve a clause on (unlike the buff-grant path,
  * which reuses ALLY_SHIELD_DESTROYED_RE directly inside detectReactiveTrigger for the "grants
  * Defense Up II" half). Reference data: docs/ship-skills.csv (AEGIS only).
@@ -2431,18 +2399,18 @@ export function detectAllyShieldDestroyedTrigger(
     return phrasePosTrigger(text, ALLY_SHIELD_DESTROYED_RE, anchorPos, 'on-ally-shield-destroyed');
 }
 
-// Nuqtu's self-cleanse cap — "(once per round)" or "cleanses 1 debuff, once per round" — the
-// plain self-scoped Ability.oncePerRound flag (no per-ally/per-enemy dimension; this is a
-// self-target effect). Position-scoped to the cleanse's OWN sentence, and the unparenthesised
-// form must follow the cleanse clause directly, so a "once per round" belonging to another
-// clause of the passive does not cap the cleanse.
+// Nuqtu's self-cleanse cap — "cleanses 1 debuff, once per round" — the plain self-scoped
+// Ability.oncePerRound flag (no per-ally/per-enemy dimension; this is a self-target effect).
+// Position-scoped to the cleanse's OWN sentence, and the "once per round" must follow the cleanse
+// clause directly, so a "once per round" belonging to another clause of the passive does not cap
+// the cleanse.
 const CLEANSE_ONCE_PER_ROUND_RE =
-    /\(once per round\)|\bcleanses?\s+\d+\s+debuffs?(?:<\/unit-\w+>)?,\s*once per round\b/i;
+    /\bcleanses?\s+\d+\s+debuffs?(?:<\/unit-\w+>)?,\s*once per round\b/i;
 
 /**
  * Returns true when `anchorPos` falls inside a sentence carrying the cleanse's once-per-round cap
  * (CLEANSE_ONCE_PER_ROUND_RE); otherwise false. Position-scoped on the RAW text (mirrors
- * detectEnemyBuffedTrigger).
+ * detectCritRepairTrigger).
  */
 export function detectCleanseOncePerRound(
     text: string | null | undefined,
