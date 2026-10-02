@@ -10,9 +10,9 @@
  * pattern, FACTION-BLIND — unlike her active Stealth grant, which is Tianchen-scoped. Her text
  * names no faction in this clause, so the built ability carries NO `factionFilter`.
  *
- * This is `extend-status` (Sokol/Ripper/Lev's existing generic mechanic), not a new ability
+ * This is `extend-status` (Ripper/Lev/Asphyxiator's existing generic mechanic), not a new ability
  * type: it only needed an optional `buffName` on the config plus a name filter in
- * `StatusEngine.extendAllBuffsDuration`, so Sokol/Ripper/Lev (which never pass a name) are
+ * `StatusEngine.extendAllBuffsDuration`, so Ripper/Lev/Asphyxiator (which never pass a name) are
  * untouched by construction.
  *
  * Structure:
@@ -78,7 +78,7 @@ describe('parseExtendStatus — named arm (#363)', () => {
         });
     });
 
-    it('leaves the generic active-voice debuff arm alone (Sokol)', () => {
+    it('leaves the generic active-voice debuff arm alone', () => {
         expect(
             parseExtendStatus('This Unit deals 150% damage and extends active Debuffs by 1 turn.')
         ).toEqual({ turns: 1, statusKind: 'debuff' });
@@ -113,7 +113,7 @@ describe('parseExtendStatus — named arm (#363)', () => {
         // The trap this closes: a literal, unresolved `buffName` is matched by EXACT name against
         // the target's live statuses in `extendAllBuffsDuration`, so it can never match anything —
         // the clause would silently extend NOTHING. Omitting the field falls back to
-        // Sokol/Ripper/Lev's extend-everything behaviour, which is at worst too generous rather
+        // Ripper/Lev's extend-everything behaviour, which is at worst too generous rather
         // than inert. Unreachable in today's corpus (see the sweep below); this is the guard for
         // the next named-extend ship, whose status name may be a typo, a DoT, or newly added.
         expect(
@@ -143,7 +143,7 @@ describe('parseExtendStatus — corpus sweep (non-vacuity + non-disturbance)', (
         expect(named).toEqual(['Fuying:Stealth']);
     });
 
-    it('every OTHER extend-status match in the corpus still has no buffName (Sokol/Ripper/Lev/Asphyxiator unmoved)', () => {
+    it('every OTHER extend-status match in the corpus still has no buffName (Ripper/Lev/Asphyxiator unmoved)', () => {
         const generic: { name: string; result: ReturnType<typeof parseExtendStatus> }[] = [];
         for (const record of loadShipSkillRecords()) {
             for (const text of [record.active, record.charge, ...record.passives]) {
@@ -152,18 +152,13 @@ describe('parseExtendStatus — corpus sweep (non-vacuity + non-disturbance)', (
                 if (r && r.buffName === undefined) generic.push({ name: record.name, result: r });
             }
         }
-        // Sokol (charged debuff), Ripper (passive buff), Lev (charged debuff) and Asphyxiator
-        // (refit passive, the INFLICTED-scope arm) — exactly 4 rows.
-        expect(generic.map((g) => g.name).sort()).toEqual([
-            'Asphyxiator',
-            'Lev',
-            'Ripper',
-            'Sokol',
-        ]);
+        // Ripper (passive buff), Lev (charged debuff) and Asphyxiator (refit passive, the
+        // INFLICTED-scope arm).
+        expect(generic.map((g) => g.name).sort()).toEqual(['Asphyxiator', 'Lev', 'Ripper']);
         for (const g of generic) expect(g.result?.buffName).toBeUndefined();
     });
 
-    // The scope axis is what separates Asphyxiator from the other three, and it is the whole
+    // The scope axis is what separates Asphyxiator from the generic arms, and it is the whole
     // behavioural difference: he grows only what his cast inflicted, they grow everything
     // standing. If a future parser change scoped one of theirs, it would silently stop
     // extending pre-existing statuses.

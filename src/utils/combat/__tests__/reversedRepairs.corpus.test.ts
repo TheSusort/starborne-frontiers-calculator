@@ -1,5 +1,5 @@
 /**
- * `Reversed Repairs` (#362) — corpus-wide scan and tripwire.
+ * `Reversed Repairs` (#362; spelled "Reverse Repairs" in the corpus text) — corpus-wide scan and tripwire.
  *
  * The issue's definition of done asks for the number of ships whose skill text applies this
  * status, explicitly including the case where it's zero-besides-Zosimos. This is that count,
@@ -28,7 +28,10 @@ import {
 } from '../../../../scripts/lib/shipSkillCsv';
 import { shipDataAvailable, loadShipDataRecords } from '../../../../scripts/lib/shipDataSnapshot';
 
-const REVERSED_REPAIRS_TEXT = 'Reversed Repairs';
+// The corpus spells the status "Reverse Repairs"; the parser aliases it to "Reversed Repairs".
+// A raw-text scan has to accept both spellings.
+const REVERSED_REPAIRS_RE = /Reversed? Repairs/;
+const mentionsReversedRepairs = (text: string): boolean => REVERSED_REPAIRS_RE.test(text);
 
 function requireReferenceData(): void {
     if (!csvAvailable() || !shipDataAvailable()) {
@@ -56,7 +59,7 @@ describe('Reversed Repairs corpus scan', () => {
 
         const structuredMatches = skillRecords
             .filter((r) =>
-                [r.active, r.charge, ...r.passives].some((t) => t.includes(REVERSED_REPAIRS_TEXT))
+                [r.active, r.charge, ...r.passives].some((t) => mentionsReversedRepairs(t))
             )
             .map((r) => r.name);
 
@@ -68,7 +71,7 @@ describe('Reversed Repairs corpus scan', () => {
         const rawCsv = readFileSync('docs/ship-skills.csv', 'utf8');
         const records = readCsvRecords(rawCsv).slice(1); // drop header
         const rawMatches = records
-            .filter((rec) => rec.includes(REVERSED_REPAIRS_TEXT))
+            .filter((rec) => mentionsReversedRepairs(rec))
             .map((rec) => rec.split(',')[0].trim())
             .filter((name) => rosterNames.has(name.toUpperCase()));
 

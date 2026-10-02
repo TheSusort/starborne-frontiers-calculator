@@ -55,6 +55,20 @@ const OWNER_INCLUSIVE_TRIGGERS = new Set<AbilityTrigger>([
 // (Provider, #590) is the newest member.
 const OWNER_EXCLUDED_TRIGGERS = new Set<AbilityTrigger>(['on-other-ally-debuff-inflicted']);
 
+// Sentinel's passive reads "When another ally critically hits an enemy ..." but resolves to the
+// owner-inclusive `on-ally-crit`. Sentinel cannot crit an enemy at all (her passive damage cannot
+// critically hit, and her active and charged are pure buffs), so the owner-inclusive trigger never
+// fires for her own crit and there is no own-crit case to model. The exemption is this one ship,
+// this one trigger, and her passive row; any other ship or trigger still fails the census.
+const OWNER_INCLUSIVE_EXEMPT_ROWS: { ship: string; trigger: AbilityTrigger; slot: string }[] = [
+    { ship: 'Sentinel', trigger: 'on-ally-crit', slot: 'passive' },
+];
+
+const isExemptRow = (v: Pick<Violation, 'ship' | 'trigger' | 'slot'>): boolean =>
+    OWNER_INCLUSIVE_EXEMPT_ROWS.some(
+        (e) => e.ship === v.ship && e.trigger === v.trigger && e.slot === v.slot
+    );
+
 const ANOTHER_ALLY_RE = /\b(another|other)\s+ally\b/i;
 
 const REFIT_LEVELS: RefitLevel[] = [0, 2, 4];
@@ -138,7 +152,15 @@ describe('ally-trigger "another ally" carve-out tripwire', () => {
         // (Oleander/on-ally-debuff-inflicted, Hayyan/on-ally-debuffed, Sentinel-Hermes/on-ally-crit,
         // reactive-plating ships/on-ally-attacked, Salvation/on-ally-purged all do today).
         expect(checked).toBeGreaterThan(0);
-        expect(violations).toEqual([]);
+        expect(violations.filter((v) => !isExemptRow(v))).toEqual([]);
+    });
+
+    it('the Sentinel exemption still matches a real row, so it is policed rather than stale', () => {
+        const { violations } = censusOwnerInclusiveAbilities();
+        expect(violations.filter(isExemptRow).length).toBeGreaterThan(0);
+        expect(new Set(violations.filter(isExemptRow).map((v) => v.ship))).toEqual(
+            new Set(['Sentinel'])
+        );
     });
 
     it('every owner-excluded-trigger ability comes from a skill row that says "another/other ally"', () => {

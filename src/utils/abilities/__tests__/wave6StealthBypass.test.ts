@@ -2,6 +2,10 @@ import { describe, it, expect } from 'vitest';
 import { parseIgnoresStealth, detectIgnoresStealth } from '../../skillTextParser';
 import { buildShipAbilities } from '../buildShipAbilities';
 import { Ship } from '../../../types/ship';
+import type { ParsedTarget } from '../../targetingParser';
+import { resolvePositionalTarget } from '../../combat/positionalBinding';
+import type { ActorTargetingStatus } from '../../combat/positionalBinding';
+import type { CombatActor } from '../../combat/state';
 import { csvAvailable, loadShipSkillRecords } from '../../../../scripts/lib/shipSkillCsv';
 
 // Build a full-refit Ship carrying a CSV record's texts (mirrors wave5DemolisherParse.test.ts).
@@ -39,30 +43,47 @@ describe('Wave 6 — parseIgnoresStealth (per-attack clause)', () => {
     });
 });
 
-describe.skipIf(!csvAvailable())(
-    'Wave 6 — config.ignoresStealth on built abilities (per slot)',
-    () => {
-        const damageWithBypass = (name: string, slot: 'active' | 'charged') =>
-            buildShipAbilities(shipFromCsv(name))
-                .slots.find((s) => s.slot === slot)
+describe.skipIf(!csvAvailable())('Wave 6 — a Stealth-ignoring ship targets through Stealth', () => {
+    // The engine resolves an attack's target from two inputs: the ship-level flag
+    // (`ShipSkills.ignoresStealth` → `acting.ignoresStealth`, battleSimulator) and the cast's own
+    // target flag (`config.ignoresStealth` stamped onto the ParsedTarget). Both feed
+    // `resolvePositionalTarget`'s Stealth filter, so the assertion goes through that function.
+    const pos = (id: string, position: CombatActor['position']): CombatActor =>
+        ({ id, position, currentHp: 100 }) as CombatActor;
+    const enemies = [pos('e-front', 'M4'), pos('e-back', 'M1')];
+    const stealthedFront = (id: string) =>
+        id === 'e-front' ? ({ stealthed: true } as ActorTargetingStatus) : undefined;
+    const front: ParsedTarget = { raw: 'enemy-front', side: 'enemy', selection: 'front' };
+
+    const targetedId = (name: string, slot: 'active' | 'charged'): string => {
+        const skills = buildShipAbilities(shipFromCsv(name));
+        const perCast =
+            skills.slots
+                .find((s) => s.slot === slot)
                 ?.abilities.some(
                     (a) => a.config.type === 'damage' && a.config.ignoresStealth === true
                 ) ?? false;
+        const target: ParsedTarget = perCast ? { ...front, ignoresStealth: true } : front;
+        const acting = { ignoresStealth: skills.ignoresStealth };
+        return resolvePositionalTarget('M4', target, enemies, stealthedFront, acting)?.id ?? '';
+    };
 
-        it('Rhodium: charged bypasses, active does not', () => {
-            expect(damageWithBypass('Rhodium', 'charged')).toBe(true);
-            expect(damageWithBypass('Rhodium', 'active')).toBe(false);
-        });
-        it('Selenite: charged bypasses, active does not', () => {
-            expect(damageWithBypass('Selenite', 'charged')).toBe(true);
-            expect(damageWithBypass('Selenite', 'active')).toBe(false);
-        });
-        it('Lodolite: both active and charged bypass', () => {
-            expect(damageWithBypass('Lodolite', 'active')).toBe(true);
-            expect(damageWithBypass('Lodolite', 'charged')).toBe(true);
-        });
-    }
-);
+    it('a ship without the bypass is steered off the Stealthed front actor', () => {
+        // Instrument check: the same resolution lands on the visible back actor when no bypass
+        // reaches it, so the e-front results below are not an artefact of the fixture.
+        expect(resolvePositionalTarget('M4', front, enemies, stealthedFront, {})?.id).toBe(
+            'e-back'
+        );
+    });
+
+    it.each(['Rhodium', 'Selenite', 'Lodolite'])(
+        '%s: both active and charged attacks target the Stealthed front actor',
+        (name) => {
+            expect(targetedId(name, 'active')).toBe('e-front');
+            expect(targetedId(name, 'charged')).toBe('e-front');
+        }
+    );
+});
 
 describe('Wave 6 — detectIgnoresStealth (ship-wide passive)', () => {
     it('matches "This Unit ignores Stealth effects"', () => {
@@ -78,9 +99,9 @@ describe('Wave 6 — detectIgnoresStealth (ship-wide passive)', () => {
 });
 
 describe.skipIf(!csvAvailable())('Wave 6 — ShipSkills.ignoresStealth', () => {
-    it('Lodolite is true; Rhodium and Selenite are undefined', () => {
+    it('Lodolite, Rhodium and Selenite are all true', () => {
         expect(buildShipAbilities(shipFromCsv('Lodolite')).ignoresStealth).toBe(true);
-        expect(buildShipAbilities(shipFromCsv('Rhodium')).ignoresStealth).toBeUndefined();
-        expect(buildShipAbilities(shipFromCsv('Selenite')).ignoresStealth).toBeUndefined();
+        expect(buildShipAbilities(shipFromCsv('Rhodium')).ignoresStealth).toBe(true);
+        expect(buildShipAbilities(shipFromCsv('Selenite')).ignoresStealth).toBe(true);
     });
 });

@@ -76,6 +76,12 @@ describe.skipIf(!csvAvailable())('Stasis-break exemption gates (tripwire)', () =
             { ship: 'Akula', refit: 0, unconditional: true, subjects: [] },
             { ship: 'Akula', refit: 2, unconditional: true, subjects: [] },
             { ship: 'Akula', refit: 4, unconditional: true, subjects: [] },
+            // Snakeroot's passive reads "This attack does not reduce Stasis". By ruling the
+            // exemption covers all of his attacks (active, charged and the passive proc), so the
+            // ship-wide flag is correct.
+            { ship: 'Snakeroot', refit: 0, unconditional: true, subjects: [] },
+            { ship: 'Snakeroot', refit: 2, unconditional: true, subjects: [] },
+            { ship: 'Snakeroot', refit: 4, unconditional: true, subjects: [] },
             { ship: 'Tygr', refit: 0, unconditional: true, subjects: [] },
             { ship: 'Tygr', refit: 2, unconditional: true, subjects: [] },
             { ship: 'Tygr', refit: 4, unconditional: true, subjects: [] },

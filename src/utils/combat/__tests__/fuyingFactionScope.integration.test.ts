@@ -564,7 +564,7 @@ describe('Fuying Stealth DR aura (#363) — corpus inertness for the ally-scoped
         expect([...new Set(hits)]).toEqual(['Fuying']);
     });
 
-    it('yields 15/15/30 for her three passive rows (refitLevel 0/2/4 → Passive R0/R2/R4)', () => {
+    it('yields 10/15/30 for her three passive rows (refitLevel 0/2/4 → Passive R0/R2/R4)', () => {
         const auraPctAt = (refitLevel: 0 | 2 | 4): number => {
             const ship = buildTraceShip('Fuying', { refitLevel });
             if (!ship) throw new Error('Fuying missing from the corpus');
@@ -581,7 +581,7 @@ describe('Fuying Stealth DR aura (#363) — corpus inertness for the ally-scoped
             }
             return ability.config.pct;
         };
-        expect(auraPctAt(0)).toBe(15); // Passive R0
+        expect(auraPctAt(0)).toBe(10); // Passive R0 ("10% less direct damage")
         expect(auraPctAt(2)).toBe(15); // Passive R2
         expect(auraPctAt(4)).toBe(30); // Passive R4 (the default used by every other test above)
     });
