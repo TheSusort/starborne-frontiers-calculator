@@ -551,11 +551,6 @@ export const BUFFS: Buff[] = [
         type: 'debuff',
     },
     {
-        name: 'Security Down III',
-        description: '-60 Security',
-        type: 'debuff',
-    },
-    {
         name: 'Exposed',
         description:
             'Increases the incoming damage of the next direct hit by 100%, removed after taking direct damage or at the end of the round.',

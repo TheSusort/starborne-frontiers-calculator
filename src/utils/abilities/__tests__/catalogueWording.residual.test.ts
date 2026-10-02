@@ -13,8 +13,6 @@ interface ResidualPair extends RewordPair {
 // Lodolite active: our text's "This attack can target Stealthed enemies" is dropped from `old`.
 // The catalogue moves that bypass into the passive's ship-wide "ignores Stealth effects" (ruled C,
 // R7), which our passive already carries, so the per-skill flag is not part of the rewording.
-//
-// Tygr active is a number row (Security Down II -> III); `old` carries the catalogue's tier.
 const PAIRS: ResidualPair[] = [
     {
         ship: 'APEX',
@@ -132,14 +130,6 @@ const PAIRS: ResidualPair[] = [
             scaling: { conditionIndex: 0, perUnit: 50 },
         },
     },
-    {
-        ship: 'Tygr',
-        slot: 'active',
-        old: 'This Unit deals <unit-damage>180% damage</unit-damage> and inflicts <unit-skill>Security Down III</unit-skill> for 2 turns. If it damages 2 or more enemies, it adds <unit-aid>adds 1 charge</unit-aid> to its Charged Skill.',
-        new: 'This Unit deals <unit-damage>180% damage</unit-damage> and inflicts <unit-skill>Security Down III</unit-skill> for 2 turns.<br /><br />If this Unit damages 2 or more enemies, it <unit-skill>adds 1 charge</unit-skill> to its charged skill.',
-        expects: 'debuff|enemy|on-cast|Security Down III',
-        carries: { config: expect.objectContaining({ parsedEffects: { security: -60 } }) },
-    },
 ];
 
 const withSig = (abilities: Ability[], sig: string): Ability[] =>
@@ -166,5 +156,31 @@ describe('residual — catalogue wording parses like ours', () => {
         expect(groups[1]).toBe(groups[0]);
         // The retaliation is the whole damage clause: no on-cast attack rides beside it.
         expect(abilities.some((a) => a.type === 'damage')).toBe(false);
+    });
+
+    // KNOWN GAP: the catalogue raises Tygr's active to Security Down III, which the buff
+    // dictionary does not list until its value is confirmed, so the parse drops that debuff.
+    it('Tygr active: held — Security Down III is unknown, so only the damage and charge parse', () => {
+        const text =
+            'This Unit deals <unit-damage>180% damage</unit-damage> and inflicts <unit-skill>Security Down III</unit-skill> for 2 turns.<br /><br />If this Unit damages 2 or more enemies, it <unit-skill>adds 1 charge</unit-skill> to its charged skill.';
+        const abilities = parseSlot('active', text);
+        expect(sigs(abilities)).toEqual([
+            'charge|self|on-cast|charge',
+            'damage|enemy|on-cast|damage',
+        ]);
+        expect(abilities.find((a) => a.type === 'damage')?.config).toMatchObject({
+            multiplier: 180,
+        });
+        expect(abilities.find((a) => a.type === 'charge')?.conditions).toEqual([
+            expect.objectContaining({
+                subject: 'enemies-hit-this-cast',
+                countComparator: 'gte',
+                countThreshold: 2,
+            }),
+        ]);
+        // The debuff clause is live: the same text at a listed tier mints it.
+        expect(
+            sigs(parseSlot('active', text.replace('Security Down III', 'Security Down II')))
+        ).toContain('debuff|enemy|on-cast|Security Down II');
     });
 });

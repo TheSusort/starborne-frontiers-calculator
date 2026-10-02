@@ -13,7 +13,6 @@ export const UNRELEASED_CHANGES: string[] = [
     'Ship data: Mender and Yin Jian now show their own portraits.',
     "Combat simulator: Madax, Orel and Sansi's Taunt now applies only to themselves.",
     "Combat simulator: AEGIS and Nyxen's charged shield now reaches every ally in range.",
-    'DPS calculator and Effect Index: Security Down III is now listed.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
