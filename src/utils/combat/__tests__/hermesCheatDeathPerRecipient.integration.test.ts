@@ -2,16 +2,12 @@
  * Hermes's charged skill: a charge to every ally in his support pattern, and Cheat Death to EACH
  * ally in that pattern who is below 40% HP — checked per recipient, never against one target.
  *
- *   catalogue: "This Unit repairs 37% of its max HP and adds 1 charge to the charged skill of
- *               allies. If an ally has less than 40% HP, it grants that ally Cheat Death."
- *   ours:      "This Unit repairs 37% of its Max HP and adds 1 charge to the Charged Skill.
- *               If the target has less than 40% HP, it grants Cheat Death."
+ *   "This Unit repairs 37% of its max HP and adds 1 charge to the charged skill of allies.
+ *    If an ally has less than 40% HP, it grants that ally Cheat Death."
  *
  * Owner ruling (2026-10-02): the pattern (allies + Pattern-Circle-Support-Range-1, anchored on
- * Hermes) targets Hermes and every adjacent ally EQUALLY — so "the target" in our text is each of
- * them, and "adds 1 charge to the Charged Skill" is the same all-ally charge the catalogue names.
- * Both texts parse to `charge|all-allies` plus one `all-allies` Cheat Death grant carrying
- * `recipientFilter: { hpBelowPct: 40 }`.
+ * Hermes) targets Hermes and every adjacent ally EQUALLY. The text parses to `charge|all-allies`
+ * plus one `all-allies` Cheat Death grant carrying `recipientFilter: { hpBelowPct: 40 }`.
  *
  * WHICH HP (user ruling 2026-10-02): each recipient's HP BEFORE this cast's repair lands — an
  * exception to the written-clause-order rule, since the text writes the repair first.
@@ -47,12 +43,9 @@ import type { ParsedPattern } from '../../targetingParser';
 import type { Position } from '../../../types/encounters';
 import type { CombatActor } from '../state';
 
-// Verbatim from docs/ship-skills.catalogue.csv (Hermes charge_skill_text).
+// Verbatim from docs/ship-skills.csv (Hermes charge_skill_text).
 const HERMES_CHARGED_CATALOGUE =
     'This Unit <unit-damage>repairs 37%</unit-damage> of its max HP and <unit-skill>adds 1 charge</unit-skill> to the charged skill of allies.<br /><br />If an ally has less than 40% HP, it grants that ally <unit-skill>Cheat Death</unit-skill>.';
-// Verbatim from docs/ship-skills.csv (Hermes charge_skill_text).
-const HERMES_CHARGED_OLD =
-    'This Unit <unit-damage>repairs 37%</unit-damage> of its Max HP and <unit-aid>adds 1 charge</unit-aid> to the Charged Skill.<br /><br />If the target has less than 40% HP, it grants <unit-skill>Cheat Death</unit-skill>.';
 
 const parsedCharged = (text: string): Skill => {
     const ship = {
@@ -158,36 +151,27 @@ beforeEach(() => {
 });
 
 describe('Hermes charged — parse', () => {
-    it.each([
-        ['catalogue', HERMES_CHARGED_CATALOGUE],
-        ['ours', HERMES_CHARGED_OLD],
-    ])(
-        '%s text: an all-allies charge and an all-allies Cheat Death with a per-recipient below-40% filter',
-        (_, text) => {
-            const charge = parsedCharged(text).abilities.find((a) => a.type === 'charge')!;
-            expect(charge).toMatchObject({
-                target: 'all-allies',
-                trigger: 'on-cast',
-                conditions: [],
-                config: { type: 'charge', amount: 1 },
-            });
-            const cd = parsedCharged(text).abilities.find(isCheatDeath)!;
-            expect(cd).toMatchObject({
-                type: 'buff',
-                target: 'all-allies',
-                trigger: 'on-cast',
-                conditions: [],
-                recipientFilter: { hpBelowPct: 40 },
-                config: { type: 'buff', buffName: 'Cheat Death', duration: 'recurring' },
-            });
-            // The repair is written first, so it sorts first (clause order).
-            expect(parsedCharged(text).abilities.map((a) => a.type)).toEqual([
-                'heal',
-                'charge',
-                'buff',
-            ]);
-        }
-    );
+    it('an all-allies charge and an all-allies Cheat Death with a per-recipient below-40% filter', () => {
+        const { abilities } = parsedCharged(HERMES_CHARGED_CATALOGUE);
+        const charge = abilities.find((a) => a.type === 'charge')!;
+        expect(charge).toMatchObject({
+            target: 'all-allies',
+            trigger: 'on-cast',
+            conditions: [],
+            config: { type: 'charge', amount: 1 },
+        });
+        const cd = abilities.find(isCheatDeath)!;
+        expect(cd).toMatchObject({
+            type: 'buff',
+            target: 'all-allies',
+            trigger: 'on-cast',
+            conditions: [],
+            recipientFilter: { hpBelowPct: 40 },
+            config: { type: 'buff', buffName: 'Cheat Death', duration: 'recurring' },
+        });
+        // The repair is written first, so it sorts first (clause order).
+        expect(abilities.map((a) => a.type)).toEqual(['heal', 'charge', 'buff']);
+    });
 });
 
 // ── Player side ──────────────────────────────────────────────────────────────
@@ -277,16 +261,6 @@ describe('Hermes charged — per-recipient Cheat Death (player side)', () => {
         const { events, actors } = run(playerBoard(charged), { a: 0.8, b: 0.3, c: 0.2 });
         expect(hpPct(actors, 'b')).toBeCloseTo(33.7, 5);
         expect(hpPct(actors, 'c')).toBeCloseTo(20, 5);
-        expect(cheatDeathTo(events)).toEqual(['b']);
-        expect(chargedUp(events)).toEqual(IN_PATTERN);
-    });
-
-    it('our text grants the same Cheat Death and the same charges', () => {
-        const { events } = run(playerBoard(parsedCharged(HERMES_CHARGED_OLD)), {
-            a: 0.8,
-            b: 0.3,
-            c: 0.2,
-        });
         expect(cheatDeathTo(events)).toEqual(['b']);
         expect(chargedUp(events)).toEqual(IN_PATTERN);
     });

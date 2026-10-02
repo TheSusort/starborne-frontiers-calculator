@@ -48,13 +48,6 @@ const PAIRS: RewordPair[] = [
         expects: 'damage|enemy|on-cast|damage',
     },
     {
-        ship: 'Rhodium',
-        slot: 'active',
-        old: 'This Unit deals <unit-damage>140% damage</unit-damage> with an additional <unit-damage>25%</unit-damage> for each buff on the enemy. Unit adds charges to the <unit-aid>Charged Skill</unit-aid> equal to the number of <unit-aid>Buffs</unit-aid> on the target.',
-        new: 'This Unit deals <unit-damage>140% damage</unit-damage> with an additional <unit-damage>25%</unit-damage> for each <unit-aid>buff</unit-aid> on the enemy. <br /><br />This Unit <unit-skill>adds charges</unit-skill> to its charged skill equal to the number of <unit-aid>buffs</unit-aid> on the enemy.',
-        expects: 'charge|self|on-cast|charge',
-    },
-    {
         ship: 'Sefuba',
         slot: 'charged',
         old: 'This Unit deals <unit-damage>200% damage</unit-damage> and <unit-aid>removes 2 charges</unit-aid> from the enemy.',
@@ -127,6 +120,12 @@ const CATALOGUE_ROWS: { ship: string; slot: SlotName; text: string; expects: str
         slot: 'passive',
         text: 'This ship has <unit-damage>20% shield penetration</unit-damage>.<br /><br />At the start of combat this Unit gains a <unit-damage>shield equal to 25%</unit-damage> of its max HP and while it has an active shield, it gains 2500 defense.<br /><br />When an enemy uses their charged skill, this Unit deals <unit-damage>80% damage</unit-damage> and gains a <unit-damage>shield equal to 30%</unit-damage> of the damage dealt, once per round.',
         expects: 'damage|enemy|on-enemy-charged-cast|damage',
+    },
+    {
+        ship: 'Rhodium',
+        slot: 'active',
+        text: 'This Unit deals <unit-damage>140% damage</unit-damage> with an additional <unit-damage>25%</unit-damage> for each <unit-aid>buff</unit-aid> on the enemy. <br /><br />This Unit <unit-skill>adds charges</unit-skill> to its charged skill equal to the number of <unit-aid>buffs</unit-aid> on the enemy.',
+        expects: 'charge|self|on-cast|charge',
     },
 ];
 

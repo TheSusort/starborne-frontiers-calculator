@@ -213,9 +213,8 @@ describe("Cobalt: start-of-turn buff shares its sibling charge ability's trigger
             refits: [{}, {}],
             firstPassiveSkillText: 'placeholder',
             secondPassiveSkillText:
-                'This Unit <unit-aid>adds 1 charge</unit-aid> to its charged skill and gains ' +
-                '<unit-skill>Out. Damage Up II</unit-skill> for 1 turn at the start of the turn ' +
-                'if it is at full HP.',
+                'Every turn this Unit <unit-skill>adds 1 charge</unit-skill> to its charged skill ' +
+                'and gains <unit-skill>Out. Damage Up II</unit-skill> for 1 turn if it is at full HP.',
         } as Partial<Ship>);
         const buff = findBuff(abilities, 'Out. Damage Up II')!;
         expect(buff).toBeDefined();

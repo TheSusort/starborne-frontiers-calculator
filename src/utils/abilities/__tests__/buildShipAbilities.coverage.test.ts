@@ -154,7 +154,7 @@ describe('buildShipAbilities.coverage', () => {
     it('Rhodium active: damage with conditional scaling (per buff on enemy) + charge', () => {
         const s = ship({
             activeSkillText:
-                'This Unit deals <unit-damage>140% damage</unit-damage> with an additional <unit-damage>25%</unit-damage> for each buff on the enemy. Unit adds charges to the <unit-aid>Charged Skill</unit-aid> equal to the number of <unit-aid>Buffs</unit-aid> on the target.',
+                'This Unit deals <unit-damage>140% damage</unit-damage> with an additional <unit-damage>25%</unit-damage> for each <unit-aid>buff</unit-aid> on the enemy. <br /><br />This Unit <unit-skill>adds charges</unit-skill> to its charged skill equal to the number of <unit-aid>buffs</unit-aid> on the enemy.',
             chargeSkillCharge: 6,
         });
 

@@ -858,15 +858,7 @@ export function detectIgnoresStealth(...skillTexts: Array<string | null | undefi
 // and one "when this Unit destroys an enemy" onto on-enemy-destroyed (Obsidian/Valiant).
 // Liberator's all-allies death charge is disqualified here via "all allies";
 // parseAllyChargeOnEnemyDeath handles it.
-// The ownerless "adds N charge to the Charged Skill" is an ally grant too — see
-// ALLY_CHARGE_GRANT_RE's Hermes note. A "gains N charge to the Charged Skill" stays a self gain.
-// The verbs that GRANT a charge to someone else; shared by CHARGE_DISQUALIFY_RE and
-// ALLY_CHARGE_GRANT_RE.
-const CHARGE_GRANT_VERBS = String.raw`(?:adds?|grants?|gives?)`;
-const CHARGE_DISQUALIFY_RE = new RegExp(
-    String.raw`all allies|their charged skill|charged skill of (?:all )?allies|\b${CHARGE_GRANT_VERBS}\s+(?:\d+|a|an)\s+charges?\s+to\s+the\s+charged\s+skill\b(?!\s+of\b)`,
-    'i'
-);
+const CHARGE_DISQUALIFY_RE = /all allies|their charged skill|charged skill of (?:all )?allies/i;
 
 // "when an enemy repairs / performs a repair[s]" — a player reaction to an ENEMY repair
 // (Zosimos's "gains a charge"). Tolerates the live CSV refit typo "performs a repairs".
@@ -878,10 +870,10 @@ const ENEMY_REPAIRS_RE = /\bwhen\s+an?\s+enemy\b[^.]*?\b(?:repairs?|performs?\s+
 // Thresh's "removes 1 charge ... and adds 1 charge" matches only the add.
 const SELF_CHARGE_ADD_RE = /\b(?:adds?|gains?)\s+(\d+|a|an)\s+charges?\b/i;
 
-// Rhodium-style form: "adds charges to the/its Charged Skill equal to the number of
-// buffs on the target" (amount is per-buff = 1). Runs on tag-stripped text.
+// Rhodium-style form: "adds charges to its charged skill equal to the number of buffs on the
+// enemy" (amount is per-buff = 1). Runs on tag-stripped text.
 const PER_BUFF_CHARGE_RE =
-    /adds?\s+charges?\s+to\s+(?:the|its)\s+charged skill[^.]*equal to the number of/i;
+    /adds?\s+charges?\s+to\s+its\s+charged skill[^.]*equal to the number of/i;
 
 // "removes N charges from the enemy" (on-cast/bomb) OR Zosimos's "decreases that enemy's charge"
 // (decreases by one, no captured number → default amount 1). Curly apostrophes (U+2018/U+2019)
@@ -914,14 +906,11 @@ const OTHER_ALLY_INFLICTS_DEBUFF_RE =
 // Exported: buildShipAbilities.ts's mergeBuff path tests it directly against the buff's clause.
 export const ONCE_PER_ALLY_PER_ROUND_RE = /\bonce per ally per round\b/i;
 
-// Cobalt: "adds N charge ... at the start of the turn if it is at full HP" — a periodic
-// self-charge gated on full HP. The two halves are detected together so the start-of-turn
-// trigger and the hp-threshold gate ride as a pair. Epic PR4: ALSO reused (unmodified regex)
-// by detectReactiveTrigger below for Cobalt's SIBLING buff grant in the same sentence ("…and
-// gains Out. Damage Up II for 1 turn at the start of the turn if it is at full HP") — the
-// charge and buff halves share one governing trailing phrase and must share one trigger.
+// "at the start of (the|its|each|every) turn" — read by detectReactiveTrigger to route a buff
+// grant in that clause onto the start-of-turn trigger.
 const START_OF_TURN_CHARGE_RE = /\bat the start of (?:the|its|each|every)\s+turn\b/i;
-const AT_FULL_HP_RE = /\bat full (?:hp|health)\b/i; // reused phrasing (cf. classifier ~line 647)
+// "at full HP" — parseChargeGain's Cobalt branch pairs it with EVERY_TURN_RE.
+const AT_FULL_HP_RE = /\bat full (?:hp|health)\b/i;
 
 function classifyChargeCondition(
     text: string // already tag-stripped, any case
@@ -1743,8 +1732,7 @@ const ENEMY_GAINS_TAUNT_RE = /\bwhen\s+an?\s+enemy\b[^.]*?\bgains?\b[^.]*?\btaun
  *    uses a looser regex that reads "is critically damaged" as a self-crit condition; no ship
  *    text relies on that reading.
  *  - "at the start of (the|each|every) round" → 'start-of-round' (Valkyrie).
- *  - "at the start of (the|its|each|every) turn" → 'start-of-turn' (Cobalt's Out. Damage Up II
- *    buff, sharing its trailing gate with the sibling charge ability).
+ *  - "at the start of (the|its|each|every) turn" → 'start-of-turn'.
  *  - "detonates a Bomb" / "Bomb explodes" → 'on-bomb-detonated' (Lingshe).
  *  - "when an enemy cleanses a debuff" → 'on-enemy-cleansed'. LIVE in healing mode (the DPS
  *    sim ignores enemy-action triggers); Grif's NAMELESS damage proc on the same phrasing is
@@ -1805,9 +1793,7 @@ export function detectReactiveTrigger(
     // end-of-turn is a LIVE trigger (triggers.ts), so partitionReactiveAbilities routes it onto
     // the reactive path instead — it re-fires every one of the owner's turns, not just round 1.
     if (END_OF_OWN_TURN_RE.test(clause)) return 'end-of-turn';
-    // "at the start of (the|its|each|every) turn" — a buff granted in this clause shares its
-    // governing trailing phrase with a sibling charge ability, which the charge-specific parser
-    // reads as start-of-turn via the same START_OF_TURN_CHARGE_RE. Start-of-turn heals and
+    // "at the start of (the|its|each|every) turn" → start-of-turn. Start-of-turn heals and
     // shields use their own, non-buff parse paths.
     if (START_OF_TURN_CHARGE_RE.test(clause)) return 'start-of-turn';
     // DETONATOR-scoped "this Unit detonates a Bomb" (Lingshe) is checked BEFORE the
@@ -4234,15 +4220,14 @@ export function parseChargeGain(text: string | null | undefined): ChargeGain | n
         };
     }
 
-    // Cobalt: a start-of-turn self-charge gated on full HP — "adds 1 charge … at the start of
-    // the turn if it is at full HP" or "Every turn this Unit adds 1 charge … if it is at full HP".
-    // The "every turn" alternate is accepted HERE only, beside the full-HP gate: widening
-    // START_OF_TURN_CHARGE_RE itself would also reach detectReactiveTrigger, where "gains 1 stack
-    // of Overload every turn" must keep its per-round stacking semantics (pinned by the Butcher
-    // test in catalogueWording.timing.test.ts). Placed after the
-    // inflict/repair reactive branches (those event triggers win if a text carries both).
+    // Cobalt: "Every turn this Unit adds 1 charge … if it is at full HP" — a start-of-turn
+    // self-charge gated on full HP. "every turn" is read HERE, beside the full-HP gate, and is
+    // not part of detectReactiveTrigger's start-of-turn rule, where "gains 1 stack of Overload
+    // every turn" must keep its per-round stacking semantics (pinned by the Butcher test in
+    // catalogueWording.timing.test.ts). Placed after the inflict/repair reactive branches (those
+    // event triggers win if a text carries both).
     // condition 'always' is a placeholder — the real gate is in `conditions`.
-    if ((START_OF_TURN_CHARGE_RE.test(low) || EVERY_TURN_RE.test(low)) && AT_FULL_HP_RE.test(low)) {
+    if (EVERY_TURN_RE.test(low) && AT_FULL_HP_RE.test(low)) {
         return {
             amount,
             condition: 'always',
@@ -4327,24 +4312,18 @@ export function parseAllyChargeOnEnemyDeath(
     return { amount };
 }
 
-// Hayyan / Graphite (enemy-team PR3): an all-allies charge-bar grant — distinct from
-// parseChargeGain's self-targeted contract (which disqualifies "all allies" / "their
-// charged skill" / "charged skill of all allies"). Two real phrasings:
+// Hayyan / Graphite / Hermes: an all-allies charge-bar grant — distinct from parseChargeGain's
+// self-targeted contract (which disqualifies "all allies" / "their charged skill" / "charged
+// skill of (all) allies"). Real phrasings:
 //   • Hayyan (charged slot): "…and adds 1 charge to their Charged Skill." → on-cast, no condition.
 //   • Graphite (third passive): "At the start of the round, if an enemy Unit has Stealth, this
 //     Unit adds 1/2 charges to the charged skill of all allies within the active pattern."
 //     → start-of-round, gated on enemy-has-Stealth.
-//   • Hermes (charged slot): "…and adds 1 charge to the charged skill of allies." (catalogue)
-//     and "…and adds 1 charge to the Charged Skill." (ours) → on-cast, every ally in the skill
-//     pattern, Hermes included (user ruling 2026-10-02). The ownerless "the Charged Skill" —
-//     no "its" / "own" / "of …" — names the charged skill of whoever the cast targets; a self
-//     gain always says "its (own) Charged Skill".
-// Lookbehind-free; matches "to their Charged Skill", "to the charged skill of [all] allies" and
-// the ownerless "to the Charged Skill".
-const ALLY_CHARGE_GRANT_RE = new RegExp(
-    String.raw`${CHARGE_GRANT_VERBS}\s+(\d+|a|an)\s+charges?\s+to\s+(?:their\s+charged\s+skill|the\s+charged\s+skill\s+of\s+(?:all\s+)?allies|the\s+charged\s+skill\b(?!\s+of\b))`,
-    'i'
-);
+//   • Hermes (charged slot): "…and adds 1 charge to the charged skill of allies." → on-cast,
+//     every ally in the skill pattern, Hermes included (user ruling 2026-10-02).
+// Lookbehind-free; matches "to their Charged Skill" and "to the charged skill of [all] allies".
+const ALLY_CHARGE_GRANT_RE =
+    /(?:adds?|grants?|gives?)\s+(\d+|a|an)\s+charges?\s+to\s+(?:their\s+charged\s+skill|the\s+charged\s+skill\s+of\s+(?:all\s+)?allies)/i;
 // Graphite's gate: "if an enemy (Unit) has Stealth".
 const ALLY_CHARGE_ENEMY_STEALTH_RE = /if\s+an\s+enemy\b[^.]*?\bhas\b[^.]*?\bStealth\b/i;
 // Shared on-enemy-death phrasing. Used both to EXCLUDE Liberator's

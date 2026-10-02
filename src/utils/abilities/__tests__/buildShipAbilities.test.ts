@@ -102,7 +102,7 @@ describe('buildShipAbilities', () => {
         };
 
         const charge = chargeAbilityFrom(
-            'This Unit adds 1 charge to its charged skill at the start of the turn if it is at full HP.'
+            'Every turn this Unit <unit-skill>adds 1 charge</unit-skill> to its charged skill if it is at full HP.'
         );
         expect(charge).toMatchObject({
             type: 'charge',
@@ -1548,7 +1548,7 @@ describe('buildShipAbilities', () => {
         it('Hermes charged bare repair → AoE heal (all-allies); charge still parses', () => {
             const s = ship({
                 chargeSkillText:
-                    'This Unit repairs 37% of its Max HP and adds 1 charge to the Charged Skill. If the target has less than 40% HP, it grants Cheat Death.',
+                    'This Unit <unit-damage>repairs 37%</unit-damage> of its max HP and <unit-skill>adds 1 charge</unit-skill> to the charged skill of allies.<br /><br />If an ally has less than 40% HP, it grants that ally <unit-skill>Cheat Death</unit-skill>.',
                 chargeSkillCharge: 4,
             });
             const charged = buildShipAbilities(s).slots.find((x) => x.slot === 'charged');
@@ -1559,7 +1559,11 @@ describe('buildShipAbilities', () => {
                 config: { type: 'heal', pct: 37, basis: 'hp' },
             });
             const charge = charged?.abilities.find((a) => a.type === 'charge');
-            expect(charge).toMatchObject({ type: 'charge', config: { type: 'charge', amount: 1 } });
+            expect(charge).toMatchObject({
+                type: 'charge',
+                target: 'all-allies',
+                config: { type: 'charge', amount: 1 },
+            });
         });
 
         it('damage-rider bare repair stays self (skill has a damage component)', () => {
@@ -3046,12 +3050,12 @@ describe('buildShipAbilities', () => {
         });
     });
 
-    // Phase 4c PR 3 (Task 7): "when HP drops/falls below N%" buff-grant reactives ride the
-    // on-hp-threshold-crossed trigger with a derivable self hp-threshold condition; "once per
-    // battle" maps to config.oncePerCombat. Sentence-scoped at the buff's anchor, so the
-    // start-of-combat Cheat Death / Everliving (Tycho) and the standing direct-damage modifier
-    // (Los) — which sit in different sentences/paragraphs — are untouched. Hermes's charged
-    // Cheat Death "if the target has less than N% HP" grant narrows to the heal target.
+    // "when HP drops/falls below N%" buff-grant reactives ride the on-hp-threshold-crossed
+    // trigger with a derivable self hp-threshold condition; "once per battle" maps to
+    // config.oncePerCombat. Sentence-scoped at the buff's anchor, so the start-of-combat Cheat
+    // Death / Everliving (Tycho) and the standing direct-damage modifier (Los) — which sit in
+    // different sentences/paragraphs — are untouched. Hermes's charged Cheat Death "if an ally
+    // has less than N% HP" grant reaches every ally the cast targets, each filtered on its own HP.
     describe('hp-crossing reactive buff grants → on-hp-threshold-crossed (Phase 4c PR 3)', () => {
         const selfHpBelow = (pct: number) => ({
             subject: 'hp-threshold',
@@ -3201,7 +3205,7 @@ describe('buildShipAbilities', () => {
         it('Hermes charged: Cheat Death is an all-allies grant with a per-recipient below-40% HP filter; heal + charge unchanged', () => {
             const s = ship({
                 chargeSkillText:
-                    'This Unit <unit-damage>repairs 37%</unit-damage> of its Max HP and <unit-aid>adds 1 charge</unit-aid> to the Charged Skill.<br /><br />If the target has less than 40% HP, it grants <unit-skill>Cheat Death</unit-skill>.',
+                    'This Unit <unit-damage>repairs 37%</unit-damage> of its max HP and <unit-skill>adds 1 charge</unit-skill> to the charged skill of allies.<br /><br />If an ally has less than 40% HP, it grants that ally <unit-skill>Cheat Death</unit-skill>.',
                 chargeSkillCharge: 4,
             });
             const charged = slot(buildShipAbilities(s).slots, 'charged')!;
@@ -3224,7 +3228,7 @@ describe('buildShipAbilities', () => {
                 target: 'all-allies',
                 config: { type: 'heal', pct: 37, basis: 'hp' },
             });
-            // "adds 1 charge to the Charged Skill" — ownerless, so every ally the cast targets.
+            // "adds 1 charge to the charged skill of allies" — every ally the cast targets.
             const charge = charged.abilities.find((a) => a.type === 'charge')!;
             expect(charge).toMatchObject({ target: 'all-allies', trigger: 'on-cast' });
             expect(charge.config).toMatchObject({ type: 'charge', amount: 1 });

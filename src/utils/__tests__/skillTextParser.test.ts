@@ -1688,7 +1688,7 @@ describe('parseChargeGain', () => {
 
     it('parses start-of-turn full-HP self gain as start-of-turn + hp-threshold gate — Cobalt 1st passive', () => {
         const text =
-            'This Unit <unit-aid>adds 1 charge</unit-aid> to its charged skill at the start of the turn if it is at full HP.';
+            'Every turn this Unit <unit-skill>adds 1 charge</unit-skill> to its charged skill if it is at full HP.';
         expect(parseChargeGain(text)).toEqual({
             amount: 1,
             condition: 'always',
@@ -1708,7 +1708,7 @@ describe('parseChargeGain', () => {
 
     it('parses start-of-turn full-HP self gain (with separate buff clause) — Cobalt 2nd passive', () => {
         const text =
-            'This Unit <unit-aid>adds 1 charge</unit-aid> to its charged skill and gains <unit-aid>Out. Damage Up II</unit-aid> for 1 turn at the start of the turn if it is at full HP.';
+            'Every turn this Unit <unit-skill>adds 1 charge</unit-skill> to its charged skill and gains <unit-skill>Out. Damage Up II</unit-skill> for 1 turn if it is at full HP.';
         expect(parseChargeGain(text)).toMatchObject({
             amount: 1,
             trigger: 'start-of-turn',
@@ -1716,7 +1716,7 @@ describe('parseChargeGain', () => {
         });
     });
 
-    it('parses "each turn" phrasing as start-of-turn trigger (widened regex)', () => {
+    it('reads "each turn" in a full-HP self gain as the start-of-turn trigger', () => {
         const text =
             'This Unit <unit-aid>adds 1 charge</unit-aid> to its charged skill at the start of each turn if it is at full HP.';
         expect(parseChargeGain(text)).toMatchObject({
@@ -1745,7 +1745,7 @@ describe('parseChargeGain', () => {
 
     it('parses "equal to the number of buffs" per-buff gain — Rhodium', () => {
         const text =
-            'Unit adds charges to the <unit-aid>Charged Skill</unit-aid> equal to the number of <unit-aid>Buffs</unit-aid> on the target.';
+            'This Unit <unit-skill>adds charges</unit-skill> to its charged skill equal to the number of <unit-aid>buffs</unit-aid> on the enemy.';
         expect(parseChargeGain(text)).toEqual({
             amount: 1,
             condition: 'enemy-buff',
@@ -2576,7 +2576,7 @@ describe('detectGrantConditions', () => {
 
     it('classifies "if it is at full HP" as a self HP-threshold gate (Cobalt)', () => {
         const text =
-            'This Unit gains <unit-skill>Out. Damage Up II</unit-skill> for 1 turn at the start of the turn if it is at full HP.';
+            'Every turn this Unit <unit-skill>adds 1 charge</unit-skill> to its charged skill and gains <unit-skill>Out. Damage Up II</unit-skill> for 1 turn if it is at full HP.';
         expect(detectGrantConditions(text, 'Out. Damage Up II')).toEqual([
             {
                 subject: 'hp-threshold',
@@ -2722,19 +2722,16 @@ describe('parseChargeGain ally-crit trigger (Hermes)', () => {
         });
     });
 
-    // The ownerless "to the Charged Skill" disqualifies a charge only behind a GRANT verb
-    // (adds/grants/gives — ALLY_CHARGE_GRANT_RE's set); a "gains" with the same wording is
-    // still a self gain.
     it('"gains 1 charge to the Charged Skill" stays a self gain', () => {
         expect(
             parseChargeGain('This Unit <unit-aid>gains 1 charge</unit-aid> to the Charged Skill.')
         ).toEqual({ amount: 1, condition: 'always', derivable: true });
     });
 
-    it('our Hermes charged "adds 1 charge to the Charged Skill" is not a self gain', () => {
+    it('Hermes charged "adds 1 charge to the charged skill of allies" is not a self gain', () => {
         expect(
             parseChargeGain(
-                'This Unit <unit-damage>repairs 37%</unit-damage> of its Max HP and <unit-aid>adds 1 charge</unit-aid> to the Charged Skill.<br /><br />If the target has less than 40% HP, it grants <unit-skill>Cheat Death</unit-skill>.'
+                'This Unit <unit-damage>repairs 37%</unit-damage> of its max HP and <unit-skill>adds 1 charge</unit-skill> to the charged skill of allies.<br /><br />If an ally has less than 40% HP, it grants that ally <unit-skill>Cheat Death</unit-skill>.'
             )
         ).toBeNull();
     });

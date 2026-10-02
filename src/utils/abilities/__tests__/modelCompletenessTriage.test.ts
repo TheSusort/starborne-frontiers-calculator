@@ -230,9 +230,9 @@ describe('SP-C — stat-comparison gates', () => {
     });
 
     // Verbatim from docs/ship-skills.csv (active_skill_text field). NOTE: Cobalt also appears in
-    // SP-G (Task 8) for its passive "adds 1 charge ... at the start of the turn if it is at full
-    // HP" start-of-turn charge drain-ordering clauses — a DISTINCT engine-timing limitation. This
-    // probe is ONLY the active skill's owner-vs-target HP comparison.
+    // SP-G for its passive "Every turn this Unit adds 1 charge … if it is at full HP" start-of-turn
+    // charge drain-ordering clauses — a DISTINCT engine-timing limitation. This probe is ONLY the
+    // active skill's owner-vs-target HP comparison.
     const COBALT_ACTIVE =
         "This Unit purges <unit-aid>1 buff</unit-aid> from the enemy and deals <unit-damage>200% damage</unit-damage>. If this Unit has more HP than the enemy, it additionally deals <unit-damage>damage equal to 25%</unit-damage> of this Unit's max HP.";
 
@@ -733,7 +733,7 @@ describe('SP-G — engine known-limitations', () => {
     // ── Cobalt: start-of-turn charge drain-ordering ─────────────────────────────────────
     // Verbatim from docs/ship-skills.csv (first_passive_skill_text field).
     const COBALT_P1_SPG =
-        'This Unit <unit-aid>adds 1 charge</unit-aid> to its charged skill at the start of the turn if it is at full HP.';
+        'Every turn this Unit <unit-skill>adds 1 charge</unit-skill> to its charged skill if it is at full HP.';
 
     it('Cobalt: start-of-turn charge ability builds correctly; the KNOWN LIMITATION is the engine drain-ordering, not this shape', () => {
         const abilities = abilitiesFor({ firstPassiveSkillText: COBALT_P1_SPG }, 'passive');

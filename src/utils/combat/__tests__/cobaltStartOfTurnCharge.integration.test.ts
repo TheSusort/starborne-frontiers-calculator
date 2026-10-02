@@ -1,8 +1,8 @@
 /**
- * Integration: Cobalt start-of-turn full-HP self-charge (Charge Phase 2/3 Task 9).
+ * Integration: Cobalt start-of-turn full-HP self-charge.
  *
- * Cobalt's passive text "adds 1 charge to its charged skill at the start of the turn if it is at
- * full HP" is parsed (Tasks 6-8) into a charge ability:
+ * Cobalt's passive text "Every turn this Unit adds 1 charge to its charged skill if it is at full
+ * HP" is parsed into a charge ability:
  *   { type:'charge', target:'self', trigger:'start-of-turn',
  *     conditions:[{ subject:'hp-threshold', derivable:true, hpComparator:'above',
  *                   hpPercent:99, hpSubject:'self' }],
@@ -53,10 +53,10 @@ type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 // "Out. Damage Up II" is invisible to parseAllSkillEffects, so the corpus-faithful tagged form is
 // required for Part 3 to exercise the real swallow hazard).
 const COBALT_P1 =
-    'This Unit adds 1 charge to its <unit-skill>charged skill</unit-skill> at the start of the turn if it is at full HP.';
+    'Every turn this Unit <unit-skill>adds 1 charge</unit-skill> to its charged skill if it is at full HP.';
 const COBALT_P2 =
-    'This Unit adds 1 charge to its <unit-skill>charged skill</unit-skill> and gains ' +
-    '<unit-skill>Out. Damage Up II</unit-skill> for 1 turn at the start of the turn if it is at full HP.';
+    'Every turn this Unit <unit-skill>adds 1 charge</unit-skill> to its charged skill and gains ' +
+    '<unit-skill>Out. Damage Up II</unit-skill> for 1 turn if it is at full HP.';
 
 // ─── Real parser resolution ───────────────────────────────────────────────────────
 // Resolve Cobalt's abilities from the SAME path production uses: a Ship carrying the passive text,
@@ -355,7 +355,7 @@ describe('Cobalt second passive — charge AND Out. Damage Up II coexist (no cla
         ).toBeDefined();
 
         // The buff is self-targeted and inherits the same full-HP gate as the charge (both are
-        // gained "at the start of the turn if it is at full HP").
+        // gained "every turn … if it is at full HP").
         expect(buff!.target).toBe('self');
         expect(buff!.conditions).toEqual([
             {
@@ -367,12 +367,10 @@ describe('Cobalt second passive — charge AND Out. Damage Up II coexist (no cla
             },
         ]);
 
-        // Epic PR4 (round-boundary trigger consistency): the buff half now shares the SAME
-        // start-of-turn trigger as the charge half — both are gained "at the start of the turn
-        // if it is at full HP", so they ride the same governing phrase (detectReactiveTrigger's
-        // START_OF_TURN_CHARGE_RE branch). Previously this was on-cast (see git history for the
-        // prior "KNOWN LIMITATION" note); the fix makes the buff actually apply once per turn
-        // in-game instead of re-granting on every skill use.
+        // The buff half shares the SAME start-of-turn trigger as the charge half — both are
+        // gained "every turn", which buildShipAbilities' detectEveryTurnTrigger promotion reads
+        // for the buff — so the buff applies once per turn instead of re-granting on every skill
+        // use.
         expect(buff!.trigger).toBe('start-of-turn');
     });
 });

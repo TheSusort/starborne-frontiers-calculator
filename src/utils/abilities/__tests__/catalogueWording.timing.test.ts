@@ -3,20 +3,6 @@ import { parseSlot, sigs, canonical, type RewordPair } from './helpers/catalogue
 
 const PAIRS: RewordPair[] = [
     {
-        ship: 'Cobalt',
-        slot: 'passive',
-        old: 'This Unit <unit-aid>adds 1 charge</unit-aid> to its charged skill at the start of the turn if it is at full HP.',
-        new: 'Every turn this Unit <unit-skill>adds 1 charge</unit-skill> to its charged skill if it is at full HP.',
-        expects: 'charge|self|start-of-turn|charge',
-    },
-    {
-        ship: 'Cobalt',
-        slot: 'passive',
-        old: 'This Unit <unit-aid>adds 1 charge</unit-aid> to its charged skill and gains <unit-skill>Out. Damage Up II</unit-skill> for 1 turn at the start of the turn if it is at full HP.',
-        new: 'Every turn this Unit <unit-skill>adds 1 charge</unit-skill> to its charged skill and gains <unit-skill>Out. Damage Up II</unit-skill> for 1 turn if it is at full HP.',
-        expects: 'charge|self|start-of-turn|charge',
-    },
-    {
         ship: 'Xcellence',
         slot: 'passive',
         old: "This Unit has 20% Shield Penetration.<br /><br />At the start of each turn this Unit gains <unit-damage>Shield equal to 20%</unit-damage> of its Max HP.<br /><br />When an enemy resists a debuff infliction, this Unit deals damage equal to <unit-damage>115%</unit-damage> of this Unit's current shield..",
@@ -60,6 +46,18 @@ describe('timing phrases — catalogue wording parses like ours', () => {
         const before = parseSlot(slot, old);
         expect(sigs(before)).toContain(expects); // the reference parse is not vacuous
         expect(canonical(parseSlot(slot, next))).toEqual(canonical(before));
+    });
+
+    it('Cobalt passive R0: the catalogue sentence carries the start-of-turn self charge', () => {
+        const text =
+            'Every turn this Unit <unit-skill>adds 1 charge</unit-skill> to its charged skill if it is at full HP.';
+        expect(sigs(parseSlot('passive', text))).toContain('charge|self|start-of-turn|charge');
+    });
+
+    it('Cobalt passive R2: the catalogue sentence carries the start-of-turn self charge', () => {
+        const text =
+            'Every turn this Unit <unit-skill>adds 1 charge</unit-skill> to its charged skill and gains <unit-skill>Out. Damage Up II</unit-skill> for 1 turn if it is at full HP.';
+        expect(sigs(parseSlot('passive', text))).toContain('charge|self|start-of-turn|charge');
     });
 
     it('FrontLine passive R0: the catalogue sentence carries the self-shield stat', () => {
