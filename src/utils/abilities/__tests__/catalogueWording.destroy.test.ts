@@ -198,8 +198,10 @@ describe('kill/destroy vocabulary — ruled rows', () => {
         const s = sigs(abilities);
         expect(s).toContain('extra-action|self|on-enemy-destroyed|extra-action');
         expect(s).not.toContain('extra-action|self|on-cast|extra-action');
-        expect(abilities.find((a) => a.type === 'extra-action')?.config).toMatchObject({
+        expect(abilities.find((a) => a.type === 'extra-action')?.config).toEqual({
+            type: 'extra-action',
             oncePerRound: true,
+            endOfRound: false,
         });
         // The every-turn Blast stack in the same row keeps accruing per round, not per kill.
         expect(s).toContain('buff|self|on-cast|Blast');
@@ -207,5 +209,41 @@ describe('kill/destroy vocabulary — ruled rows', () => {
             buffName: 'Blast',
             stackTrigger: 'per-round',
         });
+    });
+});
+
+// User ruling C (2026-10-02): Sokol's extra action is inserted into the turn queue as a full
+// action at his CURRENT speed, exactly like Liberator's — not an end-of-round action. Our text
+// says "one extra end of round action upon a kill"; it parses like the catalogue's.
+describe("kill/destroy vocabulary — Sokol's extra action is queued at his speed", () => {
+    const OLD =
+        'This Unit gains 1 stack of <unit-skill>Blast</unit-skill> every turn and grants one extra end of round action upon a kill, once per round.';
+    const NEW =
+        'This Unit gains 1 stack of <unit-skill>Blast</unit-skill> every turn.<br /><br />When an enemy is destroyed, once per round, this Unit <unit-skill>gains 1 extra action</unit-skill>.';
+    const LIBERATOR_R2 =
+        'This Unit has 40% Shield Penetration. When an enemy dies, all allies <unit-aid>add 1 charge</unit-aid> to their Charged Skills, and once per round, this unit gains 1 extra action.';
+    const extraAction = (text: string) =>
+        parseSlot('passive', text).find((a) => a.type === 'extra-action')!;
+
+    it('Sokol passive R2, our text: a once-per-round extra action on an enemy death, at speed', () => {
+        expect(extraAction(OLD)).toMatchObject({
+            target: 'self',
+            trigger: 'on-enemy-destroyed',
+            conditions: [],
+            config: { type: 'extra-action', oncePerRound: true, endOfRound: false },
+        });
+    });
+
+    it("Sokol passive R2: both texts give the same extra action as Liberator's", () => {
+        expect(extraAction(LIBERATOR_R2).config).toEqual(extraAction(OLD).config);
+        expect(canonical(parseSlot('passive', NEW))).toEqual(canonical(parseSlot('passive', OLD)));
+    });
+
+    it('Harvester keeps its end-of-round action (an ally death, not a kill)', () => {
+        const harvester = extraAction(
+            'When an allied Unit is destroyed, this Unit gains 1 extra end of round action.'
+        );
+        expect(harvester.trigger).toBe('on-ally-destroyed');
+        expect(harvester.config).toMatchObject({ endOfRound: true });
     });
 });

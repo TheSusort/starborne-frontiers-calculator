@@ -4340,7 +4340,8 @@ export interface ExtraActionParse {
     >;
     /** "end of round" extra action (e.g. Harvester): the engine drains it AFTER all
      *  normal-pool actions for the round, regardless of speed-rank — not re-picked by
-     *  speed. Default extra actions ("1 extra action", Liberator) stay speed-positioned. */
+     *  speed. Default extra actions ("1 extra action", Liberator) stay speed-positioned, and so
+     *  does every on-enemy-destroyed grant (Sokol), whatever its wording. */
     endOfRound: boolean;
 }
 
@@ -4415,10 +4416,15 @@ export function parseExtraAction(text: string | null | undefined): ExtraActionPa
           : EXTRA_ACTION_SELF_RESIST_RE.test(sentenceUnmasked)
             ? 'on-debuff-resisted'
             : undefined;
+    // An extra action granted on an ENEMY's death is queued at the ship's current speed like
+    // Liberator's, whatever the text calls it (user ruling 2026-10-02: Sokol's "one extra end of
+    // round action upon a kill" is that action). The end-of-round pool keeps every other "end of
+    // round" grant (Harvester's ally-death action, Nuqtu's buff-count action).
+    const endOfRound = trigger !== 'on-enemy-destroyed' && /end\s+of\s+round/i.test(clause);
     return {
         oncePerRound: /once per round/i.test(clause),
         conditions,
-        endOfRound: /end\s+of\s+round/i.test(clause),
+        endOfRound,
         ...(trigger ? { trigger } : {}),
     };
 }
