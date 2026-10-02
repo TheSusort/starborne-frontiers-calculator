@@ -964,18 +964,64 @@ describe('parseSkillEffects', () => {
         ]);
     });
 
-    it('parses "applies … to the enemy with the highest attack" using BUFFS type to target (Selenite)', () => {
+    // Synthetic input: no catalogue sentence uses the bare imperative "apply". It keeps the
+    // `apply` entry of AMBIGUOUS_VERBS covered.
+    it('parses "apply" (bare imperative) using BUFFS type to target (synthetic)', () => {
         const result = parseSkillEffects(
-            'At the start of each round, this Unit applies <unit-skill>Concentrate Fire</unit-skill> for 1 turn to the enemy with the highest attack.',
+            'When targeting a defender, apply <unit-skill>Concentrate Fire</unit-skill> for 2 turns.',
             'active'
         );
         expect(result).toEqual([
             {
                 buffName: 'Concentrate Fire',
                 target: 'enemy',
-                duration: 1,
+                duration: 2,
                 source: 'active',
                 application: 'apply',
+            },
+        ]);
+    });
+
+    // Synthetic input: no catalogue sentence uses the passive "is applied with". It keeps the
+    // `applied` entry of AMBIGUOUS_VERBS covered.
+    it('parses "is applied with" (passive voice) using BUFFS type to target (synthetic)', () => {
+        const result = parseSkillEffects(
+            'The enemy with the highest attack is applied with <unit-skill>Concentrate Fire</unit-skill> for 2 turns.',
+            'active'
+        );
+        expect(result).toEqual([
+            {
+                buffName: 'Concentrate Fire',
+                target: 'enemy',
+                duration: 2,
+                source: 'active',
+                application: 'apply',
+            },
+        ]);
+    });
+
+    // Synthetic input: every catalogue "newly inflicted" sits inside a tag or before a <unit-aid>
+    // debuff, so no catalogue sentence reaches the adjectival-marker skip. The pair below proves
+    // the marker is what suppresses the application.
+    it('does not treat an adjectival "newly inflicted" debuff as a fresh application (synthetic)', () => {
+        expect(
+            parseSkillEffects(
+                'extends the newly inflicted <unit-skill>Acidic Decay</unit-skill> by 1 turn.',
+                'active'
+            )
+        ).toEqual([]);
+        expect(
+            parseSkillEffects(
+                'extends the inflicted <unit-skill>Acidic Decay</unit-skill> by 1 turn.',
+                'active'
+            )
+        ).toEqual([
+            {
+                buffName: 'Acidic Decay',
+                target: 'enemy',
+                duration: null,
+                application: 'inflict',
+                source: 'active',
             },
         ]);
     });
@@ -4540,6 +4586,14 @@ describe('parseStasisBreakExemption', () => {
                 "This Unit's attacks do not reduce <unit-skill>Stasis</unit-skill>, and also ignore <unit-skill>Taunt</unit-skill> and <unit-skill>Provoke</unit-skill> effects. <br /><br />This Unit <unit-damage>increases outgoing direct damage</unit-damage> based on the enemies current HP, up to <unit-damage>30%</unit-damage> when the enemy is at full HP."
             )
         ).toEqual(UNGATED);
+    });
+
+    // Synthetic input: the catalogue says "do not reduce Stasis"; this guards the typographic
+    // (curly-apostrophe) spelling of the "don't break" arm.
+    it('detects curly-apostrophe "don’t break Stasis" — UNGATED (synthetic)', () => {
+        expect(parseStasisBreakExemption('This Unit’s attacks don’t break Stasis.')).toEqual(
+            UNGATED
+        );
     });
 
     it('detects bare "do not break Stasis" (Tygr — regression guard)', () => {

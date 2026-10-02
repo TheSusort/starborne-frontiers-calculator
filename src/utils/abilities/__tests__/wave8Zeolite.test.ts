@@ -3,8 +3,8 @@ import { buildShipAbilities } from '../buildShipAbilities';
 import { Ship } from '../../../types/ship';
 import { csvAvailable, loadShipSkillRecords } from '../../../../scripts/lib/shipSkillCsv';
 
-// Build a full-refit Ship carrying a CSV record's texts (Wave 8 convention — copied per-file to
-// avoid a cross-wave test dependency, see wave8Wusheng.test.ts).
+// Build a full-refit Ship carrying a CSV record's texts (copied per-file to avoid a cross-file
+// test dependency, see wave8Wusheng.test.ts).
 function shipFromCsv(name: string): Ship {
     const rec = loadShipSkillRecords().find((r) => r.name.toUpperCase() === name.toUpperCase());
     if (!rec) throw new Error(`docs/ship-skills.csv: no record for "${name}"`);
@@ -28,13 +28,13 @@ describe.skipIf(!csvAvailable())('Zeolite purges a buff when damaging a Defender
     it('emits a purge ability (enemy, count 1) gated on damaging a Defender, IN ADDITION to the +30% damage modifier', () => {
         const { slots } = buildShipAbilities(shipFromCsv('Zeolite'));
         // Scoped to the PASSIVE slot: Zeolite's ACTIVE skill separately carries its own
-        // unconditional on-cast purge (a distinct, pre-existing mechanic) — the passive slot
+        // unconditional on-cast purge (a distinct mechanic) — the passive slot
         // is where the Defender-gated +30%/purge sentence under test actually lives.
         const passive = slots.find((s) => s.slot === 'passive')!;
         expect(passive).toBeDefined();
         const abilities = passive.abilities;
 
-        // Wave-4 half: still present, unaffected.
+        // The +30% damage half.
         const mod = abilities.find(
             (a) => a.config.type === 'modifier' && a.config.channel === 'outgoingDamage'
         );
@@ -43,13 +43,13 @@ describe.skipIf(!csvAvailable())('Zeolite purges a buff when damaging a Defender
             { subject: 'enemy-type', derivable: true, requiredEnemyType: 'Defender' },
         ]);
 
-        // New (Task 12) half: the purge.
+        // The purge half.
         const purge = abilities.find((a) => a.config.type === 'purge');
         expect(purge).toBeDefined();
         expect(purge?.target).toBe('enemy');
         if (purge?.config.type !== 'purge') throw new Error('unreachable');
         expect(purge.config.count).toBe(1);
-        // Trigger fires on dealing damage to a Defender — mirrors the Wave-4 +30% gate's
+        // Trigger fires on dealing damage to a Defender — mirrors the +30% gate's
         // `enemy-type` condition shape exactly (same subject the reactive-purge executor and
         // the modifier gate both consume).
         expect(purge?.trigger).toBe('on-deal-damage');

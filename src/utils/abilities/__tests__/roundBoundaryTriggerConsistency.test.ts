@@ -268,6 +268,25 @@ describe('FrontLine: start-of-combat shield (docs/ship-skills.csv passive1)', ()
     });
 });
 
+// Synthetic input: no catalogue sentence ends with "at the start of combat." (FrontLine's
+// catalogue passive leads with it). This keeps the trailing-phrase position of the start-of-combat
+// detector covered.
+describe('start-of-combat shield, phrase trailing the sentence (synthetic)', () => {
+    it('the 25%-max-HP shield rides pre-combat, not on-cast', () => {
+        const abilities = passiveAbilities({
+            firstPassiveSkillText:
+                'This Unit gains a <unit-damage>shield equal to 25%</unit-damage> of its max HP at the start of combat.',
+        });
+        const shield = abilities.find((a) => a.type === 'shield')!;
+        expect(shield).toBeDefined();
+        expect(shield.trigger).toBe('pre-combat');
+        if (shield.config.type === 'shield') {
+            expect(shield.config.pct).toBe(25);
+            expect(shield.config.basis).toBe('hp');
+        }
+    });
+});
+
 describe('IonScorp: start-of-combat shield AND buff, undisclosed corpus twin of Crucialis (#210 review)', () => {
     // Exact docs/ship-skills.csv passive1 — the SAME clause shape as Crucialis, caught by the
     // reviewer's corpus sweep rather than the epic's named-ship list. Locks the generic

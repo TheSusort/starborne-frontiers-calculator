@@ -23,9 +23,8 @@
  * A small, named, per-corpus ALLOWLIST covers genuinely verb-less clauses; both are empty.
  *
  * CORPUS ACCESS: both CSVs are gitignored reference data. The `docs/ship-skills.csv` census must
- * read the real corpus
- * — a synthetic fallback would turn a missing-data worktree into a green vacuous run. The
- * catalogue half needs `docs/ship-skills.catalogue.csv` (built by
+ * read the real corpus — a synthetic fallback would turn a missing-data worktree into a green
+ * vacuous run. The catalogue half needs `docs/ship-skills.catalogue.csv` (built by
  * `scripts/build-catalogue-skills-csv.ts`); where that file is absent it is SKIPPED, by name.
  */
 import { describe, it, expect, beforeAll } from 'vitest';

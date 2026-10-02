@@ -418,11 +418,12 @@ describe('scaledBonus', () => {
         expect(scaledBonus(base, makeConditionContext({ selfCritPower: 0 }))).toBe(0);
     });
 
-    it('scaling sums the scaling source anyOf OR-group (epic PR6a: Rikra Taunted-or-Provoked)', () => {
+    it('scaling sums the scaling source anyOf OR-group (Rikra: Taunt or Provoke)', () => {
         // scaledBonus sums the counts of the WHOLE anyOf OR-group the scaling source belongs to, so
         // a binary "additional X% damage to enemies affected by Taunt or Provoke" bonus (Rikra)
-        // fires on either. A LONE (non-anyOf) scaling condition is its own singleton group → the
-        // raw-count-of-one behavior (covered by the Selenite/Wildfire/per-unit cases above).
+        // fires on either. A LONE (non-anyOf) scaling condition is its own singleton group, so it
+        // keeps the raw-count-of-one behavior (covered by the Selenite/Wildfire/per-unit cases
+        // above).
         const a = dmg(
             [
                 cond({ subject: 'enemy-debuff', derivable: true, anyOf: true }),

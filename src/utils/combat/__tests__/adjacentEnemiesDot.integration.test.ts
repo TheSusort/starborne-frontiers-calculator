@@ -1,11 +1,10 @@
 /**
- * Ship-kit Wave 5, Task B2 — engine fan-out for a `target-and-adjacent-enemies` DoT
- * (Asphyxiator active Inferno III, set by Task B1's parser work). Prior to this task,
- * `dotsFromSkill` (applyAbilities.ts) drops the ability's `target` entirely, and the
- * `applyNewDoTs` call site (playerTurn.ts) only ever pushes onto the single resolved
- * primary target's containers — so a splash-scoped DoT lands on the primary target ONLY,
- * never its board-neighbours. This file drives the fix through a real positional battle
- * (`simulateBattle`), mirroring Task A3's debuff fan-out test
+ * Engine fan-out for a `target-and-adjacent-enemies` DoT (Asphyxiator active Inferno III). A
+ * splash-scoped DoT must land on the primary target AND its board-neighbours: `dotsFromSkill`
+ * (applyAbilities.ts) carries the ability's `target`, and the `applyNewDoTs` call site
+ * (playerTurn.ts) pushes onto every resolved victim's containers, not just the primary's. This
+ * file drives the fan-out through a real positional battle (`simulateBattle`), mirroring the
+ * debuff fan-out test
  * (`adjacentEnemiesDebuff.integration.test.ts`) for roster/board layout.
  *
  * Board layout (src/utils/targeting/board.ts hex adjacency): the primary target sits at M4

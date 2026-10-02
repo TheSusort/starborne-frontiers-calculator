@@ -1,11 +1,10 @@
 /**
- * Ship-kit Wave 5, Task A3 — engine fan-out for the two enemy-adjacency `AbilityTarget` scopes
- * (`adjacent-enemies` / `target-and-adjacent-enemies`) added in Task A1 and parsed in Task A2
- * (Vindicator Provoke / Out. Damage Down I → `adjacent-enemies`; Asphyxiator Stasis →
- * `target-and-adjacent-enemies`). Prior to this task, engine.ts's self-vs-enemy
- * classification does not list either scope, so both fall through to `self` — the applied
- * status is misregistered as a SELF buff on the caster instead of an enemy debuff on the board
- * neighbours. This file drives the fix through a real positional battle (`simulateBattle`) using
+ * Engine fan-out for the two enemy-adjacency `AbilityTarget` scopes (`adjacent-enemies` /
+ * `target-and-adjacent-enemies`; Vindicator Provoke / Out. Damage Down I → `adjacent-enemies`;
+ * Asphyxiator Stasis → `target-and-adjacent-enemies`). engine.ts's self-vs-enemy classification
+ * must list both scopes, or they fall through to `self` and the applied status is misregistered
+ * as a SELF buff on the caster instead of an enemy debuff on the board neighbours. This file
+ * drives the fan-out through a real positional battle (`simulateBattle`) using
  * synthetic ships whose skill text carries the SAME two adjacency phrasings the parser recognises
  * (`detectAdjacentEnemyScope` in skillTextParser.ts — verbatim structure from Vindicator/
  * Asphyxiator in docs/ship-skills.csv), so the parser → engine pipeline is exercised end to end.
@@ -182,13 +181,13 @@ describe('team symmetry — an ENEMY-side caster fans out onto its PLAYER-side m
  * Control-path smoke test: buildShipAbilities additively emits a `type:'control'` ability
  * alongside a named control-effect debuff (Stasis/Provoke/…, CONTROL_EFFECT_DISPLAY_NAME —
  * buildShipAbilities.ts) whose `target` is RE-DERIVED from the named twin's
- * `detectEnemyGrantScope` (buildShipAbilities.ts, Task A2) — so a real Vindicator
+ * `detectEnemyGrantScope` (buildShipAbilities.ts) — so a real Vindicator
  * Provoke / Asphyxiator Stasis cast carries a control ability with `target:'adjacent-enemies'` /
  * `'target-and-adjacent-enemies'` too. playerTurn.ts's control-applied loop only special-cases
  * `ctrl.target === 'enemy'` (Block-Debuff/resisted-suppression) — a non-'enemy' string just
- * always emits (same as the pre-existing standalone-control path), so the new target values must
- * not throw. This does not assert control-applied semantics (out of scope here, unchanged by
- * this task) — only that the control-twin's presence doesn't break the fan-out this task owns.
+ * always emits (same as the standalone-control path), so these target values must not throw.
+ * This does not assert control-applied semantics — only that the control-twin's presence doesn't
+ * break the fan-out.
  */
 describe('control-path smoke test (real control-effect buff names)', () => {
     const controlCaster = (id: string, text: string): Ship => ship(id, { activeSkillText: text });
