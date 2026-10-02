@@ -62,7 +62,7 @@ function registerSingle(
 const OLEANDER_P2 =
     "When an ally inflicts a debuff, this Unit <unit-aid>adds 1 charge</unit-aid> to it's Charged Skill and then, once per ally per round, grants <unit-skill>Repair Over Time II</unit-skill> to that Ally for 2 turns.";
 const HAYYAN_P2 =
-    "When <unit-aid>cleansing a</unit-aid> Debuff from an Ally, this Unit <unit-damage>repairs the ally for 4%</unit-damage> of this Unit's Max HP.<br /><br />When a debuff is inflicted on an ally, this Unit <unit-damage>repairs the ally for 6%</unit-damage> of this Unit's Max HP.";
+    "When this Unit <unit-skill>cleanses a debuff</unit-skill> from an ally, it also <unit-damage>repairs the ally 4%</unit-damage> of this Unit's max HP. <br /><br />When a <unit-aid>debuff</unit-aid> is inflicted on an ally, this Unit <unit-damage>repairs the ally for 6%</unit-damage> of this Unit's max HP.";
 const YUYAN_P2 =
     'This Unit gains <unit-skill>Stealth</unit-skill> for 2 turns and <unit-skill>Tianchao Precision II</unit-skill> for 3 turns when applying a debuff.';
 

@@ -349,7 +349,7 @@ describe('Oleander (enemy-side) — team symmetry: an enemy Oleander reacts to i
 // =============================================================================
 
 const HAYYAN_P3 =
-    "When a debuff is inflicted on an ally, this Unit <unit-damage>repairs the ally for 6%</unit-damage> of this Unit's Max HP.";
+    "When a <unit-aid>debuff</unit-aid> is inflicted on an ally, this Unit <unit-damage>repairs the ally for 6%</unit-damage> of this Unit's max HP.";
 
 /** Extracts Hayyan's ally-debuffed repair through the REAL parser/builder (production routing). */
 function hayyanAllyDebuffedHeal(): Ability {

@@ -132,7 +132,7 @@ describe('SP-M M1: FrontLine reactive damage reduces the charging enemy HP (posi
 // Verbatim from docs/ship-skills.csv (Vindicator, second_passive_skill_text — the R2/refit-active
 // slot getShipSkillRows resolves for a 2-refit ship). Do NOT alter this text.
 const VINDICATOR_P2 =
-    "This Unit has 20% Shield Penetration. At the start of combat, this Unit gains <unit-skill>Magnetized Shielding</unit-skill>.<br /><br />When this Unit resists a debuff infliction from an enemy, it deals <unit-damage>damage equal to 30%</unit-damage> of this Unit's max HP to that enemy.";
+    "This Unit has <unit-damage>20% shield penetration</unit-damage>.<br /><br />At the start of combat, this Unit gains <unit-skill>Magnetized Shielding</unit-skill>.<br /><br />When this Unit resists a <unit-aid>debuff</unit-aid> infliction from an enemy, it deals damage equal to <unit-damage>30%</unit-damage> of this Unit's max HP to that enemy.";
 
 // Verbatim from docs/ship-skills.csv (Paracelsus, first_passive_skill_text — the R0/innate slot,
 // applies with zero refits). Do NOT alter this text.

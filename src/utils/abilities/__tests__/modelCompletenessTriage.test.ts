@@ -160,16 +160,15 @@ describe('SP-B — new reactive trigger families', () => {
 
     // Verbatim from docs/ship-skills.csv (second_passive_skill_text field).
     const RAVAGER_P2 =
-        'This Unit ignores 10% of Defense. It gains 1 stack of <unit-skill>Overload</unit-skill> every turn. Upon killing an enemy, it loses <unit-skill>Overload</unit-skill> and gains <unit-skill>Marauder Rage III</unit-skill> for 3 turns. If its debuff is resisted, it gains <unit-skill>Hacking Module Overdrive</unit-skill> for 1 turn.';
+        "This Unit gains 1 stack of <unit-skill>Overload</unit-skill> every turn and, upon destroying an enemy, removes <unit-skill>Overload</unit-skill> and gains <unit-skill>Marauder Rage III</unit-skill> for 3 turns.<br /><br />If this Unit's debuff is resisted, it gains <unit-skill>Hacking Module Overdrive</unit-skill> for 1 turn. This Unit has <unit-damage>10% defense penetration</unit-damage>.";
 
-    it('Ravager: "If its debuff is resisted, gains Hacking Module Overdrive" rides the INFLICTOR-side reaction', () => {
+    it('Ravager: "If this Unit\'s debuff is resisted, gains Hacking Module Overdrive" rides the INFLICTOR-side reaction', () => {
         const abilities = abilitiesFor({ secondPassiveSkillText: RAVAGER_P2 }, 'passive');
         const effect = abilities.find(
             (a) => a.config.type === 'buff' && a.config.buffName === 'Hacking Module Overdrive'
         );
-        // PR-B2: the INFLICTOR-side "when the debuff THIS unit inflicted gets resisted" trigger
-        // is now modelled as `on-own-debuff-resisted` — mirror of the RESISTER-scoped
-        // `on-debuff-resisted` (D-PR16 Lockdown).
+        // The INFLICTOR-side "when the debuff THIS unit inflicted gets resisted" trigger is
+        // `on-own-debuff-resisted` — mirror of the RESISTER-scoped `on-debuff-resisted` (Lockdown).
         expect(effect?.trigger).toBe('on-own-debuff-resisted');
     });
 

@@ -400,7 +400,7 @@ describe('buildShipAbilities', () => {
         expect(ext.conditions).toEqual([{ subject: 'ally-inflicts-debuff', derivable: false }]);
     });
 
-    describe('extend-status (ship-kit wave 4, Task 5)', () => {
+    describe('extend-status', () => {
         it('Sokol charged: damage + extend-status(debuff) on the enemy', () => {
             const s = ship({
                 chargeSkillText:
@@ -474,10 +474,10 @@ describe('buildShipAbilities', () => {
         // gated on the MAIN target's hit critting.
         it('Asphyxiator refit passive: inflicted-scope extend-status on all-enemies, self-crit gated', () => {
             const s = ship({
-                thirdPassiveSkillText:
-                    'At the start of the round, if there are any enemies with 3 or more debuffs, this Unit gains 1 stack of <unit-skill>Overload</unit-skill>. After this Unit applies a Debuff with a Critical hit the newly applied Debuff is extended by 1 turn.',
+                secondPassiveSkillText:
+                    'At the start of the round, if there are any enemies with 3 or more <unit-aid>debuffs</unit-aid>, this Unit gains 1 stack of <unit-skill>Overload</unit-skill> and gains <unit-skill>Marauder Rage II</unit-skill> for 3 turns. Upon destroying an enemy, this Unit removes <unit-skill>Overload</unit-skill>. <br /><br />After this Unit inflicts a <unit-aid>debuff</unit-aid> with a critical hit, the newly inflicted <unit-aid>debuff</unit-aid> is <unit-skill>extended by 1 turn</unit-skill>.',
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                refits: [{}, {}, {}, {}] as any,
+                refits: [{}, {}] as any,
             });
             const passive = slot(buildShipAbilities(s).slots, 'passive')!;
             const extend = abilityOfType(passive.abilities, 'extend-status')!;
@@ -1455,7 +1455,7 @@ describe('buildShipAbilities', () => {
             // inflictions supply the on-debuff-inflicted events that fire this shield grant.
             const s = ship({
                 firstPassiveSkillText:
-                    'This Unit gains a <unit-damage>Shield equal to 3%</unit-damage> of their Max HP when an enemy gets debuffed.',
+                    'This Unit gains a <unit-damage>shield equal to 3%</unit-damage> of their max HP when an enemy gets inflicted with a <unit-aid>debuff</unit-aid>.',
             });
             const passive = buildShipAbilities(s).slots.find((x) => x.slot === 'passive');
             const shield = passive?.abilities.find((a) => a.type === 'shield');
@@ -1878,7 +1878,7 @@ describe('buildShipAbilities', () => {
     // previously emitted nothing (see skillTextParser.test.ts's "the debuff-duration clause
     // emits nothing" note on parseHealAbilities — that note is about the HEAL parser only; the
     // reduction now lives in its own ability, added alongside, not folded into the heal).
-    describe('debuff-duration reduction (PR11, inverse of extend-dot)', () => {
+    describe('debuff-duration reduction (inverse of extend-dot)', () => {
         it('Heliodor first passive: self damage-reaction reduces ALL active debuffs on itself by 1 turn', () => {
             const s = ship({
                 firstPassiveSkillText:
@@ -1927,7 +1927,7 @@ describe('buildShipAbilities', () => {
         it('Pestilence passive: on-debuff-inflicted reduces ALL active debuffs on all allies by 1 turn (verbatim first_passive_skill_text)', () => {
             const s = ship({
                 firstPassiveSkillText:
-                    'On debuff infliction this Unit reduces the duration of active Debuffs on all allies by 1 turn.',
+                    'When this Unit inflicts a <unit-aid>debuff</unit-aid>, it <unit-skill>reduces the duration of all active</unit-skill> <unit-aid>debuffs</unit-aid> on all allies by 1 turn.',
             });
             const passive = buildShipAbilities(s).slots.find((x) => x.slot === 'passive');
             const reduce = passive?.abilities.find((a) => a.type === 'cleanse');
@@ -1970,7 +1970,7 @@ describe('buildShipAbilities', () => {
             });
         });
 
-        it('an un-gated reduction clause (no "when directly damaged"/"on debuff infliction") is DROPPED, not emitted as a phantom on-attacked ability', () => {
+        it('an un-gated reduction clause (no "when directly damaged"/"when this Unit inflicts a debuff") is DROPPED, not emitted as a phantom on-attacked ability', () => {
             // The clause parses (parseDebuffDurationReduction returns turns/target) but carries
             // neither reactive gate flag → buildShipAbilities must NOT emit it (a silent on-cast /
             // on-attacked default would fire an all-debuff reduction with no real trigger). No
@@ -2884,11 +2884,11 @@ describe('buildShipAbilities', () => {
             });
         });
 
-        it('R0 passive "Shield equal to 30% of Max HP when applying Stasis" → shield on-stasis-applied', () => {
+        it('R0 passive "shield equal to 30% of its max HP after it inflicts Stasis" → shield on-stasis-applied', () => {
             const s = ship({
                 refits: [],
                 firstPassiveSkillText:
-                    'This Unit gains <unit-damage>Shield equal to 30%</unit-damage> of its Max HP when applying Stasis.',
+                    'This Unit gains a <unit-damage>shield equal to 30%</unit-damage> of its max HP after it inflicts <unit-skill>Stasis</unit-skill>.',
             });
             const passive = buildShipAbilities(s).slots.find((sl) => sl.slot === 'passive');
             const shield = passive?.abilities.find((a) => a.type === 'shield');
@@ -2900,12 +2900,12 @@ describe('buildShipAbilities', () => {
             });
         });
 
-        it('R2 passive parses the shield-on-Stasis clause AND the adjacency HP grant (PR F4)', () => {
+        it('R2 passive parses the shield-on-Stasis clause AND the adjacency HP grant', () => {
             const s = ship({
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 refits: [{}, {}] as any,
                 secondPassiveSkillText:
-                    'When adjacent to a Supporter, this Unit gains 20% HP. This Unit gains <unit-damage>Shield equal to 30%</unit-damage> of its Max HP when applying Stasis.',
+                    'This Unit gains a <unit-damage>shield equal to 30%</unit-damage> of its max HP after it inflicts <unit-skill>Stasis</unit-skill>.<br /><br />At the start of combat this Unit gains 20% HP if its adjacent to a supporter.',
             });
             const passive = buildShipAbilities(s).slots.find((sl) => sl.slot === 'passive');
             const shield = passive?.abilities.find((a) => a.type === 'shield');
@@ -2915,9 +2915,9 @@ describe('buildShipAbilities', () => {
                 trigger: 'on-stasis-applied',
                 config: { type: 'shield', pct: 30, basis: 'hp' },
             });
-            // PR F4: "When adjacent to a Supporter, this Unit gains 20% HP" is now parsed as a
+            // "At the start of combat this Unit gains 20% HP if its adjacent to a supporter" is a
             // permanent pre-fight stat grant (percent-of-own, Supporter-gated), applied by the
-            // battle sim's pre-fight layer in F5.
+            // battle sim's pre-fight layer.
             const preCombat = passive?.abilities.find((a) => a.type === 'pre-combat-stat');
             expect(preCombat).toMatchObject({
                 type: 'pre-combat-stat',

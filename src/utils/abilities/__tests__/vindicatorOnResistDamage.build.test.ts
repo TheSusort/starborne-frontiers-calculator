@@ -19,7 +19,7 @@ function abilitiesFor(over: Partial<Ship>, name: string): Ability[] {
 }
 
 const VINDICATOR_P2 =
-    "This Unit has 20% Shield Penetration. At the start of combat, this Unit gains <unit-skill>Magnetized Shielding</unit-skill>.<br /><br />When this Unit resists a debuff infliction from an enemy, it deals <unit-damage>damage equal to 30%</unit-damage> of this Unit's max HP to that enemy.";
+    "This Unit has <unit-damage>20% shield penetration</unit-damage>.<br /><br />At the start of combat, this Unit gains <unit-skill>Magnetized Shielding</unit-skill>.<br /><br />When this Unit resists a <unit-aid>debuff</unit-aid> infliction from an enemy, it deals damage equal to <unit-damage>30%</unit-damage> of this Unit's max HP to that enemy.";
 
 describe('Vindicator on-resist HP damage — builder', () => {
     it('emits a damage ability on on-debuff-resisted with hpBasisPct 30', () => {

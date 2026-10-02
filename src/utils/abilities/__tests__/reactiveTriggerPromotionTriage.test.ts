@@ -193,20 +193,16 @@ describe('cluster 3 — on-ally-debuff-inflicted', () => {
 // ─── cluster 4 — on-enemy-buffed (event correction: NOT on-enemy-cleansed) ───────────────────
 describe('cluster 4 — on-enemy-buffed (Nuqtu)', () => {
     const NUQTU_P2 =
-        'This Unit <unit-aid>Cleanses 1</unit-aid> debuff from itself (once per round) and gains <unit-skill>Terran Bolster III</unit-skill> for 1 turn when an enemy gets buffed.';
+        'Every turn this Unit <unit-skill>cleanses 1 debuff</unit-skill>, once per round, and when an enemy gains a <unit-aid>buff</unit-aid> this Unit gains <unit-skill>Terran Bolster III</unit-skill> for 1 turn.';
 
-    it('Nuqtu: self-cleanse + self-buff ride the "enemy gets buffed" reactive trigger, not on-cast', () => {
+    it('Nuqtu: the self-buff rides the "enemy gains a buff" reactive trigger; the cleanse is not on-cast', () => {
         const ab = abilitiesFor({ firstPassiveSkillText: NUQTU_P2 }, 'passive');
         const cleanse = ab.find((a) => a.type === 'cleanse');
         expect(cleanse?.trigger).not.toBe('on-cast');
-        // FIXED (Phase 3 PR-I): the sweep's original GAP comment claimed no buff-applied
-        // CombatEvent existed — that was factually wrong; buff-applied already existed and
-        // already fired for enemy-side actors (events.ts, playerTurn.ts, engine.ts, triggers.ts).
-        // Only a NEW `on-enemy-buffed` trigger + listener (triggers.ts, subscribing to
-        // buff-applied, isOpposing-gated) was needed, plus promoting the "enemy gets/is buffed"
-        // clause (skillTextParser.ts, previously a manual `enemy-buff` CONDITION) to a live
-        // trigger. Both the cleanse (once-per-round, self-scoped Ability.oncePerRound) and the
-        // Terran Bolster III buff grant now ride on-enemy-buffed.
+        const bolster = ab.find(
+            (a) => a.config.type === 'buff' && a.config.buffName === 'Terran Bolster III'
+        );
+        expect(bolster?.trigger).toBe('on-enemy-buffed');
     });
 });
 
@@ -325,13 +321,13 @@ describe('cluster 7 — ally-crit / cleanse-reactive / DoT-crit / debuff-resiste
     });
 
     const HAYYAN_P3 =
-        "When a debuff is inflicted on an ally, this Unit <unit-damage>repairs the ally for 6%</unit-damage> of this Unit's Max HP.";
+        "When a <unit-aid>debuff</unit-aid> is inflicted on an ally, this Unit <unit-damage>repairs the ally for 6%</unit-damage> of this Unit's max HP.";
     it('Hayyan: repair-on-ally-debuffed rides on-ally-debuffed', () => {
         const ab = abilitiesFor({ firstPassiveSkillText: HAYYAN_P3 }, 'passive');
         const heal = ab.find((a) => a.type === 'heal');
         expect(heal?.trigger).toBe('on-ally-debuffed');
-        // GAP: needs-capture — NEW `on-ally-debuffed` trigger (victim-scoped `debuff-applied`,
-        // targetId is the debuffed ally; mirrors self-scoped `on-debuffed`).
+        // `on-ally-debuffed` is victim-scoped `debuff-applied` (targetId is the debuffed ally;
+        // mirrors self-scoped `on-debuffed`).
     });
 
     // Hayyan's SIBLING clause (same passive, first sentence — PR-E's on-ally-debuffed fix
@@ -371,18 +367,12 @@ describe('cluster 7 — ally-crit / cleanse-reactive / DoT-crit / debuff-resiste
     });
 
     const VINDICATOR_P3 =
-        "When this Unit resists a debuff infliction from an enemy, it deals <unit-damage>damage equal to 30%</unit-damage> of this Unit's max HP to that enemy.";
+        "When this Unit resists a <unit-aid>debuff</unit-aid> infliction from an enemy, it deals damage equal to <unit-damage>30%</unit-damage> of this Unit's max HP to that enemy.";
     it('Vindicator: reactive damage on debuff-resisted rides on-debuff-resisted', () => {
         const ab = abilitiesFor({ firstPassiveSkillText: VINDICATOR_P3 }, 'passive');
         expect(ab.some((a) => a.type === 'damage' && a.trigger === 'on-debuff-resisted')).toBe(
             true
         );
-        // GAP: DEFERRED (Phase 3 PR-C, 2026-07-04) — two independent infra gaps beyond Layer-1 tag
-        // inheritance: (1) no maxHP-scaled damage model — the 'damage' AbilityConfig only carries an
-        // attack%-based multiplier (applyReactiveDamage sources ownerStats.attack), so "30% of max HP"
-        // cannot be emitted faithfully; (2) no-capturable-actor — the debuff-resisted event carries only
-        // targetId (the resister), no source/attacker id, so "that enemy" cannot be resolved. Spec-locked
-        // out-of-scope (no-capturable-actor → candidate future work). Probe intentionally left RED.
     });
 
     const AMARTYA_P2 =
@@ -396,7 +386,7 @@ describe('cluster 7 — ally-crit / cleanse-reactive / DoT-crit / debuff-resiste
     });
 
     const APEX_P2 =
-        'This Unit gains a <unit-damage>Shield equal to 3%</unit-damage> of their Max HP when an enemy gets debuffed.';
+        'This Unit gains a <unit-damage>shield equal to 3%</unit-damage> of their max HP when an enemy gets inflicted with a <unit-aid>debuff</unit-aid>.';
     it('APEX: shield-on-enemy-debuffed already rides on-debuff-inflicted (FP lock)', () => {
         const ab = abilitiesFor({ firstPassiveSkillText: APEX_P2 }, 'passive');
         const shield = ab.find((a) => a.type === 'shield');

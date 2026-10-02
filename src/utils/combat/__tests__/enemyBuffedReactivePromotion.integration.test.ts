@@ -1,27 +1,17 @@
 /**
- * PR-I — combat-integration tests for the NEW `on-enemy-buffed` reactive trigger:
- *   - Nuqtu (1st passive): "This Unit Cleanses 1 debuff from itself (once per round) and gains
- *     Terran Bolster III for 1 turn when an enemy gets buffed" (docs/ship-skills.csv, verbatim).
- *     Both effects are SELF-target — no actor capture needed. The cleanse is capped at once per
- *     round (Ability.oncePerRound); the Terran Bolster III grant carries no cap.
- *
- *   The clause was previously modeled as an ON-CAST ability gated by a manual, non-derivable
- *   `enemy-buff` CONDITION (the single-ship DPS sim has no enemy casting buffs, so it never fired
- *   there — the user could only toggle it manually). It is now a LIVE reactive trigger for the
- *   team simulator: `buff-applied` (which already existed and already fired for enemy-side
- *   actors — see events.ts / playerTurn.ts / engine.ts / triggers.ts) drives a NEW
- *   `on-enemy-buffed` listener (isOpposing-gated), and the "when an enemy gets buffed" clause is
- *   promoted from the manual condition to the trigger (skillTextParser.ts).
+ * Combat-integration tests for the `on-enemy-buffed` reactive trigger, driven by Nuqtu's passive
+ * (docs/ship-skills.csv, verbatim): "Every turn this Unit cleanses 1 debuff, once per round, and
+ * when an enemy gains a buff this Unit gains Terran Bolster III for 1 turn." Both effects are
+ * SELF-target. The cleanse is an every-turn self-cleanse capped at once per round
+ * (start-of-turn, Ability.oncePerRound); only the Terran Bolster III grant (and, at refit 2, the
+ * Core Charge I stack) rides `on-enemy-buffed`, whose listener (triggers.ts) wakes on an
+ * opposing `buff-applied`.
  *
  * Nuqtu's ability is extracted through the REAL production path (`buildShipAbilities`) fed skill
  * text copied verbatim from `docs/ship-skills.csv` (parser source of truth) — never a hand-built
  * ability array. The surrounding cast (an enemy that self-buffs to generate the triggering event,
  * an enemy that debuffs Nuqtu so its cleanse has something real to remove) are minimal hand-built
  * actors, following `onEnemyRepairedReactivePromotion.integration.test.ts`'s harness style.
- *
- * Non-vacuity: reverting the PR-I src changes (skillTextParser.ts / buildShipAbilities.ts /
- * triggers.ts / types/abilities.ts) turns every "fires"/"routes" assertion in this file red
- * (verified manually — see the PR-I report for the exact revert/restore transcript).
  */
 import { describe, it, expect } from 'vitest';
 import { runCombat, CombatEngineInput } from '../engine';
@@ -111,12 +101,12 @@ const debuffOnCast = (id: string, buffName: string): Ability => ({
 });
 
 // =============================================================================
-// Nuqtu — "This Unit Cleanses 1 debuff from itself (once per round) and gains Terran Bolster III
-// for 1 turn when an enemy gets buffed" (docs/ship-skills.csv, verbatim — base passive).
+// Nuqtu — "Every turn this Unit cleanses 1 debuff, once per round, and when an enemy gains a buff
+// this Unit gains Terran Bolster III for 1 turn" (docs/ship-skills.csv, verbatim — base passive).
 // =============================================================================
 
 const NUQTU_P1 =
-    'This Unit <unit-aid>Cleanses 1</unit-aid> debuff from itself (once per round) and gains <unit-skill>Terran Bolster III</unit-skill> for 1 turn when an enemy gets buffed.';
+    'Every turn this Unit <unit-skill>cleanses 1 debuff</unit-skill>, once per round, and when an enemy gains a <unit-aid>buff</unit-aid> this Unit gains <unit-skill>Terran Bolster III</unit-skill> for 1 turn.';
 
 /** Extracts Nuqtu's REAL production passive slot (the self-cleanse + Terran Bolster III grant). */
 function nuqtuPassiveAbilities(): Ability[] {
@@ -147,34 +137,34 @@ function nuqtuBolsterGrant(): Ability {
 // Sanity-check the extracted abilities BEFORE using them as engine input — a mutation guard so a
 // regression in the parser/builder wiring fails loudly here rather than silently no-op'ing the
 // engine tests below.
-describe('Nuqtu self-cleanse + Terran Bolster III — extracted ability shape (mutation guard)', () => {
-    it('both ride on-enemy-buffed, self-target; only the cleanse carries the once-per-round cap', () => {
+describe('Nuqtu every-turn cleanse + Terran Bolster III — extracted ability shape (mutation guard)', () => {
+    it('the grant rides on-enemy-buffed; the cleanse is an every-turn self-cleanse capped once per round', () => {
         const cleanse = nuqtuCleanse();
         const grant = nuqtuBolsterGrant();
-        expect(cleanse.trigger).toBe('on-enemy-buffed');
+        expect(cleanse.trigger).toBe('start-of-turn');
         expect(cleanse.target).toBe('self');
         expect(cleanse.oncePerRound).toBe(true);
         expect(grant.trigger).toBe('on-enemy-buffed');
         expect(grant.target).toBe('self');
         expect(grant.oncePerRound).toBeUndefined();
-        // COLLISION-SCOPE: the promoted grant must NOT also carry the now-redundant manual
-        // enemy-buff condition (double-gating would silently suppress the reactive).
+        // COLLISION-SCOPE: the reactive grant must NOT also carry the manual enemy-buff
+        // condition (double-gating would silently suppress the reactive).
         expect(grant.conditions.some((c) => c.subject === 'enemy-buff')).toBe(false);
     });
 });
 
 // =============================================================================
-// Nuqtu — REFIT (2nd) passive: "This Unit Cleanses 1 debuff from itself (once per round) and
-// gains Terran Bolster III for 1 turn, and gains 1 stack of Core Charge I when an enemy gets
-// buffed" (docs/ship-skills.csv, verbatim — refit-active passive). Per this project's convention
-// only the refit-active passive applies in-game — getShipSkillRows resolves refitCount >= 2 to
-// `secondPassiveSkillText` (src/utils/ship/skillRows.ts) — so THIS is the passive a real,
-// refitted Nuqtu actually runs. It adds a THIRD clause over the base passive above: a Core
-// Charge I stack grant, sharing the same "when an enemy gets buffed" trigger clause.
+// Nuqtu — REFIT (2nd) passive: "Every turn this Unit cleanses 1 debuff, once per round, and when
+// an enemy gains a buff this Unit gains Terran Bolster III for 1 turn and gains 1 stack of Core
+// Charge I" (docs/ship-skills.csv, verbatim — refit-active passive). Per this project's
+// convention only the refit-active passive applies in-game — getShipSkillRows resolves
+// refitCount >= 2 to `secondPassiveSkillText` (src/utils/ship/skillRows.ts) — so THIS is the
+// passive a real, refitted Nuqtu actually runs. It adds a THIRD clause over the base passive
+// above: a Core Charge I stack grant, sharing the same "when an enemy gains a buff" clause.
 // =============================================================================
 
 const NUQTU_P2_REFIT =
-    'This Unit <unit-aid>Cleanses 1</unit-aid> debuff from itself (once per round) and gains <unit-skill>Terran Bolster III</unit-skill> for 1 turn, and gains 1 stack of <unit-skill>Core Charge I</unit-skill> when an enemy gets buffed.';
+    'Every turn this Unit <unit-skill>cleanses 1 debuff</unit-skill>, once per round, and when an enemy gains a <unit-aid>buff</unit-aid> this Unit gains <unit-skill>Terran Bolster III</unit-skill> for 1 turn and gains 1 stack of <unit-skill>Core Charge I</unit-skill>.';
 
 /**
  * Extracts Nuqtu's REAL production REFIT passive slot. `ship()` defaults to 4 refits, so with
@@ -189,8 +179,8 @@ function nuqtuRefitPassiveAbilities(): Ability[] {
     );
 }
 
-describe('Nuqtu REFIT passive — self-cleanse + Terran Bolster III + Core Charge I stack — extracted ability shape (mutation guard)', () => {
-    it('all THREE effects ride on-enemy-buffed, self-target; only the cleanse carries the once-per-round cap', () => {
+describe('Nuqtu REFIT passive — every-turn cleanse + Terran Bolster III + Core Charge I stack — extracted ability shape (mutation guard)', () => {
+    it('both grants ride on-enemy-buffed; the cleanse is an every-turn self-cleanse capped once per round', () => {
         const abilities = nuqtuRefitPassiveAbilities();
         const cleanse = abilities.find((a) => a.type === 'cleanse');
         const bolster = abilities.find(
@@ -211,26 +201,28 @@ describe('Nuqtu REFIT passive — self-cleanse + Terran Bolster III + Core Charg
         if (!coreCharge)
             throw new Error('mutation guard: Nuqtu refit Core Charge I stack grant not found');
 
-        for (const ability of [cleanse, bolster, coreCharge]) {
+        for (const ability of [bolster, coreCharge]) {
             expect(ability.trigger).toBe('on-enemy-buffed');
             expect(ability.target).toBe('self');
-            // COLLISION-SCOPE: none of the three promoted effects may carry the now-redundant
-            // manual enemy-buff condition (double-gating would silently suppress the reactive).
+            // COLLISION-SCOPE: neither reactive grant may carry the manual enemy-buff condition
+            // (double-gating would silently suppress the reactive).
             expect(ability.conditions.some((c) => c.subject === 'enemy-buff')).toBe(false);
         }
+        expect(cleanse.trigger).toBe('start-of-turn');
+        expect(cleanse.target).toBe('self');
         expect(cleanse.oncePerRound).toBe(true);
         expect(bolster.oncePerRound).toBeUndefined();
         expect(coreCharge.oncePerRound).toBeUndefined();
     });
 });
 
-describe('Nuqtu (player-side) — an opposing buff wakes the self-cleanse + Terran Bolster III grant', () => {
+describe('Nuqtu (player-side) — an opposing buff wakes the Terran Bolster III grant', () => {
     const nuqtuFocusSkills = (): ShipSkills => ({
         slots: [noopActiveSlot(), { slot: 'passive', abilities: nuqtuPassiveAbilities() }],
     });
 
-    // Faster than the buffing enemy: lands a real, removable debuff on Nuqtu BEFORE the
-    // self-buff reactive fires this same round.
+    // Faster than every other actor: lands a real, removable debuff on Nuqtu before Nuqtu's own
+    // turn, so its every-turn cleanse has something to remove.
     const debuffEnemy = (id: string): EnemyAttacker => ({
         id,
         stats: {
@@ -284,18 +276,17 @@ describe('Nuqtu (player-side) — an opposing buff wakes the self-cleanse + Terr
         ...overrides,
     });
 
-    it("an enemy self-buffing removes Nuqtu's pre-existing debuff and grants it Terran Bolster III", () => {
-        const { buffsApplied, result } = runAndCollectBuffs(
+    it('an enemy self-buffing grants Nuqtu Terran Bolster III', () => {
+        const { buffsApplied } = runAndCollectBuffs(
             BASE({ enemyAttackers: [debuffEnemy('enemy-deb'), buffEnemy('enemy-buf', 900)] })
         );
-        expect(cleanseCountFor(result, 'attacker')).toBe(1);
         const bolster = buffsApplied.filter(
             (b) => b.buffName === 'Terran Bolster III' && b.actorId === 'attacker'
         );
         expect(bolster).toHaveLength(1);
     });
 
-    it('once-per-round cap: TWO opposing self-buffs in one round cleanse only ONCE, but grant Terran Bolster III TWICE', () => {
+    it('TWO opposing self-buffs in one round grant Terran Bolster III TWICE; the every-turn cleanse runs only ONCE', () => {
         const debuffEnemyB = (id: string): EnemyAttacker => ({
             id,
             stats: {
@@ -323,8 +314,8 @@ describe('Nuqtu (player-side) — an opposing buff wakes the self-cleanse + Terr
                 ],
             })
         );
-        // Two debuffs existed, but the once-per-round cap on the CLEANSE lets only the FIRST
-        // opposing buff consume it — the second firing is gated out before touching the store.
+        // Two debuffs stand, but the cleanse is not woken by the opposing buffs: it runs once,
+        // at the start of Nuqtu's own turn.
         expect(cleanseCountFor(result, 'attacker')).toBe(1);
         // The buff GRANT carries no cap — it fires on every qualifying opposing buff this round.
         const bolster = buffsApplied.filter(
@@ -368,10 +359,9 @@ describe('Nuqtu (player-side) — an opposing buff wakes the self-cleanse + Terr
             },
         });
 
-        const { buffsApplied, result } = runAndCollectBuffs(
+        const { buffsApplied } = runAndCollectBuffs(
             BASE({ teamActors: [allyBuff()], enemyAttackers: [debuffEnemy('enemy-deb')] })
         );
-        expect(cleanseCountFor(result, 'attacker')).toBe(0);
         expect(
             buffsApplied.some(
                 (b) => b.buffName === 'Terran Bolster III' && b.actorId === 'attacker'
@@ -379,7 +369,7 @@ describe('Nuqtu (player-side) — an opposing buff wakes the self-cleanse + Terr
         ).toBe(false);
     });
 
-    it('NEGATIVE control: no opposing buff this round → neither the cleanse nor the grant fires', () => {
+    it('NEGATIVE control: no opposing buff this round → the grant does not fire; the every-turn cleanse still does', () => {
         const passiveEnemy: EnemyAttacker = {
             id: 'enemy-passive',
             stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 500 },
@@ -391,9 +381,8 @@ describe('Nuqtu (player-side) — an opposing buff wakes the self-cleanse + Terr
         const { buffsApplied, result } = runAndCollectBuffs(
             BASE({ enemyAttackers: [debuffEnemy('enemy-deb'), passiveEnemy] })
         );
-        // The debuff still lands (proving the store isn't empty for unrelated reasons), but with
-        // no opposing buff this round the cleanse never fires.
-        expect(cleanseCountFor(result, 'attacker')).toBe(0);
+        // The cleanse runs on Nuqtu's own turn start, with or without an opposing buff.
+        expect(cleanseCountFor(result, 'attacker')).toBe(1);
         expect(
             buffsApplied.some(
                 (b) => b.buffName === 'Terran Bolster III' && b.actorId === 'attacker'
@@ -403,7 +392,7 @@ describe('Nuqtu (player-side) — an opposing buff wakes the self-cleanse + Terr
 });
 
 describe('Nuqtu (enemy-side) — team symmetry: an enemy Nuqtu reacts to a PLAYER self-buff', () => {
-    it("a player self-buffing wakes the enemy Nuqtu's self-cleanse + Terran Bolster III grant", () => {
+    it("a player self-buffing wakes the enemy Nuqtu's Terran Bolster III grant", () => {
         const enemyDebuffsAttacker = (id: string): EnemyAttacker => ({
             id,
             stats: {
@@ -424,10 +413,7 @@ describe('Nuqtu (enemy-side) — team symmetry: an enemy Nuqtu reacts to a PLAYE
             stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 10 },
             chargeCount: 0,
             startCharged: false,
-            // Give the enemy Nuqtu a standing debuff to cleanse by pre-seeding via a slower ally
-            // is unnecessary here — the player's OWN self-buff below is the ONLY event under
-            // test; the cleanse still fires (gated by the trigger, not by debuff presence — a
-            // cleanse with nothing to remove is a no-op remove, not a skipped reactive).
+            // The player's OWN self-buff below is the ONLY event under test.
             shipSkills: { slots: [{ slot: 'passive', abilities: nuqtuPassiveAbilities() }] },
         };
 

@@ -1326,10 +1326,10 @@ describe('parseExtendStatus', () => {
     // Asphyxiator's refit passive. Unlike Sokol/Ripper/Lev — which grow every status already
     // standing on the target — this one grows only what the cast just inflicted, so it carries
     // scope 'inflicted' (the same axis extend-dot uses for Valerian's twin wording).
-    it("parses Asphyxiator's 'the newly applied Debuff is extended' as inflicted-scope", () => {
+    it("parses Asphyxiator's 'the newly inflicted debuff is extended' as inflicted-scope", () => {
         expect(
             parseExtendStatus(
-                'After this Unit applies a Debuff with a Critical hit the newly applied Debuff is extended by 1 turn.'
+                'After this Unit inflicts a <unit-aid>debuff</unit-aid> with a critical hit, the newly inflicted <unit-aid>debuff</unit-aid> is <unit-skill>extended by 1 turn</unit-skill>.'
             )
         ).toEqual({ turns: 1, statusKind: 'debuff', scope: 'inflicted' });
     });
@@ -1410,10 +1410,10 @@ describe('parseDebuffDurationReduction', () => {
         ).toEqual([{ turns: 1, target: 'all-allies', isDamageReaction: true }]);
     });
 
-    it('Pestilence passive: "On debuff infliction" gate, target all-allies, 1 turn (verbatim first_passive_skill_text)', () => {
+    it('Pestilence passive: "When this Unit inflicts a debuff" gate, target all-allies, 1 turn (verbatim first_passive_skill_text)', () => {
         expect(
             parseDebuffDurationReduction(
-                'On debuff infliction this Unit reduces the duration of active Debuffs on all allies by 1 turn.'
+                'When this Unit inflicts a <unit-aid>debuff</unit-aid>, it <unit-skill>reduces the duration of all active</unit-skill> <unit-aid>debuffs</unit-aid> on all allies by 1 turn.'
             )
         ).toEqual([{ turns: 1, target: 'all-allies', onDebuffInflicted: true }]);
     });
@@ -1421,7 +1421,7 @@ describe('parseDebuffDurationReduction', () => {
     it('Pestilence refit passive (tagged, with the trailing cleanse-reaction clause): the reduction clause still isolates cleanly', () => {
         expect(
             parseDebuffDurationReduction(
-                'On debuff infliction this Unit reduces the duration of active <unit-aid>Debuffs</unit-aid> on all allies by 1 turn.<br />When an enemy <unit-aid>cleanses a Debuff</unit-aid> this unit inflicts <unit-skill>Corrosion II</unit-skill> for 2 turns on all cleansed enemies.'
+                'When this Unit inflicts a <unit-aid>debuff</unit-aid>, it <unit-skill>reduces the duration of all active</unit-skill> <unit-aid>debuffs</unit-aid> on all allies by 1 turn.<br /><br />When an enemy <unit-skill>cleanses a debuff</unit-skill>, this Unit inflicts <unit-skill>Corrosion II</unit-skill> for 2 turns'
             )
         ).toEqual([{ turns: 1, target: 'all-allies', onDebuffInflicted: true }]);
     });
@@ -1448,7 +1448,7 @@ describe('parseDebuffDurationReduction', () => {
         ).toEqual([]);
     });
 
-    it('a reduction clause matching NEITHER gate (no "when directly damaged"/"on debuff infliction") carries NO trigger flag — the parse reports it, buildShipAbilities drops it', () => {
+    it('a reduction clause matching NEITHER gate (no "when directly damaged"/"when this Unit inflicts a debuff") carries NO trigger flag — the parse reports it, buildShipAbilities drops it', () => {
         // A hypothetical on-cast phrasing: the clause parses (turns/target extracted) but sets
         // neither isDamageReaction nor onDebuffInflicted. This is the signal buildShipAbilities
         // keys off to SKIP emission (rather than silently defaulting to on-attacked). No corpus
@@ -5216,7 +5216,7 @@ describe('parseControlInflicts', () => {
 
 describe('parseOnResistHpDamage (Vindicator p2 reactive)', () => {
     const VINDICATOR_P2 =
-        "This Unit has 20% Shield Penetration. At the start of combat, this Unit gains <unit-skill>Magnetized Shielding</unit-skill>.<br /><br />When this Unit resists a debuff infliction from an enemy, it deals <unit-damage>damage equal to 30%</unit-damage> of this Unit's max HP to that enemy.";
+        "This Unit has <unit-damage>20% shield penetration</unit-damage>.<br /><br />At the start of combat, this Unit gains <unit-skill>Magnetized Shielding</unit-skill>.<br /><br />When this Unit resists a <unit-aid>debuff</unit-aid> infliction from an enemy, it deals damage equal to <unit-damage>30%</unit-damage> of this Unit's max HP to that enemy.";
 
     it('parses the on-resist max-HP damage percentage', () => {
         expect(parseOnResistHpDamage(VINDICATOR_P2)).toEqual({ pct: 30 });

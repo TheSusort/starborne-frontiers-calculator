@@ -1631,17 +1631,14 @@ function abilitiesFromText(
         }
 
         // Xcellence p2: "When an enemy resists a debuff infliction, this Unit deals damage
-        // equal to X% of this Unit's current shield." Ship-kit W8.
+        // equal to X% of this Unit's current shield."
         //
-        // #413: routes on `on-enemy-debuff-resisted` — enemy resister, INFLICTOR-AGNOSTIC. It stood
-        // on `on-own-debuff-resisted` because the parser's own doc comment glossed the text as
-        // "when an enemy resists A DEBUFF [THIS UNIT INFLICTED]", and that bracketed clause is not
-        // in the skill row: the subject is "an enemy" (the resister) and the object is "a debuff
-        // infliction", with no possessive anywhere. So an ally's resisted debuff procs her too,
-        // which the inflictor-scoped trigger (`e.sourceId !== ownerId` → drop) silently discarded.
-        // Contrast the two shipped neighbours, both of which are correctly scoped and unchanged:
+        // #413: routes on `on-enemy-debuff-resisted` — enemy resister, INFLICTOR-AGNOSTIC. The
+        // subject is "an enemy" (the resister) and the object is "a debuff infliction", with no
+        // possessive anywhere, so an ally's resisted debuff procs her too; the inflictor-scoped
+        // trigger (`e.sourceId !== ownerId` → drop) would discard it. Contrast the two neighbours:
         // Vindicator's "When THIS UNIT resists…" is resister-scoped (`on-debuff-resisted`) and
-        // Ravager's "If ITS debuff is resisted" really is inflictor-scoped (`on-own-debuff-resisted`).
+        // Ravager's "If THIS UNIT'S debuff is resisted" is inflictor-scoped (`on-own-debuff-resisted`).
         //
         // Both triggers stamp counterTargetId = the resister, so the retaliation still hits the
         // enemy that resisted. multiplier:0 — the amount rides shieldBasisPct (owner's current
@@ -2448,7 +2445,7 @@ function abilitiesFromText(
                       // on-own-cleanse). Shield-only (no corpus heal carries this phrase).
                       (detectShieldStrippedTrigger(text, healPos) ??
                       detectDebuffInflictedTrigger(text, healPos) ??
-                      // Defiant: a SHIELD anchored in the "when applying Stasis" clause rides the
+                      // Defiant: a SHIELD anchored in the "after it inflicts Stasis" clause rides the
                       // on-stasis-applied reactive trigger (own-cast scoped; position-scoped).
                       detectStasisAppliedTrigger(text, healPos))
                     : undefined));
@@ -2626,7 +2623,7 @@ function abilitiesFromText(
         //  - every-turn ("Every turn this Unit cleanses ...") is a per-turn cleanse: the leading
         //    "every turn" governs the cleanse and a trailing "when" clause governs only the grants
         //    after it, so this check runs BEFORE the enemy-buffed one when a sentence carries both.
-        //  - enemy-buffed ("cleanses ... when an enemy gets buffed") -> on-enemy-buffed
+        //  - enemy-buffed ("cleanses ... when an enemy gains a buff") -> on-enemy-buffed
         //    (opposing-scoped trigger).
         //  - ally-shield-destroyed ("cleanses all debuffs when an ally has their Shield
         //    destroyed") -> on-ally-shield-destroyed.
@@ -2726,7 +2723,7 @@ function abilitiesFromText(
         }
     }
 
-    // PR11 (epic PR11): debuff-duration reduction — the inverse of extend-dot. Modeled as a
+    // Debuff-duration reduction — the inverse of extend-dot. Modeled as a
     // 'cleanse' ability with mode:'reduce-duration' + count:'all' (shrinks EVERY eligible
     // debuff on the recipient by durationTurns, not just the newest — the Warpstrike implant's
     // count:0/mode:'reduce-duration' shape stays newest-only and is unaffected by count:'all'
@@ -2736,15 +2733,15 @@ function abilitiesFromText(
     //    The unit being damaged is always itself (never the ally-subject shape) — only the
     //    RECIPIENT (self vs all-allies) varies, mirroring parseHealAbilities' identical
     //    treatment of Heliodor's co-occurring repair clause in the same sentence.
-    //  - Pestilence: gated on this unit's OWN debuff infliction ("On debuff infliction this
-    //    Unit reduces …") → trigger 'on-debuff-inflicted', target all-allies.
+    //  - Pestilence: gated on this unit's OWN debuff infliction ("When this Unit inflicts a
+    //    debuff, it reduces …") → trigger 'on-debuff-inflicted', target all-allies.
     // Lingshe's charge-skill Bomb-countdown reduction is a structurally different mechanic
     // (enemy-targeted, hacking-gated, PendingBomb countdown with a forced-detonation-at-zero
     // rider — not the generic timed-debuff store this touches) and is deliberately NOT parsed
     // here; see scripts/auditSkills.allowlist.ts.
     for (const dr of parseDebuffDurationReduction(text)) {
         // Map the parsed gate to a reactive trigger EXPLICITLY (not by absence): Pestilence's
-        // "on debuff infliction" → on-debuff-inflicted; Heliodor's "when directly damaged" self
+        // "when this Unit inflicts a debuff" → on-debuff-inflicted; Heliodor's "when directly damaged" self
         // reaction → on-attacked. A clause matching NEITHER gate carries no recognized reactive
         // trigger — it is NOT emitted (a silent on-cast default would fire an all-debuff reduction
         // every round, phantom behaviour). No corpus ship hits this branch today (both shapes are
@@ -2763,8 +2760,8 @@ function abilitiesFromText(
                 type: 'cleanse',
                 target: dr.target,
                 trigger,
-                // ON_DEBUFF_INFLICTION_RE only ever matches the literal "on debuff infliction"
-                // noun phrase — there is no "application" counterpart for this detector to miss.
+                // The on-debuff gate (SELF_INFLICTS_DEBUFF_RE) only matches the "inflicts" verb —
+                // there is no "applies" counterpart for this detector to miss.
                 ...(dr.onDebuffInflicted ? { triggerApplicationFilter: 'inflict' as const } : {}),
                 conditions: [],
                 config: {

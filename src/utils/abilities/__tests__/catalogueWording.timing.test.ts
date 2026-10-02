@@ -1,14 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { parseSlot, sigs, canonical, type RewordPair } from './helpers/catalogueWording';
+import {
+    parseSlot,
+    sigs,
+    canonical,
+    type RewordPair,
+    type SlotName,
+} from './helpers/catalogueWording';
 
 const PAIRS: RewordPair[] = [
-    {
-        ship: 'Xcellence',
-        slot: 'passive',
-        old: "This Unit has 20% Shield Penetration.<br /><br />At the start of each turn this Unit gains <unit-damage>Shield equal to 20%</unit-damage> of its Max HP.<br /><br />When an enemy resists a debuff infliction, this Unit deals damage equal to <unit-damage>115%</unit-damage> of this Unit's current shield..",
-        new: "This Unit has <unit-damage>20% shield penetration</unit-damage>.<br /><br />Every turn this Unit gains a <unit-damage>shield equal to 20%</unit-damage> of its max HP.<br /><br />When an enemy resists a <unit-aid>debuff</unit-aid> infliction, this Unit deals damage equal to <unit-damage>115%</unit-damage> of this Unit's current shield.",
-        expects: 'shield|self|start-of-turn|shield',
-    },
     {
         ship: 'Chakara',
         slot: 'passive',
@@ -23,8 +22,7 @@ const PAIRS: RewordPair[] = [
         new: 'This Unit ignores <unit-skill>Stealth</unit-skill> effects.<br /><br />This Unit deals <unit-damage>10% more direct damage</unit-damage> for every enemy with <unit-skill>Stealth</unit-skill>.<br /><br />At the start of each round, this Unit applies <unit-skill>Concentrate Fire</unit-skill> for 1 turn to the enemy with the highest attack.',
         expects: 'debuff|enemy-highest-attack|start-of-round|Concentrate Fire',
     },
-    // Crucialis and Defiant: no numbers substituted — old and new carry the same values in a
-    // different order.
+    // Crucialis: no numbers substituted — old and new carry the same values in a different order.
     {
         ship: 'Crucialis',
         slot: 'passive',
@@ -32,11 +30,21 @@ const PAIRS: RewordPair[] = [
         new: 'This Unit has <unit-damage>20% shield penetration</unit-damage>.<br /><br />At the start of combat, this Unit gains a <unit-damage>shield equal to 20%</unit-damage> of its max HP and gains <unit-skill>Atlas Coordination I</unit-skill> for 6 turns.',
         expects: 'shield|self|pre-combat|shield',
     },
+];
+
+// Rows whose catalogue sentence is the only wording the parser reads: the parse must carry
+// `expects`.
+const CATALOGUE_ROWS: { ship: string; slot: SlotName; text: string; expects: string }[] = [
+    {
+        ship: 'Xcellence',
+        slot: 'passive',
+        text: "This Unit has <unit-damage>20% shield penetration</unit-damage>.<br /><br />Every turn this Unit gains a <unit-damage>shield equal to 20%</unit-damage> of its max HP.<br /><br />When an enemy resists a <unit-aid>debuff</unit-aid> infliction, this Unit deals damage equal to <unit-damage>115%</unit-damage> of this Unit's current shield.",
+        expects: 'shield|self|start-of-turn|shield',
+    },
     {
         ship: 'Defiant',
         slot: 'passive',
-        old: 'When adjacent to a Supporter, this Unit gains 20% HP. This Unit gains <unit-damage>Shield equal to 30%</unit-damage> of its Max HP when applying Stasis.',
-        new: 'This Unit gains a <unit-damage>shield equal to 30%</unit-damage> of its max HP after it inflicts <unit-skill>Stasis</unit-skill>.<br /><br />At the start of combat this Unit gains 20% HP if its adjacent to a supporter.',
+        text: 'This Unit gains a <unit-damage>shield equal to 30%</unit-damage> of its max HP after it inflicts <unit-skill>Stasis</unit-skill>.<br /><br />At the start of combat this Unit gains 20% HP if its adjacent to a supporter.',
         expects: 'pre-combat-stat|self|pre-combat|pre-combat-stat',
     },
 ];
@@ -59,6 +67,13 @@ describe('timing phrases — catalogue wording parses like ours', () => {
             'Every turn this Unit <unit-skill>adds 1 charge</unit-skill> to its charged skill and gains <unit-skill>Out. Damage Up II</unit-skill> for 1 turn if it is at full HP.';
         expect(sigs(parseSlot('passive', text))).toContain('charge|self|start-of-turn|charge');
     });
+
+    it.each(CATALOGUE_ROWS)(
+        '$ship $slot: the catalogue sentence carries its parse',
+        ({ slot, text, expects }) => {
+            expect(sigs(parseSlot(slot, text))).toContain(expects);
+        }
+    );
 
     it('FrontLine passive R0: the catalogue sentence carries the self-shield stat', () => {
         const text =
