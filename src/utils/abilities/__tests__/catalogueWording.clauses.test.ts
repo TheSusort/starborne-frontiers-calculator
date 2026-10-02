@@ -10,7 +10,6 @@ import {
     type SlotName,
 } from './helpers/catalogueWording';
 
-// Lingshe charged's extra number is the "reduced to 0 turns" sentence the catalogue drops.
 const PAIRS: RewordPair[] = [
     {
         ship: 'Stalwart',
@@ -20,39 +19,11 @@ const PAIRS: RewordPair[] = [
         expects: 'counter|enemy|on-attacked|counter',
     },
     {
-        ship: 'Stalwart',
-        slot: 'passive',
-        old: 'When this Unit is directly damaged as a primary target, it deals <unit-damage>70% damage</unit-damage> to that enemy and gains <unit-skill>Legion Discipline II</unit-skill> for 3 turns.<br /><br />Additionally, when this Unit is adjacent to a Supporter, this Unit gains 20% Attack.',
-        new: 'This Unit ignores <unit-skill>Taunt</unit-skill> and <unit-skill>Provoke</unit-skill> effects.<br /><br />When this Unit is directly damaged as a primary target, it deals <unit-damage>70% damage</unit-damage> to the enemy and gains <unit-skill>Legion Discipline II</unit-skill> for 3 turns.<br /><br />At the start of combat this Unit gains 20% attack if its adjacent to a supporter.',
-        expects: 'counter|enemy|on-attacked|counter',
-    },
-    {
-        ship: 'Orel',
-        slot: 'passive',
-        old: 'When directly damaged by an enemy effected by <unit-skill>Taunt</unit-skill> or <unit-skill>Provoke</unit-skill>, this unit transforms the damage into a <unit-skill>Damage over Time effect</unit-skill> for 2 turns.',
-        new: 'When directly damaged by an enemy effected by <unit-skill>Taunt</unit-skill> or <unit-skill>Provoke</unit-skill>, this Unit transforms the damage into a <unit-skill>damage over time effect</unit-skill> lasting 2 turns.',
-        expects: 'transform-incoming-to-dot|self|on-attacked|transform-incoming-to-dot',
-    },
-    {
-        ship: 'Orel',
-        slot: 'passive',
-        old: 'When directly damaged by an enemy effected by <unit-skill>Taunt</unit-skill> or <unit-skill>Provoke</unit-skill>, this unit transforms the damage into a <unit-skill>Damage over Time effect</unit-skill> for 3 turns.',
-        new: 'When directly damaged by an enemy effected by <unit-skill>Taunt</unit-skill> or <unit-skill>Provoke</unit-skill>, this Unit transforms the damage into a <unit-skill>damage over time effect</unit-skill> lasting 3 turns.',
-        expects: 'transform-incoming-to-dot|self|on-attacked|transform-incoming-to-dot',
-    },
-    {
         ship: 'Sefuba',
         slot: 'charged',
         old: 'This Unit deals <unit-damage>200% damage</unit-damage> and <unit-aid>removes 2 charges</unit-aid> from the enemy.',
         new: 'This Unit deals <unit-damage>200% damage</unit-damage> and <unit-skill>removes 2 charges</unit-skill> from the enemies charged skill.',
         expects: 'charge|enemy|on-cast|charge',
-    },
-    {
-        ship: 'Lingshe',
-        slot: 'charged',
-        old: 'This Unit reduces all <unit-skill>Bombs</unit-skill> on the enemy targets by 1 turn, <unit-skill>Bombs</unit-skill> reduced to 0 turns by this skill will detonate.<br />This reduction effect requires hacking.<br /><br />This Unit inflicts <unit-skill>Bomb III</unit-skill> for 3 turns.',
-        new: 'This Unit reduces all <unit-skill>Bomb</unit-skill> on the enemy targets by 1 turn.<br />This reduction effect requires hacking.<br /><br />This Unit inflicts <unit-skill>Bomb III</unit-skill> for 3 turns.',
-        expects: 'bomb-countdown-reduce|all-enemies|on-cast|bomb-countdown-reduce',
     },
 ];
 
@@ -124,6 +95,30 @@ const CATALOGUE_ROWS: { ship: string; slot: SlotName; text: string; expects: str
         slot: 'active',
         text: 'This Unit deals <unit-damage>140% damage</unit-damage> with an additional <unit-damage>25%</unit-damage> for each <unit-aid>buff</unit-aid> on the enemy. <br /><br />This Unit <unit-skill>adds charges</unit-skill> to its charged skill equal to the number of <unit-aid>buffs</unit-aid> on the enemy.',
         expects: 'charge|self|on-cast|charge',
+    },
+    {
+        ship: 'Stalwart',
+        slot: 'passive',
+        text: 'This Unit ignores <unit-skill>Taunt</unit-skill> and <unit-skill>Provoke</unit-skill> effects.<br /><br />When this Unit is directly damaged as a primary target, it deals <unit-damage>70% damage</unit-damage> to the enemy and gains <unit-skill>Legion Discipline II</unit-skill> for 3 turns.<br /><br />At the start of combat this Unit gains 20% attack if its adjacent to a supporter.',
+        expects: 'counter|enemy|on-attacked|counter',
+    },
+    {
+        ship: 'Orel',
+        slot: 'passive',
+        text: 'When directly damaged by an enemy effected by <unit-skill>Taunt</unit-skill> or <unit-skill>Provoke</unit-skill>, this Unit transforms the damage into a <unit-skill>damage over time effect</unit-skill> lasting 2 turns.',
+        expects: 'transform-incoming-to-dot|self|on-attacked|transform-incoming-to-dot',
+    },
+    {
+        ship: 'Orel',
+        slot: 'passive',
+        text: 'When directly damaged by an enemy effected by <unit-skill>Taunt</unit-skill> or <unit-skill>Provoke</unit-skill>, this Unit transforms the damage into a <unit-skill>damage over time effect</unit-skill> lasting 3 turns.',
+        expects: 'transform-incoming-to-dot|self|on-attacked|transform-incoming-to-dot',
+    },
+    {
+        ship: 'Lingshe',
+        slot: 'charged',
+        text: 'This Unit reduces all <unit-skill>Bomb</unit-skill> on the enemy targets by 1 turn.<br />This reduction effect requires hacking.<br /><br />This Unit inflicts <unit-skill>Bomb III</unit-skill> for 3 turns.',
+        expects: 'bomb-countdown-reduce|all-enemies|on-cast|bomb-countdown-reduce',
     },
 ];
 

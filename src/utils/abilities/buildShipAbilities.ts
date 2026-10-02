@@ -54,7 +54,6 @@ import {
     detectHitCount,
     parseHpThresholdCondition,
     parseExtendDoT,
-    parseExtendDoTTarget,
     parseExtendStatus,
     parseCritPowerExtend,
     parseDebuffDurationReduction,
@@ -1835,6 +1834,8 @@ function abilitiesFromText(
         if (cleanseTrigger) out[0].ability.trigger = cleanseTrigger;
     }
 
+    // Provider: "all damage over time debuffs are extended by N turn" names no enemy, so the
+    // extension spans every enemy the cast hits.
     const extendTurns = parseExtendDoT(text);
     if (extendTurns) {
         const extendPos = text.search(/extend/i);
@@ -1842,7 +1843,7 @@ function abilitiesFromText(
             ability: {
                 id: nextId(),
                 type: 'extend-dot',
-                target: parseExtendDoTTarget(text),
+                target: 'all-enemies',
                 trigger: 'on-cast',
                 conditions: [],
                 config: { type: 'extend-dot', turns: extendTurns },
@@ -1852,14 +1853,12 @@ function abilitiesFromText(
         });
     }
 
-    // Ship-kit Wave 4, Task 5: generic buff/debuff DURATION EXTENSION — the inverse of the
-    // debuff-duration-reduction mechanic above, riding the NEW extend-status ability type
-    // (Task 4's StatusEngine primitives; executors are Task 6). Distinct from extend-dot
+    // Generic buff/debuff DURATION EXTENSION — the inverse of the debuff-duration-reduction
+    // mechanic above, riding the extend-status ability type. Distinct from extend-dot
     // above (a different store — DoT tick stacks, not the StatusEngine buff/debuff maps).
     // Three corpus shapes, all sentence-scoped off the "extend"/"extended" match:
     //  - Sokol (charged): "extends active Debuffs by 1 turn" — no "all allies"/"all enemies"
-    //    subject in the clause → default target 'enemy' (the primary/hit enemy, mirroring
-    //    extend-dot's own 'enemy' default).
+    //    subject in the clause → default target 'enemy' (the primary/hit enemy).
     //  - Ripper (passive R2): "All allies extend their active Buffs by 1 turn" — the "All
     //    allies" subject (checked in the PREFIX before the extend verb, so it can never
     //    false-match a later "all allies" clause in the same sentence — see Lev) → target
@@ -1955,10 +1954,10 @@ function abilitiesFromText(
         });
     }
 
-    // SP-F F3 (Lingshe charged skill): "reduces all Bombs on the enemy targets by N turn(s),
-    // Bombs reduced to 0 turns by this skill will detonate. This reduction effect requires
-    // hacking." Builds a dedicated all-enemies ability; the hacking gate + forced-detonate-at-
-    // zero rider are fixed runtime behavior (playerTurn.ts's reduceEnemyBombs), not parsed here.
+    // Lingshe charged skill: "This Unit reduces all Bomb on the enemy targets by 1 turn. This
+    // reduction effect requires hacking." Builds a dedicated all-enemies ability; the hacking
+    // gate + forced-detonate-at-zero rider are fixed runtime behavior (playerTurn.ts's
+    // reduceEnemyBombs), not parsed here.
     // Kept structurally separate from the "inflicts Bomb III" DoT-apply below (a different
     // sentence, unaffected).
     const bombCountdownReduceTurns = parseBombCountdownReduce(text);
@@ -1979,7 +1978,7 @@ function abilitiesFromText(
     }
 
     // Crit-power-chance extension (Valerian self-crit; Belladonna ally-inflicts → team).
-    // SP-E, Task E4: a row that ALSO carries a "convert the Corrosion into <family>" clause
+    // A row that ALSO carries a "converts the Corrosion into <family>" clause
     // (Belladonna) folds this SAME crit-power extension into the convert-dot ability's
     // extendTurns/extendChanceFromCritPower (see mergeBuff below) — emitting the standalone
     // extend-dot here too would double-apply the extension on every successful conversion.
@@ -2036,15 +2035,14 @@ function abilitiesFromText(
     }
 
     // Self-subject sibling of the Crocus on-ally-crit-dot block above — THIS unit's own crit-cast
-    // DoT infliction re-inflicts a second DoT (Wisteria: "after applying Corrosion with a Critical
-    // hit, inflicts Inferno II for 2 turns" / "When this Unit inflicts Corrosion with a critical
-    // hit, it also inflicts Inferno II for 2 turns"). Deliberately NOT reusing the
+    // DoT infliction re-inflicts a second DoT (Wisteria: "When this Unit inflicts Corrosion with a
+    // critical hit, it also inflicts Inferno II for 2 turns"). Deliberately NOT reusing the
     // parseSkillEffects tag walk the on-ally-crit-dot block uses above: the TRIGGER clause names a
     // DoT (Corrosion), and DOT_TIER_MAP carries a bare 'Corrosion' entry — that walk would mint a
     // phantom Corrosion dot from the trigger's own named DoT (see parseSelfCritDotEffect's
     // comment; buildShipAbilities.test.ts's "no phantom Corrosion dot" guard covers exactly this).
     // parseSelfCritDotEffect instead anchors on the "inflicts X for N turns" clause specifically,
-    // in EITHER ordering, so only the genuinely injected DoT (Inferno II) is ever extracted,
+    // so only the genuinely injected DoT (Inferno II) is ever extracted,
     // landing on the reactive on-self-crit-dot trigger (see triggers.ts/types/abilities.ts).
     const selfCritDotEffect = parseSelfCritDotEffect(text);
     if (selfCritDotEffect) {
@@ -2315,8 +2313,8 @@ function abilitiesFromText(
         // the trigger), where the detectors infer from an anchor position that can land
         // on the wrong tag when pcts repeat.
         //
-        // Pallas: a heal/shield whose anchor falls in the "when this unit critically repairs an
-        // ally" sentence rides the on-ally-critically-repaired reactive trigger (position-scoped;
+        // Hermes: a heal/shield whose anchor falls in the "when it critically repairs an ally"
+        // sentence rides the on-ally-critically-repaired reactive trigger (position-scoped;
         // undefined → on-cast). APEX: a SHIELD whose anchor falls in the "when an enemy gets
         // debuffed" sentence rides on-debuff-inflicted (own inflictions; position-scoped). Both
         // are position-scoped so an unrelated heal/shield in another sentence is never co-triggered.
@@ -2369,7 +2367,7 @@ function abilitiesFromText(
                 // repairs the ally" sentence rides on-ally-crit — the crit-ing ally is routed via
                 // eventCtx.damagedAllyId (triggers.ts on-ally-crit listener; the same lane Howler's
                 // cleanse uses). Distinct from detectCritRepairTrigger above, which matches "when
-                // this Unit critically REPAIRS an ally" (Pallas). Position-scoped; corpus:
+                // it critically REPAIRS an ally" (Hermes). Position-scoped; corpus:
                 // Sentinel alone carries an ally-crit HEAL clause (Hermes/Howler self-heal in
                 // active/charge slots, no ally-crit phrase there).
                 detectAllyCritTrigger(text, healPos) ??
@@ -2615,7 +2613,7 @@ function abilitiesFromText(
         const cleansePos = text.search(/cleanse/i);
         // A cleanse rides a reactive trigger when ITS OWN sentence carries the reaction phrase
         // (each detector is position-scoped to the cleanse). Detectors run in this order:
-        //  - crit-repair ("when this unit critically repairs an ally") ->
+        //  - crit-repair ("when it critically repairs an ally") ->
         //    on-ally-critically-repaired.
         //  - ally-crit ("cleanses 1 debuff from an ally when that ally crits an enemy") ->
         //    on-ally-crit, which fires on any same-side crit (owner included, see triggers.ts's
@@ -2848,7 +2846,7 @@ function abilitiesFromText(
         });
     }
 
-    // Chain purge — "purges N more/extra buff from the enemy" on on-enemy-purged. Emitted here,
+    // Chain purge — "purges N extra buff from the enemy" on on-enemy-purged. Emitted here,
     // separately from the generic loop above, which skips any purge sentence without a recognized
     // trigger, so a chain purge is never emitted twice. Count: PURGE_MORE_RE capture group 1
     // (digit or 'a'/'an' → 1).
@@ -3509,8 +3507,8 @@ export function buildShipAbilities(rawShip: Ship): ShipSkills {
         }
         const slot = slotForBuffSource(buff.skillSource);
         const rowText = getSkillRowForSlot(ship, slot)?.text ?? '';
-        // SP-E, Task E4: Belladonna's "convert the Corrosion into Acidic Decay ... 1% per 10
-        // Hacking" clause auto-fills a bare, ungated enemy-target 'debuff' named after the
+        // Belladonna's "converts the Corrosion into Acidic Decay ... 1% per 10 Hacking"
+        // clause auto-fills a bare, ungated enemy-target 'debuff' named after the
         // conversion's TARGET family ("Acidic Decay") — the generic buff/debuff-name auto-fill
         // has no notion of "conversion", it just sees a named status in the clause. Recognise
         // that shape here (enemy-target + the row's own convert-dot clause names THIS buff) and

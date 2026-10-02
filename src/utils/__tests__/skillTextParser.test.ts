@@ -329,9 +329,9 @@ describe('parsePreCombatStatGrants', () => {
         expect(grants[0].pos).toBeLessThan(grants[1].pos);
     });
 
-    it('Defiant P2 (full row): leading supporter gate yields HP percent-of-own; shield clause untouched', () => {
+    it('Defiant P2 (full row): trailing supporter gate yields HP percent-of-own; shield clause untouched', () => {
         const grants = parsePreCombatStatGrants(
-            'When adjacent to a Supporter, this Unit gains 20% HP. This Unit gains <unit-damage>Shield equal to 30%</unit-damage> of its Max HP when applying Stasis.'
+            'This Unit gains a <unit-damage>shield equal to 30%</unit-damage> of its max HP after it inflicts <unit-skill>Stasis</unit-skill>.<br /><br />At the start of combat this Unit gains 20% HP if its adjacent to a supporter.'
         );
         expect(grants).toEqual([
             {
@@ -345,9 +345,9 @@ describe('parsePreCombatStatGrants', () => {
         ]);
     });
 
-    it('Stalwart P2 (full row): leading "this Unit is adjacent" gate yields attack percent-of-own', () => {
+    it('Stalwart P2 (full row): trailing "its adjacent" gate yields attack percent-of-own', () => {
         const grants = parsePreCombatStatGrants(
-            'When this Unit is directly damaged as a primary target, it deals <unit-damage>70% damage</unit-damage> to that enemy and gains <unit-skill>Legion Discipline II</unit-skill> for 3 turns.<br /><br />Additionally, when this Unit is adjacent to a Supporter, this Unit gains 20% Attack.'
+            'This Unit ignores <unit-skill>Taunt</unit-skill> and <unit-skill>Provoke</unit-skill> effects.<br /><br />When this Unit is directly damaged as a primary target, it deals <unit-damage>70% damage</unit-damage> to the enemy and gains <unit-skill>Legion Discipline II</unit-skill> for 3 turns.<br /><br />At the start of combat this Unit gains 20% attack if its adjacent to a supporter.'
         );
         expect(grants).toEqual([
             {
@@ -1266,9 +1266,9 @@ describe('parseConditionalDamage', () => {
 });
 
 describe('parseExtendDoT', () => {
-    it('parses "extends active Damage Over Time effects by 1 turn" (Provider)', () => {
+    it('parses "all damage over time debuffs are extended by 1 turn" (Provider)', () => {
         const text =
-            'This Unit deals <unit-damage>200% damage</unit-damage>, removes 1 charge from the enemy, and extends active Damage Over Time effects by 1 turn.';
+            "This Unit deals <unit-damage>200% damage</unit-damage>, <unit-skill>removes 1 charge</unit-skill> from the enemy's charged skill and all <unit-skill>damage over time debuffs</unit-skill> are <unit-skill>extended by 1 turn</unit-skill>.";
         expect(parseExtendDoT(text)).toBe(1);
     });
 
@@ -1277,12 +1277,12 @@ describe('parseExtendDoT', () => {
         // crit-power chance, so parseCritPowerExtend returns null and the ability stays
         // scope 'active' via parseExtendDoT.
         const text =
-            'This Unit deals <unit-damage>200% damage</unit-damage>, removes 1 charge from the enemy, and extends active Damage Over Time effects by 1 turn.';
+            "This Unit deals <unit-damage>200% damage</unit-damage>, <unit-skill>removes 1 charge</unit-skill> from the enemy's charged skill and all <unit-skill>damage over time debuffs</unit-skill> are <unit-skill>extended by 1 turn</unit-skill>.";
         expect(parseCritPowerExtend(text)).toBeNull();
     });
 
-    it('parses a multi-turn extension and the "(DoT)" abbreviation', () => {
-        expect(parseExtendDoT('extends all Damage Over Time (DoT) effects by 2 turns.')).toBe(2);
+    it('parses a multi-turn extension', () => {
+        expect(parseExtendDoT('all damage over time debuffs are extended by 2 turns.')).toBe(2);
     });
 
     it('returns null when there is no DoT extension', () => {
@@ -1385,7 +1385,7 @@ describe('parseCritPowerExtend', () => {
 
     it('returns null without a crit-power extension', () => {
         expect(
-            parseCritPowerExtend('extends active Damage Over Time effects by 1 turn.')
+            parseCritPowerExtend('all damage over time debuffs are extended by 1 turn.')
         ).toBeNull();
         expect(parseCritPowerExtend('')).toBeNull();
     });
@@ -1444,7 +1444,7 @@ describe('parseDebuffDurationReduction', () => {
 
     it('does not match a plain extend-dot clause (no cross-talk with the growth mechanic)', () => {
         expect(
-            parseDebuffDurationReduction('extends active Damage Over Time effects by 1 turn.')
+            parseDebuffDurationReduction('all damage over time debuffs are extended by 1 turn.')
         ).toEqual([]);
     });
 
@@ -2194,14 +2194,15 @@ describe('parseSelfBuffRemovals', () => {
 
 describe('detectCritRepairTrigger', () => {
     it('returns on-ally-critically-repaired when the anchor is in the crit-repair sentence', () => {
-        const text = 'When this unit critically repairs an ally, it cleanses 1 debuff from itself.';
+        const text =
+            "This Unit's defense is increased by 20% and when it critically repairs an ally, it <unit-skill>cleanses 1 debuff</unit-skill> from itself.";
         expect(detectCritRepairTrigger(text, text.indexOf('cleanses'))).toBe(
             'on-ally-critically-repaired'
         );
     });
 
     it('handles the "allies" plural form', () => {
-        const text = 'When this unit critically repairs allies, it cleanses 1 debuff.';
+        const text = 'When it critically repairs allies, it cleanses 1 debuff.';
         expect(detectCritRepairTrigger(text, text.indexOf('cleanses'))).toBe(
             'on-ally-critically-repaired'
         );
@@ -2210,7 +2211,7 @@ describe('detectCritRepairTrigger', () => {
     it('is position-scoped: an anchor in a DIFFERENT sentence is not stamped', () => {
         // The first sentence's cleanse anchor falls OUTSIDE the crit-repair sentence.
         const text =
-            'This Unit cleanses 1 debuff from itself. When this unit critically repairs an ally, it gains a buff.';
+            'This Unit cleanses 1 debuff from itself. When it critically repairs an ally, it gains a buff.';
         expect(detectCritRepairTrigger(text, text.indexOf('cleanses'))).toBeUndefined();
     });
 
@@ -2220,7 +2221,7 @@ describe('detectCritRepairTrigger', () => {
     });
 
     it('returns undefined for a negative anchor position', () => {
-        const text = 'When this unit critically repairs an ally, it cleanses 1 debuff.';
+        const text = 'When it critically repairs an ally, it cleanses 1 debuff.';
         expect(detectCritRepairTrigger(text, -1)).toBeUndefined();
     });
 
@@ -2232,7 +2233,7 @@ describe('detectCritRepairTrigger', () => {
         // anchor in the next — detectCritRepairTrigger would return undefined instead of the
         // trigger. Masking the abbreviation period before the boundary scan prevents the split.
         const text =
-            'When this unit critically repairs an ally, it grants Inc. Damage Up and heals the ally for 5% of its Max HP.';
+            'When it critically repairs an ally, it grants Inc. Damage Up and heals the ally for 5% of its Max HP.';
         const healAnchor = text.indexOf('heals');
         expect(detectCritRepairTrigger(text, healAnchor)).toBe('on-ally-critically-repaired');
     });
@@ -2242,7 +2243,7 @@ describe('detectCritRepairTrigger', () => {
         // boundary, the crit-repair phrase (paragraph 1) and the heal anchor (paragraph 2) would
         // be co-scoped in one segment and wrongly stamped.
         const text =
-            'When this unit critically repairs an ally, it gains a buff<br /><br />This unit heals the ally for 5% of its Max HP';
+            'When it critically repairs an ally, it gains a buff<br /><br />This unit heals the ally for 5% of its Max HP';
         const healAnchor = text.indexOf('heals');
         expect(detectCritRepairTrigger(text, healAnchor)).toBeUndefined();
     });
@@ -2251,7 +2252,7 @@ describe('detectCritRepairTrigger', () => {
         // Same paragraph 1 carries both the crit-repair phrase and the heal anchor; paragraph 2
         // (after <br />) is unrelated. The anchor must still be stamped.
         const text =
-            'When this unit critically repairs an ally, it heals the ally for 5% of its Max HP<br />This unit gains a buff';
+            'When it critically repairs an ally, it heals the ally for 5% of its Max HP<br />This unit gains a buff';
         const healAnchor = text.indexOf('heals');
         expect(detectCritRepairTrigger(text, healAnchor)).toBe('on-ally-critically-repaired');
     });
@@ -3032,7 +3033,7 @@ describe('parseHealAbilities', () => {
     it('multi-component heal: HP + Defense (bare → self, explicitTarget false)', () => {
         expect(
             parseHealAbilities(
-                'repairs <unit-damage>5%</unit-damage> of its Max HP with an additional repair equal to 100% of its Defense.'
+                '<unit-damage>repairs 5%</unit-damage> of its max HP with additional repair equal to <unit-damage>100%</unit-damage> of its defense'
             )
         ).toEqual([
             { kind: 'heal', pct: 5, basis: 'hp', target: 'self', explicitTarget: false },
@@ -3173,7 +3174,7 @@ describe('parseHealAbilities', () => {
     it('HEAL_ADDITIONAL_RE does not pick up a continuation in a LATER sentence', () => {
         expect(
             parseHealAbilities(
-                'This unit repairs 5% of its Max HP. An unrelated buff with an additional repair equal to 100% of its Defense exists.'
+                'This unit repairs 5% of its Max HP. An unrelated buff with additional repair equal to 100% of its Defense exists.'
             )
         ).toEqual([{ kind: 'heal', pct: 5, basis: 'hp', target: 'self', explicitTarget: false }]);
     });
@@ -3399,7 +3400,7 @@ describe('parseHealAbilities — unmodeled reactive triggers are NOT emitted', (
     it('Makoli ACTIVE cleanse+repair (cleanses 1 debuff, repairs 5% + 100% Defense) still parses', () => {
         expect(
             parseHealAbilities(
-                'This Unit cleanses 1 debuff, repairs 5% of its Max HP with an additional repair equal to 100% of its Defense, and grants Inc. Damage Down II for 2 turns.'
+                'This Unit <unit-skill>cleanses 1 debuff</unit-skill>, <unit-damage>repairs 5%</unit-damage> of its max HP with additional repair equal to <unit-damage>100%</unit-damage> of its defense and grants <unit-skill>Inc. Damage Down II</unit-skill> for 2 turns.'
             )
         ).toEqual([
             { kind: 'heal', pct: 5, basis: 'hp', target: 'self', explicitTarget: false },
@@ -3453,9 +3454,9 @@ describe('parseHealAbilities — unmodeled reactive triggers are NOT emitted', (
         expect(r[0]).toMatchObject({ kind: 'shield', pct: 15, basis: 'damage-taken' });
     });
 
-    it('GUARD: modeled reactive heal "when this Unit critically repairs an ally" still parses', () => {
+    it('GUARD: modeled reactive heal "when it critically repairs an ally" still parses', () => {
         const r = parseHealAbilities(
-            "When this Unit critically repairs an ally, it also repairs that ally for 5% of this Unit's Max HP."
+            "When it critically repairs an ally, it also repairs that ally for 5% of this Unit's Max HP."
         );
         expect(r).toHaveLength(1);
         expect(r[0]).toMatchObject({ kind: 'heal', pct: 5, basis: 'hp' });

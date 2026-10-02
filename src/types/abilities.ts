@@ -43,10 +43,10 @@ export type AbilityType =
     | 'outgoing-amplification'
     | 'heal-amplification'
     | 'incoming-heal-amplification'
-    // PR F4: permanent pre-fight base-stat grant, adjacency-conditioned (Lionheart/Centurion/
-    // Enforcer/Defiant/Stalwart "At the start of combat …" / "when adjacent to a Supporter …"
-    // passives). Applied ONCE to PlacementPlan stats by the battle sim's pre-fight layer (F5) —
-    // never a status (hidden, non-purgeable, not reset on death). DPS calculators ignore it.
+    // Permanent pre-fight base-stat grant, adjacency-conditioned (Lionheart/Centurion/
+    // Enforcer/Defiant/Stalwart "At the start of combat …" passives). Applied ONCE to
+    // PlacementPlan stats by the battle sim's pre-fight layer (F5) — never a status (hidden,
+    // non-purgeable, not reset on death). DPS calculators ignore it.
     | 'pre-combat-stat'
     // SP-E: Voron/Orel "transforms the [incoming direct] damage into a DoT lasting N turns" —
     // reactive self-ability (trigger:'on-attacked', target:'self'). See AbilityConfig's
@@ -68,8 +68,8 @@ export type AbilityType =
     // AbilityConfig's 'defense-substitution' variant (a no-op marker — consumed at the engine's
     // defence-read sites, never through the ability-fold/executor pipeline).
     | 'defense-substitution'
-    // SP-F F3 (Lingshe): "reduces all Bombs on the enemy targets by N turn(s), Bombs reduced
-    // to 0 turns by this skill will detonate. This reduction effect requires hacking." Enemy-
+    // Lingshe: "reduces all Bomb on the enemy targets by 1 turn. This reduction effect requires
+    // hacking." Enemy-
     // targeted (all-enemies), hacking-gated (runtime always draws the 'inflict' landing roll —
     // see AbilityConfig's 'bomb-countdown-reduce' variant). Structurally distinct from the
     // generic `cleanse`/`reduce-duration` primitive (which deliberately excludes bombs and only
@@ -183,8 +183,8 @@ export type AbilityTrigger =
     // block for the carve-out list.
     | 'on-other-ally-debuff-inflicted'
     | 'on-ally-crit-dot'
-    // Ship-kit W8 Task 10 (Wisteria): self-subject sibling of on-ally-crit-dot — THIS unit's
-    // OWN crit-cast DoT infliction ("after applying Corrosion with a Critical hit, inflicts
+    // Wisteria: self-subject sibling of on-ally-crit-dot — THIS unit's OWN crit-cast DoT
+    // infliction ("When this Unit inflicts Corrosion with a critical hit, it also inflicts
     // Inferno II for 2 turns"), not an ally's. See buildShipAbilities' dot-effects branch.
     | 'on-self-crit-dot'
     | 'on-ally-critically-repaired'
@@ -899,9 +899,9 @@ export type AbilityConfig =
     // supports both 'inflict' and 'apply').
     | { type: 'bomb-countdown-reduce'; turns: number }
     // `scope`: 'active'/undefined extends ALL standing DoT entries (Provider's
-    // "extends active Damage Over Time effects"; default + back-compat for stored
+    // "all damage over time debuffs are extended"; default + back-compat for stored
     // configs). 'inflicted' extends ONLY the DoT entries this cast just applied
-    // (Valerian's "the newly applied Corrosion ... extended by 1 turn").
+    // (Valerian's "the newly inflicted Corrosion by 1 turn").
     | {
           type: 'extend-dot';
           turns: number;

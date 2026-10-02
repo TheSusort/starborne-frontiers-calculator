@@ -1946,8 +1946,8 @@ export function registerReactiveListeners(args: {
                 case 'on-enemy-purged':
                     bus.on('purge-performed', (e) => {
                         // Self-scoped on the caster: THIS owner purged an enemy (Sefuba).
-                        // Route counterTargetId = e.targetId so Sefuba's chain "purge 1 more"
-                        // re-purges the SAME victim (victim-routing).
+                        // Route counterTargetId = e.targetId so Sefuba's chain "purges 1 extra
+                        // buff" re-purges the SAME victim (victim-routing).
                         // fromPurgeEvent guards the chain purge from re-emitting → depth-1.
                         // purgedBuffCount carries THIS purge's removed count to a "for each buff
                         // removed" repair. The chain purge emits no purge-performed, so its

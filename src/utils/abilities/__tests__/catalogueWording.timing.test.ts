@@ -115,16 +115,12 @@ describe('timing phrases — the timing half of a mixed row', () => {
     });
 });
 
-// User ruling (2026-10-02): "Start of combat, This Unit gains Taunt" is the same one-time
-// pre-combat grant as "At the start of combat, this Unit gains Taunt".
-describe('timing phrases — a bare "Start of combat" is the pre-combat grant', () => {
-    const OLD =
-        'This Unit takes 35% less damage from Critical hits, and this effect does not stack with similar effects.<br /><br />When directly damaged, This Unit <unit-aid>purges 2</unit-aid> buffs from the enemy and inflicts <unit-skill>Speed Down II</unit-skill> for 1 turn.<br /><br />Start of combat, This Unit gains <unit-skill>Taunt</unit-skill> for 1 turn.';
-    const NEW =
+describe('timing phrases — the start-of-combat Taunt grant', () => {
+    const TEXT =
         'When directly damaged, this Unit <unit-skill>purges 2 buffs</unit-skill> from the enemy and inflicts <unit-skill>Speed Down II</unit-skill> for 1 turn.<br /><br />This Unit has <unit-damage>35% damage reduction</unit-damage> from critical hits.<br /><br />At the start of combat, this Unit gains <unit-skill>Taunt</unit-skill> for 1 turn.';
 
-    it('Iridium passive R2: our Taunt grant is the pre-combat grant, with no cast-time twin', () => {
-        const abilities = parseSlot('passive', OLD);
+    it('Iridium passive R2: the catalogue wording is the pre-combat Taunt grant, with no cast-time twin', () => {
+        const abilities = parseSlot('passive', TEXT);
         const s = sigs(abilities);
         expect(s).toContain('buff|self|pre-combat|Taunt');
         expect(s).not.toContain('buff|self|on-cast|Taunt');
@@ -139,12 +135,6 @@ describe('timing phrases — a bare "Start of combat" is the pre-combat grant', 
             isStackable: false,
             duration: 1,
         });
-    });
-
-    it('Iridium passive R2: the catalogue wording is the pre-combat Taunt grant', () => {
-        const s = sigs(parseSlot('passive', NEW));
-        expect(s).toContain('buff|self|pre-combat|Taunt');
-        expect(s).not.toContain('buff|self|on-cast|Taunt');
     });
 });
 

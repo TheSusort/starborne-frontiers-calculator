@@ -31,22 +31,6 @@ const PAIRS: ResidualPair[] = [
         carries: { config: expect.objectContaining({ multiplier: 100 }) },
     },
     {
-        ship: 'Makoli',
-        slot: 'active',
-        old: 'This Unit <unit-aid>cleanses 1</unit-aid> debuff, <unit-damage>repairs 5%</unit-damage> of its Max HP with an additional repair equal to 100% of its Defense, and grants <unit-skill>Inc. Damage Down II</unit-skill> for 2 turns.',
-        new: 'This Unit <unit-skill>cleanses 1 debuff</unit-skill>, <unit-damage>repairs 5%</unit-damage> of its max HP with additional repair equal to <unit-damage>100%</unit-damage> of its defense and grants <unit-skill>Inc. Damage Down II</unit-skill> for 2 turns.',
-        expects: 'heal|all-allies|on-cast|heal',
-        carries: { config: expect.objectContaining({ basis: 'defense', pct: 100 }) },
-    },
-    {
-        ship: 'Makoli',
-        slot: 'charged',
-        old: 'This Unit <unit-damage>repairs 7%</unit-damage> of its Max HP and an additional amount equal to <unit-damage>120%</unit-damage> of its Defense, grants <unit-skill>Defense Up II</unit-skill> for 2 turns, and grants <unit-skill>Terran Guard II</unit-skill> for 2 turns.',
-        new: 'This Unit <unit-damage>repairs 7%</unit-damage> of its max HP with additional repair equal to <unit-damage>120%</unit-damage> of its defense, grants <unit-skill>Defense Up II</unit-skill> and <unit-skill>Terran Guard II</unit-skill> for 2 turns.',
-        expects: 'heal|all-allies|on-cast|heal',
-        carries: { config: expect.objectContaining({ basis: 'defense', pct: 120 }) },
-    },
-    {
         ship: 'Nayra',
         slot: 'charged',
         old: 'This Unit inflicts <unit-skill>Attack Down II</unit-skill> and <unit-skill>Crit Power Down III</unit-skill> for 2 turns, dealing <unit-damage>210% damage</unit-damage> and additional <unit-damage>damage equal to 30%</unit-damage> of its defense.<br />If the target was repaired this round, inflict <unit-skill>Exposed</unit-skill> for 1 turn and purge all buffs from the enemy.',
@@ -119,6 +103,20 @@ const CATALOGUE_ROWS: ResidualRow[] = [
             conditions: [expect.objectContaining({ subject: 'self-buff', buffName: 'Stealth' })],
             scaling: { conditionIndex: 0, perUnit: 50 },
         },
+    },
+    {
+        ship: 'Makoli',
+        slot: 'active',
+        text: 'This Unit <unit-skill>cleanses 1 debuff</unit-skill>, <unit-damage>repairs 5%</unit-damage> of its max HP with additional repair equal to <unit-damage>100%</unit-damage> of its defense and grants <unit-skill>Inc. Damage Down II</unit-skill> for 2 turns.',
+        expects: 'heal|all-allies|on-cast|heal',
+        carries: { config: expect.objectContaining({ basis: 'defense', pct: 100 }) },
+    },
+    {
+        ship: 'Makoli',
+        slot: 'charged',
+        text: 'This Unit <unit-damage>repairs 7%</unit-damage> of its max HP with additional repair equal to <unit-damage>120%</unit-damage> of its defense, grants <unit-skill>Defense Up II</unit-skill> and <unit-skill>Terran Guard II</unit-skill> for 2 turns.',
+        expects: 'heal|all-allies|on-cast|heal',
+        carries: { config: expect.objectContaining({ basis: 'defense', pct: 120 }) },
     },
 ];
 

@@ -9,34 +9,6 @@ import {
 
 const PAIRS: RewordPair[] = [
     {
-        ship: 'Wisteria',
-        slot: 'passive',
-        old: 'This Unit, after applying <unit-skill>Corrosion</unit-skill> with a Critical hit, inflicts <unit-skill>Inferno II</unit-skill> for 2 turns.',
-        new: 'When this Unit inflicts <unit-skill>Corrosion</unit-skill> with a critical hit, it also inflicts <unit-skill>Inferno II</unit-skill> for 2 turns.',
-        expects: 'dot|enemy|on-self-crit-dot|dot',
-    },
-    {
-        ship: 'Wisteria',
-        slot: 'passive',
-        old: 'This Unit inflicts <unit-skill>Inferno II</unit-skill> for 2 turns after applying <unit-skill>Corrosion</unit-skill> with a Critical hit and extends the newly applied <unit-skill>Corrosion</unit-skill> by 1 turn with a chance to hit equal to Crit Power.',
-        new: "When this Unit inflicts <unit-skill>Corrosion</unit-skill> with a critical hit, it also inflicts <unit-skill>Inferno II</unit-skill> for 2 turns and <unit-skill>extends the newly inflicted</unit-skill> <unit-skill>Corrosion</unit-skill> by 1 turn with the extension chance equal to this Unit's crit power.",
-        expects: 'dot|enemy|on-self-crit-dot|dot',
-    },
-    {
-        ship: 'Belladonna',
-        slot: 'passive',
-        old: 'When an ally inflicts <unit-skill>Corrosion</unit-skill>, this Unit has a chance to convert the <unit-skill>Corrosion</unit-skill> into <unit-skill>Acidic Decay</unit-skill> of the same level, with the chance scaling at 1% per 10 Hacking.',
-        new: 'When an ally inflicts <unit-skill>Corrosion</unit-skill>, this Unit converts the <unit-skill>Corrosion</unit-skill> into <unit-skill>Acidic Decay</unit-skill> of the same level, with the chance scaling at 1% per 10 Hacking.',
-        expects: 'convert-dot|enemy|on-ally-debuff-inflicted|Acidic Decay',
-    },
-    {
-        ship: 'Belladonna',
-        slot: 'passive',
-        old: 'When an ally inflicts <unit-skill>Corrosion</unit-skill>, this Unit has a chance to convert the <unit-skill>Corrosion</unit-skill> into <unit-skill>Acidic Decay</unit-skill> of the same level, with the chance scaling at 1% per 10 Hacking.<br /><br />Upon converting <unit-skill>Corrosion</unit-skill>, this Unit extends the newly applied <unit-skill>Acidic Decay</unit-skill> status for 1 turn, with the chance to equal to its crit power.',
-        new: 'When an ally inflicts <unit-skill>Corrosion</unit-skill>, this Unit converts the <unit-skill>Corrosion</unit-skill> into <unit-skill>Acidic Decay</unit-skill> of the same level, with the chance scaling at 1% per 10 Hacking.<br /><br />Upon converting <unit-skill>Corrosion</unit-skill>, this Unit <unit-skill>extends the newly inflicted</unit-skill> <unit-skill>Acidic Decay</unit-skill> status for 1 turn, with the chance equal to its crit power.',
-        expects: 'convert-dot|enemy|on-ally-debuff-inflicted|Acidic Decay',
-    },
-    {
         ship: 'Prospect',
         slot: 'passive',
         old: 'This Unit gains <unit-skill>Inc. Damage Down I</unit-skill> for 2 turns when inflicting a debuff.',
@@ -98,6 +70,30 @@ const CATALOGUE_ROWS: { ship: string; slot: SlotName; text: string; expects: str
         slot: 'passive',
         text: "When this Unit <unit-skill>cleanses a debuff</unit-skill> from an ally, it also <unit-damage>repairs the ally 4%</unit-damage> of this Unit's max HP. <br /><br />When a <unit-aid>debuff</unit-aid> is inflicted on an ally, this Unit <unit-damage>repairs the ally for 6%</unit-damage> of this Unit's max HP.",
         expects: 'heal|ally|on-ally-debuffed|heal',
+    },
+    {
+        ship: 'Wisteria',
+        slot: 'passive',
+        text: 'When this Unit inflicts <unit-skill>Corrosion</unit-skill> with a critical hit, it also inflicts <unit-skill>Inferno II</unit-skill> for 2 turns.',
+        expects: 'dot|enemy|on-self-crit-dot|dot',
+    },
+    {
+        ship: 'Wisteria',
+        slot: 'passive',
+        text: "When this Unit inflicts <unit-skill>Corrosion</unit-skill> with a critical hit, it also inflicts <unit-skill>Inferno II</unit-skill> for 2 turns and <unit-skill>extends the newly inflicted</unit-skill> <unit-skill>Corrosion</unit-skill> by 1 turn with the extension chance equal to this Unit's crit power.",
+        expects: 'dot|enemy|on-self-crit-dot|dot',
+    },
+    {
+        ship: 'Belladonna',
+        slot: 'passive',
+        text: 'When an ally inflicts <unit-skill>Corrosion</unit-skill>, this Unit converts the <unit-skill>Corrosion</unit-skill> into <unit-skill>Acidic Decay</unit-skill> of the same level, with the chance scaling at 1% per 10 Hacking.',
+        expects: 'convert-dot|enemy|on-ally-debuff-inflicted|Acidic Decay',
+    },
+    {
+        ship: 'Belladonna',
+        slot: 'passive',
+        text: 'When an ally inflicts <unit-skill>Corrosion</unit-skill>, this Unit converts the <unit-skill>Corrosion</unit-skill> into <unit-skill>Acidic Decay</unit-skill> of the same level, with the chance scaling at 1% per 10 Hacking.<br /><br />Upon converting <unit-skill>Corrosion</unit-skill>, this Unit <unit-skill>extends the newly inflicted</unit-skill> <unit-skill>Acidic Decay</unit-skill> status for 1 turn, with the chance equal to its crit power.',
+        expects: 'convert-dot|enemy|on-ally-debuff-inflicted|Acidic Decay',
     },
 ];
 

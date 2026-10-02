@@ -1,7 +1,6 @@
 /**
- * SP-F F3 — Lingshe's charge-skill "reduces all Bombs on the enemy targets by 1 turn, Bombs
- * reduced to 0 turns by this skill will detonate.<br />This reduction effect requires
- * hacking.<br /><br />This Unit inflicts Bomb III for 3 turns."
+ * Lingshe's charge-skill "This Unit reduces all Bomb on the enemy targets by 1 turn.<br />This
+ * reduction effect requires hacking.<br /><br />This Unit inflicts Bomb III for 3 turns."
  *
  * Runtime behavior (playerTurn.ts's `reduceEnemyBombs`, called BEFORE `applyNewDoTs` — mirrors
  * the `extendDoTs`-before-`applyNewDoTs` ordering):

@@ -23,7 +23,8 @@ const LIONHEART_TEXT =
 const CENTURION_TEXT = 'At the start of combat, this Unit gains 500 attack per adjacent ally.';
 const ENFORCER_TEXT =
     'At the start of combat this Unit gains +15% crit rate and +10% hacking if adjacent to a supporter.';
-const DEFIANT_TEXT = 'When adjacent to a Supporter, this Unit gains 20% HP.';
+const DEFIANT_TEXT =
+    'At the start of combat this Unit gains 20% HP if its adjacent to a supporter.';
 
 const makeShip = (over: Partial<Ship>): Ship => ({
     id: 'unit',

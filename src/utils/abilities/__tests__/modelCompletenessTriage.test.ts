@@ -422,7 +422,7 @@ describe('SP-E — DoT transforms & conversions', () => {
     // Verbatim from docs/ship-skills.csv (second_passive_skill_text field) — Orel's variant of
     // the SAME transform family, gated on the ATTACKER holding Taunt or Provoke.
     const OREL_P2 =
-        'When directly damaged by an enemy effected by <unit-skill>Taunt</unit-skill> or <unit-skill>Provoke</unit-skill>, this unit transforms the damage into a <unit-skill>Damage over Time effect</unit-skill> for 3 turns.';
+        'When directly damaged by an enemy effected by <unit-skill>Taunt</unit-skill> or <unit-skill>Provoke</unit-skill>, this Unit transforms the damage into a <unit-skill>damage over time effect</unit-skill> lasting 3 turns.';
     it('Orel: transform is gated on the attacker being Taunted or Provoked', () => {
         const abilities = abilitiesFor({ secondPassiveSkillText: OREL_P2 }, 'passive');
         const transform = abilities.find((a) => a.config.type === 'transform-incoming-to-dot');
@@ -437,9 +437,9 @@ describe('SP-E — DoT transforms & conversions', () => {
     // appears in SP-D (Task 5) for the charge skill's "3+ Acidic Decay" count-gate clause — a
     // DISTINCT clause. This probe is ONLY the passive's Corrosion→Acidic Decay conversion.
     const BELLADONNA_P2 =
-        'When an ally inflicts <unit-skill>Corrosion</unit-skill>, this Unit has a chance to convert the <unit-skill>Corrosion</unit-skill> into <unit-skill>Acidic Decay</unit-skill> of the same level, with the chance scaling at 1% per 10 Hacking.<br /><br />Upon converting <unit-skill>Corrosion</unit-skill>, this Unit extends the newly applied <unit-skill>Acidic Decay</unit-skill> status for 1 turn, with the chance to equal to its crit power.';
+        'When an ally inflicts <unit-skill>Corrosion</unit-skill>, this Unit converts the <unit-skill>Corrosion</unit-skill> into <unit-skill>Acidic Decay</unit-skill> of the same level, with the chance scaling at 1% per 10 Hacking.<br /><br />Upon converting <unit-skill>Corrosion</unit-skill>, this Unit <unit-skill>extends the newly inflicted</unit-skill> <unit-skill>Acidic Decay</unit-skill> status for 1 turn, with the chance equal to its crit power.';
 
-    it('Belladonna: "convert the Corrosion into Acidic Decay" rides the live ally-inflicts-debuff reactive trigger (SP-E, Task E4 — closed)', () => {
+    it('Belladonna: "converts the Corrosion into Acidic Decay" rides the live ally-inflicts-debuff reactive trigger', () => {
         const abilities = abilitiesFor({ secondPassiveSkillText: BELLADONNA_P2 }, 'passive');
         // Anchor by `buffName` across ALL `config.type` values — NOT restricted to
         // `config.type === 'debuff'` (review finding). SP-E's family is literally "DoT
@@ -520,15 +520,13 @@ describe('SP-F — deep one-offs', () => {
     // Verbatim from docs/ship-skills.csv (charge_skill_text field). Lingshe's clause is a
     // CHARGED skill → slot 'charged' (not 'active').
     const LINGSHE_CHARGED =
-        'This Unit reduces all <unit-skill>Bombs</unit-skill> on the enemy targets by 1 turn, <unit-skill>Bombs</unit-skill> reduced to 0 turns by this skill will detonate.<br />This reduction effect requires hacking.<br /><br />This Unit inflicts <unit-skill>Bomb III</unit-skill> for 3 turns.';
+        'This Unit reduces all <unit-skill>Bomb</unit-skill> on the enemy targets by 1 turn.<br />This reduction effect requires hacking.<br /><br />This Unit inflicts <unit-skill>Bomb III</unit-skill> for 3 turns.';
 
-    it('Lingshe: charged "reduces all Bombs on the enemy targets by 1 turn ... will detonate" countdown-reduction rider builds a bomb-countdown-reduce ability alongside the Bomb III DoT-apply', () => {
+    it('Lingshe: charged "reduces all Bomb on the enemy targets by 1 turn" countdown-reduction rider builds a bomb-countdown-reduce ability alongside the Bomb III DoT-apply', () => {
         const abilities = abilitiesFor({ chargeSkillText: LINGSHE_CHARGED }, 'charged');
-        // SP-F F3: the countdown-reduction sentence now builds a dedicated
-        // `bomb-countdown-reduce` ability (all-enemies, hacking-gated at runtime via
-        // `landsTimedEnemyApplicationLive('inflict')`), alongside the existing Bomb III
-        // DoT-apply from the second sentence — so the array now has more than the lone
-        // Bomb III entry it had before this task.
+        // The countdown-reduction sentence builds a dedicated `bomb-countdown-reduce` ability
+        // (all-enemies, hacking-gated at runtime via `landsTimedEnemyApplicationLive('inflict')`),
+        // alongside the Bomb III DoT-apply from the last sentence.
         expect(abilities.length).toBeGreaterThan(1);
         const reduce = abilities.find((a) => a.config.type === 'bomb-countdown-reduce');
         expect(reduce).toBeDefined();

@@ -196,11 +196,11 @@ describe('buildShipAbilities', () => {
         ).toBe(false);
     });
 
-    it('Provider charged: damage + extend-dot (charge removal now also emitted — see Phase 1 Task 3 block)', () => {
+    it('Provider charged: damage + extend-dot across all enemies', () => {
         const s = ship({
             activeSkillText: 'This Unit deals <unit-damage>100% damage</unit-damage>.',
             chargeSkillText:
-                'This Unit deals <unit-damage>200% damage</unit-damage>, removes 1 charge from the enemy, and extends active Damage Over Time effects by 1 turn.',
+                "This Unit deals <unit-damage>200% damage</unit-damage>, <unit-skill>removes 1 charge</unit-skill> from the enemy's charged skill and all <unit-skill>damage over time debuffs</unit-skill> are <unit-skill>extended by 1 turn</unit-skill>.",
             chargeSkillCharge: 3,
         });
 
@@ -210,7 +210,7 @@ describe('buildShipAbilities', () => {
         });
         const extend = abilityOfType(charged.abilities, 'extend-dot')!;
         expect(extend.config).toEqual({ type: 'extend-dot', turns: 1 });
-        expect(extend.target).toBe('enemy');
+        expect(extend.target).toBe('all-enemies');
     });
 
     it('Provider passive: no-crit damage + Crit Rate Down II both ride on-other-ally-debuff-inflicted (#590)', () => {
@@ -1945,10 +1945,10 @@ describe('buildShipAbilities', () => {
             });
         });
 
-        it('Lingshe charge skill (Bomb-countdown reduction): emits a bomb-countdown-reduce ability, NOT a debuff-duration-reduction cleanse (SP-F F3 — see auditSkills.allowlist.ts history)', () => {
+        it('Lingshe charge skill (Bomb-countdown reduction): emits a bomb-countdown-reduce ability, NOT a debuff-duration-reduction cleanse', () => {
             const s = ship({
                 chargeSkillText:
-                    'This Unit reduces all <unit-skill>Bombs</unit-skill> on the enemy targets by 1 turn, <unit-skill>Bombs</unit-skill> reduced to 0 turns by this skill will detonate.<br />This reduction effect requires hacking.<br /><br />This Unit inflicts <unit-skill>Bomb III</unit-skill> for 3 turns.',
+                    'This Unit reduces all <unit-skill>Bomb</unit-skill> on the enemy targets by 1 turn.<br />This reduction effect requires hacking.<br /><br />This Unit inflicts <unit-skill>Bomb III</unit-skill> for 3 turns.',
             });
             const charged = buildShipAbilities(s).slots.find((x) => x.slot === 'charged');
             // Still no generic duration-reduction cleanse — that primitive deliberately excludes
@@ -1960,7 +1960,7 @@ describe('buildShipAbilities', () => {
                     a.config.mode === 'reduce-duration'
             );
             expect(reduce).toBeUndefined();
-            // SP-F F3: the dedicated bomb-countdown-reduce ability now builds instead.
+            // The dedicated bomb-countdown-reduce ability builds instead.
             const bombReduce = charged?.abilities.find((a) => a.type === 'bomb-countdown-reduce');
             expect(bombReduce).toMatchObject({
                 type: 'bomb-countdown-reduce',
@@ -2025,7 +2025,7 @@ describe('buildShipAbilities', () => {
         it('Stalwart second passive (70%): emits an on-attacked counter with requirePrimaryTarget and keeps the Legion Discipline II buff', () => {
             const s = ship({
                 secondPassiveSkillText:
-                    'When this Unit is directly damaged as a primary target, it deals <unit-damage>70% damage</unit-damage> to that enemy and gains <unit-skill>Legion Discipline II</unit-skill> for 3 turns.<br /><br />Additionally, when this Unit is adjacent to a Supporter, this Unit gains <unit-skill>20% Attack</unit-skill>.',
+                    'This Unit ignores <unit-skill>Taunt</unit-skill> and <unit-skill>Provoke</unit-skill> effects.<br /><br />When this Unit is directly damaged as a primary target, it deals <unit-damage>70% damage</unit-damage> to the enemy and gains <unit-skill>Legion Discipline II</unit-skill> for 3 turns.<br /><br />At the start of combat this Unit gains 20% attack if its adjacent to a supporter.',
             });
             const passive = passiveOf(s);
             const counterAb = passive?.abilities.find((a) => a.type === 'counter');
@@ -2523,16 +2523,19 @@ describe('buildShipAbilities', () => {
     });
 
     describe('Pallas-pattern ally-crit reactive triggers', () => {
-        // Real Pallas passive shape: a defense buff, then "when an ally critically hits" (charge +
-        // Everliving Regeneration buff), then "when this unit critically repairs an ally" (cleanse).
+        // A defense buff, then "when an ally critically hits" (charge + Everliving Regeneration
+        // buff), then "when it critically repairs an ally" (cleanse).
         const PALLAS_TEXT =
-            "This Unit's Defense is increased by 20%. When an ally critically hits an enemy, this unit gains 1 charge to its charged skill and Everliving Regeneration 3 for 2 turns. Additionally, when this unit critically repairs an ally, it cleanses 1 debuff from itself.";
+            "This Unit's Defense is increased by 20%. When an ally critically hits an enemy, this unit gains 1 charge to its charged skill and Everliving Regeneration 3 for 2 turns. Additionally, when it critically repairs an ally, it cleanses 1 debuff from itself.";
+        // Hermes passive R2 (docs/ship-skills.csv).
+        const HERMES_R2_TEXT =
+            "When an ally critically hits an enemy, this Unit <unit-skill>adds 1 charge</unit-skill> to its own charged skill and grants <unit-skill>Everliving Regeneration III</unit-skill> for 2 turns to the ally.<br /><br />This Unit's defense is increased by 20% and when it critically repairs an ally, it <unit-skill>cleanses 1 debuff</unit-skill> from itself.";
 
         it('cleanse rides on-ally-critically-repaired', () => {
             const s = ship({
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 refits: [{}, {}] as any,
-                firstPassiveSkillText: PALLAS_TEXT,
+                firstPassiveSkillText: HERMES_R2_TEXT,
             });
             const passive = buildShipAbilities(s).slots.find((x) => x.slot === 'passive');
             const cleanse = passive?.abilities.find((a) => a.type === 'cleanse');
@@ -2549,7 +2552,7 @@ describe('buildShipAbilities', () => {
             const s = ship({
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 refits: [{}, {}] as any,
-                firstPassiveSkillText: PALLAS_TEXT,
+                firstPassiveSkillText: HERMES_R2_TEXT,
             });
             const passive = buildShipAbilities(s).slots.find((x) => x.slot === 'passive');
             const charge = passive?.abilities.find((a) => a.type === 'charge');
@@ -2591,7 +2594,7 @@ describe('buildShipAbilities', () => {
             // inside the crit-repair sentence).
             const s = ship({
                 activeSkillText:
-                    'This Unit <unit-damage>repairs the ally for 4%</unit-damage> of its Max HP. When this unit critically repairs an ally, it <unit-damage>repairs itself for 7%</unit-damage> of its Max HP.',
+                    'This Unit <unit-damage>repairs the ally for 4%</unit-damage> of its Max HP. When it critically repairs an ally, it <unit-damage>repairs itself for 7%</unit-damage> of its Max HP.',
             });
             const active = buildShipAbilities(s).slots.find((x) => x.slot === 'active');
             const heals = active?.abilities.filter((a) => a.type === 'heal') ?? [];
@@ -3667,7 +3670,7 @@ describe('buildShipAbilities — on-enemy-purged and on-ally-purged heal trigger
         const sefubaP2 = () =>
             ship({
                 secondPassiveSkillText:
-                    'When this Unit <unit-aid>purges an enemy buff</unit-aid>, it <unit-damage>repairs itself for 12%</unit-damage> Max HP and <unit-aid>purges 1</unit-aid> more buff from the enemy.',
+                    'When this Unit <unit-skill>purges a buff</unit-skill> from an enemy, it <unit-damage>repairs 8%</unit-damage> of its max HP for each <unit-aid>buff</unit-aid> removed and also <unit-skill>purges 1 extra buff</unit-skill> from the enemy.',
             });
 
         it('emits a self heal with trigger on-enemy-purged', () => {
@@ -3677,7 +3680,7 @@ describe('buildShipAbilities — on-enemy-purged and on-ally-purged heal trigger
             expect(heal!.trigger).toBe('on-enemy-purged');
             expect(heal!.target).toBe('self');
             if (heal!.config.type === 'heal') {
-                expect(heal!.config.pct).toBe(12);
+                expect(heal!.config.pct).toBe(8);
             }
         });
 
@@ -3762,7 +3765,7 @@ describe('buildShipAbilities — Iridium passive purge emit (C2b-2 T1)', () => {
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 refits: [{}, {}] as any,
                 secondPassiveSkillText:
-                    'This Unit takes 35% less damage from Critical hits, and this effect does not stack with similar effects.<br /><br />When directly damaged, This Unit <unit-aid>purges 2</unit-aid> buffs from the enemy and inflicts <unit-skill>Speed Down II</unit-skill> for 1 turn.<br /><br />Start of combat, This Unit gains <unit-skill>Taunt</unit-skill> for 1 turn.',
+                    'When directly damaged, this Unit <unit-skill>purges 2 buffs</unit-skill> from the enemy and inflicts <unit-skill>Speed Down II</unit-skill> for 1 turn.<br /><br />This Unit has <unit-damage>35% damage reduction</unit-damage> from critical hits.<br /><br />At the start of combat, this Unit gains <unit-skill>Taunt</unit-skill> for 1 turn.',
             });
 
         it('emits exactly ONE purge ability with trigger on-attacked and count 2', () => {
@@ -3794,7 +3797,7 @@ describe('buildShipAbilities — Iridium passive purge emit (C2b-2 T1)', () => {
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 refits: [{}, {}] as any,
                 secondPassiveSkillText:
-                    'When this Unit <unit-aid>purges an enemy buff</unit-aid>, it <unit-damage>repairs itself for 12%</unit-damage> Max HP and <unit-aid>purges 1</unit-aid> more buff from the enemy.',
+                    'When this Unit <unit-skill>purges a buff</unit-skill> from an enemy, it <unit-damage>repairs 8%</unit-damage> of its max HP for each <unit-aid>buff</unit-aid> removed and also <unit-skill>purges 1 extra buff</unit-skill> from the enemy.',
             });
             const passive = slot(buildShipAbilities(sefubaP2).slots, 'passive')!;
             const purges = passive.abilities.filter((a) => a.type === 'purge');
@@ -4563,14 +4566,10 @@ describe('buildShipAbilities — enemy-targeted charge removal (Phase 1 Task 3)'
         );
     });
 
-    it('Provider charged: removal of 1 charge from the enemy on-cast (previously ignored)', () => {
-        // Provider's charge skill text already existed in the test at line ~161 with a comment
-        // saying "charge removal is ignored". Now that the orchestrator wires parseChargeRemoval,
-        // the removal MUST be emitted. The existing test still passes (it only asserts damage +
-        // extend-dot exist); this complementary test locks the removal contract.
+    it('Provider charged: removal of 1 charge from the enemy on-cast', () => {
         const s = ship({
             chargeSkillText:
-                'This Unit deals <unit-damage>200% damage</unit-damage>, removes 1 charge from the enemy, and extends active Damage Over Time effects by 1 turn.',
+                "This Unit deals <unit-damage>200% damage</unit-damage>, <unit-skill>removes 1 charge</unit-skill> from the enemy's charged skill and all <unit-skill>damage over time debuffs</unit-skill> are <unit-skill>extended by 1 turn</unit-skill>.",
             chargeSkillCharge: 3,
         });
 
@@ -4925,22 +4924,20 @@ describe('buildShipAbilities — PR1 phantom-ability suppression (reduction/conv
 // passive text, so the phantom DoT does not reproduce for any of the four ships. These tests were
 // RED-checked (asserted the phantom absent) BEFORE any parser change and already passed —
 // confirmed FALSE POSITIVE; no parser change was made for this family. Kept as regression guards.
-// UPDATE (Ship-kit W8 Task 10): Wisteria's "after applying Corrosion with a Critical hit,
-// inflicts Inferno II" clause was itself UNMODELED (a real gap, distinct from the sweep's
-// false-positive phantom-DoT claim) — it now mints a genuine self-crit-dot Inferno II ability.
-// The phantom-Corrosion guard this test exists for still holds (see the updated assertion
-// below); Valerian/Lingshe/Belladonna remain untouched false positives.
+// Wisteria's "When this Unit inflicts Corrosion with a critical hit, it also inflicts Inferno II"
+// clause mints a genuine self-crit-dot Inferno II ability (a real modeled mechanic, distinct from
+// the sweep's false-positive phantom-DoT claim). The phantom-Corrosion guard this test exists for
+// still holds; Valerian/Lingshe/Belladonna remain untouched false positives.
 describe('buildShipAbilities — PR1 finding family 2 (confirmed FALSE POSITIVE under real usage)', () => {
-    it('Wisteria passive1 (R0): "after applying Corrosion with a Critical hit, inflicts Inferno II" mints ONLY the Inferno II dot — no phantom Corrosion dot', () => {
-        // Ship-kit W8 Task 10: this clause is now modeled (self-subject on-crit-after-Corrosion
-        // secondary-DoT injection, mirroring Crocus's ally-scoped on-ally-crit-dot). The ORIGINAL
-        // "no phantom Corrosion dot" guard still holds — DOT_TIER_MAP has a bare 'Corrosion' entry
-        // and a naive tag walk would mint a second, wrong dot from the trigger clause's own named
-        // DoT — so this test now asserts exactly ONE dot ability (Inferno II), never two.
+    it('Wisteria passive1 (R0): "When this Unit inflicts Corrosion with a critical hit, it also inflicts Inferno II" mints ONLY the Inferno II dot — no phantom Corrosion dot', () => {
+        // The clause is a self-subject on-crit-after-Corrosion secondary-DoT injection, mirroring
+        // Crocus's ally-scoped on-ally-crit-dot. DOT_TIER_MAP has a bare 'Corrosion' entry and a
+        // naive tag walk would mint a second, wrong dot from the trigger clause's own named DoT —
+        // so this test asserts exactly ONE dot ability (Inferno II), never two.
         const s = ship({
             refits: [] as never,
             firstPassiveSkillText:
-                'This Unit, after applying <unit-skill>Corrosion</unit-skill> with a Critical hit, inflicts <unit-skill>Inferno II</unit-skill> for 2 turns.',
+                'When this Unit inflicts <unit-skill>Corrosion</unit-skill> with a critical hit, it also inflicts <unit-skill>Inferno II</unit-skill> for 2 turns.',
         });
         const { slots } = buildShipAbilities(s);
         const passive = slot(slots, 'passive')!;
