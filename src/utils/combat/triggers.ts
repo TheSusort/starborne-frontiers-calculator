@@ -304,6 +304,10 @@ export interface Intent {
          *  ("repairs 5% per enemy affected"); Hemlock's heal is self-target so the ids themselves
          *  are never routed. Mirrors repairedEnemyIds' count-only use. */
         spreadAffectedIds?: string[];
+        /** Sefuba: the number of buffs the triggering purge removed (purge-performed.count),
+         *  stamped by the on-enemy-purged listener. Read by the reactive heal executor's
+         *  `purged-buff-count` scaling ("repairs 8% … for each buff removed"). */
+        purgedBuffCount?: number;
         /** The ACTUAL victim id (dot-applied.targetId) of the ally's DoT
          *  application, captured by the on-ally-debuff-inflicted dot-applied listener. Read by
          *  the convert-dot executor to resolve the correct CombatActor (via ctx.actorById) whose
@@ -1940,6 +1944,12 @@ export function registerReactiveListeners(args: {
                         // Route counterTargetId = e.targetId so Sefuba's chain "purge 1 more"
                         // re-purges the SAME victim (victim-routing).
                         // fromPurgeEvent guards the chain purge from re-emitting → depth-1.
+                        // purgedBuffCount carries THIS purge's removed count to a "for each buff
+                        // removed" repair. The chain purge emits no purge-performed, so its
+                        // buff never adds to that repair.
+                        // KNOWN GAP: whether the game counts the chained "1 extra buff" toward
+                        // Sefuba's "for each buff removed" is unconfirmed, pending an in-game
+                        // test. Pinned in sefubaRepairPerBuffPurged.integration.test.ts (4).
                         if (e.casterId === ownerId)
                             enqueue({
                                 ...intent,
@@ -1947,6 +1957,7 @@ export function registerReactiveListeners(args: {
                                     ...intent.eventCtx,
                                     counterTargetId: e.targetId,
                                     fromPurgeEvent: true,
+                                    purgedBuffCount: e.count,
                                 },
                             });
                     });
@@ -5142,12 +5153,16 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // count = the number of adjacent allies the Corrosion spread landed Corrosion I on
         // (eventCtx.spreadAffectedIds, stamped by the on-corrosion-spread listener from the real
         // affected-actor ids), so a positional multi-ally spread heals proportionally.
+        // Sefuba: "repairs 8% … for each buff removed" — count = the triggering purge's
+        // removed count (eventCtx.purgedBuffCount, stamped by the on-enemy-purged listener).
         const eventCountMultiplier =
             intent.ability.scaling?.countSource === 'repaired-enemy-count'
                 ? (intent.eventCtx?.repairedEnemyIds?.length ?? 0)
                 : intent.ability.scaling?.countSource === 'spread-affected-count'
                   ? (intent.eventCtx?.spreadAffectedIds?.length ?? 0)
-                  : undefined;
+                  : intent.ability.scaling?.countSource === 'purged-buff-count'
+                    ? (intent.eventCtx?.purgedBuffCount ?? 0)
+                    : undefined;
         // The per-unit rate for a count-scaled heal is scaling.perUnit (== the parsed base pct);
         // for a plain heal it is cfg.pct. A zero count (defensive — the trigger only fires on a
         // repair event, so count >= 1 in practice) grants nothing.

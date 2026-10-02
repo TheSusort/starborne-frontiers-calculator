@@ -4921,6 +4921,11 @@ const REPAIRED_ENEMY_COUNT_RE = /\bfor every enemy repaired\b/i;
 // (eventCtx.spreadAffectedIds.length), stamped by the on-corrosion-spread listener. Same primitive
 // as Sansi's above; `pct` is KEPT (the per-unit rate) and the executor multiplies it by the count.
 const SPREAD_AFFECTED_COUNT_RE = /\bper enemy affected\b/i;
+// Sefuba (catalogue): reactive event-count repair scaling — "repairs 8% of its max HP for each
+// buff removed". The count is the number of buffs the triggering purge removed
+// (eventCtx.purgedBuffCount, stamped by the on-enemy-purged listener). Same primitive as Sansi's
+// above; `pct` is KEPT (the per-unit rate) and the executor multiplies it by the count.
+const PURGED_BUFF_COUNT_RE = /\bfor each buffs? removed\b/i;
 // ship-kit W3 (Sansi): numeric per-round cap — "limited to 3 times per Round". Generalizes the
 // boolean once-per-round caps. Threaded to Ability.maxPerRound and enforced executor-side.
 const MAX_PER_ROUND_RE = /\blimited to\s+(\d+)\s+times?\s+per\s+round\b/i;
@@ -4937,6 +4942,8 @@ function parseHealEventCountScaling(
     // ship-kit W3 (Hemlock): "per enemy affected" — the Corrosion-spread affected-count source.
     if (SPREAD_AFFECTED_COUNT_RE.test(sentence))
         return { perUnit: basePct, countSource: 'spread-affected-count' };
+    if (PURGED_BUFF_COUNT_RE.test(sentence))
+        return { perUnit: basePct, countSource: 'purged-buff-count' };
     return null;
 }
 

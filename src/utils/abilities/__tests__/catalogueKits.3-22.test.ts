@@ -229,18 +229,34 @@ describe('3.22 kits — charge, purge and repair clauses', () => {
         expect(only(abilities, 'debuff').conditions).toEqual([]);
     });
 
-    // KNOWN GAP: the text repairs 8% per buff removed. The engine heals a flat 8% per purge
-    // because the on-enemy-purged listener passes no count and no heal reads purge-performed's
-    // count; whether the chained extra purge counts toward the heal is an open question.
-    it('Sefuba passive R2: pins the current flat-8% heal parse (not the per-buff kit) and the 1 extra purge', () => {
+    // KNOWN GAP: whether the chained "1 extra buff" counts toward "for each buff removed" is
+    // unconfirmed, pending an in-game test. The repair counts the triggering purge's buffs only
+    // (fight pin: sefubaRepairPerBuffPurged.integration.test.ts case 4).
+    it('Sefuba passive R2: 8% per buff the triggering purge removed, plus the 1 extra purge', () => {
         const text =
             'When this Unit <unit-skill>purges a buff</unit-skill> from an enemy, it <unit-damage>repairs 8%</unit-damage> of its max HP for each <unit-aid>buff</unit-aid> removed and also <unit-skill>purges 1 extra buff</unit-skill> from the enemy.';
         const abilities = parseSlot('passive', text);
         expect(sigs(abilities)).toEqual(
             sorted(['heal|self|on-enemy-purged|heal', 'purge|enemy|on-enemy-purged|purge'])
         );
-        expect(only(abilities, 'heal').config).toMatchObject({ pct: 8, basis: 'hp' });
+        expect(only(abilities, 'heal')).toMatchObject({
+            conditions: [],
+            scaling: { perUnit: 8, countSource: 'purged-buff-count' },
+            config: { pct: 8, basis: 'hp' },
+        });
         expect(only(abilities, 'purge').config).toMatchObject({ count: 1 });
+    });
+
+    it('Sefuba passive R0: 8% per buff the triggering purge removed', () => {
+        const text =
+            'When this Unit <unit-skill>purges a buff</unit-skill> from an enemy, it <unit-damage>repairs 8%</unit-damage> of its max HP for each <unit-aid>buff</unit-aid> removed.';
+        const abilities = parseSlot('passive', text);
+        expect(sigs(abilities)).toEqual(['heal|self|on-enemy-purged|heal']);
+        expect(only(abilities, 'heal')).toMatchObject({
+            conditions: [],
+            scaling: { perUnit: 8, countSource: 'purged-buff-count' },
+            config: { pct: 8, basis: 'hp' },
+        });
     });
 });
 
