@@ -1,7 +1,14 @@
 /** Markdown report and outcome status for one catalogue sync run. Pure. */
 import type { Change } from './catalogueDiff';
 import type { CatalogueManifest } from './catalogueSchema';
-import { isDroppedField, TEXT_CHANGE_HOLD_RATIO, type RowPatch, type SyncPlan, type TextHold } from './catalogueSyncPlan';
+import {
+    isDroppedField,
+    TEXT_CHANGE_HOLD_RATIO,
+    type PinnedSlot,
+    type RowPatch,
+    type SyncPlan,
+    type TextHold,
+} from './catalogueSyncPlan';
 
 export type SyncStatus = 'clean' | 'attention' | 'held' | 'failed';
 
@@ -19,7 +26,9 @@ export const syncStatus = (plan: SyncPlan, writeFailures: string[]): SyncStatus 
         plan.refusedInserts.length ||
         plan.metadata.length ||
         plan.idMismatches.length ||
-        plan.missingFromCatalogue.length
+        plan.missingFromCatalogue.length ||
+        plan.pinned.some((p) => p.state === 'catalogue-changed') ||
+        plan.patches.some((p) => p.gate?.accepted?.length)
     ) {
         return 'attention';
     }
@@ -74,7 +83,7 @@ const columnsOf = (changes: Change[]): string =>
 const textHoldLabel = (p: RowPatch, hold: TextHold): string => {
     switch (hold) {
         case 'gate':
-            return 'held by the audit gate; new audit findings:';
+            return 'held by the skill gate; new findings:';
         case 'dropped-field':
             return `held: ${DROPPED} (${columnsOf(p.heldText.filter(isDroppedField))})`;
         case 'text-writes-off':
@@ -131,6 +140,63 @@ const renderHeldDrops = (plan: SyncPlan): string[] => {
     return lines;
 };
 
+const PIN_STATE: Record<Exclude<PinnedSlot['state'], 'catalogue-changed'>, string> = {
+    'overrides-catalogue': 'kept our text over the catalogue\'s',
+    'catalogue-agrees': 'catalogue text now equals ours; the pin can go',
+    'no-matched-ship': 'no matched ship has this definition_id; fix or drop the pin',
+};
+const SHIP_HELD = 'ship held for mapping errors; nothing written';
+
+const isChangedPin = (p: PinnedSlot): boolean => p.state === 'catalogue-changed';
+
+/**
+ * Pins whose catalogue text moved off the text the ruling was made on: the only pins that raise
+ * the run's status. Both texts are printed in every renderer, because re-asking the ruling needs them.
+ */
+const renderChangedPins = (plan: SyncPlan): string[] => {
+    const changed = plan.pinned.filter(isChangedPin);
+    if (!changed.length) return [];
+    const lines = ['', `### Pinned text changed since the ruling (${changed.length}) — re-ask the ruling, then update or drop the pin`];
+    for (const p of changed) {
+        lines.push('', `**${p.name}** ${p.column} — ${p.reason}${p.shipHeld ? ` (${SHIP_HELD})` : ''}`);
+        lines.push('', 'Ruled against:', '', fence(p.ruledAgainst), '', 'Catalogue now:', '', fence(p.catalogueText));
+    }
+    return lines;
+};
+
+/** Every other pin, listed so it is re-read each run. `withText` prints the catalogue text it kept out. */
+const renderPinned = (plan: SyncPlan, withText: boolean): string[] => {
+    const lines: string[] = [];
+    const listed = plan.pinned.filter((p) => !isChangedPin(p));
+    if (listed.length) {
+        lines.push('', `### Pinned text (${listed.length})`);
+        for (const p of listed) {
+            const label = p.shipHeld ? SHIP_HELD : PIN_STATE[p.state as keyof typeof PIN_STATE];
+            lines.push(`- **${p.name}** ${p.column} — ${p.reason} (${label})`);
+            if (withText && p.suppressed && !p.shipHeld) lines.push(`  - ${describeChange(p.suppressed)}`);
+        }
+    }
+    return lines;
+};
+
+/**
+ * Structural changes `--accept-structural` let through, by ship, and every accept-list name that
+ * matched none — a stale or misspelt name is otherwise silent.
+ */
+const renderAccepted = (plan: SyncPlan, ctx: ReportContext): string[] => {
+    const accepted = plan.patches.filter((p) => p.gate?.accepted?.length);
+    const seen = new Set(accepted.map((p) => p.name.toLowerCase()));
+    const unused = (ctx.acceptStructural ?? []).filter((n) => !seen.has(n.toLowerCase()));
+    if (!accepted.length && !unused.length) return [];
+    const lines = ['', `### Accepted structural changes (${accepted.length} ships)`];
+    for (const p of accepted) {
+        lines.push('', p.textHold === 'gate' ? `**${p.name}** — text still held by the skill gate` : `**${p.name}**`);
+        for (const f of p.gate?.accepted ?? []) lines.push(`- ${f}`);
+    }
+    if (unused.length) lines.push('', `--accept-structural names with no structural change: ${unused.join(', ')}`);
+    return lines;
+};
+
 const renderMappingHeld = (plan: SyncPlan): string[] => {
     const lines: string[] = [];
     if (plan.mappingHeld.length) {
@@ -174,6 +240,8 @@ export interface ReportContext {
     mode: 'dry-run' | 'write';
     backupPath: string | null;
     writeFailures: string[];
+    /** The run's `--accept-structural` names, if any. */
+    acceptStructural?: string[];
 }
 
 const renderHeader = (plan: SyncPlan, ctx: ReportContext): string[] => [
@@ -194,10 +262,13 @@ const renderWriteFailures = (ctx: ReportContext): string[] =>
     ctx.writeFailures.length ? ['', `**Write failures:** ${ctx.writeFailures.join(', ')}`] : [];
 
 /** Everything after the applied changes: the sections that need a human. */
-const renderAttention = (plan: SyncPlan, withText: boolean): string[] => [
+const renderAttention = (plan: SyncPlan, ctx: ReportContext, withText: boolean): string[] => [
+    ...renderChangedPins(plan),
     ...renderMappingHeld(plan),
     ...renderHeldText(plan, withText),
+    ...renderAccepted(plan, ctx),
     ...renderHeldDrops(plan),
+    ...renderPinned(plan, withText),
     ...renderInserts(plan),
     ...renderIdMismatches(plan),
     ...renderMetadata(plan),
@@ -219,7 +290,7 @@ export const renderReport = (plan: SyncPlan, ctx: ReportContext): string => {
             for (const c of p.applied) lines.push(`- ${describeChange(c)}`);
         }
     }
-    lines.push(...renderAttention(plan, true));
+    lines.push(...renderAttention(plan, ctx, true));
     return lines.join('\n') + '\n';
 };
 
@@ -243,7 +314,7 @@ export const renderIssueSummary = (plan: SyncPlan, ctx: ReportContext): string =
             const verb = ctx.mode === 'write' ? 'updated' : 'would be updated';
             lines.push('', `${applied} ships ${verb}; full diff in the job summary and artifact.`);
         }
-        lines.push(...renderAttention(plan, false));
+        lines.push(...renderAttention(plan, ctx, false));
     }
     const body = lines.join('\n') + '\n';
     if (body.length <= ISSUE_SUMMARY_LIMIT) return body;

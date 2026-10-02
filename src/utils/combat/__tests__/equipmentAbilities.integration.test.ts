@@ -6179,14 +6179,13 @@ describe('Tasks 1.5 + 3.3 — Voidfire Catalyst: detonationDamage + bombSplashDa
 });
 
 // ---------------------------------------------------------------------------
-// Insidiousness: one roll per attack, applied to every debuffed enemy (all-or-none)
+// Insidiousness: one roll per skill cast, applied to every debuffed enemy (all-or-none)
 // ---------------------------------------------------------------------------
 //
 // A Curator-shaped carrier (AoE damage + two inflicted debuffs, `all` / Pattern-All) wearing
-// legendary Insidiousness attacks two enemies. Four debuff applications per turn used to mean
-// four 21% rolls that all landed on enemy slot 1; now it is ONE roll whose hit lands on each
-// enemy the debuff actually reached.
-describe('Insidiousness integration — per-attack roll, all debuffed enemies', () => {
+// legendary Insidiousness attacks two enemies. Its four debuff applications per cast share ONE
+// roll, and a successful roll hits each enemy the debuffs actually reached, once.
+describe('Insidiousness integration — per-cast roll, all debuffed enemies', () => {
     const IMPLANT_ID = 'insid-legendary';
 
     const insidPiece = makePiece({
@@ -6370,7 +6369,7 @@ describe('Insidiousness integration — per-attack roll, all debuffed enemies', 
 
     afterEach(() => resetRateGateRng());
 
-    it('proc passes → EVERY debuffed enemy takes exactly one Insidiousness hit per attack', () => {
+    it('proc passes → EVERY debuffed enemy takes exactly one Insidiousness hit per cast', () => {
         setKeyedRng(() => 0); // every keyed gate fires: debuffs land, the 21% proc passes
         const procs = insidiousnessProcs(run(true, [0, 0]));
 

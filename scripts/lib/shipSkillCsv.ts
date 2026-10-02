@@ -85,3 +85,11 @@ export function loadShipSkillRecords(csvPath: string = CSV_PATH): ShipSkillRecor
     }
     return out;
 }
+
+// Standard CSV escaping; SQL NULL stays a literal unquoted `null` (the format
+// the existing file uses and its consumers filter on).
+export function toCsvField(value: string | number | null): string {
+    if (value === null || value === undefined) return 'null';
+    const s = String(value);
+    return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}

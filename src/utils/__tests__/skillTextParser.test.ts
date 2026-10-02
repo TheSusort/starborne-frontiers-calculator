@@ -2711,6 +2711,23 @@ describe('parseChargeGain ally-crit trigger (Hermes)', () => {
             derivable: false,
         });
     });
+
+    // The ownerless "to the Charged Skill" disqualifies a charge only behind a GRANT verb
+    // (adds/grants/gives — ALLY_CHARGE_GRANT_RE's set); a "gains" with the same wording is
+    // still a self gain.
+    it('"gains 1 charge to the Charged Skill" stays a self gain', () => {
+        expect(
+            parseChargeGain('This Unit <unit-aid>gains 1 charge</unit-aid> to the Charged Skill.')
+        ).toEqual({ amount: 1, condition: 'always', derivable: true });
+    });
+
+    it('our Hermes charged "adds 1 charge to the Charged Skill" is not a self gain', () => {
+        expect(
+            parseChargeGain(
+                'This Unit <unit-damage>repairs 37%</unit-damage> of its Max HP and <unit-aid>adds 1 charge</unit-aid> to the Charged Skill.<br /><br />If the target has less than 40% HP, it grants <unit-skill>Cheat Death</unit-skill>.'
+            )
+        ).toBeNull();
+    });
 });
 
 describe('parseExtraAction', () => {

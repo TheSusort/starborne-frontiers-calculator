@@ -1,6 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { collectFindings, csvAvailable, ungatedFinding } from '../../../../scripts/auditSkills';
-import { Ability } from '../../../types/abilities';
+import {
+    collectFindings,
+    csvAvailable,
+    findingsForShip,
+    ruleById,
+    ungatedFinding,
+} from '../../../../scripts/auditSkills';
+import { Ability, Condition, ScalingRule } from '../../../types/abilities';
 
 /**
  * Regression guard for parser coverage. Runs the skill audit over docs/ship-skills.csv and
@@ -71,9 +77,9 @@ describe('ungatedFinding damage-reaction parity', () => {
 });
 
 /**
- * HP-threshold parity (Phase 4c PR 3): "when HP drops/falls below N%" CROSSING grants
+ * HP-threshold parity: "when HP drops/falls below N%" CROSSING grants
  * (Tycho/Shelter/Los/Kafa/Redeemer) ride the on-hp-threshold-crossed trigger and Hermes's
- * "If the target has less than N% HP" Cheat-Death grant carries a derivable target-HP gate —
+ * "If the target has less than N% HP" Cheat-Death grant carries a per-recipient HP filter —
  * both parser-modeled, so an effect from such a clause that parses UNGATED on-cast is a parser
  * regression the audit must FLAG via the detectHpCrossingTrigger / detectTargetHpGate parity
  * guards. STATIC "while its HP is below N%" gates (no drops/falls verb) stay skipped.
@@ -111,5 +117,105 @@ describe('ungatedFinding hp-threshold parity', () => {
         // through to the INTENTIONAL_REACTIVE_RE "hp is below" skip rather than flagging.
         const plain = 'When its HP is below 50%, this Unit gains Attack Up III.';
         expect(ungatedFinding([ungatedBuff('Attack Up III')], plain)).toBeNull();
+    });
+});
+
+describe('instead-replacement rule', () => {
+    const gallant =
+        'This Unit deals <unit-damage>115% damage</unit-damage>, if the target is a defender it instead deals <unit-damage>155% damage</unit-damage>.';
+    const rulesFor = (text: string) =>
+        findingsForShip({ name: 'Probe', slots: [{ slot: 'active', text }] }).map((f) => f.rule);
+
+    it('accepts the defender-gated "instead deals" shape', () => {
+        expect(rulesFor(gallant)).not.toContain('instead-replacement');
+    });
+
+    it('still flags an "instead deals" clause with no modelled gate', () => {
+        const text =
+            'This Unit deals <unit-damage>115% damage</unit-damage>, if it is a full moon it instead deals <unit-damage>155% damage</unit-damage>.';
+        expect(rulesFor(text)).toContain('instead-replacement');
+    });
+
+    describe('handled predicate', () => {
+        const { handled } = ruleById('instead-replacement');
+        const damage = (conditions: Condition[], scaling?: ScalingRule): Ability => ({
+            id: 'test-damage',
+            type: 'damage',
+            target: 'enemy',
+            trigger: 'on-cast',
+            conditions,
+            ...(scaling ? { scaling } : {}),
+            config: { type: 'damage', multiplier: 115 },
+        });
+        const defenderGate: Condition = {
+            subject: 'enemy-type',
+            derivable: true,
+            requiredEnemyType: 'Defender',
+        };
+
+        it('does not accept an enemy-type gate with no replacement delta', () => {
+            expect(handled([damage([defenderGate])], '')).toBe(false);
+        });
+
+        it('accepts an enemy-type gate carrying the replacement delta as scaling', () => {
+            expect(handled([damage([defenderGate], { conditionIndex: 0, perUnit: 40 })], '')).toBe(
+                true
+            );
+        });
+
+        it("accepts Panon's negated-base plus anyOf-replacement pair", () => {
+            const negatedBase = damage([
+                {
+                    subject: 'self-buff',
+                    derivable: true,
+                    countComparator: 'eq',
+                    countThreshold: 0,
+                },
+            ]);
+            const replacement = damage([
+                { subject: 'self-buff', derivable: true, buffName: 'Taunt', anyOf: true },
+                { subject: 'self-buff', derivable: true, buffName: 'Provoke', anyOf: true },
+            ]);
+            expect(handled([negatedBase, replacement], '')).toBe(true);
+        });
+    });
+});
+
+describe('findingsForShip reads catalogue status-name spellings', () => {
+    // The parse names the buff by its engine name (Tianchao Precision II); the clause lookup must
+    // find that name in the text, so the text is canonicalised before the audit reads it.
+    const text =
+        'This Unit deals <unit-damage>100% damage</unit-damage>. This Unit gains <unit-skill>Tianchen Precision II</unit-skill> for 2 turns while an ally is in Stealth. It gains <unit-skill>Attack Up I</unit-skill> every turn.';
+
+    it("scopes an ungated finding to the aliased buff's own clause", () => {
+        const findings = findingsForShip({
+            name: 'AuditAliasShip',
+            slots: [{ slot: 'active', text }],
+        });
+        expect(findings).toEqual([
+            expect.objectContaining({
+                rule: 'ungated-effect-with-trigger',
+                clause: 'This Unit gains Tianchao Precision II for 2 turns while an ally is in Stealth.',
+            }),
+        ]);
+    });
+});
+
+describe('base-damage audit rule keyword', () => {
+    const rules = (text: string) =>
+        findingsForShip({ name: 'RuleProbe', slots: [{ slot: 'passive1', text }] }).map(
+            (f) => f.rule
+        );
+
+    it('does not read "N% damage reduction" as base damage', () => {
+        expect(rules('This Unit has 35% damage reduction from critical hits.')).not.toContain(
+            'base-damage'
+        );
+    });
+
+    it('still flags a real damage clause the parse does not handle', () => {
+        expect(rules('Something unparseable deals 120% damage to the target.')).toContain(
+            'base-damage'
+        );
     });
 });

@@ -53,6 +53,8 @@
         "audit:gated-buffs": "tsx scripts/auditGatedBuffs.ts",
         "fetch:ship-skills": "tsx scripts/fetch-ship-skills.ts",
         "fetch:ship-data": "tsx scripts/fetch-ship-data.ts",
+        "build:catalogue-skills": "tsx scripts/build-catalogue-skills-csv.ts",
+        "diff:skill-parse": "tsx scripts/diff-skill-parse.ts",
         "sync:catalogue": "tsx scripts/sync-unit-catalogue.ts",
         "restore:ship-templates": "tsx scripts/restore-ship-templates.ts",
         "audit": "node scripts/audit.mjs",

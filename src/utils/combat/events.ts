@@ -1,4 +1,4 @@
-import { AbilityType, ControlEffect } from '../../types/abilities';
+import { AbilityType, ControlEffect, SkillSlot } from '../../types/abilities';
 import { DoTType } from '../../types/calculator';
 
 /**
@@ -139,15 +139,23 @@ export type CombatEvent =
     /** Discrete infliction events ONLY — emitted once at the round of application.
      *  `sourceId` is the actor that inflicted the debuff (e.g. 'attacker' or a team
      *  actor id). NOT emitted for recurring/aura per-round re-applications.
-     *  `viaDebuffInflictedReaction`: set when this debuff was applied BY an
-     *  `on-debuff-inflicted`-triggered ability (Warden's Out. Damage Down II). The
-     *  `on-debuff-inflicted` listener ignores such events so a debuff-inflicted reaction whose
-     *  own follow-up is itself a debuff cannot re-trigger ITSELF (an unbounded self-chain that
-     *  would otherwise hit MAX_INTENT_GENERATIONS). Debuffs from OTHER reactive triggers
-     *  (on-crit/on-attacked) carry no flag and still feed on-debuff-inflicted as before.
+     *  `debuffInflictedReactionChain`: the ids of the `on-debuff-inflicted`-triggered
+     *  abilities whose reactions produced this debuff, oldest first — set only when the debuff
+     *  was applied BY such an ability (Warden's Out. Damage Down II, Ripper's catalogue Inferno
+     *  II on the `dot-applied` twin). The `on-debuff-inflicted` listener skips an ability whose
+     *  OWN id is in the chain, so a reaction whose follow-up is itself a debuff cannot
+     *  re-trigger itself, directly or through another of the owner's reactions (an unbounded
+     *  chain would otherwise hit MAX_INTENT_GENERATIONS). Every OTHER on-debuff-inflicted
+     *  ability of the owner still sees the debuff: the Insidiousness implant reacts to Warden's
+     *  reactive Out. Damage Down II as to a cast-inflicted one, and rolls for it separately
+     *  from the cast (`Ability.procScope` `'per-cast'`). Each ability in a chain fires at most
+     *  once, so chain LENGTH is bounded by the owner's count of such abilities;
+     *  MAX_INTENT_GENERATIONS bounds only the depth of a drain, not the number of firings.
+     *  Debuffs from OTHER reactive triggers (on-crit/on-attacked) carry no chain, so the chain
+     *  guard lets every on-debuff-inflicted ability see them.
      *  `viaAllyDebuffInflictedReaction`: the sibling brand for `on-ally-debuff-inflicted`
      *  reactions — set when this debuff was applied by an ability whose OWN trigger is
-     *  `on-ally-debuff-inflicted`. A separate field from `viaDebuffInflictedReaction`
+     *  `on-ally-debuff-inflicted`. A separate field from `debuffInflictedReactionChain`
      *  deliberately: the two triggers are gated by different owners (`on-debuff-inflicted` is
      *  self-scoped; `on-ally-debuff-inflicted` is same-side-scoped, owner included — see the
      *  ruling in triggers.ts's trigger doc block), so a shared flag would make one trigger's
@@ -160,7 +168,7 @@ export type CombatEvent =
      *  `on-debuff-inflicted` and an `on-ally-debuff-inflicted` debuff-emitting reaction is bounded
      *  by neither brand against the other's chain — no corpus ship has that shape.
      *  `viaOtherAllyDebuffInflictedReaction`: the brand for `on-other-ally-debuff-inflicted`
-     *  reactions (Provider's "another ally" — owner-EXCLUDED, unlike the two brands above). That
+     *  reactions (Provider's "another ally" — owner-EXCLUDED, unlike the two fields above). That
      *  listener ignores this brand SOURCE-AGNOSTICALLY (any event carrying it, regardless of
      *  `sourceId`) rather than only when `sourceId === ownerId`: an owner-excluded trigger's
      *  `sourceId` can never equal `ownerId` (the same-side-ally guard excludes the owner
@@ -173,15 +181,24 @@ export type CombatEvent =
           targetId: string;
           round: number;
           buffName: string;
-          /** #590 R3: the landing mechanic this debuff used — `'apply'` lands unconditionally
-           *  (no hacking-vs-security roll; Concentrate Fire, Provoke), `'inflict'` rolled for it.
-           *  Undefined only for a corpus shape that predates this field (treated as rolled — the
-           *  strictly narrower gate at `on-other-ally-debuff-inflicted` is the only consumer that
-           *  cares). `on-other-ally-debuff-inflicted` (Provider — #590) does NOT count an 'apply':
-           *  an applied debuff is not "inflicted" by the game's own wording. `on-debuff-inflicted`
-           *  and `on-ally-debuff-inflicted` are untouched and still count both kinds. */
+          /** The verb this debuff's source text states, which is also its landing mechanic —
+           *  `'apply'` lands unconditionally (no hacking-vs-security roll; Concentrate Fire,
+           *  Provoke), `'inflict'` rolled for it. Undefined only for a corpus shape that predates
+           *  this field (an inflict). Read by the debuff-inflicted trigger family's
+           *  `triggerApplicationFilter` — `passesApplicationFilter`'s doc in triggers.ts. */
           application?: 'inflict' | 'apply';
-          viaDebuffInflictedReaction?: true;
+          /** The slot of the ability that inflicted this debuff: the firing slot on the cast
+           *  path, the reactive ability's own slot on a reaction (implants and gear ride the
+           *  passive slot). Read by `on-debuff-inflicted`'s `triggerSourceSlotFilter` (Ripper's
+           *  "with its active or charged skills"). Optional so hand-built fixture events may omit
+           *  it; an unstamped event never satisfies a present filter. */
+          sourceSlot?: SkillSlot;
+          debuffInflictedReactionChain?: readonly string[];
+          /** Set on every debuff a REACTION lands (any trigger): the id of that one reaction
+           *  firing, shared by everything the firing lands and distinct from every other firing in
+           *  the combat. Absent on a cast's own inflictions. `procScope:'per-cast'`
+           *  (Insidiousness) gives each firing its own roll. */
+          reactionFiringId?: number;
           viaAllyDebuffInflictedReaction?: true;
           viaOtherAllyDebuffInflictedReaction?: true;
       } & ReactiveStamp)
@@ -233,9 +250,23 @@ export type CombatEvent =
            *  applied line show the tier numeral (corrosion/inferno) via dotTierNumeral. Always set
            *  by the engine; optional so hand-crafted test emits may omit it (→ no numeral shown). */
           tier?: number;
+          /** The verb the DoT's source text states, from its config's `application` — `'apply'`
+           *  for the Burner gear set's "Applies Inferno", which landed on the affinity check alone
+           *  (no hacking roll). Absent → an inflict. Read by the debuff-inflicted trigger family's
+           *  `triggerApplicationFilter` (`passesApplicationFilter` in triggers.ts). */
+          application?: 'inflict' | 'apply';
           /** The applying cast had >= 1 critting hit (per-hit crits). Present only when
            *  true. Executor-applied dots omit it (drain-time has no crit outcome). */
           viaCrit?: boolean;
+          /** The inflicting ability's slot — see the `debuff-applied` sibling's `sourceSlot`. */
+          sourceSlot?: SkillSlot;
+          /** The `debuff-applied` sibling's `on-debuff-inflicted` reaction chain — see that
+           *  field's doc. Set when this DoT was applied by an ability whose OWN trigger is
+           *  `on-debuff-inflicted`, so that listener's `dot-applied` arm skips a reaction already in
+           *  the chain exactly as its `debuff-applied` arm does. */
+          debuffInflictedReactionChain?: readonly string[];
+          /** The `debuff-applied` sibling's `reactionFiringId` — see that field's doc. */
+          reactionFiringId?: number;
           /** The `debuff-applied` sibling's self-chain brand — see that field's doc. Set when
            *  this DoT was applied by an ability whose OWN trigger is `on-ally-debuff-inflicted`,
            *  so the `on-ally-debuff-inflicted` listener's `dot-applied` arm can skip its own

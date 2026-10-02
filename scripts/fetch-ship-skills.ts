@@ -12,6 +12,7 @@
 import 'dotenv/config';
 import { writeFileSync } from 'fs';
 import { createClient } from '@supabase/supabase-js';
+import { toCsvField } from './lib/shipSkillCsv';
 
 const OUT_PATH = 'docs/ship-skills.csv';
 
@@ -39,14 +40,6 @@ if (!supabaseUrl || !supabaseKey) {
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 type TemplateRow = Record<(typeof COLUMNS)[number], string | number | null>;
-
-// Standard CSV escaping; SQL NULL stays a literal unquoted `null` (the format
-// the existing file uses and its consumers filter on).
-function toCsvField(value: string | number | null): string {
-    if (value === null || value === undefined) return 'null';
-    const s = String(value);
-    return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-}
 
 async function main(): Promise<void> {
     console.log('Fetching ship_templates from Supabase...');

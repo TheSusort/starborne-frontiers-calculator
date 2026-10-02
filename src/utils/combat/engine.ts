@@ -15,10 +15,12 @@ import {
 } from '../../constants/toxicOverflow';
 import {
     Ability,
+    AbilityConfig,
     AbilityTarget,
     Condition,
     IncomingHitContext,
     ShipSkills,
+    SkillSlot,
 } from '../../types/abilities';
 import type { Position } from '../../types/encounters';
 import type { AffinityName } from '../../types/ship';
@@ -209,6 +211,38 @@ export function foldSpeedBuffPct(
     return foldActorBuffTotals(statusEngine, selfBuffLookup, actorId).speedBuff;
 }
 
+/**
+ * Which status store a cast buff/debuff ability registers into — the ONE classifier
+ * `registerActorAbilityStatuses` routes on (exported so census tests ask the engine instead of
+ * re-deriving it). Rules, in precedence order:
+ *  - a hit-counted grant ("Barrier for 1 hit") is always `timed` — the aura and accumulating
+ *    stores are unreachable by `consumeStatusHit`;
+ *  - `stackTrigger` + `isStackable` → `accumulating`;
+ *  - a Cheat-Death-family grant from a FIRING slot is `timed` (a cast-path persistent grant,
+ *    duration Infinity — `castPathCheatDeath`);
+ *  - a `recurring`/absent duration → `aura`; a finite duration → `timed`.
+ */
+export function classifyCastStatus(
+    slot: SkillSlot,
+    cfg: Extract<AbilityConfig, { type: 'buff' | 'debuff' }>
+): { kind: 'accumulating' | 'aura' | 'timed'; castPathCheatDeath: boolean } {
+    const hitCounted = cfg.type === 'buff' && cfg.hits !== undefined;
+    const accumulating = !hitCounted && !!cfg.stackTrigger && !!cfg.isStackable;
+    const castPathCheatDeath =
+        !accumulating &&
+        CHEAT_DEATH_BUFFS.has(cfg.buffName) &&
+        (slot === 'active' || slot === 'charged');
+    const isAura =
+        !accumulating &&
+        !castPathCheatDeath &&
+        !hitCounted &&
+        (cfg.duration === 'recurring' || cfg.duration === undefined);
+    return {
+        kind: accumulating ? 'accumulating' : isAura ? 'aura' : 'timed',
+        castPathCheatDeath,
+    };
+}
+
 // Classify ONE actor's cast buff/debuff abilities into timed/aura/accumulating statuses
 // and register them under the correct status-engine recipients. Returns the timed-by-slot
 // lists (applied when that caster's slot fires).
@@ -246,7 +280,7 @@ function registerActorAbilityStatuses(
     // actors the engine passes the enemy team's ids so cross-enemy buffs land on the enemy side.
     playerIds: string[],
     // Heal target id (healing mode) — the recipient a single-`ally`/`lowest-hp-ally`
-    // Cheat-Death-family firing-slot grant narrows to (Hermes shape). Absent (DPS mode / no heal
+    // Cheat-Death-family firing-slot grant narrows to (an authored-kit shape). Absent (DPS mode / no heal
     // target): the `'ally'` carve-out falls back to [ownerId], but the `'lowest-hp-ally'`
     // carve-out falls back to [] — the owner is the one answer that selector forbids (see the
     // fence's own comment at the recipients computation below). Irrelevant for every
@@ -353,37 +387,29 @@ function registerActorAbilityStatuses(
             // combines `hits` with `stackTrigger + isStackable` today; if one ever does, the hit
             // lifecycle wins and the stack accrual is what gets dropped, loudly here rather than
             // silently at the spend site.
-            const accumulating = !hitCounted && !!cfg.stackTrigger && cfg.isStackable;
+            const classified = classifyCastStatus(slot.slot, cfg);
+            const accumulating = classified.kind === 'accumulating';
             // Cheat-Death-family grants from a FIRING slot (Hermes/Hayyan charged skills) are
             // cast-path persistent grants, NOT always-on auras: they apply when the slot fires
-            // (per-slot timed loop in playerTurn, gated by conditionsMet at cast time) and never
-            // expire (duration Infinity; the intercept consumes them via cheatDeathConsumed).
-            // Scoped to CHEAT_DEATH_BUFFS — other firing-slot recurring buffs (Panon, Sansi,
-            // Sentinel, Oleander…) keep the aura model (documented in coverage §5).
-            const castPathCheatDeath =
-                !accumulating &&
-                CHEAT_DEATH_BUFFS.has(cfg.buffName) &&
-                (slot.slot === 'active' || slot.slot === 'charged');
+            // (per-slot timed loop in playerTurn, gated by conditionsMet at cast time and by any
+            // per-recipient `recipientFilter`) and never expire (duration Infinity; the intercept
+            // consumes them via cheatDeathConsumed). Scoped to CHEAT_DEATH_BUFFS — other
+            // firing-slot recurring buffs (Panon, Sansi, Sentinel, Oleander…) keep the aura model
+            // (documented in coverage §5).
+            const castPathCheatDeath = classified.castPathCheatDeath;
             // Player-side recipients (self vs ally/all-allies). Enemy-side statuses ignore this
             // (recipients are only consulted on the self side). Self → caster only; ally/all-allies
             // → every player actor (fixed source order). `playerIds` already includes the caster.
-            // CARVE-OUT (castPathCheatDeath only): a single-`ally` grant narrows to the heal target
-            // (Hermes "grants Cheat Death to the lowest-HP ally"), fallback [ownerId] when no heal
-            // target; `all-allies` (Hayyan) keeps every player. The global ally → all-players rule
-            // for every OTHER cast-path buff is UNCHANGED.
+            // CARVE-OUT (castPathCheatDeath only): a single-`ally` grant narrows to the heal target,
+            // fallback [ownerId] when no heal target; `all-allies` keeps every player (Hayyan, and
+            // Hermes, whose per-recipient HP test rides `recipientFilter`). The global ally →
+            // all-players rule for every OTHER cast-path buff is UNCHANGED.
             //
             // `'lowest-hp-ally'` joins BOTH ally arms. On the CARVE-OUT arm the match is
-            // purely DEFENSIVE and is expected to stay dead — do not read it as a Hermes fix.
-            // Measured against the corpus (`docs/ship-skills.csv`, 2026-08-20): the only
-            // firing-slot Cheat Death grants are Hermes (charged, `'ally'`) and Hayyan (charged,
-            // `'all-allies'`); Tycho's and Yazid's are passive-slot, which `castPathCheatDeath`
-            // already excludes. Hermes's charged text is "This Unit repairs 37% of its Max HP and
-            // adds 1 charge to the Charged Skill. / If the target has less than 40% HP, it grants
-            // Cheat Death." — it names NO ally selector (no "most missing health" / "lowest
-            // current health" / "the other ally" in any of its five rows), so the parser
-            // cannot turn it into `'lowest-hp-ally'`. `castPathCheatDeath` is keyed on the BUFF
-            // NAME, so nothing else can reach this arm with the variant either. The match exists
-            // so the two single-ally flavours cannot diverge if a future kit does land here.
+            // purely DEFENSIVE: the parser cannot produce a `'lowest-hp-ally'` Cheat Death (no
+            // firing-slot Cheat Death text names an ally selector), and `castPathCheatDeath` is
+            // keyed on the BUFF NAME, so nothing else can reach this arm with the variant either.
+            // The match exists so the two single-ally flavours cannot diverge if a kit lands here.
             //
             // NO OWNER FALLBACK FOR THE SELECTOR. The `'ally'` flavour names the heal ANCHOR, and
             // `[ownerId]` is a sane stand-in for it when there is no anchor (DPS mode —
@@ -447,11 +473,7 @@ function registerActorAbilityStatuses(
             // its gate and has no consumable charge, so a durationless "Barrier for 1 hit" would
             // otherwise be permanent for as long as its gate held. (`hitCounted` is computed with
             // `accumulating` above — the other classification it has to lose to.)
-            const isAura =
-                !accumulating &&
-                !castPathCheatDeath &&
-                !hitCounted &&
-                (cfg.duration === 'recurring' || cfg.duration === undefined);
+            const isAura = classified.kind === 'aura';
             const payload: AbilityStatusPayload = {
                 buffName: cfg.buffName,
                 stacks: cfg.stacks,
@@ -482,6 +504,10 @@ function registerActorAbilityStatuses(
                 // here — this function runs at actor construction. Attached only when the ability
                 // carries one; every other ship's status object omits the key entirely.
                 ...(ability.factionFilter ? { factionFilter: ability.factionFilter } : {}),
+                // Recipient STATE filter (held status / HP), narrowed at application time for the
+                // same reason as factionFilter: it is a per-recipient LIVE reading. Attached only
+                // when the ability carries one.
+                ...(ability.recipientFilter ? { recipientFilter: ability.recipientFilter } : {}),
                 // Board-adjacency scope, same shape and same reason as factionFilter above: the
                 // roster-wide `recipients` is narrowed to LIVING board-neighbours at application
                 // time, which is the only place a live roster exists. Attached only for
@@ -2646,7 +2672,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         'attacker',
         playerIds,
         // Heal target (healing mode) — narrows a single-`ally` Cheat-Death-family firing-slot
-        // grant to the tank (Hermes). Undefined in DPS mode → falls back to the caster.
+        // grant to the tank. Undefined in DPS mode → falls back to the caster.
         input.healTargetId,
         factionOf,
         staticAdjacentAllyIdsFor(playerIds)
@@ -3794,12 +3820,12 @@ export function runCombat(rawInput: CombatEngineInput): {
     // `${ownerId}:${abilityId}`; each gate is a RateGate that fires with the ability's
     // procChance probability on each draw (random, like the crit/landing gates).
     const procChanceGates = new Map<string, RateGate>();
-    // Per-SUB-ATTACK verdict cache for procScope:'per-attack' proc abilities (Insidiousness).
-    // Keyed `${ownerId}:${abilityId}:${subAttackIndex}` — the sub-attack index is load-bearing:
-    // keyed on `${ownerId}:${abilityId}` alone the cache would be per-TURN, and a hits:N skill
-    // would replay sub-attack #1's verdict for all N. Cleared at each actor turn-start beside
-    // reactionFiredThisAttack so a later attack rolls afresh.
+    // Verdict cache for scoped proc abilities: procScope:'per-attack' keys it per sub-attack,
+    // procScope:'per-cast' (Insidiousness) per roll and per cap — see each gate in triggers.ts.
+    // Cleared at each actor turn-start beside reactionFiredThisAttack so a later turn rolls afresh.
     const procDecisionThisSubAttack = new Map<string, boolean>();
+    // Numbers every reactive-intent resolution (`IntentExecContext.reactionFiringId`).
+    let reactionFiringSeq = 0;
     // Dedicated crit-gate for counterattacks — a SEPARATE map, never any existing per-actor
     // crit gate, so it only ever creates keys for counter-carriers and draws no numbers from
     // another actor's stream.
@@ -10274,6 +10300,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                         // emission with this so a later builder nests the reaction under the
                         // triggering turn, not the reactor's own turn.
                         duringTurnOf: actingActorId,
+                        reactionFiringId: ++reactionFiringSeq,
                         corrosionEntries,
                         infernoEntries,
                         genericDoTEntries,
@@ -10341,8 +10368,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                         // Combat-lifetime proc-chance gates: equipment reactive procs
                         // that carry a procChance fire at their stated rate via this accumulator.
                         procChanceGates,
-                        // Per-attack proc verdict cache (Insidiousness): one roll per attack,
-                        // replayed for every debuff event that attack inflicts.
+                        // Scoped proc verdict cache (Insidiousness: one roll per cast, plus one
+                        // per reaction firing that cast sets off).
                         procDecisionThisSubAttack,
                         // Live lowest-speed-ally gate. UNCONDITIONAL — with a lone attacker the set
                         // is {attacker}, so it resolves true.
@@ -10979,10 +11006,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // Reset the self-rider once-per-attack guard beside the counter guard so a
                 // later attack re-applies Hermes's Everliving Regeneration / charge.
                 reactionFiredThisAttack.clear();
-                // Insidiousness: drop the per-sub-attack proc verdicts so each sub-attack of this
-                // turn draws its own single roll (and every debuff ONE sub-attack inflicts shares
-                // that sub-attack's verdict). Keys carry the sub-attack index, so this clear is
-                // what stops turn N+1's sub-attack 0 reading turn N's verdict.
+                // Drop the scoped proc verdicts so this turn rolls afresh (Insidiousness: this
+                // turn's cast gets its own roll and its own one-success cap).
                 procDecisionThisSubAttack.clear();
 
                 // Set the active carrier for the own-turn self-buff reprieve: a TIMED self-buff

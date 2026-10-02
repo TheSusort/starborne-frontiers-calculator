@@ -17,14 +17,15 @@ export const flagValue = (argv: string[], flag: string): string | null => {
     return value;
 };
 
-/** Parses a comma-separated id list (e.g. `--ids A, B`), trimming whitespace and dropping empty
- *  entries. Throws rather than returning an empty list, since an empty id filter would widen a
- *  restore's scope from "these ids" to "every row". */
-export const parseIds = (raw: string): string[] => {
+/** Parses a comma-separated list (e.g. `--ids A, B`), trimming whitespace around each entry and
+ *  dropping empty entries. Throws rather than returning an empty list, since an empty id filter
+ *  would widen a restore's scope from "these ids" to "every row". `flag` names the flag in the
+ *  error. */
+export const parseIds = (raw: string, flag = '--ids'): string[] => {
     const ids = raw
         .split(',')
         .map((s) => s.trim())
         .filter(Boolean);
-    if (ids.length === 0) throw new Error('--ids needs at least one non-empty id');
+    if (ids.length === 0) throw new Error(`${flag} needs at least one non-empty entry`);
     return ids;
 };

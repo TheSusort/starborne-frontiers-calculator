@@ -3,14 +3,20 @@
  * Syncs ship_templates from the official unit catalogue.
  *
  * Usage: npm run sync:catalogue [-- --write] [--stats-only] [--allow-bulk-text] [--report <file>] [--issue-body <file>]
- *        [--outcome <file>] [--backup-dir <dir>]
+ *        [--outcome <file>] [--backup-dir <dir>] [--accept-structural <ship,ship,...>]
  *        npm run sync:catalogue -- --print-cache-key
  *
  * Dry run by default (`--dry-run` is accepted and changes nothing). With --write it snapshots the whole table to --backup-dir BEFORE the first
  * write (no snapshot, no write), then applies the plan from scripts/lib/catalogueSyncPlan.ts.
  * Restore a snapshot with scripts/restore-ship-templates.ts.
  *
+ * Skill text passes two gates (scripts/lib/skillTextGate.ts): no new `audit:skills` finding, and no
+ * ability lost, gained, retargeted or retriggered in the parse.
+ *
  * --allow-bulk-text lifts the bulk-text hold (see `planSync`); the scheduled workflow never passes it.
+ * --accept-structural lets the named ships' parse changes through the structural gate (the audit
+ * gate still applies); the report lists each one under "Accepted structural changes". For a run
+ * after the user has ruled on every listed change; the scheduled workflow never passes it.
  * --report writes the full report; --issue-body writes the short summary meant for a GitHub issue.
  *
  * Needs SUPABASE_SERVICE_ROLE_KEY (ship_templates is admin-write).
@@ -21,12 +27,14 @@ import { cacheKey, fetchCatalogueIndex, fetchCatalogueUnits } from './lib/catalo
 import { toCatalogueTemplate } from './lib/catalogueMapping';
 import { diffCatalogue, type TemplateRow } from './lib/catalogueDiff';
 import { planSync } from './lib/catalogueSyncPlan';
-import { auditGate } from './lib/skillTextGate';
+import { syncGate } from './lib/skillTextGate';
 import { renderIssueSummary, renderReport, syncStatus, type ReportContext, type SyncStatus } from './lib/syncReport';
 import { backupFileName, buildBackup } from './lib/templateBackup';
-import { flagValue } from './lib/cliArgs';
+import { flagValue, parseIds } from './lib/cliArgs';
 
 const main = async (): Promise<SyncStatus> => {
+    const acceptRaw = flagValue(process.argv, '--accept-structural');
+    const acceptStructural = acceptRaw ? parseIds(acceptRaw, '--accept-structural') : [];
     const index = await fetchCatalogueIndex();
     if (process.argv.includes('--print-cache-key')) {
         console.log(`key=${cacheKey(index.manifest)}`);
@@ -45,7 +53,8 @@ const main = async (): Promise<SyncStatus> => {
     const units = (await fetchCatalogueUnits(index.slugs)).map(toCatalogueTemplate);
     const raw = await db.selectAll<Record<string, unknown>>('ship_templates', 'select=*&order=id.asc');
     const templates = raw as unknown as TemplateRow[];
-    const plan = planSync(diffCatalogue(units, templates), templates, auditGate, {
+    const gate = syncGate(acceptStructural);
+    const plan = planSync(diffCatalogue(units, templates), templates, gate, {
         textWrites: !process.argv.includes('--stats-only'),
         allowBulkText: process.argv.includes('--allow-bulk-text'),
     });
@@ -79,7 +88,13 @@ const main = async (): Promise<SyncStatus> => {
     }
 
     const status = syncStatus(plan, writeFailures);
-    const reportCtx: ReportContext = { manifest: index.manifest, mode: write ? 'write' : 'dry-run', backupPath, writeFailures };
+    const reportCtx: ReportContext = {
+        manifest: index.manifest,
+        mode: write ? 'write' : 'dry-run',
+        backupPath,
+        writeFailures,
+        acceptStructural,
+    };
     const report = renderReport(plan, reportCtx);
     console.log(report);
     if (reportPath) writeFileSync(reportPath, report);
