@@ -136,18 +136,6 @@ describe('debuff-inflicted trigger family — triggerApplicationFilter tripwire'
         expect(violations).toEqual([]);
     });
 
-    it.skipIf(!csvAvailable(CATALOGUE_CSV))(
-        'the catalogue corpus: every verb-bearing family ability has triggerApplicationFilter set',
-        () => {
-            const { violations, checked } = censusMissingFilter(
-                CATALOGUE_CSV,
-                CATALOGUE_NO_VERB_ALLOWLIST
-            );
-            expect(checked).toBeGreaterThan(0);
-            expect(violations).toEqual([]);
-        }
-    );
-
     it('the NO_VERB_ALLOWLIST members still resolve to the family (not silently falling off it)', () => {
         for (const name of NO_VERB_ALLOWLIST) {
             let sawFamilyTrigger = false;
@@ -165,6 +153,25 @@ describe('debuff-inflicted trigger family — triggerApplicationFilter tripwire'
         }
     });
 });
+
+// The catalogue CSV is generated on the catalogue-adaptation branch only; where it is absent this
+// block is SKIPPED, by name, rather than passing on no data.
+const CATALOGUE_PRESENT = csvAvailable(CATALOGUE_CSV);
+describe.skipIf(!CATALOGUE_PRESENT)(
+    `catalogue corpus — triggerApplicationFilter tripwire${
+        CATALOGUE_PRESENT ? '' : ` (SKIPPED: ${CATALOGUE_CSV} is absent from this checkout)`
+    }`,
+    () => {
+        it('every verb-bearing family ability has triggerApplicationFilter set', () => {
+            const { violations, checked } = censusMissingFilter(
+                CATALOGUE_CSV,
+                CATALOGUE_NO_VERB_ALLOWLIST
+            );
+            expect(checked).toBeGreaterThan(0);
+            expect(violations).toEqual([]);
+        });
+    }
+);
 
 // ---------------------------------------------------------------------------------------------
 // Equipment: implants and gear sets carry the verb their own description states.

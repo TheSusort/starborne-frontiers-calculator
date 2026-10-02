@@ -882,10 +882,13 @@ export type AbilityConfig =
           tier: number;
           stacks: number;
           duration: number;
-          /** The landing verb the DoT's source text states, read ONLY by the debuff-inflicted
-           *  trigger family's `triggerApplicationFilter` (stamped on `dot-applied`) — the Burner
-           *  gear set's "Applies Inferno 1" sets `'apply'`. It does NOT change how the DoT lands:
-           *  every DoT draws its landing roll whatever this says. Absent → an inflict. */
+          /** The landing verb the DoT's source text states — the Burner gear set's "Applies
+           *  Inferno 1" sets `'apply'`; absent → an inflict. It decides two things, exactly as a
+           *  debuff's `application` does: how a REACTIVE DoT lands (`'apply'` = the affinity check
+           *  only, no hacking-vs-security roll — the reactive executor's
+           *  `landsTimedEnemyApplication` call in triggers.ts), and which debuff-inflicted-family
+           *  reactions see it (stamped on `dot-applied`; `passesApplicationFilter`). The cast-path
+           *  DoT landing does not read it: no corpus cast DoT says "applies". */
           application?: 'inflict' | 'apply';
       }
     // SP-F F3 (Lingshe charged skill): shrinks every living enemy's PendingBomb.countdown by

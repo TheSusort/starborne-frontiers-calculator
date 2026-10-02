@@ -251,9 +251,9 @@ export type CombatEvent =
            *  by the engine; optional so hand-crafted test emits may omit it (→ no numeral shown). */
           tier?: number;
           /** The verb the DoT's source text states, from its config's `application` — `'apply'`
-           *  for the Burner gear set's "Applies Inferno". A verb stamp ONLY: the DoT drew its
-           *  landing roll either way. Absent → an inflict. Read by the debuff-inflicted trigger
-           *  family's `triggerApplicationFilter` (`passesApplicationFilter` in triggers.ts). */
+           *  for the Burner gear set's "Applies Inferno", which landed on the affinity check alone
+           *  (no hacking roll). Absent → an inflict. Read by the debuff-inflicted trigger family's
+           *  `triggerApplicationFilter` (`passesApplicationFilter` in triggers.ts). */
           application?: 'inflict' | 'apply';
           /** The applying cast had >= 1 critting hit (per-hit crits). Present only when
            *  true. Executor-applied dots omit it (drain-time has no crit outcome). */

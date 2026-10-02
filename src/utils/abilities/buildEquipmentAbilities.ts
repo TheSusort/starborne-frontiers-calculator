@@ -102,8 +102,9 @@ const GEAR_SET_ABILITIES: Partial<
     // amount; it was once per TURN before that), draining through the reactive DoT executor
     // (triggers.ts) which pushes the inferno entry to the attack target (ctx.enemy.id) with
     // sourceId = owner. Re-applies on each such sub-attack (refreshes the 2-turn duration).
-    // `application: 'apply'` is the set text's own verb ("Applies Inferno 1"): reactions that
-    // say "inflicts" (and Insidiousness) do not see it — the dot config's `application` doc.
+    // `application: 'apply'` is the set text's own verb ("Applies Inferno 1"): it lands on the
+    // affinity check alone (no hacking roll), and reactions that say "inflicts" (and
+    // Insidiousness) do not see it — the dot config's `application` doc.
     BURNER: () => ({
         type: 'dot',
         target: 'enemy',

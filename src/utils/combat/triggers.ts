@@ -520,7 +520,7 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
  *  - `debuff-applied`: the debuff config's `application`, which also decides how it lands
  *    ('apply' = no hacking-vs-security roll — Provoke, Concentrate Fire, Disable).
  *  - `dot-applied`: the DoT config's `application` — set only where the text says "applies" (the
- *    Burner gear set's Inferno). It is a verb stamp only: every DoT still draws its landing roll.
+ *    Burner gear set's Inferno, which lands on the affinity check alone, like an applied debuff).
  * An event with no `application` counts as an inflict (a cast DoT — every corpus DoT clause says
  * "inflicts" — or a debuff shape predating #592, matching the `application === 'apply'` landing
  * branches in playerTurn.ts and this file's reactive debuff executor).
@@ -4985,11 +4985,15 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                     );
                     continue;
                 }
-                const liveLanding =
-                    ctx.liveDebuffLandingChanceFor?.(intent.ownerId, victimId) ??
-                    owner.liveDebuffLandingChance ??
-                    1;
-                if (!owner.debuffLandingGate(liveLanding)) continue;
+                // The timed-debuff landing path, shared — see the single-victim draw below.
+                if (
+                    !owner.landsTimedEnemyApplication(
+                        cfg.application,
+                        ctx.affinityOf?.(victimId),
+                        ctx.liveDebuffLandingChanceFor?.(intent.ownerId, victimId)
+                    )
+                )
+                    continue;
                 landDotOn(victim, victimId);
             }
             return;
@@ -5039,18 +5043,23 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
             );
             return;
         }
-        // One landing draw at execution (deterministic queue order) — the OWNER's DoT landing
-        // gate + chance (a team ship's DoT lands at ITS hacking-vs-security rate).
-        // That chance is resolved against THIS DoT's own victim (`victimId`, resolved just above),
-        // not the owner's cached turn-target chance: a reactive DoT lands on the enemy the
-        // triggering event carries, so its landing roll must be that enemy's hacking-vs-security
-        // (same rule as the sibling `debuff` branch). The `?? owner.liveDebuffLandingChance ?? 1`
-        // tail covers unit ctxs (no delegate) and a read before the owner's first turn.
-        const liveLanding =
-            ctx.liveDebuffLandingChanceFor?.(intent.ownerId, victimId) ??
-            owner.liveDebuffLandingChance ??
-            1;
-        if (!owner.debuffLandingGate(liveLanding)) return;
+        // Lands through the SAME path as a timed debuff (`owner.landsTimedEnemyApplication`, the
+        // sibling `debuff` branch's gate), keyed on the DoT's own verb (owner ruling, 2026-10-01):
+        //  - 'apply' (the Burner gear set's "Applies Inferno") — the affinity check against THIS
+        //    victim only, no hacking-vs-security roll and no draw;
+        //  - anything else — one draw of the OWNER's landing gate at THIS victim's
+        //    hacking-vs-security chance (a team ship's DoT lands at ITS rate), not the owner's
+        //    cached turn-target chance: a reactive DoT lands on the enemy the triggering event
+        //    carries. An undefined chance (unit ctxs, a read before the owner's first turn) falls
+        //    back to the owner's cached chance, then 1, inside the gate.
+        if (
+            !owner.landsTimedEnemyApplication(
+                cfg.application,
+                ctx.affinityOf?.(victimId),
+                ctx.liveDebuffLandingChanceFor?.(intent.ownerId, victimId)
+            )
+        )
+            return;
         landDotOn(victim, victimId);
         return;
     }
