@@ -2833,9 +2833,8 @@ describe('parseExtraAction', () => {
         );
         expect(r).toEqual({
             oncePerRound: true,
-            // A kill-triggered extra action is queued at Sokol's current speed like Liberator's,
-            // even though our text says "end of round" (user ruling 2026-10-02).
-            endOfRound: false,
+            // Sokol's "extra end of round action" → drains after the speed pool.
+            endOfRound: true,
             conditions: [],
             trigger: 'on-enemy-destroyed',
         });

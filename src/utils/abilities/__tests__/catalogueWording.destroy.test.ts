@@ -212,10 +212,10 @@ describe('kill/destroy vocabulary — ruled rows', () => {
     });
 });
 
-// User ruling C (2026-10-02): Sokol's extra action is inserted into the turn queue as a full
-// action at his CURRENT speed, exactly like Liberator's — not an end-of-round action. Our text
-// says "one extra end of round action upon a kill"; it parses like the catalogue's.
-describe("kill/destroy vocabulary — Sokol's extra action is queued at his speed", () => {
+// User ruling (2026-10-02): the WORDING decides an extra action's queue slot, not its trigger. A
+// plain "extra action" is inserted into the turn queue at the ship's current speed (Liberator's
+// model); an "extra end of round action" is a full turn appended to the end of the round.
+describe("kill/destroy vocabulary — the wording decides the extra action's queue slot", () => {
     const OLD =
         'This Unit gains 1 stack of <unit-skill>Blast</unit-skill> every turn and grants one extra end of round action upon a kill, once per round.';
     const NEW =
@@ -225,18 +225,23 @@ describe("kill/destroy vocabulary — Sokol's extra action is queued at his spee
     const extraAction = (text: string) =>
         parseSlot('passive', text).find((a) => a.type === 'extra-action')!;
 
-    it('Sokol passive R2, our text: a once-per-round extra action on an enemy death, at speed', () => {
-        expect(extraAction(OLD)).toMatchObject({
+    it('Sokol passive R2, catalogue text: "1 extra action" is queued at speed, like Liberator\'s', () => {
+        expect(extraAction(NEW)).toMatchObject({
             target: 'self',
             trigger: 'on-enemy-destroyed',
             conditions: [],
             config: { type: 'extra-action', oncePerRound: true, endOfRound: false },
         });
+        expect(extraAction(LIBERATOR_R2).config).toEqual(extraAction(NEW).config);
     });
 
-    it("Sokol passive R2: both texts give the same extra action as Liberator's", () => {
-        expect(extraAction(LIBERATOR_R2).config).toEqual(extraAction(OLD).config);
-        expect(canonical(parseSlot('passive', NEW))).toEqual(canonical(parseSlot('passive', OLD)));
+    it('Sokol passive R2, our text: "extra end of round action" stays end-of-round on a kill', () => {
+        expect(extraAction(OLD)).toMatchObject({
+            target: 'self',
+            trigger: 'on-enemy-destroyed',
+            conditions: [],
+            config: { type: 'extra-action', oncePerRound: true, endOfRound: true },
+        });
     });
 
     it('Harvester keeps its end-of-round action (an ally death, not a kill)', () => {
