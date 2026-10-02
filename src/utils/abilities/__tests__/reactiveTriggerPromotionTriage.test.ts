@@ -195,10 +195,10 @@ describe('cluster 4 — on-enemy-buffed (Nuqtu)', () => {
     const NUQTU_P2 =
         'Every turn this Unit <unit-skill>cleanses 1 debuff</unit-skill>, once per round, and when an enemy gains a <unit-aid>buff</unit-aid> this Unit gains <unit-skill>Terran Bolster III</unit-skill> for 1 turn.';
 
-    it('Nuqtu: the self-buff rides the "enemy gains a buff" reactive trigger; the cleanse is not on-cast', () => {
+    it('Nuqtu: the self-buff rides the "enemy gains a buff" reactive trigger; the cleanse is every-turn', () => {
         const ab = abilitiesFor({ firstPassiveSkillText: NUQTU_P2 }, 'passive');
         const cleanse = ab.find((a) => a.type === 'cleanse');
-        expect(cleanse?.trigger).not.toBe('on-cast');
+        expect(cleanse?.trigger).toBe('start-of-turn');
         const bolster = ab.find(
             (a) => a.config.type === 'buff' && a.config.buffName === 'Terran Bolster III'
         );

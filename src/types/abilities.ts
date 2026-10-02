@@ -227,8 +227,8 @@ export type AbilityTrigger =
     | 'on-enemy-cleansed'
     // Fires when an OPPOSING-side actor receives a timed buff (rides the `buff-applied`
     // event, opposing-scoped on actorId — the buff RECIPIENT). Nuqtu's Terran Bolster III
-    // grant ("when an enemy gains a buff"), a live reactive trigger for the team simulator.
-    // Self-target — no capture needed.
+    // grant and, at refit 2, her Core Charge I stack ("when an enemy gains a buff"), a live
+    // reactive trigger for the team simulator. Self-target — no capture needed.
     | 'on-enemy-buffed'
     // Purge ecosystem C2b: Sefuba self-purge / Salvation ally-purged
     | 'on-enemy-purged'
@@ -1242,9 +1242,9 @@ export interface Ability {
      *  whose source says "applies" (Provoke, Concentrate Fire, Disable; the Burner gear set's
      *  Inferno). Set by the parser from the clause's own verb ("inflicts"/"inflicting" →
      *  'inflict', "applies"/"applying" → 'apply'); absent when the clause uses neither, which
-     *  fires on any landing. The Insidiousness
-     *  implant ("When debuffing an enemy") is the one hand-set exception: 'inflict' by user ruling
-     *  (2026-10-02). What each event counts as — `passesApplicationFilter`'s doc in triggers.ts. */
+     *  fires on any landing. The Insidiousness implant ("When debuffing an enemy") is the one
+     *  hand-set exception: 'inflict' by user ruling (2026-10-02). What each event counts as —
+     *  `passesApplicationFilter`'s doc in triggers.ts. */
     triggerApplicationFilter?: 'inflict' | 'apply';
     /** Status-FAMILY filter for `on-debuff-inflicted`: the reaction fires only when the landed
      *  status belongs to this family — Lingshe's "When this Unit inflicts a Bomb it gains

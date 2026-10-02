@@ -1708,10 +1708,9 @@ const ALLY_SHIELD_DESTROYED_RE = /\bwhen\s+an\s+ally\b[^.]*?\bshield\b[^.]*?\bde
 // "When an enemy defender gains Taunt" — Amartya's Exposed grant (docs/ship-skills.csv, second/
 // third passive: "When an enemy defender gains Taunt, this Unit inflicts N stacks of Exposed on
 // that defender."). Distinct from ENEMY_BUFFED_RE (any buff, "gains a buff") — this is
-// name-specific to Taunt and requires the "gains" verb, so
-// it does not co-match any self-gain "this Unit gains Taunt" phrasing elsewhere in the corpus
-// (Sabertooth/Isha/Xarrow's own Taunt self-grants all use "this Unit gains", not "an enemy...
-// gains"). Corpus-verified (docs/ship-skills.csv, grep "enemy[^.]*gains[^.]*taunt"): only
+// name-specific to Taunt and requires the "gains" verb, so it does not co-match any self-gain
+// "this Unit gains Taunt" phrasing elsewhere in the corpus (Sabertooth/Isha/Xarrow's own Taunt
+// self-grants all use "this Unit gains", not "an enemy... gains"). Corpus-verified (docs/ship-skills.csv, grep "enemy[^.]*gains[^.]*taunt"): only
 // Amartya's two passive rows match.
 const ENEMY_GAINS_TAUNT_RE = /\bwhen\s+an?\s+enemy\b[^.]*?\bgains?\b[^.]*?\btaunt\b/i;
 

@@ -276,10 +276,11 @@ describe('Nuqtu (player-side) — an opposing buff wakes the Terran Bolster III 
         ...overrides,
     });
 
-    it('an enemy self-buffing grants Nuqtu Terran Bolster III', () => {
-        const { buffsApplied } = runAndCollectBuffs(
+    it('an enemy self-buffing grants Nuqtu Terran Bolster III; the every-turn cleanse runs once', () => {
+        const { buffsApplied, result } = runAndCollectBuffs(
             BASE({ enemyAttackers: [debuffEnemy('enemy-deb'), buffEnemy('enemy-buf', 900)] })
         );
+        expect(cleanseCountFor(result, 'attacker')).toBe(1);
         const bolster = buffsApplied.filter(
             (b) => b.buffName === 'Terran Bolster III' && b.actorId === 'attacker'
         );
@@ -314,8 +315,9 @@ describe('Nuqtu (player-side) — an opposing buff wakes the Terran Bolster III 
                 ],
             })
         );
-        // Two debuffs stand, but the cleanse is not woken by the opposing buffs: it runs once,
-        // at the start of Nuqtu's own turn.
+        // Two debuffs stand and the cleanse runs once this round. That count alone does not tell
+        // an every-turn cleanse from a once-per-round reactive one; the NEGATIVE control below
+        // (cleanse = 1 with no opposing buff) is what pins the every-turn parse.
         expect(cleanseCountFor(result, 'attacker')).toBe(1);
         // The buff GRANT carries no cap — it fires on every qualifying opposing buff this round.
         const bolster = buffsApplied.filter(
@@ -359,9 +361,11 @@ describe('Nuqtu (player-side) — an opposing buff wakes the Terran Bolster III 
             },
         });
 
-        const { buffsApplied } = runAndCollectBuffs(
+        const { buffsApplied, result } = runAndCollectBuffs(
             BASE({ teamActors: [allyBuff()], enemyAttackers: [debuffEnemy('enemy-deb')] })
         );
+        // The every-turn cleanse runs on Nuqtu's own turn start regardless of the ally's buff.
+        expect(cleanseCountFor(result, 'attacker')).toBe(1);
         expect(
             buffsApplied.some(
                 (b) => b.buffName === 'Terran Bolster III' && b.actorId === 'attacker'

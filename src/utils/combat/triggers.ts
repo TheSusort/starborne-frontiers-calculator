@@ -492,8 +492,9 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
  *    recipients) so an 'ally'-target reaction fans out to exactly those ids (reactiveRecipients);
  *    a 'self'-target reaction ignores it. One enqueue per qualifying (>= 1 real removal) cast.
  *  - on-enemy-buffed → buff-applied where isOpposing(actorId) (Nuqtu's Terran Bolster III
- *    grant, "when an enemy gains a buff"). actorId is the buff RECIPIENT (events.ts), so this
- *    fires once per opposing-side buff application. Self-target — no eventCtx capture needed.
+ *    grant and, at refit 2, her Core Charge I stack, "when an enemy gains a buff"). actorId is
+ *    the buff RECIPIENT (events.ts), so this fires once per opposing-side buff application.
+ *    Self-target — no eventCtx capture needed.
  *  - on-hp-threshold-crossed → hp-changed where targetId === ownerId and the event is a
  *    DOWNWARD crossing of N (oldPct >= N > newPct), N read from the ability's self
  *    hp-threshold condition (trigger CONFIG — executeIntent scrubs it from the drain-time

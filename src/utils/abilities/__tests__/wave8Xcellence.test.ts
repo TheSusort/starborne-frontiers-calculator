@@ -62,8 +62,8 @@ describe.skipIf(!csvAvailable())('Wave 8 Task 7 — Xcellence active untagged St
 // possessive, so this is enemy-resister-scoped and INFLICTOR-AGNOSTIC — 'on-enemy-debuff-resisted'.
 // This test used to pin 'on-own-debuff-resisted', matching a parser doc comment that glossed the
 // clause as "a debuff [THIS UNIT INFLICTED]"; that clause is not in the CSV row, and the
-// inflictor-scoped trigger dropped every ally-inflicted resist. Ravager's "if ITS debuff is
-// resisted" is the genuinely inflictor-scoped one and stays on 'on-own-debuff-resisted'.
+// inflictor-scoped trigger dropped every ally-inflicted resist. Ravager's "if THIS UNIT'S debuff
+// is resisted" is the genuinely inflictor-scoped one and stays on 'on-own-debuff-resisted'.
 //
 // Field names verified against the shipped hpBasisPct sibling (buildShipAbilities.ts's Vindicator
 // wiring): multiplier:0, the amount rides a dedicated *BasisPct field, not `pct`.
