@@ -1054,8 +1054,9 @@ export type AbilityConfig =
           type: 'control';
           effect: ControlEffect;
       }
-    // Overload lifecycle: "loses/removes Overload on kill". Removes a named self-buff family from
-    // ALL of the owner's self stores. target:'self'; trigger carries the reactive moment.
+    // Overload lifecycle: "upon destroying an enemy, removes Overload". Removes a named self-buff
+    // family from ALL of the owner's self stores. target:'self'; trigger carries the reactive
+    // moment.
     | { type: 'remove-self-buff'; buffName: string; scope: 'all' }
     // D-PR3 victim-side incoming-damage reduction (folded at the crit-aware computation sites).
     | {

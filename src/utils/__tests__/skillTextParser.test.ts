@@ -1198,7 +1198,7 @@ describe('parseConditionalDamage', () => {
 
     it('ignores repair/heal scaling ("repairs X% ... for each enemy destroyed")', () => {
         const text =
-            'This Unit <unit-damage>repairs 60%</unit-damage> of its Max HP for each enemy Unit destroyed by the attack upon killing them.';
+            'This Unit <unit-damage>repairs 60%</unit-damage> of its max HP for each enemy destroyed by this Unit.';
         expect(parseConditionalDamage(text)).toBeNull();
     });
 
@@ -1556,7 +1556,7 @@ describe('parser false-positive guards', () => {
     it('on-death proc is not secondary damage (Paracelsus p1)', () => {
         expect(
             parseSecondaryDamage(
-                'Upon being killed by direct Damage, this Unit deals <unit-damage>Damage equal to 50%</unit-damage> of its max HP.'
+                'Upon being destroyed by direct damage, this Unit deals <unit-damage>damage equal to 50%</unit-damage> of its max HP.'
             )
         ).toBeNull();
     });
@@ -1835,9 +1835,9 @@ describe('parseChargeGain', () => {
         expect(parseChargeGain(text)).toBeNull();
     });
 
-    it('parses on-kill gain as on-enemy-destroyed trigger — Valiant (Phase 3 PR-B)', () => {
+    it('parses on-kill gain as on-enemy-destroyed trigger — Valiant', () => {
         const text =
-            'This Unit <unit-aid>gains 1 charge</unit-aid> for its Charged Skill upon killing an enemy.';
+            'When this Unit destroys an enemy it <unit-skill>adds 1 charge</unit-skill> to its charged skill.';
         expect(parseChargeGain(text)).toEqual({
             amount: 1,
             condition: 'always',
@@ -1848,7 +1848,7 @@ describe('parseChargeGain', () => {
 
     it('returns null for ally-grant — Liberator', () => {
         const text =
-            'When an enemy dies, all allies <unit-aid>add 1 charge</unit-aid> to their Charged Skills.';
+            'This Unit has <unit-damage>40% shield penetration</unit-damage>.<br /><br />When an enemy is destroyed, all allies <unit-skill>add 1 charge</unit-skill> to their charged skills.';
         expect(parseChargeGain(text)).toBeNull();
     });
 
@@ -2036,21 +2036,27 @@ describe('detectReactiveTrigger', () => {
         expect(detectReactiveTrigger(text, 'Gelecek Contagion II')).toBe('on-enemy-cleansed');
     });
 
-    it('detects on-enemy-destroyed from "on kill"', () =>
-        expect(detectReactiveTrigger('loses Overload on kill', 'Overload')).toBe(
-            'on-enemy-destroyed'
-        ));
-    it('detects on-enemy-destroyed from "killing an opponent"', () =>
+    it('detects on-enemy-destroyed from "When this Unit destroys an enemy" (Obsidian R2)', () =>
         expect(
             detectReactiveTrigger(
-                'it gains Marauder Rage I for 2 turns upon killing an opponent',
+                'When this Unit destroys an enemy it <unit-skill>adds 2 charges</unit-skill> to its charged skill.<br /><br />At the start of each round, this Unit gains <unit-skill>Attack Up III</unit-skill> for 1 turn.',
+                'adds 2 charges'
+            )
+        ).toBe('on-enemy-destroyed'));
+    it('detects on-enemy-destroyed from a trailing "upon destroying an enemy" (Mangler)', () =>
+        expect(
+            detectReactiveTrigger(
+                'This Unit gains 1 stack of <unit-skill>Overload</unit-skill> every turn and, upon destroying an enemy, removes <unit-skill>Overload</unit-skill>. Additionally, it gains <unit-skill>Marauder Rage I</unit-skill> for 2 turns upon destroying an enemy.',
                 'Marauder Rage I'
             )
         ).toBe('on-enemy-destroyed'));
-    it('detects on-enemy-destroyed from "killing an enemy"', () =>
-        expect(detectReactiveTrigger('upon killing an enemy, loses Overload', 'Overload')).toBe(
-            'on-enemy-destroyed'
-        ));
+    it('detects on-enemy-destroyed from a leading "upon destroying an enemy" (Ravager)', () =>
+        expect(
+            detectReactiveTrigger(
+                'This Unit gains 1 stack of <unit-skill>Overload</unit-skill> every turn and, upon destroying an enemy, removes <unit-skill>Overload</unit-skill> and gains <unit-skill>Marauder Rage III</unit-skill> for 3 turns.',
+                'Marauder Rage III'
+            )
+        ).toBe('on-enemy-destroyed'));
     it('detects on-enemy-repaired', () =>
         expect(
             detectReactiveTrigger('gains Overload when an enemy performs a repair', 'Overload')
@@ -2065,7 +2071,7 @@ describe('detectReactiveTrigger', () => {
     it('routes Ruiner Overload grant to on-enemy-repaired despite a kill clause in the same sentence', () =>
         expect(
             detectReactiveTrigger(
-                'gains 1 stack of Overload when an enemy performs a repair, upon killing an enemy, this Unit removes Overload',
+                'This Unit gains 1 stack of <unit-skill>Overload</unit-skill> when an enemy preforms a <unit-aid>repair</unit-aid>, upon destroying an enemy, this Unit removes <unit-skill>Overload</unit-skill>.',
                 'Overload'
             )
         ).toBe('on-enemy-repaired'));
@@ -2078,38 +2084,38 @@ describe('detectReactiveTrigger — non-Marauder reclassifications (Overload-lif
     // so these are semantically-correct reclassifications. Text below is the real CSV phrasing.
 
     // --- KILL_TRIGGER_RE → on-enemy-destroyed ---
-    it('Gallant — Legion Discipline I gated on "on kill"', () =>
+    it('Gallant — Legion Discipline I gated on "When this Unit destroys an enemy"', () =>
         expect(
             detectReactiveTrigger(
-                'This Unit gains <unit-skill>Legion Discipline I</unit-skill> for 3 turns on kill.',
+                'When this Unit destroys an enemy it gains <unit-skill>Legion Discipline I</unit-skill> for 3 turns.',
                 'Legion Discipline I'
             )
         ).toBe('on-enemy-destroyed'));
-    it('Gallant — Legion Discipline II gated on "on kill"', () =>
+    it('Gallant — Legion Discipline II gated on "When this Unit destroys an enemy"', () =>
         expect(
             detectReactiveTrigger(
-                'This Unit gains <unit-skill>Legion Discipline II</unit-skill> for 4 turns on kill.',
+                'When this Unit destroys an enemy it gains <unit-skill>Legion Discipline II</unit-skill> for 4 turns.',
                 'Legion Discipline II'
             )
         ).toBe('on-enemy-destroyed'));
-    it('Medved — XAOC Swiftness I gated on "On kill"', () =>
+    it('Medved — XAOC Swiftness I gated on "When this Unit destroys an enemy"', () =>
         expect(
             detectReactiveTrigger(
-                'This Unit has 20% Shield Penetration. On kill, it gains <unit-skill>XAOC Swiftness I</unit-skill> for 2 turns.',
+                'This Unit has <unit-aid>20% shield penetration</unit-aid>.<br /><br />When this Unit destroys an enemy, it gains <unit-skill>XAOC Swiftness I</unit-skill> for 2 turns.',
                 'XAOC Swiftness I'
             )
         ).toBe('on-enemy-destroyed'));
-    it('Medved — XAOC Swiftness II gated on "On kill"', () =>
+    it('Medved — XAOC Swiftness II gated on "When this Unit destroys an enemy"', () =>
         expect(
             detectReactiveTrigger(
-                'This Unit has 20% Shield Penetration. On kill, it gains <unit-skill>XAOC Swiftness II</unit-skill> for 3 turns.',
+                'This Unit has <unit-aid>20% shield penetration</unit-aid>.<br /><br />When this Unit destroys an enemy, it gains <unit-skill>XAOC Swiftness II</unit-skill> for 3 turns.',
                 'XAOC Swiftness II'
             )
         ).toBe('on-enemy-destroyed'));
-    it('Meiying — Stasis gated on "Upon killing an enemy with a Debuff"', () =>
+    it('Meiying — Stasis gated on "Upon destroying an enemy with a debuff"', () =>
         expect(
             detectReactiveTrigger(
-                'Upon killing an enemy with a Debuff, this Unit inflicts <unit-skill>Stasis</unit-skill> on all adjacent enemies for 1 turn.',
+                "This Unit's attacks ignore <unit-skill>Taunt</unit-skill> and <unit-skill>Provoke</unit-skill> effects.<br /><br />Upon destroying an enemy with a <unit-aid>debuff</unit-aid>, this Unit inflicts <unit-skill>Stasis</unit-skill> on all adjacent enemies for 1 turn.",
                 'Stasis'
             )
         ).toBe('on-enemy-destroyed'));
@@ -2146,30 +2152,34 @@ describe('detectReactiveTrigger — non-Marauder reclassifications (Overload-lif
 });
 
 describe('parseSelfBuffRemovals', () => {
-    it('emits for "loses Overload on kill"', () =>
-        expect(parseSelfBuffRemovals('loses <unit-skill>Overload</unit-skill> on kill')).toEqual([
-            { buffName: 'Overload', trigger: 'on-enemy-destroyed' },
-        ]));
-    it('emits for "removes Overload" (Ruiner)', () =>
+    it('emits for "upon destroying an enemy, removes Overload" (Butcher)', () =>
         expect(
             parseSelfBuffRemovals(
-                'upon killing an enemy, this Unit removes <unit-skill>Overload</unit-skill>'
+                'This Unit gains 1 stack of <unit-skill>Overload</unit-skill> every turn and, upon destroying an enemy, removes <unit-skill>Overload</unit-skill>.'
             )
         ).toEqual([{ buffName: 'Overload', trigger: 'on-enemy-destroyed' }]));
-    it('emits for passive "Overload is lost" (Butcher R2)', () =>
-        expect(parseSelfBuffRemovals('On kill, <unit-skill>Overload</unit-skill> is lost')).toEqual(
-            [{ buffName: 'Overload', trigger: 'on-enemy-destroyed' }]
-        ));
+    it('emits for "removes Overload and gains Marauder Rage III" (Ravager)', () =>
+        expect(
+            parseSelfBuffRemovals(
+                'This Unit gains 1 stack of <unit-skill>Overload</unit-skill> every turn and, upon destroying an enemy, removes <unit-skill>Overload</unit-skill> and gains <unit-skill>Marauder Rage III</unit-skill> for 3 turns.'
+            )
+        ).toEqual([{ buffName: 'Overload', trigger: 'on-enemy-destroyed' }]));
+    it('emits for passive "Overload is lost"', () =>
+        expect(
+            parseSelfBuffRemovals(
+                'Upon destroying an enemy, <unit-skill>Overload</unit-skill> is lost'
+            )
+        ).toEqual([{ buffName: 'Overload', trigger: 'on-enemy-destroyed' }]));
     it('resolves the removal trigger by removal position, not first buff-name sentence (Asphyxiator)', () =>
         expect(
             parseSelfBuffRemovals(
-                'At the start of the round, this Unit gains 1 stack of <unit-skill>Overload</unit-skill>. Upon killing an enemy, this Unit loses <unit-skill>Overload</unit-skill>.'
+                'At the start of the round, if there are any enemies with 3 or more <unit-aid>debuffs</unit-aid>, this Unit gains 1 stack of <unit-skill>Overload</unit-skill> and gains <unit-skill>Marauder Rage II</unit-skill> for 3 turns. Upon destroying an enemy, this Unit removes <unit-skill>Overload</unit-skill>.'
             )
         ).toEqual([{ buffName: 'Overload', trigger: 'on-enemy-destroyed' }]));
     it('resolves the removal trigger by removal position within a shared sentence (Ruiner)', () =>
         expect(
             parseSelfBuffRemovals(
-                'This Unit gains 1 stack of <unit-skill>Overload</unit-skill> when an enemy performs a repair, upon killing an enemy, this Unit removes <unit-skill>Overload</unit-skill>'
+                'This Unit gains 1 stack of <unit-skill>Overload</unit-skill> when an enemy preforms a <unit-aid>repair</unit-aid>, upon destroying an enemy, this Unit removes <unit-skill>Overload</unit-skill>.'
             )
         ).toEqual([{ buffName: 'Overload', trigger: 'on-enemy-destroyed' }]));
     it('returns [] for no-loss text', () =>
@@ -2816,7 +2826,7 @@ describe('parseExtraAction', () => {
 
     it('Liberator: on-enemy-destroyed, once per round', () => {
         const r = parseExtraAction(
-            'This Unit has 40% Shield Penetration. When an enemy dies, all allies <unit-aid>add 1 charge</unit-aid> to their Charged Skills, and once per round, this unit gains 1 extra action.'
+            'This Unit has <unit-damage>40% shield penetration</unit-damage>.<br /><br />When an enemy is destroyed, all allies <unit-skill>add 1 charge</unit-skill> to their charged skills and once per round, this unit <unit-skill>gains 1 extra action</unit-skill>.'
         );
         expect(r).toEqual({
             oncePerRound: true,
@@ -2844,14 +2854,14 @@ describe('parseExtraAction', () => {
         });
     });
 
-    it('Sokol: on-enemy-destroyed (upon a kill), once per round', () => {
+    it('Sokol: on-enemy-destroyed ("When an enemy is destroyed"), once per round', () => {
         const r = parseExtraAction(
-            'This Unit gains 1 stack of <unit-skill>Blast</unit-skill> every turn and grants one extra end of round action upon a kill, once per round.'
+            'This Unit gains 1 stack of <unit-skill>Blast</unit-skill> every turn.<br /><br />When an enemy is destroyed, once per round, this Unit <unit-skill>gains 1 extra action</unit-skill>.'
         );
         expect(r).toEqual({
             oncePerRound: true,
-            // Sokol's "extra end of round action" → drains after the speed pool.
-            endOfRound: true,
+            // Sokol's plain "1 extra action" → queued at speed, not after the speed pool.
+            endOfRound: false,
             conditions: [],
             trigger: 'on-enemy-destroyed',
         });
@@ -4692,12 +4702,12 @@ describe('detectEndOfRoundPurgeTrigger', () => {
     });
 });
 
-// C2b-2 T6: detectKilledByDirectDamageTrigger (Faust)
+// detectKilledByDirectDamageTrigger (Faust)
 // RAW strings from docs/ship-skills.csv (Faust row, passive 1 & 2).
 const FAUST_P1_RAW =
-    'This Unit <unit-aid>purges 2</unit-aid> buffs from the enemy when killed by direct Damage.';
+    'This Unit <unit-skill>purges 2 buffs</unit-skill> from the enemy when destroyed by direct damage.';
 const FAUST_P2_RAW =
-    'This Unit <unit-aid>purges 3</unit-aid> buffs from the enemy when killed by direct Damage.';
+    'This Unit <unit-skill>purges 3 buffs</unit-skill> from the enemy when destroyed by direct damage.';
 
 describe('detectKilledByDirectDamageTrigger', () => {
     it('returns on-destroyed for Faust p1 (anchor inside the purge sentence)', () => {
@@ -4710,12 +4720,12 @@ describe('detectKilledByDirectDamageTrigger', () => {
         expect(detectKilledByDirectDamageTrigger(FAUST_P2_RAW, pos)).toBe('on-destroyed');
     });
 
-    it('returns undefined for Iridium p1 (no "killed by direct damage" phrase)', () => {
+    it('returns undefined for Iridium p1 (no "destroyed by direct damage" phrase)', () => {
         const pos = IRIDIUM_P1_RAW.search(/purge/i);
         expect(detectKilledByDirectDamageTrigger(IRIDIUM_P1_RAW, pos)).toBeUndefined();
     });
 
-    it('returns undefined for Rhodium p1 (no "killed by direct damage" phrase)', () => {
+    it('returns undefined for Rhodium p1 (no "destroyed by direct damage" phrase)', () => {
         const pos = RHODIUM_P1_RAW.search(/purge/i);
         expect(detectKilledByDirectDamageTrigger(RHODIUM_P1_RAW, pos)).toBeUndefined();
     });
@@ -5219,7 +5229,7 @@ describe('parseOnResistHpDamage (Vindicator p2 reactive)', () => {
     it('returns null for an on-death max-HP proc (Paracelsus p1 — different trigger)', () => {
         expect(
             parseOnResistHpDamage(
-                'Upon being killed by direct Damage, this Unit deals <unit-damage>Damage equal to 50%</unit-damage> of its max HP.'
+                'Upon being destroyed by direct damage, this Unit deals <unit-damage>damage equal to 50%</unit-damage> of its max HP.'
             )
         ).toBeNull();
     });

@@ -1358,15 +1358,15 @@ describe('buildShipAbilities', () => {
         it('Liberator third passive: once-per-round extra action on-enemy-destroyed in passive slot', () => {
             const s = ship({
                 thirdPassiveSkillText:
-                    'This Unit has 40% Shield Penetration. When an enemy dies, all allies <unit-aid>add 1 charge</unit-aid> to their Charged Skills, and once per round, this unit gains 1 extra action.',
+                    'This Unit has <unit-damage>40% shield penetration</unit-damage>.<br /><br />When an enemy is destroyed, all allies <unit-skill>add 1 charge</unit-skill> to their charged skills and once per round, this unit <unit-skill>gains 1 extra action</unit-skill>.',
                 chargeSkillCharge: 4,
             });
             const { slots } = buildShipAbilities(s);
             const passive = slot(slots, 'passive');
             expect(passive).toBeDefined();
             const extraAction = abilityOfType(passive!.abilities, 'extra-action');
-            // Phase 4b Task 10: the sentence's "When an enemy dies" scopes the grant to the
-            // on-enemy-destroyed death trigger (previously stamped on-cast pre-Task-10).
+            // The sentence's "When an enemy is destroyed" scopes the grant to the
+            // on-enemy-destroyed death trigger.
             expect(extraAction).toMatchObject({
                 target: 'self',
                 trigger: 'on-enemy-destroyed',
@@ -2977,7 +2977,7 @@ describe('buildShipAbilities', () => {
         it('Sokol 3rd passive: extra-action on-enemy-destroyed, once per round', () => {
             const s = ship({
                 thirdPassiveSkillText:
-                    'This Unit gains 1 stack of <unit-skill>Blast</unit-skill> every turn and grants one extra end of round action upon a kill, once per round.',
+                    'This Unit gains 1 stack of <unit-skill>Blast</unit-skill> every turn.<br /><br />When an enemy is destroyed, once per round, this Unit <unit-skill>gains 1 extra action</unit-skill>.',
             });
             const passive = slot(buildShipAbilities(s).slots, 'passive')!;
             const extra = passive.abilities.find((a) => a.type === 'extra-action')!;
@@ -3004,7 +3004,7 @@ describe('buildShipAbilities', () => {
         it('Liberator 3rd passive: all-allies charge + self extra-action, both on-enemy-destroyed', () => {
             const s = ship({
                 thirdPassiveSkillText:
-                    'This Unit has 40% Shield Penetration. When an enemy dies, all allies <unit-aid>add 1 charge</unit-aid> to their Charged Skills, and once per round, this unit gains 1 extra action.',
+                    'This Unit has <unit-damage>40% shield penetration</unit-damage>.<br /><br />When an enemy is destroyed, all allies <unit-skill>add 1 charge</unit-skill> to their charged skills and once per round, this unit <unit-skill>gains 1 extra action</unit-skill>.',
             });
             const passive = slot(buildShipAbilities(s).slots, 'passive')!;
 
@@ -3031,7 +3031,7 @@ describe('buildShipAbilities', () => {
             // emit the same all-allies on-enemy-destroyed charge ability.
             const s = ship({
                 secondPassiveSkillText:
-                    'When an enemy dies, this unit grants 1 charge to all allies, and once per round, it gains 1 extra action.',
+                    'When an enemy is destroyed, this unit grants 1 charge to all allies, and once per round, it gains 1 extra action.',
             });
             const passive = slot(buildShipAbilities(s).slots, 'passive')!;
             const charge = passive.abilities.find((a) => a.type === 'charge')!;
@@ -3472,7 +3472,7 @@ describe('buildShipAbilities — all-allies charge-bar grants (Hayyan / Graphite
     it('Liberator real passive: emits EXACTLY ONE charge — on-enemy-destroyed / all-allies, no on-cast double', () => {
         const s = ship({
             firstPassiveSkillText:
-                'This Unit has 40% Shield Penetration. When an enemy dies, all allies <unit-aid>add 1 charge</unit-aid> to their Charged Skills.',
+                'This Unit has <unit-damage>40% shield penetration</unit-damage>.<br /><br />When an enemy is destroyed, all allies <unit-skill>add 1 charge</unit-skill> to their charged skills.',
         });
 
         const { slots } = buildShipAbilities(s);
@@ -4042,16 +4042,15 @@ describe('buildShipAbilities — Lodolite charged purge + shield strip (I6)', ()
 });
 
 // ---------------------------------------------------------------------------
-// C2b-2 T6: Faust on-destroyed killed-by-direct-damage purge build tests.
+// Faust on-destroyed destroyed-by-direct-damage purge build tests.
 // RAW strings from docs/ship-skills.csv (Faust row, passive 1 & 2).
 // ---------------------------------------------------------------------------
 describe('buildShipAbilities — Faust on-destroyed killer-targeted purge (C2b-2 T6)', () => {
-    // Faust p1 RAW: "This Unit <unit-aid>purges 2</unit-aid> buffs from the enemy when killed by
-    // direct Damage."
+    // Faust p1 RAW.
     const faustP1 = () =>
         ship({
             firstPassiveSkillText:
-                'This Unit <unit-aid>purges 2</unit-aid> buffs from the enemy when killed by direct Damage.',
+                'This Unit <unit-skill>purges 2 buffs</unit-skill> from the enemy when destroyed by direct damage.',
         });
 
     // Faust p2 RAW (refit-active 2nd passive): purges 3.
@@ -4060,7 +4059,7 @@ describe('buildShipAbilities — Faust on-destroyed killer-targeted purge (C2b-2
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             refits: [{}, {}] as any,
             secondPassiveSkillText:
-                'This Unit <unit-aid>purges 3</unit-aid> buffs from the enemy when killed by direct Damage.',
+                'This Unit <unit-skill>purges 3 buffs</unit-skill> from the enemy when destroyed by direct damage.',
         });
 
     describe('Faust p1: on-destroyed purge with target enemy, count 2', () => {
@@ -4433,12 +4432,11 @@ describe('buildShipAbilities — control-twin gating parity (epic PR2)', () => {
     });
 
     it('Meiying first passive: control{stasis} is DROPPED — its Stasis debuff twin resolves to the REACTIVE on-enemy-destroyed trigger', () => {
-        // docs/ship-skills.csv Meiying first_passive_skill_text (exact clause, routed through
-        // the real passive slot): "Upon killing an enemy with a Debuff, this Unit inflicts
-        // Stasis on all adjacent enemies for 1 turn."
+        // docs/ship-skills.csv Meiying first_passive_skill_text, routed through the real
+        // passive slot.
         const s = ship({
             firstPassiveSkillText:
-                'Upon killing an enemy with a Debuff, this Unit inflicts <unit-skill>Stasis</unit-skill> on all adjacent enemies for 1 turn.',
+                "This Unit's attacks ignore <unit-skill>Taunt</unit-skill> and <unit-skill>Provoke</unit-skill> effects.<br /><br />Upon destroying an enemy with a <unit-aid>debuff</unit-aid>, this Unit inflicts <unit-skill>Stasis</unit-skill> on all adjacent enemies for 1 turn.",
         });
         const passive = slot(buildShipAbilities(s).slots, 'passive');
         const debuff = passive?.abilities.find(
@@ -4699,7 +4697,7 @@ describe('buildShipAbilities — enemy-targeted charge removal (Phase 1 Task 3)'
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 refits: [{}, {}] as any,
                 secondPassiveSkillText:
-                    'This Unit gains 1 stack of <unit-skill>Overload</unit-skill> every turn and loses <unit-skill>Overload</unit-skill> on kill. Additionally, it gains <unit-skill>Marauder Rage II</unit-skill> for 3 turns upon killing an opponent.',
+                    'This Unit gains 1 stack of <unit-skill>Overload</unit-skill> every turn and, upon destroying an enemy, removes <unit-skill>Overload</unit-skill>. Additionally, it gains <unit-skill>Marauder Rage II</unit-skill> for 3 turns upon destroying an enemy.',
             });
             const abilities = slot(buildShipAbilities(s).slots, 'passive')!.abilities;
 
@@ -4724,7 +4722,7 @@ describe('buildShipAbilities — enemy-targeted charge removal (Phase 1 Task 3)'
         it('Ravager p1: remove Overload on kill + Marauder Rage III on kill', () => {
             const s = ship({
                 firstPassiveSkillText:
-                    'This Unit gains 1 stack of <unit-skill>Overload</unit-skill> every turn and, upon killing an enemy, loses <unit-skill>Overload</unit-skill> and gains <unit-skill>Marauder Rage III</unit-skill> for 3 turns.',
+                    'This Unit gains 1 stack of <unit-skill>Overload</unit-skill> every turn and, upon destroying an enemy, removes <unit-skill>Overload</unit-skill> and gains <unit-skill>Marauder Rage III</unit-skill> for 3 turns.',
                 refits: [],
             });
             const abilities = slot(buildShipAbilities(s).slots, 'passive')!.abilities;
@@ -4752,7 +4750,7 @@ describe('buildShipAbilities — enemy-targeted charge removal (Phase 1 Task 3)'
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 refits: [{}, {}] as any,
                 secondPassiveSkillText:
-                    'This Unit gains 1 stack of <unit-skill>Overload</unit-skill> every turn. On kill, <unit-skill>Overload</unit-skill> is lost. On inflicting a debuff, this Unit gains <unit-skill>Marauder Rage II</unit-skill> for 3 turns.',
+                    'This Unit gains 1 stack of <unit-skill>Overload</unit-skill> every turn and, upon destroying an enemy, removes <unit-skill>Overload</unit-skill>.<br /><br />On inflicting a <unit-aid>debuff</unit-aid>, this Unit gains <unit-skill>Marauder Rage II</unit-skill> for 3 turns.',
             });
             const abilities = slot(buildShipAbilities(s).slots, 'passive')!.abilities;
 
@@ -4777,7 +4775,7 @@ describe('buildShipAbilities — enemy-targeted charge removal (Phase 1 Task 3)'
         it('Asphyxiator p1: remove Overload on kill (SoR grant verified e2e)', () => {
             const s = ship({
                 firstPassiveSkillText:
-                    'At the start of the round, if there are any enemies with 3 or more debuffs, this Unit gains 1 stack of <unit-skill>Overload</unit-skill> and gains <unit-skill>Marauder Rage II</unit-skill> for 3 turns. Upon killing an enemy, this Unit loses <unit-skill>Overload</unit-skill>.',
+                    'At the start of the round, if there are any enemies with 3 or more <unit-aid>debuffs</unit-aid>, this Unit gains 1 stack of <unit-skill>Overload</unit-skill> and gains <unit-skill>Marauder Rage II</unit-skill> for 3 turns. Upon destroying an enemy, this Unit removes <unit-skill>Overload</unit-skill>.',
                 refits: [],
             });
             const abilities = slot(buildShipAbilities(s).slots, 'passive')!.abilities;
@@ -4808,7 +4806,7 @@ describe('buildShipAbilities — enemy-targeted charge removal (Phase 1 Task 3)'
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 refits: [{}, {}] as any,
                 secondPassiveSkillText:
-                    'This Unit inflicts <unit-skill>Bomb II</unit-skill> for 2 turns on any enemy performing a <unit-aid>repair</unit-aid>, once per round per enemy.<br /><br />This Unit gains 1 stack of <unit-skill>Overload</unit-skill> when an enemy performs a <unit-aid>repair</unit-aid>, upon killing an enemy, this Unit removes <unit-skill>Overload</unit-skill>.',
+                    'This Unit inflicts <unit-skill>Bomb II</unit-skill> for 2 turns on any enemy performing a <unit-aid>repair</unit-aid>, once per round per enemy.<br /><br />This Unit gains 1 stack of <unit-skill>Overload</unit-skill> when an enemy preforms a <unit-aid>repair</unit-aid>, upon destroying an enemy, this Unit removes <unit-skill>Overload</unit-skill>.',
             });
             const abilities = slot(buildShipAbilities(s).slots, 'passive')!.abilities;
 

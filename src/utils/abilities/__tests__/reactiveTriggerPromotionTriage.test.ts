@@ -221,7 +221,7 @@ describe('cluster 5 — on-enemy-destroyed / on-kill', () => {
     });
 
     const RAVAGER_P2 =
-        'This Unit gains 1 stack of <unit-skill>Overload</unit-skill> every turn and, upon killing an enemy, loses <unit-skill>Overload</unit-skill> and gains <unit-skill>Marauder Rage III</unit-skill> for 3 turns.';
+        'This Unit gains 1 stack of <unit-skill>Overload</unit-skill> every turn and, upon destroying an enemy, removes <unit-skill>Overload</unit-skill> and gains <unit-skill>Marauder Rage III</unit-skill> for 3 turns.';
     it('Ravager: Overload kill-reset buff already rides on-enemy-destroyed (FP lock)', () => {
         const ab = abilitiesFor({ firstPassiveSkillText: RAVAGER_P2 }, 'passive');
         expect(ab.some((a) => a.type === 'buff' && a.trigger === 'on-enemy-destroyed')).toBe(true);
@@ -238,34 +238,29 @@ describe('cluster 5 — on-enemy-destroyed / on-kill', () => {
     });
 
     const OBSIDIAN_P2 =
-        'This Unit <unit-aid>adds 2 charges</unit-aid> to its Charged Skill upon killing an enemy.';
+        'When this Unit destroys an enemy it <unit-skill>adds 2 charges</unit-skill> to its charged skill.';
     it('Obsidian: charge-on-kill rides on-enemy-destroyed', () => {
         const ab = abilitiesFor({ firstPassiveSkillText: OBSIDIAN_P2 }, 'passive');
         expect(ab.some((a) => a.type === 'charge' && a.trigger === 'on-enemy-destroyed')).toBe(
             true
         );
-        // GAP: tag-only (detector-recognition) — emits NO ability; the charge builder doesn't
-        // detect "upon killing an enemy". Self charge, no actor needed; on-enemy-destroyed exists.
     });
 
     const VALIANT_P2 =
-        'This Unit <unit-aid>gains 1 charge</unit-aid> for its Charged Skill upon killing an enemy.';
+        'When this Unit destroys an enemy it <unit-skill>adds 1 charge</unit-skill> to its charged skill.';
     it('Valiant: charge-on-kill rides on-enemy-destroyed', () => {
         const ab = abilitiesFor({ firstPassiveSkillText: VALIANT_P2 }, 'passive');
         expect(ab.some((a) => a.type === 'charge' && a.trigger === 'on-enemy-destroyed')).toBe(
             true
         );
-        // GAP: tag-only (detector-recognition) — same as Obsidian, emits nothing.
     });
 
     const RIKRA_P2 =
-        'This Unit <unit-damage>repairs 30%</unit-damage> of its Max HP for each enemy Unit destroyed by the attack upon killing them.';
+        'This Unit <unit-damage>repairs 30%</unit-damage> of its max HP for each enemy destroyed by this Unit.';
     it('Rikra: self-heal-on-kill rides on-enemy-destroyed', () => {
         const ab = abilitiesFor({ firstPassiveSkillText: RIKRA_P2 }, 'passive');
         const heal = ab.find((a) => a.type === 'heal');
         expect(heal?.trigger).toBe('on-enemy-destroyed');
-        // GAP: tag-only — self-target heal on self-kill; heal builder doesn't recognize "upon
-        // killing". (Rikra already allowlisted for the ungated against-Taunted damage bonus — distinct.)
     });
 });
 

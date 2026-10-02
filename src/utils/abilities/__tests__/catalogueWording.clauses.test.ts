@@ -369,16 +369,13 @@ describe('damage, defence and charge clauses — defense penetration describes t
         ]);
     });
 
-    it('Ravager passive R2: the catalogue text parses like ours, with no modifier', () => {
-        const old =
-            'This Unit ignores 10% of Defense. It gains 1 stack of <unit-skill>Overload</unit-skill> every turn. Upon killing an enemy, it loses <unit-skill>Overload</unit-skill> and gains <unit-skill>Marauder Rage III</unit-skill> for 3 turns. If its debuff is resisted, it gains <unit-skill>Hacking Module Overdrive</unit-skill> for 1 turn.';
-        const next =
+    it('Ravager passive R2: the catalogue text carries its resist buff, with no modifier', () => {
+        const text =
             "This Unit gains 1 stack of <unit-skill>Overload</unit-skill> every turn and, upon destroying an enemy, removes <unit-skill>Overload</unit-skill> and gains <unit-skill>Marauder Rage III</unit-skill> for 3 turns.<br /><br />If this Unit's debuff is resisted, it gains <unit-skill>Hacking Module Overdrive</unit-skill> for 1 turn. This Unit has <unit-damage>10% defense penetration</unit-damage>.";
-        const before = parseSlot('passive', old);
-        expect(sigs(before)).toContain('buff|self|on-own-debuff-resisted|Hacking Module Overdrive');
-        expect(defPen('passive', next)).toEqual([]);
-        expect(sigs(parseSlot('passive', next))).not.toContain('modifier|self|on-cast|modifier');
-        expect(canonical(parseSlot('passive', next))).toEqual(canonical(before));
+        const s = sigs(parseSlot('passive', text));
+        expect(s).toContain('buff|self|on-own-debuff-resisted|Hacking Module Overdrive');
+        expect(defPen('passive', text)).toEqual([]);
+        expect(s).not.toContain('modifier|self|on-cast|modifier');
     });
 
     it('Chakara charged: "This skill has 20% defense penetration" still mints the skill-scoped pen', () => {

@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { parseSlot, sigs, canonical, type RewordPair } from './helpers/catalogueWording';
+import {
+    parseSlot,
+    sigs,
+    canonical,
+    type RewordPair,
+    type SlotName,
+} from './helpers/catalogueWording';
 
 const PAIRS: RewordPair[] = [
     {
@@ -22,13 +28,6 @@ const PAIRS: RewordPair[] = [
         old: 'This Unit inflicts <unit-skill>Inferno II</unit-skill> for 2 turns after applying <unit-skill>Corrosion</unit-skill> with a Critical hit and extends the newly applied <unit-skill>Corrosion</unit-skill> by 1 turn with a chance to hit equal to Crit Power.',
         new: "When this Unit inflicts <unit-skill>Corrosion</unit-skill> with a critical hit, it also inflicts <unit-skill>Inferno II</unit-skill> for 2 turns and <unit-skill>extends the newly inflicted</unit-skill> <unit-skill>Corrosion</unit-skill> by 1 turn with the extension chance equal to this Unit's crit power.",
         expects: 'dot|enemy|on-self-crit-dot|dot',
-    },
-    {
-        ship: 'Asphyxiator',
-        slot: 'passive',
-        old: 'At the start of the round, if there are any enemies with 3 or more debuffs, this Unit gains 1 stack of <unit-skill>Overload</unit-skill> and gains <unit-skill>Marauder Rage II</unit-skill> for 3 turns. Upon killing an enemy, this Unit loses <unit-skill>Overload</unit-skill>. After this Unit applies a Debuff with a Critical hit the newly applied Debuff is extended by 1 turn.',
-        new: 'At the start of the round, if there are any enemies with 3 or more <unit-aid>debuffs</unit-aid>, this Unit gains 1 stack of <unit-skill>Overload</unit-skill> and gains <unit-skill>Marauder Rage II</unit-skill> for 3 turns. Upon destroying an enemy, this Unit removes <unit-skill>Overload</unit-skill>. <br /><br />After this Unit inflicts a <unit-aid>debuff</unit-aid> with a critical hit, the newly inflicted <unit-aid>debuff</unit-aid> is <unit-skill>extended by 1 turn</unit-skill>.',
-        expects: 'extend-status|all-enemies|on-cast|extend-status',
     },
     {
         ship: 'Belladonna',
@@ -100,6 +99,23 @@ describe('inflict/apply vocabulary — catalogue wording parses like ours', () =
         const before = parseSlot(slot, old);
         expect(sigs(before)).toContain(expects); // the reference parse is not vacuous
         expect(canonical(parseSlot(slot, next))).toEqual(canonical(before));
+    });
+});
+
+// Rows whose catalogue sentence is the only wording the parser reads: the parse must carry
+// `expects`.
+const CATALOGUE_ROWS: { ship: string; slot: SlotName; text: string; expects: string }[] = [
+    {
+        ship: 'Asphyxiator',
+        slot: 'passive',
+        text: 'At the start of the round, if there are any enemies with 3 or more <unit-aid>debuffs</unit-aid>, this Unit gains 1 stack of <unit-skill>Overload</unit-skill> and gains <unit-skill>Marauder Rage II</unit-skill> for 3 turns. Upon destroying an enemy, this Unit removes <unit-skill>Overload</unit-skill>. <br /><br />After this Unit inflicts a <unit-aid>debuff</unit-aid> with a critical hit, the newly inflicted <unit-aid>debuff</unit-aid> is <unit-skill>extended by 1 turn</unit-skill>.',
+        expects: 'extend-status|all-enemies|on-cast|extend-status',
+    },
+];
+
+describe('inflict/apply vocabulary — the catalogue sentence carries its parse', () => {
+    it.each(CATALOGUE_ROWS)('$ship $slot', ({ slot, text, expects }) => {
+        expect(sigs(parseSlot(slot, text))).toContain(expects);
     });
 });
 

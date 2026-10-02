@@ -84,7 +84,7 @@ const LIVE_SUBJECTS: ReadonlySet<ConditionSubject> = new Set([
     // debuff is live-derivable — the executor folds ConditionContext.killedEnemyHadDebuff in as a
     // targeted override (keyed to the specific victim, eventCtx.victimId) right before this gate
     // runs (triggers.ts's executeIntent). Needed for Meiying's Stasis-on-kill (a timed ENEMY
-    // debuff gated on "killing an enemy WITH A DEBUFF") — without this, the condition would be
+    // debuff gated on "destroying an enemy WITH A DEBUFF") — without this, the condition would be
     // neutralized to 'always' and Stasis would land unconditionally on every kill.
     'killed-enemy-had-debuff',
 ]);

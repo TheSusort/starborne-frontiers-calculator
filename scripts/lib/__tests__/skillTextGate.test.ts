@@ -82,7 +82,7 @@ const skills = (passive: string) => ({ ...EMPTY_SKILLS, first_passive_skill_text
 describe('structuralGate', () => {
     it('holds a reword that demotes a kill trigger to on-cast', () => {
         // Stand-in wording the parser does NOT recognise as a kill reaction, so the buff falls to on-cast.
-        const before = skills('This Unit gains <unit-skill>Legion Discipline I</unit-skill> for 3 turns on kill.');
+        const before = skills('When this Unit destroys an enemy it gains <unit-skill>Legion Discipline I</unit-skill> for 3 turns.');
         const after = skills('This Unit gains <unit-skill>Legion Discipline I</unit-skill> for 3 turns whenever a foe is vanquished.');
         const r = structuralGate('Gallant', before, after);
         expect(r.pass).toBe(false);
@@ -92,7 +92,7 @@ describe('structuralGate', () => {
     it('names the slot and refit of each lost and gained signature', () => {
         const r = structuralGate(
             'Gallant',
-            skills('This Unit gains <unit-skill>Legion Discipline I</unit-skill> for 3 turns on kill.'),
+            skills('When this Unit destroys an enemy it gains <unit-skill>Legion Discipline I</unit-skill> for 3 turns.'),
             skills('This Unit gains <unit-skill>Legion Discipline I</unit-skill> for 3 turns whenever a foe is vanquished.')
         );
         expect(r.newFindings).toEqual([
@@ -105,7 +105,7 @@ describe('structuralGate', () => {
         const base = 'This Unit deals <unit-damage>100% damage</unit-damage>.';
         const r = structuralGate(
             'Gallant',
-            { ...skills(base), second_passive_skill_text: 'This Unit gains <unit-skill>Legion Discipline I</unit-skill> for 3 turns on kill.' },
+            { ...skills(base), second_passive_skill_text: 'When this Unit destroys an enemy it gains <unit-skill>Legion Discipline I</unit-skill> for 3 turns.' },
             { ...skills(base), second_passive_skill_text: 'This Unit gains <unit-skill>Legion Discipline I</unit-skill> for 3 turns whenever a foe is vanquished.' }
         );
         expect(r.newFindings[0]).toMatch(/^passive R2 · lost /);
@@ -118,7 +118,7 @@ describe('structuralGate', () => {
     });
 
     it('passes a ship with no current text: there is no parse to compare against', () => {
-        expect(structuralGate('New', EMPTY_SKILLS, skills('This Unit gains <unit-skill>Legion Discipline I</unit-skill> for 3 turns on kill.'))).toEqual({
+        expect(structuralGate('New', EMPTY_SKILLS, skills('When this Unit destroys an enemy it gains <unit-skill>Legion Discipline I</unit-skill> for 3 turns.'))).toEqual({
             pass: true,
             newFindings: [],
         });
@@ -188,7 +188,7 @@ describe('acceptingFor', () => {
 });
 
 describe('syncGate', () => {
-    const kill = 'This Unit gains <unit-skill>Legion Discipline I</unit-skill> for 3 turns on kill.';
+    const kill = 'When this Unit destroys an enemy it gains <unit-skill>Legion Discipline I</unit-skill> for 3 turns.';
     // Replaces the kill buff with a plain attack: a parse change the audit rules do not flag.
     const replaced = 'This Unit deals <unit-damage>100% damage</unit-damage>.';
     const alwaysCrit = "This Unit's attacks are always critical.";

@@ -45,8 +45,8 @@ function ship(over: Partial<Ship>): Ship {
 const RUINER_R2 =
     'This Unit inflicts <unit-skill>Bomb II</unit-skill> for 2 turns on any enemy performing a ' +
     '<unit-aid>repair</unit-aid>, once per round per enemy.<br /><br />This Unit gains 1 stack of ' +
-    '<unit-skill>Overload</unit-skill> when an enemy performs a <unit-aid>repair</unit-aid>, upon ' +
-    'killing an enemy, this Unit removes <unit-skill>Overload</unit-skill>.';
+    '<unit-skill>Overload</unit-skill> when an enemy preforms a <unit-aid>repair</unit-aid>, upon ' +
+    'destroying an enemy, this Unit removes <unit-skill>Overload</unit-skill>.';
 
 /** Heliodor's R2 passive, verbatim from docs/ship-skills.csv (second passive column). */
 const HELIODOR_R2 =

@@ -1605,7 +1605,7 @@ function abilitiesFromText(
             });
         }
 
-        // Paracelsus p2: "Upon being killed by direct Damage, this Unit deals Damage equal to
+        // Paracelsus p2: "Upon being destroyed by direct damage, this Unit deals damage equal to
         // N% of its max HP." on-destroyed HP-scaled retaliation — composes the existing
         // on-destroyed trigger with hpBasisPct (multiplier:0), same executor shape as Vindicator.
         const onKilled = parseKilledByDirectHpDamage(text);
@@ -3001,8 +3001,8 @@ function abilitiesFromText(
         });
     }
 
-    // Liberator (Phase 4b Task 10): "When an enemy dies, all allies add 1 charge to their
-    // Charged Skills" → an all-allies charge ability on the on-enemy-destroyed reactive trigger
+    // Liberator: "When an enemy is destroyed, all allies add 1 charge to their charged skills"
+    // → an all-allies charge ability on the on-enemy-destroyed reactive trigger
     // (rides the existing charge executor's ally/all-allies path). Emitted BEFORE the extra-action
     // block so the slot keeps text-position order (the charge phrase precedes the extra-action one).
     const allyCharge = parseAllyChargeOnEnemyDeath(text);
@@ -3590,9 +3590,9 @@ export function buildShipAbilities(rawShip: Ship): ShipSkills {
             : undefined;
         // Overload lifecycle guard: a kill never GRANTS a recurring/accumulating buff — it only
         // REMOVES it (the kill phrasing belongs to the remove-self-buff path, parsed separately by
-        // parseSelfBuffRemovals). The Marauder "gains <buff> every turn … loses it on kill" shape
-        // makes Overload's name appear in BOTH the per-turn grant clause and the kill-removal
-        // clause; resolveBuffClause can pick up the kill phrasing and mis-trigger the accumulating
+        // parseSelfBuffRemovals). The Marauder "gains 1 stack of Overload every turn and, upon
+        // destroying an enemy, removes Overload" shape makes Overload's name appear in BOTH the
+        // per-turn grant clause and the kill-removal clause; resolveBuffClause can pick up the kill phrasing and mis-trigger the accumulating
         // GRANT on on-enemy-destroyed (Mangler/Ravager), which would gate the every-turn accrual
         // behind a kill. Strip a kill trigger from an accumulating (recurring) grant so it keeps its
         // per-round accumulation; the legitimate recurring-grant triggers (Asphyxiator
@@ -3669,13 +3669,11 @@ export function buildShipAbilities(rawShip: Ship): ShipSkills {
         // unaffected.
         //
         // Reuse the same Overload-lifecycle guard as detectReactiveTrigger above
-        // (isAccumulatingGrant): Sokol's "gains 1 stack of Blast every turn and grants one extra
-        // end of round action upon a kill, once per round" shares ITS OWN sentence with both the
-        // EXTRA_ACTION_RE phrase and the enemy-death phrase, so detectExtraActionCoTrigger alone
-        // would co-trigger the recurring/accumulating Blast stack onto on-enemy-destroyed — gating
+        // (isAccumulatingGrant): an accumulating stack ("gains 1 stack of <buff> every turn") that
+        // shares its sentence with both the EXTRA_ACTION_RE phrase and an enemy-death phrase would
+        // otherwise be co-triggered by detectExtraActionCoTrigger onto on-enemy-destroyed — gating
         // its every-turn accrual behind a kill, the exact regression class the guard above exists
-        // to prevent. isAccumulatingGrant must gate this branch too, since it runs after (and was
-        // never re-applied here).
+        // to prevent. isAccumulatingGrant gates this branch too.
         if (
             reactiveTrigger === undefined &&
             !isAccumulatingGrant &&

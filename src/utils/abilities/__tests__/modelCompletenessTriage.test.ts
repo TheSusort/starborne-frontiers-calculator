@@ -92,12 +92,12 @@ describe('SP-A — incoming-reduction condition gates', () => {
 describe('SP-B — new reactive trigger families', () => {
     // Verbatim from docs/ship-skills.csv (second_passive_skill_text field).
     const PARACELSUS_P2 =
-        'Upon being killed by direct Damage, this Unit deals <unit-damage>Damage equal to 50%</unit-damage> of its max HP and grants allies <unit-skill>Everliving Regeneration II</unit-skill> for 4 turns.';
+        'Upon being destroyed by direct damage, this Unit deals <unit-damage>damage equal to 50%</unit-damage> of its max HP and grants all allies <unit-skill>Everliving Regeneration II</unit-skill> for 4 turns.';
 
-    it('Paracelsus: "Upon being killed by direct Damage, deals damage equal to 50% of its max HP" builds an on-destroyed HP-scaled retaliation', () => {
+    it('Paracelsus: "Upon being destroyed by direct damage, deals damage equal to 50% of its max HP" builds an on-destroyed HP-scaled retaliation', () => {
         const abilities = abilitiesFor({ secondPassiveSkillText: PARACELSUS_P2 }, 'passive');
         // Retaliation: on-destroyed HP-scaled damage. Assert the exact basis (skill text says
-        // "Damage equal to 50% of its max HP") so a wrong-scaling regression is caught.
+        // "damage equal to 50% of its max HP") so a wrong-scaling regression is caught.
         expect(
             abilities.some(
                 (a) =>
@@ -116,15 +116,15 @@ describe('SP-B — new reactive trigger families', () => {
 
     // Verbatim from docs/ship-skills.csv (second_passive_skill_text field).
     const FAUST_P2 =
-        'This Unit <unit-aid>purges 3</unit-aid> buffs from the enemy when killed by direct Damage.';
+        'This Unit <unit-skill>purges 3 buffs</unit-skill> from the enemy when destroyed by direct damage.';
 
     // FALSE POSITIVE — locked as a regression guard, NOT assigned to SP-B. Dry-run (plain `it`)
     // against production PASSES today: buildShipAbilities already routes this exact "purges N
-    // buffs ... when killed by direct Damage" clause onto `on-destroyed` via
+    // buffs ... when destroyed by direct damage" clause onto `on-destroyed` via
     // detectKilledByDirectDamageTrigger (skillTextParser.ts) — a detector whose own doc comment
     // names Faust as its target. The SP0 roadmap assumed this was an unmodelled reactive family;
     // it was already shipped independently of this epic.
-    it('Faust: "purges 3 buffs from the enemy when killed by direct Damage" already rides on-destroyed (FP)', () => {
+    it('Faust: "purges 3 buffs from the enemy when destroyed by direct damage" already rides on-destroyed (FP)', () => {
         const abilities = abilitiesFor({ secondPassiveSkillText: FAUST_P2 }, 'passive');
         expect(abilities.some((a) => a.trigger === 'on-destroyed')).toBe(true);
     });

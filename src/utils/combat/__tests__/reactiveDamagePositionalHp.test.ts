@@ -137,7 +137,7 @@ const VINDICATOR_P2 =
 // Verbatim from docs/ship-skills.csv (Paracelsus, first_passive_skill_text — the R0/innate slot,
 // applies with zero refits). Do NOT alter this text.
 const PARACELSUS_P1 =
-    'Upon being killed by direct Damage, this Unit deals <unit-damage>Damage equal to 50%</unit-damage> of its max HP.';
+    'Upon being destroyed by direct damage, this Unit deals <unit-damage>damage equal to 50%</unit-damage> of its max HP.';
 
 const vindicator = (id: string): Ship =>
     ship(id, {

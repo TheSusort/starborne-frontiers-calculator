@@ -1,9 +1,8 @@
 /**
- * PR-B1: Paracelsus's "Upon being killed by direct Damage" clause routes BOTH halves onto the
- * existing on-destroyed trigger:
+ * Paracelsus's "Upon being destroyed by direct damage" clause routes BOTH halves onto the
+ * on-destroyed trigger:
  *   (a) a 50%-max-HP retaliation (`type: 'damage'`, `hpBasisPct`) against the killer, and
- *   (b) an ally-wide Everliving Regeneration II grant (`type: 'buff'`, `target: 'all-allies'`) —
- *       previously wired onto on-cast; PR-B1 moves it onto on-destroyed too.
+ *   (b) an ally-wide Everliving Regeneration II grant (`type: 'buff'`, `target: 'all-allies'`).
  *
  * Model-completeness triage locked the ability SHAPE (modelCompletenessTriage.test.ts, SP-B).
  * These are the ENGINE-level integration tests proving the shapes actually EXECUTE:
@@ -36,7 +35,7 @@ type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 // Verbatim from docs/ship-skills.csv (second_passive_skill_text field) — same constant as the
 // SP-B triage probe (modelCompletenessTriage.test.ts). Do not alter.
 const PARACELSUS_P2 =
-    'Upon being killed by direct Damage, this Unit deals <unit-damage>Damage equal to 50%</unit-damage> of its max HP and grants allies <unit-skill>Everliving Regeneration II</unit-skill> for 4 turns.';
+    'Upon being destroyed by direct damage, this Unit deals <unit-damage>damage equal to 50%</unit-damage> of its max HP and grants all allies <unit-skill>Everliving Regeneration II</unit-skill> for 4 turns.';
 
 /** Minimal Ship stub — mirrors modelCompletenessTriage.test.ts's `ship()` helper. */
 function makeShip(over: Partial<Ship>): Ship {
