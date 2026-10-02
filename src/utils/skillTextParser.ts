@@ -1700,33 +1700,30 @@ const ENEMY_GAINS_TAUNT_RE = /\bwhen\s+an?\s+enemy\b[^.]*?\bgains?\b[^.]*?\btaun
  *  - active-voice crit phrasing → 'on-crit' (Enforcer "critically hits", Wusheng
  *    "critically damaging"). Guarded against passive voice: "is critically hit" /
  *    "is critically damaged" do NOT classify. NOTE: detectGrantConditions' self-crit rule
- *    uses a looser regex and WOULD misclassify "is critically damaged" as a self-crit
- *    condition; that legacy behaviour is left untouched (no ship text relies on it), but this
- *    new trigger path is correct.
+ *    uses a looser regex that reads "is critically damaged" as a self-crit condition; no ship
+ *    text relies on that reading.
  *  - "at the start of (the|each|every) round" → 'start-of-round' (Valkyrie).
- *  - "at the start of (the|its|each|every) turn" → 'start-of-turn' (epic PR4: Cobalt's Out.
- *    Damage Up II buff, sharing its trailing gate with the sibling charge ability).
+ *  - "at the start of (the|its|each|every) turn" → 'start-of-turn' (Cobalt's Out. Damage Up II
+ *    buff, sharing its trailing gate with the sibling charge ability).
  *  - "detonates a Bomb" / "Bomb explodes" → 'on-bomb-detonated' (Lingshe).
- *  - "when an enemy cleanses a debuff" → 'on-enemy-cleansed' (Phase 4c PR 4: Arum Out. Damage
- *    Down I, Yarrow/Larkspur Gelecek Contagion). LIVE in healing mode (the DPS sim ignores
- *    enemy-action triggers); Grif's NAMELESS damage proc on the same phrasing is handled by
- *    detectEnemyCleanseTrigger (sentence-scoped) since it has no buffName to key on.
+ *  - "when an enemy cleanses a debuff" → 'on-enemy-cleansed'. LIVE in healing mode (the DPS
+ *    sim ignores enemy-action triggers); Grif's NAMELESS damage proc on the same phrasing is
+ *    handled by detectEnemyCleanseTrigger (sentence-scoped) since it has no buffName to key on.
  *  - "when an enemy performs a repair" → 'on-enemy-repaired'.
  *    Checked BEFORE the kill rule so Ruiner's comma-joined grant resolves correctly.
- *  - "when this Unit cleanses a Debuff" / "upon Cleansing a Debuff" → 'on-own-cleanse'
- *    (Phase 3 PR-H: Morao's Defense Up II grant).
+ *  - "when this Unit cleanses a Debuff" / "upon Cleansing a Debuff" → 'on-own-cleanse'.
  *  - an enemy-death phrasing (KILL_TRIGGER_RE holds the accepted wordings) →
  *    'on-enemy-destroyed'.
  *  - "on inflicting a debuff" / "upon applying a debuff" → 'on-debuff-inflicted'
  *    (APPLYING_DEBUFF_RE; SELF_INFLICTS_DEBUFF_RE covers the present-tense form).
- *  - "if its debuff is resisted" → 'on-own-debuff-resisted' (PR-B2: Ravager's Hacking Module
- *    Overdrive grant; inflictor-scoped mirror of the resister-side on-debuff-resisted).
- *  - "when an enemy [defender] gains Taunt" → 'on-enemy-taunt-gained' (Ship-kit Wave 3, Task 4:
- *    Amartya's Exposed grant). Narrow and name-specific to Taunt — distinct from the broad,
- *    unfiltered on-enemy-buffed (ENEMY_BUFFED_RE).
+ *  - "if its debuff is resisted" → 'on-own-debuff-resisted' (the inflictor-scoped mirror of
+ *    the resister-side on-debuff-resisted).
+ *  - "when an enemy [defender] gains Taunt" → 'on-enemy-taunt-gained'. Narrow and
+ *    name-specific to Taunt — distinct from the broad, unfiltered on-enemy-buffed
+ *    (ENEMY_BUFFED_RE).
  *
- * Other reactive phrasings (when-attacked, ally-crit, …) are NOT derivable this phase and stay
- * undefined (manual modelling). Reference data: docs/ship-skills.csv.
+ * A phrasing no rule matches returns undefined (modelled manually). Reference data:
+ * docs/ship-skills.csv.
  */
 export function detectReactiveTrigger(
     skillText: string | null | undefined,
@@ -1740,7 +1737,7 @@ export function detectReactiveTrigger(
     // here, but the ally subject makes this an ally-scoped trigger, not a self-crit.
     if (ALLY_CRIT_HIT_RE.test(clause)) return 'on-ally-crit';
     if (matchesActiveSelfCrit(clause)) return 'on-crit';
-    // SP-D (Berserker): "gains <Buff> for N turns when hitting 3 ore more enemies" is a
+    // Berserker: "gains <Buff> for N turns when hitting 3 ore more enemies" is a
     // reaction to THIS UNIT's own damage-dealing action (same family as the self-crit rule
     // above), not a combat-start-only fact — route it through on-deal-damage so the drain-time
     // enemies-hit-this-cast gate (still carried in `conditions`, untouched here) re-evaluates on
@@ -1748,7 +1745,7 @@ export function detectReactiveTrigger(
     // observe a real hit count before any turn has fired).
     if (hitCountConditionFromClause(clause.toLowerCase())) return 'on-deal-damage';
     if (START_OF_ROUND_RE.test(clause)) return 'start-of-round';
-    // Ship-kit W8, Task 4: "at the end of the round" → end-of-round (Chimei's non-defender
+    // "at the end of the round" → end-of-round (Chimei's non-defender
     // below-40%-HP Stealth grant). Shares END_OF_ROUND_RE with detectEndOfRoundPurgeTrigger/
     // detectEndOfRoundDamageTrigger (Rhodium) — same phrase, buff-grant call site. Checked
     // AFTER start-of-round since resolveBuffClause is sentence-scoped (Chimei's grant sentence
@@ -1756,7 +1753,7 @@ export function detectReactiveTrigger(
     // separate clause keyed on the same buff name but matched first by resolveBuffClause, so it
     // never reaches here) — this ordering just mirrors the existing rule for readability.
     if (END_OF_ROUND_RE.test(clause)) return 'end-of-round';
-    // Ship-kit W9, Task 5: "at the end of this Unit's turn" → end-of-turn (Quixilver R2's
+    // "at the end of this Unit's turn" → end-of-turn (Quixilver R2's
     // Barrier grant). Checked AFTER end-of-round for the same reason START_OF_ROUND_RE is
     // checked first above — the two phrasings never co-occur in one clause, but this mirrors
     // the existing ordering for readability. Routing this OFF on-cast matters beyond the trigger
@@ -1765,14 +1762,12 @@ export function detectReactiveTrigger(
     // end-of-turn is a LIVE trigger (triggers.ts), so partitionReactiveAbilities routes it onto
     // the reactive path instead — it re-fires every one of the owner's turns, not just round 1.
     if (END_OF_OWN_TURN_RE.test(clause)) return 'end-of-turn';
-    // Epic PR4: "at the start of (the|its|each|every) turn" — Cobalt's Out. Damage Up II buff
-    // shares its governing trailing phrase with its sibling charge ability (already
-    // start-of-turn via START_OF_TURN_CHARGE_RE in the charge-specific parser); this was the
-    // only "at the start of the turn" BUFF grant in the corpus at write time (verified against
-    // docs/ship-skills.csv — Volk/Xcellence's start-of-turn heal/shield use separate,
-    // non-buff parse paths untouched by this branch).
+    // "at the start of (the|its|each|every) turn" — a buff granted in this clause shares its
+    // governing trailing phrase with a sibling charge ability, which the charge-specific parser
+    // reads as start-of-turn via the same START_OF_TURN_CHARGE_RE. Start-of-turn heals and
+    // shields use their own, non-buff parse paths.
     if (START_OF_TURN_CHARGE_RE.test(clause)) return 'start-of-turn';
-    // Ship-kit W7: DETONATOR-scoped "this Unit detonates a Bomb" (Lingshe) is checked BEFORE the
+    // DETONATOR-scoped "this Unit detonates a Bomb" (Lingshe) is checked BEFORE the
     // victim-scoped "bomb explodes" family — the two are mutually exclusive by phrasing, but this
     // ordering makes the detonator reading win unambiguously.
     if (SELF_DETONATES_BOMB_RE.test(clause)) return 'on-self-bomb-detonated';
@@ -1789,26 +1784,20 @@ export function detectReactiveTrigger(
     // repair sentence). Tycho's below-40%-HP Barrier is a different reactive (deferred), so this
     // only matches the literal activation phrasing.
     if (CHEAT_DEATH_ACTIVATES_RE.test(clause)) return 'on-cheat-death-activated';
-    // "when an enemy cleanses a debuff" → on-enemy-cleansed (Phase 4c PR 4). Previously this
-    // phrasing fell through to undefined (manual modelling); it is now a LIVE derivable trigger
-    // for the named buff/debuff grant in its clause (Arum Out. Damage Down I, Yarrow/Larkspur
-    // Gelecek Contagion, Arum-refit all-allies Gelecek Contagion II).
+    // "when an enemy cleanses a debuff" → on-enemy-cleansed, a LIVE trigger for the named
+    // buff/debuff grant in its clause.
     if (ENEMY_CLEANSE_RE.test(clause)) return 'on-enemy-cleansed';
-    // Phase 3 PR-H: "when this Unit cleanses a Debuff" / "upon Cleansing a Debuff" — Morao's
-    // Defense Up II grant. Clause-scoped by buffName (resolveBuffClause) so no anchor-position
+    // "when this Unit cleanses a Debuff" / "upon Cleansing a Debuff" → on-own-cleanse.
+    // Clause-scoped by buffName (resolveBuffClause) so no anchor-position
     // ambiguity — a buff name is unique per grant, unlike the heal-side same-pct collision (see
     // ParsedHealAbility.ownCleanseReaction in parseHealAbilities for that case).
     if (OWN_CLEANSE_TRIGGER_RE.test(clause)) return 'on-own-cleanse';
-    // Phase 3 PR-I: "when an enemy gets buffed" → on-enemy-buffed (Nuqtu's Terran Bolster III
-    // grant). See ENEMY_BUFFED_RE's doc comment for the corpus-verification that only Nuqtu's
-    // clauses match.
+    // "when an enemy gets buffed" → on-enemy-buffed (see ENEMY_BUFFED_RE's doc comment).
     if (ENEMY_BUFFED_RE.test(clause)) return 'on-enemy-buffed';
-    // Ship-kit Wave 3, Task 4: "when an enemy [defender] gains Taunt" → on-enemy-taunt-gained
-    // (Amartya's Exposed grant). Checked AFTER the broad ENEMY_BUFFED_RE (harmless ordering here —
-    // ENEMY_BUFFED_RE's own "gets/is/are/becomes buffed" phrasing never matches "gains Taunt", so
-    // this branch is only ever reached via ENEMY_GAINS_TAUNT_RE's own distinct match).
+    // "when an enemy [defender] gains Taunt" → on-enemy-taunt-gained. Checked AFTER the broad
+    // ENEMY_BUFFED_RE, whose "gets/is/are/becomes buffed" phrasing never matches "gains Taunt".
     if (ENEMY_GAINS_TAUNT_RE.test(clause)) return 'on-enemy-taunt-gained';
-    // Overload lifecycle (Task 4). REPAIR is checked BEFORE KILL: Ruiner's Overload grant and its
+    // REPAIR is checked BEFORE KILL: Ruiner's Overload grant and its
     // kill-removal share one comma-joined sentence ("gains Overload when an enemy performs a repair,
     // upon killing an enemy, this Unit removes Overload") — the grant must resolve to
     // on-enemy-repaired. Safe: no Marauder Rage clause contains "repair", and the Mangler/Ravager/
@@ -1816,7 +1805,7 @@ export function detectReactiveTrigger(
     if (ENEMY_REPAIRS_RE.test(clause)) return 'on-enemy-repaired';
     if (KILL_TRIGGER_RE.test(clause)) return 'on-enemy-destroyed';
     if (APPLYING_DEBUFF_RE.test(clause)) return 'on-debuff-inflicted';
-    // Ship-kit W7: present-tense self-subject "when this Unit inflicts a Debuff" (Warden).
+    // Present-tense self-subject "when this Unit inflicts a Debuff" (Warden).
     if (SELF_INFLICTS_DEBUFF_RE.test(clause)) return 'on-debuff-inflicted';
     // Paracelsus: "Upon being killed by direct Damage … grants allies <buff>" — the named-buff
     // half of an on-destroyed clause. Mirrors Faust's detectKilledByDirectDamageTrigger (which
@@ -1824,7 +1813,7 @@ export function detectReactiveTrigger(
     if (KILLED_BY_DIRECT_RE.test(clause)) return 'on-destroyed';
     // Ravager: "If its debuff is resisted, it gains <buff>" — inflictor-side reaction.
     if (OWN_DEBUFF_RESISTED_RE.test(clause)) return 'on-own-debuff-resisted';
-    // SP-F F2: "when an ally ... has their Shield destroyed" — AEGIS's Defense Up II grant.
+    // "when an ally ... has their Shield destroyed" (AEGIS's Defense Up II grant).
     if (ALLY_SHIELD_DESTROYED_RE.test(clause)) return 'on-ally-shield-destroyed';
     return undefined;
 }

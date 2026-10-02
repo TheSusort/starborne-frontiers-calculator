@@ -298,6 +298,8 @@ describe('damage, defence and charge clauses — tagged mechanic phrases are not
                 name: 'Inferno II',
             },
         },
+        // KNOWN GAP: 'Corrosion' is a phantom read of "extends the newly inflicted Corrosion",
+        // which names the status being extended, not a second inflict; our text parses it too.
         {
             ship: 'Wisteria passive R2',
             source: 'passive2' as const,

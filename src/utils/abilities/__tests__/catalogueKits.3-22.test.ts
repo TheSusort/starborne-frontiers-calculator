@@ -169,10 +169,10 @@ describe('3.22 kits — damage clauses', () => {
         });
     });
 
-    // "a control effect" names a CATEGORY of statuses, not a status called "control". Which
-    // statuses belong to it is not modelled, so the bonus is left out and only the base damage
-    // fires: a condition keyed on the name 'control' would match no status in the combat sim and
-    // ANY debuff in DPS mode (whose name-agnostic fallback counts every debuff).
+    // KNOWN GAP: "a control effect" names a CATEGORY of statuses, not a status called "control".
+    // Which statuses belong to it is pending a user ruling, so the bonus is left out and only the
+    // base damage fires: a condition keyed on the name 'control' would match no status in the
+    // combat sim and ANY debuff in DPS mode (whose name-agnostic fallback counts every debuff).
     it('Sokol active: the base 80% fires; the control-effect bonus is not minted', () => {
         const text =
             'This Unit deals <unit-damage>80% damage</unit-damage> and, if the target is affected by a <unit-skill>control</unit-skill> effect, deals an additional <unit-damage>130% damage</unit-damage>.';

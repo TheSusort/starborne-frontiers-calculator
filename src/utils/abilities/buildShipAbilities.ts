@@ -847,7 +847,7 @@ function parseIncomingCritReduction(text: string): number | null {
     return parseFloat(m[1] ?? m[2]);
 }
 
-/** One parsed incoming-damage-reduction directive . `scopes` lists every
+/** One parsed incoming-damage-reduction directive. `scopes` lists every
  *  incoming-reduction ability scope this phrasing should emit (most phrasings are
  *  scope:'direct' only; "all incoming damage"/unscoped phrasings emit BOTH 'direct' and
  *  'dot'). `pct` XOR `hpScaling` — never both. */
