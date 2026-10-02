@@ -209,7 +209,7 @@ describe('cluster 4 — on-enemy-buffed (Nuqtu)', () => {
 // ─── cluster 5 — on-enemy-destroyed / on-kill ───────────────────────────────────────────────
 describe('cluster 5 — on-enemy-destroyed / on-kill', () => {
     const HARVESTER_P2 =
-        'When an allied Unit is destroyed, this Unit gains 1 extra end of round action.';
+        'When an ally is destroyed, this Unit <unit-skill>gains 1 extra end of round action</unit-skill>.';
     it('Harvester: extra-action on ally-destroyed already rides on-ally-destroyed (FP lock)', () => {
         const ab = abilitiesFor({ firstPassiveSkillText: HARVESTER_P2 }, 'passive');
         const ea = ab.find((a) => a.type === 'extra-action');

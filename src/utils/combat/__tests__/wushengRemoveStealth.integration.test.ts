@@ -1,13 +1,10 @@
 /**
- * Ship-kit Wave 8 Task 11 — Wusheng "if directly damaged while Stealth is active, remove
- * Stealth" engine dispatch coverage.
- *
- * wave8Wusheng.test.ts (abilities/__tests__) only asserts the parsed ability SHAPE — a
- * `remove-self-buff` ability for Stealth on the `on-attacked` trigger, gated on `self-buff`
- * Stealth being active. Nothing there exercises the reactive ENGINE path proving the trigger
- * actually DISPATCHES and the removal actually fires at runtime. This file mirrors
- * wisteriaSelfCritDot.integration.test.ts's structure: a direct registerReactiveListeners unit
- * test, plus a full runCombat integration test.
+ * Engine dispatch coverage for a hand-built "if directly damaged while Stealth is active, remove
+ * Stealth" ability: a `remove-self-buff` for Stealth on the `on-attacked` trigger, gated on
+ * `self-buff` Stealth being active. No ship's skill text parses to this ability (Wusheng keeps
+ * Stealth when hit — wave8Wusheng.test.ts); a user can still author it in the editor. This file
+ * mirrors wisteriaSelfCritDot.integration.test.ts's structure: a direct registerReactiveListeners
+ * unit test, plus a full runCombat integration test.
  *
  * The `on-attacked` trigger is a pre-existing LIVE trigger (triggers.ts's `case 'on-attacked':`,
  * registered generically for ANY ability type on that trigger — see e.g. the Task 8

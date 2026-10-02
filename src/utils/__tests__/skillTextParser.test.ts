@@ -778,13 +778,24 @@ describe('parseSkillEffects', () => {
         ).toEqual([]);
     });
 
-    it('skips tags preceded by loses', () => {
+    it('skips tags preceded by removes (Ravager)', () => {
+        // The second Overload tag follows "removes", so it is not a second grant.
         expect(
             parseSkillEffects(
-                'Upon killing an enemy, this Unit loses <unit-skill>Overload</unit-skill>',
+                'This Unit gains 1 stack of <unit-skill>Overload</unit-skill> every turn and, upon destroying an enemy, removes <unit-skill>Overload</unit-skill> and gains <unit-skill>Marauder Rage III</unit-skill> for 3 turns.',
                 'passive1'
             )
-        ).toEqual([]);
+        ).toEqual([
+            {
+                buffName: 'Overload',
+                target: 'self',
+                duration: 'recurring',
+                stacks: 1,
+                stackTrigger: 'per-round',
+                source: 'passive1',
+            },
+            { buffName: 'Marauder Rage III', target: 'self', duration: 3, source: 'passive1' },
+        ]);
     });
 
     it('parses stack-based recurring effect', () => {
@@ -1109,7 +1120,7 @@ describe('parseSecondaryDamage', () => {
         // shield") — not additional damage tied to this unit's OWN skill cast. The existing
         // Phase-4 reactive guard (line ~316, "resists...debuff") intentionally excludes this
         // clause from parseSecondaryDamage both BEFORE and AFTER the shield-basis addition —
-        // it stays an unmodeled/deferred reactive proc (same bucket as "upon being killed").
+        // it stays an unmodeled/deferred reactive proc (same bucket as "upon being destroyed").
         // This is a protective regression test, not a red-to-green test: it passes identically
         // pre- and post-change, proving the shield-basis addition does not accidentally widen
         // the guard's scope.
@@ -2164,12 +2175,6 @@ describe('parseSelfBuffRemovals', () => {
                 'This Unit gains 1 stack of <unit-skill>Overload</unit-skill> every turn and, upon destroying an enemy, removes <unit-skill>Overload</unit-skill> and gains <unit-skill>Marauder Rage III</unit-skill> for 3 turns.'
             )
         ).toEqual([{ buffName: 'Overload', trigger: 'on-enemy-destroyed' }]));
-    it('emits for passive "Overload is lost"', () =>
-        expect(
-            parseSelfBuffRemovals(
-                'Upon destroying an enemy, <unit-skill>Overload</unit-skill> is lost'
-            )
-        ).toEqual([{ buffName: 'Overload', trigger: 'on-enemy-destroyed' }]));
     it('resolves the removal trigger by removal position, not first buff-name sentence (Asphyxiator)', () =>
         expect(
             parseSelfBuffRemovals(
@@ -2867,7 +2872,7 @@ describe('parseExtraAction', () => {
 
     it('Harvester: on-ally-destroyed', () => {
         const r = parseExtraAction(
-            'When an allied Unit is destroyed, this Unit gains 1 extra end of round action and <unit-skill>Speed Up I</unit-skill> for 6 turns.'
+            'When an ally is destroyed, this Unit <unit-skill>gains 1 extra end of round action</unit-skill> and <unit-skill>Speed Up I</unit-skill> for 6 turns.'
         );
         expect(r).toEqual({
             oncePerRound: false,

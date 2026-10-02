@@ -2515,7 +2515,7 @@ describe('buildShipAbilities', () => {
             const s = ship({
                 refits: [{}, {}] as Ship['refits'],
                 secondPassiveSkillText:
-                    'This Unit gains <unit-skill>Stealth</unit-skill> for 1 turn after critically damaging an enemy.<br /><br />This Unit reduces direct damage by 25% while <unit-skill>Stealth</unit-skill> is active. If directly damaged while <unit-skill>Stealth</unit-skill> is active, remove <unit-skill>Stealth</unit-skill>.<br /><br />This Unit starts combat fully charged.',
+                    'This Unit gains <unit-skill>Stealth</unit-skill> for 1 turn after critically damaging an enemy.<br /><br />This Unit takes <unit-damage>25% less direct damage</unit-damage> while <unit-skill>Stealth</unit-skill> is active.<br /><br />This Unit starts combat <unit-skill>fully charged</unit-skill>.',
             });
             const buff = passiveOf(s)?.abilities.find((a) => a.type === 'buff');
             expect(buff).toMatchObject({ trigger: 'on-crit', config: { buffName: 'Stealth' } });
@@ -2999,7 +2999,7 @@ describe('buildShipAbilities', () => {
         it('Harvester 3rd passive: extra-action on-ally-destroyed', () => {
             const s = ship({
                 thirdPassiveSkillText:
-                    'When an allied Unit is destroyed, this Unit gains 1 extra end of round action and <unit-skill>Speed Up I</unit-skill> for 6 turns.',
+                    'When an ally is destroyed, this Unit <unit-skill>gains 1 extra end of round action</unit-skill> and <unit-skill>Speed Up I</unit-skill> for 6 turns.',
             });
             const passive = slot(buildShipAbilities(s).slots, 'passive')!;
             const extra = passive.abilities.find((a) => a.type === 'extra-action')!;
@@ -3030,26 +3030,6 @@ describe('buildShipAbilities', () => {
             if (extra.config.type === 'extra-action') {
                 expect(extra.config.oncePerRound).toBe(true);
             }
-        });
-
-        it('Liberator (constants phrasing): "grants N charge to all allies" also emits the all-allies charge', () => {
-            // An older in-game phrasing reads "this unit grants 1 charge to all
-            // allies" (verb-first), distinct from the CSV's "all allies add 1 charge". Both must
-            // emit the same all-allies on-enemy-destroyed charge ability.
-            const s = ship({
-                secondPassiveSkillText:
-                    'When an enemy is destroyed, this unit grants 1 charge to all allies, and once per round, it gains 1 extra action.',
-            });
-            const passive = slot(buildShipAbilities(s).slots, 'passive')!;
-            const charge = passive.abilities.find((a) => a.type === 'charge')!;
-            expect(charge).toBeDefined();
-            expect(charge.target).toBe('all-allies');
-            expect(charge.trigger).toBe('on-enemy-destroyed');
-            if (charge.config.type === 'charge') {
-                expect(charge.config.amount).toBe(1);
-            }
-            const extra = passive.abilities.find((a) => a.type === 'extra-action')!;
-            expect(extra.trigger).toBe('on-enemy-destroyed');
         });
     });
 

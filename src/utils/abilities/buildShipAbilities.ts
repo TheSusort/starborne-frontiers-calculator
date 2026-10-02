@@ -3067,18 +3067,10 @@ function abilitiesFromText(
         });
     }
 
-    // Overload lose-on-kill (and "removes"/"is lost" phrasings): the 5 Marauder ships drop a
-    // named self-buff on a reactive trigger. parseSelfBuffRemovals (Task 5) scopes the trigger to
-    // the removal clause's position; the buff is cleared from ALL self stores (scope: 'all').
-    //
-    // Wave 8 Task 11 (Wusheng): an `on-attacked` removal ("if directly damaged … remove Stealth")
-    // additionally gates on the named buff still being ACTIVE at drain time — unlike the Marauder
-    // kill/repair/debuff triggers (which fire unconditionally; removeSelfBuffByName is a safe
-    // no-op if the buff was never present, so those never needed a gate), Wusheng's text is
-    // explicitly conditional ("if directly damaged WHILE Stealth is active"). The generic
-    // `self-buff` ConditionSubject (evaluateConditions.ts) already reads a live buff-presence
-    // count off the owner's snapshot, so this reuses existing machinery rather than adding a new
-    // condition kind.
+    // Overload removal ("removes Overload"): the Marauder ships drop a named self-buff on a
+    // reactive trigger. parseSelfBuffRemovals scopes the trigger to the removal clause's position;
+    // the buff is cleared from ALL self stores (scope: 'all'). The removal fires unconditionally:
+    // removeSelfBuffByName is a safe no-op if the buff was never present.
     for (const rem of parseSelfBuffRemovals(text)) {
         const removePos = findBuffNamePos(text, rem.buffName);
         out.push({
@@ -3087,10 +3079,7 @@ function abilitiesFromText(
                 type: 'remove-self-buff',
                 target: 'self',
                 trigger: rem.trigger,
-                conditions:
-                    rem.trigger === 'on-attacked'
-                        ? [{ subject: 'self-buff', buffName: rem.buffName, derivable: true }]
-                        : [],
+                conditions: [],
                 config: { type: 'remove-self-buff', buffName: rem.buffName, scope: 'all' },
                 autoFilled: true,
             },
@@ -3655,23 +3644,15 @@ export function buildShipAbilities(rawShip: Ship): ShipSkills {
                 occurrence
             );
         }
-        // Harvester p2: "When an allied Unit is destroyed, this Unit gains 1 extra end of round
+        // Harvester p2: "When an ally is destroyed, this Unit gains 1 extra end of round
         // action and Speed Up I for 6 turns" — the extra-action grant resolves on-ally-destroyed
         // via parseExtraAction, but Speed Up I is a separate (plain) buff ability that otherwise
         // falls through to the on-cast default. Position-scoped on THIS buff's own sentence
         // (rather than buffName-scoped) so a co-located death-trigger phrase is only inherited
         // when it actually shares the sentence — an unrelated buff elsewhere in the row text is
         // unaffected.
-        //
-        // Reuse the same Overload-lifecycle guard as detectReactiveTrigger above
-        // (isAccumulatingGrant): an accumulating stack ("gains 1 stack of <buff> every turn") that
-        // shares its sentence with both the EXTRA_ACTION_RE phrase and an enemy-death phrase would
-        // otherwise be co-triggered by detectExtraActionCoTrigger onto on-enemy-destroyed — gating
-        // its every-turn accrual behind a kill, the exact regression class the guard above exists
-        // to prevent. isAccumulatingGrant gates this branch too.
         if (
             reactiveTrigger === undefined &&
-            !isAccumulatingGrant &&
             ability.config.type === 'buff' &&
             rowText &&
             pos >= 0

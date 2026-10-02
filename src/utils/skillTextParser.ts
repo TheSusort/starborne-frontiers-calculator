@@ -391,8 +391,8 @@ export function parseSecondaryDamage(text: string | null | undefined): Secondary
     const match = pattern.exec(text);
     if (!match) return null;
     // Clause guard: a match whose sentence is a heal ("repairs … an additional X% of
-    // its Max HP") or a clearly-reactive Phase-4 proc ("When this Unit resists …",
-    // "Upon being killed …") is NOT on-cast secondary damage. Sentence-scoped so an
+    // its Max HP") or a clearly-reactive proc ("When this Unit resists …",
+    // "Upon being destroyed …") is NOT on-cast secondary damage. Sentence-scoped so an
     // earlier sentence's repair can't block a later legitimate secondary. NOTE: the
     // prefix keeps non-<br> tags inline (only sentence boundaries are normalized) —
     // sufficient for the known texts, where the guard words are plain prose. This is the
@@ -404,8 +404,7 @@ export function parseSecondaryDamage(text: string | null | undefined): Secondary
     const sentenceStart = Math.max(plainBefore.lastIndexOf('. '), plainBefore.lastIndexOf('; '));
     const sentencePrefix = plainBefore.slice(sentenceStart + 1).toLowerCase();
     if (/\brepair/.test(sentencePrefix)) return null;
-    if (/\bresists?\b[^.]*\bdebuff|upon being killed|upon being destroyed/.test(sentencePrefix))
-        return null;
+    if (/\bresists?\b[^.]*\bdebuff|upon being destroyed/.test(sentencePrefix)) return null;
     const pct = parseFloat(match[1]);
     if (isNaN(pct)) return null;
     const statRaw = match[2].toLowerCase();
@@ -1913,14 +1912,6 @@ export function detectPreCombatShieldTrigger(
 // segment on the un-stripped text. Comma/period boundaries never fall inside <unit-skill> tags, so
 // segmentation is identical with or without tags; only the index mapping is fragile.
 const REMOVAL_SEGMENT_BOUNDARY = /[,.;](?=\s|$)|<br\s*\/?>/gi;
-// Ship-kit Wave 8 Task 11 (Wusheng): "If directly damaged while <buff> is active, remove <buff>."
-// Unlike DR_DIRECT_DAMAGE_RE (the general reaction detector, which deliberately excludes "if" —
-// Panon's "If this Unit is directly damaged" is a conditional GRANT, out of scope there), this
-// window-scoped removal detector accepts BOTH "if" and "when": detectRemovalTriggerAt only ever
-// runs on a window already anchored at a removal verb (parseSelfBuffRemovals' scan), so there is
-// no risk of over-matching an unrelated conditional grant sentence — Panon never reaches this
-// function at all (it has no "loses/removes/remove <unit-skill>" clause to scan for).
-const REMOVAL_DIRECT_DAMAGE_RE = /\b(?:if|when)\s+directly\s+damaged\b|\bwhen\s+attacked\b/i;
 function detectRemovalTriggerAt(text: string, idx: number): AbilityTrigger {
     const masked = maskAbbrev(text);
     // Collect segment boundary spans [start,end) keyed by their terminator position so we can find
@@ -1951,48 +1942,32 @@ function detectRemovalTriggerAt(text: string, idx: number): AbilityTrigger {
     if (ENEMY_REPAIRS_RE.test(window)) return 'on-enemy-repaired';
     if (APPLYING_DEBUFF_RE.test(window)) return 'on-debuff-inflicted';
     if (START_OF_ROUND_RE.test(window)) return 'start-of-round';
-    // Wave 8 Task 11: "if/when directly damaged, remove <buff>" (Wusheng) — the self-scoped
-    // direct-damage reaction, mirroring HEAL_DAMAGE_REACTION_RE's "when … directly damaged"
-    // shape but scoped to this removal window only (see REMOVAL_DIRECT_DAMAGE_RE doc above).
-    if (REMOVAL_DIRECT_DAMAGE_RE.test(window)) return 'on-attacked';
     return 'on-cast';
 }
 
-// Active removal: "loses/removes <unit-skill>NAME</unit-skill>" (Mangler/Ravager/Asphyxiator/
-// Butcher-R1/Ruiner), plus the bare imperative "remove <unit-skill>NAME</unit-skill>" (Wusheng
-// Wave 8 Task 11: "…remove Stealth."). Corpus-verified (docs/ship-skills.csv): the ONLY two
-// "remove[s]? <unit-skill>" matches in the whole sheet are Ruiner's "removes Overload" (already
-// covered by the `removes` alternative) and Wusheng's "remove Stealth" — no ship uses the bare
-// imperative to describe removing a buff FROM AN ENEMY, so broadening to `remove` cannot mint a
-// phantom removal anywhere else. Passive removal: "<unit-skill>NAME</unit-skill> is lost"
-// (Butcher-R2).
-const SELF_BUFF_REMOVAL_ACTIVE_RE =
-    /\b(?:loses|removes|remove)\s+<unit-skill>([^<]+)<\/unit-skill>/gi;
-const SELF_BUFF_REMOVAL_PASSIVE_RE = /<unit-skill>([^<]+)<\/unit-skill>\s+is\s+lost\b/gi;
+// "removes <unit-skill>NAME</unit-skill>" — this Unit removing its own buff (Overload: Mangler,
+// Ravager, Asphyxiator, Butcher, Ruiner).
+const SELF_BUFF_REMOVAL_RE = /\bremoves\s+<unit-skill>([^<]+)<\/unit-skill>/gi;
 
 /**
- * Parses "this Unit loses/removes <buff>" and the passive "<buff> is lost" into self-buff-removal
- * descriptors, resolving each removal's trigger from text NEAR the removal verb (NOT by buff-name
- * sentence — see detectRemovalTriggerAt). Unknown buffs are skipped (resolveBuffName gate) and
- * duplicate buff names are deduped. Operates on the TAGGED text. Reference data: docs/ship-skills.csv.
+ * Parses "this Unit removes <buff>" into self-buff-removal descriptors, resolving each removal's
+ * trigger from text NEAR the removal verb (NOT by buff-name sentence — see
+ * detectRemovalTriggerAt). Unknown buffs are skipped (resolveBuffName gate) and duplicate buff
+ * names are deduped. Operates on the TAGGED text. Reference data: docs/ship-skills.csv.
  */
 export function parseSelfBuffRemovals(
     text: string
 ): { buffName: string; trigger: AbilityTrigger }[] {
     const out: { buffName: string; trigger: AbilityTrigger }[] = [];
     const seen = new Set<string>();
-    const scan = (re: RegExp) => {
-        re.lastIndex = 0;
-        let m: RegExpExecArray | null;
-        while ((m = re.exec(text)) !== null) {
-            const name = resolveBuffName(m[1]);
-            if (!name || seen.has(name)) continue;
-            seen.add(name);
-            out.push({ buffName: name, trigger: detectRemovalTriggerAt(text, m.index) });
-        }
-    };
-    scan(SELF_BUFF_REMOVAL_ACTIVE_RE);
-    scan(SELF_BUFF_REMOVAL_PASSIVE_RE);
+    SELF_BUFF_REMOVAL_RE.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = SELF_BUFF_REMOVAL_RE.exec(text)) !== null) {
+        const name = resolveBuffName(m[1]);
+        if (!name || seen.has(name)) continue;
+        seen.add(name);
+        out.push({ buffName: name, trigger: detectRemovalTriggerAt(text, m.index) });
+    }
     return out;
 }
 
@@ -3163,18 +3138,14 @@ const DR_ALLY_CRIT_HIT_RE = /\bis\s+critical(?:ly)?\s+hit\b/i;
 // trailing clause) / "when attacked" / bare "when hit" (Sansi) / "upon receiving direct
 // damage" (Bizon — the one non-"when" phrasing; corpus-unique so no over-match).
 //
-// The "IF directly damaged" arm (Panon R1/R2, Wusheng R1/R2) used to be deliberately EXCLUDED as
-// "out of scope for this reaction phase". That carve-out went stale: it left Panon's Barrier
-// grant on the generic `on-cast` default, so it armed on PANON'S OWN TURN — every third turn,
-// whether or not anything had touched him — instead of reactively at the moment he is hit. The
-// game text draws no distinction between the two phrasings, and the sibling removal detector
-// (REMOVAL_DIRECT_DAMAGE_RE, ~:1753) already accepts both for exactly that reason.
+// The "IF directly damaged" arm (Panon) is a reaction like the "when" form: the game text draws no
+// distinction between the two phrasings, so Panon's Barrier grant arms at the moment he is hit,
+// not on the generic `on-cast` default (his own turn).
 //
 // The optional group admits ONLY "this unit is" between "if" and "directly", which is what keeps
 // Meatshield's "If this Unit HAS BEEN directly damaged" out: that is a CAST-TIME condition on an
 // active skill (the `wasHitThisRound` subject), not a reaction that fires on being hit, and
-// promoting it to `on-attacked` would move the clause to the wrong path entirely. Corpus census
-// (docs/ship-skills.csv, 2026-08-30): those 5 sites are every `if …directly damaged` in the file.
+// promoting it to `on-attacked` would move the clause to the wrong path entirely.
 const DR_DIRECT_DAMAGE_RE =
     /when\s+(?:this\s+unit\s+is\s+)?directly\s+damaged\b|if\s+(?:this\s+unit\s+is\s+)?directly\s+damaged\b|when\s+attacked\b|when\s+hit\b|upon\s+receiving\s+direct\s+damage\b/i;
 // "while below N% HP" HP gate on a damage-reaction sentence (Makoli: "when directly damaged
@@ -4202,13 +4173,11 @@ export function parseChargeGain(text: string | null | undefined): ChargeGain | n
 
 // Liberator: an all-allies charge grant gated on the enemy's death — distinct from
 // parseChargeGain's self-targeted contract (which disqualifies "all allies"). The death clause
-// reads "When an enemy is destroyed". Two grant phrasings follow it in the same sentence (no '.'
-// between):
-//   • "…, all allies add N charge to their Charged Skills"
-//   • an older in-game phrasing: "…, this unit grants N charge to all allies"
-// Returns the per-ally charge amount, or null. Lookbehind-free.
+// reads "When an enemy is destroyed", and the grant follows it in the same sentence (no '.'
+// between): "…, all allies add N charge to their charged skills". Returns the per-ally charge
+// amount, or null. Lookbehind-free.
 const ALLY_CHARGE_ON_ENEMY_DEATH_RE =
-    /when an enemy is destroyed[^.]*?(?:all allies\s+(?:adds?|gains?)\s+(\d+|a|an)\s+charges?|(?:grants?|adds?|gives?)\s+(\d+|a|an)\s+charges?[^.]*?all allies)/i;
+    /when an enemy is destroyed[^.]*?all allies\s+(?:adds?|gains?)\s+(\d+|a|an)\s+charges?/i;
 
 /** Parses Liberator's on-enemy-death "all allies add N charge" grant. Returns `{ amount }`
  *  (per-ally charge count) or null. The trigger is implicitly on-enemy-destroyed. */
@@ -4218,7 +4187,7 @@ export function parseAllyChargeOnEnemyDeath(
     if (!text) return null;
     const m = ALLY_CHARGE_ON_ENEMY_DEATH_RE.exec(stripUnitTags(text));
     if (!m) return null;
-    const raw = (m[1] ?? m[2]).toLowerCase();
+    const raw = m[1].toLowerCase();
     const amount = raw === 'a' || raw === 'an' ? 1 : parseInt(raw, 10);
     if (!amount || isNaN(amount)) return null;
     return { amount };
@@ -4293,7 +4262,7 @@ const EXTRA_ACTION_DISQUALIFY_RE = /\bpurg/i;
 // "When an enemy is destroyed") → on-enemy-destroyed; an ally-destroyed phrasing (Harvester) →
 // on-ally-destroyed. Default (no match) → on-cast.
 const EXTRA_ACTION_ENEMY_DESTROYED_RE = ENEMY_DEATH_PHRASING_RE;
-const EXTRA_ACTION_ALLY_DESTROYED_RE = /allied unit is destroyed|ally is destroyed/i;
+const EXTRA_ACTION_ALLY_DESTROYED_RE = /ally is destroyed/i;
 // #361 (Prophet): "When this Unit resists a debuff infliction from an enemy, once per round, this
 // Unit gains 1 extra action." Requires the SELF subject — an ally's resist grants Prophet shield
 // penetration in a sibling clause and must not fire an action.
@@ -4404,7 +4373,7 @@ export function parseExtraAction(text: string | null | undefined): ExtraActionPa
 }
 
 /**
- * Harvester p2: "When an allied Unit is destroyed, this Unit gains 1 extra end of round action
+ * Harvester p2: "When an ally is destroyed, this Unit gains 1 extra end of round action
  * AND Speed Up I for 6 turns" — parseExtraAction correctly resolves the extra-action grant to
  * on-ally-destroyed (sentence-level death-phrase detection), but the co-located Speed Up I buff
  * is a separate ability (a plain buff grant, not an extra-action) so it falls through to the
@@ -5768,7 +5737,7 @@ const APPLICATION_VERBS = new Set([...SELF_VERBS, ...ENEMY_VERBS, ...AMBIGUOUS_V
 // Past participles double as adjectives ("the newly inflicted Corrosion") — that's a
 // reference to an existing effect being extended, not a fresh application.
 const ADJECTIVAL_MARKER = 'newly';
-const SKIP_VERBS = new Set(['ignoring', 'loses', 'removes', 'resists', 'when']);
+const SKIP_VERBS = new Set(['ignoring', 'removes', 'resists', 'when']);
 // `\s*` (not `\s+`) between the number and "turn(s)" tolerates a CSV concatenation typo
 // ("for 1turn." — Morao's active) where the tag-removal boundary leaves no space. `\s+` before
 // the number is left mandatory since "for" is always followed by a real space in the corpus.
@@ -6011,7 +5980,7 @@ function hasEnemySubject(words: string[], verbIndex: number): boolean {
         if (w === 'when' || w === 'after' || w === 'if' || w === 'while' || w === 'upon')
             return false;
         if (APPLICATION_VERBS.has(w) || SKIP_VERBS.has(w)) return false;
-        // "… to that enemy AND gains …" / "loses Overload AND gains …" (Stalwart, Ravager) is a
+        // "… to the enemy AND gains …" / "removes Overload AND gains …" (Stalwart/Ravager) is a
         // COMPOUND predicate — "and" carries the subject over from an earlier, unrelated clause
         // (an elided "it"/"this Unit"), so an "enemy" beyond "and" is never this verb's subject.
         // The genuine bug shape ("an enemy defender gains X") never has "and" in between.

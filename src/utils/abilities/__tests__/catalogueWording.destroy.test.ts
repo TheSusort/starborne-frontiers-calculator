@@ -210,7 +210,7 @@ describe("kill/destroy vocabulary — the wording decides the extra action's que
 
     it('Harvester keeps its end-of-round action (an ally death, not a kill)', () => {
         const harvester = extraAction(
-            'When an allied Unit is destroyed, this Unit gains 1 extra end of round action.'
+            'When an ally is destroyed, this Unit <unit-skill>gains 1 extra end of round action</unit-skill>.'
         );
         expect(harvester.trigger).toBe('on-ally-destroyed');
         expect(harvester.config).toMatchObject({ endOfRound: true });
