@@ -85,15 +85,20 @@ export const controlEffectLabel = (effect: ControlEffect): string => CONTROL_EFF
  *  that #413's `viaLandingRoll` gate is supposed to keep.
  *
  *  Hence `viaLandingRoll`, which the CALLER supplies because only the caller knows which arm it is
- *  in: `false` on the Block-Debuff branch (no gate drawn), `true` on the landing-roll-failure
- *  branch. */
+ *  in: `false` when no roll was drawn (Block Debuff, or an 'apply' that failed on affinity),
+ *  `true` when a landing roll was drawn and failed.
+ *
+ *  `subAttackIndex` is the hit within a multi-hit attack, when the caller knows it: an on-resist
+ *  reaction keys per (resister, sub-attack), so two resists in one multi-hit turn stay two procs
+ *  (see `debuff-resisted` in events.ts). */
 export function emitBlockDebuffResist(
     bus: CombatEventBus,
     sourceId: string,
     targetId: string,
     round: number,
     buffName: string,
-    viaLandingRoll: boolean
+    viaLandingRoll: boolean,
+    subAttackIndex?: number
 ): void {
     bus.emit({
         type: 'debuff-resisted',
@@ -102,5 +107,6 @@ export function emitBlockDebuffResist(
         round,
         buffName,
         ...(viaLandingRoll ? { viaLandingRoll: true as const } : {}),
+        ...(subAttackIndex !== undefined ? { subAttackIndex } : {}),
     });
 }

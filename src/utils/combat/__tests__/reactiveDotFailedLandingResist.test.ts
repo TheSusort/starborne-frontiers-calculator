@@ -120,6 +120,8 @@ describe('#599: a reactive DoT that fails to land is logged as resisted', () => 
         const hardResists = resisted.filter((e) => e.targetId === HARD_ENEMY_ID);
         expect(hardResists.length).toBeGreaterThan(0);
         expect(hardResists.every((e) => e.viaLandingRoll === true)).toBe(true);
+        // The triggering hit's index rides along, so on-resist reactions key per sub-attack.
+        expect(hardResists.every((e) => e.subAttackIndex !== undefined)).toBe(true);
         expect(applied.some((e) => e.targetId === HARD_ENEMY_ID)).toBe(false);
         // The zero-security attacker always takes the DoT and never resists — so the hard arm's
         // resists come from the roll, not from a reaction that never landed anywhere.

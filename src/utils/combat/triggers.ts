@@ -4946,7 +4946,8 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // A DoT that failed its landing check surfaces as a resist, like the sibling `debuff`
         // branch's failure arm, so the combat log shows it. `viaLandingRoll` follows that branch's
         // `drewLandingRoll`: an 'apply' DoT (Burner) fails on affinity alone and draws no roll, so
-        // it must not proc an on-resist reaction (#413); an inflicted DoT drew and failed one.
+        // it must not proc an on-resist reaction (#413); an inflicted DoT drew and failed one. The
+        // sub-attack index rides along for the same reason the debuff branch passes it.
         const emitFailedDotLanding = (victimId: string): void =>
             emitBlockDebuffResist(
                 ctx.bus,
@@ -4954,7 +4955,8 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 victimId,
                 ctx.round,
                 dotResistLabel(cfg.dotType, cfg.tier),
-                cfg.application !== 'apply'
+                cfg.application !== 'apply',
+                intent.eventCtx?.subAttackIndex
             );
 
         // Pestilence: a reactive DoT whose ability targets 'all-enemies' and whose triggering
