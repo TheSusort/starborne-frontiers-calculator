@@ -3014,6 +3014,7 @@ exports[`kit fingerprints > Ripper 1`] = `
   "plain": [
     "attack:active",
     "attack:charged",
+    "buff",
     "charge-changed",
     "debuff",
     "debuff-resisted",
@@ -3021,6 +3022,7 @@ exports[`kit fingerprints > Ripper 1`] = `
   "richEnemy": [
     "attack:active",
     "attack:charged",
+    "buff",
     "charge-changed",
     "debuff",
     "debuff-resisted",
@@ -3028,6 +3030,7 @@ exports[`kit fingerprints > Ripper 1`] = `
   "wounded": [
     "attack:active",
     "attack:charged",
+    "buff",
     "charge-changed",
     "debuff",
     "debuff-resisted",

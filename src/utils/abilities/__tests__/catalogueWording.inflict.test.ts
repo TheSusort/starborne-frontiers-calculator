@@ -79,6 +79,34 @@ const PAIRS: RewordPair[] = [
         new: "When this Unit <unit-skill>cleanses a debuff</unit-skill> from an ally, it also <unit-damage>repairs the ally 4%</unit-damage> of this Unit's max HP. <br /><br />When a <unit-aid>debuff</unit-aid> is inflicted on an ally, this Unit <unit-damage>repairs the ally for 6%</unit-damage> of this Unit's max HP.",
         expects: 'heal|ally|on-ally-debuffed|heal',
     },
+    {
+        ship: 'Prospect',
+        slot: 'passive',
+        old: 'This Unit gains <unit-skill>Inc. Damage Down I</unit-skill> for 2 turns when inflicting a debuff.',
+        new: 'This Unit gains <unit-skill>Inc. Damage Down I</unit-skill> for 2 turns after it inflicts a <unit-aid>debuff</unit-aid>.',
+        expects: 'buff|self|on-debuff-inflicted|Inc. Damage Down I',
+    },
+    {
+        ship: 'Prospect',
+        slot: 'passive',
+        old: 'This Unit gains <unit-skill>Inc. Damage Down II</unit-skill> for 3 turns when inflicting a debuff.',
+        new: 'This Unit gains <unit-skill>Inc. Damage Down II</unit-skill> for 3 turns after it inflicts a <unit-aid>debuff</unit-aid>.',
+        expects: 'buff|self|on-debuff-inflicted|Inc. Damage Down II',
+    },
+    {
+        ship: 'Torcher',
+        slot: 'passive',
+        old: 'This Unit gains <unit-skill>Marauder Rage I</unit-skill> for 3 turns upon inflicting a debuff.',
+        new: 'This Unit gains <unit-skill>Marauder Rage I</unit-skill> for 3 turns after it inflicts a <unit-aid>debuff</unit-aid>.',
+        expects: 'buff|self|on-debuff-inflicted|Marauder Rage I',
+    },
+    {
+        ship: 'Torcher',
+        slot: 'passive',
+        old: 'This Unit gains <unit-skill>Marauder Rage II</unit-skill> for 3 turns upon inflicting a debuff.',
+        new: 'This Unit gains <unit-skill>Marauder Rage II</unit-skill> for 3 turns after it inflicts a <unit-aid>debuff</unit-aid>.',
+        expects: 'buff|self|on-debuff-inflicted|Marauder Rage II',
+    },
 ];
 
 describe('inflict/apply vocabulary — catalogue wording parses like ours', () => {
@@ -99,5 +127,44 @@ describe('inflict/apply vocabulary — resist reaction', () => {
         const s = sigs(parseSlot('passive', text));
         expect(s).toContain('buff|self|on-own-debuff-resisted|Hacking Module Overdrive');
         expect(s).not.toContain('buff|self|on-cast|Hacking Module Overdrive');
+    });
+});
+
+// User ruling (2026-10-02): a reaction "after it inflicts a debuff" needs a SUCCESSFUL infliction
+// (landed, not resisted). `on-debuff-inflicted` is that trigger: its listener (triggers.ts) wakes
+// on `debuff-applied`, which only a landed application emits — a resisted roll emits
+// `debuff-resisted` instead. Our Ripper text uses the phrase, so it reacts like Prospect's.
+describe('inflict/apply vocabulary — "after it inflicts a debuff" needs a landed debuff', () => {
+    it.each([
+        [
+            'R0',
+            'This Unit gains <unit-skill>Marauder Rage II</unit-skill> for 3 turns after it inflicts a debuff.',
+        ],
+        [
+            'R2',
+            'This Unit gains <unit-skill>Marauder Rage II</unit-skill> for 3 turns after it inflicts a debuff.<br /><br />All allies extend their active <unit-aid>Buffs</unit-aid> by 1 turn.',
+        ],
+    ])('Ripper passive %s: Marauder Rage II fires on each landed infliction', (_refit, text) => {
+        const abilities = parseSlot('passive', text);
+        const s = sigs(abilities);
+        expect(s).toContain('buff|self|on-debuff-inflicted|Marauder Rage II');
+        expect(s).not.toContain('buff|self|on-cast|Marauder Rage II');
+        const rage = abilities.find(
+            (a) => a.config.type === 'buff' && a.config.buffName === 'Marauder Rage II'
+        );
+        // The reaction's own trigger is the gate: no leftover enemy-has-a-debuff condition, and
+        // the clause's "inflicts" verb keeps an applied (no-roll) status from waking it.
+        expect(rage?.conditions).toEqual([]);
+        expect(rage?.triggerApplicationFilter).toBe('inflict');
+        expect(rage?.config).toMatchObject({ buffName: 'Marauder Rage II', duration: 3 });
+    });
+
+    it('Ripper passive R2: the all-allies buff extension stays a cast effect', () => {
+        const text =
+            'This Unit gains <unit-skill>Marauder Rage II</unit-skill> for 3 turns after it inflicts a debuff.<br /><br />All allies extend their active <unit-aid>Buffs</unit-aid> by 1 turn.';
+        expect(sigs(parseSlot('passive', text))).toEqual([
+            'buff|self|on-debuff-inflicted|Marauder Rage II',
+            'extend-status|all-allies|on-cast|extend-status',
+        ]);
     });
 });

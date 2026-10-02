@@ -14,6 +14,7 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator: Madax, Orel and Sansi's Taunt now applies only to themselves.",
     "Combat simulator: AEGIS and Nyxen's charged shield now reaches every ally in range.",
     'DPS calculator and Effect Index: Security Down III is now available as a debuff.',
+    'Combat simulator: Ripper now gains Marauder Rage each time his debuff lands.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

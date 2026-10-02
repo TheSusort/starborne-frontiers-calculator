@@ -1619,14 +1619,18 @@ export function detectTargetShieldGate(clause: string | null | undefined): boole
 }
 // "On inflicting a debuff" / "upon applying a debuff" → on-debuff-inflicted (Butcher Marauder Rage II).
 const APPLYING_DEBUFF_RE = /\b(?:upon|on|after|when)\s+(?:inflicting|applying)\s+(?:a\s+)?debuff/i;
-// Present-tense SELF-subject "when this Unit inflicts a Debuff" → on-debuff-inflicted.
-// APPLYING_DEBUFF_RE above matches only the gerund ("on inflicting"), so this form needs its own
-// regex; without it a passive-slot enemy timed debuff would resolve to on-cast, a dispatch path
-// the engine never fires for a passive. SELF-scoped ("this Unit") so it never co-matches an
-// ally/enemy-subject infliction (those are on-ally-debuff-inflicted / on-attacked, resolved
-// elsewhere). Consumed by detectReactiveTrigger and the passive-debuff gate near
-// ON_DEBUFF_INFLICTION_RE.
-const SELF_INFLICTS_DEBUFF_RE = /\bwhen\s+this\s+unit\s+inflicts\s+(?:a\s+)?debuff/i;
+// Present-tense SELF-subject "when this Unit inflicts a Debuff" / "after it inflicts a debuff" →
+// on-debuff-inflicted. APPLYING_DEBUFF_RE above matches only the gerund ("on inflicting"), so
+// these forms need their own regex; without it a passive-slot reaction resolves to on-cast, a
+// dispatch path the engine never fires for a passive. The reaction needs a SUCCESSFUL infliction
+// (user ruling 2026-10-02: landed, not resisted), which is what on-debuff-inflicted listens for.
+// SELF-scoped ("this Unit" / "it") so it never co-matches an ally/enemy-subject infliction (those
+// are on-ally-debuff-inflicted / on-attacked, resolved elsewhere). "after this Unit inflicts" is
+// deliberately not an alternate: the catalogue uses it for a crit-qualified extension ("After
+// this Unit inflicts a debuff with a critical hit, the newly inflicted debuff is extended"), a
+// different reaction with its own parse.
+// Consumed by detectReactiveTrigger and the passive-debuff gate near ON_DEBUFF_INFLICTION_RE.
+const SELF_INFLICTS_DEBUFF_RE = /\b(?:when\s+this\s+unit|after\s+it)\s+inflicts\s+(?:a\s+)?debuff/i;
 
 // A status named as the OBJECT of a reaction's own trigger clause — "after it inflicts <Stasis>",
 // "When this Unit inflicts a <Bomb>", "When this Unit inflicts <Corrosion> with a critical hit" —
@@ -1715,7 +1719,8 @@ const ENEMY_GAINS_TAUNT_RE = /\bwhen\s+an?\s+enemy\b[^.]*?\bgains?\b[^.]*?\btaun
  *  - an enemy-death phrasing (KILL_TRIGGER_RE holds the accepted wordings) →
  *    'on-enemy-destroyed'.
  *  - "on inflicting a debuff" / "upon applying a debuff" → 'on-debuff-inflicted'
- *    (APPLYING_DEBUFF_RE; SELF_INFLICTS_DEBUFF_RE covers the present-tense form).
+ *    (APPLYING_DEBUFF_RE; SELF_INFLICTS_DEBUFF_RE covers the present-tense "when this Unit
+ *    inflicts a debuff" / "after it inflicts a debuff"). Fires only on a landed debuff.
  *  - "if its debuff is resisted" → 'on-own-debuff-resisted' (the inflictor-scoped mirror of
  *    the resister-side on-debuff-resisted).
  *  - "when an enemy [defender] gains Taunt" → 'on-enemy-taunt-gained'. Narrow and
@@ -1805,7 +1810,7 @@ export function detectReactiveTrigger(
     if (ENEMY_REPAIRS_RE.test(clause)) return 'on-enemy-repaired';
     if (KILL_TRIGGER_RE.test(clause)) return 'on-enemy-destroyed';
     if (APPLYING_DEBUFF_RE.test(clause)) return 'on-debuff-inflicted';
-    // Present-tense self-subject "when this Unit inflicts a Debuff" (Warden).
+    // Present-tense self-subject "when this Unit inflicts a Debuff" / "after it inflicts a debuff".
     if (SELF_INFLICTS_DEBUFF_RE.test(clause)) return 'on-debuff-inflicted';
     // Paracelsus: "Upon being killed by direct Damage … grants allies <buff>" — the named-buff
     // half of an on-destroyed clause. Mirrors Faust's detectKilledByDirectDamageTrigger (which
