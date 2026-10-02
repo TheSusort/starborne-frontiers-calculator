@@ -518,11 +518,12 @@ function passesApplicationFilter(
 
 /**
  * Whether a landed status satisfies a reactive ability's `triggerStatusFilter` (see that field's
- * doc in types/abilities.ts). `landedFamily` is the landed status's tierless family name — the
- * caller derives it from the event it holds: `dotFamilyLabel(e.dotType)` for a `dot-applied`,
- * `deriveFamilyKey(e.buffName).familyKey` for a `debuff-applied`. Exact, case-sensitive compare:
- * the parser writes the same capitalised family names `dotFamilyLabel` produces. Absent filter →
- * every landed status passes.
+ * doc in types/abilities.ts). The caller derives `landedFamily` from the event it holds:
+ * `dotFamilyLabel(e.dotType)` (tierless) for a `dot-applied`; `deriveFamilyKey(e.buffName)
+ * .familyKey` for a `debuff-applied`, which strips a Roman tier suffix but returns a
+ * Bomb/Corrosion/Inferno-prefixed name whole (that field's doc states what this means). Exact,
+ * case-sensitive compare: the parser writes the same capitalised family names `dotFamilyLabel`
+ * produces. Absent filter → every landed status passes.
  */
 function passesStatusFilter(filter: string | undefined, landedFamily: string): boolean {
     return filter === undefined || filter === landedFamily;

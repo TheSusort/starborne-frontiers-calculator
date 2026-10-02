@@ -3,13 +3,16 @@
  * catalogue's R0/R2/R4) reacts only to one of HER Bombs LANDING:
  *   - her active lands Bomb I → she gains Stealth that turn;
  *   - a non-Bomb debuff she lands (an implant-style Defense Down proc) → no Stealth;
- *   - her Bomb is resisted → no Stealth.
+ *   - her Bomb is resisted → no Stealth;
+ *   - a Corrosion she lands (another DoT, the dot-applied arm) → no Stealth;
+ *   - a teammate's Bomb lands → no Stealth for her.
  *
  * The passive rides `on-debuff-inflicted` narrowed by `Ability.triggerStatusFilter: 'Bomb'`
  * (triggers.ts `passesStatusFilter`). Each negative arm sits next to a positive control on the
- * same board so a zero cannot be "the reaction never could fire": the Defense Down arm reruns
- * with the filter stripped (the bare trigger DOES wake on that debuff), and the resist arm is the
- * landing arm with only the victim's security raised.
+ * same board so a zero cannot be "the reaction never could fire": the Defense Down and Corrosion
+ * arms rerun with the filter stripped (the bare trigger DOES wake on that landing), the resist
+ * arm is the landing arm with only the victim's security raised, and the teammate's-Bomb board
+ * also carries her own Bomb.
  *
  * Real parsed kit (buildShipAbilities on verbatim docs/ship-skills.csv text), real engine
  * (runCombat). Hacking 200 vs security 0 lands every roll; hacking 0 vs security 100 resists
@@ -82,6 +85,24 @@ const plainHit = (): Ability => ({
     config: { type: 'damage', multiplier: 100 },
 });
 
+const corrosionCast = (): Ability => ({
+    id: 'own-corrosion',
+    type: 'dot',
+    target: 'enemy',
+    trigger: 'on-cast',
+    conditions: [],
+    config: { type: 'dot', dotType: 'corrosion', tier: 3, stacks: 1, duration: 3 },
+});
+
+const bombCast = (): Ability => ({
+    id: 'ally-bomb',
+    type: 'dot',
+    target: 'enemy',
+    trigger: 'on-cast',
+    conditions: [],
+    config: { type: 'dot', dotType: 'bomb', tier: 100, stacks: 1, duration: 4 },
+});
+
 /** Her REAL kit: parsed Bomb I active + parsed Stealth passive. */
 const realKit = (): ShipSkills => ({ slots: [parsedSlot('active'), parsedSlot('passive')] });
 
@@ -90,6 +111,14 @@ const defenseDownKit = (stealth: Ability): ShipSkills => ({
     slots: [
         { slot: 'active', abilities: [plainHit()] },
         { slot: 'passive', abilities: [stealth, defenseDownProc()] },
+    ],
+});
+
+/** No Bomb anywhere: an active that lands her own Corrosion, plus her Stealth passive. */
+const corrosionKit = (stealth: Ability): ShipSkills => ({
+    slots: [
+        { slot: 'active', abilities: [corrosionCast()] },
+        { slot: 'passive', abilities: [stealth] },
     ],
 });
 
@@ -165,6 +194,12 @@ const bombLandingRounds = (events: CombatEvent[], sourceId: string): number[] =>
     events.flatMap((e) =>
         e.type === 'dot-applied' && e.sourceId === sourceId && e.dotType === 'bomb' ? [e.round] : []
     );
+const corrosionLandingRounds = (events: CombatEvent[], sourceId: string): number[] =>
+    events.flatMap((e) =>
+        e.type === 'dot-applied' && e.sourceId === sourceId && e.dotType === 'corrosion'
+            ? [e.round]
+            : []
+    );
 const defenseDownLandingRounds = (events: CombatEvent[], sourceId: string): number[] =>
     events.flatMap((e) =>
         e.type === 'debuff-applied' && e.sourceId === sourceId && e.buffName === 'Defense Down I'
@@ -229,6 +264,75 @@ describe('Lingshe — "When this Unit inflicts a Bomb it gains Stealth"', () => 
         expect(landed.length).toBeGreaterThan(0);
         expect(stealthRounds(events, 'attacker')).toEqual(landed);
     });
+
+    it('a Corrosion she lands grants no Stealth', () => {
+        const events = run(
+            BASE({
+                shipSkills: corrosionKit(stealthAbility()),
+                enemyAttackers: [victimAt('victim', 0)],
+            })
+        );
+        expect(corrosionLandingRounds(events, 'attacker').length).toBeGreaterThan(0);
+        expect(bombLandingRounds(events, 'attacker')).toEqual([]);
+        expect(stealthRounds(events, 'attacker')).toEqual([]);
+    });
+
+    it('control: the same board with the Bomb filter stripped DOES grant Stealth off that Corrosion', () => {
+        const unfiltered: Ability = { ...stealthAbility(), triggerStatusFilter: undefined };
+        const events = run(
+            BASE({
+                shipSkills: corrosionKit(unfiltered),
+                enemyAttackers: [victimAt('victim', 0)],
+            })
+        );
+        const landed = corrosionLandingRounds(events, 'attacker');
+        expect(landed.length).toBeGreaterThan(0);
+        expect(stealthRounds(events, 'attacker')).toEqual(landed);
+    });
+
+    it("a teammate's Bomb grants her nothing; her own Bomb on the same board still does", () => {
+        const events = run(
+            BASE({
+                enemyAttackers: [victimAt('victim', 0)],
+                teamActors: [
+                    {
+                        id: 'ally-bomber',
+                        speed: 150,
+                        chargeCount: 0,
+                        startCharged: false,
+                        selfBuffs: [],
+                        enemyDebuffs: [],
+                        position: 'M3',
+                        target: parsedFrontTarget(),
+                        pattern: singleTargetPattern(),
+                        walk: {
+                            shipSkills: { slots: [{ slot: 'active', abilities: [bombCast()] }] },
+                            stats: {
+                                attack: 100,
+                                crit: 0,
+                                critDamage: 0,
+                                defensePenetration: 0,
+                                hacking: 999,
+                                defence: 0,
+                                hp: 1_000_000,
+                            },
+                            selfDotModifier: 0,
+                            defensePenetrationBuff: 0,
+                            affinityDamageModifier: 0,
+                            affinityCritCap: 100,
+                            affinityCritPenalty: 0,
+                            hasChargedSkill: false,
+                        },
+                    },
+                ],
+            })
+        );
+        expect(bombLandingRounds(events, 'ally-bomber').length).toBeGreaterThan(0);
+        const own = bombLandingRounds(events, 'attacker');
+        expect(own.length).toBeGreaterThan(0);
+        expect(stealthRounds(events, 'attacker')).toEqual(own);
+        expect(stealthRounds(events, 'ally-bomber')).toEqual([]);
+    });
 });
 
 describe('Lingshe — team symmetry (enemy-side Lingshe)', () => {
@@ -279,5 +383,38 @@ describe('Lingshe — team symmetry (enemy-side Lingshe)', () => {
         ).toBe(true);
         expect(bombLandingRounds(events, 'lingshe-enemy')).toEqual([]);
         expect(stealthRounds(events, 'lingshe-enemy')).toEqual([]);
+    });
+
+    it("an enemy-side teammate's Bomb grants her nothing; her own Bomb on the same board still does", () => {
+        const enemyBomber: EnemyAttacker = {
+            id: 'enemy-bomber',
+            stats: {
+                attack: 100,
+                crit: 0,
+                critDamage: 0,
+                speed: 250,
+                hp: 1_000_000,
+                defence: 0,
+                hacking: 999,
+            },
+            chargeCount: 0,
+            startCharged: false,
+            position: 'M3',
+            shipSkills: { slots: [{ slot: 'active', abilities: [bombCast()] }] },
+        };
+        const events = run(
+            BASE({
+                attack: 0,
+                shipSkills: { slots: [{ slot: 'active', abilities: [] }] },
+                security: 0,
+                speed: 1,
+                enemyAttackers: [enemyLingshe(200), enemyBomber],
+            })
+        );
+        expect(bombLandingRounds(events, 'enemy-bomber').length).toBeGreaterThan(0);
+        const own = bombLandingRounds(events, 'lingshe-enemy');
+        expect(own.length).toBeGreaterThan(0);
+        expect(stealthRounds(events, 'lingshe-enemy')).toEqual(own);
+        expect(stealthRounds(events, 'enemy-bomber')).toEqual([]);
     });
 });

@@ -1230,10 +1230,13 @@ export interface Ability {
      *  status belongs to this family — Lingshe's "When this Unit inflicts a Bomb it gains
      *  Stealth" sets `'Bomb'`, so a Defense Down she lands wakes nothing. Matched by family, not
      *  exact name ("a Bomb" means any Bomb tier), unlike `requireDamagedAllyStatus`, which names a
-     *  status an ally HOLDS: a `dot-applied` compares its DoT family label (`dotFamilyLabel`), a
-     *  `debuff-applied` its name's family (`deriveFamilyKey`). Composes with
-     *  `triggerApplicationFilter` (both must pass). Set by the parser from the clause's own
-     *  object; absent → any landed status, which is what every other ability carries. Read by
+     *  status an ally HOLDS. A `dot-applied` compares its tierless DoT family label
+     *  (`dotFamilyLabel`: 'Bomb', 'Corrosion', 'Inferno'). A `debuff-applied` compares
+     *  `deriveFamilyKey(buffName).familyKey`: the name with its Roman tier suffix stripped
+     *  ('Defense Down I' → 'Defense Down'), EXCEPT a name starting Bomb/Corrosion/Inferno, which
+     *  `deriveFamilyKey` returns whole ('Inferno II' stays 'Inferno II') and so never equals a
+     *  bare family filter. Composes with `triggerApplicationFilter` (both must pass). Set by the
+     *  parser from the clause's own object; absent → any landed status passes. Read by
      *  `passesStatusFilter` in triggers.ts. */
     triggerStatusFilter?: string;
     /** Ally-role filter for on-ally-attacked (Graphite "when an ally attacker or
