@@ -1249,11 +1249,12 @@ export function registerReactiveListeners(args: {
                         // (hit, victim) collapse is what this one-enqueue-per-event shape guards: a
                         // single-hit 3-victim AoE that crits two victims still fires ONCE. Both
                         // halves are pinned by perSubAttackEvents.integration.test.ts. SELF-target
-                        // riders (Hermes's charge + Everliving Regeneration) behave the SAME as
-                        // ally-routed ones: `on-ally-crit` is NOT in PER_HIT_REACTIVE_TRIGGERS, so
-                        // oncePerAttackGuardKey does not collapse them across sub-attacks. This
-                        // one-enqueue-per-event shape is the whole collapse, and it is enough.
-                        // Locked by hermesOncePerAttack.integration.test.ts.
+                        // riders (Hermes's charge) behave the SAME as ally-routed ones (Hermes's
+                        // Everliving Regeneration grant to the critting ally): `on-ally-crit` is
+                        // NOT in PER_HIT_REACTIVE_TRIGGERS, so oncePerAttackGuardKey does not
+                        // collapse them across sub-attacks. This one-enqueue-per-event shape is
+                        // the whole collapse, and it is enough. Locked by
+                        // hermesOncePerAttack.integration.test.ts.
                         if (!e.didCrit && (e.critHits ?? 0) === 0) return;
                         // The enemies actually crit. `critVictimIds` is present only on the
                         // POSITIONAL deferred emit; the single-target inline emit omits it, where

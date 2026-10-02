@@ -3913,10 +3913,10 @@ export function runCombat(rawInput: CombatEngineInput): {
     // — draws N counters rather than collapsing into one.
     const counterFiredThisTurn = new Set<string>();
 
-    // Sibling once-per-attack guard for SELF-scoped reactive buff/heal/charge riders
-    // (Hermes's Everliving Regeneration + charge on on-ally-crit). Same lifecycle as
-    // counterFiredThisTurn — cleared at every actor turn-start so a multi-hit / AoE attack applies
-    // a self-rider once, while a later attack (a different turn) applies it again.
+    // Sibling once-per-attack guard for SELF-scoped reactive buff/heal/charge riders on the
+    // per-hit triggers (on-attacked / on-ally-attacked; see oncePerAttackGuardKey). Same
+    // lifecycle as counterFiredThisTurn — cleared at every actor turn-start so a multi-hit / AoE
+    // attack applies a self-rider once, while a later attack (a different turn) applies it again.
     const reactionFiredThisAttack = new Set<string>();
 
     // Installed per ROUND (below, where the deferral flags live — inside the `for (let r …)` body,
@@ -11004,7 +11004,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // clear separates one turn from the next.
                 counterFiredThisTurn.clear();
                 // Reset the self-rider once-per-attack guard beside the counter guard so a
-                // later attack re-applies Hermes's Everliving Regeneration / charge.
+                // later attack re-applies a self-scoped on-attacked rider.
                 reactionFiredThisAttack.clear();
                 // Drop the scoped proc verdicts so this turn rolls afresh (Insidiousness: this
                 // turn's cast gets its own roll and its own one-success cap).
