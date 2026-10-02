@@ -169,31 +169,43 @@ describe('3.22 kits — damage clauses', () => {
         });
     });
 
-    // KNOWN GAP: "a control effect" names a CATEGORY of statuses, not a status called "control".
-    // Which statuses belong to it is pending a user ruling, so the bonus is left out and only the
-    // base damage fires: a condition keyed on the name 'control' would match no status in the
-    // combat sim and ANY debuff in DPS mode (whose name-agnostic fallback counts every debuff).
-    it('Sokol active: the base 80% fires; the control-effect bonus is not minted', () => {
-        const text =
-            'This Unit deals <unit-damage>80% damage</unit-damage> and, if the target is affected by a <unit-skill>control</unit-skill> effect, deals an additional <unit-damage>130% damage</unit-damage>.';
-        const abilities = parseSlot('active', text);
-        expect(sigs(abilities)).toEqual(['damage|enemy|on-cast|damage']);
-        const dmg = only(abilities, 'damage');
-        expect(dmg.config).toMatchObject({ multiplier: 80 });
-        expect(dmg.conditions).toEqual([]);
-        expect(dmg.scaling).toBeUndefined();
-    });
+    // User ruling (2026-10-02): "a control effect" is any of Stasis, Disable, Provoke, Taunt and
+    // Concentrate Fire on the target. The base damage always fires; the additional damage is a
+    // binary add-on (capped at its own amount) when the target carries any one of them.
+    const CONTROL_EFFECT_CONDITIONS = [
+        { subject: 'enemy-debuff', derivable: true, buffName: 'Stasis', anyOf: true },
+        { subject: 'enemy-debuff', derivable: true, buffName: 'Disable', anyOf: true },
+        { subject: 'enemy-debuff', derivable: true, buffName: 'Provoke', anyOf: true },
+        { subject: 'enemy-buff', derivable: true, buffName: 'Taunt', anyOf: true },
+        { subject: 'enemy-debuff', derivable: true, buffName: 'Concentrate Fire', anyOf: true },
+    ];
 
-    it('Sokol charged: the base 120% fires; the control-effect bonus is not minted', () => {
-        const text =
-            'This Unit deals <unit-damage>120% damage</unit-damage> and, if the target is affected by a <unit-skill>control</unit-skill> effect, deals an additional <unit-damage>150% damage</unit-damage>.';
-        const abilities = parseSlot('charged', text);
-        expect(sigs(abilities)).toEqual(['damage|enemy|on-cast|damage']);
-        const dmg = only(abilities, 'damage');
-        expect(dmg.config).toMatchObject({ multiplier: 120 });
-        expect(dmg.conditions).toEqual([]);
-        expect(dmg.scaling).toBeUndefined();
-    });
+    it.each([
+        {
+            slot: 'active' as const,
+            text: 'This Unit deals <unit-damage>80% damage</unit-damage> and, if the target is affected by a <unit-skill>control</unit-skill> effect, deals an additional <unit-damage>130% damage</unit-damage>.',
+            base: 80,
+            bonus: 130,
+        },
+        {
+            slot: 'charged' as const,
+            text: 'This Unit deals <unit-damage>120% damage</unit-damage> and, if the target is affected by a <unit-skill>control</unit-skill> effect, deals an additional <unit-damage>150% damage</unit-damage>.',
+            base: 120,
+            bonus: 150,
+        },
+    ])(
+        'Sokol $slot: the additional damage needs a control effect on the target',
+        ({ slot, text, base, bonus }) => {
+            const abilities = parseSlot(slot, text);
+            expect(sigs(abilities)).toEqual(['damage|enemy|on-cast|damage']);
+            const dmg = only(abilities, 'damage');
+            expect(dmg.config).toEqual({ type: 'damage', multiplier: base });
+            expect(dmg.conditions).toEqual(CONTROL_EFFECT_CONDITIONS);
+            expect(dmg.scaling).toEqual({ conditionIndex: 0, perUnit: bonus, cap: bonus });
+            // No status named "control" is minted or gated on.
+            expect(JSON.stringify(abilities)).not.toMatch(/"buffName":"control"/i);
+        }
+    );
 });
 
 describe('3.22 kits — charge, purge and repair clauses', () => {

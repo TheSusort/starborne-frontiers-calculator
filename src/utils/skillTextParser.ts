@@ -671,8 +671,12 @@ const ENEMY_AFFECTED_BONUS_RE =
     /(?:target|enem(?:y|ies))\s+(?:is\s+|are\s+)?affected by\b([^.]*?),[^.]*?\badditional(?:ly)?\b[^.]*?(\d+(?:\.\d+)?)\s*%/i;
 // "affected by a <unit-skill>control</unit-skill> effect" — the tag names a CATEGORY of statuses,
 // not a status of that name, so ENEMY_AFFECTED_BONUS_RE's capture is no effect list when it holds
-// this shape: no status is named "control", and which statuses form the category is not modelled.
+// this shape. The control category is expanded to its members (CONTROL_EFFECT_STATUSES); any
+// other category name stays unparsed, since no status carries it.
 const STATUS_CATEGORY_RE = /\ban?\s+<unit-skill>[^<]+<\/unit-skill>\s+effects?\b/i;
+const CONTROL_EFFECT_CATEGORY_RE = /\ban?\s+<unit-skill>\s*control\s*<\/unit-skill>\s+effects?\b/i;
+// The statuses "a control effect" covers (user ruling 2026-10-02).
+const CONTROL_EFFECT_STATUSES = ['Stasis', 'Disable', 'Provoke', 'Taunt', 'Concentrate Fire'];
 // "an additional N% damage to enemies affected by <Effect>[ or <Effect>]" — the same enemy-state
 // bonus with the effects named AFTER the amount (Rikra). Matched on RAW text so the <unit-skill>
 // tags delimit the names; the list ends at the first non-tag word.
@@ -733,6 +737,8 @@ function statusAdjectivesToNames(phrase: string): string[] {
  *    same precedent as enemy-stealth-count scaling). Returns the bonus % and the effect names
  *    (caller builds enemy-buff/enemy-debuff conditions via classifyEnemyEffect). Null when neither
  *    phrasing is present.
+ *  - "if the target is affected by a <control> effect, deals an additional N% damage" (Sokol) —
+ *    the control category, returned as its member statuses (CONTROL_EFFECT_STATUSES).
  */
 export function parseEnemyEffectDamageBonus(
     text: string | null | undefined
@@ -744,6 +750,9 @@ export function parseEnemyEffectDamageBonus(
         if (names.length) return { pct: parseFloat(statusM[1]), effectNames: names };
     }
     const affectedM = ENEMY_AFFECTED_BONUS_RE.exec(text);
+    if (affectedM && CONTROL_EFFECT_CATEGORY_RE.test(affectedM[1])) {
+        return { pct: parseFloat(affectedM[2]), effectNames: [...CONTROL_EFFECT_STATUSES] };
+    }
     if (affectedM && !STATUS_CATEGORY_RE.test(affectedM[1])) {
         const names = [...affectedM[1].matchAll(/<unit-skill>([^<]+)<\/unit-skill>/gi)].map((x) =>
             x[1].trim()
