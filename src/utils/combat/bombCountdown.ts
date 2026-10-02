@@ -2,19 +2,18 @@ import type { CombatEventBus } from './events';
 import type { CombatActor } from './state';
 
 /**
- * Lingshe's charged skill: "reduces all Bomb on the enemy targets by 1 turn." Decrements
- * EVERY pending bomb on `victim` by
- * `turns`; any bomb reaching <= 0 detonates IMMEDIATELY using the EXACT `processBombs` burst
- * formula (engine.ts) — stacks * damagePerStack * affinityMult * (1 + detonationDamageModifier
- * / 100) — crediting the bomb's ORIGINAL applier (`bomb.sourceId`, NOT this ability's caster) via
- * a `bomb-detonated` bus emission (one event per detonating entry, mirroring the enemy-turn
- * `processBombs` shape) and, when `forceDetonateBomb` is supplied, the SAME per-victim
- * `applyVictimDamage` sink a natural detonation uses — so Barrier, Cheat-Death, `destroyedRound`/
- * `ship-destroyed`, and incoming-block/Lifeline all apply exactly as they would to a natural
- * countdown-0 burst (see `PlayerTurnArgs.forceDetonateBomb`'s doc comment). Absent (no engine
- * scope — standalone/unit-test callers), falls back to a bare shield-then-HP debit with none of
- * that. Deliberately NOT detonateContainers/detonate() — those credit the CASTER unconditionally
- * and consume the WHOLE container regardless of countdown.
+ * Lingshe's charged skill: "reduces all Bomb on the enemy targets by 1 turn." Decrements EVERY
+ * pending bomb on `victim` by `turns`; any bomb reaching <= 0 detonates IMMEDIATELY using the
+ * EXACT `processBombs` burst formula (engine.ts) — stacks * damagePerStack * affinityMult *
+ * (1 + detonationDamageModifier / 100) — crediting the bomb's ORIGINAL applier (`bomb.sourceId`,
+ * NOT this ability's caster) via a `bomb-detonated` bus emission (one event per detonating entry,
+ * mirroring the enemy-turn `processBombs` shape) and, when `forceDetonateBomb` is supplied, the
+ * SAME per-victim `applyVictimDamage` sink a natural detonation uses — so Barrier, Cheat-Death,
+ * `destroyedRound`/`ship-destroyed`, and incoming-block/Lifeline all apply exactly as they would
+ * to a natural countdown-0 burst (see `PlayerTurnArgs.forceDetonateBomb`'s doc comment). Absent
+ * (no engine scope — standalone/unit-test callers), falls back to a bare shield-then-HP debit with
+ * none of that. Deliberately NOT detonateContainers/detonate() — those credit the CASTER
+ * unconditionally and consume the WHOLE container regardless of countdown.
  *
  * Also the shared implementation for the generic duration-shrink over bombs (triggers.ts's
  * `cleanse` / `reduce-duration` branch — Heliodor's "reduces the duration of all active Debuffs on

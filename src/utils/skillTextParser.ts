@@ -1288,9 +1288,9 @@ export function detectGrantConditions(
         return [{ subject: 'target-repaired-this-round', derivable: true }];
     }
 
-    // Quixilver R2: "if it has shield equal to 100% of its max HP" → self-shield-full. Requires
-    // the explicit 100%-of-max-HP wording — a bare "When Shielded" (Malvex) is the BROADER
-    // existing `self-shielded` INCOMING-hit condition (evaluateConditions.ts's victim-side
+    // Quixilver R2: "if it has shield equal to 100% of its max HP" → self-shield-full. Requires the
+    // explicit 100%-of-max-HP wording — Malvex's "When this Unit has an active shield" is the
+    // BROADER existing `self-shielded` INCOMING-hit condition (evaluateConditions.ts's victim-side
     // shieldPool > 0 check, a different mechanism entirely) and must not match here.
     // `self-shield-full` is the narrower of the two (exactly 100%, not merely > 0).
     // derivable:true — a derivable:false condition is treated as always met
@@ -1536,9 +1536,9 @@ const KILL_TRIGGER_RE =
 // every unqualified kill clause stays ungated.
 const KILL_WITH_DEBUFF_RE = /\bdestroying\s+an\s+enemy\s+with\s+a\s+debuff\b/i;
 // Quixilver R2: "if it has shield equal to 100% of its max HP" → self-shield-full (the caster's
-// OWN shield pool, cast-time). Requires the explicit 100%-of-max-HP wording so a bare "When
-// Shielded" (Malvex's reactive `self-shielded` INCOMING-hit condition — shieldPool > 0, a
-// different mechanism) cannot co-match. Corpus-verified (docs/ship-skills.csv, grep "equal to
+// OWN shield pool, cast-time). Requires the explicit 100%-of-max-HP wording so Malvex's "When this
+// Unit has an active shield" (the reactive `self-shielded` INCOMING-hit condition — shieldPool > 0,
+// a different mechanism) cannot co-match. Corpus-verified (docs/ship-skills.csv, grep "equal to
 // 100%.*max"): Quixilver's third-passive Barrier grant is the only row with this phrasing.
 const SHIELD_FULL_RE = /\bshield\s+equal\s+to\s+100%\s+of\s+(?:its|their)\s+max(?:imum)?\s*hp\b/i;
 // Malvex charged Barrier: "If the target has a Shield" → enemy-shield (the TARGET's shield pool,
@@ -1710,7 +1710,7 @@ export function detectReactiveTrigger(
 ): AbilityTrigger | undefined {
     if (!skillText || !buffName) return undefined;
     const clause = resolveBuffClause(skillText, buffName, occurrenceIndex);
-    // "when an ally critically hits" → on-ally-crit (Pallas's Everliving Regeneration buff grant).
+    // "when an ally critically hits" → on-ally-crit (Hermes's Everliving Regeneration buff grant).
     // Checked BEFORE the self-crit rule: matchesActiveSelfCrit would also match "critically hits"
     // here, but the ally subject makes this an ally-scoped trigger, not a self-crit.
     if (ALLY_CRIT_HIT_RE.test(clause)) return 'on-ally-crit';
@@ -1999,8 +1999,8 @@ const EXTEND_ALL_DOT_PASSIVE_RE =
     /\ball\s+damage over time\s+debuffs\s+are\s+extended\s+by\s+(\d+)\s+turns?/i;
 
 /**
- * Returns the number of turns a skill extends active Damage Over Time effects by, or null
- * when the skill has no DoT-extension clause. Reference data: docs/ship-skills.csv.
+ * Returns N from an "all damage over time debuffs are extended by N turn(s)" clause
+ * (EXTEND_ALL_DOT_PASSIVE_RE), or null when the skill has none.
  */
 export function parseExtendDoT(text: string | null | undefined): number | null {
     if (!text) return null;
@@ -2012,8 +2012,8 @@ export function parseExtendDoT(text: string | null | undefined): number | null {
 // Generic buff/debuff DURATION EXTENSION — the inverse of parseDebuffDurationReduction, and a
 // sibling of EXTEND_ALL_DOT_PASSIVE_RE (which is DoT-tick-store-only and requires the literal
 // "Damage Over Time" phrase). Two surface forms:
-//   active voice:  "extends [their] active <Buffs|Debuffs> by N turn(s)"   (Sokol, Ripper)
-//   passive voice: "<buffs|debuffs> [are] extended by N turn(s)"           (Lev)
+//   active voice:  "extends [their] active <Buffs|Debuffs> by N turn(s)"
+//   passive voice: "<buffs|debuffs> [are] extended by N turn(s)"           (Lev, Ripper)
 // Both carry a negative lookahead for "damage over time", so a DoT-extend clause in the same
 // period-scoped segment never also matches here (mirrors the audit rule's own DoT exclusion).
 const EXTEND_STATUS_ACTIVE_RE =
@@ -2048,8 +2048,8 @@ const EXTEND_NAMED_STATUS_RE =
 
 /**
  * Parses a generic buff/debuff duration-extension clause into its turns + statusKind, or null
- * when absent. Runs over stripUnitTags(text) so both the `<unit-aid>`-wrapped active-voice form
- * (Sokol/Ripper) and the plain passive-voice form (Lev) match. Reference: docs/ship-skills.csv.
+ * when absent. Runs over stripUnitTags(text) so a tag inside the clause ("all allies active
+ * <unit-skill>buffs are extended by 1 turn</unit-skill>", Ripper) never blocks a match. Reference: docs/ship-skills.csv.
  *
  * #363 (Fuying): a NAMED arm ("extends <unit-skill>Stealth</unit-skill> by 1 turn") is tried
  * FIRST, against the ORIGINAL (tagged) text — it is strictly more specific than the two generic
@@ -2059,7 +2059,7 @@ const EXTEND_NAMED_STATUS_RE =
  * emits NO `buffName` at all rather than a literal one. That is not cosmetic. `buffName` is matched
  * by exact name against the target's live statuses in `extendAllBuffsDuration`, so a name that is
  * not in `BUFFS` can never match anything and the clause silently extends NOTHING — strictly worse
- * than the absent-`buffName` fallback, which extends every standing buff (Sokol/Ripper/Lev's
+ * than the absent-`buffName` fallback, which extends every standing buff (Ripper's
  * behaviour). Unreachable today (Fuying's "Stealth" resolves exactly), but it is the trap waiting
  * for the next named-extend ship, and it mirrors the precedent `DR_ALLY_STATUS_RE` already set for
  * `detectDamageReactionTrigger`'s `allyStatusName`.
@@ -2340,7 +2340,7 @@ export function detectEchoingBurstDetonatedTrigger(
 }
 
 // The TWO ally-crit reactive phrasings (live triggers; see types/abilities.ts):
-//  - "when it critically repairs an ally / allies" → on-ally-critically-repaired (the
+//  - "when it critically repairs an ally" → on-ally-critically-repaired (the
 //    OWNER's own crit-repair fires it; stamped onto heal/shield/cleanse abilities in that
 //    sentence — Hermes's "it cleanses 1 debuff from itself").
 //  - "when an ally critically hits" → on-ally-crit (an ally's crit fires it; stamped onto
@@ -2899,10 +2899,10 @@ export function detectDealDamageToRoleTrigger(
     return phrasePosTrigger(text, DEAL_DAMAGE_TO_ROLE_RE, anchorPos, 'on-deal-damage');
 }
 
-// "to/against/targeting/damaging/attacking/hitting a <Role>" — the SAME enemy-class extraction
-// buildShipAbilities.ts's outgoing-damage-modifier branch already uses for Zeolite's "+30%
-// damage when hitting a Defender" gate (Wave 4). Reused here so both halves of Zeolite's
-// passive ("+30%… Defender" / "purges… Defender") read the role from one shared pattern.
+// "to/against/targeting/damaging/attacking/hitting a <Role>" in a purge's own sentence (Zeolite:
+// "When this Unit deals damage to a defender it purges 1 buff"). The role gate on Zeolite's
+// "30% more damage when hitting a defender" is read separately, by buildShipAbilities'
+// MORE_DAMAGE_ROLE_TAIL_RE.
 const ENEMY_ROLE_CLAUSE_RE =
     /\b(?:to|against|targeting|damaging|attacking|hitting)\s+(?:an?\s+)?(defender|attacker|debuffer|supporter)s?\b/i;
 
@@ -5989,12 +5989,12 @@ function findVerb(segments: SkillTextSegment[], tagIndex: number): string | null
             // "newly inflicted X" is adjectival (referencing an existing effect being extended),
             // not an application — keep scanning for a real verb instead.
             if (words[i - 1] === ADJECTIVAL_MARKER) continue;
-            // Epic PR1 (skill-model gap, finding family 3): "when an enemy [defender] gains
-            // <BuffName>, this Unit inflicts …" names the buff only as the TRIGGER condition —
-            // the grammatical subject of "gains" is the ENEMY, not this Unit. Without this
-            // check a self-grant verb (gains/grants) minted a phantom self-buff regardless of
-            // subject (Amartya: "gains Taunt" read as This-Unit-gains-Taunt). Keep scanning past
-            // it for an earlier governing verb (or none) instead of returning it.
+            // "when an enemy [defender] gains <BuffName>, this Unit inflicts …" names the buff
+            // only as the TRIGGER condition — the grammatical subject of "gains" is the ENEMY,
+            // not this Unit. Without this check a self-grant verb (gains/grants) would mint a
+            // phantom self-buff regardless of subject (Amartya: "gains Taunt" read as
+            // This-Unit-gains-Taunt). Keep scanning past it for an earlier governing verb (or
+            // none) instead of returning it.
             if (SELF_VERBS.has(words[i]) && hasEnemySubject(words, i)) continue;
             return words[i];
         }

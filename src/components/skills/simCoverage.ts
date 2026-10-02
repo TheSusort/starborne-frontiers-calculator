@@ -111,8 +111,8 @@ const INFLICTION_TYPES: ReadonlySet<AbilityType> = new Set(['dot', 'debuff']);
 
 /**
  * THE ONE COMBINATION THAT WORKS, and it is a shipped ship: Selenite's refit passive is
- * `debuff` + `start-of-round` + `enemy-highest-attack` ("at the start of the round, the highest
- * attack enemy is applied with Concentrate Fire"). The debuff executor resolves that target through
+ * `debuff` + `start-of-round` + `enemy-highest-attack` ("At the start of each round, this Unit
+ * applies Concentrate Fire for 1 turn to the enemy with the highest attack"). The debuff executor resolves that target through
  * its own highest-attack selector instead of from the triggering event, so nothing is dropped.
  *
  * DEBUFF-ONLY on purpose: the `dot` executor has no such selector, so the same target does not

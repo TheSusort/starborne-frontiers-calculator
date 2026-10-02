@@ -151,12 +151,12 @@ const RULES: Rule[] = [
         severity: 'high',
         // PR11 (epic PR11): "reduces the duration of [all] active Debuffs on <recipient> by N
         // turn(s)" (Heliodor/Pestilence) — the inverse of extend-dot. ALSO matches Lingshe's
-        // structurally different "reduces all Bombs on the enemy targets by N turn(s)" clause (a
+        // structurally different "reduces all Bomb on the enemy targets by N turn(s)" clause (a
         // hacking-gated, enemy-targeted PendingBomb countdown shrink with a forced-detonation-at-
         // zero rider) — SP-F F3 models that shape as its own `bomb-countdown-reduce` ability
         // (not the generic cleanse/reduce-duration primitive, which deliberately excludes bombs).
         keyword: (t) =>
-            /reduces?\s+(?:the\s+duration\s+of\s+)?(?:all\s+)?(?:active\s+)?(?:debuffs|bombs)\s+on\b/i.test(
+            /reduces?\s+(?:the\s+duration\s+of\s+)?(?:all\s+)?(?:active\s+)?(?:debuffs|bombs?)\s+on\b/i.test(
                 t
             ),
         handled: (a) =>
@@ -396,12 +396,12 @@ const RULES: Rule[] = [
     {
         id: 'while-shielded-flat-defence',
         severity: 'high',
-        // Ship-kit wave 4 Task 8 (FrontLine): "While Shielded, it gains N additional Defense" — a
-        // flat-points DEFENSIVE stat bonus gated on the owner currently holding a shield. Narrow —
-        // corpus-wide this phrasing matches exactly FrontLine (verified via `grep -io "while
-        // shielded[^.]*"` / `"additional defen[cs]e[^.]*"` across docs/ship-skills.csv).
+        // FrontLine: "while it has an active shield, it gains N defense" — a flat-points
+        // DEFENSIVE stat bonus gated on the owner currently holding a shield.
         keyword: (t) =>
-            /while\s+shielded[,]?\s+(?:it\s+)?gains\s+\d+\s+additional\s+defen[cs]e/i.test(t),
+            /while\s+it\s+has\s+an\s+active\s+shield[,]?\s+(?:it\s+)?gains\s+\d+\s+defen[cs]e/i.test(
+                t
+            ),
         handled: (a) => hasType(a, 'conditional-stat'),
     },
 ];

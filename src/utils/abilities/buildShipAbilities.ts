@@ -1324,13 +1324,13 @@ function abilitiesFromText(
         // SP-F F4 (Wusheng): "deals 220% damage with affinity advantage" forces this on-cast hit
         // (and its paired Stasis 'apply' landing) to affinity advantage at the engine seams.
         const forceAffinityAdvantage = parseForceAffinityAdvantage(text);
-        // Epic PR4 (round-boundary trigger consistency): a base damage ability whose OWN
-        // sentence carries "at the start of the round" (Judge, Chakara's "Then," continuation)
-        // or "at the end of the round" (Incinerator, Rhodium p2's co-located 80%-no-crit hit)
-        // rides that LIVE trigger instead of the on-cast default — the reactive damage executor
-        // (triggers.ts cfg.type==='damage' branch) and, for start-of-round specifically, the
-        // partition machinery removing it from the old passive-payload-hit cast-time fold
-        // (playerTurn.ts) both already exist; this ability just needs the correct label.
+        // A base damage ability whose OWN sentence carries "at the start of the round" (Judge,
+        // Chakara's "Then," continuation) or "at the end of the round" (Incinerator, Rhodium p2's
+        // co-located 80%-no-crit hit) rides that LIVE trigger instead of the on-cast default — the
+        // reactive damage executor (triggers.ts cfg.type==='damage' branch) and, for start-of-round
+        // specifically, the partition machinery removing it from the old passive-payload-hit
+        // cast-time fold (playerTurn.ts) both already exist; this ability just needs the correct
+        // label.
         // #2 (Sentinel): a passive damage clause anchored in a "when an ally critically hits an
         // enemy … deals X% damage to that enemy" sentence rides the on-ally-crit reactive trigger
         // (the crit-victim enemy is routed via eventCtx.counterTargetId — triggers.ts on-ally-crit
@@ -1822,19 +1822,18 @@ function abilitiesFromText(
         out[0].ability.target = 'all-enemies';
     }
 
-    // Phase 4c PR 4 (Task 6): Grif's NAMELESS damage proc — "When an enemy cleanses a Debuff,
-    // this Unit deals 75% Damage that cannot critically hit" — rides the LIVE on-enemy-cleansed
-    // trigger. Sentence-scoped at the damage anchor (`damagePos`), so Grif's standing "increases
-    // its Defense by 20%." in a DIFFERENT leading sentence never co-triggers the proc. noCrit is
-    // already attached above (parseNoCrit). The buff/debuff-grant cleanse cases (Arum/Yarrow/
-    // Larkspur) are handled by detectReactiveTrigger in the buff-merge path (they have a buffName).
+    // Grif's NAMELESS damage proc — "When an enemy cleanses a Debuff, this Unit deals 75% Damage
+    // that cannot critically hit" — rides the LIVE on-enemy-cleansed trigger. Sentence-scoped at
+    // the damage anchor (`damagePos`), so Grif's standing "increases its Defense by 20%." in a
+    // DIFFERENT leading sentence never co-triggers the proc. noCrit is already attached above
+    // (parseNoCrit). The buff/debuff-grant cleanse cases (Arum/Yarrow/Larkspur) are handled by
+    // detectReactiveTrigger in the buff-merge path (they have a buffName).
     if (out[0]?.ability.type === 'damage') {
         const cleanseTrigger = detectEnemyCleanseTrigger(text, damagePos);
         if (cleanseTrigger) out[0].ability.trigger = cleanseTrigger;
     }
 
-    // Provider: "all damage over time debuffs are extended by N turn" names no enemy, so the
-    // extension spans every enemy the cast hits.
+    // Provider's DoT extension targets 'all-enemies' — see EXTEND_ALL_DOT_PASSIVE_RE for why.
     const extendTurns = parseExtendDoT(text);
     if (extendTurns) {
         const extendPos = text.search(/extend/i);
@@ -1855,36 +1854,23 @@ function abilitiesFromText(
     // Generic buff/debuff DURATION EXTENSION — the inverse of the debuff-duration-reduction
     // mechanic above, riding the extend-status ability type. Distinct from extend-dot
     // above (a different store — DoT tick stacks, not the StatusEngine buff/debuff maps).
-    // Three corpus shapes, all sentence-scoped off the "extend"/"extended" match:
-    //  - Sokol (charged): "extends active Debuffs by 1 turn" — no "all allies"/"all enemies"
-    //    subject in the clause → default target 'enemy' (the primary/hit enemy).
-    //  - Ripper (passive R2): "All allies extend their active Buffs by 1 turn" — the "All
-    //    allies" subject (checked in the PREFIX before the extend verb, so it can never
-    //    false-match a later "all allies" clause in the same sentence — see Lev) → target
-    //    'all-allies'. This is an ADDITIONAL ability alongside the co-located Marauder Rage
-    //    II self-buff parsed elsewhere in this function — this block never touches out[0]/
-    //    mutates any existing entry, so that self-buff keeps parsing unchanged.
-    //  - Lev (charged): "If a critical hit occurs, all hit enemies have their debuffs
-    //    extended by 1 turn and all allies are granted Crit Power Up II for 2 turns." — the
-    //    "all hit enemies" subject precedes "extended" → target 'all-enemies'; the LATER
-    //    "all allies are granted…" clause (a different, unrelated buff-grant subject) is
-    //    excluded from the subject check by construction (prefix-only), so it can never
-    //    flip Lev's target to 'all-allies'.
+    // The target is read from the subject in the sentence PREFIX before the extend verb, so a
+    // later "all allies" clause in the same sentence never counts:
+    //  - Ripper (passive R2): "… and all allies active buffs are extended by 1 turn" →
+    //    'all-allies'. It is an ADDITIONAL ability: this block never mutates an existing entry.
+    //  - Lev (charged): "If a critical hit occurs, all hit enemies have their debuffs extended by
+    //    1 turn and all allies are granted Crit Power Up II for 1 turn." → 'all-enemies'; the
+    //    later "all allies are granted…" clause is outside the prefix.
+    //  - No subject: the fallbacks in `extendTarget` below.
     //
-    // Lev on-crit shape — THIS TASK'S JUDGMENT CALL (see task-5-report.md for the full
-    // writeup): kept on trigger:'on-cast' with a live-derivable `self-crit` CONDITION
-    // (abilityStatusGating.ts LIVE_SUBJECTS), gated the SAME way parseCritPowerExtend's
-    // Valerian condition is above (conditions:[{subject:'self-crit', derivable:true}]) —
-    // NOT the reactive 'on-crit' AbilityTrigger. Rationale: 'on-crit' carries no AoE fan-out
-    // plumbing — reactiveRecipients has no 'all-enemies' branch, and the reactive on-crit listener
-    // stamps no hit-enemy ids in eventCtx. (Measured 2026-08-08: the corpus has FOUR on-crit
-    // abilities — Enforcer's Defense Shred, Lionheart's two Attack Up grants and Wusheng's Stealth —
-    // plus Bloodthirst from equipment. An earlier version of this comment claimed Bloodthirst was
-    // the only one; it was wrong.) Staying on-cast instead reuses the SAME aoeVictimIds fan-out
-    // the on-cast purge/steal blocks already use for "all hit enemies" semantics (this cast's
-    // actual hit set), which is the literal wording of Lev's clause — reusing existing on-cast
-    // plumbing rather than adding new reactive machinery. Task 6's executor MUST honor this shape
-    // (on-cast + condition).
+    // Lev's crit gate stays on trigger:'on-cast' with a live-derivable `self-crit` CONDITION
+    // (abilityStatusGating.ts LIVE_SUBJECTS), the same gate the crit-power extend-dot below
+    // carries — NOT the reactive 'on-crit' AbilityTrigger. 'on-crit' carries no AoE fan-out
+    // plumbing: reactiveRecipients has no 'all-enemies' branch, and the reactive on-crit listener
+    // stamps no hit-enemy ids in eventCtx. On-cast reuses the aoeVictimIds fan-out the on-cast
+    // purge/steal blocks use for "all hit enemies" (this cast's actual hit set), which is the
+    // literal wording of Lev's clause. The extend-status executor honours this shape (on-cast +
+    // condition).
     const extendStatus = parseExtendStatus(text);
     if (extendStatus) {
         const plainForExtend = stripTags(text);
@@ -1895,17 +1881,17 @@ function abilitiesFromText(
         const localVerbIdx = extendSentence.search(/\bextend(?:s|ed)?\b/i);
         const extendSubjectPrefix =
             localVerbIdx >= 0 ? extendSentence.slice(0, localVerbIdx) : extendSentence;
-        // #363 (Fuying): the named arm carries no "all allies"/"all enemies" subject in its
-        // own clause ("...and extends Stealth by 1 turn" — the subject is inherited, not
-        // restated), so the no-subject fallback for a BUFF-kind extension is 'all-allies' —
-        // matching Ripper's explicit "All allies extend..." semantics and letting the runtime's
-        // existing allyRoster + supportRecipients pattern-scoping apply. A DEBUFF-kind
-        // extension's no-subject fallback stays 'enemy' (Sokol, unchanged: a single hit target).
-        // An INFLICTED-scope extension (Asphyxiator) names no scope word at all — its object is
-        // "the debuffs this cast inflicted", which spans every enemy the cast landed one on, not
-        // just the anchor. Owner ruling 2026-09-02: a crit on the main target extends the
-        // adjacent enemies' freshly applied debuffs too. So it takes the cast's whole hit
-        // footprint, which is what 'all-enemies' resolves to at the seam (aoeVictimIds).
+        // #363 (Fuying): the named arm carries no "all allies"/"all enemies" subject in its own
+        // clause ("...and extends Stealth by 1 turn" — the subject is inherited, not restated), so
+        // the no-subject fallback for a BUFF-kind extension is 'all-allies' — matching Ripper's
+        // explicit "all allies active buffs are extended" semantics and letting the runtime's
+        // existing allyRoster + supportRecipients pattern-scoping apply. A DEBUFF-kind extension's
+        // no-subject fallback stays 'enemy' (a single hit target). An INFLICTED-scope extension
+        // (Asphyxiator) names no scope word at all — its object is "the debuffs this cast
+        // inflicted", which spans every enemy the cast landed one on, not just the anchor. Owner
+        // ruling 2026-09-02: a crit on the main target extends the adjacent enemies' freshly
+        // inflicted debuffs too. So it takes the cast's whole hit footprint, which is what
+        // 'all-enemies' resolves to at the seam (aoeVictimIds).
         const extendTarget: AbilityTarget = /\ball\s+allies\b/i.test(extendSubjectPrefix)
             ? 'all-allies'
             : /\ball\s+(?:hit\s+)?enemies\b/i.test(extendSubjectPrefix)
@@ -2337,16 +2323,15 @@ function abilitiesFromText(
                 // "every turn") falls through to detectEveryTurnTrigger below, and a
                 // start-of-COMBAT one to detectPreCombatShieldTrigger.
                 (detectStartOfRoundTrigger(text, healPos) ??
-                // Epic PR4 (start-of-combat one-time grant family): Crucialis's "At the start of
-                // combat, this Unit gains a Shield equal to 20% of its Max HP …" and FrontLine's
-                // "This Unit gains Shield equal to 25% of its Max HP at the start of combat" parsed
-                // on-cast — the shield would re-grant the pool on every skill use instead of once
-                // at combat start. Position-scoped (no buff name to resolve a clause on), checked
-                // for shields only (no corpus heal carries this phrase — verified ship-skills.csv;
-                // Lionheart's start-of-combat "grants adjacent allies 10% of its HP" is a HEAL, not
-                // a shield, and is out of this PR's named scope). The engine seeds the pool exactly
-                // once via seedPreCombatShields (round 1, before any turn); the cast path
-                // (runPlayerTurn) skips pre-combat abilities entirely.
+                // A start-of-combat shield (Crucialis: "At the start of combat, this Unit gains a
+                // shield equal to 20% of its max HP …"; FrontLine: "At the start of combat this
+                // Unit gains a shield equal to 25% of its max HP …") is 'pre-combat', not on-cast —
+                // on-cast would re-grant the pool on every skill use instead of once at combat
+                // start. Position-scoped (no buff name to resolve a clause on), checked for shields
+                // only: Lionheart's start-of-combat "grants all adjacent allies 10% of its HP" is a
+                // HEAL, not a shield. The engine seeds the pool exactly once via
+                // seedPreCombatShields (round 1, before any turn); the cast path (runPlayerTurn)
+                // skips pre-combat abilities entirely.
                 // basis GUARD (#210 review): the engine's seedPreCombatShields only seeds
                 // hp-basis pools — tagging a non-hp pre-combat shield would strip it from the
                 // cast path (notPreCombat filter) AND skip it at the seed = silently dropped
@@ -2494,7 +2479,7 @@ function abilitiesFromText(
                       role,
                       // AoE: a bare support-cast heal repairs every ally in the pattern footprint
                       // (like all-allies buffs), not a single ally. An explicit "most missing
-                      // health" recipient sets explicitTarget and stays a single recipient, parsed
+                      // HP" recipient sets explicitTarget and stays a single recipient, parsed
                       // as 'lowest-hp-ally'. A bare CLEANSE parses as 'ally', which resolves to the
                       // same cast reach as this 'all-allies' in `recipientsFor`; see
                       // flipBareSupportTarget's `bareActiveScope` doc.
@@ -2775,10 +2760,9 @@ function abilitiesFromText(
     // trigger is detected in the purge's own sentence (C2b-2): Iridium "when directly damaged"
     // → on-attacked. Rhodium end-of-round + Faust killed-by-direct-damage detectors, plus
     // Zeolite's "When this Unit deals damage to a defender" → on-deal-damage, carrying
-    // an `enemy-type` Defender condition (see detectPurgeEnemyTypeCondition below — same
-    // extraction the outgoing-damage-modifier branch above uses for Zeolite's sibling "+30%
-    // damage when hitting a Defender" gate). A passive purge with NO detected trigger is NOT
-    // emitted (Sefuba's chain stays on PURGE_MORE_RE below). Purge is enemy-only (no support-flip).
+    // an `enemy-type` Defender condition (see detectPurgeEnemyTypeCondition below). A passive
+    // purge with NO detected trigger is NOT emitted (Sefuba's chain stays on PURGE_MORE_RE
+    // below). Purge is enemy-only (no support-flip).
     //
     // Nayra's "if the target was repaired this round, purge all buffs" emits with
     // conditions:[{subject:'target-repaired-this-round', derivable:true}] (see
@@ -2813,10 +2797,9 @@ function abilitiesFromText(
             ? 'enemy-most-buffs'
             : p.target;
         const repairedCond = detectRepairedThisRoundCondition(text, purgePos);
-        // Task 12: an on-deal-damage purge (Zeolite) is gated on the DAMAGED enemy being the
-        // named role (Defender) — reuses the enemy-type extraction shared with the +30%
-        // damage-modifier branch above. Only computed for the on-deal-damage trigger so no
-        // other purge (Iridium/Rhodium/Faust) picks up a spurious condition.
+        // An on-deal-damage purge (Zeolite) is gated on the DAMAGED enemy being the named role
+        // (Defender). Only computed for the on-deal-damage trigger so no other purge
+        // (Iridium/Rhodium/Faust) picks up a spurious condition.
         const enemyTypeCond =
             trigger === 'on-deal-damage'
                 ? detectPurgeEnemyTypeCondition(text, purgePos)
@@ -2879,8 +2862,8 @@ function abilitiesFromText(
     const charge = parseChargeGain(text);
     if (charge) {
         const chargePos = text.search(/charge/i);
-        // Inflict-driven charge gains fire on a reactive event (+amount per infliction). Pallas's
-        // "when an ally critically hits ... gains 1 charge" rides the on-ally-crit reactive trigger
+        // Inflict-driven charge gains fire on a reactive event (+amount per infliction). Hermes's
+        // "when an ally critically hits ... adds 1 charge" rides the on-ally-crit reactive trigger
         // (sentence-scoped). Either reactive source means the trigger IS the gate → no gating
         // condition. parseChargeGain's own trigger (inflict-driven) takes precedence when present.
         const allyCritChargeTrigger = detectAllyCritTrigger(text, chargePos);
@@ -3573,12 +3556,13 @@ export function buildShipAbilities(rawShip: Ship): ShipSkills {
         // REMOVES it (the kill phrasing belongs to the remove-self-buff path, parsed separately by
         // parseSelfBuffRemovals). The Marauder "gains 1 stack of Overload every turn and, upon
         // destroying an enemy, removes Overload" shape makes Overload's name appear in BOTH the
-        // per-turn grant clause and the kill-removal clause; resolveBuffClause can pick up the kill phrasing and mis-trigger the accumulating
-        // GRANT on on-enemy-destroyed (Mangler/Ravager), which would gate the every-turn accrual
-        // behind a kill. Strip a kill trigger from an accumulating (recurring) grant so it keeps its
-        // per-round accumulation; the legitimate recurring-grant triggers (Asphyxiator
-        // start-of-round, Ruiner on-enemy-repaired) are unaffected, and finite grants (Marauder Rage
-        // on-kill) keep their kill trigger.
+        // per-turn grant clause and the kill-removal clause; resolveBuffClause can pick up the
+        // kill phrasing and mis-trigger the accumulating GRANT on on-enemy-destroyed
+        // (Mangler/Ravager), which would gate the every-turn accrual behind a kill. Strip a kill
+        // trigger from an accumulating (recurring) grant so it keeps its per-round accumulation;
+        // the legitimate recurring-grant triggers (Asphyxiator start-of-round, Ruiner
+        // on-enemy-repaired) are unaffected, and finite grants (Marauder Rage on-kill) keep their
+        // kill trigger.
         const isAccumulatingGrant =
             ability.config.type === 'buff' && ability.config.duration === 'recurring';
         if (reactiveTrigger === 'on-enemy-destroyed' && isAccumulatingGrant) {
@@ -3604,7 +3588,7 @@ export function buildShipAbilities(rawShip: Ship): ShipSkills {
             const hits = detectHitCount(rowText, pos);
             if (hits !== undefined) ability.config.hits = hits;
         }
-        // Epic PR4: a split-sentence "… also gains <Buff>" continuing an IMMEDIATELY PRECEDING
+        // A split-sentence "… also gains <Buff>" continuing an IMMEDIATELY PRECEDING
         // "At the start of the round, this Unit gains …" sentence (Nayra p2's Offensive Affinity
         // Override, Isha p1/p2's Defensive Affinity Override) has no round-start phrase of its
         // OWN clause, so detectReactiveTrigger above misses it — fall back to the continuation
@@ -3727,11 +3711,11 @@ export function buildShipAbilities(rawShip: Ship): ShipSkills {
                 ability.target = 'ally';
             }
         } else if (
-            // Phase 4c PR 3 (Task 7): "when HP drops/falls below N%" buff-grant reactives
-            // (Tycho/Shelter/Los/Kafa/Redeemer) ride the LIVE on-hp-threshold-crossed trigger.
-            // Checked BEFORE the damage-reaction detector and short-circuiting: a crossing grant is
-            // never also target-gated, and the (drops|falls) verb excludes the static "while below
-            // N% HP" damage-reaction phrasing, so the two paths are mutually exclusive by corpus.
+            // "when HP drops/falls below N%" buff-grant reactives (Tycho/Shelter/Los/Kafa/Redeemer)
+            // ride the LIVE on-hp-threshold-crossed trigger. Checked BEFORE the damage-reaction
+            // detector and short-circuiting: a crossing grant is never also target-gated, and the
+            // (drops|falls) verb excludes the static "while below N% HP" damage-reaction phrasing,
+            // so the two paths are mutually exclusive by corpus.
             rowText &&
             pos >= 0 &&
             crossing(rowText, pos, ability)
@@ -3749,14 +3733,14 @@ export function buildShipAbilities(rawShip: Ship): ShipSkills {
         ) {
             // target-gated Cheat Death handled in the helper; nothing further to do for this buff.
         } else {
-            // Phase 4c PR 1 (Task 8): a SELF-subject damage-reaction grant/infliction ("When
-            // directly damaged, … inflicts Speed Down I"; Guardian's "When this Unit is
-            // critically hit, it gains …") rides the LIVE on-attacked trigger (+ crit filter)
-            // instead of registering as an unconditional per-round aura (a phantom — the
-            // reactive partition routes it OUT of registerActorAbilityStatuses and into the
-            // executor, which lands enemy-target counter-debuffs on the attacking enemy via
-            // eventCtx.counterTargetId). Sentence-scoped at the buff's own anchor, so grants
-            // in other sentences of the same row are never co-triggered.
+            // A SELF-subject damage-reaction grant/infliction ("When directly damaged, … inflicts
+            // Speed Down I"; Guardian's "When this Unit is critically hit, it gains …") rides the
+            // LIVE on-attacked trigger (+ crit filter) instead of registering as an unconditional
+            // per-round aura (a phantom — the reactive partition routes it OUT of
+            // registerActorAbilityStatuses and into the executor, which lands enemy-target
+            // counter-debuffs on the attacking enemy via eventCtx.counterTargetId). Sentence-scoped
+            // at the buff's own anchor, so grants in other sentences of the same row are never
+            // co-triggered.
             const reaction =
                 rowText && pos >= 0 ? detectDamageReactionTrigger(rowText, pos) : undefined;
             if (reaction) {
@@ -3839,19 +3823,18 @@ export function buildShipAbilities(rawShip: Ship): ShipSkills {
                 }
             }
         }
-        // Epic PR4 (start-of-combat one-time grant family): a still-on-cast, NON-STACKING buff
-        // whose OWN clause reads "At the start of combat, this Unit gains …" (Crucialis's Atlas
-        // Coordination I/II, Tycho's Cheat Death + Everliving Regeneration I/II) is relabeled
-        // 'pre-combat' — a data-model/annotation correction only. 'pre-combat' is deliberately
-        // excluded from LIVE_TRIGGERS, so this is INERT at the engine level: the ability stays on
-        // the normal cast path, where registerActorAbilityStatuses' duration/slot-based
-        // classification already seeds a finite-duration passive buff exactly once at round start
-        // (seedPassiveTimedStatuses) and treats a 'recurring'-duration one (Cheat Death) as a
-        // standing aura — see src/utils/combat/engine.ts. EXCLUDES Meatshield's "gains 3 stacks of
-        // Protection" (stackTrigger:'per-round', isStackable): that ability still climbs every
-        // round under the parser's generic "gains N stacks" default, so it is NOT actually a
-        // one-time grant yet — relabeling only the trigger without fixing the stacking default
-        // would be actively misleading (deferred to a follow-up PR; see the epic report).
+        // A still-on-cast, NON-STACKING buff whose OWN clause reads "At the start of combat, this
+        // Unit gains …" (Crucialis's Atlas Coordination I/II, Tycho's Cheat Death + Everliving
+        // Regeneration I/II) is relabeled 'pre-combat' — a data-model/annotation correction only.
+        // 'pre-combat' is deliberately excluded from LIVE_TRIGGERS, so this is INERT at the engine
+        // level: the ability stays on the normal cast path, where registerActorAbilityStatuses'
+        // duration/slot-based classification already seeds a finite-duration passive buff exactly
+        // once at round start (seedPassiveTimedStatuses) and treats a 'recurring'-duration one
+        // (Cheat Death) as a standing aura — see src/utils/combat/engine.ts. EXCLUDES Meatshield's
+        // "gains 3 stacks of Protection" (stackTrigger:'per-round', isStackable): that ability
+        // still climbs every round under the parser's generic "gains N stacks" default, so it is
+        // NOT actually a one-time grant yet — relabeling only the trigger without fixing the
+        // stacking default would be actively misleading.
         const isAccumulatingBuff =
             ability.config.type === 'buff' &&
             !!ability.config.stackTrigger &&

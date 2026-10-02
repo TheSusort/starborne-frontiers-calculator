@@ -308,7 +308,7 @@ export interface StatusEngine {
      *  rejection. Returns the number of debuffs affected (removed early if their reduced
      *  duration is <= 0). Unknown id → 0. */
     reduceAllDebuffsDuration(actorId: string, turns: number): number;
-    /** The clean inverse of reduceAllDebuffsDuration (Sokol) — extends EVERY eligible
+    /** The clean inverse of reduceAllDebuffsDuration (Lev) — extends EVERY eligible
      *  timed debuff on `actorId` (per-victim `enemyMaps`) by `turns`. Same eligibility rules
      *  (numeric turnsRemaining only, skips isUnremovable(name, turnsRemaining)) and the same
      *  non-positive/non-finite `turns` rejection, but NEVER expires an entry — extending only
@@ -324,7 +324,7 @@ export interface StatusEngine {
      *  rules and never expires an entry. Returns the number of buffs affected. Unknown id → 0.
      *  #363 (Fuying): when `buffName` is given, restricts the extension to statuses with that
      *  exact name (e.g. "Stealth") — every other eligible buff is left untouched. Absent →
-     *  extend-everything (Sokol/Ripper/Lev behaviour). */
+     *  extend-everything (Ripper behaviour). */
     extendAllBuffsDuration(actorId: string, turns: number, buffName?: string): number;
     /** Remove up to `count` removable BUFFS from `actorId`'s self store, newest first;
      *  `'all'` = all; respects UNREMOVABLE_STATUSES + 'permanent'; returns count removed. */
@@ -1692,7 +1692,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         return affected;
     };
 
-    /** The clean inverse of reduceAllDebuffsDuration (Sokol) — extends EVERY eligible
+    /** The clean inverse of reduceAllDebuffsDuration (Lev) — extends EVERY eligible
      *  timed debuff on `actorId` (per-victim `enemyMaps`) by `turns`. Same store and
      *  eligibility rules as reduceAllDebuffsDuration (numeric turnsRemaining only, skip
      *  isUnremovable(name, turnsRemaining)) but ADDS instead of subtracting, and there is no
@@ -1702,7 +1702,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
      *  `onlyNames` restricts the extension to statuses with one of those exact names — the
      *  INFLICTED-scope case (Asphyxiator), where the caller has recorded what its own cast just
      *  applied to this victim and everything else standing must be left alone. Absent → extend
-     *  every eligible debuff (Sokol/Lev). An EMPTY set therefore extends nothing,
+     *  every eligible debuff (Lev). An EMPTY set therefore extends nothing,
      *  which is the correct reading of "extend what I inflicted" when nothing landed. */
     const extendAllDebuffsDuration = (
         actorId: string,
@@ -1730,7 +1730,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
      *  non-positive/non-finite `turns` or unknown id returns 0.
      *  #363 (Fuying): an optional `buffName` restricts the extension to statuses with that
      *  exact name — a NAMED extension touches only that status; absent → every eligible
-     *  buff (Sokol/Ripper/Lev). */
+     *  buff (Ripper). */
     const extendAllBuffsDuration = (actorId: string, turns: number, buffName?: string): number => {
         const delta = Number.isFinite(turns) ? Math.trunc(turns) : 0;
         if (delta <= 0) return 0;

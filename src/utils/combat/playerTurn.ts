@@ -1757,7 +1757,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     //  (2) TARGET (user-confirmed 2026-08-20). A TEXT-NAMED ally selector is never
     //      footprint-scoped **on either slot**. The load-bearing half of the Volk observation
     //      above is the selector, not the slot: his text names "the ally with the most missing
-    //      health", and a named ally is reached wherever it stands.
+    //      HP", and a named ally is reached wherever it stands.
     //      `'lowest-hp-ally'` (Pallas, Volk, Valkyrie) therefore bypasses
     //      `supportRecipients` entirely — `recipientsFor` returns for it BEFORE calling this, and
     //      `resolveSupportRecipients` THROWS on the target by design so a future caller cannot
@@ -2858,10 +2858,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // `dmgStats`/`effectiveHp` exist in the turn (computed further down) and
         // cannot be reordered here without reordering the whole turn, which is out of scope.
         // THIS is the ctx that matters for the subject: the per-slot timed-SELF-buff loop just
-        // below (`timedSelfBySlot`, gated via
-        // `conditionsMet(status.conditions, postDebuffGateCtx)`) is what fires an ON-CAST ability gated on `self-shield-full` (Quixilver R2's
-        // shape, e.g. a charge/active-slot "if this Unit has Shield equal to 100% of its max HP"
-        // grant). Without this field, selfShieldFull defaults false here (buildRoundContext's
+        // below (`timedSelfBySlot`, gated via `conditionsMet(status.conditions, postDebuffGateCtx)`)
+        // is what fires an ON-CAST ability gated on `self-shield-full` (Quixilver R2's shape, e.g.
+        // a charge/active-slot "if it has shield equal to 100% of its max HP" grant). Without this field, selfShieldFull defaults false here (buildRoundContext's
         // DPS-safe default) and such a cast-path grant would be permanently suppressed regardless
         // of the caster's real shieldPool — the same silent-failure class the sibling fields in
         // the other three contexts already guard against.
@@ -4525,11 +4524,11 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         }
     }
 
-    // On-cast extend-status (Sokol charged debuff-extend; Ripper passive
-    // all-allies buff-extend; Lev charged all-enemies debuff-extend gated on self-crit). Pure
-    // StatusEngine duration mutation — side-symmetric (mirrors the purge/steal/shield-strip
-    // blocks above: runs identically for player AND enemy casters, OUTSIDE the healing gate).
-    // Sourced from BOTH the firing slot (gatedSkill: Sokol/Lev, charged) AND the always-active
+    // On-cast extend-status (Ripper passive all-allies buff-extend; Lev charged all-enemies
+    // debuff-extend gated on self-crit). Pure StatusEngine duration mutation — side-symmetric
+    // (mirrors the purge/steal/shield-strip blocks above: runs identically for player AND enemy
+    // casters, OUTSIDE the healing gate).
+    // Sourced from BOTH the firing slot (gatedSkill: Lev, charged) AND the always-active
     // passive slot (gatedPassive: Ripper) — mirroring the healAbilities combine
     // (below) and the extendDoTs/extendInflictedDoTs combine (above), since a
     // gatedSkill-only scan (like the purge/steal loops, whose abilities are never passive-slot
@@ -4560,7 +4559,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // branch below to that exact status name. Absent (Ripper) → extend-everything, unchanged.
         const namedBuff = ab.config.type === 'extend-status' ? ab.config.buffName : undefined;
         if (statusKind === 'debuff') {
-            // Sokol: single hit enemy (targetId). Lev: fans over the cast's hit-enemy footprint
+            // 'enemy': single hit enemy (targetId). Lev: fans over the cast's hit-enemy footprint
             // (aoeVictimIds) for an 'all-enemies' target — same E3 pattern the purge/shield-strip
             // blocks above use. Requires a hit target; skipped when there is none.
             if (targetId === undefined) continue;
@@ -4621,7 +4620,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             // (above): healing-mode roster when present, else the live same-side
             // roster, narrowed through supportRecipients (the caster's own footprint pattern,
             // if any — undefined pattern/anchor leaves the roster unfiltered, so Ripper's own
-            // buffs extend too, matching "All allies extend their active Buffs"). Independent of
+            // buffs extend too, matching "all allies active buffs are extended"). Independent of
             // targetId — an ally buff-extend needs no enemy target.
             const isEnemyCaster = actor.side === 'enemy';
             const allyRoster = args.healing

@@ -14,7 +14,7 @@ export type AbilityType =
     | 'debuff'
     | 'dot'
     | 'extend-dot'
-    // Wave 4 (Sokol/Ripper/Lev): generic extend-status — grows every eligible timed
+    // Generic extend-status (Ripper/Lev) — grows every eligible timed
     // buff or debuff by N turns (StatusEngine selfMaps/enemyMaps), the clean inverse of
     // the shipped duration-reduce ('cleanse' mode:'reduce-duration'). Distinct from
     // 'extend-dot', which operates on the separate DoT tick-stack store, not these maps.
@@ -69,16 +69,15 @@ export type AbilityType =
     // defence-read sites, never through the ability-fold/executor pipeline).
     | 'defense-substitution'
     // Lingshe: "reduces all Bomb on the enemy targets by 1 turn. This reduction effect requires
-    // hacking." Enemy-
-    // targeted (all-enemies), hacking-gated (runtime always draws the 'inflict' landing roll —
-    // see AbilityConfig's 'bomb-countdown-reduce' variant). Structurally distinct from the
-    // generic `cleanse`/`reduce-duration` primitive (which deliberately excludes bombs and only
-    // ever targets self/allies) — this shrinks the ENEMY's own PendingBomb.countdown, and any
-    // bomb reaching <= 0 detonates immediately (bespoke runtime loop in playerTurn.ts,
+    // hacking." Enemy-targeted (all-enemies), hacking-gated (runtime always draws the 'inflict'
+    // landing roll — see AbilityConfig's 'bomb-countdown-reduce' variant). Structurally distinct
+    // from the generic `cleanse`/`reduce-duration` primitive (which deliberately excludes bombs
+    // and only ever targets self/allies) — this shrinks the ENEMY's own PendingBomb.countdown,
+    // and any bomb reaching <= 0 detonates immediately (bespoke runtime loop in playerTurn.ts,
     // `reduceEnemyBombs` — NOT detonateContainers/detonate(), which credit the CASTER
     // unconditionally and ignore countdown).
     | 'bomb-countdown-reduce'
-    // Wave 4 Task 8 (FrontLine passive): "While Shielded, it gains N additional Defense" — a
+    // FrontLine passive: "while it has an active shield, it gains 2500 defense" — a
     // FLAT-points DEFENSIVE stat bonus gated on the owner CURRENTLY holding a shield
     // (CombatActor.shieldPool > 0). No-op marker config (mirrors 'defense-substitution' /
     // 'damage-reflection' / 'buff-duration-extension') — the engine collects every carrier into
@@ -625,13 +624,13 @@ export type IncomingCondition =
     // Distinct from `dot-inferno-corrosion` (a fact about THIS hit being a DoT tick); this is a
     // fact about the ATTACKER's own status, checked on an ordinary direct hit.
     | 'attacker-has-dot'
-    // Epic PR12 (C): the VICTIM currently carries its own "Barrier Recharging" self-status
-    // (Panon — "reduces all incoming damage by 20% when affected by Barrier Recharging").
+    // The VICTIM currently carries its own "Barrier Recharging" self-status (Panon — "gains 20%
+    // damage reduction from all sources when affected by Barrier Recharging").
     // A literal named-status check, mirroring the self-stealth/self-stasis precedent.
     | 'self-barrier-recharging'
-    // Model-completeness epic (SP-A): the VICTIM currently holds an active shield pool
-    // (Malvex — "When Shielded, this Ship takes 10% less damage"). Context-driven, not
-    // side-gated — evaluated per-hit against the victim's live shieldPool.
+    // The VICTIM currently holds an active shield pool (Malvex — "When this Unit has an active
+    // shield, it gains 10% damage reduction"). Context-driven, not side-gated — evaluated per-hit
+    // against the victim's live shieldPool.
     | 'self-shielded'
     // Epic PR12 (C): unconditional — used with `hpScaling` (Tormenter's HP-proportional
     // reduction, which carries no trigger/status gate, only continuous HP scaling).
@@ -908,7 +907,7 @@ export type AbilityConfig =
           chanceFromCritPower?: boolean;
           scope?: 'active' | 'inflicted';
       }
-    // Wave 4: generic extend-status (Sokol/Ripper/Lev) — extends every eligible timed
+    // Generic extend-status (Ripper/Lev) — extends every eligible timed
     // buff ('buff') or debuff ('debuff') on the StatusEngine selfMaps/enemyMaps store by
     // `turns`. See src/utils/combat/statusEngine.ts extendAllBuffsDuration/
     // extendAllDebuffsDuration.
@@ -918,12 +917,12 @@ export type AbilityConfig =
           turns: number;
           /** #363 (Fuying): restrict the extension to statuses with this exact name
            *  ("extends Stealth by 1 turn"). Absent → extend EVERY eligible timed status of
-           *  `statusKind`, which is what Sokol/Ripper/Lev do. */
+           *  `statusKind`, which is what Ripper/Lev do. */
           buffName?: string;
           /** Asphyxiator: 'inflicted' extends ONLY the statuses THIS cast just applied
            *  ("the newly inflicted debuff is extended by 1 turn") — a status already standing
            *  from an earlier round is left alone. Absent → extend every eligible standing
-           *  status, which is what Sokol/Ripper/Lev do. Same axis as `extend-dot`'s `scope`,
+           *  status, which is what Ripper/Lev do. Same axis as `extend-dot`'s `scope`,
            *  and an inflicted-scope debuff extension covers the cast's DoT applications too:
            *  the game counts a DoT as one of the debuffs it inflicted. */
           scope?: 'active' | 'inflicted';
@@ -1194,7 +1193,7 @@ export type AbilityConfig =
     // dedicated per-owner set and substitutes the carrier's effective defence for a living
     // non-defender ally's own defence at every defence-read site.
     | { type: 'defense-substitution' }
-    // Wave 4 Task 8 (FrontLine passive): "While Shielded, it gains 2500 additional Defense" — a
+    // FrontLine passive: "while it has an active shield, it gains 2500 defense" — a
     // flat-points DEFENSIVE stat bonus, gated on the owner CURRENTLY holding a shield
     // (CombatActor.shieldPool > 0). Distinct from every existing stat-bonus path: `modifier` is
     // percentage-only and folds ONLY into the attacker-side/DAMAGE-mode read

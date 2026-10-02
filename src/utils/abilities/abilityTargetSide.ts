@@ -106,8 +106,8 @@ export type EnemySelectorKind = 'most-buffs' | 'highest-attack' | 'highest-speed
  * Same instrument, same reason: the key set is DERIVED from `AbilityTarget`, so `tsc` rejects a new
  * variant until somebody classifies it here. Before #403 the footprint question was simply not
  * asked on the cast path — `resolveDebuffRecipientIds` had no selector arm at all and the three
- * selector targets fell through its tail to `[anchorId]`, so a clause reading "applies Stasis to
- * the highest attack enemy" landed on whichever enemy the cast's pattern happened to anchor on.
+ * selector targets fell through its tail to `[anchorId]`, so a clause reading "applies Concentrate
+ * Fire for 1 turn to the enemy with the highest attack" landed on whichever enemy the cast's pattern happened to anchor on.
  *
  * Resolving a kind to an actual actor id is the CALLER's job — it needs the live opposing roster
  * and live effective stats, which this module has no business knowing. `engine.ts`'s `buildTurnArgs`

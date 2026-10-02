@@ -4685,7 +4685,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             }
         }
     }
-    // FrontLine's "While Shielded, it gains 2500 additional Defense": per-actor
+    // FrontLine's "while it has an active shield, it gains 2500 defense": per-actor
     // flat conditional-defence bonus, keyed by owner id -> flat bonus points. Side-agnostic, built
     // once from BOTH runtime maps, mirroring defenseSubstitutionCarrierIds. The GATE
     // (hasShield(ownerId)) is deliberately NOT checked here — it must be re-evaluated fresh on
@@ -4796,7 +4796,7 @@ export function runCombat(rawInput: CombatEngineInput): {
     // case): the HIGHEST effective defence among living, same-side carriers wins.
     const substitutedDefenceFor = (victim: CombatActor, fallback: number): number => {
         if (victim.currentHp <= 0) return fallback; // dead victims are never substituted
-        // FrontLine's "While Shielded, it gains 2500 additional Defense" — an
+        // FrontLine's "while it has an active shield, it gains 2500 defense" — an
         // ADDITIVE flat bonus on top of whatever defence value this victim would otherwise read
         // (the substitution below, or the site's own fallback), gated live on hasShield(victim.id)
         // so it is re-evaluated fresh on every hit and reverts the instant the shield is consumed
@@ -4856,14 +4856,14 @@ export function runCombat(rawInput: CombatEngineInput): {
         return !!a && (a.corrosionEntries.length > 0 || a.infernoEntries.length > 0);
     };
     // Does the given actor currently carry its own "Barrier Recharging"
-    // self-status? (Panon — "reduces all incoming damage by 20% when affected by Barrier
-    // Recharging.") Local alias over barrierRecharging.ts's lookup, which is shared with
+    // self-status? (Panon — "gains 20% damage reduction from all sources when affected by
+    // Barrier Recharging.") Local alias over barrierRecharging.ts's lookup, which is shared with
     // triggers.ts's Barrier-grant gate.
     const hasBarrierRecharging = (actorId: string): boolean =>
         holdsBarrierRecharging(statusEngine, actorId);
-    // Does the given actor currently hold an active shield
-    // pool? (Malvex — "When Shielded, this Ship takes 10% less damage.") Reads the live
-    // absorption pool directly off the CombatActor, mirroring hasBarrierRecharging.
+    // Does the given actor currently hold an active shield pool? (Malvex — "When this Unit has an
+    // active shield, it gains 10% damage reduction.") Reads the live absorption pool directly off
+    // the CombatActor, mirroring hasBarrierRecharging.
     const hasShield = (actorId: string): boolean =>
         (allActorsById.get(actorId)?.shieldPool ?? 0) > 0;
     // The given actor's own live HP% (0..100) at this instant, for
