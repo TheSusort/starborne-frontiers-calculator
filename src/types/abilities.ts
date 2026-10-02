@@ -887,8 +887,10 @@ export type AbilityConfig =
            *  debuff's `application` does: how a REACTIVE DoT lands (`'apply'` = the affinity check
            *  only, no hacking-vs-security roll — the reactive executor's
            *  `landsTimedEnemyApplication` call in triggers.ts), and which debuff-inflicted-family
-           *  reactions see it (stamped on `dot-applied`; `passesApplicationFilter`). The cast-path
-           *  DoT landing does not read it: no corpus cast DoT says "applies". */
+           *  reactions see it (stamped on `dot-applied`; `passesApplicationFilter`). The parser
+           *  never sets it on a ship DoT and the cast-path DoT landing does not read it —
+           *  debuffApplicationFilterTripwire.test.ts's ship-DoT census fails on an apply-worded
+           *  ship DoT clause. */
           application?: 'inflict' | 'apply';
       }
     // SP-F F3 (Lingshe charged skill): shrinks every living enemy's PendingBomb.countdown by

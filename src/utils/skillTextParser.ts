@@ -2140,10 +2140,16 @@ const EXTEND_STATUS_PASSIVE_RE =
 // wording. Tried FIRST, so a hypothetical plural "the newly applied Debuffs are extended" is
 // scoped rather than being claimed by the standing-status arm.
 //
-// LOOSE OLD WORDING (owner ruling, 2026-10-01): the OLD text's "applies a Debuff" does NOT make
-// this an apply-only reaction — every debuff in his kit is inflicted, and the catalogue text
-// (docs/ship-skills.catalogue.csv) reads "After this Unit inflicts a debuff with a critical hit,
-// the newly inflicted debuff". So no `triggerApplicationFilter`-style verb split is taken here.
+// LOOSE OLD WORDING — the one statement of this rule (owner ruling, 2026-10-01). Three OLD-text
+// trigger clauses say "apply" where the ship's own kit only INFLICTS the status they react to, and
+// the catalogue text (docs/ship-skills.catalogue.csv) rewords each to "inflicts":
+//  - Asphyxiator (here): "After this Unit applies a Debuff with a Critical hit" → "inflicts a
+//    debuff with a critical hit … the newly inflicted debuff";
+//  - Wisteria (SELF_CRIT_DOT_RE): "after applying Corrosion with a Critical hit" → "When this
+//    Unit inflicts Corrosion with a critical hit";
+//  - Defiant (APPLYING_STASIS_RE): "when applying Stasis" → "after it inflicts Stasis".
+// None is an apply-only reaction: no verb split is taken, and both wordings react to the ship's
+// inflicted status.
 //
 // Two negative lookaheads keep the three extension detectors disjoint, and each is load-bearing:
 // "damage over time" belongs to EXTEND_DOT_RE, and "crit(ical) power" to CRIT_POWER_EXTEND_RE
@@ -2305,12 +2311,12 @@ export function detectAllyCritDotTrigger(
 //  - "When this Unit inflicts Corrosion with a critical hit, it also inflicts Inferno II for 2
 //    turns …"
 // The trigger clause's own verb is "applying" or a "when this Unit inflicts" subordinate clause;
-// a plain on-cast "inflicts X with a critical hit" has neither. LOOSE OLD WORDING: the OLD
-// "after applying Corrosion" is NOT an apply-only reaction — Wisteria's Corrosion is always
-// inflicted, and the catalogue text (docs/ship-skills.catalogue.csv) reads "When this Unit
-// inflicts Corrosion with a critical hit". Both wordings therefore react to the inflicted DoT. The generic `[^.]*` gap (not
-// `[\w\s]+?`) so this works against BOTH the raw tagged text (phrasePosTrigger's sentence scan)
-// and the stripped text (parseSelfCritDot/parseSelfCritDotEffect below).
+// a plain on-cast "inflicts X with a critical hit" has neither. "after applying" is loose OLD
+// wording for an inflicted Corrosion — see the LOOSE OLD WORDING note in Asphyxiator's
+// extend-status block.
+// The generic `[^.]*` gap (not `[\w\s]+?`) so this works against BOTH the raw tagged text
+// (phrasePosTrigger's sentence scan) and the stripped text (parseSelfCritDot/parseSelfCritDotEffect
+// below).
 const SELF_CRIT_DOT_RE =
     /\b(?:after\s+applying|when\s+this\s+unit\s+inflicts)\b[^.]*\bwith\s+a\s+critical\s+hit\b/i;
 
@@ -2718,9 +2724,8 @@ export function parseControlInflicts(
 // "when applying Stasis" / "after it inflicts Stasis" — the reactive trigger for a grant that
 // procs when THIS unit applies Stasis (Defiant's "gains a shield equal to 30% of its max HP").
 // Position-scoped on the RAW sentence (mirrors detectDebuffInflictedTrigger), so the status name
-// may be tagged; no lookbehind. LOOSE OLD WORDING: the OLD "when applying Stasis" is NOT an
-// apply-only reaction — Defiant's charged inflicts her Stasis, and the catalogue text
-// (docs/ship-skills.catalogue.csv) reads "after it inflicts Stasis". Both wordings react to it.
+// may be tagged; no lookbehind. "when applying Stasis" is loose OLD wording for an inflicted
+// Stasis — see the LOOSE OLD WORDING note in Asphyxiator's extend-status block.
 const APPLYING_STASIS_RE =
     /\bwhen\s+applying\s+stasis\b|\bafter\s+it\s+inflicts\s+(?:<unit-skill>\s*)?stasis\b/i;
 

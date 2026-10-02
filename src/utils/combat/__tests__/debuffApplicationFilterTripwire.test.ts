@@ -16,14 +16,17 @@
  * silently leave the ability firing on BOTH landing kinds (the pre-#593 default). The equipment
  * half pins the same rule for implants and gear sets: an equipment debuff/DoT carries the verb its
  * description states, and Insidiousness reacts to inflicted debuffs only (user ruling, 2026-10-02).
+ * The ship-DoT half pins that no ship DoT clause in either corpus is worded "applies <DoT>": the
+ * parser never stamps `application` on a ship DoT, so every one lands and reacts as an inflict —
+ * an apply-worded one would need that stamp, and this test is where it would surface.
  *
  * A small, named, per-corpus ALLOWLIST covers genuinely verb-less clauses (OLD APEX's "gets
  * debuffed") — adding a ship here is a deliberate, reviewed decision, not a silent gap.
  *
  * CORPUS ACCESS: both CSVs are gitignored reference data. The OLD census must read the real corpus
  * — a synthetic fallback would turn a missing-data worktree into a green vacuous run. The
- * catalogue CSV is generated on the catalogue-adaptation branch only, so its census is SKIPPED
- * (visibly) where the file is absent.
+ * catalogue half needs `docs/ship-skills.catalogue.csv` (built by
+ * `scripts/build-catalogue-skills-csv.ts`); where that file is absent it is SKIPPED, by name.
  */
 import { describe, it, expect, beforeAll } from 'vitest';
 import { csvAvailable, loadShipSkillRecords } from '../../../../scripts/lib/shipSkillCsv';
@@ -154,11 +157,78 @@ describe('debuff-inflicted trigger family — triggerApplicationFilter tripwire'
     });
 });
 
-// The catalogue CSV is generated on the catalogue-adaptation branch only; where it is absent this
-// block is SKIPPED, by name, rather than passing on no data.
+// ---------------------------------------------------------------------------------------------
+// Ship DoTs: none is apply-worded. A DoT's landing verb is the active verb that governs its tag —
+// "applies"/"apply" (not "applying"/"applied", which are trigger clauses and adjectives: Wisteria's
+// "after applying Corrosion", Valerian's "the newly applied Corrosion") or "inflicts". The verb's
+// reach ends at the next verb, so "applies Concentrate Fire …, and inflicts Inferno II" governs
+// only the Concentrate Fire.
+// ---------------------------------------------------------------------------------------------
+const DOT_TAG_RE = /<unit-skill>\s*(Corrosion|Inferno|Bomb)\b/i;
+const GOVERNING_VERB_RE =
+    /\b(appl(?:y|ies)|inflict(?:s)?)\b|\b(?:deals?|grants?|gains?|repairs?|removes?|cleanses?|purges?|detonates?|extends?|inflicting|applying)\b|[.;]|<br\s*\/?>/gi;
+
+/** Every DoT tag governed by an "apply" verb, as `ship: clause` lines. */
+function applyWordedDots(text: string): { apply: string[]; inflict: number } {
+    const apply: string[] = [];
+    let inflict = 0;
+    const marks = [...text.matchAll(GOVERNING_VERB_RE)];
+    marks.forEach((m, i) => {
+        const verb = m[1];
+        if (!verb) return;
+        const end = i + 1 < marks.length ? marks[i + 1].index : text.length;
+        const clause = text.slice(m.index, end);
+        if (!DOT_TAG_RE.test(clause)) return;
+        if (/^appl/i.test(verb)) apply.push(clause.replace(/<[^>]+>/g, '').trim());
+        else inflict++;
+    });
+    return { apply, inflict };
+}
+
+function shipDotVerbCensus(csvPath?: string): { applyWorded: string[]; inflictWorded: number } {
+    const applyWorded: string[] = [];
+    let inflictWorded = 0;
+    for (const r of loadShipSkillRecords(csvPath)) {
+        for (const text of [r.active, r.charge, ...r.passives]) {
+            const { apply, inflict } = applyWordedDots(text);
+            inflictWorded += inflict;
+            for (const clause of apply) applyWorded.push(`${r.name}: ${clause}`);
+        }
+    }
+    return { applyWorded, inflictWorded };
+}
+
+describe('ship DoTs — none is apply-worded (OLD corpus)', () => {
+    it('the detector sees an "applies <DoT>" clause and ignores the inflict, gerund and adjective forms', () => {
+        expect(
+            applyWordedDots(
+                'This Unit deals 100% damage and applies <unit-skill>Corrosion II</unit-skill> for 2 turns.'
+            ).apply
+        ).toHaveLength(1);
+        expect(
+            applyWordedDots(
+                'This Unit applies <unit-skill>Concentrate Fire</unit-skill> for 1 turn, and inflicts <unit-skill>Inferno II</unit-skill> for 2 turns.'
+            )
+        ).toEqual({ apply: [], inflict: 1 });
+        expect(
+            applyWordedDots(
+                'This Unit, after applying <unit-skill>Corrosion</unit-skill> with a Critical hit, extends the newly applied <unit-skill>Corrosion</unit-skill> by 1 turn.'
+            ).apply
+        ).toEqual([]);
+    });
+
+    it('no ship DoT clause is worded "applies <DoT>"', () => {
+        const { applyWorded, inflictWorded } = shipDotVerbCensus();
+        expect(inflictWorded).toBeGreaterThan(0);
+        expect(applyWorded).toEqual([]);
+    });
+});
+
+// Needs `docs/ship-skills.catalogue.csv` (built by `scripts/build-catalogue-skills-csv.ts`); where
+// that file is absent this block is SKIPPED, by name, rather than passing on no data.
 const CATALOGUE_PRESENT = csvAvailable(CATALOGUE_CSV);
 describe.skipIf(!CATALOGUE_PRESENT)(
-    `catalogue corpus — triggerApplicationFilter tripwire${
+    `catalogue corpus — verb tripwires${
         CATALOGUE_PRESENT ? '' : ` (SKIPPED: ${CATALOGUE_CSV} is absent from this checkout)`
     }`,
     () => {
@@ -169,6 +239,12 @@ describe.skipIf(!CATALOGUE_PRESENT)(
             );
             expect(checked).toBeGreaterThan(0);
             expect(violations).toEqual([]);
+        });
+
+        it('no ship DoT clause is worded "applies <DoT>"', () => {
+            const { applyWorded, inflictWorded } = shipDotVerbCensus(CATALOGUE_CSV);
+            expect(inflictWorded).toBeGreaterThan(0);
+            expect(applyWorded).toEqual([]);
         });
     }
 );

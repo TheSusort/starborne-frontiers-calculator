@@ -521,9 +521,10 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
  *    ('apply' = no hacking-vs-security roll — Provoke, Concentrate Fire, Disable).
  *  - `dot-applied`: the DoT config's `application` — set only where the text says "applies" (the
  *    Burner gear set's Inferno, which lands on the affinity check alone, like an applied debuff).
- * An event with no `application` counts as an inflict (a cast DoT — every corpus DoT clause says
- * "inflicts" — or a debuff shape predating #592, matching the `application === 'apply'` landing
- * branches in playerTurn.ts and this file's reactive debuff executor).
+ * An event with no `application` counts as an inflict (a ship DoT, which the parser never stamps
+ * — debuffApplicationFilterTripwire.test.ts's ship-DoT census pins that none is apply-worded — or a
+ * debuff shape predating #592, matching the `application === 'apply'` landing branches in
+ * playerTurn.ts and this file's reactive debuff executor).
  *
  * `filter === undefined` (a clause with no "inflict"/"apply" verb of its own — OLD APEX's "gets
  * debuffed", Firewall's "when debuffed") takes neither reading and passes unconditionally.
