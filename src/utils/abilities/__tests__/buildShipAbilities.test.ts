@@ -385,21 +385,6 @@ describe('buildShipAbilities', () => {
         expect(ext.conditions).toEqual([{ subject: 'self-crit', derivable: true }]);
     });
 
-    it('Belladonna passive: crit-power extension gated by ally-inflicts-debuff (team)', () => {
-        const s = ship({
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            refits: [{}, {}] as any,
-            secondPassiveSkillText:
-                'When an ally inflicts <unit-skill>Corrosion</unit-skill>, this Unit has a chance to convert it.<br /><br />Upon converting Corrosion, this Unit extends the newly applied Acidic Decay status for 1 turn, with the chance to equal to its crit power.',
-        });
-        const ext = abilityOfType(
-            slot(buildShipAbilities(s).slots, 'passive')!.abilities,
-            'extend-dot'
-        )!;
-        expect(ext.config).toMatchObject({ chanceFromCritPower: true, turns: 1 });
-        expect(ext.conditions).toEqual([{ subject: 'ally-inflicts-debuff', derivable: false }]);
-    });
-
     describe('extend-status', () => {
         it('Sokol charged: damage + extend-status(debuff) on the enemy', () => {
             const s = ship({

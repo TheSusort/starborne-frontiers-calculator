@@ -1961,7 +1961,7 @@ function abilitiesFromText(
     // sentence, unaffected).
     const bombCountdownReduceTurns = parseBombCountdownReduce(text);
     if (bombCountdownReduceTurns) {
-        const bombReducePos = text.search(/reduces?\s+all\s+bombs/i);
+        const bombReducePos = text.search(/reduces?\s+all\s+(?:<[^>]*>\s*)?bomb/i);
         out.push({
             ability: {
                 id: nextId(),
@@ -1976,7 +1976,7 @@ function abilitiesFromText(
         });
     }
 
-    // Crit-power-chance extension (Valerian self-crit; Belladonna ally-inflicts → team).
+    // Crit-power-chance extension, gated on this unit's own crit (Valerian, Wisteria).
     // A row that ALSO carries a "converts the Corrosion into <family>" clause
     // (Belladonna) folds this SAME crit-power extension into the convert-dot ability's
     // extendTurns/extendChanceFromCritPower (see mergeBuff below) — emitting the standalone
@@ -3199,7 +3199,7 @@ function abilitiesFromText(
     // the bonus is applied dynamically at the defensive read, never fired.
     const whileShieldedFlatDefence = parseWhileShieldedFlatDefence(text);
     if (whileShieldedFlatDefence !== undefined) {
-        const whileShieldedPos = text.search(/while\s+shielded/i);
+        const whileShieldedPos = text.search(/while\s+it\s+has\s+an\s+active\s+shield/i);
         out.push({
             ability: {
                 id: nextId(),
