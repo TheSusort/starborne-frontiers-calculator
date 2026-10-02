@@ -173,10 +173,12 @@ export interface Intent {
          *  collapsing all N into one. Undefined for triggers with no attack identity
          *  (start-of-round / end-of-round) — those keep per-turn gating, which is correct for them.
          *  Read by `passesProcChanceGate`'s memo key, so `procScope:'per-attack'` means per
-         *  sub-attack rather than per turn. Also undefined on `on-debuff-inflicted`: its
-         *  `debuff-applied` / `dot-applied` events carry no sub-attack index, so Insidiousness's
-         *  verdict and per-victim dedupe there are per actor turn (a 2-hit cast that debuffs on
-         *  each hit gets one roll). */
+         *  sub-attack rather than per turn.
+         *  KNOWN GAP: undefined on `on-debuff-inflicted` too — its `debuff-applied` /
+         *  `dot-applied` events carry no sub-attack index, so Insidiousness's verdict and
+         *  per-victim dedupe there are per actor turn. That diverges from the locked rule that an
+         *  outgoing proc rolls once per ATTACK (a multi-hit skill is N attacks): a 2-hit cast that
+         *  debuffs on each hit gets one roll where the rule gives two. */
         subAttackIndex?: number;
         /** The damage of the triggering event, used by a reactive heal/shield to scale off
          *  that hit rather than the owner's max HP. Two consumers: `basis:'damage-dealt'`

@@ -11,10 +11,12 @@
  * the reactive infliction.
  *
  * Insidiousness declares `procScope:'per-attack'`: one verdict shared by every enemy debuffed in
- * the same memo bucket, at most one hit per enemy per bucket. On this trigger the listener stamps
- * no `subAttackIndex`, so the bucket is today the actor's whole turn — see
- * `passesProcChanceGate`'s memo key. A reactive infliction on the SAME enemy, in the same turn, as
- * the infliction that triggered it therefore shares that verdict and adds no second hit; the boards
+ * the same memo bucket, at most one hit per enemy per bucket. KNOWN GAP: on this trigger the
+ * listener stamps no `subAttackIndex`, so the bucket is the actor's whole turn, not one attack as
+ * the locked proc rule requires — a 2-hit cast that debuffs on each hit gets one roll where the
+ * rule gives two (see `Intent.eventCtx.subAttackIndex` in triggers.ts). A reactive infliction on
+ * the SAME enemy, in the same turn, as the infliction that triggered it therefore shares that
+ * verdict and adds no second hit; the boards
  * below make the reaction land on a DIFFERENT enemy (an `enemy-highest-attack` follow-up), or
  * narrow Insidiousness to the reaction's status, which is where the change is visible.
  *
@@ -257,7 +259,7 @@ describe('Insidiousness — real Warden kit (OLD R2 text), debuff arm', () => {
     const WARDEN_ACTIVE =
         'This Unit deals <unit-damage>165% damage</unit-damage> and applies <unit-skill>Provoke</unit-skill> for 1 turn.';
     const WARDEN_PASSIVE_R2 =
-        'When directly damaged, this Unit inflicts <unit-skill>Corrosion I</unit-skill> for 2 turns on that enemy and repairs itself 3% of its Max HP.<br /><br />Additionally, when this Unit inflicts a <unit-skill>Debuff</unit-skill>, it inflicts <unit-skill>Out. Damage Down II</unit-skill> for 1 turn.';
+        'When directly damaged, this Unit inflicts <unit-skill>Corrosion I</unit-skill> for 2 turns on that enemy and repairs itself 3% of its Max HP.<br /><br />Additionally, when this Unit inflicts a Debuff, it inflicts <unit-skill>Out. Damage Down II</unit-skill> for 1 turn.';
     const OUT_DD = 'Out. Damage Down II';
     /** Her parsed kit plus `extra`; `withReaction: false` strips her on-debuff-inflicted reaction. */
     const wardenSkills = (extra: Ability[], withReaction = true): ShipSkills => {
@@ -360,6 +362,21 @@ describe('Insidiousness — real catalogue Ripper kit (R0), DoT arm', () => {
         const landed = infernoRounds(events, 'attacker', 'victim');
         expect(landed).toEqual([1, 2, 3]);
         expect(procHits(events, 'attacker', 'victim')).toEqual(landed);
+    });
+
+    it('each reactive Inferno II carries his reaction’s id in its chain', () => {
+        const skills = ripperSkills([]);
+        const reactionId = skills.slots
+            .find((s) => s.slot === 'passive')
+            ?.abilities.find((a) => a.config.type === 'dot')?.id;
+        expect(reactionId).toBeDefined();
+        const events = runWithDots(BASE({ shipSkills: skills, enemyAttackers: [victim()] }));
+        const chains = events.flatMap((e) =>
+            e.type === 'dot-applied' && e.dotType === 'inferno'
+                ? [e.debuffInflictedReactionChain]
+                : []
+        );
+        expect(chains).toEqual([[reactionId], [reactionId], [reactionId]]);
     });
 
     it('control: without his reaction there is no Inferno and no hit', () => {

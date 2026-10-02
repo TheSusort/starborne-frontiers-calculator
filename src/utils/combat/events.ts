@@ -147,10 +147,13 @@ export type CombatEvent =
      *  re-trigger itself, directly or through another of the owner's reactions (an unbounded
      *  chain would otherwise hit MAX_INTENT_GENERATIONS). Every OTHER on-debuff-inflicted
      *  ability of the owner still sees the debuff: the Insidiousness implant reacts to Warden's
-     *  reactive Out. Damage Down II as to a cast-inflicted one — on the same enemy in the same
-     *  turn it shares the triggering infliction's verdict and per-victim dedupe, so it adds no
-     *  second hit (see `passesProcChanceGate` in triggers.ts). Each ability in a chain
-     *  fires at most once, so a chain is bounded by the owner's count of such abilities.
+     *  reactive Out. Damage Down II as to a cast-inflicted one. KNOWN GAP: on this trigger
+     *  Insidiousness's verdict and per-victim dedupe are per actor turn, not per attack as the
+     *  locked proc rule requires (see `Intent.eventCtx.subAttackIndex` in triggers.ts), so a
+     *  reactive landing on the same enemy in the same turn shares the triggering infliction's
+     *  verdict and adds no second hit. Each ability in a chain fires at most once, so chain
+     *  LENGTH is bounded by the owner's count of such abilities; MAX_INTENT_GENERATIONS bounds
+     *  only the depth of a drain, not the number of firings.
      *  Debuffs from OTHER reactive triggers (on-crit/on-attacked) carry no chain and feed
      *  on-debuff-inflicted like a cast infliction.
      *  `viaAllyDebuffInflictedReaction`: the sibling brand for `on-ally-debuff-inflicted`

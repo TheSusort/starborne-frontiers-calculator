@@ -2,18 +2,15 @@
  * wave7WardenDebuffInflicted.integration.test.ts — Ship-kit Wave 7 (Warden).
  *
  * Warden's passive: "…Additionally, when this Unit inflicts a Debuff, it inflicts Out. Damage
- * Down II for 1 turn." Parsed as {type:'debuff', target:'enemy', duration:1} with trigger 'on-cast'
- * (the recognizer only matched the gerund "inflicting"), which classifies it as a passive-slot
- * ENEMY-side TIMED status. That status has NO dispatch site — the per-turn timed loop fires only
- * `sourceSlot === action` (active/charged), and the combat-start seeder reads only the SELF side —
- * so "Out. Damage Down II" never appeared, across every qualifying turn.
+ * Down II for 1 turn." The present-tense self-subject recognizer parses it as a reactive debuff on
+ * `on-debuff-inflicted` ({type:'debuff', target:'enemy', duration:1}), routed onto the enemy the
+ * triggering debuff landed on.
  *
- * The fix routes it to the existing reactive `on-debuff-inflicted` trigger (parser: present-tense
- * self-subject recognizer). The follow-up is ITSELF a debuff, so its own debuff-applied carries
- * the reaction's id in `debuffInflictedReactionChain` and the on-debuff-inflicted listener skips it
- * for that reaction — a precise self-chain guard (else the reaction would re-enter and blow
- * MAX_INTENT_GENERATIONS), while debuffs from other reactive triggers (on-crit/on-attacked) still
- * chain as before.
+ * The follow-up is ITSELF a debuff, so its own debuff-applied carries the reaction's id in
+ * `debuffInflictedReactionChain` and the on-debuff-inflicted listener skips it for that reaction —
+ * a precise self-chain guard (else the reaction would re-enter until MAX_INTENT_GENERATIONS
+ * throws), while debuffs from other reactive triggers (on-crit/on-attacked) chain like cast
+ * inflictions.
  *
  * Her own clause reads "inflicts" (`triggerApplicationFilter:'inflict'`): her active's Provoke is
  * an unconditional APPLY (no hacking roll), so it must NOT wake this passive. Only her Corrosion I
