@@ -6,7 +6,37 @@ export const CURRENT_VERSION = '1.72.0';
 // top of CHANGELOG, bumps CURRENT_VERSION and empties this array — all three together, because a
 // bumped version whose entries are still unreleased shows users a what's-new dialog listing
 // nothing. Do it by hand only if that script cannot.
-export const UNRELEASED_CHANGES: string[] = [];
+export const UNRELEASED_CHANGES: string[] = [
+    'Ship skills: skill text and numbers now match the official catalogue.',
+    "Combat simulator: Sokol's extra action now takes its turn at his speed.",
+    'Combat simulator and DPS calculator: Sokol now deals bonus damage to targets under a control effect.',
+    "Combat simulator and DPS calculator: Sokol's charged skill no longer extends enemy debuffs.",
+    "Combat simulator: Snakeroot's attacks no longer reduce Stasis on their target.",
+    "Combat simulator and DPS calculator: Ripper's passive now inflicts Inferno II when his debuffs land.",
+    "Combat simulator: Ripper now extends allies' buffs only when his debuffs land.",
+    'Combat simulator: Rhodium and Selenite now ignore Stealth with every attack.',
+    'Combat simulator and healing calculator: Hermes now grants Everliving Regeneration III to the ally who crit.',
+    'Combat simulator and DPS calculator: Huanying now gains Stealth whenever one of its debuffs lands.',
+    'Combat simulator: Nuqtu now cleanses a debuff every turn, once per round.',
+    'Combat simulator: Panon now grants every ally Terran Guard III while Taunted or Provoked.',
+    "Combat simulator: Provider's charged skill now extends DoTs on every enemy it hits.",
+    "Combat simulator and DPS calculator: Tygr's bonus against Stasis and Disable now applies to all allies.",
+    'Combat simulator: Wusheng now keeps its Stealth when taking direct damage.',
+    "Combat simulator: Wusheng's unrefitted passive now grants Stealth on crit, reducing damage while stealthed.",
+    "Combat simulator: Yuyan's charged Disable no longer refreshes its Stealth.",
+    "Combat simulator: Yuyan's charged Disable now needs a hacking roll to land.",
+    "Combat simulator: Gallant's charged Stasis now needs a hacking roll to land.",
+    "Combat simulator: Sansi's charged Barrier now goes to Sansi only.",
+    "Combat simulator: Guardian's unrefitted passive now grants Binderburg Resilience I when critically hit.",
+    "Combat simulator and healing calculator: Guardian's unrefitted passive no longer repairs when damaged below 40% HP.",
+    "Combat simulator: LUXX's unrefitted passive now grants a shield every turn.",
+    "Combat simulator: LUXX's unrefitted passive no longer gains Blast every turn.",
+    "Combat simulator and DPS calculator: Pestilence's charged skill now grants Binderburg Resilience II and inflicts Corrosion III.",
+    "Combat simulator: Meiying's charged skill now puts its target in Stasis.",
+    'Combat simulator: Zosimos now gains a charge when hitting a target repaired this round.',
+    'Combat simulator: Sefuba now repairs for each buff it purges from an enemy.',
+    "Combat simulator: APEX's shield now triggers only on inflicted debuffs.",
+];
 
 export const CHANGELOG: ChangelogEntry[] = [
     {

@@ -9,9 +9,10 @@ export interface AllowEntry {
     ship: string;
     rules: string[];
     reason: string;
-    /** True when the entry suppresses text only the official catalogue carries (the sync gate in
-     *  scripts/lib/skillTextGate.ts relies on it), so the CSV audit never consults it and the
-     *  stale-entry report must not flag it. */
+    /** True when the entry suppresses text only the official catalogue carries and the
+     *  corpus CSV does not, so the CSV audit never consults it and the stale-entry report
+     *  must not flag it. The catalogue sync gate (scripts/lib/skillTextGate.ts) reaches the
+     *  allowlist only through findingsForShip -> isAllowed and does not read this field. */
     catalogueOnly?: boolean;
 }
 
@@ -19,32 +20,17 @@ export const ALLOWLIST: AllowEntry[] = [
     {
         ship: 'Lingshe',
         rules: ['detonation'],
-        reason: 'detonation: crit-scaling Bomb detonation (charged skill\'s countdown-reduction rider is modelled as `bomb-countdown-reduce`, but the crit-power-scaled "detonation damage" modifier on passive2/3 is not a detonate-dot consumption). The passive2/3 "gains Stealth on detonating a Bomb" grant rides on-self-bomb-detonated, and passive1\'s "When this Unit inflicts a Bomb it gains Stealth" rides on-debuff-inflicted narrowed to Bomb (triggerStatusFilter).',
+        reason: 'detonation: crit-scaling Bomb detonation (charged skill\'s countdown-reduction rider is modelled as `bomb-countdown-reduce`, but the crit-power-scaled "detonation damage" modifier on passive2/3 is not a detonate-dot consumption). Every passive\'s "When this Unit inflicts a Bomb it gains Stealth" rides on-debuff-inflicted narrowed to Bomb (triggerStatusFilter).',
     },
 
     // ── ungated-effect-with-trigger: intentionally not auto-gated ───────────────
     // Reactive triggers (on-cleanse / on-kill / on-damaged / enemy-uses-charged / on-resist /
     // on-death) — modelled manually by the user, never auto-derived in single-ship DPS.
-    {
-        ship: 'Rikra',
-        rules: ['ungated-effect-with-trigger'],
-        reason: 'Charged Defense Up II is granted UNCONDITIONALLY; the "against Taunted or Provoked enemies" trigger words in the same sentence gate the co-located +80% damage BONUS (parser-modeled as an enemy-effect scaling condition on the damage ability, PR6a), not the buff. clauseFor scopes the whole sentence, so the audit sees "against" beside the ungated buff — a scoping false flag, not a missing gate.',
-    },
-    // Self-HP / stat-comparison gates — not modelled (sim assumes full HP, no stat comparisons).
-    // (Hermes's "If the target has less than N% HP" Cheat-Death gate is now parser-modeled —
-    // Phase 4c PR 3, detectTargetHpGate — so it no longer needs an allowlist entry. Bayah's
-    // Crit-Power-vs-target Stasis gate is now parser-modeled too — SP-C, detectGrantConditions'
-    // stat-vs-target detector — so its entry is likewise removed.)
     // Niche counts / conversions / clause-split false positives.
     {
         ship: 'Oleander',
         rules: ['ungated-effect-with-trigger'],
         reason: 'Trigger ("per debuffed enemy") scopes the repair, not the buff.',
-    },
-    {
-        ship: 'Madax',
-        rules: ['ungated-effect-with-trigger'],
-        reason: '"while this Unit deals…" is simultaneity, not a gate.',
     },
 
     // ── always-crit: handled at the DATA layer, not the parser ──────────────────
@@ -69,8 +55,7 @@ export const ALLOWLIST: AllowEntry[] = [
     // correctly gated `slot === 'passive'` in buildShipAbilities (production routes it via the
     // real ship's `secondPassiveSkillText`/`thirdPassiveSkillText`, verified in
     // buildShipAbilities.test.ts's epic PR12(A) describe block) — it is simply invisible to
-    // this harness's active-only re-parse, not a missing gate (mirrors the Rikra
-    // clauseFor-scoping precedent above).
+    // this harness's active-only re-parse, not a missing gate.
     {
         ship: 'Nosorog',
         rules: ['damage-reflection'],
@@ -108,13 +93,12 @@ export const ALLOWLIST: AllowEntry[] = [
     // "This Unit has X% defense penetration" describes the refit ascension stat (user ruling
     // 2026-10-02), which the ship's stats already carry; parsing the clause would double-count.
     // Verified against the official catalogue's ascensionStats: Judge DefensePenetration 0.2 at
-    // level 0 (innate), Ravager 0.1 at level 2. Ravager's entry only suppresses the catalogue
-    // text ("This Unit has 10% defense penetration"); ours reads "ignores 10% of Defense".
+    // level 0 (innate), Ravager 0.1 at level 2. The catalogue text reads "This Unit has 10%
+    // defense penetration"; the passive is never parsed as a modifier.
     ...['Judge', 'Ravager'].map((ship) => ({
         ship,
         rules: ['defense-penetration-innate'],
         reason: 'Defense penetration is the refit ascension stat the ship already carries.',
-        ...(ship === 'Ravager' ? { catalogueOnly: true } : {}),
     })),
 
     // Burst-explosion reference — not an accumulate-detonate application.

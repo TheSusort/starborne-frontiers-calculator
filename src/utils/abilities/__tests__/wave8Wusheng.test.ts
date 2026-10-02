@@ -22,55 +22,41 @@ function shipFromCsv(name: string): Ship {
     } as Ship;
 }
 
-describe.skipIf(!csvAvailable())(
-    'Wave 8 Task 11 — Wusheng removes Stealth on direct damage',
-    () => {
-        // Wusheng's refit-active (R2) passive: "This Unit gains Stealth for 1 turn after
-        // critically damaging an enemy.<br/><br/>This Unit reduces direct damage by 25% while
-        // Stealth is active. If directly damaged while Stealth is active, remove Stealth.<br/><br/>
-        // This Unit starts combat fully charged." Two previously-modeled mechanics (the on-crit
-        // Stealth grant, the 25% incoming reduction) plus the UNMODELED "remove Stealth on direct
-        // damage" reaction targeted by this task.
-        it('emits a remove-self-buff ability for Stealth on the on-attacked (directly-damaged) trigger', () => {
-            const { slots } = buildShipAbilities(shipFromCsv('Wusheng'));
-            const abilities = slots.flatMap((s) => s.abilities);
-            const remove = abilities.find(
-                (a) => a.config.type === 'remove-self-buff' && a.config.buffName === 'Stealth'
-            );
-            expect(remove).toBeDefined();
-            expect(remove?.trigger).toBe('on-attacked');
-            expect(remove?.target).toBe('self');
-            if (remove?.config.type !== 'remove-self-buff') throw new Error('unreachable');
-            expect(remove.config.scope).toBe('all');
-            // Gated on Stealth still being active — the game text is conditional ("if directly
-            // damaged WHILE Stealth is active"), not an unconditional kill/repair-style removal.
-            expect(remove.conditions).toEqual([
-                { subject: 'self-buff', buffName: 'Stealth', derivable: true },
-            ]);
-        });
+describe.skipIf(!csvAvailable())('Wusheng keeps Stealth on direct damage', () => {
+    // Wusheng's refit-active passive reads "This Unit takes 25% less direct damage while
+    // Stealth is active." There is no removal clause: she keeps Stealth when hit directly.
+    // Two modelled mechanics follow (the on-crit Stealth grant, the 25% incoming reduction);
+    // no Stealth-removal reaction exists.
+    it('keeps Stealth when directly damaged: no remove-self-buff Stealth on the on-attacked trigger', () => {
+        const { slots } = buildShipAbilities(shipFromCsv('Wusheng'));
+        const abilities = slots.flatMap((s) => s.abilities);
+        const remove = abilities.find(
+            (a) => a.config.type === 'remove-self-buff' && a.config.buffName === 'Stealth'
+        );
+        expect(remove).toBeUndefined();
+        expect(abilities.filter((a) => a.trigger === 'on-attacked')).toEqual([]);
+    });
 
-        it('still emits the existing 25% incoming-reduction ability gated on self-stealth', () => {
-            const { slots } = buildShipAbilities(shipFromCsv('Wusheng'));
-            const abilities = slots.flatMap((s) => s.abilities);
-            const reduction = abilities.find((a) => a.config.type === 'incoming-reduction');
-            expect(reduction).toBeDefined();
-            if (reduction?.config.type !== 'incoming-reduction') throw new Error('unreachable');
-            expect(reduction.config).toMatchObject({
-                scope: 'direct',
-                condition: 'self-stealth',
-                pct: 25,
-            });
+    it('still emits the existing 25% incoming-reduction ability gated on self-stealth', () => {
+        const { slots } = buildShipAbilities(shipFromCsv('Wusheng'));
+        const abilities = slots.flatMap((s) => s.abilities);
+        const reduction = abilities.find((a) => a.config.type === 'incoming-reduction');
+        expect(reduction).toBeDefined();
+        if (reduction?.config.type !== 'incoming-reduction') throw new Error('unreachable');
+        expect(reduction.config).toMatchObject({
+            scope: 'direct',
+            condition: 'self-stealth',
+            pct: 25,
         });
+    });
 
-        it('still emits the on-crit Stealth grant (unaffected by the removal wiring)', () => {
-            const { slots } = buildShipAbilities(shipFromCsv('Wusheng'));
-            const abilities = slots.flatMap((s) => s.abilities);
-            const grant = abilities.find(
-                (a) =>
-                    a.type === 'buff' && a.config.type === 'buff' && a.config.buffName === 'Stealth'
-            );
-            expect(grant).toBeDefined();
-            expect(grant?.trigger).toBe('on-crit');
-        });
-    }
-);
+    it('still emits the on-crit Stealth grant', () => {
+        const { slots } = buildShipAbilities(shipFromCsv('Wusheng'));
+        const abilities = slots.flatMap((s) => s.abilities);
+        const grant = abilities.find(
+            (a) => a.type === 'buff' && a.config.type === 'buff' && a.config.buffName === 'Stealth'
+        );
+        expect(grant).toBeDefined();
+        expect(grant?.trigger).toBe('on-crit');
+    });
+});

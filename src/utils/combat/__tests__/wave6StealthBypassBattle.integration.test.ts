@@ -26,6 +26,11 @@
  *     .ignoresStealth` on the focus's `target` → the resolver skips the Stealth filter
  *     entirely → 'front' resolves to the true front-most cell, M4 — the STEALTHED enemy takes
  *     the hit, the visible one takes none.
+ *   - SHIP-WIDE BYPASS: plain active, plus a passive reading "This Unit ignores Stealth effects."
+ *     (the catalogue wording on Rhodium, Selenite and Lodolite) → `detectIgnoresStealth` sets
+ *     the ship-level `ShipSkills.ignoresStealth` → `simulateBattle` hands it to the engine as the
+ *     acting ship's bypass → the resolver skips the Stealth filter for every cast, so the same
+ *     M4-not-M1 outcome as BYPASS.
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { setRateGateRng, resetRateGateRng } from '../../calculators/rateAccumulator';
@@ -43,9 +48,10 @@ afterEach(() => resetRateGateRng());
 const BASIC_ACTIVE = 'This Unit deals <unit-damage>100% damage</unit-damage>.';
 const BYPASS_ACTIVE =
     'This Unit deals <unit-damage>100% damage</unit-damage>.<br />This attack can target <unit-aid>Stealthed</unit-aid> enemies.';
+const SHIP_WIDE_BYPASS_PASSIVE = 'This Unit ignores <unit-skill>Stealth</unit-skill> effects.';
 const STEALTH_SELF_BUFF_ACTIVE = 'This Unit gains <unit-skill>Stealth</unit-skill> for 2 turns.';
 
-const focusShip = (activeSkillText: string): Ship => ({
+const focusShip = (activeSkillText: string, firstPassiveSkillText?: string): Ship => ({
     id: 'focus',
     name: 'Focus',
     rarity: 'legendary',
@@ -68,6 +74,7 @@ const focusShip = (activeSkillText: string): Ship => ({
     refits: [],
     affinity: 'antimatter',
     activeSkillText,
+    ...(firstPassiveSkillText ? { firstPassiveSkillText } : {}),
     activeTarget: 'front',
     activePattern: 'Pattern-Base',
     chargeSkillCharge: 0,
@@ -142,9 +149,12 @@ const placement = (ship: Ship, position: Position): BattlePlacement => ({
     },
 });
 
-const runBattle = (activeSkillText: string): ReturnType<typeof simulateBattle> => {
+const runBattle = (
+    activeSkillText: string,
+    firstPassiveSkillText?: string
+): ReturnType<typeof simulateBattle> => {
     const input: BattleSimulationInput = {
-        playerTeam: [placement(focusShip(activeSkillText), 'M4')],
+        playerTeam: [placement(focusShip(activeSkillText, firstPassiveSkillText), 'M4')],
         enemyTeam: [
             placement(stealthedFrontEnemy(), 'M4'), // front-most cell — highest column, col 4
             placement(visibleBackEnemy(), 'M1'), // back-most cell — lowest column, col 1
@@ -172,6 +182,12 @@ describe('simulateBattle — Wave 6 stealth-bypass wiring (battleSimulator → e
 
     it('BYPASS: the Stealthed front enemy takes the hit — the visible back enemy is untouched', () => {
         const result = runBattle(BYPASS_ACTIVE);
+        expect(damageTakenR1(result, FRONT_ID)).toBeGreaterThan(0);
+        expect(damageTakenR1(result, BACK_ID)).toBe(0);
+    });
+
+    it('SHIP-WIDE BYPASS: a passive "ignores Stealth effects" lets a plain active hit the Stealthed front enemy', () => {
+        const result = runBattle(BASIC_ACTIVE, SHIP_WIDE_BYPASS_PASSIVE);
         expect(damageTakenR1(result, FRONT_ID)).toBeGreaterThan(0);
         expect(damageTakenR1(result, BACK_ID)).toBe(0);
     });
