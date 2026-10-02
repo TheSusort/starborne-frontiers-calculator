@@ -153,7 +153,7 @@ describe('PR6a conditional-branch phrasing', () => {
             });
         });
 
-        it('charged: base 175 + Defender delta 10 + conditional Stasis control', () => {
+        it('charged: base 175 + Defender delta 10 + conditional Stasis control and debuff', () => {
             const s = ship({
                 chargeSkillText:
                     'This Unit deals <unit-damage>175% Damage</unit-damage>, increased to <unit-damage>185%</unit-damage> with additional <unit-skill>Stasis</unit-skill> applied for 1 turn against Defenders.',
@@ -174,6 +174,18 @@ describe('PR6a conditional-branch phrasing', () => {
                 subject: 'enemy-type',
                 requiredEnemyType: 'Defender',
             });
+            // #600: the Stasis status itself, from the postposed "Stasis applied" — an apply, so
+            // it lands on affinity, not on a hacking roll.
+            const stasis = abilities.filter((a) => a.type === 'debuff');
+            expect(stasis).toHaveLength(1);
+            expect(stasis[0]).toMatchObject({
+                target: 'enemy',
+                trigger: 'on-cast',
+                config: { type: 'debuff', buffName: 'Stasis', duration: 1, application: 'apply' },
+            });
+            expect(stasis[0].conditions).toEqual([
+                { subject: 'enemy-type', derivable: true, requiredEnemyType: 'Defender' },
+            ]);
         });
     });
 

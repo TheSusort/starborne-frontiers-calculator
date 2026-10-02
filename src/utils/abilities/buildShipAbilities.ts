@@ -2271,32 +2271,57 @@ function abilitiesFromText(
         });
     }
 
-    // Gallant's charged "additional Stasis applied for 1 turn against Defenders" — a control gated
-    // on the enemy class. Emitted here (not via parseControlInflicts, whose verb-before regex
-    // doesn't match "Stasis applied") carrying the enemy-type condition so the model records the
-    // gate. DPS-inert (control abilities have no damage/modifier); the condition documents the
-    // Defender restriction for the combat model.
+    // Gallant's charged "additional Stasis applied for 1 turn against Defenders" — a control AND
+    // the Stasis debuff itself, both gated on the enemy class: the same control+debuff pair the
+    // verb-before phrasing yields. Emitted here because neither parseControlInflicts nor
+    // parseSkillEffects reads a verb that FOLLOWS the status name ("Stasis applied"), and the
+    // generic grant-condition detector does not read a trailing "against <class>s". "applied" →
+    // an 'apply' (lands on affinity, no hacking roll).
     const condStasis = parseConditionalStasisApplied(text);
     if (condStasis) {
         const stasisPos = text.search(/<unit-skill>\s*Stasis\b/i);
+        const classGate = (): Condition[] => [
+            {
+                subject: 'enemy-type',
+                derivable: true,
+                requiredEnemyType: condStasis.requiredEnemyType,
+            },
+        ];
+        const pos = stasisPos >= 0 ? stasisPos : MAX_POS;
         out.push({
             ability: {
                 id: nextId(),
                 type: 'control',
                 target: 'enemy',
                 trigger: 'on-cast',
-                conditions: [
-                    {
-                        subject: 'enemy-type',
-                        derivable: true,
-                        requiredEnemyType: condStasis.requiredEnemyType,
-                    },
-                ],
+                conditions: classGate(),
                 config: { type: 'control', effect: 'stasis' },
                 autoFilled: true,
             },
-            pos: stasisPos >= 0 ? stasisPos : MAX_POS,
+            pos,
         });
+        if (condStasis.duration !== undefined) {
+            out.push({
+                ability: {
+                    id: nextId(),
+                    type: 'debuff',
+                    target: 'enemy',
+                    trigger: 'on-cast',
+                    conditions: classGate(),
+                    config: {
+                        type: 'debuff',
+                        buffName: 'Stasis',
+                        parsedEffects: {},
+                        stacks: 1,
+                        isStackable: false,
+                        duration: condStasis.duration,
+                        application: 'apply',
+                    },
+                    autoFilled: true,
+                },
+                pos,
+            });
+        }
     }
 
     // Heal / shield grants (and cleanse) — parsed narrowly (on-cast, percentage-of-stat only;

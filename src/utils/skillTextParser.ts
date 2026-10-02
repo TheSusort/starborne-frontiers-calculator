@@ -695,11 +695,11 @@ const IF_TARGET_IS_CLASS_INSTEAD_RE =
     /(\d+(?:\.\d+)?)\s*%\s*damage,?\s*if\s+the\s+target\s+is\s+an?\s+(attacker|defender|debuffer|supporter),?\s*it\s+instead\s+deals?\s+(\d+(?:\.\d+)?)\s*%/i;
 
 // "additional <Stasis> applied for N turn(s) against <class>[s]" — Gallant's charged conditional
-// control. Verb-after-tag phrasing ("Stasis applied") that STASIS_INFLICT_RE (verb-before)
-// deliberately doesn't match; kept as its own narrow pattern so the byte-identity-critical
-// STASIS_INFLICT_RE stays untouched.
+// Stasis. Verb-after-tag phrasing ("Stasis applied") that STASIS_INFLICT_RE (verb-before) and
+// parseSkillEffects' backward verb scan deliberately don't match; kept as its own narrow pattern
+// so the byte-identity-critical STASIS_INFLICT_RE stays untouched.
 const CONDITIONAL_STASIS_APPLIED_RE =
-    /additional\s+<unit-skill>\s*Stasis\b[^.]*?\bapplied\b[^.]*?\bagainst\s+(?:an?\s+)?(attacker|defender|debuffer|supporter)s?\b/i;
+    /additional\s+<unit-skill>\s*Stasis\b[^.]*?\bapplied\b(?:\s+for\s+(?<turns>\d+)\s*turns?)?[^.]*?\bagainst\s+(?:an?\s+)?(?<cls>attacker|defender|debuffer|supporter)s?\b/i;
 
 /**
  * Returns the enemy class gating Gallant's charged "additional Stasis applied for 1 turn against
@@ -708,10 +708,15 @@ const CONDITIONAL_STASIS_APPLIED_RE =
  */
 export function parseConditionalStasisApplied(
     text: string | null | undefined
-): { requiredEnemyType: EnemyBaseClass } | null {
+): { requiredEnemyType: EnemyBaseClass; duration?: number } | null {
     if (!text) return null;
     const m = CONDITIONAL_STASIS_APPLIED_RE.exec(text);
-    return m ? { requiredEnemyType: capType(m[1]) } : null;
+    if (!m?.groups) return null;
+    const { cls, turns } = m.groups;
+    return {
+        requiredEnemyType: capType(cls),
+        ...(turns !== undefined ? { duration: parseInt(turns, 10) } : {}),
+    };
 }
 
 /** Maps enemy-status ADJECTIVES ("Taunted", "Provoked") to their effect names. Scoped to the

@@ -79,21 +79,26 @@ export const controlEffectLabel = (effect: ControlEffect): string => CONTROL_EFF
 /** Emit a `debuff-resisted` event for a DoT that did not land.
  *
  *  ⚠️ THE NAME IS NARROWER THAN THE FUNCTION. It is NOT called only on the Block-Debuff path:
- *  `playerTurn`'s DoT LANDING-ROLL FAILURE arm (the `else` that draws `roundDebuffLanded`) calls it
- *  too, so the combat log can show "Inferno III resisted" symmetrically with stat-debuff resists.
+ *  every DoT landing FAILURE (cast or reactive) calls it too, so the combat log can show
+ *  "Inferno III resisted" symmetrically with stat-debuff resists.
  *  Tagging every call here as a Block-Debuff auto-resist would drop exactly the rolled DoT resists
  *  that #413's `viaLandingRoll` gate is supposed to keep.
  *
  *  Hence `viaLandingRoll`, which the CALLER supplies because only the caller knows which arm it is
- *  in: `false` on the Block-Debuff branch (no gate drawn), `true` on the landing-roll-failure
- *  branch. */
+ *  in: `false` when no roll was drawn (Block Debuff, or an 'apply' that failed on affinity),
+ *  `true` when a landing roll was drawn and failed.
+ *
+ *  `subAttackIndex` is the hit within a multi-hit attack, when the caller knows it: an on-resist
+ *  reaction keys per (resister, sub-attack), so two resists in one multi-hit turn stay two procs
+ *  (see `debuff-resisted` in events.ts). */
 export function emitBlockDebuffResist(
     bus: CombatEventBus,
     sourceId: string,
     targetId: string,
     round: number,
     buffName: string,
-    viaLandingRoll: boolean
+    viaLandingRoll: boolean,
+    subAttackIndex?: number
 ): void {
     bus.emit({
         type: 'debuff-resisted',
@@ -102,5 +107,6 @@ export function emitBlockDebuffResist(
         round,
         buffName,
         ...(viaLandingRoll ? { viaLandingRoll: true as const } : {}),
+        ...(subAttackIndex !== undefined ? { subAttackIndex } : {}),
     });
 }
