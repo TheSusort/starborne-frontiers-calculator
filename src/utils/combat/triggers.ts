@@ -173,7 +173,10 @@ export interface Intent {
          *  collapsing all N into one. Undefined for triggers with no attack identity
          *  (start-of-round / end-of-round) — those keep per-turn gating, which is correct for them.
          *  Read by `passesProcChanceGate`'s memo key, so `procScope:'per-attack'` means per
-         *  sub-attack rather than per turn. */
+         *  sub-attack rather than per turn. Also undefined on `on-debuff-inflicted`: its
+         *  `debuff-applied` / `dot-applied` events carry no sub-attack index, so Insidiousness's
+         *  verdict and per-victim dedupe there are per actor turn (a 2-hit cast that debuffs on
+         *  each hit gets one roll). */
         subAttackIndex?: number;
         /** The damage of the triggering event, used by a reactive heal/shield to scale off
          *  that hit rather than the owner's max HP. Two consumers: `basis:'damage-dealt'`
@@ -842,7 +845,7 @@ export function registerReactiveListeners(args: {
                         // every generation until MAX_INTENT_GENERATIONS throws. The guard skips only
                         // the abilities already in the infliction's reaction chain, so the owner's
                         // OTHER on-debuff-inflicted abilities still see a reactive infliction
-                        // (Insidiousness rolls on Warden's Out. Damage Down II), and debuffs from
+                        // (Insidiousness on Warden's Out. Damage Down II), and debuffs from
                         // other reactive triggers (on-crit's Crit Shred feeding an
                         // on-debuff-inflicted charge) chain here like cast inflictions.
                         // The debuffed enemy rides along as `debuffVictimId` so the reactive

@@ -10,10 +10,13 @@
  * by way of another of the owner's reactions), and every other ability on the trigger still sees
  * the reactive infliction.
  *
- * Insidiousness's roll is one verdict per attack applied to every enemy that attack debuffed, at
- * most one hit per enemy per attack. A reactive infliction on the SAME enemy as the infliction
- * that triggered it therefore adds no second hit; the boards below make the reaction land on a
- * DIFFERENT enemy (an `enemy-highest-attack` follow-up), which is where the change is visible.
+ * Insidiousness declares `procScope:'per-attack'`: one verdict shared by every enemy debuffed in
+ * the same memo bucket, at most one hit per enemy per bucket. On this trigger the listener stamps
+ * no `subAttackIndex`, so the bucket is today the actor's whole turn — see
+ * `passesProcChanceGate`'s memo key. A reactive infliction on the SAME enemy, in the same turn, as
+ * the infliction that triggered it therefore shares that verdict and adds no second hit; the boards
+ * below make the reaction land on a DIFFERENT enemy (an `enemy-highest-attack` follow-up), or
+ * narrow Insidiousness to the reaction's status, which is where the change is visible.
  *
  * Real engine (runCombat), real Insidiousness ability (buildEquipmentAbilities on a legendary
  * implant piece) with its proc chance raised to 1 so every board is deterministic. Hacking 200 vs

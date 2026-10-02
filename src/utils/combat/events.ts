@@ -146,8 +146,10 @@ export type CombatEvent =
      *  OWN id is in the chain, so a reaction whose follow-up is itself a debuff cannot
      *  re-trigger itself, directly or through another of the owner's reactions (an unbounded
      *  chain would otherwise hit MAX_INTENT_GENERATIONS). Every OTHER on-debuff-inflicted
-     *  ability of the owner still sees the debuff: the Insidiousness implant rolls on Warden's
-     *  reactive Out. Damage Down II exactly as on a cast-inflicted one. Each ability in a chain
+     *  ability of the owner still sees the debuff: the Insidiousness implant reacts to Warden's
+     *  reactive Out. Damage Down II as to a cast-inflicted one — on the same enemy in the same
+     *  turn it shares the triggering infliction's verdict and per-victim dedupe, so it adds no
+     *  second hit (see `passesProcChanceGate` in triggers.ts). Each ability in a chain
      *  fires at most once, so a chain is bounded by the owner's count of such abilities.
      *  Debuffs from OTHER reactive triggers (on-crit/on-attacked) carry no chain and feed
      *  on-debuff-inflicted like a cast infliction.
