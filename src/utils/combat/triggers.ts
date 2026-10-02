@@ -111,7 +111,8 @@ export type ReactiveAbilityType =
     | 'purge' // purge can be reactive — Sefuba on-enemy-purged chain
     | 'remove-self-buff' // Overload lifecycle: reactive self-buff removal (on kill/repair/debuff)
     | 'convert-dot' // Belladonna's ally-Corrosion→Acidic-Decay conversion
-    | 'stat-gain'; // Prophet's permanent shield-pen gain on an ally's resist (#591)
+    | 'stat-gain' // Prophet's permanent shield-pen gain on an ally's resist (#591)
+    | 'extend-status'; // Ripper's ally buff extension on an own-cast debuff landing
 
 /** Runtime mirror of ReactiveAbilityType for the partition check. */
 const REACTIVE_ABILITY_TYPES: readonly ReactiveAbilityType[] = [
@@ -129,6 +130,7 @@ const REACTIVE_ABILITY_TYPES: readonly ReactiveAbilityType[] = [
     'remove-self-buff', // Overload lifecycle: reactive self-buff removal
     'convert-dot', // Belladonna's ally-Corrosion→Acidic-Decay conversion
     'stat-gain', // Prophet's permanent shield-pen gain on an ally's resist (#591)
+    'extend-status', // Ripper's ally buff extension on an own-cast debuff landing
 ];
 
 /** A reactive ability registered as a listener, paired with its source slot
@@ -301,14 +303,14 @@ export interface Intent {
          *  (Oleander's buff grant doesn't need a victim — it routes via damagedAllyId only). */
         victimId?: string;
         /** The debuffed enemy's actor id (debuff-applied.targetId / dot-applied.targetId),
-         *  stamped by the on-debuff-inflicted listener. Read ONLY by the reactive `damage`
-         *  branch (Insidiousness) so the proc lands on the enemy that was actually debuffed
-         *  instead of falling through to the first living opposing actor. A DEDICATED field
-         *  rather than reusing `victimId`: that one is the `adjacent-enemies` splash anchor
-         *  (on-bomb-detonated), and reusing it would newly re-anchor any adjacent-enemies
-         *  damage ability reached via this trigger. Every OTHER on-debuff-inflicted consumer
-         *  (Warden's debuff, APEX/Butcher/Torcher/Prospect/Yuyan self-riders, Hemlock's
-         *  charge, Pestilence's cleanse) ignores this field → unchanged. */
+         *  stamped by the on-debuff-inflicted and on-other-ally-debuff-inflicted listeners. The
+         *  reactive `damage`, `debuff` and `dot` branches read it after `counterTargetId` so the
+         *  proc lands on the enemy that was actually debuffed — Insidiousness's hit, Warden's
+         *  Out. Damage Down II, Ripper's Inferno II. A DEDICATED field rather than reusing `victimId`: that
+         *  one is the `adjacent-enemies` splash anchor (on-bomb-detonated), and reusing it would
+         *  newly re-anchor any adjacent-enemies ability reached via this trigger. Self-target
+         *  consumers (APEX/Butcher/Torcher/Prospect/Yuyan riders, Hemlock's charge,
+         *  Pestilence's cleanse) ignore it. */
         debuffVictimId?: string;
         /** The DoT type of the ally's application (dot-applied.dotType), captured
          *  alongside victimId. The convert-dot executor gates on this === cfg.fromDotType so an
@@ -380,7 +382,8 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
  *    Cardinality follows the LANDING, which is once per SUB-ATTACK for a direct debuff clause,
  *    not once per cast: an N-hit cast that lands its clause every hit enqueues N times.
  *    `triggerStatusFilter` narrows it to one status family (`passesStatusFilter` — Lingshe's
- *    "inflicts a Bomb").
+ *    "inflicts a Bomb"); `triggerSourceSlotFilter` to the inflicting ability's slot
+ *    (`passesSourceSlotFilter` — Ripper's "with its active or charged skills").
  *  - on-ally-debuff-inflicted → debuff-applied OR dot-applied where the source is same-side
  *    (not opposing) — owner included, see the ruling above. For the PLAYER registration this is
  *    any PLAYER's infliction; for the ENEMY registration this is any enemy actor's infliction. A
@@ -527,6 +530,19 @@ function passesApplicationFilter(
  */
 function passesStatusFilter(filter: string | undefined, landedFamily: string): boolean {
     return filter === undefined || filter === landedFamily;
+}
+
+/**
+ * Whether a landed status satisfies a reactive ability's `triggerSourceSlotFilter` (see that
+ * field's doc in types/abilities.ts): the event's `sourceSlot` stamp must be one of the listed
+ * slots. Absent filter → every landing passes; a present filter never passes an unstamped event.
+ */
+function passesSourceSlotFilter(
+    filter: readonly ('active' | 'charged')[] | undefined,
+    sourceSlot: SkillSlot | undefined
+): boolean {
+    if (filter === undefined) return true;
+    return sourceSlot !== undefined && (filter as readonly SkillSlot[]).includes(sourceSlot);
 }
 
 export function registerReactiveListeners(args: {
@@ -840,7 +856,8 @@ export function registerReactiveListeners(args: {
                             passesStatusFilter(
                                 ra.ability.triggerStatusFilter,
                                 deriveFamilyKey(e.buffName).familyKey
-                            )
+                            ) &&
+                            passesSourceSlotFilter(ra.ability.triggerSourceSlotFilter, e.sourceSlot)
                         )
                             enqueue({
                                 ...intent,
@@ -848,8 +865,12 @@ export function registerReactiveListeners(args: {
                             });
                     });
                     bus.on('dot-applied', (e) => {
+                        // The same self-chain guard as the debuff-applied arm above: a DoT an
+                        // on-debuff-inflicted reaction lands (Ripper's Inferno II) never re-wakes
+                        // this trigger.
                         if (
                             e.sourceId === ownerId &&
+                            !e.viaDebuffInflictedReaction &&
                             passesApplicationFilter(
                                 ra.ability.triggerApplicationFilter,
                                 undefined
@@ -857,7 +878,8 @@ export function registerReactiveListeners(args: {
                             passesStatusFilter(
                                 ra.ability.triggerStatusFilter,
                                 dotFamilyLabel(e.dotType)
-                            )
+                            ) &&
+                            passesSourceSlotFilter(ra.ability.triggerSourceSlotFilter, e.sourceSlot)
                         )
                             enqueue({
                                 ...intent,
@@ -3592,6 +3614,24 @@ function passesMaxPerRoundGate(intent: Intent, ctx: IntentExecContext): boolean 
     return true;
 }
 
+/** Once-per-cast gate backing `Ability.oncePerCast` (see that field's doc). Returns false when
+ *  this (owner, ability) — and, for `'per-victim'`, this `victimId` — already fired during the
+ *  owner's current cast; otherwise marks it consumed and returns true. The cast is the owner's
+ *  `turnsTaken` (every own turn, extra actions included, advances it), and the mark lives in the
+ *  per-round `oncePerRoundConsumed` set: a cast never spans a round. Pass-through when the ability
+ *  carries no `oncePerCast`. */
+function passesOncePerCastGate(intent: Intent, ctx: IntentExecContext, victimId?: string): boolean {
+    const scope = intent.ability.oncePerCast;
+    if (scope === undefined) return true;
+    const cast = ctx.turnsTakenFor?.(intent.ownerId) ?? 0;
+    const key =
+        `${intent.ownerId}:${intent.ability.id}:cast:${cast}` +
+        (scope === 'per-victim' ? `:${victimId ?? ''}` : '');
+    if (ctx.oncePerRoundConsumed?.has(key)) return false;
+    ctx.oncePerRoundConsumed?.add(key);
+    return true;
+}
+
 /**
  * Execute one drained follow-up intent against the engine context. Dispatches on
  * the ability's config type (the ONLY state mutator in the trigger machinery):
@@ -4067,6 +4107,19 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // delegate (unit fixtures / DPS mode) → inert, matching every other engine-owned
         // accumulator in this file.
         ctx.addShieldPenBonus?.(intent.ownerId, cfg.pct);
+        return;
+    }
+
+    if (cfg.type === 'extend-status') {
+        // A reactive duration extension (Ripper R2: "… and all allies active buffs are extended
+        // by 1 turn", riding his on-debuff-inflicted reaction). Only the BUFF kind is reactive:
+        // a debuff extension rides the cast path, which owns the hit footprint it extends over.
+        if (cfg.statusKind !== 'buff') return;
+        if (!passesOncePerCastGate(intent, ctx)) return;
+        for (const rid of reactiveRecipients(intent, ctx, intent.ownerId)) {
+            if (!(ctx.isActorAlive?.(rid) ?? true)) continue;
+            ctx.statusEngine.extendAllBuffsDuration(rid, cfg.turns, cfg.buffName);
+        }
         return;
     }
 
@@ -4581,6 +4634,7 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                     round: ctx.round,
                     buffName: cfg.buffName,
                     application: cfg.application,
+                    sourceSlot: intent.sourceSlot,
                     ...(intent.ability.trigger === 'on-debuff-inflicted'
                         ? { viaDebuffInflictedReaction: true as const }
                         : {}),
@@ -4703,11 +4757,10 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 });
             }
             // Discrete infliction event — sourceId = the owner so the application is chainable
-            // and feeds on-ally-debuff-inflicted's dot-applied arm. Brand it when THIS reaction is
-            // itself an on-ally-debuff-inflicted follow-up, mirroring the sibling `debuff` branch's
-            // guard above: without it, an owner's own reactive DoT (this landDotOn call) would
-            // re-wake its OWN on-ally-debuff-inflicted listener and loop until
-            // MAX_INTENT_GENERATIONS throws — the self-chain guard covers this event too.
+            // and feeds the debuff-inflicted listeners' dot-applied arms. Branded per trigger
+            // exactly as the sibling `debuff` branch brands its debuff-applied: without the brand,
+            // an owner's own reactive DoT (this landDotOn call) would re-wake the very listener
+            // that queued it and loop until MAX_INTENT_GENERATIONS throws.
             ctx.bus.emit({
                 type: 'dot-applied',
                 sourceId: intent.ownerId,
@@ -4716,6 +4769,10 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 dotType: cfg.dotType,
                 stacks: cfg.stacks,
                 tier: cfg.tier,
+                sourceSlot: intent.sourceSlot,
+                ...(intent.ability.trigger === 'on-debuff-inflicted'
+                    ? { viaDebuffInflictedReaction: true as const }
+                    : {}),
                 ...(intent.ability.trigger === 'on-ally-debuff-inflicted'
                     ? { viaAllyDebuffInflictedReaction: true as const }
                     : {}),
@@ -4790,9 +4847,18 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // and on-enemy-repaired stamp instead of victimId — the same field the sibling `debuff`
         // branch falls back to. Without it Warden/Shepherd's Corrosion and Ruiner's Bomb never
         // reach the real enemy at all.
-        const routedVictimId = intent.eventCtx?.victimId ?? intent.eventCtx?.counterTargetId;
+        //
+        // `debuffVictimId` is the third: `on-debuff-inflicted` stamps the enemy the triggering
+        // infliction landed on under that field only (Ripper's "it also inflicts Inferno II" lands
+        // on the enemy his debuff just hit) — the same counterTargetId-then-debuffVictimId order
+        // the sibling `debuff` branch reads.
+        const routedVictimId =
+            intent.eventCtx?.victimId ??
+            intent.eventCtx?.counterTargetId ??
+            intent.eventCtx?.debuffVictimId;
         // Victimless → NO-OP, so no container push and NO `dot-applied`.
         if (routedVictimId === undefined) return;
+        if (!passesOncePerCastGate(intent, ctx, routedVictimId)) return;
         const victim = ctx.actorById?.(routedVictimId);
         // A unit-test ctx without an `actorById` delegate cannot resolve the object but still
         // knows the id — keep using it rather than inventing a target.

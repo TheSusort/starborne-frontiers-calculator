@@ -1239,6 +1239,25 @@ export interface Ability {
      *  parser from the clause's own object; absent → any landed status passes. Read by
      *  `passesStatusFilter` in triggers.ts. */
     triggerStatusFilter?: string;
+    /** Source-SLOT filter for `on-debuff-inflicted`: the reaction fires only when the landed
+     *  debuff/DoT was inflicted by an ability in one of these slots — Ripper's "When this Unit
+     *  inflicts a debuff with its active or charged skills" sets `['active', 'charged']`, so a
+     *  debuff his passive or an implant lands wakes nothing (and neither does the Inferno the
+     *  reaction itself inflicts, which is passive-sourced). Compared against the event's
+     *  `sourceSlot` stamp; an event with no stamp never passes a present filter. Composes with
+     *  the other `trigger*Filter` fields (all must pass). Set by the parser from the clause's own
+     *  words; absent → any slot passes. Read by `passesSourceSlotFilter` in triggers.ts. */
+    triggerSourceSlotFilter?: ('active' | 'charged')[];
+    /** Once-per-CAST cap for a reaction to the owner's own cast (Ripper: "When this Unit
+     *  inflicts a debuff with its active or charged skills, it also inflicts Inferno II … and all
+     *  allies active buffs are extended by 1 turn"). `'cast'` fires at most once per owner cast
+     *  however many qualifying events the cast raised (the buff extension: a charged landing two
+     *  debuffs extends once); `'per-victim'` at most once per (cast, debuffed victim) (the
+     *  Inferno II: one per enemy the cast debuffed). A cast is one own turn of the owner — keyed
+     *  on the owner's `turnsTaken`, which every turn (extra actions included) advances. The slot
+     *  is consumed when the reaction fires, whatever its own landing roll then does. Enforced
+     *  executor-side by `passesOncePerCastGate` in triggers.ts. Absent → no per-cast cap. */
+    oncePerCast?: 'cast' | 'per-victim';
     /** Ally-role filter for on-ally-attacked (Graphite "when an ally attacker or
      *  debuffer is directly damaged"): the reaction fires only when the DAMAGED
      *  ally's ship role matches one of these categories (prefix match over

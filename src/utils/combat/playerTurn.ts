@@ -1821,7 +1821,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // emitDebuffApplied: discrete-infliction-only. `sourceId` is the
     // actor that inflicted the debuff. NOT called for recurring/aura per-round re-applications
     // or for every round a standing timed status is active — only at the infliction site.
-    // `victimId` is REQUIRED here too — see emitDebuffResisted above.
+    // `victimId` is REQUIRED here too — see emitDebuffResisted above. Every caller lands a
+    // status of THIS cast's firing slot, so `sourceSlot` is `action`.
     const emitDebuffApplied = (
         sourceId: string,
         buffName: string,
@@ -1835,6 +1836,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             round: r,
             buffName,
             ...(application !== undefined ? { application } : {}),
+            sourceSlot: action,
         });
 
     // LIVE per-target debuff-landing chance. The sole producer of
@@ -4036,6 +4038,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                         stacks,
                         tier,
                         ...(critHits > 0 ? { viaCrit: true } : {}),
+                        sourceSlot: action,
                     }),
             });
         } else if (dotsConfig.length > 0) {
@@ -4154,6 +4157,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                         stacks,
                         tier,
                         ...(critHits > 0 ? { viaCrit: true } : {}),
+                        sourceSlot: action,
                     }),
             });
             // Owner ruling 2026-09-02: the neighbours' freshly splashed DoT is extended too, and

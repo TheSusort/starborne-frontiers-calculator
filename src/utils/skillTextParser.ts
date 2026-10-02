@@ -2352,6 +2352,48 @@ export function parseSelfCritDotEffect(
     return { buffName: m[1].trim(), turns: parseInt(m[2], 10) };
 }
 
+// SELF-subject "When this Unit inflicts a debuff with its active or charged skills" (Ripper) →
+// on-debuff-inflicted narrowed to debuffs those cast slots inflict (`Ability.
+// triggerSourceSlotFilter`). Group 1 is the slot list. Matched on stripped text.
+const SELF_INFLICTS_DEBUFF_WITH_SLOTS_RE =
+    /\bwhen\s+this\s+unit\s+inflicts\s+an?\s+debuff\s+with\s+its\s+((?:active|charged)(?:\s+or\s+(?:active|charged))?)\s+skills?\b/i;
+// The DoT that reaction itself inflicts: "…with its active or charged skills, it also inflicts
+// Inferno II for 2 turns". Anchored on the trigger clause so a DoT named anywhere else in the
+// text is never read as the reaction's own.
+const SLOT_REACTION_DOT_RE =
+    /\bwhen\s+this\s+unit\s+inflicts\s+an?\s+debuff\s+with\s+its\s+(?:active|charged)(?:\s+or\s+(?:active|charged))?\s+skills?,?\s+it\s+also\s+inflicts\s+([\w\s]+?)\s+for\s+(\d+)\s+turns?/i;
+
+/**
+ * The cast slots a "When this Unit inflicts a debuff with its active or charged skills" clause
+ * names (Ripper → ['active', 'charged']), or undefined when `text` carries no such clause. Pass
+ * the sentence the reacting effect sits in, so the filter comes from that effect's own trigger.
+ */
+export function detectInflictSourceSlotFilter(
+    text: string | null | undefined
+): ('active' | 'charged')[] | undefined {
+    if (!text) return undefined;
+    const m = SELF_INFLICTS_DEBUFF_WITH_SLOTS_RE.exec(stripUnitTags(text));
+    if (!m) return undefined;
+    const slots: ('active' | 'charged')[] = [];
+    for (const word of m[1].toLowerCase().split(/\s+or\s+/)) {
+        if ((word === 'active' || word === 'charged') && !slots.includes(word)) slots.push(word);
+    }
+    return slots;
+}
+
+/**
+ * The DoT a slot-filtered debuff-inflicted reaction inflicts (Ripper: Inferno II / 2 turns), or
+ * undefined when absent.
+ */
+export function parseSlotReactionDotEffect(
+    text: string | null | undefined
+): { buffName: string; turns: number } | undefined {
+    if (!text) return undefined;
+    const m = SLOT_REACTION_DOT_RE.exec(stripUnitTags(text));
+    if (!m) return undefined;
+    return { buffName: m[1].trim(), turns: parseInt(m[2], 10) };
+}
+
 /**
  * Returns 'on-bomb-detonated' when `anchorPos` (the ability's raw-text anchor position) falls
  * inside the sentence carrying the VICTIM-scoped bomb-burst phrase (BOMB_DETONATE_RE — "bomb

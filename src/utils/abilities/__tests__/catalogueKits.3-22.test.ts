@@ -282,28 +282,56 @@ describe('3.22 kits — passives', () => {
         });
     });
 
-    // Ripper's Inferno reaction is not minted. It reacts only to debuffs his active or charged
-    // casts inflict, and the debuff-inflicted trigger has no source-slot filter; minted on that
-    // trigger it would also wake on the Inferno's own landing.
-    it('Ripper passive R0: the Inferno-on-debuff reaction is not minted', () => {
+    // Both Ripper abilities react to a debuff his active or charged cast LANDS
+    // (on-debuff-inflicted + the active/charged slot filter); the engine behaviour is pinned in
+    // src/utils/combat/__tests__/ripperInfernoOnCastDebuff.integration.test.ts.
+    const ripperReaction = {
+        trigger: 'on-debuff-inflicted',
+        triggerApplicationFilter: 'inflict',
+        triggerSourceSlotFilter: ['active', 'charged'],
+    };
+    const ripperInferno = {
+        ...ripperReaction,
+        target: 'enemy',
+        oncePerCast: 'per-victim',
+        conditions: [],
+        config: { type: 'dot', dotType: 'inferno', tier: 30, stacks: 1, duration: 2 },
+    };
+
+    it('Ripper passive R0: Inferno II on each enemy his active/charged debuffs land on', () => {
         const text =
             'When this Unit inflicts a <unit-aid>debuff</unit-aid> with its active or charged skills, it also inflicts <unit-skill>Inferno II</unit-skill> for 2 turns.';
-        expect(sigs(parseSlot('passive', text))).toEqual([]);
+        const abilities = parseSlot('passive', text);
+        expect(sigs(abilities)).toEqual(['dot|enemy|on-debuff-inflicted|dot']);
+        expect(only(abilities, 'dot')).toMatchObject(ripperInferno);
     });
 
-    // KNOWN GAP: the extension fires on every cast, including a cast whose debuffs are all
-    // resisted, because no trigger counts just the debuffs an active or charged cast inflicts
-    // (the R0 note above). Whether the extension is per cast or per debuff is pending a user
-    // ruling.
-    it('Ripper passive R2: only the all-allies buff extension is minted', () => {
+    it('Ripper passive R2: the Inferno plus an all-allies buff extension once per cast', () => {
         const text =
             'When this Unit inflicts a <unit-aid>debuff</unit-aid> with its active or charged skills, it also inflicts <unit-skill>Inferno II</unit-skill> for 2 turns and all allies active <unit-skill>buffs are extended by 1 turn</unit-skill>.';
         const abilities = parseSlot('passive', text);
-        expect(sigs(abilities)).toEqual(['extend-status|all-allies|on-cast|extend-status']);
-        expect(only(abilities, 'extend-status').config).toMatchObject({
-            statusKind: 'buff',
-            turns: 1,
+        expect(sigs(abilities)).toEqual(
+            sorted([
+                'dot|enemy|on-debuff-inflicted|dot',
+                'extend-status|all-allies|on-debuff-inflicted|extend-status',
+            ])
+        );
+        expect(only(abilities, 'dot')).toMatchObject(ripperInferno);
+        expect(only(abilities, 'extend-status')).toMatchObject({
+            ...ripperReaction,
+            oncePerCast: 'cast',
+            conditions: [],
+            config: { statusKind: 'buff', turns: 1 },
         });
+    });
+
+    it("Ripper OLD R2: the standalone 'All allies extend…' sentence stays an on-cast extension", () => {
+        const text =
+            'This Unit gains <unit-skill>Marauder Rage II</unit-skill> for 3 turns after it inflicts a debuff.<br /><br />All allies extend their active <unit-aid>Buffs</unit-aid> by 1 turn.';
+        const ext = only(parseSlot('passive', text), 'extend-status');
+        expect(ext.trigger).toBe('on-cast');
+        expect(ext.triggerSourceSlotFilter).toBeUndefined();
+        expect(ext.oncePerCast).toBeUndefined();
     });
 });
 

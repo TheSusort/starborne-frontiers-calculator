@@ -62,6 +62,8 @@ import {
     detectAllyCritDotTrigger,
     parseSelfCritDotEffect,
     detectSelfCritDotTrigger,
+    detectInflictSourceSlotFilter,
+    parseSlotReactionDotEffect,
     detectBombDetonatedTrigger,
     detectEchoingBurstDetonatedTrigger,
     detectCritRepairTrigger,
@@ -1961,12 +1963,23 @@ function abilitiesFromText(
             /\bcritical\s+hit\s+occurs\b/i.test(extendSentence) ||
             /\bwith\s+a\s+critical\s+hit\b/i.test(extendSentence);
         const extendStatusPos = text.search(/extend/i);
+        // Ripper (catalogue R2): an extension in the same sentence as "When this Unit inflicts a
+        // debuff with its active or charged skills" rides that reaction — once per cast, however
+        // many debuffs the cast lands. Every other extension is on-cast.
+        const extendSlotFilter = detectInflictSourceSlotFilter(extendSentence);
         out.push({
             ability: {
                 id: nextId(),
                 type: 'extend-status',
                 target: extendTarget,
-                trigger: 'on-cast',
+                trigger: extendSlotFilter ? 'on-debuff-inflicted' : 'on-cast',
+                ...(extendSlotFilter
+                    ? {
+                          triggerApplicationFilter: 'inflict' as const,
+                          triggerSourceSlotFilter: extendSlotFilter,
+                          oncePerCast: 'cast' as const,
+                      }
+                    : {}),
                 conditions: extendCritGated ? [{ subject: 'self-crit', derivable: true }] : [],
                 config: {
                     type: 'extend-status',
@@ -2101,6 +2114,43 @@ function abilitiesFromText(
                     pos: selfCritDotPos >= 0 ? selfCritDotPos : MAX_POS,
                 });
             }
+        }
+    }
+
+    // Ripper (catalogue): "When this Unit inflicts a debuff with its active or charged skills, it
+    // also inflicts Inferno II for 2 turns" — a reactive PASSIVE-slot DoT on on-debuff-inflicted,
+    // narrowed to debuffs his active/charged casts inflict (Ability.triggerSourceSlotFilter) and
+    // capped at one Inferno per (cast, debuffed enemy) (Ability.oncePerCast). Built directly for
+    // the same reason as the Wisteria block above: the passive slot never reaches
+    // buildDoTAutoFill, and the trigger clause's own "debuff" must not be read as the DoT.
+    const slotReactionDot = parseSlotReactionDotEffect(text);
+    const slotReactionFilter = slotReactionDot ? detectInflictSourceSlotFilter(text) : undefined;
+    if (slotReactionDot && slotReactionFilter) {
+        const info = DOT_TIER_MAP[slotReactionDot.buffName];
+        if (info) {
+            const slotReactionDotPos = findBuffNamePos(text, slotReactionDot.buffName);
+            out.push({
+                ability: {
+                    id: nextId(),
+                    type: 'dot',
+                    target: 'enemy',
+                    trigger: 'on-debuff-inflicted',
+                    conditions: [],
+                    // "inflicts a debuff": an applied (unrolled) debuff does not count (#593).
+                    triggerApplicationFilter: 'inflict',
+                    triggerSourceSlotFilter: slotReactionFilter,
+                    oncePerCast: 'per-victim',
+                    config: {
+                        type: 'dot',
+                        dotType: info.type,
+                        tier: info.tier,
+                        stacks: 1,
+                        duration: slotReactionDot.turns,
+                    },
+                    autoFilled: true,
+                },
+                pos: slotReactionDotPos >= 0 ? slotReactionDotPos : MAX_POS,
+            });
         }
     }
 

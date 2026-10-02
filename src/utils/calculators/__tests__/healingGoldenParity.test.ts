@@ -1889,6 +1889,8 @@ describe('healingGoldenParity', () => {
                 round: 1,
                 buffName: 'Corrosion I',
                 application: 'inflict',
+                // The counter-debuff ability sits in the passive slot.
+                sourceSlot: 'passive',
                 reactive: true,
                 duringTurnOf: 'e1',
                 triggerActorId: 'e1',
@@ -1900,6 +1902,8 @@ describe('healingGoldenParity', () => {
                 round: 2,
                 buffName: 'Corrosion I',
                 application: 'inflict',
+                // The counter-debuff ability sits in the passive slot.
+                sourceSlot: 'passive',
                 reactive: true,
                 duringTurnOf: 'e1',
                 triggerActorId: 'e1',
@@ -1911,6 +1915,8 @@ describe('healingGoldenParity', () => {
                 round: 3,
                 buffName: 'Corrosion I',
                 application: 'inflict',
+                // The counter-debuff ability sits in the passive slot.
+                sourceSlot: 'passive',
                 reactive: true,
                 duringTurnOf: 'e1',
                 triggerActorId: 'e1',
@@ -1922,6 +1928,8 @@ describe('healingGoldenParity', () => {
                 round: 4,
                 buffName: 'Corrosion I',
                 application: 'inflict',
+                // The counter-debuff ability sits in the passive slot.
+                sourceSlot: 'passive',
                 reactive: true,
                 duringTurnOf: 'e1',
                 triggerActorId: 'e1',

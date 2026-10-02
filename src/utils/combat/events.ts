@@ -1,4 +1,4 @@
-import { AbilityType, ControlEffect } from '../../types/abilities';
+import { AbilityType, ControlEffect, SkillSlot } from '../../types/abilities';
 import { DoTType } from '../../types/calculator';
 
 /**
@@ -181,6 +181,12 @@ export type CombatEvent =
            *  an applied debuff is not "inflicted" by the game's own wording. `on-debuff-inflicted`
            *  and `on-ally-debuff-inflicted` are untouched and still count both kinds. */
           application?: 'inflict' | 'apply';
+          /** The slot of the ability that inflicted this debuff: the firing slot on the cast
+           *  path, the reactive ability's own slot on a reaction (implants and gear ride the
+           *  passive slot). Read by `on-debuff-inflicted`'s `triggerSourceSlotFilter` (Ripper's
+           *  "with its active or charged skills"). Optional so hand-built fixture events may omit
+           *  it; an unstamped event never satisfies a present filter. */
+          sourceSlot?: SkillSlot;
           viaDebuffInflictedReaction?: true;
           viaAllyDebuffInflictedReaction?: true;
           viaOtherAllyDebuffInflictedReaction?: true;
@@ -236,6 +242,13 @@ export type CombatEvent =
           /** The applying cast had >= 1 critting hit (per-hit crits). Present only when
            *  true. Executor-applied dots omit it (drain-time has no crit outcome). */
           viaCrit?: boolean;
+          /** The inflicting ability's slot — see the `debuff-applied` sibling's `sourceSlot`. */
+          sourceSlot?: SkillSlot;
+          /** The `debuff-applied` sibling's `on-debuff-inflicted` self-chain brand — see that
+           *  field's doc. Set when this DoT was applied by an ability whose OWN trigger is
+           *  `on-debuff-inflicted`, so that listener's `dot-applied` arm skips the reaction's own
+           *  output exactly as its `debuff-applied` arm does. */
+          viaDebuffInflictedReaction?: true;
           /** The `debuff-applied` sibling's self-chain brand — see that field's doc. Set when
            *  this DoT was applied by an ability whose OWN trigger is `on-ally-debuff-inflicted`,
            *  so the `on-ally-debuff-inflicted` listener's `dot-applied` arm can skip its own
