@@ -65,10 +65,10 @@ describe('"If the target has a Shield" gate (Malvex charged Barrier)', () => {
     });
 
     it('does not fire on the OWNER-side phrasing (APEX canary)', () => {
-        // "If this Unit has Shield" is the `self-shield` sibling rule immediately above this one in
-        // detectGrantConditions. The two must never co-match.
+        // "If this Unit has an active shield" is the `self-shield` sibling rule immediately above
+        // this one in detectGrantConditions. The two must never co-match.
         const barrier = barrierOf(
-            'If this Unit has Shield, it gains <unit-skill>Barrier</unit-skill> for 1 hit.'
+            'If this Unit has an active shield, it gains <unit-skill>Barrier</unit-skill> for 1 hit.'
         );
         expect(barrier?.conditions).toEqual([{ subject: 'self-shield', derivable: true }]);
     });

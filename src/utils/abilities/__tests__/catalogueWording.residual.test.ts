@@ -10,20 +10,10 @@ interface ResidualPair extends RewordPair {
     carries: Record<string, unknown>;
 }
 
-// Lodolite active: our text's "This attack can target Stealthed enemies" is dropped from `old`.
-// The catalogue moves that bypass into the passive's ship-wide "ignores Stealth effects" (ruled C,
-// R7), which our passive already carries, so the per-skill flag is not part of the rewording.
-//
+type ResidualRow = Omit<ResidualPair, 'old' | 'new'> & { text: string };
+
 // Tygr active is a number row (Security Down II -> III); `old` carries the catalogue's tier.
 const PAIRS: ResidualPair[] = [
-    {
-        ship: 'APEX',
-        slot: 'charged',
-        old: 'This Unit deals <unit-damage>220% damage</unit-damage> and inflicts <unit-skill>Attack Down II</unit-skill> and <unit-skill>Out. Damage Down II</unit-skill> for 2 turns. If this Unit has Shield, the primary target is inflicted with <unit-skill>Disable</unit-skill> for 2 turns.',
-        new: 'This Unit deals <unit-damage>220% damage</unit-damage> and inflicts <unit-skill>Attack Down II</unit-skill> and <unit-skill>Out. Damage Down II</unit-skill> for 2 turns. If this Unit has an active shield, the primary target is inflicted with <unit-skill>Disable</unit-skill> for 2 turns.',
-        expects: 'debuff|enemy|on-cast|Disable',
-        carries: { conditions: [expect.objectContaining({ subject: 'self-shield' })] },
-    },
     {
         ship: 'Centurion',
         slot: 'passive',
@@ -39,30 +29,6 @@ const PAIRS: ResidualPair[] = [
         new: 'At the start of combat, this Unit gains 1000 attack per adjacent ally.<br /><br />When this Unit or an adjacent ally is directly damaged, this Unit retaliates dealing <unit-damage>100% damage</unit-damage>.',
         expects: 'counter|enemy|on-ally-attacked|counter',
         carries: { config: expect.objectContaining({ multiplier: 100 }) },
-    },
-    {
-        ship: 'Isha',
-        slot: 'passive',
-        old: 'At the start of the round this Unit gains <unit-skill>Offensive Affinity Override</unit-skill>.<br />If Nayra is on the same team, it also gains <unit-skill>Defensive Affinity Override</unit-skill>.<br /><br />When directly damaged, this Unit <unit-damage>repairs 3%</unit-damage> of its max HP, but when critcally hit, it instead <unit-damage>repairs 6%</unit-damage> of its max HP.',
-        new: 'At the start of the round this Unit gains <unit-skill>Offensive Affinity Override</unit-skill>. If Nayra is on the same team, it also gains <unit-skill>Defensive Affinity Override</unit-skill>.<br /><br />When directly damaged, this Unit <unit-damage>repairs 3%</unit-damage> of its max HP, but when critcally hit, it instead <unit-damage>repairs 6%</unit-damage> of its max HP.',
-        expects: 'heal|self|on-attacked|heal',
-        carries: { triggerCritFilter: 'crit', config: expect.objectContaining({ pct: 6 }) },
-    },
-    {
-        ship: 'Lodolite',
-        slot: 'active',
-        old: 'This Unit deals <unit-damage>240% damage</unit-damage> with additional damage equal to <unit-damage>10%</unit-damage> of its max HP. When targeting non-Defenders, apply <unit-skill>Concentrate Fire</unit-skill> for 2 turns.',
-        new: 'This Unit deals <unit-damage>240% damage</unit-damage> with additional damage equal to <unit-damage>10%</unit-damage> of its max HP.<br /><br />When this attack targets non-defenders, it also applies <unit-skill>Concentrate Fire</unit-skill> for 2 turns.',
-        expects: 'debuff|enemy|on-cast|Concentrate Fire',
-        carries: {
-            conditions: [
-                expect.objectContaining({
-                    subject: 'enemy-type',
-                    requiredEnemyType: 'Defender',
-                    negate: true,
-                }),
-            ],
-        },
     },
     {
         ship: 'Makoli',
@@ -89,39 +55,70 @@ const PAIRS: ResidualPair[] = [
         carries: { config: expect.objectContaining({ duration: 1, stacks: 1 }) },
     },
     {
-        ship: 'Quixilver',
-        slot: 'passive',
-        old: 'This Unit gains <unit-damage>Shield equal to 25%</unit-damage> of the damage taken when taking HP damage and still having Shield.',
-        new: 'This Unit gains a <unit-damage>shield equal to 25%</unit-damage> of the damage taken when taking HP damage and still having a shield.',
-        expects: 'shield|self|on-cast|shield',
-        carries: { config: expect.objectContaining({ requiresHpDamage: true }) },
-    },
-    {
-        ship: 'Quixilver',
-        slot: 'passive',
-        old: "This Unit gains <unit-damage>Shield equal to 25%</unit-damage> of the damage taken when taking HP damage and still having Shield.<br /><br />At the end of this Unit's turn if it has shield equal to 100% of its max HP, this Unit grants all allies <unit-skill>Barrier</unit-skill> for 1 hit and applies <unit-skill>Barrier Recharging</unit-skill> for 3 turns.",
-        new: "This Unit gains a <unit-damage>shield equal to 25%</unit-damage> of the damage taken when taking HP damage and still having a shield.<br /><br />At the end of this Unit's turn if it has shield equal to 100% of its max HP, this Unit grants all allies <unit-skill>Barrier</unit-skill> for 1 hit and applies <unit-skill>Barrier Recharging</unit-skill> for 3 turns.",
-        expects: 'shield|self|on-cast|shield',
-        carries: { config: expect.objectContaining({ requiresHpDamage: true }) },
-    },
-    {
-        ship: 'Yin Jian',
-        slot: 'active',
-        old: 'This Unit deals <unit-damage>95% damage</unit-damage> and, if <unit-aid>Stealthed</unit-aid>, additional deals <unit-damage>50%</unit-damage> damage.',
-        new: 'This Unit deals <unit-damage>95% damage</unit-damage> and if it has <unit-skill>Stealth</unit-skill> it deals an additional <unit-damage>50% damage</unit-damage>.',
-        expects: 'damage|enemy|on-cast|damage',
-        carries: {
-            conditions: [expect.objectContaining({ subject: 'self-buff', buffName: 'Stealth' })],
-            scaling: { conditionIndex: 0, perUnit: 50 },
-        },
-    },
-    {
         ship: 'Tygr',
         slot: 'active',
         old: 'This Unit deals <unit-damage>180% damage</unit-damage> and inflicts <unit-skill>Security Down III</unit-skill> for 2 turns. If it damages 2 or more enemies, it adds <unit-aid>adds 1 charge</unit-aid> to its Charged Skill.',
         new: 'This Unit deals <unit-damage>180% damage</unit-damage> and inflicts <unit-skill>Security Down III</unit-skill> for 2 turns.<br /><br />If this Unit damages 2 or more enemies, it <unit-skill>adds 1 charge</unit-skill> to its charged skill.',
         expects: 'debuff|enemy|on-cast|Security Down III',
         carries: { config: expect.objectContaining({ parsedEffects: { security: -60 } }) },
+    },
+];
+
+// Rows whose catalogue sentence is the only wording the parser reads: the parse must carry
+// `carries` on an ability with signature `expects`.
+const CATALOGUE_ROWS: ResidualRow[] = [
+    {
+        ship: 'APEX',
+        slot: 'charged',
+        text: 'This Unit deals <unit-damage>220% damage</unit-damage> and inflicts <unit-skill>Attack Down II</unit-skill> and <unit-skill>Out. Damage Down II</unit-skill> for 2 turns. If this Unit has an active shield, the primary target is inflicted with <unit-skill>Disable</unit-skill> for 2 turns.',
+        expects: 'debuff|enemy|on-cast|Disable',
+        carries: { conditions: [expect.objectContaining({ subject: 'self-shield' })] },
+    },
+    {
+        ship: 'Isha',
+        slot: 'passive',
+        text: 'At the start of the round this Unit gains <unit-skill>Offensive Affinity Override</unit-skill>. If Nayra is on the same team, it also gains <unit-skill>Defensive Affinity Override</unit-skill>.<br /><br />When directly damaged, this Unit <unit-damage>repairs 3%</unit-damage> of its max HP, but when critcally hit, it instead <unit-damage>repairs 6%</unit-damage> of its max HP.',
+        expects: 'heal|self|on-attacked|heal',
+        carries: { triggerCritFilter: 'crit', config: expect.objectContaining({ pct: 6 }) },
+    },
+    {
+        ship: 'Lodolite',
+        slot: 'active',
+        text: 'This Unit deals <unit-damage>240% damage</unit-damage> with additional damage equal to <unit-damage>10%</unit-damage> of its max HP.<br /><br />When this attack targets non-defenders, it also applies <unit-skill>Concentrate Fire</unit-skill> for 2 turns.',
+        expects: 'debuff|enemy|on-cast|Concentrate Fire',
+        carries: {
+            conditions: [
+                expect.objectContaining({
+                    subject: 'enemy-type',
+                    requiredEnemyType: 'Defender',
+                    negate: true,
+                }),
+            ],
+        },
+    },
+    {
+        ship: 'Quixilver',
+        slot: 'passive',
+        text: 'This Unit gains a <unit-damage>shield equal to 25%</unit-damage> of the damage taken when taking HP damage and still having a shield.',
+        expects: 'shield|self|on-cast|shield',
+        carries: { config: expect.objectContaining({ requiresHpDamage: true }) },
+    },
+    {
+        ship: 'Quixilver',
+        slot: 'passive',
+        text: "This Unit gains a <unit-damage>shield equal to 25%</unit-damage> of the damage taken when taking HP damage and still having a shield.<br /><br />At the end of this Unit's turn if it has shield equal to 100% of its max HP, this Unit grants all allies <unit-skill>Barrier</unit-skill> for 1 hit and applies <unit-skill>Barrier Recharging</unit-skill> for 3 turns.",
+        expects: 'shield|self|on-cast|shield',
+        carries: { config: expect.objectContaining({ requiresHpDamage: true }) },
+    },
+    {
+        ship: 'Yin Jian',
+        slot: 'active',
+        text: 'This Unit deals <unit-damage>95% damage</unit-damage> and if it has <unit-skill>Stealth</unit-skill> it deals an additional <unit-damage>50% damage</unit-damage>.',
+        expects: 'damage|enemy|on-cast|damage',
+        carries: {
+            conditions: [expect.objectContaining({ subject: 'self-buff', buffName: 'Stealth' })],
+            scaling: { conditionIndex: 0, perUnit: 50 },
+        },
     },
 ];
 
@@ -138,8 +135,19 @@ describe('residual — catalogue wording parses like ours', () => {
         expect(canonical(parseSlot(slot, next))).toEqual(canonical(before));
     });
 
+    it.each(CATALOGUE_ROWS)(
+        '$ship $slot: the catalogue sentence carries its parse',
+        ({ slot, text, expects, carries }) => {
+            const abilities = parseSlot(slot, text);
+            expect(sigs(abilities)).toContain(expects);
+            expect(withSig(abilities, expects)).toEqual(
+                expect.arrayContaining([expect.objectContaining(carries)])
+            );
+        }
+    );
+
     it('Centurion: "retaliates dealing 50% damage" is one self + one adjacent-ally counter, grouped', () => {
-        const abilities = parseSlot('passive', PAIRS[1].new);
+        const abilities = parseSlot('passive', PAIRS.find((p) => p.ship === 'Centurion')!.new);
         const counters = abilities.filter((a) => a.type === 'counter');
         expect(counters.map((a) => a.trigger).sort()).toEqual(['on-ally-attacked', 'on-attacked']);
         const groups = counters.map(

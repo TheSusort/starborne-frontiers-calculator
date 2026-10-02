@@ -25,12 +25,12 @@ import { flattenCombatLog } from '../log/__testutils__/flattenCombatLog';
 import { bareEnemy, BARE_ENEMY_ID } from '../__testutils__/bareRosterFixture';
 
 // Verbatim-shaped phrasing (matches Asphyxiator's real active Inferno III sentence structure:
-// "... then inflicts Inferno III for 3 turns on the targeted enemy and all enemies adjacent to
-// it."). Parsed via `adjacentEnemyScopeForName` into `target: 'target-and-adjacent-
-// enemies'` on the `dot` ability, which `dotsFromSkill` (Task B2 Step 1) turns into
-// `splashTarget: 'target-and-adjacent-enemies'` on the DoT application entry.
+// "... then inflicts Inferno III for 3 turns on the targeted enemy and all adjacent enemies.").
+// Parsed via `adjacentEnemyScopeForName` into `target: 'target-and-adjacent-enemies'` on the
+// `dot` ability, which `dotsFromSkill` turns into `splashTarget: 'target-and-adjacent-enemies'`
+// on the DoT application entry.
 const SPLASH_INFERNO_TEXT =
-    'This Unit deals <unit-damage>1% damage</unit-damage>, then inflicts <unit-skill>Inferno III</unit-skill> for 3 turns on the targeted enemy and all enemies adjacent to it.';
+    'This Unit deals <unit-damage>1% damage</unit-damage>, then inflicts <unit-skill>Inferno III</unit-skill> for 3 turns on the targeted enemy and all adjacent enemies.';
 
 // Baseline: the SAME Inferno III DoT with plain `target: 'enemy'` (no adjacency phrase) — used
 // for the DPS-invariance byte-identical comparison.

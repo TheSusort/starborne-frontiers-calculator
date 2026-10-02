@@ -1,8 +1,8 @@
 /**
  * #345 — Valkyrie's Echoing Burst repair fires on HER OWN burst, and on nothing else.
  *
- *     "When an Echoing Burst explodes on an enemy, this Unit and the ally with the lowest
- *      current health percentage repair 5% of damage dealt."
+ *     "When an Echoing Burst explodes on an enemy, the Unit and the ally with the lowest
+ *      current health percentage repair 5% of the damage dealt."
  *
  * The engine had this backwards on both halves. Her repair parsed to `on-bomb-detonated` — a
  * VICTIM-scoped trigger riding the `bomb-detonated` event — while her Echoing Burst is an
@@ -34,10 +34,11 @@ type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 
 /** Valkyrie's R1 passive, verbatim from docs/ship-skills.csv (first passive column). */
 const VALKYRIE_R1 =
-    'This Unit gains <unit-skill>Speed Up II</unit-skill> for 1 turn at the start of the round.' +
-    '<br /><br />When an <unit-aid>Echoing Burst</unit-aid> explodes on an enemy, this Unit and ' +
+    'This Unit ignores <unit-skill>Taunt</unit-skill> and <unit-skill>Provoke</unit-skill> effects ' +
+    'and at the start of the round, this Unit gains <unit-skill>Speed Up II</unit-skill> for 1 turn. ' +
+    '<br /><br />When an <unit-skill>Echoing Burst</unit-skill> explodes on an enemy, the Unit and ' +
     'the ally with the lowest current health percentage <unit-damage>repair 5%</unit-damage> of ' +
-    'damage dealt.';
+    'the damage dealt.';
 
 const valkyriePassive = (): Ability[] =>
     buildShipAbilities({

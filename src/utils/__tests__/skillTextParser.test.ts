@@ -2566,9 +2566,9 @@ describe('detectGrantConditions', () => {
         ]);
     });
 
-    it('classifies "When targeting non-Defenders" as a negated enemy-type gate (Lodolite)', () => {
+    it('classifies "When this attack targets non-defenders" as a negated enemy-type gate (Lodolite)', () => {
         const text =
-            'When targeting non-Defenders, apply <unit-skill>Concentrate Fire</unit-skill> for 2 turns.';
+            'When this attack targets non-defenders, it also applies <unit-skill>Concentrate Fire</unit-skill> for 2 turns.';
         expect(detectGrantConditions(text, 'Concentrate Fire')).toEqual([
             { subject: 'enemy-type', derivable: true, requiredEnemyType: 'Defender', negate: true },
         ]);
@@ -2607,9 +2607,9 @@ describe('detectGrantConditions', () => {
         ]);
     });
 
-    it('detectGrantConditions: APEX "If this Unit has Shield" → self-shield gate on Disable', () => {
+    it('detectGrantConditions: APEX "If this Unit has an active shield" → self-shield gate on Disable', () => {
         const text =
-            'This Unit deals <unit-damage>220% damage</unit-damage> and inflicts <unit-skill>Attack Down II</unit-skill> and <unit-skill>Out. Damage Down II</unit-skill> for 2 turns. If this Unit has Shield, the primary target is inflicted with <unit-skill>Disable</unit-skill> for 2 turns.';
+            'This Unit deals <unit-damage>220% damage</unit-damage> and inflicts <unit-skill>Attack Down II</unit-skill> and <unit-skill>Out. Damage Down II</unit-skill> for 2 turns. If this Unit has an active shield, the primary target is inflicted with <unit-skill>Disable</unit-skill> for 2 turns.';
         expect(detectGrantConditions(text, 'Disable')).toEqual([
             { subject: 'self-shield', derivable: true },
         ]);
@@ -3012,13 +3012,13 @@ describe('parseHealAbilities', () => {
             { kind: 'heal', pct: 80, basis: 'hp', target: 'all-allies', explicitTarget: true },
         ]);
     });
-    // SP-4e Task 3: "most missing health" NAMES its recipient by live HP, so it carries the
-    // 'lowest-hp-ally' selector rather than the generic 'ally' the engine used to resolve off the
-    // teamBattle run-mode flag. Loose phrasing for lowest HP PERCENTAGE, not an absolute basis.
-    it('most-missing-health routes as lowest-hp-ally', () => {
+    // "most missing HP" NAMES its recipient by live HP, so it carries the 'lowest-hp-ally'
+    // selector rather than the generic 'ally'. Loose phrasing for lowest HP PERCENTAGE, not an
+    // absolute basis.
+    it('most-missing-HP routes as lowest-hp-ally', () => {
         expect(
             parseHealAbilities(
-                'This unit <unit-damage>repairs 30%</unit-damage> of its Max HP to the ally with the most missing health.'
+                'At the start of its turn, this Unit <unit-damage>repairs 30%</unit-damage> of its max HP to the ally with the most missing HP.'
             )
         ).toEqual([
             { kind: 'heal', pct: 30, basis: 'hp', target: 'lowest-hp-ally', explicitTarget: true },
@@ -3075,7 +3075,7 @@ describe('parseHealAbilities', () => {
     it('damage-taken shield IS parsed as a leech (basis damage-taken, requiresHpDamage)', () => {
         expect(
             parseHealAbilities(
-                'gains a Shield equal to 25% of the damage taken when taking HP damage and still having Shield'
+                'gains a <unit-damage>shield equal to 25%</unit-damage> of the damage taken when taking HP damage and still having a shield'
             )
         ).toEqual([
             {
@@ -3139,7 +3139,7 @@ describe('parseHealAbilities', () => {
     it('"X% of damage dealt" repair IS parsed as a dual-recipient leech (Valkyrie burst reaction)', () => {
         expect(
             parseHealAbilities(
-                'this Unit and the ally with the lowest current health percentage <unit-damage>repair 5%</unit-damage> of damage dealt.'
+                'the Unit and the ally with the lowest current health percentage <unit-damage>repair 5%</unit-damage> of the damage dealt.'
             )
         ).toEqual([
             {
@@ -3265,7 +3265,7 @@ describe('damage-leech parsing', () => {
 
     it('Valkyrie: dual recipient + Echoing Burst scope → two entries, detonation scope', () => {
         const r = parseHealAbilities(
-            'When an Echoing Burst explodes on an enemy, this Unit and the ally with the lowest current health percentage repair 5% of damage dealt.'
+            'When an <unit-skill>Echoing Burst</unit-skill> explodes on an enemy, the Unit and the ally with the lowest current health percentage <unit-damage>repair 5%</unit-damage> of the damage dealt.'
         );
         expect(r).toHaveLength(2);
         expect(r[0]).toMatchObject({
@@ -3289,7 +3289,7 @@ describe('damage-leech parsing', () => {
 
     it('Quixilver passive: Shield equal to 25% of the damage taken → damage-taken + requiresHpDamage', () => {
         const r = parseHealAbilities(
-            'This Unit gains Shield equal to 25% of the damage taken when taking HP damage and still having Shield.'
+            'This Unit gains a <unit-damage>shield equal to 25%</unit-damage> of the damage taken when taking HP damage and still having a shield.'
         );
         expect(r).toHaveLength(1);
         expect(r[0]).toMatchObject({
@@ -3501,7 +3501,7 @@ describe('parseHealAbilities — damage-reaction heals (Phase 4c)', () => {
         ]);
     });
 
-    it('Isha second passive (CSV second_passive_skill_text): instead-on-crit pair → 3% non-crit + 6% crit', () => {
+    it('Isha second passive (CSV second_passive_skill_text): instead-on-crit pair → 3% non-crit + 6% crit (reads the "critcally" spelling)', () => {
         expect(
             parseHealAbilities(
                 'When directly damaged, this Unit <unit-damage>repairs 3%</unit-damage> of its max HP, but when critcally hit, it instead <unit-damage>repairs 6%</unit-damage> of its max HP.'
@@ -4055,24 +4055,24 @@ describe('detectHpCrossingTrigger', () => {
     });
 });
 
-// Phase 4c PR 3 (Task 6): Hermes charged-skill "If the target has less than N% HP" gate on a
-// grant clause. Sentence-scoped at the grant's anchor; requires "the target".
+// Hermes charged-skill "If an ally has less than N% HP" gate on a grant clause. Sentence-scoped at
+// the grant's anchor.
 describe('detectTargetHpGate', () => {
     const at = (text: string, needle: string) => detectTargetHpGate(text, text.indexOf(needle));
 
-    it('Hermes charged: "If the target has less than 40% HP, it grants Cheat Death" → hpBelowPct 40', () => {
+    it('Hermes charged: "If an ally has less than 40% HP, it grants that ally Cheat Death" → hpBelowPct 40', () => {
         const text =
-            'This Unit <unit-damage>repairs 37%</unit-damage> of its Max HP and <unit-aid>adds 1 charge</unit-aid> to the Charged Skill. If the target has less than 40% HP, it grants <unit-skill>Cheat Death</unit-skill>.';
+            'This Unit <unit-damage>repairs 37%</unit-damage> of its max HP and <unit-skill>adds 1 charge</unit-skill> to the charged skill of allies.<br /><br />If an ally has less than 40% HP, it grants that ally <unit-skill>Cheat Death</unit-skill>.';
         expect(at(text, 'Cheat Death')).toEqual({ hpBelowPct: 40 });
     });
 
     it('Hermes charged: the repair sentence (no target gate) → undefined', () => {
         const text =
-            'This Unit <unit-damage>repairs 37%</unit-damage> of its Max HP and <unit-aid>adds 1 charge</unit-aid> to the Charged Skill. If the target has less than 40% HP, it grants <unit-skill>Cheat Death</unit-skill>.';
+            'This Unit <unit-damage>repairs 37%</unit-damage> of its max HP and <unit-skill>adds 1 charge</unit-skill> to the charged skill of allies.<br /><br />If an ally has less than 40% HP, it grants that ally <unit-skill>Cheat Death</unit-skill>.';
         expect(at(text, 'repairs 37%')).toBeUndefined();
     });
 
-    it('no "the target" in the gated text → undefined', () => {
+    it('no HP gate in the gated text → undefined', () => {
         const text =
             'This Unit gains <unit-skill>Terran Tenacity I</unit-skill> for 3 turns when HP drops below 50%.';
         expect(at(text, 'Terran Tenacity I')).toBeUndefined();
@@ -4080,7 +4080,10 @@ describe('detectTargetHpGate', () => {
 
     it('negative pos → undefined', () => {
         expect(
-            detectTargetHpGate('If the target has less than 40% HP, it grants Cheat Death.', -1)
+            detectTargetHpGate(
+                'If an ally has less than 40% HP, it grants that ally Cheat Death.',
+                -1
+            )
         ).toBeUndefined();
     });
 });

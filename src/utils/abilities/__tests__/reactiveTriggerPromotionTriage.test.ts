@@ -71,14 +71,14 @@ describe('cluster 1 — on-attacked', () => {
     });
 
     const QUIXILVER_PASSIVE =
-        'This Unit gains <unit-damage>Shield equal to 25%</unit-damage> of the damage taken when taking HP damage and still having Shield.';
+        'This Unit gains a <unit-damage>shield equal to 25%</unit-damage> of the damage taken when taking HP damage and still having a shield.';
 
     it('Quixilver: damage-taken leech shield with the requiresHpDamage punch-through gate (FP — engine-modeled)', () => {
         const abilities = abilitiesFor({ firstPassiveSkillText: QUIXILVER_PASSIVE }, 'passive');
         const shield = abilities.find((a) => a.type === 'shield');
         // FP (re-classified PR-A): NOT a trigger gap. This is a `damage-taken` leech shield the
         // engine procs per enemy attack via its dedicated leech block (engine.ts ~2627/2887),
-        // which IGNORES the ability trigger. The "when taking HP damage and still having Shield"
+        // which IGNORES the ability trigger. The "when taking HP damage and still having a shield"
         // clause is modeled by requiresHpDamage (punch-through gate — leech.test.ts locks it).
         // Promoting the trigger to on-attacked would partition it OFF the leech path onto the
         // reactive path (no requiresHpDamage gate there), REGRESSING behavior — so it correctly
@@ -106,7 +106,7 @@ describe('cluster 1 — on-attacked', () => {
         const shield = abilities.find((a) => a.type === 'shield');
         // FP (re-classified PR-A): same as Quixilver — a `damage-taken` leech shield procced per
         // attack by the engine's leech block ("15% of the Damage dealt to them"; leech.test.ts
-        // locks it), NOT a trigger gap. No "still having Shield" clause, so no requiresHpDamage
+        // locks it), NOT a trigger gap. No "still having a shield" clause, so no requiresHpDamage
         // gate. Trigger stays on-cast (leech path ignores it); promoting it would regress.
         expect(shield?.config).toMatchObject({ basis: 'damage-taken' });
         expect(shield?.config).not.toHaveProperty('requiresHpDamage');

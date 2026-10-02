@@ -96,7 +96,7 @@ export type AbilityTarget =
     | 'lowest-hp-ally' // SP-4e: the living same-side ally with the lowest currentHp/maxHp, caster
     // EXCLUDED, ties broken by source order. Named by the ability's own text
     // (Pallas "the other ally with the lowest current health percentage", Volk
-    // "the ally with the most missing health", Valkyrie "the ally with the lowest
+    // "the ally with the most missing HP", Valkyrie "the ally with the lowest
     // current health percentage"). NEVER narrowed by the caster's support
     // footprint — it reaches its ally wherever they stand, on either slot
     // (user-confirmed 2026-08-20). Resolves to NO recipient when the caster is the
@@ -580,7 +580,7 @@ export interface Condition {
     anyOf?: boolean;
     requiredEnemyType?: EnemyBaseClass;
     // For 'enemy-type': when true, the gate means the enemy is NOT `requiredEnemyType`
-    // (e.g. "when targeting non-Defenders").
+    // (e.g. "when this attack targets non-defenders").
     negate?: boolean;
     buffName?: string;
     hpComparator?: 'below' | 'above';
@@ -1359,7 +1359,7 @@ export interface Ability {
      *  buffs, charge) is NOT narrowed to the firing skill's support footprint — user-verified
      *  2026-07-31 via Volk, whose active buffs land inside
      *  `Pattern-Line-Support-from-centre-Range-1` while its passive "repairs … the ally with the
-     *  most missing health" reaches any ally. This flag is the opt-BACK-IN for the handful of
+     *  most missing HP" reaches any ally. This flag is the opt-BACK-IN for the handful of
      *  passives that name the pattern themselves; cast-slot support is footprint-scoped
      *  regardless of the flag. Set by buildShipAbilities from the ability's own sentence. */
     patternScoped?: boolean;

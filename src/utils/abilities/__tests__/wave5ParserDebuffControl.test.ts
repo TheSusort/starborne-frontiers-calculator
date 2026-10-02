@@ -173,7 +173,7 @@ describe.skipIf(!csvAvailable())(
 // Synthetic fixtures: feed hand-written skill text through the real `buildShipAbilities`
 // (NOT docs/ship-skills.csv), so the parser→builder wiring for enemy-adjacency scoping stays
 // covered in CI even when the gitignored reference CSV is absent (the suite above skips there).
-describe('Task A2 — parser enemy-adjacency scope for debuffs + control (synthetic, CSV-independent)', () => {
+describe('parser enemy-adjacency scope for debuffs + control (synthetic, CSV-independent)', () => {
     it('charged: a debuff inflicted "on all enemies adjacent to the original target" scopes to adjacent-enemies', () => {
         // Uses a real debuff name (Defense Down I) — the auto-fill path only emits a debuff
         // ability for buff names present in the BUFFS constant, so a wholly fictional name
@@ -191,9 +191,9 @@ describe('Task A2 — parser enemy-adjacency scope for debuffs + control (synthe
         expect(debuff?.target).toBe('adjacent-enemies');
     });
 
-    it('active: a control inflicted "on the targeted enemy and all enemies adjacent to it" scopes to target-and-adjacent-enemies', () => {
+    it('active: a control inflicted "on the targeted enemy and all adjacent enemies" scopes to target-and-adjacent-enemies', () => {
         const text =
-            'This Unit inflicts <unit-skill>Provoke</unit-skill> on the targeted enemy and all enemies adjacent to it for 2 turns.';
+            'This Unit inflicts <unit-skill>Provoke</unit-skill> on the targeted enemy and all adjacent enemies for 2 turns.';
         const { slots } = buildShipAbilities(ship({ activeSkillText: text }));
         const active = slot(slots, 'active')!;
         expect(active).toBeDefined();
@@ -209,7 +209,7 @@ describe('Task A2 — parser enemy-adjacency scope for debuffs + control (synthe
         // Real debuff names (Attack Down I / Defense Down I) for the same BUFFS-lookup reason
         // as above.
         const text =
-            'This Unit inflicts <unit-skill>Attack Down I</unit-skill> for 1 turn, then inflicts <unit-skill>Defense Down I</unit-skill> for 3 turns on the targeted enemy and all enemies adjacent to it.';
+            'This Unit inflicts <unit-skill>Attack Down I</unit-skill> for 1 turn, then inflicts <unit-skill>Defense Down I</unit-skill> for 3 turns on the targeted enemy and all adjacent enemies.';
         const { slots } = buildShipAbilities(ship({ activeSkillText: text }));
         const active = slot(slots, 'active')!;
         expect(active).toBeDefined();

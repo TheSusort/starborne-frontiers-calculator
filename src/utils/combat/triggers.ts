@@ -2376,8 +2376,8 @@ export interface IntentExecContext {
      *  SAME `roleByActorId` map (side-agnostic by key) Meatshield's defense-substitution and
      *  Graphite's `roleFilter` reaction-time check already consume. Used by the reactive `purge`
      *  branch to re-check an `enemy-type` gate (scrubbed from the generic drain gate above)
-     *  against the REAL victim of an on-deal-damage purge (Zeolite: "… when dealing damage to a
-     *  Defender"), team-symmetrically. Optional — absent in unit-test ctxs that don't drive it
+     *  against the REAL victim of an on-deal-damage purge (Zeolite: "When this Unit deals damage
+     *  to a defender …"), team-symmetrically. Optional — absent in unit-test ctxs that don't drive it
      *  (an `enemy-type`-gated purge with no `roleOf` reads `undefined` → matchesRoleCategory
      *  always false → conservative no-op).
      *
@@ -2668,8 +2668,8 @@ function dispatchType(intent: Intent): Ability['config']['type'] {
  *  so each half re-groups the way the author wrote it. DELIBERATELY NOT ATTEMPTED: it changes
  *  which conditions gate where, so it needs an owner ruling on the intended semantics and its own
  *  tests. */
-/** An on-deal-damage reaction's `enemy-type` conditions ("after damaging a Debuffer or
- *  Supporter", Zeolite's "when dealing damage to a Defender") name the role of a ship the attack
+/** An on-deal-damage reaction's `enemy-type` conditions ("after damaging a debuffer or
+ *  supporter", Zeolite's "When this Unit deals damage to a defender") name the role of a ship the attack
  *  HIT. They never gate globally — the fight-wide `ctx.enemyType` scalar describes no actor and is
  *  undefined for an enemy-owned reaction — and are checked by `dealtVictimRoleGateMet` instead.
  *  `perVictimOk` must not take them either: its per-victim ctx carries that same undefined
@@ -5977,7 +5977,7 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // Target: enemy-most-buffs (Rhodium) → the opposing actor with the most buffs;
         // else the routed attacker/killer (counterTargetId — Iridium/Faust) else the REAL
         // victim this event carries (eventCtx.victimId — the on-deal-damage purge,
-        // Zeolite: "purges 1 buff from the enemy when dealing damage to a Defender" — the
+        // Zeolite: "When this Unit deals damage to a defender it purges 1 buff" — the
         // owner's own damage target, mirrors the `dot`/`convert-dot` branches' victimId seam).
         // Nothing resolved → NO-OP.
         const targetId =

@@ -1106,7 +1106,7 @@ const MAX_POS = Number.MAX_SAFE_INTEGER;
  * A bare repair/cleanse (no recipient phrase, so the parser defaulted target to 'self') on an
  * ACTIVE or CHARGED skill with NO damage component is a pure support skill — it targets an ally,
  * so the heal/cleanse routes to the ally, not the caster. Example: Hermes' active "This Unit
- * Repairs 27% of its Max HP." with charged "If the target has less than 40% HP …" — the skill
+ * Repairs 27% of its Max HP." with charged "If an ally has less than 40% HP …" — the skill
  * targets an ally. Damage-rider repairs (skill has a damage component → it targets an enemy, the
  * repair is a self rider), passive repairs, and explicit recipients are unaffected.
  *
@@ -1150,9 +1150,9 @@ function flipBareSupportTarget(
     // is a NO-OP for cast routing and still load-bearing on the REACTIVE path, where
     // `reactiveRecipients` (triggers.ts) treats 'ally' as the ONE ally the triggering event named.
     //
-    // An EXPLICIT recipient ("the ally with the most missing health" → Volk) sets explicitTarget
-    // and never reaches this branch; since SP-4e Task 3 that recipient is parsed as
-    // 'lowest-hp-ally', which IS a genuine single-recipient target on every path.
+    // An EXPLICIT recipient ("the ally with the most missing HP" → Volk) sets explicitTarget
+    // and never reaches this branch; that recipient is parsed as 'lowest-hp-ally', which IS a
+    // genuine single-recipient target on every path.
     bareActiveScope: 'ally' | 'all-allies' = 'ally'
 ): 'self' | 'ally' | 'all-allies' | 'lowest-hp-ally' {
     if (
@@ -1380,11 +1380,11 @@ function abilitiesFromText(
         if (damageTrigger === 'end-of-round' && detectMostBuffsTarget(text, damagePos)) {
             out[0].ability.target = 'enemy-most-buffs';
         }
-        // SP-M M1 (Task 6): a round-boundary (start-of-round, INCLUDING the "Then," continuation
-        // sentence — Chakara p4: "starts each round with Attack Up II/Defense Up II … if it has
-        // the lowest speed among all Allies. Then, deals 60% damage to the highest Speed Enemy.")
-        // damage clause carrying "to the highest Speed Enemy" re-targets from the default 'enemy'
-        // to 'enemy-highest-speed'. Sentence/position-scoped on damagePos (parseHighestSpeedEnemyTarget
+        // A round-boundary (start-of-round, INCLUDING the "Then" continuation sentence — Chakara
+        // p4: "At the start of the round, if this Unit has the lowest speed among all allies, it
+        // gains Attack Up II and Defense Up II for 1 turn. Then deals 60% damage to the enemy with
+        // the highest speed.") damage clause carrying "to the enemy with the highest speed"
+        // re-targets from the default 'enemy' to 'enemy-highest-speed'. Sentence/position-scoped on damagePos (parseHighestSpeedEnemyTarget
         // mirrors detectMostBuffsTarget's scoping), so an unrelated damage clause elsewhere in the
         // text is unaffected. out[0] is safe to mutate here (SP-F F1's out[0] invariant).
         if (damageTrigger === 'start-of-round' && parseHighestSpeedEnemyTarget(text, damagePos)) {
@@ -1397,7 +1397,7 @@ function abilitiesFromText(
         // sentence-position check: an on-cast damage clause can share its SENTENCE with an
         // unrelated debuff/control clause that owns its own adjacency phrase (Asphyxiator's
         // "...deals 175% damage, then inflicts Inferno III... on the targeted enemy and all
-        // enemies adjacent to it" — the adjacency belongs to Inferno III, not the 175% hit;
+        // adjacent enemies" — the adjacency belongs to Inferno III, not the 175% hit;
         // Vindicator's "...deals 100% damage and applies Provoke... to all enemies adjacent to
         // the target" — the adjacency belongs to Provoke, not the 100% hit). Both are corpus
         // regressions caught by the Task C1 corpus-regression check and fixed by this gate,
@@ -1708,8 +1708,8 @@ function abilitiesFromText(
         };
     }
 
-    // Conditional damage BONUS gated on the ENEMY carrying an effect: Rikra "additional 60%
-    // damage against Taunted or Provoked enemies", Wrecker "if affected by Inferno, additional
+    // Conditional damage BONUS gated on the ENEMY carrying an effect: Rikra "an additional 60%
+    // damage to enemies affected by Taunt or Provoke", Wrecker "if affected by Inferno, additional
     // 50%". enemyEffectConditions classifies each name into an enemy-buff/enemy-debuff condition
     // (anyOf when >1); scaledBonus/gateConditions treat the group as one bare scaling source, so
     // the base damage always fires and the bonus adds only when the enemy has the effect(s).
@@ -2201,10 +2201,10 @@ function abilitiesFromText(
     // forced-targeting; the control ability only sources the `control-applied` event
     // (reaction substrate, e.g. Defiant's shield-on-Stasis). Carries no conditions (see the
     // gated-control caveat below); no damage/modifier → DPS pipeline ignores it.
-    // Wave 5 (Task A2): an enemy-side control's target is re-derived via detectEnemyGrantScope
-    // (same clause-adjacency detection as the paired named-status SkillEffect, keyed on the
-    // effect's display name) so an enemy-adjacency phrasing ("Stasis ... on the targeted enemy
-    // and all enemies adjacent to the enemy") routes the control to the same adjacency scope as
+    // An enemy-side control's target is re-derived via detectEnemyGrantScope (same
+    // clause-adjacency detection as the paired named-status SkillEffect, keyed on the effect's
+    // display name) so an enemy-adjacency phrasing ("Stasis ... on the targeted enemy and all
+    // adjacent enemies") routes the control to the same adjacency scope as
     // its paired debuff, instead of always collapsing to plain 'enemy'.
     for (const ctrl of parseControlInflicts(text)) {
         const controlTargetName = CONTROL_EFFECT_DISPLAY_NAME[ctrl.effect];
@@ -2779,7 +2779,7 @@ function abilitiesFromText(
     // Emit purge from active/charged (on-cast, C2a) AND from a PASSIVE slot WHEN a purge
     // trigger is detected in the purge's own sentence (C2b-2): Iridium "when directly damaged"
     // → on-attacked. Rhodium end-of-round + Faust killed-by-direct-damage detectors, plus
-    // Zeolite's "when dealing damage to a Defender" (Wave 8 Task 12) → on-deal-damage, carrying
+    // Zeolite's "When this Unit deals damage to a defender" → on-deal-damage, carrying
     // an `enemy-type` Defender condition (see detectPurgeEnemyTypeCondition below — same
     // extraction the outgoing-damage-modifier branch above uses for Zeolite's sibling "+30%
     // damage when hitting a Defender" gate). A passive purge with NO detected trigger is NOT
@@ -2808,7 +2808,7 @@ function abilitiesFromText(
                 ? ('on-attacked' as const)
                 : (detectEndOfRoundPurgeTrigger(text, purgePos) ?? // Rhodium
                   detectKilledByDirectDamageTrigger(text, purgePos) ?? // Faust
-                  detectDealDamageToRoleTrigger(text, purgePos)); // Zeolite (Task 12)
+                  detectDealDamageToRoleTrigger(text, purgePos)); // Zeolite
         const trigger: AbilityTrigger | undefined =
             slot === 'active' || slot === 'charged' ? 'on-cast' : passiveTrigger;
         if (!trigger) continue; // passive purge with no recognized trigger → not emitted
@@ -3399,10 +3399,10 @@ function crossing(rowText: string, pos: number, ability: Ability): boolean {
 }
 
 /**
- * Hermes charged "If the target / an ally has less than N% HP, it grants (that ally) Cheat
- * Death". The grant reaches every ally the cast targets (his support pattern, himself included —
- * owner ruling 2026-10-02: the pattern targets them all equally, so "the target" is each of them),
- * and the HP test is asked of EACH recipient: an `all-allies` grant carrying
+ * Hermes charged "If an ally has less than N% HP, it grants that ally Cheat Death". The grant
+ * reaches every ally the cast targets (his support pattern, himself included — owner ruling
+ * 2026-10-02: the pattern targets them all equally, so the gated ally is each of them), and the
+ * HP test is asked of EACH recipient: an `all-allies` grant carrying
  * `recipientFilter.hpBelowPct`, not a single cast-time condition. Caller gates this to the
  * Cheat-Death family; sentence-scoped at the grant's anchor `pos`, so the preceding repair/charge
  * sentence (no gate) never matches. Returns true when it handled the buff.
@@ -3474,7 +3474,7 @@ export function buildShipAbilities(rawShip: Ship): ShipSkills {
                 : undefined;
             if (reactiveTrigger) ability.trigger = reactiveTrigger;
             // Enemy-adjacency splash (Asphyxiator active Inferno III: "on the targeted enemy
-            // and all enemies adjacent to it"). Charged Inferno's adjacency phrase belongs to a
+            // and all adjacent enemies"). Charged Inferno's adjacency phrase belongs to a
             // separate Stasis sentence, so it resolves to null and the DoT stays 'enemy'.
             const adjacentScope = rowText ? adjacentEnemyScopeForName(rowText, entry.type) : null;
             if (adjacentScope) ability.target = adjacentScope;
@@ -3770,7 +3770,7 @@ export function buildShipAbilities(rawShip: Ship): ShipSkills {
         ) {
             // crossing grant handled in the helper; nothing further to do for this buff.
         } else if (
-            // Hermes charged "If the target / an ally has less than N% HP, it grants Cheat Death" —
+            // Hermes charged "If an ally has less than N% HP, it grants that ally Cheat Death" —
             // a per-recipient HP filter on the all-allies grant (see `targetGate`). Only the
             // Cheat-Death family is gated this way; the preceding repair/charge sentence has no
             // such gate, so detectTargetHpGate returns undefined there.
@@ -3947,15 +3947,14 @@ export function buildShipAbilities(rawShip: Ship): ShipSkills {
         // enemy debuffs now do too ('enemy' vs 'all-enemies' — detectEnemyGrantScope). Defaults
         // to 'enemy' for round-trip debuffs that predate the effectTarget field.
         let enemyTarget: AbilityTarget = buff.effectTarget ?? 'enemy';
-        // Ship-kit W8 (Task 5): Selenite p3's round-start "the highest attack enemy is applied
-        // with Concentrate Fire" re-targets from the plain 'enemy' default to 'enemy-highest-
-        // attack' (the selector already resolves live at applyAbilities.ts, used by gear procs —
-        // this wires an existing selector, not a new one). Sentence/position-scoped on this buff's
-        // own name anchor (mirrors parseHighestSpeedEnemyTarget's damagePos scoping above) and
-        // gated on the plain 'enemy' scope only, so a co-located all-enemies/adjacent debuff in
-        // the same row is unaffected. The other seven Concentrate Fire ships in the corpus
-        // (Huanying, Judge, Lodolite, Stalwart, Valkyrie, Vanguard, Yuyan) carry no "highest
-        // attack enemy" phrase, so the narrow regex leaves them at the plain 'enemy' target.
+        // Selenite p3's round-start "applies Concentrate Fire for 1 turn to the enemy with the
+        // highest attack" re-targets from the plain 'enemy' default to 'enemy-highest-attack' (the
+        // selector already resolves live at applyAbilities.ts, used by gear procs). Sentence/
+        // position-scoped on this buff's own name anchor (mirrors parseHighestSpeedEnemyTarget's
+        // damagePos scoping above) and gated on the plain 'enemy' scope only, so a co-located
+        // all-enemies/adjacent debuff in the same row is unaffected. Other Concentrate Fire ships
+        // carry no "enemy with the highest attack" phrase, so the narrow regex leaves them at the
+        // plain 'enemy' target.
         if (enemyTarget === 'enemy') {
             const slotForThisBuff = slotForBuffSource(buff.skillSource);
             const rowTextForThisBuff = getSkillRowForSlot(ship, slotForThisBuff)?.text ?? '';

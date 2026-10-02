@@ -8432,7 +8432,7 @@ export function runCombat(rawInput: CombatEngineInput): {
          *       version of this comment was WRONG to call that half a defect. Owner ruling
          *       2026-08-18: a passive-slot instance does not proc a taken leech, because the victim
          *       is not its primary target — Malvex reads "when directly damaged as a PRIMARY
-         *       TARGET", Quixilver "when taking HP damage and still having Shield". The repo's
+         *       TARGET", Quixilver "when taking HP damage and still having a shield". The repo's
          *       locked granularity rule ("outgoing per attack, incoming per occurrence") governs
          *       HOW OFTEN an incoming proc fires, NOT which channels qualify; which channels
          *       qualify is decided by the ability's own text qualifier. Routing this site through
@@ -10421,8 +10421,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                         // Side-agnostic ship-role lookup (the SAME
                         // roleByActorId map Meatshield's defense-substitution and Graphite's
                         // roleFilter already consume) — feeds the reactive `purge` branch's
-                        // per-victim `enemy-type` re-check (Zeolite: "when dealing damage to a
-                        // Defender"), team-symmetrically.
+                        // per-victim `enemy-type` re-check (Zeolite: "When this Unit deals
+                        // damage to a defender"), team-symmetrically.
                         roleOf: (id) => roleByActorId.get(id),
                         // Live hacking/critDamage for `id` (either side), feeding
                         // Belladonna's conversion-chance (hacking) and paired extend-chance

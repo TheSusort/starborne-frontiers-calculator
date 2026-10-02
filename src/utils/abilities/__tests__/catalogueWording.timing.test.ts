@@ -8,20 +8,6 @@ import {
 } from './helpers/catalogueWording';
 
 const PAIRS: RewordPair[] = [
-    {
-        ship: 'Chakara',
-        slot: 'passive',
-        old: 'This Unit starts each round with <unit-skill>Attack Up II</unit-skill> and <unit-skill>Defense Up II</unit-skill> for 1 turn if it has the lowest speed among all Allies. Then, deals <unit-damage>60% damage</unit-damage> to the highest Speed Enemy.',
-        new: 'At the start of the round, if this Unit has the lowest speed among all allies, it gains <unit-skill>Attack Up II</unit-skill> and <unit-skill>Defense Up II</unit-skill> for 1 turn. Then deals <unit-damage>60% damage</unit-damage> to the enemy with the highest speed.',
-        expects: 'damage|enemy-highest-speed|start-of-round|damage',
-    },
-    {
-        ship: 'Selenite',
-        slot: 'passive',
-        old: 'This Unit deals 10% more direct damage for every enemy with <unit-skill>Stealth</unit-skill>.<br /><br />At the start of the round, the highest attack enemy is applied with <unit-skill>Concentrate Fire</unit-skill> for 1 turn.',
-        new: 'This Unit ignores <unit-skill>Stealth</unit-skill> effects.<br /><br />This Unit deals <unit-damage>10% more direct damage</unit-damage> for every enemy with <unit-skill>Stealth</unit-skill>.<br /><br />At the start of each round, this Unit applies <unit-skill>Concentrate Fire</unit-skill> for 1 turn to the enemy with the highest attack.',
-        expects: 'debuff|enemy-highest-attack|start-of-round|Concentrate Fire',
-    },
     // Crucialis: no numbers substituted — old and new carry the same values in a different order.
     {
         ship: 'Crucialis',
@@ -46,6 +32,18 @@ const CATALOGUE_ROWS: { ship: string; slot: SlotName; text: string; expects: str
         slot: 'passive',
         text: 'This Unit gains a <unit-damage>shield equal to 30%</unit-damage> of its max HP after it inflicts <unit-skill>Stasis</unit-skill>.<br /><br />At the start of combat this Unit gains 20% HP if its adjacent to a supporter.',
         expects: 'pre-combat-stat|self|pre-combat|pre-combat-stat',
+    },
+    {
+        ship: 'Chakara',
+        slot: 'passive',
+        text: 'At the start of the round, if this Unit has the lowest speed among all allies, it gains <unit-skill>Attack Up II</unit-skill> and <unit-skill>Defense Up II</unit-skill> for 1 turn. Then deals <unit-damage>60% damage</unit-damage> to the enemy with the highest speed.',
+        expects: 'damage|enemy-highest-speed|start-of-round|damage',
+    },
+    {
+        ship: 'Selenite',
+        slot: 'passive',
+        text: 'This Unit ignores <unit-skill>Stealth</unit-skill> effects.<br /><br />This Unit deals <unit-damage>10% more direct damage</unit-damage> for every enemy with <unit-skill>Stealth</unit-skill>.<br /><br />At the start of each round, this Unit applies <unit-skill>Concentrate Fire</unit-skill> for 1 turn to the enemy with the highest attack.',
+        expects: 'debuff|enemy-highest-attack|start-of-round|Concentrate Fire',
     },
 ];
 

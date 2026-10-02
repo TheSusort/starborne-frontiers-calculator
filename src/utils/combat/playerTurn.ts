@@ -1749,7 +1749,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     //
     //  (1) SLOT. A PASSIVE-slot support ability is not part of the cast, so the pattern does not
     //      govern it (user-verified 2026-07-31 via Volk: its active buffs stay on-pattern, its
-    //      passive repair reaches the ally with the most missing health wherever that ally stands).
+    //      passive repair reaches the ally with the most missing HP wherever that ally stands).
     //      The exception is a passive whose own clause names the pattern —
     //      `Ability.patternScoped`, see the flag's doc comment. That is what `scopedByFootprint`
     //      below decides, and it is the ONLY axis this predicate knows about.
@@ -2327,8 +2327,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // actor.shieldPool (SAME field/derivation as modifierCtx's selfShielded below) — REQUIRED
         // here because THIS ctx (not modifierCtx) gates the TIMED ENEMY DEBUFF application just
         // below (the `conditionsMet(status.conditions, preDebuffGateCtx)` check). APEX's
-        // charged Disable ("If this Unit has Shield, the primary target is inflicted with
-        // Disable") is a self-shield-gated NAMED debuff — without this field, selfShielded
+        // charged Disable ("If this Unit has an active shield, the primary target is inflicted
+        // with Disable") is a self-shield-gated NAMED debuff — without this field, selfShielded
         // defaults false here (buildRoundContext's DPS-safe default) and the debuff would never
         // land regardless of the caster's real shieldPool, which is just as wrong as the
         // original unconditional-inflict bug this task fixes.

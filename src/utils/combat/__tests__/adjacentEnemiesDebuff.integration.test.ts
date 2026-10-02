@@ -34,8 +34,8 @@ const DEBUFF_NAME = 'Defense Down II';
 // hacking-vs-security landing RNG.
 const ADJACENT_ONLY_TEXT = `This Unit applies <unit-skill>${DEBUFF_NAME}</unit-skill> for 2 turns to all enemies adjacent to the target.`;
 // Verbatim-shaped phrasing (matches TARGET_AND_ADJACENT_ENEMY_RE / real Asphyxiator text: "... on
-// the targeted enemy and all enemies adjacent to it.").
-const TARGET_AND_ADJACENT_TEXT = `This Unit applies <unit-skill>${DEBUFF_NAME}</unit-skill> for 2 turns to the targeted enemy and all enemies adjacent to it.`;
+// the targeted enemy and all adjacent enemies.").
+const TARGET_AND_ADJACENT_TEXT = `This Unit applies <unit-skill>${DEBUFF_NAME}</unit-skill> for 2 turns to the targeted enemy and all adjacent enemies.`;
 
 const ship = (id: string, over: Partial<Ship>): Ship => ({
     id,
@@ -217,7 +217,7 @@ describe('Ship-kit W5 Task A3: control-path smoke test (real control-effect buff
     });
 
     it('a Stasis (target-and-adjacent-enemies) cast does not throw and still fans out to target+neighbours', () => {
-        const stasisText = `This Unit applies <unit-skill>Stasis</unit-skill> for 1 turn to the targeted enemy and all enemies adjacent to it.`;
+        const stasisText = `This Unit applies <unit-skill>Stasis</unit-skill> for 1 turn to the targeted enemy and all adjacent enemies.`;
         const run = () =>
             simulateBattle({
                 playerTeam: [place(controlCaster('atk', stasisText), 'M4', 1, 1e9)],

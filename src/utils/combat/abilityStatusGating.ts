@@ -59,7 +59,7 @@ const LIVE_SUBJECTS: ReadonlySet<ConditionSubject> = new Set([
     // The caster's own shield-presence gate is live-derivable —
     // buildRoundContext's selfShielded field reads the acting actor's LIVE shieldPool
     // (`actor.shieldPool > 0`) at cast time. Needed here for APEX's charged Disable (a timed
-    // ENEMY debuff gated on "If this Unit has Shield") — without this, liveGateConditions would
+    // ENEMY debuff gated on "If this Unit has an active shield") — without this, liveGateConditions would
     // neutralize the condition to 'always' and the debuff would inflict unconditionally.
     'self-shield',
     // Quixilver R2: the caster's shield pool being AT max HP is live-derivable on both paths —

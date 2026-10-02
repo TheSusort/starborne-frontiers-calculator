@@ -41,13 +41,6 @@ const PAIRS: RewordPair[] = [
         expects: 'transform-incoming-to-dot|self|on-attacked|transform-incoming-to-dot',
     },
     {
-        ship: 'Rikra',
-        slot: 'charged',
-        old: 'This Unit gains <unit-skill>Defense Up II</unit-skill> for 2 turns, and deals <unit-damage>180% damage</unit-damage> with additional <unit-damage>80%</unit-damage> damage against Taunted or Provoked enemies.',
-        new: 'This Unit gains <unit-skill>Defense Up II</unit-skill> for 2 turns and deals <unit-damage>180% damage</unit-damage> with an additional <unit-damage>80% damage</unit-damage> to enemies affected by <unit-skill>Taunt</unit-skill> or <unit-skill>Provoke</unit-skill>.',
-        expects: 'damage|enemy|on-cast|damage',
-    },
-    {
         ship: 'Sefuba',
         slot: 'charged',
         old: 'This Unit deals <unit-damage>200% damage</unit-damage> and <unit-aid>removes 2 charges</unit-aid> from the enemy.',
@@ -60,13 +53,6 @@ const PAIRS: RewordPair[] = [
         old: 'This Unit reduces all <unit-skill>Bombs</unit-skill> on the enemy targets by 1 turn, <unit-skill>Bombs</unit-skill> reduced to 0 turns by this skill will detonate.<br />This reduction effect requires hacking.<br /><br />This Unit inflicts <unit-skill>Bomb III</unit-skill> for 3 turns.',
         new: 'This Unit reduces all <unit-skill>Bomb</unit-skill> on the enemy targets by 1 turn.<br />This reduction effect requires hacking.<br /><br />This Unit inflicts <unit-skill>Bomb III</unit-skill> for 3 turns.',
         expects: 'bomb-countdown-reduce|all-enemies|on-cast|bomb-countdown-reduce',
-    },
-    {
-        ship: 'Zeolite',
-        slot: 'passive',
-        old: 'This Unit <unit-aid>purges 1</unit-aid> buff from the enemy when dealing damage to a Defender.',
-        new: 'When this Unit deals damage to a defender it <unit-skill>purges 1 buff</unit-skill> from that enemy.',
-        expects: 'purge|enemy|on-deal-damage|purge',
     },
 ];
 
@@ -102,6 +88,18 @@ const CATALOGUE_ROWS: { ship: string; slot: SlotName; text: string; expects: str
         slot: 'passive',
         text: "This Unit's attacks always critically hit and gains up to <unit-damage>30% damage reduction</unit-damage> as its health decreases.",
         expects: 'incoming-reduction|self|on-cast|incoming-reduction',
+    },
+    {
+        ship: 'Rikra',
+        slot: 'charged',
+        text: 'This Unit gains <unit-skill>Defense Up II</unit-skill> for 2 turns and deals <unit-damage>180% damage</unit-damage> with an additional <unit-damage>80% damage</unit-damage> to enemies affected by <unit-skill>Taunt</unit-skill> or <unit-skill>Provoke</unit-skill>.',
+        expects: 'damage|enemy|on-cast|damage',
+    },
+    {
+        ship: 'Zeolite',
+        slot: 'passive',
+        text: 'When this Unit deals damage to a defender it <unit-skill>purges 1 buff</unit-skill> from that enemy.',
+        expects: 'purge|enemy|on-deal-damage|purge',
     },
     {
         ship: 'Zeolite',
@@ -144,7 +142,6 @@ describe('damage, defence and charge clauses — catalogue wording parses like o
     );
 });
 
-const pairText = (ship: string): string => PAIRS.filter((p) => p.ship === ship)[0].new;
 const rowText = (ship: string): string => CATALOGUE_ROWS.filter((p) => p.ship === ship)[0].text;
 
 // A percentage that names a damage REDUCTION, a damage share or an enemy-side condition is not an
@@ -165,7 +162,7 @@ describe('damage, defence and charge clauses — the catalogue sentence mints no
     });
 
     it('Rikra charged: "enemies affected by Taunt or Provoke" grants Rikra neither', () => {
-        const s = sigs(parseSlot('charged', pairText('Rikra')));
+        const s = sigs(parseSlot('charged', rowText('Rikra')));
         expect(s).not.toContain('buff|self|on-cast|Taunt');
         expect(s).not.toContain('buff|self|on-cast|Provoke');
     });

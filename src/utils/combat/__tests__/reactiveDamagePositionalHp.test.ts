@@ -438,21 +438,21 @@ describe('SP-M M1 Task 5 review fix: two same-side Rhodiums re-resolve enemy-mos
 });
 
 /**
- * Chakara's start-of-round continuation sentence ("This Unit starts each round
- * with Attack Up II and Defense Up II for 1 turn if it has the lowest speed among all Allies.
- * Then, deals 60% damage to the highest Speed Enemy.") must route the damage clause to the LIVE
+ * Chakara's start-of-round continuation sentence ("At the start of the round, if this Unit has
+ * the lowest speed among all allies, it gains Attack Up II and Defense Up II for 1 turn. Then
+ * deals 60% damage to the enemy with the highest speed.") must route the damage clause to the LIVE
  * highest-Speed opposing actor (ctx.enemyWithHighestSpeed), not the co-located `target:'enemy'`
  * default that falls back to the vestigial dummy `ctx.enemy` in positional mode. With two real
  * enemies of different Speed, only the FASTER one must take the real HP hit — the slower enemy
  * (never the selector's pick) must not.
  */
 
-// Verbatim from docs/ship-skills.csv (Chakara, third_passive_skill_text — the R4/refit-active
-// slot getShipSkillRows resolves for a 4-refit ship). Do NOT alter this text.
+// Verbatim from docs/ship-skills.csv (Chakara, second_passive_skill_text), fed through
+// thirdPassiveSkillText — the refit-active slot getShipSkillRows resolves for a 4-refit ship.
 const CHAKARA_P4 =
-    'This Unit starts each round with <unit-skill>Attack Up II</unit-skill> and ' +
-    '<unit-skill>Defense Up II</unit-skill> for 1 turn if it has the lowest speed among all ' +
-    'Allies. Then, deals <unit-damage>60% damage</unit-damage> to the highest Speed Enemy.';
+    'At the start of the round, if this Unit has the lowest speed among all allies, it gains ' +
+    '<unit-skill>Attack Up II</unit-skill> and <unit-skill>Defense Up II</unit-skill> for 1 turn. ' +
+    'Then deals <unit-damage>60% damage</unit-damage> to the enemy with the highest speed.';
 
 // `withPassive` isolates the HP delta to the reactive proc firing at all — the reaction run
 // carries Chakara's real R4 passive text (4 refits, per getShipSkillRows), the control run omits

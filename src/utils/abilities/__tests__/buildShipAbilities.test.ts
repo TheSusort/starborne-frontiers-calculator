@@ -236,7 +236,7 @@ describe('buildShipAbilities', () => {
     it('Lodolite active: Concentrate Fire debuff gated by a negated enemy-type (non-Defenders)', () => {
         const s = ship({
             activeSkillText:
-                'This Unit deals <unit-damage>240% damage</unit-damage>. When targeting non-Defenders, apply <unit-skill>Concentrate Fire</unit-skill> for 2 turns.',
+                'This Unit deals <unit-damage>240% damage</unit-damage> with additional damage equal to <unit-damage>10%</unit-damage> of its max HP.<br /><br />When this attack targets non-defenders, it also applies <unit-skill>Concentrate Fire</unit-skill> for 2 turns.',
         });
 
         const active = slot(buildShipAbilities(s).slots, 'active')!;
@@ -1528,9 +1528,9 @@ describe('buildShipAbilities', () => {
     // block: the reach lives in the engine, pinned by
     // `plainAllyCleanseFootprintReach.integration.test.ts`.
     //
-    // An EXPLICIT recipient ("the ally with the most missing health" → Volk) sets explicitTarget
-    // and stays a genuine single recipient on every path — since SP-4e Task 3 it is parsed as
-    // 'lowest-hp-ally' rather than 'ally'. The parser defaults bare to 'self'; the flip lives in
+    // An EXPLICIT recipient ("the ally with the most missing HP" → Volk) sets explicitTarget
+    // and stays a genuine single recipient on every path — it is parsed as 'lowest-hp-ally'
+    // rather than 'ally'. The parser defaults bare to 'self'; the flip lives in
     // abilitiesFromText where the slot + damage component are known.
     describe('bare repair → all-allies (AoE) / cleanse → ally on pure-support active/charged skills', () => {
         it('Hermes active bare repair → AoE heal (all-allies)', () => {
@@ -2685,7 +2685,7 @@ describe('buildShipAbilities', () => {
         it('Valkyrie: passive detonation dual-recipient → lowest-hp-ally + self leech, scope detonation', () => {
             const s = ship({
                 firstPassiveSkillText:
-                    'This Unit gains <unit-skill>Speed Up II</unit-skill> for 1 turn at the start of the round.<br /><br />When an <unit-aid>Echoing Burst</unit-aid> explodes on an enemy, this Unit and the ally with the lowest current health percentage <unit-damage>repair 5%</unit-damage> of damage dealt.',
+                    'This Unit ignores <unit-skill>Taunt</unit-skill> and <unit-skill>Provoke</unit-skill> effects and at the start of the round, this Unit gains <unit-skill>Speed Up II</unit-skill> for 1 turn. <br /><br />When an <unit-skill>Echoing Burst</unit-skill> explodes on an enemy, the Unit and the ally with the lowest current health percentage <unit-damage>repair 5%</unit-damage> of the damage dealt.',
             });
             const passive = buildShipAbilities(s).slots.find((x) => x.slot === 'passive');
             const heals = passive?.abilities.filter((a) => a.type === 'heal') ?? [];
@@ -2698,7 +2698,7 @@ describe('buildShipAbilities', () => {
                     leechScope: 'detonation',
                 });
             }
-            // SP-4e Task 3: the ally half is the named worst-HP selector.
+            // The ally half is the named worst-HP selector.
             expect(heals.map((h) => h.target).sort()).toEqual(['lowest-hp-ally', 'self']);
         });
 
@@ -2720,7 +2720,7 @@ describe('buildShipAbilities', () => {
         it('Quixilver passive: damage-taken shield with requiresHpDamage, no leechScope', () => {
             const s = ship({
                 firstPassiveSkillText:
-                    'This Unit gains <unit-damage>Shield equal to 25%</unit-damage> of the damage taken when taking HP damage and still having Shield.',
+                    'This Unit gains a <unit-damage>shield equal to 25%</unit-damage> of the damage taken when taking HP damage and still having a shield.',
             });
             const passive = buildShipAbilities(s).slots.find((x) => x.slot === 'passive');
             const shield = passive?.abilities.find((a) => a.type === 'shield');
@@ -3802,10 +3802,10 @@ describe('buildShipAbilities — Iridium passive purge emit (C2b-2 T1)', () => {
             expect(purges[0].trigger).toBe('on-enemy-purged'); // PURGE_MORE_RE path, not generic loop
         });
 
-        it('Zeolite p1 (Wave 8 Task 12): passive emits ONE purge, on-deal-damage, gated on enemy-type Defender', () => {
+        it('Zeolite p1: passive emits ONE purge, on-deal-damage, gated on enemy-type Defender', () => {
             const zeoliteP1 = ship({
                 firstPassiveSkillText:
-                    'This Unit <unit-aid>purges 1</unit-aid> buff from the enemy when dealing damage to a Defender.',
+                    'When this Unit deals damage to a defender it <unit-skill>purges 1 buff</unit-skill> from that enemy.',
             });
             const passive = slot(buildShipAbilities(zeoliteP1).slots, 'passive')!;
             const purges = passive.abilities.filter((a) => a.type === 'purge');
@@ -3949,18 +3949,19 @@ describe('buildShipAbilities — Rhodium end-of-round most-buffs purge (C2b-2 T4
 });
 
 // ---------------------------------------------------------------------------
-// SP-M M1 Task 6: Chakara start-of-round enemy-highest-speed damage re-target build test.
-// RAW string from docs/ship-skills.csv (Chakara, third_passive_skill_text).
+// Chakara start-of-round enemy-highest-speed damage re-target build test.
+// RAW string from docs/ship-skills.csv (Chakara, second_passive_skill_text).
 // ---------------------------------------------------------------------------
-describe('buildShipAbilities — Chakara start-of-round highest-speed damage (SP-M M1 Task 6)', () => {
-    // Chakara p4 RAW: "This Unit starts each round with Attack Up II and Defense Up II for 1 turn
-    // if it has the lowest speed among all Allies. Then, deals 60% damage to the highest Speed
-    // Enemy." Default `ship()` helper seeds refits: [{}, {}, {}, {}] (4 refits) → thirdPassiveSkillText
-    // (R4, refit-active) is the active passive per getShipSkillRows.
+describe('buildShipAbilities — Chakara start-of-round highest-speed damage', () => {
+    // Chakara R2 passive RAW: "At the start of the round, if this Unit has the lowest speed among
+    // all allies, it gains Attack Up II and Defense Up II for 1 turn. Then deals 60% damage to the
+    // enemy with the highest speed." Default `ship()` helper seeds refits: [{}, {}, {}, {}]
+    // (4 refits) → thirdPassiveSkillText (R4, refit-active) is the active passive per
+    // getShipSkillRows.
     const chakaraP4 = () =>
         ship({
             thirdPassiveSkillText:
-                'This Unit starts each round with <unit-skill>Attack Up II</unit-skill> and <unit-skill>Defense Up II</unit-skill> for 1 turn if it has the lowest speed among all Allies. Then, deals <unit-damage>60% damage</unit-damage> to the highest Speed Enemy.',
+                'At the start of the round, if this Unit has the lowest speed among all allies, it gains <unit-skill>Attack Up II</unit-skill> and <unit-skill>Defense Up II</unit-skill> for 1 turn. Then deals <unit-damage>60% damage</unit-damage> to the enemy with the highest speed.',
         });
 
     it('the round-boundary damage ability carries trigger start-of-round, target enemy-highest-speed, multiplier 60', () => {
@@ -5237,7 +5238,7 @@ describe('buildShipAbilities — PR5 Finding 4 Isha/Guardian reactive-heal gates
         const s = ship({
             refits: [{}, {}] as Ship['refits'],
             secondPassiveSkillText:
-                'At the start of the round this Unit gains <unit-skill>Offensive Affinity Override</unit-skill>.<br />If Nayra is on the same team, it also gains <unit-skill>Defensive Affinity Override</unit-skill>.<br /><br />When directly damaged, this Unit <unit-damage>repairs 3%</unit-damage> of its max HP, but when critcally hit, it instead <unit-damage>repairs 6%</unit-damage> of its max HP.',
+                'At the start of the round this Unit gains <unit-skill>Offensive Affinity Override</unit-skill>. If Nayra is on the same team, it also gains <unit-skill>Defensive Affinity Override</unit-skill>.<br /><br />When directly damaged, this Unit <unit-damage>repairs 3%</unit-damage> of its max HP, but when critcally hit, it instead <unit-damage>repairs 6%</unit-damage> of its max HP.',
         });
         const passive = slot(buildShipAbilities(s).slots, 'passive')!;
         const heals = passive.abilities.filter((a) => a.type === 'heal');

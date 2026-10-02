@@ -891,9 +891,9 @@ describe('confirm-GREEN-only — locked FPs', () => {
     // ── Rikra: clause-scoping — the Taunt/Provoke gate scopes the damage bonus, not the buff ──
     // Verbatim from docs/ship-skills.csv (charge_skill_text field).
     const RIKRA_CHARGE =
-        'This Unit gains <unit-skill>Defense Up II</unit-skill> for 2 turns, and deals <unit-damage>180% damage</unit-damage> with additional <unit-damage>80%</unit-damage> damage against Taunted or Provoked enemies.';
+        'This Unit gains <unit-skill>Defense Up II</unit-skill> for 2 turns and deals <unit-damage>180% damage</unit-damage> with an additional <unit-damage>80% damage</unit-damage> to enemies affected by <unit-skill>Taunt</unit-skill> or <unit-skill>Provoke</unit-skill>.';
 
-    it('Rikra: charged "gains Defense Up II ... deals 180% damage with additional 80% damage against Taunted or Provoked enemies" grants Defense Up II unconditionally — only the damage bonus is Taunt/Provoke-gated (FP: correct clause scoping)', () => {
+    it('Rikra: charged "gains Defense Up II ... deals 180% damage with an additional 80% damage to enemies affected by Taunt or Provoke" grants Defense Up II unconditionally — only the damage bonus is Taunt/Provoke-gated (FP: correct clause scoping)', () => {
         const abilities = abilitiesFor(
             { chargeSkillText: RIKRA_CHARGE, chargeSkillCharge: 2 },
             'charged'
@@ -901,7 +901,7 @@ describe('confirm-GREEN-only — locked FPs', () => {
         const buff = abilities.find(
             (a) => a.config.type === 'buff' && a.config.buffName === 'Defense Up II'
         );
-        // FP: "against Taunted or Provoked enemies" grammatically attaches only to the trailing
+        // FP: "to enemies affected by Taunt or Provoke" grammatically attaches only to the trailing
         // damage clause, not to the co-located "gains Defense Up II" grant earlier in the
         // sentence. buildShipAbilities scopes it correctly: the buff builds fully unconditional.
         expect(buff?.conditions).toEqual([]);
@@ -953,9 +953,9 @@ describe('confirm-GREEN-only — locked FPs', () => {
     // ── Valkyrie: the passive's "Echoing Burst explodes" REFERENCE is parser-guard-filtered ──
     // Verbatim from docs/ship-skills.csv (second_passive_skill_text field).
     const VALKYRIE_P2 =
-        'This Unit gains <unit-skill>Speed Up II</unit-skill> for 1 turn at the start of the round.<br /><br />When an <unit-aid>Echoing Burst</unit-aid> explodes on an enemy, this Unit and the ally with the lowest current health percentage <unit-damage>repair 5%</unit-damage> of damage dealt.<br /><br />This Unit starts combat fully Charged.';
+        'This Unit ignores <unit-skill>Taunt</unit-skill> and <unit-skill>Provoke</unit-skill> effects and at the start of the round, this Unit gains <unit-skill>Speed Up II</unit-skill> for 1 turn. <br /><br />When an <unit-skill>Echoing Burst</unit-skill> explodes on an enemy, the Unit and the ally with the lowest current health percentage <unit-damage>repair 5%</unit-damage> of the damage dealt.<br /><br />This Unit starts combat <unit-skill>fully charged</unit-skill>.';
 
-    it('Valkyrie: passive "When an Echoing Burst explodes on an enemy, ... repair 5% of damage dealt" does NOT mint a second accumulate-detonate application — it is a reactive heal off the Echoing Burst detonation trigger (FP: parser-guard-filtered)', () => {
+    it('Valkyrie: passive "When an Echoing Burst explodes on an enemy, ... repair 5% of the damage dealt" does NOT mint a second accumulate-detonate application — it is a reactive heal off the Echoing Burst detonation trigger (FP: parser-guard-filtered)', () => {
         const abilities = abilitiesFor({ secondPassiveSkillText: VALKYRIE_P2 }, 'passive');
         // FP: the passive merely REFERENCES an Echoing Burst detonating (to react with a heal);
         // it does not itself INFLICT Echoing Burst, so it must not mint its own

@@ -6,8 +6,9 @@
  *    If an ally has less than 40% HP, it grants that ally Cheat Death."
  *
  * Owner ruling (2026-10-02): the pattern (allies + Pattern-Circle-Support-Range-1, anchored on
- * Hermes) targets Hermes and every adjacent ally EQUALLY. The text parses to `charge|all-allies`
- * plus one `all-allies` Cheat Death grant carrying `recipientFilter: { hpBelowPct: 40 }`.
+ * Hermes) targets Hermes and every adjacent ally EQUALLY — so "an ally" is each of them. The text
+ * parses to `charge|all-allies` plus one `all-allies` Cheat Death grant carrying
+ * `recipientFilter: { hpBelowPct: 40 }`.
  *
  * WHICH HP (user ruling 2026-10-02): each recipient's HP BEFORE this cast's repair lands — an
  * exception to the written-clause-order rule, since the text writes the repair first.
@@ -28,7 +29,7 @@
  * Board (player side): Hermes at M3. His pattern from M3 covers M3, M2, M4, T2, T3, B2, B3. A at
  * M4 and B at T3 are inside; C at T4 is outside. The enemy is inert (attack 0, slowest), so the
  * only HP movement in round 1 is Hermes's repair. Real parsed charged (buildShipAbilities on the
- * verbatim texts), real engine (runCombat), `mode: 'battle'` so the repair lands on every
+ * verbatim text), real engine (runCombat), `mode: 'battle'` so the repair lands on every
  * recipient's own HP.
  */
 import { describe, it, expect, beforeEach } from 'vitest';

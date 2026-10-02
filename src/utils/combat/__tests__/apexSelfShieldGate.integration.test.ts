@@ -1,8 +1,6 @@
 /**
- * apexSelfShieldGate.integration.test.ts — ship-kit Wave 4, Task 3.
- *
- * APEX's charged skill (docs/ship-skills.csv, charge_skill_text): "...If this Unit has Shield,
- * the primary target is inflicted with Disable for 2 turns." Previously `detectGrantConditions`
+ * APEX's charged skill (docs/ship-skills.csv, charge_skill_text): "...If this Unit has an active
+ * shield, the primary target is inflicted with Disable for 2 turns." Previously `detectGrantConditions`
  * had no `self-shield` subject, so the Disable debuff (and its control twin, which inherits the
  * debuff's conditions per buildShipAbilities.ts) built with NO conditions — Disable
  * inflicted on every charged cast regardless of whether APEX actually held a shield.
@@ -36,7 +34,7 @@ type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 
 // Verbatim from docs/ship-skills.csv (charge_skill_text field, APEX row).
 const APEX_CHARGE =
-    'This Unit deals <unit-damage>220% damage</unit-damage> and inflicts <unit-skill>Attack Down II</unit-skill> and <unit-skill>Out. Damage Down II</unit-skill> for 2 turns. If this Unit has Shield, the primary target is inflicted with <unit-skill>Disable</unit-skill> for 2 turns.';
+    'This Unit deals <unit-damage>220% damage</unit-damage> and inflicts <unit-skill>Attack Down II</unit-skill> and <unit-skill>Out. Damage Down II</unit-skill> for 2 turns. If this Unit has an active shield, the primary target is inflicted with <unit-skill>Disable</unit-skill> for 2 turns.';
 
 function apexShip(): Ship {
     return {

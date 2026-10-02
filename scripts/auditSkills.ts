@@ -434,7 +434,7 @@ const TRIGGER_RE =
 //     this alternation were removed; Crocus's crit-DoT reaction is modeled as on-ally-crit-dot)
 //
 // HP-threshold nuance: the reactive "when HP drops/falls below N%" CROSSING
-// grants (Tycho/Shelter/Los/Kafa/Redeemer) AND Hermes's "If the target has less than N% HP"
+// grants (Tycho/Shelter/Los/Kafa/Redeemer) AND Hermes's "If an ally has less than N% HP"
 // Cheat-Death gate are parser-modeled (on-hp-threshold-crossed trigger / per-recipient
 // `recipientFilter`), so their effects never reach `ungatedEffects` and any that DOES parse ungated is
 // flagged by the detectHpCrossingTrigger / detectTargetHpGate parity guards in `ungatedFinding`
@@ -492,7 +492,7 @@ export function ungatedFinding(abilities: Ability[], plain: string): string | nu
         if (detectDamageReactionTrigger(plain, namePos)) return clause.trim().slice(0, 160);
         // Parity guard: "when HP drops/falls below N%" crossing reactives
         // (Tycho/Shelter/Los/Kafa/Redeemer) ride the LIVE on-hp-threshold-crossed trigger, and
-        // Hermes's "If the target has less than N% HP" Cheat-Death grant carries a per-recipient
+        // Hermes's "If an ally has less than N% HP" Cheat-Death grant carries a per-recipient
         // HP filter — both are parser-modeled (the trigger/gate IS the gate), so an effect
         // that parsed UNGATED on-cast from a clause either detector classifies is a regression —
         // flag it BEFORE the reactive skip below can hide it. Both detectors do their own

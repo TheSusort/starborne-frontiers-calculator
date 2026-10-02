@@ -448,8 +448,8 @@ export function groupConditions(conditions: Condition[]): Condition[][] {
 /**
  * Indices of the consecutive `anyOf` OR-group containing `idx`. A non-anyOf condition is its
  * own singleton group → returns just [idx]. Mirrors groupConditions' consecutive-run grouping.
- * Lets a scaling source that is ONE member of an OR-group (Rikra's "against Taunted OR Provoked
- * enemies") scale/gate as the WHOLE group, not just its first member. Inert for the
+ * Lets a scaling source that is ONE member of an OR-group (Rikra's "to enemies affected by Taunt
+ * OR Provoke") scale/gate as the WHOLE group, not just its first member. Inert for the
  * single-condition scaling every existing parser-emitted / editor-built ability uses.
  */
 export function anyOfGroupIndices(conditions: Condition[], idx: number): number[] {
