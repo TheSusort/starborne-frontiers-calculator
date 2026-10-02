@@ -44,6 +44,7 @@ import {
     detectAllyInflictsGrantTrigger,
     detectOtherAllyInflictsGrantTrigger,
     detectDebuffInflictionVerb,
+    debuffTriggerVerb,
     detectInflictedStatusFilter,
     detectPreCombatBuffTrigger,
     detectPreCombatShieldTrigger,
@@ -2581,6 +2582,15 @@ function abilitiesFromText(
                 // "applied" counterpart exists for this detector to miss).
                 ...(reactiveTrigger === 'on-ally-debuffed'
                     ? { triggerApplicationFilter: 'inflict' as const }
+                    : {}),
+                // APEX: the shield's own sentence carries the trigger clause, so its verb is the
+                // filter — catalogue "gets inflicted with a debuff" → 'inflict'; OLD "gets
+                // debuffed" names no verb and stays unfiltered.
+                ...(reactiveTrigger === 'on-debuff-inflicted'
+                    ? (() => {
+                          const verb = debuffTriggerVerb(healSentence);
+                          return verb ? { triggerApplicationFilter: verb } : {};
+                      })()
                     : {}),
                 conditions: healConditions,
                 // Recipient STATE filter ("all allies with Stealth repairs 10% …" — Chimei R2).

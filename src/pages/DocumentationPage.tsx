@@ -2864,7 +2864,12 @@ const DocumentationPage: React.FC = () => {
                                         ability&apos;s editor controls which event activates it.
                                         Triggers the simulator cannot derive (when attacked, ally
                                         destroyed, etc.) are treated as assume-active, preserving
-                                        the existing manual-condition behavior.
+                                        the existing manual-condition behavior. A reaction&apos;s
+                                        own wording decides which debuffs it sees: one that says
+                                        &quot;inflicts a debuff&quot; reacts only to inflicted
+                                        debuffs, and one that says &quot;applying a debuff&quot;
+                                        only to applied ones, such as Provoke, Concentrate Fire or
+                                        the Burner set&apos;s Inferno.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Buff Steal:</span> Skills
@@ -4366,10 +4371,11 @@ const DocumentationPage: React.FC = () => {
                                     <strong>Giant Slayer</strong> (chance to amplify a hit&apos;s
                                     damage against an enemy with higher attack), and{' '}
                                     <strong>Insidiousness</strong> (chance to deal bonus damage when
-                                    you apply a debuff to an enemy: one roll per skill cast, plus
-                                    one for each reaction that inflicts a debuff, from a passive,
-                                    implant or gear set — one reaction landing on two enemies is one
-                                    roll. At most one roll succeeds per skill cast, counting
+                                    you inflict a debuff on an enemy; applied debuffs, such as
+                                    Provoke, Concentrate Fire or the Burner set&apos;s Inferno,
+                                    never roll: one roll per skill cast, plus one for each reaction
+                                    that inflicts a debuff — one reaction landing on two enemies is
+                                    one roll. At most one roll succeeds per skill cast, counting
                                     reactions to an enemy&apos;s skill as part of that skill, and a
                                     successful roll hits every enemy the debuffs reached). Three
                                     heal implants are also modeled: <strong>Second Wind</strong>{' '}

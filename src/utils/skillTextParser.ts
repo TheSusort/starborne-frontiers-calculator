@@ -1690,9 +1690,9 @@ function namesTriggerClauseObject(precedingText: string): boolean {
 const DEBUFF_VERB_RE = /\binflict\w*\b|\bappl(?:y|ies|ying|ied)\b/i;
 /**
  * Resolves a reactive clause's own landing verb for `Ability.triggerApplicationFilter`. Returns
- * undefined when the clause uses neither family (a neutral phrasing like "gets debuffed" (APEX)
- * or "debuffing" (the Insidiousness implant)) — callers leave `triggerApplicationFilter` unset in
- * that case, so the reactive listener fires on either landing, unchanged.
+ * undefined when the clause uses neither family (a neutral phrasing like OLD APEX's "gets
+ * debuffed") — callers leave `triggerApplicationFilter` unset in that case, so the reactive
+ * listener fires on either landing.
  */
 export function debuffTriggerVerb(
     clause: string | null | undefined

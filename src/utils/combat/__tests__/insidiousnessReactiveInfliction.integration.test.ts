@@ -362,13 +362,14 @@ describe('Insidiousness — real Warden kit (OLD R2 text), debuff arm', () => {
         expect(procHits(events, 'attacker', 'hitter')).toEqual([]);
     });
 
-    it('the real implant: one hit in her turn and one in the hitter’s turn', () => {
+    it('the real implant: no hit in her turn, one in the hitter’s turn', () => {
         const events = run(board(wardenSkills([insidiousness()])));
         expect(landings(events, 'attacker', 'hitter', OUT_DD)).toEqual([1, 2, 3]);
-        // Her own turn (Provoke) is one cast: one hit. In the hitter's turn her Corrosion I and
-        // the Out. Damage Down II it sets off are reactions to the hitter's ONE skill, so they
-        // share its cap: one hit (`perCastProcKeys` in triggers.ts).
-        expect(procHits(events, 'attacker', 'hitter')).toEqual([1, 1, 2, 2, 3, 3]);
+        // Her own turn only APPLIES Provoke, so Insidiousness (inflicted debuffs only) does not
+        // roll. In the hitter's turn her inflicted Corrosion I and the Out. Damage Down II it sets
+        // off are reactions to the hitter's ONE skill, so they share its cap: one hit
+        // (`perCastProcKeys` in triggers.ts).
+        expect(procHits(events, 'attacker', 'hitter')).toEqual([1, 2, 3]);
     });
 });
 

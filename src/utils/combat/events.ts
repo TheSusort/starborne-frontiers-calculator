@@ -181,13 +181,11 @@ export type CombatEvent =
           targetId: string;
           round: number;
           buffName: string;
-          /** #590 R3: the landing mechanic this debuff used — `'apply'` lands unconditionally
-           *  (no hacking-vs-security roll; Concentrate Fire, Provoke), `'inflict'` rolled for it.
-           *  Undefined only for a corpus shape that predates this field (treated as rolled — the
-           *  strictly narrower gate at `on-other-ally-debuff-inflicted` is the only consumer that
-           *  cares). `on-other-ally-debuff-inflicted` (Provider — #590) does NOT count an 'apply':
-           *  an applied debuff is not "inflicted" by the game's own wording. `on-debuff-inflicted`
-           *  and `on-ally-debuff-inflicted` are untouched and still count both kinds. */
+          /** The verb this debuff's source text states, which is also its landing mechanic —
+           *  `'apply'` lands unconditionally (no hacking-vs-security roll; Concentrate Fire,
+           *  Provoke), `'inflict'` rolled for it. Undefined only for a corpus shape that predates
+           *  this field (an inflict). Read by the debuff-inflicted trigger family's
+           *  `triggerApplicationFilter` — `passesApplicationFilter`'s doc in triggers.ts. */
           application?: 'inflict' | 'apply';
           /** The slot of the ability that inflicted this debuff: the firing slot on the cast
            *  path, the reactive ability's own slot on a reaction (implants and gear ride the
@@ -252,6 +250,11 @@ export type CombatEvent =
            *  applied line show the tier numeral (corrosion/inferno) via dotTierNumeral. Always set
            *  by the engine; optional so hand-crafted test emits may omit it (→ no numeral shown). */
           tier?: number;
+          /** The verb the DoT's source text states, from its config's `application` — `'apply'`
+           *  for the Burner gear set's "Applies Inferno". A verb stamp ONLY: the DoT drew its
+           *  landing roll either way. Absent → an inflict. Read by the debuff-inflicted trigger
+           *  family's `triggerApplicationFilter` (`passesApplicationFilter` in triggers.ts). */
+          application?: 'inflict' | 'apply';
           /** The applying cast had >= 1 critting hit (per-hit crits). Present only when
            *  true. Executor-applied dots omit it (drain-time has no crit outcome). */
           viaCrit?: boolean;

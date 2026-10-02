@@ -102,12 +102,21 @@ const GEAR_SET_ABILITIES: Partial<
     // amount; it was once per TURN before that), draining through the reactive DoT executor
     // (triggers.ts) which pushes the inferno entry to the attack target (ctx.enemy.id) with
     // sourceId = owner. Re-applies on each such sub-attack (refreshes the 2-turn duration).
+    // `application: 'apply'` is the set text's own verb ("Applies Inferno 1"): reactions that
+    // say "inflicts" (and Insidiousness) do not see it — the dot config's `application` doc.
     BURNER: () => ({
         type: 'dot',
         target: 'enemy',
         trigger: 'on-deal-damage',
         conditions: [],
-        config: { type: 'dot', dotType: 'inferno', tier: 15, stacks: 1, duration: 2 },
+        config: {
+            type: 'dot',
+            dotType: 'inferno',
+            tier: 15,
+            stacks: 1,
+            duration: 2,
+            application: 'apply',
+        },
         autoFilled: true,
     }),
     // Reflect (2pc set): reflect 10% of each direct hit back to the attacker (thorns).
@@ -737,8 +746,10 @@ const IMPLANT_ABILITIES: Partial<Record<string, ImplantAbilityBuilder>> = {
         };
     },
     // D-PR4: reactive-damage-on-debuff implants
-    // Insidiousness: X% chance to deal Y% damage when debuffing an enemy. One roll per skill
-    // cast plus one per reaction firing that cast sets off, at most one success per cast
+    // Insidiousness: X% chance to deal Y% damage when debuffing an enemy. It rolls ONLY on an
+    // INFLICTED debuff, never an applied one (`triggerApplicationFilter: 'inflict'` — a user
+    // ruling, 2026-10-02; the text's "debuffing" names neither verb). One roll per skill cast
+    // plus one per reaction firing that cast sets off, at most one success per cast
     // (`procScope:'per-cast'` — that field's doc has the rule). A successful roll hits each enemy
     // it covers once; the on-debuff-inflicted listener's `debuffVictimId` stamp puts each hit on
     // its own debuffed enemy.
@@ -750,6 +761,7 @@ const IMPLANT_ABILITIES: Partial<Record<string, ImplantAbilityBuilder>> = {
             type: 'damage',
             target: 'enemy',
             trigger: 'on-debuff-inflicted',
+            triggerApplicationFilter: 'inflict',
             conditions: [],
             procChance: pc,
             procScope: 'per-cast',

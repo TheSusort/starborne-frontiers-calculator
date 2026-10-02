@@ -876,7 +876,18 @@ export type AbilityConfig =
           application: 'inflict' | 'apply';
           duration?: number | 'recurring';
       }
-    | { type: 'dot'; dotType: DoTType; tier: number; stacks: number; duration: number }
+    | {
+          type: 'dot';
+          dotType: DoTType;
+          tier: number;
+          stacks: number;
+          duration: number;
+          /** The landing verb the DoT's source text states, read ONLY by the debuff-inflicted
+           *  trigger family's `triggerApplicationFilter` (stamped on `dot-applied`) — the Burner
+           *  gear set's "Applies Inferno 1" sets `'apply'`. It does NOT change how the DoT lands:
+           *  every DoT draws its landing roll whatever this says. Absent → an inflict. */
+          application?: 'inflict' | 'apply';
+      }
     // SP-F F3 (Lingshe charged skill): shrinks every living enemy's PendingBomb.countdown by
     // `turns`; any bomb reaching <= 0 detonates immediately, crediting the bomb's ORIGINAL
     // applier (bomb.sourceId), not this ability's caster. Always hacking-gated at the runtime
@@ -1221,14 +1232,15 @@ export interface Ability {
      *  on critting hits, 'non-crit' only on non-critting hits. Absent → fires on any hit.
      *  Isha parses as a mutually exclusive pair (3% non-crit / 6% crit — "instead"). */
     triggerCritFilter?: 'crit' | 'non-crit';
-    /** Landing-mechanic filter for the debuff-inflicted trigger family (on-debuff-inflicted,
-     *  on-ally-debuff-inflicted, on-other-ally-debuff-inflicted, on-ally-debuffed): 'inflict'
-     *  fires only on a hacking-roll infliction, 'apply' only on an unconditional land (no roll —
-     *  Provoke, Concentrate Fire, Disable). Set by the parser from the clause's own verb
-     *  ("inflicts"/"inflicting" → 'inflict', "applies"/"applying" → 'apply'); absent when the
-     *  clause uses neither (a neutral phrasing like "gets debuffed"/"debuffing" — APEX, the
-     *  Insidiousness implant), which fires on any landing, unchanged. A `dot-applied` event always
-     *  counts as an inflict — see `passesApplicationFilter`'s doc in triggers.ts. */
+    /** Landing-verb filter for the debuff-inflicted trigger family (on-debuff-inflicted,
+     *  on-ally-debuff-inflicted, on-other-ally-debuff-inflicted, on-ally-debuffed, on-debuffed):
+     *  'inflict' fires only on a status whose source text says "inflicts", 'apply' only on one
+     *  whose source says "applies" (Provoke, Concentrate Fire, Disable; the Burner gear set's
+     *  Inferno). Set by the parser from the clause's own verb ("inflicts"/"inflicting" →
+     *  'inflict', "applies"/"applying" → 'apply'); absent when the clause uses neither (a neutral
+     *  phrasing like OLD APEX's "gets debuffed"), which fires on any landing. The Insidiousness
+     *  implant ("When debuffing an enemy") is the one hand-set exception: 'inflict' by user ruling
+     *  (2026-10-02). What each event counts as — `passesApplicationFilter`'s doc in triggers.ts. */
     triggerApplicationFilter?: 'inflict' | 'apply';
     /** Status-FAMILY filter for `on-debuff-inflicted`: the reaction fires only when the landed
      *  status belongs to this family — Lingshe's "When this Unit inflicts a Bomb it gains

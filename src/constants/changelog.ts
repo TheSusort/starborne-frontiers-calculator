@@ -17,7 +17,9 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator and DPS calculator: Ripper now gains Marauder Rage each time his debuff lands.',
     "Combat simulator and DPS calculator: Judge's defense penetration is no longer counted twice.",
     'Combat simulator: Lingshe gains Stealth only when one of her Bombs lands.',
-    'Combat simulator and DPS calculator: Insidiousness also rolls for debuffs a passive inflicts in reaction.',
+    'Combat simulator and DPS calculator: Insidiousness also rolls when a passive inflicts a debuff in reaction.',
+    'Combat simulator and DPS calculator: Insidiousness now rolls only on inflicted debuffs, not applied ones.',
+    "Combat simulator and DPS calculator: Burner's Inferno no longer triggers passives that react to inflicted debuffs.",
     "Combat simulator and healing calculator: Hermes's charged skill now adds a charge to every ally in range.",
     'Combat simulator and healing calculator: Hermes now grants Cheat Death to each ally in range below 40%.',
 ];

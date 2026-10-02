@@ -514,21 +514,19 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
 
 /**
  * Whether a landed debuff/DoT satisfies a reactive ability's `triggerApplicationFilter` — the
- * parser-derived split for a clause whose own text says "inflict" (gated by the hacking-vs-
- * security roll) vs "apply" (lands unconditionally, no roll — Provoke, Concentrate Fire, Disable).
+ * split between a status whose source text says "inflicts" and one whose source says "applies"
+ * (#593; the user's general rule: a reaction's own verb decides which of the two it sees).
+ * `application` is the landed event's own stamp of its source's verb:
+ *  - `debuff-applied`: the debuff config's `application`, which also decides how it lands
+ *    ('apply' = no hacking-vs-security roll — Provoke, Concentrate Fire, Disable).
+ *  - `dot-applied`: the DoT config's `application` — set only where the text says "applies" (the
+ *    Burner gear set's Inferno). It is a verb stamp only: every DoT still draws its landing roll.
+ * An event with no `application` counts as an inflict (a cast DoT — every corpus DoT clause says
+ * "inflicts" — or a debuff shape predating #592, matching the `application === 'apply'` landing
+ * branches in playerTurn.ts and this file's reactive debuff executor).
  *
- * A `dot-applied` event never carries `application`: every DoT landing site draws a roll
- * (playerTurn.ts's cast-path `roundDebuffLanded`, its splash arm's hardcoded `'inflict'` decision,
- * and the reactive single-victim/fan-out arms' own `debuffLandingGate` draws), and no DoT
- * AbilityConfig variant carries an `application` field at all — so a DoT always counts as an
- * inflict. A `debuff-applied` event with no `application` is a corpus shape predating #592 and is
- * likewise treated as an inflict (matching `playerTurn.ts`'s `application === 'apply' ? ... :
- * debuffLandingGate(...)` branch and `cfg.application !== 'apply'` at this file's reactive debuff
- * executor — both treat anything other than `'apply'` as a drawn roll).
- *
- * `filter === undefined` (a clause with no "inflict"/"apply" verb of its own — APEX's "gets
- * debuffed", the Insidiousness implant's "debuffing") takes neither reading and passes
- * unconditionally.
+ * `filter === undefined` (a clause with no "inflict"/"apply" verb of its own — OLD APEX's "gets
+ * debuffed", Firewall's "when debuffed") takes neither reading and passes unconditionally.
  */
 function passesApplicationFilter(
     filter: 'inflict' | 'apply' | undefined,
@@ -907,7 +905,7 @@ export function registerReactiveListeners(args: {
                             ) &&
                             passesApplicationFilter(
                                 ra.ability.triggerApplicationFilter,
-                                undefined
+                                e.application
                             ) &&
                             passesStatusFilter(
                                 ra.ability.triggerStatusFilter,
@@ -962,7 +960,10 @@ export function registerReactiveListeners(args: {
                         if (
                             !isOpposing(e.sourceId) &&
                             !(e.sourceId === ownerId && e.viaAllyDebuffInflictedReaction) &&
-                            passesApplicationFilter(ra.ability.triggerApplicationFilter, undefined)
+                            passesApplicationFilter(
+                                ra.ability.triggerApplicationFilter,
+                                e.application
+                            )
                         )
                             enqueue({
                                 ...intent,
@@ -1017,12 +1018,15 @@ export function registerReactiveListeners(args: {
                     });
                     bus.on('dot-applied', (e) => {
                         // An ally's DoT landing counts as a debuff inflicted — same guard as the
-                        // debuff-applied arm above (a DoT always passes an 'inflict' filter; see
-                        // passesApplicationFilter's doc).
+                        // debuff-applied arm above (an applied DoT — Burner's Inferno — does not;
+                        // see passesApplicationFilter's doc).
                         if (
                             isSameSideAlly(e.sourceId, ownerId) &&
                             !e.viaOtherAllyDebuffInflictedReaction &&
-                            passesApplicationFilter(ra.ability.triggerApplicationFilter, undefined)
+                            passesApplicationFilter(
+                                ra.ability.triggerApplicationFilter,
+                                e.application
+                            )
                         )
                             enqueue({
                                 ...intent,
@@ -4925,6 +4929,7 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 dotType: cfg.dotType,
                 stacks: cfg.stacks,
                 tier: cfg.tier,
+                ...(cfg.application !== undefined ? { application: cfg.application } : {}),
                 sourceSlot: intent.sourceSlot,
                 ...debuffInflictedReactionChainStamp(intent),
                 ...reactionFiringStamp(ctx),

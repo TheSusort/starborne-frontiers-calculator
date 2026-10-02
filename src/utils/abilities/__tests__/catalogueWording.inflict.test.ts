@@ -3,20 +3,6 @@ import { parseSlot, sigs, canonical, type RewordPair } from './helpers/catalogue
 
 const PAIRS: RewordPair[] = [
     {
-        ship: 'APEX',
-        slot: 'passive',
-        old: 'This Unit gains a <unit-damage>Shield equal to 3%</unit-damage> of their Max HP when an enemy gets debuffed.',
-        new: 'This Unit gains a <unit-damage>shield equal to 3%</unit-damage> of their max HP when an enemy gets inflicted with a <unit-aid>debuff</unit-aid>.',
-        expects: 'shield|self|on-debuff-inflicted|shield',
-    },
-    {
-        ship: 'APEX',
-        slot: 'passive',
-        old: 'This Unit gains a <unit-damage>Shield equal to 3%</unit-damage> of their Max HP when an enemy gets debuffed.<br /><br />If that enemy has 3 or more debuffs, Inflict <unit-skill>Block Shield</unit-skill> for 1 turn.',
-        new: 'This Unit gains a <unit-damage>shield equal to 3%</unit-damage> of their max HP when an enemy gets inflicted with a <unit-aid>debuff</unit-aid>.<br /><br />If that enemy has 3 or more <unit-aid>debuffs</unit-aid> on a <unit-aid>debuff</unit-aid> infliction, this Unit inflicts <unit-skill>Block Shield</unit-skill> for 1 turn.',
-        expects: 'shield|self|on-debuff-inflicted|shield',
-    },
-    {
         ship: 'Defiant',
         slot: 'passive',
         old: 'This Unit gains <unit-damage>Shield equal to 30%</unit-damage> of its Max HP when applying Stasis.',
@@ -114,6 +100,46 @@ describe('inflict/apply vocabulary — catalogue wording parses like ours', () =
         const before = parseSlot(slot, old);
         expect(sigs(before)).toContain(expects); // the reference parse is not vacuous
         expect(canonical(parseSlot(slot, next))).toEqual(canonical(before));
+    });
+});
+
+// APEX: the catalogue adds a verb the OLD text lacks — OLD "when an enemy gets debuffed" names
+// neither verb (unfiltered), the catalogue's "when an enemy gets inflicted with a debuff" says
+// "inflicted", so its shield reacts only to inflicted debuffs (#593's split; the user's rule that
+// a reaction's own verb decides what it sees). Otherwise the two parse alike.
+const APEX_PAIRS: RewordPair[] = [
+    {
+        ship: 'APEX',
+        slot: 'passive',
+        old: 'This Unit gains a <unit-damage>Shield equal to 3%</unit-damage> of their Max HP when an enemy gets debuffed.',
+        new: 'This Unit gains a <unit-damage>shield equal to 3%</unit-damage> of their max HP when an enemy gets inflicted with a <unit-aid>debuff</unit-aid>.',
+        expects: 'shield|self|on-debuff-inflicted|shield',
+    },
+    {
+        ship: 'APEX',
+        slot: 'passive',
+        old: 'This Unit gains a <unit-damage>Shield equal to 3%</unit-damage> of their Max HP when an enemy gets debuffed.<br /><br />If that enemy has 3 or more debuffs, Inflict <unit-skill>Block Shield</unit-skill> for 1 turn.',
+        new: 'This Unit gains a <unit-damage>shield equal to 3%</unit-damage> of their max HP when an enemy gets inflicted with a <unit-aid>debuff</unit-aid>.<br /><br />If that enemy has 3 or more <unit-aid>debuffs</unit-aid> on a <unit-aid>debuff</unit-aid> infliction, this Unit inflicts <unit-skill>Block Shield</unit-skill> for 1 turn.',
+        expects: 'shield|self|on-debuff-inflicted|shield',
+    },
+];
+
+describe('inflict/apply vocabulary — APEX: the catalogue verb adds the inflict filter', () => {
+    it.each(APEX_PAIRS)('$ship $slot', ({ slot, old, new: next, expects }) => {
+        const before = parseSlot(slot, old);
+        const after = parseSlot(slot, next);
+        expect(sigs(before)).toContain(expects);
+        const shieldOf = (abilities: typeof before) =>
+            abilities.find((a) => a.trigger === 'on-debuff-inflicted');
+        expect(shieldOf(before)?.triggerApplicationFilter).toBeUndefined();
+        expect(shieldOf(after)?.triggerApplicationFilter).toBe('inflict');
+        const stripFilter = (abilities: typeof before) =>
+            abilities.map((a) => {
+                const { triggerApplicationFilter: _drop, ...rest } = a;
+                void _drop;
+                return rest;
+            });
+        expect(canonical(stripFilter(after))).toEqual(canonical(before));
     });
 });
 
