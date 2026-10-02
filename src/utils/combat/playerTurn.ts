@@ -1042,11 +1042,15 @@ function foldTimedEnemyDebuffs(args: {
  * Recipients follow the ability's `target` through `resolveDebuffRecipientIds`, the resolver every
  * direct enemy clause uses: 'all-enemies' fans over the cast's pattern footprint (`aoeVictimIds`,
  * living victims only — `footprintVictims`), 'enemy' is the primary alone, and a non-positional
- * cast with no footprint falls back to the primary. The primary's containers are the loose
+ * cast with no footprint falls back to the primary. A POSITIONAL cast with no footprint reaches
+ * nobody with an 'all-enemies' extension — the debuff resolver's answer, unlike the on-cast purge
+ * loop's primary fallback. The primary's containers are the loose
  * `corrosionEntries`/`infernoEntries`; every other recipient's come off `opposingVictimById`.
  *
- * Runs BEFORE `applyNewDoTs`, so a DoT this same cast inflicts is never extended, whichever side
- * of the extension clause it is written on.
+ * Runs BEFORE `applyNewDoTs`, so a DoT this same cast inflicts is never extended.
+ * KNOWN GAP: that departs from the locked written-order rule — a DoT whose clause is written
+ * BEFORE the extension clause should be extended. No ship in either corpus reaches it: no cast
+ * carries an active-scope extend-dot alongside an on-cast DoT in the same slot.
  *
  * Each ability's gate — its conditions against ctx (binary roundCrit), then for a
  * `chanceFromCritPower` extension one `extendChanceGate(critPowerFactor)` draw — is taken ONCE per

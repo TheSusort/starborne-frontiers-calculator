@@ -10,8 +10,8 @@
  *   (1) the charged hits 3 enemies in its cone, each carrying Corrosion → all three +1 turn;
  *   (2) an enemy outside the cone carrying Corrosion → not extended (same board as (1));
  *   (3) the old `enemy`-targeted text → the primary only;
- *   (4) a DoT the SAME cast inflicts is not extended, whichever side of the extension clause it
- *       is written on — the extension resolves before the cast lands its own DoTs;
+ *   (4) a DoT the SAME cast inflicts is not extended — the extension resolves before the cast
+ *       lands its own DoTs (KNOWN GAP for the dot-first order; see the describe block);
  *   (5) an enemy in the cone that died earlier in the round is skipped; the living ones still
  *       extend;
  *   (6) an enemy-side Provider mirrors (1)/(2) onto the player board.
@@ -302,8 +302,12 @@ describe('Provider charged — DoT extension across the pattern (player side)', 
 
 describe('Provider charged — a DoT the same cast inflicts is not extended (4)', () => {
     // Hand-authored charged skills: the parsed catalogue charged with Provider's own Corrosion
-    // (tier 6, primary only) written BEFORE or AFTER the extension clause. Either way his fresh
-    // Corrosion ticks its plain duration while the seeded one on the same victim gains a turn.
+    // (tier 6, primary only) written BEFORE or AFTER the extension clause. The engine extends
+    // before the cast lands its own DoTs, so his fresh Corrosion ticks its plain duration while the
+    // seeded one on the same victim gains a turn.
+    // KNOWN GAP: the dot-first arm departs from the locked written-order rule — a DoT written
+    // BEFORE the extension clause should be extended. No ship in either corpus reaches it: no cast
+    // carries an active-scope extend-dot alongside an on-cast DoT in the same slot.
     const charged = (order: 'dot-first' | 'extend-first'): Skill => {
         const s = parsedCharged(PROVIDER_CHARGED_CATALOGUE);
         const own = corrosion('enemy', OWN_TIER, 'own-corrosion');
