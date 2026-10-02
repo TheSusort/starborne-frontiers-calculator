@@ -14,8 +14,8 @@ export interface AllowEntry {
 export const ALLOWLIST: AllowEntry[] = [
     {
         ship: 'Lingshe',
-        rules: ['detonation', 'ungated-effect-with-trigger'],
-        reason: 'detonation: crit-scaling Bomb detonation (charged skill\'s countdown-reduction rider is now modelled — SP-F F3, `bomb-countdown-reduce` — but the crit-power-scaled "detonation damage" modifier on passive2/3 is not a detonate-dot consumption). The passive2/3 "gains Stealth on detonating a Bomb" grant carries an on-bomb-detonated trigger (not ungated). ungated-effect-with-trigger: passive1\'s "When this Unit inflicts a Bomb it gains Stealth" is a reactive on-self-inflicting-a-DoT trigger the parser does not derive (distinct from the detonate trigger above) — modelled manually.',
+        rules: ['detonation'],
+        reason: 'detonation: crit-scaling Bomb detonation (charged skill\'s countdown-reduction rider is modelled as `bomb-countdown-reduce`, but the crit-power-scaled "detonation damage" modifier on passive2/3 is not a detonate-dot consumption). The passive2/3 "gains Stealth on detonating a Bomb" grant rides on-self-bomb-detonated, and passive1\'s "When this Unit inflicts a Bomb it gains Stealth" rides on-debuff-inflicted narrowed to Bomb (triggerStatusFilter).',
     },
 
     // ── ungated-effect-with-trigger: intentionally not auto-gated ───────────────

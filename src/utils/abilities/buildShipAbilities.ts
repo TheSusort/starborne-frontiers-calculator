@@ -44,6 +44,7 @@ import {
     detectAllyInflictsGrantTrigger,
     detectOtherAllyInflictsGrantTrigger,
     detectDebuffInflictionVerb,
+    detectInflictedStatusFilter,
     detectPreCombatBuffTrigger,
     detectPreCombatShieldTrigger,
     detectDamageReactionTrigger,
@@ -3695,6 +3696,16 @@ export function buildShipAbilities(rawShip: Ship): ShipSkills {
             ) {
                 const verb = detectDebuffInflictionVerb(rowText, buff.buffName, occurrence);
                 if (verb) ability.triggerApplicationFilter = verb;
+            }
+            // "When this Unit inflicts a Bomb" (Lingshe) reacts to that family landing only
+            // (Ability.triggerStatusFilter's doc), read from the same clause as the trigger.
+            if (rowText && reactiveTrigger === 'on-debuff-inflicted') {
+                const statusFilter = detectInflictedStatusFilter(
+                    rowText,
+                    buff.buffName,
+                    occurrence
+                );
+                if (statusFilter) ability.triggerStatusFilter = statusFilter;
             }
             // Oleander's "once per ally per round" RoT grant: a DEDICATED cap (not the plain
             // oncePerRound flag) so a different ally inflicting a debuff still procs even if

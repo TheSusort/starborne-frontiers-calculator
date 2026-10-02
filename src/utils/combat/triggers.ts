@@ -36,7 +36,12 @@ import {
 // import targetCarriesBlockDebuff back. Both are used only inside function bodies (never at
 // top-level evaluation), so there is no initialization-order hazard.
 // eslint-disable-next-line import/no-cycle
-import { targetCarriesBlockDebuff, emitBlockDebuffResist, dotResistLabel } from './debuffImmunity';
+import {
+    targetCarriesBlockDebuff,
+    emitBlockDebuffResist,
+    dotResistLabel,
+    dotFamilyLabel,
+} from './debuffImmunity';
 // eslint-disable-next-line import/no-cycle
 import { recipientCarriesBlockBuff } from './blockBuffBuffs';
 // Call-time-safe cycle (same shape as blockBuffBuffs.ts above): barrierRecharging imports
@@ -62,6 +67,7 @@ import {
     DEFAULT_ENEMY_TARGET,
     RegisteredAbilityStatus,
     StatusEngine,
+    deriveFamilyKey,
 } from './statusEngine';
 // Type-only import (erased at runtime) → no circular-import cycle even though playerTurn.ts
 // imports buildActorConditionContext/ReactiveAbility from this module.
@@ -373,6 +379,8 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
  *  - on-debuff-inflicted → debuff-applied | dot-applied with `sourceId === ownerId`.
  *    Cardinality follows the LANDING, which is once per SUB-ATTACK for a direct debuff clause,
  *    not once per cast: an N-hit cast that lands its clause every hit enqueues N times.
+ *    `triggerStatusFilter` narrows it to one status family (`passesStatusFilter` — Lingshe's
+ *    "inflicts a Bomb").
  *  - on-ally-debuff-inflicted → debuff-applied OR dot-applied where the source is same-side
  *    (not opposing) — owner included, see the ruling above. For the PLAYER registration this is
  *    any PLAYER's infliction; for the ENEMY registration this is any enemy actor's infliction. A
@@ -506,6 +514,18 @@ function passesApplicationFilter(
     if (filter === undefined) return true;
     const inflicted = application !== 'apply';
     return filter === 'inflict' ? inflicted : !inflicted;
+}
+
+/**
+ * Whether a landed status satisfies a reactive ability's `triggerStatusFilter` (see that field's
+ * doc in types/abilities.ts). `landedFamily` is the landed status's tierless family name — the
+ * caller derives it from the event it holds: `dotFamilyLabel(e.dotType)` for a `dot-applied`,
+ * `deriveFamilyKey(e.buffName).familyKey` for a `debuff-applied`. Exact, case-sensitive compare:
+ * the parser writes the same capitalised family names `dotFamilyLabel` produces. Absent filter →
+ * every landed status passes.
+ */
+function passesStatusFilter(filter: string | undefined, landedFamily: string): boolean {
+    return filter === undefined || filter === landedFamily;
 }
 
 export function registerReactiveListeners(args: {
@@ -815,6 +835,10 @@ export function registerReactiveListeners(args: {
                             passesApplicationFilter(
                                 ra.ability.triggerApplicationFilter,
                                 e.application
+                            ) &&
+                            passesStatusFilter(
+                                ra.ability.triggerStatusFilter,
+                                deriveFamilyKey(e.buffName).familyKey
                             )
                         )
                             enqueue({
@@ -825,7 +849,14 @@ export function registerReactiveListeners(args: {
                     bus.on('dot-applied', (e) => {
                         if (
                             e.sourceId === ownerId &&
-                            passesApplicationFilter(ra.ability.triggerApplicationFilter, undefined)
+                            passesApplicationFilter(
+                                ra.ability.triggerApplicationFilter,
+                                undefined
+                            ) &&
+                            passesStatusFilter(
+                                ra.ability.triggerStatusFilter,
+                                dotFamilyLabel(e.dotType)
+                            )
                         )
                             enqueue({
                                 ...intent,

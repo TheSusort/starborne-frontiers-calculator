@@ -1226,6 +1226,16 @@ export interface Ability {
      *  Insidiousness implant), which fires on any landing, unchanged. A `dot-applied` event always
      *  counts as an inflict — see `passesApplicationFilter`'s doc in triggers.ts. */
     triggerApplicationFilter?: 'inflict' | 'apply';
+    /** Status-FAMILY filter for `on-debuff-inflicted`: the reaction fires only when the landed
+     *  status belongs to this family — Lingshe's "When this Unit inflicts a Bomb it gains
+     *  Stealth" sets `'Bomb'`, so a Defense Down she lands wakes nothing. Matched by family, not
+     *  exact name ("a Bomb" means any Bomb tier), unlike `requireDamagedAllyStatus`, which names a
+     *  status an ally HOLDS: a `dot-applied` compares its DoT family label (`dotFamilyLabel`), a
+     *  `debuff-applied` its name's family (`deriveFamilyKey`). Composes with
+     *  `triggerApplicationFilter` (both must pass). Set by the parser from the clause's own
+     *  object; absent → any landed status, which is what every other ability carries. Read by
+     *  `passesStatusFilter` in triggers.ts. */
+    triggerStatusFilter?: string;
     /** Ally-role filter for on-ally-attacked (Graphite "when an ally attacker or
      *  debuffer is directly damaged"): the reaction fires only when the DAMAGED
      *  ally's ship role matches one of these categories (prefix match over

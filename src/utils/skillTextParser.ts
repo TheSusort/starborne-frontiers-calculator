@@ -1637,6 +1637,31 @@ const APPLYING_DEBUFF_RE = /\b(?:upon|on|after|when)\s+(?:inflicting|applying)\s
 // different reaction with its own parse.
 // Consumed by detectReactiveTrigger and the passive-debuff gate near ON_DEBUFF_INFLICTION_RE.
 const SELF_INFLICTS_DEBUFF_RE = /\b(?:when\s+this\s+unit|after\s+it)\s+inflicts\s+(?:a\s+)?debuff/i;
+// SELF-subject "When this Unit inflicts a Bomb" (Lingshe) → on-debuff-inflicted narrowed to the
+// named DoT family (`Ability.triggerStatusFilter`, via detectInflictedStatusFilter). The article
+// is required: Wisteria's "When this Unit inflicts Corrosion with a critical hit" (no article) is
+// a crit-qualified reaction with its own parse (on-self-crit-dot), and Defiant's "after it
+// inflicts Stasis" rides on-stasis-applied. Group 1 is the family word.
+const SELF_INFLICTS_DOT_FAMILY_RE =
+    /\bwhen\s+this\s+unit\s+inflicts\s+an?\s+(bomb|corrosion|inferno)\b/i;
+
+/**
+ * The status family a "When this Unit inflicts a <DoT family>" clause names, scoped to
+ * `buffName`'s own clause (the same resolution detectReactiveTrigger uses, so the trigger and its
+ * filter come from one sentence) — capitalised as `dotFamilyLabel` writes it ('Bomb'). Undefined
+ * for every other clause.
+ */
+export function detectInflictedStatusFilter(
+    text: string | null | undefined,
+    buffName: string,
+    occurrenceIndex = 0
+): string | undefined {
+    if (!text || !buffName) return undefined;
+    const m = SELF_INFLICTS_DOT_FAMILY_RE.exec(resolveBuffClause(text, buffName, occurrenceIndex));
+    if (!m) return undefined;
+    const family = m[1].toLowerCase();
+    return family.charAt(0).toUpperCase() + family.slice(1);
+}
 
 // A status named as the OBJECT of a reaction's own trigger clause — "after it inflicts <Stasis>",
 // "When this Unit inflicts a <Bomb>", "When this Unit inflicts <Corrosion> with a critical hit" —
@@ -1727,6 +1752,8 @@ const ENEMY_GAINS_TAUNT_RE = /\bwhen\s+an?\s+enemy\b[^.]*?\bgains?\b[^.]*?\btaun
  *  - "on inflicting a debuff" / "upon applying a debuff" → 'on-debuff-inflicted'
  *    (APPLYING_DEBUFF_RE; SELF_INFLICTS_DEBUFF_RE covers the present-tense "when this Unit
  *    inflicts a debuff" / "after it inflicts a debuff"). Fires only on a landed debuff.
+ *    "When this Unit inflicts a Bomb" (Lingshe) also → 'on-debuff-inflicted'; the caller narrows
+ *    it to the family with detectInflictedStatusFilter.
  *  - "if its debuff is resisted" → 'on-own-debuff-resisted' (the inflictor-scoped mirror of
  *    the resister-side on-debuff-resisted).
  *  - "when an enemy [defender] gains Taunt" → 'on-enemy-taunt-gained'. Narrow and
@@ -1818,6 +1845,9 @@ export function detectReactiveTrigger(
     if (APPLYING_DEBUFF_RE.test(clause)) return 'on-debuff-inflicted';
     // Present-tense self-subject "when this Unit inflicts a Debuff" / "after it inflicts a debuff".
     if (SELF_INFLICTS_DEBUFF_RE.test(clause)) return 'on-debuff-inflicted';
+    // "When this Unit inflicts a Bomb" (Lingshe) — the same trigger, narrowed by the caller to the
+    // named family via detectInflictedStatusFilter.
+    if (SELF_INFLICTS_DOT_FAMILY_RE.test(clause)) return 'on-debuff-inflicted';
     // Paracelsus: "Upon being killed by direct Damage … grants allies <buff>" — the named-buff
     // half of an on-destroyed clause. Mirrors Faust's detectKilledByDirectDamageTrigger (which
     // routes the purge half); here the buffName-scoped clause carries the same phrase.

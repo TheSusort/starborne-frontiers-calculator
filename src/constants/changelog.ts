@@ -16,6 +16,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'DPS calculator and Effect Index: Security Down III is now available as a debuff.',
     'Combat simulator and DPS calculator: Ripper now gains Marauder Rage each time his debuff lands.',
     "Combat simulator and DPS calculator: Judge's defense penetration is no longer counted twice.",
+    'Combat simulator: Lingshe gains Stealth only when one of her Bombs lands.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

@@ -167,3 +167,50 @@ describe('inflict/apply vocabulary — "after it inflicts a debuff" needs a land
         ]);
     });
 });
+
+// "When this Unit inflicts a Bomb it gains Stealth" reacts to one of HER Bombs landing — not to any
+// debuff she lands, and not on every cast. Our R0 and the catalogue's R0/R2/R4 share the sentence;
+// the catalogue's R2/R4 add the crit-power detonation clause.
+describe('inflict/apply vocabulary — "When this Unit inflicts a Bomb" reacts to her landed Bomb', () => {
+    it.each([
+        [
+            'R0',
+            'When this Unit inflicts a <unit-skill>Bomb</unit-skill> it gains <unit-skill>Stealth</unit-skill> for 1 turn.',
+            1,
+        ],
+        [
+            'R2',
+            'When this Unit inflicts a <unit-skill>Bomb</unit-skill> it gains <unit-skill>Stealth</unit-skill> for 1 turn.<br /><br />This Unit deals <unit-damage>1% more detonation damage</unit-damage> per 20% crit power it has.',
+            1,
+        ],
+        [
+            'R4',
+            'When this Unit inflicts a <unit-skill>Bomb</unit-skill> it gains <unit-skill>Stealth</unit-skill> for 2 turns.<br /><br />This Unit deals <unit-damage>1% more detonation damage</unit-damage> per 10% crit power it has.',
+            2,
+        ],
+    ])(
+        'Lingshe passive %s: Stealth rides on-debuff-inflicted narrowed to Bomb',
+        (_r, text, turns) => {
+            const abilities = parseSlot('passive', text);
+            const s = sigs(abilities);
+            expect(s).toContain('buff|self|on-debuff-inflicted|Stealth');
+            expect(s).not.toContain('buff|self|on-cast|Stealth');
+            const stealth = abilities.find(
+                (a) => a.config.type === 'buff' && a.config.buffName === 'Stealth'
+            );
+            expect(stealth?.triggerStatusFilter).toBe('Bomb');
+            expect(stealth?.triggerApplicationFilter).toBe('inflict');
+            expect(stealth?.conditions).toEqual([]);
+            expect(stealth?.config).toMatchObject({ buffName: 'Stealth', duration: turns });
+        }
+    );
+
+    it('a debuff-noun reaction carries no status filter (Ripper "after it inflicts a debuff")', () => {
+        const rage = parseSlot(
+            'passive',
+            'This Unit gains <unit-skill>Marauder Rage II</unit-skill> for 3 turns after it inflicts a debuff.'
+        ).find((a) => a.config.type === 'buff' && a.config.buffName === 'Marauder Rage II');
+        expect(rage?.trigger).toBe('on-debuff-inflicted');
+        expect(rage?.triggerStatusFilter).toBeUndefined();
+    });
+});
