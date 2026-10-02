@@ -1378,16 +1378,19 @@ export interface Ability {
      *  `'per-cast'` (Insidiousness, `on-debuff-inflicted`; user + Solid Clouds dev, 2026-10-02):
      *  ONE roll for everything the owner's skill cast inflicts itself, however many debuffs and
      *  however many hits (an exception to the per-attack proc rule); ONE extra roll for each
-     *  reaction firing that inflicts during that cast (Warden's passive Out. Damage Down II off her
-     *  charged Corrosion II); and at most ONE successful roll per cast. The cast's roll, when it
-     *  succeeds, hits every enemy the cast's own inflictions landed on, once each; a reaction's
-     *  roll hits the enemies that reaction landed on. See `passesPerCastProcGate` in triggers.ts.
+     *  reaction firing that inflicts in that cast (Warden's passive Out. Damage Down II off her
+     *  charged Corrosion II); and at most ONE successful roll per SKILL CAST that set the chain
+     *  off, whoever cast it (an enemy's attack waking the owner's on-attacked Corrosion I, and the
+     *  Out. Damage Down II that wakes, are that enemy's one cast). A successful cast roll hits
+     *  EVERY enemy the cast's own inflictions landed on, once each (a Curator cast debuffing 3
+     *  enemies hits all 3); a reaction's roll hits the enemies that reaction landed on. See
+     *  `perCastProcKeys` / `passesPerCastProcGate` in triggers.ts.
      *
      *  `'per-attack'` draws the gate ONCE per ATTACK and reuses that verdict for every qualifying
      *  trigger event in that same attack, via IntentExecContext.procDecisionThisSubAttack. A
      *  `hits: N` skill is N consecutive full-walk attacks (R1), so a 3-hit skill draws THREE
-     *  verdicts — one per sub-attack, each shared across that sub-attack's footprint. No shipped
-     *  ability declares it; `subAttackProcGates.integration.test.ts` pins it on an on-crit rider. */
+     *  verdicts — one per sub-attack, each shared across that sub-attack's footprint.
+     *  `subAttackProcGates.integration.test.ts` pins it on an on-crit rider. */
     procScope?: 'per-attack' | 'per-cast';
     /** Reactive event-frequency gate: fire this ability only every Nth qualifying trigger
      *  event, counted per SOURCE (the triggering actor). N=2 → every second event. Gated

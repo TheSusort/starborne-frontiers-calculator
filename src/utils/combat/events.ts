@@ -148,9 +148,9 @@ export type CombatEvent =
      *  chain would otherwise hit MAX_INTENT_GENERATIONS). Every OTHER on-debuff-inflicted
      *  ability of the owner still sees the debuff: the Insidiousness implant reacts to Warden's
      *  reactive Out. Damage Down II as to a cast-inflicted one, and rolls for it separately
-     *  from the cast (`Ability.procScope` `'per-cast'`). Each ability in a chain fires at most once, so chain
-     *  LENGTH is bounded by the owner's count of such abilities; MAX_INTENT_GENERATIONS bounds
-     *  only the depth of a drain, not the number of firings.
+     *  from the cast (`Ability.procScope` `'per-cast'`). Each ability in a chain fires at most
+     *  once, so chain LENGTH is bounded by the owner's count of such abilities;
+     *  MAX_INTENT_GENERATIONS bounds only the depth of a drain, not the number of firings.
      *  Debuffs from OTHER reactive triggers (on-crit/on-attacked) carry no chain, so the chain
      *  guard lets every on-debuff-inflicted ability see them.
      *  `viaAllyDebuffInflictedReaction`: the sibling brand for `on-ally-debuff-inflicted`
@@ -198,8 +198,8 @@ export type CombatEvent =
           debuffInflictedReactionChain?: readonly string[];
           /** Set on every debuff a REACTION lands (any trigger): the id of that one reaction
            *  firing, shared by everything the firing lands and distinct from every other firing in
-           *  the combat. Absent on a cast's own inflictions. `procScope:'per-cast'` (Insidiousness)
-           *  gives each firing its own roll. */
+           *  the combat. Absent on a cast's own inflictions. `procScope:'per-cast'`
+           *  (Insidiousness) gives each firing its own roll. */
           reactionFiringId?: number;
           viaAllyDebuffInflictedReaction?: true;
           viaOtherAllyDebuffInflictedReaction?: true;

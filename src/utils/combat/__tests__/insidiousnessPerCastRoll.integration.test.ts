@@ -4,10 +4,11 @@
  *  - ONE roll for everything the cast inflicts itself, however many debuffs and however many hits;
  *  - ONE extra roll for each reaction firing that inflicts during that cast (Warden's passive
  *    Out. Damage Down II off her charged Corrosion II; Ripper's catalogue Inferno II);
- *  - at most ONE successful roll per cast.
- * A reaction that inflicts OUTSIDE the carrier's cast (here: Warden's Corrosion I when an enemy
- * hits her, and the Out. Damage Down II it sets off) gets its own roll and its own cap — the
- * unconfirmed default (see `perCastProcKeys` in triggers.ts).
+ *  - at most ONE successful roll per SKILL CAST that set the inflictions off, whoever cast it:
+ *    an enemy's attack waking Warden's Corrosion I, which wakes her Out. Damage Down II, is that
+ *    enemy's one cast — two rolls, at most one hit (user, 2026-10-02);
+ *  - a successful cast roll hits EVERY enemy the cast debuffed (pinned on the Curator AoE board in
+ *    equipmentAbilities.integration.test.ts).
  *
  * Instrument: `scriptProcs` scripts the carrier's `${owner}:proc` sub-stream — the only proc
  * ability on these boards is Insidiousness (real legendary ability, 21%) — and COUNTS its draws,
@@ -467,11 +468,20 @@ describe('Insidiousness — Ripper’s catalogue reactive Inferno II is a second
 });
 
 // ---------------------------------------------------------------------------------------------
-// Outside the carrier's cast (UNCONFIRMED default): each reaction firing that inflicts is its own
-// roll with its own cap. An enemy hits Warden: her Corrosion I on it (on-attacked) and the Out.
-// Damage Down II that sets off are two firings during the ENEMY's turn → up to two hits.
+// Reactions to ANOTHER actor's skill share that skill's cap: an enemy hits Warden, her Corrosion I
+// (on-attacked) lands on it and sets off her Out. Damage Down II — one enemy skill, so two rolls
+// and at most one hit. Her own active is a plain hit here, so every roll is from the enemy's turn.
 // ---------------------------------------------------------------------------------------------
-describe('Insidiousness — reactions outside the carrier’s cast (unconfirmed default)', () => {
+describe('Insidiousness — reactions to an enemy’s skill: one cap for the whole chain', () => {
+    const PLAIN_ACTIVE = { slot: 'active' as const, abilities: [hit()] };
+    /** Warden with a plain active, her R2 passive (optionally without its reaction) and
+     *  Insidiousness. */
+    const plainWarden = (withReaction = true): ShipSkills => ({
+        slots: [
+            PLAIN_ACTIVE,
+            ...wardenSkills(withReaction).slots.filter((sl) => sl.slot === 'passive'),
+        ],
+    });
     /** Hits during `turnOf`'s turn. */
     const hitsDuring = (events: CombatEvent[], sourceId: string, turnOf: string) =>
         events.filter(
@@ -481,25 +491,97 @@ describe('Insidiousness — reactions outside the carrier’s cast (unconfirmed 
                 e.duringTurnOf === turnOf
         ).length;
 
-    it('player Warden hit by an enemy: Corrosion I and its Out. Damage Down II roll and hit separately', () => {
-        // Her own turn (Provoke, an applied debuff Insidiousness also counts) takes the first draw.
-        const draws = scriptProcs('attacker', [FAIL, PASS, PASS]);
-        const events = run(
-            BASE({ shipSkills: wardenSkills(), enemyAttackers: [inert('hitter', 0, [hit()])] })
-        );
+    const playerBoard = (withReaction = true) =>
+        BASE({
+            shipSkills: plainWarden(withReaction),
+            enemyAttackers: [inert('hitter', 0, [hit()])],
+        });
+
+    it('premise: the hitter’s attack sets off Corrosion I and then Out. Damage Down II', () => {
+        scriptProcs('attacker', []);
+        const events = run(playerBoard());
         expect(debuffLandings(events, 'attacker', OUT_DD)).toBe(1);
-        expect(hitsDuring(events, 'attacker', 'attacker')).toBe(0);
-        expect(hitsDuring(events, 'attacker', 'hitter')).toBe(2);
-        expect(draws()).toBe(3);
+        expect(
+            events.filter(
+                (e) =>
+                    e.type === 'dot-applied' &&
+                    e.sourceId === 'attacker' &&
+                    e.reactive === true &&
+                    e.duringTurnOf === 'hitter'
+            )
+        ).toHaveLength(1);
     });
 
-    it('control: the same board with her reaction stripped hits once in the enemy’s turn', () => {
-        const draws = scriptProcs('attacker', [FAIL, PASS, PASS]);
-        const events = run(
-            BASE({ shipSkills: wardenSkills(false), enemyAttackers: [inert('hitter', 0, [hit()])] })
-        );
+    it('both rolls would pass → exactly one hit; the cap stops the second draw', () => {
+        const draws = scriptProcs('attacker', [PASS, PASS]);
+        const events = run(playerBoard());
+        expect(hitsDuring(events, 'attacker', 'hitter')).toBe(1);
+        expect(procHits(events, 'attacker', 'hitter')).toHaveLength(1);
+        expect(draws()).toBe(1);
+    });
+
+    it('first roll fails, second passes → one hit, two draws (each reaction rolls)', () => {
+        const draws = scriptProcs('attacker', [FAIL, PASS]);
+        const events = run(playerBoard());
         expect(hitsDuring(events, 'attacker', 'hitter')).toBe(1);
         expect(draws()).toBe(2);
+    });
+
+    it('both fail → no hit, two draws; without her reaction, one draw', () => {
+        let draws = scriptProcs('attacker', [FAIL, FAIL]);
+        let events = run(playerBoard());
+        expect(hitsDuring(events, 'attacker', 'hitter')).toBe(0);
+        expect(draws()).toBe(2);
+
+        draws = scriptProcs('attacker', [FAIL, PASS]);
+        events = run(playerBoard(false));
+        expect(debuffLandings(events, 'attacker', OUT_DD)).toBe(0);
+        expect(hitsDuring(events, 'attacker', 'hitter')).toBe(0);
+        expect(draws()).toBe(1);
+    });
+
+    it('enemy side: the player hits an enemy Warden → the same one cap for her chain', () => {
+        const enemyWarden = (withReaction = true): EnemyAttacker => ({
+            id: 'warden-enemy',
+            stats: {
+                attack: 100,
+                crit: 0,
+                critDamage: 0,
+                defence: 0,
+                hp: 1e12,
+                speed: 1,
+                hacking: 200,
+                security: 0,
+            },
+            chargeCount: 0,
+            startCharged: false,
+            position: 'M4',
+            target: frontTarget(),
+            pattern: basePattern(),
+            shipSkills: plainWarden(withReaction),
+        });
+        const enemyBoard = (withReaction = true) =>
+            BASE({
+                shipSkills: { slots: [{ slot: 'active', abilities: [hit()] }] },
+                security: 0,
+                enemyAttackers: [enemyWarden(withReaction)],
+            });
+
+        let draws = scriptProcs('warden-enemy', [PASS, PASS]);
+        let events = run(enemyBoard());
+        expect(debuffLandings(events, 'warden-enemy', OUT_DD)).toBe(1);
+        expect(hitsDuring(events, 'warden-enemy', 'attacker')).toBe(1);
+        expect(draws()).toBe(1);
+
+        draws = scriptProcs('warden-enemy', [FAIL, PASS]);
+        events = run(enemyBoard());
+        expect(hitsDuring(events, 'warden-enemy', 'attacker')).toBe(1);
+        expect(draws()).toBe(2);
+
+        draws = scriptProcs('warden-enemy', [FAIL, PASS]);
+        events = run(enemyBoard(false));
+        expect(hitsDuring(events, 'warden-enemy', 'attacker')).toBe(0);
+        expect(draws()).toBe(1);
     });
 });
 

@@ -4367,25 +4367,29 @@ const DocumentationPage: React.FC = () => {
                                     damage against an enemy with higher attack), and{' '}
                                     <strong>Insidiousness</strong> (chance to deal bonus damage when
                                     you apply a debuff to an enemy: one roll per skill cast, plus
-                                    one for each debuff your passives inflict in reaction, and at
-                                    most one successful roll per cast). Three heal implants are also
-                                    modeled: <strong>Second Wind</strong> (chance to repair itself
-                                    when it takes a critical hit), <strong>Nourishment</strong>{' '}
-                                    (stronger repairs on allies with less HP than the healer), and{' '}
-                                    <strong>Vivacious Repair</strong> (chance to double a repair on
-                                    an ally below 25% HP), and <strong>Exuberance</strong> (chance
-                                    to increase the amount of a repair this unit receives). Charge
-                                    manipulation is also modeled: <strong>Chrono Reaver</strong>{' '}
-                                    (grants a bonus charge to the carrier&apos;s charged skill every
-                                    2nd turn at legendary rarity or every 3rd turn at epic; units in
-                                    Stasis bank no charge on skipped turns). Two damage-over-time
-                                    gear sets are also modeled: <strong>Burner</strong> (applies
-                                    Inferno for 2 turns when the ship attacks) and{' '}
-                                    <strong>Decimation</strong> (+10% DoT damage per equipped set,
-                                    up to +30%, boosting your Inferno and Corrosion ticks in both
-                                    the combat simulator and the DPS calculator). Five shield
-                                    sources are also modeled: the <strong>Shield</strong> gear set
-                                    (grants the equipped ship a shield each turn, 4% of its max HP),{' '}
+                                    one for each reaction that inflicts a debuff, from a passive,
+                                    implant or gear set — one reaction landing on two enemies is one
+                                    roll. At most one roll succeeds per skill cast, counting
+                                    reactions to an enemy&apos;s skill as part of that skill, and a
+                                    successful roll hits every enemy the debuffs reached). Three
+                                    heal implants are also modeled: <strong>Second Wind</strong>{' '}
+                                    (chance to repair itself when it takes a critical hit),{' '}
+                                    <strong>Nourishment</strong> (stronger repairs on allies with
+                                    less HP than the healer), and <strong>Vivacious Repair</strong>{' '}
+                                    (chance to double a repair on an ally below 25% HP), and{' '}
+                                    <strong>Exuberance</strong> (chance to increase the amount of a
+                                    repair this unit receives). Charge manipulation is also modeled:{' '}
+                                    <strong>Chrono Reaver</strong> (grants a bonus charge to the
+                                    carrier&apos;s charged skill every 2nd turn at legendary rarity
+                                    or every 3rd turn at epic; units in Stasis bank no charge on
+                                    skipped turns). Two damage-over-time gear sets are also modeled:{' '}
+                                    <strong>Burner</strong> (applies Inferno for 2 turns when the
+                                    ship attacks) and <strong>Decimation</strong> (+10% DoT damage
+                                    per equipped set, up to +30%, boosting your Inferno and
+                                    Corrosion ticks in both the combat simulator and the DPS
+                                    calculator). Five shield sources are also modeled: the{' '}
+                                    <strong>Shield</strong> gear set (grants the equipped ship a
+                                    shield each turn, 4% of its max HP),{' '}
                                     <strong>Adaptive Plating</strong> (grants the ship a shield from
                                     the damage it takes, once per round),{' '}
                                     <strong>Abundant Renewal</strong> (turns over-healing on an ally

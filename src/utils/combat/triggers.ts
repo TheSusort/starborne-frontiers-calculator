@@ -180,10 +180,12 @@ export interface Intent {
         subAttackIndex?: number;
         /** Stamped by the `on-debuff-inflicted` listener when the triggering infliction was
          *  landed by a REACTION (`e.reactive`) rather than by the owner's cast: `firingId` is that
-         *  reaction firing's `reactionFiringId`, and `duringOwnTurn` says the reaction fired
-         *  during the owner's own turn — i.e. the owner's cast set it off. Absent for the cast's
+         *  reaction firing's `reactionFiringId`, and `duringTurnOf` is the actor whose turn was
+         *  active when it fired — the caster of the skill that set the reaction off (the owner
+         *  itself, or e.g. the enemy whose attack woke an on-attacked reaction). Undefined
+         *  `duringTurnOf`: no turn was active (round start / end of round). Absent for the cast's
          *  own inflictions. Read only by `passesPerCastProcGate`. */
-        inflictionReaction?: { firingId?: number; duringOwnTurn: boolean };
+        inflictionReaction?: { firingId?: number; duringTurnOf?: string };
         /** The damage of the triggering event, used by a reactive heal/shield to scale off
          *  that hit rather than the owner's max HP. Two consumers: `basis:'damage-dealt'`
          *  (ability-performed — damage the owner DEALT, e.g. Bloodthirst) and
@@ -884,7 +886,7 @@ export function registerReactiveListeners(args: {
                                     ...intent.eventCtx,
                                     debuffVictimId: e.targetId,
                                     debuffInflictedReactionChain: e.debuffInflictedReactionChain,
-                                    ...inflictionReactionCtx(e, ownerId),
+                                    ...inflictionReactionCtx(e),
                                 },
                             });
                     });
@@ -915,7 +917,7 @@ export function registerReactiveListeners(args: {
                                     ...intent.eventCtx,
                                     debuffVictimId: e.targetId,
                                     debuffInflictedReactionChain: e.debuffInflictedReactionChain,
-                                    ...inflictionReactionCtx(e, ownerId),
+                                    ...inflictionReactionCtx(e),
                                 },
                             });
                     });
@@ -3608,38 +3610,46 @@ function reactionFiringStamp(ctx: IntentExecContext): { reactionFiringId?: numbe
 
 /** The `on-debuff-inflicted` listener's `eventCtx.inflictionReaction` for an infliction event:
  *  present only when a reaction landed it (see that field's doc). */
-function inflictionReactionCtx(
-    e: { reactive?: true; duringTurnOf?: string; reactionFiringId?: number },
-    ownerId: string
-): { inflictionReaction?: { firingId?: number; duringOwnTurn: boolean } } {
+function inflictionReactionCtx(e: {
+    reactive?: true;
+    duringTurnOf?: string;
+    reactionFiringId?: number;
+}): { inflictionReaction?: { firingId?: number; duringTurnOf?: string } } {
     if (e.reactive !== true) return {};
     return {
-        inflictionReaction: {
-            firingId: e.reactionFiringId,
-            duringOwnTurn: e.duringTurnOf === ownerId,
-        },
+        inflictionReaction: { firingId: e.reactionFiringId, duringTurnOf: e.duringTurnOf },
     };
 }
 
-/** The roll and the one-success cap a `procScope:'per-cast'` intent belongs to.
- *  - The owner's cast's own inflictions (no `inflictionReaction`): roll = cap = the cast.
- *  - A reaction firing during the owner's own turn: its own roll, under the cast's cap.
- *  - A reaction firing outside the owner's turn (round start/end, another actor's turn): its own
- *    roll and its own cap. This is the UNCONFIRMED default — the game rule (user + Solid Clouds
- *    dev, 2026-10-02) covers only reactions a skill cast sets off.
- *  The cast is keyed by the owner's `turnsTaken`, so an extra action is a cast of its own. */
+/** The roll and the one-success cap a `procScope:'per-cast'` intent belongs to. The cap is the
+ *  SKILL CAST that set the infliction off, whoever cast it (user, 2026-10-02):
+ *  - The owner's cast's own inflictions (no `inflictionReaction`): roll = cap = that cast.
+ *  - A reaction firing during an actor's turn: its own roll, under the cap of THAT actor's cast.
+ *    The owner's own charged setting off its Out. Damage Down II shares the owner's cast cap; an
+ *    enemy's attack waking the owner's on-attacked Corrosion I, which wakes its Out. Damage Down
+ *    II, is one skill too — one cap for the whole chain.
+ *  - A reaction firing with no turn active (round start / end of round): its own roll and its own
+ *    cap. UNCONFIRMED — the rule covers only inflictions a skill cast sets off.
+ *  A cast is keyed by its caster's `turnsTaken`, so an extra action is a cast of its own. */
 function perCastProcKeys(intent: Intent, ctx: IntentExecContext): { roll: string; cap: string } {
-    const cast = `cast:${ctx.turnsTakenFor?.(intent.ownerId) ?? 0}`;
+    const castOf = (casterId: string) => `cast:${casterId}:${ctx.turnsTakenFor?.(casterId) ?? 0}`;
     const reaction = intent.eventCtx?.inflictionReaction;
-    if (!reaction) return { roll: cast, cap: cast };
+    if (!reaction) {
+        const cast = castOf(intent.ownerId);
+        return { roll: cast, cap: cast };
+    }
     const firing = `reaction:${reaction.firingId ?? 'unstamped'}`;
-    return { roll: firing, cap: reaction.duringOwnTurn ? cast : firing };
+    return {
+        roll: firing,
+        cap: reaction.duringTurnOf !== undefined ? castOf(reaction.duringTurnOf) : firing,
+    };
 }
 
 /**
- * The `procScope:'per-cast'` gate (Insidiousness — see that field's doc for the rule). One draw per
- * roll (`perCastProcKeys`), replayed for every later event of the same roll so a successful roll
- * covers every enemy it debuffed; once any roll under a cap has succeeded, every OTHER roll under
+ * The `procScope:'per-cast'` gate (Insidiousness — see that field's doc for the rule). One draw
+ * per roll (`perCastProcKeys`), replayed for every later event of the same roll so a successful
+ * roll hits EVERY enemy it debuffed (a Curator cast debuffing 3 enemies hits all 3 — user,
+ * 2026-10-02); once any roll under a cap has succeeded, every OTHER roll under
  * that cap fails without drawing. A `procChance` of 1 or more succeeds without drawing and still
  * takes the cap. Draws from the owner's shared proc sub-stream, as `passesProcChanceGate` does.
  * Absent verdict map (unit ctxs) → `passesProcChanceGate`'s per-event draws.
@@ -3686,9 +3696,10 @@ function passesProcChanceGate(intent: Intent, ctx: IntentExecContext): boolean {
     // procScope:'per-attack': one roll for the whole attack. The verdict is memoized per
     // (owner, ability) and replayed for every later event this attack, so every event of one
     // attack shares ONE roll and all-or-none holds across its footprint. (`'per-cast'` —
-    // Insidiousness — has its own gate, `passesPerCastProcGate`.) Opt-in by design — this gate is shared with the heal/shield/buff/debuff
-    // branches, and memoizing unconditionally would silently convert every other proc ability
-    // (Adaptive Plating, Smokescreen, Ambush, Bloodthirst, Reactive Ward, Tenacity) to per-turn.
+    // Insidiousness — has its own gate, `passesPerCastProcGate`.) Opt-in by design — this gate
+    // is shared with the heal/shield/buff/debuff branches, and memoizing unconditionally would
+    // silently convert every other proc ability (Adaptive Plating, Smokescreen, Ambush,
+    // Bloodthirst, Reactive Ward, Tenacity) to per-turn.
     const memo =
         intent.ability.procScope === 'per-attack' ? ctx.procDecisionThisSubAttack : undefined;
     // One verdict per SUB-ATTACK. The gate/stream key stays `${owner}:${ability}` — that is the

@@ -283,6 +283,22 @@ describe('Insidiousness — rolls on a reactively inflicted debuff (player side)
         // Every roll fails: per cast, the cast's own roll plus four reaction firings.
         expect(draws()).toBe(15);
         expect(procHits(events, 'attacker', 'strong')).toEqual([]);
+
+        // Positive on the same board: the cast's roll fails and the FIRST reaction firing's roll
+        // passes, so `strong` is hit once per cast and the cap stops the other three draws.
+        const draws2 = scriptProcs('attacker', CAST_FAILS_REACTION_PASSES);
+        const events2 = run(
+            BASE({
+                shipSkills: kit([
+                    reaction('reaction-a', CHAIN),
+                    reaction('reaction-b', 'Echo Down'),
+                    realInsidiousness(),
+                ]),
+            })
+        );
+        expect(procHits(events2, 'attacker', 'strong')).toEqual([1, 2, 3]);
+        expect(procHits(events2, 'attacker', 'front')).toEqual([]);
+        expect(draws2()).toBe(6);
     });
 });
 
@@ -346,13 +362,13 @@ describe('Insidiousness — real Warden kit (OLD R2 text), debuff arm', () => {
         expect(procHits(events, 'attacker', 'hitter')).toEqual([]);
     });
 
-    it('the real implant: her turn hits once; the hitter’s turn hits for Corrosion I and its Out. Damage Down II', () => {
+    it('the real implant: one hit in her turn and one in the hitter’s turn', () => {
         const events = run(board(wardenSkills([insidiousness()])));
         expect(landings(events, 'attacker', 'hitter', OUT_DD)).toEqual([1, 2, 3]);
         // Her own turn (Provoke) is one cast: one hit. In the hitter's turn her Corrosion I and
-        // the Out. Damage Down II it sets off are two reaction firings outside her cast, each with
-        // its own roll and cap (the unconfirmed default — `perCastProcKeys` in triggers.ts).
-        expect(procHits(events, 'attacker', 'hitter')).toEqual([1, 1, 1, 2, 2, 2, 3, 3, 3]);
+        // the Out. Damage Down II it sets off are reactions to the hitter's ONE skill, so they
+        // share its cap: one hit (`perCastProcKeys` in triggers.ts).
+        expect(procHits(events, 'attacker', 'hitter')).toEqual([1, 1, 2, 2, 3, 3]);
     });
 });
 
