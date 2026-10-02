@@ -43,7 +43,7 @@ const PAIRS: ResidualPair[] = [
     {
         ship: 'Isha',
         slot: 'passive',
-        old: 'At the start of the round this Unit gains <unit-skill>Offensive Affinity Override</unit-skill>.<br />If Nayra is on the same team, it also gains <unit-skill>Defensive Affinity Override</unit-skill>.<br /><br />When directly damaged, this Unit <unit-damage>repairs 3%</unit-damage> of its max HP, but when criticall hit, it instead <unit-damage>repairs 6%</unit-damage> of its max HP.',
+        old: 'At the start of the round this Unit gains <unit-skill>Offensive Affinity Override</unit-skill>.<br />If Nayra is on the same team, it also gains <unit-skill>Defensive Affinity Override</unit-skill>.<br /><br />When directly damaged, this Unit <unit-damage>repairs 3%</unit-damage> of its max HP, but when critcally hit, it instead <unit-damage>repairs 6%</unit-damage> of its max HP.',
         new: 'At the start of the round this Unit gains <unit-skill>Offensive Affinity Override</unit-skill>. If Nayra is on the same team, it also gains <unit-skill>Defensive Affinity Override</unit-skill>.<br /><br />When directly damaged, this Unit <unit-damage>repairs 3%</unit-damage> of its max HP, but when critcally hit, it instead <unit-damage>repairs 6%</unit-damage> of its max HP.',
         expects: 'heal|self|on-attacked|heal',
         carries: { triggerCritFilter: 'crit', config: expect.objectContaining({ pct: 6 }) },

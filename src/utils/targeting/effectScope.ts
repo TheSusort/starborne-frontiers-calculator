@@ -9,10 +9,9 @@ export function parseEffectScope(skillText: string): string | null {
     const t = skillText.replace(HTML_TAG, ' ').toLowerCase();
 
     // Geometric scopes — "adjacent" may come before or after the noun
-    // ("all adjacent enemies" / "all enemies adjacent to it"). Note the 'adjavent' typo
-    // present in the source data.
-    if (/adja[cv]ent enemies|enemies adja[cv]ent/.test(t)) return 'adjacent enemies';
-    if (/adja[cv]ent allies|allies adja[cv]ent/.test(t)) return 'adjacent allies';
+    // ("all adjacent enemies" / "all enemies adjacent to it").
+    if (/adjacent enemies|enemies adjacent/.test(t)) return 'adjacent enemies';
+    if (/adjacent allies|allies adjacent/.test(t)) return 'adjacent allies';
 
     // Conditional subsets — keep the qualifier so we don't overstate the scope.
     const conditional = t.match(/all (cleansed|hit|damaged|debuffed|stealthed) (enemies|allies)/);

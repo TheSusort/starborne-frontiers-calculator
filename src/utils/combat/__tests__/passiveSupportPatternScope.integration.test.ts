@@ -203,7 +203,7 @@ describe('passive-slot support vs the firing skill support footprint', () => {
 const VOLK_P1 =
     'At the start of its turn, this Unit <unit-damage>repairs 30%</unit-damage> of its Max HP to the ally with the most missing health.';
 const GRAPHITE_P2 =
-    '<br /><br />\nAt the start of the round, if an enemy Unit has <unit-skill>Stealth</unit-skill>, this Unit <unit-aid>adds 1 charges</unit-aid> to the charged skill of all allies within the active pattern.';
+    '<br /><br />\nAt the start of the round, if an enemy Unit has <unit-skill>Stealth</unit-skill>, this Unit <unit-skill>adds 1 charge</unit-skill> to the charged skill of all allies within the active pattern.';
 
 function passiveAbilities(text: string, refits: number) {
     const ship = {

@@ -1805,7 +1805,7 @@ describe('buildShipAbilities', () => {
         it('Isha second passive (CSV second_passive_skill_text): instead-on-crit pair maps to triggerCritFilter non-crit (3%) / crit (6%)', () => {
             const s = ship({
                 firstPassiveSkillText:
-                    'When directly damaged, this Unit <unit-damage>repairs 3%</unit-damage> of its max HP, but when criticall hit, it instead <unit-damage>repairs 6%</unit-damage> of its max HP.',
+                    'When directly damaged, this Unit <unit-damage>repairs 3%</unit-damage> of its max HP, but when critcally hit, it instead <unit-damage>repairs 6%</unit-damage> of its max HP.',
             });
             const passive = buildShipAbilities(s).slots.find((x) => x.slot === 'passive');
             const heals = passive?.abilities.filter((a) => a.type === 'heal') ?? [];
@@ -5229,11 +5229,11 @@ describe('buildShipAbilities — PR5 Finding 4 Isha/Guardian reactive-heal gates
     it('Isha second passive: the two damage-reaction repairs are MUTUALLY EXCLUSIVE (non-crit 3% / crit 6% instead), not additive', () => {
         // docs/ship-skills.csv Isha second_passive_skill_text (exact clause, routed through the
         // real passive slot via refits.length >= 2): "...When directly damaged, this Unit repairs
-        // 3% of its max HP, but when criticall hit, it instead repairs 6% of its max HP."
+        // 3% of its max HP, but when critcally hit, it instead repairs 6% of its max HP."
         const s = ship({
             refits: [{}, {}] as Ship['refits'],
             secondPassiveSkillText:
-                'At the start of the round this Unit gains <unit-skill>Offensive Affinity Override</unit-skill>.<br />If Nayra is on the same team, it also gains <unit-skill>Defensive Affinity Override</unit-skill>.<br /><br />When directly damaged, this Unit <unit-damage>repairs 3%</unit-damage> of its max HP, but when criticall hit, it instead <unit-damage>repairs 6%</unit-damage> of its max HP.',
+                'At the start of the round this Unit gains <unit-skill>Offensive Affinity Override</unit-skill>.<br />If Nayra is on the same team, it also gains <unit-skill>Defensive Affinity Override</unit-skill>.<br /><br />When directly damaged, this Unit <unit-damage>repairs 3%</unit-damage> of its max HP, but when critcally hit, it instead <unit-damage>repairs 6%</unit-damage> of its max HP.',
         });
         const passive = slot(buildShipAbilities(s).slots, 'passive')!;
         const heals = passive.abilities.filter((a) => a.type === 'heal');

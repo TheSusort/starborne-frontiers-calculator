@@ -28,7 +28,7 @@ const WARDEN_PASSIVE_R2 =
 const LINGSHE_PASSIVE_R4 =
     'When this Unit detonates a <unit-skill>Bomb</unit-skill> it gains <unit-skill>Stealth</unit-skill> for 2 turn.<br /><br />\n\nThis Unit deals 1% more detonation damage per 10% crit power it has.';
 const DEMOLISHER_PASSIVE_R2 =
-    "When a Bomb explodes on an enemy, this Unit <unit-aid>removes 2 charges</unit-aid> from the enemy's Charged Skill and deals <unit-damage>100% of the Bomb's damage</unit-damage> to all adjavent enemies. This damage ignores Defense and cannot result in a critical hit.";
+    "When a <unit-skill>Bomb</unit-skill> explodes on an enemy, this Unit <unit-skill>removes 2 charges</unit-skill> from the enemy's charged skill and deals 100% of the <unit-skill>Bomb</unit-skill> damage to all adjacent enemies. This damage ignores defense and cannot critically hit.";
 
 const shipWith = (over: Partial<Ship>): Ship =>
     ({

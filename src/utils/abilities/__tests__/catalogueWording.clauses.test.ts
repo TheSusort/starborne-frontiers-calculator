@@ -13,13 +13,6 @@ import {
 // Lingshe charged's extra number is the "reduced to 0 turns" sentence the catalogue drops.
 const PAIRS: RewordPair[] = [
     {
-        ship: 'Demolisher',
-        slot: 'passive',
-        old: "When a Bomb explodes on an enemy, this Unit <unit-aid>removes 2 charges</unit-aid> from the enemy's Charged Skill and deals <unit-damage>100% of the Bomb's damage</unit-damage> to all adjavent enemies. This damage ignores Defense and cannot result in a critical hit.",
-        new: "When a <unit-skill>Bomb</unit-skill> explodes on an enemy, this Unit <unit-skill>removes 2 charges</unit-skill> from the enemy's charged skill and deals 100% of the <unit-skill>Bomb</unit-skill> damage to all adjacent enemies. This damage ignores defense and cannot critically hit.",
-        expects: 'damage|adjacent-enemies|on-bomb-detonated|damage',
-    },
-    {
         ship: 'Stalwart',
         slot: 'passive',
         old: 'When this Unit is directly damaged as a primary target, it deals <unit-damage>30% damage</unit-damage> to that enemy and gains <unit-skill>Legion Discipline II</unit-skill> for 3 turns.',
@@ -122,6 +115,12 @@ const CATALOGUE_ROWS: { ship: string; slot: SlotName; text: string; expects: str
         slot: 'passive',
         text: 'When this Unit deals damage to a defender it <unit-skill>purges 1 buff</unit-skill> from that enemy.<br /><br />This Unit deals <unit-damage>30% more damage</unit-damage> when hitting a defender.',
         expects: 'purge|enemy|on-deal-damage|purge',
+    },
+    {
+        ship: 'Demolisher',
+        slot: 'passive',
+        text: "When a <unit-skill>Bomb</unit-skill> explodes on an enemy, this Unit <unit-skill>removes 2 charges</unit-skill> from the enemy's charged skill and deals 100% of the <unit-skill>Bomb</unit-skill> damage to all adjacent enemies. This damage ignores defense and cannot critically hit.",
+        expects: 'damage|adjacent-enemies|on-bomb-detonated|damage',
     },
     {
         ship: 'FrontLine',

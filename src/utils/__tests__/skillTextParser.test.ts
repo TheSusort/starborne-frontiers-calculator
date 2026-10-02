@@ -1909,9 +1909,9 @@ describe('parseAllyChargeGrant', () => {
         });
     });
 
-    it('tolerates the plural-with-1 CSV typo "adds 1 charges" — Graphite R-tier', () => {
+    it('reads the singular "adds 1 charge" form — Graphite R-tier', () => {
         const text =
-            'At the start of the round, if an enemy Unit has <unit-skill>Stealth</unit-skill>, this Unit <unit-aid>adds 1 charges</unit-aid> to the charged skill of all allies within the active pattern.';
+            'At the start of the round, if an enemy Unit has <unit-skill>Stealth</unit-skill>, this Unit <unit-skill>adds 1 charge</unit-skill> to the charged skill of all allies within the active pattern.';
         expect(parseAllyChargeGrant(text)).toEqual({
             amount: 1,
             trigger: 'start-of-round',
@@ -3504,10 +3504,10 @@ describe('parseHealAbilities — damage-reaction heals (Phase 4c)', () => {
         ]);
     });
 
-    it('Isha second passive (CSV second_passive_skill_text): instead-on-crit pair → 3% non-crit + 6% crit (tolerates the "criticall" typo)', () => {
+    it('Isha second passive (CSV second_passive_skill_text): instead-on-crit pair → 3% non-crit + 6% crit', () => {
         expect(
             parseHealAbilities(
-                'When directly damaged, this Unit <unit-damage>repairs 3%</unit-damage> of its max HP, but when criticall hit, it instead <unit-damage>repairs 6%</unit-damage> of its max HP.'
+                'When directly damaged, this Unit <unit-damage>repairs 3%</unit-damage> of its max HP, but when critcally hit, it instead <unit-damage>repairs 6%</unit-damage> of its max HP.'
             )
         ).toEqual([
             {
@@ -3666,11 +3666,10 @@ describe('parseHealAbilities — damage-reaction heals (Phase 4c)', () => {
         ]);
     });
 
-    // LOCK: corpus typo "criticall hit" (no trailing 'y') is also matched
-    it('crit-only heal: tolerated typo "criticall hit" → ONE heal with critFilter crit', () => {
+    it('crit-only heal: "is critically hit" → ONE heal with critFilter crit', () => {
         expect(
             parseHealAbilities(
-                'When this unit is criticall hit, this Unit repairs 7% of its Max HP.'
+                'When this unit is critically hit, this Unit repairs 7% of its Max HP.'
             )
         ).toEqual([
             {
@@ -3703,7 +3702,7 @@ describe('parseHealAbilities — damage-reaction heals (Phase 4c)', () => {
     it('GUARD: Isha pair unchanged after crit-hit alternation addition', () => {
         expect(
             parseHealAbilities(
-                'When directly damaged, this Unit <unit-damage>repairs 3%</unit-damage> of its max HP, but when criticall hit, it instead <unit-damage>repairs 6%</unit-damage> of its max HP.'
+                'When directly damaged, this Unit <unit-damage>repairs 3%</unit-damage> of its max HP, but when critcally hit, it instead <unit-damage>repairs 6%</unit-damage> of its max HP.'
             )
         ).toEqual([
             {

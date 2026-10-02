@@ -1261,10 +1261,9 @@ function statVsTargetConditionFromClause(low: string): Condition | null {
 // SP-D: "hitting N or more enemies" / "damages N or more enemies" — a real hit-count gate on
 // THIS cast (Berserker's passive Marauder Rage grants; Tygr's self-charge-gain). Shared by
 // `detectGrantConditions` (buff clauses) and `parseChargeGain` (Tygr's charge-gain, via the same
-// `conditions` escape hatch statVsTargetConditionFromClause uses for Chakara) — CSV note:
-// Berserker's text has a typo "N ore more" — the `or?e?` group matches both "or" and "ore".
+// `conditions` escape hatch statVsTargetConditionFromClause uses for Chakara).
 function hitCountConditionFromClause(low: string): Condition | null {
-    const m = low.match(/(?:hitting|damages?|damaging)\s+(\d+)\s+or?e?\s+more\s+enemies/);
+    const m = low.match(/(?:hitting|damages?|damaging)\s+(\d+)\s+or\s+more\s+enemies/);
     if (!m) return null;
     return {
         subject: 'enemies-hit-this-cast',
@@ -1781,7 +1780,7 @@ export function detectReactiveTrigger(
     // here, but the ally subject makes this an ally-scoped trigger, not a self-crit.
     if (ALLY_CRIT_HIT_RE.test(clause)) return 'on-ally-crit';
     if (matchesActiveSelfCrit(clause)) return 'on-crit';
-    // Berserker: "gains <Buff> for N turns when hitting 3 ore more enemies" is a
+    // Berserker: "gains <Buff> for N turns when hitting 3 or more enemies" is a
     // reaction to THIS UNIT's own damage-dealing action (same family as the self-crit rule
     // above), not a combat-start-only fact — route it through on-deal-damage so the drain-time
     // enemies-hit-this-cast gate (still carried in `conditions`, untouched here) re-evaluates on
@@ -3246,23 +3245,22 @@ const ROLE_WORD_TO_CATEGORY: Record<string, ShipRoleCategory> = {
 // Crit-suppression riders ("damage that cannot critically hit", incl. the live CSV typo
 // "cannont") are NOT crit reactions — scrubbed before the crit-hit test so a when-sentence
 // carrying such a rider (Provider, Grif) never reads as crit-gated.
-const DR_CANNOT_CRIT_RE = /\bcann?on?t\s+criticall?y?\s+hit\b/i;
+const DR_CANNOT_CRIT_RE = /\bcann?on?t\s+critical(?:ly)?\s+hit\b/i;
 // "… inflicts X WITH a critical hit" is the subject LANDING a crit (outgoing — Wisteria's
 // on-self-crit-dot, Crocus's on-ally-crit-dot), not being hit, so it is scrubbed before the
 // self-subject crit-hit test as well.
 const DR_OUTGOING_CRIT_RE = /\bwith\s+a\s+critical\s+hit\b/i;
-// Passive-voice "when … critically hit" (Guardian "When this Unit is critically hit"; the
-// missing "y" in the live CSV's "criticall hit" is tolerated). DISTINCT from the ACTIVE-voice
+// Passive-voice "when … critically hit" (Guardian "When this Unit is critically hit").
+// DISTINCT from the ACTIVE-voice
 // self-crit phrasing ("critically hits/damaging"), which matchesActiveSelfCrit handles and
 // which "hit\b" deliberately does not match (no trailing "s").
-const DR_CRIT_HIT_RE = /when\b[^.;]*\bcriticall?y?\s+hit\b/i;
+const DR_CRIT_HIT_RE = /when\b[^.;]*\bcritical(?:ly)?\s+hit\b/i;
 // ALLY-subject crit reactions require the damaged ally as subject — "is critically hit"
-// (Guardian "When an ally is critically hit by an enemy"; same "criticall hit" typo
-// tolerance as DR_CRIT_HIT_RE). The bare DR_CRIT_HIT_RE also matches the ACTIVE-voice
+// (Guardian "When an ally is critically hit by an enemy"). The bare DR_CRIT_HIT_RE also matches the ACTIVE-voice
 // "…inflicts a DoT effect WITH a critical hit" (Crocus), where the ally LANDS the crit
 // (outgoing — on-ally-crit-dot territory) rather than receiving it, so the ally branch
 // must not reuse it.
-const DR_ALLY_CRIT_HIT_RE = /\bis\s+criticall?y?\s+hit\b/i;
+const DR_ALLY_CRIT_HIT_RE = /\bis\s+critical(?:ly)?\s+hit\b/i;
 // Self-subject direct-damage reaction: "when (this Unit is) directly damaged" (leading OR
 // trailing clause) / "when attacked" / bare "when hit" (Sansi) / "upon receiving direct
 // damage" (Bizon — the one non-"when" phrasing; corpus-unique so no over-match).
@@ -4341,7 +4339,6 @@ export function parseAllyChargeOnEnemyDeath(
 //     pattern, Hermes included (user ruling 2026-10-02). The ownerless "the Charged Skill" —
 //     no "its" / "own" / "of …" — names the charged skill of whoever the cast targets; a self
 //     gain always says "its (own) Charged Skill".
-// Tolerates the live CSV plural-with-1 typo ("adds 1 charges"). Reference: docs/ship-skills.csv.
 // Lookbehind-free; matches "to their Charged Skill", "to the charged skill of [all] allies" and
 // the ownerless "to the Charged Skill".
 const ALLY_CHARGE_GRANT_RE = new RegExp(
@@ -4694,8 +4691,7 @@ const HEAL_DISQUALIFY_RE = new RegExp(
 // Damage-reaction reactive triggers — only disqualifying when the heal is NOT a damage leech
 // (the caller gates this against the resolved leech basis). Covers "when (an ally/this unit is)
 // directly damaged", "when attacked", "when … is hit", "when … takes … damage", and the
-// passive-voice pure crit-hit form "when (this unit) is critically hit" (tolerates the corpus
-// typo "criticall"). The match is captured (not just tested) so the caller can reject an
+// passive-voice pure crit-hit form "when (this unit) is critically hit". The match is captured (not just tested) so the caller can reject an
 // ENEMY-subject trigger — "when an enemy takes damage from a DoT" (Anemone) is an on-DoT-tick
 // trigger, NOT a self/ally damage reaction, so it must not be disqualified by this rule.
 // The crit-hit alternation uses `hit\b` (no trailing `s`) so it matches passive-voice "is
@@ -4704,11 +4700,11 @@ const HEAL_DISQUALIFY_RE = new RegExp(
 // annotation gate's ally-subject test on dmgReaction[0] safe (ally-OUTGOING sentences like
 // Crocus's "inflicts a DoT … with a critical hit" never match). No lookbehind (iOS Safari 15).
 const HEAL_DAMAGE_REACTION_RE =
-    /when\b[^.;]*\b(?:directly\s+)?damaged\b|when\s+attacked\b|when\b[^.;]*\bis\s+attacked\b|when\b[^.;]*\bis\s+criticall?y?\s+hit\b|when\b[^.;]*\bis\s+hit\b|when\b[^.;]*\btakes\b[^.;]*\bdamage\b/i;
+    /when\b[^.;]*\b(?:directly\s+)?damaged\b|when\s+attacked\b|when\b[^.;]*\bis\s+attacked\b|when\b[^.;]*\bis\s+critical(?:ly)?\s+hit\b|when\b[^.;]*\bis\s+hit\b|when\b[^.;]*\btakes\b[^.;]*\bdamage\b/i;
 // Detects the crit-hit alternation within a HEAL_DAMAGE_REACTION_RE match so the annotation
 // gate can set critFilter:'crit' when the trigger itself (not an instead-clause) is the pure
 // "when (this unit) is critically hit" phrasing.
-const HEAL_CRIT_HIT_TRIGGER_RE = /\bis\s+criticall?y?\s+hit\b/i;
+const HEAL_CRIT_HIT_TRIGGER_RE = /\bis\s+critical(?:ly)?\s+hit\b/i;
 
 /**
  * Neutralises the word "repair" where it is part of a <unit-skill> STATUS NAME rather than a repair
@@ -5048,8 +5044,8 @@ export function parseHealAbilities(text: string | null | undefined): ParsedHealA
                     // Instead-on-crit split (Isha): a sentence with "but when critical(ly)
                     // hit, it instead" carries TWO repair matches — the one INSIDE the
                     // instead-clause gets critFilter 'crit', the base match 'non-crit'
-                    // (mutually exclusive pair; the misspellings "criticall hit" and
-                    // "critcally hit" are tolerated). Isha's sentence always matches the
+                    // (mutually exclusive pair; the misspelling
+                    // "critcally hit" is tolerated). Isha's sentence always matches the
                     // "directly damaged" alternation FIRST (it precedes the crit-hit
                     // alternation in HEAL_DAMAGE_REACTION_RE), so the instead-clause
                     // handling takes precedence and the crit-hit-trigger branch below is
@@ -6594,13 +6590,12 @@ export function detectGrantFactionScope(
 //    it)
 //  - "(to) all enemies adjacent to the (original) target"           → anchor EXCLUDED
 //  - "all adjacent enemies" (bare, no "target"/"to" — Demolisher's passive bomb-splash:
-//    "deals 100% of the Bomb's damage to all adjavent enemies") → anchor EXCLUDED, same
+//    "deals 100% of the Bomb's damage to all adjacent enemies") → anchor EXCLUDED, same
 //    scope as the "to ... target" flavour above.
-// Tolerates the docs/ship-skills.csv "adjavent" typo.
 const TARGET_AND_ADJACENT_ENEMY_RE =
-    /targeted\s+enemy\s+and\s+all\s+(?:enem(?:y|ies)\s+adja[cv]ent\s+to\s+(?:it|the\s+enemy)|adja[cv]ent\s+enem(?:y|ies))/i;
+    /targeted\s+enemy\s+and\s+all\s+(?:enem(?:y|ies)\s+adjacent\s+to\s+(?:it|the\s+enemy)|adjacent\s+enem(?:y|ies))/i;
 const ADJACENT_ENEMY_ONLY_RE =
-    /all\s+enem(?:y|ies)\s+adja[cv]ent\s+to\s+(?:the\s+)?(?:original\s+)?target|all\s+adja[cv]ent\s+enem(?:y|ies)/i;
+    /all\s+enem(?:y|ies)\s+adjacent\s+to\s+(?:the\s+)?(?:original\s+)?target|all\s+adjacent\s+enem(?:y|ies)/i;
 
 /**
  * Detects whether a resolved (sentence/sub-clause scoped) buff clause carries one of the two
@@ -6649,7 +6644,7 @@ export function adjacentEnemyScopeForName(
  * raw-text sentence scoping (rawSentenceAround) so `anchorPos` — a position into the raw `text`,
  * same basis as the trigger detectors' `damagePos` — maps to the sentence actually carrying the
  * damage clause, and an unrelated adjacency phrase elsewhere in the text can't leak in.
- * Ship-kit W5 (Demolisher passive): "... deals 100% of the Bomb's damage to all adjavent
+ * Ship-kit W5 (Demolisher passive): "... deals 100% of the Bomb's damage to all adjacent
  * enemies" resolves to 'adjacent-enemies'.
  */
 export function adjacentEnemyScopeAtPos(

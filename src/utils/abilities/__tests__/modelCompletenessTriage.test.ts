@@ -257,12 +257,11 @@ describe('SP-C — stat-comparison gates', () => {
 });
 
 describe('SP-D — count-based gates', () => {
-    // Verbatim from docs/ship-skills.csv (second_passive_skill_text field). NOTE: CSV typo
-    // "3 ore more" preserved verbatim (not "or more").
+    // Verbatim from docs/ship-skills.csv (second_passive_skill_text field).
     const BERSERKER_P2 =
-        'This Unit gains <unit-skill>Marauder Rage II</unit-skill> for 3 turns when hitting 3 ore more enemies.';
+        'This Unit gains <unit-skill>Marauder Rage II</unit-skill> for 3 turns when hitting 3 or more enemies.';
 
-    it('Berserker: "gains Marauder Rage II when hitting 3 ore more enemies" is gated on a hit-count threshold', () => {
+    it('Berserker: "gains Marauder Rage II when hitting 3 or more enemies" is gated on a hit-count threshold', () => {
         const abilities = abilitiesFor({ secondPassiveSkillText: BERSERKER_P2 }, 'passive');
         const rageBuff = abilities.find(
             (a) => a.config.type === 'buff' && a.config.buffName === 'Marauder Rage II'

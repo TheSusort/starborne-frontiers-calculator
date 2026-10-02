@@ -1391,7 +1391,7 @@ function abilitiesFromText(
             out[0].ability.target = 'enemy-highest-speed';
         }
         // Ship-kit W5 (Demolisher bomb-splash): the reactive bomb-detonated damage clause
-        // ("... deals 100% of the Bomb's damage to all adjavent enemies") re-targets from the
+        // ("... deals 100% of the Bomb's damage to all adjacent enemies") re-targets from the
         // default 'enemy' to the adjacency scope. GATED on damageTrigger === 'on-bomb-detonated'
         // (same pattern as the end-of-round/start-of-round retargets above) rather than a bare
         // sentence-position check: an on-cast damage clause can share its SENTENCE with an
