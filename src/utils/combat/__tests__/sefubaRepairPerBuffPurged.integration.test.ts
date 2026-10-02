@@ -41,8 +41,10 @@ import type { StatusEngine } from '../statusEngine';
 // Verbatim from docs/catalogue-adaptation/ship-skills.candidate.csv (Sefuba).
 const SEFUBA_ACTIVE_CATALOGUE =
     'This Unit deals <unit-damage>160% damage</unit-damage> and <unit-skill>purges 1 buff</unit-skill> from the enemy.';
+// Synthetic: the catalogue active with "purges 2 buffs"; no real Sefuba skill purges two.
 const SEFUBA_ACTIVE_PURGE_2 =
     'This Unit deals <unit-damage>160% damage</unit-damage> and <unit-skill>purges 2 buffs</unit-skill> from the enemy.';
+// Verbatim from docs/catalogue-adaptation/ship-skills.candidate.csv (Sefuba passives R0 and R2).
 const SEFUBA_R0_CATALOGUE =
     'When this Unit <unit-skill>purges a buff</unit-skill> from an enemy, it <unit-damage>repairs 8%</unit-damage> of its max HP for each <unit-aid>buff</unit-aid> removed.';
 const SEFUBA_R2_CATALOGUE =
@@ -242,9 +244,7 @@ describe('Sefuba passive — repair per buff removed (player side)', () => {
         expect(hpPct(actors, 'attacker')).toBeCloseTo(50, 5);
     });
 
-    // KNOWN GAP: whether the chained "1 extra buff" purge's buff also counts toward "for each
-    // buff removed" is unconfirmed, pending an in-game test. The model counts the triggering
-    // purge only: the chained purge emits no purge-performed, so it repairs nothing.
+    // Pins the current model for the KNOWN GAP at the on-enemy-purged listener (triggers.ts).
     it('(4) R2: the chained extra purge removes a third buff but the repair stays 16%', () => {
         const r2Purge2 = sefubaKit(SEFUBA_ACTIVE_PURGE_2, SEFUBA_R2_CATALOGUE);
         // The chain fires: 4 buffs − 2 (her purge) − 1 (the extra) = 1 left; R0 leaves 2.
@@ -314,15 +314,19 @@ describe('Sefuba passive — team symmetry (enemy-side Sefuba) (5)', () => {
     });
 
     it('(5)/(2) her purge removes 1 buff → 8%', () => {
-        const { actors } = runEnemy(sefubaKit(SEFUBA_ACTIVE_CATALOGUE, SEFUBA_R0_CATALOGUE), 3);
+        const { purges, actors } = runEnemy(
+            sefubaKit(SEFUBA_ACTIVE_CATALOGUE, SEFUBA_R0_CATALOGUE),
+            3
+        );
+        expect(purges.map((p) => p.count)).toEqual([1]);
         expect(hpPct(actors, 'sefuba-enemy')).toBeCloseTo(58, 5);
     });
 
     it('(5)/(3) a focus with no buffs: no purge, no repair', () => {
-        const { purges, actors } = runEnemy(
-            sefubaKit(SEFUBA_ACTIVE_PURGE_2, SEFUBA_R0_CATALOGUE),
-            0
-        );
+        const kit = sefubaKit(SEFUBA_ACTIVE_PURGE_2, SEFUBA_R0_CATALOGUE);
+        // Positive control on this board: the same kit against a buffed focus repairs.
+        expect(hpPct(runEnemy(kit, 3).actors, 'sefuba-enemy')).toBeCloseTo(66, 5);
+        const { purges, actors } = runEnemy(kit, 0);
         expect(purges).toEqual([]);
         expect(hpPct(actors, 'sefuba-enemy')).toBeCloseTo(50, 5);
     });

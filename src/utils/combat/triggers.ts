@@ -1949,7 +1949,8 @@ export function registerReactiveListeners(args: {
                         // buff never adds to that repair.
                         // KNOWN GAP: whether the game counts the chained "1 extra buff" toward
                         // Sefuba's "for each buff removed" is unconfirmed, pending an in-game
-                        // test. Pinned in sefubaRepairPerBuffPurged.integration.test.ts (4).
+                        // test. The model counts the triggering purge only; pinned in
+                        // sefubaRepairPerBuffPurged.integration.test.ts case (4).
                         if (e.casterId === ownerId)
                             enqueue({
                                 ...intent,

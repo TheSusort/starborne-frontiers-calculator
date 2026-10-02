@@ -229,9 +229,8 @@ describe('3.22 kits — charge, purge and repair clauses', () => {
         expect(only(abilities, 'debuff').conditions).toEqual([]);
     });
 
-    // KNOWN GAP: whether the chained "1 extra buff" counts toward "for each buff removed" is
-    // unconfirmed, pending an in-game test. The repair counts the triggering purge's buffs only
-    // (fight pin: sefubaRepairPerBuffPurged.integration.test.ts case 4).
+    // Whether the chained extra purge counts: see the KNOWN GAP at the on-enemy-purged listener
+    // (triggers.ts); fight pin in sefubaRepairPerBuffPurged.integration.test.ts case (4).
     it('Sefuba passive R2: 8% per buff the triggering purge removed, plus the 1 extra purge', () => {
         const text =
             'When this Unit <unit-skill>purges a buff</unit-skill> from an enemy, it <unit-damage>repairs 8%</unit-damage> of its max HP for each <unit-aid>buff</unit-aid> removed and also <unit-skill>purges 1 extra buff</unit-skill> from the enemy.';

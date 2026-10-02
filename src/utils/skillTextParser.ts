@@ -860,10 +860,14 @@ export function detectIgnoresStealth(...skillTexts: Array<string | null | undefi
 // all-allies death charge is disqualified here via "all allies"; parseAllyChargeOnEnemyDeath
 // handles it.
 // The ownerless "adds N charge to the Charged Skill" is an ally grant too — see
-// ALLY_CHARGE_GRANT_RE's Hermes note. The arm carries that regex's grant verbs (adds/grants/gives)
-// so a "gains N charge to the Charged Skill" stays a self gain.
-const CHARGE_DISQUALIFY_RE =
-    /all allies|their charged skill|charged skill of (?:all )?allies|\b(?:adds?|grants?|gives?)\s+(?:\d+|a|an)\s+charges?\s+to\s+the\s+charged\s+skill\b(?!\s+of\b)/i;
+// ALLY_CHARGE_GRANT_RE's Hermes note. A "gains N charge to the Charged Skill" stays a self gain.
+// The verbs that GRANT a charge to someone else; shared by CHARGE_DISQUALIFY_RE and
+// ALLY_CHARGE_GRANT_RE.
+const CHARGE_GRANT_VERBS = String.raw`(?:adds?|grants?|gives?)`;
+const CHARGE_DISQUALIFY_RE = new RegExp(
+    String.raw`all allies|their charged skill|charged skill of (?:all )?allies|\b${CHARGE_GRANT_VERBS}\s+(?:\d+|a|an)\s+charges?\s+to\s+the\s+charged\s+skill\b(?!\s+of\b)`,
+    'i'
+);
 
 // "when an enemy repairs / performs a repair[s]" — a player reaction to an ENEMY repair
 // (Zosimos's "gains a charge"). Tolerates the live CSV refit typo "performs a repairs".
@@ -4329,8 +4333,10 @@ export function parseAllyChargeOnEnemyDeath(
 // Tolerates the live CSV plural-with-1 typo ("adds 1 charges"). Reference: docs/ship-skills.csv.
 // Lookbehind-free; matches "to their Charged Skill", "to the charged skill of [all] allies" and
 // the ownerless "to the Charged Skill".
-const ALLY_CHARGE_GRANT_RE =
-    /(?:adds?|grants?|gives?)\s+(\d+|a|an)\s+charges?\s+to\s+(?:their\s+charged\s+skill|the\s+charged\s+skill\s+of\s+(?:all\s+)?allies|the\s+charged\s+skill\b(?!\s+of\b))/i;
+const ALLY_CHARGE_GRANT_RE = new RegExp(
+    String.raw`${CHARGE_GRANT_VERBS}\s+(\d+|a|an)\s+charges?\s+to\s+(?:their\s+charged\s+skill|the\s+charged\s+skill\s+of\s+(?:all\s+)?allies|the\s+charged\s+skill\b(?!\s+of\b))`,
+    'i'
+);
 // Graphite's gate: "if an enemy (Unit) has Stealth".
 const ALLY_CHARGE_ENEMY_STEALTH_RE = /if\s+an\s+enemy\b[^.]*?\bhas\b[^.]*?\bStealth\b/i;
 // Shared on-enemy-death phrasing (ours and the catalogue's). Used both to EXCLUDE Liberator's
