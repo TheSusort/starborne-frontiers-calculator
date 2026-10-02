@@ -4524,22 +4524,23 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         }
     }
 
-    // On-cast extend-status (Ripper passive all-allies buff-extend; Lev charged all-enemies
-    // debuff-extend gated on self-crit). Pure StatusEngine duration mutation — side-symmetric
-    // (mirrors the purge/steal/shield-strip blocks above: runs identically for player AND enemy
-    // casters, OUTSIDE the healing gate).
-    // Sourced from BOTH the firing slot (gatedSkill: Lev, charged) AND the always-active
-    // passive slot (gatedPassive: Ripper) — mirroring the healAbilities combine
+    // On-cast extend-status (Lev charged all-enemies debuff-extend gated on self-crit; Fuying
+    // charged named Stealth buff-extend; Asphyxiator passive inflicted-scope debuff-extend).
+    // Ripper's buff-extend rides on-debuff-inflicted and runs in triggers.ts, not here. Pure
+    // StatusEngine duration mutation — side-symmetric (mirrors the purge/steal/shield-strip
+    // blocks above: runs identically for player AND enemy casters, OUTSIDE the healing gate).
+    // Sourced from BOTH the firing slot (gatedSkill: Lev, Fuying) AND the always-active
+    // passive slot (gatedPassive: Asphyxiator) — mirroring the healAbilities combine
     // (below) and the extendDoTs/extendInflictedDoTs combine (above), since a
     // gatedSkill-only scan (like the purge/steal loops, whose abilities are never passive-slot
-    // in the corpus) would silently skip Ripper's passive-slot extend ability.
+    // in the corpus) would silently skip a passive-slot extend ability.
     // conditionsMet(ab.conditions, ctx) evaluates Lev's self-crit gate against THIS cast's live
     // `ctx.roundCrit` (set at buildRoundContext above from `roundCrit = critHits > 0`) — the
     // SAME ctx the purge/steal blocks gate against, so a non-crit cast correctly suppresses
     // Lev's extension (see evaluateConditions.ts's 'self-crit' case, binary off ctx.roundCrit).
     // The DEBUFF branch targets enemies, so it requires a hit target (targetId / aoeVictimIds)
     // and is skipped when there is none — a NO-VICTIM turn, which leaves targetId unset. The
-    // BUFF branch (Ripper 'all-allies') needs NO enemy target — it must run regardless of
+    // BUFF branch (Fuying 'all-allies') needs NO enemy target — it must run regardless of
     // targetId, otherwise the ally/self buff-extend is silently dropped in DPS mode and on any
     // enemy-less cast. extendAll{Debuffs,Buffs}Duration return 0 against an empty/missing store,
     // so both branches no-op harmlessly when the relevant roster is empty.
@@ -4556,7 +4557,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         }
         const { statusKind, turns } = ab.config;
         // #363 (Fuying): a NAMED extension ("extends Stealth by 1 turn") restricts the buff
-        // branch below to that exact status name. Absent (Ripper) → extend-everything, unchanged.
+        // branch below to that exact status name. Absent → extend-everything.
         const namedBuff = ab.config.type === 'extend-status' ? ab.config.buffName : undefined;
         if (statusKind === 'debuff') {
             // 'enemy': single hit enemy (targetId). Lev: fans over the cast's hit-enemy footprint
@@ -4616,12 +4617,12 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 }
             }
         } else {
-            // Ripper: 'all-allies' — same allyRoster pattern the ally-charge-gain block uses
+            // 'all-allies' (Fuying) — same allyRoster pattern the ally-charge-gain block uses
             // (above): healing-mode roster when present, else the live same-side
             // roster, narrowed through supportRecipients (the caster's own footprint pattern,
-            // if any — undefined pattern/anchor leaves the roster unfiltered, so Ripper's own
-            // buffs extend too, matching "all allies active buffs are extended"). Independent of
-            // targetId — an ally buff-extend needs no enemy target.
+            // if any — undefined pattern/anchor leaves the roster unfiltered, so the caster's own
+            // buffs extend too). Independent of targetId — an ally buff-extend needs no enemy
+            // target.
             const isEnemyCaster = actor.side === 'enemy';
             const allyRoster = args.healing
                 ? isEnemyCaster
