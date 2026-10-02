@@ -306,11 +306,11 @@ export interface Intent {
          *  stamped by the on-debuff-inflicted and on-other-ally-debuff-inflicted listeners. The
          *  reactive `damage`, `debuff` and `dot` branches read it after `counterTargetId` so the
          *  proc lands on the enemy that was actually debuffed — Insidiousness's hit, Warden's
-         *  Out. Damage Down II, Ripper's Inferno II. A DEDICATED field rather than reusing `victimId`: that
-         *  one is the `adjacent-enemies` splash anchor (on-bomb-detonated), and reusing it would
-         *  newly re-anchor any adjacent-enemies ability reached via this trigger. Self-target
-         *  consumers (APEX/Butcher/Torcher/Prospect/Yuyan riders, Hemlock's charge,
-         *  Pestilence's cleanse) ignore it. */
+         *  Out. Damage Down II, Ripper's Inferno II. A DEDICATED field rather than reusing
+         *  `victimId`: that one is the `adjacent-enemies` splash anchor (on-bomb-detonated), and
+         *  reusing it would newly re-anchor any adjacent-enemies ability reached via this
+         *  trigger. Self-target consumers (APEX/Butcher/Torcher/Prospect/Yuyan riders, Hemlock's
+         *  charge, Pestilence's cleanse) ignore it. */
         debuffVictimId?: string;
         /** The DoT type of the ally's application (dot-applied.dotType), captured
          *  alongside victimId. The convert-dot executor gates on this === cfg.fromDotType so an

@@ -26,6 +26,8 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { runCombat, CombatEngineInput } from '../engine';
 import { createEventBus, CombatEvent } from '../events';
+import { executeIntent, IntentExecContext } from '../triggers';
+import { createStatusEngine, RegisteredAbilityStatus } from '../statusEngine';
 import { buildShipAbilities } from '../../abilities/buildShipAbilities';
 import { setupKeyedRng } from '../../calculators/rateAccumulator';
 import type { Ability, ShipSkills, SkillSlot } from '../../../types/abilities';
@@ -152,7 +154,9 @@ const victimAt = (id: string, security: number): EnemyAttacker => ({
     shipSkills: { slots: [{ slot: 'active', abilities: [] }] },
 });
 
-const allyBuffer = (): TeamActor => ({
+/** The buffing ally. `killer` gives its active a plain hit at overwhelming attack, so from round 2
+ *  on it kills the front enemy before Ripper acts. */
+const allyBuffer = (opts: { killer?: boolean } = {}): TeamActor => ({
     id: 'ally-buffer',
     speed: 150,
     chargeCount: 99,
@@ -163,9 +167,16 @@ const allyBuffer = (): TeamActor => ({
     target: parsedFrontTarget(),
     pattern: singleTargetPattern(),
     walk: {
-        shipSkills: allyBufferSkills(),
+        shipSkills: opts.killer
+            ? {
+                  slots: [
+                      { slot: 'active', abilities: [plainHit()] },
+                      { slot: 'charged', abilities: [allyBuff()] },
+                  ],
+              }
+            : allyBufferSkills(),
         stats: {
-            attack: 0,
+            attack: opts.killer ? 1_000_000_000 : 0,
             crit: 0,
             critDamage: 0,
             defensePenetration: 0,
@@ -568,5 +579,210 @@ describe('Ripper — team symmetry (enemy-side Ripper)', () => {
         const resisted = run(enemySideExtensionBoard([infernoR2(), extension()], 0, 100));
         expect(resistedRounds(resisted, 'ripper-enemy')).toEqual([1, 1]);
         expect(expiryRound(resisted, 'enemy-buffer')).toBe(base);
+    });
+});
+
+// Hand-built active pieces for the cast-cardinality boards below.
+const incRepairDown = (): Ability => ({
+    id: 'hand-inc-repair-down',
+    type: 'debuff',
+    target: 'enemy',
+    trigger: 'on-cast',
+    conditions: [],
+    config: {
+        type: 'debuff',
+        buffName: 'Inc. Repair Down II',
+        parsedEffects: {},
+        stacks: 1,
+        isStackable: false,
+        application: 'inflict',
+        duration: 1,
+    },
+});
+const twoHitStrike = (): Ability => ({
+    id: 'two-hit-strike',
+    type: 'damage',
+    target: 'enemy',
+    trigger: 'on-cast',
+    conditions: [],
+    config: { type: 'damage', multiplier: 100, hits: 2 },
+});
+const extraActionOncePerRound = (): Ability => ({
+    id: 'extra-action',
+    type: 'extra-action',
+    target: 'self',
+    trigger: 'on-cast',
+    conditions: [],
+    config: { type: 'extra-action', oncePerRound: true },
+});
+const corrosionDot = (target: Ability['target']): Ability => ({
+    id: 'own-corrosion',
+    type: 'dot',
+    target,
+    trigger: 'on-cast',
+    conditions: [],
+    config: { type: 'dot', dotType: 'corrosion', tier: 3, stacks: 1, duration: 3 },
+});
+
+describe('Ripper — the cap is per CAST, not per round or per hit', () => {
+    it('an extra action in the same round is a second cast: 2 landings → 2 Infernos in round 1', () => {
+        const events = run(
+            BASE({
+                numRounds: 1,
+                shipSkills: kit([inferno()], {
+                    active: [plainHit(), incRepairDown(), extraActionOncePerRound()],
+                }),
+                enemyAttackers: [victimAt('victim', 0)],
+            })
+        );
+        expect(debuffLandingRounds(events, 'attacker', 'victim')).toEqual([1, 1]);
+        expect(infernoLandings(events, 'attacker', 'victim')).toEqual([
+            { round: 1, tier: 30 },
+            { round: 1, tier: 30 },
+        ]);
+    });
+
+    it('a 2-hit active landing its debuff on both hits is ONE cast: 1 Inferno', () => {
+        const events = run(
+            BASE({
+                numRounds: 1,
+                shipSkills: kit([inferno()], { active: [twoHitStrike(), incRepairDown()] }),
+                enemyAttackers: [victimAt('victim', 0)],
+            })
+        );
+        expect(debuffLandingRounds(events, 'attacker', 'victim')).toEqual([1, 1]);
+        expect(infernoLandings(events, 'attacker', 'victim')).toEqual([{ round: 1, tier: 30 }]);
+    });
+
+    it('control: the same 2-hit active with the cap stripped lands one Inferno per hit', () => {
+        const uncapped: Ability = { ...inferno(), oncePerCast: undefined };
+        const events = run(
+            BASE({
+                numRounds: 1,
+                shipSkills: kit([uncapped], { active: [twoHitStrike(), incRepairDown()] }),
+                enemyAttackers: [victimAt('victim', 0)],
+            })
+        );
+        expect(infernoLandings(events, 'attacker', 'victim')).toHaveLength(2);
+    });
+
+    // R2: Ripper casts twice in round 1 (extra action) on victim A. In round 2 the ally kills A
+    // before Ripper acts, so his later casts hit victim B, who resists everything — round 1's two
+    // casts are the only ones that extend the ally's Attack Up I.
+    const extraActionBoard = (passive: Ability[]) =>
+        BASE({
+            numRounds: 6,
+            speed: 100,
+            shipSkills: kit(passive, {
+                active: [plainHit(), incRepairDown(), extraActionOncePerRound()],
+            }),
+            enemyAttackers: [
+                victimAt('victim', 0),
+                // Beyond the ally's power to kill and Ripper's to debuff.
+                {
+                    ...victimAt('victim-b', 1_000_000),
+                    stats: { ...victimAt('victim-b', 1_000_000).stats, hp: 1e15 },
+                    position: 'M3',
+                },
+            ],
+            teamActors: [allyBuffer({ killer: true })],
+        });
+
+    it('R2: two casts in one round extend the ally buff by 2 (one per cast)', () => {
+        const base = expiryRound(run(extraActionBoard([infernoR2()])), 'ally-buffer') as number;
+        expect(base).toBeDefined();
+        const events = run(extraActionBoard([infernoR2(), extension()]));
+        expect(debuffLandingRounds(events, 'attacker', 'victim')).toEqual([1, 1]);
+        expect(debuffLandingRounds(events, 'attacker', 'victim-b')).toEqual([]);
+        expect(resistedRounds(events, 'attacker').length).toBeGreaterThan(0);
+        expect(expiryRound(events, 'ally-buffer')).toBe(base + 2);
+    });
+});
+
+describe('Ripper — a DoT his active inflicts carries the firing slot', () => {
+    // A Corrosion his active lands is a debuff "with its active skill": the slot-filtered Inferno
+    // reaction fires off it. The primary victim's Corrosion comes from the cast's primary DoT
+    // emit, the neighbour's from its splash emit.
+    it('his active Corrosion on the target and its neighbour → Inferno II on each', () => {
+        const events = run(
+            BASE({
+                numRounds: 1,
+                shipSkills: kit([inferno()], {
+                    active: [plainHit(), corrosionDot('target-and-adjacent-enemies')],
+                }),
+                enemyAttackers: [
+                    victimAt('victim', 0),
+                    { ...victimAt('victim-2', 0), position: 'M3' },
+                ],
+            })
+        );
+        for (const id of ['victim', 'victim-2']) {
+            expect(
+                events.flatMap((e) =>
+                    e.type === 'dot-applied' && e.targetId === id && e.dotType === 'corrosion'
+                        ? [e.sourceSlot]
+                        : []
+                )
+            ).toEqual(['active']);
+            expect(infernoLandings(events, 'attacker', id)).toEqual([{ round: 1, tier: 30 }]);
+        }
+    });
+});
+
+describe('Ripper R2 — the extension skips a dead ally', () => {
+    const timedBuff = (): Extract<RegisteredAbilityStatus, { kind: 'timed' }> => ({
+        kind: 'timed',
+        side: 'self',
+        sourceSlot: 'active',
+        conditions: [],
+        duration: 2,
+        payload: { buffName: ALLY_BUFF, stacks: 1, parsedEffects: { attack: 10 } },
+    });
+    const turnsOf = (se: ReturnType<typeof createStatusEngine>, id: string) =>
+        se.timedAbilityStatuses('self', id).find((s) => s.payload.buffName === ALLY_BUFF)?.active
+            .turnsRemaining;
+
+    it("extends a live ally's buff and leaves a dead ally's alone", () => {
+        const se = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        se.beginRound(1);
+        for (const id of ['attacker', 'live-ally', 'dead-ally'])
+            se.applyTimedAbilityStatus(1, timedBuff(), id);
+        const runtime = {
+            actor: { id: 'attacker', chargeCount: 0, charges: 0 },
+            selfBuffLookup: new Map(),
+            enemyDebuffLookup: new Map(),
+        } as never;
+        const ctx = {
+            round: 1,
+            statusEngine: se,
+            bus: createEventBus(),
+            corrosionEntries: [],
+            infernoEntries: [],
+            pendingBombs: [],
+            runtimes: new Map([['attacker', runtime]]),
+            grantAllyCharges: () => {},
+            grantExtraAction: () => {},
+            playerIds: ['attacker', 'live-ally', 'dead-ally'],
+            isActorAlive: (id: string) => id !== 'dead-ally',
+            turnsTakenFor: () => 1,
+            oncePerRoundConsumed: new Set<string>(),
+            lastTurnCtxByActor: new Map(),
+            recordResisted: () => {},
+            lowestHpAllyIdFor: () => undefined,
+        } as unknown as IntentExecContext;
+        const before = turnsOf(se, 'live-ally') as number;
+        expect(turnsOf(se, 'dead-ally')).toBe(before);
+        executeIntent(
+            {
+                ability: extension(),
+                sourceSlot: 'passive',
+                ownerId: 'attacker',
+                eventCtx: { debuffVictimId: 'victim' },
+            },
+            ctx
+        );
+        expect(turnsOf(se, 'attacker')).toBe(before + 1);
+        expect(turnsOf(se, 'live-ally')).toBe(before + 1);
+        expect(turnsOf(se, 'dead-ally')).toBe(before);
     });
 });
