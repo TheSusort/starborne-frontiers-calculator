@@ -1034,15 +1034,26 @@ function foldTimedEnemyDebuffs(args: {
     return { roundEnemyDebuffs, landedEnemyDebuffs };
 }
 
-// Step 2.9: Extend ACTIVE-scope ticking DoTs (Corrosion/Inferno) by extend-dot abilities —
-// applied BEFORE this round's new DoTs so only pre-existing ones grow (Provider's
-// "extends active Damage Over Time effects"). Bombs are excluded (delaying a one-shot
-// detonation adds nothing). Each ability is gated by its conditions (using ctx with binary
-// roundCrit); a `chanceFromCritPower` extension fires at exactly critPowerFactor frequency
-// via the deterministic extendChanceGate schedule. Sourced from BOTH the firing skill and
-// the always-active passive slot. The stateful gate is passed in and called at the same
-// sequence point as the original inline loop. 'inflicted'-scope extensions are handled
-// separately AFTER applyNewDoTs (see extendInflictedDoTs).
+/**
+ * Step 2.9: grows the ticking DoTs (Corrosion/Inferno) already standing on the enemies an
+ * active-scope `extend-dot` ability targets. Bombs are excluded (delaying a one-shot detonation
+ * adds nothing); 'inflicted'-scope extensions are `extendInflictedDoTs`' job.
+ *
+ * Recipients follow the ability's `target` through `resolveDebuffRecipientIds`, the resolver every
+ * direct enemy clause uses: 'all-enemies' fans over the cast's pattern footprint (`aoeVictimIds`,
+ * living victims only — `footprintVictims`), 'enemy' is the primary alone, and a non-positional
+ * cast with no footprint falls back to the primary. The primary's containers are the loose
+ * `corrosionEntries`/`infernoEntries`; every other recipient's come off `opposingVictimById`.
+ *
+ * Runs BEFORE `applyNewDoTs`, so a DoT this same cast inflicts is never extended, whichever side
+ * of the extension clause it is written on.
+ *
+ * Each ability's gate — its conditions against ctx (binary roundCrit), then for a
+ * `chanceFromCritPower` extension one `extendChanceGate(critPowerFactor)` draw — is taken ONCE per
+ * ability per cast, never per recipient, so the gate's deterministic schedule does not depend on
+ * how many enemies the pattern hits. Sourced from BOTH the firing skill and the always-active
+ * passive slot.
+ */
 function extendDoTs(args: {
     abilities: Ability[];
     ctx: ConditionContext;
@@ -1050,6 +1061,12 @@ function extendDoTs(args: {
     extendChanceGate: (rate: number) => boolean;
     corrosionEntries: ActiveDoTStack[];
     infernoEntries: ActiveDoTStack[];
+    targetId: string | undefined;
+    aoeVictimIds: string[] | undefined;
+    opposingVictimById: Map<string, CombatActor> | undefined;
+    adjacentEnemyIdsFor?: (anchorId: string) => string[];
+    positionalLanding: boolean;
+    selectorEnemyIdFor?: (kind: EnemySelectorKind) => string | undefined;
 }): void {
     for (const ab of args.abilities) {
         if (ab.config.type !== 'extend-dot') continue;
@@ -1059,8 +1076,26 @@ function extendDoTs(args: {
             const critPowerFactor = Math.min(1, args.effectiveCritDamage / 100);
             if (!args.extendChanceGate(critPowerFactor)) continue;
         }
-        for (const e of args.corrosionEntries) e.remainingRounds += ab.config.turns;
-        for (const e of args.infernoEntries) e.remainingRounds += ab.config.turns;
+        const turns = ab.config.turns;
+        const recipients = resolveDebuffRecipientIds({
+            abTarget: ab.target,
+            anchorId: args.targetId,
+            aoeVictimIds: args.aoeVictimIds,
+            adjacentEnemyIdsFor: args.adjacentEnemyIdsFor,
+            positionalLanding: args.positionalLanding,
+            selectorEnemyIdFor: args.selectorEnemyIdFor,
+        });
+        for (const vid of recipients) {
+            // `undefined` (the turn's own bound victim) and the primary's id both read the loose
+            // containers; a no-victim turn's are a throwaway default, so that case lands on nobody.
+            const primary = vid === undefined || vid === args.targetId;
+            const victim = primary ? undefined : args.opposingVictimById?.get(vid);
+            if (!primary && !victim) continue;
+            for (const e of victim?.corrosionEntries ?? args.corrosionEntries)
+                e.remainingRounds += turns;
+            for (const e of victim?.infernoEntries ?? args.infernoEntries)
+                e.remainingRounds += turns;
+        }
     }
 }
 
@@ -3868,6 +3903,12 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         extendChanceGate,
         corrosionEntries,
         infernoEntries,
+        targetId,
+        aoeVictimIds,
+        opposingVictimById,
+        adjacentEnemyIdsFor,
+        positionalLanding,
+        selectorEnemyIdFor,
     });
 
     // Lingshe: countdown-reduces + force-detonates enemy Bombs. Runs BEFORE
