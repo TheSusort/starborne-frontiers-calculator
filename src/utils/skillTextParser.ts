@@ -859,7 +859,10 @@ export function detectIgnoresStealth(...skillTexts: Array<string | null | undefi
 // and one on killing an enemy onto on-enemy-destroyed (Obsidian/Valiant). Liberator's
 // all-allies death charge is disqualified here via "all allies"; parseAllyChargeOnEnemyDeath
 // handles it.
-const CHARGE_DISQUALIFY_RE = /all allies|their charged skill|charged skill of (?:all )?allies/i;
+// The ownerless "adds N charge to the Charged Skill" is an ally grant too — see
+// ALLY_CHARGE_GRANT_RE's Hermes note.
+const CHARGE_DISQUALIFY_RE =
+    /all allies|their charged skill|charged skill of (?:all )?allies|\b(?:\d+|a|an)\s+charges?\s+to\s+the\s+charged\s+skill\b(?!\s+of\b)/i;
 
 // "when an enemy repairs / performs a repair[s]" — a player reaction to an ENEMY repair
 // (Zosimos's "gains a charge"). Tolerates the live CSV refit typo "performs a repairs".
@@ -4317,12 +4320,16 @@ export function parseAllyChargeOnEnemyDeath(
 //   • Graphite (third passive): "At the start of the round, if an enemy Unit has Stealth, this
 //     Unit adds 1/2 charges to the charged skill of all allies within the active pattern."
 //     → start-of-round, gated on enemy-has-Stealth.
-//   • Hermes (catalogue charged slot): "…and adds 1 charge to the charged skill of allies." →
-//     on-cast, every ally in the skill pattern, Hermes included (user ruling 2026-10-02).
+//   • Hermes (charged slot): "…and adds 1 charge to the charged skill of allies." (catalogue)
+//     and "…and adds 1 charge to the Charged Skill." (ours) → on-cast, every ally in the skill
+//     pattern, Hermes included (user ruling 2026-10-02). The ownerless "the Charged Skill" —
+//     no "its" / "own" / "of …" — names the charged skill of whoever the cast targets; a self
+//     gain always says "its (own) Charged Skill".
 // Tolerates the live CSV plural-with-1 typo ("adds 1 charges"). Reference: docs/ship-skills.csv.
-// Lookbehind-free; matches "to their Charged Skill" and "to the charged skill of [all] allies".
+// Lookbehind-free; matches "to their Charged Skill", "to the charged skill of [all] allies" and
+// the ownerless "to the Charged Skill".
 const ALLY_CHARGE_GRANT_RE =
-    /(?:adds?|grants?|gives?)\s+(\d+|a|an)\s+charges?\s+to\s+(?:their\s+charged\s+skill|the\s+charged\s+skill\s+of\s+(?:all\s+)?allies)/i;
+    /(?:adds?|grants?|gives?)\s+(\d+|a|an)\s+charges?\s+to\s+(?:their\s+charged\s+skill|the\s+charged\s+skill\s+of\s+(?:all\s+)?allies|the\s+charged\s+skill\b(?!\s+of\b))/i;
 // Graphite's gate: "if an enemy (Unit) has Stealth".
 const ALLY_CHARGE_ENEMY_STEALTH_RE = /if\s+an\s+enemy\b[^.]*?\bhas\b[^.]*?\bStealth\b/i;
 // Shared on-enemy-death phrasing (ours and the catalogue's). Used both to EXCLUDE Liberator's

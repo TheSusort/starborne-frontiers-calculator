@@ -15,10 +15,12 @@ import {
 } from '../../constants/toxicOverflow';
 import {
     Ability,
+    AbilityConfig,
     AbilityTarget,
     Condition,
     IncomingHitContext,
     ShipSkills,
+    SkillSlot,
 } from '../../types/abilities';
 import type { Position } from '../../types/encounters';
 import type { AffinityName } from '../../types/ship';
@@ -209,6 +211,38 @@ export function foldSpeedBuffPct(
     return foldActorBuffTotals(statusEngine, selfBuffLookup, actorId).speedBuff;
 }
 
+/**
+ * Which status store a cast buff/debuff ability registers into — the ONE classifier
+ * `registerActorAbilityStatuses` routes on (exported so census tests ask the engine instead of
+ * re-deriving it). Rules, in precedence order:
+ *  - a hit-counted grant ("Barrier for 1 hit") is always `timed` — the aura and accumulating
+ *    stores are unreachable by `consumeStatusHit`;
+ *  - `stackTrigger` + `isStackable` → `accumulating`;
+ *  - a Cheat-Death-family grant from a FIRING slot is `timed` (a cast-path persistent grant,
+ *    duration Infinity — `castPathCheatDeath`);
+ *  - a `recurring`/absent duration → `aura`; a finite duration → `timed`.
+ */
+export function classifyCastStatus(
+    slot: SkillSlot,
+    cfg: Extract<AbilityConfig, { type: 'buff' | 'debuff' }>
+): { kind: 'accumulating' | 'aura' | 'timed'; castPathCheatDeath: boolean } {
+    const hitCounted = cfg.type === 'buff' && cfg.hits !== undefined;
+    const accumulating = !hitCounted && !!cfg.stackTrigger && !!cfg.isStackable;
+    const castPathCheatDeath =
+        !accumulating &&
+        CHEAT_DEATH_BUFFS.has(cfg.buffName) &&
+        (slot === 'active' || slot === 'charged');
+    const isAura =
+        !accumulating &&
+        !castPathCheatDeath &&
+        !hitCounted &&
+        (cfg.duration === 'recurring' || cfg.duration === undefined);
+    return {
+        kind: accumulating ? 'accumulating' : isAura ? 'aura' : 'timed',
+        castPathCheatDeath,
+    };
+}
+
 // Classify ONE actor's cast buff/debuff abilities into timed/aura/accumulating statuses
 // and register them under the correct status-engine recipients. Returns the timed-by-slot
 // lists (applied when that caster's slot fires).
@@ -292,15 +326,11 @@ function registerActorAbilityStatuses(
         // (its statuses are seeded, not cast), so the tracker stays false there.
         const isFiringSlot = slot.slot === 'active' || slot.slot === 'charged';
         let sawDamageClause = false;
-        // Same walk for a REPAIR clause: a per-recipient HP filter written after it reads the HP
-        // that repair left behind (see the `afterHealClause` stamp below).
-        let sawHealClause = false;
         for (const ability of slot.abilities) {
             const cfg = ability.config;
             // A real damage-dealing clause. A 0-multiplier entry is a structural no-op (the
             // fixtures' "took a turn" placeholder) and orders nothing.
             if (isFiringSlot && cfg.type === 'damage' && cfg.multiplier > 0) sawDamageClause = true;
-            if (isFiringSlot && cfg.type === 'heal' && cfg.pct > 0) sawHealClause = true;
             if (cfg.type !== 'buff' && cfg.type !== 'debuff') continue;
             // #399: the store side comes from the ONE classifier (abilityTargetSide.ts), not a
             // local list. The list this replaced omitted the three selector targets, so a
@@ -357,7 +387,8 @@ function registerActorAbilityStatuses(
             // combines `hits` with `stackTrigger + isStackable` today; if one ever does, the hit
             // lifecycle wins and the stack accrual is what gets dropped, loudly here rather than
             // silently at the spend site.
-            const accumulating = !hitCounted && !!cfg.stackTrigger && cfg.isStackable;
+            const classified = classifyCastStatus(slot.slot, cfg);
+            const accumulating = classified.kind === 'accumulating';
             // Cheat-Death-family grants from a FIRING slot (Hermes/Hayyan charged skills) are
             // cast-path persistent grants, NOT always-on auras: they apply when the slot fires
             // (per-slot timed loop in playerTurn, gated by conditionsMet at cast time and by any
@@ -365,18 +396,14 @@ function registerActorAbilityStatuses(
             // consumes them via cheatDeathConsumed). Scoped to CHEAT_DEATH_BUFFS — other
             // firing-slot recurring buffs (Panon, Sansi, Sentinel, Oleander…) keep the aura model
             // (documented in coverage §5).
-            const castPathCheatDeath =
-                !accumulating &&
-                CHEAT_DEATH_BUFFS.has(cfg.buffName) &&
-                (slot.slot === 'active' || slot.slot === 'charged');
+            const castPathCheatDeath = classified.castPathCheatDeath;
             // Player-side recipients (self vs ally/all-allies). Enemy-side statuses ignore this
             // (recipients are only consulted on the self side). Self → caster only; ally/all-allies
             // → every player actor (fixed source order). `playerIds` already includes the caster.
             // CARVE-OUT (castPathCheatDeath only): a single-`ally` grant narrows to the heal target,
             // fallback [ownerId] when no heal target; `all-allies` keeps every player (Hayyan, and
             // Hermes, whose per-recipient HP test rides `recipientFilter`). The global ally →
-            // all-players rule for every OTHER cast-path buff is UNCHANGED. No parsed kit carries
-            // the single-`ally` shape (both corpora, 2026-10-02); it serves authored kits.
+            // all-players rule for every OTHER cast-path buff is UNCHANGED.
             //
             // `'lowest-hp-ally'` joins BOTH ally arms. On the CARVE-OUT arm the match is
             // purely DEFENSIVE: the parser cannot produce a `'lowest-hp-ally'` Cheat Death (no
@@ -446,11 +473,7 @@ function registerActorAbilityStatuses(
             // its gate and has no consumable charge, so a durationless "Barrier for 1 hit" would
             // otherwise be permanent for as long as its gate held. (`hitCounted` is computed with
             // `accumulating` above — the other classification it has to lose to.)
-            const isAura =
-                !accumulating &&
-                !castPathCheatDeath &&
-                !hitCounted &&
-                (cfg.duration === 'recurring' || cfg.duration === undefined);
+            const isAura = classified.kind === 'aura';
             const payload: AbilityStatusPayload = {
                 buffName: cfg.buffName,
                 stacks: cfg.stacks,
@@ -543,13 +566,6 @@ function registerActorAbilityStatuses(
                     // victim's incoming damage, so deferring one would change nothing but its
                     // event order). Consumed by playerTurn's timed-enemy application loop.
                     ...(side === 'enemy' && sawDamageClause ? { afterDamageClause: true } : {}),
-                    // Self-side twin: a per-recipient HP filter written after a repair clause
-                    // reads post-repair HP. Consumed by playerTurn's timed-self application loop.
-                    ...(side === 'self' &&
-                    sawHealClause &&
-                    ability.recipientFilter?.hpBelowPct !== undefined
-                        ? { afterHealClause: true }
-                        : {}),
                 };
                 (side === 'self' ? timedSelfBySlot : timedEnemyBySlot).push(status);
             }

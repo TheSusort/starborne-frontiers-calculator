@@ -1259,9 +1259,10 @@ exports[`kit fingerprints > Hermes 1`] = `
   "wounded": [
     "buff",
     "buff-expired",
+    "buff:charged",
     "charge-changed",
+    "heal",
     "heal:active",
-    "heal:charged",
   ],
 }
 `;

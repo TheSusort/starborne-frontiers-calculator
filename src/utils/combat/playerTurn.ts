@@ -2904,6 +2904,11 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // The status's recipient STATE filter (`recipientFilter` — Hermes's "if an ally has less
         // than 40% HP, it grants that ally Cheat Death") is read per recipient, LIVE, right here:
         // an ally-wide grant asks each recipient about its own HP, never the caster's target.
+        // TIMING CONTRACT: this loop runs BEFORE the cast's support pass, so the HP read is each
+        // recipient's HP before this cast's repair lands — even though Hermes's text writes the
+        // repair first. That is a deliberate exception to written clause order (user ruling
+        // 2026-10-02: an ally at 38% whom the repair lifts to 41.7% still gets Cheat Death).
+        // Pinned by hermesCheatDeathPerRecipient.integration.test.ts case (6), both sides.
         // No role reader exists on the cast path, so a `notRole` axis excludes everyone here
         // (`recipientFilterCarriers.test.ts` keeps that axis off cast-path abilities).
         const stateFiltered = narrowByRecipientFilter(
@@ -2941,9 +2946,6 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             });
         }
     };
-    // Timed self statuses whose clause follows this cast's repair clause (`afterHealClause`):
-    // applied after the support pass, so their per-recipient HP filter reads post-repair HP.
-    const afterHealStatuses: (typeof timedSelfBySlot)[number][] = [];
     for (const status of timedSelfBySlot) {
         if (status.sourceSlot !== action) continue;
         // The gate evaluates against THIS CASTER's post-debuff ctx (the status belongs to the
@@ -2951,8 +2953,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // is applied to EVERY recipient: self → [caster]; ally/all-allies → all players, narrowed
         // per recipient inside `applyTimedSelfStatus`.
         if (!conditionsMet(status.conditions, postDebuffGateCtx)) continue;
-        if (status.afterHealClause) afterHealStatuses.push(status);
-        else applyTimedSelfStatus(status);
+        applyTimedSelfStatus(status);
     }
 
     // (e) Effective self ability statuses this round (timed in-window + auras +
@@ -5460,16 +5461,11 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             deferredCastSupport = (deliveredTotal: number) => {
                 castDeliveredDamage = deliveredTotal;
                 runSupportPass();
-                afterHealStatuses.forEach(applyTimedSelfStatus);
             };
         } else {
             runSupportPass();
         }
     }
-    // Written clause order: a status stamped `afterHealClause` resolves once this cast's repair
-    // has landed — inside the deferred support pass when there is one, else right here (also
-    // when the turn has no healing runtime, where there is no repair to wait for).
-    if (deferredCastSupport === undefined) afterHealStatuses.forEach(applyTimedSelfStatus);
 
     // Display-only: surface pending accumulate-detonate effects (Echoing Burst — the only
     // such effect the parser emits; the ability config carries no name) in the round's

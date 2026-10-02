@@ -3225,7 +3225,9 @@ describe('buildShipAbilities', () => {
                 target: 'all-allies',
                 config: { type: 'heal', pct: 37, basis: 'hp' },
             });
+            // "adds 1 charge to the Charged Skill" — ownerless, so every ally the cast targets.
             const charge = charged.abilities.find((a) => a.type === 'charge')!;
+            expect(charge).toMatchObject({ target: 'all-allies', trigger: 'on-cast' });
             expect(charge.config).toMatchObject({ type: 'charge', amount: 1 });
         });
 

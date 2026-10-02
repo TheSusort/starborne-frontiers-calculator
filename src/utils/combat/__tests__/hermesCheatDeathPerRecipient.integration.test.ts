@@ -9,26 +9,25 @@
  *
  * Owner ruling (2026-10-02): the pattern (allies + Pattern-Circle-Support-Range-1, anchored on
  * Hermes) targets Hermes and every adjacent ally EQUALLY — so "the target" in our text is each of
- * them, the same skill the catalogue text describes. Both parse to one `all-allies` grant carrying
+ * them, and "adds 1 charge to the Charged Skill" is the same all-ally charge the catalogue names.
+ * Both texts parse to `charge|all-allies` plus one `all-allies` Cheat Death grant carrying
  * `recipientFilter: { hpBelowPct: 40 }`.
  *
- * WHICH HP: clauses resolve in written order (locked rule), and the repair is written before the
- * Cheat Death clause. So each recipient's HP is read AFTER this cast's repair has landed on it. A
- * hand-authored kit with the Cheat Death clause written first reads the pre-repair HP.
+ * WHICH HP (user ruling 2026-10-02): each recipient's HP BEFORE this cast's repair lands — an
+ * exception to the written-clause-order rule, since the text writes the repair first.
  *
  * Fight cases (every count read against a positive control on the same board):
  *   (1) Hermes casts with ally A (80%) and ally B (30%) in the pattern → B gets Cheat Death, A
  *       does not; Hermes, A and B each gain a charge;
- *   (2) Hermes himself below 40% after his own repair → he gets Cheat Death too;
+ *   (2) Hermes himself below 40% → he gets Cheat Death too;
  *   (3) ally C OUTSIDE the pattern at 20% → no Cheat Death, no charge, no repair;
  *   (4) nobody below 40% → no Cheat Death; the charges still land;
- *   (5) an enemy-side Hermes mirrors (1) and (4);
- *   (6) the repair lifting B from 38% to above 40% → no Cheat Death; with the Cheat Death clause
- *       written before the repair, the same B gets it.
+ *   (5) an enemy-side Hermes mirrors (1), (4) and (6);
+ *   (6) B at 38% gets Cheat Death even though the repair lifts B to 41.7%.
  *
  * Arithmetic: Hermes's max HP is 10,000, so his repair is 3,700 to each recipient. Allies have
  * 100,000 max HP, so the repair lifts them 3.7 points: B 30% → 33.7% (below 40), B 38% → 41.7%
- * (not below 40). Hermes himself gains 37 points of his own HP: 1% → 38% (below 40).
+ * (no longer below 40, but the gate read 38%). Hermes himself gains 37 points of his own HP.
  *
  * Board (player side): Hermes at M3. His pattern from M3 covers M3, M2, M4, T2, T3, B2, B3. A at
  * M4 and B at T3 are inside; C at T4 is outside. The enemy is inert (attack 0, slowest), so the
@@ -69,15 +68,6 @@ const parsedCharged = (text: string): Skill => {
 
 const isCheatDeath = (a: Ability) =>
     a.config.type === 'buff' && a.config.buffName === 'Cheat Death';
-
-/** The parsed charged with its Cheat Death clause moved IN FRONT of the repair. */
-const cheatDeathFirst = (s: Skill): Skill => ({
-    ...s,
-    abilities: [
-        ...s.abilities.filter(isCheatDeath),
-        ...s.abilities.filter((a) => !isCheatDeath(a)),
-    ],
-});
 
 const hermesKit = (charged: Skill): ShipSkills => ({
     slots: [{ slot: 'active', abilities: [] }, charged],
@@ -171,23 +161,33 @@ describe('Hermes charged — parse', () => {
     it.each([
         ['catalogue', HERMES_CHARGED_CATALOGUE],
         ['ours', HERMES_CHARGED_OLD],
-    ])('%s text: one all-allies Cheat Death with a per-recipient below-40% filter', (_, text) => {
-        const cd = parsedCharged(text).abilities.find(isCheatDeath)!;
-        expect(cd).toMatchObject({
-            type: 'buff',
-            target: 'all-allies',
-            trigger: 'on-cast',
-            conditions: [],
-            recipientFilter: { hpBelowPct: 40 },
-            config: { type: 'buff', buffName: 'Cheat Death', duration: 'recurring' },
-        });
-        // The repair is written first, so it sorts first (clause order).
-        expect(parsedCharged(text).abilities.map((a) => a.type)).toEqual([
-            'heal',
-            'charge',
-            'buff',
-        ]);
-    });
+    ])(
+        '%s text: an all-allies charge and an all-allies Cheat Death with a per-recipient below-40% filter',
+        (_, text) => {
+            const charge = parsedCharged(text).abilities.find((a) => a.type === 'charge')!;
+            expect(charge).toMatchObject({
+                target: 'all-allies',
+                trigger: 'on-cast',
+                conditions: [],
+                config: { type: 'charge', amount: 1 },
+            });
+            const cd = parsedCharged(text).abilities.find(isCheatDeath)!;
+            expect(cd).toMatchObject({
+                type: 'buff',
+                target: 'all-allies',
+                trigger: 'on-cast',
+                conditions: [],
+                recipientFilter: { hpBelowPct: 40 },
+                config: { type: 'buff', buffName: 'Cheat Death', duration: 'recurring' },
+            });
+            // The repair is written first, so it sorts first (clause order).
+            expect(parsedCharged(text).abilities.map((a) => a.type)).toEqual([
+                'heal',
+                'charge',
+                'buff',
+            ]);
+        }
+    );
 });
 
 // ── Player side ──────────────────────────────────────────────────────────────
@@ -275,30 +275,30 @@ describe('Hermes charged — per-recipient Cheat Death (player side)', () => {
 
     it('(1)+(3) B at 30% gets Cheat Death; A at 80%, Hermes at full and C outside at 20% do not', () => {
         const { events, actors } = run(playerBoard(charged), { a: 0.8, b: 0.3, c: 0.2 });
-        // The repair lands before the gate reads: B is 33.7%, still below 40.
         expect(hpPct(actors, 'b')).toBeCloseTo(33.7, 5);
         expect(hpPct(actors, 'c')).toBeCloseTo(20, 5);
         expect(cheatDeathTo(events)).toEqual(['b']);
         expect(chargedUp(events)).toEqual(IN_PATTERN);
     });
 
-    it('our text grants the same Cheat Death', () => {
+    it('our text grants the same Cheat Death and the same charges', () => {
         const { events } = run(playerBoard(parsedCharged(HERMES_CHARGED_OLD)), {
             a: 0.8,
             b: 0.3,
             c: 0.2,
         });
         expect(cheatDeathTo(events)).toEqual(['b']);
+        expect(chargedUp(events)).toEqual(IN_PATTERN);
     });
 
-    it('(2) Hermes himself at 1% (38% after his own repair) gets Cheat Death too', () => {
+    it('(2) Hermes himself at 30% (67% after his own repair) gets Cheat Death too', () => {
         const { events, actors } = run(playerBoard(charged), {
-            attacker: 0.01,
+            attacker: 0.3,
             a: 0.8,
             b: 0.3,
             c: 0.2,
         });
-        expect(hpPct(actors, 'attacker')).toBeCloseTo(38, 5);
+        expect(hpPct(actors, 'attacker')).toBeCloseTo(67, 5);
         expect(cheatDeathTo(events)).toEqual(['attacker', 'b']);
     });
 
@@ -308,18 +308,10 @@ describe('Hermes charged — per-recipient Cheat Death (player side)', () => {
         expect(chargedUp(events)).toEqual(IN_PATTERN);
     });
 
-    it('(6) the repair lifts B from 38% to 41.7% → no Cheat Death; with Cheat Death written first, B gets it', () => {
-        const repairFirst = run(playerBoard(charged), { a: 0.8, b: 0.38, c: 0.2 });
-        expect(hpPct(repairFirst.actors, 'b')).toBeCloseTo(41.7, 5);
-        expect(cheatDeathTo(repairFirst.events)).toEqual([]);
-
-        const gateFirst = run(playerBoard(cheatDeathFirst(charged)), {
-            a: 0.8,
-            b: 0.38,
-            c: 0.2,
-        });
-        expect(hpPct(gateFirst.actors, 'b')).toBeCloseTo(41.7, 5);
-        expect(cheatDeathTo(gateFirst.events)).toEqual(['b']);
+    it('(6) B at 38% gets Cheat Death even though the repair lifts B to 41.7%', () => {
+        const { events, actors } = run(playerBoard(charged), { a: 0.8, b: 0.38, c: 0.2 });
+        expect(hpPct(actors, 'b')).toBeCloseTo(41.7, 5);
+        expect(cheatDeathTo(events)).toEqual(['b']);
     });
 });
 
@@ -403,5 +395,15 @@ describe('Hermes charged — team symmetry (enemy-side Hermes) (5)', () => {
         const { events } = run(enemyBoard(charged), { 'e-a': 0.8, 'e-b': 0.8, 'e-c': 0.2 });
         expect(cheatDeathTo(events)).toEqual([]);
         expect(chargedUp(events)).toEqual(ENEMY_IN_PATTERN);
+    });
+
+    it('(5)/(6) B at 38% gets Cheat Death even though the repair lifts B to 41.7%', () => {
+        const { events, actors } = run(enemyBoard(charged), {
+            'e-a': 0.8,
+            'e-b': 0.38,
+            'e-c': 0.2,
+        });
+        expect(hpPct(actors, 'e-b')).toBeCloseTo(41.7, 5);
+        expect(cheatDeathTo(events)).toEqual(['e-b']);
     });
 });

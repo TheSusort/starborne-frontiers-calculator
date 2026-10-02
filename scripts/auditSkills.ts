@@ -90,11 +90,11 @@ const ungatedEffects = (abilities: Ability[]) =>
             // A reactive trigger (on-crit / start-of-round / bomb-detonated / on-attacked / …)
             // IS the gate — the parser routes these through the engine's trigger machinery
             // instead of a condition, so they aren't "ungated" (Enforcer, Wusheng, Valkyrie,
-            // Lingshe, and the Phase 4c damage-reaction ships: Warden, Guardian, Makoli, …).
+            // Lingshe, and the damage-reaction ships: Warden, Guardian, Makoli, …).
             a.trigger === 'on-cast' &&
-            // A per-recipient state filter (Hermes's "if an ally has less than 40% HP, it grants
+            // A per-recipient HP filter (Hermes's "if an ally has less than 40% HP, it grants
             // that ally Cheat Death") IS the gate, read per recipient instead of once per cast.
-            a.recipientFilter === undefined &&
+            a.recipientFilter?.hpBelowPct === undefined &&
             // Recurring per-turn grants are unconditional by design (not a missing gate).
             a.config.duration !== 'recurring'
     );
@@ -433,7 +433,7 @@ const TRIGGER_RE =
 //     inflicts-a-debuff counter, Oleander, Belladonna — Oleander's RoT grant would flag if
 //     this alternation were removed; Crocus's crit-DoT reaction is modeled as on-ally-crit-dot)
 //
-// HP-threshold nuance (Phase 4c PR 3): the reactive "when HP drops/falls below N%" CROSSING
+// HP-threshold nuance: the reactive "when HP drops/falls below N%" CROSSING
 // grants (Tycho/Shelter/Los/Kafa/Redeemer) AND Hermes's "If the target has less than N% HP"
 // Cheat-Death gate are parser-modeled (on-hp-threshold-crossed trigger / per-recipient
 // `recipientFilter`), so their effects never reach `ungatedEffects` and any that DOES parse ungated is
@@ -490,7 +490,7 @@ export function ungatedFinding(abilities: Ability[], plain: string): string | nu
         // Acceptable — duplicate buff names within one skill text are rare in the corpus.
         const namePos = plain.toLowerCase().indexOf(name.toLowerCase());
         if (detectDamageReactionTrigger(plain, namePos)) return clause.trim().slice(0, 160);
-        // Parity guard (Phase 4c PR 3): "when HP drops/falls below N%" crossing reactives
+        // Parity guard: "when HP drops/falls below N%" crossing reactives
         // (Tycho/Shelter/Los/Kafa/Redeemer) ride the LIVE on-hp-threshold-crossed trigger, and
         // Hermes's "If the target has less than N% HP" Cheat-Death grant carries a per-recipient
         // HP filter — both are parser-modeled (the trigger/gate IS the gate), so an effect

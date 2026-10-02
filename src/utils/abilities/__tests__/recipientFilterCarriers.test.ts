@@ -20,7 +20,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { buildShipAbilities } from '../buildShipAbilities';
 import { LIVE_TRIGGERS, type Ability, type SkillSlot } from '../../../types/abilities';
-import { CHEAT_DEATH_BUFFS } from '../../combat/cheatDeathBuffs';
+import { classifyCastStatus } from '../../combat/engine';
 import { csvAvailable, loadShipSkillRecords } from '../../../../scripts/lib/shipSkillCsv';
 import { Ship } from '../../../types/ship';
 
@@ -58,15 +58,11 @@ function carriers(): { ship: string; slot: SkillSlot; ability: Ability }[] {
 const isLive = (a: Ability) => LIVE_TRIGGERS.has(a.trigger);
 
 /** A firing-slot buff that the engine registers as a TIMED by-slot status — the only cast-path
- *  route that reads `recipientFilter` (engine.ts `registerActorAbilityStatuses`: not
- *  accumulating, and either a Cheat-Death-family grant or a finite duration). */
-const isTimedCastGrant = (slot: SkillSlot, a: Ability): boolean => {
-    if (slot !== 'active' && slot !== 'charged') return false;
-    const cfg = a.config;
-    if (cfg.type !== 'buff') return false;
-    if (cfg.stackTrigger && cfg.isStackable) return false;
-    return CHEAT_DEATH_BUFFS.has(cfg.buffName) || typeof cfg.duration === 'number';
-};
+ *  route that reads `recipientFilter`. Asks the engine's own classifier. */
+const isTimedCastGrant = (slot: SkillSlot, a: Ability): boolean =>
+    (slot === 'active' || slot === 'charged') &&
+    a.config.type === 'buff' &&
+    classifyCastStatus(slot, a.config).kind === 'timed';
 
 const label = (c: { ship: string; slot: SkillSlot; ability: Ability }) =>
     `${c.ship}:${c.slot}:${c.ability.config.type}|${c.ability.trigger}`;
