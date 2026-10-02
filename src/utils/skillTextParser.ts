@@ -2047,9 +2047,10 @@ const EXTEND_NAMED_STATUS_RE =
     /extends?\s+<unit-skill>([^<]+)<\/unit-skill>\s+by\s+(\d+)\s+turns?/i;
 
 /**
- * Parses a generic buff/debuff duration-extension clause into its turns + statusKind, or null
- * when absent. Runs over stripUnitTags(text) so a tag inside the clause ("all allies active
- * <unit-skill>buffs are extended by 1 turn</unit-skill>", Ripper) never blocks a match. Reference: docs/ship-skills.csv.
+ * Parses a generic buff/debuff duration-extension clause into its turns + statusKind, or null when
+ * absent. Runs over stripUnitTags(text) so a tag inside the clause ("all allies active
+ * <unit-skill>buffs are extended by 1 turn</unit-skill>", Ripper) never blocks a match. Reference:
+ * docs/ship-skills.csv.
  *
  * #363 (Fuying): a NAMED arm ("extends <unit-skill>Stealth</unit-skill> by 1 turn") is tried
  * FIRST, against the ORIGINAL (tagged) text — it is strictly more specific than the two generic

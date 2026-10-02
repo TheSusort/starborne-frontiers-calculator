@@ -149,12 +149,12 @@ const RULES: Rule[] = [
     {
         id: 'debuff-duration-reduction',
         severity: 'high',
-        // PR11 (epic PR11): "reduces the duration of [all] active Debuffs on <recipient> by N
-        // turn(s)" (Heliodor/Pestilence) — the inverse of extend-dot. ALSO matches Lingshe's
-        // structurally different "reduces all Bomb on the enemy targets by N turn(s)" clause (a
-        // hacking-gated, enemy-targeted PendingBomb countdown shrink with a forced-detonation-at-
-        // zero rider) — SP-F F3 models that shape as its own `bomb-countdown-reduce` ability
-        // (not the generic cleanse/reduce-duration primitive, which deliberately excludes bombs).
+        // "reduces the duration of [all] active Debuffs on <recipient> by N turn(s)"
+        // (Heliodor/Pestilence) — the inverse of extend-dot. ALSO matches Lingshe's structurally
+        // different "reduces all Bomb on the enemy targets by N turn(s)" clause (a hacking-gated,
+        // enemy-targeted PendingBomb countdown shrink with a forced-detonation-at-zero rider),
+        // modelled as its own `bomb-countdown-reduce` ability (not the generic
+        // cleanse/reduce-duration primitive, which deliberately excludes bombs).
         keyword: (t) =>
             /reduces?\s+(?:the\s+duration\s+of\s+)?(?:all\s+)?(?:active\s+)?(?:debuffs|bombs?)\s+on\b/i.test(
                 t

@@ -2858,12 +2858,13 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // `dmgStats`/`effectiveHp` exist in the turn (computed further down) and
         // cannot be reordered here without reordering the whole turn, which is out of scope.
         // THIS is the ctx that matters for the subject: the per-slot timed-SELF-buff loop just
-        // below (`timedSelfBySlot`, gated via `conditionsMet(status.conditions, postDebuffGateCtx)`)
-        // is what fires an ON-CAST ability gated on `self-shield-full` (Quixilver R2's shape, e.g.
-        // a charge/active-slot "if it has shield equal to 100% of its max HP" grant). Without this field, selfShieldFull defaults false here (buildRoundContext's
-        // DPS-safe default) and such a cast-path grant would be permanently suppressed regardless
-        // of the caster's real shieldPool — the same silent-failure class the sibling fields in
-        // the other three contexts already guard against.
+        // below (`timedSelfBySlot`, gated via `conditionsMet(status.conditions,
+        // postDebuffGateCtx)`) is what fires an ON-CAST ability gated on `self-shield-full`
+        // (Quixilver R2's shape, e.g. a charge/active-slot "if it has shield equal to 100% of its
+        // max HP" grant). Without this field, selfShieldFull defaults false here
+        // (buildRoundContext's DPS-safe default) and such a cast-path grant would be permanently
+        // suppressed regardless of the caster's real shieldPool — the same silent-failure class the
+        // sibling fields in the other three contexts already guard against.
         selfShieldFull: actor.stats.hp > 0 && actor.shieldPool >= actor.stats.hp,
         // Malvex charged Barrier: the TARGET's shield-presence gate (see victimShieldGateCtx). Note
         // `selfShielded` is still absent from THIS ctx (its only consumers gate enemy debuffs /

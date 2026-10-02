@@ -632,8 +632,8 @@ export type IncomingCondition =
     // shield, it gains 10% damage reduction"). Context-driven, not side-gated — evaluated per-hit
     // against the victim's live shieldPool.
     | 'self-shielded'
-    // Epic PR12 (C): unconditional — used with `hpScaling` (Tormenter's HP-proportional
-    // reduction, which carries no trigger/status gate, only continuous HP scaling).
+    // Unconditional — used with `hpScaling` (Tormenter's HP-proportional reduction, which
+    // carries no trigger/status gate, only continuous HP scaling).
     | 'always'
     // SP-E: Orel — the transform fires only when the ATTACKER of this hit currently carries
     // Taunt (self-buff) or Provoke (debuff placed on it by someone else). Distinct from

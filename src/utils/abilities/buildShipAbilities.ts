@@ -1321,8 +1321,8 @@ function abilitiesFromText(
         const ignoresDefense = parseIgnoresDefense(text);
         // Ship-kit W6 (Lodolite/Rhodium/Selenite): "This attack can target Stealthed enemies".
         const ignoresStealth = parseIgnoresStealth(text);
-        // SP-F F4 (Wusheng): "deals 220% damage with affinity advantage" forces this on-cast hit
-        // (and its paired Stasis 'apply' landing) to affinity advantage at the engine seams.
+        // Wusheng: "deals 220% damage with affinity advantage" forces this on-cast hit (and its
+        // paired Stasis 'apply' landing) to affinity advantage at the engine seams.
         const forceAffinityAdvantage = parseForceAffinityAdvantage(text);
         // A base damage ability whose OWN sentence carries "at the start of the round" (Judge,
         // Chakara's "Then," continuation) or "at the end of the round" (Incinerator, Rhodium p2's
@@ -1962,9 +1962,10 @@ function abilitiesFromText(
         });
     }
 
-    // Crit-power-chance extension, gated on this unit's own crit (Valerian, Wisteria).
-    // A row that ALSO carries a "converts the Corrosion into <family>" clause
-    // (Belladonna) folds this SAME crit-power extension into the convert-dot ability's
+    // Crit-power-chance extension, carrying the condition parseCritPowerExtend parsed. Only
+    // self-crit rows (Valerian, Wisteria) reach it today, because convert-dot rows are fenced off
+    // here: a row that ALSO carries a "converts the Corrosion into <family>" clause (Belladonna)
+    // folds this SAME crit-power extension into the convert-dot ability's
     // extendTurns/extendChanceFromCritPower (see mergeBuff below) — emitting the standalone
     // extend-dot here too would double-apply the extension on every successful conversion.
     const critExtend = detectConvertDot(text) ? null : parseCritPowerExtend(text);
