@@ -721,8 +721,8 @@ export interface OutgoingHitContext {
  *  - 'repaired-enemy-count' → eventCtx.repairedEnemyIds.length (Sansi's "5% for every enemy
  *    repaired").
  *  - 'spread-affected-count' → eventCtx.spreadAffectedIds.length (Hemlock's "5% per enemy
- *    affected" — the number of adjacent allies a Corrosion spread landed Corrosion I on, ship-kit
- *    W3 Task 9). Reuses the exact same primitive as 'repaired-enemy-count'.
+ *    affected" — the number of adjacent allies a Corrosion spread landed Corrosion I on).
+ *    Reuses the exact same primitive as 'repaired-enemy-count'.
  *  - 'purged-buff-count' → eventCtx.purgedBuffCount (Sefuba's catalogue "repairs 8% of its max HP
  *    for each buff removed") — the number of buffs the TRIGGERING purge removed
  *    (purge-performed.count), stamped by the on-enemy-purged listener. */

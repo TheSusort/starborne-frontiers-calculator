@@ -9,7 +9,29 @@ import {
     EMPTY_SKILLS,
     type SkillGate,
 } from '../skillTextGate';
-import type { Finding } from '../../auditSkills';
+import { staleAllowEntries, type Finding } from '../../auditSkills';
+
+describe('staleAllowEntries', () => {
+    const audited = new Set(['A']);
+    const entry = (catalogueOnly?: boolean) => ({
+        ship: 'A',
+        rules: ['r'],
+        reason: 'x',
+        ...(catalogueOnly ? { catalogueOnly } : {}),
+    });
+
+    it('reports an audited, unconsulted entry as stale', () => {
+        expect(staleAllowEntries([entry()], audited, new Set())).toHaveLength(1);
+    });
+
+    it('does not report a catalogueOnly entry as stale', () => {
+        expect(staleAllowEntries([entry(true)], audited, new Set())).toEqual([]);
+    });
+
+    it('does not report a consulted entry', () => {
+        expect(staleAllowEntries([entry()], audited, new Set(['A::r']))).toEqual([]);
+    });
+});
 
 const f = (slot: string, rule: string, clause = 'x'): Finding => ({
     ship: 'S', slot, rule, severity: 'high', clause,

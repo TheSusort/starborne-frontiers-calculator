@@ -24,7 +24,7 @@ import {
 } from '../src/utils/skillTextParser';
 import { Ship } from '../src/types/ship';
 import { Ability } from '../src/types/abilities';
-import { ALLOWLIST } from './auditSkills.allowlist';
+import { ALLOWLIST, type AllowEntry } from './auditSkills.allowlist';
 import {
     parseCsvLine,
     readCsvRecords,
@@ -540,20 +540,32 @@ function isAllowed(ship: string, ruleId: string): boolean {
     return ALLOWLIST.some((a) => a.ship === ship && a.rules.includes(ruleId));
 }
 
-/** Allowlist (ship, ruleId) pairs that are stale: the ship WAS audited but the rule no longer
- *  produces a raw finding, so the entry suppresses nothing and can be removed. Entries for ships
- *  the reader dropped are excluded (unknowable, not stale). Call AFTER `collectFindings`. */
-export function unusedAllowlistPairs(): { ship: string; rule: string; reason: string }[] {
+/** Pure core of `unusedAllowlistPairs`. An entry for a ship that was not audited is skipped
+ *  (unknowable, not stale); a `catalogueOnly` entry is skipped because the CSV corpus is not the
+ *  text it suppresses. */
+export function staleAllowEntries(
+    allowlist: readonly AllowEntry[],
+    audited: ReadonlySet<string>,
+    consulted: ReadonlySet<string>
+): { ship: string; rule: string; reason: string }[] {
     const out: { ship: string; rule: string; reason: string }[] = [];
-    for (const entry of ALLOWLIST) {
-        if (!auditedShipNames.has(entry.ship)) continue; // dropped ship → can't judge
+    for (const entry of allowlist) {
+        if (entry.catalogueOnly) continue;
+        if (!audited.has(entry.ship)) continue; // dropped ship → can't judge
         for (const rule of entry.rules) {
-            if (!consultedAllowKeys.has(allowKey(entry.ship, rule))) {
+            if (!consulted.has(allowKey(entry.ship, rule))) {
                 out.push({ ship: entry.ship, rule, reason: entry.reason });
             }
         }
     }
     return out;
+}
+
+/** Allowlist (ship, ruleId) pairs that are stale: the ship WAS audited but the rule no longer
+ *  produces a raw finding, so the entry suppresses nothing and can be removed. Call AFTER
+ *  `collectFindings`. */
+export function unusedAllowlistPairs(): { ship: string; rule: string; reason: string }[] {
+    return staleAllowEntries(ALLOWLIST, auditedShipNames, consultedAllowKeys);
 }
 
 /** True when the (gitignored) reference CSV is present — false in CI/clean checkouts. */

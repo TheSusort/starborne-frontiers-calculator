@@ -9,6 +9,10 @@ export interface AllowEntry {
     ship: string;
     rules: string[];
     reason: string;
+    /** True when the entry suppresses text only the official catalogue carries (the sync gate in
+     *  scripts/lib/skillTextGate.ts relies on it), so the CSV audit never consults it and the
+     *  stale-entry report must not flag it. */
+    catalogueOnly?: boolean;
 }
 
 export const ALLOWLIST: AllowEntry[] = [
@@ -110,6 +114,7 @@ export const ALLOWLIST: AllowEntry[] = [
         ship,
         rules: ['defense-penetration-innate'],
         reason: 'Defense penetration is the refit ascension stat the ship already carries.',
+        ...(ship === 'Ravager' ? { catalogueOnly: true } : {}),
     })),
 
     // Burst-explosion reference — not an accumulate-detonate application.
