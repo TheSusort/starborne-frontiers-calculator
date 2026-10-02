@@ -82,8 +82,8 @@ export const refitsFromAscensionStats = (rows: AscensionStat[]): Refit[] =>
 /**
  * Stats the catalogue's base stat block never carries: a unit's penetration comes only from its
  * ascension rows (innate at level 0, or a refit). A template `base_stats` value for one is not a
- * base — it is a hand-entered copy of those rows (often the fully refitted total) — so it is
- * discarded whenever ascension rows exist, and each penetration is counted once, from the rows.
+ * base — it is a hand-entered copy of those rows — so it is discarded whenever ascension rows
+ * exist, and each penetration is counted once, from the rows.
  */
 const ASCENSION_ONLY_STATS = ['shieldPenetration', 'defensePenetration'] as const;
 

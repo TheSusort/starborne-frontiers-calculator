@@ -121,6 +121,23 @@ const JUDGE = row({
     ascension_stats: [{ level: 0, attribute: 'DefensePenetration', type: 'Flat', value: 0.2 }],
 });
 
+// Its only penetration is the R2 grant.
+const RAVAGER = row({
+    id: 'RAVAGER',
+    name: 'Ravager',
+    base_stats: {
+        hp: 13204,
+        speed: 88,
+        attack: 4910,
+        defence: 1786,
+        hacking: 79,
+        security: 1,
+        crit_rate: 28,
+        crit_damage: 30,
+    },
+    ascension_stats: [{ level: 2, attribute: 'DefensePenetration', type: 'Flat', value: 0.1 }],
+});
+
 const SNAPDRAGON = row({
     id: 'SNAPDRAGON',
     name: 'Snapdragon',
@@ -185,6 +202,11 @@ describe('reference ship penetration', () => {
         });
         expect(statsOf(handEntered, 'r0').defensePenetration).toBe(20);
         expect(statsOf(handEntered, 'refitted').defensePenetration).toBe(20);
+    });
+
+    it('gives Ravager no defense penetration at R0 and 10% once his second refit lands', () => {
+        expect(statsOf(RAVAGER, 'r0').defensePenetration).toBe(0);
+        expect(statsOf(RAVAGER, 'refitted').defensePenetration).toBe(10);
     });
 
     // Tripwire for the scope of the rule: only penetration is absent from the catalogue's base
