@@ -1106,8 +1106,8 @@ function extendDoTs(args: {
 }
 
 // Step 3a: Extend INFLICTED-scope DoTs — runs AFTER applyNewDoTs, extending ONLY the
-// Corrosion/Inferno entries THIS cast just appended (Valerian's "the newly applied
-// Corrosion ... extended by 1 turn"). `*EntriesBefore` are the container lengths captured
+// Corrosion/Inferno entries THIS cast just appended (Valerian's "extends the duration the newly
+// inflicted Corrosion by 1 turn"). `*EntriesBefore` are the container lengths captured
 // before applyNewDoTs, so the slice from that index onward is exactly what landed this cast.
 // Bombs are excluded (matching extendDoTs). Gating is identical to extendDoTs: ability
 // conditions vs ctx (binary roundCrit), then extendChanceGate(critPowerFactor) for a

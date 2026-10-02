@@ -1174,9 +1174,10 @@ export type AbilityConfig =
     // trigger:'on-ally-debuff-inflicted', target:'enemy' (widened gate — see buildShipAbilities'
     // mergeBuff). `chanceFromStat` is the conversion-chance stat scaling (1% per 10 Hacking →
     // pctPerPoint 0.1). `extendTurns`/`extendChanceFromCritPower` fold Belladonna's paired
-    // "extends the newly applied <family> for N turns, chance = crit power" clause (otherwise
-    // parsed standalone by parseCritPowerExtend into an `extend-dot` ability — suppressed for
-    // this row to avoid a double-extend) directly into the SAME conversion executor.
+    // "extends the newly inflicted <family> status for N turns, chance = crit power" clause
+    // (otherwise parsed standalone by parseCritPowerExtend into an `extend-dot` ability —
+    // suppressed for this row to avoid a double-extend) directly into the SAME conversion
+    // executor.
     | {
           type: 'convert-dot';
           fromDotType: DoTType;

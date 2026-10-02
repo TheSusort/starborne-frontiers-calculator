@@ -370,7 +370,7 @@ describe('buildShipAbilities', () => {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             refits: [{}, {}] as any,
             secondPassiveSkillText:
-                'This Unit repairs 15% of damage dealt, including damage over time effects. After inflicting <unit-skill>Corrosion</unit-skill> with a Critical hit, the duration of the newly applied Corrosion is extended by 1 turn, with the extension chance equal to the Critical Power.',
+                "This Unit <unit-damage>repairs 15%</unit-damage> of damage dealt to the enemy, including damage from <unit-skill>damage over time effects</unit-skill>.<br /><br />After inflicting <unit-skill>Corrosion</unit-skill> with a critical hit, <unit-skill>extends the duration the newly inflicted</unit-skill> <unit-skill>Corrosion</unit-skill> by 1 turn, with the extension chance equal to this Unit's critical power.",
         });
         const ext = abilityOfType(
             slot(buildShipAbilities(s).slots, 'passive')!.abilities,

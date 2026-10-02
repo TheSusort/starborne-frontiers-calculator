@@ -2034,12 +2034,12 @@ export function statusEffectCondition(name: string, anyOf = false): Condition {
     };
 }
 
-// "all damage over time debuffs/effects are extended by N turn(s)" — prolongs existing ticking
+// "all damage over time debuffs are extended by N turn(s)" — prolongs existing ticking
 // DoTs (Provider's charge). Requires "Damage Over Time" so it doesn't catch generic buff/debuff
 // duration extensions. With no enemy named, "all" spans every enemy the cast hits, so the
 // extension's target is 'all-enemies' (buildShipAbilities' extend-dot emit).
 const EXTEND_ALL_DOT_PASSIVE_RE =
-    /\ball\s+damage over time\s+(?:debuffs|effects)\s+are\s+extended\s+by\s+(\d+)\s+turns?/i;
+    /\ball\s+damage over time\s+debuffs\s+are\s+extended\s+by\s+(\d+)\s+turns?/i;
 
 /**
  * Returns the number of turns a skill extends active Damage Over Time effects by, or null
@@ -2072,8 +2072,9 @@ const EXTEND_STATUS_PASSIVE_RE =
 //
 // Two negative lookaheads keep the three extension detectors disjoint, and each is load-bearing:
 // "damage over time" belongs to EXTEND_ALL_DOT_PASSIVE_RE, and "crit(ical) power" to
-// CRIT_POWER_EXTEND_RE (Valerian's own "the newly applied Corrosion is extended … chance equal
-// to the Critical Power", which builds an extend-dot with a chance gate). Valerian is
+// CRIT_POWER_EXTEND_RE (Valerian's own "extends the duration the newly inflicted Corrosion by 1
+// turn, with the extension chance equal to this Unit's critical power", which builds an
+// extend-dot with a chance gate). Valerian is
 // additionally excluded by the literal `buff`/`debuff` token — he names the DoT family — but a
 // future row that spelled his clause with the generic word would otherwise emit BOTH an always-on
 // extend-status and a chance-gated extend-dot for one clause.
@@ -2161,12 +2162,9 @@ export function parseCritPowerExtend(
     const condition: Condition = /\ball(?:y|ies)\b[^.]*\binflict/i.test(plain)
         ? { subject: 'ally-inflicts-debuff', derivable: false }
         : { subject: 'self-crit', derivable: true };
-    // "the newly applied <DoT> ... extended" → only THIS cast's freshly applied DoT
-    // grows (Valerian/Belladonna), not every standing entry. Matched against the
-    // extend clause text so it stays tight to the actual wording.
-    const scope: 'active' | 'inflicted' = /newly\s+applied|inflicted\s+corrosion/i.test(plain)
-        ? 'inflicted'
-        : 'active';
+    // "extends the newly inflicted <DoT>" → only THIS cast's freshly inflicted DoT grows
+    // (Valerian/Wisteria/Belladonna), not every standing entry.
+    const scope: 'active' | 'inflicted' = /newly\s+inflicted/i.test(plain) ? 'inflicted' : 'active';
     return { turns: parseInt(m[1], 10), condition, scope };
 }
 
@@ -2176,12 +2174,13 @@ export function parseCritPowerExtend(
 // so the named-family capture group stops at the right boundary — the family name can be
 // multi-word ("Acidic Decay") and a bare lazy match would otherwise capture only its first word.
 const CONVERT_DOT_RE =
-    /converts\s+the\s+(corrosion|inferno)\s+into\s+([\w\s]+?)\s+of\s+the\s+same\s+level[^.]*?(\d+(?:\.\d+)?)%\s+per\s+(\d+)\s+hacking/i;
+    /converts\s+the\s+corrosion\s+into\s+([\w\s]+?)\s+of\s+the\s+same\s+level[^.]*?(\d+(?:\.\d+)?)%\s+per\s+(\d+)\s+hacking/i;
 
 /**
- * Parses a "converts the <DoT> into <family> of the same level ... N% per M Hacking" clause into
- * its conversion descriptor, or undefined when absent. `pctPerPoint` is the %-per-Hacking-point
- * rate (1% per 10 Hacking → 0.1). Reference data: docs/ship-skills.csv (Belladonna).
+ * Parses a "converts the Corrosion into <family> of the same level ... N% per M Hacking" clause
+ * into its conversion descriptor, or undefined when absent. `pctPerPoint` is the
+ * %-per-Hacking-point rate (1% per 10 Hacking → 0.1). Reference data: docs/ship-skills.csv
+ * (Belladonna).
  */
 export function detectConvertDot(
     text: string | null | undefined
@@ -2191,9 +2190,9 @@ export function detectConvertDot(
     const m = CONVERT_DOT_RE.exec(plain);
     if (!m) return undefined;
     return {
-        fromDotType: m[1].toLowerCase() as DoTType,
-        buffName: m[2].trim(),
-        pctPerPoint: parseFloat(m[3]) / parseInt(m[4], 10),
+        fromDotType: 'corrosion',
+        buffName: m[1].trim(),
+        pctPerPoint: parseFloat(m[2]) / parseInt(m[3], 10),
     };
 }
 
@@ -5766,7 +5765,7 @@ const ENEMY_VERBS = new Set(['inflict', 'inflicts', 'inflicting', 'inflicted']);
 // "apply" forms are side-ambiguous (a buff is self, a debuff is enemy) — verbToTarget disambiguates via BUFFS.
 const AMBIGUOUS_VERBS = new Set(['apply', 'applies', 'applying', 'applied']);
 const APPLICATION_VERBS = new Set([...SELF_VERBS, ...ENEMY_VERBS, ...AMBIGUOUS_VERBS]);
-// Past participles double as adjectives ("the newly applied Corrosion") — that's a
+// Past participles double as adjectives ("the newly inflicted Corrosion") — that's a
 // reference to an existing effect being extended, not a fresh application.
 const ADJECTIVAL_MARKER = 'newly';
 const SKIP_VERBS = new Set(['ignoring', 'loses', 'removes', 'resists', 'when']);
@@ -6057,8 +6056,8 @@ function findVerb(segments: SkillTextSegment[], tagIndex: number): string | null
     const words = accumulatedText.toLowerCase().match(/\b[a-z]+\b/g) ?? [];
     for (let i = words.length - 1; i >= 0; i--) {
         if (APPLICATION_VERBS.has(words[i])) {
-            // "newly applied X" is adjectival (referencing an existing effect being
-            // extended), not an application — keep scanning for a real verb instead.
+            // "newly inflicted X" is adjectival (referencing an existing effect being extended),
+            // not an application — keep scanning for a real verb instead.
             if (words[i - 1] === ADJECTIVAL_MARKER) continue;
             // Epic PR1 (skill-model gap, finding family 3): "when an enemy [defender] gains
             // <BuffName>, this Unit inflicts …" names the buff only as the TRIGGER condition —
