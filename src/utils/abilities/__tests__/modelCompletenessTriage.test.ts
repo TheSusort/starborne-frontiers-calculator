@@ -37,9 +37,9 @@ export function abilitiesFor(over: Partial<Ship>, name: string): Ability[] {
 // Ships probed from two SP angles share ONE verbatim text constant (single source of truth → no
 // drift between the two probes; both must stay byte-identical to docs/ship-skills.csv).
 const VORON_PASSIVE2 =
-    'When directly damaged, this Unit transforms the damage into a <unit-skill>Damage over Time effect</unit-skill> lasting for 3 turns.<br /><br />This Unit takes <unit-damage>20% less damage</unit-damage> from <unit-skill>Damage over Time effects</unit-skill>.';
+    'When directly damaged, this Unit transforms the damage into a <unit-skill>damage over time effect</unit-skill> lasting for 3 turns.<br /><br />This Unit takes <unit-damage>20% less damage</unit-damage> from <unit-skill>damage over time effects</unit-skill>.';
 const FRONTLINE_PASSIVE2 =
-    'This ship has 20% Shield Penetration.<br />While Shielded, it gains 2500 additional Defense.<br />This Unit gains <unit-damage>Shield equal to 25%</unit-damage> of its Max HP at the start of combat.<br /><br />When an enemy uses their Charged skill, it deals <unit-damage>80%</unit-damage> and gains a Shield equal to <unit-damage>30%</unit-damage> of the damage dealt, once per round.';
+    'This ship has <unit-damage>20% shield penetration</unit-damage>.<br /><br />At the start of combat this Unit gains a <unit-damage>shield equal to 25%</unit-damage> of its max HP and while it has an active shield, it gains 2500 defense.<br /><br />When an enemy uses their charged skill, this Unit deals <unit-damage>80% damage</unit-damage> and gains a <unit-damage>shield equal to 30%</unit-damage> of the damage dealt, once per round.';
 
 describe('SP0 triage — corpus scaffold', () => {
     it('abilitiesFor helper is available', () => {

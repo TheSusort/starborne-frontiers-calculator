@@ -1320,7 +1320,7 @@ describe('buildShipAbilities', () => {
     it('Chakara passive: round-start damage proc + both self-buffs gated on lowest-speed', () => {
         const s = ship({
             thirdPassiveSkillText:
-                'This Unit starts each round with <unit-skill>Attack Up II</unit-skill> and <unit-skill>Defense Up II</unit-skill> for 1 turn if it has the lowest speed among all Allies. Then, deals <unit-damage>60% damage</unit-damage> to the highest Speed Enemy.',
+                'At the start of the round, if this Unit has the lowest speed among all allies, it gains <unit-skill>Attack Up II</unit-skill> and <unit-skill>Defense Up II</unit-skill> for 1 turn. Then deals <unit-damage>60% damage</unit-damage> to the enemy with the highest speed.',
         });
         const passive = buildShipAbilities(s).slots.find((sl) => sl.slot === 'passive');
         // 60% damage proc still parses.
@@ -2756,10 +2756,10 @@ describe('buildShipAbilities', () => {
             });
         });
 
-        it('FrontLine R4 passive: start-of-combat max-HP shield + the on-enemy-charged-cast damage-dealt shield, no duplicate/taken shield', () => {
+        it('FrontLine R2 passive: start-of-combat max-HP shield + the on-enemy-charged-cast damage-dealt shield, no duplicate/taken shield', () => {
             const s = ship({
                 thirdPassiveSkillText:
-                    'This ship has 20% Shield Penetration.<br />While Shielded, it gains 2500 additional Defense.<br />This Unit gains <unit-damage>Shield equal to 25%</unit-damage> of its Max HP at the start of combat.<br /><br />When an enemy uses their Charged skill, it deals <unit-damage>80%</unit-damage> and gains a Shield equal to <unit-damage>30%</unit-damage> of the damage dealt, once per round.',
+                    'This ship has <unit-damage>20% shield penetration</unit-damage>.<br /><br />At the start of combat this Unit gains a <unit-damage>shield equal to 25%</unit-damage> of its max HP and while it has an active shield, it gains 2500 defense.<br /><br />When an enemy uses their charged skill, this Unit deals <unit-damage>80% damage</unit-damage> and gains a <unit-damage>shield equal to 30%</unit-damage> of the damage dealt, once per round.',
             });
             const passive = buildShipAbilities(s).slots.find((x) => x.slot === 'passive');
             const shields = passive?.abilities.filter((a) => a.type === 'shield') ?? [];
@@ -3468,11 +3468,10 @@ describe('buildShipAbilities — all-allies charge-bar grants (Hayyan / Graphite
 // ── §4.5 Akula exception: doesntBreakStasis ───────────────────────────────────────────────
 
 describe('buildShipAbilities doesntBreakStasis', () => {
-    it("Akula: doesntBreakStasis=true (curly-apostrophe don't break Stasis in passive)", () => {
-        // Akula's refit-active passive text uses curly apostrophe + "don't break Stasis".
+    it('Akula: doesntBreakStasis=true ("do not reduce Stasis" in passive)', () => {
         const s = ship({
             firstPassiveSkillText:
-                "This Unit's attacks don’t break Stasis. Increases outgoing direct damage by up to 30% based on the target's current HP percentage; the higher the percentage, the more the damage.",
+                "This Unit's attacks do not reduce <unit-skill>Stasis</unit-skill>, and also ignore <unit-skill>Taunt</unit-skill> and <unit-skill>Provoke</unit-skill> effects. <br /><br />This Unit <unit-damage>increases outgoing direct damage</unit-damage> based on the enemies current HP, up to <unit-damage>30%</unit-damage> when the enemy is at full HP.",
         });
         const result = buildShipAbilities(s);
         expect(result.doesntBreakStasis).toBe(true);
@@ -3501,7 +3500,7 @@ describe('buildShipAbilities doesntBreakStasis', () => {
         const akula = buildShipAbilities(
             ship({
                 firstPassiveSkillText:
-                    "This Unit's attacks don’t break Stasis. Increases outgoing direct damage by up to 30% based on the target's current HP percentage; the higher the percentage, the more the damage.",
+                    "This Unit's attacks do not reduce <unit-skill>Stasis</unit-skill>, and also ignore <unit-skill>Taunt</unit-skill> and <unit-skill>Provoke</unit-skill> effects. <br /><br />This Unit <unit-damage>increases outgoing direct damage</unit-damage> based on the enemies current HP, up to <unit-damage>30%</unit-damage> when the enemy is at full HP.",
             })
         );
         expect(akula.stasisBreakExemptWhen).toBeUndefined();
@@ -3597,7 +3596,7 @@ describe('buildShipAbilities ignoresForcedTargeting', () => {
 
     it('unrelated ship (no ignore clause): ignoresForcedTargeting is absent (falsy)', () => {
         const activeSkillText =
-            'This Unit deals <unit-damage>50% damage</unit-damage> plus an additional amount equal to <unit-damage>60%</unit-damage> of its Defense and inflicts <unit-skill>Defense Down I</unit-skill> for 1 turn.';
+            'This Unit deals <unit-damage>50% damage</unit-damage> with additional damage equal to <unit-damage>60%</unit-damage> of its defense and inflicts <unit-skill>Defense Down I</unit-skill> for 1 turn.';
         const result = buildShipAbilities(ship({ activeSkillText }));
         expect(result.ignoresForcedTargeting).toBeFalsy();
     });
@@ -3946,22 +3945,23 @@ describe('buildShipAbilities — Chakara start-of-round highest-speed damage', (
 });
 
 // ---------------------------------------------------------------------------
-// I6: Lodolite charged purge (passive-voice "is Purged of all buffs") + legendary-refit
-// shield strip. RAW strings verbatim from docs/ship-skills.csv (Lodolite row).
+// I6: Lodolite charged purge + refit-passive shield strip. RAW strings verbatim from
+// docs/ship-skills.csv (Lodolite row).
 // ---------------------------------------------------------------------------
 describe('buildShipAbilities — Lodolite charged purge + shield strip (I6)', () => {
     const LODOLITE_CHARGED_RAW =
-        "This Unit deals <unit-damage>310% damage</unit-damage> and additional damage equal to <unit-damage>10%</unit-damage> of this Unit's max HP. Then, the enemy with the most <unit-aid>Buffs</unit-aid> is Purged of all buffs.<br />This attack can target <unit-aid>Stealthed</unit-aid> enemies.";
-    const LODOLITE_R4_PASSIVE_RAW =
-        "This Unit ignores <unit-skill>Stealth</unit-skill> effects.<br /><br />This Unit deals <unit-damage>10% more critical damage</unit-damage> to defenders, all allies deal <unit-damage>15% more direct damage</unit-damage> to enemies with <unit-skill>Concentrate Fire</unit-skill> or <unit-skill>Stealth</unit-skill>.<br /><br />When this Unit <unit-aid>Purges a buff</unit-aid> from an enemy, it <unit-damage>removes 100%</unit-damage> of the enemy's shield.";
+        'This Unit deals <unit-damage>310% damage</unit-damage> with additional damage equal to <unit-damage>10%</unit-damage> of its max HP.<br /><br />Then this Unit <unit-skill>purges all buffs</unit-skill> from enemy with the most <unit-aid>buffs</unit-aid>.';
+    const LODOLITE_R2_PASSIVE_RAW =
+        "This Unit ignores <unit-skill>Stealth</unit-skill> effects.<br /><br />This Unit deals <unit-damage>10% more critical damage</unit-damage> to defenders, all allies deal <unit-damage>15% more direct damage</unit-damage> to enemies with <unit-skill>Concentrate Fire</unit-skill> or <unit-skill>Stealth</unit-skill>.<br /><br />When this Unit <unit-aid>purges a buff</unit-aid> from an enemy, it <unit-damage>removes 100%</unit-damage> of the enemy's shield.";
 
     // Default `ship()` helper seeds refits: [{}, {}, {}, {}] (4 refits) → thirdPassiveSkillText
-    // (R4, legendary refit) is the active passive per getShipSkillRows.
+    // is the active passive per getShipSkillRows; it carries the R2 passive, the one with the
+    // shield clause.
     const lodolite = () =>
         ship({
             chargeSkillText: LODOLITE_CHARGED_RAW,
             chargeSkillCharge: 3,
-            thirdPassiveSkillText: LODOLITE_R4_PASSIVE_RAW,
+            thirdPassiveSkillText: LODOLITE_R2_PASSIVE_RAW,
         });
 
     it('charged skill emits a purge ability: target enemy-most-buffs, count all, trigger on-cast', () => {
@@ -3974,27 +3974,26 @@ describe('buildShipAbilities — Lodolite charged purge + shield strip (I6)', ()
         expect(purge.config).toMatchObject({ type: 'purge', count: 'all' });
     });
 
-    it('the charged purge config carries stripsShield (from the R4 legendary passive clause)', () => {
+    it('the charged purge config carries stripsShield (from the R2 passive clause)', () => {
         const charged = slot(buildShipAbilities(lodolite()).slots, 'charged')!;
         const purge = charged.abilities.find((a) => a.type === 'purge')!;
         expect(purge.config).toMatchObject({ stripsShield: true });
     });
 
-    it('the R4 passive itself does NOT ALSO emit a spurious purge ability', () => {
+    it('the R2 passive itself does NOT ALSO emit a spurious purge ability', () => {
         const passive = slot(buildShipAbilities(lodolite()).slots, 'passive');
         const purges = (passive?.abilities ?? []).filter((a) => a.type === 'purge');
         expect(purges).toHaveLength(0);
     });
 
-    it('WITHOUT the R4 legendary refit (2 refits, R2 passive without the shield clause) the charged purge has NO stripsShield', () => {
+    it('WITHOUT a refit (R0 passive, no shield clause) the charged purge has NO stripsShield', () => {
         const nonLegendary = ship({
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            refits: [{}, {}] as any,
+            refits: [],
             chargeSkillText: LODOLITE_CHARGED_RAW,
             chargeSkillCharge: 3,
-            secondPassiveSkillText:
-                'This Unit ignores <unit-skill>Stealth</unit-skill> effects.<br /><br />This Unit deals <unit-damage>10% more critical damage</unit-damage> to defenders, all allies deal <unit-damage>15% more direct damage</unit-damage> to enemies with <unit-skill>Concentrate Fire</unit-skill>.',
-            thirdPassiveSkillText: LODOLITE_R4_PASSIVE_RAW,
+            firstPassiveSkillText:
+                'This Unit ignores <unit-skill>Stealth</unit-skill> effects.<br /><br />This Unit deals <unit-damage>10% more critical damage</unit-damage> to defenders and all allies deal <unit-damage>15% more direct damage</unit-damage> to enemies with <unit-skill>Concentrate Fire</unit-skill>.',
+            thirdPassiveSkillText: LODOLITE_R2_PASSIVE_RAW,
         });
         const charged = slot(buildShipAbilities(nonLegendary).slots, 'charged')!;
         const purge = charged.abilities.find((a) => a.type === 'purge')!;
@@ -4843,13 +4842,13 @@ describe('buildShipAbilities — PR1 phantom-ability suppression (reduction/conv
         expect(passive?.abilities.some((a) => a.type === 'damage') ?? false).toBe(false);
     });
 
-    it('Malvex passive2 (R2): no phantom damage ability from "takes 10% less damage"', () => {
+    it('Malvex passive2 (R2): no phantom damage ability from "10% damage reduction"', () => {
         const s = ship({
             refits: [{}, {}] as never,
             firstPassiveSkillText:
-                'When directly damaged as a primary target, this Unit gains <unit-damage>Shield equal to 15%</unit-damage> of the Damage dealt to them.',
+                'When directly damaged as a primary target, this Unit gains <unit-damage>shield equal to 15%</unit-damage> of the damage dealt.',
             secondPassiveSkillText:
-                'When Shielded, this Ship takes <unit-damage>10% less damage</unit-damage>. When directly damaged as a primary target, this Unit gains <unit-damage>Shield equal to 15%</unit-damage> of the Damage dealt to them.',
+                'When directly damaged as a primary target, this Unit gains <unit-damage>shield equal to 15%</unit-damage> of the damage dealt.<br /><br />When this Unit has an active shield, it gains <unit-damage>10% damage reduction</unit-damage>.',
         });
         const { slots } = buildShipAbilities(s);
         const passive = slot(slots, 'passive');
@@ -4862,9 +4861,9 @@ describe('buildShipAbilities — PR1 phantom-ability suppression (reduction/conv
         const s = ship({
             refits: [{}, {}] as never,
             firstPassiveSkillText:
-                'This ship has 20% Shield Penetration.<br />While Shielded, it gains 2500 additional Defense.<br />This Unit gains <unit-damage>Shield equal to 25%</unit-damage> of its Max HP at the start of combat.',
+                'This ship has <unit-damage>20% shield penetration</unit-damage>.<br /><br />At the start of combat this Unit gains a <unit-damage>shield equal to 25%</unit-damage> of its max HP and while it has an active shield, it gains 2500 defense.',
             secondPassiveSkillText:
-                'This ship has 20% Shield Penetration.<br />While Shielded, it gains 2500 additional Defense.<br />This Unit gains <unit-damage>Shield equal to 25%</unit-damage> of its Max HP at the start of combat.<br /><br />When an enemy uses their Charged skill, it deals <unit-damage>80%</unit-damage> and gains a Shield equal to <unit-damage>30%</unit-damage> of the damage dealt, once per round.',
+                'This ship has <unit-damage>20% shield penetration</unit-damage>.<br /><br />At the start of combat this Unit gains a <unit-damage>shield equal to 25%</unit-damage> of its max HP and while it has an active shield, it gains 2500 defense.<br /><br />When an enemy uses their charged skill, this Unit deals <unit-damage>80% damage</unit-damage> and gains a <unit-damage>shield equal to 30%</unit-damage> of the damage dealt, once per round.',
         });
         const { slots } = buildShipAbilities(s);
         const passive = slot(slots, 'passive')!;
@@ -4914,13 +4913,13 @@ describe('buildShipAbilities — PR1 finding family 2 (confirmed FALSE POSITIVE 
         });
     });
 
-    it('Valerian passive2 (R2): no phantom Corrosion dot from "After inflicting Corrosion with a Critical hit"', () => {
+    it('Valerian passive2 (R2): no phantom Corrosion dot from "After inflicting Corrosion with a critical hit"', () => {
         const s = ship({
             refits: [{}, {}] as never,
             firstPassiveSkillText:
-                'This Unit <unit-damage>repairs 15%</unit-damage> of Damage dealt to the enemy, including inflcted Damage over Time effects.',
+                'This Unit <unit-damage>repairs 15%</unit-damage> of damage dealt to the enemy, including damage from <unit-skill>damage over time effects</unit-skill>.',
             secondPassiveSkillText:
-                'This Unit <unit-damage>repairs 15%</unit-damage> of damage dealt to an enemy, including damage from damage over time effects. After inflicting <unit-skill>Corrosion</unit-skill> with a Critical hit, the duration of the newly applied <unit-skill>Corrosion</unit-skill> is extended by 1 turn, with the extension chance equal to the Critical Power.',
+                "This Unit <unit-damage>repairs 15%</unit-damage> of damage dealt to the enemy, including damage from <unit-skill>damage over time effects</unit-skill>.<br /><br />After inflicting <unit-skill>Corrosion</unit-skill> with a critical hit, <unit-skill>extends the duration the newly inflicted</unit-skill> <unit-skill>Corrosion</unit-skill> by 1 turn, with the extension chance equal to this Unit's critical power.",
         });
         const { slots } = buildShipAbilities(s);
         const passive = slot(slots, 'passive')!;
@@ -4944,7 +4943,7 @@ describe('buildShipAbilities — PR1 finding family 2 (confirmed FALSE POSITIVE 
         const s = ship({
             refits: [] as never,
             firstPassiveSkillText:
-                'When an ally inflicts <unit-skill>Corrosion</unit-skill>, this Unit has a chance to convert the <unit-skill>Corrosion</unit-skill> into <unit-skill>Acidic Decay</unit-skill> of the same level, with the chance scaling at 1% per 10 Hacking.',
+                'When an ally inflicts <unit-skill>Corrosion</unit-skill>, this Unit converts the <unit-skill>Corrosion</unit-skill> into <unit-skill>Acidic Decay</unit-skill> of the same level, with the chance scaling at 1% per 10 Hacking.',
         });
         const { slots } = buildShipAbilities(s);
         const passive = slot(slots, 'passive');
@@ -5340,18 +5339,18 @@ describe('buildShipAbilities — PR9b standalone shield-strip', () => {
 
     it('does NOT emit a shield-strip ability for the Lodolite I6 purge-coupled clause (guard against double-modeling)', () => {
         const LODOLITE_CHARGED_RAW =
-            "This Unit deals <unit-damage>310% damage</unit-damage> and additional damage equal to <unit-damage>10%</unit-damage> of this Unit's max HP. Then, the enemy with the most <unit-aid>Buffs</unit-aid> is Purged of all buffs.<br />This attack can target <unit-aid>Stealthed</unit-aid> enemies.";
-        const LODOLITE_R4_PASSIVE_RAW =
-            "This Unit ignores <unit-skill>Stealth</unit-skill> effects.<br /><br />This Unit deals <unit-damage>10% more critical damage</unit-damage> to defenders, all allies deal <unit-damage>15% more direct damage</unit-damage> to enemies with <unit-skill>Concentrate Fire</unit-skill> or <unit-skill>Stealth</unit-skill>.<br /><br />When this Unit <unit-aid>Purges a buff</unit-aid> from an enemy, it <unit-damage>removes 100%</unit-damage> of the enemy's shield.";
+            'This Unit deals <unit-damage>310% damage</unit-damage> with additional damage equal to <unit-damage>10%</unit-damage> of its max HP.<br /><br />Then this Unit <unit-skill>purges all buffs</unit-skill> from enemy with the most <unit-aid>buffs</unit-aid>.';
+        const LODOLITE_R2_PASSIVE_RAW =
+            "This Unit ignores <unit-skill>Stealth</unit-skill> effects.<br /><br />This Unit deals <unit-damage>10% more critical damage</unit-damage> to defenders, all allies deal <unit-damage>15% more direct damage</unit-damage> to enemies with <unit-skill>Concentrate Fire</unit-skill> or <unit-skill>Stealth</unit-skill>.<br /><br />When this Unit <unit-aid>purges a buff</unit-aid> from an enemy, it <unit-damage>removes 100%</unit-damage> of the enemy's shield.";
         const s = ship({
             chargeSkillText: LODOLITE_CHARGED_RAW,
             chargeSkillCharge: 3,
-            thirdPassiveSkillText: LODOLITE_R4_PASSIVE_RAW,
+            thirdPassiveSkillText: LODOLITE_R2_PASSIVE_RAW,
         });
         const { slots } = buildShipAbilities(s);
         const allAbilities = slots.flatMap((sk) => sk.abilities);
         expect(allAbilities.filter((a) => a.type === 'shield-strip')).toHaveLength(0);
-        // The purge ability still carries stripsShield (I6, unaffected by this PR).
+        // The purge ability still carries stripsShield (I6).
         const purge = allAbilities.find((a) => a.type === 'purge')!;
         expect(purge.config).toMatchObject({ stripsShield: true });
     });

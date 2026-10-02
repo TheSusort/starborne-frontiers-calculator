@@ -73,11 +73,11 @@ describe('"If the target has a Shield" gate (Malvex charged Barrier)', () => {
         expect(barrier?.conditions).toEqual([{ subject: 'self-shield', derivable: true }]);
     });
 
-    it('does not fire on a bare "When Shielded" clause (Malvex passive canary)', () => {
-        // Malvex's own second passive says "When Shielded, this Ship takes 10% less damage" — an
-        // owner-side incoming-reduction condition, not a target-side gate.
+    it('does not fire on an owner-side "has an active shield" clause (Malvex passive canary)', () => {
+        // Malvex's own second passive says "When this Unit has an active shield, it gains 10%
+        // damage reduction" — an owner-side condition, not a target-side gate.
         const barrier = barrierOf(
-            'When Shielded, it gains <unit-skill>Barrier</unit-skill> for 1 hit.'
+            'When this Unit has an active shield, it gains <unit-skill>Barrier</unit-skill> for 1 hit.'
         );
         expect(barrier?.conditions ?? []).not.toContainEqual(
             expect.objectContaining({ subject: 'enemy-shield' })

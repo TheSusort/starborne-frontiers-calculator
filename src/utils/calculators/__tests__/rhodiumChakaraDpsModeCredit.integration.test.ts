@@ -100,12 +100,13 @@ function rhodiumShipSkills() {
     return buildShipAbilities(rhodium);
 }
 
-// Verbatim from docs/ship-skills.csv (Chakara, third_passive_skill_text — the R4/refit-active
-// slot getShipSkillRows resolves for a 4-refit ship). Matches reactiveDamagePositionalHp.test.ts.
+// Verbatim from docs/ship-skills.csv (Chakara, second_passive_skill_text), fed through
+// thirdPassiveSkillText — the refit-active slot getShipSkillRows resolves for a 4-refit ship.
+// Matches reactiveDamagePositionalHp.test.ts.
 const CHAKARA_P4 =
-    'This Unit starts each round with <unit-skill>Attack Up II</unit-skill> and ' +
-    '<unit-skill>Defense Up II</unit-skill> for 1 turn if it has the lowest speed among all ' +
-    'Allies. Then, deals <unit-damage>60% damage</unit-damage> to the highest Speed Enemy.';
+    'At the start of the round, if this Unit has the lowest speed among all allies, it gains ' +
+    '<unit-skill>Attack Up II</unit-skill> and <unit-skill>Defense Up II</unit-skill> for 1 turn. ' +
+    'Then deals <unit-damage>60% damage</unit-damage> to the enemy with the highest speed.';
 
 function chakaraShipSkills(withPassive: boolean) {
     const chakara = {

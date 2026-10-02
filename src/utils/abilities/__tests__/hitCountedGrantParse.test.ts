@@ -47,9 +47,9 @@ function namedAbility(abilities: Ability[], buffName: string): Ability | undefin
 
 // Verbatim from docs/ship-skills.csv, charge_skill_text column.
 const SANSI_CHARGE =
-    'This Unit deals <unit-damage>230% Damage</unit-damage> and grants <unit-skill>Taunt</unit-skill> for 1 turn and <unit-skill>Barrier</unit-skill> for 1 hit.';
+    'This Unit deals <unit-damage>230% damage</unit-damage> and gains <unit-skill>Taunt</unit-skill> for 1 turn and <unit-skill>Barrier</unit-skill> for 1 hit.';
 const MALVEX_CHARGE =
-    'This Unit deals <unit-damage>220% damage</unit-damage> with additional damage equal to <unit-damage>12%</unit-damage> of its current Shield and removes 30% of the enemy’s Shield. If the target has a Shield, it gains <unit-skill>Barrier</unit-skill> for 1 hit.';
+    "This Unit deals <unit-damage>220% damage</unit-damage> with additional damage equal to <unit-damage>12%</unit-damage> of its current shield and <unit-damage>removes 30%</unit-damage> of the enemy's shield. If the target has a shield, this Unit gains <unit-skill>Barrier</unit-skill> for 1 hit.";
 // Verbatim from docs/ship-skills.csv, first_passive_skill_text column (Panon).
 const PANON_PASSIVE =
     'If this Unit is directly damaged and does not have <unit-skill>Barrier Recharging</unit-skill>, it gains <unit-skill>Barrier</unit-skill> for 1 turn and applies <unit-skill>Barrier Recharging</unit-skill> to itself for 3 turns.';
@@ -58,7 +58,7 @@ const PANON_PASSIVE =
 // phrase follows — the inverse of Sansi/Panon, and the reason it needs its own coverage rather
 // than relying on the other three sites.
 const QUIXILVER_PASSIVE_R2 =
-    "This Unit gains <unit-damage>Shield equal to 25%</unit-damage> of the damage taken when taking HP damage and still having Shield.<br /><br />At the end of this Unit's turn if it has shield equal to 100% of its max HP, this Unit grants all allies <unit-skill>Barrier</unit-skill> for 1 hit and applies <unit-skill>Barrier Recharging</unit-skill> for 3 turns.";
+    "This Unit gains a <unit-damage>shield equal to 25%</unit-damage> of the damage taken when taking HP damage and still having a shield.<br /><br />At the end of this Unit's turn if it has shield equal to 100% of its max HP, this Unit grants all allies <unit-skill>Barrier</unit-skill> for 1 hit and applies <unit-skill>Barrier Recharging</unit-skill> for 3 turns.";
 
 describe('"for N hit(s)" grants', () => {
     it('stamps hits:1 on a Barrier granted for 1 hit (Sansi charge)', () => {

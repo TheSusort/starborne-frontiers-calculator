@@ -130,8 +130,9 @@ describe('parseSkillDamage', () => {
         expect(parseSkillDamage(text)).toBe(0);
     });
 
-    it('skips a tag whose content says "X% less damage" (incoming-reduction guard)', () => {
-        const text = 'When Shielded, this Ship takes <unit-damage>10% less damage</unit-damage>.';
+    it('skips a tag whose content says "X% damage reduction" (Malvex p2 — shield-gated incoming reduction)', () => {
+        const text =
+            'When this Unit has an active shield, it gains <unit-damage>10% damage reduction</unit-damage>.';
         expect(parseSkillDamage(text)).toBe(0);
     });
 
@@ -833,12 +834,27 @@ describe('parseSkillEffects', () => {
     });
 
     it('stops scanning backward at sentence boundary (.)', () => {
+        // Belladonna's charged skill: "Acidic Decay" opens the second sentence as a gate, and the
+        // "inflicts" before it belongs to the first sentence.
         const result = parseSkillEffects(
-            'This Unit loses <unit-skill>Overload</unit-skill>. This Unit gains <unit-skill>Attack Up III</unit-skill> for 3 turns',
-            'passive1'
+            'This Unit deals <unit-damage>180% damage</unit-damage> and inflicts <unit-skill>Corrosion II</unit-skill> for 2 turns. If the enemy has 3 or more <unit-skill>Acidic Decay</unit-skill>, inflict <unit-skill>Stasis</unit-skill> for 1 turn.',
+            'charge'
         );
         expect(result).toEqual([
-            { buffName: 'Attack Up III', target: 'self', duration: 3, source: 'passive1' },
+            {
+                buffName: 'Corrosion II',
+                target: 'enemy',
+                duration: 2,
+                application: 'inflict',
+                source: 'charge',
+            },
+            {
+                buffName: 'Stasis',
+                target: 'enemy',
+                duration: 1,
+                application: 'inflict',
+                source: 'charge',
+            },
         ]);
     });
 
@@ -932,9 +948,9 @@ describe('parseSkillEffects', () => {
         ]);
     });
 
-    it('parses "apply" (bare imperative) using BUFFS type to target', () => {
+    it('parses "applies" using BUFFS type to target (Lodolite)', () => {
         const result = parseSkillEffects(
-            'When targeting non-Defenders, apply <unit-skill>Concentrate Fire</unit-skill> for 2 turns.',
+            'When this attack targets non-defenders, it also applies <unit-skill>Concentrate Fire</unit-skill> for 2 turns.',
             'active'
         );
         expect(result).toEqual([
@@ -948,16 +964,16 @@ describe('parseSkillEffects', () => {
         ]);
     });
 
-    it('parses "is applied with" (passive voice) using BUFFS type to target', () => {
+    it('parses "applies … to the enemy with the highest attack" using BUFFS type to target (Selenite)', () => {
         const result = parseSkillEffects(
-            'The highest attack enemy is applied with <unit-skill>Concentrate Fire</unit-skill> for 2 turns.',
+            'At the start of each round, this Unit applies <unit-skill>Concentrate Fire</unit-skill> for 1 turn to the enemy with the highest attack.',
             'active'
         );
         expect(result).toEqual([
             {
                 buffName: 'Concentrate Fire',
                 target: 'enemy',
-                duration: 2,
+                duration: 1,
                 source: 'active',
                 application: 'apply',
             },
@@ -972,15 +988,6 @@ describe('parseSkillEffects', () => {
         expect(result).toEqual([
             { buffName: 'Defense Up II', target: 'self', duration: 2, source: 'active' },
         ]);
-    });
-
-    it('does not treat an adjectival "newly applied" debuff as a fresh application', () => {
-        expect(
-            parseSkillEffects(
-                'After a critical hit, this Unit extends the newly applied <unit-skill>Acidic Decay</unit-skill> by 1 turn.',
-                'active'
-            )
-        ).toEqual([]);
     });
 
     // Epic PR1 (skill-model gap, finding family 3): Amartya's "When an enemy defender gains
@@ -1126,7 +1133,7 @@ describe('parseSecondaryDamage', () => {
         // the guard's scope.
         it("does NOT treat Xcellence's on-enemy-resist-debuff reactive proc as on-cast secondary damage", () => {
             const xcellencePassive2 =
-                "This Unit has 20% Shield Penetration.<br /><br />At the start of each turn this Unit gains <unit-damage>Shield equal to 20%</unit-damage> of its Max HP.<br /><br />When an enemy resists a debuff infliction, this Unit deals damage equal to <unit-damage>115%</unit-damage> of this Unit's current shield..";
+                "This Unit has <unit-damage>20% shield penetration</unit-damage>.<br /><br />Every turn this Unit gains a <unit-damage>shield equal to 20%</unit-damage> of its max HP.<br /><br />When an enemy resists a <unit-aid>debuff</unit-aid> infliction, this Unit deals damage equal to <unit-damage>115%</unit-damage> of this Unit's current shield.";
             expect(parseSecondaryDamage(xcellencePassive2)).toBeNull();
         });
 
@@ -1330,8 +1337,12 @@ describe('parseExtendStatus', () => {
         });
     });
 
-    it('does NOT match extend-dot "damage over time" wording', () => {
-        expect(parseExtendStatus('extends damage over time effects by 1 turn')).toBeNull();
+    it('does NOT match extend-dot "damage over time" wording (Provider)', () => {
+        expect(
+            parseExtendStatus(
+                "This Unit deals <unit-damage>200% damage</unit-damage>, <unit-skill>removes 1 charge</unit-skill> from the enemy's charged skill and all <unit-skill>damage over time debuffs</unit-skill> are <unit-skill>extended by 1 turn</unit-skill>."
+            )
+        ).toBeNull();
     });
 
     // Asphyxiator's refit passive. Unlike Sokol/Ripper/Lev — which grow every status already
@@ -1437,10 +1448,10 @@ describe('parseDebuffDurationReduction', () => {
         ).toEqual([{ turns: 1, target: 'all-allies', onDebuffInflicted: true }]);
     });
 
-    it('does NOT match Lingshe\'s Bomb-duration reduction (structurally different mechanic — "Bombs", not "Debuffs")', () => {
+    it('does NOT match Lingshe\'s Bomb-duration reduction (structurally different mechanic — "Bomb", not "Debuffs")', () => {
         expect(
             parseDebuffDurationReduction(
-                'This Unit reduces all <unit-skill>Bombs</unit-skill> on the enemy targets by 1 turn, <unit-skill>Bombs</unit-skill> reduced to 0 turns by this skill will detonate. This reduction effect requires hacking. This Unit inflicts <unit-skill>Bomb III</unit-skill> for 3 turns.'
+                'This Unit reduces all <unit-skill>Bomb</unit-skill> on the enemy targets by 1 turn.<br />This reduction effect requires hacking.<br /><br />This Unit inflicts <unit-skill>Bomb III</unit-skill> for 3 turns.'
             )
         ).toEqual([]);
     });
@@ -1559,7 +1570,7 @@ describe('parser false-positive guards', () => {
     it('on-resist proc is not secondary damage (Vindicator p2)', () => {
         expect(
             parseSecondaryDamage(
-                "This Unit has 20% Shield Penetration. At the start of combat, this Unit gains <unit-skill>Magnetized Shielding</unit-skill>.<br /><br />When this Unit resists a debuff infliction from an enemy, it deals <unit-damage>damage equal to 30%</unit-damage> of this Unit's max HP to that enemy."
+                "This Unit has <unit-damage>20% shield penetration</unit-damage>.<br /><br />At the start of combat, this Unit gains <unit-skill>Magnetized Shielding</unit-skill>.<br /><br />When this Unit resists a <unit-aid>debuff</unit-aid> infliction from an enemy, it deals damage equal to <unit-damage>30%</unit-damage> of this Unit's max HP to that enemy."
             )
         ).toBeNull();
     });
@@ -1575,7 +1586,7 @@ describe('parser false-positive guards', () => {
     it('burst-explosion reference is not an accumulate-detonate application (Valkyrie p1)', () => {
         expect(
             parseAccumulateDetonate(
-                'This Unit gains <unit-skill>Speed Up II</unit-skill> for 1 turn at the start of the round.<br /><br />When an <unit-aid>Echoing Burst</unit-aid> explodes on an enemy, this Unit and the ally with the lowest current health percentage <unit-damage>repair 5%</unit-damage> of damage dealt.'
+                'This Unit ignores <unit-skill>Taunt</unit-skill> and <unit-skill>Provoke</unit-skill> effects and at the start of the round, this Unit gains <unit-skill>Speed Up II</unit-skill> for 1 turn. <br /><br />When an <unit-skill>Echoing Burst</unit-skill> explodes on an enemy, the Unit and the ally with the lowest current health percentage <unit-damage>repair 5%</unit-damage> of the damage dealt.'
             )
         ).toBeNull();
     });
@@ -1661,10 +1672,10 @@ describe('parseHpThresholdCondition', () => {
     });
 
     it('does not match a damage-bonus phrasing (base damage stays ungated)', () => {
-        // "increases Damage by 100% to enemies with less than 30% HP" is a separate bonus on a
-        // ship with its own base damage — not a "deals N% damage to …" gate.
+        // Obsidian's charged skill: "deals 100% more damage to enemies with less than 30% HP" is a
+        // separate bonus on a ship with its own base damage — not a "deals N% damage to …" gate.
         const text =
-            'This Unit deals <unit-damage>250% Damage</unit-damage> and increases Damage by 100% to enemies with less than 30% HP.';
+            'This Unit deals <unit-damage>250% damage</unit-damage> with additional damage equal to <unit-damage>20%</unit-damage> of its max HP.<br /><br />This attack deals <unit-damage>100% more damage</unit-damage> to enemies with less than 30% HP.';
         expect(parseHpThresholdCondition(text)).toBeNull();
     });
 
@@ -1885,9 +1896,9 @@ describe('parseChargeGain', () => {
         });
     });
 
-    it('still returns null for "when an enemy dies" on-kill ally charge — Liberator (death routing unchanged)', () => {
+    it('still returns null for "when an enemy is destroyed" ally charge — Liberator (death routing unchanged)', () => {
         const text =
-            'When an enemy dies, this unit <unit-aid>grants 1 charge</unit-aid> to all allies.';
+            'When an enemy is destroyed, all allies <unit-skill>add 1 charge</unit-skill> to their charged skills.';
         expect(parseChargeGain(text)).toBeNull();
     });
 
@@ -2494,7 +2505,7 @@ describe('detectGrantConditions', () => {
 
     it('scopes the count gate to its own sentence when an abbreviated buff name has an internal period (Asphyxiator)', () => {
         const text =
-            'This Unit inflicts <unit-skill>Inc. DoT Damage Up III</unit-skill> for 2 turns, deals <unit-damage>215% damage</unit-damage>, and inflicts <unit-skill>Inferno III</unit-skill> for 3 turns. If the targeted enemy or adjacent enemies have 3 or more debuffs, it inflicts <unit-skill>Stasis</unit-skill> for 2 turns on the targeted enemy and all enemies adjacent to the enemy.';
+            'This Unit inflicts <unit-skill>Inc. DoT Damage Up III</unit-skill> for 2 turns, deals <unit-damage>215% damage</unit-damage>, and inflicts <unit-skill>Inferno III</unit-skill> for 3 turns. If the targeted enemy or adjacent enemies have 3 or more <unit-aid>debuffs</unit-aid>, it inflicts <unit-skill>Stasis</unit-skill> for 1 turn on the targeted enemy and all adjacent enemies.';
         // "Inc. DoT Damage Up III" is inflicted unconditionally — the "3 or more debuffs"
         // gate belongs to the separate Stasis sentence and must not leak onto it.
         expect(detectGrantConditions(text, 'Inc. DoT Damage Up III')).toEqual([]);
@@ -2598,9 +2609,9 @@ describe('detectGrantConditions', () => {
         expect(detectGrantConditions(text, 'Blast')).toEqual([]);
     });
 
-    it('recognises "when attacking a Defender" as an enemy-type gate (IonScorp)', () => {
+    it('recognises "when attacking a defender" as an enemy-type gate (IonScorp)', () => {
         const text =
-            'This Unit deals <unit-damage>190% damage</unit-damage>, but when attacking a Defender, it deals <unit-damage>200% damage</unit-damage> and inflicts <unit-skill>Disable</unit-skill> for 1 turn.';
+            'This Unit deals <unit-damage>190% damage</unit-damage>, but when attacking a defender, it instead deals <unit-damage>220% damage</unit-damage> and inflicts <unit-skill>Disable</unit-skill> for 1 turn.';
         expect(detectGrantConditions(text, 'Disable')).toEqual([
             { subject: 'enemy-type', derivable: true, requiredEnemyType: 'Defender' },
         ]);
@@ -2695,7 +2706,7 @@ describe('detectGrantConditions', () => {
 
     it('classifies "lowest speed among all allies" as a derivable lowest-speed-ally gate', () => {
         const text =
-            'This Unit starts each round with <unit-skill>Attack Up II</unit-skill> and <unit-skill>Defense Up II</unit-skill> for 1 turn if it has the lowest speed among all Allies. Then, deals <unit-damage>60% damage</unit-damage> to the highest Speed Enemy.';
+            'At the start of the round, if this Unit has the lowest speed among all allies, it gains <unit-skill>Attack Up II</unit-skill> and <unit-skill>Defense Up II</unit-skill> for 1 turn. Then deals <unit-damage>60% damage</unit-damage> to the enemy with the highest speed.';
         expect(detectGrantConditions(text, 'Attack Up II')).toEqual([
             { subject: 'lowest-speed-ally', derivable: true },
         ]);
@@ -4188,12 +4199,12 @@ describe('parsePurge', () => {
     it('does not match passive-voice "is Purged of all buffs" (deferred to C2b)', () => {
         expect(parsePurge('is Purged of all buffs')).toEqual([]);
     });
-    it('context-free double-match on Sefuba p2 reactive text (EXPECTED — slot-gate in Task 3 excludes passives)', () => {
-        // parsePurge is context-free: both "purges an enemy buff" and "purges 1 more buff"
-        // match. Task 3 gates emission to active/charged slots only, so Sefuba's passive text
-        // is never emitted. This assertion pins the known double-match as deliberate.
+    it("context-free double-match on Sefuba p2 reactive text (expected — emission is not parsePurge's call)", () => {
+        // parsePurge is context-free: both "purges a buff" and "purges 1 extra buff" match.
+        // Whether a passive purge is emitted is decided by buildShipAbilities' purge loop, so this
+        // assertion pins the double-match as deliberate.
         const result = parsePurge(
-            'when this unit purges an enemy buff, it repairs itself for 12% and purges 1 more buff from the enemy'
+            'When this Unit <unit-skill>purges a buff</unit-skill> from an enemy, it <unit-damage>repairs 8%</unit-damage> of its max HP for each <unit-aid>buff</unit-aid> removed and also <unit-skill>purges 1 extra buff</unit-skill> from the enemy.'
         );
         expect(result).toHaveLength(2);
         expect(result[0]).toEqual({ count: 1, target: 'enemy', explicitTarget: true });
@@ -4281,12 +4292,14 @@ describe('parseBuffSteal (PR10)', () => {
     });
 });
 
-// I6: Lodolite charged purge + legendary-refit shield strip. RAW strings verbatim from
-// docs/ship-skills.csv (Lodolite row).
+// I6: Lodolite charged purge + legendary-refit shield strip. The R4 passive is verbatim from
+// docs/ship-skills.csv. The charged constant is NOT catalogue text: the catalogue's Lodolite
+// purges in the active voice ("this Unit purges all buffs from enemy with the most buffs"), and no
+// catalogue row carries the passive-voice "is Purged of" form detectPassiveVoicePurge reads.
 const LODOLITE_CHARGED_RAW =
     "This Unit deals <unit-damage>310% damage</unit-damage> and additional damage equal to <unit-damage>10%</unit-damage> of this Unit's max HP. Then, the enemy with the most <unit-aid>Buffs</unit-aid> is Purged of all buffs.<br />This attack can target <unit-aid>Stealthed</unit-aid> enemies.";
 const LODOLITE_R4_PASSIVE_RAW =
-    "This Unit ignores <unit-skill>Stealth</unit-skill> effects.<br /><br />This Unit deals <unit-damage>10% more critical damage</unit-damage> to defenders, all allies deal <unit-damage>15% more direct damage</unit-damage> to enemies with <unit-skill>Concentrate Fire</unit-skill> or <unit-skill>Stealth</unit-skill>.<br /><br />When this Unit <unit-aid>Purges a buff</unit-aid> from an enemy, it <unit-damage>removes 100%</unit-damage> of the enemy's shield.";
+    "This Unit ignores <unit-skill>Stealth</unit-skill> effects.<br /><br />This Unit deals <unit-damage>10% more critical damage</unit-damage> to defenders, all allies deal <unit-damage>15% more direct damage</unit-damage> to enemies with <unit-skill>Concentrate Fire</unit-skill> or <unit-skill>Stealth</unit-skill>.<br /><br />When this Unit <unit-aid>purges a buff</unit-aid> from an enemy, it <unit-damage>removes 100%</unit-damage> of the enemy's shield.";
 
 describe('detectPassiveVoicePurge (I6 — Lodolite charged purge)', () => {
     it('parses the bare phrase "is Purged of all buffs" → count all, target enemy', () => {
@@ -4394,14 +4407,12 @@ describe('parseShieldStrip (PR9b — standalone "removes X% of the enemy Shield"
     });
 
     // Negative: Lodolite's I6 clause carries "removes 100% of the enemy's shield" too, but it
-    // is PURGE-COUPLED ("When this Unit Purges a buff from an enemy, it removes...") — that
+    // is PURGE-COUPLED ("When this Unit purges a buff from an enemy, it removes...") — that
     // stays modeled exclusively by detectPurgeStripsShield's `stripsShield` flag (gated on the
     // purge landing). parseShieldStrip must NOT also mint a standalone ability for it, or the
     // strip would double-apply (100% + another 100%).
     it('does NOT fire for the Lodolite purge-coupled clause (guard against double-modeling with I6)', () => {
-        const lodoliteR4Passive =
-            "This Unit ignores <unit-skill>Stealth</unit-skill> effects.<br /><br />This Unit deals <unit-damage>10% more critical damage</unit-damage> to defenders, all allies deal <unit-damage>15% more direct damage</unit-damage> to enemies with <unit-skill>Concentrate Fire</unit-skill> or <unit-skill>Stealth</unit-skill>.<br /><br />When this Unit <unit-aid>Purges a buff</unit-aid> from an enemy, it <unit-damage>removes 100%</unit-damage> of the enemy's shield.";
-        expect(parseShieldStrip(lodoliteR4Passive)).toBeNull();
+        expect(parseShieldStrip(LODOLITE_R4_PASSIVE_RAW)).toBeNull();
         expect(
             parseShieldStrip(
                 "When this Unit purges a buff from an enemy, it removes 100% of the enemy's shield."
@@ -4429,9 +4440,9 @@ describe('parseHealNoCrit', () => {
     });
 });
 
-describe('Chakara "starts each round with" extraction (Gap A)', () => {
+describe('Chakara start-of-round self-buff extraction', () => {
     const txt =
-        'This Unit starts each round with <unit-skill>Attack Up II</unit-skill> and <unit-skill>Defense Up II</unit-skill> for 1 turn if it has the lowest speed among all Allies. Then, deals <unit-damage>60% damage</unit-damage> to the highest Speed Enemy.';
+        'At the start of the round, if this Unit has the lowest speed among all allies, it gains <unit-skill>Attack Up II</unit-skill> and <unit-skill>Defense Up II</unit-skill> for 1 turn. Then deals <unit-damage>60% damage</unit-damage> to the enemy with the highest speed.';
 
     it('extracts BOTH self-buffs with duration 1', () => {
         const effects = parseSkillEffects(txt, 'passive2');
@@ -4489,10 +4500,10 @@ describe('detectIgnoresForcedTargeting', () => {
         ).toBe(false);
     });
 
-    it('returns false for a condition reader ("against Taunted or Provoked enemies")', () => {
+    it('returns false for a condition reader ("to enemies affected by Taunt or Provoke", Rikra)', () => {
         expect(
             detectIgnoresForcedTargeting(
-                'deals 180% damage with additional 60% damage against Taunted or Provoked enemies.'
+                'This Unit deals <unit-damage>140% damage</unit-damage> with an additional <unit-damage>60% damage</unit-damage> to enemies affected by <unit-skill>Taunt</unit-skill> or <unit-skill>Provoke</unit-skill>.'
             )
         ).toBe(false);
     });
@@ -4599,28 +4610,28 @@ describe('parseStasisBreakExemption', () => {
 
 // C2b-1 T5: on-enemy-purged and on-ally-purged heal trigger detectors.
 // All three RAW strings below are taken verbatim from docs/ship-skills.csv.
-// Regexes must match THROUGH <unit-aid>/<unit-damage> tags (loose [^.;]* gaps).
+// Regexes must match THROUGH <unit-skill>/<unit-damage> tags (loose [^.;]* gaps).
 const SEFUBA_P1_RAW =
-    'When this Unit <unit-aid>purges a buff</unit-aid> from an enemy, it <unit-damage>repairs itself for 8%</unit-damage> Max HP.';
+    'When this Unit <unit-skill>purges a buff</unit-skill> from an enemy, it <unit-damage>repairs 8%</unit-damage> of its max HP for each <unit-aid>buff</unit-aid> removed.';
 const SEFUBA_P2_RAW =
-    'When this Unit <unit-aid>purges an enemy buff</unit-aid>, it <unit-damage>repairs itself for 12%</unit-damage> Max HP and <unit-aid>purges 1</unit-aid> more buff from the enemy.';
-const SALVATION_P3_RAW =
-    "When this Unit is destroyed it <unit-damage>repairs 80%</unit-damage> of its max HP to all allies.<br /><br />When a <unit-aid>buff</unit-aid> is <unit-aid>purged</unit-aid> from an ally, this Unit <unit-damage>repairs that ally for 5%</unit-damage> of this Unit's max HP.";
+    'When this Unit <unit-skill>purges a buff</unit-skill> from an enemy, it <unit-damage>repairs 8%</unit-damage> of its max HP for each <unit-aid>buff</unit-aid> removed and also <unit-skill>purges 1 extra buff</unit-skill> from the enemy.';
+const SALVATION_P2_RAW =
+    "When this Unit is destroyed it <unit-damage>repairs 80%</unit-damage> of its max HP to all allies.<br /><br />When a <unit-aid>buff</unit-aid> is <unit-skill>purged</unit-skill> from an ally, this Unit <unit-damage>repairs that ally for 5%</unit-damage> of this Unit's max HP.";
 
 describe('detectEnemyPurgedTrigger', () => {
     it('returns on-enemy-purged for Sefuba p1 (anchor inside the purge sentence)', () => {
-        const pos = SEFUBA_P1_RAW.search(/repairs itself/i);
+        const pos = SEFUBA_P1_RAW.search(/repairs 8%/i);
         expect(detectEnemyPurgedTrigger(SEFUBA_P1_RAW, pos)).toBe('on-enemy-purged');
     });
 
     it('returns on-enemy-purged for Sefuba p2 (anchor inside the purge sentence)', () => {
-        const pos = SEFUBA_P2_RAW.search(/repairs itself/i);
+        const pos = SEFUBA_P2_RAW.search(/repairs 8%/i);
         expect(detectEnemyPurgedTrigger(SEFUBA_P2_RAW, pos)).toBe('on-enemy-purged');
     });
 
-    it('returns undefined for Salvation p3 (no "this unit purges … enemy" phrasing)', () => {
-        const pos = SALVATION_P3_RAW.search(/repairs that ally/i);
-        expect(detectEnemyPurgedTrigger(SALVATION_P3_RAW, pos)).toBeUndefined();
+    it('returns undefined for Salvation p2 (no "this unit purges … enemy" phrasing)', () => {
+        const pos = SALVATION_P2_RAW.search(/repairs that ally/i);
+        expect(detectEnemyPurgedTrigger(SALVATION_P2_RAW, pos)).toBeUndefined();
     });
 
     it('is position-scoped: returns undefined when anchor is in a different sentence', () => {
@@ -4639,30 +4650,30 @@ describe('detectEnemyPurgedTrigger', () => {
 });
 
 describe('detectAllyPurgedTrigger', () => {
-    it('returns on-ally-purged for Salvation p3 (anchor inside the ally-purge sentence)', () => {
-        const pos = SALVATION_P3_RAW.search(/repairs that ally/i);
-        expect(detectAllyPurgedTrigger(SALVATION_P3_RAW, pos)).toBe('on-ally-purged');
+    it('returns on-ally-purged for Salvation p2 (anchor inside the ally-purge sentence)', () => {
+        const pos = SALVATION_P2_RAW.search(/repairs that ally/i);
+        expect(detectAllyPurgedTrigger(SALVATION_P2_RAW, pos)).toBe('on-ally-purged');
     });
 
     it('returns undefined for Sefuba p1 (no "buff is purged from an ally" phrasing)', () => {
-        const pos = SEFUBA_P1_RAW.search(/repairs itself/i);
+        const pos = SEFUBA_P1_RAW.search(/repairs 8%/i);
         expect(detectAllyPurgedTrigger(SEFUBA_P1_RAW, pos)).toBeUndefined();
     });
 
     it('returns undefined for Sefuba p2 (no "buff is purged from an ally" phrasing)', () => {
-        const pos = SEFUBA_P2_RAW.search(/repairs itself/i);
+        const pos = SEFUBA_P2_RAW.search(/repairs 8%/i);
         expect(detectAllyPurgedTrigger(SEFUBA_P2_RAW, pos)).toBeUndefined();
     });
 
-    it('is position-scoped: an anchor in the on-destroyed sentence of Salvation p3 is not stamped', () => {
+    it('is position-scoped: an anchor in the on-destroyed sentence of Salvation p2 is not stamped', () => {
         // The on-destroyed sentence is before the <br /><br /> — its "repairs 80%" anchor
         // must NOT get on-ally-purged.
-        const pos = SALVATION_P3_RAW.search(/repairs 80%/i);
-        expect(detectAllyPurgedTrigger(SALVATION_P3_RAW, pos)).toBeUndefined();
+        const pos = SALVATION_P2_RAW.search(/repairs 80%/i);
+        expect(detectAllyPurgedTrigger(SALVATION_P2_RAW, pos)).toBeUndefined();
     });
 
     it('returns undefined for negative anchor', () => {
-        expect(detectAllyPurgedTrigger(SALVATION_P3_RAW, -1)).toBeUndefined();
+        expect(detectAllyPurgedTrigger(SALVATION_P2_RAW, -1)).toBeUndefined();
     });
 });
 
@@ -5052,13 +5063,13 @@ describe('parseEnemyChargedCastReaction (Curator enemy-charged-cast reaction)', 
         ).toBeNull();
     });
 
-    // Real-corpus lock (Task 7): FrontLine's VERBATIM second-passive text from docs/ship-skills.csv
-    // — full <unit-damage> tags AND the "Shield equal to 25% of its Max HP at the start of combat"
-    // preamble (which must NOT be mistaken for the reaction's shield). Mirrors the Curator real-data
-    // test (Task 5): exercises tag stripping + preamble exclusion on the genuine game string.
+    // Real-corpus lock: FrontLine's VERBATIM second-passive text from docs/ship-skills.csv — full
+    // <unit-damage> tags AND the start-of-combat "shield equal to 25% of its max HP" preamble
+    // (which must NOT be mistaken for the reaction's shield). Exercises tag stripping + preamble
+    // exclusion on the genuine game string.
     it('FrontLine VERBATIM CSV second-passive text → exactly the damage(80)+shield(damage-dealt,30) pair', () => {
         const FRONTLINE_R2_VERBATIM =
-            'This ship has 20% Shield Penetration.<br />While Shielded, it gains 2500 additional Defense.<br />This Unit gains <unit-damage>Shield equal to 25%</unit-damage> of its Max HP at the start of combat.<br /><br />When an enemy uses their Charged skill, it deals <unit-damage>80%</unit-damage> and gains a Shield equal to <unit-damage>30%</unit-damage> of the damage dealt, once per round.';
+            'This ship has <unit-damage>20% shield penetration</unit-damage>.<br /><br />At the start of combat this Unit gains a <unit-damage>shield equal to 25%</unit-damage> of its max HP and while it has an active shield, it gains 2500 defense.<br /><br />When an enemy uses their charged skill, this Unit deals <unit-damage>80% damage</unit-damage> and gains a <unit-damage>shield equal to 30%</unit-damage> of the damage dealt, once per round.';
         const abilities = parseEnemyChargedCastReaction(FRONTLINE_R2_VERBATIM);
         expect(abilities).not.toBeNull();
         expect(abilities).toHaveLength(2);

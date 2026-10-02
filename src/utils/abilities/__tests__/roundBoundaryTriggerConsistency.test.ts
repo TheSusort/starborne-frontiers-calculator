@@ -124,18 +124,18 @@ describe('Chakara: round-start-continuation damage inherits its preceding senten
         expect(atk.trigger).toBe('start-of-round');
     });
 
-    it('passive2: "Then, deals 60% damage …" (no round-start phrase of its own) inherits start-of-round from the preceding "starts each round with" sentence', () => {
+    it('passive2: "Then deals 60% damage …" (no round-start phrase of its own) inherits start-of-round from the preceding "At the start of the round" sentence', () => {
         const abilities = passiveAbilities({
             refits: [{}, {}],
             firstPassiveSkillText: 'placeholder',
             secondPassiveSkillText:
-                'This Unit starts each round with <unit-skill>Attack Up II</unit-skill> and ' +
-                '<unit-skill>Defense Up II</unit-skill> for 1 turn if it has the lowest speed ' +
-                'among all Allies. Then, deals <unit-damage>60% damage</unit-damage> to the ' +
-                'highest Speed Enemy.',
+                'At the start of the round, if this Unit has the lowest speed among all allies, ' +
+                'it gains <unit-skill>Attack Up II</unit-skill> and <unit-skill>Defense Up II</unit-skill> ' +
+                'for 1 turn. Then deals <unit-damage>60% damage</unit-damage> to the enemy with ' +
+                'the highest speed.',
         } as Partial<Ship>);
         const atk = findBuff(abilities, 'Attack Up II')!;
-        expect(atk.trigger).toBe('start-of-round'); // pre-existing (STARTS_ROUND_WITH_RE), unaffected
+        expect(atk.trigger).toBe('start-of-round');
         const dmg = abilities.find((a) => a.type === 'damage')!;
         expect(dmg).toBeDefined();
         expect(dmg.trigger).toBe('start-of-round');
@@ -251,13 +251,12 @@ describe('Crucialis: start-of-combat shield AND buff (docs/ship-skills.csv passi
     });
 });
 
-describe('FrontLine: start-of-combat shield, phrase trailing the sentence (docs/ship-skills.csv passive1)', () => {
+describe('FrontLine: start-of-combat shield (docs/ship-skills.csv passive1)', () => {
     it('the 25%-max-HP shield rides pre-combat, not on-cast', () => {
         const abilities = passiveAbilities({
             firstPassiveSkillText:
-                'This ship has 20% Shield Penetration.<br />While Shielded, it gains 2500 ' +
-                'additional Defense.<br />This Unit gains <unit-damage>Shield equal to 25%</unit-damage> ' +
-                'of its Max HP at the start of combat.',
+                'This ship has <unit-damage>20% shield penetration</unit-damage>.<br /><br />' +
+                'At the start of combat this Unit gains a <unit-damage>shield equal to 25%</unit-damage> of its max HP and while it has an active shield, it gains 2500 defense.',
         });
         const shield = abilities.find((a) => a.type === 'shield')!;
         expect(shield).toBeDefined();

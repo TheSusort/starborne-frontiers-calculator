@@ -20,10 +20,10 @@
  * parser never stamps `application` on a ship DoT, so every one lands and reacts as an inflict —
  * an apply-worded one would need that stamp, and this test is where it would surface.
  *
- * A small, named, per-corpus ALLOWLIST covers genuinely verb-less clauses (empty today) — adding a
- * ship here is a deliberate, reviewed decision, not a silent gap.
+ * A small, named, per-corpus ALLOWLIST covers genuinely verb-less clauses; both are empty.
  *
- * CORPUS ACCESS: both CSVs are gitignored reference data. The OLD census must read the real corpus
+ * CORPUS ACCESS: both CSVs are gitignored reference data. The `docs/ship-skills.csv` census must
+ * read the real corpus
  * — a synthetic fallback would turn a missing-data worktree into a green vacuous run. The
  * catalogue half needs `docs/ship-skills.catalogue.csv` (built by
  * `scripts/build-catalogue-skills-csv.ts`); where that file is absent it is SKIPPED, by name.
@@ -67,10 +67,8 @@ const FAMILY = new Set<AbilityTrigger>([
 const VERB_RE = /\binflict\w*\b|\bappl(?:y|ies|ying|ied)\b/i;
 
 // Ships whose on-debuff-inflicted-family ability rides a clause with NO "inflict"/"apply" verb of
-// its own — a reviewed, deliberate exception, not a gap. Empty: every family clause in both
-// corpora names its verb (APEX reads "gets inflicted with a debuff"). Adding a name here is a
-// conscious call: read the ship's row text first and confirm it really carries no landing verb
-// before assuming this tripwire is wrong.
+// its own. Empty: every family clause in both corpora names its verb (APEX reads "gets inflicted
+// with a debuff").
 const NO_VERB_ALLOWLIST = new Set<string>();
 const CATALOGUE_NO_VERB_ALLOWLIST = new Set<string>();
 
@@ -142,8 +140,8 @@ describe('debuff-inflicted trigger family — triggerApplicationFilter tripwire'
 
 // ---------------------------------------------------------------------------------------------
 // Ship DoTs: none is apply-worded. A DoT's landing verb is the active verb that governs its tag —
-// "applies"/"apply" (not "applying"/"applied", which are trigger clauses and adjectives: Wisteria's
-// "after applying Corrosion", Valerian's "the newly applied Corrosion") or "inflicts". The verb's
+// "applies"/"apply" or "inflicts" — not the gerund or adjective forms, which are trigger clauses and
+// references (Valerian's "After inflicting Corrosion", "the newly inflicted Corrosion"). The verb's
 // reach ends at the next verb, so "applies Concentrate Fire …, and inflicts Inferno II" governs
 // only the Concentrate Fire.
 // ---------------------------------------------------------------------------------------------
@@ -181,7 +179,7 @@ function shipDotVerbCensus(csvPath?: string): { applyWorded: string[]; inflictWo
     return { applyWorded, inflictWorded };
 }
 
-describe('ship DoTs — none is apply-worded (OLD corpus)', () => {
+describe('ship DoTs — none is apply-worded', () => {
     it('the detector sees an "applies <DoT>" clause and ignores the inflict, gerund and adjective forms', () => {
         expect(
             applyWordedDots(
@@ -193,11 +191,13 @@ describe('ship DoTs — none is apply-worded (OLD corpus)', () => {
                 'This Unit applies <unit-skill>Concentrate Fire</unit-skill> for 1 turn, and inflicts <unit-skill>Inferno II</unit-skill> for 2 turns.'
             )
         ).toEqual({ apply: [], inflict: 1 });
+        // Valerian: "inflicting" is a trigger clause and "newly inflicted" an adjective — neither
+        // governs a DoT tag.
         expect(
             applyWordedDots(
-                'This Unit, after applying <unit-skill>Corrosion</unit-skill> with a Critical hit, extends the newly applied <unit-skill>Corrosion</unit-skill> by 1 turn.'
-            ).apply
-        ).toEqual([]);
+                "After inflicting <unit-skill>Corrosion</unit-skill> with a critical hit, <unit-skill>extends the duration the newly inflicted</unit-skill> <unit-skill>Corrosion</unit-skill> by 1 turn, with the extension chance equal to this Unit's critical power."
+            )
+        ).toEqual({ apply: [], inflict: 0 });
     });
 
     it('no ship DoT clause is worded "applies <DoT>"', () => {

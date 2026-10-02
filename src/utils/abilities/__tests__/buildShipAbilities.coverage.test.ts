@@ -137,7 +137,7 @@ describe('buildShipAbilities.coverage', () => {
     it('Lodolite active: damage + additional-damage(hp) + modifier (Concentrate Fire)', () => {
         const s = ship({
             activeSkillText:
-                'This Unit deals <unit-damage>240% damage</unit-damage> with additional damage equal to <unit-damage>10%</unit-damage> of its max HP. When targeting non-Defenders, apply <unit-skill>Concentrate Fire</unit-skill> for 2 turns.<br />This attack can target <unit-aid>Stealthed</unit-aid> enemies.',
+                'This Unit deals <unit-damage>240% damage</unit-damage> with additional damage equal to <unit-damage>10%</unit-damage> of its max HP.<br /><br />When this attack targets non-defenders, it also applies <unit-skill>Concentrate Fire</unit-skill> for 2 turns.',
         });
 
         const { slots } = buildShipAbilities(s);

@@ -223,14 +223,12 @@ describe('cluster 5 — on-enemy-destroyed / on-kill', () => {
         expect(ab.some((a) => a.type === 'buff' && a.trigger === 'on-enemy-destroyed')).toBe(true);
     });
 
-    const MADAX_P2 =
-        'This Unit <unit-damage>repairs itself for 13%</unit-damage> of its Max HP when an enemy dies.';
+    const MADAX_P1 =
+        'This Unit <unit-damage>repairs 13%</unit-damage> of its max HP when an enemy dies.';
     it('Madax: self-heal-on-enemy-death rides on-enemy-destroyed', () => {
-        const ab = abilitiesFor({ firstPassiveSkillText: MADAX_P2 }, 'passive');
+        const ab = abilitiesFor({ firstPassiveSkillText: MADAX_P1 }, 'passive');
         const heal = ab.find((a) => a.type === 'heal');
         expect(heal?.trigger).toBe('on-enemy-destroyed');
-        // GAP: tag-only — heal is self-target (no actor needed); the heal builder's reaction chain
-        // doesn't recognize "when an enemy dies" → stays on-cast. on-enemy-destroyed trigger exists.
     });
 
     const OBSIDIAN_P2 =
@@ -271,7 +269,7 @@ describe('cluster 6 — on-bomb-detonated', () => {
     });
 
     const VALKYRIE_P2 =
-        'When an <unit-aid>Echoing Burst</unit-aid> explodes on an enemy, this Unit and the ally with the lowest current health percentage <unit-damage>repair 5%</unit-damage> of damage dealt.';
+        'When an <unit-skill>Echoing Burst</unit-skill> explodes on an enemy, the Unit and the ally with the lowest current health percentage <unit-damage>repair 5%</unit-damage> of the damage dealt.';
     // #345: the earlier lock here ("rides on-bomb-detonated") was itself the bug, in the same
     // shape as Lingshe's below. An Echoing Burst is not a Bomb — it is an accumulate-then-detonate
     // container — so sharing the Bomb trigger fired her repair on any teammate's Bomb and never on
