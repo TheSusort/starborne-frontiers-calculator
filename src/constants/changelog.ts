@@ -1,35 +1,26 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '1.71.0';
+export const CURRENT_VERSION = '1.72.0';
 
 // Accumulates between releases. `npm run release` folds these into a new ChangelogEntry at the
 // top of CHANGELOG, bumps CURRENT_VERSION and empties this array — all three together, because a
 // bumped version whose entries are still unreleased shows users a what's-new dialog listing
 // nothing. Do it by hand only if that script cannot.
-export const UNRELEASED_CHANGES: string[] = [
-    'Ship data: base stats and refit bonuses now match the official catalogue.',
-    'Ship data: Enforcer, Orel and Yazid now have their correct roles.',
-    'Ship data: Suku and Yuyan now have their correct affinities.',
-    'Ship data: Mender and Yin Jian now show their own portraits.',
-    "Combat simulator: Madax, Orel and Sansi's Taunt now applies only to themselves.",
-    "Combat simulator: AEGIS and Nyxen's charged shield now reaches every ally in range.",
-    'DPS calculator and Effect Index: Security Down III is now available as a debuff.',
-    'Combat simulator and DPS calculator: Ripper now gains Marauder Rage each time his debuff lands.',
-    "Combat simulator and DPS calculator: Judge's defense penetration is no longer counted twice.",
-    'Combat simulator: Lingshe gains Stealth only when one of her Bombs lands.',
-    'Combat simulator and DPS calculator: Insidiousness also rolls when a passive inflicts a debuff in reaction.',
-    'Combat simulator and DPS calculator: Insidiousness now rolls only on inflicted debuffs, not applied ones.',
-    "Combat simulator and DPS calculator: Burner's Inferno no longer triggers passives that react to inflicted debuffs.",
-    "Combat simulator and DPS calculator: Burner's Inferno now lands without a hacking roll.",
-    "Combat simulator and healing calculator: Hermes's charged skill now adds a charge to every ally in range.",
-    'Combat simulator and healing calculator: Hermes now grants Cheat Death to each ally in range below 40%.',
-    'Combat simulator: reference Liberator, Prophet and others now have correct shield penetration.',
-    'Combat log: gear and passive DoTs that fail to land now show as resisted.',
-    "Combat simulator: a resisted passive DoT now triggers resist reactions like Prophet's.",
-    "Combat simulator: Gallant's charged skill now puts Stasis on Defenders.",
-];
+export const UNRELEASED_CHANGES: string[] = [];
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.72.0',
+        date: '2026-10-02',
+        changes: [
+            'Ship data: base stats and refit bonuses now match the official catalogue.',
+            'Ship data: Enforcer, Orel and Yazid now have their correct roles.',
+            'Ship data: Suku and Yuyan now have their correct affinities.',
+            'Ship data: Mender and Yin Jian now show their own portraits.',
+            '15 combat simulator fixes.',
+            'DPS calculator and Effect Index: Security Down III is now available as a debuff.',
+        ],
+    },
     {
         version: '1.71.0',
         date: '2026-10-01',
