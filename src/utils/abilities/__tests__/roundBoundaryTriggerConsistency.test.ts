@@ -62,9 +62,9 @@ describe('Judge: start-of-round AoE execute damage (docs/ship-skills.csv passive
                 hpPercent: 50,
             })
         );
-        // The co-located defense-penetration modifier (different sentence) is unaffected.
-        const modifier = abilities.find((a) => a.type === 'modifier')!;
-        expect(modifier.trigger).toBe('on-cast');
+        // The co-located "has 20% defense penetration" (different sentence) describes Judge's
+        // refit stat and mints no modifier, so nothing else rides on-cast.
+        expect(abilities.some((a) => a.type === 'modifier')).toBe(false);
     });
 
     it('passive2 (stage-2 duplicate + extra sentence): same fix applies', () => {

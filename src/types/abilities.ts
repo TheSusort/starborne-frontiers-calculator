@@ -721,9 +721,13 @@ export interface OutgoingHitContext {
  *  - 'repaired-enemy-count' → eventCtx.repairedEnemyIds.length (Sansi's "5% for every enemy
  *    repaired").
  *  - 'spread-affected-count' → eventCtx.spreadAffectedIds.length (Hemlock's "5% per enemy
- *    affected" — the number of adjacent allies a Corrosion spread landed Corrosion I on, ship-kit
- *    W3 Task 9). Reuses the exact same primitive as 'repaired-enemy-count'. */
-export type ReactiveScalingCountSource = 'repaired-enemy-count' | 'spread-affected-count';
+ *    affected" — the number of adjacent allies a Corrosion spread landed Corrosion I on).
+ *    Reuses the exact same primitive as 'repaired-enemy-count'.
+ *  - 'purged-buff-count' → eventCtx.purgedBuffCount (Sefuba's catalogue "repairs 8% of its max HP
+ *    for each buff removed") — the number of buffs the TRIGGERING purge removed
+ *    (purge-performed.count), stamped by the on-enemy-purged listener. */
+export type ReactiveScalingCountSource =
+    'repaired-enemy-count' | 'spread-affected-count' | 'purged-buff-count';
 
 export interface ScalingRule {
     /** Index into Ability.conditions of the live-state count Condition (additive PR6b / damage
@@ -872,7 +876,23 @@ export type AbilityConfig =
           application: 'inflict' | 'apply';
           duration?: number | 'recurring';
       }
-    | { type: 'dot'; dotType: DoTType; tier: number; stacks: number; duration: number }
+    | {
+          type: 'dot';
+          dotType: DoTType;
+          tier: number;
+          stacks: number;
+          duration: number;
+          /** The landing verb the DoT's source text states — the Burner gear set's "Applies
+           *  Inferno 1" sets `'apply'`; absent → an inflict. It decides two things, exactly as a
+           *  debuff's `application` does: how a REACTIVE DoT lands (`'apply'` = the affinity check
+           *  only, no hacking-vs-security roll — the reactive executor's
+           *  `landsTimedEnemyApplication` call in triggers.ts), and which debuff-inflicted-family
+           *  reactions see it (stamped on `dot-applied`; `passesApplicationFilter`). The parser
+           *  never sets it on a ship DoT and the cast-path DoT landing does not read it —
+           *  debuffApplicationFilterTripwire.test.ts's ship-DoT census fails on an apply-worded
+           *  ship DoT clause. */
+          application?: 'inflict' | 'apply';
+      }
     // SP-F F3 (Lingshe charged skill): shrinks every living enemy's PendingBomb.countdown by
     // `turns`; any bomb reaching <= 0 detonates immediately, crediting the bomb's ORIGINAL
     // applier (bomb.sourceId), not this ability's caster. Always hacking-gated at the runtime
@@ -1217,15 +1237,48 @@ export interface Ability {
      *  on critting hits, 'non-crit' only on non-critting hits. Absent → fires on any hit.
      *  Isha parses as a mutually exclusive pair (3% non-crit / 6% crit — "instead"). */
     triggerCritFilter?: 'crit' | 'non-crit';
-    /** Landing-mechanic filter for the debuff-inflicted trigger family (on-debuff-inflicted,
-     *  on-ally-debuff-inflicted, on-other-ally-debuff-inflicted, on-ally-debuffed): 'inflict'
-     *  fires only on a hacking-roll infliction, 'apply' only on an unconditional land (no roll —
-     *  Provoke, Concentrate Fire, Disable). Set by the parser from the clause's own verb
-     *  ("inflicts"/"inflicting" → 'inflict', "applies"/"applying" → 'apply'); absent when the
-     *  clause uses neither (a neutral phrasing like "gets debuffed"/"debuffing" — APEX, the
-     *  Insidiousness implant), which fires on any landing, unchanged. A `dot-applied` event always
-     *  counts as an inflict — see `passesApplicationFilter`'s doc in triggers.ts. */
+    /** Landing-verb filter for the debuff-inflicted trigger family (on-debuff-inflicted,
+     *  on-ally-debuff-inflicted, on-other-ally-debuff-inflicted, on-ally-debuffed, on-debuffed):
+     *  'inflict' fires only on a status whose source text says "inflicts", 'apply' only on one
+     *  whose source says "applies" (Provoke, Concentrate Fire, Disable; the Burner gear set's
+     *  Inferno). Set by the parser from the clause's own verb ("inflicts"/"inflicting" →
+     *  'inflict', "applies"/"applying" → 'apply'); absent when the clause uses neither (a neutral
+     *  phrasing like OLD APEX's "gets debuffed"), which fires on any landing. The Insidiousness
+     *  implant ("When debuffing an enemy") is the one hand-set exception: 'inflict' by user ruling
+     *  (2026-10-02). What each event counts as — `passesApplicationFilter`'s doc in triggers.ts. */
     triggerApplicationFilter?: 'inflict' | 'apply';
+    /** Status-FAMILY filter for `on-debuff-inflicted`: the reaction fires only when the landed
+     *  status belongs to this family — Lingshe's "When this Unit inflicts a Bomb it gains
+     *  Stealth" sets `'Bomb'`, so a Defense Down she lands wakes nothing. Matched by family, not
+     *  exact name ("a Bomb" means any Bomb tier), unlike `requireDamagedAllyStatus`, which names a
+     *  status an ally HOLDS. A `dot-applied` compares its tierless DoT family label
+     *  (`dotFamilyLabel`: 'Bomb', 'Corrosion', 'Inferno'). A `debuff-applied` compares
+     *  `deriveFamilyKey(buffName).familyKey`: the name with its Roman tier suffix stripped
+     *  ('Defense Down I' → 'Defense Down'), EXCEPT a name starting Bomb/Corrosion/Inferno, which
+     *  `deriveFamilyKey` returns whole ('Inferno II' stays 'Inferno II') and so never equals a
+     *  bare family filter. Composes with `triggerApplicationFilter` (both must pass). Set by the
+     *  parser from the clause's own object; absent → any landed status passes. Read by
+     *  `passesStatusFilter` in triggers.ts. */
+    triggerStatusFilter?: string;
+    /** Source-SLOT filter for `on-debuff-inflicted`: the reaction fires only when the landed
+     *  debuff/DoT was inflicted by an ability in one of these slots — Ripper's "When this Unit
+     *  inflicts a debuff with its active or charged skills" sets `['active', 'charged']`, so a
+     *  debuff his passive or an implant lands wakes nothing (and neither does the Inferno the
+     *  reaction itself inflicts, which is passive-sourced). Compared against the event's
+     *  `sourceSlot` stamp; an event with no stamp never passes a present filter. Composes with
+     *  the other `trigger*Filter` fields (all must pass). Set by the parser from the clause's own
+     *  words; absent → any slot passes. Read by `passesSourceSlotFilter` in triggers.ts. */
+    triggerSourceSlotFilter?: ('active' | 'charged')[];
+    /** Once-per-CAST cap for a reaction to the owner's own cast (Ripper: "When this Unit
+     *  inflicts a debuff with its active or charged skills, it also inflicts Inferno II … and all
+     *  allies active buffs are extended by 1 turn"). `'cast'` fires at most once per owner cast
+     *  however many qualifying events the cast raised (the buff extension: a charged landing two
+     *  debuffs extends once); `'per-victim'` at most once per (cast, debuffed victim) (the
+     *  Inferno II: one per enemy the cast debuffed). A cast is one own turn of the owner — keyed
+     *  on the owner's `turnsTaken`, which every turn (extra actions included) advances. The slot
+     *  is consumed when the reaction fires, whatever its own landing roll then does. Enforced
+     *  executor-side by `passesOncePerCastGate` in triggers.ts. Absent → no per-cast cap. */
+    oncePerCast?: 'cast' | 'per-victim';
     /** Ally-role filter for on-ally-attacked (Graphite "when an ally attacker or
      *  debuffer is directly damaged"): the reaction fires only when the DAMAGED
      *  ally's ship role matches one of these categories (prefix match over
@@ -1255,10 +1308,14 @@ export interface Ability {
      *  what every other ship carries. Read LIVE at application time — the whole point is that a
      *  recipient's Stealth/HP changes between one round and the next.
      *
-     *  ⚠️ REACTIVE PATH ONLY. Unlike `factionFilter`, which is honoured at four seams, this is
-     *  intersected in exactly one — `footprintFilteredRecipients` (triggers.ts). Both clauses that
-     *  carry it are live-triggered, so nothing is dropped; `recipientFilterIsReactiveOnly.test.ts`
-     *  is the standing guard. On a cast-path ability the field would be silently ignored. */
+     *  Hermes's charged names the HP axis on a CAST: "If an ally has less than 40% HP, it grants
+     *  that ally Cheat Death" — each ally the cast reaches is asked about its own HP.
+     *
+     *  ⚠️ NOT every seam `factionFilter` runs at. This is intersected in
+     *  `footprintFilteredRecipients` (triggers.ts, the reactive path) and in playerTurn's per-slot
+     *  timed loop (the cast path's timed grants), and nowhere else. On any other route (an aura,
+     *  an accumulating status, a passive combat-start seed, a cast heal/shield) the field would be
+     *  silently ignored; `recipientFilterCarriers.test.ts` is the standing guard. */
     recipientFilter?: RecipientFilter;
     /** D-PR14 Bulwark: this reactive applies at most once per round per (owner, ability).
      *  Gated executor-side via IntentExecContext.oncePerRoundConsumed (check BEFORE the
@@ -1339,19 +1396,27 @@ export interface Ability {
      *  ability) RateGate (deterministic accumulator, like crit/landing). Absent or out of (0,1)
      *  → fires on every qualifying trigger. */
     procChance?: number;
-    /** Proc-roll granularity for a probabilistic reactive ability. `'per-attack'` draws the
-     *  gate ONCE per ATTACK and reuses that verdict for every qualifying trigger event in that
-     *  same attack, via IntentExecContext.procDecisionThisSubAttack — so Insidiousness either
-     *  damages EVERY enemy its attack debuffed or none of them, matching the game. Absent →
-     *  per-event draws, the historical behaviour of every other procChance ability (Adaptive
-     *  Plating, Smokescreen, Ambush, Bloodthirst, Reactive Ward, Tenacity, Bulwark).
+    /** Proc-roll granularity for a probabilistic reactive ability. Absent → per-event draws, the
+     *  behaviour of every other procChance ability (Adaptive Plating, Smokescreen, Ambush,
+     *  Bloodthirst, Reactive Ward, Tenacity, Bulwark).
      *
-     *  "Attack" here means ONE attack, and a `hits: N` skill is N consecutive full-walk attacks
-     *  (multi-hit full-walk epic, R1), so a 3-hit skill draws THREE verdicts — one per sub-attack,
-     *  each shared across that sub-attack's footprint. Until PR4 the verdict was keyed without the
-     *  sub-attack and cleared only at actor turn-start, making this per-TURN and replaying
-     *  sub-attack #1's verdict for all N. */
-    procScope?: 'per-attack';
+     *  `'per-cast'` (Insidiousness, `on-debuff-inflicted`; user + Solid Clouds dev, 2026-10-02):
+     *  ONE roll for everything the owner's skill cast inflicts itself, however many debuffs and
+     *  however many hits (an exception to the per-attack proc rule); ONE extra roll for each
+     *  reaction firing that inflicts in that cast (Warden's passive Out. Damage Down II off her
+     *  charged Corrosion II); and at most ONE successful roll per SKILL CAST that set the chain
+     *  off, whoever cast it (an enemy's attack waking the owner's on-attacked Corrosion I, and the
+     *  Out. Damage Down II that wakes, are that enemy's one cast). A successful cast roll hits
+     *  EVERY enemy the cast's own inflictions landed on, once each (a Curator cast debuffing 3
+     *  enemies hits all 3); a reaction's roll hits the enemies that reaction landed on. See
+     *  `perCastProcKeys` / `passesPerCastProcGate` in triggers.ts.
+     *
+     *  `'per-attack'` draws the gate ONCE per ATTACK and reuses that verdict for every qualifying
+     *  trigger event in that same attack, via IntentExecContext.procDecisionThisSubAttack. A
+     *  `hits: N` skill is N consecutive full-walk attacks (R1), so a 3-hit skill draws THREE
+     *  verdicts — one per sub-attack, each shared across that sub-attack's footprint.
+     *  `subAttackProcGates.integration.test.ts` pins it on an on-crit rider. */
+    procScope?: 'per-attack' | 'per-cast';
     /** Reactive event-frequency gate: fire this ability only every Nth qualifying trigger
      *  event, counted per SOURCE (the triggering actor). N=2 → every second event. Gated
      *  executor-side via IntentExecContext.repairCountBySource, keyed

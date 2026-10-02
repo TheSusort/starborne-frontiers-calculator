@@ -45,15 +45,21 @@ export function dotTierNumeral(dotType: DoTType, magnitude: number): string {
     return level < ROMAN.length ? ROMAN[level] : '';
 }
 
+/** A DoT type's tierless status-family name, as skill text names it: 'Bomb', 'Corrosion',
+ *  'Inferno'; 'generic' is the plain 'Damage over Time'. */
+export function dotFamilyLabel(dotType: DoTType): string {
+    if (dotType === 'generic') return 'Damage over Time';
+    return dotType.charAt(0).toUpperCase() + dotType.slice(1);
+}
+
 /** Single source of truth for the resisted-debuff label of a blocked DoT, so the emit site and
  *  the test assertion agree. `tier` is the MAGNITUDE (corrosion 3/6/9, inferno 15/30/45) — the
  *  same value tickDoTs divides by 100 — NOT a 1/2/3 level. e.g. ('inferno', 45) -> 'Inferno III';
  *  ('bomb', 100) -> 'Bomb'. 'generic' is an absolute per-tick DoT, not tiered, so it always
  *  renders as the plain 'Damage over Time' label (no numeral) regardless of tier. */
 export function dotResistLabel(dotType: DoTType, tier: number): string {
-    if (dotType === 'generic') return 'Damage over Time';
-    const kind = dotType.charAt(0).toUpperCase() + dotType.slice(1);
-    if (dotType === 'bomb') return kind;
+    const kind = dotFamilyLabel(dotType);
+    if (dotType === 'generic' || dotType === 'bomb') return kind;
     const numeral = dotTierNumeral(dotType, tier);
     return numeral ? `${kind} ${numeral}` : kind;
 }

@@ -1880,7 +1880,9 @@ describe('healingGoldenParity', () => {
         simulateHealing({ ...scenario23Input(), bus });
         // The counter-debuff is a REACTION to the enemy 'e1' attack → stamped reactive with
         // duringTurnOf/triggerActorId = 'e1' (the active-turn attacker that provoked it). The
-        // sourceId/targetId/round/buffName are unchanged (no math/routing change).
+        // sourceId/targetId/round/buffName are unchanged (no math/routing change). Each landing
+        // also carries its reaction firing's id — one firing per hit, so four distinct ids.
+        expect(new Set(applied.map((e) => e.reactionFiringId)).size).toBe(4);
         expect(applied).toEqual([
             {
                 type: 'debuff-applied',
@@ -1889,9 +1891,12 @@ describe('healingGoldenParity', () => {
                 round: 1,
                 buffName: 'Corrosion I',
                 application: 'inflict',
+                // The counter-debuff ability sits in the passive slot.
+                sourceSlot: 'passive',
                 reactive: true,
                 duringTurnOf: 'e1',
                 triggerActorId: 'e1',
+                reactionFiringId: expect.any(Number),
             },
             {
                 type: 'debuff-applied',
@@ -1900,9 +1905,12 @@ describe('healingGoldenParity', () => {
                 round: 2,
                 buffName: 'Corrosion I',
                 application: 'inflict',
+                // The counter-debuff ability sits in the passive slot.
+                sourceSlot: 'passive',
                 reactive: true,
                 duringTurnOf: 'e1',
                 triggerActorId: 'e1',
+                reactionFiringId: expect.any(Number),
             },
             {
                 type: 'debuff-applied',
@@ -1911,9 +1919,12 @@ describe('healingGoldenParity', () => {
                 round: 3,
                 buffName: 'Corrosion I',
                 application: 'inflict',
+                // The counter-debuff ability sits in the passive slot.
+                sourceSlot: 'passive',
                 reactive: true,
                 duringTurnOf: 'e1',
                 triggerActorId: 'e1',
+                reactionFiringId: expect.any(Number),
             },
             {
                 type: 'debuff-applied',
@@ -1922,9 +1933,12 @@ describe('healingGoldenParity', () => {
                 round: 4,
                 buffName: 'Corrosion I',
                 application: 'inflict',
+                // The counter-debuff ability sits in the passive slot.
+                sourceSlot: 'passive',
                 reactive: true,
                 duringTurnOf: 'e1',
                 triggerActorId: 'e1',
+                reactionFiringId: expect.any(Number),
             },
         ]);
     });

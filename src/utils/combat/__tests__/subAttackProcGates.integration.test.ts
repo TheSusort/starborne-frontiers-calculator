@@ -251,7 +251,7 @@ describe('PR4 Task 2 — the amplification proc rolls once per sub-attack', () =
 });
 
 /**
- * Insidiousness's shape: a `procScope:'per-attack'` reactive damage rider on on-crit.
+ * A `procScope:'per-attack'` reactive damage rider on on-crit.
  * `procChance` is optional here because the two gates it must clear are independent:
  *  - with NO procChance, `passesProcChanceGate` returns early and only the per-victim
  *    `reactionFiredThisAttack` suppression is in play;

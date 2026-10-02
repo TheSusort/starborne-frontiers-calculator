@@ -2864,7 +2864,12 @@ const DocumentationPage: React.FC = () => {
                                         ability&apos;s editor controls which event activates it.
                                         Triggers the simulator cannot derive (when attacked, ally
                                         destroyed, etc.) are treated as assume-active, preserving
-                                        the existing manual-condition behavior.
+                                        the existing manual-condition behavior. A reaction&apos;s
+                                        own wording decides which debuffs it sees: one that says
+                                        &quot;inflicts a debuff&quot; reacts only to inflicted
+                                        debuffs, and one that says &quot;applying a debuff&quot;
+                                        only to applied ones, such as Provoke, Concentrate Fire or
+                                        the Burner set&apos;s Inferno.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Buff Steal:</span> Skills
@@ -4366,10 +4371,17 @@ const DocumentationPage: React.FC = () => {
                                     <strong>Giant Slayer</strong> (chance to amplify a hit&apos;s
                                     damage against an enemy with higher attack), and{' '}
                                     <strong>Insidiousness</strong> (chance to deal bonus damage when
-                                    you apply a debuff to an enemy). Three heal implants are also
-                                    modeled: <strong>Second Wind</strong> (chance to repair itself
-                                    when it takes a critical hit), <strong>Nourishment</strong>{' '}
-                                    (stronger repairs on allies with less HP than the healer), and{' '}
+                                    you inflict a debuff on an enemy. It rolls once per skill cast
+                                    that inflicts a debuff, plus once for each reaction that
+                                    inflicts one — one reaction landing on two enemies is one roll.
+                                    Applied debuffs, such as Provoke, Concentrate Fire or the Burner
+                                    set&apos;s Inferno, never roll. At most one roll succeeds per
+                                    skill cast, counting reactions to an enemy&apos;s skill as part
+                                    of that skill, and a successful roll hits every enemy the
+                                    debuffs reached). Three heal implants are also modeled:{' '}
+                                    <strong>Second Wind</strong> (chance to repair itself when it
+                                    takes a critical hit), <strong>Nourishment</strong> (stronger
+                                    repairs on allies with less HP than the healer), and{' '}
                                     <strong>Vivacious Repair</strong> (chance to double a repair on
                                     an ally below 25% HP), and <strong>Exuberance</strong> (chance
                                     to increase the amount of a repair this unit receives). Charge
@@ -4378,7 +4390,9 @@ const DocumentationPage: React.FC = () => {
                                     2nd turn at legendary rarity or every 3rd turn at epic; units in
                                     Stasis bank no charge on skipped turns). Two damage-over-time
                                     gear sets are also modeled: <strong>Burner</strong> (applies
-                                    Inferno for 2 turns when the ship attacks) and{' '}
+                                    Inferno for 2 turns when the ship attacks; an applied Inferno
+                                    lands without a hacking roll, failing only when the ship is at
+                                    an affinity disadvantage against the target) and{' '}
                                     <strong>Decimation</strong> (+10% DoT damage per equipped set,
                                     up to +30%, boosting your Inferno and Corrosion ticks in both
                                     the combat simulator and the DPS calculator). Five shield

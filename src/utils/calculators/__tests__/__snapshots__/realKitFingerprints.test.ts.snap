@@ -1259,9 +1259,10 @@ exports[`kit fingerprints > Hermes 1`] = `
   "wounded": [
     "buff",
     "buff-expired",
+    "buff:charged",
     "charge-changed",
+    "heal",
     "heal:active",
-    "heal:charged",
   ],
 }
 `;
@@ -2502,7 +2503,6 @@ exports[`kit fingerprints > Orel 1`] = `
 {
   "plain": [
     "attack",
-    "buff",
     "buff-expired",
     "buff:charged",
     "charge-changed",
@@ -2513,7 +2513,6 @@ exports[`kit fingerprints > Orel 1`] = `
   ],
   "richEnemy": [
     "attack",
-    "buff",
     "buff-expired",
     "buff:charged",
     "charge-changed",
@@ -2524,7 +2523,6 @@ exports[`kit fingerprints > Orel 1`] = `
   ],
   "wounded": [
     "attack",
-    "buff",
     "buff-expired",
     "buff:charged",
     "charge-changed",
@@ -3017,6 +3015,7 @@ exports[`kit fingerprints > Ripper 1`] = `
   "plain": [
     "attack:active",
     "attack:charged",
+    "buff",
     "charge-changed",
     "debuff",
     "debuff-resisted",
@@ -3024,6 +3023,7 @@ exports[`kit fingerprints > Ripper 1`] = `
   "richEnemy": [
     "attack:active",
     "attack:charged",
+    "buff",
     "charge-changed",
     "debuff",
     "debuff-resisted",
@@ -3031,6 +3031,7 @@ exports[`kit fingerprints > Ripper 1`] = `
   "wounded": [
     "attack:active",
     "attack:charged",
+    "buff",
     "charge-changed",
     "debuff",
     "debuff-resisted",

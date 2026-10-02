@@ -245,3 +245,65 @@ describe('Yuyan — on-debuff-inflicted gated on her OWN "applying" verb (apply-
         expect(enqueued).toHaveLength(0);
     });
 });
+
+// User ruling (2026-10-02): Yuyan's "when applying a debuff" Stealth comes only from her ACTIVE
+// ("applies Concentrate Fire"); her charged "inflicts Disable" does not trigger it. The catalogue
+// texts carry that split in their verbs, so the parse alone decides it: each debuff's own
+// `application` comes from its clause's verb, and the Stealth reaction only accepts an apply.
+// The engine's apply/inflict split is #593's (`passesApplicationFilter`); the Yuyan block above
+// pins it on hand-emitted events, and debuffApplicationFilterTripwire.test.ts pins the parse.
+describe('Yuyan (catalogue text) — the active applies, the charged inflicts, only the apply grants Stealth', () => {
+    const yuyan = ship({
+        activeSkillText:
+            'This Unit deals <unit-damage>170% damage</unit-damage>, applies <unit-skill>Concentrate Fire</unit-skill> for 1 turn, and inflicts <unit-skill>Defense Down II</unit-skill> for 2 turns.',
+        chargeSkillText:
+            'This Unit deals <unit-damage>210% damage</unit-damage>, and inflicts <unit-skill>Disable</unit-skill> for 1 turn.',
+        chargeSkillCharge: 4,
+        firstPassiveSkillText:
+            "This Unit's attacks ignore <unit-skill>Taunt</unit-skill> and <unit-skill>Provoke</unit-skill> effects.<br /><br />This Unit gains <unit-skill>Stealth</unit-skill> for 2 turns when applying a <unit-aid>debuff</unit-aid>.",
+    });
+    const slots = buildShipAbilities(yuyan).slots;
+    const debuffIn = (slotName: 'active' | 'charged', buffName: string) =>
+        slots
+            .find((s) => s.slot === slotName)!
+            .abilities.find((a) => a.config.type === 'debuff' && a.config.buffName === buffName)!;
+    const applicationOf = (a: Ability) =>
+        a.config.type === 'debuff' ? a.config.application : undefined;
+    const concentrateFire = debuffIn('active', 'Concentrate Fire');
+    const disable = debuffIn('charged', 'Disable');
+    const stealthAbility = abilitiesFor(yuyan).find(
+        (a) => a.type === 'buff' && a.trigger === 'on-debuff-inflicted'
+    )!;
+
+    it('parses the active Concentrate Fire as an apply, the charged Disable as an inflict', () => {
+        expect(applicationOf(concentrateFire)).toBe('apply');
+        expect(applicationOf(disable)).toBe('inflict');
+        expect(applicationOf(debuffIn('active', 'Defense Down II'))).toBe('inflict');
+        expect(stealthAbility.triggerApplicationFilter).toBe('apply');
+    });
+
+    it('the active Concentrate Fire grants Stealth; the charged Disable does not', () => {
+        const handBus = makeHandBus();
+        const enqueued = registerSingle(handBus, 'yuyan', stealthAbility, {
+            isOpposing: (id) => id === 'enemy',
+        });
+        handBus.emit({
+            type: 'debuff-applied',
+            sourceId: 'yuyan',
+            targetId: 'e1',
+            round: 1,
+            buffName: 'Disable',
+            application: applicationOf(disable),
+        });
+        expect(enqueued).toHaveLength(0);
+        handBus.emit({
+            type: 'debuff-applied',
+            sourceId: 'yuyan',
+            targetId: 'e1',
+            round: 1,
+            buffName: 'Concentrate Fire',
+            application: applicationOf(concentrateFire),
+        });
+        expect(enqueued).toHaveLength(1);
+    });
+});

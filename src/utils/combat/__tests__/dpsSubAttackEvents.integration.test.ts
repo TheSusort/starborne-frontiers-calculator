@@ -415,7 +415,7 @@ describe('non-positional outgoing riders — per-sub-attack fan-out', () => {
 describe('non-positional proc gates — one verdict per SUB-ATTACK, not per turn', () => {
     afterEach(() => resetRateGateRng());
 
-    /** Insidiousness's shape: a `procScope:'per-attack'` reactive damage rider on on-crit. */
+    /** A `procScope:'per-attack'` reactive damage rider on on-crit. */
     const procScopedRider = (procChance: number): Ability =>
         ab({
             type: 'damage',

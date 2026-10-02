@@ -69,15 +69,17 @@ function ship(over: Partial<Ship> & { id: string; name: string }): Ship {
     } as Ship;
 }
 
-/** AEGIS-shaped support: grants an all-ally shield on cast, and on an ally's shield being
- *  destroyed grants Defense Up II AND cleanses all debuffs (its real R2 passive text). */
+/** AEGIS-shaped support: gains a shield on cast, and on an ally's shield being destroyed grants
+ *  Defense Up II AND cleanses all debuffs (its real R2 passive text). The shield is the caster's
+ *  own ("gains"), so only the shielder's shield breaks and the debuffers stay uncleansed — a
+ *  "grants a shield" cast would shield every ally in the pattern, the M3 debuffer included. */
 const SHIELDER_SHIELD_PCT = 10;
 function shielder(id: string, extra: Partial<Ship> = {}): Ship {
     return ship({
         id,
         name: 'Shielder',
         type: 'DEFENDER',
-        activeSkillText: `This Unit grants <unit-damage>Shield equal to ${SHIELDER_SHIELD_PCT}%</unit-damage> of its Max HP.`,
+        activeSkillText: `This Unit gains <unit-damage>Shield equal to ${SHIELDER_SHIELD_PCT}%</unit-damage> of its Max HP.`,
         secondPassiveSkillText:
             'This Unit grants <unit-skill>Defense Up II</unit-skill> for 1 turn and <unit-aid>cleanses all</unit-aid> debuffs when an ally within the Active pattern has their Shield destroyed.',
         // State the targeting DATA COLUMNS (see `debuffer`'s note for why). The R2

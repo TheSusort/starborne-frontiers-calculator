@@ -7,18 +7,26 @@
  * `Ability.triggerApplicationFilter` carries that decision, parsed from the clause's own verb
  * (skillTextParser's `debuffTriggerVerb`/`detectDebuffInflictionVerb`).
  *
- * This census reads every corpus ship (refits 0/2/4) and every parsed implant ability, and asserts
- * that any ability on the four-trigger family (on-debuff-inflicted, on-ally-debuff-inflicted,
+ * This census reads every corpus ship (refits 0/2/4) in BOTH corpora — `docs/ship-skills.csv` and
+ * the official-catalogue text `docs/ship-skills.catalogue.csv` — and asserts that any ability on
+ * the four-trigger family (on-debuff-inflicted, on-ally-debuff-inflicted,
  * on-other-ally-debuff-inflicted, on-ally-debuffed) whose OWN source row contains a literal
  * "inflict"/"apply" verb carries a `triggerApplicationFilter` — catching a future ship whose text
  * uses one of these verbs but whose parser path forgot to call the verb detector, which would
- * silently leave the ability firing on BOTH landing kinds (the pre-#593 default).
+ * silently leave the ability firing on BOTH landing kinds (the pre-#593 default). The equipment
+ * half pins the same rule for implants and gear sets: an equipment debuff/DoT carries the verb its
+ * description states, and Insidiousness reacts to inflicted debuffs only (user ruling, 2026-10-02).
+ * The ship-DoT half pins that no ship DoT clause in either corpus is worded "applies <DoT>": the
+ * parser never stamps `application` on a ship DoT, so every one lands and reacts as an inflict —
+ * an apply-worded one would need that stamp, and this test is where it would surface.
  *
- * A small, named ALLOWLIST covers the corpus's genuinely verb-less clauses (APEX's "gets
+ * A small, named, per-corpus ALLOWLIST covers genuinely verb-less clauses (OLD APEX's "gets
  * debuffed") — adding a ship here is a deliberate, reviewed decision, not a silent gap.
  *
- * CORPUS ACCESS: `docs/ship-skills.csv` is gitignored reference data. This census must read the
- * real corpus — a synthetic fallback would turn a missing-data worktree into a green vacuous run.
+ * CORPUS ACCESS: both CSVs are gitignored reference data. The OLD census must read the real corpus
+ * — a synthetic fallback would turn a missing-data worktree into a green vacuous run. The
+ * catalogue half needs `docs/ship-skills.catalogue.csv` (built by
+ * `scripts/build-catalogue-skills-csv.ts`); where that file is absent it is SKIPPED, by name.
  */
 import { describe, it, expect, beforeAll } from 'vitest';
 import { csvAvailable, loadShipSkillRecords } from '../../../../scripts/lib/shipSkillCsv';
@@ -26,6 +34,13 @@ import { buildTraceShip, RefitLevel } from '../../../../scripts/lib/traceShipFac
 import { buildShipAbilities } from '../../abilities/buildShipAbilities';
 import { getSkillRowForSlot } from '../../ship/skillRows';
 import type { AbilityTrigger } from '../../../types/abilities';
+import type { Ship } from '../../../types/ship';
+import type { GearPiece } from '../../../types/gear';
+import { buildEquipmentAbilities } from '../../abilities/buildEquipmentAbilities';
+import { IMPLANTS } from '../../../constants/implants';
+import { GEAR_SETS } from '../../../constants/gearSets';
+
+const CATALOGUE_CSV = 'docs/ship-skills.catalogue.csv';
 
 function requireReferenceData(): void {
     if (!csvAvailable()) {
@@ -52,10 +67,12 @@ const FAMILY = new Set<AbilityTrigger>([
 const VERB_RE = /\binflict\w*\b|\bappl(?:y|ies|ying|ied)\b/i;
 
 // Ships whose on-debuff-inflicted-family ability rides a clause with NO "inflict"/"apply" verb of
-// its own (APEX's "when an enemy gets debuffed") — a reviewed, deliberate exception, not a gap.
-// Adding a name here is a conscious call: read the ship's row text first and confirm it really
-// carries no landing verb before assuming this tripwire is wrong.
+// its own (OLD APEX's "when an enemy gets debuffed") — a reviewed, deliberate exception, not a
+// gap. Per corpus: the catalogue rewords APEX to "gets inflicted with a debuff", so it is NOT
+// exempt there. Adding a name here is a conscious call: read the ship's row text first and confirm
+// it really carries no landing verb before assuming this tripwire is wrong.
 const NO_VERB_ALLOWLIST = new Set(['APEX']);
+const CATALOGUE_NO_VERB_ALLOWLIST = new Set<string>();
 
 const REFIT_LEVELS: RefitLevel[] = [0, 2, 4];
 
@@ -68,14 +85,27 @@ interface Violation {
     text: string;
 }
 
-function censusMissingFilter(): { violations: Violation[]; checked: number } {
+function censusMissingFilter(
+    csvPath?: string,
+    allowlist: ReadonlySet<string> = NO_VERB_ALLOWLIST
+): { violations: Violation[]; checked: number } {
     const violations: Violation[] = [];
     let checked = 0;
-    for (const record of loadShipSkillRecords()) {
-        if (NO_VERB_ALLOWLIST.has(record.name.toUpperCase())) continue;
+    for (const record of loadShipSkillRecords(csvPath)) {
+        if (allowlist.has(record.name.toUpperCase())) continue;
         for (const refitLevel of REFIT_LEVELS) {
-            const ship = buildTraceShip(record.name, { refitLevel });
-            if (!ship) continue;
+            const base = buildTraceShip(record.name, { refitLevel });
+            if (!base) continue;
+            // The record's own text wins, so the catalogue census reads the catalogue's rows.
+            const ship: Ship = {
+                ...base,
+                activeSkillText: record.active || undefined,
+                chargeSkillText: record.charge || undefined,
+                chargeSkillCharge: record.chargeCharge,
+                firstPassiveSkillText: record.passives[0] || undefined,
+                secondPassiveSkillText: record.passives[1] || undefined,
+                thirdPassiveSkillText: record.passives[2] || undefined,
+            };
             const skills = buildShipAbilities(ship);
             for (const slotEntry of skills.slots) {
                 for (const ability of slotEntry.abilities) {
@@ -123,6 +153,186 @@ describe('debuff-inflicted trigger family — triggerApplicationFilter tripwire'
                 }
             }
             expect(sawFamilyTrigger).toBe(true);
+        }
+    });
+});
+
+// ---------------------------------------------------------------------------------------------
+// Ship DoTs: none is apply-worded. A DoT's landing verb is the active verb that governs its tag —
+// "applies"/"apply" (not "applying"/"applied", which are trigger clauses and adjectives: Wisteria's
+// "after applying Corrosion", Valerian's "the newly applied Corrosion") or "inflicts". The verb's
+// reach ends at the next verb, so "applies Concentrate Fire …, and inflicts Inferno II" governs
+// only the Concentrate Fire.
+// ---------------------------------------------------------------------------------------------
+const DOT_TAG_RE = /<unit-skill>\s*(Corrosion|Inferno|Bomb)\b/i;
+const GOVERNING_VERB_RE =
+    /\b(appl(?:y|ies)|inflict(?:s)?)\b|\b(?:deals?|grants?|gains?|repairs?|removes?|cleanses?|purges?|detonates?|extends?|inflicting|applying)\b|[.;]|<br\s*\/?>/gi;
+
+/** Every DoT tag governed by an "apply" verb, as `ship: clause` lines. */
+function applyWordedDots(text: string): { apply: string[]; inflict: number } {
+    const apply: string[] = [];
+    let inflict = 0;
+    const marks = [...text.matchAll(GOVERNING_VERB_RE)];
+    marks.forEach((m, i) => {
+        const verb = m[1];
+        if (!verb) return;
+        const end = i + 1 < marks.length ? marks[i + 1].index : text.length;
+        const clause = text.slice(m.index, end);
+        if (!DOT_TAG_RE.test(clause)) return;
+        if (/^appl/i.test(verb)) apply.push(clause.replace(/<[^>]+>/g, '').trim());
+        else inflict++;
+    });
+    return { apply, inflict };
+}
+
+function shipDotVerbCensus(csvPath?: string): { applyWorded: string[]; inflictWorded: number } {
+    const applyWorded: string[] = [];
+    let inflictWorded = 0;
+    for (const r of loadShipSkillRecords(csvPath)) {
+        for (const text of [r.active, r.charge, ...r.passives]) {
+            const { apply, inflict } = applyWordedDots(text);
+            inflictWorded += inflict;
+            for (const clause of apply) applyWorded.push(`${r.name}: ${clause}`);
+        }
+    }
+    return { applyWorded, inflictWorded };
+}
+
+describe('ship DoTs — none is apply-worded (OLD corpus)', () => {
+    it('the detector sees an "applies <DoT>" clause and ignores the inflict, gerund and adjective forms', () => {
+        expect(
+            applyWordedDots(
+                'This Unit deals 100% damage and applies <unit-skill>Corrosion II</unit-skill> for 2 turns.'
+            ).apply
+        ).toHaveLength(1);
+        expect(
+            applyWordedDots(
+                'This Unit applies <unit-skill>Concentrate Fire</unit-skill> for 1 turn, and inflicts <unit-skill>Inferno II</unit-skill> for 2 turns.'
+            )
+        ).toEqual({ apply: [], inflict: 1 });
+        expect(
+            applyWordedDots(
+                'This Unit, after applying <unit-skill>Corrosion</unit-skill> with a Critical hit, extends the newly applied <unit-skill>Corrosion</unit-skill> by 1 turn.'
+            ).apply
+        ).toEqual([]);
+    });
+
+    it('no ship DoT clause is worded "applies <DoT>"', () => {
+        const { applyWorded, inflictWorded } = shipDotVerbCensus();
+        expect(inflictWorded).toBeGreaterThan(0);
+        expect(applyWorded).toEqual([]);
+    });
+});
+
+// Needs `docs/ship-skills.catalogue.csv` (built by `scripts/build-catalogue-skills-csv.ts`); where
+// that file is absent this block is SKIPPED, by name, rather than passing on no data.
+const CATALOGUE_PRESENT = csvAvailable(CATALOGUE_CSV);
+describe.skipIf(!CATALOGUE_PRESENT)(
+    `catalogue corpus — verb tripwires${
+        CATALOGUE_PRESENT ? '' : ` (SKIPPED: ${CATALOGUE_CSV} is absent from this checkout)`
+    }`,
+    () => {
+        it('every verb-bearing family ability has triggerApplicationFilter set', () => {
+            const { violations, checked } = censusMissingFilter(
+                CATALOGUE_CSV,
+                CATALOGUE_NO_VERB_ALLOWLIST
+            );
+            expect(checked).toBeGreaterThan(0);
+            expect(violations).toEqual([]);
+        });
+
+        it('no ship DoT clause is worded "applies <DoT>"', () => {
+            const { applyWorded, inflictWorded } = shipDotVerbCensus(CATALOGUE_CSV);
+            expect(inflictWorded).toBeGreaterThan(0);
+            expect(applyWorded).toEqual([]);
+        });
+    }
+);
+
+// ---------------------------------------------------------------------------------------------
+// Equipment: implants and gear sets carry the verb their own description states.
+// ---------------------------------------------------------------------------------------------
+type EquipmentSource = {
+    label: string;
+    description: string;
+    build: () => ReturnType<typeof buildEquipmentAbilities>;
+};
+
+function equipmentSources(): EquipmentSource[] {
+    const out: EquipmentSource[] = [];
+    for (const [key, implant] of Object.entries(IMPLANTS)) {
+        for (const variant of implant.variants) {
+            const piece = {
+                id: 'p',
+                rarity: variant.rarity,
+                setBonus: key,
+            } as unknown as GearPiece;
+            out.push({
+                label: `${key}/${variant.rarity}`,
+                description: (variant as { description?: string }).description ?? '',
+                build: () =>
+                    buildEquipmentAbilities(
+                        { implants: { implant_major: 'p' }, equipment: {} } as unknown as Ship,
+                        (id) => (id === 'p' ? piece : undefined)
+                    ),
+            });
+        }
+    }
+    for (const [key, set] of Object.entries(GEAR_SETS)) {
+        const slots = ['weapon', 'hull', 'generator', 'sensor', 'software', 'thrusters'];
+        const equipment: Record<string, string> = {};
+        const pieces: Record<string, GearPiece> = {};
+        slots.forEach((slot, i) => {
+            equipment[slot] = `g${i}`;
+            pieces[`g${i}`] = {
+                id: `g${i}`,
+                slot,
+                rarity: 'legendary',
+                setBonus: key,
+            } as unknown as GearPiece;
+        });
+        out.push({
+            label: key,
+            description: (set as { description?: string }).description ?? '',
+            build: () =>
+                buildEquipmentAbilities(
+                    { implants: {}, equipment } as unknown as Ship,
+                    (id) => pieces[id]
+                ),
+        });
+    }
+    return out;
+}
+
+describe('equipment — the landing verb its description states', () => {
+    it('every equipment debuff/DoT whose description names a verb carries it as `application`', () => {
+        const mismatches: string[] = [];
+        let checked = 0;
+        for (const src of equipmentSources()) {
+            const m = VERB_RE.exec(src.description);
+            if (!m) continue;
+            const verb = /^inflict/i.test(m[0]) ? 'inflict' : 'apply';
+            for (const ability of src.build()) {
+                const config = ability.config as { type: string; application?: string };
+                if (config.type !== 'debuff' && config.type !== 'dot') continue;
+                checked++;
+                // An absent DoT verb reads as an inflict (`passesApplicationFilter`'s doc).
+                const carried = config.application ?? 'inflict';
+                if (carried !== verb)
+                    mismatches.push(`${src.label}: text ${verb}, carries ${carried}`);
+            }
+        }
+        // Not vacuous: Burner, Martyrdom, Bulwark and Doomsayer all state "applies".
+        expect(checked).toBeGreaterThan(0);
+        expect(mismatches).toEqual([]);
+    });
+
+    it('Insidiousness ("When debuffing an enemy") reacts to inflicted debuffs only, every rarity', () => {
+        const insid = equipmentSources().filter((s) => s.label.startsWith('INSIDIOUSNESS/'));
+        expect(insid.length).toBeGreaterThan(0);
+        for (const src of insid) {
+            const ability = src.build().find((a) => a.trigger === 'on-debuff-inflicted');
+            expect(ability?.triggerApplicationFilter).toBe('inflict');
         }
     });
 });

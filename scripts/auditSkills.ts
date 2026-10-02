@@ -12,15 +12,19 @@
  */
 import { readFileSync, writeFileSync } from 'fs';
 import { pathToFileURL } from 'url';
-import { buildShipAbilities } from '../src/utils/abilities/buildShipAbilities';
 import {
+    buildShipAbilities,
+    UNIT_HAS_DEFENSE_PENETRATION_RE,
+} from '../src/utils/abilities/buildShipAbilities';
+import {
+    canonicaliseStatusNames,
     detectDamageReactionTrigger,
     detectHpCrossingTrigger,
     detectTargetHpGate,
 } from '../src/utils/skillTextParser';
 import { Ship } from '../src/types/ship';
 import { Ability } from '../src/types/abilities';
-import { ALLOWLIST } from './auditSkills.allowlist';
+import { ALLOWLIST, type AllowEntry } from './auditSkills.allowlist';
 import {
     parseCsvLine,
     readCsvRecords,
@@ -86,13 +90,16 @@ const ungatedEffects = (abilities: Ability[]) =>
             // A reactive trigger (on-crit / start-of-round / bomb-detonated / on-attacked / …)
             // IS the gate — the parser routes these through the engine's trigger machinery
             // instead of a condition, so they aren't "ungated" (Enforcer, Wusheng, Valkyrie,
-            // Lingshe, and the Phase 4c damage-reaction ships: Warden, Guardian, Makoli, …).
+            // Lingshe, and the damage-reaction ships: Warden, Guardian, Makoli, …).
             a.trigger === 'on-cast' &&
+            // A per-recipient HP filter (Hermes's "if an ally has less than 40% HP, it grants
+            // that ally Cheat Death") IS the gate, read per recipient instead of once per cast.
+            a.recipientFilter?.hpBelowPct === undefined &&
             // Recurring per-turn grants are unconditional by design (not a missing gate).
             a.config.duration !== 'recurring'
     );
 
-interface Rule {
+export interface Rule {
     id: string;
     severity: 'high' | 'medium';
     /** True when the text shows this mechanic (loose, so a parser miss surfaces). */
@@ -105,7 +112,7 @@ const RULES: Rule[] = [
     {
         id: 'base-damage',
         severity: 'high',
-        keyword: (t) => /\d+(?:\.\d+)?%\s+damage\b/i.test(t) && !/\bmore\b/i.test(t),
+        keyword: (t) => /\d+(?:\.\d+)?%\s+damage\b(?!\s+reduction)/i.test(t) && !/\bmore\b/i.test(t),
         handled: (a) => hasType(a, 'damage'),
     },
     {
@@ -190,13 +197,25 @@ const RULES: Rule[] = [
     {
         id: 'defense-penetration',
         severity: 'medium',
-        // Epic PR12(B): also matches "bypassing N% of the enemy Defense" (Chakara) — a
+        // Also matches "bypassing N% of the enemy Defense" (Chakara) — a
         // differently-worded synonym for the same defensePenetration modifier as the
-        // "X% defense penetration" phrasing.
+        // "X% defense penetration" phrasing. The unit-subject "has X% defense penetration" is
+        // `defense-penetration-innate`'s, never this rule's.
         keyword: (t) =>
-            /defense\s+penetration/i.test(t) ||
+            (/defense\s+penetration/i.test(t) && !UNIT_HAS_DEFENSE_PENETRATION_RE.test(t)) ||
             /bypassing\s+\d+(?:\.\d+)?%\s+of\s+the\s+enemy\s+defense/i.test(t),
         handled: (a) => hasModifier(a, 'defensePenetration'),
+    },
+    {
+        id: 'defense-penetration-innate',
+        severity: 'medium',
+        // "This Unit (…) has X% defense penetration". Deliberately NEVER parser-handled: the
+        // clause describes the refit ascension stat, which already reaches the ship's stats
+        // (user ruling 2026-10-02), so parsing it would double-count. The allowlist records the
+        // known ships; a NEW ship matching this keyword should have its ascension stat
+        // verified, then be allowlisted.
+        keyword: (t) => UNIT_HAS_DEFENSE_PENETRATION_RE.test(t),
+        handled: () => false,
     },
     {
         id: 'incoming-damage-reduction',
@@ -222,7 +241,16 @@ const RULES: Rule[] = [
     {
         id: 'dot-application',
         severity: 'high',
-        keyword: (t) => /inflict\w*[^.]*\b(corrosion|inferno|bomb)\b/i.test(t),
+        // A DoT named as a reaction's trigger object ("When this Unit inflicts a Bomb it gains
+        // Stealth") is not applied by that clause — the parser's namesTriggerClauseObject rule —
+        // so it is scrubbed before the keyword test.
+        keyword: (t) =>
+            /inflict\w*[^.]*\b(corrosion|inferno|bomb)\b/i.test(
+                t.replace(
+                    /\b(?:when|after)\s+(?:it|this\s+unit)\s+inflicts\s+(?:an?\s+)?(?:corrosion|inferno|bomb)\b/gi,
+                    ''
+                )
+            ),
         handled: (a) => hasType(a, 'dot'),
     },
     {
@@ -266,7 +294,13 @@ const RULES: Rule[] = [
                 x.conditions.some((c) => c.countComparator === 'eq' && c.countThreshold === 0)
             );
             const hasAnyOfReplacement = dmg.some((x) => x.conditions.some((c) => c.anyOf));
-            return hasNegatedBase && hasAnyOfReplacement;
+            // The defender-gated shape ("if the target is a defender it instead deals N%"): handled
+            // when a damage ability carries BOTH an `enemy-type` condition AND `scaling` (the
+            // replacement delta); a gate alone does not model the "instead" branch.
+            const hasEnemyTypeGatedReplacement = dmg.some(
+                (x) => x.scaling !== undefined && x.conditions.some((c) => c.subject === 'enemy-type')
+            );
+            return (hasNegatedBase && hasAnyOfReplacement) || hasEnemyTypeGatedReplacement;
         },
     },
     {
@@ -399,10 +433,10 @@ const TRIGGER_RE =
 //     inflicts-a-debuff counter, Oleander, Belladonna — Oleander's RoT grant would flag if
 //     this alternation were removed; Crocus's crit-DoT reaction is modeled as on-ally-crit-dot)
 //
-// HP-threshold nuance (Phase 4c PR 3): the reactive "when HP drops/falls below N%" CROSSING
+// HP-threshold nuance: the reactive "when HP drops/falls below N%" CROSSING
 // grants (Tycho/Shelter/Los/Kafa/Redeemer) AND Hermes's "If the target has less than N% HP"
-// Cheat-Death gate are parser-modeled (on-hp-threshold-crossed trigger / derivable target-HP
-// condition), so their effects never reach `ungatedEffects` and any that DOES parse ungated is
+// Cheat-Death gate are parser-modeled (on-hp-threshold-crossed trigger / per-recipient
+// `recipientFilter`), so their effects never reach `ungatedEffects` and any that DOES parse ungated is
 // flagged by the detectHpCrossingTrigger / detectTargetHpGate parity guards in `ungatedFinding`
 // before this regex is consulted. The STATIC "while its HP is below N%" gates below stay
 // unmodeled — they carry no (drops|falls) verb, so HP_CROSSING_RE skips them (Los's standing
@@ -424,6 +458,13 @@ function clauseFor(plain: string, name: string): string {
     const sentences = masked.split(/(?<=[.;])\s+/);
     const clause = sentences.find((s) => s.toLowerCase().includes(maskedName)) ?? masked;
     return clause.split(ABBR_MARK).join(' ');
+}
+
+/** The audit rule with this id, for unit-testing its `keyword` / `handled` predicates directly. */
+export function ruleById(id: string): Rule {
+    const rule = RULES.find((r) => r.id === id);
+    if (!rule) throw new Error(`No audit rule with id '${id}'`);
+    return rule;
 }
 
 /**
@@ -449,10 +490,10 @@ export function ungatedFinding(abilities: Ability[], plain: string): string | nu
         // Acceptable — duplicate buff names within one skill text are rare in the corpus.
         const namePos = plain.toLowerCase().indexOf(name.toLowerCase());
         if (detectDamageReactionTrigger(plain, namePos)) return clause.trim().slice(0, 160);
-        // Parity guard (Phase 4c PR 3): "when HP drops/falls below N%" crossing reactives
+        // Parity guard: "when HP drops/falls below N%" crossing reactives
         // (Tycho/Shelter/Los/Kafa/Redeemer) ride the LIVE on-hp-threshold-crossed trigger, and
-        // Hermes's "If the target has less than N% HP" Cheat-Death grant carries a derivable
-        // target-HP gate — both are parser-modeled (the trigger/gate IS the gate), so an effect
+        // Hermes's "If the target has less than N% HP" Cheat-Death grant carries a per-recipient
+        // HP filter — both are parser-modeled (the trigger/gate IS the gate), so an effect
         // that parsed UNGATED on-cast from a clause either detector classifies is a regression —
         // flag it BEFORE the reactive skip below can hide it. Both detectors do their own
         // sentence-scoping with Inc./Out. abbreviation masking (same discipline as clauseFor),
@@ -499,20 +540,32 @@ function isAllowed(ship: string, ruleId: string): boolean {
     return ALLOWLIST.some((a) => a.ship === ship && a.rules.includes(ruleId));
 }
 
-/** Allowlist (ship, ruleId) pairs that are stale: the ship WAS audited but the rule no longer
- *  produces a raw finding, so the entry suppresses nothing and can be removed. Entries for ships
- *  the reader dropped are excluded (unknowable, not stale). Call AFTER `collectFindings`. */
-export function unusedAllowlistPairs(): { ship: string; rule: string; reason: string }[] {
+/** Pure core of `unusedAllowlistPairs`. An entry for a ship that was not audited is skipped
+ *  (unknowable, not stale); a `catalogueOnly` entry is skipped because the CSV corpus is not the
+ *  text it suppresses. */
+export function staleAllowEntries(
+    allowlist: readonly AllowEntry[],
+    audited: ReadonlySet<string>,
+    consulted: ReadonlySet<string>
+): { ship: string; rule: string; reason: string }[] {
     const out: { ship: string; rule: string; reason: string }[] = [];
-    for (const entry of ALLOWLIST) {
-        if (!auditedShipNames.has(entry.ship)) continue; // dropped ship → can't judge
+    for (const entry of allowlist) {
+        if (entry.catalogueOnly) continue;
+        if (!audited.has(entry.ship)) continue; // dropped ship → can't judge
         for (const rule of entry.rules) {
-            if (!consultedAllowKeys.has(allowKey(entry.ship, rule))) {
+            if (!consulted.has(allowKey(entry.ship, rule))) {
                 out.push({ ship: entry.ship, rule, reason: entry.reason });
             }
         }
     }
     return out;
+}
+
+/** Allowlist (ship, ruleId) pairs that are stale: the ship WAS audited but the rule no longer
+ *  produces a raw finding, so the entry suppresses nothing and can be removed. Call AFTER
+ *  `collectFindings`. */
+export function unusedAllowlistPairs(): { ship: string; rule: string; reason: string }[] {
+    return staleAllowEntries(ALLOWLIST, auditedShipNames, consultedAllowKeys);
 }
 
 /** True when the (gitignored) reference CSV is present — false in CI/clean checkouts. */
@@ -524,7 +577,9 @@ export function csvAvailable(): boolean {
 export function findingsForShip(ship: ShipRow): Finding[] {
     const findings: Finding[] = [];
     for (const { slot, text } of ship.slots) {
-        const plain = stripTags(text);
+        // The parse names a status by its engine name, and the clause lookups find that name in
+        // `plain`, so `plain` carries engine names too (see `canonicaliseStatusNames`).
+        const plain = stripTags(canonicaliseStatusNames(text));
         const abilities = abilitiesFor(text);
         for (const rule of RULES) {
             if (!rule.keyword(plain)) continue;

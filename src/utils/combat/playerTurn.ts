@@ -51,6 +51,7 @@ import {
     selfBuffNamesForOwners,
     selfBuffStacksForOwner,
     LIVE_TRIGGERS,
+    ownerHoldsSelfBuff,
     TURN_SHADOW_CHANNELS,
     type ReactiveAbility,
 } from './triggers';
@@ -62,6 +63,7 @@ import { BARRIER_RECHARGING, holdsBarrierRecharging } from './barrierRecharging'
 import {
     allyHpFraction,
     lowestHpAllyRecipients,
+    narrowByRecipientFilter,
     resolveSupportRecipients,
 } from './supportRecipients';
 import { resolveDebuffRecipientIds } from './debuffRecipients';
@@ -687,8 +689,8 @@ export interface PlayerTurnArgs {
      *  as if the actor is at full HP — the gate never fires. */
     selfHpPct?: number;
     /** Heal target's live HP% (0..100) at THIS acting actor's turn start (pre-this-cast-heal),
-     *  for `hpSubject:'target'` condition gates — Hermes' "grants Cheat Death to an ally below
-     *  40% HP" evaluated at cast time. Defaults to 100 so un-updated callers behave as if the
+     *  for `hpSubject:'target'` condition gates, evaluated once at cast time (a gate asked of
+     *  EACH recipient rides `recipientFilter` instead). Defaults to 100 so un-updated callers behave as if the
      *  target is full HP → a "below N" gate fails. The engine threads `healTargetHpPctNow()`
      *  unconditionally (`engine.ts`, the per-actor turn-args block), so a DPS turn reads the
      *  focus's REAL live HP and the gate can open (#415); only callers that supply nothing still
@@ -1034,15 +1036,30 @@ function foldTimedEnemyDebuffs(args: {
     return { roundEnemyDebuffs, landedEnemyDebuffs };
 }
 
-// Step 2.9: Extend ACTIVE-scope ticking DoTs (Corrosion/Inferno) by extend-dot abilities —
-// applied BEFORE this round's new DoTs so only pre-existing ones grow (Provider's
-// "extends active Damage Over Time effects"). Bombs are excluded (delaying a one-shot
-// detonation adds nothing). Each ability is gated by its conditions (using ctx with binary
-// roundCrit); a `chanceFromCritPower` extension fires at exactly critPowerFactor frequency
-// via the deterministic extendChanceGate schedule. Sourced from BOTH the firing skill and
-// the always-active passive slot. The stateful gate is passed in and called at the same
-// sequence point as the original inline loop. 'inflicted'-scope extensions are handled
-// separately AFTER applyNewDoTs (see extendInflictedDoTs).
+/**
+ * Step 2.9: grows the ticking DoTs (Corrosion/Inferno) already standing on the enemies an
+ * active-scope `extend-dot` ability targets. Bombs are excluded (delaying a one-shot detonation
+ * adds nothing); 'inflicted'-scope extensions are `extendInflictedDoTs`' job.
+ *
+ * Recipients follow the ability's `target` through `resolveDebuffRecipientIds`, the resolver every
+ * direct enemy clause uses: 'all-enemies' fans over the cast's pattern footprint (`aoeVictimIds`,
+ * living victims only — `footprintVictims`), 'enemy' is the primary alone, and a non-positional
+ * cast with no footprint falls back to the primary. A POSITIONAL cast with no footprint reaches
+ * nobody with an 'all-enemies' extension — the debuff resolver's answer, unlike the on-cast purge
+ * loop's primary fallback. The primary's containers are the loose
+ * `corrosionEntries`/`infernoEntries`; every other recipient's come off `opposingVictimById`.
+ *
+ * Runs BEFORE `applyNewDoTs`, so a DoT this same cast inflicts is never extended.
+ * KNOWN GAP: that departs from the locked written-order rule — a DoT whose clause is written
+ * BEFORE the extension clause should be extended. No ship in either corpus reaches it: no cast
+ * carries an active-scope extend-dot alongside an on-cast DoT in the same slot.
+ *
+ * Each ability's gate — its conditions against ctx (binary roundCrit), then for a
+ * `chanceFromCritPower` extension one `extendChanceGate(critPowerFactor)` draw — is taken ONCE per
+ * ability per cast, never per recipient, so the gate's deterministic schedule does not depend on
+ * how many enemies the pattern hits. Sourced from BOTH the firing skill and the always-active
+ * passive slot.
+ */
 function extendDoTs(args: {
     abilities: Ability[];
     ctx: ConditionContext;
@@ -1050,6 +1067,12 @@ function extendDoTs(args: {
     extendChanceGate: (rate: number) => boolean;
     corrosionEntries: ActiveDoTStack[];
     infernoEntries: ActiveDoTStack[];
+    targetId: string | undefined;
+    aoeVictimIds: string[] | undefined;
+    opposingVictimById: Map<string, CombatActor> | undefined;
+    adjacentEnemyIdsFor?: (anchorId: string) => string[];
+    positionalLanding: boolean;
+    selectorEnemyIdFor?: (kind: EnemySelectorKind) => string | undefined;
 }): void {
     for (const ab of args.abilities) {
         if (ab.config.type !== 'extend-dot') continue;
@@ -1059,8 +1082,26 @@ function extendDoTs(args: {
             const critPowerFactor = Math.min(1, args.effectiveCritDamage / 100);
             if (!args.extendChanceGate(critPowerFactor)) continue;
         }
-        for (const e of args.corrosionEntries) e.remainingRounds += ab.config.turns;
-        for (const e of args.infernoEntries) e.remainingRounds += ab.config.turns;
+        const turns = ab.config.turns;
+        const recipients = resolveDebuffRecipientIds({
+            abTarget: ab.target,
+            anchorId: args.targetId,
+            aoeVictimIds: args.aoeVictimIds,
+            adjacentEnemyIdsFor: args.adjacentEnemyIdsFor,
+            positionalLanding: args.positionalLanding,
+            selectorEnemyIdFor: args.selectorEnemyIdFor,
+        });
+        for (const vid of recipients) {
+            // `undefined` (the turn's own bound victim) and the primary's id both read the loose
+            // containers; a no-victim turn's are a throwaway default, so that case lands on nobody.
+            const primary = vid === undefined || vid === args.targetId;
+            const victim = primary ? undefined : args.opposingVictimById?.get(vid);
+            if (!primary && !victim) continue;
+            for (const e of victim?.corrosionEntries ?? args.corrosionEntries)
+                e.remainingRounds += turns;
+            for (const e of victim?.infernoEntries ?? args.infernoEntries)
+                e.remainingRounds += turns;
+        }
     }
 }
 
@@ -1821,7 +1862,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // emitDebuffApplied: discrete-infliction-only. `sourceId` is the
     // actor that inflicted the debuff. NOT called for recurring/aura per-round re-applications
     // or for every round a standing timed status is active — only at the infliction site.
-    // `victimId` is REQUIRED here too — see emitDebuffResisted above.
+    // `victimId` is REQUIRED here too — see emitDebuffResisted above. Every caller lands a
+    // status of THIS cast's firing slot, so `sourceSlot` is `action`.
     const emitDebuffApplied = (
         sourceId: string,
         buffName: string,
@@ -1835,6 +1877,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             round: r,
             buffName,
             ...(application !== undefined ? { application } : {}),
+            sourceSlot: action,
         });
 
     // LIVE per-target debuff-landing chance. The sole producer of
@@ -2830,16 +2873,11 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // a firing-slot timed self-buff actually gates on.
         ...victimShieldGateCtx(enemy),
     });
-    for (const status of timedSelfBySlot) {
-        if (status.sourceSlot !== action) continue;
-        // The gate evaluates against THIS CASTER's post-debuff ctx (the status belongs to the
-        // acting runtime — postDebuffGateCtx IS the caster's context). Once it passes, the status
-        // is applied to EVERY recipient: self → [caster]; ally/all-allies → all players.
-        // The status lives on each recipient (decrements at the recipient's Post Turn; family +
-        // persistent rules run per recipient side because applyTimedAbilityStatus threads
-        // recipientId). buff-applied emits ONCE PER RECIPIENT with the recipient's actorId, with
-        // the granter riding alongside in `granterId`.
-        if (!conditionsMet(status.conditions, postDebuffGateCtx)) continue;
+    // Applies one passed timed self status to its recipients. The status lives on each recipient
+    // (decrements at the recipient's Post Turn; family + persistent rules run per recipient side
+    // because applyTimedAbilityStatus threads recipientId). buff-applied emits ONCE PER RECIPIENT
+    // with the recipient's actorId, with the granter riding alongside in `granterId`.
+    const applyTimedSelfStatus = (status: (typeof timedSelfBySlot)[number]): void => {
         // recipients is set by the engine helper for every timed-by-slot status; default to
         // [actor.id] (self routing) for any caller that omitted it (statusEngine fixtures).
         // #363: the status's own recipient FACTION scope, copied off the source ability at
@@ -2863,12 +2901,25 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                       new Set(adjacentAllyIds)
                   )
                 : (status.recipients ?? [actor.id]);
-        for (const rid of supportRecipients(
-            'all-allies',
-            scopedRecipients,
-            undefined,
-            status.factionFilter
-        )) {
+        // The status's recipient STATE filter (`recipientFilter` — Hermes's "if an ally has less
+        // than 40% HP, it grants that ally Cheat Death") is read per recipient, LIVE, right here:
+        // an ally-wide grant asks each recipient about its own HP, never the caster's target.
+        // TIMING CONTRACT: this loop runs BEFORE the cast's support pass, so the HP read is each
+        // recipient's HP before this cast's repair lands — even though Hermes's text writes the
+        // repair first. That is a deliberate exception to written clause order (user ruling
+        // 2026-10-02: an ally at 38% whom the repair lifts to 41.7% still gets Cheat Death).
+        // Pinned by hermesCheatDeathPerRecipient.integration.test.ts case (6), both sides.
+        // No role reader exists on the cast path, so a `notRole` axis excludes everyone here
+        // (`recipientFilterCarriers.test.ts` keeps that axis off cast-path abilities).
+        const stateFiltered = narrowByRecipientFilter(
+            supportRecipients('all-allies', scopedRecipients, undefined, status.factionFilter),
+            status.recipientFilter,
+            {
+                holdsStatus: (id, buffName) => ownerHoldsSelfBuff(statusEngine, id, buffName),
+                hpFractionOf: allyHpFractionOf,
+            }
+        );
+        for (const rid of stateFiltered) {
             // Block Buff: a recipient carrying it cannot receive new buffs. Covers self-buffs,
             // single-ally grants, and all-allies grants (each recipient guarded independently);
             // covers BOTH sides (enemies run this same path). Silent skip — no buff-applied emit.
@@ -2894,6 +2945,15 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 duration: status.duration,
             });
         }
+    };
+    for (const status of timedSelfBySlot) {
+        if (status.sourceSlot !== action) continue;
+        // The gate evaluates against THIS CASTER's post-debuff ctx (the status belongs to the
+        // acting runtime — postDebuffGateCtx IS the caster's context). Once it passes, the status
+        // is applied to EVERY recipient: self → [caster]; ally/all-allies → all players, narrowed
+        // per recipient inside `applyTimedSelfStatus`.
+        if (!conditionsMet(status.conditions, postDebuffGateCtx)) continue;
+        applyTimedSelfStatus(status);
     }
 
     // (e) Effective self ability statuses this round (timed in-window + auras +
@@ -3866,6 +3926,12 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         extendChanceGate,
         corrosionEntries,
         infernoEntries,
+        targetId,
+        aoeVictimIds,
+        opposingVictimById,
+        adjacentEnemyIdsFor,
+        positionalLanding,
+        selectorEnemyIdFor,
     });
 
     // Lingshe: countdown-reduces + force-detonates enemy Bombs. Runs BEFORE
@@ -4036,6 +4102,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                         stacks,
                         tier,
                         ...(critHits > 0 ? { viaCrit: true } : {}),
+                        sourceSlot: action,
                     }),
             });
         } else if (dotsConfig.length > 0) {
@@ -4154,6 +4221,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                         stacks,
                         tier,
                         ...(critHits > 0 ? { viaCrit: true } : {}),
+                        sourceSlot: action,
                     }),
             });
             // Owner ruling 2026-09-02: the neighbours' freshly splashed DoT is extended too, and

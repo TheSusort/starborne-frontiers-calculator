@@ -23,6 +23,7 @@ import {
 import { getShipSkillRows, getSkillRowForSlot } from '../ship/skillRows';
 import {
     parseSkillDamage,
+    parseBombShareDamage,
     parseCounterAbilities,
     parseDamageReflection,
     parseSecondaryDamage,
@@ -43,6 +44,8 @@ import {
     detectAllyInflictsGrantTrigger,
     detectOtherAllyInflictsGrantTrigger,
     detectDebuffInflictionVerb,
+    debuffTriggerVerb,
+    detectInflictedStatusFilter,
     detectPreCombatBuffTrigger,
     detectPreCombatShieldTrigger,
     detectDamageReactionTrigger,
@@ -51,6 +54,7 @@ import {
     detectHitCount,
     parseHpThresholdCondition,
     parseExtendDoT,
+    parseExtendDoTTarget,
     parseExtendStatus,
     parseCritPowerExtend,
     parseDebuffDurationReduction,
@@ -59,6 +63,8 @@ import {
     detectAllyCritDotTrigger,
     parseSelfCritDotEffect,
     detectSelfCritDotTrigger,
+    detectInflictSourceSlotFilter,
+    parseSlotReactionDotEffect,
     detectBombDetonatedTrigger,
     detectEchoingBurstDetonatedTrigger,
     detectCritRepairTrigger,
@@ -106,6 +112,7 @@ import {
     parseChargeRemoval,
     parseSelfBuffRemovals,
     parseEnemyChargedCastReaction,
+    detectEnemyChargedCastTrigger,
     parseOverRepairRedirect,
     REMOVE_CHARGE_RE,
     ONCE_PER_ALLY_PER_ROUND_RE,
@@ -123,6 +130,7 @@ import {
     detectPurgeStripsShield,
     parseHealNoCrit,
     parseSkillEffects,
+    withCanonicalStatusNames,
     classifyEnemyEffect,
     statusEffectCondition,
     parsePreCombatStatGrants,
@@ -420,7 +428,8 @@ function forEveryEnemyStealthCondition(sentence: string, rawText: string): Condi
 /**
  * Detects an HP-proportional "up to X%" bonus: the value scales linearly with the
  * target's CURRENT HP% (Akula — "based on the target's current HP percentage; the
- * higher the percentage, the more") or MISSING HP% (Tithonus — "based on the
+ * higher the percentage, the more", or "based on the enemies current HP, up to X% when the
+ * enemy is at full HP") or MISSING HP% (Tithonus — "based on the
  * target's missing HP, with the maximum achieved when the target is below 10% HP").
  * Returns the count condition + scaling rule (perUnit per HP point, capped at the
  * full value), or null when the sentence has no HP-proportional phrasing. The
@@ -431,7 +440,7 @@ function hpProportionalScaling(
     sentence: string,
     value: number
 ): { condition: Condition; scaling: ScalingRule } | null {
-    if (/based on the target'?s?\s+current\s+hp/i.test(sentence)) {
+    if (/based on the (?:target|enem(?:y|ies))'?s?\s+current\s+hp/i.test(sentence)) {
         return {
             condition: { subject: 'enemy-hp-pct', derivable: true },
             scaling: { conditionIndex: 0, perUnit: value / 100, cap: value },
@@ -449,6 +458,16 @@ function hpProportionalScaling(
     return null;
 }
 
+// An enemy-type gate stated right after an "N% more damage" bonus: "… when hitting a defender".
+const MORE_DAMAGE_ROLE_TAIL_RE =
+    /^\s+(?:when\s+)?(?:to|against|targeting|damaging|attacking|hitting)\s+(?:an?\s+)?(defender|attacker|debuffer|supporter)s?\b/i;
+
+// "This Unit … has X% defense penetration" / "it has X% defense penetration": the unit's own
+// penetration stat stated in its skill text (tested on the sentence that carries the number).
+// Shared with the skill audit's `defense-penetration-innate` rule (scripts/auditSkills.ts).
+export const UNIT_HAS_DEFENSE_PENETRATION_RE =
+    /\b(?:this\s+unit|it)\b[^.]*?\bhas\s+\d+(?:\.\d+)?%\s+defense penetration\b/i;
+
 /**
  * Detects passive output/stat modifiers in a skill's text. Handles:
  *  - "X% more (direct) damage" → outgoing-damage modifier (self, or all-allies when
@@ -457,7 +476,9 @@ function hpProportionalScaling(
  *    a capped scaling modifier instead of a flat bonus.
  *  - "X% defense penetration for each buff it has, up to a max of Y%" → a per-self-buff
  *    scaling defense-penetration modifier (capped).
- *  - flat "has X% defense penetration" → a flat defense-penetration modifier (Judge).
+ *  - flat "This skill has X% defense penetration" / "bypassing X% of the enemy Defense" → a
+ *    flat defense-penetration modifier (Chakara's charged). A unit-subject "This Unit has X%
+ *    defense penetration" describes the refit stat and mints nothing (see the branch below).
  */
 function parseModifiers(text: string): ParsedModifier[] {
     const plain = stripTags(text).replace(/<br\s*\/?>/gi, '. ');
@@ -540,6 +561,21 @@ function parseModifiers(text: string): ParsedModifier[] {
                 conditions.push(...affectedByConditions(sentence));
                 const hpCond = hpThresholdFromSentence(sentence);
                 if (hpCond) conditions.push(hpCond);
+                // Enemy-type gate stated right after the bonus ("30% more damage when hitting a
+                // defender"). Read from the text FOLLOWING the match, so a role named by a
+                // different clause of the sentence (Lodolite's "more critical damage to
+                // defenders") never gates this bonus.
+                const roleM = MORE_DAMAGE_ROLE_TAIL_RE.exec(
+                    plain.slice(moreM.index! + moreM[0].length)
+                );
+                if (roleM) {
+                    conditions.push({
+                        subject: 'enemy-type',
+                        derivable: true,
+                        requiredEnemyType: (roleM[1].charAt(0).toUpperCase() +
+                            roleM[1].slice(1).toLowerCase()) as EnemyBaseClass,
+                    });
+                }
                 out.push({
                     channel: 'outgoingDamage',
                     value,
@@ -554,9 +590,13 @@ function parseModifiers(text: string): ParsedModifier[] {
     // "X% more critical damage [to <enemy class>]" → crit-damage modifier (Lodolite).
     const critM = plain.match(/(\d+(?:\.\d+)?)%\s+more\s+critical\s+damage/i);
     if (critM) {
-        // Comma-scoped: "This Unit deals X% more critical damage, all allies deal Y%…" are
-        // separate subjects, so don't let the all-ally clause leak into this one.
-        const clause = clauseContaining(plain, critM.index!);
+        // Clause-scoped: "This Unit deals X% more critical damage, all allies deal Y%…" (or
+        // "… and all allies deal Y%…") are separate subjects, so the all-ally clause must not
+        // leak into this one. The "and <allies> deal" conjunction splits like the comma does.
+        const clause =
+            clauseContaining(plain, critM.index!)
+                .split(/\s+and\s+(?=(?:all\s+)?allies\s+deal\b)/i)
+                .find((part) => part.includes(critM[0])) ?? '';
         const isAllyScoped = /friendly|all allies|allies/i.test(clause);
         const conditions: Condition[] = [];
         const typeM = clause.match(
@@ -663,12 +703,14 @@ function parseModifiers(text: string): ParsedModifier[] {
     // → an outgoing-damage bonus (Obsidian). HP-proportional phrasings (Akula's "up to 30%
     // based on the target's current HP percentage") become a scaling modifier on the live
     // enemy-hp-pct count — the sim derives enemy HP from cumulative damage per round.
+    // The amount follows "by" ("increases damage by up to 30% based on…") or the HP basis
+    // ("increases outgoing direct damage based on the enemies current HP, up to 30%…").
     const incM = plain.match(
-        /increases?\s+(?:outgoing\s+)?(?:direct\s+)?damage\s+by\s+(?:up\s+to\s+)?(\d+(?:\.\d+)?)%/i
+        /increases?\s+(?:outgoing\s+)?(?:direct\s+)?damage\s+(?:by\s+(?:up\s+to\s+)?(\d+(?:\.\d+)?)%|based\s+on\s+the\s+enem(?:y|ies)'?s?\s+current\s+hp,?\s+up\s+to\s+(\d+(?:\.\d+)?)%)/i
     );
     if (incM) {
         const sentence = sentenceContaining(plain, incM.index!);
-        const incValue = parseFloat(incM[1]);
+        const incValue = parseFloat(incM[1] ?? incM[2]);
         const incTarget: AbilityTarget = /friendly|all allies|allies/i.test(sentence)
             ? 'all-allies'
             : 'self';
@@ -759,9 +801,17 @@ function parseModifiers(text: string): ParsedModifier[] {
             },
         });
     } else {
-        // flat "has X% defense penetration" (no per-buff scaling) — e.g. Judge passives.
+        // Flat "X% defense penetration" (no per-buff scaling). A unit-subject "This Unit (…) has
+        // X% defense penetration" DESCRIBES the refit ascension stat (user ruling 2026-10-02:
+        // Judge's innate 20%, Ravager's refit-2 10%), which already reaches the ship's stats, so
+        // it mints nothing — a modifier on top would count the penetration twice. A skill-scoped
+        // "This skill has X% defense penetration" is not a ship stat and mints the modifier.
         const flatPenM = plain.match(/(\d+(?:\.\d+)?)%\s+defense penetration(?!\s+for each)/i);
-        if (flatPenM) {
+        const describesShipStat =
+            !!flatPenM &&
+            UNIT_HAS_DEFENSE_PENETRATION_RE.test(sentenceContaining(plain, flatPenM.index!));
+        // Only a skill-scoped flat penetration mints a modifier; a unit-subject one is the ship stat.
+        if (flatPenM && !describesShipStat) {
             out.push({
                 channel: 'defensePenetration',
                 value: parseFloat(flatPenM[1]),
@@ -769,8 +819,8 @@ function parseModifiers(text: string): ParsedModifier[] {
                 target: 'self',
                 conditions: [],
             });
-        } else {
-            // Epic PR12(B) — Chakara's charged: "…bypassing 20% of the enemy Defense…". Distinct
+        } else if (!flatPenM) {
+            // Chakara's charged: "…bypassing 20% of the enemy Defense…". Distinct
             // wording from "X% defense penetration" above; same defensePenetration modifier
             // shape. Because parseModifiers runs PER SKILL ROW (abilitiesFromText is called once
             // per Active/Charge/Passive text), this is inherently a PER-SKILL modifier — it only
@@ -797,25 +847,27 @@ function parseModifiers(text: string): ParsedModifier[] {
 }
 
 /**
- * D-PR3 T5 — Detects Iridium's "takes N% less damage from Critical hits" clause and
- * returns the reduction percentage, or null when the phrase is absent.
+ * Detects Iridium's crit reduction — "takes N% less damage from Critical hits" or "has N% damage
+ * reduction from critical hits" — and returns the reduction percentage, or null when the phrase
+ * is absent.
  *
- * The match is intentionally narrow: only the `takes … less damage from Critical hits`
- * construction maps to the crit-family incoming-reduction ability. A generic "less
- * damage" clause (e.g. "takes 20% less damage from all sources") does NOT match and
- * returns null.
+ * The match is intentionally narrow: only a reduction stated "from critical hits" maps to the
+ * crit-family incoming-reduction ability. A generic "less damage" clause (e.g. "takes 20% less
+ * damage from all sources") does NOT match and returns null.
  *
  * Masking: `<br />` tags are normalised to `. ` before the regex so they never
  * break sentence detection; `stripTags` removes inline markup tags.
  */
 function parseIncomingCritReduction(text: string): number | null {
     const plain = stripTags(text).replace(/<br\s*\/?>/gi, '. ');
-    const m = plain.match(/takes\s+(\d+(?:\.\d+)?)%\s+less\s+damage\s+from\s+critical\s+hits/i);
+    const m = plain.match(
+        /(?:takes\s+(\d+(?:\.\d+)?)%\s+less\s+damage|has\s+(\d+(?:\.\d+)?)%\s+damage\s+reduction)\s+from\s+critical\s+hits/i
+    );
     if (!m) return null;
-    return parseFloat(m[1]);
+    return parseFloat(m[1] ?? m[2]);
 }
 
-/** One parsed incoming-damage-reduction directive (epic PR12(C)). `scopes` lists every
+/** One parsed incoming-damage-reduction directive. `scopes` lists every
  *  incoming-reduction ability scope this phrasing should emit (most phrasings are
  *  scope:'direct' only; "all incoming damage"/unscoped phrasings emit BOTH 'direct' and
  *  'dot'). `pct` XOR `hpScaling` — never both. */
@@ -839,24 +891,19 @@ interface ParsedIncomingDamageReduction {
 }
 
 /**
- * Epic PR12(C) — wires four corpus phrasings onto the existing `incoming-reduction`
- * AbilityConfig / IncomingCondition (D-PR3: Iridium/Voidshade/Hyperion Gaze/Ironclad), which
- * previously only covered "takes N% less damage from Critical hits" (parseIncomingCritReduction
- * above):
+ * Reads the non-crit incoming-damage-reduction phrasings onto the `incoming-reduction`
+ * AbilityConfig / IncomingCondition (the crit-family reduction is parseIncomingCritReduction):
  *  - Anemone: "takes N% less direct damage from enemies debuffed with a Damage over Time
- *    effect" — the ATTACKER carries a live DoT (new `attacker-has-dot` condition).
- *  - Panon: "reduces all incoming damage by N% when affected by Barrier Recharging" — the
- *    VICTIM carries its own named self-status (new `self-barrier-recharging` condition,
- *    mirroring the self-stealth/self-stasis literal-name precedent). "ALL incoming damage"
- *    (not "direct") → emits both scope:'direct' and scope:'dot'.
- *  - Wusheng: "reduces direct damage by N% while Stealth is active" — reuses the EXISTING
- *    `self-stealth` condition (previously only wired via the Voidshade implant, never a ship
- *    skill-text phrasing).
- *  - Tormenter: "gains up to N% damage reduction as its health decreases" — no status gate at
- *    all, just continuous HP-proportional scaling (new `hpScaling` field, condition 'always').
- *    perUnit = cap/100 so the reduction reaches exactly `cap`% at 0 HP (mirrors the Revenge
- *    gear set's self-hp-missing-pct formula, `hpProportionalScaling` above). No explicit scope
- *    word in the text → both 'direct' and 'dot', same as Panon.
+ *    effect" — the ATTACKER carries a live DoT (`attacker-has-dot`).
+ *  - Panon: "reduces all incoming damage by N%" / "gains N% damage reduction from all sources"
+ *    "when affected by Barrier Recharging" — the VICTIM carries its own named self-status
+ *    (`self-barrier-recharging`). Every incoming source → both scope:'direct' and scope:'dot'.
+ *  - Wusheng: "reduces direct damage by N%" / "takes N% less direct damage" "while Stealth is
+ *    active" — `self-stealth`, direct only.
+ *  - Tormenter: "gains up to N% damage reduction as its health decreases" — no status gate,
+ *    continuous HP-proportional scaling (`hpScaling`, condition 'always'). perUnit = cap/100 so
+ *    the reduction reaches exactly `cap`% at 0 HP (the Revenge gear set's self-hp-missing-pct
+ *    formula, `hpProportionalScaling` above). No scope word → both 'direct' and 'dot'.
  */
 function parseIncomingDamageReductionPhrasings(text: string): ParsedIncomingDamageReduction[] {
     const plain = stripTags(text).replace(/<br\s*\/?>/gi, '. ');
@@ -875,28 +922,30 @@ function parseIncomingDamageReductionPhrasings(text: string): ParsedIncomingDama
         });
     }
 
+    // "reduces all incoming damage by N%" and "gains N% damage reduction from all sources" both
+    // cover every incoming source.
     const panonM =
-        /reduces\s+all\s+incoming\s+damage\s+by\s+(\d+(?:\.\d+)?)%\s+when\s+affected\s+by\s+barrier\s+recharging/i.exec(
+        /(?:reduces\s+all\s+incoming\s+damage\s+by\s+(\d+(?:\.\d+)?)%|gains\s+(\d+(?:\.\d+)?)%\s+damage\s+reduction\s+from\s+all\s+sources)\s+when\s+affected\s+by\s+barrier\s+recharging/i.exec(
             plain
         );
     if (panonM) {
         out.push({
             scopes: ['direct', 'dot'],
             condition: 'self-barrier-recharging',
-            pct: parseFloat(panonM[1]),
+            pct: parseFloat(panonM[1] ?? panonM[2]),
             matchIndex: panonM.index,
         });
     }
 
     const wushengM =
-        /reduces\s+direct\s+damage\s+by\s+(\d+(?:\.\d+)?)%\s+while\s+stealth\s+is\s+active/i.exec(
+        /(?:reduces\s+direct\s+damage\s+by\s+(\d+(?:\.\d+)?)%|takes\s+(\d+(?:\.\d+)?)%\s+less\s+direct\s+damage)\s+while\s+stealth\s+is\s+active/i.exec(
             plain
         );
     if (wushengM) {
         out.push({
             scopes: ['direct'],
             condition: 'self-stealth',
-            pct: parseFloat(wushengM[1]),
+            pct: parseFloat(wushengM[1] ?? wushengM[2]),
             matchIndex: wushengM.index,
         });
     }
@@ -931,19 +980,20 @@ function parseIncomingDamageReductionPhrasings(text: string): ParsedIncomingDama
         });
     }
 
-    // Malvex: "When Shielded, this Ship takes N% less damage" — a self-shield-gated flat
-    // reduction. New self-shielded IncomingCondition (evaluated per-hit against the victim's
-    // live shieldPool). Anchored on "when shielded" so it never matches Voron's DoT phrasing
-    // or a bare "takes N% less damage".
+    // Malvex: "When Shielded, this Ship takes N% less damage" / "When this Unit has an active
+    // shield, it gains N% damage reduction" — a self-shield-gated flat reduction. The
+    // self-shielded IncomingCondition is evaluated per-hit against the victim's live shieldPool.
+    // Anchored on the shield gate so it never matches Voron's DoT phrasing or a bare "takes N%
+    // less damage".
     const malvexM =
-        /when\s+shielded,?\s+this\s+(?:ship|unit)\s+takes\s+(\d+(?:\.\d+)?)%\s+less\s+damage/i.exec(
+        /(?:when\s+shielded,?\s+this\s+(?:ship|unit)\s+takes\s+(\d+(?:\.\d+)?)%\s+less\s+damage|when\s+this\s+unit\s+has\s+an\s+active\s+shield,?\s+it\s+gains\s+(\d+(?:\.\d+)?)%\s+damage\s+reduction)/i.exec(
             plain
         );
     if (malvexM) {
         out.push({
             scopes: ['direct'],
             condition: 'self-shielded',
-            pct: parseFloat(malvexM[1]),
+            pct: parseFloat(malvexM[1] ?? malvexM[2]),
             matchIndex: malvexM.index,
         });
     }
@@ -1095,12 +1145,9 @@ const MAX_POS = Number.MAX_SAFE_INTEGER;
  * so the heal/cleanse routes to the ally, not the caster. Example: Hermes' active "This Unit
  * Repairs 27% of its Max HP." with charged "If the target has less than 40% HP …" — the skill
  * targets an ally. Damage-rider repairs (skill has a damage component → it targets an enemy, the
- * Damage-rider repairs (skill has a damage component → it targets an enemy, the
  * repair is a self rider), passive repairs, and explicit recipients are unaffected.
  *
- * Shields use {@link flipBareSupportShieldTarget} instead — a bare shield co-cast beside an
- * all-allies buff grant routes to `all-allies` (Graphite's Overclock + shield); standalone
- * self shields stay on the caster.
+ * Shields use {@link flipBareSupportShieldTarget} instead, which owns the shield routing rules.
  *
  * Exception (user-verified 2026-06-07): a bare repair whose own sentence is gated on a
  * SELF-DAMAGE condition ("if this unit has been directly damaged this round") is a SELF-heal —
@@ -1186,18 +1233,23 @@ function flipBareSupportTarget(
     return target;
 }
 
-/** Bare shield on a pure-support active/charged co-cast beside an all-allies buff grant routes
- *  to all allies (Graphite: Overclock + shield). Standalone self shields ("gains a shield…")
- *  stay self. Explicit recipients and damage-rider skills are unchanged. */
+/** A bare shield on a pure-support active/charged cast routes to all allies (the engine narrows
+ *  them to the skill's support pattern) when either
+ *   - it is co-cast beside an all-allies buff grant (Graphite: Overclock + shield), or
+ *   - its own verb bestows it ("grants a shield equal to …"): a receiver-less grant goes to all
+ *     allies, the same rule `detectGrantScopes` applies to named buffs.
+ *  A shield the caster receives ("gains a shield…") stays self. Explicit recipients and
+ *  damage-rider skills are unchanged. */
 function flipBareSupportShieldTarget(
     target: 'self' | 'ally' | 'all-allies' | 'lowest-hp-ally',
     explicitTarget: boolean,
     slot: SkillSlot,
     hasDamage: boolean,
-    hasCoCastAllAlliesGrant: boolean
+    hasCoCastAllAlliesGrant: boolean,
+    isBestowedShield: boolean
 ): 'self' | 'ally' | 'all-allies' | 'lowest-hp-ally' {
     if (
-        hasCoCastAllAlliesGrant &&
+        (hasCoCastAllAlliesGrant || isBestowedShield) &&
         !explicitTarget &&
         target === 'self' &&
         (slot === 'active' || slot === 'charged') &&
@@ -1224,7 +1276,9 @@ function abilitiesFromText(
     // at the END via a single stable sort — so construction order never leaks into the result.
     const out: PositionedAbility[] = [];
 
-    const mult = parseSkillDamage(text);
+    const taggedMult = parseSkillDamage(text);
+    const bombShare = taggedMult > 0 ? null : parseBombShareDamage(text);
+    const mult = bombShare?.mult ?? taggedMult;
     // #361: hoisted above the base-damage gate below (its own emit point is further down, at the
     // `additional-damage` push) because the gate has to consult it. A skill whose ONLY damage is a
     // stat-basis rider — Prophet's "damage equal to 50x its security" — still needs a base attack
@@ -1243,36 +1297,61 @@ function abilitiesFromText(
     const damageTagPos = text.search(
         new RegExp(`<unit-damage>\\s*${escNum(mult)}%\\s*damage`, 'i')
     );
-    const damagePos = damageTagPos >= 0 ? damageTagPos : text.search(/<unit-damage>/i);
-    // Combat G PR1: on a PASSIVE, the "When this Unit is directly damaged as a primary target,
-    // it deals X% damage to that enemy" shape (Stalwart) is a reactive COUNTERATTACK, not an
-    // on-cast base damage. Re-type that component to a `counter` ability (on-attacked,
-    // requirePrimaryTarget) when the parsed counter multiplier matches the base damage the tag
-    // carries. Heal/shield/reflect "directly damaged" consequences are not matched by
-    // parseCounterAbilities, so they keep their existing parse. PR2: Nyxen's shield-hit shape
-    // also rides this path (requireShieldHit). Centurion (adjacent-ally) does NOT ride this path
-    // (its retaliate tag carries no "damage" word → mult is 0) — it is pushed separately below.
+    const damagePos = bombShare
+        ? bombShare.pos
+        : damageTagPos >= 0
+          ? damageTagPos
+          : text.search(/<unit-damage>/i);
+    // On a PASSIVE, "When this Unit is directly damaged as a primary target, it deals X% damage
+    // to that enemy" (Stalwart) is a reactive COUNTERATTACK, not an on-cast base damage; the
+    // shield-hit shape (Nyxen) is one too (requireShieldHit). The damage component is re-typed to
+    // a `counter` ability (on-attacked) when the parsed counter multiplier equals the tag's base
+    // damage. Heal/shield/reflect "directly damaged" consequences are not matched by
+    // parseCounterAbilities and keep their own parse. The adjacent-ally retaliate shape
+    // (Centurion, `counter.allySubject`) is pushed by its own block below whether or not its tag
+    // carries the word "damage"; when it does (mult > 0), branch 2 pushes nothing.
+    //
+    // The branches below are exclusive:
+    //  1. enemyChargedCastOwnsDamage: no base push; the reaction's damage ability is emitted
+    //     later by the enemy-charged-cast block. out[0] may then be absent or not a damage
+    //     ability, and every out[0] rider/condition attachment below is guarded on
+    //     `out[0]?.ability.type === 'damage'`, so each skips silently instead of attaching to
+    //     the wrong ability.
+    //  2. counter: the counterattack replaces the base damage.
+    //  3. otherwise a base damage ability is pushed FIRST, so it is out[0] for those attachments.
     const counter = slot === 'passive' ? parseCounterAbilities(text) : null;
-    if (mult > 0 && counter && counter.multiplier === mult) {
-        const hits = parseHitCount(text);
-        out.push({
-            ability: {
-                id: nextId(),
-                type: 'counter',
-                target: 'enemy',
-                trigger: 'on-attacked',
-                conditions: [],
-                config: {
+    // A hit stated in the "when an enemy uses their charged skill" sentence is that reaction's
+    // own damage — parseEnemyChargedCastReaction emits it on the on-enemy-charged-cast trigger —
+    // so it is never also an on-cast attack.
+    const enemyChargedCastOwnsDamage =
+        mult > 0 &&
+        detectEnemyChargedCastTrigger(text, damagePos) !== undefined &&
+        (parseEnemyChargedCastReaction(text)?.some((a) => a.type === 'damage') ?? false);
+    if (enemyChargedCastOwnsDamage) {
+        // Emitted by the enemy-charged-cast block below.
+    } else if (mult > 0 && counter && counter.multiplier === mult) {
+        // An allySubject retaliation is emitted, grouped, by the adjacent-ally counter block.
+        if (!counter.allySubject) {
+            const hits = parseHitCount(text);
+            out.push({
+                ability: {
+                    id: nextId(),
                     type: 'counter',
-                    multiplier: mult,
-                    ...(hits !== undefined ? { hits } : {}),
-                    ...(counter.requirePrimaryTarget ? { requirePrimaryTarget: true } : {}),
-                    ...(counter.requireShieldHit ? { requireShieldHit: true } : {}),
+                    target: 'enemy',
+                    trigger: 'on-attacked',
+                    conditions: [],
+                    config: {
+                        type: 'counter',
+                        multiplier: mult,
+                        ...(hits !== undefined ? { hits } : {}),
+                        ...(counter.requirePrimaryTarget ? { requirePrimaryTarget: true } : {}),
+                        ...(counter.requireShieldHit ? { requireShieldHit: true } : {}),
+                    },
+                    autoFilled: true,
                 },
-                autoFilled: true,
-            },
-            pos: damagePos >= 0 ? damagePos : MAX_POS,
-        });
+                pos: damagePos >= 0 ? damagePos : MAX_POS,
+            });
+        }
     } else if (mult > 0 || secForBaseGate) {
         const hits = parseHitCount(text);
         const noCrit = parseNoCrit(text);
@@ -1398,23 +1477,18 @@ function abilitiesFromText(
         }
     }
 
-    // Combat G PR2 (Centurion): "When this Unit OR AN ADJACENT ALLY is directly damaged, this
-    // Unit retaliates dealing X%." The retaliate <unit-damage> tag omits "damage" → parseSkillDamage
-    // returns 0 → NOT an on-cast base-damage component, so it cannot ride the re-type path above.
-    // Push it directly as TWO counter abilities: a self counter (on-attacked, any direct hit) +
-    // an adjacent-ally counter (on-ally-attacked, reusing the existing requireDamagedAllyAdjacent
-    // gate). The per-ability guard collapses the per-HIT fan-out within one sub-attack; since the
-    // multi-hit epic's PR6 it does NOT collapse across sub-attacks, so a `hits: N` cast draws N
-    // retaliations — correct, since R1 makes that N separate attacks. Self/ally were also
-    // mutually exclusive per attack back when the `attacked` emit was single-focus. Per-victim
-    // `attacked` emission HAS since landed, so an AoE covering both this unit and an adjacent ally
-    // wakes both abilities in one sub-attack — one incoming attack, two retaliations. Both now
-    // carry the SAME `counterGroupId` so the executor guard collapses them back into one. Keying
-    // the guard on `${ownerId}` instead would have worked here but would also collapse two
-    // genuinely independent counters on some future ship; the group id says exactly what is true,
-    // that these two abilities are one clause. This is a multi-VICTIM defect, not a multi-HIT one
-    // (it reproduces at `hits: 1`), which is why PR6 neither caused nor fixed it. The co-located
-    // "start of combat … attack per adjacent ally" buff parses independently and is unaffected.
+    // Centurion: "When this Unit OR AN ADJACENT ALLY is directly damaged, this Unit retaliates
+    // dealing X% [damage]." This block is the clause's only emitter, with or without the word
+    // "damage" in the tag (the re-type branch above skips an allySubject counter). It pushes TWO
+    // counter abilities: a self counter (on-attacked, any direct hit) + an adjacent-ally counter
+    // (on-ally-attacked, reusing the requireDamagedAllyAdjacent gate). The per-ability guard
+    // collapses the per-HIT fan-out within one sub-attack but not across sub-attacks, so a
+    // `hits: N` cast draws N retaliations — N separate attacks. `attacked` is emitted per victim,
+    // so an AoE covering both this unit and an adjacent ally wakes both abilities in one
+    // sub-attack; both carry the SAME `counterGroupId`, so the executor guard collapses them into
+    // one retaliation. The group id (not the owner id) is the guard key because these two
+    // abilities are one clause, while two independent counters on one ship must not collapse.
+    // The co-located "start of combat … attack per adjacent ally" buff parses independently.
     if (slot === 'passive' && counter && counter.allySubject) {
         const hits = parseHitCount(text);
         // The self ability's own id doubles as the group id — stable, unique, and no extra id
@@ -1808,7 +1882,7 @@ function abilitiesFromText(
             ability: {
                 id: nextId(),
                 type: 'extend-dot',
-                target: 'enemy',
+                target: parseExtendDoTTarget(text),
                 trigger: 'on-cast',
                 conditions: [],
                 config: { type: 'extend-dot', turns: extendTurns },
@@ -1890,12 +1964,23 @@ function abilitiesFromText(
             /\bcritical\s+hit\s+occurs\b/i.test(extendSentence) ||
             /\bwith\s+a\s+critical\s+hit\b/i.test(extendSentence);
         const extendStatusPos = text.search(/extend/i);
+        // Ripper (catalogue R2): an extension in the same sentence as "When this Unit inflicts a
+        // debuff with its active or charged skills" rides that reaction — once per cast, however
+        // many debuffs the cast lands. Every other extension is on-cast.
+        const extendSlotFilter = detectInflictSourceSlotFilter(extendSentence);
         out.push({
             ability: {
                 id: nextId(),
                 type: 'extend-status',
                 target: extendTarget,
-                trigger: 'on-cast',
+                trigger: extendSlotFilter ? 'on-debuff-inflicted' : 'on-cast',
+                ...(extendSlotFilter
+                    ? {
+                          triggerApplicationFilter: 'inflict' as const,
+                          triggerSourceSlotFilter: extendSlotFilter,
+                          oncePerCast: 'cast' as const,
+                      }
+                    : {}),
                 conditions: extendCritGated ? [{ subject: 'self-crit', derivable: true }] : [],
                 config: {
                     type: 'extend-status',
@@ -1990,18 +2075,17 @@ function abilitiesFromText(
         }
     }
 
-    // Ship-kit W8 Task 10 (Wisteria): self-subject sibling of the Crocus on-ally-crit-dot block
-    // above — "This Unit ... after applying <DoT> with a Critical hit, inflicts <DoT> for N
-    // turns" (R0) / "inflicts <DoT> for N turns after applying <DoT> with a Critical hit ..."
-    // (R2, refit-active). Deliberately NOT reusing the parseSkillEffects tag walk the
-    // on-ally-crit-dot block uses above: Wisteria's own TRIGGER clause names a DoT ("applying
-    // Corrosion with a Critical hit"), and DOT_TIER_MAP carries a bare 'Corrosion' entry — that
-    // walk would mint a phantom Corrosion dot from the trigger's own named DoT (see
-    // parseSelfCritDotEffect's comment; buildShipAbilities.test.ts's "no phantom Corrosion dot"
-    // guard covers exactly this). parseSelfCritDotEffect instead anchors on the "inflicts X for
-    // N turns" clause specifically, in EITHER ordering, so only the genuinely injected DoT
-    // (Inferno II) is ever extracted, landing on the SAME reactive on-self-crit-dot trigger
-    // machinery (see triggers.ts/types/abilities.ts).
+    // Self-subject sibling of the Crocus on-ally-crit-dot block above — THIS unit's own crit-cast
+    // DoT infliction re-inflicts a second DoT (Wisteria: "after applying Corrosion with a Critical
+    // hit, inflicts Inferno II for 2 turns" / "When this Unit inflicts Corrosion with a critical
+    // hit, it also inflicts Inferno II for 2 turns"). Deliberately NOT reusing the
+    // parseSkillEffects tag walk the on-ally-crit-dot block uses above: the TRIGGER clause names a
+    // DoT (Corrosion), and DOT_TIER_MAP carries a bare 'Corrosion' entry — that walk would mint a
+    // phantom Corrosion dot from the trigger's own named DoT (see parseSelfCritDotEffect's
+    // comment; buildShipAbilities.test.ts's "no phantom Corrosion dot" guard covers exactly this).
+    // parseSelfCritDotEffect instead anchors on the "inflicts X for N turns" clause specifically,
+    // in EITHER ordering, so only the genuinely injected DoT (Inferno II) is ever extracted,
+    // landing on the reactive on-self-crit-dot trigger (see triggers.ts/types/abilities.ts).
     const selfCritDotEffect = parseSelfCritDotEffect(text);
     if (selfCritDotEffect) {
         const info = DOT_TIER_MAP[selfCritDotEffect.buffName];
@@ -2031,6 +2115,43 @@ function abilitiesFromText(
                     pos: selfCritDotPos >= 0 ? selfCritDotPos : MAX_POS,
                 });
             }
+        }
+    }
+
+    // Ripper (catalogue): "When this Unit inflicts a debuff with its active or charged skills, it
+    // also inflicts Inferno II for 2 turns" — a reactive PASSIVE-slot DoT on on-debuff-inflicted,
+    // narrowed to debuffs his active/charged casts inflict (Ability.triggerSourceSlotFilter) and
+    // capped at one Inferno per (cast, debuffed enemy) (Ability.oncePerCast). Built directly for
+    // the same reason as the Wisteria block above: the passive slot never reaches
+    // buildDoTAutoFill, and the trigger clause's own "debuff" must not be read as the DoT.
+    const slotReactionDot = parseSlotReactionDotEffect(text);
+    const slotReactionFilter = slotReactionDot ? detectInflictSourceSlotFilter(text) : undefined;
+    if (slotReactionDot && slotReactionFilter) {
+        const info = DOT_TIER_MAP[slotReactionDot.buffName];
+        if (info) {
+            const slotReactionDotPos = findBuffNamePos(text, slotReactionDot.buffName);
+            out.push({
+                ability: {
+                    id: nextId(),
+                    type: 'dot',
+                    target: 'enemy',
+                    trigger: 'on-debuff-inflicted',
+                    conditions: [],
+                    // "inflicts a debuff": an applied (unrolled) debuff does not count (#593).
+                    triggerApplicationFilter: 'inflict',
+                    triggerSourceSlotFilter: slotReactionFilter,
+                    oncePerCast: 'per-victim',
+                    config: {
+                        type: 'dot',
+                        dotType: info.type,
+                        tier: info.tier,
+                        stacks: 1,
+                        duration: slotReactionDot.turns,
+                    },
+                    autoFilled: true,
+                },
+                pos: slotReactionDotPos >= 0 ? slotReactionDotPos : MAX_POS,
+            });
         }
     }
 
@@ -2184,13 +2305,22 @@ function abilitiesFromText(
     const healNoCrit = parseHealNoCrit(text);
     const skillEffectsForSlot = parseSkillEffects(text, slot === 'charged' ? 'charge' : 'active');
     for (const h of parseHealAbilities(text)) {
-        // Anchor at the tag carrying THIS pct (mirrors the damage anchor convention). If multiple
-        // heal components share the same pct the regex may hit the wrong tag — acceptable, since
-        // the position only drives cosmetic editor order (the engine ignores heal types).
-        const healTagPos = text.search(new RegExp(`<unit-damage>(?:[^<]*?)${escNum(h.pct)}%`, 'i'));
+        // Anchor at the tag carrying THIS pct (mirrors the damage anchor convention). The anchor
+        // position selects the heal's trigger: the position-scoped detectors below
+        // (detectStartOfRoundTrigger, detectPreCombatShieldTrigger, detectEveryTurnTrigger,
+        // detectCritRepairTrigger, ...) read the sentence around it. The `(?<![\d.])` lookbehind
+        // stops a smaller pct anchoring inside a larger tagged number (5% inside "25%"). A tag
+        // naming a penetration stat ("<unit-damage>20% shield penetration</unit-damage>") is never
+        // a repair or shield amount, so the anchor skips it even when its pct is the same.
+        const healTagPos = text.search(
+            new RegExp(
+                `<unit-damage>(?![^<]*penetration)(?:[^<]*?)(?<![\\d.])${escNum(h.pct)}%`,
+                'i'
+            )
+        );
         const fallbackPos = text.search(h.kind === 'shield' ? /shield/i : /repair/i);
         const healPos = healTagPos >= 0 ? healTagPos : fallbackPos;
-        // Phase 4c PR 1+2: a damage-reaction heal (parser annotation `damageReaction`)
+        // A damage-reaction heal (parser annotation `damageReaction`)
         // rides the live reactive trigger — SELF-subject sentences ("when directly
         // damaged") → on-attacked, ALLY-subject ones (allySubject, Cultivator's "when
         // an ally is directly damaged … repairs 8%") → on-ally-attacked, where the
@@ -2267,10 +2397,10 @@ function abilitiesFromText(
                 // position-scoped). The parser only emits this all-allies heal when that shape is
                 // present (HEAL_DISQUALIFY_RE lookahead), so the trigger fires it ONLY on death.
                 detectDestroyedTrigger(text, healPos) ??
-                // Madax/Rikra (Phase 3 PR-B): a self-repair anchored in an enemy-kill sentence
-                // ("when an enemy dies" / "destroyed … upon killing them") rides the
-                // on-enemy-destroyed reactive trigger (position-scoped). The ENEMY-death
-                // counterpart to detectDestroyedTrigger's SELF-death case above.
+                // Madax/Rikra: a self-repair anchored in an enemy-kill sentence (the phrasings
+                // detectEnemyDestroyedTrigger's regexes hold) rides the on-enemy-destroyed
+                // reactive trigger (position-scoped). The ENEMY-death counterpart to
+                // detectDestroyedTrigger's SELF-death case above.
                 detectEnemyDestroyedTrigger(text, healPos) ??
                 // Crocus (Phase 3 PR-C): a self-repair anchored in the "when another ally
                 // inflicts a Damage Over Time (DoT) effect with a critical hit" sentence rides
@@ -2369,7 +2499,8 @@ function abilitiesFromText(
             );
         const oncePerCombat =
             reactiveTrigger === 'on-cheat-death-activated' && /once per battle/i.test(healSentence);
-        // Bare support shields route to all-allies (Graphite co-cast); heals use flipBareSupportTarget.
+        // Shields route through flipBareSupportShieldTarget, which owns the rule; heals use
+        // flipBareSupportTarget.
         const healTarget =
             h.kind === 'heal'
                 ? flipBareSupportTarget(
@@ -2380,12 +2511,11 @@ function abilitiesFromText(
                       healSentence,
                       role,
                       // AoE: a bare support-cast heal repairs every ally in the pattern footprint
-                      // (like all-allies buffs), not a single ally. Volk-style explicit "most
-                      // missing health" sets explicitTarget and stays a single recipient — since
-                      // SP-4e Task 3 it is parsed as 'lowest-hp-ally', not 'ally'. (A bare CLEANSE
-                      // still parses as 'ally', but since SP-4e Task 4 that is no longer a
-                      // narrower CAST reach than this 'all-allies' — the two resolve identically
-                      // in `recipientsFor`; see flipBareSupportTarget's `bareActiveScope` doc.)
+                      // (like all-allies buffs), not a single ally. An explicit "most missing
+                      // health" recipient sets explicitTarget and stays a single recipient, parsed
+                      // as 'lowest-hp-ally'. A bare CLEANSE parses as 'ally', which resolves to the
+                      // same cast reach as this 'all-allies' in `recipientsFor`; see
+                      // flipBareSupportTarget's `bareActiveScope` doc.
                       'all-allies'
                   )
                 : h.kind === 'shield'
@@ -2394,7 +2524,8 @@ function abilitiesFromText(
                         h.explicitTarget,
                         slot,
                         mult > 0,
-                        shieldCoCastAllAlliesGrant
+                        shieldCoCastAllAlliesGrant,
+                        /\bgrant(?:s|ing)?\s+(?:an?\s+)?shield\b/i.test(healSentence)
                     )
                   : h.target;
         // PR6b: per-count repair scaling (Oleander/Meatshield). The count Condition is appended
@@ -2452,6 +2583,15 @@ function abilitiesFromText(
                 ...(reactiveTrigger === 'on-ally-debuffed'
                     ? { triggerApplicationFilter: 'inflict' as const }
                     : {}),
+                // APEX: the shield's own sentence carries the trigger clause, so its verb is the
+                // filter — catalogue "gets inflicted with a debuff" → 'inflict'; OLD "gets
+                // debuffed" names no verb and stays unfiltered.
+                ...(reactiveTrigger === 'on-debuff-inflicted'
+                    ? (() => {
+                          const verb = debuffTriggerVerb(healSentence);
+                          return verb ? { triggerApplicationFilter: verb } : {};
+                      })()
+                    : {}),
                 conditions: healConditions,
                 // Recipient STATE filter ("all allies with Stealth repairs 10% …" — Chimei R2).
                 // Read from this heal's OWN sentence, and only for an ally-scoped target: a
@@ -2488,26 +2628,26 @@ function abilitiesFromText(
 
     for (const c of parseCleanse(text)) {
         const cleansePos = text.search(/cleanse/i);
-        // Pallas: "when this unit critically repairs an ally, it cleanses 1 debuff from itself" —
-        // the cleanse rides the on-ally-critically-repaired reactive trigger (position-scoped).
-        // Howler (Phase 3 PR-G): "cleanses 1 debuff from an ally when that ally crits an enemy" —
-        // rides on-ally-crit instead (fires on any same-side crit, owner included — see the
-        // 2026-09-30 ruling in triggers.ts's trigger doc block) — routed to the crit-er via
-        // eventCtx.damagedAllyId (triggers.ts on-ally-crit listener).
-        // Purifier (Phase 3 PR-A): a PASSIVE-slot "cleanses N debuff when directly damaged" cleanse
-        // rides on-attacked — the cleanse builder previously derived ONLY the crit-repair reaction,
-        // so a direct-damage cleanse fell through to on-cast. Gated to passive (an active/charged
-        // cleanse is on-cast) and position-scoped, so only a passive cleanse whose own sentence
-        // carries the reaction phrase flips (corpus: Purifier alone — Makoli/Nosorog/Nyxen's
-        // cleanses sit in active/charged slots or a different sentence; Cultivator's is on-own-cleanse).
-        // Nuqtu (Phase 3 PR-I): "Cleanses 1 debuff from itself (once per round) ... when an enemy
-        // gets buffed" rides on-enemy-buffed (position-scoped; opposing-scoped trigger).
-        // AEGIS (SP-F F2): "cleanses all debuffs when an ally ... has their Shield destroyed"
-        // rides on-ally-shield-destroyed — position-scoped like the siblings above (this loop has
-        // no buff name to resolve a clause on).
+        // A cleanse rides a reactive trigger when ITS OWN sentence carries the reaction phrase
+        // (each detector is position-scoped to the cleanse). Detectors run in this order:
+        //  - crit-repair ("when this unit critically repairs an ally") ->
+        //    on-ally-critically-repaired.
+        //  - ally-crit ("cleanses 1 debuff from an ally when that ally crits an enemy") ->
+        //    on-ally-crit, which fires on any same-side crit (owner included, see triggers.ts's
+        //    trigger doc block) and is routed to the crit-er via eventCtx.damagedAllyId.
+        //  - every-turn ("Every turn this Unit cleanses ...") is a per-turn cleanse: the leading
+        //    "every turn" governs the cleanse and a trailing "when" clause governs only the grants
+        //    after it, so this check runs BEFORE the enemy-buffed one when a sentence carries both.
+        //  - enemy-buffed ("cleanses ... when an enemy gets buffed") -> on-enemy-buffed
+        //    (opposing-scoped trigger).
+        //  - ally-shield-destroyed ("cleanses all debuffs when an ally has their Shield
+        //    destroyed") -> on-ally-shield-destroyed.
+        //  - a PASSIVE-slot cleanse whose sentence carries a direct-damage reaction phrase ->
+        //    on-attacked. An active/charged cleanse is on-cast.
         const reactiveTrigger =
             detectCritRepairTrigger(text, cleansePos) ??
             detectAllyCritTrigger(text, cleansePos) ??
+            detectEveryTurnTrigger(text, cleansePos) ??
             detectEnemyBuffedTrigger(text, cleansePos) ??
             detectAllyShieldDestroyedTrigger(text, cleansePos) ??
             (slot === 'passive' &&
@@ -2660,11 +2800,10 @@ function abilitiesFromText(
     // damage when hitting a Defender" gate). A passive purge with NO detected trigger is NOT
     // emitted (Sefuba's chain stays on PURGE_MORE_RE below). Purge is enemy-only (no support-flip).
     //
-    // C2b-3 update: Nayra's "if the target was repaired this round, purge all buffs" now emits
-    // with conditions:[{subject:'target-repaired-this-round', derivable:true}] (see
-    // detectRepairedThisRoundCondition below). The engine cast path evaluates this condition;
-    // Task 3 populates targetRepairedThisRound on ConditionContext. Until then the condition
-    // always evaluates false, keeping production byte-identical (no Nayra fixture in any golden).
+    // Nayra's "if the target was repaired this round, purge all buffs" emits with
+    // conditions:[{subject:'target-repaired-this-round', derivable:true}] (see
+    // detectRepairedThisRoundCondition below); the engine cast path evaluates it against
+    // ConditionContext.targetRepairedThisRound.
     //
     // I6: the passive-voice "is Purged of all buffs" form (Lodolite charged) is picked up by
     // detectPassiveVoicePurge, merged in ONLY for the on-cast (active/charged) slots — the
@@ -2724,11 +2863,10 @@ function abilitiesFromText(
         });
     }
 
-    // C2b-1 T5: Sefuba chain purge — "purges N more buff from the enemy" on on-enemy-purged.
-    // Emitted here, separately from the generic loop above. Sefuba's passive sentences carry no
-    // recognized purge trigger (on-attacked/end-of-round/killed-by-direct), so the generic loop's
-    // trigger-detection `continue` skips both of Sefuba p2's parsePurge matches — there is no
-    // double-emit risk. Count: PURGE_MORE_RE capture group 1 (digit or 'a'/'an' → 1).
+    // Chain purge — "purges N more/extra buff from the enemy" on on-enemy-purged. Emitted here,
+    // separately from the generic loop above, which skips any purge sentence without a recognized
+    // trigger, so a chain purge is never emitted twice. Count: PURGE_MORE_RE capture group 1
+    // (digit or 'a'/'an' → 1).
     {
         const purgeMoreMatch = PURGE_MORE_RE.exec(text);
         if (purgeMoreMatch) {
@@ -2999,14 +3137,14 @@ function abilitiesFromText(
         });
     }
 
-    // D-PR3 T5: Iridium "takes N% less damage from Critical hits" → incoming-reduction.
-    // Emitted as a separate block (approach b) rather than extending parseModifiers,
-    // because ParsedModifier is typed for outgoing-damage channels and the incoming-
-    // reduction config shape is orthogonal. The ability is INERT until a later task
-    // wires up the engine consumer.
+    // Iridium's crit reduction (parseIncomingCritReduction) → a crit-family incoming-reduction.
+    // Its own block rather than part of parseModifiers: ParsedModifier is typed for
+    // outgoing-damage channels, and the incoming-reduction config shape is orthogonal.
     const critReductionPct = parseIncomingCritReduction(text);
     if (critReductionPct !== null) {
-        const critRedPos = text.search(/less\s+damage\s+from\s+critical\s+hits/i);
+        const critRedPos = text.search(
+            /(?:less\s+damage|damage\s+reduction)(?:<\/unit-damage>)?\s+from\s+critical\s+hits/i
+        );
         out.push({
             ability: {
                 id: nextId(),
@@ -3276,30 +3414,19 @@ function crossing(rowText: string, pos: number, ability: Ability): boolean {
 }
 
 /**
- * Phase 4c PR 3 (Task 7): Hermes charged "If the target has less than N% HP, it grants Cheat
- * Death". On a match, attaches a derivable TARGET hp-threshold condition (evaluated against the
- * heal recipient's live HP) and narrows the parser's all-allies grant to the single heal target.
- * Caller gates this to the Cheat-Death family; sentence-scoped at the grant's anchor `pos`, so
- * the preceding repair/charge sentence (no target gate) never matches. Returns true when it
- * handled the buff. Reference data: docs/ship-skills.csv.
+ * Hermes charged "If the target / an ally has less than N% HP, it grants (that ally) Cheat
+ * Death". The grant reaches every ally the cast targets (his support pattern, himself included —
+ * owner ruling 2026-10-02: the pattern targets them all equally, so "the target" is each of them),
+ * and the HP test is asked of EACH recipient: an `all-allies` grant carrying
+ * `recipientFilter.hpBelowPct`, not a single cast-time condition. Caller gates this to the
+ * Cheat-Death family; sentence-scoped at the grant's anchor `pos`, so the preceding repair/charge
+ * sentence (no gate) never matches. Returns true when it handled the buff.
  */
 function targetGate(rowText: string, pos: number, ability: Ability): boolean {
     const gate = detectTargetHpGate(rowText, pos);
     if (!gate) return false;
-    // Safe overwrite: the Hermes Cheat-Death grant sentence ("If the target has less than N% HP,
-    // it grants Cheat Death") carries no other parsed condition — detectGrantConditions has no
-    // rule matching the "target has less than N% HP" phrasing, so ability.conditions is always
-    // empty before this point — verified corpus-wide.
-    ability.conditions = [
-        {
-            subject: 'hp-threshold',
-            derivable: true,
-            hpComparator: 'below',
-            hpPercent: gate.hpBelowPct,
-            hpSubject: 'target',
-        },
-    ];
-    if (ability.target === 'all-allies') ability.target = 'ally';
+    ability.target = 'all-allies';
+    ability.recipientFilter = { ...ability.recipientFilter, hpBelowPct: gate.hpBelowPct };
     return true;
 }
 
@@ -3322,8 +3449,10 @@ function slotForBuffSource(skillSource: SelectedGameBuff['skillSource']): SkillS
     }
 }
 
-export function buildShipAbilities(ship: Ship): ShipSkills {
+export function buildShipAbilities(rawShip: Ship): ShipSkills {
     counter = 0;
+    // Every pass below reads status names off the text by position (canonicaliseStatusNames).
+    const ship = withCanonicalStatusNames(rawShip);
 
     // DoTs are derived at the ship level (active/charge only — no passive DoTs).
     const { activeDoTs, chargedDoTs } = buildDoTAutoFill(ship);
@@ -3617,6 +3746,16 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
                 const verb = detectDebuffInflictionVerb(rowText, buff.buffName, occurrence);
                 if (verb) ability.triggerApplicationFilter = verb;
             }
+            // "When this Unit inflicts a Bomb" (Lingshe) reacts to that family landing only
+            // (Ability.triggerStatusFilter's doc), read from the same clause as the trigger.
+            if (rowText && reactiveTrigger === 'on-debuff-inflicted') {
+                const statusFilter = detectInflictedStatusFilter(
+                    rowText,
+                    buff.buffName,
+                    occurrence
+                );
+                if (statusFilter) ability.triggerStatusFilter = statusFilter;
+            }
             // Oleander's "once per ally per round" RoT grant: a DEDICATED cap (not the plain
             // oncePerRound flag) so a different ally inflicting a debuff still procs even if
             // another ally already consumed the cap this round.
@@ -3648,10 +3787,10 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
         ) {
             // crossing grant handled in the helper; nothing further to do for this buff.
         } else if (
-            // Phase 4c PR 3 (Task 7): Hermes charged "If the target has less than N% HP, it grants
-            // Cheat Death" — the clause names "the target", so spec PR 3 narrows the grant to the
-            // heal target. Only the Cheat-Death family is target-gated; the preceding repair/charge
-            // sentence has no target gate, so detectTargetHpGate returns undefined there.
+            // Hermes charged "If the target / an ally has less than N% HP, it grants Cheat Death" —
+            // a per-recipient HP filter on the all-allies grant (see `targetGate`). Only the
+            // Cheat-Death family is gated this way; the preceding repair/charge sentence has no
+            // such gate, so detectTargetHpGate returns undefined there.
             rowText &&
             pos >= 0 &&
             CHEAT_DEATH_BUFFS.has(buff.buffName) &&

@@ -103,14 +103,8 @@ export function narrowByFaction(
  * therefore only under-reach when data is missing, never over-reach — the same conservative
  * direction `narrowByFaction` and `matchesRoleCategory` already run on.
  *
- * ⚠️ NOT applied at every site `factionFilter` is. That one runs at FOUR (the registration
- * fan-out, the cast-path timed loop, the passive-slot combat-start seed, and the reactive
- * resolver); this one has exactly ONE caller — `footprintFilteredRecipients` in triggers.ts, the
- * REACTIVE path. Both corpus clauses that carry the field (Chimei's R2) are reactive, so nothing
- * is dropped today, and `recipientFilterIsReactiveOnly.test.ts` is the standing guard that keeps
- * it that way. An ability that reached a cast-path seam carrying this field would be silently
- * UN-narrowed — it would over-reach, not vanish, which is the less-bad of the two directions but
- * still wrong. Widen the wiring, don't widen the parser, if a cast clause ever needs it.
+ * ⚠️ NOT applied at every site `factionFilter` is — which seams honour it, and the tripwire that
+ * keeps every carrier on one of them, live in `Ability.recipientFilter`'s doc (types/abilities.ts).
  */
 export function narrowByRecipientFilter(
     ids: string[],

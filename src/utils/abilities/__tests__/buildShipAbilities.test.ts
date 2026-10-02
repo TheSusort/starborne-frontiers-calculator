@@ -159,7 +159,7 @@ describe('buildShipAbilities', () => {
         expect(slot(slots, 'passive')).toBeUndefined();
     });
 
-    it('Judge passive: HP-gated damage (no scaling) + separate per-destroyed modifier + flat defPen', () => {
+    it('Judge passive: HP-gated damage (no scaling) + separate per-destroyed modifier, no defPen modifier', () => {
         const s = ship({
             thirdPassiveSkillText:
                 'This Unit ignores <unit-skill>Taunt</unit-skill> and <unit-skill>Provoke</unit-skill> effects and has <unit-damage>20% defense penetration</unit-damage><br /><br />At the start of the round, this Unit deals <unit-damage>60% damage</unit-damage> to all enemies with less than 50% HP.<br /><br />This Unit deals <unit-damage>20% more direct damage</unit-damage> for each destroyed enemy, up to max of 100%.',
@@ -188,15 +188,12 @@ describe('buildShipAbilities', () => {
         expect(modifier.scaling).toMatchObject({ perUnit: 20, cap: 100 });
         expect(modifier.conditions).toEqual([{ subject: 'enemy-destroyed', derivable: false }]);
 
-        // Flat 20% defense penetration modifier is still present.
+        // "has 20% defense penetration" describes Judge's refit stat: no modifier of its own.
         expect(
             passive.abilities.some(
-                (a) =>
-                    a.config.type === 'modifier' &&
-                    a.config.channel === 'defensePenetration' &&
-                    a.config.value === 20
+                (a) => a.config.type === 'modifier' && a.config.channel === 'defensePenetration'
             )
-        ).toBe(true);
+        ).toBe(false);
     });
 
     it('Provider charged: damage + extend-dot (charge removal now also emitted — see Phase 1 Task 3 block)', () => {
@@ -825,7 +822,7 @@ describe('buildShipAbilities', () => {
         expect(defPen.conditions[0]).toMatchObject({ subject: 'self-buff', derivable: true });
     });
 
-    it('parses Judge-style passive: flat defPen modifier + capped "% more damage for each destroyed" scaling', () => {
+    it('parses Judge-style passive: no defPen modifier + capped "% more damage for each destroyed" scaling', () => {
         const s = ship({
             secondPassiveSkillText:
                 'This Unit ignores Taunt and Provoke effects and has 20% defense penetration. This Unit deals 20% more direct damage for each destroyed enemy, up to max of 100%.',
@@ -833,12 +830,12 @@ describe('buildShipAbilities', () => {
         const passive = buildShipAbilities(s).slots.find((sl) => sl.slot === 'passive');
         const mods = passive!.abilities.filter((a) => a.type === 'modifier');
 
-        const defPen = mods.find(
-            (m) => m.config.type === 'modifier' && m.config.channel === 'defensePenetration'
-        )!;
-        expect(defPen.config).toMatchObject({ channel: 'defensePenetration', value: 20 });
-        expect(defPen.scaling).toBeUndefined();
-        expect(defPen.conditions).toEqual([]);
+        // "has 20% defense penetration" describes the refit stat the ship already carries.
+        expect(
+            mods.some(
+                (m) => m.config.type === 'modifier' && m.config.channel === 'defensePenetration'
+            )
+        ).toBe(false);
 
         const outgoing = mods.find(
             (m) => m.config.type === 'modifier' && m.config.channel === 'outgoingDamage'
@@ -1202,7 +1199,7 @@ describe('buildShipAbilities', () => {
     });
 
     describe('Judge passive (hp-threshold-gated passive damage)', () => {
-        it('passive: damage 60 gated below 50% HP + flat 20% defPen modifier', () => {
+        it('passive: damage 60 gated below 50% HP, and no defPen modifier', () => {
             const judge = ship({
                 firstPassiveSkillText:
                     'This Unit ignores <unit-skill>Taunt</unit-skill> and <unit-skill>Provoke</unit-skill> effects and has <unit-damage>20% defense penetration</unit-damage><br /><br />At the start of the round, this Unit deals <unit-damage>60% damage</unit-damage> to all enemies with less than 50% HP.',
@@ -1220,10 +1217,8 @@ describe('buildShipAbilities', () => {
                 hpPercent: 50,
             });
 
-            const mod = abilityOfType(passive!.abilities, 'modifier');
-            expect(mod).toMatchObject({
-                config: { type: 'modifier', channel: 'defensePenetration', value: 20 },
-            });
+            // "has 20% defense penetration" describes Judge's refit stat: no modifier.
+            expect(abilityOfType(passive!.abilities, 'modifier')).toBeUndefined();
         });
     });
 
@@ -3204,7 +3199,7 @@ describe('buildShipAbilities', () => {
             expect(shield.trigger).not.toBe('on-hp-threshold-crossed');
         });
 
-        it('Hermes charged: Cheat Death narrows to the heal target with a derivable below-40% target hp-threshold; heal + charge unchanged', () => {
+        it('Hermes charged: Cheat Death is an all-allies grant with a per-recipient below-40% HP filter; heal + charge unchanged', () => {
             const s = ship({
                 chargeSkillText:
                     'This Unit <unit-damage>repairs 37%</unit-damage> of its Max HP and <unit-aid>adds 1 charge</unit-aid> to the Charged Skill.<br /><br />If the target has less than 40% HP, it grants <unit-skill>Cheat Death</unit-skill>.',
@@ -3216,28 +3211,23 @@ describe('buildShipAbilities', () => {
             )!;
             expect(cheatDeath).toMatchObject({
                 type: 'buff',
-                target: 'ally',
+                target: 'all-allies',
                 trigger: 'on-cast',
-                conditions: [
-                    {
-                        subject: 'hp-threshold',
-                        derivable: true,
-                        hpComparator: 'below',
-                        hpPercent: 40,
-                        hpSubject: 'target',
-                    },
-                ],
+                conditions: [],
+                recipientFilter: { hpBelowPct: 40 },
             });
             expect(cheatDeath.config).toMatchObject({ duration: 'recurring' });
             // The 37% repair is an AoE all-allies heal (support footprint); the 1 charge is
-            // unchanged. (Cheat Death above still narrows to the single low-HP ally.)
+            // unchanged. Cheat Death reaches the same allies, each one asked about its own HP.
             const heal = charged.abilities.find((a) => a.type === 'heal')!;
             expect(heal).toMatchObject({
                 type: 'heal',
                 target: 'all-allies',
                 config: { type: 'heal', pct: 37, basis: 'hp' },
             });
+            // "adds 1 charge to the Charged Skill" — ownerless, so every ally the cast targets.
             const charge = charged.abilities.find((a) => a.type === 'charge')!;
+            expect(charge).toMatchObject({ target: 'all-allies', trigger: 'on-cast' });
             expect(charge.config).toMatchObject({ type: 'charge', amount: 1 });
         });
 

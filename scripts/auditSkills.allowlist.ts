@@ -9,13 +9,17 @@ export interface AllowEntry {
     ship: string;
     rules: string[];
     reason: string;
+    /** True when the entry suppresses text only the official catalogue carries (the sync gate in
+     *  scripts/lib/skillTextGate.ts relies on it), so the CSV audit never consults it and the
+     *  stale-entry report must not flag it. */
+    catalogueOnly?: boolean;
 }
 
 export const ALLOWLIST: AllowEntry[] = [
     {
         ship: 'Lingshe',
-        rules: ['detonation', 'ungated-effect-with-trigger'],
-        reason: 'detonation: crit-scaling Bomb detonation (charged skill\'s countdown-reduction rider is now modelled — SP-F F3, `bomb-countdown-reduce` — but the crit-power-scaled "detonation damage" modifier on passive2/3 is not a detonate-dot consumption). The passive2/3 "gains Stealth on detonating a Bomb" grant carries an on-bomb-detonated trigger (not ungated). ungated-effect-with-trigger: passive1\'s "When this Unit inflicts a Bomb it gains Stealth" is a reactive on-self-inflicting-a-DoT trigger the parser does not derive (distinct from the detonate trigger above) — modelled manually.',
+        rules: ['detonation'],
+        reason: 'detonation: crit-scaling Bomb detonation (charged skill\'s countdown-reduction rider is modelled as `bomb-countdown-reduce`, but the crit-power-scaled "detonation damage" modifier on passive2/3 is not a detonate-dot consumption). The passive2/3 "gains Stealth on detonating a Bomb" grant rides on-self-bomb-detonated, and passive1\'s "When this Unit inflicts a Bomb it gains Stealth" rides on-debuff-inflicted narrowed to Bomb (triggerStatusFilter).',
     },
 
     // ── ungated-effect-with-trigger: intentionally not auto-gated ───────────────
@@ -55,21 +59,6 @@ export const ALLOWLIST: AllowEntry[] = [
         ship: 'Tormenter',
         rules: ['always-crit'],
         reason: 'Crit rate set to 100% in import data; parser flag would double-count.',
-    },
-
-    // ── base-damage: incoming-reduction clause, not an attack (epic PR1) ────────
-    // "gains up to 30% damage reduction as its health decreases" matches the base-damage
-    // keyword regex (contains "N% damage") but is HP-scaled incoming damage reduction, not an
-    // attack — PR1 fixed parseSkillDamage to stop minting a phantom on-cast damage{30} ability
-    // from it. The actual incoming-reduction mechanic is now modeled (epic PR12(C),
-    // hpScaling on the `incoming-reduction` ability config) — this entry stays because the
-    // `base-damage` rule's keyword still matches the "N% damage" substring and the clause is
-    // STILL correctly not a damage ability (it's incoming-reduction instead); the new
-    // `incoming-damage-reduction` rule confirms it IS handled.
-    {
-        ship: 'Tormenter',
-        rules: ['base-damage'],
-        reason: 'passive2 "gains up to 30% damage reduction as its health decreases" is HP-scaled incoming damage reduction, not an attack — modeled via `incoming-reduction`.hpScaling (epic PR12(C)), never a `damage` ability.',
     },
 
     // ── epic PR12(A): damage-reflection rule — audit-harness scoping false positive ──
@@ -113,6 +102,19 @@ export const ALLOWLIST: AllowEntry[] = [
         ship,
         rules: ['shield-penetration-innate'],
         reason: 'Shield penetration already filled as a ship stat by import/template data.',
+    })),
+
+    // ── defense-penetration-innate: handled at the DATA layer, not the parser ────
+    // "This Unit has X% defense penetration" describes the refit ascension stat (user ruling
+    // 2026-10-02), which the ship's stats already carry; parsing the clause would double-count.
+    // Verified against the official catalogue's ascensionStats: Judge DefensePenetration 0.2 at
+    // level 0 (innate), Ravager 0.1 at level 2. Ravager's entry only suppresses the catalogue
+    // text ("This Unit has 10% defense penetration"); ours reads "ignores 10% of Defense".
+    ...['Judge', 'Ravager'].map((ship) => ({
+        ship,
+        rules: ['defense-penetration-innate'],
+        reason: 'Defense penetration is the refit ascension stat the ship already carries.',
+        ...(ship === 'Ravager' ? { catalogueOnly: true } : {}),
     })),
 
     // Burst-explosion reference — not an accumulate-detonate application.
