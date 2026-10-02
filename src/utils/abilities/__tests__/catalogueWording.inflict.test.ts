@@ -179,15 +179,6 @@ describe('inflict/apply vocabulary — "after it inflicts a debuff" needs a land
         expect(rage?.triggerApplicationFilter).toBe('inflict');
         expect(rage?.config).toMatchObject({ buffName: 'Marauder Rage II', duration: 3 });
     });
-
-    it('Ripper passive R2: the all-allies buff extension stays a cast effect', () => {
-        const text =
-            'This Unit gains <unit-skill>Marauder Rage II</unit-skill> for 3 turns after it inflicts a debuff.<br /><br />All allies extend their active <unit-aid>Buffs</unit-aid> by 1 turn.';
-        expect(sigs(parseSlot('passive', text))).toEqual([
-            'buff|self|on-debuff-inflicted|Marauder Rage II',
-            'extend-status|all-allies|on-cast|extend-status',
-        ]);
-    });
 });
 
 // "When this Unit inflicts a Bomb it gains Stealth" reacts to one of HER Bombs landing — not to any

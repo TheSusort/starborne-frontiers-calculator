@@ -124,7 +124,6 @@ import {
     parsePurge,
     parseBuffSteal,
     detectTopUpBuffSteal,
-    detectPassiveVoicePurge,
     detectPurgeStripsShield,
     parseHealNoCrit,
     parseSkillEffects,
@@ -473,8 +472,8 @@ export const UNIT_HAS_DEFENSE_PENETRATION_RE =
  *    a capped scaling modifier instead of a flat bonus.
  *  - "X% defense penetration for each buff it has, up to a max of Y%" → a per-self-buff
  *    scaling defense-penetration modifier (capped).
- *  - flat "This skill has X% defense penetration" / "bypassing X% of the enemy Defense" → a
- *    flat defense-penetration modifier (Chakara's charged). A unit-subject "This Unit has X%
+ *  - flat "This skill has X% defense penetration" → a flat defense-penetration modifier
+ *    (Chakara's charged). A unit-subject "This Unit has X%
  *    defense penetration" describes the refit stat and mints nothing (see the branch below).
  */
 function parseModifiers(text: string): ParsedModifier[] {
@@ -772,6 +771,9 @@ function parseModifiers(text: string): ParsedModifier[] {
         // Judge's innate 20%, Ravager's refit-2 10%), which already reaches the ship's stats, so
         // it mints nothing — a modifier on top would count the penetration twice. A skill-scoped
         // "This skill has X% defense penetration" is not a ship stat and mints the modifier.
+        // parseModifiers runs PER SKILL ROW, so a charged-skill modifier (Chakara) folds into
+        // `dmgStats.effectivePen` only on the turn THAT skill fires (playerTurn.ts's
+        // `selfModifierAbilities = firingSkill.abilities + passiveSkill.abilities`).
         const flatPenM = plain.match(/(\d+(?:\.\d+)?)%\s+defense penetration(?!\s+for each)/i);
         const describesShipStat =
             !!flatPenM &&
@@ -785,27 +787,6 @@ function parseModifiers(text: string): ParsedModifier[] {
                 target: 'self',
                 conditions: [],
             });
-        } else if (!flatPenM) {
-            // Chakara's charged: "…bypassing 20% of the enemy Defense…". Distinct
-            // wording from "X% defense penetration" above; same defensePenetration modifier
-            // shape. Because parseModifiers runs PER SKILL ROW (abilitiesFromText is called once
-            // per Active/Charge/Passive text), this is inherently a PER-SKILL modifier — it only
-            // folds into `dmgStats.effectivePen` on the turn THIS skill fires (playerTurn.ts's
-            // `selfModifierAbilities = firingSkill.abilities + passiveSkill.abilities`), not a
-            // permanent standing pen like the flat-text branch above (which corpus rows only ever
-            // carry on a PASSIVE, so the distinction is inert there — passives fire every turn).
-            const bypassM = plain.match(
-                /bypassing\s+(\d+(?:\.\d+)?)%\s+of\s+the\s+enemy\s+defense/i
-            );
-            if (bypassM) {
-                out.push({
-                    channel: 'defensePenetration',
-                    value: parseFloat(bypassM[1]),
-                    isMultiplicative: false,
-                    target: 'self',
-                    conditions: [],
-                });
-            }
         }
     }
 
@@ -1861,7 +1842,7 @@ function abilitiesFromText(
     //  - Lev (charged): "If a critical hit occurs, all hit enemies have their debuffs extended by
     //    1 turn and all allies are granted Crit Power Up II for 1 turn." → 'all-enemies'; the
     //    later "all allies are granted…" clause is outside the prefix.
-    //  - No subject: the fallbacks in `extendTarget` below.
+    //  - No subject: the fallback in `extendTarget` below.
     //
     // Lev's crit gate stays on trigger:'on-cast' with a live-derivable `self-crit` CONDITION
     // (abilityStatusGating.ts LIVE_SUBJECTS), the same gate the crit-power extend-dot below
@@ -1885,22 +1866,20 @@ function abilitiesFromText(
         // clause ("...and extends Stealth by 1 turn" — the subject is inherited, not restated), so
         // the no-subject fallback for a BUFF-kind extension is 'all-allies' — matching Ripper's
         // explicit "all allies active buffs are extended" semantics and letting the runtime's
-        // existing allyRoster + supportRecipients pattern-scoping apply. A DEBUFF-kind extension's
-        // no-subject fallback stays 'enemy' (a single hit target). An INFLICTED-scope extension
-        // (Asphyxiator) names no scope word at all — its object is "the debuffs this cast
-        // inflicted", which spans every enemy the cast landed one on, not just the anchor. Owner
-        // ruling 2026-09-02: a crit on the main target extends the adjacent enemies' freshly
-        // inflicted debuffs too. So it takes the cast's whole hit footprint, which is what
-        // 'all-enemies' resolves to at the seam (aoeVictimIds).
+        // existing allyRoster + supportRecipients pattern-scoping apply. An INFLICTED-scope
+        // extension (Asphyxiator) names no scope word at all — its object is "the debuffs this
+        // cast inflicted", which spans every enemy the cast landed one on, not just the anchor.
+        // Owner ruling 2026-09-02: a crit on the main target extends the adjacent enemies'
+        // freshly inflicted debuffs too. So it takes the cast's whole hit footprint, which is what
+        // 'all-enemies' resolves to at the seam (aoeVictimIds). A no-subject DEBUFF-kind
+        // extension takes the same footprint, as Lev's "all hit enemies" does.
         const extendTarget: AbilityTarget = /\ball\s+allies\b/i.test(extendSubjectPrefix)
             ? 'all-allies'
             : /\ball\s+(?:hit\s+)?enemies\b/i.test(extendSubjectPrefix)
               ? 'all-enemies'
-              : extendStatus.scope === 'inflicted'
+              : extendStatus.scope === 'inflicted' || extendStatus.statusKind === 'debuff'
                 ? 'all-enemies'
-                : extendStatus.statusKind === 'buff'
-                  ? 'all-allies'
-                  : 'enemy';
+                : 'all-allies';
         // Two corpus wordings for the same self-crit gate: Lev's "if a critical hit occurs" and
         // Asphyxiator's "applies a Debuff with a Critical hit". Both mean THIS cast crit, which
         // is what the live-derivable 'self-crit' condition reads (ctx.roundCrit).
@@ -2770,15 +2749,8 @@ function abilitiesFromText(
     // detectRepairedThisRoundCondition below); the engine cast path evaluates it against
     // ConditionContext.targetRepairedThisRound.
     //
-    // I6: the passive-voice "is Purged of all buffs" form (Lodolite charged) is picked up by
-    // detectPassiveVoicePurge, merged in ONLY for the on-cast (active/charged) slots — the
-    // passive-slot trigger-detection loop below never sees it (see detectPassiveVoicePurge's
-    // doc comment for why that separation matters). Amartya count-scaling under-counts to 1 —
-    // SAFE under direction.
-    const purgeMatches =
-        slot === 'active' || slot === 'charged'
-            ? [...parsePurge(text), ...detectPassiveVoicePurge(text)]
-            : parsePurge(text);
+    // Amartya count-scaling under-counts to 1 — SAFE under direction.
+    const purgeMatches = parsePurge(text);
     for (const p of purgeMatches) {
         const purgePos = text.search(/purge/i);
         const passiveTrigger: AbilityTrigger | undefined =

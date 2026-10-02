@@ -2011,17 +2011,13 @@ export function parseExtendDoT(text: string | null | undefined): number | null {
 
 // Generic buff/debuff DURATION EXTENSION — the inverse of parseDebuffDurationReduction, and a
 // sibling of EXTEND_ALL_DOT_PASSIVE_RE (which is DoT-tick-store-only and requires the literal
-// "Damage Over Time" phrase). Two surface forms:
-//   active voice:  "extends [their] active <Buffs|Debuffs> by N turn(s)"
-//   passive voice: "<buffs|debuffs> [are] extended by N turn(s)"           (Lev, Ripper)
-// Both carry a negative lookahead for "damage over time", so a DoT-extend clause in the same
-// period-scoped segment never also matches here (mirrors the audit rule's own DoT exclusion).
-const EXTEND_STATUS_ACTIVE_RE =
-    /extends?\b(?![^.]*\bdamage over time\b)[^.]*?\bactive\s+(buffs|debuffs)\b[^.]*?\bby\s+(\d+)\s+turns?/i;
+// "Damage Over Time" phrase). Surface form: "<buffs|debuffs> [are] extended by N turn(s)" (Lev,
+// Ripper). A negative lookahead for "damage over time" keeps a DoT-extend clause in the same
+// period-scoped segment from also matching here (mirrors the audit rule's own DoT exclusion).
 const EXTEND_STATUS_PASSIVE_RE =
     /\b(buffs|debuffs)\b(?![^.]*\bdamage over time\b)[^.]*?\bextended\b[^.]*?\bby\s+(\d+)\s+turns?/i;
 // Asphyxiator: "After this Unit inflicts a debuff with a critical hit, the newly inflicted debuff
-// is extended by 1 turn". The two arms above grow every status ALREADY STANDING on the target;
+// is extended by 1 turn". The arm above grows every status ALREADY STANDING on the target;
 // this one grows only what the cast just inflicted, which is a different scope, not a different
 // mechanic — hence `scope: 'inflicted'`, the same axis `extend-dot` carries for Valerian's twin
 // wording. Tried FIRST, so a hypothetical plural "the newly inflicted debuffs are extended" is
@@ -2039,7 +2035,7 @@ const EXTEND_STATUS_INFLICTED_RE =
     /\bnewly\s+inflicted\s+(buff|debuff)s?\b(?![^.]*\b(?:damage over time|crit(?:ical)?\s*power)\b)[^.]*?\bextended\b[^.]*?\bby\s+(\d+)\s+turns?/i;
 
 // #363 (Fuying): "extends <unit-skill>Stealth</unit-skill> by 1 turn" — a NAMED status, where the
-// two arms above require a literal 'buffs'/'debuffs' token. Matched against the TAGGED text so the
+// generic arms above require a literal 'buffs'/'debuffs' token. Matched against the TAGGED text so the
 // <unit-skill> boundary identifies the status name exactly, rather than guessing where a bare
 // capitalised phrase ends. (Same reasoning as maskStatusNameRepairs in #362: the tag boundary is
 // information, and stripping tags first throws it away.)
@@ -2053,8 +2049,8 @@ const EXTEND_NAMED_STATUS_RE =
  * docs/ship-skills.csv.
  *
  * #363 (Fuying): a NAMED arm ("extends <unit-skill>Stealth</unit-skill> by 1 turn") is tried
- * FIRST, against the ORIGINAL (tagged) text — it is strictly more specific than the two generic
- * arms below, which require a literal 'buffs'/'debuffs' token and so can never match it.
+ * FIRST, against the ORIGINAL (tagged) text — it is strictly more specific than the generic arms
+ * below, which require a literal 'buffs'/'debuffs' token and so can never match it.
  *
  * The named arm's captured phrase is resolved through `resolveBuffName`, so an UNRECOGNISED name
  * emits NO `buffName` at all rather than a literal one. That is not cosmetic. `buffName` is matched
@@ -2090,7 +2086,7 @@ export function parseExtendStatus(text: string | null | undefined): {
     // generic debuff one.
     const passiveIsDoT =
         passive !== null && /\bdamage over time\s+$/i.test(plain.slice(0, passive.index));
-    const m = inflicted ?? EXTEND_STATUS_ACTIVE_RE.exec(plain) ?? (passiveIsDoT ? null : passive);
+    const m = inflicted ?? (passiveIsDoT ? null : passive);
     if (!m) return null;
     const kind: 'buff' | 'debuff' = m[1].toLowerCase().startsWith('debuff') ? 'debuff' : 'buff';
     return {
@@ -5152,9 +5148,8 @@ const CLEANSE_RE = /\bcleanses?\s+(\d+(?=\b|[a-z])|all\b)/gi;
  * Parses purge grants ("purges N buffs from <recipient>"). Purge is enemy-targeting only.
  * Target from the sentence: "all enemies" → all-enemies, else "enemy".
  * explicitTarget is always true (purge has no support-flip, kept for shape parity with parseCleanse).
- * Does NOT match "cleanses". Passive-voice "is Purged of all buffs" has no "purges" token and is
- * excluded naturally — see detectPassiveVoicePurge (I6) for that shape, merged in by callers
- * (buildShipAbilities) only on the active/charged slots. Reference data: docs/ship-skills.csv.
+ * Does NOT match "cleanses", nor a passive-voice "is Purged of" (no "purges" token).
+ * Reference data: docs/ship-skills.csv.
  *
  * NOTE: parsePurge is context-free. Reactive/conditional purge text in passives (Sefuba p2,
  * Faust, Iridium, etc.) will produce matches here. The active/charged slot-gate in
@@ -5293,55 +5288,6 @@ export function detectTopUpBuffSteal(
     return [{ buffName: m[2].trim(), upToStacks }];
 }
 
-// I6: "<subject> is Purged of (N|all) buffs" — Lodolite's charged skill: "Then, the enemy with
-// the most Buffs is Purged of all buffs." No "purges" verb token, so the active-verb-only
-// PURGE_RE does not match it (by design — see PURGE_RE's comment). Kept as a SEPARATE detector
-// (rather than folded into PURGE_RE/parsePurge) because parsePurge is context-free and consumed
-// for every slot of every ship (including passive text scanned for REACTIVE purge triggers, e.g.
-// Sefuba/Rhodium/Faust/Salvation/Nayra) — widening that shared, corpus-wide regex risks absorbing
-// a future passive's self-referential "when this Unit is Purged of a buff…" (an INCOMING purge
-// reaction, a different semantic than Lodolite's outgoing "the enemy … is Purged"). This detector
-// is wired ONLY into the active/charged on-cast path (buildShipAbilities), never the passive-slot
-// trigger-detection loop, so it cannot pick up a hypothetical passive-voice self-reaction even if
-// the corpus grows one later. Corpus today has exactly ONE "is Purged" occurrence (Lodolite;
-// verified via `grep -io "is purged[^.]*" docs/ship-skills.csv`).
-const PASSIVE_VOICE_PURGE_RE = /\bis\s+purged\s+of\s+(\d+|all)\s+buffs?\b/gi;
-
-/**
- * Parses the passive-voice purge shape ("<subject> is Purged of N/all buffs") — the counterpart
- * to parsePurge's active-verb form, restricted to on-cast (active/charged) callers. Same result
- * shape as parsePurge so callers can merge the two lists. Reference data: docs/ship-skills.csv
- * (Lodolite charged skill).
- */
-export function detectPassiveVoicePurge(text: string | null | undefined): {
-    count: number | 'all';
-    target: 'enemy' | 'all-enemies';
-    explicitTarget: boolean;
-    countScaling?: { stat: 'critDamage'; per: number };
-}[] {
-    if (!text) return [];
-    const plain = stripUnitTags(text).replace(/<br\s*\/?>/gi, '. ');
-    const results: {
-        count: number | 'all';
-        target: 'enemy' | 'all-enemies';
-        explicitTarget: boolean;
-        countScaling?: { stat: 'critDamage'; per: number };
-    }[] = [];
-    PASSIVE_VOICE_PURGE_RE.lastIndex = 0;
-    let m: RegExpExecArray | null;
-    while ((m = PASSIVE_VOICE_PURGE_RE.exec(plain)) !== null) {
-        const raw = m[1].toLowerCase();
-        const count: number | 'all' = raw === 'all' ? 'all' : parseInt(raw, 10);
-        if (count !== 'all' && (!count || isNaN(count))) continue;
-        const sentence = sentenceAround(plain, m.index).toLowerCase();
-        const target: 'enemy' | 'all-enemies' = /all\s+enemies/.test(sentence)
-            ? 'all-enemies'
-            : 'enemy';
-        results.push({ count, target, explicitTarget: true });
-    }
-    return results;
-}
-
 // I6: "When this Unit Purges a buff from an enemy, it removes N% of the enemy's shield" —
 // Lodolite's legendary-refit (R4) passive. Scoped to the SAME self-purge-reactive phrase shape as
 // ENEMY_PURGED_RE ("when this unit … purges … enem[y]"), extended to require a shield-percentage
@@ -5361,7 +5307,7 @@ export function detectPurgeStripsShield(text: string | null | undefined): boolea
     if (!text) return false;
     // Normalize before matching (strip unit tags + <br/> → '. ') so the RE's [^.;]* sentence
     // scoping can't span an un-punctuated <br/> into an unrelated clause — matches the
-    // convention used by parsePurge/detectPassiveVoicePurge above.
+    // convention used by parsePurge above.
     const plain = stripUnitTags(text).replace(/<br\s*\/?>/gi, '. ');
     const m = PURGE_STRIPS_SHIELD_RE.exec(plain);
     return m !== null && m[1] === '100';

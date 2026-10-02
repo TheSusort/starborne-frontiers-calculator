@@ -38,7 +38,6 @@ import {
     parseCleanse,
     parsePurge,
     parseBuffSteal,
-    detectPassiveVoicePurge,
     detectPurgeStripsShield,
     parseShieldStrip,
     parseHealNoCrit,
@@ -1363,16 +1362,11 @@ describe('parseExtendDoT', () => {
 });
 
 describe('parseExtendStatus', () => {
-    it('parses Sokol active-voice debuff extend', () => {
-        expect(parseExtendStatus('extends active <unit-aid>Debuffs</unit-aid> by 1 turn')).toEqual({
-            turns: 1,
-            statusKind: 'debuff',
-        });
-    });
-
-    it('parses Ripper active-voice buff extend', () => {
+    it('parses Ripper passive-voice buff extend', () => {
         expect(
-            parseExtendStatus('All allies extend their active <unit-aid>Buffs</unit-aid> by 1 turn')
+            parseExtendStatus(
+                'When this Unit inflicts a <unit-aid>debuff</unit-aid> with its active or charged skills, it also inflicts <unit-skill>Inferno II</unit-skill> for 2 turns and all allies active <unit-skill>buffs are extended by 1 turn</unit-skill>.'
+            )
         ).toEqual({ turns: 1, statusKind: 'buff' });
     });
 
@@ -1391,7 +1385,7 @@ describe('parseExtendStatus', () => {
         ).toBeNull();
     });
 
-    // Asphyxiator's refit passive. Unlike Sokol/Ripper/Lev — which grow every status already
+    // Asphyxiator's refit passive. Unlike Ripper/Lev — which grow every status already
     // standing on the target — this one grows only what the cast just inflicted, so it carries
     // scope 'inflicted' (the same axis extend-dot uses for Valerian's twin wording).
     it("parses Asphyxiator's 'the newly inflicted debuff is extended' as inflicted-scope", () => {
@@ -1402,9 +1396,11 @@ describe('parseExtendStatus', () => {
         ).toEqual({ turns: 1, statusKind: 'debuff', scope: 'inflicted' });
     });
 
-    it('leaves the standing-status extends unscoped (Sokol/Ripper/Lev keep extending everything)', () => {
+    it('leaves the standing-status extends unscoped (Ripper/Lev keep extending everything)', () => {
         expect(
-            parseExtendStatus('extends active <unit-aid>Debuffs</unit-aid> by 1 turn')?.scope
+            parseExtendStatus(
+                'When this Unit inflicts a <unit-aid>debuff</unit-aid> with its active or charged skills, it also inflicts <unit-skill>Inferno II</unit-skill> for 2 turns and all allies active <unit-skill>buffs are extended by 1 turn</unit-skill>.'
+            )?.scope
         ).toBeUndefined();
         expect(
             parseExtendStatus('all hit enemies have their debuffs extended by 1 turn')?.scope
@@ -4338,44 +4334,9 @@ describe('parseBuffSteal (PR10)', () => {
     });
 });
 
-// I6: Lodolite charged purge + legendary-refit shield strip. The R4 passive is verbatim from
-// docs/ship-skills.csv. The charged constant is NOT catalogue text: the catalogue's Lodolite
-// purges in the active voice ("this Unit purges all buffs from enemy with the most buffs"), and no
-// catalogue row carries the passive-voice "is Purged of" form detectPassiveVoicePurge reads.
-const LODOLITE_CHARGED_RAW =
-    "This Unit deals <unit-damage>310% damage</unit-damage> and additional damage equal to <unit-damage>10%</unit-damage> of this Unit's max HP. Then, the enemy with the most <unit-aid>Buffs</unit-aid> is Purged of all buffs.<br />This attack can target <unit-aid>Stealthed</unit-aid> enemies.";
+// I6: Lodolite legendary-refit shield strip. The R4 passive is verbatim from docs/ship-skills.csv.
 const LODOLITE_R4_PASSIVE_RAW =
     "This Unit ignores <unit-skill>Stealth</unit-skill> effects.<br /><br />This Unit deals <unit-damage>10% more critical damage</unit-damage> to defenders, all allies deal <unit-damage>15% more direct damage</unit-damage> to enemies with <unit-skill>Concentrate Fire</unit-skill> or <unit-skill>Stealth</unit-skill>.<br /><br />When this Unit <unit-aid>purges a buff</unit-aid> from an enemy, it <unit-damage>removes 100%</unit-damage> of the enemy's shield.";
-
-describe('detectPassiveVoicePurge (I6 — Lodolite charged purge)', () => {
-    it('parses the bare phrase "is Purged of all buffs" → count all, target enemy', () => {
-        expect(detectPassiveVoicePurge('is Purged of all buffs')).toEqual([
-            { count: 'all', target: 'enemy', explicitTarget: true },
-        ]);
-    });
-
-    it('parses a numeric count: "is purged of 2 buffs"', () => {
-        expect(detectPassiveVoicePurge('is purged of 2 buffs')).toEqual([
-            { count: 2, target: 'enemy', explicitTarget: true },
-        ]);
-    });
-
-    it('parses Lodolite charged RAW text (with tags) → count all, target enemy', () => {
-        expect(detectPassiveVoicePurge(LODOLITE_CHARGED_RAW)).toEqual([
-            { count: 'all', target: 'enemy', explicitTarget: true },
-        ]);
-    });
-
-    it('returns [] for text with no passive-voice purge phrase', () => {
-        expect(detectPassiveVoicePurge('This Unit purges 1 buff from the enemy.')).toEqual([]);
-        expect(detectPassiveVoicePurge('This Unit deals 100% damage.')).toEqual([]);
-    });
-
-    it('returns [] for null/undefined', () => {
-        expect(detectPassiveVoicePurge(null)).toEqual([]);
-        expect(detectPassiveVoicePurge(undefined)).toEqual([]);
-    });
-});
 
 describe('detectPurgeStripsShield (I6 — Lodolite legendary refit)', () => {
     it('recognizes the RAW Lodolite R4 passive clause ("removes 100% of the enemy\'s shield")', () => {

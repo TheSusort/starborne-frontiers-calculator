@@ -339,15 +339,6 @@ describe('3.22 kits — passives', () => {
             config: { statusKind: 'buff', turns: 1 },
         });
     });
-
-    it("Ripper OLD R2: the standalone 'All allies extend…' sentence stays an on-cast extension", () => {
-        const text =
-            'This Unit gains <unit-skill>Marauder Rage II</unit-skill> for 3 turns after it inflicts a debuff.<br /><br />All allies extend their active <unit-aid>Buffs</unit-aid> by 1 turn.';
-        const ext = only(parseSlot('passive', text), 'extend-status');
-        expect(ext.trigger).toBe('on-cast');
-        expect(ext.triggerSourceSlotFilter).toBeUndefined();
-        expect(ext.oncePerCast).toBeUndefined();
-    });
 });
 
 describe('3.22 kits — Akula', () => {

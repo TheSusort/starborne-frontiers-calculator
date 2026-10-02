@@ -136,9 +136,8 @@ const RULES: Rule[] = [
         id: 'extend-status',
         severity: 'high',
         // Generic buff/debuff duration EXTEND (the inverse of extend-dot and of
-        // debuff-duration-reduction below): "extends active Buffs/Debuffs by N turn(s)"
-        // (Sokol/Ripper, active voice) or "debuffs extended by N turn(s)" (Lev, passive
-        // voice). Excludes the DoT-specific extend-dot wording so the two rules don't
+        // debuff-duration-reduction below): "<buffs|debuffs> extended by N turn(s)" (Lev,
+        // Ripper). Excludes the DoT-specific extend-dot wording so the two rules don't
         // double-count the same clause.
         keyword: (t) =>
             /extend/i.test(t) &&
@@ -197,13 +196,10 @@ const RULES: Rule[] = [
     {
         id: 'defense-penetration',
         severity: 'medium',
-        // Also matches "bypassing N% of the enemy Defense" (Chakara) — a
-        // differently-worded synonym for the same defensePenetration modifier as the
-        // "X% defense penetration" phrasing. The unit-subject "has X% defense penetration" is
-        // `defense-penetration-innate`'s, never this rule's.
+        // The unit-subject "has X% defense penetration" is `defense-penetration-innate`'s, never
+        // this rule's.
         keyword: (t) =>
-            (/defense\s+penetration/i.test(t) && !UNIT_HAS_DEFENSE_PENETRATION_RE.test(t)) ||
-            /bypassing\s+\d+(?:\.\d+)?%\s+of\s+the\s+enemy\s+defense/i.test(t),
+            /defense\s+penetration/i.test(t) && !UNIT_HAS_DEFENSE_PENETRATION_RE.test(t),
         handled: (a) => hasModifier(a, 'defensePenetration'),
     },
     {

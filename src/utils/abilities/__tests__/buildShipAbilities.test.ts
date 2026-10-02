@@ -386,49 +386,6 @@ describe('buildShipAbilities', () => {
     });
 
     describe('extend-status', () => {
-        it('Sokol charged: damage + extend-status(debuff) on the enemy', () => {
-            const s = ship({
-                chargeSkillText:
-                    'This Unit deals <unit-damage>150% damage</unit-damage> and extends active <unit-aid>Debuffs</unit-aid> by 1 turn.',
-                chargeSkillCharge: 2,
-            });
-            const charged = slot(buildShipAbilities(s).slots, 'charged')!;
-            expect(abilityOfType(charged.abilities, 'damage')!.config).toMatchObject({
-                multiplier: 150,
-            });
-            const extend = abilityOfType(charged.abilities, 'extend-status')!;
-            expect(extend.config).toEqual({
-                type: 'extend-status',
-                statusKind: 'debuff',
-                turns: 1,
-            });
-            expect(extend.target).toBe('enemy');
-            expect(extend.trigger).toBe('on-cast');
-            expect(extend.conditions).toEqual([]);
-        });
-
-        it('Ripper passive R2: Marauder Rage II self-buff STILL present + extend-status(buff) on all-allies', () => {
-            const s = ship({
-                // factory default refits + only secondPassiveSkillText → getShipSkillRows picks Passive R2
-                secondPassiveSkillText:
-                    'This Unit gains <unit-skill>Marauder Rage II</unit-skill> for 3 turns after it inflicts a debuff.<br /><br />All allies extend their active <unit-aid>Buffs</unit-aid> by 1 turn.',
-            });
-            const passive = slot(buildShipAbilities(s).slots, 'passive')!;
-            const rage = abilityOfType(passive.abilities, 'buff');
-            expect(rage).toMatchObject({
-                config: { type: 'buff', buffName: 'Marauder Rage II' },
-            });
-            const extend = abilityOfType(passive.abilities, 'extend-status')!;
-            expect(extend.config).toEqual({
-                type: 'extend-status',
-                statusKind: 'buff',
-                turns: 1,
-            });
-            expect(extend.target).toBe('all-allies');
-            expect(extend.trigger).toBe('on-cast');
-            expect(extend.conditions).toEqual([]);
-        });
-
         it('Lev charged: extend-status(debuff) on all-enemies, gated on a self-crit condition', () => {
             const s = ship({
                 chargeSkillText:
@@ -5407,18 +5364,16 @@ describe('buildShipAbilities — epic PR12(A) Nosorog damage-reflection phrasing
 });
 
 // ---------------------------------------------------------------------------
-// Epic PR12(B): Chakara's charged "bypassing 20% of the enemy Defense" → a per-skill
-// defensePenetration modifier (the `defensePenetration` ModifierChannel already exists;
-// this wires the "bypassing X% of the enemy Defense" phrasing distinct from the existing
-// "X% defense penetration" wording). Because `abilitiesFromText` runs per skill ROW, the
-// resulting modifier ability is scoped to the CHARGED skill's own cast (folded via
-// `firingSkill.abilities` in playerTurn.ts) — not a standing self-buff.
+// Chakara's charged "This skill has 20% defense penetration" → a per-skill defensePenetration
+// modifier. Because `abilitiesFromText` runs per skill ROW, the resulting modifier ability is
+// scoped to the CHARGED skill's own cast (folded via `firingSkill.abilities` in playerTurn.ts) —
+// not a standing self-buff.
 // ---------------------------------------------------------------------------
-describe('buildShipAbilities — epic PR12(B) Chakara "bypassing N% of the enemy Defense"', () => {
+describe('buildShipAbilities — Chakara "This skill has N% defense penetration"', () => {
     it('Chakara charged: a self defensePenetration modifier (value 20) alongside the damage + additional-damage + purge abilities', () => {
         const s = ship({
             chargeSkillText:
-                'This Unit deals <unit-damage>220% damage</unit-damage> with an additional amount equal to <unit-damage>100%</unit-damage> of its Defense, bypassing 20% of the enemy Defense, and <unit-aid>purges 1</unit-aid> buff from the enemy.',
+                'This Unit deals <unit-damage>220% damage</unit-damage> with additional damage equal to <unit-damage>100%</unit-damage> of its defense and <unit-skill>purges 1 buff</unit-skill> from the enemy.<br /><br />This skill has <unit-damage>20% defense penetration</unit-damage>.',
             chargeSkillCharge: 2,
         });
         const charged = slot(buildShipAbilities(s).slots, 'charged')!;
@@ -5451,7 +5406,7 @@ describe('buildShipAbilities — epic PR12(B) Chakara "bypassing N% of the enemy
         const s = ship({
             activeSkillText: 'This Unit deals <unit-damage>160% damage</unit-damage>.',
             chargeSkillText:
-                'This Unit deals <unit-damage>220% damage</unit-damage>, bypassing 20% of the enemy Defense.',
+                'This Unit deals <unit-damage>220% damage</unit-damage> with additional damage equal to <unit-damage>100%</unit-damage> of its defense and <unit-skill>purges 1 buff</unit-skill> from the enemy.<br /><br />This skill has <unit-damage>20% defense penetration</unit-damage>.',
             chargeSkillCharge: 2,
         });
         const active = slot(buildShipAbilities(s).slots, 'active')!;

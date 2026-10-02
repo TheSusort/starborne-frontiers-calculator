@@ -369,13 +369,10 @@ describe('damage, defence and charge clauses — defense penetration describes t
     });
 
     it('Chakara charged: "This skill has 20% defense penetration" still mints the skill-scoped pen', () => {
-        const old =
-            'This Unit deals <unit-damage>220% damage</unit-damage> with an additional amount equal to <unit-damage>100%</unit-damage> of its Defense, bypassing 20% of the enemy Defense, and <unit-aid>purges 1</unit-aid> buff from the enemy.';
         const next =
             'This Unit deals <unit-damage>220% damage</unit-damage> with additional damage equal to <unit-damage>100%</unit-damage> of its defense and <unit-skill>purges 1 buff</unit-skill> from the enemy.<br /><br />This skill has <unit-damage>20% defense penetration</unit-damage>.';
         expect(defPen('charged', next).map((a) => a.config)).toEqual([
             { type: 'modifier', channel: 'defensePenetration', value: 20, isMultiplicative: false },
         ]);
-        expect(canonical(parseSlot('charged', next))).toEqual(canonical(parseSlot('charged', old)));
     });
 });

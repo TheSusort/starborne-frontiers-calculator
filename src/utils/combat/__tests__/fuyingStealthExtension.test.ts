@@ -71,19 +71,6 @@ describe('parseExtendStatus — named arm (#363)', () => {
         });
     });
 
-    it('leaves the generic active-voice arm alone', () => {
-        expect(parseExtendStatus('All allies extend their active Buffs by 1 turn.')).toEqual({
-            turns: 1,
-            statusKind: 'buff',
-        });
-    });
-
-    it('leaves the generic active-voice debuff arm alone', () => {
-        expect(
-            parseExtendStatus('This Unit deals 150% damage and extends active Debuffs by 1 turn.')
-        ).toEqual({ turns: 1, statusKind: 'debuff' });
-    });
-
     it('leaves the generic passive-voice arm alone (Lev)', () => {
         expect(
             parseExtendStatus(
