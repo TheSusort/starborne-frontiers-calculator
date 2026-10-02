@@ -11,6 +11,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Ship data: Enforcer, Orel and Yazid now have their correct roles.',
     'Ship data: Suku and Yuyan now have their correct affinities.',
     'Ship data: Mender and Yin Jian now show their own portraits.',
+    'Reference ships: Liberator, Prophet and others no longer double their shield penetration.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
