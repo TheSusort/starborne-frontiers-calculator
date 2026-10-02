@@ -103,6 +103,39 @@ describe('timing phrases — the timing half of a mixed row', () => {
     });
 });
 
+// User ruling (2026-10-02): "Start of combat, This Unit gains Taunt" is the same one-time
+// pre-combat grant as "At the start of combat, this Unit gains Taunt".
+describe('timing phrases — a bare "Start of combat" is the pre-combat grant', () => {
+    const OLD =
+        'This Unit takes 35% less damage from Critical hits, and this effect does not stack with similar effects.<br /><br />When directly damaged, This Unit <unit-aid>purges 2</unit-aid> buffs from the enemy and inflicts <unit-skill>Speed Down II</unit-skill> for 1 turn.<br /><br />Start of combat, This Unit gains <unit-skill>Taunt</unit-skill> for 1 turn.';
+    const NEW =
+        'When directly damaged, this Unit <unit-skill>purges 2 buffs</unit-skill> from the enemy and inflicts <unit-skill>Speed Down II</unit-skill> for 1 turn.<br /><br />This Unit has <unit-damage>35% damage reduction</unit-damage> from critical hits.<br /><br />At the start of combat, this Unit gains <unit-skill>Taunt</unit-skill> for 1 turn.';
+
+    it('Iridium passive R2: our Taunt grant is the pre-combat grant, with no cast-time twin', () => {
+        const abilities = parseSlot('passive', OLD);
+        const s = sigs(abilities);
+        expect(s).toContain('buff|self|pre-combat|Taunt');
+        expect(s).not.toContain('buff|self|on-cast|Taunt');
+        expect(s).not.toContain('control|self|on-cast|control');
+        expect(
+            abilities.find((a) => a.type === 'buff' && a.trigger === 'pre-combat')?.config
+        ).toEqual({
+            type: 'buff',
+            buffName: 'Taunt',
+            parsedEffects: {},
+            stacks: 1,
+            isStackable: false,
+            duration: 1,
+        });
+    });
+
+    it('Iridium passive R2: the catalogue wording parses like ours', () => {
+        const before = parseSlot('passive', OLD);
+        expect(sigs(before)).toContain('buff|self|pre-combat|Taunt');
+        expect(canonical(parseSlot('passive', NEW))).toEqual(canonical(before));
+    });
+});
+
 // User ruling R8 (2026-10-01): Nuqtu cleanses a debuff from herself every turn, at most once per
 // round; separately, each time an enemy gains a buff she gains Terran Bolster III (and, at refit 2,
 // a stack of Core Charge I).

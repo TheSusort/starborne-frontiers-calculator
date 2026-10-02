@@ -1863,7 +1863,9 @@ export function detectOtherAllyInflictsGrantTrigger(
 // Regeneration I/II. Deliberately NOT folded into detectReactiveTrigger above: 'pre-combat' is
 // annotation-only (excluded from LIVE_TRIGGERS — see types/abilities.ts), not a live reactive
 // trigger, so it does not belong in a function documented as resolving REACTIVE triggers.
-const START_OF_COMBAT_GRANT_RE = /\bat the start of combat\b/i;
+// The leading "at the" is optional: a bare "Start of combat, This Unit gains Taunt" is the same
+// one-time grant (user ruling 2026-10-02).
+const START_OF_COMBAT_GRANT_RE = /\b(?:at the )?start of combat\b/i;
 
 /**
  * Returns 'pre-combat' when `buffName`'s own clause (same resolution as detectReactiveTrigger)
