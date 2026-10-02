@@ -190,11 +190,13 @@ describe('inflict/apply vocabulary — "When this Unit inflicts a Bomb" reacts t
         ],
     ])(
         'Lingshe passive %s: Stealth rides on-debuff-inflicted narrowed to Bomb',
-        (_r, text, turns) => {
+        (refit, text, turns) => {
             const abilities = parseSlot('passive', text);
             const s = sigs(abilities);
             expect(s).toContain('buff|self|on-debuff-inflicted|Stealth');
             expect(s).not.toContain('buff|self|on-cast|Stealth');
+            // R2/R4's crit-power detonation clause still parses beside the Stealth reaction.
+            if (refit !== 'R0') expect(s).toContain('modifier|self|on-cast|modifier');
             const stealth = abilities.find(
                 (a) => a.config.type === 'buff' && a.config.buffName === 'Stealth'
             );
