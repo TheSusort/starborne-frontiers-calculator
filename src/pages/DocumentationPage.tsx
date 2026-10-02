@@ -3503,7 +3503,7 @@ const DocumentationPage: React.FC = () => {
                                         simulated in the Healing Calculator too, applied as the
                                         damage is dealt or taken round by round. Event-reactive
                                         shields and heals — such as gaining a shield when an enemy
-                                        is debuffed or when the ship applies Stasis — fire from
+                                        is debuffed or when the ship inflicts Stasis — fire from
                                         their real triggers as well.
                                     </p>
                                     <p className="text-theme-text mb-2">

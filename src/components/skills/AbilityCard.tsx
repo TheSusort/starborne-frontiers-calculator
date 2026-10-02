@@ -591,7 +591,7 @@ export const AbilityCard: React.FC<Props> = ({
                         />
                         <Select
                             label="Scope"
-                            helpLabel="All active DoTs grow every standing Corrosion/Inferno; Only DoTs from this cast grow only the ones this skill applies this turn (e.g. Valerian's newly applied Corrosion)."
+                            helpLabel="All active DoTs grow every standing Corrosion/Inferno; Only DoTs from this cast grow only the ones this skill inflicts this turn (e.g. Valerian's newly inflicted Corrosion)."
                             value={config.scope ?? 'active'}
                             options={EXTEND_DOT_SCOPE_OPTIONS}
                             onChange={(value) =>
@@ -631,7 +631,7 @@ export const AbilityCard: React.FC<Props> = ({
                         />
                         <Select
                             label="Scope"
-                            helpLabel="All active grows every standing Buff/Debuff on the recipient; Only from this cast grows just the ones this skill applies this turn, its DoTs included (e.g. Asphyxiator's newly applied Debuff on a critical hit)."
+                            helpLabel="All active grows every standing Buff/Debuff on the recipient; Only from this cast grows just the ones this skill inflicts this turn, its DoTs included (e.g. Asphyxiator's newly inflicted Debuff on a critical hit)."
                             value={config.scope ?? 'active'}
                             options={EXTEND_STATUS_SCOPE_OPTIONS}
                             onChange={(value) =>
