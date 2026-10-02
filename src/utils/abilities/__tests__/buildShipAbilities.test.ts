@@ -4163,7 +4163,7 @@ describe('buildShipAbilities — E4 Amartya crit-power-scaled purge (countScalin
 });
 
 // ---------------------------------------------------------------------------
-// D-PR3 T5: Iridium "takes N% less damage from Critical hits" parser rule.
+// Iridium "has N% damage reduction from critical hits" parser rule.
 // The ability is INERT (no engine consumer yet). Tests confirm the passive slot
 // emits exactly one `incoming-reduction` ability with the correct config and
 // that no other existing abilities on the slot are disturbed.

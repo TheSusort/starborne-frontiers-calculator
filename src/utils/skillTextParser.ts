@@ -226,9 +226,9 @@ export function parseSkillDamage(text: string): number {
         // itself carries the base multiplier, unlike the "damage equal to X% of its Defense/max
         // HP" additional-damage shape, which is always excluded above by the "of its"/"of this"
         // following-text check before reaching this line). Scoped narrowly to a LEADING
-        // "damage equal to" so it can't pick up an unrelated "Shield equal to X%" tag (Malvex,
-        // FrontLine) or an "increases damage by X%" conditional modifier tag (Zeolite, Obsidian)
-        // elsewhere in the corpus, neither of which is base skill damage.
+        // "damage equal to" so it can't pick up an unrelated "Shield equal to X%" tag or a
+        // non-numeric-leading damage-modifier tag ("increases outgoing direct damage"), neither of
+        // which is base skill damage.
         if (isNaN(numeric)) {
             const damageEqualTo = /^damage\s+equal\s+to\s+(\d+(?:\.\d+)?)\s*%/i.exec(match[1]);
             if (damageEqualTo) numeric = parseFloat(damageEqualTo[1]);
@@ -631,8 +631,8 @@ export function parseConditionalDamage(text: string | null | undefined): Conditi
             requiredEnemyType: capType(typed[1]),
         };
     }
-    // "if critical, additionally deals N% damage" → a self-crit conditional bonus on the base
-    // multiplier (Crucialis). The base damage always applies; this N% is added only on a crit
+    // "if a critical hit, deals an additional N% damage" → a self-crit conditional bonus on the
+    // base multiplier (Crucialis). The base damage always applies; this N% is added only on a crit
     // (scaledBonus weights it by crit rate as an expected value).
     const critBonus = CRIT_BONUS_RE.exec(stripUnitTags(text));
     if (critBonus) {
@@ -803,8 +803,9 @@ const CRIT_BONUS_RE =
 
 // "deals N% damage to <targets> with less/more than X% HP" — the damage itself is gated by an
 // enemy-HP threshold (Judge's "deals 60% damage to all enemies with less than 50% HP"). Scoped
-// to "deals … damage to …" so it ignores damage-BONUS phrasings ("increases Damage by 100% to
-// enemies below 30% HP") and scaling caps ("max achieved when below 10% HP").
+// to "deals N% damage to …" so it ignores damage-BONUS phrasings ("deals 100% more damage to
+// enemies with less than 30% HP") and scaling caps ("maximum achieved when the target is below
+// 10% HP").
 const DAMAGE_HP_GATE_RE =
     /deals?\s+\d+(?:\.\d+)?%\s+damage\s+to\b[^.]*?\b(less than|below|under|more than|above|over|greater than)\s+(\d+)%\s*(?:max\s+)?hp/i;
 

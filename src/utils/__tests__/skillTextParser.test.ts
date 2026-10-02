@@ -130,7 +130,7 @@ describe('parseSkillDamage', () => {
         expect(parseSkillDamage(text)).toBe(0);
     });
 
-    it('skips "takes X% less damage" (Malvex p2 — when-Shielded incoming reduction)', () => {
+    it('skips a tag whose content says "X% less damage" (incoming-reduction guard)', () => {
         const text = 'When Shielded, this Ship takes <unit-damage>10% less damage</unit-damage>.';
         expect(parseSkillDamage(text)).toBe(0);
     });

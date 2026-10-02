@@ -720,34 +720,6 @@ function parseModifiers(text: string): ParsedModifier[] {
                 conditions: [incHpScaling.condition],
                 scaling: incHpScaling.scaling,
             });
-        } else {
-            const conditions: Condition[] = [];
-            if (/\benem(?:y|ies)\b[^.]*\bwith\b/i.test(sentence)) {
-                conditions.push(...enemyEffectConditions(enemyEffectNamesFromClause(text)));
-            }
-            // Enemy-type gate (Zeolite's "increases damage by 30% when hitting a Defender").
-            // Verb set differs from the crit-damage branch's template (adds hitting/attacking)
-            // and tolerates an optional article ("hitting a Defender" vs Lodolite's "to defenders").
-            const typeM = sentence.match(
-                /\b(?:to|against|targeting|damaging|attacking|hitting)\s+(?:an?\s+)?(defender|attacker|debuffer|supporter)s?\b/i
-            );
-            if (typeM) {
-                conditions.push({
-                    subject: 'enemy-type',
-                    derivable: true,
-                    requiredEnemyType: (typeM[1].charAt(0).toUpperCase() +
-                        typeM[1].slice(1).toLowerCase()) as EnemyBaseClass,
-                });
-            }
-            const hpCond = hpThresholdFromSentence(sentence);
-            if (hpCond) conditions.push(hpCond);
-            out.push({
-                channel: 'outgoingDamage',
-                value: incValue,
-                isMultiplicative: true,
-                target: incTarget,
-                conditions,
-            });
         }
     }
 
@@ -3237,7 +3209,7 @@ function abilitiesFromText(
         });
     }
 
-    // Wave 4 Task 8 (FrontLine passive): "While Shielded, it gains 2500 additional Defense" — a
+    // FrontLine passive: "while it has an active shield, it gains 2500 defense" — a
     // flat-points DEFENSIVE stat bonus gated on the owner currently holding a shield. No-op
     // marker config (mirrors defense-substitution above) — the engine collects every carrier
     // into a per-owner map and folds `flat` into `substitutedDefenceFor`'s defensive read, gated
