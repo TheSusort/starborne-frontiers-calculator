@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { catalogueUnitPayloadSchema } from '../catalogueSchema';
-import { renderSkillText, toCatalogueTemplate } from '../catalogueMapping';
+import { BASE_STAT_KEYS, renderSkillText, toCatalogueTemplate } from '../catalogueMapping';
 
 const load = (slug: string) =>
     catalogueUnitPayloadSchema.parse(
@@ -147,6 +147,16 @@ describe('toCatalogueTemplate', () => {
     it('keeps ascension stats, or null when the unit has none', () => {
         expect(toCatalogueTemplate(load('aegis')).ascensionStats?.length).toBeGreaterThan(0);
         expect(toCatalogueTemplate({ ...load('aegis'), ascensionStats: [] }).ascensionStats).toBeNull();
+    });
+
+    // Reference ships take penetration from ascension rows alone (`ASCENSION_ONLY_STATS` in
+    // src/utils/ship/referenceShip.ts). If the catalogue's stat block ever carries a penetration,
+    // that rule and this key list change together.
+    it('never writes a penetration into base_stats', () => {
+        expect(BASE_STAT_KEYS.filter((key) => key.includes('penetration'))).toEqual([]);
+        expect(Object.keys(toCatalogueTemplate(load('aegis')).baseStats).sort()).toEqual(
+            [...BASE_STAT_KEYS].sort()
+        );
     });
 });
 

@@ -23,6 +23,7 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator and DPS calculator: Burner's Inferno now lands without a hacking roll.",
     "Combat simulator and healing calculator: Hermes's charged skill now adds a charge to every ally in range.",
     'Combat simulator and healing calculator: Hermes now grants Cheat Death to each ally in range below 40%.',
+    'Combat simulator: reference Liberator, Prophet and others now have correct shield penetration.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
