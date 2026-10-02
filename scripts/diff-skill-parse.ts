@@ -58,7 +58,10 @@ if (dumpPath) {
     const rows = diffCorpora(fromRecs, toRecs, parse);
     if (fixtures) {
         for (const key of fixtures.split(',')) {
-            const [ship, slot, refit] = key.split(':');
+            const parts = key.split(':');
+            const refit = parts.pop();
+            const slot = parts.pop();
+            const ship = parts.join(':');
             const r = rows.find((x) => x.name === ship && x.slot === slot && String(x.refit) === refit);
             if (!r) { console.log(`// ${key}: no row`); continue; }
             console.log(`{ ship: ${JSON.stringify(ship)}, slot: '${slot}', old: ${JSON.stringify(r.currentText)}, new: ${JSON.stringify(r.candidateText)}, expects: ${JSON.stringify(r.lost[0] ?? '')} },`);

@@ -134,6 +134,12 @@ describe('instead-replacement rule', () => {
             'This Unit deals <unit-damage>115% damage</unit-damage>, if it is a full moon it instead deals <unit-damage>155% damage</unit-damage>.';
         expect(rulesFor(text)).toContain('instead-replacement');
     });
+
+    it('still flags an unmodelled "instead deals" beside an enemy-type gate with no replacement delta', () => {
+        const text =
+            'This Unit deals <unit-damage>115% damage</unit-damage>, if it is a full moon it instead deals <unit-damage>155% damage</unit-damage>. If the target is a defender, this Unit deals <unit-damage>20% damage</unit-damage>.';
+        expect(rulesFor(text)).toContain('instead-replacement');
+    });
 });
 
 describe('findingsForShip reads catalogue status-name spellings', () => {

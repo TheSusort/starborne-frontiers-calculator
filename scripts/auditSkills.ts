@@ -292,9 +292,10 @@ const RULES: Rule[] = [
             );
             const hasAnyOfReplacement = dmg.some((x) => x.conditions.some((c) => c.anyOf));
             // The defender-gated shape ("if the target is a defender it instead deals N%"): handled
-            // when any damage ability carries an `enemy-type` condition.
-            const hasEnemyTypeGatedReplacement = dmg.some((x) =>
-                x.conditions.some((c) => c.subject === 'enemy-type')
+            // when a damage ability carries BOTH an `enemy-type` condition AND `scaling` (the
+            // replacement delta); a gate alone does not model the "instead" branch.
+            const hasEnemyTypeGatedReplacement = dmg.some(
+                (x) => x.scaling !== undefined && x.conditions.some((c) => c.subject === 'enemy-type')
             );
             return (hasNegatedBase && hasAnyOfReplacement) || hasEnemyTypeGatedReplacement;
         },
