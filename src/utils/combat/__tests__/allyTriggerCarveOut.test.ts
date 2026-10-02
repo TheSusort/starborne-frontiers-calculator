@@ -56,10 +56,11 @@ const OWNER_INCLUSIVE_TRIGGERS = new Set<AbilityTrigger>([
 const OWNER_EXCLUDED_TRIGGERS = new Set<AbilityTrigger>(['on-other-ally-debuff-inflicted']);
 
 // Sentinel's passive reads "When another ally critically hits an enemy ..." but resolves to the
-// owner-inclusive `on-ally-crit`. Sentinel cannot crit an enemy at all (her passive damage cannot
-// critically hit, and her active and charged are pure buffs), so the owner-inclusive trigger never
-// fires for her own crit and there is no own-crit case to model. The exemption is this one ship,
-// this one trigger, and her passive row; any other ship or trigger still fails the census.
+// owner-inclusive `on-ally-crit`. Sentinel cannot crit an enemy at all (its only damage is that
+// passive, which cannot critically hit; its active and charged are pure buffs), so the
+// owner-inclusive trigger never fires for its own crit and there is no own-crit case to model.
+// The exemption is this one ship, this one trigger, and its passive row; any other ship or
+// trigger still fails the census.
 const OWNER_INCLUSIVE_EXEMPT_ROWS: { ship: string; trigger: AbilityTrigger; slot: string }[] = [
     { ship: 'Sentinel', trigger: 'on-ally-crit', slot: 'passive' },
 ];
