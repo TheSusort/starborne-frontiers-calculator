@@ -179,9 +179,15 @@ describe('syncGate', () => {
     });
 
     it('holds an audit-only finding, accepted or not', () => {
+        // The always-crit sentence parses to nothing, so the slot's signatures are unchanged.
         const before = skills(kill);
-        const after = { ...before, second_passive_skill_text: alwaysCrit };
-        expect(syncGate(new Set())('GateTestShip', before, after).pass).toBe(false);
-        expect(syncGate(new Set(['GateTestShip']))('GateTestShip', before, after).pass).toBe(false);
+        const after = skills(`${kill} ${alwaysCrit}`);
+        expect(structuralGate('GateTestShip', before, after)).toEqual({ pass: true, newFindings: [] });
+        for (const accept of [new Set<string>(), new Set(['GateTestShip'])]) {
+            const r = syncGate(accept)('GateTestShip', before, after);
+            expect(r.pass).toBe(false);
+            expect(r.newFindings).toEqual([expect.stringMatching(/^passive1 · always-crit: /)]);
+            expect(r.accepted).toBeUndefined();
+        }
     });
 });

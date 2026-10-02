@@ -9,6 +9,7 @@
  * A pin is keyed on the catalogue's `definitionId` (equal to `ship_templates.definition_id` for
  * every matched ship) and one skill column. `withPinnedText` is the one place a pin is applied to
  * a set of skill columns; `planSync` and `build-catalogue-skills-csv` both go through it.
+ * A `reason`'s ruling id (R2, R4a) refers to the 2026-10-01 catalogue rulings record.
  */
 import type { SkillColumn, SkillColumns } from './catalogueMapping';
 

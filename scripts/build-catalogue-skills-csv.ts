@@ -46,11 +46,12 @@ const main = async () => {
     const unmatched: string[] = [];
     const mappingErrors: string[] = [];
     const pinnedSlots: string[] = [];
+    // `loadShipSkillRecords` reads a null charge cost as 0; `|| null` writes it back as null.
     for (const r of loadShipSkillRecords()) {
         const t = byId.get(idOf.get(r.name) ?? '');
         if (!t) {
             unmatched.push(r.name);
-            lines.push([r.name, r.active, r.chargeCharge, r.charge, ...r.passives].map((v) => toCsvField(v === '' ? null : v)).join(','));
+            lines.push([r.name, r.active, r.chargeCharge || null, r.charge, ...r.passives].map((v) => toCsvField(v === '' ? null : v)).join(','));
             continue;
         }
         if (t.mappingErrors.length) mappingErrors.push(`${r.name}: ${t.mappingErrors.join('; ')}`);
@@ -64,7 +65,7 @@ const main = async () => {
         for (const p of pinsFor(t.definitionId, TEXT_PINS)) pinnedSlots.push(`${r.name} ${p.column}`);
         const s = withPinnedText(t.definitionId, current, t.skills, TEXT_PINS);
         lines.push(
-            [r.name, s.active_skill_text, t.chargeSkillCharge ?? r.chargeCharge, s.charge_skill_text,
+            [r.name, s.active_skill_text, t.chargeSkillCharge ?? (r.chargeCharge || null), s.charge_skill_text,
                 s.first_passive_skill_text, s.second_passive_skill_text, s.third_passive_skill_text]
                 .map(toCsvField).join(',')
         );

@@ -144,5 +144,5 @@ export const acceptingFor = (names: Iterable<string>, gate: SkillGate): SkillGat
  * The gate the scheduled sync runs: the audit gate, plus the structural gate with the ships named
  * in `accept` let through (their findings are reported as accepted).
  */
-export const syncGate = (accept: ReadonlySet<string>): SkillGate =>
+export const syncGate = (accept: Iterable<string>): SkillGate =>
     combineGates(auditGate, acceptingFor(accept, structuralGate));
