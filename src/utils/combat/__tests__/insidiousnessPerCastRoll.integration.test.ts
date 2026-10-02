@@ -25,6 +25,8 @@ import type { Ability, ShipSkills } from '../../../types/abilities';
 import type { GearPiece } from '../../../types/gear';
 import type { Ship } from '../../../types/ship';
 import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
+import { simulateBattle, BattlePlacement } from '../../calculators/battleSimulator';
+import type { Position } from '../../../types/encounters';
 
 type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 
@@ -548,6 +550,114 @@ describe('Insidiousness — one reaction firing landing on two enemies is one ro
         expect(debuffLandings(events, 'attacker', 'Crit Down')).toBe(2);
         expect(procHits(events, 'attacker', 'foe-a')).toHaveLength(0);
         expect(procHits(events, 'attacker', 'foe-b')).toHaveLength(0);
+        expect(draws()).toBe(1);
+    });
+});
+
+// ---------------------------------------------------------------------------------------------
+// The shipped battle simulator (simulateBattle, positional) reaches the same rule: catalogue
+// Ripper's active (Inc. Repair Down II) and his reactive Inferno II are two rolls, one hit.
+// ---------------------------------------------------------------------------------------------
+describe('Insidiousness — the battle simulator: one roll for the cast, one for the reaction', () => {
+    const IMPLANT_ID = 'insid-legendary';
+    const getGearPiece = (id: string): GearPiece | undefined =>
+        id === IMPLANT_ID
+            ? {
+                  id: IMPLANT_ID,
+                  slot: 'implant_major',
+                  level: 16,
+                  stars: 6,
+                  rarity: 'legendary',
+                  mainStat: null,
+                  subStats: [],
+                  setBonus: 'INSIDIOUSNESS',
+              }
+            : undefined;
+    const ship = (over: Partial<Ship>): Ship =>
+        ({
+            rarity: 'legendary',
+            faction: 'AURELIAN_SOVEREIGNTY',
+            type: 'DEBUFFER',
+            baseStats: {} as Ship['baseStats'],
+            equipment: {},
+            implants: {},
+            refits: [],
+            affinity: 'antimatter',
+            chargeSkillCharge: 0,
+            activeTarget: 'front',
+            activePattern: 'Pattern-Base',
+            ...over,
+        }) as Ship;
+    const place = (s: Ship, position: Position, speed: number): BattlePlacement => ({
+        ship: s,
+        position,
+        statOverrides: {
+            attack: 5_000,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            hacking: 200,
+            security: 0,
+            defence: 0,
+            hp: 1_000_000_000,
+            speed,
+        },
+    });
+    const ripper = (withReaction: boolean) =>
+        ship({
+            id: 'ripper',
+            name: 'Ripper',
+            implants: { implant_major: IMPLANT_ID },
+            activeSkillText:
+                'This Unit deals <unit-damage>165% damage</unit-damage> and inflicts <unit-skill>Inc. Repair Down II</unit-skill> for 1 turn.',
+            ...(withReaction
+                ? {
+                      firstPassiveSkillText:
+                          'When this Unit inflicts a <unit-aid>debuff</unit-aid> with its active or charged skills, it also inflicts <unit-skill>Inferno II</unit-skill> for 2 turns.',
+                  }
+                : {}),
+        });
+    const foe = () =>
+        ship({
+            id: 'foe',
+            name: 'foe',
+            type: 'ATTACKER',
+            activeSkillText: 'This Unit deals <unit-damage>0% damage</unit-damage> to one enemy.',
+        });
+    const battle = (withReaction: boolean) =>
+        simulateBattle(
+            {
+                playerTeam: [place(ripper(withReaction), 'M4', 100)],
+                enemyTeam: [place(foe(), 'M4', 1)],
+                rounds: 1,
+            },
+            getGearPiece
+        );
+    /** Reactive `attack` rows the carrier dealt (Insidiousness is its only reactive damage). */
+    const procRows = (result: ReturnType<typeof simulateBattle>) => {
+        const carrierId = result.roster.find((r) => r.side === 'player')!.actorId;
+        let n = 0;
+        for (const round of result.combatLog)
+            for (const turn of round.turns)
+                for (const entry of turn.entries)
+                    for (const re of entry.reactions)
+                        if (re.kind === 'attack' && re.actorId === carrierId) n++;
+        return n;
+    };
+
+    it('cast roll fails, Inferno roll passes → one hit, two draws; both pass → one hit, one draw', () => {
+        let draws = scriptProcs('attacker', [FAIL, PASS]);
+        expect(procRows(battle(true))).toBe(1);
+        expect(draws()).toBe(2);
+
+        draws = scriptProcs('attacker', [PASS, PASS]);
+        expect(procRows(battle(true))).toBe(1);
+        expect(draws()).toBe(1);
+    });
+
+    it('control: without his reaction the cast gets its one roll only', () => {
+        const draws = scriptProcs('attacker', [FAIL, PASS]);
+        expect(procRows(battle(false))).toBe(0);
         expect(draws()).toBe(1);
     });
 });
