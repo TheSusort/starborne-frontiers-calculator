@@ -46,7 +46,7 @@ const shipBase = (id: string, name: string, type: ShipTypeName, speed: number): 
     activePattern: 'Pattern-Base',
 });
 
-/** Shashou's real active + R0 passive, on a single-target pattern. */
+/** Shashou's catalogue active + R0 passive (old-corpus wording), on a single-target pattern. */
 const shashou = (speed = 300, pattern = 'Pattern-Base'): Ship => ({
     ...shipBase(`shashou-${speed}`, 'Shashou', 'ATTACKER', speed),
     activeSkillText:

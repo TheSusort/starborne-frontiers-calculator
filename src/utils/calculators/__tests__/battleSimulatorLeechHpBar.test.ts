@@ -20,7 +20,7 @@
  * team-symmetric over every actor). "Healing received" was the same defect on a second axis, closed
  * separately by #375 — the second test below was its pinned tripwire and is now its claim.
  *
- * Real production surface: verbatim skill text through `skillTextParser`/`buildShipAbilities` into
+ * Real production surface: skill text through `skillTextParser`/`buildShipAbilities` into
  * `simulateBattle`, not a hand-injected ability (the pattern from
  * `battleSimulatorDefenseSubstitution.test.ts`).
  */
@@ -35,7 +35,7 @@ afterEach(() => resetRateGateRng());
 
 const BASIC_ACTIVE = 'This Unit deals <unit-damage>100% damage</unit-damage>.';
 
-/** Magnolia's refit-1 passive, verbatim from docs/ship-skills.csv. */
+/** Old-corpus wording of Magnolia's refit-1 passive (synthetic; the catalogue text differs). */
 const MAGNOLIA_P1 =
     'This Unit <unit-damage>repairs itself for 20%</unit-damage> of the damage it deals to enemies.';
 

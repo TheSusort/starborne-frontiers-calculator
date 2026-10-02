@@ -1,9 +1,10 @@
 /**
- * Morao active-slot Provoke duration — production-routed builder probe. Skill text VERBATIM
- * from docs/ship-skills.csv (parser source of truth). Drives the REAL buildShipAbilities path.
+ * Morao active-slot Provoke duration — production-routed builder probe. Skill text is the
+ * old-corpus wording (synthetic; the catalogue text differs). Drives the REAL buildShipAbilities
+ * path.
  *
  * Wave 2 Finding A2: the active slot's trailing clause is "...applies <unit-skill>Provoke</unit-
- * skill> for 1turn." — a CSV concatenation typo with no space between "1" and "turn". DURATION_RE
+ * skill> for 1turn." — an old-corpus concatenation typo with no space between "1" and "turn". DURATION_RE
  * (`for\s+(\d+)\s+turns?`) requires whitespace between the number and "turn(s)", so it never
  * matches "1turn" and the Provoke debuff carries no `duration`, unlike every other timed
  * control-debuff in the corpus (Stasis on Medved/Meiying/Nayra all carry duration).
@@ -24,7 +25,7 @@ function abilitiesFor(over: Partial<Ship>, name: string): Ability[] {
     return slot(buildShipAbilities(ship(over)).slots, name)?.abilities ?? [];
 }
 
-// Verbatim from docs/ship-skills.csv row "Morao" (active_skill_text column).
+// Old-corpus wording of Morao's active (synthetic; the catalogue text differs).
 const MORAO_ACTIVE =
     'This Unit deals <unit-damage>70% damage</unit-damage> with an additional damage equal to <unit-damage>60%</unit-damage> of its Defense and applies <unit-skill>Provoke</unit-skill> for 1turn.';
 

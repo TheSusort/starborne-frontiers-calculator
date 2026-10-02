@@ -69,8 +69,8 @@ describe('enemy-dot-count condition', () => {
 });
 
 describe('enemy-dot-count parsing (countGateCondition DoT branch)', () => {
-    // Verbatim from docs/ship-skills.csv (charge_skill_text field) — same constant used by the
-    // SP-D Anemone triage probe.
+    // Old-corpus wording of Anemone's charged (synthetic; the catalogue text differs) — same
+    // constant used by the SP-D Anemone triage probe.
     const ANEMONE_CHARGE =
         'This Unit deals <unit-damage>200% damage</unit-damage> and inflicts <unit-skill>Corrosion III</unit-skill> for 2 turns. If the primary enemy has 3 or more Damage over Time effects, this Unit gains <unit-skill>Taunt</unit-skill> for 1 turn.';
 
@@ -89,8 +89,8 @@ describe('enemy-dot-count parsing (countGateCondition DoT branch)', () => {
         ).toBe(true);
     });
 
-    // Verbatim from docs/ship-skills.csv (charge_skill_text field) — same constant used by the
-    // SP-D Belladonna triage probe.
+    // Old-corpus wording of Belladonna's charged (synthetic; the catalogue text differs) — same
+    // constant used by the SP-D Belladonna triage probe.
     const BELLADONNA_CHARGE =
         'This Unit deals <unit-damage>180% damage</unit-damage> and inflicts <unit-skill>Corrosion II</unit-skill> for 2 turns.<br />If the enemy has 3 or more <unit-skill>Acidic Decay</unit-skill>, inflict <unit-skill>Stasis</unit-skill> for 1 turn.';
 

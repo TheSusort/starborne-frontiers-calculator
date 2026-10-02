@@ -9,8 +9,8 @@
  * of adjacent allies the spread landed Corrosion I on (eventCtx.spreadAffectedIds.length).
  *
  * Both the Toxic Overflow debuff (Hemlock's charged) and the corrosion-spread heal (Hemlock's
- * passive) are extracted through the REAL parser/builder (`buildShipAbilities` fed verbatim
- * docs/ship-skills.csv text), never hand-built. The Toxic Overflow debuff — parsed as an on-cast
+ * passive) are extracted through the REAL parser/builder (`buildShipAbilities` fed Hemlock's skill
+ * text), never hand-built. The Toxic Overflow debuff — parsed as an on-cast
  * enemy debuff — is placed on the focus's ACTIVE slot so it lands on a real positioned enemy on the
  * focus's normal turn (no charge plumbing needed); the mechanic reads it off the per-victim TIMED
  * enemy-debuff store exactly as it would for the real charged application.
@@ -59,7 +59,8 @@ const parsedTarget = (selection: ParsedTarget['selection']): ParsedTarget => ({
 // Single-target ("base") pattern — hits exactly the resolved primary, no splash.
 const basePattern = (): ParsedPattern => ({ raw: 'base', shape: 'base', range: 0, modifiers: {} });
 
-// Verbatim Hemlock skill text (docs/ship-skills.csv).
+// Hemlock's active is his catalogue text (docs/ship-skills.csv); the charged and passive are
+// old-corpus wording (synthetic; the catalogue text differs).
 const HEMLOCK_ACTIVE =
     'This Unit deals <unit-damage>130% damage</unit-damage> and inflicts <unit-skill>Corrosion II</unit-skill> for 3 turns.';
 const HEMLOCK_CHARGE =

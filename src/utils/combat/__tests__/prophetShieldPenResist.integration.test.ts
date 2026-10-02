@@ -14,8 +14,8 @@
  *
  * This file has three parts, mirroring providerOtherAllyDebuffReaction.integration.test.ts's
  * structure: a hand-rolled-bus unit test of the new `on-ally-debuff-resisted` LISTENER (precise,
- * deterministic engine-wiring checks), a parser test of Prophet's REAL kit (buildShipAbilities on
- * the verbatim docs/ship-skills.csv text), and an engine-level integration test that measures the
+ * deterministic engine-wiring checks), a parser test of Prophet's kit (buildShipAbilities on his
+ * passives in old-corpus wording), and an engine-level integration test that measures the
  * bonus's real effect on shield absorption (not just the stored field) — plus a Block Debuff vs
  * real-roll pairing for Prophet's own extra action.
  */
@@ -35,7 +35,7 @@ function ship(over: Partial<Ship>): Ship {
     return { ...({} as any), refits: [], ...over } as Ship;
 }
 
-// Verbatim from docs/ship-skills.csv.
+// Old-corpus wording of Prophet's passives (synthetic; the catalogue text differs).
 const PROPHET_P0 =
     'This Unit has <unit-damage>20% shield penetration</unit-damage>.<br /><br />\nWhen an ally resists a debuff infliction from an enemy, this Unit gains <unit-damage>1% more shield penetration</unit-damage>.';
 const PROPHET_P4 =

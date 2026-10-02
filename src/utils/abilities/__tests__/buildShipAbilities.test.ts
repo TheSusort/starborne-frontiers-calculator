@@ -963,10 +963,10 @@ describe('buildShipAbilities', () => {
     });
 
     it('Selenite passive: "for every enemy with Stealth" scales on the DERIVABLE stealthed-enemy count (sub-project I, PR I5)', () => {
-        // Real CSV text (docs/ship-skills.csv, first/second_passive_skill_text) — "for every",
-        // not "for each", and counting ENEMY UNITS with Stealth, not stacks on one target.
-        // A plain enemy-buff gate (pre-I5) can only tell "at least one enemy Stealthed", not
-        // how many — the dedicated count subject fixes that.
+        // Old-corpus wording of Selenite's passive (synthetic; the catalogue text differs) — "for
+        // every", not "for each", and counting ENEMY UNITS with Stealth, not stacks on one target.
+        // A plain enemy-buff gate (pre-I5) can only tell "at least one enemy Stealthed", not how
+        // many — the dedicated count subject fixes that.
         const s = ship({
             firstPassiveSkillText:
                 'This Unit deals 10% more direct damage for every enemy with <unit-skill>Stealth</unit-skill>.',
@@ -986,7 +986,7 @@ describe('buildShipAbilities', () => {
     });
 
     it('Zenith passive: "for each ally with a shield" scales on the DERIVABLE own-side shielded count', () => {
-        // Verbatim third_passive_skill_text from docs/ship-skills.csv (`grep '^Zenith,'`). The
+        // Old-corpus wording of Zenith's R4 passive (synthetic; the catalogue text differs). The
         // own-side mirror of Selenite's enemy-stealth count: Zenith COUNTS ITSELF (owner ruling),
         // so its own round-start shield floors the bonus at +8% on any board. Linear, no cap.
         const s = ship({
@@ -1024,7 +1024,8 @@ describe('buildShipAbilities', () => {
     });
 
     describe('Wildfire dotDamage crit-power scaling (sub-project I, PR I4a)', () => {
-        // Real CSV text (docs/ship-skills.csv row 156, first/second_passive_skill_text).
+        // Old-corpus wording of Wildfire's first/second passives (synthetic; the catalogue text
+        // differs).
         const baseText =
             'When an enemy has <unit-skill>Scorching Radiation</unit-skill>, this Unit deals <unit-damage>1% additional</unit-damage> <unit-skill>Inferno</unit-skill> <unit-damage>damage</unit-damage> to that unit for every 10% crit power.';
         const refitText =
@@ -1589,7 +1590,7 @@ describe('buildShipAbilities', () => {
         // condition ("if this unit has been directly damaged this round") is a SELF-heal — the caster
         // tanks damage and heals itself. The flip to 'ally' must NOT apply even though the skill has
         // no damage component and no explicit target phrase.
-        it('Meatshield active: self-damage-conditional bare repair stays self (real text)', () => {
+        it('Meatshield active: self-damage-conditional bare repair stays self', () => {
             const s = ship({
                 activeSkillText:
                     'This Unit gains <unit-skill>Inc. Repair Up III</unit-skill> for 2 turns.<br /><br /> If this Unit has been directly damaged this round, it <unit-damage>repairs 5%</unit-damage> of its max HP.',
@@ -1620,10 +1621,11 @@ describe('buildShipAbilities', () => {
         });
     });
 
-    // Lionheart R4 refit-active passive (docs/ship-skills.csv, verbatim): the round-start
-    // Protection grant is a consumable FIXED pool (a redirected hit clears it entirely), so it
-    // must refresh to 10 each round rather than accumulate — maxStacks + clearAllOnRedirect are
-    // threaded through to the buff config for the engine (Task 4) to consume.
+    // Lionheart R4 refit-active passive (old-corpus wording; the catalogue text differs): the
+    // round-start Protection grant is a consumable FIXED pool (a redirected hit clears it
+    // entirely), so it must refresh to 10 each round rather than accumulate — maxStacks +
+    // clearAllOnRedirect are threaded through to the buff config for the engine (Task 4) to
+    // consume.
     it('Lionheart: Protection buff ability carries maxStacks:10 + clearAllOnRedirect', () => {
         const s = ship({
             thirdPassiveSkillText:
@@ -1722,8 +1724,8 @@ describe('buildShipAbilities', () => {
     // condition (evaluated against live tank HP at drain time); Isha's instead-on-crit
     // pair maps to triggerCritFilter 'non-crit' / 'crit'.
     describe('self-subject damage-reaction heals → on-attacked (Phase 4c)', () => {
-        // Makoli and Guardian share this CSV first_passive_skill_text byte-identically.
-        it('Makoli/Guardian first passive (identical CSV text): heal rides on-attacked with a derivable below-40% self hp-threshold', () => {
+        // Old-corpus wording of Makoli's first passive (synthetic; the catalogue text differs).
+        it('Makoli/Guardian first passive (old-corpus text): heal rides on-attacked with a derivable below-40% self hp-threshold', () => {
             const s = ship({
                 firstPassiveSkillText:
                     'When directly damaged while below 40% HP, this Unit <unit-damage>repairs 20%</unit-damage> of its Max HP.',
@@ -3471,7 +3473,7 @@ describe('buildShipAbilities doesntBreakStasis', () => {
     });
 
     it('Zenith R4: "do not reduce Stasis" while shielded → a SELF-SHIELD-GATED exemption, never the unconditional flag', () => {
-        // Verbatim third_passive_skill_text from docs/ship-skills.csv (`grep '^Zenith,'`).
+        // Old-corpus wording of Zenith's R4 passive (synthetic; the catalogue text differs).
         const s = ship({
             refits: [{}, {}, {}, {}],
             thirdPassiveSkillText:
@@ -3516,10 +3518,8 @@ describe('buildShipAbilities chargeLossImmune', () => {
 
 // ── ship-kit correctness backlog: ignoresForcedTargeting (ignore Taunt/Provoke) ────────────
 // Judge/Stalwart/Yuyan/Huanying/Valkyrie/Vanguard's kit text states their attacks "ignore
-// Taunt and Provoke". RAW active-skill strings from docs/ship-skills.csv (the Supabase-fetched
-// master), fed through the production buildShipAbilities(ship) path. Skill data's master is
-// Supabase ship_templates → docs/ship-skills.csv; tagged CSV text is what production actually
-// parses, so fixtures use it verbatim rather than any hand-maintained constant.
+// Taunt and Provoke". Old-corpus active-skill texts (synthetic; the catalogue wording differs),
+// fed through the production buildShipAbilities(ship) path.
 describe('buildShipAbilities ignoresForcedTargeting', () => {
     it.each([
         [
@@ -3546,7 +3546,7 @@ describe('buildShipAbilities ignoresForcedTargeting', () => {
             'Vanguard',
             "This Unit's attack ignores <unit-skill>Taunt</unit-skill> and <unit-skill>Provoke</unit-skill> and deals <unit-damage>100% damage</unit-damage>.",
         ],
-    ])('%s: ignoresForcedTargeting=true from CSV active-skill text', (_name, activeSkillText) => {
+    ])('%s: ignoresForcedTargeting=true from its active-skill text', (_name, activeSkillText) => {
         const result = buildShipAbilities(ship({ activeSkillText }));
         expect(result.ignoresForcedTargeting).toBe(true);
     });
@@ -3654,7 +3654,8 @@ describe('buildShipAbilities — on-enemy-purged and on-ally-purged heal trigger
 });
 
 // C2b-2 T1: Iridium passive-slot purge emit (on-attacked trigger from "when directly damaged").
-// RAW strings from docs/ship-skills.csv.
+// Iridium p2 and the Sefuba p2 / Zeolite texts are catalogue text; Iridium p1, Sefuba p1 and
+// Cobalt are old-corpus wording (synthetic; the catalogue text differs).
 describe('buildShipAbilities — Iridium passive purge emit (C2b-2 T1)', () => {
     // Iridium p1: "When directly damaged, This Unit purges 1 buff from the enemy ..."
     // → exactly ONE purge ability with trigger:'on-attacked', count:1
@@ -3789,19 +3790,20 @@ describe('buildShipAbilities — Iridium passive purge emit (C2b-2 T1)', () => {
 
 // ---------------------------------------------------------------------------
 // C2b-2 T4: Rhodium end-of-round + enemy-most-buffs purge build tests.
-// RAW strings from docs/ship-skills.csv (Rhodium row).
+// Old-corpus wording of Rhodium's passives and Iridium's p1 (synthetic; the catalogue text
+// differs).
 // ---------------------------------------------------------------------------
 describe('buildShipAbilities — Rhodium end-of-round most-buffs purge (C2b-2 T4)', () => {
-    // Rhodium p1 RAW: "At the end of the round, this Unit <unit-aid>purges 2</unit-aid> buffs
-    // from the enemy with the most buffs."
+    // Rhodium p1 (old corpus): "At the end of the round, this Unit <unit-aid>purges 2</unit-aid>
+    // buffs from the enemy with the most buffs."
     const rhodiumP1 = () =>
         ship({
             firstPassiveSkillText:
                 'At the end of the round, this Unit <unit-aid>purges 2</unit-aid> buffs from the enemy with the most buffs.',
         });
 
-    // Rhodium p2 RAW: same purge phrase + "deals <unit-damage>80% damage</unit-damage> that
-    // cannot critically hit."
+    // Rhodium p2 (old corpus): same purge phrase + "deals <unit-damage>80% damage</unit-damage>
+    // that cannot critically hit."
     const rhodiumP2 = () =>
         ship({
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -4234,9 +4236,9 @@ describe('buildShipAbilities — D-PR13 Disable active-skill: named debuff + add
 //     remains the sole model of the effect.
 describe('buildShipAbilities — control-twin gating parity (epic PR2)', () => {
     it('Crocus active: control{stasis} inherits the enemy-debuff-gte-4 condition from its Stasis debuff twin (on-cast twin → condition copy)', () => {
-        // docs/ship-skills.csv Crocus active_skill_text (exact clause, routed through the real
-        // active slot): "...If the target has more than 3 Debuffs, it inflicts Stasis for 2
-        // turns."
+        // Old-corpus wording of Crocus's active (synthetic; the catalogue text differs), routed
+        // through the real active slot: "...If the target has more than 3 Debuffs, it inflicts
+        // Stasis for 2 turns."
         const s = ship({
             activeSkillText:
                 'This Unit deals <unit-damage>150% Damage</unit-damage> and inflicts <unit-skill>Corrosion II</unit-skill> for 2 turns.<br />If the target has more than 3 Debuffs, it inflicts <unit-skill>Stasis</unit-skill> for 2 turns.',
@@ -4261,8 +4263,9 @@ describe('buildShipAbilities — control-twin gating parity (epic PR2)', () => {
     });
 
     it('Nayra active: control{stasis} inherits the target-repaired-this-round condition from its Stasis debuff twin (on-cast twin → condition copy)', () => {
-        // docs/ship-skills.csv Nayra active_skill_text (exact clause, routed through the real
-        // active slot): "...If the target was repaired this round, inflict Stasis for 1 turn."
+        // Old-corpus wording of Nayra's active (synthetic; the catalogue text differs), routed
+        // through the real active slot: "...If the target was repaired this round, inflict Stasis
+        // for 1 turn."
         const s = ship({
             activeSkillText:
                 'This Unit inflicts <unit-skill>Defense Down II</unit-skill> and <unit-skill>Crit Rate Down III</unit-skill> for 2 turns, dealing <unit-damage>170% damage</unit-damage> and additional <unit-damage>damage equal to 30%</unit-damage> of its Defense.<br />If the target was repaired this round, inflict <unit-skill>Stasis</unit-skill> for 1 turn.',
@@ -4286,9 +4289,9 @@ describe('buildShipAbilities — control-twin gating parity (epic PR2)', () => {
     });
 
     it('Makoli second passive: control{disable} is DROPPED — its Disable debuff twin resolves to a REACTIVE trigger (on-attacked + below-40%-HP), which the cast-path control-applied loop can never consume', () => {
-        // docs/ship-skills.csv Makoli second_passive_skill_text (exact clause, routed through
-        // the real passive slot via refits.length >= 2): "When directly damaged while below 40%
-        // HP, this Unit repairs 20% of its Max HP and inflicts Disable for 1 turn."
+        // Old-corpus wording of Makoli's second passive (synthetic; the catalogue text differs),
+        // routed through the real passive slot via refits.length >= 2: "When directly damaged while
+        // below 40% HP, this Unit repairs 20% of its Max HP and inflicts Disable for 1 turn."
         const s = ship({
             refits: [{}, {}] as Ship['refits'],
             secondPassiveSkillText:
@@ -4317,9 +4320,9 @@ describe('buildShipAbilities — control-twin gating parity (epic PR2)', () => {
     });
 
     it('Flamel second passive: control{stasis} is DROPPED — its Stasis debuff twin resolves to the REACTIVE on-attacked trigger', () => {
-        // docs/ship-skills.csv Flamel second_passive_skill_text (exact clause, routed through
-        // the real passive slot via refits.length >= 2): "When directly damaged, this Unit
-        // inflicts Speed Down I for 2 turns and Stasis for 2 turn."
+        // Old-corpus wording of Flamel's second passive (synthetic; the catalogue text differs),
+        // routed through the real passive slot via refits.length >= 2: "When directly damaged, this
+        // Unit inflicts Speed Down I for 2 turns and Stasis for 2 turn."
         const s = ship({
             refits: [{}, {}] as Ship['refits'],
             secondPassiveSkillText:
@@ -4339,9 +4342,9 @@ describe('buildShipAbilities — control-twin gating parity (epic PR2)', () => {
     });
 
     it('Guardian second passive: control{provoke} is DROPPED — its Provoke debuff twin resolves to the REACTIVE on-ally-attacked trigger', () => {
-        // docs/ship-skills.csv Guardian second_passive_skill_text (exact clause, routed through
-        // the real passive slot via refits.length >= 2): "...When an ally is critically hit by
-        // an enemy, apply Provoke for 1 turn to that enemy."
+        // Old-corpus wording of Guardian's second passive (synthetic; the catalogue text differs),
+        // routed through the real passive slot via refits.length >= 2: "...When an ally is
+        // critically hit by an enemy, apply Provoke for 1 turn to that enemy."
         const s = ship({
             refits: [{}, {}] as Ship['refits'],
             secondPassiveSkillText:
@@ -4414,7 +4417,7 @@ describe('buildShipAbilities — control-twin gating parity (epic PR2)', () => {
 
 describe('buildShipAbilities — enemy-targeted charge removal (Phase 1 Task 3)', () => {
     it('Opal charged: on-cast removal of 2 charges from the enemy', () => {
-        // Opal's real charge skill text (from docs/ship-skills.csv).
+        // Old-corpus wording of Opal's charged skill (synthetic; the catalogue text differs).
         const s = ship({
             chargeSkillText:
                 'This Unit deals 70% damage with an additional damage equal to 11% of its Max HP, and removes 2 charges from the enemy.',
@@ -4436,7 +4439,7 @@ describe('buildShipAbilities — enemy-targeted charge removal (Phase 1 Task 3)'
     });
 
     it('Demolisher passive: bomb-detonation removal of 2 charges from the enemy', () => {
-        // Demolisher's real passive text (from docs/ship-skills.csv).
+        // Old-corpus wording of Demolisher's passive (synthetic; the catalogue text differs).
         const s = ship({
             firstPassiveSkillText:
                 "When a bomb explodes on an enemy, this unit removes 2 charges from the enemy's charged skill.",
@@ -4457,7 +4460,8 @@ describe('buildShipAbilities — enemy-targeted charge removal (Phase 1 Task 3)'
     });
 
     it('Zosimos passive: BOTH self gain (on-enemy-repaired) AND enemy removal (every 2nd repair)', () => {
-        // Zosimos's real passive text includes both a self charge gain and an enemy charge removal.
+        // Old-corpus wording of Zosimos's passive (synthetic; the catalogue text differs). It
+        // includes both a self charge gain and an enemy charge removal.
         const s = ship({
             firstPassiveSkillText:
                 "When an enemy repairs, this unit gains a charge to its charged skill. Additionally, this unit decreases that enemy's charge by one for every second repair they perform.",
@@ -4508,8 +4512,9 @@ describe('buildShipAbilities — enemy-targeted charge removal (Phase 1 Task 3)'
     });
 
     it("Zenith charged: 'removes all charges' emits an enemy removal with amount 'all'", () => {
-        // Verbatim `charge_skill_text` from docs/ship-skills.csv (Zenith). The "all" quantifier
-        // is the corpus's first — every other removal names a count ("removes 1 charge").
+        // Old-corpus wording of Zenith's charged skill (synthetic; the catalogue text differs). The
+        // "all" quantifier is the corpus's first — every other removal names a count ("removes 1
+        // charge").
         const s = ship({
             chargeSkillText:
                 'This Unit deals <unit-damage>310% damage</unit-damage> and <unit-aid>removes all charges</unit-aid> from the enemy charged skill.',
@@ -4537,8 +4542,8 @@ describe('buildShipAbilities — enemy-targeted charge removal (Phase 1 Task 3)'
     });
 
     it("Zenith active: the numeric quantifier still parses as a number, not 'all'", () => {
-        // Verbatim `active_skill_text` from docs/ship-skills.csv (Zenith). Guards the numeric
-        // branch against the "all" branch swallowing it.
+        // Old-corpus wording of Zenith's active (synthetic; the catalogue text differs). Guards the
+        // numeric branch against the "all" branch swallowing it.
         const s = ship({
             activeSkillText:
                 'This Unit deals <unit-damage>230% damage</unit-damage> and <unit-aid>removes 1 charge</unit-aid> from the enemy charged skill.',
@@ -4757,10 +4762,10 @@ describe('buildShipAbilities — enemy-targeted charge removal (Phase 1 Task 3)'
 // Epic PR1 (skill-model gap, finding family 1): damage-reduction / shield-scaled-off-damage
 // clauses were being minted as phantom on-cast attacks because parseSkillDamage's "does this
 // tag mention 'damage'?" heuristic can't distinguish an outgoing hit from an incoming-reduction
-// or shield-scaling clause. All texts below are exact CSV clauses (docs/ship-skills.csv),
-// assigned to their REAL slot fields (matching how buildShipAbilities is actually invoked in
-// production via getShipSkillRows) — not the audit script's "treat every slot as active"
-// simplification.
+// or shield-scaling clause. The texts below are catalogue clauses except Voron's, which is
+// old-corpus wording (synthetic; the catalogue text differs). They are assigned to their REAL
+// slot fields (matching how buildShipAbilities is actually invoked in production via
+// getShipSkillRows) — not the audit script's "treat every slot as active" simplification.
 describe('buildShipAbilities — PR1 phantom-ability suppression (reduction/conversion clauses)', () => {
     it('Tormenter passive2 (R2): no phantom damage ability from "30% damage reduction"', () => {
         const s = ship({
@@ -4958,11 +4963,11 @@ describe('buildShipAbilities — PR1 Amartya phantom Taunt + Exposed stack count
 });
 
 // ── PR5 Finding 1: Panon self-Provoke/Taunt condition subject ─────────────────────────────
-// docs/ship-skills.csv Panon active_skill_text (exact clause, routed through the real active
-// slot): "...If this Unit is Provoked or Taunted, this Unit instead gains Terran Guard III for
-// 2 turns and deals 120% damage..." — the condition checks a status on THIS Unit (self), not the
-// enemy. Taunt is a self-buff per constants/buffs.ts ("Forces enemies to target this unit"), so
-// "this Unit is ... Taunted" must resolve as a self-buff gate, not an enemy-buff gate.
+// Old-corpus wording of Panon's active (synthetic; the catalogue text differs), routed through the
+// real active slot: "...If this Unit is Provoked or Taunted, this Unit instead gains Terran Guard
+// III for 2 turns and deals 120% damage..." — the condition checks a status on THIS Unit (self),
+// not the enemy. Taunt is a self-buff per constants/buffs.ts ("Forces enemies to target this
+// unit"), so "this Unit is ... Taunted" must resolve as a self-buff gate, not an enemy-buff gate.
 describe('buildShipAbilities — PR5 Finding 1 Panon self-Provoke/Taunt condition subject', () => {
     it('Panon active: "If this Unit is Provoked or Taunted" gates Terran Guard III with self-subject conditions (both self-debuff Provoke and self-buff Taunt)', () => {
         const s = ship({
@@ -4984,9 +4989,9 @@ describe('buildShipAbilities — PR5 Finding 1 Panon self-Provoke/Taunt conditio
     });
 
     it('Panon charged: "If this Unit is affected by Provoke or Taunt" gates the Barrier grant + damage modifier with self-subject conditions', () => {
-        // docs/ship-skills.csv Panon charge_skill_text (exact clause): "...If this Unit is
-        // affected by Provoke or Taunt, it instead gains Barrier for 1 hit and deals 170%
-        // damage..."
+        // Old-corpus wording of Panon's charged skill (synthetic; the catalogue text differs):
+        // "...If this Unit is affected by Provoke or Taunt, it instead gains Barrier for 1 hit and
+        // deals 170% damage..."
         const s = ship({
             activeSkillText: 'This Unit deals <unit-damage>100% damage</unit-damage>.',
             chargeSkillCharge: 3,
@@ -5008,8 +5013,8 @@ describe('buildShipAbilities — PR5 Finding 1 Panon self-Provoke/Taunt conditio
 // ── PR5 Finding 2: duration misattachment across multi-buff sentences ─────────────────────
 describe('buildShipAbilities — PR5 Finding 2 duration misattachment across multi-buff sentences', () => {
     it('Bayah first passive: "gains Terran Bolster II and inflicts Speed Down II on an enemy for 2 turns" — the trailing duration reaches BOTH buffs', () => {
-        // docs/ship-skills.csv Bayah first_passive_skill_text (exact clause, routed through the
-        // real passive slot).
+        // Old-corpus wording of Bayah's first passive (synthetic; the catalogue text differs),
+        // routed through the real passive slot.
         const s = ship({
             refits: [{}] as Ship['refits'],
             firstPassiveSkillText:
@@ -5029,8 +5034,8 @@ describe('buildShipAbilities — PR5 Finding 2 duration misattachment across mul
     });
 
     it('Bayah second passive: same shape with an added third buff (Out. Damage Down II) — all three share the trailing 2-turn duration', () => {
-        // docs/ship-skills.csv Bayah second_passive_skill_text (exact clause, routed through the
-        // real passive slot via refits.length >= 2).
+        // Old-corpus wording of Bayah's second passive (synthetic; the catalogue text differs),
+        // routed through the real passive slot via refits.length >= 2.
         const s = ship({
             refits: [{}, {}] as Ship['refits'],
             secondPassiveSkillText:
@@ -5052,8 +5057,8 @@ describe('buildShipAbilities — PR5 Finding 2 duration misattachment across mul
     });
 
     it('Oleander charged: "grants Repair Over Time II for 2 turns and, for 3 turns, grants both Out. DoT Damage Up II and Hit Mitigation" — the LEADING "for 3 turns" reaches both trailing buffs', () => {
-        // docs/ship-skills.csv Oleander charge_skill_text (exact clause, routed through the real
-        // charged slot).
+        // Old-corpus wording of Oleander's charged skill (synthetic; the catalogue text differs),
+        // routed through the real charged slot.
         const s = ship({
             activeSkillText: 'This Unit deals <unit-damage>100% damage</unit-damage>.',
             chargeSkillCharge: 6,
@@ -5103,8 +5108,8 @@ describe('buildShipAbilities — PR5 Finding 2 duration misattachment across mul
 // ── PR5 Finding 3: Nyxen typed cleanse filter ─────────────────────────────────────────────
 describe('buildShipAbilities — PR5 Finding 3 Nyxen typed cleanse filter', () => {
     it('Nyxen active: "Cleanses 2 bombs" carries a debuffType: bomb filter', () => {
-        // docs/ship-skills.csv Nyxen active_skill_text (exact clause, routed through the real
-        // active slot).
+        // Old-corpus wording of Nyxen's active (synthetic; the catalogue text differs), routed
+        // through the real active slot.
         const s = ship({
             activeSkillText:
                 'This Unit <unit-aid>Cleanses 2 bombs</unit-aid>, Grants a <unit-damage>Shield equal to 15%</unit-damage> of its Max HP, and Grants <unit-skill>Atlas Readiness II</unit-skill> for 1 turn.',
@@ -5116,8 +5121,8 @@ describe('buildShipAbilities — PR5 Finding 3 Nyxen typed cleanse filter', () =
     });
 
     it('Nyxen charged: "Cleanses 2 damage over time debuffs" carries a debuffType: dot filter', () => {
-        // docs/ship-skills.csv Nyxen charge_skill_text (exact clause, routed through the real
-        // charged slot).
+        // Old-corpus wording of Nyxen's charged skill (synthetic; the catalogue text differs),
+        // routed through the real charged slot.
         const s = ship({
             activeSkillText: 'This Unit deals <unit-damage>100% damage</unit-damage>.',
             chargeSkillCharge: 1,
@@ -5146,8 +5151,9 @@ describe('buildShipAbilities — PR5 Finding 3 Nyxen typed cleanse filter', () =
 // 6%) and Guardian's <40%-HP gate as dropped. Both are ALREADY correctly modeled (Phase 4c PR1):
 // Isha's "instead"-clause split produces a mutually-exclusive triggerCritFilter pair, and
 // Guardian's on-attacked heal keeps a derivable below-40% self hp-threshold condition. These
-// tests reproduce the exact CSV text through production slot routing and PASS with no code
-// change — kept as regression locks documenting the false positive.
+// tests run Isha's catalogue text and Guardian's old-corpus wording (synthetic; the catalogue
+// text differs) through production slot routing and PASS with no code change — kept as
+// regression locks documenting the false positive.
 describe('buildShipAbilities — PR5 Finding 4 Isha/Guardian reactive-heal gates (confirmed FALSE POSITIVE)', () => {
     it('Isha second passive: the two damage-reaction repairs are MUTUALLY EXCLUSIVE (non-crit 3% / crit 6% instead), not additive', () => {
         // docs/ship-skills.csv Isha second_passive_skill_text (exact clause, routed through the
@@ -5173,9 +5179,9 @@ describe('buildShipAbilities — PR5 Finding 4 Isha/Guardian reactive-heal gates
     });
 
     it('Guardian first passive: the reactive repair keeps its below-40%-HP gate (fires only below threshold, not on every hit)', () => {
-        // docs/ship-skills.csv Guardian first_passive_skill_text (exact clause, routed through the
-        // real passive slot as R0): "When directly damaged while below 40% HP, this Unit repairs
-        // 20% of its Max HP."
+        // Old-corpus wording of Guardian's first passive (synthetic; the catalogue text differs),
+        // routed through the real passive slot as R0: "When directly damaged while below 40% HP,
+        // this Unit repairs 20% of its Max HP."
         const s = ship({
             refits: [{}] as Ship['refits'],
             firstPassiveSkillText:
@@ -5201,7 +5207,7 @@ describe('buildShipAbilities — PR5 Finding 4 Isha/Guardian reactive-heal gates
 
 // ---------------------------------------------------------------------------
 // PR9(a): shield-basis "additional damage equal to X% of its/their current Shield" —
-// Malvex, Quixilver, FrontLine. RAW CSV rows (docs/ship-skills.csv), verbatim.
+// Malvex, Quixilver, FrontLine. Old-corpus texts (synthetic; the catalogue wording differs).
 // ---------------------------------------------------------------------------
 describe('buildShipAbilities — PR9a shield-basis additional-damage', () => {
     it('FrontLine active: additional-damage stat "shield", pct 60 (pronoun "their")', () => {
@@ -5334,7 +5340,7 @@ describe('buildShipAbilities — epic PR12(A) Nosorog damage-reflection phrasing
         });
     });
 
-    it('Nosorog third passive (40%, verbatim CSV text with trailing Defense-Up clause): still emits the reflect ability', () => {
+    it('Nosorog third passive (40%, old-corpus text with trailing Defense-Up clause): still emits the reflect ability', () => {
         const s = ship({
             thirdPassiveSkillText:
                 'This Unit reflects 40% of the Damage taken back to the enemy when directly damaged as a primary target. Additionally, when this Unit removes a Debuff, it gains <unit-skill>Defense Up II</unit-skill> for 1 turn.',
@@ -5556,8 +5562,8 @@ describe('buildShipAbilities — epic PR12(C) incoming-damage-reduction phrasing
 });
 
 describe('buildShipAbilities — round-start self shields', () => {
-    // Verbatim from docs/ship-skills.csv (Zenith row), including the newline the CSV's
-    // multi-line quoted passive carries after each `<br /><br />`.
+    // Old-corpus wording of Zenith's passives (synthetic; the catalogue text differs), including
+    // the newline the old CSV's multi-line quoted passive carried after each `<br /><br />`.
     const ZENITH_R4 =
         'When this Unit has a <unit-aid>shield</unit-aid> its attacks do not reduce <unit-skill>Stasis</unit-skill>. <br /><br />\nAt the start of each round this Unit gains a <unit-damage>shield equal to 50%</unit-damage> of its attack.<br /><br />\nThis Unit deals <unit-damage>8% more direct damage</unit-damage> for each ally with a shield.';
     const ZENITH_R0 =
@@ -5584,7 +5590,7 @@ describe('buildShipAbilities — round-start self shields', () => {
         });
     });
 
-    it('a per-TURN self shield keeps start-of-turn (Xcellence, Kinetik — verbatim CSV)', () => {
+    it('a per-TURN self shield keeps start-of-turn (Xcellence, Kinetik — old-corpus text)', () => {
         // The round-start detector is position-scoped on the phrase "start of the/each/every
         // ROUND"; these two say "turn" and must fall through to detectEveryTurnTrigger.
         const xcellence = ship({
@@ -5606,7 +5612,7 @@ describe('buildShipAbilities — round-start self shields', () => {
         ).toMatchObject({ trigger: 'start-of-turn', config: { pct: 4, basis: 'hp' } });
     });
 
-    it('a start-of-COMBAT self shield keeps pre-combat (Crucialis — verbatim CSV)', () => {
+    it('a start-of-COMBAT self shield keeps pre-combat (Crucialis — old-corpus text)', () => {
         const s = ship({
             refits: [],
             firstPassiveSkillText:

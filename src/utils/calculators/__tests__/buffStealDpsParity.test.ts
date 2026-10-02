@@ -16,8 +16,8 @@ const RATE_GATE_TEST_SEED = 0x5eed1234;
 // from the target to the caster). In single-ship DPS mode there is no target holding buffs to
 // steal, so statusEngine.steal always finds an empty store and returns [] — a pure no-op. This
 // locks that the DPS calculator's OUTPUT is byte-identical whether or not the buff-steal
-// ability is present, for the real Pallas/Thresh/Tithonus charged-skill text (verbatim from
-// docs/ship-skills.csv, confirmed 2026-07-04).
+// ability is present, for Pallas/Thresh/Tithonus charged-skill texts (old-corpus wording;
+// synthetic, the catalogue text differs).
 
 function ship(over: Partial<Ship>): Ship {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

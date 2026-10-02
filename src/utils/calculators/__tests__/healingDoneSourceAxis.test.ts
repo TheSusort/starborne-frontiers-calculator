@@ -39,7 +39,8 @@ beforeEach(() => setRateGateRng(() => 0.999999)); // never crit — deterministi
 afterEach(() => resetRateGateRng());
 
 const BASIC_ACTIVE = 'This Unit deals <unit-damage>100% damage</unit-damage>.';
-/** Magnolia's refit-1 passive, verbatim from docs/ship-skills.csv — a standing damage-dealt leech. */
+/** Old-corpus wording of Magnolia's refit-1 passive (synthetic; the catalogue text differs) — a
+ *  standing damage-dealt leech. */
 const MAGNOLIA_P1 =
     'This Unit <unit-damage>repairs itself for 20%</unit-damage> of the damage it deals to enemies.';
 /** Isha's refit-2 passive clause, verbatim — a REACTIVE self-repair on being directly damaged. */
@@ -313,7 +314,7 @@ describe('#383 the cast-heal channel keeps reporting healing DONE on both sides'
 // for 2 turns" — so a single fixture separates them: the 13% is a performed repair and lands on
 // both columns, the ticks land on `received` alone.
 describe('#383 a Repair Over Time tick books received but NOT done (R2)', () => {
-    /** Flamel's refit-1 active, verbatim from docs/ship-skills.csv. */
+    /** Old-corpus wording of Flamel's refit-1 active (synthetic; the catalogue text differs). */
     const FLAMEL_ACTIVE =
         'This Unit <unit-damage>repairs 13%</unit-damage> of its Max HP and grants <unit-skill>Repair Over Time I</unit-skill> for 2 turns.';
 

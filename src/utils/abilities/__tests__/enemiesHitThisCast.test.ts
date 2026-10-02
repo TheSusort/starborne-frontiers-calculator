@@ -61,7 +61,7 @@ describe('enemies-hit-this-cast — parser output (buildShipAbilities)', () => {
         ).toBe(true);
     });
 
-    // Verbatim from docs/ship-skills.csv (active_skill_text field).
+    // Old-corpus wording (active_skill_text field; synthetic, the catalogue text differs).
     const TYGR_ACTIVE =
         'This Unit deals <unit-damage>180% damage</unit-damage> and inflicts <unit-skill>Security Down II</unit-skill> for 2 turns. If it damages <unit-aid>2 or more enemies, it adds 1 charge</unit-aid> to its Charged Skill.';
 

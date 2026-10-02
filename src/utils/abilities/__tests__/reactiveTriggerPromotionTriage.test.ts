@@ -1,8 +1,9 @@
 /**
  * Phase 3 reactive-trigger promotion — TRIAGE PROBE CORPUS (PR0).
  *
- * One probe per family-C ship, routed through the REAL production path (buildShipAbilities)
- * with skill text copied VERBATIM from docs/ship-skills.csv (parser source of truth).
+ * One probe per family-C ship, routed through the REAL production path (buildShipAbilities).
+ * Skill texts mix verbatim docs/ship-skills.csv text with old-corpus wording (synthetic; the
+ * catalogue text differs).
  *
  * GREEN = the reactive effect is already correctly triggered → the sweep finding was a false
  * positive (locked here as a regression guard). RED = a real gap; the matching cluster fix-PR
@@ -37,11 +38,12 @@ describe('Phase 3 reactive-trigger triage — corpus scaffold', () => {
 
 // ─── Task 2 / Cluster 1 — on-attacked ───────────────────────────────────────────────────────
 //
-// Bizon, Purifier, Quixilver, Iridium, Malvex, Warden, Nyxen, Sansi, Panguan. Every text below
-// is copied VERBATIM from docs/ship-skills.csv's first_passive_skill_text column (parser source
-// of truth). Each probe was first run with a console.log of the raw abilities array (per the
-// task's ambiguity clause) to confirm the actual ability `type` before asserting — several
-// ships' real ability shape differs from the task brief's illustrative text (see report).
+// Bizon, Purifier, Quixilver, Iridium, Malvex, Warden, Nyxen, Sansi, Panguan. Texts below are
+// first_passive_skill_text wording; all but Quixilver's and Panguan's are old-corpus wording
+// (synthetic; the catalogue text differs). Each probe was first run with a console.log of the raw
+// abilities array (per the task's ambiguity clause) to confirm the actual ability `type` before
+// asserting — several ships' real ability shape differs from the task brief's illustrative text
+// (see report).
 describe('cluster 1 — on-attacked', () => {
     // Bizon's passive is a self-BUFF grant (XAOC Swiftness II), NOT a damage ability as the task
     // brief's illustrative example text assumed — confirmed via buildShipAbilities output.

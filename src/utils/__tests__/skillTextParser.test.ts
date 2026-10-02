@@ -116,7 +116,8 @@ describe('parseSkillDamage', () => {
     // Epic PR1 (skill-model gap, finding family 1): damage-REDUCTION / conversion clauses were
     // being read as outgoing attack multipliers because the tag content or nearby text merely
     // mentions the word "damage" — the heuristic never distinguished incoming reduction from an
-    // outgoing hit. Exact clauses from docs/ship-skills.csv.
+    // outgoing hit. Clauses are from docs/ship-skills.csv except Voron's and FrontLine's, which
+    // are old-corpus wording (synthetic; the catalogue text differs).
     it('skips "X% damage reduction" (Tormenter p2 — incoming HP-scaled reduction, not an attack)', () => {
         const text =
             "This Unit's attacks always critically hit and gains up to <unit-damage>30% damage reduction</unit-damage> as its health decreases.";
@@ -221,8 +222,9 @@ describe('detectFullyCharged', () => {
     });
 });
 
-// PR F4: permanent pre-fight base-stat passives. Every positive case below is the EXACT
-// docs/ship-skills.csv text (markup included) — the CSV is the parser's source of truth.
+// PR F4: permanent pre-fight base-stat passives. Positive cases are ship skill text with markup
+// included: docs/ship-skills.csv rows, or a ship's old-corpus wording (synthetic; the catalogue
+// text differs).
 describe('parsePreCombatStatGrants', () => {
     it('returns [] for null/undefined/empty', () => {
         expect(parsePreCombatStatGrants(null)).toEqual([]);
@@ -1038,8 +1040,9 @@ describe('parseSkillEffects', () => {
     // Epic PR1 (skill-model gap, finding family 3): Amartya's "When an enemy defender gains
     // Taunt, this Unit inflicts N stacks of Exposed on that defender." names Taunt only as the
     // TRIGGER condition (the enemy is the one gaining it) — the segment loop's verb scan doesn't
-    // check WHO the "gains" verb's subject is, so it minted a phantom self Taunt grant. Exact
-    // clause from docs/ship-skills.csv (Amartya passive2/passive3).
+    // check WHO the "gains" verb's subject is, so it minted a phantom self Taunt grant. The
+    // clause is the old-corpus wording of Amartya's passive2 (synthetic; the catalogue text
+    // differs).
     it('does not mint a phantom self Taunt grant from an enemy-gains-Taunt trigger clause (Amartya)', () => {
         const text =
             'When an enemy defender gains <unit-skill>Taunt</unit-skill>, this Unit inflicts 1 stacks of <unit-skill>Exposed</unit-skill> on that defender.';
@@ -1141,7 +1144,9 @@ describe('parseSecondaryDamage', () => {
     });
 
     // PR9(a): "additional damage equal to X% of its/their current Shield" — Malvex, Quixilver,
-    // Xcellence, FrontLine. RAW CSV rows (docs/ship-skills.csv), verbatim.
+    // Xcellence, FrontLine. The Xcellence row is verbatim docs/ship-skills.csv text; the
+    // Malvex, Quixilver and FrontLine rows are old-corpus wording (synthetic; the catalogue text
+    // differs).
     describe('shield-basis secondary damage (PR9a)', () => {
         it('parses FrontLine\'s "of their current Shield" (pronoun "their", not "its")', () => {
             const frontLineActive =
@@ -1191,7 +1196,7 @@ describe('parseSecondaryDamage', () => {
         // FrontLine's own active row (tested above) already proves the ADDITIONAL-DAMAGE
         // shield clause ("60% of their current Shield") is picked over the co-located
         // shield-GRANT clause ("Shield equal to 30% of the damage dealt") in the SAME text —
-        // both clauses share the raw row, and only the damage-basis one is a SecondaryDamage.
+        // both clauses share the row, and only the damage-basis one is a SecondaryDamage.
     });
 });
 
@@ -1455,8 +1460,9 @@ describe('parseCritPowerExtend', () => {
     });
 });
 
-// PR11 (epic PR11): debuff-duration reduction — the inverse of extend-dot. All texts below are
-// real CSV rows (docs/ship-skills.csv).
+// PR11 (epic PR11): debuff-duration reduction — the inverse of extend-dot. The Heliodor texts
+// are old-corpus wording (synthetic; the catalogue text differs); the Pestilence texts are
+// docs/ship-skills.csv rows.
 describe('parseDebuffDurationReduction', () => {
     it('Heliodor FIRST passive: self damage-reaction, target self, 1 turn', () => {
         expect(
@@ -2144,8 +2150,10 @@ describe('detectReactiveTrigger', () => {
 describe('detectReactiveTrigger — non-Marauder reclassifications (Overload-lifecycle side effects)', () => {
     // The KILL_TRIGGER_RE / APPLYING_DEBUFF_RE patterns added for the Overload lifecycle also
     // (correctly) reclassify several non-Marauder buff grants from on-cast to reactive triggers.
-    // Each ship's buff genuinely is gated behind a kill / debuff-infliction in docs/ship-skills.csv,
-    // so these are semantically-correct reclassifications. Text below is the real CSV phrasing.
+    // Each ship's buff genuinely is gated behind a kill / debuff-infliction, so these are
+    // semantically-correct reclassifications. The KILL_TRIGGER_RE texts are docs/ship-skills.csv
+    // phrasing; the APPLYING_DEBUFF_RE texts are old-corpus wording (synthetic; the catalogue
+    // text differs).
 
     // --- KILL_TRIGGER_RE → on-enemy-destroyed ---
     it('Gallant — Legion Discipline I gated on "When this Unit destroys an enemy"', () =>
@@ -2405,7 +2413,8 @@ describe('parseAllSkillEffects', () => {
         expect(result.find((e) => e.source === 'charge')?.buffName).toBe('Attack Up III');
     });
 
-    // Lionheart R4 refit-active passive (docs/ship-skills.csv, verbatim). Its round-start
+    // Lionheart R4 refit-active passive, old-corpus wording (synthetic; the catalogue text
+    // differs). Its round-start
     // Protection grant is a FIXED pool (a redirect clears it entirely) — refresh-to-10, not
     // accumulate. maxStacks/clearAllOnRedirect tag this so the engine (Task 4) can cap +
     // clear it, distinct from Meatshield's accumulating start-of-combat grant below.
@@ -2808,7 +2817,8 @@ describe('parseExtraAction', () => {
         ).toBeUndefined();
     });
 
-    // Real texts from docs/ship-skills.csv.
+    // Ship texts: docs/ship-skills.csv rows, or old-corpus wording (synthetic; the catalogue text
+    // differs) for Nuqtu, Sustainer and Tormenter.
     it('Nuqtu: charged, gated on enemy having 3+ buffs', () => {
         const r = parseExtraAction(
             'This Unit deals <unit-damage>200% damage</unit-damage>, including additional Damage equal to <unit-damage>80%</unit-damage> of its Defense, and an extra 40% for each buff on the enemy. If the target has 3 or more buffs, this Unit grants itself 1 extra End Of Round Action.'
@@ -3452,7 +3462,8 @@ describe('parseHealAbilities — unmodeled reactive triggers are NOT emitted', (
     });
 
     it('Cultivator p2: ally-damage clause → ally-target heal with allySubject damageReaction; 4% cleanse clause carries ownCleanseReaction (Phase 3 PR-H)', () => {
-        // Full CSV p2 text (tags stripped; <br /><br /> → '. ' via the plain pipeline).
+        // Old-corpus p2 text (synthetic; the catalogue text differs), tags stripped and
+        // <br /><br /> → '. ' as the plain pipeline does.
         // The 4% cleanse-reaction clause now carries `ownCleanseReaction` (Phase 3 PR-H: routes
         // to the NEW on-own-cleanse trigger — "cleanses" is NOT a damageReaction shape, a
         // SEPARATE parser-level annotation, see its doc comment); the 8% ally-damaged clause was
@@ -3524,11 +3535,12 @@ describe('parseHealAbilities — unmodeled reactive triggers are NOT emitted', (
 // self hp-threshold). PR 2 (Task 8): ALLY-subject reactions ("when an ally is directly
 // damaged", Cultivator) parse with `damageReaction.allySubject: true`, and self triggers
 // whose heal RECIPIENT is not self (Heliodor's second-listed passive "repairs them
-// [all allies]") parse too. All texts below are real CSV rows.
+// [all allies]") parse too. Most texts below are old-corpus wording (synthetic; the catalogue
+// text differs).
 describe('parseHealAbilities — damage-reaction heals (Phase 4c)', () => {
-    // Makoli and Guardian share this CSV text BYTE-IDENTICALLY (both ships'
+    // Makoli and Guardian shared this old-corpus text byte-identically (both ships'
     // first_passive_skill_text column) — one test covers both.
-    it('Makoli/Guardian first passive (identical CSV text): below-40% gate → ONE heal with damageReaction.hpBelowPct', () => {
+    it('Makoli/Guardian first passive (identical old-corpus text): below-40% gate → ONE heal with damageReaction.hpBelowPct', () => {
         expect(
             parseHealAbilities(
                 'When directly damaged while below 40% HP, this Unit <unit-damage>repairs 20%</unit-damage> of its Max HP.'
@@ -4273,9 +4285,8 @@ describe('parsePurge — E4 crit-power scaling', () => {
     });
 });
 
-// PR10: buff steal. RAW strings verbatim from docs/ship-skills.csv (Pallas/Thresh/Tithonus
-// charged-skill text). Confirmed via `grep -iE "^(Pallas|Thresh|Tithonus|Meatshield),"
-// docs/ship-skills.csv` (2026-07-04).
+// PR10: buff steal. Tagged strings in the old-corpus wording of Pallas/Thresh/Tithonus's
+// charged skills and Meatshield's passive (synthetic; the catalogue text differs).
 const PALLAS_CHARGED_RAW =
     'This Unit steals 1 buff from the primary target, then deals <unit-damage>260% damage</unit-damage>.';
 const THRESH_CHARGED_RAW =
@@ -4286,19 +4297,19 @@ const MEATSHIELD_PASSIVE_RAW =
     'This Unit <unit-damage>repairs 1.5%</unit-damage> of its max HP for each <unit-aid>debuff</unit-aid> on itself.<br /><br />If this Unit has less than 3 stacks of <unit-skill>Protection</unit-skill>, it steals <unit-skill>Protection</unit-skill> until this Unit has 3 stacks of <unit-skill>Protection</unit-skill>.';
 
 describe('parseBuffSteal (PR10)', () => {
-    it('parses Pallas charged RAW text: count 1, no adjacent-ally grant', () => {
+    it('parses Pallas charged old-corpus text: count 1, no adjacent-ally grant', () => {
         expect(parseBuffSteal(PALLAS_CHARGED_RAW)).toEqual([
             { count: 1, grantAdjacentAllies: false },
         ]);
     });
 
-    it('parses Thresh charged RAW text: count 1, no adjacent-ally grant (steal clause is independent of the trailing Defender-gated buff sentence)', () => {
+    it('parses Thresh charged old-corpus text: count 1, no adjacent-ally grant (steal clause is independent of the trailing Defender-gated buff sentence)', () => {
         expect(parseBuffSteal(THRESH_CHARGED_RAW)).toEqual([
             { count: 1, grantAdjacentAllies: false },
         ]);
     });
 
-    it('parses Tithonus charged RAW text: count 1, grantAdjacentAllies true — and does NOT cannibalize the sibling purge clause', () => {
+    it('parses Tithonus charged old-corpus text: count 1, grantAdjacentAllies true — and does NOT cannibalize the sibling purge clause', () => {
         expect(parseBuffSteal(TITHONUS_CHARGED_RAW)).toEqual([
             { count: 1, grantAdjacentAllies: true },
         ]);
@@ -4352,7 +4363,8 @@ describe('detectPurgeStripsShield (I6 — Lodolite legendary refit)', () => {
     });
 
     it('does NOT fire for a shield-removal clause with no purge language (guard against false positives)', () => {
-        // Real corpus lines (docs/ship-skills.csv) — "removes N% … Shield" with no self-purge trigger.
+        // Old-corpus lines (synthetic; the catalogue text differs) — "removes N% … Shield" with no
+        // self-purge trigger.
         expect(
             detectPurgeStripsShield(
                 'removes 30% of the enemy Shield, and inflicts Speed Down II and Crit Power Down III for 2 turns'
@@ -4386,8 +4398,8 @@ describe('detectPurgeStripsShield (I6 — Lodolite legendary refit)', () => {
 });
 
 describe('parseShieldStrip (PR9b — standalone "removes X% of the enemy Shield")', () => {
-    // RAW CSV rows (docs/ship-skills.csv), verbatim — the "other 3" rows referenced by
-    // detectPurgeStripsShield's comment ("the other 3 corpus rows carry no purge language
+    // Old-corpus wording of the APEX, Laika and Malvex rows (synthetic; the catalogue text
+    // differs) — the "other 3" rows referenced by detectPurgeStripsShield's comment ("the other 3 corpus rows carry no purge language
     // at all"). This is a STANDALONE on-cast strip, never gated on a purge landing.
     it('parses APEX\'s active skill ("removes 30% of the enemy Shield")', () => {
         const apexActive =
@@ -4694,7 +4706,7 @@ describe('detectAllyPurgedTrigger', () => {
 
 // ---------------------------------------------------------------------------
 // C2b-2 T4: detectEndOfRoundPurgeTrigger + detectMostBuffsTarget (Rhodium)
-// RAW strings from docs/ship-skills.csv (Rhodium row).
+// Old-corpus wording of the Rhodium and Iridium rows (synthetic; the catalogue text differs).
 // Regexes must match THROUGH <unit-aid> tags (loose [^.;]* gaps).
 // ---------------------------------------------------------------------------
 const RHODIUM_P1_RAW =
@@ -5391,7 +5403,7 @@ describe('parseOverRepairRedirect', () => {
 });
 
 describe("detectTopUpBuffSteal (Meatshield's charged Protection clause)", () => {
-    it('parses the real RAW charged text: Protection, up to 3 stacks', () => {
+    it('parses the old-corpus passive text: Protection, up to 3 stacks', () => {
         expect(detectTopUpBuffSteal(MEATSHIELD_PASSIVE_RAW)).toEqual([
             { buffName: 'Protection', upToStacks: 3 },
         ]);

@@ -8,7 +8,7 @@
  * Yuyan, the sole "apply"-literal member (`on-debuff-inflicted` with `triggerApplicationFilter:
  * 'apply'`).
  *
- * Each ability is the REAL parsed kit (buildShipAbilities on verbatim docs/ship-skills.csv text),
+ * Each ability is the REAL parsed kit (buildShipAbilities on the skill texts below),
  * registered directly via registerReactiveListeners and driven with synthetic debuff-applied
  * events — the same hand-rolled-bus pattern as providerOtherAllyDebuffReaction's Part 1, which
  * proves the LISTENER wiring precisely without fighting positional targeting/landing rolls.
@@ -58,7 +58,8 @@ function registerSingle(
     return enqueued;
 }
 
-// Verbatim from docs/ship-skills.csv.
+// HAYYAN_P2 is catalogue text (docs/ship-skills.csv); OLEANDER_P2 and YUYAN_P2 are old-corpus
+// wording (synthetic; the catalogue text differs).
 const OLEANDER_P2 =
     "When an ally inflicts a debuff, this Unit <unit-aid>adds 1 charge</unit-aid> to it's Charged Skill and then, once per ally per round, grants <unit-skill>Repair Over Time II</unit-skill> to that Ally for 2 turns.";
 const HAYYAN_P2 =

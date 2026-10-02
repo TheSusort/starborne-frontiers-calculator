@@ -23,8 +23,8 @@
  * emits reactive-cleanse-performed), so a working mechanic was indistinguishable from a missing
  * one. It now emits the same log-only event flagged `mode: 'reduce-duration'`.
  *
- * Both ships run through the REAL production path — verbatim skill text from docs/ship-skills.csv
- * through buildShipAbilities, driven by runCombat.
+ * Both ships run through the REAL production path — skill text (Ruiner's catalogue R2, Heliodor's
+ * old-corpus R2) through buildShipAbilities, driven by runCombat.
  */
 import { describe, it, expect } from 'vitest';
 import { runCombat, CombatEngineInput } from '../engine';
@@ -48,7 +48,7 @@ const RUINER_R2 =
     '<unit-skill>Overload</unit-skill> when an enemy preforms a <unit-aid>repair</unit-aid>, upon ' +
     'destroying an enemy, this Unit removes <unit-skill>Overload</unit-skill>.';
 
-/** Heliodor's R2 passive, verbatim from docs/ship-skills.csv (second passive column). */
+/** Old-corpus wording of Heliodor's R2 passive (synthetic; the catalogue text differs). */
 const HELIODOR_R2 =
     'When directly damaged, this Unit reduces the duration of all active <unit-aid>Debuffs</unit-aid> ' +
     'on itself by 1 turn and <unit-damage>repairs itself for 8%</unit-damage> of its Max HP.';

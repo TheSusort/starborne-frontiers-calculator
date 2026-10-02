@@ -19,7 +19,7 @@ function abilitiesFor(over: Partial<Ship>, name: string): Ability[] {
     return slot(buildShipAbilities(ship(over)).slots, name)?.abilities ?? [];
 }
 
-// Verbatim from docs/ship-skills.csv row "Zosimos".
+// Old-corpus wording of Zosimos's charged (synthetic; the catalogue text differs).
 const ZOSIMOS_CHARGED =
     'This Unit inflicts <unit-skill>Reversed Repairs</unit-skill> for 1 turn and deals <unit-damage>300% damage</unit-damage>.';
 

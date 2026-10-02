@@ -9,10 +9,11 @@
  *   - "At the start of combat, this Unit gains …" one-time grants → 'pre-combat' (buffs AND
  *     shields), not 'on-cast' (which would re-grant on every skill use).
  *
- * Every clause below is copied VERBATIM from docs/ship-skills.csv (the parser's source of
- * truth) and routed through the REAL production path (buildShipAbilities), per the epic's
- * verification protocol: findings are unverified until a red test fails through production
- * routing, not an isolated regex/dump.
+ * Clauses below mix verbatim docs/ship-skills.csv text with old-corpus wording (synthetic; the
+ * catalogue text differs); a describe title that cites docs/ship-skills.csv uses catalogue text
+ * throughout. Every clause is routed through the REAL production path (buildShipAbilities), per
+ * the epic's verification protocol: findings are unverified until a red test fails through
+ * production routing, not an isolated regex/dump.
  */
 import { describe, it, expect } from 'vitest';
 import { buildShipAbilities } from '../buildShipAbilities';
@@ -38,7 +39,7 @@ function findBuff(abilities: Ability[], buffName: string): Ability | undefined {
 
 // ─── "At the start of the round …" → start-of-round ────────────────────────────────────────
 
-describe('Judge: start-of-round AoE execute damage (docs/ship-skills.csv passive1/2)', () => {
+describe('Judge: start-of-round AoE execute damage (old-corpus passive1/2)', () => {
     const JUDGE_TEXT =
         'This Unit ignores <unit-skill>Taunt</unit-skill> and <unit-skill>Provoke</unit-skill> ' +
         'effects and has <unit-damage>20% defense penetration</unit-damage><br /><br />At the ' +
@@ -98,7 +99,7 @@ describe('Chimei: start-of-round Stealth-gated heal (docs/ship-skills.csv passiv
     });
 });
 
-describe('Incinerator: end-of-round Inferno-execute damage (docs/ship-skills.csv passive1/2)', () => {
+describe('Incinerator: end-of-round Inferno-execute damage (old-corpus passive1/2)', () => {
     const INCINERATOR_TEXT =
         'At the end of the round, this unit deals <unit-damage>100% damage</unit-damage> to ' +
         'all enemies with <unit-skill>Inferno</unit-skill>.';
@@ -143,7 +144,7 @@ describe('Chakara: round-start-continuation damage inherits its preceding senten
     });
 });
 
-describe('Rhodium: end-of-round co-located purge + damage (docs/ship-skills.csv passive2)', () => {
+describe('Rhodium: end-of-round co-located purge + damage (old-corpus passive2)', () => {
     it('the 80%-no-crit damage rides end-of-round, alongside the already-correct purge', () => {
         const abilities = passiveAbilities({
             refits: [{}, {}],
@@ -226,7 +227,7 @@ describe("Cobalt: start-of-turn buff shares its sibling charge ability's trigger
 
 // ─── "At the start of combat, this Unit gains …" one-time grants → pre-combat ──────────────
 
-describe('Crucialis: start-of-combat shield AND buff (docs/ship-skills.csv passive1)', () => {
+describe('Crucialis: start-of-combat shield AND buff (old-corpus passive1)', () => {
     const CRUCIALIS_TEXT =
         'At the start of combat, this Unit gains a <unit-damage>Shield equal to 20%</unit-damage> ' +
         'of its Max HP and gains <unit-skill>Atlas Coordination I</unit-skill> for 6 turns.' +
@@ -288,9 +289,10 @@ describe('start-of-combat shield, phrase trailing the sentence (synthetic)', () 
 });
 
 describe('IonScorp: start-of-combat shield AND buff, undisclosed corpus twin of Crucialis (#210 review)', () => {
-    // Exact docs/ship-skills.csv passive1 — the SAME clause shape as Crucialis, caught by the
-    // reviewer's corpus sweep rather than the epic's named-ship list. Locks the generic
-    // detectors so a future parser tweak that silently un-fires on IonScorp is caught here.
+    // Old-corpus wording of IonScorp's passive1 (synthetic; the catalogue text differs) — the
+    // SAME clause shape as Crucialis, caught by the reviewer's corpus sweep rather than the
+    // epic's named-ship list. Locks the generic detectors so a future parser tweak that silently
+    // un-fires on IonScorp is caught here.
     const IONSCORP_TEXT =
         'At the start of combat, this Unit gains a <unit-damage>Shield equal to 20%</unit-damage> ' +
         'of its Max HP and gains <unit-skill>Atlas Coordination I</unit-skill> for 6 turns.';
@@ -315,7 +317,8 @@ describe('IonScorp: start-of-combat shield AND buff, undisclosed corpus twin of 
 
 describe('Vindicator: start-of-combat durationless buff (#210 review corpus sweep)', () => {
     it('Magnetized Shielding rides pre-combat, not on-cast', () => {
-        // Exact docs/ship-skills.csv passive1 — no "for N turns" duration on the grant.
+        // Old-corpus wording of Vindicator's passive1 (synthetic; the catalogue text differs) — no
+        // "for N turns" duration on the grant.
         const abilities = passiveAbilities({
             firstPassiveSkillText:
                 'This Unit has 20% Shield Penetration. At the start of combat, this Unit gains ' +

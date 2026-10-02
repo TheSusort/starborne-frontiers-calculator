@@ -234,8 +234,8 @@ describe('Paracelsus on-destroyed reactive HP retaliation reduces the killer HP 
  * casterId = the enemy's own actor id.
  */
 
-// Verbatim from docs/ship-skills.csv (Grif, first_passive_skill_text — the R0/innate slot,
-// applies with zero refits). Do NOT alter this text.
+// Old-corpus wording of Grif's first passive (synthetic; the catalogue text differs) — the
+// R0/innate slot, applies with zero refits. Do NOT alter this text.
 const GRIF_P1 =
     'When an enemy <unit-aid>cleanses a Debuff</unit-aid>, this Unit deals <unit-damage>75% Damage</unit-damage> that cannot critically hit.';
 
@@ -301,8 +301,8 @@ describe("Grif's on-enemy-cleansed reactive lands on the real cleansing enemy (p
  * take the real HP hit — and the OTHER enemy (still alive, never the selector's pick) must NOT.
  */
 
-// Verbatim from docs/ship-skills.csv (Rhodium, second_passive_skill_text — the R2/refit-active
-// slot getShipSkillRows resolves for a 2-refit ship). Do NOT alter this text.
+// Old-corpus wording of Rhodium's second passive (synthetic; the catalogue text differs) — the
+// R2/refit-active slot getShipSkillRows resolves for a 2-refit ship. Do NOT alter this text.
 const RHODIUM_P2 =
     'At the end of the round, this Unit <unit-aid>purges 2</unit-aid> buffs from the enemy with ' +
     'the most buffs and deals <unit-damage>80% damage</unit-damage> that cannot critically hit.';
@@ -626,6 +626,7 @@ describe("Judge's start-of-round damage hits ALL <50%-HP enemies, not the >50% o
 // Real corpus active (single-target 185% + inflicts Inferno III) — verbatim-shaped from
 // docs/ship-skills.csv (Incinerator active_skill_text). The Inferno infliction lands (Incinerator
 // hacking 500 vs the victim's security 0), so the front enemy carries Inferno from round 1 on.
+// INCINERATOR_PASSIVE is old-corpus wording (synthetic; the catalogue text differs).
 const INCINERATOR_PASSIVE =
     'At the end of the round, this unit deals <unit-damage>100% damage</unit-damage> to all ' +
     'enemies with <unit-skill>Inferno</unit-skill>.';

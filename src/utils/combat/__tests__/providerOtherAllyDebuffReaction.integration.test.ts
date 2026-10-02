@@ -15,7 +15,7 @@
  * parts: a hand-rolled-bus unit test of the LISTENER (mirrors allyCritDot.test.ts's Task 2 —
  * precise, deterministic, and the only practical way to prove the AoE/chain-bound shapes without
  * fighting positional targeting), and engine-level integration tests of Provider's REAL parsed
- * kit (buildShipAbilities on the verbatim docs/ship-skills.csv text) via `runCombat`.
+ * kit (buildShipAbilities on the texts below) via `runCombat`.
  */
 import { describe, expect, it } from 'vitest';
 import { runCombat, CombatEngineInput, TeamActorEngineInput } from '../engine';
@@ -33,7 +33,8 @@ function ship(over: Partial<Ship>): Ship {
     return { ...({} as any), refits: [], ...over } as Ship;
 }
 
-// Verbatim from docs/ship-skills.csv.
+// PROVIDER_ACTIVE is catalogue text (docs/ship-skills.csv); the passives are old-corpus wording
+// (synthetic; the catalogue text differs).
 const PROVIDER_ACTIVE =
     'This Unit deals <unit-damage>145% damage</unit-damage> and inflicts <unit-skill>Hacking Down II</unit-skill> and <unit-skill>Security Down I</unit-skill> for 1 turn.';
 const PROVIDER_P0 =

@@ -16,13 +16,13 @@ function abilityOfType(abilities: Ability[], type: string): Ability | undefined 
     return abilities.find((a) => a.type === type);
 }
 
-// Verbatim from docs/ship-skills.csv (second_passive_skill_text) — Snakeroot p2. The refit-2
+// Old-corpus wording of Snakeroot's p2 (synthetic; the catalogue text differs). The refit-2
 // text; with the default 4-refit fixture this is the refit-active passive row.
 const SNAKEROOT_P2 =
     'This Unit deals <unit-damage>120% damage</unit-damage> for every 4 stacks of damage over time inflicted on to a single enemy.';
 
-// Verbatim from docs/ship-skills.csv (first_passive_skill_text) — Snakeroot p1 (the R0
-// innate, same clause shape with a different rate — 100% per 7 stacks).
+// Old-corpus wording of Snakeroot's p1 (synthetic; the catalogue text differs) — the R0
+// innate, same clause shape with a different rate (100% per 7 stacks).
 const SNAKEROOT_P1 =
     'This Unit deals <unit-damage>100% damage</unit-damage> for every 7 stacks of damage over time inflicted on to a single enemy.';
 

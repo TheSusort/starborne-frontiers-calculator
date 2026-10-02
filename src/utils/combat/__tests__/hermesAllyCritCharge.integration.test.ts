@@ -1,10 +1,10 @@
 /**
  * Hermes on-ally-crit charge gain — "per attack that crits", not "per crit".
  *
- * Hermes (docs/ship-skills.csv, first passive, verbatim): "When an ally critically hits an
- * enemy, this Unit gains 1 charge to its Charged Skill." The rule is ONE charge per ally ATTACK
- * that lands a crit, never one per critting (hit, victim) pair — so an AoE footprint that crits
- * several victims grants exactly 1.
+ * Hermes (first passive, old-corpus wording; synthetic, the catalogue text differs): "When an
+ * ally critically hits an enemy, this Unit gains 1 charge to its Charged Skill." The rule is ONE
+ * charge per ally ATTACK that lands a crit, never one per critting (hit, victim) pair — so an AoE
+ * footprint that crits several victims grants exactly 1.
  *
  * "ATTACK" means SUB-ATTACK. A `hits: N` skill is N consecutive FULL-WALK attacks (locked game
  * rule) emitting N `ability-performed` events, so it grants N charges. Both halves are asserted
@@ -13,8 +13,8 @@
  * while the executor's `oncePerAttackGuardKey` — which used to hold self riders at one per actor
  * TURN — no longer covers this trigger.
  *
- * The ability is extracted through the REAL production path (buildShipAbilities on verbatim CSV
- * skill text), never a hand-built ability.
+ * The ability is extracted through the REAL production path (buildShipAbilities on skill text),
+ * never a hand-built ability.
  */
 import { describe, it, expect } from 'vitest';
 import { runCombat, CombatEngineInput, TeamActorEngineInput } from '../engine';

@@ -144,7 +144,7 @@ describe('Counter-attacks surface in the combat log (real sim path)', () => {
 // reactive `attack` entry under the attacking enemy's turn.
 // ---------------------------------------------------------------------------
 
-/** Nosorog's verbatim reflect passive (docs/ship-skills.csv, Nosorog passive2/3). */
+/** Old-corpus wording of Nosorog's reflect passive (synthetic; the catalogue text differs). */
 const NOSOROG_REFLECT =
     'This Unit reflects 40% of the Damage taken back to the enemy when directly damaged as a primary target.';
 

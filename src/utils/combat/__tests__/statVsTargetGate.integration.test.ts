@@ -2,8 +2,8 @@
  * SP-C engine population — Cobalt's owner-vs-target HP-comparison gate ("If this Unit has
  * more HP than the enemy, it additionally deals damage equal to 25% of its max HP").
  *
- * Uses the REAL parsed abilities (via `buildShipAbilities` on Cobalt's verbatim active-skill
- * text from docs/ship-skills.csv) so the `stat-vs-target`/hp/gt condition under test is the
+ * Uses the REAL parsed abilities (via `buildShipAbilities` on Cobalt's active-skill text in
+ * old-corpus wording) so the `stat-vs-target`/hp/gt condition under test is the
  * production parser output, not a hand-written stand-in.
  *
  * Team-symmetry: the SAME gate must fire whether Cobalt is the focus PLAYER attacker (its
@@ -21,8 +21,8 @@ import type { Ship } from '../../../types/ship';
 import { bareEnemy } from '../__testutils__/bareRosterFixture';
 import { dealtBy } from '../__testutils__/perTargetDealt';
 
-// Verbatim from docs/ship-skills.csv (active_skill_text field) — same constant used by the
-// Cobalt triage probe / statVsTarget.test.ts parser block.
+// Old-corpus wording of Cobalt's active (synthetic; the catalogue text differs) — same constant
+// used by the Cobalt triage probe / statVsTarget.test.ts parser block.
 const COBALT_ACTIVE =
     "This Unit purges <unit-aid>1 buff</unit-aid> from the enemy and deals <unit-damage>200% damage</unit-damage>. If this Unit has more HP than the enemy, it additionally deals <unit-damage>damage equal to 25%</unit-damage> of this Unit's max HP.";
 
@@ -171,8 +171,8 @@ describe('stat-vs-target engine gate — Cobalt HP-vs-target bonus damage', () =
     });
 });
 
-// Verbatim from docs/ship-skills.csv (charge_skill_text field) — same constant used by the
-// Bayah triage probe / statVsTarget.test.ts parser block.
+// Old-corpus wording of Bayah's charged skill (synthetic; the catalogue text differs) — same
+// constant used by the Bayah triage probe / statVsTarget.test.ts parser block.
 const BAYAH_CHARGE =
     'This Unit deals <unit-damage>150% damage</unit-damage> plus an additional amount equal to <unit-damage>30%</unit-damage> of its Defense and inflicts <unit-skill>Crit Rate Down II</unit-skill> for 2 turns. If this Unit has more Crit Power than the target, it inflicts <unit-skill>Stasis</unit-skill> for 1 turn.';
 
@@ -248,8 +248,8 @@ describe('stat-vs-target engine gate — Bayah crit-power-vs-target Stasis infli
     });
 });
 
-// Verbatim from docs/ship-skills.csv (active_skill_text field) — same constant used by the
-// Chakara triage probe / statVsTarget.test.ts parser block.
+// Old-corpus wording of Chakara's active (synthetic; the catalogue text differs) — same constant
+// used by the Chakara triage probe / statVsTarget.test.ts parser block.
 const CHAKARA_ACTIVE =
     'This Unit deals <unit-damage>180% damage</unit-damage> with additional damage equal to <unit-damage>80%</unit-damage> of its Defense. If all damaged enemies have more Speed than this Unit, it <unit-aid>adds 1 charge</unit-aid> to its Charged Skill.';
 

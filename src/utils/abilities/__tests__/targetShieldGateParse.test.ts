@@ -14,17 +14,18 @@ import { conditionsMet } from '../evaluateConditions';
 import type { Ship } from '../../../types/ship';
 import type { Condition } from '../../../types/abilities';
 
-// Verbatim from docs/ship-skills.csv (the only ground truth for skill text), including the
+// Old-corpus wording of Malvex's charged (synthetic; the catalogue text differs), including the
 // typographic apostrophe in "enemy’s Shield".
 const MALVEX_CHARGED =
     'This Unit deals <unit-damage>220% damage</unit-damage> with additional damage equal to ' +
     '<unit-damage>12%</unit-damage> of its current Shield and removes 30% of the enemy’s Shield. ' +
     'If the target has a Shield, it gains <unit-skill>Barrier</unit-skill> for 1 hit.';
 
-// Malvex's ACTIVE row, verbatim from docs/ship-skills.csv. Carries the SAME gate as the charged
-// row above, but its consequent is a NAMELESS self-shield rather than a named buff — so it is built
-// by the heal/shield loop, which never consulted detectGrantConditions (that helper needs a
-// buffName to resolve a clause on). No comma before "this Unit" here; the gate regex allows both.
+// Old-corpus wording of Malvex's ACTIVE row (synthetic; the catalogue text differs). Carries the
+// SAME gate as the charged row above, but its consequent is a NAMELESS self-shield rather than a
+// named buff — so it is built by the heal/shield loop, which never consulted detectGrantConditions
+// (that helper needs a buffName to resolve a clause on). No comma before "this Unit" here; the
+// gate regex allows both.
 const MALVEX_ACTIVE =
     'This Unit deals <unit-damage>100% damage</unit-damage> with an additional damage equal to ' +
     '<unit-damage>5%</unit-damage> of its current Shield. If the target has a Shield this Unit ' +

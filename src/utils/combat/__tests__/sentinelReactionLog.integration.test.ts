@@ -2,11 +2,12 @@
  * #2 (reaction-only-on-turn) end-to-end log visibility, through the REAL sim path
  * (planPlacement -> simulateBattle -> buildCombatLog).
  *
- * Sentinel's refit-active passive (docs/ship-skills.csv, verbatim): "When an ally critically hits
- * an enemy, this Unit repairs the ally for 5% of this Unit's Max HP and deals 60% damage to that
- * enemy." Both ride on-ally-crit. Drain-time reactive damage/heal emit no ability/heal event
- * (chain guard), so they surface via the LOG-ONLY reactive-damage-performed / reactive-heal-performed
- * events, nested under the crit-ing ally's turn — never on Sentinel's own turn.
+ * Sentinel's refit-active passive (old-corpus wording; synthetic, the catalogue text differs):
+ * "When an ally critically hits an enemy, this Unit repairs the ally for 5% of this Unit's Max HP
+ * and deals 60% damage to that enemy." Both ride on-ally-crit. Drain-time reactive damage/heal
+ * emit no ability/heal event (chain guard), so they surface via the LOG-ONLY
+ * reactive-damage-performed / reactive-heal-performed events, nested under the crit-ing ally's
+ * turn — never on Sentinel's own turn.
  *
  * Non-vacuity: without the parser/trigger fix the reactions never fire; without the log-only
  * emits they fire but stay invisible — both make the "surfaces in the log" assertions red.

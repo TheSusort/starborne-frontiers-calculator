@@ -1,13 +1,14 @@
 /**
  * PR-G — combat-integration tests for Howler's on-ally-crit cleanse + Blast grant.
  *
- * Howler (2nd/refit passive, docs/ship-skills.csv verbatim): "This Unit cleanses 1 debuff from
+ * Howler (2nd/refit passive, old-corpus wording): "This Unit cleanses 1 debuff from
  * an ally and grants them 1 stack of Blast when that ally crits an enemy." — the cleanse AND the
  * Blast grant both ride the on-ally-crit reactive trigger, routed to the CRIT-ING ally via
  * eventCtx.damagedAllyId (the same routing lane on-ally-debuffed/on-ally-purged already use).
  *
  * Both owner abilities are extracted through the REAL production path (`buildShipAbilities`) fed
- * verbatim skill text from `docs/ship-skills.csv` — never a hand-built ability array.
+ * skill text (old-corpus wording; synthetic, the catalogue text differs) — never a hand-built
+ * ability array.
  *
  * Non-vacuity: reverting the PR-G src changes (skillTextParser.ts's broadened ALLY_CRIT_HIT_RE,
  * buildShipAbilities.ts's cleanse builder detectAllyCritTrigger wiring, and triggers.ts's
@@ -52,7 +53,8 @@ const hit = (): Ability => ({
 
 // =============================================================================
 // Howler — "This Unit cleanses 1 debuff from an ally and grants them 1 stack of Blast when
-// that ally crits an enemy." (docs/ship-skills.csv, verbatim refit-active 2nd passive).
+// that ally crits an enemy." (old-corpus wording of the refit-active 2nd passive; synthetic, the
+// catalogue text differs).
 // =============================================================================
 
 const HOWLER_P2 =
@@ -449,7 +451,7 @@ describe('Howler (enemy-side) — team symmetry: an enemy Howler reacts to its O
 //
 //   R0 (unrefit):   "…this Unit deals 40% damage to that enemy. This attack cannot crit."
 //   R2 (refit-active): "…repairs the ally for 5% of Max HP AND deals 60% damage to that enemy…"
-// (docs/ship-skills.csv, verbatim.)
+// (Old-corpus wording; synthetic, the catalogue text differs.)
 // =============================================================================
 
 const SENTINEL_R0 =
