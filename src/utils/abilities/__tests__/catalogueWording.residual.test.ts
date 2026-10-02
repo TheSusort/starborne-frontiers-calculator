@@ -41,23 +41,6 @@ const PAIRS: ResidualPair[] = [
         carries: { config: expect.objectContaining({ multiplier: 100 }) },
     },
     {
-        ship: 'Hermes',
-        slot: 'charged',
-        old: 'This Unit <unit-damage>repairs 37%</unit-damage> of its Max HP and <unit-aid>adds 1 charge</unit-aid> to the Charged Skill.<br /><br />If the target has less than 40% HP, it grants <unit-skill>Cheat Death</unit-skill>.',
-        new: 'This Unit <unit-damage>repairs 37%</unit-damage> of its max HP and <unit-skill>adds 1 charge</unit-skill> to the charged skill of allies.<br /><br />If an ally has less than 40% HP, it grants that ally <unit-skill>Cheat Death</unit-skill>.',
-        expects: 'buff|ally|on-cast|Cheat Death',
-        carries: {
-            conditions: [
-                expect.objectContaining({
-                    subject: 'hp-threshold',
-                    hpComparator: 'below',
-                    hpPercent: 40,
-                    hpSubject: 'target',
-                }),
-            ],
-        },
-    },
-    {
         ship: 'Isha',
         slot: 'passive',
         old: 'At the start of the round this Unit gains <unit-skill>Offensive Affinity Override</unit-skill>.<br />If Nayra is on the same team, it also gains <unit-skill>Defensive Affinity Override</unit-skill>.<br /><br />When directly damaged, this Unit <unit-damage>repairs 3%</unit-damage> of its max HP, but when criticall hit, it instead <unit-damage>repairs 6%</unit-damage> of its max HP.',
@@ -166,5 +149,46 @@ describe('residual — catalogue wording parses like ours', () => {
         expect(groups[1]).toBe(groups[0]);
         // The retaliation is the whole damage clause: no on-cast attack rides beside it.
         expect(abilities.some((a) => a.type === 'damage')).toBe(false);
+    });
+});
+
+// User ruling K (2026-10-02): Hermes' charged gives a charge to every ally within his skill
+// pattern, himself included; any ally in the pattern below 40% HP gets Cheat Death.
+describe('residual — Hermes charged (ruled)', () => {
+    const text =
+        'This Unit <unit-damage>repairs 37%</unit-damage> of its max HP and <unit-skill>adds 1 charge</unit-skill> to the charged skill of allies.<br /><br />If an ally has less than 40% HP, it grants that ally <unit-skill>Cheat Death</unit-skill>.';
+
+    it('the charge goes to every ally in the pattern, not to Hermes alone', () => {
+        const abilities = parseSlot('charged', text);
+        expect(sigs(abilities)).toEqual([
+            'buff|ally|on-cast|Cheat Death',
+            'charge|all-allies|on-cast|charge',
+            'heal|all-allies|on-cast|heal',
+        ]);
+        const charge = abilities.find((a) => a.type === 'charge')!;
+        expect(charge.config).toEqual({ type: 'charge', amount: 1 });
+        expect(charge.conditions).toEqual([]);
+    });
+
+    // KNOWN GAP: "any ally in the pattern below 40% HP" needs the HP gate read per RECIPIENT. A
+    // cast-path grant's conditions are checked once, against the caster's turn context, whose
+    // target HP is the heal target's (playerTurn.ts's timed-status loop), so the gate here still
+    // asks about that one ally: below 40% grants it to every recipient, above 40% to none.
+    it('Cheat Death keeps the cast-time target-HP gate', () => {
+        const cheatDeath = parseSlot('charged', text).find((a) => a.type === 'buff')!;
+        expect(cheatDeath).toMatchObject({
+            target: 'ally',
+            trigger: 'on-cast',
+            conditions: [
+                {
+                    subject: 'hp-threshold',
+                    derivable: true,
+                    hpComparator: 'below',
+                    hpPercent: 40,
+                    hpSubject: 'target',
+                },
+            ],
+            config: { type: 'buff', buffName: 'Cheat Death' },
+        });
     });
 });

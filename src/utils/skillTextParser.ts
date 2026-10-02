@@ -862,7 +862,7 @@ export function detectIgnoresStealth(...skillTexts: Array<string | null | undefi
 // LIVE on-enemy-destroyed trigger (Obsidian/Valiant), handled in parseChargeGain below,
 // instead of being dropped. Liberator's all-allies death charge stays disqualified here via
 // "all allies" (its own dedicated parser, parseAllyChargeOnEnemyDeath, handles it).
-const CHARGE_DISQUALIFY_RE = /all allies|their charged skill|charged skill of all allies/i;
+const CHARGE_DISQUALIFY_RE = /all allies|their charged skill|charged skill of (?:all )?allies/i;
 
 // "when an enemy repairs / performs a repair[s]" — a player reaction to an ENEMY repair
 // (Zosimos's "gains a charge"). Tolerates the live CSV refit typo "performs a repairs".
@@ -4248,10 +4248,12 @@ export function parseAllyChargeOnEnemyDeath(
 //   • Graphite (third passive): "At the start of the round, if an enemy Unit has Stealth, this
 //     Unit adds 1/2 charges to the charged skill of all allies within the active pattern."
 //     → start-of-round, gated on enemy-has-Stealth.
+//   • Hermes (catalogue charged slot): "…and adds 1 charge to the charged skill of allies." →
+//     on-cast, every ally in the skill pattern, Hermes included (user ruling 2026-10-02).
 // Tolerates the live CSV plural-with-1 typo ("adds 1 charges"). Reference: docs/ship-skills.csv.
-// Lookbehind-free; matches both "to their Charged Skill" and "to the charged skill of all allies".
+// Lookbehind-free; matches "to their Charged Skill" and "to the charged skill of [all] allies".
 const ALLY_CHARGE_GRANT_RE =
-    /(?:adds?|grants?|gives?)\s+(\d+|a|an)\s+charges?\s+to\s+(?:their\s+charged\s+skill|the\s+charged\s+skill\s+of\s+all\s+allies)/i;
+    /(?:adds?|grants?|gives?)\s+(\d+|a|an)\s+charges?\s+to\s+(?:their\s+charged\s+skill|the\s+charged\s+skill\s+of\s+(?:all\s+)?allies)/i;
 // Graphite's gate: "if an enemy (Unit) has Stealth".
 const ALLY_CHARGE_ENEMY_STEALTH_RE = /if\s+an\s+enemy\b[^.]*?\bhas\b[^.]*?\bStealth\b/i;
 // Shared on-enemy-death phrasing (ours and the catalogue's). Used both to EXCLUDE Liberator's
