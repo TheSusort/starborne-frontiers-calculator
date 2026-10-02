@@ -104,8 +104,12 @@ describe('Judge start-of-round AoE damage — reactive engine consumption (DPS m
         expect(result.summary.survived).toBe(false);
     });
 
-    it("the reactive credit IS now defense-mitigated (epic PR4b) — matches the active hit's mitigation ratio", () => {
+    it("the reactive credit is defense-mitigated — matches the active hit's mitigation ratio", () => {
         const DEFENSE = 5_000;
+        // Judge's 20% defense penetration is his refit ascension stat: it reaches the ship's own
+        // stats (here, simulateDPS's `defensePenetration`), and his "has 20% defense penetration"
+        // text describes that stat rather than minting a second modifier.
+        const JUDGE_PEN = 20;
 
         // Isolate the DEFENSE-MITIGATED active-hit magnitude on its own: a huge enemyHp so the
         // hp-threshold gate never opens in round 1 (no reactive component to entangle with).
@@ -113,7 +117,7 @@ describe('Judge start-of-round AoE damage — reactive engine consumption (DPS m
             attack: ATTACK,
             crit: 0,
             critDamage: 0,
-            defensePenetration: 0,
+            defensePenetration: JUDGE_PEN,
             chargeCount: 0,
             enemyDefense: DEFENSE,
             enemyHp: 10_000_000,
@@ -131,7 +135,7 @@ describe('Judge start-of-round AoE damage — reactive engine consumption (DPS m
             attack: ATTACK,
             crit: 0,
             critDamage: 0,
-            defensePenetration: 0,
+            defensePenetration: JUDGE_PEN,
             chargeCount: 0,
             enemyDefense: DEFENSE,
             enemyHp: 8_000,
@@ -144,34 +148,27 @@ describe('Judge start-of-round AoE damage — reactive engine consumption (DPS m
         // gate hasn't opened yet — same as the earlier "does NOT fire round 1" case).
         expect(withReactive.rounds[0].directDamage).toBeCloseTo(activeHitOnly, 6);
 
-        // Round 2 (epic PR4b): the reactive credit riding alongside the active hit is now ALSO
-        // defense-mitigated — cut down by (1 - calculateDamageReduction(DEFENSE)/100), the SAME
-        // raw defense-vs-attack curve `victimHitDamage` (and `applyCounterAttack`) use for a
-        // normal hit, with crit:0 so there is no crit multiplier to fold in.
-        //
-        // NOTE this is NOT literally `activeHitOnly / ATTACK`: Judge's own kit-text "20% defense
-        // penetration" clause (JUDGE_TEXT) lowers the ACTIVE hit's effective enemy defense
-        // (4,000 instead of 5,000), which is why `activeHitOnly` mitigates more favorably than a
-        // bare `calculateDamageReduction(DEFENSE)` would predict. The reactive `applyReactiveDamage`
-        // walk reads `effectiveStatsOf(owner).defensePenetration`, which is BASE-ACTOR-STAT ONLY
-        // (ability/kit-text-derived pen bonuses fold separately and are NOT threaded through this
-        // reactive path) — the SAME documented approximation `applyCounterAttack` already accepts
-        // for counter-attacks. So the reactive credit here mitigates against the FULL 5,000
-        // defense, not Judge's pen-reduced 4,000.
+        // Round 2: the reactive credit riding alongside the active hit is ALSO defense-mitigated,
+        // through the SAME defense-vs-attack curve `victimHitDamage` (and `applyCounterAttack`)
+        // use for a normal hit, with crit:0 so there is no crit multiplier to fold in. The
+        // reactive `applyReactiveDamage` walk reads `effectiveStatsOf(owner).defensePenetration`
+        // — the ship's own stat — so Judge's 20% lowers the defense BOTH hits face to 4,000.
         const rawMitigationRatio = 1 - calculateDamageReduction(DEFENSE) / 100;
-        const REACTIVE_MITIGATED = ATTACK * 0.6 * rawMitigationRatio;
+        const penMitigationRatio =
+            1 - calculateDamageReduction(DEFENSE * (1 - JUDGE_PEN / 100)) / 100;
+        // The active hit mitigates at the pen-reduced ratio …
+        expect(activeHitOnly / ATTACK).toBeCloseTo(penMitigationRatio, 3);
+        // … and the penetration is real: it mitigates strictly more favorably than full defense.
+        expect(penMitigationRatio - rawMitigationRatio).toBeGreaterThan(0.05);
+        const REACTIVE_MITIGATED = ATTACK * 0.6 * penMitigationRatio;
         // Precision 0 (not 6, unlike the round-1 comparison above): the round's directDamage is
         // `Math.round(active + reactive)` computed from the FULL-PRECISION sum inside the engine,
         // while this expected value adds the already-rounded `activeHitOnly` to a freshly
         // computed `REACTIVE_MITIGATED` — a sub-1 rounding-order discrepancy, not a formula bug.
+        // A reactive mitigated against the full 5,000 would land ~330 lower and fail this.
         expect(withReactive.rounds[1].directDamage).toBeCloseTo(
             activeHitOnly + REACTIVE_MITIGATED,
             0
         );
-        // And, since Judge's defense-pen is real for the active hit but NOT folded into the
-        // reactive walk, the reactive's own mitigation ratio is strictly worse than the active
-        // hit's — proving the two hits are no longer using the identical byte-for-byte formula
-        // (a real, reported approximation, not a silent regression).
-        expect(rawMitigationRatio).toBeLessThan(activeHitOnly / ATTACK);
     });
 });

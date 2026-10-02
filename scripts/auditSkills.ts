@@ -96,7 +96,7 @@ const ungatedEffects = (abilities: Ability[]) =>
             a.config.duration !== 'recurring'
     );
 
-interface Rule {
+export interface Rule {
     id: string;
     severity: 'high' | 'medium';
     /** True when the text shows this mechanic (loose, so a parser miss surfaces). */
@@ -455,6 +455,13 @@ function clauseFor(plain: string, name: string): string {
     const sentences = masked.split(/(?<=[.;])\s+/);
     const clause = sentences.find((s) => s.toLowerCase().includes(maskedName)) ?? masked;
     return clause.split(ABBR_MARK).join(' ');
+}
+
+/** The audit rule with this id, for unit-testing its `keyword` / `handled` predicates directly. */
+export function ruleById(id: string): Rule {
+    const rule = RULES.find((r) => r.id === id);
+    if (!rule) throw new Error(`No audit rule with id '${id}'`);
+    return rule;
 }
 
 /**

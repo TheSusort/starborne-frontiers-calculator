@@ -3,9 +3,10 @@ import {
     collectFindings,
     csvAvailable,
     findingsForShip,
+    ruleById,
     ungatedFinding,
 } from '../../../../scripts/auditSkills';
-import { Ability } from '../../../types/abilities';
+import { Ability, Condition, ScalingRule } from '../../../types/abilities';
 
 /**
  * Regression guard for parser coverage. Runs the skill audit over docs/ship-skills.csv and
@@ -135,10 +136,48 @@ describe('instead-replacement rule', () => {
         expect(rulesFor(text)).toContain('instead-replacement');
     });
 
-    it('still flags an unmodelled "instead deals" beside an enemy-type gate with no replacement delta', () => {
-        const text =
-            'This Unit deals <unit-damage>115% damage</unit-damage>, if it is a full moon it instead deals <unit-damage>155% damage</unit-damage>. If the target is a defender, this Unit deals <unit-damage>20% damage</unit-damage>.';
-        expect(rulesFor(text)).toContain('instead-replacement');
+    describe('handled predicate', () => {
+        const { handled } = ruleById('instead-replacement');
+        const damage = (conditions: Condition[], scaling?: ScalingRule): Ability => ({
+            id: 'test-damage',
+            type: 'damage',
+            target: 'enemy',
+            trigger: 'on-cast',
+            conditions,
+            ...(scaling ? { scaling } : {}),
+            config: { type: 'damage', multiplier: 115 },
+        });
+        const defenderGate: Condition = {
+            subject: 'enemy-type',
+            derivable: true,
+            requiredEnemyType: 'Defender',
+        };
+
+        it('does not accept an enemy-type gate with no replacement delta', () => {
+            expect(handled([damage([defenderGate])], '')).toBe(false);
+        });
+
+        it('accepts an enemy-type gate carrying the replacement delta as scaling', () => {
+            expect(handled([damage([defenderGate], { conditionIndex: 0, perUnit: 40 })], '')).toBe(
+                true
+            );
+        });
+
+        it("accepts Panon's negated-base plus anyOf-replacement pair", () => {
+            const negatedBase = damage([
+                {
+                    subject: 'self-buff',
+                    derivable: true,
+                    countComparator: 'eq',
+                    countThreshold: 0,
+                },
+            ]);
+            const replacement = damage([
+                { subject: 'self-buff', derivable: true, buffName: 'Taunt', anyOf: true },
+                { subject: 'self-buff', derivable: true, buffName: 'Provoke', anyOf: true },
+            ]);
+            expect(handled([negatedBase, replacement], '')).toBe(true);
+        });
     });
 });
 
