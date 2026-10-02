@@ -860,9 +860,10 @@ export function detectIgnoresStealth(...skillTexts: Array<string | null | undefi
 // all-allies death charge is disqualified here via "all allies"; parseAllyChargeOnEnemyDeath
 // handles it.
 // The ownerless "adds N charge to the Charged Skill" is an ally grant too — see
-// ALLY_CHARGE_GRANT_RE's Hermes note.
+// ALLY_CHARGE_GRANT_RE's Hermes note. The arm carries that regex's grant verbs (adds/grants/gives)
+// so a "gains N charge to the Charged Skill" stays a self gain.
 const CHARGE_DISQUALIFY_RE =
-    /all allies|their charged skill|charged skill of (?:all )?allies|\b(?:\d+|a|an)\s+charges?\s+to\s+the\s+charged\s+skill\b(?!\s+of\b)/i;
+    /all allies|their charged skill|charged skill of (?:all )?allies|\b(?:adds?|grants?|gives?)\s+(?:\d+|a|an)\s+charges?\s+to\s+the\s+charged\s+skill\b(?!\s+of\b)/i;
 
 // "when an enemy repairs / performs a repair[s]" — a player reaction to an ENEMY repair
 // (Zosimos's "gains a charge"). Tolerates the live CSV refit typo "performs a repairs".

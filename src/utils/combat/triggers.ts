@@ -5164,8 +5164,7 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                     ? (intent.eventCtx?.purgedBuffCount ?? 0)
                     : undefined;
         // The per-unit rate for a count-scaled heal is scaling.perUnit (== the parsed base pct);
-        // for a plain heal it is cfg.pct. A zero count (defensive — the trigger only fires on a
-        // repair event, so count >= 1 in practice) grants nothing.
+        // for a plain heal it is cfg.pct. A zero count grants nothing.
         const effectivePct =
             eventCountMultiplier !== undefined
                 ? intent.ability.scaling!.perUnit * eventCountMultiplier
