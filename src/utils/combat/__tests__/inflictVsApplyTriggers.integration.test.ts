@@ -250,6 +250,8 @@ describe('Yuyan — on-debuff-inflicted gated on her OWN "applying" verb (apply-
 // ("applies Concentrate Fire"); her charged "inflicts Disable" does not trigger it. The catalogue
 // texts carry that split in their verbs, so the parse alone decides it: each debuff's own
 // `application` comes from its clause's verb, and the Stealth reaction only accepts an apply.
+// The engine's apply/inflict split is #593's (`passesApplicationFilter`); the Yuyan block above
+// pins it on hand-emitted events, and debuffApplicationFilterTripwire.test.ts pins the parse.
 describe('Yuyan (catalogue text) — the active applies, the charged inflicts, only the apply grants Stealth', () => {
     const yuyan = ship({
         activeSkillText:

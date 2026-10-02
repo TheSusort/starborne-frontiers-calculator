@@ -806,9 +806,8 @@ function parseModifiers(text: string): ParsedModifier[] {
         const describesShipStat =
             !!flatPenM &&
             UNIT_HAS_DEFENSE_PENETRATION_RE.test(sentenceContaining(plain, flatPenM.index!));
-        if (describesShipStat) {
-            // Nothing to mint — see above.
-        } else if (flatPenM) {
+        // Only a skill-scoped flat penetration mints a modifier; a unit-subject one is the ship stat.
+        if (flatPenM && !describesShipStat) {
             out.push({
                 channel: 'defensePenetration',
                 value: parseFloat(flatPenM[1]),
@@ -816,8 +815,8 @@ function parseModifiers(text: string): ParsedModifier[] {
                 target: 'self',
                 conditions: [],
             });
-        } else {
-            // Epic PR12(B) — Chakara's charged: "…bypassing 20% of the enemy Defense…". Distinct
+        } else if (!flatPenM) {
+            // Chakara's charged: "…bypassing 20% of the enemy Defense…". Distinct
             // wording from "X% defense penetration" above; same defensePenetration modifier
             // shape. Because parseModifiers runs PER SKILL ROW (abilitiesFromText is called once
             // per Active/Charge/Passive text), this is inherently a PER-SKILL modifier — it only

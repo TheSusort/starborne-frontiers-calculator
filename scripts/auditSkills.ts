@@ -194,7 +194,7 @@ const RULES: Rule[] = [
     {
         id: 'defense-penetration',
         severity: 'medium',
-        // Epic PR12(B): also matches "bypassing N% of the enemy Defense" (Chakara) — a
+        // Also matches "bypassing N% of the enemy Defense" (Chakara) — a
         // differently-worded synonym for the same defensePenetration modifier as the
         // "X% defense penetration" phrasing. The unit-subject "has X% defense penetration" is
         // `defense-penetration-innate`'s, never this rule's.

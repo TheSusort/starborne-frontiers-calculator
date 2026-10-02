@@ -853,15 +853,12 @@ export function detectIgnoresStealth(...skillTexts: Array<string | null | undefi
     return skillTexts.some((t) => !!t && IGNORES_STEALTH_RE.test(stripUnitTags(t)));
 }
 
-// Phrases that disqualify a charge phrase from being a self-gain we model: ally-grant to
-// others only. The enemy-REPAIR phrasings were lifted OUT (Phase 4c PR 4): a self charge
-// gain "when an enemy repairs" now rides the LIVE on-enemy-repaired trigger (Zosimos) —
-// handled in parseChargeGain below — instead of being dropped. Phase 3 PR-B (reactive-
-// trigger promotion): the on-kill phrasings ("upon killing", "killing an enemy", "when an
-// enemy dies") were ALSO lifted out — a self charge gain on killing an enemy now rides the
-// LIVE on-enemy-destroyed trigger (Obsidian/Valiant), handled in parseChargeGain below,
-// instead of being dropped. Liberator's all-allies death charge stays disqualified here via
-// "all allies" (its own dedicated parser, parseAllyChargeOnEnemyDeath, handles it).
+// Phrases that disqualify a charge phrase from being a self-gain: grants to allies only.
+// Enemy-repair and on-kill phrasings are NOT disqualified — parseChargeGain below routes a
+// self charge gain "when an enemy repairs" onto the live on-enemy-repaired trigger (Zosimos)
+// and one on killing an enemy onto on-enemy-destroyed (Obsidian/Valiant). Liberator's
+// all-allies death charge is disqualified here via "all allies"; parseAllyChargeOnEnemyDeath
+// handles it.
 const CHARGE_DISQUALIFY_RE = /all allies|their charged skill|charged skill of (?:all )?allies/i;
 
 // "when an enemy repairs / performs a repair[s]" — a player reaction to an ENEMY repair
