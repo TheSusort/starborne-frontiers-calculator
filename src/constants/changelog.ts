@@ -7,6 +7,7 @@ export const CURRENT_VERSION = '1.72.0';
 // bumped version whose entries are still unreleased shows users a what's-new dialog listing
 // nothing. Do it by hand only if that script cannot.
 export const UNRELEASED_CHANGES: string[] = [
+    "Ships: signed-out players' ships now always use the latest skill text.",
     'Ship skills: skill text and numbers now match the official catalogue.',
     "Combat simulator: Sokol's extra action now takes its turn at his speed.",
     'Combat simulator and DPS calculator: Sokol now deals bonus damage to targets under a control effect.',

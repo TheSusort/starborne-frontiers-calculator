@@ -178,6 +178,8 @@ export const fakeSupabase = (cloud: Cloud, options: FakeSupabaseOptions = {}) =>
                 return chain;
             },
             is: () => chain,
+            // An abort signal changes nothing the fake serves.
+            abortSignal: () => chain,
             // PostgREST's `single`: one row or none, never a list. Recorded as the select it
             // is, so a caller that reads a scalar row still shows up in `ops`.
             single: () => ({
