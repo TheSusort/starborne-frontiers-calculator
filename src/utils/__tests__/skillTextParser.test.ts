@@ -2206,13 +2206,6 @@ describe('detectCritRepairTrigger', () => {
         );
     });
 
-    it('handles the "allies" plural form', () => {
-        const text = 'When it critically repairs allies, it cleanses 1 debuff.';
-        expect(detectCritRepairTrigger(text, text.indexOf('cleanses'))).toBe(
-            'on-ally-critically-repaired'
-        );
-    });
-
     it('is position-scoped: an anchor in a DIFFERENT sentence is not stamped', () => {
         // The first sentence's cleanse anchor falls OUTSIDE the crit-repair sentence.
         const text =

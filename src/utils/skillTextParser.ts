@@ -2352,7 +2352,7 @@ export function detectEchoingBurstDetonatedTrigger(
 // carrying the phrase. So an unrelated heal/charge in a DIFFERENT sentence is never mis-triggered,
 // even when it shares the anchor keyword. Reference data: docs/ship-skills.csv.
 // "when it critically repairs" names the same unit: "it" is this Unit, the sentence's subject.
-const CRIT_REPAIR_RE = /when it critically repairs (?:an ally|allies)/i;
+const CRIT_REPAIR_RE = /when it critically repairs an ally/i;
 // "when an/another ally critically hits" and "when that ally crits" are the same reactive
 // trigger. `on-ally-crit` fires on the owner's own crits too, so "another ally" (which by the
 // ally-includes-self ruling excludes the owner) is read with the owner INCLUDED: there is no
@@ -4598,7 +4598,7 @@ const LEECH_HEAL_VERB_RE =
     /\bheals?\s+for\s+(\d+(?:\.\d+)?)\s*%\s*of\s+(?:the\s+)?damage\s+dealt/gi;
 // A multi-component continuation: "with additional repair equal to N% of its defense".
 const HEAL_ADDITIONAL_RE =
-    /\bwith\s+additional\s+(?:repair|amount)\s+equal\s+to\s+(\d+(?:\.\d+)?)\s*%\s*of\s+(?:its|this\s+unit'?s)\s+(hp|max\s*hp|attack|defense)/gi;
+    /\bwith\s+additional\s+repair\s+equal\s+to\s+(\d+(?:\.\d+)?)\s*%\s*of\s+its\s+(hp|max\s*hp|attack|defense)/gi;
 
 // Leech basis from the sentence tail after the match. ORDER MATTERS: "damage dealt
 // to them/this unit" (Malvex) is damage TAKEN and must be tested before the generic
@@ -4666,11 +4666,6 @@ function resolveHealTarget(sentence: string): {
     // them for 8%") → the pronoun is plural → all-allies. Checked first because the
     // singular rule below would otherwise capture the bare \bthem\b.
     if (/\ball\s+allies\b[^.;]*\bthem\b/.test(s)) return { target: 'all-allies', explicit: true };
-    // Rikra: "... for each enemy Unit destroyed by the attack upon killing them" — this
-    // "them" refers back to the slain ENEMY units (the heal is a bare self-repair keyed by
-    // kill count), not a heal recipient. Strip that antecedent before testing the generic
-    // \bthem\b ally signal below so it isn't misread as an ally recipient (Finding B2).
-    const sWithoutKillAntecedent = s.replace(/\b(?:killing|destroying)\s+them\b/g, '');
     // The text NAMES its recipient by live HP — "the other ally with the lowest current health
     // percentage", "the ally with the most missing HP", "the ally with the lowest current health
     // percentage". One selector covers every form: "most missing HP" is loose phrasing for
@@ -4686,13 +4681,13 @@ function resolveHealTarget(sentence: string): {
     // ship that reaches this arm.
     if (
         /most\s+missing\s+hp\b|lowest\s+current\s+health(?:\s+percentage)?|\bthe\s+other\s+ally\b/.test(
-            sWithoutKillAntecedent
+            s
         )
     )
         return { target: 'lowest-hp-ally', explicit: true };
     // Singular ally detection takes priority over the bare "their" heuristic so that
     // "Repairs the ally for 8% of their Max HP" correctly routes to ally, not all-allies.
-    if (/\bthe\s+ally\b|\bthat\s+ally\b|\ban\s+ally\b|\bthem\b/.test(sWithoutKillAntecedent))
+    if (/\bthe\s+ally\b|\bthat\s+ally\b|\ban\s+ally\b|\bthem\b/.test(s))
         return { target: 'ally', explicit: true };
     if (/\ball\s+allies\b|\ballies\b/.test(s)) return { target: 'all-allies', explicit: true };
     // "itself" (or "to/from this unit") is an explicit self RECIPIENT. A bare leading subject
@@ -5521,11 +5516,11 @@ const PRE_COMBAT_PER_ADJACENT_ATTACK_RE =
 
 // Pattern C: role-gated self grants with a trailing gate: "… this Unit gains +15% crit rate and
 // +10% hacking if adjacent to a supporter." / "… this Unit gains 20% HP if its adjacent to a
-// supporter." — the gate's subject ("it is" / "it's" / "its") is optional. The stat-list capture
+// supporter." — the gate's subject ("it's" / "its") is optional. The stat-list capture
 // is bounded to its own sentence ([^.;]+?) so it can't swallow neighbouring clauses in
 // multi-sentence passives.
 const PRE_COMBAT_ROLE_GATE_TRAILING_RE =
-    /this unit gains ([^.;]+?)\s+(?:if|when|while)\s+(?:it\s+is\s+|it['’]?s\s+)?adjacent to an?\s+(supporter|defender|attacker|debuffer)\b/gi;
+    /this unit gains ([^.;]+?)\s+if\s+(?:it['’]?s\s+)?adjacent to an?\s+(supporter|defender|attacker|debuffer)\b/gi;
 
 // Pattern D (Madax, Task 9): "When adjacent to a Supporter, this Unit … increases that
 // Supporter's Defense by 20% of this Unit's Defense." — a DONOR-scaled stat grant to the
@@ -5732,15 +5727,14 @@ const MAX_SCAN_CHARS = 120;
 
 // Conjoined self-grant: "gains/grants <something> and <BuffName> for N turns". The primary
 // segment-loop emitter attaches a buff to the nearest preceding application verb, but in a
-// conjoined grant the verb is consumed by the FIRST conjunct (Hermes: "gains 1 charge …") and
-// the trailing buff name after "and" has no governing verb of its own (and may not even be
-// <unit-skill>-tagged). This supplementary pass catches that trailing buff. It is deliberately
-// narrow: a self-grant verb, then "and <BuffName> for N turns", and <BuffName> must resolve to a
-// known BUFFS entry (resolveBuffName, incl. "3" → "III" normalization). Anything not in BUFFS is
-// ignored, so it never invents buffs from arbitrary capitalized phrases. Matched on tag-stripped
-// raw text so it works whether or not the trailing buff is tagged. Group 1 = buff name, group 2 =
-// duration. Across the full ship corpus the ONLY net-new emission (i.e. not already produced by
-// the segment loop) is Hermes's Everliving Regeneration III.
+// conjoined grant the verb is consumed by the FIRST conjunct (Harvester: "gains 1 extra end of
+// round action and Speed Up I for 6 turns") and the trailing buff name after "and" has no
+// governing verb of its own (and may not even be <unit-skill>-tagged). This supplementary pass
+// catches that trailing buff. It is deliberately narrow: a self-grant verb, then "and <BuffName>
+// for N turns", and <BuffName> must resolve to a known BUFFS entry (resolveBuffName, incl. "3" →
+// "III" normalization). Anything not in BUFFS is ignored, so it never invents buffs from arbitrary
+// capitalized phrases. Matched on tag-stripped raw text so it works whether or not the trailing
+// buff is tagged. Group 1 = buff name, group 2 = duration.
 const CONJOINED_SELF_GRANT_RE =
     /\b(?:gains?|grants?)\b[^.;]*?\band\s+([A-Z][A-Za-z][A-Za-z. ]*?[A-Za-z0-9])\s+for\s+(\d+)\s+turns?/gi;
 
