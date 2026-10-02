@@ -937,7 +937,7 @@ const GRANT_ENEMY_TYPE_RE = new RegExp(
 
 // Negated enemy class: "When this attack targets non-defenders" → enemy is NOT that type.
 // Scoped to the "targets" lead-in so "non-defender ally" phrasings don't match.
-const NON_ENEMY_TYPE_RE = new RegExp(`(?:targets)\\s+non-?\\s*(${ENEMY_TYPE_WORD.source})`, 'i');
+const NON_ENEMY_TYPE_RE = new RegExp(`targets\\s+non-?\\s*(${ENEMY_TYPE_WORD.source})`, 'i');
 
 const capType = (s: string): EnemyBaseClass =>
     (s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()) as EnemyBaseClass;
@@ -1559,8 +1559,8 @@ const KILL_WITH_DEBUFF_RE = /\bdestroying\s+an\s+enemy\s+with\s+a\s+debuff\b/i;
 const SHIELD_FULL_RE = /\bshield\s+equal\s+to\s+100%\s+of\s+(?:its|their)\s+max(?:imum)?\s*hp\b/i;
 // Malvex charged Barrier: "If the target has a Shield" → enemy-shield (the TARGET's shield pool,
 // cast-time). Subject-anchored on "the target|enemy" so it can never co-match the owner-side
-// `if this unit has an active shield` rule (APEX) handled just above it in
-// detectGrantConditions. The trailing `\b` after "shield" keeps the phrase from being swallowed by a longer noun — and the
+// `if this unit has an active shield` rule (APEX) handled just above it in detectGrantConditions.
+// The trailing `\b` after "shield" keeps the phrase from being swallowed by a longer noun — and the
 // "a" is optional because the same ship writes it both with and without a comma before the
 // consequent. Corpus-verified (docs/ship-skills.csv, grep "target has a Shield"): Malvex's active
 // and charged rows are the only two occurrences in the game, and only the charged one grants a
@@ -3545,9 +3545,10 @@ export function detectHpCrossingTrigger(
 const TARGET_HP_GATE_RE = /\bif an ally has less than\s+(\d+(?:\.\d+)?)\s*%\s*hp\b/i;
 
 /**
- * Hermes: "If an ally has less than N% HP" gate on a grant clause. Sentence-scoped at the grant's anchor `pos` (same masked rawSentenceAround as the
- * crossing detector) so the preceding repair/charge sentence — which has no target gate — never
- * co-matches. Returns undefined for any other subject.
+ * Hermes: "If an ally has less than N% HP" gate on a grant clause. Sentence-scoped at the grant's
+ * anchor `pos` (same masked rawSentenceAround as the crossing detector) so the preceding
+ * repair/charge sentence — which has no target gate — never co-matches. Returns undefined for any
+ * other subject.
  */
 export function detectTargetHpGate(text: string, pos: number): { hpBelowPct: number } | undefined {
     const sentence = rawSentenceAround(text, pos);
@@ -4965,14 +4966,16 @@ export function parseHealAbilities(text: string | null | undefined): ParsedHealA
                         ? null
                         : /while\s+below\s+(\d+)\s*%\s*hp/i.exec(sentence);
                     // Instead-on-crit split (Isha): a sentence with "but when critcally hit,
-                    // it instead" (the skill text's own spelling) carries TWO repair matches —
-                    // the one INSIDE the instead-clause gets critFilter 'crit', the base match
-                    // 'non-crit' (mutually exclusive pair). Isha's sentence always matches the
-                    // "directly damaged" alternation FIRST (it precedes the crit-hit
-                    // alternation in HEAL_DAMAGE_REACTION_RE), so the instead-clause
-                    // handling takes precedence and the crit-hit-trigger branch below is
-                    // never reached for Isha.
-                    const insteadClause = /but\s+when\s+critcall?y?\s+hit\b[^.;]*\binstead\b/i.exec(
+                    // it instead" carries TWO repair matches — the one INSIDE the
+                    // instead-clause gets critFilter 'crit', the base match 'non-crit'
+                    // (mutually exclusive pair). Both "critcally" (the catalogue's own
+                    // spelling) and "critically" are accepted, so an upstream typo fix keeps
+                    // the split. Isha's sentence always matches the "directly damaged"
+                    // alternation FIRST (it precedes the crit-hit alternation in
+                    // HEAL_DAMAGE_REACTION_RE), so the instead-clause handling takes
+                    // precedence and the crit-hit-trigger branch below is never reached for
+                    // Isha.
+                    const insteadClause = /but\s+when\s+criti?cally\s+hit\b[^.;]*\binstead\b/i.exec(
                         sentence
                     );
                     const inInstead =

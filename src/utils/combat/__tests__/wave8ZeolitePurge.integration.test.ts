@@ -1,6 +1,6 @@
 /**
- * Zeolite's refit-active (R2) passive: "When this Unit deals damage to a defender it purges 1 buff
- * from that enemy. This Unit deals 30% more damage when hitting a defender."
+ * Zeolite's R2 passive (the refit-active one): "When this Unit deals damage to a defender it
+ * purges 1 buff from that enemy. This Unit deals 30% more damage when hitting a defender."
  *
  * The parser emits a `purge` ability (target enemy, count 1, trigger 'on-deal-damage',
  * `enemy-type` Defender condition) — see wave8Zeolite.test.ts for the parser-level coverage.
@@ -29,7 +29,8 @@ import type { StatusEngine } from '../statusEngine';
 type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 type TeamActor = NonNullable<CombatEngineInput['teamActors']>[number];
 
-// Verbatim from docs/ship-skills.csv (Zeolite R2 passive).
+// Verbatim from docs/ship-skills.csv (Zeolite, second_passive_skill_text), fed through
+// thirdPassiveSkillText — the refit-active slot getShipSkillRows resolves for a 4-refit ship.
 const ZEOLITE_PASSIVE_R4 =
     'When this Unit deals damage to a defender it <unit-skill>purges 1 buff</unit-skill> from that enemy.<br /><br />This Unit deals <unit-damage>30% more damage</unit-damage> when hitting a defender.';
 // Zeolite's REAL active ALSO carries its own unconditional on-cast purge ("purges 1 buff from
@@ -42,7 +43,7 @@ const zeoliteShip = (): Ship =>
     ({
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         ...({} as any),
-        refits: [{}, {}, {}, {}], // R4 — third passive (the "+30%/purge vs Defender" sentence)
+        refits: [{}, {}, {}, {}], // 4 refits → the third-passive slot carries the R2 text
         activeSkillText: PLAIN_ACTIVE,
         thirdPassiveSkillText: ZEOLITE_PASSIVE_R4,
     }) as Ship;

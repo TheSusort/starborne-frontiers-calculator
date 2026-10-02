@@ -10,9 +10,9 @@ import {
 } from '../../../../scripts/lib/shipSkillCsv';
 
 /**
- * The Asphyxiator ACTIVE Inferno III DoT carries an enemy-adjacency splash phrase ("on the
- * targeted enemy and all adjacent enemies"), so the DoT builder (`buildShipAbilities.ts`,
- * dotAbility) targets it at 'target-and-adjacent-enemies'. The CHARGED Inferno III sentence has no adjacency
+ * The Asphyxiator ACTIVE Inferno III DoT carries an enemy-adjacency splash phrase ("on the targeted
+ * enemy and all adjacent enemies"), so the DoT builder (`buildShipAbilities.ts`, dotAbility)
+ * targets it at 'target-and-adjacent-enemies'. The CHARGED Inferno III sentence has no adjacency
  * phrase (the adjacency phrasing there belongs to a SEPARATE Stasis sentence), so it must stay
  * 'enemy'. Skips gracefully when the gitignored reference CSV is absent (clean checkout / CI).
  */

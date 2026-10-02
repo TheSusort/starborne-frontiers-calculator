@@ -1,12 +1,11 @@
 /**
- * APEX's charged skill (docs/ship-skills.csv, charge_skill_text): "...If this Unit has an active
- * shield, the primary target is inflicted with Disable for 2 turns." Previously `detectGrantConditions`
- * had no `self-shield` subject, so the Disable debuff (and its control twin, which inherits the
- * debuff's conditions per buildShipAbilities.ts) built with NO conditions — Disable
- * inflicted on every charged cast regardless of whether APEX actually held a shield.
+ * APEX's charged skill (docs/ship-skills.csv, charge_skill_text): "...If this Unit has an
+ * active shield, the primary target is inflicted with Disable for 2 turns." The Disable debuff
+ * (and its control twin, which inherits the debuff's conditions per buildShipAbilities.ts) is
+ * gated on APEX holding a shield at cast time, never inflicted on every charged cast.
  *
- * The fix has two pieces: (a) a new `self-shield` rule in `detectGrantConditions`
- * (skillTextParser.ts); (b) `'self-shield'` added to `LIVE_SUBJECTS` (abilityStatusGating.ts) —
+ * Two pieces carry the gate: (a) the `self-shield` rule in `detectGrantConditions`
+ * (skillTextParser.ts); (b) `'self-shield'` in `LIVE_SUBJECTS` (abilityStatusGating.ts) —
  * REQUIRED because the named Disable timed debuff is gated via
  * `liveGateConditions(ability.conditions)` (engine.ts), which neutralizes any derivable
  * subject NOT in LIVE_SUBJECTS to `'always'`; without (b), (a) alone would still let Disable

@@ -2372,14 +2372,14 @@ export interface IntentExecContext {
      *  shrinks `PendingBomb.countdown` alongside the statusEngine debuffs (a Bomb is a Debuff).
      *  Absent (unit-test ctxs) → `reduceBombsOnVictim` falls back to a bare shield-then-HP debit. */
     forceDetonateBomb?: (victim: CombatActor, sourceId: string, damage: number) => void;
-    /** Resolve ANY actor's ship role (Ship.type) by id, either side — the
-     *  SAME `roleByActorId` map (side-agnostic by key) Meatshield's defense-substitution and
-     *  Graphite's `roleFilter` reaction-time check already consume. Used by the reactive `purge`
-     *  branch to re-check an `enemy-type` gate (scrubbed from the generic drain gate above)
-     *  against the REAL victim of an on-deal-damage purge (Zeolite: "When this Unit deals damage
-     *  to a defender …"), team-symmetrically. Optional — absent in unit-test ctxs that don't drive it
-     *  (an `enemy-type`-gated purge with no `roleOf` reads `undefined` → matchesRoleCategory
-     *  always false → conservative no-op).
+    /** Resolve ANY actor's ship role (Ship.type) by id, either side — the SAME `roleByActorId` map
+     *  (side-agnostic by key) Meatshield's defense-substitution and Graphite's `roleFilter`
+     *  reaction-time check already consume. Used by the reactive `purge` branch to re-check an
+     *  `enemy-type` gate (scrubbed from the generic drain gate above) against the REAL victim of an
+     *  on-deal-damage purge (Zeolite: "When this Unit deals damage to a defender …"),
+     *  team-symmetrically. Optional — absent in unit-test ctxs that don't drive it (an
+     *  `enemy-type`-gated purge with no `roleOf` reads `undefined` → matchesRoleCategory always
+     *  false → conservative no-op).
      *
      *  ALSO read by `recipientFilter.notRole` ("non-defender allies", Chimei R2) in
      *  `footprintFilteredRecipients`. Sharing this one map keeps the RECIPIENT axis and the
@@ -2668,9 +2668,9 @@ function dispatchType(intent: Intent): Ability['config']['type'] {
  *  so each half re-groups the way the author wrote it. DELIBERATELY NOT ATTEMPTED: it changes
  *  which conditions gate where, so it needs an owner ruling on the intended semantics and its own
  *  tests. */
-/** An on-deal-damage reaction's `enemy-type` conditions ("after damaging a debuffer or
- *  supporter", Zeolite's "When this Unit deals damage to a defender") name the role of a ship the attack
- *  HIT. They never gate globally — the fight-wide `ctx.enemyType` scalar describes no actor and is
+/** An on-deal-damage reaction's `enemy-type` conditions ("after damaging a debuffer or supporter",
+ *  Zeolite's "When this Unit deals damage to a defender") name the role of a ship the attack HIT.
+ *  They never gate globally — the fight-wide `ctx.enemyType` scalar describes no actor and is
  *  undefined for an enemy-owned reaction — and are checked by `dealtVictimRoleGateMet` instead.
  *  `perVictimOk` must not take them either: its per-victim ctx carries that same undefined
  *  `enemyType`, so they would always block. */

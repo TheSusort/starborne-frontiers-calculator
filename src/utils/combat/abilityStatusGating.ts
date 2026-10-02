@@ -56,11 +56,11 @@ const LIVE_SUBJECTS: ReadonlySet<ConditionSubject> = new Set([
     // Stasis (a timed ENEMY debuff gated on "3+ Acidic Decay") — without this, both conditions
     // would be neutralized to 'always' and grant/inflict unconditionally.
     'enemy-dot-count',
-    // The caster's own shield-presence gate is live-derivable —
-    // buildRoundContext's selfShielded field reads the acting actor's LIVE shieldPool
-    // (`actor.shieldPool > 0`) at cast time. Needed here for APEX's charged Disable (a timed
-    // ENEMY debuff gated on "If this Unit has an active shield") — without this, liveGateConditions would
-    // neutralize the condition to 'always' and the debuff would inflict unconditionally.
+    // The caster's own shield-presence gate is live-derivable — buildRoundContext's selfShielded
+    // field reads the acting actor's LIVE shieldPool (`actor.shieldPool > 0`) at cast time. Needed
+    // here for APEX's charged Disable (a timed ENEMY debuff gated on "If this Unit has an active
+    // shield") — without this, liveGateConditions would neutralize the condition to 'always' and
+    // the debuff would inflict unconditionally.
     'self-shield',
     // Quixilver R2: the caster's shield pool being AT max HP is live-derivable on both paths —
     // the reactive drain reads engine.ts's `isSelfShieldFull` (live `shieldPool` vs

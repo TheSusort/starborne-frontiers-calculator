@@ -455,9 +455,9 @@ const CHAKARA_P4 =
     'Then deals <unit-damage>60% damage</unit-damage> to the enemy with the highest speed.';
 
 // `withPassive` isolates the HP delta to the reactive proc firing at all — the reaction run
-// carries Chakara's real R4 passive text (4 refits, per getShipSkillRows), the control run omits
-// it entirely (no refits, no passive text) so the whole proc no-ops for both enemies, mirroring
-// the Rhodium Task 5 "no proc anywhere" control idiom above.
+// carries Chakara's real R2 passive text in the refit-active slot (4 refits, per
+// getShipSkillRows), the control run omits it entirely (no refits, no passive text) so the whole
+// proc no-ops for both enemies, mirroring the Rhodium "no proc anywhere" control idiom above.
 const chakara = (id: string, withPassive: boolean): Ship =>
     ship(id, {
         type: 'ATTACKER',

@@ -3501,30 +3501,38 @@ describe('parseHealAbilities — damage-reaction heals (Phase 4c)', () => {
         ]);
     });
 
-    it('Isha second passive (CSV second_passive_skill_text): instead-on-crit pair → 3% non-crit + 6% crit (reads the "critcally" spelling)', () => {
-        expect(
-            parseHealAbilities(
-                'When directly damaged, this Unit <unit-damage>repairs 3%</unit-damage> of its max HP, but when critcally hit, it instead <unit-damage>repairs 6%</unit-damage> of its max HP.'
-            )
-        ).toEqual([
-            {
-                kind: 'heal',
-                pct: 3,
-                basis: 'hp',
-                target: 'self',
-                explicitTarget: false,
-                damageReaction: { critFilter: 'non-crit' },
-            },
-            {
-                kind: 'heal',
-                pct: 6,
-                basis: 'hp',
-                target: 'self',
-                explicitTarget: false,
-                damageReaction: { critFilter: 'crit' },
-            },
-        ]);
-    });
+    // Isha's catalogue text spells it "critcally"; the correct "critically" must read the same,
+    // so an upstream typo fix cannot silently drop her crit / non-crit split.
+    it.each([
+        ['critcally', 'catalogue spelling'],
+        ['critically', 'correct spelling'],
+    ])(
+        'Isha second passive (CSV second_passive_skill_text): instead-on-crit pair → 3% non-crit + 6% crit ("%s", %s)',
+        (spelling) => {
+            expect(
+                parseHealAbilities(
+                    `When directly damaged, this Unit <unit-damage>repairs 3%</unit-damage> of its max HP, but when ${spelling} hit, it instead <unit-damage>repairs 6%</unit-damage> of its max HP.`
+                )
+            ).toEqual([
+                {
+                    kind: 'heal',
+                    pct: 3,
+                    basis: 'hp',
+                    target: 'self',
+                    explicitTarget: false,
+                    damageReaction: { critFilter: 'non-crit' },
+                },
+                {
+                    kind: 'heal',
+                    pct: 6,
+                    basis: 'hp',
+                    target: 'self',
+                    explicitTarget: false,
+                    damageReaction: { critFilter: 'crit' },
+                },
+            ]);
+        }
+    );
 
     it('Heliodor FIRST passive: self repair parses with bare damageReaction; the debuff-duration clause emits nothing', () => {
         expect(

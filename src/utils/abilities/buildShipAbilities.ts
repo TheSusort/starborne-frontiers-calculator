@@ -1380,13 +1380,14 @@ function abilitiesFromText(
         if (damageTrigger === 'end-of-round' && detectMostBuffsTarget(text, damagePos)) {
             out[0].ability.target = 'enemy-most-buffs';
         }
-        // A round-boundary (start-of-round, INCLUDING the "Then" continuation sentence — Chakara
-        // p4: "At the start of the round, if this Unit has the lowest speed among all allies, it
-        // gains Attack Up II and Defense Up II for 1 turn. Then deals 60% damage to the enemy with
-        // the highest speed.") damage clause carrying "to the enemy with the highest speed"
-        // re-targets from the default 'enemy' to 'enemy-highest-speed'. Sentence/position-scoped on damagePos (parseHighestSpeedEnemyTarget
-        // mirrors detectMostBuffsTarget's scoping), so an unrelated damage clause elsewhere in the
-        // text is unaffected. out[0] is safe to mutate here (SP-F F1's out[0] invariant).
+        // A round-boundary (start-of-round, INCLUDING the "Then" continuation sentence — Chakara's
+        // R2 passive: "At the start of the round, if this Unit has the lowest speed among all
+        // allies, it gains Attack Up II and Defense Up II for 1 turn. Then deals 60% damage to the
+        // enemy with the highest speed.") damage clause carrying "to the enemy with the highest
+        // speed" re-targets from the default 'enemy' to 'enemy-highest-speed'.
+        // Sentence/position-scoped on damagePos (parseHighestSpeedEnemyTarget mirrors
+        // detectMostBuffsTarget's scoping), so an unrelated damage clause elsewhere in the text is
+        // unaffected. out[0] is safe to mutate here (SP-F F1's out[0] invariant).
         if (damageTrigger === 'start-of-round' && parseHighestSpeedEnemyTarget(text, damagePos)) {
             out[0].ability.target = 'enemy-highest-speed';
         }
@@ -1399,10 +1400,9 @@ function abilitiesFromText(
         // "...deals 175% damage, then inflicts Inferno III... on the targeted enemy and all
         // adjacent enemies" — the adjacency belongs to Inferno III, not the 175% hit;
         // Vindicator's "...deals 100% damage and applies Provoke... to all enemies adjacent to
-        // the target" — the adjacency belongs to Provoke, not the 100% hit). Both are corpus
-        // regressions caught by the Task C1 corpus-regression check and fixed by this gate,
-        // which restricts the position-scoped adjacency read to the one trigger only Demolisher's
-        // passive carries.
+        // the target" — the adjacency belongs to Provoke, not the 100% hit). This gate restricts
+        // the position-scoped adjacency read to the one trigger only Demolisher's passive
+        // carries.
         if (damageTrigger === 'on-bomb-detonated') {
             const adjacentDamageScope = adjacentEnemyScopeAtPos(text, damagePos);
             if (adjacentDamageScope) {
