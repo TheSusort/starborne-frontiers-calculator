@@ -312,6 +312,11 @@ export interface Intent {
          *  trigger. Self-target consumers (APEX/Butcher/Torcher/Prospect/Yuyan riders, Hemlock's
          *  charge, Pestilence's cleanse) ignore it. */
         debuffVictimId?: string;
+        /** The triggering infliction's `debuffInflictedReactionChain` (events.ts), stamped by
+         *  the on-debuff-inflicted listener. The debuff and dot executors extend it with the
+         *  reacting ability's own id when that ability rides `on-debuff-inflicted`, so the chain
+         *  a follow-up infliction carries names every reaction that led to it. */
+        debuffInflictedReactionChain?: readonly string[];
         /** The DoT type of the ally's application (dot-applied.dotType), captured
          *  alongside victimId. The convert-dot executor gates on this === cfg.fromDotType so an
          *  ally's Inferno (or any other DoT) never converts under a Corrosion-only ability. */
@@ -831,13 +836,15 @@ export function registerReactiveListeners(args: {
                     break;
                 case 'on-debuff-inflicted':
                     bus.on('debuff-applied', (e) => {
-                        // Warden: `!e.viaDebuffInflictedReaction` breaks a SELF-chain.
-                        // Warden's "when this Unit inflicts a Debuff → Out. Damage Down II" follow-up
-                        // is ITSELF a debuff; without this guard its own debuff-applied would re-enter
-                        // this listener and re-apply every generation until MAX_INTENT_GENERATIONS
-                        // throws. The flag is set ONLY on debuffs applied by an on-debuff-inflicted-
-                        // triggered ability, so debuffs from OTHER reactive triggers (on-crit's
-                        // Crit Shred feeding an on-debuff-inflicted charge) still chain here.
+                        // `inDebuffInflictedReactionChain` breaks a self-chain: Warden's "when this
+                        // Unit inflicts a Debuff → Out. Damage Down II" follow-up is ITSELF a debuff,
+                        // and without the guard its own debuff-applied would re-enter this listener
+                        // every generation until MAX_INTENT_GENERATIONS throws. The guard skips only
+                        // the abilities already in the infliction's reaction chain, so the owner's
+                        // OTHER on-debuff-inflicted abilities still see a reactive infliction
+                        // (Insidiousness rolls on Warden's Out. Damage Down II), and debuffs from
+                        // other reactive triggers (on-crit's Crit Shred feeding an
+                        // on-debuff-inflicted charge) chain here like cast inflictions.
                         // The debuffed enemy rides along as `debuffVictimId` so the reactive
                         // damage branch (Insidiousness) hits the enemy this infliction actually
                         // landed on rather than falling through to the first living opposing
@@ -848,7 +855,10 @@ export function registerReactiveListeners(args: {
                         // reads "applying" (filter 'apply') and is gated the other way.
                         if (
                             e.sourceId === ownerId &&
-                            !e.viaDebuffInflictedReaction &&
+                            !inDebuffInflictedReactionChain(
+                                e.debuffInflictedReactionChain,
+                                ra.ability.id
+                            ) &&
                             passesApplicationFilter(
                                 ra.ability.triggerApplicationFilter,
                                 e.application
@@ -861,16 +871,24 @@ export function registerReactiveListeners(args: {
                         )
                             enqueue({
                                 ...intent,
-                                eventCtx: { ...intent.eventCtx, debuffVictimId: e.targetId },
+                                eventCtx: {
+                                    ...intent.eventCtx,
+                                    debuffVictimId: e.targetId,
+                                    debuffInflictedReactionChain: e.debuffInflictedReactionChain,
+                                },
                             });
                     });
                     bus.on('dot-applied', (e) => {
                         // The same self-chain guard as the debuff-applied arm above: a DoT an
                         // on-debuff-inflicted reaction lands (Ripper's Inferno II) never re-wakes
-                        // this trigger.
+                        // that reaction, and still reaches the owner's other abilities on this
+                        // trigger.
                         if (
                             e.sourceId === ownerId &&
-                            !e.viaDebuffInflictedReaction &&
+                            !inDebuffInflictedReactionChain(
+                                e.debuffInflictedReactionChain,
+                                ra.ability.id
+                            ) &&
                             passesApplicationFilter(
                                 ra.ability.triggerApplicationFilter,
                                 undefined
@@ -883,7 +901,11 @@ export function registerReactiveListeners(args: {
                         )
                             enqueue({
                                 ...intent,
-                                eventCtx: { ...intent.eventCtx, debuffVictimId: e.targetId },
+                                eventCtx: {
+                                    ...intent.eventCtx,
+                                    debuffVictimId: e.targetId,
+                                    debuffInflictedReactionChain: e.debuffInflictedReactionChain,
+                                },
                             });
                     });
                     break;
@@ -3538,6 +3560,31 @@ export function footprintFilteredRecipients(
     });
 }
 
+/** Whether `abilityId` already reacted somewhere in an infliction's `debuffInflictedReactionChain`
+ *  (events.ts) — the on-debuff-inflicted listener's self-chain guard. An unchained infliction (a
+ *  cast, or a reaction on any other trigger) is in no ability's chain. */
+function inDebuffInflictedReactionChain(
+    chain: readonly string[] | undefined,
+    abilityId: string
+): boolean {
+    return chain?.includes(abilityId) === true;
+}
+
+/** The `debuffInflictedReactionChain` an infliction carries when `intent` lands it: the
+ *  triggering infliction's chain plus this ability, for an ability riding `on-debuff-inflicted`;
+ *  nothing for any other trigger. Spread into the reactive `debuff-applied` / `dot-applied`. */
+function debuffInflictedReactionChainStamp(intent: Intent): {
+    debuffInflictedReactionChain?: readonly string[];
+} {
+    if (intent.ability.trigger !== 'on-debuff-inflicted') return {};
+    return {
+        debuffInflictedReactionChain: [
+            ...(intent.eventCtx?.debuffInflictedReactionChain ?? []),
+            intent.ability.id,
+        ],
+    };
+}
+
 /**
  * Per-(owner,ability) proc-chance gate, shared by the heal/shield and damage reactive branches.
  * Pass-through when procChance is undefined / <=0 / >=1, or when the gate map is absent (unit-test
@@ -4621,12 +4668,12 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                     applicationTargetId
                 );
                 // Discrete infliction event — sourceId = the owner so the application is chainable.
-                // Brand the event when THIS reaction is itself an on-debuff-inflicted follow-up
-                // (Warden's Out. Damage Down II) or an on-ally-debuff-inflicted follow-up, so that
-                // trigger's own listener skips it and the reaction cannot re-trigger itself
-                // (bounded, no generation-cap throw) — see events.ts's doc on each flag for why
-                // they are separate. Other reactive debuffs (on-crit/on-attacked) stay unbranded
-                // → still chain.
+                // Mark the event when THIS reaction is itself an on-debuff-inflicted follow-up
+                // (Warden's Out. Damage Down II — the reaction chain) or an
+                // on-(other-)ally-debuff-inflicted follow-up (the brands), so the reaction cannot
+                // re-trigger itself (bounded, no generation-cap throw) — see events.ts's doc on
+                // each field for its scope. Other reactive debuffs (on-crit/on-attacked) stay
+                // unmarked → still chain.
                 ctx.bus.emit({
                     type: 'debuff-applied',
                     sourceId: intent.ownerId,
@@ -4635,9 +4682,7 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                     buffName: cfg.buffName,
                     application: cfg.application,
                     sourceSlot: intent.sourceSlot,
-                    ...(intent.ability.trigger === 'on-debuff-inflicted'
-                        ? { viaDebuffInflictedReaction: true as const }
-                        : {}),
+                    ...debuffInflictedReactionChainStamp(intent),
                     ...(intent.ability.trigger === 'on-ally-debuff-inflicted'
                         ? { viaAllyDebuffInflictedReaction: true as const }
                         : {}),
@@ -4757,9 +4802,9 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 });
             }
             // Discrete infliction event — sourceId = the owner so the application is chainable
-            // and feeds the debuff-inflicted listeners' dot-applied arms. Branded per trigger
-            // exactly as the sibling `debuff` branch brands its debuff-applied: without the brand,
-            // an owner's own reactive DoT (this landDotOn call) would re-wake the very listener
+            // and feeds the debuff-inflicted listeners' dot-applied arms. Marked per trigger
+            // exactly as the sibling `debuff` branch marks its debuff-applied: without the mark,
+            // an owner's own reactive DoT (this landDotOn call) would re-wake the very reaction
             // that queued it and loop until MAX_INTENT_GENERATIONS throws.
             ctx.bus.emit({
                 type: 'dot-applied',
@@ -4770,9 +4815,7 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 stacks: cfg.stacks,
                 tier: cfg.tier,
                 sourceSlot: intent.sourceSlot,
-                ...(intent.ability.trigger === 'on-debuff-inflicted'
-                    ? { viaDebuffInflictedReaction: true as const }
-                    : {}),
+                ...debuffInflictedReactionChainStamp(intent),
                 ...(intent.ability.trigger === 'on-ally-debuff-inflicted'
                     ? { viaAllyDebuffInflictedReaction: true as const }
                     : {}),

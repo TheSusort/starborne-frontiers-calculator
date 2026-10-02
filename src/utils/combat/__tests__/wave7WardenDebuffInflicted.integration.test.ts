@@ -9,10 +9,11 @@
  * so "Out. Damage Down II" never appeared, across every qualifying turn.
  *
  * The fix routes it to the existing reactive `on-debuff-inflicted` trigger (parser: present-tense
- * self-subject recognizer). The follow-up is ITSELF a debuff, so its own debuff-applied is branded
- * `viaDebuffInflictedReaction` and the on-debuff-inflicted listener skips it — a precise self-chain
- * guard (else the reaction would re-enter and blow MAX_INTENT_GENERATIONS), while debuffs from
- * other reactive triggers (on-crit/on-attacked) still chain as before.
+ * self-subject recognizer). The follow-up is ITSELF a debuff, so its own debuff-applied carries
+ * the reaction's id in `debuffInflictedReactionChain` and the on-debuff-inflicted listener skips it
+ * for that reaction — a precise self-chain guard (else the reaction would re-enter and blow
+ * MAX_INTENT_GENERATIONS), while debuffs from other reactive triggers (on-crit/on-attacked) still
+ * chain as before.
  *
  * Her own clause reads "inflicts" (`triggerApplicationFilter:'inflict'`): her active's Provoke is
  * an unconditional APPLY (no hacking roll), so it must NOT wake this passive. Only her Corrosion I

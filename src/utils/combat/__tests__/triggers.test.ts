@@ -821,10 +821,10 @@ describe('Phase 3 reactive triggers', () => {
     // ----------------------------------------------------------------------
     // Scenario 11 — self-chain guard: an on-debuff-inflicted DEBUFF whose own
     // application would re-trigger itself (Warden's Out. Damage Down II shape). BEFORE W7 this
-    // was an unbounded chain that threw MAX_INTENT_GENERATIONS; the guard now brands the reaction's
-    // own debuff-applied (`viaDebuffInflictedReaction`) so the on-debuff-inflicted listener skips
-    // it — the chain is BOUNDED (Def Down applies from the cast-path Seed Down infliction, then
-    // does NOT feed itself). No throw. The generation-cap backstop still exists for genuinely
+    // was an unbounded chain that threw MAX_INTENT_GENERATIONS; the guard now stamps the reaction's
+    // id into its own debuff-applied (`debuffInflictedReactionChain`) so the on-debuff-inflicted
+    // listener skips it for that same ability — the chain is BOUNDED (Def Down applies from the
+    // cast-path Seed Down infliction, then does NOT feed itself). No throw. The generation-cap backstop still exists for genuinely
     // pathological loops (see the separate 'exposes a finite MAX_INTENT_GENERATIONS backstop' test).
     // ----------------------------------------------------------------------
     it('scenario 11: a self-amplifying on-debuff-inflicted debuff is now BOUNDED (W7 self-chain guard), no throw', () => {

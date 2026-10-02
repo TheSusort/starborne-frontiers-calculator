@@ -139,15 +139,21 @@ export type CombatEvent =
     /** Discrete infliction events ONLY — emitted once at the round of application.
      *  `sourceId` is the actor that inflicted the debuff (e.g. 'attacker' or a team
      *  actor id). NOT emitted for recurring/aura per-round re-applications.
-     *  `viaDebuffInflictedReaction`: set when this debuff was applied BY an
-     *  `on-debuff-inflicted`-triggered ability (Warden's Out. Damage Down II). The
-     *  `on-debuff-inflicted` listener ignores such events so a debuff-inflicted reaction whose
-     *  own follow-up is itself a debuff cannot re-trigger ITSELF (an unbounded self-chain that
-     *  would otherwise hit MAX_INTENT_GENERATIONS). Debuffs from OTHER reactive triggers
-     *  (on-crit/on-attacked) carry no flag and still feed on-debuff-inflicted as before.
+     *  `debuffInflictedReactionChain`: the ids of the `on-debuff-inflicted`-triggered
+     *  abilities whose reactions produced this debuff, oldest first — set only when the debuff
+     *  was applied BY such an ability (Warden's Out. Damage Down II, Ripper's catalogue Inferno
+     *  II on the `dot-applied` twin). The `on-debuff-inflicted` listener skips an ability whose
+     *  OWN id is in the chain, so a reaction whose follow-up is itself a debuff cannot
+     *  re-trigger itself, directly or through another of the owner's reactions (an unbounded
+     *  chain would otherwise hit MAX_INTENT_GENERATIONS). Every OTHER on-debuff-inflicted
+     *  ability of the owner still sees the debuff: the Insidiousness implant rolls on Warden's
+     *  reactive Out. Damage Down II exactly as on a cast-inflicted one. Each ability in a chain
+     *  fires at most once, so a chain is bounded by the owner's count of such abilities.
+     *  Debuffs from OTHER reactive triggers (on-crit/on-attacked) carry no chain and feed
+     *  on-debuff-inflicted like a cast infliction.
      *  `viaAllyDebuffInflictedReaction`: the sibling brand for `on-ally-debuff-inflicted`
      *  reactions — set when this debuff was applied by an ability whose OWN trigger is
-     *  `on-ally-debuff-inflicted`. A separate field from `viaDebuffInflictedReaction`
+     *  `on-ally-debuff-inflicted`. A separate field from `debuffInflictedReactionChain`
      *  deliberately: the two triggers are gated by different owners (`on-debuff-inflicted` is
      *  self-scoped; `on-ally-debuff-inflicted` is same-side-scoped, owner included — see the
      *  ruling in triggers.ts's trigger doc block), so a shared flag would make one trigger's
@@ -160,7 +166,7 @@ export type CombatEvent =
      *  `on-debuff-inflicted` and an `on-ally-debuff-inflicted` debuff-emitting reaction is bounded
      *  by neither brand against the other's chain — no corpus ship has that shape.
      *  `viaOtherAllyDebuffInflictedReaction`: the brand for `on-other-ally-debuff-inflicted`
-     *  reactions (Provider's "another ally" — owner-EXCLUDED, unlike the two brands above). That
+     *  reactions (Provider's "another ally" — owner-EXCLUDED, unlike the two fields above). That
      *  listener ignores this brand SOURCE-AGNOSTICALLY (any event carrying it, regardless of
      *  `sourceId`) rather than only when `sourceId === ownerId`: an owner-excluded trigger's
      *  `sourceId` can never equal `ownerId` (the same-side-ally guard excludes the owner
@@ -187,7 +193,7 @@ export type CombatEvent =
            *  "with its active or charged skills"). Optional so hand-built fixture events may omit
            *  it; an unstamped event never satisfies a present filter. */
           sourceSlot?: SkillSlot;
-          viaDebuffInflictedReaction?: true;
+          debuffInflictedReactionChain?: readonly string[];
           viaAllyDebuffInflictedReaction?: true;
           viaOtherAllyDebuffInflictedReaction?: true;
       } & ReactiveStamp)
@@ -244,11 +250,11 @@ export type CombatEvent =
           viaCrit?: boolean;
           /** The inflicting ability's slot — see the `debuff-applied` sibling's `sourceSlot`. */
           sourceSlot?: SkillSlot;
-          /** The `debuff-applied` sibling's `on-debuff-inflicted` self-chain brand — see that
+          /** The `debuff-applied` sibling's `on-debuff-inflicted` reaction chain — see that
            *  field's doc. Set when this DoT was applied by an ability whose OWN trigger is
-           *  `on-debuff-inflicted`, so that listener's `dot-applied` arm skips the reaction's own
-           *  output exactly as its `debuff-applied` arm does. */
-          viaDebuffInflictedReaction?: true;
+           *  `on-debuff-inflicted`, so that listener's `dot-applied` arm skips a reaction already in
+           *  the chain exactly as its `debuff-applied` arm does. */
+          debuffInflictedReactionChain?: readonly string[];
           /** The `debuff-applied` sibling's self-chain brand — see that field's doc. Set when
            *  this DoT was applied by an ability whose OWN trigger is `on-ally-debuff-inflicted`,
            *  so the `on-ally-debuff-inflicted` listener's `dot-applied` arm can skip its own
