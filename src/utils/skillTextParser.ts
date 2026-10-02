@@ -2100,9 +2100,10 @@ export function parseExtendStatus(text: string | null | undefined): {
 }
 
 // "extend(s/ed) … by/for N turn(s) … chance … crit power" — a duration extension whose chance is
-// the crit-power stat, gated on this unit's own crit ("with a critical hit": Valerian, Wisteria).
-// Belladonna's text matches too, but her extension belongs to her convert-dot ability, so
-// buildShipAbilities never reads this parse for a row that converts (see its convert-dot fold).
+// the crit-power stat. The trigger gates it: an ally inflicting (Belladonna's "When an ally
+// inflicts …") → the team-dependent ally-inflicts-debuff; otherwise a self crit ("with a critical
+// hit": Valerian, Wisteria) → self-crit. buildShipAbilities folds Belladonna's extension into her
+// convert-dot ability instead of emitting it standalone (see its convert-dot fold).
 const CRIT_POWER_EXTEND_RE =
     /extend\w*\b[^.]*?\b(?:by|for)\s+(\d+)\s+turns?\b[^.]*?\bchance\b[^.]*?\bcrit(?:ical)?\s*power\b/i;
 
@@ -2117,9 +2118,11 @@ export function parseCritPowerExtend(
     const plain = stripUnitTags(text);
     const m = CRIT_POWER_EXTEND_RE.exec(plain);
     if (!m) return null;
-    const condition: Condition = { subject: 'self-crit', derivable: true };
+    const condition: Condition = /\ball(?:y|ies)\b[^.]*\binflict/i.test(plain)
+        ? { subject: 'ally-inflicts-debuff', derivable: false }
+        : { subject: 'self-crit', derivable: true };
     // "extends the newly inflicted <DoT>" → only THIS cast's freshly inflicted DoT grows
-    // (Valerian/Wisteria), not every standing entry.
+    // (Valerian/Wisteria/Belladonna), not every standing entry.
     const scope: 'active' | 'inflicted' = /newly\s+inflicted/i.test(plain) ? 'inflicted' : 'active';
     return { turns: parseInt(m[1], 10), condition, scope };
 }

@@ -1384,6 +1384,16 @@ describe('parseCritPowerExtend', () => {
         });
     });
 
+    it('parses Belladonna ally-triggered extension as ally-inflicts-debuff (inflicted scope)', () => {
+        const text =
+            'When an ally inflicts <unit-skill>Corrosion</unit-skill>, this Unit converts the <unit-skill>Corrosion</unit-skill> into <unit-skill>Acidic Decay</unit-skill> of the same level, with the chance scaling at 1% per 10 Hacking.<br /><br />Upon converting <unit-skill>Corrosion</unit-skill>, this Unit <unit-skill>extends the newly inflicted</unit-skill> <unit-skill>Acidic Decay</unit-skill> status for 1 turn, with the chance equal to its crit power.';
+        expect(parseCritPowerExtend(text)).toEqual({
+            turns: 1,
+            condition: { subject: 'ally-inflicts-debuff', derivable: false },
+            scope: 'inflicted',
+        });
+    });
+
     it('returns null without a crit-power extension', () => {
         expect(
             parseCritPowerExtend('all damage over time debuffs are extended by 1 turn.')
