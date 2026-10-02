@@ -107,8 +107,8 @@ describe.skipIf(!csvAvailable() || !shipDataAvailable())(
             // Doubles as the non-vacuity guard: a parser change that stopped producing a
             // past-the-anchor Stasis target would otherwise leave the assertion below passing over
             // an empty list forever. Asphyxiator's charged reads "on the targeted enemy and all
-            // enemies adjacent to the enemy"; it contributes both a control and a debuff ability,
-            // hence the dedupe to ship/slot.
+            // adjacent enemies"; it contributes both a control and a debuff ability, hence the
+            // dedupe to ship/slot.
             const census = [
                 ...new Set(wideScopedStasisClauses().map((c) => `${c.ship}/${c.slot}`)),
             ].sort();

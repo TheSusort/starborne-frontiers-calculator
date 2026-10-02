@@ -120,12 +120,11 @@ describe('isVictimlessInfliction', () => {
     });
 
     it("clears Selenite's shape — a debuff on the highest-attack enemy resolves its own target", () => {
-        // SHIPPED SHIP, not a hypothetical: Selenite's R2/R4 passive is exactly
-        // `debuff` + `start-of-round` + `enemy-highest-attack` ("at the start of the round, the
-        // highest attack enemy is applied with Concentrate Fire"), confirmed by running
-        // buildShipAbilities over the whole 148-ship corpus — it is the ONLY corpus ability of
-        // this shape. The highest-attack selector picks the enemy itself, so nothing is dropped
-        // and a warning here would be a false alarm on a real ship's kit.
+        // SHIPPED SHIP, not a hypothetical: Selenite's R2 passive is exactly `debuff` +
+        // `start-of-round` + `enemy-highest-attack` ("At the start of each round, this Unit
+        // applies Concentrate Fire for 1 turn to the enemy with the highest attack"). The
+        // highest-attack selector picks the enemy itself, so nothing is dropped and a warning here
+        // would be a false alarm on a real ship's kit.
         expect(
             isVictimlessInfliction({
                 type: 'debuff',

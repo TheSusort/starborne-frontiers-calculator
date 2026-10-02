@@ -140,10 +140,10 @@ describe('debuff-inflicted trigger family — triggerApplicationFilter tripwire'
 
 // ---------------------------------------------------------------------------------------------
 // Ship DoTs: none is apply-worded. A DoT's landing verb is the active verb that governs its tag —
-// "applies"/"apply" or "inflicts" — not the gerund or adjective forms, which are trigger clauses and
-// references (Valerian's "After inflicting Corrosion", "the newly inflicted Corrosion"). The verb's
-// reach ends at the next verb, so "applies Concentrate Fire …, and inflicts Inferno II" governs
-// only the Concentrate Fire.
+// "applies"/"apply" or "inflicts" — not the gerund or adjective forms, which are trigger clauses
+// and references (Valerian's "After inflicting Corrosion", "the newly inflicted Corrosion").
+// The verb's reach ends at the next verb, so "applies Concentrate Fire …, and inflicts Inferno II"
+// governs only the Concentrate Fire.
 // ---------------------------------------------------------------------------------------------
 const DOT_TAG_RE = /<unit-skill>\s*(Corrosion|Inferno|Bomb)\b/i;
 const GOVERNING_VERB_RE =

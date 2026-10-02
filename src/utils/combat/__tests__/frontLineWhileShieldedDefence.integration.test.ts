@@ -1,7 +1,8 @@
 /**
- * frontLineWhileShieldedDefence.integration.test.ts — ship-kit Wave 4, Task 8.
+ * frontLineWhileShieldedDefence.integration.test.ts
  *
- * FrontLine's passive (docs/ship-skills.csv): "While Shielded, it gains 2500 additional Defense."
+ * FrontLine's passive (docs/ship-skills.csv): "while it has an active shield, it gains 2500
+ * defense."
  * A NEW engine capability — a flat-points DEFENCE bonus folded into the DEFENSIVE stat read,
  * gated on the actor CURRENTLY holding a shield (CombatActor.shieldPool > 0), re-evaluated fresh
  * on every hit via `substitutedDefenceFor` (engine.ts). Modelled with a NEW `conditional-stat`
@@ -37,8 +38,8 @@ import { emptyPreFightModifiers } from '../preFight/types';
 type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 type TeamActor = NonNullable<CombatEngineInput['teamActors']>[number];
 
-// FrontLine's "While Shielded, it gains 2500 additional Defense" clause, injected directly (see
-// file header for why this isn't parsed from the verbatim CSV text here).
+// FrontLine's "while it has an active shield, it gains 2500 defense" clause, injected directly
+// (see file header for why this isn't parsed from the verbatim CSV text here).
 const frontLineDefenceBonus: Ability = {
     id: 'frontline-while-shielded-defence',
     type: 'conditional-stat',

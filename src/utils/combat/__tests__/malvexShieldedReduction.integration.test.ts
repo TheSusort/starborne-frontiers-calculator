@@ -1,9 +1,8 @@
 /**
- * malvexShieldedReduction.integration.test.ts — Malvex `self-shielded` incoming-reduction
- * (model-completeness epic, SP-A / Task 4-PR-A).
+ * malvexShieldedReduction.integration.test.ts — Malvex `self-shielded` incoming-reduction.
  *
- * Malvex ("When Shielded, this Ship takes 10% less damage") is the first ship to exercise the
- * NEW context-driven `self-shielded` IncomingCondition: the reduction is gated on the VICTIM's
+ * Malvex ("When this Unit has an active shield, it gains 10% damage reduction") exercises the
+ * context-driven `self-shielded` IncomingCondition: the reduction is gated on the VICTIM's
  * own live shield pool (CombatActor.shieldPool > 0), evaluated per-hit by `conditionMet`
  * (incomingEffects.ts) — NOT on which side the ship sits on. Team-symmetry: the SAME ability
  * config must produce the SAME reduction whether Malvex is a PLAYER team victim (enemy→player
@@ -32,8 +31,8 @@ import { emptyPreFightModifiers } from '../preFight/types';
 type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 type TeamActor = NonNullable<CombatEngineInput['teamActors']>[number];
 
-// Malvex's "When Shielded, this Ship takes 10% less damage" clause, injected directly (see
-// file header for why this isn't parsed from the verbatim CSV text here).
+// Malvex's "When this Unit has an active shield, it gains 10% damage reduction" clause, injected
+// directly (see file header for why this isn't parsed from the verbatim CSV text here).
 const malvexReduction: Ability = {
     id: 'malvex-self-shielded',
     type: 'incoming-reduction',

@@ -99,7 +99,7 @@ const plainEnemy = (id: string): Ship =>
 const ATTACKER = 'attacker';
 const ENEMY = 'e:e1:0';
 
-describe('SP-M M1: FrontLine reactive damage reduces the charging enemy HP (positional)', () => {
+describe('FrontLine reactive damage reduces the charging enemy HP (positional)', () => {
     const run = (enemy: Ship) =>
         simulateBattle({
             playerTeam: [place(frontline('fl'), 'M4', 10_000, 1e12)],
@@ -158,7 +158,7 @@ const debuffInflictor = (id: string): Ship =>
         activeSkillText: 'This Unit inflicts <unit-skill>Defense Down II</unit-skill> for 2 turns.',
     });
 
-describe('SP-M M1: Vindicator on-resist reactive HP retaliation reduces the inflicting enemy HP (positional)', () => {
+describe('Vindicator on-resist reactive HP retaliation reduces the inflicting enemy HP (positional)', () => {
     // Vindicator's security is fixed at 300; only the enemy's hacking varies between the two
     // runs (isolates the delta to the resist/land outcome, same idiom as the FrontLine block
     // above varying only chargedEnemy vs plainEnemy). liveDebuffLandingChance (effectiveStats.ts):
@@ -196,7 +196,7 @@ const paracelsus = (id: string): Ship =>
 const killerEnemy = (id: string): Ship =>
     ship(id, { activeSkillText: 'This Unit deals <unit-damage>500% damage</unit-damage>.' });
 
-describe('SP-M M1: Paracelsus on-destroyed reactive HP retaliation reduces the killer HP (positional)', () => {
+describe('Paracelsus on-destroyed reactive HP retaliation reduces the killer HP (positional)', () => {
     // Only Paracelsus's own HP varies between the two runs: killable (dies round 1 to the
     // killer's 500%-damage hit, on-destroyed retaliation fires against the killer) vs
     // effectively unkillable (survives both rounds, never destroyed, no proc).
@@ -261,7 +261,7 @@ const debuffPlanter = (id: string): Ship =>
 const selfCleanser = (id: string): Ship =>
     ship(id, { activeSkillText: 'This Unit cleanses 1 debuff from itself.' });
 
-describe("SP-M M1 Task 4: Grif's on-enemy-cleansed reactive lands on the real cleansing enemy (positional)", () => {
+describe("Grif's on-enemy-cleansed reactive lands on the real cleansing enemy (positional)", () => {
     const run = (enemy: Ship) =>
         simulateBattle({
             playerTeam: [
@@ -331,7 +331,7 @@ const buffedEnemy = (id: string): Ship =>
 
 const ENEMY2 = 'e:e2:1';
 
-describe("SP-M M1 Task 5: Rhodium's end-of-round damage lands on the most-buffed enemy, not the other (positional)", () => {
+describe("Rhodium's end-of-round damage lands on the most-buffed enemy, not the other (positional)", () => {
     const run = (e1: Ship, e2: Ship) =>
         simulateBattle({
             playerTeam: [place(rhodium('r'), 'M4', 10_000, 1e12)],
@@ -398,7 +398,7 @@ const twoBuffsEnemy = (id: string): Ship =>
             'This Unit gains <unit-skill>Attack Up III</unit-skill> for 2 turns. This Unit gains <unit-skill>Defense Up III</unit-skill> for 2 turns.',
     });
 
-describe('SP-M M1 Task 5 review fix: two same-side Rhodiums re-resolve enemy-most-buffs per owner (positional)', () => {
+describe('two same-side Rhodiums re-resolve enemy-most-buffs per owner (positional)', () => {
     const run = (eA: Ship, eB: Ship) =>
         simulateBattle({
             playerTeam: [
@@ -473,7 +473,7 @@ const chakara = (id: string, withPassive: boolean): Ship =>
             : {}),
     });
 
-describe("SP-M M1 Task 6: Chakara's start-of-round damage lands on the highest-Speed enemy, not the other (positional)", () => {
+describe("Chakara's start-of-round damage lands on the highest-Speed enemy, not the other (positional)", () => {
     // e1 (ENEMY) is fixed at Speed 100, e2 (ENEMY2) at Speed 300 — e2 is the faster enemy in
     // BOTH the reaction and control run, so the only thing that differs between the two runs is
     // whether Chakara's passive (and therefore the proc) exists at all.
@@ -562,7 +562,7 @@ const E_LOW1 = 'e:lo1:0';
 const E_LOW2 = 'e:lo2:1';
 const E_HIGH = 'e:hi:2';
 
-describe("SP-M M1 Task 7: Judge's start-of-round damage hits ALL <50%-HP enemies, not the >50% one (positional)", () => {
+describe("Judge's start-of-round damage hits ALL <50%-HP enemies, not the >50% one (positional)", () => {
     const run = (withPassive: boolean) =>
         simulateBattle({
             playerTeam: [
@@ -641,7 +641,7 @@ const incinerator = (id: string, withPassive: boolean): Ship =>
 const E_INFERNO = 'e:inf:0';
 const E_CLEAN = 'e:cln:1';
 
-describe("SP-M M1 Task 7: Incinerator's end-of-round damage hits ONLY the Inferno-afflicted enemy (positional)", () => {
+describe("Incinerator's end-of-round damage hits ONLY the Inferno-afflicted enemy (positional)", () => {
     const run = (withPassive: boolean) =>
         simulateBattle({
             playerTeam: [
@@ -697,7 +697,7 @@ describe("SP-M M1 Task 7: Incinerator's end-of-round damage hits ONLY the Infern
  * `p:<shipId>:<idx>`.
  */
 
-describe('SP-M M1 Task 8: FrontLine reactive damage reduces the charging PLAYER HP when FrontLine is on the enemy side (positional)', () => {
+describe('FrontLine reactive damage reduces the charging PLAYER HP when FrontLine is on the enemy side (positional)', () => {
     const FL_ENEMY = 'e:fl:0';
     const run = (playerShip: Ship) =>
         simulateBattle({
@@ -718,7 +718,7 @@ describe('SP-M M1 Task 8: FrontLine reactive damage reduces the charging PLAYER 
     });
 });
 
-describe('SP-M M1 Task 8: Vindicator on-resist reactive HP retaliation reduces the inflicting PLAYER HP when Vindicator is on the enemy side (positional)', () => {
+describe('Vindicator on-resist reactive HP retaliation reduces the inflicting PLAYER HP when Vindicator is on the enemy side (positional)', () => {
     const VIND_ENEMY = 'e:v:0';
     const run = (playerHacking: number) =>
         simulateBattle({
@@ -741,7 +741,7 @@ describe('SP-M M1 Task 8: Vindicator on-resist reactive HP retaliation reduces t
     });
 });
 
-describe('SP-M M1 Task 8: Paracelsus on-destroyed reactive HP retaliation reduces the killer PLAYER HP when Paracelsus is on the enemy side (positional)', () => {
+describe('Paracelsus on-destroyed reactive HP retaliation reduces the killer PLAYER HP when Paracelsus is on the enemy side (positional)', () => {
     const PARA_ENEMY = 'e:p:0';
     const run = (paracelsusHp: number) =>
         simulateBattle({
@@ -762,7 +762,7 @@ describe('SP-M M1 Task 8: Paracelsus on-destroyed reactive HP retaliation reduce
     });
 });
 
-describe("SP-M M1 Task 8: Grif's on-enemy-cleansed reactive lands on the real cleansing PLAYER when Grif is on the enemy side (positional)", () => {
+describe("Grif's on-enemy-cleansed reactive lands on the real cleansing PLAYER when Grif is on the enemy side (positional)", () => {
     const GRIF_ENEMY = 'e:g:0';
     const run = (playerShip: Ship) =>
         simulateBattle({
@@ -789,7 +789,7 @@ describe("SP-M M1 Task 8: Grif's on-enemy-cleansed reactive lands on the real cl
     });
 });
 
-describe("SP-M M1 Task 8: Rhodium's end-of-round damage lands on the most-buffed PLAYER, not the other, when Rhodium is on the enemy side (positional)", () => {
+describe("Rhodium's end-of-round damage lands on the most-buffed PLAYER, not the other, when Rhodium is on the enemy side (positional)", () => {
     const RHOD_ENEMY = 'e:r:0';
     const PLAYER2 = 'p:p2:1';
     const run = (p1: Ship, p2: Ship) =>
@@ -819,7 +819,7 @@ describe("SP-M M1 Task 8: Rhodium's end-of-round damage lands on the most-buffed
     });
 });
 
-describe("SP-M M1 Task 8: Chakara's start-of-round damage lands on the highest-Speed PLAYER, not the other, when Chakara is on the enemy side (positional)", () => {
+describe("Chakara's start-of-round damage lands on the highest-Speed PLAYER, not the other, when Chakara is on the enemy side (positional)", () => {
     const CHAK_ENEMY = 'e:c:0';
     const P_SLOW = ATTACKER;
     const P_FAST = 'p:p2:1';
@@ -853,7 +853,7 @@ describe("SP-M M1 Task 8: Chakara's start-of-round damage lands on the highest-S
     });
 });
 
-describe("SP-M M1 Task 8: Judge's start-of-round damage hits ALL <50%-HP PLAYERS, not the >50% one, when Judge is on the enemy side (positional)", () => {
+describe("Judge's start-of-round damage hits ALL <50%-HP PLAYERS, not the >50% one, when Judge is on the enemy side (positional)", () => {
     const JUDGE_ENEMY = 'e:j:0';
     const P_LOW1 = ATTACKER;
     const P_LOW2 = 'p:lo2:1';
@@ -902,7 +902,7 @@ describe("SP-M M1 Task 8: Judge's start-of-round damage hits ALL <50%-HP PLAYERS
     });
 });
 
-describe("SP-M M1 Task 8: Incinerator's end-of-round damage hits ONLY the Inferno-afflicted PLAYER, when Incinerator is on the enemy side (positional)", () => {
+describe("Incinerator's end-of-round damage hits ONLY the Inferno-afflicted PLAYER, when Incinerator is on the enemy side (positional)", () => {
     const INC_ENEMY = 'e:i:0';
     const P_INFERNO = ATTACKER;
     const P_CLEAN = 'p:cln:1';
@@ -975,7 +975,7 @@ const healer = (id: string): Ship =>
         activeSkillText: 'This Unit repairs 5% of its Max HP.',
     });
 
-describe("SP-M M1 Task 9b: Judge's start-of-round AoE still hits the real <50%-HP enemies with a healer on the player team (positional)", () => {
+describe("Judge's start-of-round AoE still hits the real <50%-HP enemies with a healer on the player team (positional)", () => {
     const run = (withPassive: boolean) =>
         simulateBattle({
             playerTeam: [
@@ -1021,7 +1021,7 @@ describe("SP-M M1 Task 9b: Judge's start-of-round AoE still hits the real <50%-H
     });
 });
 
-describe("SP-M M1 Task 9b: Chakara's single-target reactive still hits the real highest-Speed enemy with a healer on the player team (positional)", () => {
+describe("Chakara's single-target reactive still hits the real highest-Speed enemy with a healer on the player team (positional)", () => {
     const run = (withPassive: boolean) =>
         simulateBattle({
             playerTeam: [

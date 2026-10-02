@@ -97,7 +97,7 @@ const debuffRecipients = (result: ReturnType<typeof simulateBattle>, actorId: st
         .map((e) => e.targets[0]?.targetId)
         .filter((id): id is string => id !== undefined);
 
-describe('Ship-kit W5 Task A3: adjacent-enemies debuff fan-out (positional, player caster)', () => {
+describe('adjacent-enemies debuff fan-out (positional, player caster)', () => {
     const run = (caster: Ship) =>
         simulateBattle({
             playerTeam: [place(caster, 'M4', 1, 1e9)],
@@ -136,7 +136,7 @@ describe('Ship-kit W5 Task A3: adjacent-enemies debuff fan-out (positional, play
     });
 });
 
-describe('Ship-kit W5 Task A3: team symmetry — an ENEMY-side caster fans out onto its PLAYER-side mirror', () => {
+describe('team symmetry — an ENEMY-side caster fans out onto its PLAYER-side mirror', () => {
     const run = (caster: Ship) =>
         simulateBattle({
             playerTeam: [
@@ -190,7 +190,7 @@ describe('Ship-kit W5 Task A3: team symmetry — an ENEMY-side caster fans out o
  * not throw. This does not assert control-applied semantics (out of scope here, unchanged by
  * this task) — only that the control-twin's presence doesn't break the fan-out this task owns.
  */
-describe('Ship-kit W5 Task A3: control-path smoke test (real control-effect buff names)', () => {
+describe('control-path smoke test (real control-effect buff names)', () => {
     const controlCaster = (id: string, text: string): Ship => ship(id, { activeSkillText: text });
 
     it('a Provoke (adjacent-enemies) cast does not throw and still fans out to neighbours only', () => {
@@ -278,7 +278,7 @@ describe('Ship-kit W5 Task A3: control-path smoke test (real control-effect buff
  * cannot be re-created by a fresh fixture either: there is no non-positional shape left below the
  * boundary. What remains is the single-real-enemy positional edge case described above.
  */
-describe('Ship-kit W5 Task A3: single-entry roster edge case (positional, no neighbours to fan out to)', () => {
+describe('single-entry roster edge case (positional, no neighbours to fan out to)', () => {
     const BASE: Omit<CombatEngineInput, 'shipSkills' | 'bus'> = {
         enemyAttackers: bareEnemy({ stats: { hp: 1_000_000_000 } }),
         attack: 1000,

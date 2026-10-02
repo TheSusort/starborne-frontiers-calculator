@@ -103,7 +103,7 @@ const runTapStatus = (input: CombatEngineInput): StatusEngine => {
 const selfBuffNames = (engine: StatusEngine, id: string): string[] =>
     engine.timedAbilityStatuses('self', id).map((b) => b.active.buffName);
 
-describe('Wave 8 Task 12: Zeolite purges a buff when damaging a Defender (engine integration)', () => {
+describe('Zeolite purges a buff when damaging a Defender (engine integration)', () => {
     // A self-buffing enemy at speed 150 (> the focus's 100) so it grants itself Attack Up
     // BEFORE Zeolite's turn every round — giving the reactive purge something to remove.
     const buffingEnemy = (role: EnemyAttacker['role']): EnemyAttacker => ({
@@ -163,7 +163,7 @@ describe('Wave 8 Task 12: Zeolite purges a buff when damaging a Defender (engine
     });
 });
 
-describe('Wave 8 Task 12: team symmetry — an enemy-side Zeolite purges a player Defender', () => {
+describe('team symmetry — an enemy-side Zeolite purges a player Defender', () => {
     // Mirror of the player-side harness: the focus (player) self-buffs at speed 150 (acts
     // before the enemy Zeolite, speed 100), giving the enemy-owned reactive purge something to
     // remove from a Defender-classed FOCUS.

@@ -419,13 +419,10 @@ describe('scaledBonus', () => {
     });
 
     it('scaling sums the scaling source anyOf OR-group (epic PR6a: Rikra Taunted-or-Provoked)', () => {
-        // PR6a CONSCIOUS FLIP: scaledBonus now sums the counts of the WHOLE anyOf OR-group the
-        // scaling source belongs to, so a binary "X% against Taunted OR Provoked enemies" bonus
-        // (Rikra) fires on either. Golden-inert: no parser-emitted / editor-built ability had a
-        // multi-member anyOf scaling group before Rikra (the full golden suite is byte-identical),
-        // so this only changes the previously-synthetic multi-member case. A LONE (non-anyOf)
-        // scaling condition is its own singleton group → the raw-count-of-one behavior is unchanged
-        // (covered by the Selenite/Wildfire/per-unit cases above).
+        // scaledBonus sums the counts of the WHOLE anyOf OR-group the scaling source belongs to, so
+        // a binary "additional X% damage to enemies affected by Taunt or Provoke" bonus (Rikra)
+        // fires on either. A LONE (non-anyOf) scaling condition is its own singleton group → the
+        // raw-count-of-one behavior (covered by the Selenite/Wildfire/per-unit cases above).
         const a = dmg(
             [
                 cond({ subject: 'enemy-debuff', derivable: true, anyOf: true }),

@@ -11,14 +11,14 @@ import type { AbilityTarget } from '../../../types/abilities';
  * off a run-mode flag (`teamBattle`).
  *
  * Three ships name their recipient by live HP, and one selector covers all three: "most missing
- * health" is loose phrasing for lowest HP PERCENTAGE, not absolute missing HP (user-confirmed
+ * HP" is loose phrasing for lowest HP PERCENTAGE, not absolute missing HP (user-confirmed
  * 2026-08-20).
  *
  *   Pallas   · active   "The other ally with the lowest current health percentage heals for 20%
  *                        of the damage dealt"
- *   Volk     · passive  "repairs 30% of its Max HP to the ally with the most missing health"
- *   Valkyrie · passive  "this Unit and the ally with the lowest current health percentage repair
- *                        5% of damage dealt"  (on-own-echoing-burst-detonated since #345; ALSO
+ *   Volk     · passive  "repairs 30% of its max HP to the ally with the most missing HP"
+ *   Valkyrie · passive  "the Unit and the ally with the lowest current health percentage repair
+ *                        5% of the damage dealt"  (on-own-echoing-burst-detonated since #345; ALSO
  *                        emits a mirrored 'self')
  *
  * Both blocks read `docs/ship-skills.csv` — the parser's source of truth (CLAUDE.md), NOT any
@@ -108,7 +108,7 @@ describe('SP-4e: a text-named worst-HP ally recipient parses as lowest-hp-ally',
         expect(builtHealTargets('active', text)).toEqual(['lowest-hp-ally']);
     });
 
-    it('Volk passive — "repairs 30% of its Max HP to the ally with the most missing health"', () => {
+    it('Volk passive — "repairs 30% of its max HP to the ally with the most missing HP"', () => {
         const p1 = csvText('Volk', 'passive1');
         expect(parseHealAbilities(p1)).toEqual([
             {
@@ -128,9 +128,9 @@ describe('SP-4e: a text-named worst-HP ally recipient parses as lowest-hp-ally',
         expect(builtHealTargets('passive2', p2)).toEqual(['lowest-hp-ally', 'self']);
     });
 
-    it('Valkyrie passive — "this Unit and the ally with the lowest current health percentage"', () => {
+    it('Valkyrie passive — "the Unit and the ally with the lowest current health percentage"', () => {
         const p1 = csvText('Valkyrie', 'passive1');
-        // "this Unit AND the ally …" → two entries: the selected ally plus a mirrored self.
+        // "the Unit AND the ally …" → two entries: the selected ally plus a mirrored self.
         expect(parseHealAbilities(p1)).toEqual([
             {
                 kind: 'heal',

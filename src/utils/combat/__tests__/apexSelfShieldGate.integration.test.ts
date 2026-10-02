@@ -83,7 +83,7 @@ const apexShipSkills = (includeSelfShield: boolean): ShipSkills => ({
     ],
 });
 
-describe('APEX charged Disable — self-shield gate, player-side (ship-kit Wave 4, Task 3)', () => {
+describe('APEX charged Disable — self-shield gate, player-side', () => {
     const makeInput = (includeSelfShield: boolean): CombatEngineInput => ({
         // A real opponent for the Disable/Attack Down II debuffs to land on. Inert and
         // unkillable here — the focus deals 1000/round (10% of 10000 attack) for two rounds.

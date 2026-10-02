@@ -3602,14 +3602,14 @@ describe('buildShipAbilities ignoresForcedTargeting', () => {
     });
 });
 
-// C2b-1 T5: Sefuba and Salvation reactive heal triggers + Sefuba chain purge.
+// Sefuba and Salvation reactive heal triggers + Sefuba chain purge.
 // RAW strings from docs/ship-skills.csv.
-describe('buildShipAbilities — on-enemy-purged and on-ally-purged heal triggers (T5)', () => {
+describe('buildShipAbilities — on-enemy-purged and on-ally-purged heal triggers', () => {
     describe('Sefuba p1: on-enemy-purged self-heal, no chain purge', () => {
         const sefubaP1 = () =>
             ship({
                 firstPassiveSkillText:
-                    'When this Unit <unit-aid>purges a buff</unit-aid> from an enemy, it <unit-damage>repairs itself for 8%</unit-damage> Max HP.',
+                    'When this Unit <unit-skill>purges a buff</unit-skill> from an enemy, it <unit-damage>repairs 8%</unit-damage> of its max HP for each <unit-aid>buff</unit-aid> removed.',
             });
 
         it('emits a self heal with trigger on-enemy-purged', () => {
@@ -3661,11 +3661,11 @@ describe('buildShipAbilities — on-enemy-purged and on-ally-purged heal trigger
         });
     });
 
-    describe('Salvation p3: on-ally-purged 5% heal + on-destroyed 80% heal', () => {
+    describe('Salvation p2: on-ally-purged 5% heal + on-destroyed 80% heal', () => {
         const salvation = () =>
             ship({
                 thirdPassiveSkillText:
-                    "When this Unit is destroyed it <unit-damage>repairs 80%</unit-damage> of its max HP to all allies.<br /><br />When a <unit-aid>buff</unit-aid> is <unit-aid>purged</unit-aid> from an ally, this Unit <unit-damage>repairs that ally for 5%</unit-damage> of this Unit's max HP.",
+                    "When this Unit is destroyed it <unit-damage>repairs 80%</unit-damage> of its max HP to all allies.<br /><br />When a <unit-aid>buff</unit-aid> is <unit-skill>purged</unit-skill> from an ally, this Unit <unit-damage>repairs that ally for 5%</unit-damage> of this Unit's max HP.",
             });
 
         it('emits the 5% ally heal with trigger on-ally-purged', () => {
@@ -4139,7 +4139,7 @@ describe('buildShipAbilities — E4 Amartya crit-power-scaled purge (countScalin
 // emits exactly one `incoming-reduction` ability with the correct config and
 // that no other existing abilities on the slot are disturbed.
 // ---------------------------------------------------------------------------
-describe('buildShipAbilities — D-PR3 Iridium incoming-reduction parser (T5)', () => {
+describe('buildShipAbilities — Iridium incoming-reduction parser', () => {
     // RAW string from docs/ship-skills.csv (Iridium second_passive_skill_text, the R2 passive).
     const IRIDIUM_P2_RAW =
         'When directly damaged, this Unit <unit-skill>purges 2 buffs</unit-skill> from the enemy and inflicts <unit-skill>Speed Down II</unit-skill> for 1 turn.<br /><br />This Unit has <unit-damage>35% damage reduction</unit-damage> from critical hits.<br /><br />At the start of combat, this Unit gains <unit-skill>Taunt</unit-skill> for 1 turn.';
