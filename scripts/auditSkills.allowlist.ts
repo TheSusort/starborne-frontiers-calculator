@@ -9,9 +9,10 @@ export interface AllowEntry {
     ship: string;
     rules: string[];
     reason: string;
-    /** True when the entry suppresses text only the official catalogue carries (the sync gate in
-     *  scripts/lib/skillTextGate.ts relies on it), so the CSV audit never consults it and the
-     *  stale-entry report must not flag it. */
+    /** True when the entry suppresses text only the official catalogue carries and the
+     *  corpus CSV does not, so the CSV audit never consults it and the stale-entry report
+     *  must not flag it. The catalogue sync gate (scripts/lib/skillTextGate.ts) reaches the
+     *  allowlist only through findingsForShip -> isAllowed and does not read this field. */
     catalogueOnly?: boolean;
 }
 
@@ -19,7 +20,7 @@ export const ALLOWLIST: AllowEntry[] = [
     {
         ship: 'Lingshe',
         rules: ['detonation'],
-        reason: 'detonation: crit-scaling Bomb detonation (charged skill\'s countdown-reduction rider is modelled as `bomb-countdown-reduce`, but the crit-power-scaled "detonation damage" modifier on passive2/3 is not a detonate-dot consumption). The passive2/3 "gains Stealth on detonating a Bomb" grant rides on-self-bomb-detonated, and passive1\'s "When this Unit inflicts a Bomb it gains Stealth" rides on-debuff-inflicted narrowed to Bomb (triggerStatusFilter).',
+        reason: 'detonation: crit-scaling Bomb detonation (charged skill\'s countdown-reduction rider is modelled as `bomb-countdown-reduce`, but the crit-power-scaled "detonation damage" modifier on passive2/3 is not a detonate-dot consumption). Every passive\'s "When this Unit inflicts a Bomb it gains Stealth" rides on-debuff-inflicted narrowed to Bomb (triggerStatusFilter).',
     },
 
     // ── ungated-effect-with-trigger: intentionally not auto-gated ───────────────
@@ -92,13 +93,12 @@ export const ALLOWLIST: AllowEntry[] = [
     // "This Unit has X% defense penetration" describes the refit ascension stat (user ruling
     // 2026-10-02), which the ship's stats already carry; parsing the clause would double-count.
     // Verified against the official catalogue's ascensionStats: Judge DefensePenetration 0.2 at
-    // level 0 (innate), Ravager 0.1 at level 2. Ravager's entry only suppresses the catalogue
-    // text ("This Unit has 10% defense penetration"); ours reads "ignores 10% of Defense".
+    // level 0 (innate), Ravager 0.1 at level 2. The catalogue text reads "This Unit has 10%
+    // defense penetration"; the passive is never parsed as a modifier.
     ...['Judge', 'Ravager'].map((ship) => ({
         ship,
         rules: ['defense-penetration-innate'],
         reason: 'Defense penetration is the refit ascension stat the ship already carries.',
-        ...(ship === 'Ravager' ? { catalogueOnly: true } : {}),
     })),
 
     // Burst-explosion reference — not an accumulate-detonate application.
