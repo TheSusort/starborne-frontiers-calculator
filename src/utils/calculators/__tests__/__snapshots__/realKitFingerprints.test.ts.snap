@@ -996,16 +996,22 @@ exports[`kit fingerprints > Gallant 1`] = `
     "attack:active",
     "attack:charged",
     "charge-changed",
+    "debuff",
+    "debuff-resisted",
   ],
   "richEnemy": [
     "attack:active",
     "attack:charged",
     "charge-changed",
+    "debuff",
+    "debuff-resisted",
   ],
   "wounded": [
     "attack:active",
     "attack:charged",
     "charge-changed",
+    "debuff",
+    "debuff-resisted",
   ],
 }
 `;
@@ -1376,18 +1382,21 @@ exports[`kit fingerprints > IonScorp 1`] = `
     "attack:charged",
     "buff-expired",
     "charge-changed",
+    "debuff",
   ],
   "richEnemy": [
     "attack:active",
     "attack:charged",
     "buff-expired",
     "charge-changed",
+    "debuff",
   ],
   "wounded": [
     "attack:active",
     "attack:charged",
     "buff-expired",
     "charge-changed",
+    "debuff",
   ],
 }
 `;

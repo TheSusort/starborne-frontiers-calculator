@@ -1,4 +1,5 @@
 import type { ShipType } from '../types/ship';
+import type { EnemyBaseClass } from '../types/calculator';
 
 export const SHIP_TYPES = {
     ATTACKER: {
@@ -116,6 +117,19 @@ const ROLE_CATEGORIES = Object.keys({
     DEBUFFER: 0,
     SUPPORTER: 0,
 } satisfies Record<ShipRoleCategory, 0>) as ShipRoleCategory[];
+
+const BASE_CLASS_OF_CATEGORY: Record<ShipRoleCategory, EnemyBaseClass> = {
+    ATTACKER: 'Attacker',
+    DEFENDER: 'Defender',
+    DEBUFFER: 'Debuffer',
+    SUPPORTER: 'Supporter',
+};
+
+/** The `enemy-type` condition class a ship role falls under (DEFENDER_SECURITY → 'Defender'). */
+export function roleBaseClass(type: ShipTypeName): EnemyBaseClass | undefined {
+    const category = ROLE_CATEGORIES.find((c) => matchesRoleCategory(type, [c]));
+    return category ? BASE_CLASS_OF_CATEGORY[category] : undefined;
+}
 
 /** Looks up `type` in a role-keyed table, falling back to its role CATEGORY's entry
  *  (`matchesRoleCategory`) when `type` has no entry of its own — e.g. DEFENDER_SECURITY

@@ -6,7 +6,7 @@ import {
     TeamActorInput,
 } from '../../types/calculator';
 import type { ShipTypeName } from '../../constants/shipTypes';
-import { matchesRoleCategory } from '../../constants/shipTypes';
+import { matchesRoleCategory, roleBaseClass } from '../../constants/shipTypes';
 import type { FactionName } from '../../constants/factions';
 import {
     TOXIC_OVERFLOW,
@@ -9253,15 +9253,21 @@ export function runCombat(rawInput: CombatEngineInput): {
             // bound target's own turn args below and for every other struck enemy's
             // (`recipientGateReadings`). Read here, before the cast, for all of them at once: a
             // clause earlier in the same cast must not change what a later clause's gate sees.
-            const victimGateReading = (v: CombatActor): RecipientGateReading => ({
-                enemyHp: tb.victimMaxHpFor(v),
-                targetRepairedThisRound: repairedThisRound.has(v.id),
-                enemyDebuffNames: enemyDebuffNamesForTarget(v),
-                // WITHHELD under `mode: 'dps'` — see `liveCountsMeasurable`.
-                ...(liveCountsMeasurable
-                    ? { enemyBuffCount: selfBuffNamesForOwners(statusEngine, [v.id]).length }
-                    : {}),
-            });
+            const victimGateReading = (v: CombatActor): RecipientGateReading => {
+                const role = roleByActorId.get(v.id);
+                const roleClass = role ? roleBaseClass(role) : undefined;
+                return {
+                    enemyHp: tb.victimMaxHpFor(v),
+                    targetRepairedThisRound: repairedThisRound.has(v.id),
+                    enemyDebuffNames: enemyDebuffNamesForTarget(v),
+                    // WITHHELD under `mode: 'dps'` — see `liveCountsMeasurable`.
+                    ...(liveCountsMeasurable
+                        ? { enemyBuffCount: selfBuffNamesForOwners(statusEngine, [v.id]).length }
+                        : {}),
+                    // An actor with no role (the DPS calculator's synthesized enemy) carries none.
+                    ...(roleClass ? { role: roleClass } : {}),
+                };
+            };
             const tgtReading = tgt ? victimGateReading(tgt) : undefined;
             return {
                 runtime: rt,
@@ -9368,6 +9374,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                           enemyDefense: tb.victimDefenceFor(tgt),
                           enemyHp: tgtReading.enemyHp,
                           targetRepairedThisRound: tgtReading.targetRepairedThisRound,
+                          ...(tgtReading.role ? { targetRole: tgtReading.role } : {}),
                           targetEffectiveAttack: effectiveStatsOf(statusEngine, selfBuffLookup, tgt)
                               .attack,
                       }

@@ -632,6 +632,8 @@ export interface RecipientGateReading {
     enemyDebuffNames: string[];
     /** Absent under `mode: 'dps'`, like the bound target's `enemyBuffCount`. */
     enemyBuffCount?: number;
+    /** The actor's own role class, when its input carries one (battle mode). */
+    role?: EnemyBaseClass;
 }
 
 export interface PlayerTurnArgs {
@@ -657,6 +659,10 @@ export interface PlayerTurnArgs {
      *  100. */
     enemyHp?: number;
     enemyType?: EnemyBaseClass;
+    /** The bound target's own role class (battle mode, when its input carries a role). A cast
+     *  enemy status's `enemy-type` gate reads it ahead of the fight-wide `enemyType`, which only
+     *  answers when no actor role exists (the DPS calculator). */
+    targetRole?: EnemyBaseClass;
     // Required: the engine always passes its internal bus (wrapping the optional
     // external tap), so the player turn emits unconditionally.
     bus: CombatEventBus;
@@ -1581,6 +1587,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         enemyDefense = 0,
         enemyHp = 0,
         enemyType,
+        targetRole,
         bus,
         round: r,
         grantAllyCharges,
@@ -2327,7 +2334,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         genericCount: genericDoTEntries.length,
         enemyDotFamilyCounts: dotFamilyCounts(corrosionEntries, infernoEntries, genericDoTEntries),
         effectiveCritRate: cappedCrit(critBuffForGates),
-        enemyType,
+        // "If the target is a defender" asks the struck enemy's own role (owner ruling 4); the
+        // fight-wide class answers only where no actor carries a role (the DPS calculator).
+        enemyType: targetRole ?? enemyType,
         enemyHpPct,
         // The entry counts above are all 0 on a no-victim turn (see the `corrosionEntries
         // = []` default note at this function's destructure), which is ALSO what a real victim
@@ -2396,7 +2405,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
      *
      *  Side-wide subjects (the opposing buff-name union, the debuffed-enemy count, the destroyed
      *  count) and the caster's own subjects read the same answer for every recipient. `enemyType`
-     *  is the fight-wide scalar and is not re-pointed. A recipient with no reading (none outside
+     *  is the recipient's own role class, falling back to the fight-wide class like the bound
+     *  target's (see `targetRole`). A recipient with no reading (none outside
      *  positional runs, where the bound target is the only recipient) reads the bound target's
      *  context. */
     const recipientGateCtxById = new Map<string, ConditionContext>();
@@ -2427,6 +2437,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                     enemyHpPct:
                         vHp > 0 ? Math.max(0, 100 * (1 - Math.max(0, vHp - v.currentHp) / vHp)) : 0,
                     targetRepairedThisRound: reading.targetRepairedThisRound,
+                    enemyType: reading.role ?? enemyType,
                     // Sentinels mirror the bound target's: absent there → absent here.
                     enemyDebuffNames:
                         enemyDebuffNamesArg === undefined ? undefined : reading.enemyDebuffNames,

@@ -2926,6 +2926,17 @@ const DocumentationPage: React.FC = () => {
                                         are no neighbours, so it has no effect.
                                     </p>
                                     <p className="text-theme-text mb-2">
+                                        <span className="text-primary">Per-enemy conditions:</span>{' '}
+                                        When a skill&apos;s debuff reaches several enemies, a
+                                        condition about the enemy (its debuffs, HP, stats, whether
+                                        it was repaired this round, or its role) is checked against
+                                        each enemy separately. A role condition such as
+                                        Gallant&apos;s &ldquo;if the target is a defender&rdquo;
+                                        reads the enemy ship&apos;s own role; the Enemy Type
+                                        selector only answers in the DPS calculator, where the enemy
+                                        has no ship.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
                                         <span className="text-primary">Team Ships:</span> Pick a
                                         ship into any of the four team slots and its real skills are
                                         parsed and simulated — the same full ability editor as the
