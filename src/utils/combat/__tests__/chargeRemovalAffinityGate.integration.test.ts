@@ -13,6 +13,9 @@
  *   - applier THERMAL vs CHEMICAL target → getAffinityMatchup(thermal, chemical) === 'advantage'
  *     → the chemical enemy's charges ARE removed.
  *
+ * Both enemies stand inside the applier's Circle footprint (M4 and M3 around the front-most anchor),
+ * since a cast removes charges only from the enemies it strikes.
+ *
  * The two enemies are charge HOLDERS (chargeCount set, NO charged-damage slot → hasChargedSkill
  * false → cadence never re-banks), seeded `seeded === chargeCount` so each starts with exactly
  * `seeded` charges and the seeded value minus the removal is directly observable via the actor tap.
@@ -25,6 +28,8 @@ import type { CombatActor } from '../state';
 import { getAffinityMatchup } from '../../calculators/affinityUtils';
 import { buildShipAbilities } from '../../abilities/buildShipAbilities';
 import type { Ship } from '../../../types/ship';
+import { parsePattern, parseTarget } from '../../targetingParser';
+import type { Position } from '../../../types/encounters';
 
 type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 
@@ -64,9 +69,14 @@ const chargeAbility = (
 
 /** A charge HOLDER with a fixed id + affinity. chargeCount === seeded via startCharged; no
  *  charged-damage slot → hasChargedSkill false → never re-banks. */
-const chargeHolder = (id: string, affinity: EnemyAttacker['affinity']): EnemyAttacker => ({
+const chargeHolder = (
+    id: string,
+    affinity: EnemyAttacker['affinity'],
+    position: Position
+): EnemyAttacker => ({
     id,
     affinity,
+    position,
     stats: { attack: 1, crit: 0, critDamage: 0, speed: 40 },
     chargeCount: 3,
     startCharged: true,
@@ -106,6 +116,10 @@ const buildInput = (
     defence: 0,
     hp: 1_000_000_000,
     speed: 100,
+    position: 'M4',
+    target: parseTarget('front'),
+    pattern: parsePattern('Pattern-Circle-Range-1'),
+    chargedPattern: parsePattern('Pattern-Circle-Range-1'),
     healTargetId: 'attacker',
     mode: 'healing',
     enemyAttackers: enemies,
@@ -121,8 +135,8 @@ describe('charge removal — affinity gate (applier thermal)', () => {
     it('on-cast all-enemies: skips the affinity-advantaged (electric) enemy, removes from the chemical enemy', () => {
         const actors = runAndTap(
             buildInput(chargeAbility(2, 'all-enemies', 'on-cast', 'p-remove-cast'), [
-                chargeHolder('e-electric', 'electric'), // advantage over thermal → SKIPPED
-                chargeHolder('e-chemical', 'chemical'), // thermal advantage → removed
+                chargeHolder('e-electric', 'electric', 'M4'), // advantage over thermal → SKIPPED
+                chargeHolder('e-chemical', 'chemical', 'M3'), // thermal advantage → removed
             ])
         );
 
@@ -135,8 +149,8 @@ describe('charge removal — affinity gate (applier thermal)', () => {
     it('start-of-round all-enemies (reactive path): same affinity gate', () => {
         const actors = runAndTap(
             buildInput(chargeAbility(2, 'all-enemies', 'start-of-round', 'p-remove-sor'), [
-                chargeHolder('e-electric', 'electric'),
-                chargeHolder('e-chemical', 'chemical'),
+                chargeHolder('e-electric', 'electric', 'M4'),
+                chargeHolder('e-chemical', 'chemical', 'M3'),
             ])
         );
 
@@ -187,8 +201,8 @@ describe("Zenith — 'removes all charges' end to end", () => {
     it('the charged slot EMPTIES the chemical enemy (3 → 0) and the affinity gate still spares the electric one', () => {
         const actors = runAndTap(
             zenithInput(true, [
-                chargeHolder('e-electric', 'electric'), // advantage over thermal Zenith → SKIPPED
-                chargeHolder('e-chemical', 'chemical'), // thermal advantage → emptied
+                chargeHolder('e-electric', 'electric', 'M4'), // advantage over thermal Zenith → SKIPPED
+                chargeHolder('e-chemical', 'chemical', 'M3'), // thermal advantage → emptied
             ])
         );
 
@@ -205,8 +219,8 @@ describe("Zenith — 'removes all charges' end to end", () => {
         // emits a reactive 'all' today — this pins the path tsc forced open, not a shipped kit.
         const actors = runAndTap(
             buildInput(chargeAbility('all', 'all-enemies', 'start-of-round', 'p-remove-all-sor'), [
-                chargeHolder('e-electric', 'electric'),
-                chargeHolder('e-chemical', 'chemical'),
+                chargeHolder('e-electric', 'electric', 'M4'),
+                chargeHolder('e-chemical', 'chemical', 'M3'),
             ])
         );
 
@@ -220,8 +234,8 @@ describe("Zenith — 'removes all charges' end to end", () => {
         // artefact of the fixture removing everything no matter which slot fires.
         const actors = runAndTap(
             zenithInput(false, [
-                chargeHolder('e-electric', 'electric'),
-                chargeHolder('e-chemical', 'chemical'),
+                chargeHolder('e-electric', 'electric', 'M4'),
+                chargeHolder('e-chemical', 'chemical', 'M3'),
             ])
         );
 

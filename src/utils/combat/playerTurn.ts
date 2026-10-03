@@ -663,16 +663,15 @@ export interface PlayerTurnArgs {
         amount: number,
         opts?: { recipientIds?: string[]; emitBus?: CombatEventBus }
     ) => void;
-    /** Remove `amount` charges from every OPPOSING-side actor. Supplied by the engine, which
-     *  loops the opposing side flooring each actor at 0
-     *  and skipping chargeLossImmune / chargeCount-0 actors. Called from the caster's active/charged
-     *  charge step for enemy/all-enemies-targeted charge abilities. Optional so standalone callers
-     *  without an opposing roster need not supply it — when absent enemy-target removal is a no-op
-     *  (a self-only run never has enemy-targeted charge abilities). The optional `applierAffinity`
+    /** Remove `amount` charges from ONE opposing actor by id (floored at 0; chargeLossImmune and
+     *  chargeCount-0 actors skipped). Supplied by the engine; the cast's enemy charge removal calls it
+     *  once per struck enemy. Optional so standalone callers without an opposing roster need not
+     *  supply it — when absent enemy-target removal is a no-op. The optional `applierAffinity`
      *  enforces the Charge Manipulation affinity gate (skip targets with affinity advantage over
      *  the applier); omit it to disable the gate. The optional `emitBus` is unused on the on-turn
-     *  cast path (charge changes here are NOT reactions) — it exists only for signature parity. */
-    removeEnemyCharges?: (
+     *  cast path (charge changes here are NOT reactions). */
+    removeChargesFrom?: (
+        targetId: string,
         amount: number | 'all',
         applierAffinity?: AffinityName,
         emitBus?: CombatEventBus
@@ -1203,8 +1202,8 @@ function chargeGainFromSkill(args: {
      *  - 'own'   → self-targeted (and anything not ally/all-allies/enemy/all-enemies) → bumps the
      *    caster only.
      *  - 'ally'  → ally/all-allies-targeted → bumps every player actor (via grantAllyCharges).
-     *  - 'enemy' → enemy/all-enemies-targeted → REMOVES from every opposing actor (via
-     *    removeEnemyCharges). Positive amount; the engine subtracts.
+     *  - 'enemy' → enemy/all-enemies-targeted → REMOVES from each struck enemy (via
+     *    removeChargesFrom). Positive amount; the engine subtracts.
      *  For attacker-only runs the 'ally' total still routes through grantAllyCharges, which
      *  loops the sole attacker → identical net charge to a single 'own' sum. */
     targetFilter: 'own' | 'ally' | 'enemy';
@@ -1569,7 +1568,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         bus,
         round: r,
         grantAllyCharges,
-        removeEnemyCharges,
+        removeChargesFrom,
         selfHpPct: selfHpPctArg = 100,
         targetHpPct: targetHpPctArg = 100,
         targetRepairedThisRound: targetRepairedThisRoundArg = false,
@@ -3665,13 +3664,14 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         }
     }
 
-    // ENEMY charge removal: enemy/all-enemies-targeted charge abilities REMOVE charges
-    // from every opposing actor (floored at 0, immune actors skipped). Sourced from the FIRING
-    // skill + the always-active passive slot, both pre-gated; summed as a positive amount and
-    // passed to removeEnemyCharges (the engine subtracts). Same active/charged sequence point as
-    // own/ally gains. The engine supplies removeEnemyCharges (per-actor floor loop on the opposing
-    // side); absent (standalone callers without an opposing roster) → no-op.
-    if ((action === 'active' || action === 'charged') && removeEnemyCharges) {
+    // ENEMY charge removal: enemy/all-enemies-targeted charge abilities REMOVE charges from every
+    // enemy the cast strikes (the footprint victims, `aoeVictimIds`; the anchor when the caller has
+    // no footprint; nobody on a no-victim cast), never from an enemy outside the pattern. Per
+    // victim: floored at 0, immune actors and affinity-advantaged actors skipped (removeChargesFrom).
+    // Sourced from the FIRING skill + the always-active passive slot, both pre-gated; summed as a
+    // positive amount (the engine subtracts). Same active/charged sequence point as own/ally gains.
+    // Absent removeChargesFrom (standalone callers without an opposing roster) → no-op.
+    if ((action === 'active' || action === 'charged') && removeChargesFrom) {
         // An unbounded `'all'` removal in either slot DOMINATES any count removed alongside it:
         // emptying the pool subsumes subtracting from it.
         const wipesAllCharges =
@@ -3689,8 +3689,13 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 fallbackCtx: ctx,
                 targetFilter: 'enemy',
             });
-        if (wipesAllCharges) removeEnemyCharges('all', attackerAffinity);
-        else if (enemyChargeRemoval > 0) removeEnemyCharges(enemyChargeRemoval, attackerAffinity);
+        const chargeVictimIds = !hasVictim
+            ? []
+            : (aoeVictimIds ?? (targetId !== undefined ? [targetId] : []));
+        const removal = wipesAllCharges ? 'all' : enemyChargeRemoval;
+        if (removal === 'all' || removal > 0) {
+            for (const vid of chargeVictimIds) removeChargesFrom(vid, removal, attackerAffinity);
+        }
     }
 
     // Extra-action grants (game-verified: a full extra turn; the engine re-inserts

@@ -2972,6 +2972,12 @@ const DocumentationPage: React.FC = () => {
                                         more buffs in total, so he can chain them; the simulator
                                         stops a chain after 20 extra actions in one round.
                                     </p>
+                                    <p className="text-theme-text mb-2">
+                                        <span className="text-primary">Charge removal:</span> A
+                                        skill that removes charges from the enemy&apos;s charged
+                                        skill (Opal, Provider, Sefuba) drains every enemy it hits
+                                        and no one outside its pattern.
+                                    </p>
                                     <p className="text-theme-text">
                                         <span className="text-primary">
                                             Multi-Hit Crits and Extra Actions:
