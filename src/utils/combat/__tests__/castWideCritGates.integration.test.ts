@@ -1,20 +1,27 @@
 /**
  * A cast-wide crit clause fires on a crit against ANY enemy the skill strikes, aimed or covered
  * (owner ruling 11, 2026-10-03): Lev's charged "If a critical hit occurs, all hit enemies have
- * their debuffs extended by 1 turn" — a crit on B alone extends A, B and C.
+ * their debuffs extended by 1 turn and all allies are granted Crit Power Up II" — a crit on B
+ * alone extends A, B and C and grants the buff. In a battle the clause needs a REAL crit: a cast
+ * on which no enemy is crit grants nothing.
  *
  * Observables, per seeded run of one Lev charged cast on Pattern-Cone-Range-1 (A at the anchor,
  * B and C covered, OUT outside the footprint), crit 50:
  *   - the cast's crit identity: the union of `critVictimIds` over the cast's `ability-performed`;
  *   - the extension: every `extendAllDebuffsDuration` call the status engine receives (spied by
- *     wrapping `createStatusEngine`; Lev is the only extender on the board).
- * The extension must fire iff some struck enemy was crit, on every seed, for a player and an
- * enemy Lev.
+ *     wrapping `createStatusEngine`; Lev is the only extender on the board);
+ *   - the grant: `buff-applied` 'Crit Power Up II' with Lev as granter.
+ * Each must fire iff some struck enemy was crit, on every seed, for a player and an enemy Lev.
+ *
+ * Lionheart's "If this critically hits, grants Attack Up … to all adjacent allies" is a reactive
+ * on-crit grant fed by the same positional `ability-performed`; its arm pins that it already
+ * follows the cast's real crits.
  */
 import { describe, it, expect, beforeAll, vi } from 'vitest';
 import { runCombat, CombatEngineInput } from '../engine';
 import { createEventBus, CombatEvent } from '../events';
 import { setupKeyedRng } from '../../calculators/rateAccumulator';
+import { simulateDPS } from '../../calculators/dpsSimulator';
 import { buildTraceShip } from '../../../../scripts/lib/traceShipFactory';
 import { csvAvailable } from '../../../../scripts/lib/shipSkillCsv';
 import { shipDataAvailable } from '../../../../scripts/lib/shipDataSnapshot';
@@ -250,5 +257,75 @@ describe("Lev's charged: a crit on any struck enemy extends every struck enemy's
         expect(onlyCovered.length).toBeGreaterThan(10);
         for (const r of onlyCovered)
             expect([...r.extended].sort()).toEqual(['ally-b', 'ally-c', 'attacker']);
+    });
+});
+
+describe("Lev's charged Crit Power Up II needs a real crit in a battle", () => {
+    const grantsCritPower = (r: CastReading) =>
+        r.granted.some((g) => g.startsWith('Crit Power Up II@'));
+
+    it('player Lev: granted iff some struck enemy was crit', () => {
+        const input = playerCast('Lev', 'charged');
+        expect(mismatches(input, 'attacker', grantsCritPower)).toEqual([]);
+        // Both outcomes occur in the sweep.
+        const readings = SEEDS.map((s) => readCast(input, 'attacker', s));
+        expect(readings.some((r) => r.critVictims.size === 0)).toBe(true);
+        expect(readings.some((r) => r.critVictims.size > 0 && grantsCritPower(r))).toBe(true);
+    });
+
+    it('enemy Lev: granted iff some struck player ship was crit', () => {
+        const input = enemyCast('Lev', 'charged');
+        expect(mismatches(input, 'caster', grantsCritPower)).toEqual([]);
+        const readings = SEEDS.map((s) => readCast(input, 'caster', s));
+        expect(readings.some((r) => r.critVictims.size === 0)).toBe(true);
+    });
+
+    it('DPS calculator keeps the optimistic gate: crit 50 grants it on every charged cast', () => {
+        // The single-ship DPS calculator decides timed buff gates before the hit's crit roll and
+        // passes a crit-gated grant whenever crit rate > 0 (playerTurn's pre-debuff gate note).
+        const bus = createEventBus();
+        const grantRounds: number[] = [];
+        bus.on('buff-applied', (e: Extract<CombatEvent, { type: 'buff-applied' }>) => {
+            if (e.buffName === 'Crit Power Up II') grantRounds.push(e.round);
+        });
+        const result = simulateDPS({
+            attack: 1000,
+            crit: 50,
+            critDamage: 0,
+            defensePenetration: 0,
+            chargeCount: 1,
+            startCharged: true,
+            enemyDefense: 0,
+            enemyHp: 1e9,
+            rounds: 12,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            hacking: 0,
+            enemySecurity: 0,
+            shipSkills: realKit('Lev', 'charged'),
+            bus,
+        });
+        const chargedRounds = result.rounds.filter((r) => r.action === 'charged');
+        // Non-vacuity: some charged casts did not crit, and they still granted it.
+        expect(chargedRounds.some((r) => !r.didCrit)).toBe(true);
+        expect(grantRounds).toEqual(chargedRounds.map((r) => r.round));
+    });
+});
+
+describe("Lionheart's crit grant already follows the cast's real crits", () => {
+    // "If this critically hits, this Unit grants Attack Up II to all adjacent allies" — a
+    // reactive on-crit grant, fed by the positional ability-performed's crit identity.
+    const grantsAttackUp = (r: CastReading) => r.granted.some((g) => g.startsWith('Attack Up II@'));
+    const withAdjacentAlly = (input: CombatEngineInput): CombatEngineInput => ({
+        ...input,
+        target: parseTarget('front'),
+        pattern: parsePattern('Pattern-Line-from-centre-Range-1'),
+        teamActors: [inertAlly('ally-adj', 'T4')],
+    });
+
+    it('player Lionheart: granted iff some struck enemy was crit', () => {
+        const input = withAdjacentAlly(playerCast('Lionheart', 'active'));
+        expect(mismatches(input, 'attacker', grantsAttackUp)).toEqual([]);
+        expect(SEEDS.some((s) => grantsAttackUp(readCast(input, 'attacker', s)))).toBe(true);
     });
 });

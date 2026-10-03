@@ -2997,6 +2997,12 @@ export function runCombat(rawInput: CombatEngineInput): {
      *  Gated on the MODE, never derived from a data field (roster emptiness, position presence) —
      *  see `RunMode`'s own note on why that distinction is the point of the type. */
     const liveCountsMeasurable = runMode !== 'dps';
+    /** Whether a crit-gated timed buff grant ("If this critically hits, grants …") waits for the
+     *  cast's REAL crit. True in a battle or healing run, where every hit's crit is rolled and
+     *  the grant is decided after it (`anyVictimCrit` in runPlayerTurn). The single-ship DPS
+     *  calculator keeps its pre-hit gate, which passes whenever crit rate > 0. Gated on the MODE,
+     *  like `liveCountsMeasurable`. */
+    const critGatedGrantsNeedRealCrit = runMode !== 'dps';
 
     // Explicitness guards. These do NOT infer a mode — they refuse an input whose mode and data
     // disagree, which is the difference between validation and derivation.
@@ -9424,6 +9430,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // `adjacentAllyIds` / `adjacentEnemyIdsFor` above) are a measurement on this run.
                 // Same mode gate, same reason, as `enemyDestroyedCount` below.
                 liveCountsMeasurable,
+                critGatedGrantsNeedRealCrit,
                 // Resolves the board-neighbours of an ENEMY-side anchor
                 // (the resolved target `tgt`, not the caster) for the 'adjacent-enemies' /
                 // 'target-and-adjacent-enemies' debuff fan-out. Reuses the same side-dispatching

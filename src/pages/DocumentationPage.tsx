@@ -2880,6 +2880,18 @@ const DocumentationPage: React.FC = () => {
                                         hits. Works for both teams and in the DPS calculator.
                                     </p>
                                     <p className="text-theme-text mb-2">
+                                        <span className="text-primary">Crit-Gated Effects:</span> In
+                                        a battle, an effect that says &quot;if a critical hit
+                                        occurs&quot; or &quot;if this critically hits&quot; fires
+                                        only when the hit really crits. On an area skill a crit
+                                        against any enemy hit counts, so Lev&apos;s charged skill
+                                        extends every hit enemy&apos;s debuffs and grants Crit Power
+                                        Up II. Effects tied to one enemy&apos;s crit, such as
+                                        Wisteria&apos;s Inferno, read that enemy&apos;s own crit.
+                                        The DPS calculator still grants a crit-gated buff whenever
+                                        crit rate is above zero.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
                                         <span className="text-primary">Buff Steal:</span> Skills
                                         that &quot;steal a buff from the target&quot; (Pallas,
                                         Thresh, Tithonus) are now modeled as a dedicated Buff Steal
