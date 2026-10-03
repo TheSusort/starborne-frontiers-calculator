@@ -2987,8 +2987,11 @@ const DocumentationPage: React.FC = () => {
                                         shield, Warden lands its extra debuff, once per enemy, and
                                         Laika gains a shield per enemy stripped. A Stasis the skill
                                         lands is not shortened by that same hit. Damage over time
-                                        (Corrosion, Inferno, Bombs) still reaches only the main
-                                        target.
+                                        (Corrosion, Inferno, Bombs) spreads the same way: every
+                                        enemy hit gets its own stacks, and a Bomb uses the
+                                        attacker&apos;s affinity against that enemy. Crits are per
+                                        enemy too: Wisteria&apos;s crit Inferno and Valerian&apos;s
+                                        crit extension land only on the enemies the hit critted.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Purges:</span> A purge on a

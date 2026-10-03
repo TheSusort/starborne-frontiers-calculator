@@ -33,6 +33,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: Stasis an area skill lands is no longer shortened by that hit.',
     "Combat simulator: an area hit now shortens a resisting enemy's existing Stasis.",
     "Combat simulator: a shorter re-inflicted Stasis no longer shields an enemy's longer one.",
+    'Combat simulator: area skills now spread Corrosion, Inferno and Bombs to every enemy hit.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

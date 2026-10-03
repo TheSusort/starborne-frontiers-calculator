@@ -8209,7 +8209,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             // each COVERED footprint victim rolls the attacker's crit gate at ITS OWN affinity-
             // capped rate via this callback. Unsupplied → every victim uses hitCrits[h]. Each
             // call site supplies the firing turn's rollVictimCrit.
-            rollVictimCrit?: (victim: CombatActor) => boolean;
+            rollVictimCrit?: (victim: CombatActor, subAttackIndex?: number) => boolean;
             // This turn's enemy-status-gated outgoing-modifier ingredients
             // (modifierAbilities + primaryCtx), forwarded from `turn.perVictimOutgoing`.
             // Unsupplied/undefined → perVictimOutgoingDeltaPct short-circuits to 0 for every
@@ -9662,7 +9662,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             hitCrits: boolean[];
             perVictimOutgoing: PlayerTurnResult['perVictimOutgoing'];
             perVictimScaling: PlayerTurnResult['perVictimScaling'];
-            rollVictimCrit?: (victimAffinity: AffinityName) => boolean;
+            rollVictimCrit?: PlayerTurnResult['rollVictimCrit'];
             deferredAbilityPerformed: PlayerTurnResult['deferredAbilityPerformed'];
             positionalDetonation: DetonationRecipe | undefined;
             /**
@@ -9825,12 +9825,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                 perVictimScaling: sel.perVictimScaling,
                 preTurnVictimStatus: sel.preTurnVictimStatus,
                 // Per-victim crit: each covered footprint victim rolls at ITS own affinity-capped
-                // rate against this attacker. sel.rollVictimCrit is defined for every positional turn
-                // (turn.rollVictimCrit is a required PlayerTurnResult field); the conditional wrap
-                // reproduces the enemy site's defensive `? … : undefined` shape exactly.
-                rollVictimCrit: sel.rollVictimCrit
-                    ? (v) => sel.rollVictimCrit!(v.affinity ?? 'antimatter')
-                    : undefined,
+                // rate against this attacker (`PlayerTurnResult.rollVictimCrit`).
+                rollVictimCrit: sel.rollVictimCrit,
                 onVictimResolved: (victim, damage, outcome, didCrit, subAttackIndex) => {
                     // Injected per-site leech direction (Note A): standing (player→enemy) vs taken
                     // (enemy→player, which also captures the focus victim's shield-hit flag).
