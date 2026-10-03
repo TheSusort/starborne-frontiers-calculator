@@ -337,8 +337,8 @@ describe('extraActions', () => {
                     {
                         slot: 'active',
                         abilities: [
-                            ab({ type: 'damage', config: { type: 'damage', multiplier: 100 } }),
-                            // 1-turn +100% attack self buff, duration=1 (expires at post-turn)
+                            // 1-turn +100% attack self buff, duration=1 (expires at post-turn).
+                            // Written before the damage clause, so it boosts the same turn's hit.
                             ab({
                                 type: 'buff',
                                 target: 'self',
@@ -351,6 +351,7 @@ describe('extraActions', () => {
                                     duration: 1,
                                 },
                             }),
+                            ab({ type: 'damage', config: { type: 'damage', multiplier: 100 } }),
                         ],
                     },
                     {
@@ -374,7 +375,6 @@ describe('extraActions', () => {
                     {
                         slot: 'active',
                         abilities: [
-                            ab({ type: 'damage', config: { type: 'damage', multiplier: 100 } }),
                             ab({
                                 type: 'buff',
                                 target: 'self',
@@ -387,6 +387,7 @@ describe('extraActions', () => {
                                     duration: 1,
                                 },
                             }),
+                            ab({ type: 'damage', config: { type: 'damage', multiplier: 100 } }),
                         ],
                     },
                 ],

@@ -57,9 +57,10 @@ export function diffFingerprints(
  *  token can therefore be a genuine cast entry that simply lost the race, not a passive/reactive
  *  one.
  *  Concretely, Malvex's charged cast grants Barrier via a named buff routed through the
- *  `timedSelfBySlot` loop, which runs BEFORE the attack's `ability-performed` emission — so
- *  `buff-applied` consumes the tag (`buff:charged`) and THAT cast's attack lands as a bare
- *  `attack`.
+ *  `timedSelfBySlot` loop; written after the damage clause, it lands at the end of
+ *  `runPlayerTurn`, which is still BEFORE the engine's post-apply `ability-performed` emission on
+ *  a positional cast — so `buff-applied` consumes the tag (`buff:charged`) and THAT cast's attack
+ *  lands as a bare `attack`.
  *
  *  ONE handler is not among those: the `ability-performed` handler calls `ctx.currentSkillTag()`
  *  instead, which LATCHES the tag for the rest of the cast so all N of a multi-hit skill's attack

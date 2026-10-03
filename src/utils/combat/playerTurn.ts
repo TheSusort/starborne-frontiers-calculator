@@ -3210,6 +3210,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             });
         }
     };
+    // Passed self statuses whose clause follows the damage clause (`afterDamageClause`): applied
+    // at the end of this function, after every figure of this cast's damage is fixed.
+    const afterDamageSelfStatuses: (typeof timedSelfBySlot)[number][] = [];
     for (const status of timedSelfBySlot) {
         if (status.sourceSlot !== action) continue;
         // The gate evaluates against THIS CASTER's post-debuff ctx (the status belongs to the
@@ -3217,6 +3220,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // is applied to EVERY recipient: self → [caster]; ally/all-allies → all players, narrowed
         // per recipient inside `applyTimedSelfStatus`.
         if (!conditionsMet(status.conditions, postDebuffGateCtx)) continue;
+        if (status.afterDamageClause === true) {
+            afterDamageSelfStatuses.push(status);
+            continue;
+        }
         applyTimedSelfStatus(status);
     }
 
@@ -6056,6 +6063,22 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                   target: passiveDamageAbility.target,
               }
             : undefined;
+
+    // After-damage self/ally buffs land now: the scalars above (and the aggregate damage) were
+    // computed without them, so they boost only later hits. DISPLAY ONLY afterwards: the round's
+    // reported self-buff list (`activeSelfBuffs`) gains/refreshes the caster's row for each, the
+    // same refresh a deferred enemy debuff gives `landedEnemyDebuffs` — the buff was granted this
+    // round. Every gate ctx and damage fold has already read its own copy.
+    for (const status of afterDamageSelfStatuses) {
+        applyTimedSelfStatus(status);
+        const live = statusEngine
+            .timedAbilityStatuses('self', actor.id)
+            .find((s) => s.payload.buffName === status.payload.buffName);
+        if (!live) continue;
+        const at = activeSelfBuffsForRound.findIndex((b) => b.buffName === live.active.buffName);
+        if (at >= 0) activeSelfBuffsForRound[at] = live.active;
+        else activeSelfBuffsForRound.push(live.active);
+    }
 
     return {
         action,

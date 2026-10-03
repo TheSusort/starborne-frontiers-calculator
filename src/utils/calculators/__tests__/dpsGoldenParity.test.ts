@@ -652,7 +652,8 @@ describe('dpsGoldenParity', () => {
     }));
 
     // Scenario 15: ability buff feeds modifier gate (coupling lock)
-    // A timed self-buff (Overdrive, +20% attack) is applied by the active skill each round.
+    // A timed self-buff (Overdrive, +20% attack) is applied by the active skill each round,
+    // written before its damage clause so it boosts that same hit.
     // A passive modifier (+25% outgoingDamage) is gated on the self-buff 'Overdrive' being active.
     // Round-1 verification: base no-buff directDamage = 7410 (multiplier 150, BASE stats).
     // With Overdrive (+20% attack): effectiveAttack = 15000 × 1.20 = 18000
@@ -664,7 +665,6 @@ describe('dpsGoldenParity', () => {
                 {
                     slot: 'active',
                     abilities: [
-                        ab({ type: 'damage', config: { type: 'damage', multiplier: 150 } }),
                         ab({
                             type: 'buff',
                             target: 'self',
@@ -677,6 +677,7 @@ describe('dpsGoldenParity', () => {
                                 duration: 2,
                             },
                         }),
+                        ab({ type: 'damage', config: { type: 'damage', multiplier: 150 } }),
                     ],
                 },
                 {

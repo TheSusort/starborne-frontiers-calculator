@@ -328,8 +328,9 @@ function registerActorAbilityStatuses(
     const timedEnemyBySlot: Extract<RegisteredAbilityStatus, { kind: 'timed' }>[] = [];
     for (const slot of castSkills.slots) {
         // Intra-cast clause order: within ONE firing slot, a clause resolves after the clauses
-        // before it, so a debuff whose clause follows a damage-dealing clause is not yet in the
-        // store while that cast's damage resolves ("deals X% damage AND inflicts Defense Down").
+        // before it, so a debuff or buff whose clause follows a damage-dealing clause is not yet
+        // in the store while that cast's damage resolves ("deals X% damage AND inflicts Defense
+        // Down", "deals 300% damage. After targeting a defender, gains Crit Power Up II").
         // `slot.abilities` IS clause order — buildShipAbilities sorts each slot by text position.
         // Only the two FIRING slots cast; a passive row has no damage clause to order against
         // (its statuses are seeded, not cast), so the tracker stays false there.
@@ -571,10 +572,11 @@ function registerActorAbilityStatuses(
                             Infinity
                           : (cfg.duration as number),
                     ...(hitCount !== undefined ? { hits: hitCount } : {}),
-                    // Clause-order stamp (enemy side only — a self-buff never modifies the
-                    // victim's incoming damage, so deferring one would change nothing but its
-                    // event order). Consumed by playerTurn's timed-enemy application loop.
-                    ...(side === 'enemy' && sawDamageClause ? { afterDamageClause: true } : {}),
+                    // Clause-order stamp, both sides: a debuff written after the damage clause
+                    // misses that cast's hit, and so does a self/ally buff ("deals 300% damage.
+                    // After targeting a defender, gains Crit Power Up II"). Consumed by
+                    // playerTurn's timed-enemy and timed-self application loops.
+                    ...(sawDamageClause ? { afterDamageClause: true } : {}),
                 };
                 (side === 'self' ? timedSelfBySlot : timedEnemyBySlot).push(status);
             }

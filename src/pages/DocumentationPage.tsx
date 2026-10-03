@@ -2872,6 +2872,14 @@ const DocumentationPage: React.FC = () => {
                                         the Burner set&apos;s Inferno.
                                     </p>
                                     <p className="text-theme-text mb-2">
+                                        <span className="text-primary">Clause Order:</span> A
+                                        skill&apos;s effects resolve in the order its text lists
+                                        them. A debuff or buff written after the damage (&quot;deals
+                                        300% damage. After targeting a defender, gains Crit Power Up
+                                        II&quot;) lands after that hit, so it only affects later
+                                        hits. Works for both teams and in the DPS calculator.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
                                         <span className="text-primary">Buff Steal:</span> Skills
                                         that &quot;steal a buff from the target&quot; (Pallas,
                                         Thresh, Tithonus) are now modeled as a dedicated Buff Steal

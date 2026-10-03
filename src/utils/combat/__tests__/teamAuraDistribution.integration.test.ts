@@ -53,7 +53,8 @@ const basicDamage = (multiplier: number, id?: string): Ability =>
 // incomingBlockEngine.test.ts / allyChargeGrant.test.ts's `stealthEnemy`. Applied via the
 // SAME timedSelfBySlot → statusEngine → same-turn read pipeline that lets Panguan's own
 // Stealth gate its own attack the round it casts (no 2-round dance needed for self-buffs,
-// unlike the enemy-debuff anti-causality rule).
+// unlike the enemy-debuff anti-causality rule). The fixtures list it BEFORE the damage
+// ability: clauses resolve in written order, so a grant written after the damage misses it.
 const stealthSelfBuff = (id: string): Ability =>
     ab({
         id,
@@ -217,8 +218,8 @@ describe('team-aura distribution for outgoing-damage modifiers (sub-project I, P
                                 {
                                     slot: 'active',
                                     abilities: [
-                                        basicDamage(100, 'ally-dmg'),
                                         stealthSelfBuff('ally-stealth'),
+                                        basicDamage(100, 'ally-dmg'),
                                     ],
                                 },
                             ],
@@ -258,8 +259,8 @@ describe('team-aura distribution for outgoing-damage modifiers (sub-project I, P
                             {
                                 slot: 'active',
                                 abilities: [
-                                    basicDamage(100, 'panguan-dmg'),
                                     stealthSelfBuff('panguan-stealth'),
+                                    basicDamage(100, 'panguan-dmg'),
                                 ],
                             },
                             { slot: 'passive', abilities: [panguanAura()] },
@@ -306,8 +307,8 @@ describe('team-aura distribution for outgoing-damage modifiers (sub-project I, P
                         {
                             slot: 'active',
                             abilities: [
-                                basicDamage(100, 'e-ally-dmg'),
                                 stealthSelfBuff('e-ally-stealth'),
+                                basicDamage(100, 'e-ally-dmg'),
                             ],
                         },
                     ],

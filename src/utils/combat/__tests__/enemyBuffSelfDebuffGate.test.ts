@@ -288,20 +288,16 @@ const GRANT_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInp
  */
 const focusDealt = (round: RoundData): number => Math.round(dealtBy([round], 'attacker'));
 
-/** Active deals damage + grants a self "Attack Up" (+100% attack, 99 turns) GATED on `cond`.
+/** Active grants a self "Attack Up" (+100% attack, 99 turns) GATED on `cond`, then deals damage.
  *  A passive modifier reads that self-buff and folds nothing of its own — the grant's own
  *  parsedEffects.attack is what doubles directDamage once live. So if the grant never fires,
- *  directDamage stays at base every round. */
+ *  directDamage stays at base every round. The grant is written BEFORE the damage clause, so it
+ *  boosts the same cast's hit (clauses resolve in written order). */
 const grantGatedSelfBuffSkill = (cond: Ability['conditions']): ShipSkills => ({
     slots: [
         {
             slot: 'active',
             abilities: [
-                ab({
-                    type: 'damage',
-                    target: 'enemy',
-                    config: { type: 'damage', multiplier: 100 },
-                }),
                 ab({
                     type: 'buff',
                     target: 'self',
@@ -314,6 +310,11 @@ const grantGatedSelfBuffSkill = (cond: Ability['conditions']): ShipSkills => ({
                         isStackable: false,
                         duration: 99,
                     },
+                }),
+                ab({
+                    type: 'damage',
+                    target: 'enemy',
+                    config: { type: 'damage', multiplier: 100 },
                 }),
             ],
         },
