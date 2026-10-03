@@ -110,6 +110,13 @@ export interface VictimDefenseProfile {
      */
     outgoingDamageDeltaPct?: number;
     /**
+     * This victim's crit-power DELTA (percentage points) vs `s.effectiveCritDamage`, which is
+     * folded once against the bound target. A victim-gated crit-power modifier ("10% more
+     * critical damage to defenders") varies per footprint victim; same delta construction as
+     * `outgoingDamageDeltaPct`. Defaults to 0.
+     */
+    critDamageDeltaPct?: number;
+    /**
      * This victim's skill-multiplier DELTA (percentage points) vs `s.multiplierPct`, whose
      * count-scaled bonus ("an additional 30% damage for each buff on the enemy") is scored once
      * against the bound target. Each struck enemy counts its OWN buffs, so the engine supplies
@@ -258,7 +265,8 @@ export function victimHitDamageParts(
     const nonCritFactorPreDefence =
         1 * (1 + outgoingPct / 100) * (1 + incomingAsThrown / 100) * affinityMult;
 
-    const hitCritMultiplier = 1 + (didCrit ? 1 : 0) * (s.effectiveCritDamage / 100);
+    const hitCritMultiplier =
+        1 + (didCrit ? 1 : 0) * ((s.effectiveCritDamage + (v.critDamageDeltaPct ?? 0)) / 100);
 
     return {
         damage: perHitShare * hitCritMultiplier * nonCritFactor * roleScale,
