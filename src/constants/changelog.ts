@@ -15,7 +15,8 @@ export const UNRELEASED_CHANGES: string[] = [
     "DPS calculator: Nuqtu's bonus charges now need three or more enemy buffs set.",
     "Combat simulator: Oleander's active repair now grows with each debuffed enemy.",
     "Combat simulator: Meatshield's charged skill now repairs per debuff on herself.",
-    "Healing calculator: Oleander's and Meatshield's per-debuff repair bonuses now apply.",
+    "Healing calculator: Oleander's active now repairs more for each debuffed enemy.",
+    "Healing calculator: Meatshield's charged skill now repairs per debuff on herself.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

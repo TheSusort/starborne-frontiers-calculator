@@ -133,7 +133,9 @@ export interface ConditionContext {
      *  entries), for the `debuffed-enemy-count` subject. Live-derived by the combat engine on
      *  BOTH sides, in every mode, independent of which unit (if any) the cast is bound to. ABSENT
      *  means the caller has no roster to count: the subject then reads 1 when the bound enemy
-     *  carries any debuff (`enemyDebuffCount > 0`), else 0. A present `0` is a real reading. */
+     *  carries any debuff (`enemyDebuffCount > 0`), else 0. A present `0` is a real reading. The
+     *  reactive DRAIN ctx (triggers.ts) does not supply it, so a reactive proc reading this
+     *  subject gets that `enemyDebuffCount` fallback. */
     debuffedEnemyCount?: number;
     /** Sub-project I, PR I4a — the ACTING unit's own live crit power (effective critDamage
      *  stat, e.g. 150), a continuous MAGNITUDE scaling source (distinct from every other

@@ -215,6 +215,22 @@ describe.skipIf(!hasReferenceData())('Oleander active — +8.5% per debuffed ene
     });
 });
 
+describe.skipIf(!hasReferenceData())('single-ship DPS mode reads the live count too', () => {
+    it('ally-targeted cast, one debuffed enemy → +8.5%', () => {
+        // `mode: 'dps'` forbids healTargetId (runCombat throws), so it is dropped.
+        const { healTargetId: _drop, ...rest } = base({
+            shipSkills: kit(realSlot('Oleander', 'active')),
+            target: allyTeam(),
+            enemyAttackers: [durableEnemy('enemy-a', 'M4')],
+            teamActors: [teamDebuffer([debuff('Debuff A')], single())],
+        });
+        expect(repairOn({ ...rest, mode: 'dps' }, 'attacker', 'attacker')).toBeCloseTo(
+            pctOf(HEALER_HP, 18.5),
+            6
+        );
+    });
+});
+
 describe.skipIf(!hasReferenceData())('enemy-side Oleander counts debuffed player ships', () => {
     /** The player focus at M4 and a team ship at M3; a fast enemy debuffs them before the enemy
      *  Oleander's turn. */

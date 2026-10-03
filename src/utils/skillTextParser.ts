@@ -4450,8 +4450,8 @@ export interface ParsedHealAbility {
     /** PR6b: per-count repair scaling — the repair grows by `perUnit`% per matched `condition`
      *  count (Oleander "additional 8.5% repair for each debuffed enemy" → base kept + perUnit
      *  bonus; Meatshield "repairs 1.5% … for each debuff on itself" → pure per-count, `pct` is
-     *  zeroed and the whole repair is the perUnit scaling). The `condition`-based (live-state)
-     *  form is model fidelity only — no DPS/sim consumer. ship-kit W3 adds the `countSource`
+     *  zeroed and the whole repair is the perUnit scaling). For the `condition`-based (live-state)
+     *  form, the combat engine's cast-heal pass adds `scaledBonus` to `pct`. The `countSource`
      *  form (Sansi "repairs 5% for every enemy repaired"): the count comes from the reactive
      *  event, `pct` is KEPT, and the reactive heal executor multiplies it by that count. */
     scaling?: { perUnit: number; condition?: Condition; countSource?: ReactiveScalingCountSource };

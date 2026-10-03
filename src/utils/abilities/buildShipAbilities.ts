@@ -2480,7 +2480,8 @@ function abilitiesFromText(
                   : h.target;
         // PR6b: per-count repair scaling (Oleander/Meatshield). The count Condition is appended
         // after any damage-reaction conditions and referenced by an Ability-level scaling rule
-        // (mirrors the damage-scaling convention). Model fidelity — no DPS/sim consumer today.
+        // (mirrors the damage-scaling convention); the combat engine's cast-heal pass adds
+        // `scaledBonus` to `pct`.
         const healConditions: Condition[] = [...damageReactionConditions];
         // Malvex active: "If the target has a Shield this Unit gains Shield equal to 15% of its Max
         // HP" — the NAMELESS-grant twin of the charged-slot Barrier gate. detectGrantConditions
