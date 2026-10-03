@@ -8135,6 +8135,8 @@ export function runCombat(rawInput: CombatEngineInput): {
             /** Ship-wide stealth-targeting bypass. */
             ignoresStealth?: boolean;
             actingId: string;
+            /** The cast's resolved target: a Concentrate Fire pick made at selection time. */
+            castTargetId?: string;
             opposingLiving: CombatActor[];
             /** This turn's landed scheduled enemy effects, from the acting
              *  `PlayerTurnResult`. Feeds `defenseProfileOf` so the per-victim damage read honours
@@ -8249,6 +8251,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                         ignoresStealth: args.ignoresStealth,
                         provokedBy: provokerOf(statusEngine, args.actingId),
                         attackerId: args.actingId,
+                        concentrateFirePickId: args.castTargetId,
                     },
                     defenseProfileOf: (v) => ({
                         ...victimDefenseProfileOf(v, {
@@ -9753,6 +9756,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                     actor.ignoresForcedTargeting || holdsRoguesLiberty(statusEngine, actor.id),
                 ignoresStealth: actor.ignoresStealth,
                 actingId: actor.id,
+                castTargetId: sel.tgt?.id,
                 opposingLiving: tb.opposingRoster,
                 applyToVictim: tb.applyToVictim,
                 // The acting turn's landed scheduled enemy effects reach

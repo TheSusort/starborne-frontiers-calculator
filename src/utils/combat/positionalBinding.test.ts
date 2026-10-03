@@ -351,4 +351,41 @@ describe('resolvePositionalTarget — several Concentrate Fire carriers', () => 
         })?.id;
         expect(['front', 'mid']).toContain(id);
     });
+
+    it('a pick the cast already made is returned with no new draw while it is alive and marked', () => {
+        setKeyedRng(() => {
+            throw new Error('a sticky pick must not draw');
+        });
+        const so = statusFrom({ front: { concentrated: true }, mid: { concentrated: true } });
+        for (const id of ['front', 'mid']) {
+            expect(
+                resolvePositionalTarget('M4', enemyTarget('front'), enemies, so, {
+                    attackerId: 'ally-1',
+                    concentrateFirePickId: id,
+                })?.id
+            ).toBe(id);
+        }
+    });
+
+    it('a pick that is no longer alive or marked is redrawn among the living carriers', () => {
+        const draws = [0.01];
+        setKeyedRng(() => draws.shift()!);
+        const so = statusFrom({ front: { concentrated: true }, mid: { concentrated: true } });
+        expect(
+            resolvePositionalTarget('M4', enemyTarget('front'), enemies, so, {
+                attackerId: 'ally-1',
+                concentrateFirePickId: 'back',
+            })?.id
+        ).toBe('front');
+        const livingMid = [actor('front', 'M4', 0), actor('mid', 'M3'), actor('back', 'M1')];
+        setKeyedRng(() => {
+            throw new Error('one living carrier must not draw');
+        });
+        expect(
+            resolvePositionalTarget('M4', enemyTarget('front'), livingMid, so, {
+                attackerId: 'ally-1',
+                concentrateFirePickId: 'front',
+            })?.id
+        ).toBe('mid');
+    });
 });

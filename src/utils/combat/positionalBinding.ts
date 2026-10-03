@@ -111,6 +111,9 @@ export interface PositionalActing {
     provokedBy?: string;
     /** Keys the Concentrate Fire random pick to this attacker's own RNG stream. */
     attackerId?: string;
+    /** The Concentrate Fire carrier this cast already picked. While it is alive and still marked,
+     *  it is returned without a new draw, so every hit of one cast follows the cast's pick. */
+    concentrateFirePickId?: string;
 }
 
 /**
@@ -120,7 +123,7 @@ export interface PositionalActing {
  * runs — this is the arm the golden fixtures pin. When `statusOf` is supplied
  * AND `target.side === 'enemy'`, forced targeting and stealth run before `selectTargets`:
  *   1. Concentrate Fire (bypasses stealth, never skipped) — force the marked actor (one picked at
- *      random when several are marked).
+ *      random when several are marked; a pick the cast already made stays while it lives).
  *   2. Taunt (before stealth) — force the taunting actor (latest tauntAppliedRound else front-most).
  *      Skipped when `acting.ignoresForcedTargeting` is true.
  *   3. Provoke — attacker must target the actor whose id matches `acting.provokedBy`.
@@ -178,6 +181,8 @@ export function resolvePositionalTarget(
             return concentrated[0];
         }
         if (concentrated.length > 1) {
+            const stuck = concentrated.find((a) => a.id === acting?.concentrateFirePickId);
+            if (stuck) return stuck;
             const ordered = [...concentrated].sort(
                 (x, y) => colOf(y.position!) - colOf(x.position!)
             );
