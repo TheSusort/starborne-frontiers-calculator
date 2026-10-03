@@ -9260,6 +9260,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                     enemyHp: tb.victimMaxHpFor(v),
                     targetRepairedThisRound: repairedThisRound.has(v.id),
                     enemyDebuffNames: enemyDebuffNamesForTarget(v),
+                    statusDebuffNames: ownerDebuffNamesFor(statusEngine, v.id),
                     // WITHHELD under `mode: 'dps'` — see `liveCountsMeasurable`.
                     ...(liveCountsMeasurable
                         ? { enemyBuffCount: selfBuffNamesForOwners(statusEngine, [v.id]).length }
@@ -9374,7 +9375,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                           enemyDefense: tb.victimDefenceFor(tgt),
                           enemyHp: tgtReading.enemyHp,
                           targetRepairedThisRound: tgtReading.targetRepairedThisRound,
-                          ...(tgtReading.role ? { targetRole: tgtReading.role } : {}),
+                          targetGateReading: tgtReading,
                           targetEffectiveAttack: effectiveStatsOf(statusEngine, selfBuffLookup, tgt)
                               .attack,
                       }

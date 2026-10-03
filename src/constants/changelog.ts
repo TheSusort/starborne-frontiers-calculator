@@ -24,6 +24,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: allies pick randomly among several Concentrate Fire targets.',
     "Combat simulator: Asphyxiator's charged Stasis now lands only on the targeted enemy.",
     "Combat simulator: Gallant, IonScorp and Lodolite now check each enemy's actual role.",
+    'Combat simulator: Crocus now counts every debuff on an enemy for Stasis.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

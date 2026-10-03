@@ -632,8 +632,12 @@ export interface RecipientGateReading {
     enemyDebuffNames: string[];
     /** Absent under `mode: 'dps'`, like the bound target's `enemyBuffCount`. */
     enemyBuffCount?: number;
-    /** The actor's own role class, when its input carries one (battle mode). */
+    /** The actor's own role class, when its input carries one (battle mode). A cast enemy
+     *  status's `enemy-type` gate reads it ahead of the fight-wide `enemyType`, which answers only
+     *  when no actor role exists (the DPS calculator). */
     role?: EnemyBaseClass;
+    /** Distinct non-DoT debuffs on the actor (its per-target status store). */
+    statusDebuffNames: string[];
 }
 
 export interface PlayerTurnArgs {
@@ -659,10 +663,9 @@ export interface PlayerTurnArgs {
      *  100. */
     enemyHp?: number;
     enemyType?: EnemyBaseClass;
-    /** The bound target's own role class (battle mode, when its input carries a role). A cast
-     *  enemy status's `enemy-type` gate reads it ahead of the fight-wide `enemyType`, which only
-     *  answers when no actor role exists (the DPS calculator). */
-    targetRole?: EnemyBaseClass;
+    /** The bound target's own `RecipientGateReading` — the same derivation every other
+     *  recipient's comes from. Absent on a no-victim turn and for standalone callers. */
+    targetGateReading?: RecipientGateReading;
     // Required: the engine always passes its internal bus (wrapping the optional
     // external tap), so the player turn emits unconditionally.
     bus: CombatEventBus;
@@ -1587,7 +1590,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         enemyDefense = 0,
         enemyHp = 0,
         enemyType,
-        targetRole,
+        targetGateReading,
         bus,
         round: r,
         grantAllyCharges,
@@ -2323,11 +2326,20 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // — buff gates use the probability tier like modifierCtx. NOTE: a self-crit-gated buff
     // therefore resolves effectiveCritRate/100 > 0, i.e. passes whenever the crit rate is
     // non-zero — intended "live-subject, satisfiable" behaviour, not a bug.
+    // "N or more debuffs" on an enemy counts every debuff on THAT enemy: its own per-target
+    // statuses, unioned by name with the scheduled channel (in the DPS calculator, the debuffs
+    // the user configured on its one enemy; empty in battle), plus — inside buildRoundContext —
+    // its DoT entries. A caller with no reading for the enemy counts the scheduled channel alone.
+    const scheduledLandedNames = scheduledEnemy.landedEnemyDebuffs.map((b) => b.buffName);
+    const landedDebuffCountOn = (reading: RecipientGateReading | undefined): number =>
+        reading === undefined
+            ? scheduledEnemy.landedEnemyDebuffs.length
+            : new Set([...scheduledLandedNames, ...reading.statusDebuffNames]).size;
     const preDebuffGateInput: Parameters<typeof buildRoundContext>[0] = {
         // Live adjacency / kill counts (Panguan, Centurion, Judge) — see `liveCountCtx`.
         ...liveCountCtx,
         selfBuffNames: [...scheduledSelfBuffNames, ...priorAbilitySelfNames],
-        landedEnemyDebuffCount: scheduledEnemy.landedEnemyDebuffs.length,
+        landedEnemyDebuffCount: landedDebuffCountOn(targetGateReading),
         corrosionEntryCount: corrosionEntries.length,
         infernoEntryCount: infernoEntries.length,
         bombCount: pendingBombs.length,
@@ -2336,7 +2348,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         effectiveCritRate: cappedCrit(critBuffForGates),
         // "If the target is a defender" asks the struck enemy's own role (owner ruling 4); the
         // fight-wide class answers only where no actor carries a role (the DPS calculator).
-        enemyType: targetRole ?? enemyType,
+        enemyType: targetGateReading?.role ?? enemyType,
         enemyHpPct,
         // The entry counts above are all 0 on a no-victim turn (see the `corrosionEntries
         // = []` default note at this function's destructure), which is ALSO what a real victim
@@ -2406,7 +2418,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
      *  Side-wide subjects (the opposing buff-name union, the debuffed-enemy count, the destroyed
      *  count) and the caster's own subjects read the same answer for every recipient. `enemyType`
      *  is the recipient's own role class, falling back to the fight-wide class like the bound
-     *  target's (see `targetRole`). A recipient with no reading (none outside
+     *  target's (see `RecipientGateReading.role`). A recipient with no reading (none outside
      *  positional runs, where the bound target is the only recipient) reads the bound target's
      *  context. */
     const recipientGateCtxById = new Map<string, ConditionContext>();
@@ -2424,6 +2436,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 id,
                 buildRoundContext({
                     ...preDebuffGateInput,
+                    landedEnemyDebuffCount: landedDebuffCountOn(reading),
                     corrosionEntryCount: v.corrosionEntries.length,
                     infernoEntryCount: v.infernoEntries.length,
                     bombCount: v.pendingBombs.length,
