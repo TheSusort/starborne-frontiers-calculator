@@ -14,8 +14,9 @@ import type { StatusEngine } from '../statusEngine';
 // target so selectTurnTarget resolves a REAL enemy as the anchor `targetId`).
 // TWO enemies (M4 front + M3) each self-buff "Attack Up" every round. The focus
 // fires an 'all'-shape pattern (footprint = all living enemies), so the footprint
-// covers BOTH. A plain 'enemy' purge reaches the same footprint (owner ruling 2026-10-03); the
-// control casts on a single-target pattern, whose footprint is the anchor alone.
+// covers BOTH. A plain 'enemy' purge reaches the same footprint: a pattern skill purges every
+// enemy it strikes. The control casts on a single-target pattern, whose footprint is the anchor
+// alone.
 // ---------------------------------------------------------------------------
 let idc = 0;
 const ab = (p: Partial<Ability> & Pick<Ability, 'type' | 'config'>): Ability => ({

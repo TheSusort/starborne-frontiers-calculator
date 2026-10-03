@@ -522,7 +522,7 @@ export type ConditionSubject =
     // for contexts that never carry the field at all. Always derivable:true.
     | 'ally-shield-count'
     // COUNT subject: the number of LIVING OPPOSING units carrying at least one debuff — units,
-    // not debuffs (owner ruling 2026-10-03: enemy A with 3 debuffs + clean enemy B counts 1).
+    // not debuffs (enemy A with 3 debuffs + clean enemy B counts 1).
     // "Debuffed" is the same per-unit read a name-gated `enemy-debuff` condition uses on its
     // target (named debuffs plus DoT entries), so the two subjects cannot disagree about one
     // enemy. Used as a SCALING source by Oleander's "8.5% repair for each debuffed enemy".
@@ -973,9 +973,9 @@ export type AbilityConfig =
           endOfRound?: boolean;
           /** A CHAINABLE grant: the extra turn it grants can satisfy its own condition again, and
            *  the game lets that repeat without limit (Tithonus's "gains 1 extra action after it
-           *  purges at least 4 buffs with a single skill" — owner ruling 2026-10-03). The engine
-           *  bounds it with MAX_CHAINED_EXTRA_ACTIONS_PER_ROUND instead of the
-           *  MAX_EXTRA_TURNS_PER_ROUND tripwire. */
+           *  purges at least 4 buffs with a single skill"). The engine bounds it with
+           *  MAX_CHAINED_EXTRA_ACTIONS_PER_ROUND instead of the MAX_EXTRA_TURNS_PER_ROUND
+           *  tripwire. */
           chains?: boolean;
       }
     | {

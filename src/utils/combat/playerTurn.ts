@@ -4457,12 +4457,14 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             ) {
                 // An 'enemy' or 'all-enemies' purge reaches EVERY enemy the cast strikes: the
                 // footprint victims (aoeVictimIds, supplied by the engine in positional mode from
-                // the same resolver the damage uses). Owner ruling 2026-10-03: "purges N buffs
-                // from the enemy" on a pattern skill purges each struck enemy (Sefuba's active
-                // hitting A, B and C removes a buff from all three). A caller without a footprint
-                // (non-positional) stays on the single anchor `targetId`. Each victim emits its
-                // own purge-performed (Salvation/Sefuba are victim-scoped). The purge count is
-                // per victim.
+                // the same resolver the damage uses): "purges N buffs from the enemy" on a pattern
+                // skill purges each struck enemy (Sefuba's active hitting A, B and C removes a
+                // buff from all three). Wording that names one enemy ("from the primary target",
+                // "from that enemy") would stay single-victim, which this fan-out does not
+                // model; `purgeFanOutNarrowingTripwire.test.ts` fails if an on-cast enemy purge's
+                // text ever says so. A caller without a footprint (non-positional) stays on the
+                // single anchor `targetId`. Each victim emits its own purge-performed
+                // (Salvation/Sefuba are victim-scoped). The purge count is per victim.
                 // An 'enemy-most-buffs' purge (Lodolite's charged skill) resolves to the
                 // engine-supplied enemyMostBuffsId instead of the normal positional anchor
                 // (targetId) — the reactive counterpart (Rhodium, end-of-round) resolves this
