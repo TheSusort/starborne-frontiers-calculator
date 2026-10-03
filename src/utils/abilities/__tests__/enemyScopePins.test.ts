@@ -4,7 +4,7 @@
  * (e.g. after a catalogue sync) already parses to the pinned target — the pin is then dead and
  * should go — and when the built kit stops carrying the pinned target.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import { buildTraceShip } from '../../../../scripts/lib/traceShipFactory';
 import { csvAvailable } from '../../../../scripts/lib/shipSkillCsv';
 import { shipDataAvailable } from '../../../../scripts/lib/shipDataSnapshot';
@@ -13,7 +13,15 @@ import { getSkillRowForSlot } from '../../ship/skillRows';
 import { detectEnemyGrantScope } from '../../skillTextParser';
 import type { SkillSlot } from '../../../types/abilities';
 
-describe.skipIf(!csvAvailable() || !shipDataAvailable())('enemy scope pins', () => {
+describe('enemy scope pins', () => {
+    beforeAll(() => {
+        if (!csvAvailable() || !shipDataAvailable()) {
+            throw new Error(
+                'This suite requires docs/ship-skills.csv and docs/ship-data.json (gitignored reference data) — copy them in before running'
+            );
+        }
+    });
+
     const pins = Object.entries(ENEMY_SCOPE_PINS).flatMap(([ship, slots]) =>
         Object.entries(slots).flatMap(([slot, names]) =>
             Object.entries(names ?? {}).map(([name, target]) => ({

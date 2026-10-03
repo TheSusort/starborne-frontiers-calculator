@@ -649,9 +649,10 @@ export type CombatEvent =
     /** A `control` ability resolved on the cast path. `casterId` is the applying actor;
      *  `effect` is the control effect (e.g. 'stasis'); `targetId` is the actor it landed on. One
      *  event per recipient its paired named status landed on (none for a recipient that resisted
-     *  it); a control with no attempted paired status emits once, naming the cast's bound target
-     *  (the caster itself for a self control such as Taunt). Emitting it does NOT simulate the
-     *  control's combat effect. */
+     *  it); none when every recipient's condition gate turned the paired status away; a control
+     *  whose paired status never reached the gate at cast time (or has none) emits once, naming
+     *  the cast's bound target (the caster itself for a self control such as Taunt). Emitting it
+     *  does NOT simulate the control's combat effect. */
     | ({
           type: 'control-applied';
           casterId: string;

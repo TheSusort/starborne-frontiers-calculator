@@ -31,7 +31,11 @@ type TeamActor = NonNullable<CombatEngineInput['teamActors']>[number];
 
 let idc = 0;
 /** Damage + a Stasis status + its control twin, both aimed at `target`. */
-const stasisKit = (target: AbilityTarget, controlConditions: Condition[] = []): ShipSkills => ({
+const stasisKit = (
+    target: AbilityTarget,
+    controlConditions: Condition[] = [],
+    statusConditions: Condition[] = []
+): ShipSkills => ({
     slots: [
         {
             slot: 'active',
@@ -57,7 +61,7 @@ const stasisKit = (target: AbilityTarget, controlConditions: Condition[] = []): 
                     type: 'debuff',
                     target,
                     trigger: 'on-cast',
-                    conditions: [],
+                    conditions: statusConditions,
                     config: {
                         type: 'debuff',
                         buffName: 'Stasis',
@@ -241,6 +245,30 @@ describe("a control's own enemy condition is asked of each recipient", () => {
                 { 'enemy-b': 3 }
             )
         ).toEqual(['stasis:enemy-b']);
+    });
+});
+
+describe("a paired status every recipient's gate turns away", () => {
+    it('gated all-enemies Stasis nobody qualifies for, ungated control → no event', () => {
+        const threePlusDebuffs: Condition = {
+            subject: 'enemy-debuff',
+            derivable: true,
+            countComparator: 'gte',
+            countThreshold: 3,
+        };
+        expect(
+            controls(
+                base({
+                    shipSkills: stasisKit('all-enemies', [], [threePlusDebuffs]),
+                    enemyAttackers: [
+                        enemy('enemy-a', 'M4'),
+                        enemy('enemy-b', 'M3'),
+                        enemy('enemy-c', 'T4'),
+                    ],
+                }),
+                'attacker'
+            )
+        ).toEqual([]);
     });
 });
 

@@ -2600,6 +2600,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
      *  per-recipient `control-applied` emission: the names some recipient's gate admitted, and
      *  the recipients each one landed on, in landing order. */
     const castAttemptedStatusNames = new Set<string>();
+    /** Cast-time statuses that had recipients but whose gate every one of them turned away — the
+     *  clause did not happen, so its paired control must not announce one. */
+    const castGateRejectedStatusNames = new Set<string>();
     const castLandedRecipients = new Map<string, { id: string; victim: CombatActor }[]>();
     /** Which timed debuffs THIS cast landed on which victim — the input an inflicted-scope
      *  `extend-status` needs (Asphyxiator). Written at the one landing funnel below, read by the
@@ -2646,6 +2649,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // Some recipient passed its gate, so the clause was attempted on it — an outclassed
         // (#590 R1) recipient included. A clause no recipient's gate admits did not happen.
         let anyAttempted = false;
+        let anyGateRejected = false;
         for (const vid of recipientIds) {
             // The anchor fallback arm is dropped when there is no victim — with no victim
             // there is no anchor id for a vid to match, and the `vid === undefined` (non-positional
@@ -2668,7 +2672,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
 
             // The clause's condition gate, asked of THIS recipient (see `recipientGateCtx`).
             // Before every draw: a recipient the gate turns away is neither landed nor resisted.
-            if (!conditionsMet(status.conditions, recipientGateCtx(resolvedVictim))) continue;
+            if (!conditionsMet(status.conditions, recipientGateCtx(resolvedVictim))) {
+                anyGateRejected = true;
+                continue;
+            }
             anyAttempted = true;
 
             // #590 R1: a weaker same-family debuff onto a victim already holding a stronger one
@@ -2823,6 +2830,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // sub-attack's outcome cannot retroactively change an event that already fired, and adding
         // it here would double-count the name in the round's display list.
         if (!collect && anyAttempted) castAttemptedStatusNames.add(status.payload.buffName);
+        if (!collect && !anyAttempted && anyGateRejected)
+            castGateRejectedStatusNames.add(status.payload.buffName);
         if (!collect && !anyLanded && anyAttempted) {
             resistedAbilityTimedEnemy.push({
                 buffName: status.payload.buffName,
@@ -3673,7 +3682,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // recipient as its status's gate saw them (`withVictimHalf`) — so a parsed twin, which
     // carries its status's conditions, agrees with the status on every recipient.
     //
-    // OTHERWISE — no paired status, or one no recipient's gate admitted — it emits ONCE, naming
+    // GATED OFF: a paired status whose gate every recipient turned away did not happen, so its
+    // control emits nothing (`castGateRejectedStatusNames`).
+    //
+    // OTHERWISE — no paired status reached the gate at cast time — it emits ONCE, naming
     // the cast's bound target (the caster for a self control such as Taunt), gated by the payload
     // `ctx`. An enemy-side control there needs a victim. A plain-'enemy' one is further
     // suppressed by Block-Debuff immunity on the target and by its name among the scheduled-path
@@ -3703,6 +3715,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             }
             continue;
         }
+        if (ctrl.target !== 'self' && castGateRejectedStatusNames.has(pairedName)) continue;
         if (!gatedControls.has(ctrl)) continue;
         if (ctrl.target === 'self') {
             emitControl(effect, actor.id);
