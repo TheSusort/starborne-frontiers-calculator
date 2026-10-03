@@ -62,6 +62,20 @@ interface ShipsContextType {
     loadShips: () => Promise<void>;
 }
 
+type TemplateRow = {
+    name: string;
+    active_skill_text: string | null;
+    charge_skill_text: string | null;
+    charge_skill_charge: number | null;
+    first_passive_skill_text: string | null;
+    second_passive_skill_text: string | null;
+    third_passive_skill_text: string | null;
+    active_target: string | null;
+    active_pattern: string | null;
+    charged_target: string | null;
+    charged_pattern: string | null;
+};
+
 const ShipsContext = createContext<ShipsContextType | undefined>(undefined);
 
 export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -79,6 +93,9 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     // than build on it (#560). The ref is updated synchronously by `setShips`, never in an
     // effect, so it is never a render behind.
     const localShipsRef = useRef<Ship[]>([]);
+
+    // ship_templates rows already fetched this session, by ship name; null = no row exists.
+    const templateCacheRef = useRef<Map<string, TemplateRow | null>>(new Map());
 
     const setShips = useCallback((next: Ship[]) => {
         localShipsRef.current = next;
@@ -133,57 +150,60 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             return;
         }
 
-        // Unauthenticated path: fetch skill text from ship_templates for ships that are missing it
-        const shipsNeedingText = normalisedStorageShips.filter(
-            (s) => !s.activeSkillText || !s.activeTarget
-        );
-        if (shipsNeedingText.length === 0) {
-            setShips(normalisedStorageShips);
-            return;
-        }
+        // Unauthenticated path: every ship whose name has a ship_templates row takes that row's
+        // skill text and targeting, whether or not the stored ship already carries any, so a
+        // template refresh reaches signed-out players. Same precedence as `fleetReads`: the
+        // template value wins and a null template field is undefined. Each name is fetched
+        // once per session; later storage writes reuse the cache.
+        const cache = templateCacheRef.current;
+        const overlay = (ships: Ship[]): Ship[] =>
+            ships.map((ship) => {
+                const t = cache.get(ship.name);
+                if (!t) return ship;
+                return {
+                    ...ship,
+                    activeSkillText: t.active_skill_text ?? undefined,
+                    chargeSkillText: t.charge_skill_text ?? undefined,
+                    chargeSkillCharge: t.charge_skill_charge ?? undefined,
+                    firstPassiveSkillText: t.first_passive_skill_text ?? undefined,
+                    secondPassiveSkillText: t.second_passive_skill_text ?? undefined,
+                    thirdPassiveSkillText: t.third_passive_skill_text ?? undefined,
+                    activeTarget: t.active_target ?? undefined,
+                    activePattern: t.active_pattern ?? undefined,
+                    chargedTarget: t.charged_target ?? undefined,
+                    chargedPattern: t.charged_pattern ?? undefined,
+                };
+            });
+
+        const uncachedNames = [
+            ...new Set(normalisedStorageShips.map((s) => s.name).filter((n) => !cache.has(n))),
+        ];
+        // The stored ships (with whatever templates are cached) show at once; the request
+        // only refines their text, so a slow or failed one never hides the fleet.
+        setShips(overlay(normalisedStorageShips));
+        if (uncachedNames.length === 0) return;
 
         const controller = new AbortController();
-        const uniqueNames = [...new Set(shipsNeedingText.map((s) => s.name))];
         void supabase
             .from('ship_templates')
             .select(
                 'name, active_skill_text, charge_skill_text, charge_skill_charge, first_passive_skill_text, second_passive_skill_text, third_passive_skill_text, active_target, active_pattern, charged_target, charged_pattern'
             )
-            .in('name', uniqueNames)
+            .in('name', uncachedNames)
             .abortSignal(controller.signal)
-            .then(({ data }) => {
-                if (controller.signal.aborted) return;
-                if (!data) {
-                    setShips(normalisedStorageShips);
-                    return;
+            .then(
+                ({ data }) => {
+                    if (controller.signal.aborted || !data) return;
+                    // A name with no row is cached as null so it is not asked for again.
+                    uncachedNames.forEach((n) => cache.set(n, null));
+                    (data as TemplateRow[]).forEach((t) => cache.set(t.name, t));
+                    setShips(overlay(normalisedStorageShips));
+                },
+                () => {
+                    // Network failure: the stored ships are already shown; a later storage
+                    // change retries the uncached names.
                 }
-                const templateMap = new Map(data.map((t) => [t.name, t]));
-                setShips(
-                    normalisedStorageShips.map((ship) => {
-                        // Outer filter casts a wide net (missing text OR targeting);
-                        // skip only ships that already have both.
-                        if (ship.activeSkillText && ship.activeTarget) return ship;
-                        const t = templateMap.get(ship.name);
-                        if (!t) return ship;
-                        return {
-                            ...ship,
-                            activeSkillText: t.active_skill_text ?? ship.activeSkillText,
-                            chargeSkillText: t.charge_skill_text ?? ship.chargeSkillText,
-                            chargeSkillCharge: t.charge_skill_charge ?? ship.chargeSkillCharge,
-                            firstPassiveSkillText:
-                                t.first_passive_skill_text ?? ship.firstPassiveSkillText,
-                            secondPassiveSkillText:
-                                t.second_passive_skill_text ?? ship.secondPassiveSkillText,
-                            thirdPassiveSkillText:
-                                t.third_passive_skill_text ?? ship.thirdPassiveSkillText,
-                            activeTarget: t.active_target ?? ship.activeTarget,
-                            activePattern: t.active_pattern ?? ship.activePattern,
-                            chargedTarget: t.charged_target ?? ship.chargedTarget,
-                            chargedPattern: t.charged_pattern ?? ship.chargedPattern,
-                        };
-                    })
-                );
-            });
+            );
 
         return () => {
             controller.abort();

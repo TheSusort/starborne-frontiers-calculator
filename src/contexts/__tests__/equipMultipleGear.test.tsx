@@ -56,6 +56,7 @@ const wrapper = ({ children }: { children: React.ReactNode }) => (
 
 const mountSignedOut = async () => {
     profile.id = null;
+    fakeSupabase({});
     localStorage.setItem(StorageKey.SHIPS, JSON.stringify(fleet()));
     const view = renderHook(() => useShips(), { wrapper });
     await waitFor(() => expect(view.result.current.ships).toHaveLength(2));
@@ -64,6 +65,7 @@ const mountSignedOut = async () => {
 
 const mountSignedOutWith = async (ships: Ship[]) => {
     profile.id = null;
+    fakeSupabase({});
     localStorage.setItem(StorageKey.SHIPS, JSON.stringify(ships));
     const view = renderHook(() => useShips(), { wrapper });
     await waitFor(() => expect(view.result.current.ships).toHaveLength(ships.length));

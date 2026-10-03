@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
 import { ShipsProvider, useShips } from '../ShipsContext';
 import { StorageKey } from '../../constants/storage';
+import { fakeSupabase } from '../../__tests__/services/fakeSupabase';
 
 const { profile } = vi.hoisted(() => ({ profile: { id: null as string | null } }));
 
@@ -21,9 +22,8 @@ const wrapper = ({ children }: { children: React.ReactNode }) => (
 
 /** A ship shaped like old/corrupted localStorage: mixed-case rarity, a null affinity (both
  *  legal JSON, neither a real `RarityName`/`AffinityName` value) and a retired ship type.
- *  `activeSkillText`/`activeTarget` are pre-filled so the unauthenticated skill-text-enrichment
- *  fetch (`ShipsContext`'s `ship_templates` lookup) is skipped — this test is about the
- *  rarity/type/affinity guard, not that fetch. */
+ *  The `ship_templates` lookup `ShipsContext` makes for signed-out ships is served empty —
+ *  this test is about the rarity/type/affinity guard, not that fetch. */
 const badLocalShip = {
     id: 'local-ship-1',
     name: 'Test Ship',
@@ -43,6 +43,7 @@ describe('signed-out localStorage ship guards (#568)', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         profile.id = null;
+        fakeSupabase({});
         localStorage.clear();
         localStorage.setItem(StorageKey.SHIPS, JSON.stringify([badLocalShip]));
     });
