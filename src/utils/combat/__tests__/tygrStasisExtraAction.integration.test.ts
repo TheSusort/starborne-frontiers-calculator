@@ -6,6 +6,10 @@
  * Real parsed passive (buildTraceShip on docs/ship-skills.csv). A faster ally lands the named
  * debuff on the front enemy each round before Tygr acts; Tygr's turns per round are read off the
  * bus. Every negative arm differs from the Stasis arm only in WHICH status the ally lands.
+ *
+ * Clauses resolve in written order, so Tygr's own charged skill ("inflicts Stasis for 3 turns and
+ * deals 210% damage") damages an enemy that already carries the Stasis it just landed: the charged
+ * cast earns the extra action on its own. A resisted Stasis does not.
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import { runCombat, CombatEngineInput } from '../engine';
@@ -229,6 +233,119 @@ const tygrTurnsPerRound = (side: 'player' | 'enemy', statuses: string[]): number
     return turns;
 };
 
+const realSlot = (slot: 'active' | 'charged' | 'passive'): Ability[] => {
+    const ship = buildTraceShip('Tygr');
+    if (!ship) throw new Error('Tygr missing from reference data');
+    const found = buildShipAbilities(ship).slots.find((s) => s.slot === slot);
+    if (!found) throw new Error(`Tygr has no ${slot} slot`);
+    return found.abilities;
+};
+
+interface ChargedRoundOne {
+    /** Tygr's turns in round 1. */
+    turns: number;
+    /** Stasis outcomes from Tygr's own casts in round 1. */
+    stasisLanded: number;
+    stasisResisted: number;
+}
+
+/**
+ * Tygr's real kit, starting charged, alone against one enemy that never lands anything. Round 1
+ * opens with his charged skill, so any Stasis on the enemy is the one that cast landed.
+ * `hacking` 200 vs security 0 always lands the Stasis; 0 vs 0 always resists it.
+ */
+const tygrChargedRoundOne = (side: 'player' | 'enemy', hacking: number): ChargedRoundOne => {
+    const kit: ShipSkills = {
+        slots: [
+            { slot: 'active', abilities: realSlot('active') },
+            { slot: 'charged', abilities: realSlot('charged') },
+            { slot: 'passive', abilities: realSlot('passive') },
+        ],
+    };
+    const bus = createEventBus();
+    const focusId = side === 'player' ? 'attacker' : 'tygr-enemy';
+    const out: ChargedRoundOne = { turns: 0, stasisLanded: 0, stasisResisted: 0 };
+    bus.on('turn-started', (e) => {
+        if (e.actorId === focusId && e.round === 1) out.turns += 1;
+    });
+    bus.on('debuff-applied', (e) => {
+        if (e.sourceId === focusId && e.round === 1 && e.buffName === 'Stasis')
+            out.stasisLanded += 1;
+    });
+    bus.on('debuff-resisted', (e) => {
+        if (e.sourceId === focusId && e.round === 1 && e.buffName === 'Stasis')
+            out.stasisResisted += 1;
+    });
+    const base: CombatEngineInput = {
+        enemyAttackers: [],
+        attack: 100,
+        crit: 0,
+        critDamage: 0,
+        defensePenetration: 0,
+        chargeCount: 3,
+        shipSkills: { slots: [{ slot: 'active', abilities: [] }] },
+        numRounds: 1,
+        selfBuffs: [],
+        enemyDebuffs: [],
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        hasChargedSkill: false,
+        startCharged: false,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        defence: 0,
+        hp: 1_000_000_000,
+        hacking: 0,
+        security: 0,
+        healTargetId: 'attacker',
+        mode: 'healing',
+        position: 'M4',
+        target: parsedFrontTarget(),
+        pattern: singleTargetPattern(),
+    };
+    if (side === 'player') {
+        runCombat({
+            ...base,
+            shipSkills: kit,
+            hasChargedSkill: true,
+            startCharged: true,
+            hacking,
+            speed: 100,
+            enemyAttackers: [victim()],
+            bus,
+        });
+    } else {
+        // Mirror: Tygr is the ENEMY and strikes the player-side focus.
+        runCombat({
+            ...base,
+            speed: 1,
+            enemyAttackers: [
+                {
+                    id: 'tygr-enemy',
+                    stats: {
+                        attack: 100,
+                        crit: 0,
+                        critDamage: 0,
+                        defence: 0,
+                        hp: 1_000_000_000,
+                        speed: 100,
+                        hacking,
+                    },
+                    chargeCount: 3,
+                    startCharged: true,
+                    position: 'M4',
+                    target: parsedFrontTarget(),
+                    pattern: singleTargetPattern(),
+                    shipSkills: kit,
+                },
+            ],
+            bus,
+        });
+    }
+    return out;
+};
+
 beforeEach(() => {
     setupKeyedRng(5);
 });
@@ -250,10 +367,7 @@ describe.skipIf(!hasReferenceData())('Tygr passive — the extra action names St
 
     describe.each(['player', 'enemy'] as const)('%s side', (side) => {
         it('enemy carries Stasis → one extra action every round, once per round', () => {
-            const t = tygrTurnsPerRound(side, ['Stasis']);
-            // Round 1 may read the pre-cast state; later rounds the Stasis is already on.
-            expect(t.slice(1)).toEqual([2, 2]);
-            expect(Math.max(...t)).toBe(2);
+            expect(tygrTurnsPerRound(side, ['Stasis'])).toEqual([2, 2, 2]);
         });
 
         it('enemy carries only Corrosion → no extra action', () => {
@@ -264,9 +378,26 @@ describe.skipIf(!hasReferenceData())('Tygr passive — the extra action names St
             expect(tygrTurnsPerRound(side, ['Corrosion', 'Attack Down II'])).toEqual([1, 1, 1]);
         });
 
+        it("Tygr's charged skill lands Stasis before its damage → extra action that round", () => {
+            expect(tygrChargedRoundOne(side, 200)).toEqual({
+                turns: 2,
+                stasisLanded: 1,
+                stasisResisted: 0,
+            });
+        });
+
+        it("Tygr's charged Stasis is resisted → no extra action", () => {
+            expect(tygrChargedRoundOne(side, 0)).toEqual({
+                turns: 1,
+                stasisLanded: 0,
+                stasisResisted: 1,
+            });
+        });
+
         it('enemy carries Stasis among other debuffs → extra action', () => {
-            const t = tygrTurnsPerRound(side, ['Corrosion', 'Attack Down II', 'Stasis']);
-            expect(t.slice(1)).toEqual([2, 2]);
+            expect(tygrTurnsPerRound(side, ['Corrosion', 'Attack Down II', 'Stasis'])).toEqual([
+                2, 2, 2,
+            ]);
         });
     });
 });

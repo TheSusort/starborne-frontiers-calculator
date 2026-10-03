@@ -2428,6 +2428,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
      *  `extend-status` needs (Asphyxiator). Written at the one landing funnel below, read by the
      *  extension block near the end of the turn. */
     const inflictedDebuffNamesByVictim = new Map<string, Set<string>>();
+    /** Timed debuffs THIS cast landed on the bound target BEFORE its damage (a clause written
+     *  ahead of the damage clause). Clauses resolve in written order, so the cast's payload gate
+     *  reads these as already on the target — see `enemyDebuffNames` on the payload-gate ctx. */
+    const beforeDamageNamesOnTarget = new Set<string>();
     // Landings held back by intra-cast clause order (see the `afterDamageClause` branch below).
     // Returned on the turn result. The engine drains this at ONE of two points — at the end of
     // sub-attack 0 when a later sub-attack exists (so hit 2 can see hit 1's stack), otherwise at
@@ -2574,6 +2578,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                     // display-list refresh (see the TDZ note above pair).
                     writeState();
                     pair.emitEvents();
+                    if (vid === undefined || vid === targetId)
+                        beforeDamageNamesOnTarget.add(status.payload.buffName);
                 }
                 if (!anyLanded) {
                     inflictedEnemyDebuffs.push({
@@ -3379,7 +3385,22 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         enemyBuffNames: enemyBuffNamesArg,
         enemyBuffCount: enemyBuffCountArg,
         debuffedEnemyCount: debuffedEnemyCountArg,
-        enemyDebuffNames: enemyDebuffNamesArg,
+        // The bound target's pre-turn debuff names plus what this cast landed on it before its
+        // damage, so a named `enemy-debuff` payload gate ("after damaging an enemy affected by
+        // Stasis") sees a status written ahead of the damage clause — the same landings
+        // `landedEnemyDebuffCount` already counts. A resisted or after-damage clause adds
+        // nothing. Undefined stays undefined (DPS sentinel). Only this payload-gate ctx carries
+        // the overlay: the outgoing-modifier ctx reads pre-turn status (see
+        // `perVictimOutgoingDeltaPct` in engine.ts for that causality rule).
+        enemyDebuffNames:
+            enemyDebuffNamesArg === undefined || beforeDamageNamesOnTarget.size === 0
+                ? enemyDebuffNamesArg
+                : [
+                      ...enemyDebuffNamesArg,
+                      ...[...beforeDamageNamesOnTarget].filter(
+                          (n) => !enemyDebuffNamesArg.includes(n)
+                      ),
+                  ],
         selfDebuffNames: selfDebuffNamesArg,
         // Thread the acting actor's live own-turn counter so cast-path `every-n-turns` gates
         // (on-cast/active/charged) evaluate against the real N — symmetric with the reactive
