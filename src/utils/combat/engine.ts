@@ -9358,7 +9358,6 @@ export function runCombat(rawInput: CombatEngineInput): {
                 bus,
                 round: r,
                 grantAllyCharges: bySide(a.side).grantAllyCharges,
-                removeEnemyCharges: bySide(a.side).removeEnemyCharges,
                 removeChargesFrom: bySide(a.side).removeChargesFrom,
                 healing: healingCtx,
                 ...(tb.healEventOnly ? { healEventOnly: true } : {}),

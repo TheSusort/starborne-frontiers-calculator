@@ -20,6 +20,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: area-pattern purges now strip buffs from every enemy hit.',
     'Healing calculator: Sefuba and Tithonus purges now strip every enemy their skills hit.',
     'Combat simulator: Tithonus chains extra actions after purging four or more buffs.',
+    'Combat simulator: Opal, Provider and Sefuba drain charges only from enemies they hit.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
