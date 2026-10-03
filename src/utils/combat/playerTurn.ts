@@ -1267,9 +1267,8 @@ function extendInflictedDoTs(args: {
  * excluded, matching both DoT-extension helpers — delaying a one-shot detonation adds nothing.
  *
  * Deliberately gate-free, unlike its `extend-dot` sibling: this clause carries no crit-power
- * chance, so it draws nothing from `extendChanceGate` and cannot disturb that gate's
- * deterministic schedule. That is what makes it safe to call once per SPLASH victim as well as
- * for the primary.
+ * chance, so it draws nothing from `extendChanceGate`. Called once for the primary and once per
+ * covered victim that received the cast's DoTs.
  */
 function extendInflictedStatusDoTs(args: {
     abilities: Ability[];
@@ -4362,9 +4361,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // the entries this cast adds below (the slice from these indices onward).
         const corrosionEntriesBefore = corrosionEntries.length;
         const infernoEntriesBefore = infernoEntries.length;
-        // 'adjacent-enemies' (neighbours-only) is filtered OUT of the
-        // primary apply — it is applied only via the splash loop below. Corpus has no
-        // adjacent-only DoT, so primaryDots === dotsConfig today → zero behaviour change.
+        // 'adjacent-enemies' (neighbours-only) is filtered OUT of the primary apply — it is
+        // applied only via the covered-victim loop below. Every other DoT lands on the primary
+        // here, on this cast-level draw; the loop below carries it to the other struck enemies.
         const primaryDots = dotsConfig.filter((d) => d.splashTarget !== 'adjacent-enemies');
         if (dotsLanded) {
             applyNewDoTs({
@@ -4446,83 +4445,123 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         }
     }
 
-    // Fan splash-scoped DoTs (Asphyxiator active Inferno) onto the target's
-    // board-neighbours. 'target-and-adjacent-enemies' hits the primary via the block above
-    // ('adjacent-enemies', neighbours-only, is filtered OUT of the primary apply and applied
-    // ONLY here). Runs INDEPENDENTLY of the primary's Block-Debuff immunity/`dotsLanded` gate
-    // above — each neighbour rolls its OWN landing via `landsDebuffOnVictim`
-    // (Block-Debuff + hacking-vs-security, mirrors PR #185 for non-DoT debuffs), so a neighbour
-    // can be hit even when the primary resists (immune or failed its own roll), and vice versa.
-    // Positional-only: adjacentEnemyIdsFor returns [] / is undefined for a target with no board
-    // slot. affinityMult reused as the caster's
-    // own value (correct for the corpus: Asphyxiator's splash is Inferno, which doesn't consume
-    // affinityMult at apply time; only pendingBombs snapshot it, and no corpus bomb-DoT splashes
-    // exist) — true per-victim affinity is deferred.
-    const splashDots = dotsConfig.filter((d) => d.splashTarget !== undefined);
-    if (splashDots.length > 0 && targetId !== undefined && adjacentEnemyIdsFor) {
-        for (const rid of adjacentEnemyIdsFor(targetId)) {
-            const victim = opposingVictimById?.get(rid);
-            if (!victim) continue;
-            // #413: the decision, so a neighbour blocked by its own Block Debuff (no gate drawn)
-            // is told apart from one that drew and failed. `'inflict'` is hardcoded here, so the
-            // affinity arm is unreachable on this path — but the immunity arm is not.
-            const splashDecision = decideDebuffOnVictim('inflict', victim);
-            if (!splashDecision.landed) {
-                // Per-neighbour landing gate FAILED → resisted. Emit a resist per splash DoT
-                // against the neighbour id, symmetric with the primary-DoT resist path above
-                // (a resisted DoT is a log line). Live for Asphyxiator's target-and-adjacent-
-                // enemies Inferno (a neighbour that resists now surfaces a resist line);
-                // the neighbours-only 'adjacent-enemies' variant has no corpus yet.
-                for (const dot of splashDots) {
-                    emitDebuffResisted(
-                        dotResistLabel(dot.type, dot.tier),
-                        rid,
-                        splashDecision.viaRoll
-                    );
-                }
+    // Carry this cast's DoTs past the primary to every OTHER enemy each one reaches. Recipients
+    // follow the DoT ability's own `target` through `resolveDebuffRecipientIds`, the resolver
+    // every direct enemy clause uses (`dotsConfig` is the firing slot's, so each is a firing
+    // clause):
+    //  - 'enemy' / 'all-enemies' → every enemy the cast strikes (`aoeVictimIds`; owner ruling, an
+    //    AoE-pattern skill's effects reach every enemy in the pattern). With no footprint
+    //    (non-positional / DPS) it resolves to the primary alone, as it does on a single-target
+    //    pattern — so those casts reach nobody here and draw nothing extra.
+    //  - the adjacency scopes (Asphyxiator's active Inferno) → the primary's board-neighbours;
+    //    'adjacent-enemies' never reaches the primary at all.
+    //  - any other target (an enemy selector) stays on the primary alone.
+    // The primary is skipped: the block above already decided it, on the cast-level draw.
+    //
+    // Each covered enemy is resolved on its OWN, independent of the primary's outcome either way:
+    // one landing decision (`decideDebuffOnVictim` — its Block Debuff, the caster's affinity-scaled
+    // hacking vs its security) for every DoT that reaches it, a resist line per DoT when that
+    // fails; its own containers and `dot-applied` (so an inflict reaction fires once per enemy);
+    // a Bomb snapshotting the caster's affinity against THAT enemy; and both inflicted-scope
+    // extensions over the slice it just received, Valerian's crit-power chance drawn per enemy.
+    // `ctx.roundCrit` is the cast's crit answer — a footprint shares one crit roll — so every
+    // covered enemy reads it.
+    //
+    // Cast-time only, like the primary's Step-3 apply: a multi-hit cast lands its DoTs once,
+    // against the cast's footprint, not per sub-attack.
+    const coveredDots = new Map<string, DoTApplicationConfig>();
+    if (targetId !== undefined) {
+        const dotTargetById = new Map(
+            (gatedSkill?.abilities ?? []).map((ab) => [ab.id, ab.target])
+        );
+        for (const dot of dotsConfig) {
+            const abTarget = dotTargetById.get(dot.id);
+            if (
+                abTarget !== 'enemy' &&
+                abTarget !== 'all-enemies' &&
+                abTarget !== 'adjacent-enemies' &&
+                abTarget !== 'target-and-adjacent-enemies'
+            )
                 continue;
+            const recipients = resolveDebuffRecipientIds({
+                abTarget,
+                anchorId: targetId,
+                aoeVictimIds,
+                adjacentEnemyIdsFor,
+                positionalLanding,
+                firingClause: true,
+                selectorEnemyIdFor,
+            });
+            for (const rid of recipients) {
+                if (rid === undefined || rid === targetId) continue;
+                const list = coveredDots.get(rid);
+                if (list) list.push(dot);
+                else coveredDots.set(rid, [dot]);
             }
-            // Per-NEIGHBOUR slice bounds, captured immediately before this victim's apply — the
-            // primary's `*EntriesBefore` describe a different container entirely.
-            const splashCorrosionBefore = victim.corrosionEntries.length;
-            const splashInfernoBefore = victim.infernoEntries.length;
-            applyNewDoTs({
-                dotsConfig: splashDots,
-                effectiveAttack,
-                affinityMult,
-                detonationDamageModifier: dmgStats.detonationDamageModifier,
-                splashModifier: dmgStats.bombSplashModifier,
-                sourceId: actor.id,
-                corrosionEntries: victim.corrosionEntries,
-                infernoEntries: victim.infernoEntries,
-                genericDoTEntries: victim.genericDoTEntries,
-                pendingBombs: victim.pendingBombs,
-                emitDotApplied: (dotType, stacks, tier) =>
-                    bus.emit({
-                        type: 'dot-applied',
-                        sourceId: actor.id,
-                        targetId: rid,
-                        round: r,
-                        dotType,
-                        stacks,
-                        tier,
-                        ...(critHits > 0 ? { viaCrit: true } : {}),
-                        sourceSlot: action,
-                    }),
-            });
-            // Owner ruling 2026-09-02: the neighbours' freshly splashed DoT is extended too, and
-            // the gate is the MAIN target's hit critting — which is what `ctx.roundCrit` already
-            // holds, so each neighbour reads the same cast-level answer rather than rolling its
-            // own. A neighbour that resisted `continue`d above and never reaches this line.
-            extendInflictedStatusDoTs({
-                abilities: [...(firingSkill?.abilities ?? []), ...(passiveSkill?.abilities ?? [])],
-                ctx,
-                corrosionEntries: victim.corrosionEntries,
-                infernoEntries: victim.infernoEntries,
-                corrosionEntriesBefore: splashCorrosionBefore,
-                infernoEntriesBefore: splashInfernoBefore,
-            });
         }
+    }
+    for (const [rid, victimDots] of coveredDots) {
+        const victim = opposingVictimById?.get(rid);
+        if (!victim) continue;
+        // #413: the decision, so an enemy blocked by its own Block Debuff (no gate drawn)
+        // is told apart from one that drew and failed. `'inflict'` is hardcoded here, so the
+        // affinity arm is unreachable on this path — but the immunity arm is not.
+        const splashDecision = decideDebuffOnVictim('inflict', victim);
+        if (!splashDecision.landed) {
+            for (const dot of victimDots) {
+                emitDebuffResisted(dotResistLabel(dot.type, dot.tier), rid, splashDecision.viaRoll);
+            }
+            continue;
+        }
+        // Per-VICTIM slice bounds, captured immediately before this victim's apply — the
+        // primary's `*EntriesBefore` describe a different container entirely.
+        const splashCorrosionBefore = victim.corrosionEntries.length;
+        const splashInfernoBefore = victim.infernoEntries.length;
+        applyNewDoTs({
+            dotsConfig: victimDots,
+            effectiveAttack,
+            affinityMult: 1 + affinityModsVsVictim(victim).damageModifier / 100,
+            detonationDamageModifier: dmgStats.detonationDamageModifier,
+            splashModifier: dmgStats.bombSplashModifier,
+            sourceId: actor.id,
+            corrosionEntries: victim.corrosionEntries,
+            infernoEntries: victim.infernoEntries,
+            genericDoTEntries: victim.genericDoTEntries,
+            pendingBombs: victim.pendingBombs,
+            emitDotApplied: (dotType, stacks, tier) =>
+                bus.emit({
+                    type: 'dot-applied',
+                    sourceId: actor.id,
+                    targetId: rid,
+                    round: r,
+                    dotType,
+                    stacks,
+                    tier,
+                    ...(critHits > 0 ? { viaCrit: true } : {}),
+                    sourceSlot: action,
+                }),
+        });
+        // Owner ruling 2026-09-02: a covered enemy's fresh DoT is extended too, and the crit
+        // gate is the cast's — `ctx.roundCrit`. An enemy that resisted `continue`d above and
+        // never reaches these lines.
+        extendInflictedDoTs({
+            abilities: [...(firingSkill?.abilities ?? []), ...(passiveSkill?.abilities ?? [])],
+            ctx,
+            effectiveCritDamage,
+            extendChanceGate,
+            corrosionEntries: victim.corrosionEntries,
+            infernoEntries: victim.infernoEntries,
+            corrosionEntriesBefore: splashCorrosionBefore,
+            infernoEntriesBefore: splashInfernoBefore,
+        });
+        extendInflictedStatusDoTs({
+            abilities: [...(firingSkill?.abilities ?? []), ...(passiveSkill?.abilities ?? [])],
+            ctx,
+            corrosionEntries: victim.corrosionEntries,
+            infernoEntries: victim.infernoEntries,
+            corrosionEntriesBefore: splashCorrosionBefore,
+            infernoEntriesBefore: splashInfernoBefore,
+        });
     }
 
     // On-cast buff-steal: move the newest removable TIMED buff(s) held by each enemy the cast
