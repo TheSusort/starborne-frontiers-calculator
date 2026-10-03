@@ -11,7 +11,7 @@
  * deals 210% damage") damages an enemy that already carries the Stasis it just landed: the charged
  * cast earns the extra action on its own. A resisted Stasis does not.
  */
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, beforeAll } from 'vitest';
 import { runCombat, CombatEngineInput } from '../engine';
 import { createEventBus } from '../events';
 import { setupKeyedRng } from '../../calculators/rateAccumulator';
@@ -23,6 +23,14 @@ import type { Ability, ShipSkills } from '../../../types/abilities';
 import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
 
 const hasReferenceData = (): boolean => csvAvailable() && shipDataAvailable();
+
+beforeAll(() => {
+    if (!hasReferenceData()) {
+        throw new Error(
+            'This suite requires docs/ship-skills.csv and docs/ship-data.json (gitignored reference data) — copy them in before running'
+        );
+    }
+});
 
 const parsedFrontTarget = (): ParsedTarget => ({ raw: 'front', side: 'enemy', selection: 'front' });
 const singleTargetPattern = (): ParsedPattern => ({
@@ -350,7 +358,7 @@ beforeEach(() => {
     setupKeyedRng(5);
 });
 
-describe.skipIf(!hasReferenceData())('Tygr passive — the extra action names Stasis', () => {
+describe('Tygr passive — the extra action names Stasis', () => {
     it('parses to an enemy Stasis count gate, once per round', () => {
         const a = tygrExtraAction();
         expect(a.config).toMatchObject({ type: 'extra-action', oncePerRound: true });

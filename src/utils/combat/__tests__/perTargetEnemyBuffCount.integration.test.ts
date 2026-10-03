@@ -18,7 +18,7 @@
  * caster's `charge-changed` events with reason `'manip'` (an ability-driven grant), damage off its
  * own `ability-performed` event, extra actions off its `turn-started` count.
  */
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, beforeAll } from 'vitest';
 import { runCombat, CombatEngineInput } from '../engine';
 import { createEventBus } from '../events';
 import { setupKeyedRng } from '../../calculators/rateAccumulator';
@@ -32,6 +32,14 @@ import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
 import type { Position } from '../../../types/encounters';
 
 const hasReferenceData = (): boolean => csvAvailable() && shipDataAvailable();
+
+beforeAll(() => {
+    if (!hasReferenceData()) {
+        throw new Error(
+            'This suite requires docs/ship-skills.csv and docs/ship-data.json (gitignored reference data) — copy them in before running'
+        );
+    }
+});
 
 const parsedFrontTarget = (): ParsedTarget => ({ raw: 'front', side: 'enemy', selection: 'front' });
 const singleTargetPattern = (): ParsedPattern => ({
@@ -196,7 +204,7 @@ beforeEach(() => {
     setupKeyedRng(5);
 });
 
-describe.skipIf(!hasReferenceData())("Rhodium active — charges equal the target's buffs", () => {
+describe("Rhodium active — charges equal the target's buffs", () => {
     it('target with no buffs → no charge', () => {
         expect(playerCaster('Rhodium', [buffedEnemy('target', 'M4', [])]).chargeGain).toBe(0);
     });
@@ -226,7 +234,7 @@ describe.skipIf(!hasReferenceData())("Rhodium active — charges equal the targe
     });
 });
 
-describe.skipIf(!hasReferenceData())('Nuqtu active — +2 charges only on a 3+ buff target', () => {
+describe('Nuqtu active — +2 charges only on a 3+ buff target', () => {
     it('target with one buff → no charge', () => {
         expect(playerCaster('Nuqtu', [buffedEnemy('target', 'M4', distinct(1))]).chargeGain).toBe(
             0
@@ -246,30 +254,27 @@ describe.skipIf(!hasReferenceData())('Nuqtu active — +2 charges only on a 3+ b
     });
 });
 
-describe.skipIf(!hasReferenceData())(
-    "Nuqtu charged — the extra action reads the target's own buffs",
-    () => {
-        const charged = { startCharged: true, chargeCount: 4 };
+describe("Nuqtu charged — the extra action reads the target's own buffs", () => {
+    const charged = { startCharged: true, chargeCount: 4 };
 
-        it('two enemies under 3 buffs each but 3 distinct names between them → no extra action', () => {
-            const front = buffedEnemy('target', 'M4', [selfBuff('Buff A'), selfBuff('Buff B')]);
-            const back = buffedEnemy('other', 'M3', [selfBuff('Buff C')]);
-            expect(playerCaster('Nuqtu', [front, back], charged).turns).toBe(1);
-        });
+    it('two enemies under 3 buffs each but 3 distinct names between them → no extra action', () => {
+        const front = buffedEnemy('target', 'M4', [selfBuff('Buff A'), selfBuff('Buff B')]);
+        const back = buffedEnemy('other', 'M3', [selfBuff('Buff C')]);
+        expect(playerCaster('Nuqtu', [front, back], charged).turns).toBe(1);
+    });
 
-        it('the target itself holds 3 buffs → one extra action', () => {
-            const front = buffedEnemy('target', 'M4', [
-                selfBuff('Buff A'),
-                selfBuff('Buff B'),
-                selfBuff('Buff C'),
-            ]);
-            const back = buffedEnemy('other', 'M3', []);
-            expect(playerCaster('Nuqtu', [front, back], charged).turns).toBe(2);
-        });
-    }
-);
+    it('the target itself holds 3 buffs → one extra action', () => {
+        const front = buffedEnemy('target', 'M4', [
+            selfBuff('Buff A'),
+            selfBuff('Buff B'),
+            selfBuff('Buff C'),
+        ]);
+        const back = buffedEnemy('other', 'M3', []);
+        expect(playerCaster('Nuqtu', [front, back], charged).turns).toBe(2);
+    });
+});
 
-describe.skipIf(!hasReferenceData())('Butcher charged — +35% per buff on the target', () => {
+describe('Butcher charged — +35% per buff on the target', () => {
     const butcherCharged = (buffs: Ability[]): number =>
         measure(
             base({
@@ -301,7 +306,7 @@ describe.skipIf(!hasReferenceData())('Butcher charged — +35% per buff on the t
     });
 });
 
-describe.skipIf(!hasReferenceData())("enemy-side Rhodium counts the player target's buffs", () => {
+describe("enemy-side Rhodium counts the player target's buffs", () => {
     const enemyRhodium = (playerBuffs: Ability[]): number =>
         measure(
             base({
@@ -346,7 +351,7 @@ describe.skipIf(!hasReferenceData())("enemy-side Rhodium counts the player targe
     });
 });
 
-describe.skipIf(!hasReferenceData())('single-ship DPS mode keeps the manual count', () => {
+describe('single-ship DPS mode keeps the manual count', () => {
     /** Rhodium's real active with the user's manual count set on its charge condition. */
     const rhodiumWithManual = (manualCount: number): ShipSkills => ({
         slots: [
@@ -384,49 +389,46 @@ describe.skipIf(!hasReferenceData())('single-ship DPS mode keeps the manual coun
     });
 });
 
-describe.skipIf(!hasReferenceData())(
-    "single-ship DPS mode gates Nuqtu's +2 on the manual count",
-    () => {
-        /** Nuqtu's real active with the user's manual count set on its charge condition (unset =
-         *  the calculator's default of 1). */
-        const nuqtuDpsChargeGain = (manualCount?: number): number => {
-            const shipSkills: ShipSkills = {
-                slots: [
-                    {
-                        slot: 'active',
-                        abilities: realSlot('Nuqtu', 'active').map((a) =>
-                            a.type === 'charge' && manualCount !== undefined
-                                ? {
-                                      ...a,
-                                      conditions: a.conditions.map((c) => ({ ...c, manualCount })),
-                                  }
-                                : a
-                        ),
-                    },
-                    { slot: 'charged', abilities: realSlot('Nuqtu', 'charged') },
-                ],
-            };
-            // `mode: 'dps'` forbids healTargetId (runCombat throws), so it is dropped.
-            const { healTargetId: _drop, ...rest } = base({
-                shipSkills,
-                hasChargedSkill: true,
-                chargeCount: 10,
-                // Four live buffs: a live read would satisfy the 3+ gate, so only the manual count
-                // can explain a 0.
-                enemyAttackers: [buffedEnemy('target', 'M4', distinct(4))],
-            });
-            return measure({ ...rest, mode: 'dps' }, 'attacker').chargeGain;
+describe("single-ship DPS mode gates Nuqtu's +2 on the manual count", () => {
+    /** Nuqtu's real active with the user's manual count set on its charge condition (unset =
+     *  the calculator's default of 1). */
+    const nuqtuDpsChargeGain = (manualCount?: number): number => {
+        const shipSkills: ShipSkills = {
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: realSlot('Nuqtu', 'active').map((a) =>
+                        a.type === 'charge' && manualCount !== undefined
+                            ? {
+                                  ...a,
+                                  conditions: a.conditions.map((c) => ({ ...c, manualCount })),
+                              }
+                            : a
+                    ),
+                },
+                { slot: 'charged', abilities: realSlot('Nuqtu', 'charged') },
+            ],
         };
-
-        it('default manual count (1) → no bonus charges', () => {
-            expect(nuqtuDpsChargeGain()).toBe(0);
+        // `mode: 'dps'` forbids healTargetId (runCombat throws), so it is dropped.
+        const { healTargetId: _drop, ...rest } = base({
+            shipSkills,
+            hasChargedSkill: true,
+            chargeCount: 10,
+            // Four live buffs: a live read would satisfy the 3+ gate, so only the manual count
+            // can explain a 0.
+            enemyAttackers: [buffedEnemy('target', 'M4', distinct(4))],
         });
+        return measure({ ...rest, mode: 'dps' }, 'attacker').chargeGain;
+    };
 
-        it('manual count of 3 → +2 charges', () => {
-            expect(nuqtuDpsChargeGain(3)).toBe(2);
-        });
-    }
-);
+    it('default manual count (1) → no bonus charges', () => {
+        expect(nuqtuDpsChargeGain()).toBe(0);
+    });
+
+    it('manual count of 3 → +2 charges', () => {
+        expect(nuqtuDpsChargeGain(3)).toBe(2);
+    });
+});
 
 describe('an AoE per-buff outgoing modifier reads each victim its own count', () => {
     /** A self outgoing-damage modifier worth +10% per buff on the enemy, beside a 100% AoE hit. */
@@ -484,148 +486,143 @@ describe('an AoE per-buff outgoing modifier reads each victim its own count', ()
     });
 });
 
-describe.skipIf(!hasReferenceData())(
-    'a per-buff damage bonus on a line-pattern cast reads each struck enemy its own buffs',
-    () => {
-        // Nuqtu's and Butcher's skills strike a line: the front enemy at full damage and the two
-        // behind it at half. Attack 10 000, no defence, neutral affinity — so a victim's damage is
-        // 10 000 × (base% + per-buff% × that victim's buffs) × its footprint share.
-        const linePattern = (): ParsedPattern => parsePattern('Pattern-Line-Range-2');
-        const damageOnly = (ship: string, slot: 'active' | 'charged'): Ability[] =>
-            realSlot(ship, slot).filter((a) => a.type === 'damage');
+describe('a per-buff damage bonus on a line-pattern cast reads each struck enemy its own buffs', () => {
+    // Nuqtu's and Butcher's skills strike a line: the front enemy at full damage and the two
+    // behind it at half. Attack 10 000, no defence, neutral affinity — so a victim's damage is
+    // 10 000 × (base% + per-buff% × that victim's buffs) × its footprint share.
+    const linePattern = (): ParsedPattern => parsePattern('Pattern-Line-Range-2');
+    const damageOnly = (ship: string, slot: 'active' | 'charged'): Ability[] =>
+        realSlot(ship, slot).filter((a) => a.type === 'damage');
 
-        const playerSide = (
-            ship: string,
-            slot: 'active' | 'charged',
-            frontBuffs: number,
-            coveredBuffs: number
-        ): Record<string, number | undefined> => {
-            const charged = slot === 'charged';
-            const result = runCombat(
-                base({
-                    shipSkills: {
-                        slots: [
-                            { slot: 'active', abilities: charged ? [] : damageOnly(ship, slot) },
-                            ...(charged
-                                ? [{ slot: 'charged' as const, abilities: damageOnly(ship, slot) }]
-                                : []),
-                        ],
-                    },
-                    hasChargedSkill: charged,
-                    startCharged: charged,
-                    chargeCount: charged ? 3 : 0,
-                    pattern: linePattern(),
-                    enemyAttackers: [
-                        buffedEnemy('front', 'M4', distinct(frontBuffs)),
-                        buffedEnemy('covered', 'M3', distinct(coveredBuffs)),
+    const playerSide = (
+        ship: string,
+        slot: 'active' | 'charged',
+        frontBuffs: number,
+        coveredBuffs: number
+    ): Record<string, number | undefined> => {
+        const charged = slot === 'charged';
+        const result = runCombat(
+            base({
+                shipSkills: {
+                    slots: [
+                        { slot: 'active', abilities: charged ? [] : damageOnly(ship, slot) },
+                        ...(charged
+                            ? [{ slot: 'charged' as const, abilities: damageOnly(ship, slot) }]
+                            : []),
                     ],
-                })
-            );
-            return result.rounds[0].perTargetDamage ?? {};
-        };
+                },
+                hasChargedSkill: charged,
+                startCharged: charged,
+                chargeCount: charged ? 3 : 0,
+                pattern: linePattern(),
+                enemyAttackers: [
+                    buffedEnemy('front', 'M4', distinct(frontBuffs)),
+                    buffedEnemy('covered', 'M3', distinct(coveredBuffs)),
+                ],
+            })
+        );
+        return result.rounds[0].perTargetDamage ?? {};
+    };
 
-        it('Nuqtu active: clean front, covered enemy with 3 buffs → only the covered one gains', () => {
-            const dmg = playerSide('Nuqtu', 'active', 0, 3);
-            expect(dmg['front']).toBe(14_000);
-            expect(dmg['covered']).toBe(11_500);
+    it('Nuqtu active: clean front, covered enemy with 3 buffs → only the covered one gains', () => {
+        const dmg = playerSide('Nuqtu', 'active', 0, 3);
+        expect(dmg['front']).toBe(14_000);
+        expect(dmg['covered']).toBe(11_500);
+    });
+
+    it('Nuqtu active: front with 3 buffs, clean covered enemy → only the front gains', () => {
+        const dmg = playerSide('Nuqtu', 'active', 3, 0);
+        expect(dmg['front']).toBe(23_000);
+        expect(dmg['covered']).toBe(7_000);
+    });
+
+    it('Butcher charged: clean front, covered enemy with 3 buffs → +35% per buff there only', () => {
+        const dmg = playerSide('Butcher', 'charged', 0, 3);
+        expect(dmg['front']).toBe(15_000);
+        expect(dmg['covered']).toBe(12_750);
+    });
+
+    /** Enemy-side Nuqtu's damage to each player ship it strikes in round 1. */
+    const enemySide = (frontBuffs: number, coveredBuffs: number): Record<string, number> => {
+        const bus = createEventBus();
+        const dmg: Record<string, number> = {};
+        bus.on('attacked', (e) => {
+            if (e.attackerId === 'nuqtu-enemy' && e.round === 1)
+                dmg[e.targetId] = (dmg[e.targetId] ?? 0) + (e.damage ?? 0);
         });
-
-        it('Nuqtu active: front with 3 buffs, clean covered enemy → only the front gains', () => {
-            const dmg = playerSide('Nuqtu', 'active', 3, 0);
-            expect(dmg['front']).toBe(23_000);
-            expect(dmg['covered']).toBe(7_000);
-        });
-
-        it('Butcher charged: clean front, covered enemy with 3 buffs → +35% per buff there only', () => {
-            const dmg = playerSide('Butcher', 'charged', 0, 3);
-            expect(dmg['front']).toBe(15_000);
-            expect(dmg['covered']).toBe(12_750);
-        });
-
-        /** Enemy-side Nuqtu's damage to each player ship it strikes in round 1. */
-        const enemySide = (frontBuffs: number, coveredBuffs: number): Record<string, number> => {
-            const bus = createEventBus();
-            const dmg: Record<string, number> = {};
-            bus.on('attacked', (e) => {
-                if (e.attackerId === 'nuqtu-enemy' && e.round === 1)
-                    dmg[e.targetId] = (dmg[e.targetId] ?? 0) + (e.damage ?? 0);
-            });
-            runCombat({
-                ...base({
-                    // The player focus is the front ship and buffs itself before Nuqtu acts.
-                    shipSkills: buffKit(distinct(frontBuffs)),
-                    speed: 150,
-                    security: 0,
-                    teamActors: [
-                        {
-                            id: 'covered',
-                            speed: 150,
-                            chargeCount: 0,
-                            startCharged: false,
-                            selfBuffs: [],
-                            enemyDebuffs: [],
-                            position: 'M3',
-                            target: parsedFrontTarget(),
-                            pattern: singleTargetPattern(),
-                            walk: {
-                                shipSkills: buffKit(
-                                    Array.from({ length: coveredBuffs }, (_, i) =>
-                                        selfBuff(`Covered Buff ${i + 1}`)
-                                    )
-                                ),
-                                stats: {
-                                    attack: 0,
-                                    crit: 0,
-                                    critDamage: 0,
-                                    defensePenetration: 0,
-                                    hacking: 0,
-                                    defence: 0,
-                                    hp: 1_000_000_000,
-                                },
-                                selfDotModifier: 0,
-                                defensePenetrationBuff: 0,
-                                affinityDamageModifier: 0,
-                                affinityCritCap: 100,
-                                affinityCritPenalty: 0,
-                                hasChargedSkill: false,
-                            },
-                        },
-                    ],
-                    enemyAttackers: [
-                        {
-                            id: 'nuqtu-enemy',
+        runCombat({
+            ...base({
+                // The player focus is the front ship and buffs itself before Nuqtu acts.
+                shipSkills: buffKit(distinct(frontBuffs)),
+                speed: 150,
+                security: 0,
+                teamActors: [
+                    {
+                        id: 'covered',
+                        speed: 150,
+                        chargeCount: 0,
+                        startCharged: false,
+                        selfBuffs: [],
+                        enemyDebuffs: [],
+                        position: 'M3',
+                        target: parsedFrontTarget(),
+                        pattern: singleTargetPattern(),
+                        walk: {
+                            shipSkills: buffKit(
+                                Array.from({ length: coveredBuffs }, (_, i) =>
+                                    selfBuff(`Covered Buff ${i + 1}`)
+                                )
+                            ),
                             stats: {
-                                attack: 10_000,
+                                attack: 0,
                                 crit: 0,
                                 critDamage: 0,
+                                defensePenetration: 0,
+                                hacking: 0,
                                 defence: 0,
                                 hp: 1_000_000_000,
-                                speed: 100,
                             },
-                            chargeCount: 0,
-                            startCharged: false,
-                            position: 'M4',
-                            target: parsedFrontTarget(),
-                            pattern: linePattern(),
-                            shipSkills: {
-                                slots: [
-                                    { slot: 'active', abilities: damageOnly('Nuqtu', 'active') },
-                                ],
-                            },
+                            selfDotModifier: 0,
+                            defensePenetrationBuff: 0,
+                            affinityDamageModifier: 0,
+                            affinityCritCap: 100,
+                            affinityCritPenalty: 0,
+                            hasChargedSkill: false,
                         },
-                    ],
-                }),
-                bus,
-            });
-            return dmg;
-        };
-
-        it('enemy-side Nuqtu: clean front, covered player ship with 3 buffs → only it gains', () => {
-            expect(enemySide(0, 3)).toEqual({ attacker: 14_000, covered: 11_500 });
+                    },
+                ],
+                enemyAttackers: [
+                    {
+                        id: 'nuqtu-enemy',
+                        stats: {
+                            attack: 10_000,
+                            crit: 0,
+                            critDamage: 0,
+                            defence: 0,
+                            hp: 1_000_000_000,
+                            speed: 100,
+                        },
+                        chargeCount: 0,
+                        startCharged: false,
+                        position: 'M4',
+                        target: parsedFrontTarget(),
+                        pattern: linePattern(),
+                        shipSkills: {
+                            slots: [{ slot: 'active', abilities: damageOnly('Nuqtu', 'active') }],
+                        },
+                    },
+                ],
+            }),
+            bus,
         });
+        return dmg;
+    };
 
-        it('enemy-side Nuqtu: front with 3 buffs, clean covered player ship → only the front gains', () => {
-            expect(enemySide(3, 0)).toEqual({ attacker: 23_000, covered: 7_000 });
-        });
-    }
-);
+    it('enemy-side Nuqtu: clean front, covered player ship with 3 buffs → only it gains', () => {
+        expect(enemySide(0, 3)).toEqual({ attacker: 14_000, covered: 11_500 });
+    });
+
+    it('enemy-side Nuqtu: front with 3 buffs, clean covered player ship → only the front gains', () => {
+        expect(enemySide(3, 0)).toEqual({ attacker: 23_000, covered: 7_000 });
+    });
+});

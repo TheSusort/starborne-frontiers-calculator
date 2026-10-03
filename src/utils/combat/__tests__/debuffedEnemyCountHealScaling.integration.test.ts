@@ -12,7 +12,7 @@
  * round-1 turn. Repairs are read off the healer's own `heal-performed` events (crit 0, so no crit
  * multiplier), as the raw amount booked for one recipient.
  */
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, beforeAll } from 'vitest';
 import { runCombat, CombatEngineInput } from '../engine';
 import { createEventBus } from '../events';
 import { setupKeyedRng } from '../../calculators/rateAccumulator';
@@ -25,6 +25,14 @@ import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
 import type { Position } from '../../../types/encounters';
 
 const hasReferenceData = (): boolean => csvAvailable() && shipDataAvailable();
+
+beforeAll(() => {
+    if (!hasReferenceData()) {
+        throw new Error(
+            'This suite requires docs/ship-skills.csv and docs/ship-data.json (gitignored reference data) — copy them in before running'
+        );
+    }
+});
 
 type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 type TeamActor = NonNullable<CombatEngineInput['teamActors']>[number];
@@ -170,21 +178,16 @@ beforeEach(() => {
     setupKeyedRng(5);
 });
 
-describe.skipIf(!hasReferenceData())(
-    "Oleander's real active parses to a debuffed-enemy count",
-    () => {
-        it('base 10% repair + 8.5% per debuffed enemy', () => {
-            const heal = realSlot('Oleander', 'active').find((a) => a.type === 'heal');
-            expect(heal?.config).toMatchObject({ type: 'heal', pct: 10, basis: 'hp' });
-            expect(heal?.scaling).toEqual({ conditionIndex: 0, perUnit: 8.5 });
-            expect(heal?.conditions).toEqual([
-                { subject: 'debuffed-enemy-count', derivable: true },
-            ]);
-        });
-    }
-);
+describe("Oleander's real active parses to a debuffed-enemy count", () => {
+    it('base 10% repair + 8.5% per debuffed enemy', () => {
+        const heal = realSlot('Oleander', 'active').find((a) => a.type === 'heal');
+        expect(heal?.config).toMatchObject({ type: 'heal', pct: 10, basis: 'hp' });
+        expect(heal?.scaling).toEqual({ conditionIndex: 0, perUnit: 8.5 });
+        expect(heal?.conditions).toEqual([{ subject: 'debuffed-enemy-count', derivable: true }]);
+    });
+});
 
-describe.skipIf(!hasReferenceData())('Oleander active — +8.5% per debuffed enemy', () => {
+describe('Oleander active — +8.5% per debuffed enemy', () => {
     const oleander = (debuffer: TeamActor | undefined): number =>
         repairOn(
             base({
@@ -215,7 +218,7 @@ describe.skipIf(!hasReferenceData())('Oleander active — +8.5% per debuffed ene
     });
 });
 
-describe.skipIf(!hasReferenceData())('single-ship DPS mode reads the live count too', () => {
+describe('single-ship DPS mode reads the live count too', () => {
     it('ally-targeted cast, one debuffed enemy → +8.5%', () => {
         // `mode: 'dps'` forbids healTargetId (runCombat throws), so it is dropped.
         const { healTargetId: _drop, ...rest } = base({
@@ -231,7 +234,7 @@ describe.skipIf(!hasReferenceData())('single-ship DPS mode reads the live count 
     });
 });
 
-describe.skipIf(!hasReferenceData())('enemy-side Oleander counts debuffed player ships', () => {
+describe('enemy-side Oleander counts debuffed player ships', () => {
     /** The player focus at M4 and a team ship at M3; a fast enemy debuffs them before the enemy
      *  Oleander's turn. */
     const enemyOleander = (debuffs: Ability[], pattern: ParsedPattern): number => {
@@ -275,7 +278,7 @@ describe.skipIf(!hasReferenceData())('enemy-side Oleander counts debuffed player
     });
 });
 
-describe.skipIf(!hasReferenceData())('Meatshield charged — 1.5% per debuff on herself', () => {
+describe('Meatshield charged — 1.5% per debuff on herself', () => {
     const MEATSHIELD_HP = 100_000;
     const charged = {
         hasChargedSkill: true,

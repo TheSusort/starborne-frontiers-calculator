@@ -75,6 +75,7 @@ const COUNT_SUBJECTS: ConditionSubject[] = [
     'self-debuff',
     'enemy-buff',
     'enemy-debuff',
+    'debuffed-enemy-count',
     'adjacent-ally',
     'enemy-adjacent',
     'enemy-destroyed',

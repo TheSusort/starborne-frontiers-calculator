@@ -8,7 +8,7 @@
  * caster and grants itself its buffs on its own round-1 turn, so the buffs are on the board when
  * the caster acts. Nobody but the caster deals damage or repairs.
  */
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, beforeAll } from 'vitest';
 import { runCombat, CombatEngineInput } from '../engine';
 import { createEventBus, CombatEvent } from '../events';
 import { setupKeyedRng } from '../../calculators/rateAccumulator';
@@ -24,6 +24,14 @@ import type { CombatActor } from '../state';
 import type { StatusEngine } from '../statusEngine';
 
 const hasReferenceData = (): boolean => csvAvailable() && shipDataAvailable();
+
+beforeAll(() => {
+    if (!hasReferenceData()) {
+        throw new Error(
+            'This suite requires docs/ship-skills.csv and docs/ship-data.json (gitignored reference data) — copy them in before running'
+        );
+    }
+});
 
 type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 type TeamActor = NonNullable<CombatEngineInput['teamActors']>[number];
@@ -164,7 +172,7 @@ beforeEach(() => {
     setupKeyedRng(5);
 });
 
-describe.skipIf(!hasReferenceData())("Tithonus's active purge reaches his whole pattern", () => {
+describe("Tithonus's active purge reaches his whole pattern", () => {
     const tithonus = (pattern: ParsedPattern): Measured =>
         measure(
             base({
@@ -191,7 +199,7 @@ describe.skipIf(!hasReferenceData())("Tithonus's active purge reaches his whole 
     });
 });
 
-describe.skipIf(!hasReferenceData())('enemy-side Tithonus purges every player ship he hits', () => {
+describe('enemy-side Tithonus purges every player ship he hits', () => {
     /** A durable player-side ship that grants itself one buff before the enemy Tithonus acts. */
     const buffedAlly = (id: string, position: Position): TeamActor => ({
         id,
@@ -270,42 +278,39 @@ describe.skipIf(!hasReferenceData())('enemy-side Tithonus purges every player sh
     });
 });
 
-describe.skipIf(!hasReferenceData())(
-    "Sefuba's passive fires once per enemy her pattern purge reaches",
-    () => {
-        const SEFUBA_HP = 10_000;
-        const sefubaKit = (): ShipSkills => ({
-            slots: [
-                { slot: 'active', abilities: realSlot('Sefuba', 'active') },
-                { slot: 'passive', abilities: realSlot('Sefuba', 'passive') },
-            ],
-        });
+describe("Sefuba's passive fires once per enemy her pattern purge reaches", () => {
+    const SEFUBA_HP = 10_000;
+    const sefubaKit = (): ShipSkills => ({
+        slots: [
+            { slot: 'active', abilities: realSlot('Sefuba', 'active') },
+            { slot: 'passive', abilities: realSlot('Sefuba', 'passive') },
+        ],
+    });
 
-        it('her refit passive carries the per-buff repair and the extra purge', () => {
-            const passive = realSlot('Sefuba', 'passive');
-            expect(
-                passive.filter((a) => a.trigger === 'on-enemy-purged').map((a) => a.type)
-            ).toEqual(expect.arrayContaining(['heal', 'purge']));
-        });
+    it('her refit passive carries the per-buff repair and the extra purge', () => {
+        const passive = realSlot('Sefuba', 'passive');
+        expect(passive.filter((a) => a.trigger === 'on-enemy-purged').map((a) => a.type)).toEqual(
+            expect.arrayContaining(['heal', 'purge'])
+        );
+    });
 
-        it('A, B and C holding two buffs each → 8% per buff removed, and each loses its second buff to the extra purge', () => {
-            const { purged, buffsLeft, actors } = measure(
-                base({
-                    attack: 1000,
-                    hp: SEFUBA_HP,
-                    shipSkills: sefubaKit(),
-                    enemyAttackers: enemyRow(2),
-                }),
-                'attacker',
-                ENEMY_IDS,
-                { attacker: 0.5 }
-            );
-            // Her active removes one buff from each enemy it strikes; each removal fires the
-            // passive for that enemy, which repairs 8% and purges one more buff from it.
-            expect(purged).toEqual({ 'enemy-a': 1, 'enemy-b': 1, 'enemy-c': 1 });
-            expect(buffsLeft).toEqual({ 'enemy-a': 0, 'enemy-b': 0, 'enemy-c': 0, 'enemy-out': 2 });
-            const sefuba = actors.get('attacker')!;
-            expect((100 * sefuba.currentHp) / sefuba.stats.hp).toBeCloseTo(50 + 3 * 8, 5);
-        });
-    }
-);
+    it('A, B and C holding two buffs each → 8% per buff removed, and each loses its second buff to the extra purge', () => {
+        const { purged, buffsLeft, actors } = measure(
+            base({
+                attack: 1000,
+                hp: SEFUBA_HP,
+                shipSkills: sefubaKit(),
+                enemyAttackers: enemyRow(2),
+            }),
+            'attacker',
+            ENEMY_IDS,
+            { attacker: 0.5 }
+        );
+        // Her active removes one buff from each enemy it strikes; each removal fires the
+        // passive for that enemy, which repairs 8% and purges one more buff from it.
+        expect(purged).toEqual({ 'enemy-a': 1, 'enemy-b': 1, 'enemy-c': 1 });
+        expect(buffsLeft).toEqual({ 'enemy-a': 0, 'enemy-b': 0, 'enemy-c': 0, 'enemy-out': 2 });
+        const sefuba = actors.get('attacker')!;
+        expect((100 * sefuba.currentHp) / sefuba.stats.hp).toBeCloseTo(50 + 3 * 8, 5);
+    });
+});

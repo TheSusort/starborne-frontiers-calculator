@@ -80,6 +80,23 @@ describe('ConditionRow', () => {
         );
     });
 
+    it('shows the count controls for the debuffed-enemy-count subject', () => {
+        render(
+            <ConditionRow
+                condition={{
+                    subject: 'debuffed-enemy-count',
+                    derivable: true,
+                    countComparator: 'gte',
+                    countThreshold: 2,
+                }}
+                onChange={vi.fn()}
+                onRemove={vi.fn()}
+            />
+        );
+        expect(screen.getByLabelText('Count is')).toBeInTheDocument();
+        expect(screen.getByLabelText('Threshold')).toBeInTheDocument();
+    });
+
     it('reveals the threshold input once a comparator is set and clears both on "present"', () => {
         const onChange = vi.fn();
         const { rerender } = render(
