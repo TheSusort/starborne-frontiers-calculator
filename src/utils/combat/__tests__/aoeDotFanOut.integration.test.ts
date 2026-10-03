@@ -245,6 +245,8 @@ interface Measured {
     resisted: Record<string, string[]>;
     /** Passive charge the caster gained in round 1. */
     chargeGained: number;
+    /** Sorted ids of the enemies the caster's round-1 damage hit critically. */
+    critVictimIds: string[];
     actors: Map<string, CombatActor>;
 }
 
@@ -268,6 +270,10 @@ const measure = (input: CombatEngineInput, casterId: string): Measured => {
         if (e.actorId === casterId && e.round === 1 && e.reason === 'manip')
             chargeGained += e.newCharge - e.oldCharge;
     });
+    const critVictimIds: string[] = [];
+    bus.on('ability-performed', (e: Extract<CombatEvent, { type: 'ability-performed' }>) => {
+        if (e.actorId === casterId && e.round === 1) critVictimIds.push(...(e.critVictimIds ?? []));
+    });
     const actors = new Map<string, CombatActor>();
     runCombat({
         ...input,
@@ -278,7 +284,8 @@ const measure = (input: CombatEngineInput, casterId: string): Measured => {
     });
     for (const k of Object.keys(dots)) dots[k].sort();
     for (const k of Object.keys(resisted)) resisted[k].sort();
-    return { dots, stacks, resisted, chargeGained, actors };
+    critVictimIds.sort();
+    return { dots, stacks, resisted, chargeGained, critVictimIds, actors };
 };
 
 beforeEach(() => {
@@ -439,6 +446,86 @@ describe('reactions to an inflicted DoT fire once per enemy it lands on', () => 
             'enemy-caster'
         );
         expect(m.dots['inferno']).toEqual(['ally-b', 'ally-c', 'attacker']);
+    });
+});
+
+describe("a crit-gated DoT effect follows each struck enemy's OWN crit", () => {
+    // Owner ruling 2026-10-03: crit is per struck enemy. Wisteria's active hits A, B and C and
+    // crits A alone → only A gets the crit's Inferno II. At 50% crit each enemy's crit varies by
+    // seed; the damage apply's own `critVictimIds` is the reference the DoT effects must match.
+    const overSeeds = (
+        build: () => CombatEngineInput,
+        casterId: string,
+        check: (m: Measured) => void
+    ): string[][] => {
+        const seen: string[][] = [];
+        for (let seed = 1; seed <= 40; seed++) {
+            setupKeyedRng(seed);
+            const m = measure(build(), casterId);
+            check(m);
+            seen.push(m.critVictimIds);
+        }
+        return seen;
+    };
+    /** The seeds covered both directions a shared cast-level crit gets wrong: the anchor critting
+     *  alone, and a covered enemy critting while the anchor does not. */
+    const expectMixed = (seen: string[][], anchor: string) => {
+        expect(seen.some((c) => c.length === 1 && c[0] === anchor)).toBe(true);
+        expect(seen.some((c) => c.length > 0 && !c.includes(anchor))).toBe(true);
+    };
+
+    it('player Wisteria at 50% crit → Inferno II on exactly the enemies her hit critted', () => {
+        const seen = overSeeds(
+            () => playerCasting('Wisteria', 'active', cone(), {}, { crit: 50, critDamage: 100 }),
+            'attacker',
+            (m) => {
+                expect(m.dots['corrosion']).toEqual(['enemy-a', 'enemy-b', 'enemy-c']);
+                expect(m.dots['inferno'] ?? []).toEqual(m.critVictimIds);
+            }
+        );
+        expectMixed(seen, 'enemy-a');
+    });
+
+    it('enemy-side Wisteria at 50% crit → Inferno II on exactly the player ships she critted', () => {
+        const seen = overSeeds(
+            () => enemyCasting('Wisteria', 'active', cone(), {}, { crit: 50, critDamage: 100 }),
+            'enemy-caster',
+            (m) => {
+                expect(m.dots['corrosion']).toEqual(['ally-b', 'ally-c', 'attacker']);
+                expect(m.dots['inferno'] ?? []).toEqual(m.critVictimIds);
+            }
+        );
+        expectMixed(seen, 'attacker');
+    });
+
+    it('player Valerian at 50% crit, 100% crit power → only the critted enemies’ Corrosion runs longer', () => {
+        const struck = ['enemy-a', 'enemy-b', 'enemy-c'];
+        const seen = overSeeds(
+            () => playerCasting('Valerian', 'active', cone(), {}, { crit: 50, critDamage: 100 }),
+            'attacker',
+            (m) => {
+                const rounds = struck.map((id) =>
+                    m.actors.get(id)!.corrosionEntries.map((e) => e.remainingRounds)
+                );
+                expect(rounds).toEqual(struck.map((id) => [m.critVictimIds.includes(id) ? 4 : 3]));
+            }
+        );
+        expectMixed(seen, 'enemy-a');
+    });
+
+    it('enemy-side Valerian at 50% crit, 100% crit power → only the critted ships’ Corrosion runs longer', () => {
+        const struck = ['attacker', 'ally-b', 'ally-c'];
+        const seen = overSeeds(
+            () => enemyCasting('Valerian', 'active', cone(), {}, { crit: 50, critDamage: 100 }),
+            'enemy-caster',
+            (m) => {
+                const rounds = struck.map((id) =>
+                    m.actors.get(id)!.corrosionEntries.map((e) => e.remainingRounds)
+                );
+                expect(rounds).toEqual(struck.map((id) => [m.critVictimIds.includes(id) ? 4 : 3]));
+            }
+        );
+        expectMixed(seen, 'attacker');
     });
 });
 

@@ -527,8 +527,10 @@ export interface PlayerTurnResult {
      *  covered victim the attacker is at an affinity disadvantage against crits less often
      *  than the anchor. Uses the SAME `critGate` closure as the anchor's per-hit draws, so
      *  covered-victim draws continue the same RNG stream AFTER the anchor's per-hit draws.
+     *  A covered victim whose first-sub-attack crit the cast already rolled for its DoT effects
+     *  gets that same answer back at `subAttackIndex` 0, so its hit and its DoTs agree.
      *  Read ONLY by the positional engine branch; non-positional callers ignore it. */
-    rollVictimCrit: (victimAffinity: AffinityName) => boolean;
+    rollVictimCrit: (victim: CombatActor, subAttackIndex?: number) => boolean;
     /** Per-cast detonation recipe for the positional per-victim path. Present ONLY when the
      *  `positional` arg was set (the engine then detonates each footprint victim's own containers
      *  via detonateContainers). Absent for non-positional callers → no per-victim recipe. */
@@ -3495,6 +3497,20 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         const rate = Math.min(critCap, Math.max(0, uncappedCritTotal - critPenalty)) / 100;
         return critGate(rate);
     };
+    /** Covered footprint enemies' sub-attack-0 crits, rolled early for the DoT block (see its
+     *  `victimCritOf`). The engine's apply takes each one from here instead of rolling again. */
+    const coveredFirstHitCrit = new Map<string, boolean>();
+    /** The per-victim crit resolver handed to the engine's positional apply. */
+    const rollVictimCritForApply = (victim: CombatActor, subAttackIndex?: number): boolean => {
+        if (subAttackIndex === 0) {
+            const early = coveredFirstHitCrit.get(victim.id);
+            if (early !== undefined) {
+                coveredFirstHitCrit.delete(victim.id);
+                return early;
+            }
+        }
+        return rollVictimCrit(victim.affinity ?? 'antimatter');
+    };
     // Per-hit outgoing amplification (Menace/Giant Slayer) on the firing hit only.
     // Sourced from the always-active passive slot. With no amplification ability OR no
     // engine-supplied proc gate, the loop never calls outgoingAmplificationForHit and the
@@ -4464,15 +4480,18 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // fails; its own containers and `dot-applied` (so an inflict reaction fires once per enemy);
     // a Bomb snapshotting the caster's affinity against THAT enemy; and both inflicted-scope
     // extensions over the slice it just received, Valerian's crit-power chance drawn per enemy.
-    // `ctx.roundCrit` is the cast's crit answer — a footprint shares one crit roll — so every
-    // covered enemy reads it.
+    //
+    // Crit is per struck enemy (owner ruling 2026-10-03: Wisteria hitting A, B and C and critting
+    // A alone inflicts her crit Inferno on A alone). A covered enemy's crit-gated DoT effects
+    // (`dot-applied.viaCrit`, which wakes the crit-DoT reactions, and the inflicted-scope
+    // extensions' crit gate) read that enemy's OWN first-hit crit — `victimCritOf` below.
     //
     // Cast-time only, like the primary's Step-3 apply: a multi-hit cast lands its DoTs once,
     // against the cast's footprint, not per sub-attack.
     const coveredDots = new Map<string, DoTApplicationConfig>();
     if (targetId !== undefined) {
         // `dotsFromSkill` maps the skill's `dot` abilities in order, one entry each, so the i-th
-        // entry is the i-th of these.
+        // entry is the i-th of these (tripwire: `dotsFromSkillPairing.corpus.test.ts`).
         const dotAbilities = (gatedSkill?.abilities ?? []).filter(
             (ab) => ab.type === 'dot' && ab.config.type === 'dot'
         );
@@ -4502,6 +4521,23 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             }
         }
     }
+    // Each covered footprint enemy's crit is the one the engine's damage apply uses for it, so the
+    // DoT effects and the hit agree. That apply rolls a covered enemy's crit with `rollVictimCrit`
+    // AFTER this function returns, so the first sub-attack's rolls are taken HERE instead, in the
+    // footprint order the apply walks, and handed to it through `coveredFirstHitCrit` (consumed by
+    // the returned `rollVictimCrit` at sub-attack 0). Same closure, same stream, same order — the
+    // anchor's per-hit draws above, then each covered enemy's — so every crit comes out as it
+    // would have. Only a cast the engine will strike positionally (a damage ability) rolls here.
+    // An enemy outside the footprint (an adjacency splash neighbour) or a cast with no damage
+    // ability has no per-enemy hit, and reads the cast's crit (`ctx.roundCrit`, the primary's).
+    if (coveredDots.size > 0 && positionalLanding && hasDamageAbility) {
+        for (const id of aoeVictimIds ?? []) {
+            if (id === targetId) continue;
+            const v = opposingVictimById?.get(id);
+            if (v) coveredFirstHitCrit.set(id, rollVictimCrit(v.affinity ?? 'antimatter'));
+        }
+    }
+    const victimCritOf = (id: string): boolean => coveredFirstHitCrit.get(id) ?? roundCrit;
     for (const [rid, victimDots] of coveredDots) {
         const victim = opposingVictimById?.get(rid);
         if (!victim) continue;
@@ -4519,6 +4555,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // primary's `*EntriesBefore` describe a different container entirely.
         const splashCorrosionBefore = victim.corrosionEntries.length;
         const splashInfernoBefore = victim.infernoEntries.length;
+        const victimCrit = victimCritOf(rid);
+        const victimCtx: ConditionContext = { ...ctx, roundCrit: victimCrit };
         applyNewDoTs({
             dotsConfig: victimDots,
             effectiveAttack,
@@ -4539,16 +4577,16 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                     dotType,
                     stacks,
                     tier,
-                    ...(critHits > 0 ? { viaCrit: true } : {}),
+                    ...(victimCrit ? { viaCrit: true } : {}),
                     sourceSlot: action,
                 }),
         });
-        // Owner ruling 2026-09-02: a covered enemy's fresh DoT is extended too, and the crit
-        // gate is the cast's — `ctx.roundCrit`. An enemy that resisted `continue`d above and
-        // never reaches these lines.
+        // A covered enemy's fresh DoT is extended too (owner ruling 2026-09-02), its crit gate
+        // reading that enemy's own crit. An enemy that resisted `continue`d above and never
+        // reaches these lines.
         extendInflictedDoTs({
             abilities: [...(firingSkill?.abilities ?? []), ...(passiveSkill?.abilities ?? [])],
-            ctx,
+            ctx: victimCtx,
             effectiveCritDamage,
             extendChanceGate,
             corrosionEntries: victim.corrosionEntries,
@@ -4558,7 +4596,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         });
         extendInflictedStatusDoTs({
             abilities: [...(firingSkill?.abilities ?? []), ...(passiveSkill?.abilities ?? [])],
-            ctx,
+            ctx: victimCtx,
             corrosionEntries: victim.corrosionEntries,
             infernoEntries: victim.infernoEntries,
             corrosionEntriesBefore: splashCorrosionBefore,
@@ -6040,7 +6078,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // The landed half of this turn's scheduled enemy-debuff decision, handed to
         // the engine's per-victim damage read so both consumers share ONE draw.
         scheduledEnemyEffects: scheduledEnemy.roundEnemyDebuffs,
-        rollVictimCrit,
+        rollVictimCrit: rollVictimCritForApply,
         ...(positionalDetonation ? { positionalDetonation } : {}),
         // When the inline emit was SUPPRESSED (engine will resolve positionally), hand the
         // engine the payload to emit post-apply with the true per-victim crit signal. anchor-based

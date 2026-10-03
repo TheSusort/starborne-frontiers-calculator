@@ -2989,7 +2989,9 @@ const DocumentationPage: React.FC = () => {
                                         lands is not shortened by that same hit. Damage over time
                                         (Corrosion, Inferno, Bombs) spreads the same way: every
                                         enemy hit gets its own stacks, and a Bomb uses the
-                                        attacker&apos;s affinity against that enemy.
+                                        attacker&apos;s affinity against that enemy. Crits are per
+                                        enemy too: Wisteria&apos;s crit Inferno and Valerian&apos;s
+                                        crit extension land only on the enemies the hit critted.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Purges:</span> A purge on a
