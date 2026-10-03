@@ -759,8 +759,8 @@ export interface PlayerTurnArgs {
     onHitBreakStasis?: (targetId: string) => void;
     /**
      * The firing skill's footprint victim ids, supplied by the engine in
-     * positional mode. The on-cast purge fans an 'all-enemies' purge over these instead of the
-     * single `targetId`. Absent for non-positional callers → single-anchor.
+     * positional mode. The on-cast purge fans an 'enemy' or 'all-enemies' purge over these
+     * instead of the single `targetId`. Absent for non-positional callers → single-anchor.
      */
     aoeVictimIds?: string[];
     /** Living opposing actors keyed by id — per-victim debuff landing/application in
@@ -4414,8 +4414,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // inside the args.healing gate.
     // conditionsMet() enforces any ability-level gates (e.g. Nayra's target-repaired-this-round
     // condition) so conditional purges only fire when their precondition holds.
-    // An 'all-enemies' purge ability fans over the footprint victims (aoeVictimIds) instead of
-    // just targetId.
+    // An 'enemy' or 'all-enemies' purge fans over the cast's footprint victims (aoeVictimIds)
+    // instead of just targetId.
     if (targetId !== undefined) {
         for (const ab of gatedSkill?.abilities ?? []) {
             if (
@@ -4423,12 +4423,14 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 ab.trigger === 'on-cast' &&
                 conditionsMet(ab.conditions, ctx)
             ) {
-                // E3: an 'all-enemies' purge fans out to EVERY footprint victim (aoeVictimIds,
-                // supplied by the engine in positional mode). Single-'enemy' purges — and any
-                // caller without a footprint (non-positional) — stay on the single anchor
-                // `targetId`. Each victim emits its own purge-performed (Salvation/Sefuba are
-                // victim-scoped). (Amartya's per-victim COUNT scaling is E4; this ships at the
-                // parsed count.)
+                // An 'enemy' or 'all-enemies' purge reaches EVERY enemy the cast strikes: the
+                // footprint victims (aoeVictimIds, supplied by the engine in positional mode from
+                // the same resolver the damage uses). Owner ruling 2026-10-03: "purges N buffs
+                // from the enemy" on a pattern skill purges each struck enemy (Sefuba's active
+                // hitting A, B and C removes a buff from all three). A caller without a footprint
+                // (non-positional) stays on the single anchor `targetId`. Each victim emits its
+                // own purge-performed (Salvation/Sefuba are victim-scoped). The purge count is
+                // per victim.
                 // An 'enemy-most-buffs' purge (Lodolite's charged skill) resolves to the
                 // engine-supplied enemyMostBuffsId instead of the normal positional anchor
                 // (targetId) — the reactive counterpart (Rhodium, end-of-round) resolves this
@@ -4450,10 +4452,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 // and on the two enemy-adjacency scopes (#403, #407).
                 //
                 // THIS purge loop is the one that differs, deliberately: it keeps its anchor
-                // fall-back for an unresolved selector (see the R4 paragraph above). It shares
-                // the resolver and overrides the tail.
+                // fall-back for an unresolved selector (see the R4 paragraph above), and a plain
+                // 'enemy' purge follows the footprint where the debuff resolver keeps the anchor.
                 const recipients =
-                    ab.target === 'all-enemies' && aoeVictimIds
+                    (ab.target === 'all-enemies' || ab.target === 'enemy') && aoeVictimIds
                         ? aoeVictimIds
                         : ab.target === 'enemy-most-buffs' && enemyMostBuffsId !== undefined
                           ? [enemyMostBuffsId]

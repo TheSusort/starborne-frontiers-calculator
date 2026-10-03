@@ -9151,7 +9151,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             const tb = turnBindings(a.side);
             const rt = runtimeFor(a);
             const maxHp = rt.hp; // unified denom (baseHpFor(id) === runtimeFor(id).hp)
-            // AoE purge: footprint victim ids for an 'all-enemies' on-cast purge.
+            // AoE purge: footprint victim ids for an 'enemy'/'all-enemies' on-cast purge.
             // Computed ONLY when positional — `tgt?.position != null` is the positional
             // discriminator: when nothing positional resolved, `selectTurnTarget` returns NO victim
             // at all on EITHER side (#335), so `tgt` is `undefined` here and the optional chain
@@ -9161,8 +9161,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             // enemies. footprintVictims is the same pure resolver the AoE
             // damage path uses; covered cells are included (status removal is uniform across the
             // footprint). Non-positional → undefined → the playerTurn purge loop falls back to
-            // the single anchor. The purge ability gates on
-            // target === 'all-enemies', so single-'enemy' purges ignore this regardless.
+            // the single anchor. An 'enemy' or 'all-enemies' purge fans over it.
             // Charge-aware, mirroring the 3 damage cast sites — an on-cast purge fired
             // from a CHARGED cast (e.g. Lodolite) must expand its footprint from the charged
             // pattern too, not the active one.

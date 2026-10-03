@@ -17,6 +17,7 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator: Meatshield's charged skill now repairs per debuff on herself.",
     "Healing calculator: Oleander's active now repairs more for each debuffed enemy.",
     "Healing calculator: Meatshield's charged skill now repairs per debuff on herself.",
+    'Combat simulator: area-pattern purges now strip buffs from every enemy hit.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
