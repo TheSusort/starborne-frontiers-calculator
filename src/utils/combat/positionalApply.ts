@@ -1,7 +1,11 @@
 import type { Position } from '../../types/encounters';
 import type { ParsedPattern, ParsedTarget } from '../targetingParser';
 import { resolveCells, type CellRole } from '../targeting/resolvePattern';
-import { resolvePositionalTarget, type ActorTargetingStatus } from './positionalBinding';
+import {
+    resolvePositionalTarget,
+    type ActorTargetingStatus,
+    type PositionalActing,
+} from './positionalBinding';
 import {
     victimHitDamageParts,
     victimDefenceMitigation,
@@ -226,7 +230,7 @@ export function applyPositionalDamage(args: {
     /** The live roster; re-read each hit (it mutates as victims die). */
     opposingLiving: CombatActor[];
     statusOf?: (id: string) => ActorTargetingStatus | undefined;
-    acting?: { ignoresForcedTargeting?: boolean; ignoresStealth?: boolean; provokedBy?: string };
+    acting?: PositionalActing;
     defenseProfileOf: (v: CombatActor) => VictimDefenseProfile;
     /**
      * SUB-ATTACK INDEX. Every per-victim callback below

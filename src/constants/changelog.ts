@@ -21,6 +21,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Healing calculator: Sefuba and Tithonus purges now strip every enemy their skills hit.',
     'Combat simulator: Tithonus chains extra actions after purging four or more buffs.',
     'Combat simulator: Opal, Provider and Sefuba drain charges only from enemies they hit.',
+    'Combat simulator: allies pick randomly among several Concentrate Fire targets.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

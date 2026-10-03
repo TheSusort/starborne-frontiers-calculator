@@ -8248,6 +8248,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                         ignoresForcedTargeting: args.ignoresForcedTargeting,
                         ignoresStealth: args.ignoresStealth,
                         provokedBy: provokerOf(statusEngine, args.actingId),
+                        attackerId: args.actingId,
                     },
                     defenseProfileOf: (v) => ({
                         ...victimDefenseProfileOf(v, {
@@ -9157,6 +9158,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                   holdsRoguesLiberty(statusEngine, a.id),
                               ignoresStealth: a.ignoresStealth,
                               provokedBy: provokerOf(statusEngine, a.id),
+                              attackerId: a.id,
                           }
                       )
                     : null;

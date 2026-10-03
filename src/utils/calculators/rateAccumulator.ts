@@ -115,6 +115,13 @@ export function makeRateGate(streamKey?: string): (rate: number) => boolean {
     };
 }
 
+/** One uniform draw in [0, 1) from `streamKey`'s own sub-stream (the shared `rng` when no keyed
+ *  provider is installed) — for a choice that is not a probability gate, such as picking one of
+ *  several candidates. */
+export function drawKeyed(streamKey: string): number {
+    return keyedProvider != null ? keyedProvider(streamKey) : rng();
+}
+
 /** Get-or-create a per-key gate in `gates` and roll it at `chance`. Absent map → pass-through
  *  (true). Backs the engine's per-(owner,ability) proc closures. The per-key map exists for
  *  call-site compatibility; the gates it stores are stateless and draw independently

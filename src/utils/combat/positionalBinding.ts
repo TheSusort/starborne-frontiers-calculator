@@ -2,6 +2,7 @@ import { selectTargets } from '../targeting/selectTargets';
 import { colOf } from '../targeting/board';
 import type { Position } from '../../types/encounters';
 import type { ParsedTarget } from '../targetingParser';
+import { drawKeyed } from '../calculators/rateAccumulator';
 import type { CombatActor } from './state';
 
 /** Per-actor targeting statuses consulted during positional resolution.
@@ -103,13 +104,23 @@ export function resolvesPositionalVictim(
     return !!actorPosition && opposingLiving.some(isTargetableRosterMember);
 }
 
+/** The acting attacker's targeting context for `resolvePositionalTarget`. */
+export interface PositionalActing {
+    ignoresForcedTargeting?: boolean;
+    ignoresStealth?: boolean;
+    provokedBy?: string;
+    /** Keys the Concentrate Fire random pick to this attacker's own RNG stream. */
+    attackerId?: string;
+}
+
 /**
  * Resolve the positional target anchor to a single living CombatActor.
  *
  * When `statusOf` is omitted, or the target is ally-side, no forced-targeting or stealth rule
  * runs — this is the arm the golden fixtures pin. When `statusOf` is supplied
  * AND `target.side === 'enemy'`, forced targeting and stealth run before `selectTargets`:
- *   1. Concentrate Fire (bypasses stealth, never skipped) — force the marked actor (front-most if many).
+ *   1. Concentrate Fire (bypasses stealth, never skipped) — force the marked actor (one picked at
+ *      random when several are marked).
  *   2. Taunt (before stealth) — force the taunting actor (latest tauntAppliedRound else front-most).
  *      Skipped when `acting.ignoresForcedTargeting` is true.
  *   3. Provoke — attacker must target the actor whose id matches `acting.provokedBy`.
@@ -130,7 +141,7 @@ export function resolvePositionalTarget(
     target: ParsedTarget,
     opposingLiving: CombatActor[],
     statusOf?: (id: string) => ActorTargetingStatus | undefined,
-    acting?: { ignoresForcedTargeting?: boolean; ignoresStealth?: boolean; provokedBy?: string }
+    acting?: PositionalActing
 ): CombatActor | null {
     const byCell = new Map<Position, CombatActor>();
     for (const a of opposingLiving) {
@@ -160,9 +171,18 @@ export function resolvePositionalTarget(
         const ignore = acting?.ignoresForcedTargeting;
 
         // 1. Concentrate Fire — bypasses stealth, never skipped (even when ignore is true).
+        //    Several marked actors → one is picked at random from the attacker's keyed stream;
+        //    a single mark draws nothing.
         const concentrated = actors.filter((a) => statusOf(a.id)?.concentrated);
-        if (concentrated.length) {
-            return frontMost(concentrated);
+        if (concentrated.length === 1) {
+            return concentrated[0];
+        }
+        if (concentrated.length > 1) {
+            const ordered = [...concentrated].sort(
+                (x, y) => colOf(y.position!) - colOf(x.position!)
+            );
+            const draw = drawKeyed(`${acting?.attackerId ?? ''}:concentrate-fire-pick`);
+            return ordered[Math.min(ordered.length - 1, Math.floor(draw * ordered.length))];
         }
 
         // 2. Taunt — evaluated before the stealth filter. Skipped when the attacker ignores

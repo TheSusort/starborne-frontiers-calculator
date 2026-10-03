@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { ParsedTarget } from '../targetingParser';
+import { setKeyedRng, setupKeyedRng } from '../calculators/rateAccumulator';
 import {
     isPositional,
     isTargetableRosterMember,
@@ -290,5 +291,64 @@ describe('resolvePositionalTarget — Wave 6 stealth bypass', () => {
     it('target.ignoresStealth (per-cast): the stealthed front-most actor is targeted', () => {
         const target: ParsedTarget = { ...enemyTarget('front'), ignoresStealth: true };
         expect(resolvePositionalTarget('M4', target, enemies, so, {})?.id).toBe('e-front');
+    });
+});
+
+describe('resolvePositionalTarget — several Concentrate Fire carriers', () => {
+    // front = M4 (front-most), mid = M3, back = M1; the first two are marked.
+    const enemies = [actor('front', 'M4'), actor('mid', 'M3'), actor('back', 'M1')];
+    const marked = statusFrom({ front: { concentrated: true }, mid: { concentrated: true } });
+    const pick = (
+        so: (id: string) => ActorTargetingStatus | undefined,
+        attackerId = 'ally-1'
+    ): string | undefined =>
+        resolvePositionalTarget('M4', enemyTarget('front'), enemies, so, { attackerId })?.id;
+
+    it('a keyed draw below one half picks the front-most marked actor, above it the other', () => {
+        const draws = [0.01, 0.99];
+        setKeyedRng(() => draws.shift()!);
+        expect(pick(marked)).toBe('front');
+        expect(pick(marked)).toBe('mid');
+    });
+
+    it('reaches BOTH marked actors across seeded runs, and never an unmarked one', () => {
+        const hit = new Set<string | undefined>();
+        for (let seed = 1; seed <= 40; seed++) {
+            setupKeyedRng(seed);
+            hit.add(pick(marked));
+        }
+        expect(hit).toEqual(new Set(['front', 'mid']));
+    });
+
+    it('draws from the attacker-keyed stream, so two attackers need not agree', () => {
+        const keys: string[] = [];
+        setKeyedRng((key) => {
+            keys.push(key);
+            return 0.5;
+        });
+        pick(marked, 'ally-7');
+        expect(keys).toEqual(['ally-7:concentrate-fire-pick']);
+    });
+
+    it('one marked actor is always that actor and consumes no draw', () => {
+        setKeyedRng(() => {
+            throw new Error('a single mark must not draw');
+        });
+        const one = statusFrom({ back: { concentrated: true } });
+        expect(pick(one)).toBe('back');
+    });
+
+    it('several marked actors still bypass Stealth and Taunt-ignoring', () => {
+        setupKeyedRng(3);
+        const so = statusFrom({
+            front: { concentrated: true, stealthed: true },
+            mid: { concentrated: true, stealthed: true },
+            back: { taunting: true },
+        });
+        const id = resolvePositionalTarget('M4', enemyTarget('front'), enemies, so, {
+            attackerId: 'ally-1',
+            ignoresForcedTargeting: true,
+        })?.id;
+        expect(['front', 'mid']).toContain(id);
     });
 });
