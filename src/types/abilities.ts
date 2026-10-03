@@ -521,6 +521,15 @@ export type ConditionSubject =
     // focus holds a real shieldPool (see `roundStartAttackShield.test.ts`). Defaults to 0 only
     // for contexts that never carry the field at all. Always derivable:true.
     | 'ally-shield-count'
+    // COUNT subject: the number of LIVING OPPOSING units carrying at least one debuff — units,
+    // not debuffs (owner ruling 2026-10-03: enemy A with 3 debuffs + clean enemy B counts 1).
+    // "Debuffed" is the same per-unit read a name-gated `enemy-debuff` condition uses on its
+    // target (named debuffs plus DoT entries), so the two subjects cannot disagree about one
+    // enemy. Used as a SCALING source by Oleander's "8.5% repair for each debuffed enemy".
+    // Live-derived by the combat engine on both sides (ConditionContext.debuffedEnemyCount);
+    // without that field it falls back to 1 when `enemyDebuffCount > 0`, else 0. Always
+    // derivable:true.
+    | 'debuffed-enemy-count'
     // SCALING-SOURCE subject (sub-project I, PR I4a): the ACTING unit's own live crit
     // power (effective critDamage stat, e.g. 150), as a continuous magnitude — not a
     // count of entities like the other scaling sources above. Used by Wildfire's

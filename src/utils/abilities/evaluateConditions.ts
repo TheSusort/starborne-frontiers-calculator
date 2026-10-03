@@ -129,6 +129,12 @@ export interface ConditionContext {
      *  not supply it. The reactive DRAIN ctx (triggers.ts) is one such caller, exactly as it is
      *  for `stealthedEnemyCount` above: neither count reaches a reactive proc today. */
     shieldedAllyCount?: number;
+    /** Count of LIVING OPPOSING units carrying at least one debuff (named debuffs or DoT
+     *  entries), for the `debuffed-enemy-count` subject. Live-derived by the combat engine on
+     *  BOTH sides, in every mode, independent of which unit (if any) the cast is bound to. ABSENT
+     *  means the caller has no roster to count: the subject then reads 1 when the bound enemy
+     *  carries any debuff (`enemyDebuffCount > 0`), else 0. A present `0` is a real reading. */
+    debuffedEnemyCount?: number;
     /** Sub-project I, PR I4a — the ACTING unit's own live crit power (effective critDamage
      *  stat, e.g. 150), a continuous MAGNITUDE scaling source (distinct from every other
      *  scaling source above, which are entity COUNTS). Used by Wildfire's dotDamage-channel
@@ -284,6 +290,9 @@ export function evaluateCondition(cond: Condition, ctx: ConditionContext): numbe
             return ctx.stealthedEnemyCount ?? 0;
         case 'ally-shield-count':
             return ctx.shieldedAllyCount ?? 0;
+        case 'debuffed-enemy-count':
+            if (ctx.debuffedEnemyCount !== undefined) return ctx.debuffedEnemyCount;
+            return (ctx.enemyDebuffCount ?? 0) > 0 ? 1 : 0;
         case 'self-crit-power':
             return ctx.selfCritPower ?? 0;
         // SP-4d: was `?? 1` — a cast that resolved no victim booked a footprint of ONE. Absent now

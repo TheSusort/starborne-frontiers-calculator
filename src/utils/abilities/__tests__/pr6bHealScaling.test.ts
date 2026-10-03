@@ -3,10 +3,10 @@ import { buildShipAbilities } from '../buildShipAbilities';
 import { Ability, Skill } from '../../../types/abilities';
 import { Ship } from '../../../types/ship';
 
-// PR6b — per-count repair scaling. Heal abilities are model-fidelity (no DPS/sim consumer today;
-// they carry the model for the healing calculator), so the per-count repair is recorded as an
-// Ability-level `scaling` rule + a count Condition, mirroring the damage-scaling convention
-// (total = config.pct + perUnit × count). Red tests exercise PRODUCTION slot routing.
+// Per-count repair scaling: the per-count repair is recorded as an Ability-level `scaling` rule +
+// a count Condition, mirroring the damage-scaling convention (total = config.pct + perUnit ×
+// count), and the combat engine's cast-heal pass folds it in. These tests exercise PRODUCTION
+// slot routing; debuffedEnemyCountHealScaling.integration.test.ts covers the engine side.
 
 function ship(over: Partial<Ship>): Ship {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -31,7 +31,34 @@ describe('PR6b heal-scaling', () => {
         expect(heal.config).toMatchObject({ type: 'heal', pct: 100, basis: 'hp' });
         const idx = heal.scaling!.conditionIndex!;
         expect(heal.scaling).toMatchObject({ perUnit: 8.5 });
-        expect(heal.conditions[idx]).toMatchObject({ subject: 'enemy-debuff', derivable: true });
+        expect(heal.conditions[idx]).toEqual({
+            subject: 'debuffed-enemy-count',
+            derivable: true,
+        });
+    });
+
+    it('a damage bonus "for each debuffed enemy" counts debuffed enemy units too', () => {
+        const s = ship({
+            activeSkillText:
+                'This Unit deals <unit-damage>100%</unit-damage> damage, with 10% more damage for each <unit-aid>debuffed</unit-aid> enemy.',
+            chargeSkillCharge: 6,
+        });
+        const mod = slot(buildShipAbilities(s).slots, 'active')!.abilities.find(
+            (a) => a.type === 'modifier'
+        )!;
+        expect(mod.scaling).toMatchObject({ conditionIndex: 0, perUnit: 10 });
+        expect(mod.conditions).toEqual([{ subject: 'debuffed-enemy-count', derivable: true }]);
+    });
+
+    it('"for each debuff on the enemy" keeps counting debuffs on the target', () => {
+        const s = ship({
+            activeSkillText:
+                'This Unit <unit-damage>repairs 10%</unit-damage> of its Max HP, with an additional <unit-damage>5%</unit-damage> repair for each debuff on the enemy.',
+            chargeSkillCharge: 6,
+        });
+        const heal = healOf(slot(buildShipAbilities(s).slots, 'active')!.abilities)!;
+        const idx = heal.scaling!.conditionIndex!;
+        expect(heal.conditions[idx]).toEqual({ subject: 'enemy-debuff', derivable: true });
     });
 
     it('Meatshield charged: 1.5% repair per debuff on itself (pure per-count → base 0)', () => {

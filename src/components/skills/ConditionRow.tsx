@@ -19,6 +19,7 @@ const SUBJECT_VALUES: ConditionSubject[] = [
     'self-debuff',
     'enemy-buff',
     'enemy-debuff',
+    'debuffed-enemy-count',
     'enemy-type',
     'self-crit',
     'adjacent-ally',

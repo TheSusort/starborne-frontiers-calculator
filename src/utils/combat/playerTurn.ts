@@ -716,6 +716,9 @@ export interface PlayerTurnArgs {
      *  absent — no bound target, or a `mode: 'dps'` run — keeps bare `enemy-buff` conditions on
      *  their manual/union fallback. See ConditionContext.enemyBuffCount. */
     enemyBuffCount?: number;
+    /** Living opposing units carrying a debuff, read before the cast. NO default: absent keeps
+     *  the `debuffed-enemy-count` fallback. See ConditionContext.debuffedEnemyCount. */
+    debuffedEnemyCount?: number;
     /** Count (not union) of living opposing actors currently holding
      *  the Stealth self-buff, for this actor's `enemy-stealth-count` scaling condition
      *  (Selenite's "10% more direct damage for every enemy with Stealth"). Same per-turn
@@ -1574,6 +1577,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         enemyBuffNames: enemyBuffNamesArg = [],
         // No default — undefined is the no-target / DPS sentinel (see PlayerTurnArgs doc).
         enemyBuffCount: enemyBuffCountArg,
+        debuffedEnemyCount: debuffedEnemyCountArg,
         stealthedEnemyCount: stealthedEnemyCountArg = 0,
         shieldedAllyCount: shieldedAllyCountArg = 0,
         // No default — undefined is the DPS-parity sentinel (see PlayerTurnArgs doc).
@@ -2313,6 +2317,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         targetRepairedThisRound: targetRepairedThisRoundArg,
         enemyBuffNames: enemyBuffNamesArg,
         enemyBuffCount: enemyBuffCountArg,
+        debuffedEnemyCount: debuffedEnemyCountArg,
         enemyDebuffNames: enemyDebuffNamesArg,
         selfDebuffNames: selfDebuffNamesArg,
         turnsTaken: actor.turnsTaken,
@@ -2858,6 +2863,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         targetRepairedThisRound: targetRepairedThisRoundArg,
         enemyBuffNames: enemyBuffNamesArg,
         enemyBuffCount: enemyBuffCountArg,
+        debuffedEnemyCount: debuffedEnemyCountArg,
         enemyDebuffNames: enemyDebuffNamesArg,
         selfDebuffNames: selfDebuffNamesArg,
         turnsTaken: actor.turnsTaken,
@@ -3015,6 +3021,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         targetRepairedThisRound: targetRepairedThisRoundArg,
         enemyBuffNames: enemyBuffNamesArg,
         enemyBuffCount: enemyBuffCountArg,
+        debuffedEnemyCount: debuffedEnemyCountArg,
         enemyDebuffNames: enemyDebuffNamesArg,
         selfDebuffNames: selfDebuffNamesArg,
         selfShielded: actor.shieldPool > 0,
@@ -3371,6 +3378,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         targetRepairedThisRound: targetRepairedThisRoundArg,
         enemyBuffNames: enemyBuffNamesArg,
         enemyBuffCount: enemyBuffCountArg,
+        debuffedEnemyCount: debuffedEnemyCountArg,
         enemyDebuffNames: enemyDebuffNamesArg,
         selfDebuffNames: selfDebuffNamesArg,
         // Thread the acting actor's live own-turn counter so cast-path `every-n-turns` gates
@@ -5098,6 +5106,15 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 const cfg = ability.config;
                 if (cfg.type === 'heal') {
                     const recipients = recipientsFor(ability, fromPassive);
+                    // A per-count repair ("an additional 8.5% repair for each debuffed enemy")
+                    // adds its scaled bonus to the base pct, read at the ability's position in
+                    // the cast like a scaled damage bonus.
+                    const healPct =
+                        cfg.pct +
+                        scaledBonus(
+                            ability,
+                            (fromPassive ? passiveCtxFor : ctxFor).get(ability.id) ?? ctx
+                        );
                     if (healEventOnly) {
                         // E5 §4.1: enemy heals restore each recipient's OWN currentHp (via the
                         // per-victim pool), fire repairedThisRound, and emit heal-performed — but
@@ -5108,7 +5125,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                             const basis = basisValue(cfg.basis, rid);
                             let raw =
                                 basis *
-                                (cfg.pct / 100) *
+                                (healPct / 100) *
                                 (didCrit ? 1 + effectiveCritDamage / 100 : 1) *
                                 (1 + healModifier / 100) *
                                 (1 + dmgStats.totals.outgoingHealBuff / 100) *
@@ -5199,7 +5216,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                         const basis = basisValue(cfg.basis, rid);
                         let raw =
                             basis *
-                            (cfg.pct / 100) *
+                            (healPct / 100) *
                             (didCrit ? 1 + effectiveCritDamage / 100 : 1) *
                             (1 + healModifier / 100) *
                             (1 + dmgStats.totals.outgoingHealBuff / 100) *

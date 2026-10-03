@@ -9371,6 +9371,13 @@ export function runCombat(rawInput: CombatEngineInput): {
                 ...(tgt && liveCountsMeasurable
                     ? { enemyBuffCount: selfBuffNamesForOwners(statusEngine, [tgt.id]).length }
                     : {}),
+                // Living opposing units carrying a debuff, by the same per-unit read as
+                // `enemyDebuffNames` above. Supplied whether or not the cast binds a victim (an
+                // ally-targeted cast binds none) and in every mode: the debuffs on a DPS run's
+                // enemy are real, so its count is a measurement.
+                debuffedEnemyCount: aliveOpposing().filter(
+                    (v) => enemyDebuffNamesForTarget(v).length > 0
+                ).length,
                 selfDebuffNames: ownerDebuffNames(a.id),
                 ...(aoeVictimIds ? { aoeVictimIds } : {}),
                 ...(opposingVictimById ? { opposingVictimById } : {}),

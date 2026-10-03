@@ -4726,9 +4726,10 @@ function resolveHealTarget(sentence: string): {
 // Maps a heal "for each <phrase>" count to a model Condition (derivable counts only).
 function mapHealCountPhrase(phrase: string): Condition | null {
     const p = phrase.toLowerCase();
-    // Order: "debuff" contains "buff"; enemy phrasings before self.
-    if (/debuffed\s+enem|debuff on (?:the\s+)?enem/.test(p))
-        return { subject: 'enemy-debuff', derivable: true };
+    // Order: "debuff" contains "buff"; enemy phrasings before self. "each debuffed enemy"
+    // counts enemy UNITS; "each debuff on the enemy" counts debuffs on the target.
+    if (/debuffed\s+enem/.test(p)) return { subject: 'debuffed-enemy-count', derivable: true };
+    if (/debuff on (?:the\s+)?enem/.test(p)) return { subject: 'enemy-debuff', derivable: true };
     if (/debuff on (?:this unit|itself|it)\b/.test(p))
         return { subject: 'self-debuff', derivable: true };
     return null;

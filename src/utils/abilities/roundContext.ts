@@ -55,6 +55,9 @@ export function buildRoundContext(state: {
      *  bare `enemy-buff` conditions to their manual/union fallback; see
      *  ConditionContext.enemyBuffCount. */
     enemyBuffCount?: number;
+    /** Living opposing units carrying a debuff. Passed through with NO default — see
+     *  ConditionContext.debuffedEnemyCount. */
+    debuffedEnemyCount?: number;
     /** Sub-project I, PR I1 — NAMES on the opposing (primary) target, for name-specific
      *  `enemy-debuff` gates. SENTINEL: leave `undefined` (do NOT pass `[]`) to keep the legacy
      *  name-agnostic `enemyDebuffCount` path — this is the DPS-parity invariant (the DPS
@@ -258,5 +261,8 @@ export function buildRoundContext(state: {
         // supplied a real roster array, so absence keeps `ally-on-team`'s assume-met fallback.
         ...(state.allyTeamNames !== undefined ? { allyTeamNames: state.allyTeamNames } : {}),
         ...(state.enemyBuffCount !== undefined ? { enemyBuffCount: state.enemyBuffCount } : {}),
+        ...(state.debuffedEnemyCount !== undefined
+            ? { debuffedEnemyCount: state.debuffedEnemyCount }
+            : {}),
     };
 }

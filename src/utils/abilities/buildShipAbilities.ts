@@ -388,6 +388,9 @@ function forEachCondition(sentence: string): Condition | null {
     if (/^all(?:y|ies)\b.*\bshield\b/.test(what.trim()))
         return { subject: 'ally-shield-count', derivable: true };
     if (/destroy/.test(what)) return { subject: 'enemy-destroyed', derivable: false };
+    // "for each debuffed enemy" counts enemy UNITS, as the heal parser's mapHealCountPhrase does.
+    if (/^debuffed\s+enem/.test(what.trim()))
+        return { subject: 'debuffed-enemy-count', derivable: true };
     // Enemy DEBUFF counts ARE sim-derivable (landed debuffs + DoT entries per round) —
     // matches mapConditionPhrase; enemy BUFF counts below are not (manual).
     if (/debuff/.test(what) && /enem|target/.test(what))

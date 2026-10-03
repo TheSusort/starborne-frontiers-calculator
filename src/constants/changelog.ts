@@ -13,6 +13,9 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator: Nuqtu's extra action now reads only its target's buffs.",
     'Combat simulator: per-buff damage bonuses now count the buffs on the target.',
     "DPS calculator: Nuqtu's bonus charges now need three or more enemy buffs set.",
+    "Combat simulator: Oleander's active repair now grows with each debuffed enemy.",
+    "Combat simulator: Meatshield's charged skill now repairs per debuff on herself.",
+    "Healing calculator: Oleander's and Meatshield's per-debuff repair bonuses now apply.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

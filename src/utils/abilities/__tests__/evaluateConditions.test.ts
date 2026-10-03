@@ -125,6 +125,40 @@ describe('evaluateCondition', () => {
         });
     });
 
+    describe("'debuffed-enemy-count' counts debuffed enemy units", () => {
+        const debuffedEnemies = cond({ subject: 'debuffed-enemy-count', derivable: true });
+
+        it('the live count wins, including a real 0', () => {
+            expect(
+                evaluateCondition(
+                    debuffedEnemies,
+                    makeConditionContext({ debuffedEnemyCount: 2, enemyDebuffCount: 5 })
+                )
+            ).toBe(2);
+            expect(
+                evaluateCondition(
+                    debuffedEnemies,
+                    makeConditionContext({ debuffedEnemyCount: 0, enemyDebuffCount: 5 })
+                )
+            ).toBe(0);
+        });
+
+        it('no live count (DPS) → 1 when the enemy carries any debuff, else 0', () => {
+            expect(
+                evaluateCondition(debuffedEnemies, makeConditionContext({ enemyDebuffCount: 3 }))
+            ).toBe(1);
+            expect(
+                evaluateCondition(debuffedEnemies, makeConditionContext({ enemyDebuffCount: 0 }))
+            ).toBe(0);
+            expect(
+                evaluateCondition(
+                    debuffedEnemies,
+                    makeConditionContext({ enemyDebuffCount: undefined })
+                )
+            ).toBe(0);
+        });
+    });
+
     it("'enemy-buff' by name is 1 when present, else 0", () => {
         expect(
             evaluateCondition(

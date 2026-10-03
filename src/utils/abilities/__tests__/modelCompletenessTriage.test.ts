@@ -948,7 +948,7 @@ describe('confirm-GREEN-only — locked FPs', () => {
         expect(buff?.conditions).toEqual([]);
         const heal = abilities.find((a) => a.type === 'heal');
         expect(heal?.scaling?.perUnit).toBe(8.5);
-        expect(heal?.conditions.some((c) => c.subject === 'enemy-debuff')).toBe(true);
+        expect(heal?.conditions.some((c) => c.subject === 'debuffed-enemy-count')).toBe(true);
     });
 
     // ── Valkyrie: the passive's "Echoing Burst explodes" REFERENCE is parser-guard-filtered ──
