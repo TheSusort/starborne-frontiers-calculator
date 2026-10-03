@@ -107,11 +107,6 @@ export type AbilityTarget =
     // Resolved via adjacentAllyIdsFor(anchorId) with the enemy TARGET as anchor.
     | 'target-and-adjacent-enemies' // the anchor (primary target) PLUS its adjacent enemies.
     | 'enemy'
-    // The cast's bound target ONLY — never the other enemies its pattern strikes. Emitted for an
-    // on-cast enemy clause whose text narrows it to one enemy: "the primary target", "that enemy",
-    // "the targeted enemy" (see `markPrimaryEnemyScoped` in buildShipAbilities.ts). Resolves to
-    // the cast anchor wherever plain `'enemy'` does.
-    | 'primary-enemy'
     | 'all-enemies'
     | 'enemy-most-buffs'
     | 'enemy-highest-attack' // D-PR14 Doomsayer: living opposing actor with the greatest

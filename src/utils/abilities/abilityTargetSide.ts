@@ -28,7 +28,6 @@ export const ABILITY_TARGET_SIDE: Record<AbilityTarget, 'self' | 'enemy'> = {
     'lowest-hp-ally': 'self',
     'adjacent-allies': 'self',
     enemy: 'enemy',
-    'primary-enemy': 'enemy',
     'all-enemies': 'enemy',
     // Enemy-side debuffs scoped to the resolved target's board neighbours, not self buffs.
     'adjacent-enemies': 'enemy',
@@ -73,7 +72,6 @@ export const ABILITY_TARGET_ENEMY_SCOPE: Record<AbilityTarget, 'all' | 'subset' 
     // The one board-wide enemy scope: every opposing actor is a recipient by definition.
     'all-enemies': 'all',
     enemy: 'subset',
-    'primary-enemy': 'subset',
     // Positional scopes: the footprint comes from the anchor's neighbours, so which enemies are
     // covered is not knowable at registration time.
     'adjacent-enemies': 'subset',
@@ -124,7 +122,6 @@ export const ABILITY_TARGET_SELECTOR: Record<AbilityTarget, EnemySelectorKind | 
     'lowest-hp-ally': null,
     'adjacent-allies': null,
     enemy: null,
-    'primary-enemy': null,
     'all-enemies': null,
     // Board-neighbour scopes are enemy-side but POSITIONAL, not selected — the footprint comes
     // from the anchor's neighbours, not from a global "highest X" search.

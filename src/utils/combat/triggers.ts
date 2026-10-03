@@ -4167,7 +4167,6 @@ export const CHARGE_TARGET_KIND: Record<AbilityTarget, ChargeTargetKind> = {
     // KNOWN GAP, deliberately unwidened here — see the doc comment above.
     'adjacent-allies': 'owner-gain',
     enemy: 'enemy-bulk',
-    'primary-enemy': 'enemy-bulk',
     'all-enemies': 'enemy-bulk',
     // KNOWN GAP, deliberately unwidened here — see the doc comment above.
     'adjacent-enemies': 'owner-gain',

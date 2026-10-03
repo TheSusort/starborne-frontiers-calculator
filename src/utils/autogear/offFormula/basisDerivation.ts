@@ -20,9 +20,7 @@ export interface DerivedBasis {
 
 /** Charge abilities targeted at somebody else do not bank toward this ship's charged skill. */
 const OWN_TARGETED = (target: string): boolean =>
-    !['ally', 'all-allies', 'lowest-hp-ally', 'enemy', 'primary-enemy', 'all-enemies'].includes(
-        target
-    );
+    !['ally', 'all-allies', 'lowest-hp-ally', 'enemy', 'all-enemies'].includes(target);
 
 /**
  * Own-targeted `type: 'charge'` amounts summed over the named slots, counting every matching
