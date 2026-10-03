@@ -12,6 +12,7 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator: Nuqtu's active charges now need a target with three or more buffs.",
     "Combat simulator: Nuqtu's extra action now reads only its target's buffs.",
     'Combat simulator: per-buff damage bonuses now count the buffs on the target.',
+    "DPS calculator: Nuqtu's bonus charges now need three or more enemy buffs set.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

@@ -383,6 +383,50 @@ describe.skipIf(!hasReferenceData())('single-ship DPS mode keeps the manual coun
     });
 });
 
+describe.skipIf(!hasReferenceData())(
+    "single-ship DPS mode gates Nuqtu's +2 on the manual count",
+    () => {
+        /** Nuqtu's real active with the user's manual count set on its charge condition (unset =
+         *  the calculator's default of 1). */
+        const nuqtuDpsChargeGain = (manualCount?: number): number => {
+            const shipSkills: ShipSkills = {
+                slots: [
+                    {
+                        slot: 'active',
+                        abilities: realSlot('Nuqtu', 'active').map((a) =>
+                            a.type === 'charge' && manualCount !== undefined
+                                ? {
+                                      ...a,
+                                      conditions: a.conditions.map((c) => ({ ...c, manualCount })),
+                                  }
+                                : a
+                        ),
+                    },
+                    { slot: 'charged', abilities: realSlot('Nuqtu', 'charged') },
+                ],
+            };
+            // `mode: 'dps'` forbids healTargetId (runCombat throws), so it is dropped.
+            const { healTargetId: _drop, ...rest } = base({
+                shipSkills,
+                hasChargedSkill: true,
+                chargeCount: 10,
+                // Four live buffs: a live read would satisfy the 3+ gate, so only the manual count
+                // can explain a 0.
+                enemyAttackers: [buffedEnemy('target', 'M4', distinct(4))],
+            });
+            return measure({ ...rest, mode: 'dps' }, 'attacker').chargeGain;
+        };
+
+        it('default manual count (1) → no bonus charges', () => {
+            expect(nuqtuDpsChargeGain()).toBe(0);
+        });
+
+        it('manual count of 3 → +2 charges', () => {
+            expect(nuqtuDpsChargeGain(3)).toBe(2);
+        });
+    }
+);
+
 describe('an AoE per-buff outgoing modifier reads each victim its own count', () => {
     /** A self outgoing-damage modifier worth +10% per buff on the enemy, beside a 100% AoE hit. */
     const perBuffAoeKit = (): ShipSkills => ({

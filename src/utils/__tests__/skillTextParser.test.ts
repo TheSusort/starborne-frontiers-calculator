@@ -1828,6 +1828,7 @@ describe('parseChargeGain', () => {
         const text =
             'If the target has 3 or more buffs, this Unit gains <unit-skill>Core Charge I</unit-skill>. This Unit <unit-aid>adds 2 charges</unit-aid> to its charged skill.';
         expect(parseChargeGain(text)?.conditions).toBeUndefined();
+        expect(parseChargeGain(text)?.condition).toBe('always');
     });
 
     it('parses "equal to the number of buffs" per-buff gain — Rhodium', () => {

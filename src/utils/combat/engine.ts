@@ -3346,12 +3346,16 @@ export function runCombat(rawInput: CombatEngineInput): {
         let bonus = 0;
         for (const entry of gated) {
             if (entry.abilities.length === 0) continue;
+            const victimBuffNames = selfBuffNamesForOwners(statusEngine, [victim.id]);
             const victimCtx: ConditionContext = {
                 ...entry.ctx,
                 ...(entry.ctx.enemyDebuffNames !== undefined
                     ? { enemyDebuffNames: enemyDebuffNamesForTarget(victim) }
                     : {}),
-                enemyBuffNames: selfBuffNamesForOwners(statusEngine, [victim.id]),
+                enemyBuffNames: victimBuffNames,
+                ...(entry.ctx.enemyBuffCount !== undefined
+                    ? { enemyBuffCount: victimBuffNames.length }
+                    : {}),
             };
             bonus += modifierTotalsFromAbilities(entry.abilities, victimCtx).dotDamage;
         }
