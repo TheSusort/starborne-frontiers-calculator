@@ -2892,7 +2892,7 @@ describe('parseExtraAction', () => {
         });
     });
 
-    it('Tygr: enemy-debuff presence approximation, once per round', () => {
+    it('Tygr: enemy carries the named Stasis, once per round', () => {
         const r = parseExtraAction(
             "This Unit's attacks do not break <unit-skill>Stasis</unit-skill> and deal 30% more damage to enemies with <unit-skill>Stasis</unit-skill> or <unit-skill>Disable</unit-skill>. After damaging an enemy affected by <unit-skill>Stasis</unit-skill>, once per round, give one extra action."
         );
@@ -2903,6 +2903,7 @@ describe('parseExtraAction', () => {
                 {
                     subject: 'enemy-debuff',
                     derivable: true,
+                    buffName: 'Stasis',
                     countComparator: 'gte',
                     countThreshold: 1,
                 },

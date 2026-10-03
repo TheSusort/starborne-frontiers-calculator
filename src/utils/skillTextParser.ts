@@ -4234,6 +4234,10 @@ const EXTRA_ACTION_ALLY_DESTROYED_RE = /ally is destroyed/i;
 // penetration in a sibling clause and must not fire an action.
 const EXTRA_ACTION_SELF_RESIST_RE = /\bwhen\s+this\s+unit\s+resists?\s+a\s+debuff\b/i;
 
+// "an enemy affected by <Status>" — one status name, up to the clause's next comma or period.
+const ENEMY_AFFECTED_BY_STATUS_RE =
+    /\benem(?:y|ies)\s+affected by\s+([A-Za-z][^,.]*?)\s*(?:,|\.|$)/i;
+
 // "gains/grants (itself) one|1|a|an extra (End Of Round) action" — incl. Tygr's
 // imperative "give one extra action". Lookbehind-free.
 const EXTRA_ACTION_RE =
@@ -4298,13 +4302,15 @@ export function parseExtraAction(text: string | null | undefined): ExtraActionPa
             hpSubject: 'self',
         });
     }
-    // Tygr: "After damaging an enemy affected by Stasis" — approximated as
-    // enemy-has-any-debuff (enemy-debuff conditions are name-agnostic by design in
-    // evaluateCondition — a buffName is not a filter there).
-    if (/affected by stasis/i.test(clause)) {
+    // "After damaging an enemy affected by <Status>" (Tygr): the struck enemy must carry the NAMED
+    // status. evaluateCondition's enemy-debuff arm counts by name when the caller supplies
+    // per-target debuff names and falls back to the total debuff count when it does not.
+    const affectedBy = ENEMY_AFFECTED_BY_STATUS_RE.exec(clause);
+    if (affectedBy) {
         conditions.push({
             subject: 'enemy-debuff',
             derivable: true,
+            buffName: affectedBy[1].trim(),
             countComparator: 'gte',
             countThreshold: 1,
         });
