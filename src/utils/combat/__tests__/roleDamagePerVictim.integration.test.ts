@@ -489,7 +489,7 @@ describe('an enemy caster reads each struck player ship the same way', () => {
             hasChargedSkill: false,
         },
     });
-    const enemyCaster = (ship: string, slot: Slot): EnemyAttacker => ({
+    const enemyCaster = (ship: string, slot: Slot, withPassive = false): EnemyAttacker => ({
         id: 'enemy-caster',
         stats: {
             attack: ATTACK,
@@ -499,20 +499,24 @@ describe('an enemy caster reads each struck player ship the same way', () => {
             hp: 1e9,
             speed: 10,
             security: 0,
+            // No debuff lands ahead of the hit (Zeolite's charged Inc. Damage Up III), like the
+            // player-side caster's.
+            hacking: 0,
         },
         chargeCount: slot === 'charged' ? 1 : 0,
         startCharged: slot === 'charged',
         position: 'M4',
         target: parseTarget('front'),
         pattern: cone(),
-        shipSkills: realKit(ship, slot),
+        shipSkills: realKit(ship, slot, withPassive),
     });
     const run = (
         ship: string,
         slot: Slot,
         focusRole: ShipTypeName,
         bRole: ShipTypeName,
-        cRole: ShipTypeName
+        cRole: ShipTypeName,
+        withPassive = false
     ): Record<string, number> =>
         percentByVictim(
             base({
@@ -520,7 +524,7 @@ describe('an enemy caster reads each struck player ship the same way', () => {
                 speed: 150,
                 role: focusRole,
                 teamActors: [ally('ally-b', 'M3', bRole), ally('ally-c', 'T3', cRole)],
-                enemyAttackers: [enemyCaster(ship, slot)],
+                enemyAttackers: [enemyCaster(ship, slot, withPassive)],
             }),
             'enemy-caster'
         );
@@ -547,6 +551,67 @@ describe('an enemy caster reads each struck player ship the same way', () => {
             'ally-b': 375,
             'ally-c': 250,
         });
+    });
+
+    it('Zeolite charged (+30% vs defenders): attacker focus, defender B, attacker C → 190 / 247 / 190', () => {
+        expect(run('Zeolite', 'charged', 'ATTACKER', 'DEFENDER', 'ATTACKER', true)).toEqual({
+            attacker: 190,
+            'ally-b': 247,
+            'ally-c': 190,
+        });
+    });
+
+    it('Thresh active: a defender focus loses a charge to enemy Thresh', () => {
+        const bus = createEventBus();
+        const out: Record<string, number> = {};
+        bus.on('charge-changed', (e: Extract<CombatEvent, { type: 'charge-changed' }>) => {
+            if (e.round !== 1 || e.reason !== 'manip') return;
+            out[e.actorId] = (out[e.actorId] ?? 0) + (e.newCharge - e.oldCharge);
+        });
+        runCombat({
+            ...base({
+                attack: 0,
+                // Slower than enemy Thresh, so its full charge bar is still there when he acts.
+                speed: 5,
+                role: 'DEFENDER',
+                chargeCount: 3,
+                hasChargedSkill: true,
+                startCharged: true,
+                shipSkills: {
+                    slots: [
+                        { slot: 'active', abilities: [] },
+                        { slot: 'charged', abilities: [] },
+                    ],
+                },
+                enemyAttackers: [
+                    {
+                        id: 'enemy-thresh',
+                        stats: {
+                            attack: ATTACK,
+                            crit: 0,
+                            critDamage: 0,
+                            defence: 0,
+                            hp: 1e9,
+                            speed: 10,
+                            security: 0,
+                        },
+                        chargeCount: 2,
+                        startCharged: false,
+                        position: 'M4',
+                        target: parseTarget('front'),
+                        pattern: parsePattern('Pattern-Base'),
+                        shipSkills: {
+                            slots: [
+                                ...realKit('Thresh', 'active').slots,
+                                ...realKit('Thresh', 'charged').slots,
+                            ],
+                        },
+                    },
+                ],
+            }),
+            bus,
+        });
+        expect(out).toEqual({ 'enemy-thresh': 1, attacker: -1 });
     });
 });
 
