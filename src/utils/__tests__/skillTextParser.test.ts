@@ -1806,14 +1806,29 @@ describe('parseChargeGain', () => {
         expect(result?.trigger).toBeUndefined();
     });
 
-    it('parses enemy-buff threshold gain (manual) — Nuqtu', () => {
+    it('parses enemy-buff threshold gain (manual, gte 3) — Nuqtu', () => {
         const text =
             'If the target has 3 or more buffs, the Unit <unit-aid>gains 2 charges</unit-aid> to its Charged Skill.';
         expect(parseChargeGain(text)).toEqual({
             amount: 2,
-            condition: 'enemy-buff',
-            derivable: false,
+            condition: 'always',
+            derivable: true,
+            conditions: [
+                {
+                    subject: 'enemy-buff',
+                    derivable: false,
+                    countComparator: 'gte',
+                    countThreshold: 3,
+                },
+            ],
         });
+    });
+
+    it("reads the threshold from the charge's own sentence only", () => {
+        const text =
+            'If the target has 3 or more buffs, this Unit gains <unit-skill>Core Charge I</unit-skill>. This Unit <unit-aid>adds 2 charges</unit-aid> to its charged skill.';
+        expect(parseChargeGain(text)?.conditions).toBeUndefined();
+        expect(parseChargeGain(text)?.condition).toBe('always');
     });
 
     it('parses "equal to the number of buffs" per-buff gain — Rhodium', () => {
@@ -2892,7 +2907,7 @@ describe('parseExtraAction', () => {
         });
     });
 
-    it('Tygr: enemy-debuff presence approximation, once per round', () => {
+    it('Tygr: enemy carries the named Stasis, once per round', () => {
         const r = parseExtraAction(
             "This Unit's attacks do not break <unit-skill>Stasis</unit-skill> and deal 30% more damage to enemies with <unit-skill>Stasis</unit-skill> or <unit-skill>Disable</unit-skill>. After damaging an enemy affected by <unit-skill>Stasis</unit-skill>, once per round, give one extra action."
         );
@@ -2903,6 +2918,7 @@ describe('parseExtraAction', () => {
                 {
                     subject: 'enemy-debuff',
                     derivable: true,
+                    buffName: 'Stasis',
                     countComparator: 'gte',
                     countThreshold: 1,
                 },
@@ -2936,12 +2952,24 @@ describe('parseExtraAction', () => {
         });
     });
 
-    it('disqualified: Tithonus purge-count', () => {
+    it('Tithonus: gated on the buffs one skill purges, chainable, no once-per-round', () => {
         expect(
             parseExtraAction(
-                'This Unit <unit-aid>gains 1 extra action</unit-aid> after it <unit-aid>purges</unit-aid> at least 4 <unit-aid>buffs</unit-aid> with a single skill.'
+                'This Unit <unit-skill>gains 1 extra action</unit-skill> after it <unit-skill>purges</unit-skill> at least 4 <unit-aid>buffs</unit-aid> with a single skill.'
             )
-        ).toBeNull();
+        ).toEqual({
+            oncePerRound: false,
+            chains: true,
+            endOfRound: false,
+            conditions: [
+                {
+                    subject: 'buffs-purged-this-cast',
+                    derivable: true,
+                    countComparator: 'gte',
+                    countThreshold: 4,
+                },
+            ],
+        });
     });
 
     it('no false positive on unrelated text', () => {

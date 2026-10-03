@@ -496,6 +496,7 @@ exports[`kit fingerprints > Chakara 1`] = `
     "attack",
     "attack:active",
     "charge-changed",
+    "purge",
     "purge:charged",
   ],
   "wounded": [
@@ -2093,6 +2094,7 @@ exports[`kit fingerprints > Meatshield 1`] = `
     "charge-changed",
     "dot-ticked",
     "heal",
+    "heal:charged",
   ],
   "wounded": [
     "buff:active",
@@ -2423,11 +2425,11 @@ exports[`kit fingerprints > Obsidian 1`] = `
   ],
   "statusRich": [
     "attack",
-    "attack:active",
     "attack:charged",
     "buff",
     "buff-expired",
     "charge-changed",
+    "purge",
     "purge:active",
   ],
   "wounded": [
@@ -3209,10 +3211,10 @@ exports[`kit fingerprints > Sefuba 1`] = `
   ],
   "statusRich": [
     "attack",
-    "attack:active",
     "attack:charged",
     "charge-changed",
     "heal",
+    "purge",
     "purge:active",
   ],
   "wounded": [
@@ -3625,6 +3627,7 @@ exports[`kit fingerprints > Tithonus 1`] = `
     "buff-expired",
     "charge-changed",
     "heal",
+    "purge",
     "purge:active",
     "steal:charged",
   ],

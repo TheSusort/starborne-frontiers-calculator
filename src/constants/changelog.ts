@@ -6,7 +6,21 @@ export const CURRENT_VERSION = '1.73.0';
 // top of CHANGELOG, bumps CURRENT_VERSION and empties this array — all three together, because a
 // bumped version whose entries are still unreleased shows users a what's-new dialog listing
 // nothing. Do it by hand only if that script cannot.
-export const UNRELEASED_CHANGES: string[] = [];
+export const UNRELEASED_CHANGES: string[] = [
+    "Combat simulator: Tygr's extra action now needs a Stasis target.",
+    "Combat simulator: Rhodium's active now adds one charge per buff on its target.",
+    "Combat simulator: Nuqtu's active charges now need a target with three or more buffs.",
+    "Combat simulator: Nuqtu's extra action now reads only its target's buffs.",
+    "Combat simulator: per-buff damage bonuses now count each struck enemy's own buffs.",
+    "DPS calculator: Nuqtu's bonus charges now need three or more enemy buffs set.",
+    "Combat simulator: Oleander's active repair now grows with each debuffed enemy.",
+    "Combat simulator: Meatshield's charged skill now repairs per debuff on herself.",
+    "Healing calculator: Oleander's active now repairs more for each debuffed enemy.",
+    "Healing calculator: Meatshield's charged skill now repairs per debuff on herself.",
+    'Combat simulator: area-pattern purges now strip buffs from every enemy hit.',
+    'Healing calculator: Sefuba and Tithonus purges now strip every enemy their skills hit.',
+    'Combat simulator: Tithonus chains extra actions after purging four or more buffs.',
+];
 
 export const CHANGELOG: ChangelogEntry[] = [
     {

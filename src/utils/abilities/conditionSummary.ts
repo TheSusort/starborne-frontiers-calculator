@@ -43,6 +43,8 @@ export const CONDITION_SUBJECT_LABELS: Partial<Record<ConditionSubject, string>>
     'every-n-turns': 'on a recurring turn interval',
     'stat-vs-target': "when a stat compares favourably to the target's",
     'ally-shield-count': 'per ally with a shield',
+    'debuffed-enemy-count': 'per debuffed enemy',
+    'buffs-purged-this-cast': 'per buff this skill purges',
 };
 
 /** Human-facing name for `Condition.hpSubject`. 'self' is deliberately absent — it
@@ -92,6 +94,8 @@ const countThresholdPhrase = (
             return `while ${comparatorWord} ${n} ${plural ? 'units are' : 'unit is'} adjacent to the enemy`;
         case 'enemy-destroyed':
             return `while ${comparatorWord} ${n} ${plural ? 'enemies have' : 'enemy has'} been destroyed`;
+        case 'buffs-purged-this-cast':
+            return `after this skill purges ${comparatorWord} ${n} ${plural ? 'buffs' : 'buff'}`;
         default:
             return undefined;
     }

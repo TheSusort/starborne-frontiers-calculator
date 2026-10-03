@@ -910,11 +910,12 @@ function classifyChargeCondition(
     if (
         p.includes('buffs on the target') ||
         p.includes('buff on the target') ||
-        p.includes('or more buffs') ||
         p.includes('buffs on the enemy') ||
         p.includes('number of buffs')
     )
         return { condition: 'enemy-buff', derivable: false };
+    // NOTE: "N or more buffs" threshold phrasings (Nuqtu) are handled upstream in parseChargeGain
+    // as an `enemy-buff` count gate on the charge's own sentence.
     // NOTE: "N or more enemies" / "damages N" hit-count phrasings (Tygr) are handled upstream
     // in parseChargeGain via hitCountConditionFromClause + the `conditions` escape hatch (SP-D)
     // — they used to fall through to a coarse 'enemy-adjacent' presence proxy here, which never
@@ -4128,6 +4129,20 @@ export function parseChargeGain(text: string | null | undefined): ChargeGain | n
         return { amount, condition: 'always', derivable: true, conditions: [hitCount] };
     }
 
+    // "If the target has 3 or more buffs, this Unit adds 2 charges …" (Nuqtu): a threshold on the
+    // bound target's buff count, read from the charge's own sentence. The amount is granted once
+    // when the threshold is met, never once per buff. `derivable:false` keeps the single-ship DPS
+    // calculator on the user's manual count.
+    const buffGate = countGateCondition(rawSentenceAround(plain, m.index) ?? '');
+    if (buffGate?.subject === 'enemy-buff' && buffGate.countComparator === 'gte') {
+        return {
+            amount,
+            condition: 'always',
+            derivable: true,
+            conditions: [{ ...buffGate, derivable: false }],
+        };
+    }
+
     const { condition, derivable, requiredEnemyType } = classifyChargeCondition(plain);
     return {
         amount,
@@ -4217,12 +4232,18 @@ export function parseAllyChargeGrant(
 
 // --- Extra actions ("extra End Of Round Action" / "extra action") --------------------
 
-// Phrasings we deliberately DO NOT parse (annotation-only seams): purge-count (purges
-// are not modeled — Tithonus stays disqualified). The enemy-death / ally-destroyed phrasings
-// are MODELED as death-triggered extra actions (EXTRA_ACTION_ENEMY_DESTROYED_RE /
-// EXTRA_ACTION_ALLY_DESTROYED_RE below), NOT disqualified. The user can still add a disqualified
-// ability manually in the editor. Reference: docs/ship-skills.csv (Sokol, Harvester, Tithonus).
+// Phrasings we deliberately DO NOT parse (annotation-only seams): any purge wording other than
+// the purge-count gate below. The enemy-death / ally-destroyed phrasings are MODELED as
+// death-triggered extra actions (EXTRA_ACTION_ENEMY_DESTROYED_RE / EXTRA_ACTION_ALLY_DESTROYED_RE
+// below), NOT disqualified. The user can still add a disqualified ability manually in the editor.
+// Reference: docs/ship-skills.csv (Sokol, Harvester, Tithonus).
 const EXTRA_ACTION_DISQUALIFY_RE = /\bpurg/i;
+
+// Tithonus: "after it purges at least N buffs with a single skill" — a count of the buffs one cast
+// purges (steals excluded), gated after that cast's purges resolve. See the
+// `buffs-purged-this-cast` subject.
+const EXTRA_ACTION_PURGE_COUNT_RE =
+    /\bpurges?\s+at\s+least\s+(\d+)\s+buffs?\s+with\s+a\s+single\s+skill\b/i;
 
 // Death-trigger detection on the matched clause: an enemy-death phrasing (Sokol and Liberator
 // "When an enemy is destroyed") → on-enemy-destroyed; an ally-destroyed phrasing (Harvester) →
@@ -4233,6 +4254,10 @@ const EXTRA_ACTION_ALLY_DESTROYED_RE = /ally is destroyed/i;
 // Unit gains 1 extra action." Requires the SELF subject — an ally's resist grants Prophet shield
 // penetration in a sibling clause and must not fire an action.
 const EXTRA_ACTION_SELF_RESIST_RE = /\bwhen\s+this\s+unit\s+resists?\s+a\s+debuff\b/i;
+
+// "an enemy affected by <Status>" — one status name, up to the clause's next comma or period.
+const ENEMY_AFFECTED_BY_STATUS_RE =
+    /\benem(?:y|ies)\s+affected by\s+([A-Za-z][^,.]*?)\s*(?:,|\.|$)/i;
 
 // "gains/grants (itself) one|1|a|an extra (End Of Round) action" — incl. Tygr's
 // imperative "give one extra action". Lookbehind-free.
@@ -4260,6 +4285,9 @@ export interface ExtraActionParse {
      *  speed; a plain "extra action" (Liberator, Sokol "gains 1 extra action") is inserted into
      *  the queue at the ship's current speed. */
     endOfRound: boolean;
+    /** Set for a grant whose own extra turn can satisfy it again with no once-per-round wording
+     *  (Tithonus's purge-count gate). See the `chains` field on the `extra-action` config. */
+    chains?: boolean;
 }
 
 /**
@@ -4281,12 +4309,22 @@ export function parseExtraAction(text: string | null | undefined): ExtraActionPa
     // if two matched, find() would take the first and oncePerRound could mis-scope.
     const clauseMasked = parts.find((p) => EXTRA_ACTION_RE.test(p)) ?? sentence;
     const clause = clauseMasked.split(ABBR_MARK).join(' ');
-    if (EXTRA_ACTION_DISQUALIFY_RE.test(clause)) return null;
+    const purgeCount = EXTRA_ACTION_PURGE_COUNT_RE.exec(clause);
+    if (!purgeCount && EXTRA_ACTION_DISQUALIFY_RE.test(clause)) return null;
 
     const conditions: Condition[] = [];
+    if (purgeCount) {
+        conditions.push({
+            subject: 'buffs-purged-this-cast',
+            derivable: true,
+            countComparator: 'gte',
+            countThreshold: parseInt(purgeCount[1], 10),
+        });
+    }
     // Buff/debuff count gates: Nuqtu "If the target has 3 or more buffs" → enemy-buff
-    // gte 3; Sustainer "If this Unit has no debuffs" → self-debuff eq 0.
-    const countGate = countGateCondition(clause);
+    // gte 3; Sustainer "If this Unit has no debuffs" → self-debuff eq 0. The purge-count gate
+    // already claimed its "at least N buffs", which names purged buffs, not held ones.
+    const countGate = purgeCount ? null : countGateCondition(clause);
     if (countGate) conditions.push(countGate);
     const hpMatch = EXTRA_ACTION_SELF_HP_RE.exec(clause);
     if (hpMatch) {
@@ -4298,13 +4336,15 @@ export function parseExtraAction(text: string | null | undefined): ExtraActionPa
             hpSubject: 'self',
         });
     }
-    // Tygr: "After damaging an enemy affected by Stasis" — approximated as
-    // enemy-has-any-debuff (enemy-debuff conditions are name-agnostic by design in
-    // evaluateCondition — a buffName is not a filter there).
-    if (/affected by stasis/i.test(clause)) {
+    // "After damaging an enemy affected by <Status>" (Tygr): the struck enemy must carry the NAMED
+    // status. evaluateCondition's enemy-debuff arm counts by name when the caller supplies
+    // per-target debuff names and falls back to the total debuff count when it does not.
+    const affectedBy = ENEMY_AFFECTED_BY_STATUS_RE.exec(clause);
+    if (affectedBy) {
         conditions.push({
             subject: 'enemy-debuff',
             derivable: true,
+            buffName: affectedBy[1].trim(),
             countComparator: 'gte',
             countThreshold: 1,
         });
@@ -4330,11 +4370,13 @@ export function parseExtraAction(text: string | null | undefined): ExtraActionPa
           : EXTRA_ACTION_SELF_RESIST_RE.test(sentenceUnmasked)
             ? 'on-debuff-resisted'
             : undefined;
+    const oncePerRound = /once per round/i.test(clause);
     return {
-        oncePerRound: /once per round/i.test(clause),
+        oncePerRound,
         conditions,
         endOfRound: /end\s+of\s+round/i.test(clause),
         ...(trigger ? { trigger } : {}),
+        ...(purgeCount && !oncePerRound ? { chains: true } : {}),
     };
 }
 
@@ -4429,8 +4471,8 @@ export interface ParsedHealAbility {
     /** PR6b: per-count repair scaling — the repair grows by `perUnit`% per matched `condition`
      *  count (Oleander "additional 8.5% repair for each debuffed enemy" → base kept + perUnit
      *  bonus; Meatshield "repairs 1.5% … for each debuff on itself" → pure per-count, `pct` is
-     *  zeroed and the whole repair is the perUnit scaling). The `condition`-based (live-state)
-     *  form is model fidelity only — no DPS/sim consumer. ship-kit W3 adds the `countSource`
+     *  zeroed and the whole repair is the perUnit scaling). For the `condition`-based (live-state)
+     *  form, the combat engine's cast-heal pass adds `scaledBonus` to `pct`. The `countSource`
      *  form (Sansi "repairs 5% for every enemy repaired"): the count comes from the reactive
      *  event, `pct` is KEPT, and the reactive heal executor multiplies it by that count. */
     scaling?: { perUnit: number; condition?: Condition; countSource?: ReactiveScalingCountSource };
@@ -4705,9 +4747,10 @@ function resolveHealTarget(sentence: string): {
 // Maps a heal "for each <phrase>" count to a model Condition (derivable counts only).
 function mapHealCountPhrase(phrase: string): Condition | null {
     const p = phrase.toLowerCase();
-    // Order: "debuff" contains "buff"; enemy phrasings before self.
-    if (/debuffed\s+enem|debuff on (?:the\s+)?enem/.test(p))
-        return { subject: 'enemy-debuff', derivable: true };
+    // Order: "debuff" contains "buff"; enemy phrasings before self. "each debuffed enemy"
+    // counts enemy UNITS; "each debuff on the enemy" counts debuffs on the target.
+    if (/debuffed\s+enem/.test(p)) return { subject: 'debuffed-enemy-count', derivable: true };
+    if (/debuff on (?:the\s+)?enem/.test(p)) return { subject: 'enemy-debuff', derivable: true };
     if (/debuff on (?:this unit|itself|it)\b/.test(p))
         return { subject: 'self-debuff', derivable: true };
     return null;

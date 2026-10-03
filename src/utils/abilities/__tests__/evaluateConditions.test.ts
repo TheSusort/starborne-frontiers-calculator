@@ -84,6 +84,81 @@ describe('evaluateCondition', () => {
         });
     });
 
+    describe("bare 'enemy-buff' reads the bound target's live buff count", () => {
+        const manual = cond({ subject: 'enemy-buff', derivable: false, manualCount: 2 });
+        const gate = cond({
+            subject: 'enemy-buff',
+            derivable: true,
+            countComparator: 'gte',
+            countThreshold: 3,
+        });
+
+        it('a live count wins over the manual count, including a real 0', () => {
+            expect(evaluateCondition(manual, makeConditionContext({ enemyBuffCount: 4 }))).toBe(4);
+            expect(evaluateCondition(manual, makeConditionContext({ enemyBuffCount: 0 }))).toBe(0);
+        });
+
+        it('a live count wins over the side-wide name union for a derivable condition', () => {
+            const c = makeConditionContext({
+                enemyBuffNames: ['A', 'B', 'C'],
+                enemyBuffCount: 2,
+            });
+            expect(evaluateCondition(gate, c)).toBe(2);
+            expect(conditionMet(gate, c)).toBe(false);
+        });
+
+        it('no live count (DPS) → manual count / name union, unchanged', () => {
+            expect(evaluateCondition(manual, makeConditionContext())).toBe(2);
+            expect(
+                evaluateCondition(gate, makeConditionContext({ enemyBuffNames: ['A', 'B', 'C'] }))
+            ).toBe(3);
+        });
+
+        it('a named enemy-buff condition keeps reading the name union', () => {
+            const c = makeConditionContext({ enemyBuffNames: ['Stealth'], enemyBuffCount: 0 });
+            expect(
+                evaluateCondition(
+                    cond({ subject: 'enemy-buff', derivable: true, buffName: 'Stealth' }),
+                    c
+                )
+            ).toBe(1);
+        });
+    });
+
+    describe("'debuffed-enemy-count' counts debuffed enemy units", () => {
+        const debuffedEnemies = cond({ subject: 'debuffed-enemy-count', derivable: true });
+
+        it('the live count wins, including a real 0', () => {
+            expect(
+                evaluateCondition(
+                    debuffedEnemies,
+                    makeConditionContext({ debuffedEnemyCount: 2, enemyDebuffCount: 5 })
+                )
+            ).toBe(2);
+            expect(
+                evaluateCondition(
+                    debuffedEnemies,
+                    makeConditionContext({ debuffedEnemyCount: 0, enemyDebuffCount: 5 })
+                )
+            ).toBe(0);
+        });
+
+        it('no live count (DPS) → 1 when the enemy carries any debuff, else 0', () => {
+            expect(
+                evaluateCondition(debuffedEnemies, makeConditionContext({ enemyDebuffCount: 3 }))
+            ).toBe(1);
+            expect(
+                evaluateCondition(debuffedEnemies, makeConditionContext({ enemyDebuffCount: 0 }))
+            ).toBe(0);
+            expect(
+                evaluateCondition(
+                    debuffedEnemies,
+                    makeConditionContext({ enemyDebuffCount: undefined })
+                )
+            ).toBe(0);
+        });
+    });
+
     it("'enemy-buff' by name is 1 when present, else 0", () => {
         expect(
             evaluateCondition(

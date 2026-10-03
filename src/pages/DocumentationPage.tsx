@@ -2964,6 +2964,14 @@ const DocumentationPage: React.FC = () => {
                                         kill mark sits on the dashed line at the round it empties
                                         the HP pool.
                                     </p>
+                                    <p className="text-theme-text mb-2">
+                                        <span className="text-primary">Purges:</span> A purge on a
+                                        skill that hits several enemies strips buffs from every
+                                        enemy it hits, not just the main target. Tithonus gains
+                                        another action each time one of his skills purges four or
+                                        more buffs in total, so he can chain them; the simulator
+                                        stops a chain after 20 extra actions in one round.
+                                    </p>
                                     <p className="text-theme-text">
                                         <span className="text-primary">
                                             Multi-Hit Crits and Extra Actions:

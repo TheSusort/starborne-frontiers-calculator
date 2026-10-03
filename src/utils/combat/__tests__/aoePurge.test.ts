@@ -14,7 +14,9 @@ import type { StatusEngine } from '../statusEngine';
 // target so selectTurnTarget resolves a REAL enemy as the anchor `targetId`).
 // TWO enemies (M4 front + M3) each self-buff "Attack Up" every round. The focus
 // fires an 'all'-shape pattern (footprint = all living enemies), so the footprint
-// covers BOTH. The control uses a single-'enemy' purge (anchor only).
+// covers BOTH. A plain 'enemy' purge reaches the same footprint: a pattern skill purges every
+// enemy it strikes. The control casts on a single-target pattern, whose footprint is the anchor
+// alone.
 // ---------------------------------------------------------------------------
 let idc = 0;
 const ab = (p: Partial<Ability> & Pick<Ability, 'type' | 'config'>): Ability => ({
@@ -77,7 +79,9 @@ const focusSkills = (aoe: boolean): ShipSkills => ({
     ],
 });
 
-const BASE = (aoe: boolean): CombatEngineInput => ({
+const basePattern = (): ParsedPattern => ({ raw: 'base', shape: 'base', range: 0, modifiers: {} });
+
+const BASE = (aoe: boolean, pattern: ParsedPattern = allPattern()): CombatEngineInput => ({
     attack: 5000,
     crit: 0,
     critDamage: 0,
@@ -100,15 +104,19 @@ const BASE = (aoe: boolean): CombatEngineInput => ({
     mode: 'healing',
     position: 'M4',
     target: parsedTarget('front'),
-    pattern: allPattern(),
+    pattern,
     enemyAttackers: [buffingEnemy('enemy-front', 'M4'), buffingEnemy('enemy-back', 'M3')],
 });
 
-const finalSelfBuffs = (aoe: boolean, enemyId: string): string[] => {
+const finalSelfBuffs = (
+    aoe: boolean,
+    enemyId: string,
+    pattern: ParsedPattern = allPattern()
+): string[] => {
     idc = 0;
     let engine: StatusEngine | undefined;
     runCombat({
-        ...BASE(aoe),
+        ...BASE(aoe, pattern),
         __testTapStatusEngine: (e) => {
             engine = e;
         },
@@ -122,9 +130,14 @@ describe('E3: on-cast all-enemies purge removes buffs from every footprint victi
         expect(finalSelfBuffs(true, 'enemy-back')).toEqual([]);
     });
 
-    it('CONTROL: a single-enemy purge strips only the anchor (front-most), not the back enemy', () => {
-        expect(finalSelfBuffs(false, 'enemy-front')).toEqual([]); // anchor purged
-        expect(finalSelfBuffs(false, 'enemy-back')).toEqual(['Attack Up']); // untouched
+    it("an 'enemy' purge on the same pattern also strips BOTH enemies", () => {
+        expect(finalSelfBuffs(false, 'enemy-front')).toEqual([]);
+        expect(finalSelfBuffs(false, 'enemy-back')).toEqual([]);
+    });
+
+    it("CONTROL: an 'enemy' purge on a single-target pattern strips only the anchor", () => {
+        expect(finalSelfBuffs(false, 'enemy-front', basePattern())).toEqual([]); // anchor purged
+        expect(finalSelfBuffs(false, 'enemy-back', basePattern())).toEqual(['Attack Up']);
     });
 });
 

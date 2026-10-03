@@ -5,6 +5,14 @@ export interface ConditionContext {
     selfBuffNames: string[];
     selfDebuffNames: string[];
     enemyBuffNames: string[];
+    /** DISTINCT buffs on the cast's bound target — a buff held at several stacks counts once.
+     *  Read by every `enemy-buff` condition WITHOUT a `buffName`, whatever its `derivable` flag
+     *  ("for each buff on the enemy", "equal to the number of buffs", "if the target has 3 or
+     *  more buffs"); a named `enemy-buff` condition keeps reading the side-wide `enemyBuffNames`
+     *  union. ABSENT means there is no bound target or the run cannot measure one (the
+     *  single-ship DPS calculator): the condition then keeps its manual count (`derivable:false`)
+     *  or the union length (`derivable:true`). A present `0` is a real reading. */
+    enemyBuffCount?: number;
     /** SP-4d: OPTIONAL, and absent means "there is no opposing victim to count debuffs on" — not
      *  "the victim has zero debuffs". Per-victim, like `enemyHpPct`/`enemyDotCount`/`enemyShielded`:
      *  a no-victim turn (an ally-targeted cast that resolves nobody) must not be indistinguishable
@@ -121,6 +129,14 @@ export interface ConditionContext {
      *  not supply it. The reactive DRAIN ctx (triggers.ts) is one such caller, exactly as it is
      *  for `stealthedEnemyCount` above: neither count reaches a reactive proc today. */
     shieldedAllyCount?: number;
+    /** Count of LIVING OPPOSING units carrying at least one debuff (named debuffs or DoT
+     *  entries), for the `debuffed-enemy-count` subject. Live-derived by the combat engine on
+     *  BOTH sides, in every mode, independent of which unit (if any) the cast is bound to. ABSENT
+     *  means the caller has no roster to count: the subject then reads 1 when the bound enemy
+     *  carries any debuff (`enemyDebuffCount > 0`), else 0. A present `0` is a real reading. The
+     *  reactive DRAIN ctx (triggers.ts) does not supply it, so a reactive proc reading this
+     *  subject gets that `enemyDebuffCount` fallback. */
+    debuffedEnemyCount?: number;
     /** Sub-project I, PR I4a — the ACTING unit's own live crit power (effective critDamage
      *  stat, e.g. 150), a continuous MAGNITUDE scaling source (distinct from every other
      *  scaling source above, which are entity COUNTS). Used by Wildfire's dotDamage-channel
@@ -157,6 +173,10 @@ export interface ConditionContext {
      *  case (b), retired). Only "no cast recorded at all for this owner" stays absent/unknown.
      *  Live-derived by the positional engine from the firing actor's footprint. */
     enemiesHitThisCast?: number;
+    /** The total buffs this cast's on-cast purges removed across every victim, steals excluded.
+     *  Supplied only by runPlayerTurn's post-purge re-gate; absent means the cast's purges have
+     *  not resolved, which does not resolve the `buffs-purged-this-cast` subject. */
+    buffsPurgedThisCast?: number;
     /** SP-D — per-target DoT-ONLY entry subtotal (corrosion + inferno + bomb entry-array
      *  lengths, +acidicDecay once SP-E adds it). Distinct from `enemyDebuffCount`, which also
      *  folds in landed CONTROL/marker debuffs — `enemy-dot-count` must never be satisfied by a
@@ -226,6 +246,10 @@ export function evaluateCondition(cond: Condition, ctx: ConditionContext): numbe
                   : ctx.enemyDestroyedCount;
         return live ?? Math.max(0, cond.manualCount ?? 1);
     }
+    // A bare `enemy-buff` count is LIVE-OR-MANUAL too, and wins over the union below as well —
+    // see ConditionContext.enemyBuffCount.
+    if (cond.subject === 'enemy-buff' && !cond.buffName && ctx.enemyBuffCount !== undefined)
+        return ctx.enemyBuffCount;
     if (!cond.derivable) return Math.max(0, cond.manualCount ?? 1);
 
     switch (cond.subject) {
@@ -272,6 +296,9 @@ export function evaluateCondition(cond: Condition, ctx: ConditionContext): numbe
             return ctx.stealthedEnemyCount ?? 0;
         case 'ally-shield-count':
             return ctx.shieldedAllyCount ?? 0;
+        case 'debuffed-enemy-count':
+            if (ctx.debuffedEnemyCount !== undefined) return ctx.debuffedEnemyCount;
+            return (ctx.enemyDebuffCount ?? 0) > 0 ? 1 : 0;
         case 'self-crit-power':
             return ctx.selfCritPower ?? 0;
         // SP-4d: was `?? 1` — a cast that resolved no victim booked a footprint of ONE. Absent now
@@ -279,6 +306,8 @@ export function evaluateCondition(cond: Condition, ctx: ConditionContext): numbe
         // `gte 3` are unaffected either way; an `lte`/`eq 0` reader is the case this closes.
         case 'enemies-hit-this-cast':
             return ctx.enemiesHitThisCast;
+        case 'buffs-purged-this-cast':
+            return ctx.buffsPurgedThisCast;
         case 'enemy-dot-count':
             // Named-family branch (Belladonna's "3+ Acidic Decay") is untouched by SP-4d: it is
             // runtime-inert today (no DoT family exists in the game yet — `enemyDotFamilyCounts`

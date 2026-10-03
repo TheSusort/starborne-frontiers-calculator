@@ -51,6 +51,13 @@ export function buildRoundContext(state: {
     targetHpPct?: number;
     /** Active buff names on the enemy. Default [] (DPS-assumption: no enemy buffs). */
     enemyBuffNames?: string[];
+    /** Distinct buffs on the cast's bound target. Passed through with NO default — absent routes
+     *  bare `enemy-buff` conditions to their manual/union fallback; see
+     *  ConditionContext.enemyBuffCount. */
+    enemyBuffCount?: number;
+    /** Living opposing units carrying a debuff. Passed through with NO default — see
+     *  ConditionContext.debuffedEnemyCount. */
+    debuffedEnemyCount?: number;
     /** Sub-project I, PR I1 — NAMES on the opposing (primary) target, for name-specific
      *  `enemy-debuff` gates. SENTINEL: leave `undefined` (do NOT pass `[]`) to keep the legacy
      *  name-agnostic `enemyDebuffCount` path — this is the DPS-parity invariant (the DPS
@@ -253,5 +260,9 @@ export function buildRoundContext(state: {
         // SP-F F4 — sentinel spread (mirrors enemyDebuffNames): set the key only when the caller
         // supplied a real roster array, so absence keeps `ally-on-team`'s assume-met fallback.
         ...(state.allyTeamNames !== undefined ? { allyTeamNames: state.allyTeamNames } : {}),
+        ...(state.enemyBuffCount !== undefined ? { enemyBuffCount: state.enemyBuffCount } : {}),
+        ...(state.debuffedEnemyCount !== undefined
+            ? { debuffedEnemyCount: state.debuffedEnemyCount }
+            : {}),
     };
 }

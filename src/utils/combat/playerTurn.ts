@@ -488,6 +488,13 @@ export interface PlayerTurnResult {
      *  Absent → the engine skips the per-victim fold and keeps the single primary-ctx result;
      *  read ONLY by the positional engine branch. */
     perVictimOutgoing?: { modifierAbilities: Ability[]; primaryCtx: ConditionContext };
+    /** The firing damage ability's count-scaled bonus ("an additional 30% damage for each buff on
+     *  the enemy") and the ctx `conditionalBonusPct` was scored against. `positionalScalars`
+     *  bakes that bonus in once, from the bound target; the engine re-scores it per footprint
+     *  victim with `enemyBuffCount` re-pointed at that victim's own distinct buffs and applies
+     *  the difference to that victim's hit. Present ONLY when a damage ability with `scaling`
+     *  fired; read ONLY by the positional engine branch, for the firing hit. */
+    perVictimScaling?: { scalingAbility: Ability; primaryCtx: ConditionContext };
     /** This turn's SCHEDULED enemy-debuff effects AFTER the per-round landing
      *  decision, i.e. exactly the entries that LANDED (`scheduledEnemy.roundEnemyDebuffs`:
      *  recurring/always/accumulating re-rolled through `roundDebuffLanded()` / the affinity
@@ -712,6 +719,13 @@ export interface PlayerTurnArgs {
      *  feed condition gates, never effect folding (no double-fold). Defaults to [] (the
      *  DPS assumption). Sourced by the engine via triggers.selfBuffNamesForOwners. */
     enemyBuffNames?: string[];
+    /** Distinct buffs on THIS cast's bound target (`targetId`), read before the cast. NO default:
+     *  absent — no bound target, or a `mode: 'dps'` run — keeps bare `enemy-buff` conditions on
+     *  their manual/union fallback. See ConditionContext.enemyBuffCount. */
+    enemyBuffCount?: number;
+    /** Living opposing units carrying a debuff, read before the cast. NO default: absent keeps
+     *  the `debuffed-enemy-count` fallback. See ConditionContext.debuffedEnemyCount. */
+    debuffedEnemyCount?: number;
     /** Count (not union) of living opposing actors currently holding
      *  the Stealth self-buff, for this actor's `enemy-stealth-count` scaling condition
      *  (Selenite's "10% more direct damage for every enemy with Stealth"). Same per-turn
@@ -752,8 +766,8 @@ export interface PlayerTurnArgs {
     onHitBreakStasis?: (targetId: string) => void;
     /**
      * The firing skill's footprint victim ids, supplied by the engine in
-     * positional mode. The on-cast purge fans an 'all-enemies' purge over these instead of the
-     * single `targetId`. Absent for non-positional callers → single-anchor.
+     * positional mode. The on-cast purge fans an 'enemy' or 'all-enemies' purge over these
+     * instead of the single `targetId`. Absent for non-positional callers → single-anchor.
      */
     aoeVictimIds?: string[];
     /** Living opposing actors keyed by id — per-victim debuff landing/application in
@@ -1568,6 +1582,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         enemyDestroyedCount: enemyDestroyedCountArg,
         selectorEnemyIdFor,
         enemyBuffNames: enemyBuffNamesArg = [],
+        // No default — undefined is the no-target / DPS sentinel (see PlayerTurnArgs doc).
+        enemyBuffCount: enemyBuffCountArg,
+        debuffedEnemyCount: debuffedEnemyCountArg,
         stealthedEnemyCount: stealthedEnemyCountArg = 0,
         shieldedAllyCount: shieldedAllyCountArg = 0,
         // No default — undefined is the DPS-parity sentinel (see PlayerTurnArgs doc).
@@ -2306,6 +2323,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         targetHpPct: targetHpPctArg,
         targetRepairedThisRound: targetRepairedThisRoundArg,
         enemyBuffNames: enemyBuffNamesArg,
+        enemyBuffCount: enemyBuffCountArg,
+        debuffedEnemyCount: debuffedEnemyCountArg,
         enemyDebuffNames: enemyDebuffNamesArg,
         selfDebuffNames: selfDebuffNamesArg,
         turnsTaken: actor.turnsTaken,
@@ -2416,6 +2435,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
      *  `extend-status` needs (Asphyxiator). Written at the one landing funnel below, read by the
      *  extension block near the end of the turn. */
     const inflictedDebuffNamesByVictim = new Map<string, Set<string>>();
+    /** Timed debuffs THIS cast landed on the bound target BEFORE its damage (a clause written
+     *  ahead of the damage clause). Clauses resolve in written order, so the cast's payload gate
+     *  reads these as already on the target — see `enemyDebuffNames` on the payload-gate ctx. */
+    const beforeDamageNamesOnTarget = new Set<string>();
     // Landings held back by intra-cast clause order (see the `afterDamageClause` branch below).
     // Returned on the turn result. The engine drains this at ONE of two points — at the end of
     // sub-attack 0 when a later sub-attack exists (so hit 2 can see hit 1's stack), otherwise at
@@ -2562,6 +2585,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                     // display-list refresh (see the TDZ note above pair).
                     writeState();
                     pair.emitEvents();
+                    if (vid === undefined || vid === targetId)
+                        beforeDamageNamesOnTarget.add(status.payload.buffName);
                 }
                 if (!anyLanded) {
                     inflictedEnemyDebuffs.push({
@@ -2850,6 +2875,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         targetHpPct: targetHpPctArg,
         targetRepairedThisRound: targetRepairedThisRoundArg,
         enemyBuffNames: enemyBuffNamesArg,
+        enemyBuffCount: enemyBuffCountArg,
+        debuffedEnemyCount: debuffedEnemyCountArg,
         enemyDebuffNames: enemyDebuffNamesArg,
         selfDebuffNames: selfDebuffNamesArg,
         turnsTaken: actor.turnsTaken,
@@ -3006,6 +3033,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         targetHpPct: targetHpPctArg,
         targetRepairedThisRound: targetRepairedThisRoundArg,
         enemyBuffNames: enemyBuffNamesArg,
+        enemyBuffCount: enemyBuffCountArg,
+        debuffedEnemyCount: debuffedEnemyCountArg,
         enemyDebuffNames: enemyDebuffNamesArg,
         selfDebuffNames: selfDebuffNamesArg,
         selfShielded: actor.shieldPool > 0,
@@ -3361,7 +3390,24 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         targetHpPct: targetHpPctArg,
         targetRepairedThisRound: targetRepairedThisRoundArg,
         enemyBuffNames: enemyBuffNamesArg,
-        enemyDebuffNames: enemyDebuffNamesArg,
+        enemyBuffCount: enemyBuffCountArg,
+        debuffedEnemyCount: debuffedEnemyCountArg,
+        // The bound target's pre-turn debuff names plus what this cast landed on it before its
+        // damage, so a named `enemy-debuff` payload gate ("after damaging an enemy affected by
+        // Stasis") sees a status written ahead of the damage clause — the same landings
+        // `landedEnemyDebuffCount` already counts. A resisted or after-damage clause adds
+        // nothing. Undefined stays undefined (DPS sentinel). Only this payload-gate ctx carries
+        // the overlay: the outgoing-modifier ctx reads pre-turn status (see
+        // `perVictimOutgoingDeltaPct` in engine.ts for that causality rule).
+        enemyDebuffNames:
+            enemyDebuffNamesArg === undefined || beforeDamageNamesOnTarget.size === 0
+                ? enemyDebuffNamesArg
+                : [
+                      ...enemyDebuffNamesArg,
+                      ...[...beforeDamageNamesOnTarget].filter(
+                          (n) => !enemyDebuffNamesArg.includes(n)
+                      ),
+                  ],
         selfDebuffNames: selfDebuffNamesArg,
         // Thread the acting actor's live own-turn counter so cast-path `every-n-turns` gates
         // (on-cast/active/charged) evaluate against the real N — symmetric with the reactive
@@ -4396,8 +4442,12 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // inside the args.healing gate.
     // conditionsMet() enforces any ability-level gates (e.g. Nayra's target-repaired-this-round
     // condition) so conditional purges only fire when their precondition holds.
-    // An 'all-enemies' purge ability fans over the footprint victims (aoeVictimIds) instead of
-    // just targetId.
+    // An 'enemy' or 'all-enemies' purge fans over the cast's footprint victims (aoeVictimIds)
+    // instead of just targetId.
+    // `buffsPurgedThisCast` totals what these purges removed across every victim — the
+    // `buffs-purged-this-cast` count the post-purge extra-action re-gate below reads. Steals
+    // (the loop above) never add to it.
+    let buffsPurgedThisCast = 0;
     if (targetId !== undefined) {
         for (const ab of gatedSkill?.abilities ?? []) {
             if (
@@ -4405,12 +4455,16 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 ab.trigger === 'on-cast' &&
                 conditionsMet(ab.conditions, ctx)
             ) {
-                // E3: an 'all-enemies' purge fans out to EVERY footprint victim (aoeVictimIds,
-                // supplied by the engine in positional mode). Single-'enemy' purges — and any
-                // caller without a footprint (non-positional) — stay on the single anchor
-                // `targetId`. Each victim emits its own purge-performed (Salvation/Sefuba are
-                // victim-scoped). (Amartya's per-victim COUNT scaling is E4; this ships at the
-                // parsed count.)
+                // An 'enemy' or 'all-enemies' purge reaches EVERY enemy the cast strikes: the
+                // footprint victims (aoeVictimIds, supplied by the engine in positional mode from
+                // the same resolver the damage uses): "purges N buffs from the enemy" on a pattern
+                // skill purges each struck enemy (Sefuba's active hitting A, B and C removes a
+                // buff from all three). Wording that names one enemy ("from the primary target",
+                // "from that enemy") would stay single-victim, which this fan-out does not
+                // model; `purgeFanOutNarrowingTripwire.test.ts` fails if an on-cast enemy purge's
+                // text ever says so. A caller without a footprint (non-positional) stays on the
+                // single anchor `targetId`. Each victim emits its own purge-performed
+                // (Salvation/Sefuba are victim-scoped). The purge count is per victim.
                 // An 'enemy-most-buffs' purge (Lodolite's charged skill) resolves to the
                 // engine-supplied enemyMostBuffsId instead of the normal positional anchor
                 // (targetId) — the reactive counterpart (Rhodium, end-of-round) resolves this
@@ -4432,10 +4486,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 // and on the two enemy-adjacency scopes (#403, #407).
                 //
                 // THIS purge loop is the one that differs, deliberately: it keeps its anchor
-                // fall-back for an unresolved selector (see the R4 paragraph above). It shares
-                // the resolver and overrides the tail.
+                // fall-back for an unresolved selector (see the R4 paragraph above), and a plain
+                // 'enemy' purge follows the footprint where the debuff resolver keeps the anchor.
                 const recipients =
-                    ab.target === 'all-enemies' && aoeVictimIds
+                    (ab.target === 'all-enemies' || ab.target === 'enemy') && aoeVictimIds
                         ? aoeVictimIds
                         : ab.target === 'enemy-most-buffs' && enemyMostBuffsId !== undefined
                           ? [enemyMostBuffsId]
@@ -4453,6 +4507,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 );
                 for (const vid of recipients) {
                     const removed = statusEngine.purge(vid, purgeCount);
+                    buffsPurgedThisCast += removed;
                     if (removed > 0) {
                         bus.emit({
                             type: 'purge-performed',
@@ -4487,6 +4542,26 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                     }
                 }
             }
+        }
+    }
+
+    // Extra-action grants gated on `buffs-purged-this-cast` (Tithonus) can only be decided now,
+    // after the purge loop: the pre-cast gate (gateFiringAbilities above) evaluates them with no
+    // count and drops them. Re-gate those abilities from the firing and passive slots against the
+    // same per-ability contexts plus the cast's purge total. A grant the pre-cast gate already
+    // kept (e.g. through an `anyOf` sibling) is not added twice.
+    for (const [slotSkill, slotCtxFor] of [
+        [firingSkill, ctxFor],
+        [passiveSkill, passiveCtxFor],
+    ] as const) {
+        for (const ab of slotSkill?.abilities ?? []) {
+            if (!ab.conditions.some((c) => c.subject === 'buffs-purged-this-cast')) continue;
+            if (extraActionGrants.some((g) => g.abilityId === ab.id)) continue;
+            const regated = gateFiringAbilities(
+                { ...slotSkill!, abilities: [ab] },
+                { ...(slotCtxFor.get(ab.id) ?? ctx), buffsPurgedThisCast }
+            );
+            extraActionGrants.push(...extraActionsFromSkill(regated.gatedSkill));
         }
     }
 
@@ -5088,6 +5163,15 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 const cfg = ability.config;
                 if (cfg.type === 'heal') {
                     const recipients = recipientsFor(ability, fromPassive);
+                    // A per-count repair ("an additional 8.5% repair for each debuffed enemy")
+                    // adds its scaled bonus to the base pct, read at the ability's position in
+                    // the cast like a scaled damage bonus.
+                    const healPct =
+                        cfg.pct +
+                        scaledBonus(
+                            ability,
+                            (fromPassive ? passiveCtxFor : ctxFor).get(ability.id) ?? ctx
+                        );
                     if (healEventOnly) {
                         // E5 §4.1: enemy heals restore each recipient's OWN currentHp (via the
                         // per-victim pool), fire repairedThisRound, and emit heal-performed — but
@@ -5098,7 +5182,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                             const basis = basisValue(cfg.basis, rid);
                             let raw =
                                 basis *
-                                (cfg.pct / 100) *
+                                (healPct / 100) *
                                 (didCrit ? 1 + effectiveCritDamage / 100 : 1) *
                                 (1 + healModifier / 100) *
                                 (1 + dmgStats.totals.outgoingHealBuff / 100) *
@@ -5189,7 +5273,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                         const basis = basisValue(cfg.basis, rid);
                         let raw =
                             basis *
-                            (cfg.pct / 100) *
+                            (healPct / 100) *
                             (didCrit ? 1 + effectiveCritDamage / 100 : 1) *
                             (1 + healModifier / 100) *
                             (1 + dmgStats.totals.outgoingHealBuff / 100) *
@@ -5544,6 +5628,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     const perVictimOutgoing: PlayerTurnResult['perVictimOutgoing'] = hasDamageAbility
         ? { modifierAbilities, primaryCtx: modifierCtx }
         : undefined;
+    const perVictimScaling: PlayerTurnResult['perVictimScaling'] =
+        hasDamageAbility && scalingAbility
+            ? { scalingAbility, primaryCtx: ctxFor.get(scalingAbility.id) ?? ctx }
+            : undefined;
 
     // Hand the PASSIVE-SLOT damage instance to the positional apply path, which
     // otherwise never sees it (`positionalScalars` above is the FIRING skill's scalars — the
@@ -5647,6 +5735,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         positionalScalars,
         passiveSlotHit,
         perVictimOutgoing,
+        perVictimScaling,
         // The landed half of this turn's scheduled enemy-debuff decision, handed to
         // the engine's per-victim damage read so both consumers share ONE draw.
         scheduledEnemyEffects: scheduledEnemy.roundEnemyDebuffs,

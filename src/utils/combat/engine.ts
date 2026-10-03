@@ -36,7 +36,7 @@ import {
     hasUsableChargedSkill,
     modifierTotalsFromAbilities,
 } from '../abilities/applyAbilities';
-import { conditionsMet, type ConditionContext } from '../abilities/evaluateConditions';
+import { conditionsMet, scaledBonus, type ConditionContext } from '../abilities/evaluateConditions';
 import { buildRoundContext } from '../abilities/roundContext';
 import {
     isEnemyTarget,
@@ -163,11 +163,19 @@ import { supportFootprintAllyIds } from './supportFootprint';
 import type { PreFightCombatModifiers } from './preFight/types';
 import { protectionCascade } from './protectionTransfer';
 
-/** Backstop for pathological extra-action loops (a non-once-per-round grant whose
- *  conditions stay true re-fires on the extra turn it granted). Real texts are
- *  self-limited (charged-skill grants consume charges; passive grants are once per
- *  round), so any round needing more than this is a config/parser bug. */
+/** Tripwire for NON-chainable extra-action grants: a non-once-per-round grant whose conditions
+ *  stay true re-fires on the extra turn it granted. Every non-chainable corpus grant is
+ *  self-limited (charged-skill grants consume charges; passive grants are once per round), so a
+ *  round needing more than this is a config/parser bug and the engine throws. Chainable grants
+ *  (`ExtraActionGrant.chains`) never count toward it — see MAX_CHAINED_EXTRA_ACTIONS_PER_ROUND. */
 const MAX_EXTRA_TURNS_PER_ROUND = 8;
+
+/** Sim-safety limit, NOT a game rule: the game puts no limit on a chainable grant (Tithonus keeps
+ *  taking actions while each one purges 4+ buffs, e.g. against enemies that regain a buff every
+ *  time they are hit). Each actor takes at most this many chained extra actions per round; any
+ *  further chainable grant that round is dropped silently, so the fight ends normally instead of
+ *  looping forever. */
+export const MAX_CHAINED_EXTRA_ACTIONS_PER_ROUND = 20;
 
 /** §4.3: the id the side-wide scheduled-enemy-debuff bucket emits `buff-expired`
  *  under. NO actor carries it — the name is honest about what it is: an id for a bucket, not a
@@ -2972,11 +2980,12 @@ export function runCombat(rawInput: CombatEngineInput): {
     // text-named worst-HP ally routes via `lowestHpAllyId`, on either side and in either mode —
     // neither reads this anchor.
     const runMode: RunMode = input.mode ?? 'dps';
-    /** Whether the live adjacency / kill counts (Panguan, Centurion, Judge) are a MEASUREMENT on
-     *  this run, or a question this run cannot ask.
+    /** Whether the live adjacency / kill / target-buff counts (Panguan, Centurion, Judge, and the
+     *  "buffs on the enemy" readers) are a MEASUREMENT on this run, or a question this run cannot
+     *  ask.
      *
      *  `mode: 'dps'` is the single-ship DPS calculator: no board, and a synthetic enemy that
-     *  exists only to be hit. Its "0 allies adjacent, 0 enemies destroyed" is structurally
+     *  exists only to be hit. Its "0 allies adjacent, 0 enemies destroyed, 0 buffs" is structurally
      *  permanent, not an observation — so the user's own manual count (`Condition.manualCount`,
      *  the number the skill editor's condition row asks for) is the only honest answer there, and
      *  handing the evaluator a live 0 would silently override it. Withholding the fields entirely
@@ -3345,12 +3354,16 @@ export function runCombat(rawInput: CombatEngineInput): {
         let bonus = 0;
         for (const entry of gated) {
             if (entry.abilities.length === 0) continue;
+            const victimBuffNames = selfBuffNamesForOwners(statusEngine, [victim.id]);
             const victimCtx: ConditionContext = {
                 ...entry.ctx,
                 ...(entry.ctx.enemyDebuffNames !== undefined
                     ? { enemyDebuffNames: enemyDebuffNamesForTarget(victim) }
                     : {}),
-                enemyBuffNames: selfBuffNamesForOwners(statusEngine, [victim.id]),
+                enemyBuffNames: victimBuffNames,
+                ...(entry.ctx.enemyBuffCount !== undefined
+                    ? { enemyBuffCount: victimBuffNames.length }
+                    : {}),
             };
             bonus += modifierTotalsFromAbilities(entry.abilities, victimCtx).dotDamage;
         }
@@ -7945,6 +7958,8 @@ export function runCombat(rawInput: CombatEngineInput): {
         //    enemyBuffNamesUnion above — which is correct for "does an enemy have X" REACTIVE
         //    gates but not for a per-victim OUTGOING-damage aura; the locked game rule (spec §2)
         //    requires each victim's OWN status here).
+        //  - enemyBuffCount: this victim's distinct-buff count, from the same snapshot names —
+        //    ONLY when primaryCtx carries one (absent is the no-target / DPS sentinel).
         //  - enemyHpPct: rebuilt from the snapshot's pre-turn currentHp/stats.hp reading (the
         //    primary ctx's value is a turn-start snapshot of the BOUND target only).
         //  - enemyType: NOT rebuilt — no per-enemy-attacker class field is plumbed on
@@ -7996,11 +8011,40 @@ export function runCombat(rawInput: CombatEngineInput): {
                     ? { enemyDebuffNames: snap.enemyDebuffNames }
                     : {}),
                 enemyBuffNames: snap.enemyBuffNames,
+                ...(primaryCtx.enemyBuffCount !== undefined
+                    ? { enemyBuffCount: snap.enemyBuffNames.length }
+                    : {}),
                 enemyHpPct: snap.enemyHpPct,
             };
             const full = modifierTotalsFromAbilities(modifierAbilities, victimCtx).outgoingDamage;
             const base = modifierTotalsFromAbilities(modifierAbilities, primaryCtx).outgoingDamage;
             return full - base;
+        };
+
+        /**
+         * Per-victim skill-multiplier delta for a count-scaled damage bonus ("an additional 30%
+         * damage for each buff on the enemy"). `positionalScalars.multiplierPct` scores the bonus
+         * once against the bound target; each struck enemy counts its OWN distinct buffs, so this
+         * re-scores it with only `enemyBuffCount` re-pointed at the victim (read from the same
+         * pre-turn snapshot as `perVictimOutgoingDeltaPct`) and returns the difference. Absent
+         * `enemyBuffCount` on the primary ctx (no target / DPS sentinel) → 0.
+         */
+        const perVictimScalingDeltaPct = (
+            perVictimScaling: PlayerTurnResult['perVictimScaling'],
+            preTurnStatus: Map<string, PreTurnVictimStatusSnapshot> | undefined,
+            victim: CombatActor
+        ): number => {
+            if (!perVictimScaling) return 0;
+            const { scalingAbility, primaryCtx } = perVictimScaling;
+            if (primaryCtx.enemyBuffCount === undefined) return 0;
+            const snap = preTurnStatus?.get(victim.id);
+            if (!snap) return 0;
+            return (
+                scaledBonus(scalingAbility, {
+                    ...primaryCtx,
+                    enemyBuffCount: snap.enemyBuffNames.length,
+                }) - scaledBonus(scalingAbility, primaryCtx)
+            );
         };
 
         /**
@@ -8142,6 +8186,9 @@ export function runCombat(rawInput: CombatEngineInput): {
             // Unsupplied/undefined → perVictimOutgoingDeltaPct short-circuits to 0 for every
             // victim.
             perVictimOutgoing?: PlayerTurnResult['perVictimOutgoing'];
+            // This turn's firing count-scaled bonus, forwarded from `turn.perVictimScaling`.
+            // Firing hit only — the passive-slot instance has its own multiplier.
+            perVictimScaling?: PlayerTurnResult['perVictimScaling'];
             // The PRE-TURN per-victim status snapshot (captured by the
             // call site via `snapshotPreTurnVictimStatus` BEFORE `runPlayerTurn` ran this turn),
             // keyed by victim id. Required for a non-zero delta — see the causality note above
@@ -8202,12 +8249,18 @@ export function runCombat(rawInput: CombatEngineInput): {
                         ignoresStealth: args.ignoresStealth,
                         provokedBy: provokerOf(statusEngine, args.actingId),
                     },
-                    defenseProfileOf: (v) =>
-                        victimDefenseProfileOf(v, {
+                    defenseProfileOf: (v) => ({
+                        ...victimDefenseProfileOf(v, {
                             scheduledEnemyEffects: args.scheduledEnemyEffects,
                             perVictimOutgoing: args.perVictimOutgoing,
                             preTurnVictimStatus: args.preTurnVictimStatus,
                         }),
+                        multiplierDeltaPct: perVictimScalingDeltaPct(
+                            args.perVictimScaling,
+                            args.preTurnVictimStatus,
+                            v
+                        ),
+                    }),
                     // Stamp the sub-attack under application so the funnel's deferred
                     // LOG buffers (reflect rows + consequence twins) can be drained per sub-attack
                     // rather than all under the first attack row. Save/restore rather than clear:
@@ -9141,7 +9194,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             const tb = turnBindings(a.side);
             const rt = runtimeFor(a);
             const maxHp = rt.hp; // unified denom (baseHpFor(id) === runtimeFor(id).hp)
-            // AoE purge: footprint victim ids for an 'all-enemies' on-cast purge.
+            // AoE purge: footprint victim ids for an 'enemy'/'all-enemies' on-cast purge.
             // Computed ONLY when positional — `tgt?.position != null` is the positional
             // discriminator: when nothing positional resolved, `selectTurnTarget` returns NO victim
             // at all on EITHER side (#335), so `tgt` is `undefined` here and the optional chain
@@ -9151,8 +9204,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             // enemies. footprintVictims is the same pure resolver the AoE
             // damage path uses; covered cells are included (status removal is uniform across the
             // footprint). Non-positional → undefined → the playerTurn purge loop falls back to
-            // the single anchor. The purge ability gates on
-            // target === 'all-enemies', so single-'enemy' purges ignore this regardless.
+            // the single anchor. An 'enemy' or 'all-enemies' purge fans over it.
             // Charge-aware, mirroring the 3 damage cast sites — an on-cast purge fired
             // from a CHARGED cast (e.g. Lodolite) must expand its footprint from the charged
             // pattern too, not the active one.
@@ -9356,6 +9408,18 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // no-enemy sentinel) and the round contexts fall back to the name-agnostic
                 // enemyDebuffCount path.
                 ...(tgt ? { enemyDebuffNames: enemyDebuffNamesForTarget(tgt) } : {}),
+                // Distinct buffs on the bound target, read pre-cast like the names above.
+                // WITHHELD under `mode: 'dps'` — see `liveCountsMeasurable`.
+                ...(tgt && liveCountsMeasurable
+                    ? { enemyBuffCount: selfBuffNamesForOwners(statusEngine, [tgt.id]).length }
+                    : {}),
+                // Living opposing units carrying a debuff, by the same per-unit read as
+                // `enemyDebuffNames` above. Supplied whether or not the cast binds a victim (an
+                // ally-targeted cast binds none) and in every mode: the debuffs on a DPS run's
+                // enemy are real, so its count is a measurement.
+                debuffedEnemyCount: aliveOpposing().filter(
+                    (v) => enemyDebuffNamesForTarget(v).length > 0
+                ).length,
                 selfDebuffNames: ownerDebuffNames(a.id),
                 ...(aoeVictimIds ? { aoeVictimIds } : {}),
                 ...(opposingVictimById ? { opposingVictimById } : {}),
@@ -9535,6 +9599,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             scalars: AttackerDamageScalars;
             hitCrits: boolean[];
             perVictimOutgoing: PlayerTurnResult['perVictimOutgoing'];
+            perVictimScaling: PlayerTurnResult['perVictimScaling'];
             rollVictimCrit?: (victimAffinity: AffinityName) => boolean;
             deferredAbilityPerformed: PlayerTurnResult['deferredAbilityPerformed'];
             positionalDetonation: DetonationRecipe | undefined;
@@ -9694,6 +9759,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // stops cutting the victim's defence behind the reporting channel's back.
                 scheduledEnemyEffects: sel.scheduledEnemyEffects,
                 perVictimOutgoing: sel.perVictimOutgoing,
+                perVictimScaling: sel.perVictimScaling,
                 preTurnVictimStatus: sel.preTurnVictimStatus,
                 // Per-victim crit: each covered footprint victim rolls at ITS own affinity-capped
                 // rate against this attacker. sel.rollVictimCrit is defined for every positional turn
@@ -10175,14 +10241,17 @@ export function runCombat(rawInput: CombatEngineInput): {
         };
 
         // Per-round extra-action bookkeeping: oncePerRound abilities fire at most once
-        // per actor per round (key `${actorId}:${abilityId}`); total insertions are
-        // backstopped. A grant bumps the granter's PENDING count by 1 — the selection
+        // per actor per round (key `${actorId}:${abilityId}`); non-chainable insertions are
+        // backstopped by the MAX_EXTRA_TURNS_PER_ROUND tripwire, chainable ones capped per granter
+        // by MAX_CHAINED_EXTRA_ACTIONS_PER_ROUND. A grant bumps the granter's PENDING count by 1 — the selection
         // loop then re-picks it at its LIVE speed-rank among the remaining unacted actors
         // (game-verified: re-added to the turn order; acts immediately only when fastest
         // remaining). The selection comparator (orderByTurnPriority via selectNextBySpeed)
         // owns the speed-position + equal-speed tiebreak, so there is no splice to position.
         const extraActionFired = new Set<string>();
         let extraTurnInsertions = 0;
+        // Chained extra actions taken this round, per granter (MAX_CHAINED_EXTRA_ACTIONS_PER_ROUND).
+        const chainedExtraActions = new Map<string, number>();
         const processExtraActionGrants = (
             granter: CombatActor,
             grants: ExtraActionGrant[]
@@ -10191,18 +10260,24 @@ export function runCombat(rawInput: CombatEngineInput): {
                 const key = `${granter.id}:${g.abilityId}`;
                 if (g.oncePerRound && extraActionFired.has(key)) continue;
                 if (g.oncePerRound) extraActionFired.add(key);
-                extraTurnInsertions += 1;
-                if (extraTurnInsertions > MAX_EXTRA_TURNS_PER_ROUND) {
-                    throw new Error(
-                        `combat round ${r}: extra-action insertions exceeded ` +
-                            `MAX_EXTRA_TURNS_PER_ROUND (${MAX_EXTRA_TURNS_PER_ROUND}) — ` +
-                            `an extra-action grant is re-firing without bound`
-                    );
+                if (g.chains) {
+                    const taken = chainedExtraActions.get(granter.id) ?? 0;
+                    if (taken >= MAX_CHAINED_EXTRA_ACTIONS_PER_ROUND) continue;
+                    chainedExtraActions.set(granter.id, taken + 1);
+                } else {
+                    extraTurnInsertions += 1;
+                    if (extraTurnInsertions > MAX_EXTRA_TURNS_PER_ROUND) {
+                        throw new Error(
+                            `combat round ${r}: extra-action insertions exceeded ` +
+                                `MAX_EXTRA_TURNS_PER_ROUND (${MAX_EXTRA_TURNS_PER_ROUND}) — ` +
+                                `an extra-action grant is re-firing without bound`
+                        );
+                    }
                 }
                 // Route by pool: end-of-round grants (Harvester) bump the end-of-round
                 // pool, drained after the normal speed pool; default grants stay speed-positioned
-                // in the normal pool. The oncePerRound gate + MAX_EXTRA_TURNS_PER_ROUND backstop
-                // above apply to BOTH pools.
+                // in the normal pool. The oncePerRound gate and both caps above apply to BOTH
+                // pools.
                 if (g.endOfRound) {
                     endOfRoundPending.set(granter.id, endOfRoundPendingOf(granter.id) + 1);
                 } else {
@@ -11642,6 +11717,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                         scalars: turn.positionalScalars!,
                                         hitCrits: turn.hitCrits,
                                         perVictimOutgoing: turn.perVictimOutgoing,
+                                        perVictimScaling: turn.perVictimScaling,
                                         rollVictimCrit: turn.rollVictimCrit,
                                         deferredAbilityPerformed: turn.deferredAbilityPerformed,
                                         positionalDetonation: turn.positionalDetonation,
@@ -11945,6 +12021,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                         scalars: teamTurn.positionalScalars!,
                                         hitCrits: teamTurn.hitCrits,
                                         perVictimOutgoing: teamTurn.perVictimOutgoing,
+                                        perVictimScaling: teamTurn.perVictimScaling,
                                         rollVictimCrit: teamTurn.rollVictimCrit,
                                         deferredAbilityPerformed: teamTurn.deferredAbilityPerformed,
                                         positionalDetonation: teamTurn.positionalDetonation,
@@ -12605,6 +12682,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                             scalars: enemyScalars!,
                                             hitCrits: enemyHitCrits,
                                             perVictimOutgoing: enemyPerVictimOutgoing,
+                                            perVictimScaling: enemyTurn.perVictimScaling,
                                             rollVictimCrit: enemyRollVictimCrit,
                                             deferredAbilityPerformed: enemyDeferredAbilityPerformed,
                                             positionalDetonation: enemyPositionalDetonation,

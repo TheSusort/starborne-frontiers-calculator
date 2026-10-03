@@ -504,7 +504,7 @@ export type ConditionSubject =
     // Used by Chrono Reaver (every other/third turn). Always derivable:true.
     | 'every-n-turns'
     // COUNT subject (sub-project I, PR I5): the number of living OPPOSING actors
-    // currently holding the Stealth self-buff. Distinct from 'enemy-buff' (which reads
+    // currently holding the Stealth self-buff. Distinct from a named 'enemy-buff' (which reads
     // `enemyBuffNames`, a DEDUPED UNION — it can tell "is at least one enemy Stealthed"
     // but never "how many"). Used as a SCALING source, e.g. Selenite's "10% more direct
     // damage for every enemy with Stealth" (perUnit 10, no cap). Live-derived by the
@@ -521,6 +521,15 @@ export type ConditionSubject =
     // focus holds a real shieldPool (see `roundStartAttackShield.test.ts`). Defaults to 0 only
     // for contexts that never carry the field at all. Always derivable:true.
     | 'ally-shield-count'
+    // COUNT subject: the number of LIVING OPPOSING units carrying at least one debuff — units,
+    // not debuffs (enemy A with 3 debuffs + clean enemy B counts 1).
+    // "Debuffed" is the same per-unit read a name-gated `enemy-debuff` condition uses on its
+    // target (named debuffs plus DoT entries), so the two subjects cannot disagree about one
+    // enemy. Used as a SCALING source by Oleander's "8.5% repair for each debuffed enemy".
+    // Live-derived by the combat engine on both sides (ConditionContext.debuffedEnemyCount);
+    // without that field it falls back to 1 when `enemyDebuffCount > 0`, else 0. Always
+    // derivable:true.
+    | 'debuffed-enemy-count'
     // SCALING-SOURCE subject (sub-project I, PR I4a): the ACTING unit's own live crit
     // power (effective critDamage stat, e.g. 150), as a continuous magnitude — not a
     // count of entities like the other scaling sources above. Used by Wildfire's
@@ -546,6 +555,13 @@ export type ConditionSubject =
     // — the faithful behaviour (Tygr genuinely doesn't add charge against a single target). The
     // positional engine live-derives the real per-cast footprint size. Always derivable:true.
     | 'enemies-hit-this-cast'
+    // COUNT subject: the total buffs THIS cast's on-cast purges actually removed, summed across
+    // every victim the cast reached (Tithonus's "gains 1 extra action after it purges at least 4
+    // buffs with a single skill"). Buffs moved by a steal never count. Known only once the
+    // cast's purges have resolved: runPlayerTurn re-gates on-cast EXTRA-ACTION abilities carrying
+    // this subject after its purge loop (ConditionContext.buffsPurgedThisCast); absent anywhere
+    // else, so any other ability gated on it never passes. Always derivable:true.
+    | 'buffs-purged-this-cast'
     // Model-completeness SP-D: COUNT subject — per-target DoT ENTRY count (corrosion + inferno +
     // bomb entry-array lengths, +acidicDecay once SP-E adds it). Bare (no buffName) = the sum of
     // ALL DoT entries, regardless of family (Anemone's charged "If the primary enemy has 3 or
@@ -951,7 +967,17 @@ export type AbilityConfig =
     | { type: 'stat-gain'; stat: 'shieldPenetration'; pct: number }
     // A full extra turn: the engine re-inserts the granting actor into the round's
     // remaining turn queue at its speed position (game-verified 2026-06-06).
-    | { type: 'extra-action'; oncePerRound: boolean; endOfRound?: boolean }
+    | {
+          type: 'extra-action';
+          oncePerRound: boolean;
+          endOfRound?: boolean;
+          /** A CHAINABLE grant: the extra turn it grants can satisfy its own condition again, and
+           *  the game lets that repeat without limit (Tithonus's "gains 1 extra action after it
+           *  purges at least 4 buffs with a single skill"). The engine bounds it with
+           *  MAX_CHAINED_EXTRA_ACTIONS_PER_ROUND instead of the MAX_EXTRA_TURNS_PER_ROUND
+           *  tripwire. */
+          chains?: boolean;
+      }
     | {
           type: 'heal' | 'shield';
           pct: number;
