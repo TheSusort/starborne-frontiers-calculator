@@ -313,6 +313,15 @@ describe("Ravager's Inferno reaches every enemy his pattern strikes", () => {
         expect(m.dots['inferno']).toEqual(['enemy-a', 'enemy-c']);
         expect(m.resisted['Inferno II']).toEqual(['enemy-b']);
     });
+
+    it('enemy-side: ally-b out-secures the caster → ally-b resists; the other two burn', () => {
+        const m = measure(
+            enemyCasting('Ravager', 'active', cone(), { security: { 'ally-b': 1e9 } }),
+            'enemy-caster'
+        );
+        expect(m.dots['inferno']).toEqual(['ally-c', 'attacker']);
+        expect(m.resisted['Inferno II']).toEqual(['ally-b']);
+    });
 });
 
 describe("a Bomb on each struck enemy snapshots the caster's affinity against THAT enemy", () => {
@@ -465,6 +474,41 @@ describe("Lingshe's damage-less charged Bomb reaches both enemies her Backline s
             'attacker'
         );
         expect(m.dots['bomb']).toEqual(['enemy-a', 'enemy-b']);
+    });
+
+    it('enemy-side Lingshe charged → Bomb III on the two back player ships; not the front one', () => {
+        const caster: EnemyAttacker = {
+            id: 'enemy-caster',
+            stats: {
+                attack: 1000,
+                crit: 0,
+                critDamage: 0,
+                defence: 0,
+                hp: 1e9,
+                speed: 10,
+                security: 0,
+                hacking: 1e6,
+            },
+            chargeCount: chargeCost('charged'),
+            startCharged: true,
+            position: 'M4',
+            target: parseTarget('back'),
+            pattern: parsePattern('Pattern-Backline-Range-1'),
+            shipSkills: kit('Lingshe'),
+        };
+        const m = measure(
+            base({
+                attack: 0,
+                hacking: 0,
+                speed: 150,
+                pattern: single(),
+                position: 'M4',
+                teamActors: [playerShip('ally-a', 'M1', {}), playerShip('ally-b', 'M2', {})],
+                enemyAttackers: [caster],
+            }),
+            'enemy-caster'
+        );
+        expect(m.dots['bomb']).toEqual(['ally-a', 'ally-b']);
     });
 });
 

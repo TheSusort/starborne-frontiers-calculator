@@ -4471,11 +4471,13 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // against the cast's footprint, not per sub-attack.
     const coveredDots = new Map<string, DoTApplicationConfig>();
     if (targetId !== undefined) {
-        const dotTargetById = new Map(
-            (gatedSkill?.abilities ?? []).map((ab) => [ab.id, ab.target])
+        // `dotsFromSkill` maps the skill's `dot` abilities in order, one entry each, so the i-th
+        // entry is the i-th of these.
+        const dotAbilities = (gatedSkill?.abilities ?? []).filter(
+            (ab) => ab.type === 'dot' && ab.config.type === 'dot'
         );
-        for (const dot of dotsConfig) {
-            const abTarget = dotTargetById.get(dot.id);
+        for (const [i, dot] of dotsConfig.entries()) {
+            const abTarget = dotAbilities[i]?.target;
             if (
                 abTarget !== 'enemy' &&
                 abTarget !== 'all-enemies' &&
