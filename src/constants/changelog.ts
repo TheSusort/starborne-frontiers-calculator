@@ -8,6 +8,10 @@ export const CURRENT_VERSION = '1.73.0';
 // nothing. Do it by hand only if that script cannot.
 export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator: Tygr's extra action now needs a Stasis target.",
+    "Combat simulator: Rhodium's active now adds one charge per buff on its target.",
+    "Combat simulator: Nuqtu's active charges now need a target with three or more buffs.",
+    "Combat simulator: Nuqtu's extra action now reads only its target's buffs.",
+    'Combat simulator: per-buff damage bonuses now count the buffs on the target.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

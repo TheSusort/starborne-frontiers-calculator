@@ -2972,11 +2972,12 @@ export function runCombat(rawInput: CombatEngineInput): {
     // text-named worst-HP ally routes via `lowestHpAllyId`, on either side and in either mode —
     // neither reads this anchor.
     const runMode: RunMode = input.mode ?? 'dps';
-    /** Whether the live adjacency / kill counts (Panguan, Centurion, Judge) are a MEASUREMENT on
-     *  this run, or a question this run cannot ask.
+    /** Whether the live adjacency / kill / target-buff counts (Panguan, Centurion, Judge, and the
+     *  "buffs on the enemy" readers) are a MEASUREMENT on this run, or a question this run cannot
+     *  ask.
      *
      *  `mode: 'dps'` is the single-ship DPS calculator: no board, and a synthetic enemy that
-     *  exists only to be hit. Its "0 allies adjacent, 0 enemies destroyed" is structurally
+     *  exists only to be hit. Its "0 allies adjacent, 0 enemies destroyed, 0 buffs" is structurally
      *  permanent, not an observation — so the user's own manual count (`Condition.manualCount`,
      *  the number the skill editor's condition row asks for) is the only honest answer there, and
      *  handing the evaluator a live 0 would silently override it. Withholding the fields entirely
@@ -7945,6 +7946,8 @@ export function runCombat(rawInput: CombatEngineInput): {
         //    enemyBuffNamesUnion above — which is correct for "does an enemy have X" REACTIVE
         //    gates but not for a per-victim OUTGOING-damage aura; the locked game rule (spec §2)
         //    requires each victim's OWN status here).
+        //  - enemyBuffCount: this victim's distinct-buff count, from the same snapshot names —
+        //    ONLY when primaryCtx carries one (absent is the no-target / DPS sentinel).
         //  - enemyHpPct: rebuilt from the snapshot's pre-turn currentHp/stats.hp reading (the
         //    primary ctx's value is a turn-start snapshot of the BOUND target only).
         //  - enemyType: NOT rebuilt — no per-enemy-attacker class field is plumbed on
@@ -7996,6 +7999,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                     ? { enemyDebuffNames: snap.enemyDebuffNames }
                     : {}),
                 enemyBuffNames: snap.enemyBuffNames,
+                ...(primaryCtx.enemyBuffCount !== undefined
+                    ? { enemyBuffCount: snap.enemyBuffNames.length }
+                    : {}),
                 enemyHpPct: snap.enemyHpPct,
             };
             const full = modifierTotalsFromAbilities(modifierAbilities, victimCtx).outgoingDamage;
@@ -9356,6 +9362,11 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // no-enemy sentinel) and the round contexts fall back to the name-agnostic
                 // enemyDebuffCount path.
                 ...(tgt ? { enemyDebuffNames: enemyDebuffNamesForTarget(tgt) } : {}),
+                // Distinct buffs on the bound target, read pre-cast like the names above.
+                // WITHHELD under `mode: 'dps'` — see `liveCountsMeasurable`.
+                ...(tgt && liveCountsMeasurable
+                    ? { enemyBuffCount: selfBuffNamesForOwners(statusEngine, [tgt.id]).length }
+                    : {}),
                 selfDebuffNames: ownerDebuffNames(a.id),
                 ...(aoeVictimIds ? { aoeVictimIds } : {}),
                 ...(opposingVictimById ? { opposingVictimById } : {}),

@@ -5,6 +5,14 @@ export interface ConditionContext {
     selfBuffNames: string[];
     selfDebuffNames: string[];
     enemyBuffNames: string[];
+    /** DISTINCT buffs on the cast's bound target — a buff held at several stacks counts once.
+     *  Read by every `enemy-buff` condition WITHOUT a `buffName`, whatever its `derivable` flag
+     *  ("for each buff on the enemy", "equal to the number of buffs", "if the target has 3 or
+     *  more buffs"); a named `enemy-buff` condition keeps reading the side-wide `enemyBuffNames`
+     *  union. ABSENT means there is no bound target or the run cannot measure one (the
+     *  single-ship DPS calculator): the condition then keeps its manual count (`derivable:false`)
+     *  or the union length (`derivable:true`). A present `0` is a real reading. */
+    enemyBuffCount?: number;
     /** SP-4d: OPTIONAL, and absent means "there is no opposing victim to count debuffs on" — not
      *  "the victim has zero debuffs". Per-victim, like `enemyHpPct`/`enemyDotCount`/`enemyShielded`:
      *  a no-victim turn (an ally-targeted cast that resolves nobody) must not be indistinguishable
@@ -226,6 +234,10 @@ export function evaluateCondition(cond: Condition, ctx: ConditionContext): numbe
                   : ctx.enemyDestroyedCount;
         return live ?? Math.max(0, cond.manualCount ?? 1);
     }
+    // A bare `enemy-buff` count is LIVE-OR-MANUAL too, and wins over the union below as well —
+    // see ConditionContext.enemyBuffCount.
+    if (cond.subject === 'enemy-buff' && !cond.buffName && ctx.enemyBuffCount !== undefined)
+        return ctx.enemyBuffCount;
     if (!cond.derivable) return Math.max(0, cond.manualCount ?? 1);
 
     switch (cond.subject) {

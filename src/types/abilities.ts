@@ -504,7 +504,7 @@ export type ConditionSubject =
     // Used by Chrono Reaver (every other/third turn). Always derivable:true.
     | 'every-n-turns'
     // COUNT subject (sub-project I, PR I5): the number of living OPPOSING actors
-    // currently holding the Stealth self-buff. Distinct from 'enemy-buff' (which reads
+    // currently holding the Stealth self-buff. Distinct from a named 'enemy-buff' (which reads
     // `enemyBuffNames`, a DEDUPED UNION — it can tell "is at least one enemy Stealthed"
     // but never "how many"). Used as a SCALING source, e.g. Selenite's "10% more direct
     // damage for every enemy with Stealth" (perUnit 10, no cap). Live-derived by the

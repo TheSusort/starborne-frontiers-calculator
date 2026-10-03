@@ -1806,14 +1806,28 @@ describe('parseChargeGain', () => {
         expect(result?.trigger).toBeUndefined();
     });
 
-    it('parses enemy-buff threshold gain (manual) — Nuqtu', () => {
+    it('parses enemy-buff threshold gain (manual, gte 3) — Nuqtu', () => {
         const text =
             'If the target has 3 or more buffs, the Unit <unit-aid>gains 2 charges</unit-aid> to its Charged Skill.';
         expect(parseChargeGain(text)).toEqual({
             amount: 2,
-            condition: 'enemy-buff',
-            derivable: false,
+            condition: 'always',
+            derivable: true,
+            conditions: [
+                {
+                    subject: 'enemy-buff',
+                    derivable: false,
+                    countComparator: 'gte',
+                    countThreshold: 3,
+                },
+            ],
         });
+    });
+
+    it("reads the threshold from the charge's own sentence only", () => {
+        const text =
+            'If the target has 3 or more buffs, this Unit gains <unit-skill>Core Charge I</unit-skill>. This Unit <unit-aid>adds 2 charges</unit-aid> to its charged skill.';
+        expect(parseChargeGain(text)?.conditions).toBeUndefined();
     });
 
     it('parses "equal to the number of buffs" per-buff gain — Rhodium', () => {

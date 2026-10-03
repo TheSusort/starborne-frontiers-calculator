@@ -712,6 +712,10 @@ export interface PlayerTurnArgs {
      *  feed condition gates, never effect folding (no double-fold). Defaults to [] (the
      *  DPS assumption). Sourced by the engine via triggers.selfBuffNamesForOwners. */
     enemyBuffNames?: string[];
+    /** Distinct buffs on THIS cast's bound target (`targetId`), read before the cast. NO default:
+     *  absent — no bound target, or a `mode: 'dps'` run — keeps bare `enemy-buff` conditions on
+     *  their manual/union fallback. See ConditionContext.enemyBuffCount. */
+    enemyBuffCount?: number;
     /** Count (not union) of living opposing actors currently holding
      *  the Stealth self-buff, for this actor's `enemy-stealth-count` scaling condition
      *  (Selenite's "10% more direct damage for every enemy with Stealth"). Same per-turn
@@ -1568,6 +1572,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         enemyDestroyedCount: enemyDestroyedCountArg,
         selectorEnemyIdFor,
         enemyBuffNames: enemyBuffNamesArg = [],
+        // No default — undefined is the no-target / DPS sentinel (see PlayerTurnArgs doc).
+        enemyBuffCount: enemyBuffCountArg,
         stealthedEnemyCount: stealthedEnemyCountArg = 0,
         shieldedAllyCount: shieldedAllyCountArg = 0,
         // No default — undefined is the DPS-parity sentinel (see PlayerTurnArgs doc).
@@ -2306,6 +2312,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         targetHpPct: targetHpPctArg,
         targetRepairedThisRound: targetRepairedThisRoundArg,
         enemyBuffNames: enemyBuffNamesArg,
+        enemyBuffCount: enemyBuffCountArg,
         enemyDebuffNames: enemyDebuffNamesArg,
         selfDebuffNames: selfDebuffNamesArg,
         turnsTaken: actor.turnsTaken,
@@ -2850,6 +2857,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         targetHpPct: targetHpPctArg,
         targetRepairedThisRound: targetRepairedThisRoundArg,
         enemyBuffNames: enemyBuffNamesArg,
+        enemyBuffCount: enemyBuffCountArg,
         enemyDebuffNames: enemyDebuffNamesArg,
         selfDebuffNames: selfDebuffNamesArg,
         turnsTaken: actor.turnsTaken,
@@ -3006,6 +3014,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         targetHpPct: targetHpPctArg,
         targetRepairedThisRound: targetRepairedThisRoundArg,
         enemyBuffNames: enemyBuffNamesArg,
+        enemyBuffCount: enemyBuffCountArg,
         enemyDebuffNames: enemyDebuffNamesArg,
         selfDebuffNames: selfDebuffNamesArg,
         selfShielded: actor.shieldPool > 0,
@@ -3361,6 +3370,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         targetHpPct: targetHpPctArg,
         targetRepairedThisRound: targetRepairedThisRoundArg,
         enemyBuffNames: enemyBuffNamesArg,
+        enemyBuffCount: enemyBuffCountArg,
         enemyDebuffNames: enemyDebuffNamesArg,
         selfDebuffNames: selfDebuffNamesArg,
         // Thread the acting actor's live own-turn counter so cast-path `every-n-turns` gates

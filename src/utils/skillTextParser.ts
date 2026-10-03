@@ -910,11 +910,12 @@ function classifyChargeCondition(
     if (
         p.includes('buffs on the target') ||
         p.includes('buff on the target') ||
-        p.includes('or more buffs') ||
         p.includes('buffs on the enemy') ||
         p.includes('number of buffs')
     )
         return { condition: 'enemy-buff', derivable: false };
+    // NOTE: "N or more buffs" threshold phrasings (Nuqtu) are handled upstream in parseChargeGain
+    // as an `enemy-buff` count gate on the charge's own sentence.
     // NOTE: "N or more enemies" / "damages N" hit-count phrasings (Tygr) are handled upstream
     // in parseChargeGain via hitCountConditionFromClause + the `conditions` escape hatch (SP-D)
     // — they used to fall through to a coarse 'enemy-adjacent' presence proxy here, which never
@@ -4126,6 +4127,20 @@ export function parseChargeGain(text: string | null | undefined): ChargeGain | n
     const hitCount = hitCountConditionFromClause(low);
     if (hitCount) {
         return { amount, condition: 'always', derivable: true, conditions: [hitCount] };
+    }
+
+    // "If the target has 3 or more buffs, this Unit adds 2 charges …" (Nuqtu): a threshold on the
+    // bound target's buff count, read from the charge's own sentence. The amount is granted once
+    // when the threshold is met, never once per buff. `derivable:false` keeps the single-ship DPS
+    // calculator on the user's manual count.
+    const buffGate = countGateCondition(rawSentenceAround(plain, m.index) ?? '');
+    if (buffGate?.subject === 'enemy-buff' && buffGate.countComparator === 'gte') {
+        return {
+            amount,
+            condition: 'always',
+            derivable: true,
+            conditions: [{ ...buffGate, derivable: false }],
+        };
     }
 
     const { condition, derivable, requiredEnemyType } = classifyChargeCondition(plain);

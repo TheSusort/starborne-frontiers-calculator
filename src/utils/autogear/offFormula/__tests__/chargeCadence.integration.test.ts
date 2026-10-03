@@ -8,6 +8,7 @@ import { bareEnemy } from '../../../combat/__testutils__/bareRosterFixture';
 import { csvAvailable, loadShipSkillRecords } from '../../../../../scripts/lib/shipSkillCsv';
 import { shipDataAvailable } from '../../../../../scripts/lib/shipDataSnapshot';
 import type { Ship } from '../../../../types/ship';
+import type { ShipSkills } from '../../../../types/abilities';
 
 interface Datum {
     name: string;
@@ -82,13 +83,31 @@ const ROUNDS = 40;
  * kinds of condition hold on every round: the enemy is faster than any corpus ship (satisfies a
  * speed condition) and carries no Security against a focus hacking pinned far above any
  * corpus value (`liveDebuffLandingChance` clamps to 100%, so a debuff-gated charge gain never
- * misses to RNG). Without this the real cadence diverges from the derivation for exactly the
- * ships whose bonus charge rides a condition — Chakara and Hemlock, pinned below.
+ * misses to RNG). Nuqtu's own-charge rides "if the target has 3 or more buffs", which this
+ * DPS-mode run reads from the user's manual count, so `enemyBuffThresholdsMet` sets that count to
+ * the threshold. Without this the real cadence diverges from the derivation for exactly the
+ * ships whose bonus charge rides a condition — Chakara, Hemlock and Nuqtu, pinned below.
  *
  * Subscribes to the engine's bus DIRECTLY (`createEventBus` + `runCombat({ ..., bus })`) rather
  * than going through `battleSimulator`/`simulateBattle`, whose event surface carries an allowlist
  * that can silently make a handler dead code.
  */
+/** Every bare `enemy-buff` count gate in `skills` with its manual count raised to its threshold. */
+const enemyBuffThresholdsMet = (skills: ShipSkills): ShipSkills => ({
+    ...skills,
+    slots: skills.slots.map((slot) => ({
+        ...slot,
+        abilities: slot.abilities.map((a) => ({
+            ...a,
+            conditions: a.conditions.map((c) =>
+                c.subject === 'enemy-buff' && !c.buffName && c.countThreshold !== undefined
+                    ? { ...c, manualCount: c.countThreshold }
+                    : c
+            ),
+        })),
+    })),
+});
+
 function runLongFight(ship: Ship): Array<Extract<CombatEvent, { type: 'charge-changed' }>> {
     const stats = ship.baseStats as {
         attack: number;
@@ -107,7 +126,7 @@ function runLongFight(ship: Ship): Array<Extract<CombatEvent, { type: 'charge-ch
         critDamage: stats.critDamage,
         defensePenetration: 0,
         chargeCount: ship.chargeSkillCharge ?? 0,
-        shipSkills: buildShipAbilities(ship),
+        shipSkills: enemyBuffThresholdsMet(buildShipAbilities(ship)),
         numRounds: ROUNDS,
         selfBuffs: [],
         enemyDebuffs: [],
