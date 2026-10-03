@@ -34,6 +34,10 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator: an area hit now shortens a resisting enemy's existing Stasis.",
     "Combat simulator: a shorter re-inflicted Stasis no longer shields an enemy's longer one.",
     'Combat simulator: area skills now spread Corrosion, Inferno and Bombs to every enemy hit.',
+    'Combat simulator: Gallant, IonScorp and Meiying role damage bonuses now apply in battles.',
+    'Combat simulator: Zeolite and Lodolite bonuses against defenders now apply in battles.',
+    'Combat simulator: Thresh now gains Crit Power Up II after targeting a defender.',
+    "Combat simulator: Thresh's active now takes a charge from a targeted defender.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

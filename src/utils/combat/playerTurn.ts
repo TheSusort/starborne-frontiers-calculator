@@ -1671,7 +1671,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         pendingAccumulators = [],
         enemyDefense = 0,
         enemyHp = 0,
-        enemyType,
+        enemyType: fightWideEnemyType,
         targetGateReading,
         bus,
         round: r,
@@ -1707,6 +1707,12 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         chargedPattern,
         sameSideLiving,
     } = args;
+    // The bound target's role class for every `enemy-type` gate and role-scaled bonus asked of
+    // this turn ("if the target is a defender", "when attacking a supporter") — the struck enemy's
+    // own role (owner ruling 4). The fight-wide class answers only where the target carries no
+    // role (the DPS calculator). Covered footprint victims re-point it at their own role in the
+    // engine's per-victim refolds (`perVictimScalingDeltaPct`, `perVictimOutgoingDeltaPct`).
+    const enemyType = targetGateReading?.role ?? fightWideEnemyType;
 
     const {
         actor,
@@ -2428,9 +2434,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         genericCount: genericDoTEntries.length,
         enemyDotFamilyCounts: dotFamilyCounts(corrosionEntries, infernoEntries, genericDoTEntries),
         effectiveCritRate: cappedCrit(critBuffForGates),
-        // "If the target is a defender" asks the struck enemy's own role (owner ruling 4); the
-        // fight-wide class answers only where no actor carries a role (the DPS calculator).
-        enemyType: targetGateReading?.role ?? enemyType,
+        enemyType,
         enemyHpPct,
         // The entry counts above are all 0 on a no-victim turn (see the `corrosionEntries
         // = []` default note at this function's destructure), which is ALSO what a real victim
@@ -2535,7 +2539,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                     enemyHpPct:
                         vHp > 0 ? Math.max(0, 100 * (1 - Math.max(0, vHp - v.currentHp) / vHp)) : 0,
                     targetRepairedThisRound: reading.targetRepairedThisRound,
-                    enemyType: reading.role ?? enemyType,
+                    enemyType: reading.role ?? fightWideEnemyType,
                     // Sentinels mirror the bound target's: absent there → absent here.
                     enemyDebuffNames:
                         enemyDebuffNamesArg === undefined ? undefined : reading.enemyDebuffNames,

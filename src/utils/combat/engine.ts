@@ -5645,11 +5645,9 @@ export function runCombat(rawInput: CombatEngineInput): {
         };
 
         // Combat-start seeding (round 1) for PASSIVE-sourced finite (timed) self-statuses.
-        // A player runtime's `enemy-type` gate resolves against the FIGHT-WIDE `input.enemyType`
-        // scalar — no per-enemy-attacker class field is plumbed (see the `enemyType: NOT rebuilt`
-        // note at the per-victim ctx builder). Enemy-attacker runtimes face the player heal
-        // target (which has no
-        // EnemyBaseClass), so their `enemy-type` gate must resolve against undefined.
+        // A combat-start passive has no struck enemy, so a player runtime's `enemy-type` gate
+        // resolves against the FIGHT-WIDE `input.enemyType` scalar. Enemy-attacker runtimes face
+        // the player side, which has no fight-wide class, so theirs resolves against undefined.
         if (r === 1) {
             seedPassiveTimedStatuses(
                 [...runtimesById.values()],
@@ -7989,11 +7987,9 @@ export function runCombat(rawInput: CombatEngineInput): {
         //    ONLY when primaryCtx carries one (absent is the no-target / DPS sentinel).
         //  - enemyHpPct: rebuilt from the snapshot's pre-turn currentHp/stats.hp reading (the
         //    primary ctx's value is a turn-start snapshot of the BOUND target only).
-        //  - enemyType: NOT rebuilt — no per-enemy-attacker class field is plumbed on
-        //    positional inputs today (only one fight-wide `input.enemyType`), so every victim
-        //    reuses the primary ctx's value. Inert today — no shipped kit gates its outgoing
-        //    modifier on `enemy-type`; a future enemy-type-gated per-victim aura
-        //    needs real per-actor class plumbing first (deferred, not modeled here).
+        //  - enemyType: this victim's own role class (`victimEnemyType`) — "30% more damage when
+        //    hitting a defender" asks each struck enemy (owner ruling 4). Static per actor, so it
+        //    needs no snapshot.
         //
         // For the PRIMARY target in a single-enemy fight this ctx is IDENTICAL to primaryCtx
         // (delta = 0). A ship with no enemy-status-gated outgoing modifier also gets delta = 0
@@ -8019,19 +8015,39 @@ export function runCombat(rawInput: CombatEngineInput): {
                     },
                 ])
             );
+        /**
+         * A struck victim's `enemy-type` class for the per-victim refolds below: its own role's
+         * class; for a role-less victim, the class the caster's own turn falls back to — the
+         * fight-wide `input.enemyType` when the victim is on the enemy side (the DPS
+         * calculator's configured enemy), none for a player-side victim (an enemy caster's
+         * turn carries no fight-wide class). Mirrors `RecipientGateReading.role` + the
+         * `TurnBindings.enemyTypeArg` fallback the bound target's turn reads.
+         */
+        const victimEnemyType = (victim: CombatActor): EnemyBaseClass | undefined => {
+            const role = roleByActorId.get(victim.id);
+            if (role) return roleBaseClass(role);
+            return victim.side === 'enemy' ? enemyType : undefined;
+        };
+        /** Per-victim outgoing-damage and crit-power deltas (percentage points) vs the
+         *  attacker-fixed scalars folded once against the bound target. */
+        interface PerVictimOutgoingDelta {
+            outgoingDamage: number;
+            critDamage: number;
+        }
+        const NO_OUTGOING_DELTA: PerVictimOutgoingDelta = { outgoingDamage: 0, critDamage: 0 };
         const perVictimOutgoingDeltaPct = (
             perVictimOutgoing: PlayerTurnResult['perVictimOutgoing'],
             preTurnStatus: Map<string, PreTurnVictimStatusSnapshot> | undefined,
             victim: CombatActor
-        ): number => {
-            if (!perVictimOutgoing) return 0;
+        ): PerVictimOutgoingDelta => {
+            if (!perVictimOutgoing) return NO_OUTGOING_DELTA;
             const { modifierAbilities, primaryCtx } = perVictimOutgoing;
-            if (modifierAbilities.length === 0) return 0; // fast path — nothing to re-fold
+            if (modifierAbilities.length === 0) return NO_OUTGOING_DELTA; // nothing to re-fold
             // Defensive fallback: a victim absent from the snapshot (should never happen — the
             // snapshot covers the FULL opposing roster captured pre-turn) contributes delta 0
             // rather than crashing.
             const snap = preTurnStatus?.get(victim.id);
-            if (!snap) return 0;
+            if (!snap) return NO_OUTGOING_DELTA;
             const victimCtx: ConditionContext = {
                 ...primaryCtx,
                 ...(primaryCtx.enemyDebuffNames !== undefined
@@ -8042,19 +8058,25 @@ export function runCombat(rawInput: CombatEngineInput): {
                     ? { enemyBuffCount: snap.enemyBuffNames.length }
                     : {}),
                 enemyHpPct: snap.enemyHpPct,
+                enemyType: victimEnemyType(victim),
             };
-            const full = modifierTotalsFromAbilities(modifierAbilities, victimCtx).outgoingDamage;
-            const base = modifierTotalsFromAbilities(modifierAbilities, primaryCtx).outgoingDamage;
-            return full - base;
+            const full = modifierTotalsFromAbilities(modifierAbilities, victimCtx);
+            const base = modifierTotalsFromAbilities(modifierAbilities, primaryCtx);
+            return {
+                outgoingDamage: full.outgoingDamage - base.outgoingDamage,
+                critDamage: full.critDamage - base.critDamage,
+            };
         };
 
         /**
-         * Per-victim skill-multiplier delta for a count-scaled damage bonus ("an additional 30%
-         * damage for each buff on the enemy"). `positionalScalars.multiplierPct` scores the bonus
-         * once against the bound target; each struck enemy counts its OWN distinct buffs, so this
-         * re-scores it with only `enemyBuffCount` re-pointed at the victim (read from the same
-         * pre-turn snapshot as `perVictimOutgoingDeltaPct`) and returns the difference. Absent
-         * `enemyBuffCount` on the primary ctx (no target / DPS sentinel) → 0.
+         * Per-victim skill-multiplier delta for a scaled damage bonus — count-scaled ("an
+         * additional 30% damage for each buff on the enemy") or role-scaled ("if the target is a
+         * defender it instead deals 205% damage", "when attacking a supporter, an additional
+         * 125%"). `positionalScalars.multiplierPct` scores the bonus once against the bound
+         * target; each struck enemy answers for itself, so this re-scores it with `enemyBuffCount`
+         * (from the same pre-turn snapshot as `perVictimOutgoingDeltaPct`) and `enemyType`
+         * (`victimEnemyType`) re-pointed at the victim, and returns the difference. Absent
+         * `enemyBuffCount` on the primary ctx (no target / DPS sentinel) stays absent.
          */
         const perVictimScalingDeltaPct = (
             perVictimScaling: PlayerTurnResult['perVictimScaling'],
@@ -8063,13 +8085,15 @@ export function runCombat(rawInput: CombatEngineInput): {
         ): number => {
             if (!perVictimScaling) return 0;
             const { scalingAbility, primaryCtx } = perVictimScaling;
-            if (primaryCtx.enemyBuffCount === undefined) return 0;
             const snap = preTurnStatus?.get(victim.id);
             if (!snap) return 0;
             return (
                 scaledBonus(scalingAbility, {
                     ...primaryCtx,
-                    enemyBuffCount: snap.enemyBuffNames.length,
+                    ...(primaryCtx.enemyBuffCount !== undefined
+                        ? { enemyBuffCount: snap.enemyBuffNames.length }
+                        : {}),
+                    enemyType: victimEnemyType(victim),
                 }) - scaledBonus(scalingAbility, primaryCtx)
             );
         };
@@ -8092,6 +8116,11 @@ export function runCombat(rawInput: CombatEngineInput): {
             }
         ): VictimDefenseProfile => {
             const m = victimIncomingModifiers(v.id, opts.scheduledEnemyEffects);
+            const outgoingDelta = perVictimOutgoingDeltaPct(
+                opts.perVictimOutgoing,
+                opts.preTurnVictimStatus,
+                v
+            );
             return {
                 // Meatshield defense-substitution (approximation) — see the
                 // substitutedDefenceFor doc comment above for the full rule.
@@ -8113,13 +8142,10 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // still folds the whole mixed channel — this field never touches it.
                 victimSideIncomingPct: m.victimSideIncomingModifier,
                 affinity: v.affinity ?? 'antimatter',
-                // This footprint victim's own enemy-status-gated
-                // outgoing-modifier delta vs the attacker-fixed positionalScalars term.
-                outgoingDamageDeltaPct: perVictimOutgoingDeltaPct(
-                    opts.perVictimOutgoing,
-                    opts.preTurnVictimStatus,
-                    v
-                ),
+                // This footprint victim's own enemy-status- or role-gated outgoing-modifier and
+                // crit-power deltas vs the attacker-fixed positionalScalars terms.
+                outgoingDamageDeltaPct: outgoingDelta.outgoingDamage,
+                critDamageDeltaPct: outgoingDelta.critDamage,
                 // This victim's 'Defensive Affinity Override' (Isha/Nayra) forces
                 // the incoming attacker to affinity DISADVANTAGE against it. Detected per
                 // victim (anchor AND covered) via the victim's own self-buff store — the
