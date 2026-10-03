@@ -7973,23 +7973,10 @@ export function runCombat(rawInput: CombatEngineInput): {
         // `runPlayerTurn` call, capturing every living opposing actor's status at that moment;
         // `perVictimOutgoingDeltaPct` below reads ONLY from that frozen snapshot.
         //
-        //  - enemyDebuffNames: rebuilt from the snapshot (I1's per-target name read,
-        //    `enemyDebuffNamesForTarget`), but ONLY when primaryCtx already carries the array
-        //    (the DPS-parity sentinel: undefined means "not opted in" and must stay undefined
-        //    here too — though this path only runs from the positional apply branch, where the
-        //    primary ctx is always real/positional and the array is always populated).
-        //  - enemyBuffNames: rebuilt from the snapshot for JUST this victim (the per-turn
-        //    primaryCtx uses a UNION across every living enemy attacker — see
-        //    enemyBuffNamesUnion above — which is correct for "does an enemy have X" REACTIVE
-        //    gates but not for a per-victim OUTGOING-damage aura; the locked game rule (spec §2)
-        //    requires each victim's OWN status here).
-        //  - enemyBuffCount: this victim's distinct-buff count, from the same snapshot names —
-        //    ONLY when primaryCtx carries one (absent is the no-target / DPS sentinel).
-        //  - enemyHpPct: rebuilt from the snapshot's pre-turn currentHp/stats.hp reading (the
-        //    primary ctx's value is a turn-start snapshot of the BOUND target only).
-        //  - enemyType: this victim's own role class (`victimEnemyType`) — "30% more damage when
-        //    hitting a defender" asks each struck enemy (owner ruling 4). Static per actor, so it
-        //    needs no snapshot.
+        // The per-victim ctx is `victimReadingCtx` (its doc lists the re-pointed fields).
+        // `enemyBuffNames` there is JUST this victim's: the per-turn primaryCtx carries a UNION
+        // across every living enemy (`enemyBuffNamesUnion`), right for "does an enemy have X"
+        // reactive gates but not for a per-victim outgoing aura (spec §2: each victim's OWN).
         //
         // For the PRIMARY target in a single-enemy fight this ctx is IDENTICAL to primaryCtx
         // (delta = 0). A ship with no enemy-status-gated outgoing modifier also gets delta = 0
@@ -7998,22 +7985,40 @@ export function runCombat(rawInput: CombatEngineInput): {
             enemyDebuffNames: string[];
             enemyBuffNames: string[];
             enemyHpPct: number;
+            /** Debuffs on the victim: its distinct per-target statuses plus one per DoT entry /
+             *  pending bomb — the bound target's `enemyDebuffCount` derivation. */
+            enemyDebuffCount: number;
+            /** DoT entries / pending bombs on the victim (`enemyDotCount`'s derivation). */
+            enemyDotCount: number;
+            /** Living units next to the victim on its own side (`enemyAdjacentCount`). */
+            enemyAdjacentCount: number;
         }
         const snapshotPreTurnVictimStatus = (
             opposingLiving: CombatActor[]
         ): Map<string, PreTurnVictimStatusSnapshot> =>
             new Map(
-                opposingLiving.map((v) => [
-                    v.id,
-                    {
-                        enemyDebuffNames: enemyDebuffNamesForTarget(v),
-                        enemyBuffNames: selfBuffNamesForOwners(statusEngine, [v.id]),
-                        enemyHpPct:
-                            v.stats.hp > 0
-                                ? Math.max(0, Math.min(100, (100 * v.currentHp) / v.stats.hp))
-                                : 100,
-                    },
-                ])
+                opposingLiving.map((v) => {
+                    const dots =
+                        v.corrosionEntries.length +
+                        v.infernoEntries.length +
+                        v.pendingBombs.length +
+                        v.genericDoTEntries.length;
+                    return [
+                        v.id,
+                        {
+                            enemyDebuffNames: enemyDebuffNamesForTarget(v),
+                            enemyBuffNames: selfBuffNamesForOwners(statusEngine, [v.id]),
+                            enemyHpPct:
+                                v.stats.hp > 0
+                                    ? Math.max(0, Math.min(100, (100 * v.currentHp) / v.stats.hp))
+                                    : 100,
+                            enemyDebuffCount:
+                                new Set(ownerDebuffNamesFor(statusEngine, v.id)).size + dots,
+                            enemyDotCount: dots,
+                            enemyAdjacentCount: bySide(v.side).adjacentAllyIdsFor(v.id).length,
+                        },
+                    ];
+                })
             );
         /**
          * A struck victim's `enemy-type` class for the per-victim refolds below: its own role's
@@ -8028,6 +8033,39 @@ export function runCombat(rawInput: CombatEngineInput): {
             if (role) return roleBaseClass(role);
             return victim.side === 'enemy' ? enemyType : undefined;
         };
+        /**
+         * `primaryCtx` with every subject that describes THE ENEMY re-pointed at `victim`: its
+         * buffs (count and names), debuffs (count and names), DoT entries, adjacent units, HP and
+         * role class — all read from the pre-turn snapshot (owner rulings 3 and 4: a per-enemy
+         * reading is each struck enemy's own). A field the primary ctx leaves absent (the
+         * no-target / DPS sentinels) stays absent. The one victim ctx both per-victim refolds
+         * (`perVictimOutgoingDeltaPct`, `perVictimScalingDeltaPct`) score against.
+         */
+        const victimReadingCtx = (
+            primaryCtx: ConditionContext,
+            snap: PreTurnVictimStatusSnapshot,
+            victim: CombatActor
+        ): ConditionContext => ({
+            ...primaryCtx,
+            enemyBuffNames: snap.enemyBuffNames,
+            ...(primaryCtx.enemyBuffCount !== undefined
+                ? { enemyBuffCount: snap.enemyBuffNames.length }
+                : {}),
+            ...(primaryCtx.enemyDebuffNames !== undefined
+                ? { enemyDebuffNames: snap.enemyDebuffNames }
+                : {}),
+            ...(primaryCtx.enemyDebuffCount !== undefined
+                ? { enemyDebuffCount: snap.enemyDebuffCount }
+                : {}),
+            ...(primaryCtx.enemyDotCount !== undefined
+                ? { enemyDotCount: snap.enemyDotCount }
+                : {}),
+            ...(primaryCtx.enemyAdjacentCount !== undefined
+                ? { enemyAdjacentCount: snap.enemyAdjacentCount }
+                : {}),
+            ...(primaryCtx.enemyHpPct !== undefined ? { enemyHpPct: snap.enemyHpPct } : {}),
+            enemyType: victimEnemyType(victim),
+        });
         /** Per-victim outgoing-damage and crit-power deltas (percentage points) vs the
          *  attacker-fixed scalars folded once against the bound target. */
         interface PerVictimOutgoingDelta {
@@ -8041,25 +8079,16 @@ export function runCombat(rawInput: CombatEngineInput): {
             victim: CombatActor
         ): PerVictimOutgoingDelta => {
             if (!perVictimOutgoing) return NO_OUTGOING_DELTA;
-            const { modifierAbilities, primaryCtx } = perVictimOutgoing;
+            const { modifierAbilities, primaryCtx, boundTargetId } = perVictimOutgoing;
             if (modifierAbilities.length === 0) return NO_OUTGOING_DELTA; // nothing to re-fold
+            // The bound target's own reading IS `primaryCtx`, so its delta is 0 by definition.
+            if (victim.id === boundTargetId) return NO_OUTGOING_DELTA;
             // Defensive fallback: a victim absent from the snapshot (should never happen — the
             // snapshot covers the FULL opposing roster captured pre-turn) contributes delta 0
             // rather than crashing.
             const snap = preTurnStatus?.get(victim.id);
             if (!snap) return NO_OUTGOING_DELTA;
-            const victimCtx: ConditionContext = {
-                ...primaryCtx,
-                ...(primaryCtx.enemyDebuffNames !== undefined
-                    ? { enemyDebuffNames: snap.enemyDebuffNames }
-                    : {}),
-                enemyBuffNames: snap.enemyBuffNames,
-                ...(primaryCtx.enemyBuffCount !== undefined
-                    ? { enemyBuffCount: snap.enemyBuffNames.length }
-                    : {}),
-                enemyHpPct: snap.enemyHpPct,
-                enemyType: victimEnemyType(victim),
-            };
+            const victimCtx = victimReadingCtx(primaryCtx, snap, victim);
             const full = modifierTotalsFromAbilities(modifierAbilities, victimCtx);
             const base = modifierTotalsFromAbilities(modifierAbilities, primaryCtx);
             return {
@@ -8069,14 +8098,13 @@ export function runCombat(rawInput: CombatEngineInput): {
         };
 
         /**
-         * Per-victim skill-multiplier delta for a scaled damage bonus — count-scaled ("an
-         * additional 30% damage for each buff on the enemy") or role-scaled ("if the target is a
-         * defender it instead deals 205% damage", "when attacking a supporter, an additional
-         * 125%"). `positionalScalars.multiplierPct` scores the bonus once against the bound
-         * target; each struck enemy answers for itself, so this re-scores it with `enemyBuffCount`
-         * (from the same pre-turn snapshot as `perVictimOutgoingDeltaPct`) and `enemyType`
-         * (`victimEnemyType`) re-pointed at the victim, and returns the difference. Absent
-         * `enemyBuffCount` on the primary ctx (no target / DPS sentinel) stays absent.
+         * Per-victim skill-multiplier delta for a scaled damage bonus — per-enemy count ("an
+         * additional 25% damage for each debuff on the enemy", "for each buff on the enemy",
+         * "for each Unit adjacent to the enemy"), named ("if the target is affected by Inferno")
+         * or role ("if the target is a defender it instead deals 205% damage").
+         * `positionalScalars.multiplierPct` scores the bonus once against the bound target; each
+         * other struck enemy answers for itself (owner rulings 3 and 4), so this re-scores it
+         * against `victimReadingCtx` and returns the difference.
          */
         const perVictimScalingDeltaPct = (
             perVictimScaling: PlayerTurnResult['perVictimScaling'],
@@ -8084,17 +8112,15 @@ export function runCombat(rawInput: CombatEngineInput): {
             victim: CombatActor
         ): number => {
             if (!perVictimScaling) return 0;
-            const { scalingAbility, primaryCtx } = perVictimScaling;
+            const { scalingAbility, primaryCtx, boundTargetId } = perVictimScaling;
+            // The bound target's own reading IS `primaryCtx` (which also sees what this cast
+            // landed on it ahead of its damage clause), so its delta is 0 by definition.
+            if (victim.id === boundTargetId) return 0;
             const snap = preTurnStatus?.get(victim.id);
             if (!snap) return 0;
             return (
-                scaledBonus(scalingAbility, {
-                    ...primaryCtx,
-                    ...(primaryCtx.enemyBuffCount !== undefined
-                        ? { enemyBuffCount: snap.enemyBuffNames.length }
-                        : {}),
-                    enemyType: victimEnemyType(victim),
-                }) - scaledBonus(scalingAbility, primaryCtx)
+                scaledBonus(scalingAbility, victimReadingCtx(primaryCtx, snap, victim)) -
+                scaledBonus(scalingAbility, primaryCtx)
             );
         };
 

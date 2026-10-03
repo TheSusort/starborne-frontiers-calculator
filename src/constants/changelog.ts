@@ -38,6 +38,9 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: Zeolite and Lodolite bonuses against defenders now apply in battles.',
     'Combat simulator: Thresh now gains Crit Power Up II after targeting a defender.',
     "Combat simulator: Thresh's active now takes a charge from a targeted defender.",
+    "Combat simulator: per-debuff damage bonuses now count each enemy hit's own debuffs.",
+    'Combat simulator: Sokol, Wrecker and Rikra bonus damage now checks each enemy hit.',
+    "Combat simulator: Panguan's bonus now counts the units next to each enemy hit.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

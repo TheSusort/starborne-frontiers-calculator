@@ -499,14 +499,25 @@ export interface PlayerTurnResult {
      *  folds). Present ONLY when a damage ability fired this cast (mirrors positionalScalars).
      *  Absent → the engine skips the per-victim fold and keeps the single primary-ctx result;
      *  read ONLY by the positional engine branch. */
-    perVictimOutgoing?: { modifierAbilities: Ability[]; primaryCtx: ConditionContext };
-    /** The firing damage ability's count-scaled bonus ("an additional 30% damage for each buff on
-     *  the enemy") and the ctx `conditionalBonusPct` was scored against. `positionalScalars`
-     *  bakes that bonus in once, from the bound target; the engine re-scores it per footprint
-     *  victim with `enemyBuffCount` re-pointed at that victim's own distinct buffs and applies
-     *  the difference to that victim's hit. Present ONLY when a damage ability with `scaling`
-     *  fired; read ONLY by the positional engine branch, for the firing hit. */
-    perVictimScaling?: { scalingAbility: Ability; primaryCtx: ConditionContext };
+    perVictimOutgoing?: {
+        modifierAbilities: Ability[];
+        primaryCtx: ConditionContext;
+        /** The bound target `primaryCtx` describes (absent on a no-victim turn). */
+        boundTargetId?: string;
+    };
+    /** The firing damage ability's scaled bonus ("an additional 25% damage for each debuff on
+     *  the enemy", "if the target is a defender it instead deals 205%") and the ctx
+     *  `conditionalBonusPct` was scored against. `positionalScalars` bakes that bonus in once,
+     *  from the bound target; the engine re-scores it for every other footprint victim against
+     *  that victim's own reading (`victimReadingCtx` in engine.ts) and applies the difference to
+     *  that victim's hit. Present ONLY when a damage ability with `scaling` fired; read ONLY by
+     *  the positional engine branch, for the firing hit. */
+    perVictimScaling?: {
+        scalingAbility: Ability;
+        primaryCtx: ConditionContext;
+        /** The bound target `primaryCtx` describes (absent on a no-victim turn). */
+        boundTargetId?: string;
+    };
     /** This turn's SCHEDULED enemy-debuff effects AFTER the per-round landing
      *  decision, i.e. exactly the entries that LANDED (`scheduledEnemy.roundEnemyDebuffs`:
      *  recurring/always/accumulating re-rolled through `roundDebuffLanded()` / the affinity
@@ -5966,11 +5977,19 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // Carries the exact ingredients (modifierAbilities + the per-turn modifierCtx) the engine
     // needs to re-fold outgoingDamage against each footprint victim's OWN enemy-status.
     const perVictimOutgoing: PlayerTurnResult['perVictimOutgoing'] = hasDamageAbility
-        ? { modifierAbilities, primaryCtx: modifierCtx }
+        ? {
+              modifierAbilities,
+              primaryCtx: modifierCtx,
+              ...(hasVictim ? { boundTargetId: enemy.id } : {}),
+          }
         : undefined;
     const perVictimScaling: PlayerTurnResult['perVictimScaling'] =
         hasDamageAbility && scalingAbility
-            ? { scalingAbility, primaryCtx: ctxFor.get(scalingAbility.id) ?? ctx }
+            ? {
+                  scalingAbility,
+                  primaryCtx: ctxFor.get(scalingAbility.id) ?? ctx,
+                  ...(hasVictim ? { boundTargetId: enemy.id } : {}),
+              }
             : undefined;
 
     // Hand the PASSIVE-SLOT damage instance to the positional apply path, which
