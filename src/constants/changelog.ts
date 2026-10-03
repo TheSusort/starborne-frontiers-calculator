@@ -31,6 +31,8 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: APEX, Laika and Malvex now strip shields from every enemy hit.',
     'Combat simulator: Tithonus and Pallas now steal a buff from every enemy hit.',
     'Healing calculator: Tithonus now steals a buff from every enemy his skill hits.',
+    'Combat simulator: Stasis an area skill lands is no longer shortened by that hit.',
+    "Combat simulator: an area hit now shortens a resisting enemy's existing Stasis.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

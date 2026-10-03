@@ -1,141 +1,67 @@
 /**
- * COVERED VICTIMS AND THE SAME-TURN STASIS RE-APPLY VECTOR — the corpus precondition.
+ * THE STASIS-BREAK RE-INFLICT CHECK SEES CAST-PATH LANDINGS ONLY — the corpus census of what it
+ * cannot see.
  *
- * The engine keeps two Stasis-break sets. The ANCHOR's marks go through
- * `resolveAnchorStasisBreak`, which suppresses a break when the same cast re-inflicted Stasis on
- * that victim; the COVERED footprint's marks are set unconditionally, on the stated ground that a
- * covered victim cannot be re-inflicted by the cast that hit it. Merging the two would make
- * covered breaks re-inflict-suppressible, which is unruled — so that ground has to stay true.
+ * A hit on a stasised enemy queues a §4.5 break, which the engine skips for any victim the SAME
+ * cast landed Stasis on (`resolveStasisBreaks` in engine.ts, asked per victim — the aimed enemy and
+ * every covered one alike). The "did this cast land Stasis on V" answer is `inflictedStasisOn`,
+ * playerTurn's per-victim record of its own FIRING-slot clauses. A Stasis landed by a PASSIVE
+ * clause routes through `triggers.ts` and never enters that record, so if such a clause lands on a
+ * victim of its owner's own cast, that victim's break is NOT skipped (#534, awaiting a ruling).
  *
- * It is true only because of a corpus coincidence, not a rule: a victim needs BOTH of
- *   (a) a Stasis clause whose target reaches past the anchor, and
- *   (b) a damage footprint covering more than the anchor's own cell,
- * to be a covered victim the cast also re-inflicts. The census arm below pins which ships satisfy
- * (a); each one is then required to fail (b).
+ * The census below pins every passive-slot Stasis clause aimed at the enemy side, each read:
+ *   - Flamel ("on-attacked") and Fuying ("on-ally-attacked") stasis the enemy that attacked —
+ *     the attacker of SOMEONE ELSE's hit, never a victim of the owner's own cast. Out of reach.
+ *   - Meiying ("on-enemy-destroyed", adjacent enemies) fires off her own kill, so a charged cast on
+ *     `Pattern-Backline-Range-2` that kills a debuffed enemy can stasis a struck neighbour of that
+ *     same cast: the #534 gap.
+ * A new entry is a new route around the re-inflict check and needs reading before it is added.
  *
- * SCOPE — READ THIS BEFORE TRUSTING A GREEN. This tripwire covers FIRING-SLOT clauses only, and
- * that is a known gap, not a complete argument. Meiying's PASSIVE inflicts Stasis on
- * `adjacent-enemies` from an `on-enemy-destroyed` trigger while her cast fires on
- * `Pattern-Backline-Range-2` (3 cells), so a charged cast that kills a debuffed enemy can
- * re-stasis a covered victim of that same cast — satisfying (a) and (b) together. That vector
- * routes through `triggers.ts` rather than the cast-path `inflictedEnemyDebuffs` push, so
- * `resolveAnchorStasisBreak` would not see it for the ANCHOR either; it is a pre-existing gap in
- * both sets, awaiting a ruling (#534). Widening the scan here without that ruling would only
- * assert a behaviour nobody has decided.
- *
- * If the firing-slot arm goes red, the unconditional covered break in engine.ts has become
- * reachable from a cast clause and needs a ruling before the fixture is adjusted — see
- * `resolveAnchorStasisBreak` and the comment on `coveredStasisVictims`.
- *
- * CORPUS ACCESS: both reference files are gitignored, so this skips on a clean checkout. The
- * pattern half matters as much as the text half — without `docs/ship-data.json` every footprint
- * measures 0 cells and the reachability arm passes over nothing.
+ * CORPUS ACCESS: the reference file is gitignored, so this skips on a clean checkout.
  */
 import { describe, it, expect } from 'vitest';
 import { buildShipAbilities } from '../../abilities/buildShipAbilities';
 import { buildTraceShip } from '../../../../scripts/lib/traceShipFactory';
 import { csvAvailable, loadShipSkillRecords } from '../../../../scripts/lib/shipSkillCsv';
 import { shipDataAvailable } from '../../../../scripts/lib/shipDataSnapshot';
-import { parsePattern } from '../../targetingParser';
-import { resolveCells } from '../../targeting/resolvePattern';
-import { ALL_POSITIONS } from '../../targeting/board';
+import { isEnemyTarget } from '../../abilities/abilityTargetSide';
 import type { Ship } from '../../../types/ship';
 import type { Ability } from '../../../types/abilities';
-
-const FIRING_SLOTS = ['active', 'charged'] as const;
-type FiringSlot = (typeof FIRING_SLOTS)[number];
-
-/** The ONLY enemy-facing target that resolves to the anchor by construction. The three
- *  `enemy-highest-*` / `enemy-most-buffs` selectors are deliberately NOT here: they are global
- *  selectors resolved live against the whole opposing roster (see `AbilityTarget` and
- *  `enemySelectorId`), so one can land on a covered footprint victim. No Stasis clause carries one
- *  today, which is exactly why leaving them out of the census would hide the day one does. */
-const ANCHOR_ONLY_ENEMY_TARGETS = ['enemy'];
 
 const isControlStatus =
     (effect: 'stasis' | 'provoke') =>
     (a: Ability): boolean =>
         (a.config.type === 'control' && a.config.effect === effect) ||
         (a.config.type === 'debuff' && new RegExp(effect, 'i').test(a.config.buffName ?? ''));
-const isStasis = isControlStatus('stasis');
 
-/** Widest footprint the pattern reaches ANYWHERE on the board. Measuring at one anchor understates
- *  it in the direction that hides a hit: `Pattern-Scattershot-Range-1` and `Pattern-Split-Range-1`
- *  both resolve to a single cell from M2 and to several from other positions. `'unresolvable'`
- *  keeps a pattern `resolveCells` cannot parse (the data already carries the typo
- *  `Patern-Support-All`) as a visible finding rather than a thrown test. */
-const widestFootprint = (raw: string): number | 'unresolvable' => {
-    try {
-        const parsed = parsePattern(raw);
-        return Math.max(...ALL_POSITIONS.map((p) => resolveCells(parsed, p).length));
-    } catch {
-        return 'unresolvable';
-    }
-};
-
-interface WideStasisClause {
-    ship: string;
-    slot: FiringSlot;
-    target: string;
-    footprint: number | 'unresolvable';
-}
-
-const wideScopedStasisClauses = (
-    matches: (a: Ability) => boolean = isStasis
-): WideStasisClause[] => {
-    const found: WideStasisClause[] = [];
+const passiveEnemyClauses = (matches: (a: Ability) => boolean): string[] => {
+    const found = new Set<string>();
     for (const rec of loadShipSkillRecords()) {
         const ship = buildTraceShip(rec.name, { refitLevel: 4 }) as Ship;
-        const skills = buildShipAbilities(ship);
-        for (const slot of FIRING_SLOTS) {
-            const abilities = skills.slots.find((s) => s.slot === slot)?.abilities ?? [];
-            const wide = abilities.filter(
-                (a) => matches(a) && !ANCHOR_ONLY_ENEMY_TARGETS.includes(a.target)
-            );
-            if (wide.length === 0) continue;
-            // A charged row with no pattern of its own fires on the active's (`chargedPattern ??
-            // pattern`, playerTurn.ts and the engine's pattern reads); a ship with neither has no
-            // positional footprint at all, so it produces no covered victims.
-            const raw =
-                (slot === 'charged' ? ship.chargedPattern : undefined) || ship.activePattern;
-            const footprint = raw ? widestFootprint(raw) : 0;
-            for (const a of wide) found.push({ ship: rec.name, slot, target: a.target, footprint });
+        const passive = buildShipAbilities(ship).slots.find((s) => s.slot === 'passive');
+        for (const a of passive?.abilities ?? []) {
+            if (matches(a) && isEnemyTarget(a.target))
+                found.add(`${rec.name}/${a.trigger}/${a.target}`);
         }
     }
-    return found;
+    return [...found].sort();
 };
 
 describe.skipIf(!csvAvailable() || !shipDataAvailable())(
-    'covered-victim Stasis re-inflict precondition (tripwire)',
+    'passive-slot Stasis clauses the re-inflict check cannot see (census)',
     () => {
-        it('the census of past-the-anchor firing-slot Stasis clauses is unchanged', () => {
-            // Empty: Asphyxiator's charged text reads "on the targeted enemy and all adjacent
-            // enemies", but its Stasis is pinned to the targeted enemy (`ENEMY_SCOPE_PINS`). A new
-            // entry here makes the arm below meaningful again and needs reading.
-            const census = [
-                ...new Set(wideScopedStasisClauses().map((c) => `${c.ship}/${c.slot}`)),
-            ].sort();
-            expect(census).toEqual([]);
+        it('the census of enemy-aimed passive Stasis clauses is unchanged', () => {
+            expect(passiveEnemyClauses(isControlStatus('stasis'))).toEqual([
+                'Flamel/on-attacked/enemy',
+                'Fuying/on-ally-attacked/enemy',
+                'Meiying/on-enemy-destroyed/adjacent-enemies',
+            ]);
         });
 
-        it('the census can see a past-the-anchor control clause (validity)', () => {
-            // The Stasis census above is empty, so prove the scan reports one when it exists:
-            // Vindicator's active "applies Provoke … to all adjacent enemies".
-            const census = [
-                ...new Set(
-                    wideScopedStasisClauses(isControlStatus('provoke')).map(
-                        (c) => `${c.ship}/${c.slot}`
-                    )
-                ),
-            ];
-            expect(census).toContain('Vindicator/active');
-        });
-
-        it('no firing-slot clause combines a past-the-anchor Stasis with a multi-cell footprint', () => {
-            const reachable = wideScopedStasisClauses().filter(
-                (c) => c.footprint === 'unresolvable' || c.footprint > 1
-            );
-            expect(reachable).toEqual([]);
+        it('the census can see a passive control clause of another kind (validity)', () => {
+            // Proves the scan reads passive slots at all: an empty Stasis census would otherwise
+            // be indistinguishable from a scan that never looked.
+            expect(passiveEnemyClauses(isControlStatus('provoke')).length).toBeGreaterThan(0);
         });
     }
 );

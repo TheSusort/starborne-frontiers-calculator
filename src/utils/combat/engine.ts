@@ -5588,6 +5588,24 @@ export function runCombat(rawInput: CombatEngineInput): {
         stasisBreakPending.delete(targetId);
         for (const name of STASIS_BUFFS) statusEngine.reduceTimedEnemyStatus(targetId, name);
     });
+    /**
+     * Queue the §4.5 Stasis break for every victim one cast's hit marked, except a victim that
+     * SAME cast landed Stasis on: a same-cast landing wins over the break, so that victim keeps the
+     * fresh duration. Asked per victim — a Stasis the cast landed on one struck enemy (or resisted
+     * on one) decides nothing for another. One rule for the aimed victim and every covered one.
+     *
+     * Reaches only cast-path landings (`inflictedStasisOn` is the cast's own per-victim record): a
+     * Stasis a REACTIVE trigger lands on a victim of the same cast is not seen (#534).
+     */
+    const resolveStasisBreaks = (
+        markedVictims: Iterable<string>,
+        inflictedStasisOn: (victimId: string) => boolean
+    ): void => {
+        for (const victimId of markedVictims) {
+            if (inflictedStasisOn(victimId)) continue;
+            stasisBreakPending.set(victimId, true);
+        }
+    };
 
     for (let r = 1; r <= numRounds; r++) {
         // Advance the status engine's round counter (per-round accumulating stacks
@@ -9648,6 +9666,9 @@ export function runCombat(rawInput: CombatEngineInput): {
              */
             applyDebuffsForSubAttack: PlayerTurnResult['applyDebuffsForSubAttack'];
             deferredEnemyApplications: PlayerTurnResult['deferredEnemyApplications'];
+            /** Whether this cast landed Stasis on a victim — its covered Stasis marks skip such a
+             *  victim (see `resolveStasisBreaks`). */
+            inflictedStasisOn: PlayerTurnResult['inflictedStasisOn'];
             /** This turn's scheduled enemy effects AFTER its landing/resist draw.
              *  `undefined` only where the turn itself produced none, in which case
              *  `victimEnemyBuffs` falls back to its raw bucket read. Every site — the enemy one
@@ -9755,14 +9776,11 @@ export function runCombat(rawInput: CombatEngineInput): {
             };
             // Per-footprint Stasis-break: collect EVERY covered footprint victim (≠ anchor) stasised
             // AT IMPACT (marked from `onVictimPreImpact`, per sub-attack × victim) so its Stasis is
-            // broken. Covered victims break unconditionally, performed below.
+            // broken, resolved below through `resolveStasisBreaks`.
             const coveredStasisVictims = new Set<string>();
-            // The anchor's marks, kept apart from the covered set because only the anchor has a
-            // same-turn re-apply vector: the call site hands these to `resolveAnchorStasisBreak`,
-            // which suppresses them when the cast itself re-inflicted Stasis. That a covered victim
-            // has no such vector is a corpus fact, not a rule — a cast would need a Stasis clause
-            // reaching past the anchor AND a multi-cell damage footprint. Pinned by
-            // `coveredVictimReInflict.corpus.test.ts`; merging the two sets is unruled.
+            // The anchor's marks, kept apart from the covered set only for WHEN they resolve: the
+            // call site resolves them after this drive returns, the covered ones resolve here. Both
+            // go through `resolveStasisBreaks`, so the same-cast re-inflict rule is one rule.
             const anchorStasisVictims = new Set<string>();
             /** §4.5 marks APPROVED at impact but not yet committed, keyed `victimId:subAttackIndex`;
              *  the value is that hit's `isAnchor`. The gate (`attackBreaksStasis` + `isStasised`)
@@ -9926,15 +9944,13 @@ export function runCombat(rawInput: CombatEngineInput): {
                     );
                 },
             });
-            // Set the DEFERRED Stasis break for every covered victim. Unconditional HERE only in
-            // the sense that `resolveAnchorStasisBreak`'s re-inflict suppression does not apply:
-            // the gate itself already ran, in `onVictimPreImpact`, which is the only thing that
-            // puts an id in this set. The victim's own skip branch consumes it next turn.
+            // Set the DEFERRED Stasis break for every covered victim this cast did not itself
+            // stasis. The gate already ran in `onVictimPreImpact`, the only thing that puts an id in
+            // this set, and every sub-attack has rolled its clauses by now. The victim's own skip
+            // branch consumes the mark next turn.
             // Pure state, no events: hoisted ABOVE the emission block so the
             // interleaved event/attacked pairs below stay adjacent, with nothing between them.
-            for (const victimId of coveredStasisVictims) {
-                stasisBreakPending.set(victimId, true);
-            }
+            resolveStasisBreaks(coveredStasisVictims, sel.inflictedStasisOn);
             // ── Interleaved per-sub-attack emission ───────────────────────────
             // A multi-hit skill is N consecutive full-walk attacks, so this cast emits ONE
             // `ability-performed` per sub-attack that landed, each IMMEDIATELY followed by that
@@ -10252,6 +10268,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 activeSelfBuffs: [],
                 landedEnemyDebuffs: [],
                 inflictedEnemyDebuffs: [],
+                inflictedStasisOn: () => false,
                 resistedEnemyDebuffs: [],
                 // A skipped turn casts nothing, so it holds back nothing (clause order).
                 deferredEnemyApplications: [],
@@ -10986,41 +11003,32 @@ export function runCombat(rawInput: CombatEngineInput): {
         // whenever the attacker acted after the victim.
         // Keys: victimIds whose Stasis should be removed when their skip branch runs.
         // Values: always true (present = break approved; absent = no break queued).
-        // An entry is added by the ATTACKER's turn block, from two sources:
+        // An entry is added by the ATTACKER's turn block through `resolveStasisBreaks`, from two
+        // sources:
         //   - the anchor victim, via `resolveAnchorStasisBreak` below;
-        //   - every covered footprint victim, unconditionally, inside `drivePositionalTurnApply`.
+        //   - every covered footprint victim, inside `drivePositionalTurnApply`.
         // Consumed inside each actor's own skip branch (focus / team / real-enemy): if the
         // victim id is present, remove Stasis after the turn-skip logic. This ensures the
         // victim STILL skips its current-round turn (invariant preserved), and is freed for
         // its next turn (Stasis gone). The same-round drain guard (drainIntentsFor('player') / drainIntentsFor('enemy'))
         // runs BEFORE the break resolution → on-attacked reactive sees isStasised=true (test iii).
-        // Re-apply check is performed at the ATTACKER's turn, not at consume time, so there is
-        // The re-apply suppression reads the ACTING attacker's own `inflictedEnemyDebuffs`, so it
-        // answers "did this cast re-inflict Stasis" and nothing else. A Stasis applied by a
-        // DIFFERENT ship after the mark is queued is invisible to it, and the queued mark then
-        // shaves that fresh Stasis — #535, whose ruling is that a cross-ship fresh Stasis keeps its
-        // full duration. Closing that needs the mark keyed to the Stasis INSTANCE, or cleared at
-        // the apply seam; neither is done here.
+        // The re-apply suppression reads the ACTING attacker's own per-victim landing record, so it
+        // answers "did this cast re-inflict Stasis on this victim" and nothing else. A Stasis
+        // applied by a DIFFERENT ship after the mark is queued settles the mark at the apply seam
+        // (`setBeforeTimedEnemyApplication` above, #535).
         /**
-         * Queue the anchor victim's §4.5 Stasis break for one cast, unless that same cast
-         * re-inflicted Stasis — a same-turn re-apply wins over the break, so the victim keeps the
-         * fresh duration.
+         * Queue the anchor victim's §4.5 Stasis break for one cast (see `resolveStasisBreaks`).
          *
          * `anchorVictims` is the anchor ids marked as hit while stasised: the positional drive's
          * at-impact marks (one gate read per hit × victim) when a drive ran, else the cast-time
          * `onHitBreakStasis` set, whose single read is all a non-positional cast's one aggregate
          * hit can support. Call it AFTER the drive so a Stasis that RESISTED on one sub-attack and
-         * LANDED on a later one is seen as re-inflicted; `inflictedEnemyDebuffs` is not
-         * `collect`-guarded, so those later rows are already in the list by then.
+         * LANDED on a later one is seen as re-inflicted.
          */
         const resolveAnchorStasisBreak = (
             anchorVictims: ReadonlySet<string>,
-            inflictedEnemyDebuffs: readonly ActiveBuff[]
-        ): void => {
-            if (anchorVictims.size === 0) return;
-            if (inflictedEnemyDebuffs.some((ab) => isStasis(ab.buffName))) return;
-            for (const victimId of anchorVictims) stasisBreakPending.set(victimId, true);
-        };
+            inflictedStasisOn: (victimId: string) => boolean
+        ): void => resolveStasisBreaks(anchorVictims, inflictedStasisOn);
         inTurnLoop = true;
         try {
             let selectionGuard = 0;
@@ -11760,6 +11768,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                         positionalDetonation: turn.positionalDetonation,
                                         applyDebuffsForSubAttack: turn.applyDebuffsForSubAttack,
                                         deferredEnemyApplications: turn.deferredEnemyApplications,
+                                        inflictedStasisOn: turn.inflictedStasisOn,
                                         scheduledEnemyEffects: turn.scheduledEnemyEffects,
                                     },
                                     (victim, damage, outcome) =>
@@ -11790,7 +11799,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                             }
                             resolveAnchorStasisBreak(
                                 driveAnchorStasis ?? turnStasisHitVictims,
-                                turn.inflictedEnemyDebuffs
+                                turn.inflictedStasisOn
                             );
                             // Clause order: this turn's damage has landed (or the cast had none) —
                             // now apply the debuff clauses that followed it.
@@ -12065,6 +12074,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                         applyDebuffsForSubAttack: teamTurn.applyDebuffsForSubAttack,
                                         deferredEnemyApplications:
                                             teamTurn.deferredEnemyApplications,
+                                        inflictedStasisOn: teamTurn.inflictedStasisOn,
                                         scheduledEnemyEffects: teamTurn.scheduledEnemyEffects,
                                     },
                                     (victim, damage, outcome) =>
@@ -12093,7 +12103,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                             }
                             resolveAnchorStasisBreak(
                                 teamDriveAnchorStasis ?? teamTurnStasisHitVictims,
-                                teamTurn.inflictedEnemyDebuffs
+                                teamTurn.inflictedStasisOn
                             );
                             // Clause order — mirror of the focus site (see flushDeferredEnemyApplications).
                             flushDeferredEnemyApplications(teamTurn.deferredEnemyApplications);
@@ -12727,6 +12737,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                             // The SAME array the fallback flush below drains (see
                                             // the capture note), never a fresh one.
                                             deferredEnemyApplications: enemyDeferredApplications,
+                                            inflictedStasisOn: enemyTurn.inflictedStasisOn,
                                             // Team symmetry: the enemy's own turn gates its own
                                             // scheduled debuffs on the player side by the same draw.
                                             scheduledEnemyEffects: enemyScheduledEnemyEffects,
@@ -12876,7 +12887,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                             }
                             resolveAnchorStasisBreak(
                                 enemyDriveAnchorStasis ?? enemyTurnStasisHitVictims,
-                                enemyTurn.inflictedEnemyDebuffs
+                                enemyTurn.inflictedStasisOn
                             );
                             // Fallback: when the firing hit contributed nothing to the aggregate
                             // the block above never ran — the passive-slot instance is not the

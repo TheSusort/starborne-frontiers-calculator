@@ -5,8 +5,8 @@
  * THE RULE. A direct hit on a stasised anchor queues a §4.5 Stasis break, which shortens the
  * victim's Stasis by one turn when the victim's own skip branch runs. That break is DISCARDED when
  * the same cast re-inflicted Stasis on the victim: the fresh application wins and keeps its full
- * duration. Covered footprint victims have no same-turn re-apply vector and break unconditionally
- * — this file is about the anchor.
+ * duration. Covered footprint victims follow the same per-victim rule
+ * (`aoeStasisBreak.integration.test.ts`) — this file is about the anchor's sub-attack axis.
  *
  * THE SUB-ATTACK AXIS. A multi-hit cast is N consecutive FULL-WALK attacks, and every sub-attack
  * re-rolls the debuff clause against its own anchor, so one cast can RESIST the Stasis on

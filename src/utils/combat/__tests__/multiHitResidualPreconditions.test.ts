@@ -12,8 +12,8 @@
  *
  * R3 no longer names a defect: `resolveAnchorStasisBreak` (engine.ts) answers the same-cast
  * re-inflict question after the positional drive has run, at every actor site, so a Stasis landed
- * on sub-attack >= 1 is already in `inflictedEnemyDebuffs` by the time it reads. What R3 guards now
- * is a coverage gap — see the R3 section below — gated by the SAME precondition, because a witness
+ * on sub-attack >= 1 is already in the per-victim landing record (`inflictedStasisOn`) by the time
+ * it reads. What R3 guards now is a coverage gap — see the R3 section below — gated by the SAME precondition, because a witness
  * for it needs the same kind of ship R1/R2 need.
  *
  * This file asserts the ABSENCE of a trigger condition. That makes it a characterisation test whose
@@ -46,11 +46,11 @@
  * ── R3 · the re-inflict check has no witness at two of its three sites ──────────────────────
  * `resolveAnchorStasisBreak` answers the same-cast re-inflict question after the positional drive
  * has run, at every actor site — focus, walked-team, and enemy (search `resolveAnchorStasisBreak(`
- * in engine.ts; each call site is named by which turn's `inflictedEnemyDebuffs` it passes —
+ * in engine.ts; each call site is named by which turn's `inflictedStasisOn` it passes —
  * `turn.`, `teamTurn.`, `enemyTurn.`). Only the focus site has an automated witness:
  * `reInflictedStasisBreak.integration.test.ts`. Neither the walked-team nor the enemy site has a
  * re-inflict witness. Note that "no witness" is not "unpinned": the enemy call's
- * `inflictedEnemyDebuffs` argument is held incidentally by an unrelated single-hit test, while the
+ * `inflictedStasisOn` argument is held incidentally by an unrelated single-hit test, while the
  * walked-team call's is held by nothing at all. Building a
  * real witness for either needs the SAME precondition as R1/R2 (a multi-hit ship with a
  * firing-slot Stasis clause), because re-inflict-on-a-later-sub-attack does not exist below
