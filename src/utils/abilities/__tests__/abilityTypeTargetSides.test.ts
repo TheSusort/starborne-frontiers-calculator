@@ -22,8 +22,8 @@
  *     forbids nothing the parser produces, and closes the authoring hole outright.
  *   • Exactly THREE types span both sides: `charge` (self-gain 24 / enemy-removal 8 / ally-bulk 5),
  *     `control` (inflicted 35 + 2 adjacency, and Taunt at 6 — `parseControlInflicts` emits Taunt
- *     with `side: 'self'`), and `extend-status` (Ripper's all-allies buff-extend 2, Sokol/Lev's
- *     enemy debuff-extend 2).
+ *     with `side: 'self'`), and `extend-status` (Ripper's all-allies buff-extend; Lev's and
+ *     Asphyxiator's enemy debuff-extend).
  *
  * ── WHAT MAKES IT RED ─────────────────────────────────────────────────────────────────────────
  * A parser change that emits an existing type on a side the map forbids. If that happens, the MAP

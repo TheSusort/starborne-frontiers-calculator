@@ -1663,8 +1663,8 @@ const ALLY_SHIELD_DESTROYED_RE = /\bwhen\s+an\s+ally\b[^.]*?\bshield\b[^.]*?\bde
 // that defender."). Distinct from ENEMY_BUFFED_RE (any buff, "gains a buff") — this is
 // name-specific to Taunt and requires the "gains" verb, so it does not co-match any self-gain
 // "this Unit gains Taunt" phrasing elsewhere in the corpus (Sabertooth/Isha/Xarrow's own Taunt
-// self-grants all use "this Unit gains", not "an enemy... gains"). Corpus-verified (docs/ship-skills.csv, grep "enemy[^.]*gains[^.]*taunt"): only
-// Amartya's two passive rows match.
+// self-grants all use "this Unit gains", not "an enemy... gains"). Corpus-verified (docs/ship-skills.csv, grep
+// "enemy[^.]*gains[^.]*taunt"): only Amartya's two passive rows match.
 const ENEMY_GAINS_TAUNT_RE = /\bwhen\s+an?\s+enemy\b[^.]*?\bgains?\b[^.]*?\btaunt\b/i;
 
 /**
@@ -1679,7 +1679,6 @@ const ENEMY_GAINS_TAUNT_RE = /\bwhen\s+an?\s+enemy\b[^.]*?\bgains?\b[^.]*?\btaun
  *    uses a looser regex that reads "is critically damaged" as a self-crit condition; no ship
  *    text relies on that reading.
  *  - "at the start of (the|each|every) round" → 'start-of-round' (Valkyrie).
- *  - "at the start of (the|its|each|every) turn" → 'start-of-turn'.
  *  - "detonates a Bomb" / "Bomb explodes" → 'on-bomb-detonated' (Lingshe).
  *  - "when an enemy cleanses a debuff" → 'on-enemy-cleansed'. LIVE in healing mode (the DPS
  *    sim ignores enemy-action triggers); Grif's NAMELESS damage proc on the same phrasing is
@@ -3096,8 +3095,8 @@ const DR_OUTGOING_CRIT_RE = /\bwith\s+a\s+critical\s+hit\b/i;
 // which "hit\b" deliberately does not match (no trailing "s").
 const DR_CRIT_HIT_RE = /when\b[^.;]*\bcritical(?:ly)?\s+hit\b/i;
 // ALLY-subject crit reactions require the damaged ally as subject — "is critically hit"
-// (Guardian "When an ally is critically hit by an enemy"). The bare DR_CRIT_HIT_RE also matches the ACTIVE-voice
-// "…inflicts a DoT effect WITH a critical hit" (Crocus), where the ally LANDS the crit
+// (Guardian "When an ally is critically hit by an enemy"). The bare DR_CRIT_HIT_RE also matches
+// the ACTIVE-voice "…inflicts a DoT effect WITH a critical hit" (Crocus), where the ally LANDS the crit
 // (outgoing — on-ally-crit-dot territory) rather than receiving it, so the ally branch
 // must not reuse it.
 const DR_ALLY_CRIT_HIT_RE = /\bis\s+critical(?:ly)?\s+hit\b/i;
@@ -4072,8 +4071,8 @@ export function parseChargeGain(text: string | null | undefined): ChargeGain | n
 
     // Cobalt: "Every turn this Unit adds 1 charge … if it is at full HP" — a start-of-turn
     // self-charge gated on full HP. "every turn" is read HERE, beside the full-HP gate, and is
-    // not part of detectReactiveTrigger's start-of-turn rule, where "gains 1 stack of Overload
-    // every turn" must keep its per-round stacking semantics (pinned by the Butcher test in
+    // not read by detectReactiveTrigger, which has no start-of-turn rule: "gains 1 stack of
+    // Overload every turn" keeps its per-round stacking semantics (pinned by the Butcher test in
     // catalogueWording.timing.test.ts). Placed after the inflict/repair reactive branches (those
     // event triggers win if a text carries both).
     // condition 'always' is a placeholder — the real gate is in `conditions`.
@@ -4518,8 +4517,8 @@ const HEAL_DISQUALIFY_RE = new RegExp(
 // Damage-reaction reactive triggers — only disqualifying when the heal is NOT a damage leech
 // (the caller gates this against the resolved leech basis). Covers "when (an ally/this unit is)
 // directly damaged", "when attacked", "when … is hit", "when … takes … damage", and the
-// passive-voice pure crit-hit form "when (this unit) is critically hit". The match is captured (not just tested) so the caller can reject an
-// ENEMY-subject trigger — "when an enemy takes damage from a DoT" (Anemone) is an on-DoT-tick
+// passive-voice pure crit-hit form "when (this unit) is critically hit". The match is captured (not just tested) so the caller can
+// reject an ENEMY-subject trigger — "when an enemy takes damage from a DoT" (Anemone) is an on-DoT-tick
 // trigger, NOT a self/ally damage reaction, so it must not be disqualified by this rule.
 // The crit-hit alternation uses `hit\b` (no trailing `s`) so it matches passive-voice "is
 // critically hit" but NOT the active-voice ally form "when an ally critically hits an enemy"
@@ -6397,8 +6396,8 @@ export function adjacentEnemyScopeForName(
  * raw-text sentence scoping (rawSentenceAround) so `anchorPos` — a position into the raw `text`,
  * same basis as the trigger detectors' `damagePos` — maps to the sentence actually carrying the
  * damage clause, and an unrelated adjacency phrase elsewhere in the text can't leak in.
- * Ship-kit W5 (Demolisher passive): "... deals 100% of the Bomb's damage to all adjacent
- * enemies" resolves to 'adjacent-enemies'.
+ * Demolisher's passive "... deals 100% of the Bomb's damage to all adjacent enemies" resolves to
+ * 'adjacent-enemies'.
  */
 export function adjacentEnemyScopeAtPos(
     text: string,

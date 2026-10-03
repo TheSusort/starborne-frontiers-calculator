@@ -60,8 +60,8 @@ export function resolveDebuffRecipientIds(args: {
     // anchor and not a positional footprint. They are resolved FIRST and returned directly: a
     // selector is single-victim, so it must never fall into the `all-enemies` / adjacency arms
     // below, and before #403 it fell all the way past them to the tail `[anchorId]` — the cast's
-    // normal target. In-fight that meant a clause reading "applies Concentrate Fire for 1 turn to
-    // the enemy with the highest attack" landed on the front-most enemy the pattern anchored on,
+    // normal target. In-fight that meant a hypothetical clause reading "applies <debuff> for 1
+    // turn to the enemy with the highest attack" landed on the front-most enemy the pattern anchored on,
     // leaving the 9,000-attack ship behind it untouched.
     //
     // Resolution is the CALLER's (engine.ts `buildTurnArgs` builds the delegate over the live

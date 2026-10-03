@@ -4561,7 +4561,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // branch below to that exact status name. Absent → extend-everything.
         const namedBuff = ab.config.type === 'extend-status' ? ab.config.buffName : undefined;
         if (statusKind === 'debuff') {
-            // 'enemy': single hit enemy (targetId). Lev: fans over the cast's hit-enemy footprint
+            // 'enemy': single hit enemy (targetId); the parser no longer emits it (`extendTarget`
+            // falls back to all-enemies), so only editor-authored abilities reach this arm. Lev: fans over the cast's hit-enemy footprint
             // (aoeVictimIds) for an 'all-enemies' target — same E3 pattern the purge/shield-strip
             // blocks above use. Requires a hit target; skipped when there is none.
             if (targetId === undefined) continue;

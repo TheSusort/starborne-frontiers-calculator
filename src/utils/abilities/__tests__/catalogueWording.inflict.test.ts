@@ -154,18 +154,15 @@ describe('inflict/apply vocabulary — resist reaction', () => {
 // User ruling (2026-10-02): a reaction "after it inflicts a debuff" needs a SUCCESSFUL infliction
 // (landed, not resisted). `on-debuff-inflicted` is that trigger: its listener (triggers.ts) wakes
 // on `debuff-applied`, which only a landed application emits — a resisted roll emits
-// `debuff-resisted` instead. Our Ripper text uses the phrase, so it reacts like Prospect's.
+// `debuff-resisted` instead. The fixture is a synthetic sentence in that shape (no catalogue ship carries it), so it reacts
+// like Prospect's.
 describe('inflict/apply vocabulary — "after it inflicts a debuff" needs a landed debuff', () => {
     it.each([
         [
             'R0',
             'This Unit gains <unit-skill>Marauder Rage II</unit-skill> for 3 turns after it inflicts a debuff.',
         ],
-        [
-            'R2',
-            'This Unit gains <unit-skill>Marauder Rage II</unit-skill> for 3 turns after it inflicts a debuff.<br /><br />All allies extend their active <unit-aid>Buffs</unit-aid> by 1 turn.',
-        ],
-    ])('Ripper passive %s: Marauder Rage II fires on each landed infliction', (_refit, text) => {
+    ])('Synthetic passive %s: Marauder Rage II fires on each landed infliction', (_refit, text) => {
         const abilities = parseSlot('passive', text);
         const s = sigs(abilities);
         expect(s).toContain('buff|self|on-debuff-inflicted|Marauder Rage II');

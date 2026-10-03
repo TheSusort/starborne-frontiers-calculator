@@ -1366,7 +1366,7 @@ function abilitiesFromText(
         // speed" re-targets from the default 'enemy' to 'enemy-highest-speed'.
         // Sentence/position-scoped on damagePos (parseHighestSpeedEnemyTarget mirrors
         // detectMostBuffsTarget's scoping), so an unrelated damage clause elsewhere in the text is
-        // unaffected. out[0] is safe to mutate here (SP-F F1's out[0] invariant).
+        // unaffected. out[0] is safe to mutate here: it is the base branch pushed first (see above).
         if (damageTrigger === 'start-of-round' && parseHighestSpeedEnemyTarget(text, damagePos)) {
             out[0].ability.target = 'enemy-highest-speed';
         }
@@ -2701,8 +2701,8 @@ function abilitiesFromText(
     // here; see scripts/auditSkills.allowlist.ts.
     for (const dr of parseDebuffDurationReduction(text)) {
         // Map the parsed gate to a reactive trigger EXPLICITLY (not by absence): Pestilence's
-        // "when this Unit inflicts a debuff" → on-debuff-inflicted; Heliodor's "when directly damaged" self
-        // reaction → on-attacked. A clause matching NEITHER gate carries no recognized reactive
+        // "when this Unit inflicts a debuff" → on-debuff-inflicted; Heliodor's "when directly
+        // damaged" self reaction → on-attacked. A clause matching NEITHER gate carries no recognized reactive
         // trigger — it is NOT emitted (a silent on-cast default would fire an all-debuff reduction
         // every round, phantom behaviour). No corpus ship hits this branch today (both shapes are
         // reactive); the audit's debuff-duration-reduction rule would flag such a future ship so

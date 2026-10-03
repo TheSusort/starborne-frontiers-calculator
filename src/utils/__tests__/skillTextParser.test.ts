@@ -1361,8 +1361,11 @@ describe('parseExtendDoT', () => {
         expect(parseExtendDoT(null)).toBeNull();
     });
 
-    it('does not match a debuff-duration extension that is not a DoT', () => {
-        expect(parseExtendDoT('extends the duration of all buffs by 1 turn.')).toBeNull();
+    // Differs from the matching "all damage over time debuffs are extended by N turns" only in the
+    // status family, so the literal "damage over time" in EXTEND_ALL_DOT_PASSIVE_RE is what rejects it.
+    it('does not match an extension of a non-DoT status family', () => {
+        expect(parseExtendDoT('all buffs are extended by 1 turn.')).toBeNull();
+        expect(parseExtendDoT('all debuffs are extended by 1 turn.')).toBeNull();
     });
 });
 
@@ -1786,9 +1789,9 @@ describe('parseChargeGain', () => {
         });
     });
 
-    it('reads "each turn" in a full-HP self gain as the start-of-turn trigger', () => {
+    it('reads the trailing "each turn" wording (synthetic) in a full-HP self gain as start-of-turn', () => {
         const text =
-            'This Unit <unit-aid>adds 1 charge</unit-aid> to its charged skill at the start of each turn if it is at full HP.';
+            'This Unit <unit-aid>adds 1 charge</unit-aid> to its charged skill each turn if it is at full HP.';
         expect(parseChargeGain(text)).toMatchObject({
             amount: 1,
             trigger: 'start-of-turn',
@@ -2775,7 +2778,9 @@ describe('parseChargeGain ally-crit trigger (Hermes)', () => {
         });
     });
 
-    it('"gains 1 charge to the Charged Skill" stays a self gain', () => {
+    // Boundary twin of the Hermes case below: CHARGE_DISQUALIFY_RE rejects "of allies", not a bare
+    // "to the Charged Skill".
+    it('"gains 1 charge to the Charged Skill" with no ally scope is a self gain', () => {
         expect(
             parseChargeGain('This Unit <unit-aid>gains 1 charge</unit-aid> to the Charged Skill.')
         ).toEqual({ amount: 1, condition: 'always', derivable: true });

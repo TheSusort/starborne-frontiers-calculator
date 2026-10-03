@@ -526,8 +526,8 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
  * debuff shape predating #592, matching the `application === 'apply'` landing branches in
  * playerTurn.ts and this file's reactive debuff executor).
  *
- * `filter === undefined` (a clause with no "inflict"/"apply" verb of its own — OLD APEX's "gets
- * debuffed", Firewall's "when debuffed") takes neither reading and passes unconditionally.
+ * `filter === undefined` (a clause with no "inflict"/"apply" verb of its own — Firewall's
+ * "when debuffed") takes neither reading and passes unconditionally.
  */
 function passesApplicationFilter(
     filter: 'inflict' | 'apply' | undefined,
