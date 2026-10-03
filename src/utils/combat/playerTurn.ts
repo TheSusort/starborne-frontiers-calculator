@@ -623,6 +623,17 @@ export interface PlayerActorRuntime {
  *  enemy actor + its DoT containers, the bus, and the per-call round number /
  *  cumulative damage). chargeCount/startCharged are NOT here — they live on
  *  `runtime.actor` (CombatActor carries chargeCount + seeded charges). */
+/** One opposing actor's gate readings that only the engine can derive (its roster's max-HP rule,
+ *  the round's repaired set, the per-target status store). The victim half a gate reads straight
+ *  off the actor (DoT containers, HP, stats, shield) is not here. */
+export interface RecipientGateReading {
+    enemyHp: number;
+    targetRepairedThisRound: boolean;
+    enemyDebuffNames: string[];
+    /** Absent under `mode: 'dps'`, like the bound target's `enemyBuffCount`. */
+    enemyBuffCount?: number;
+}
+
 export interface PlayerTurnArgs {
     runtime: PlayerActorRuntime;
     /** ABSENT means there is no victim this turn — an ally-targeted cast resolved nobody
@@ -772,6 +783,11 @@ export interface PlayerTurnArgs {
     /** Living opposing actors keyed by id — per-victim debuff landing/application in
      *  positional mode. Supplied from the side's opposing roster. Absent → anchor-only path. */
     opposingVictimById?: Map<string, CombatActor>;
+    /** Every living opposing actor's engine-derived gate readings, keyed by id, read before the
+     *  cast together with the bound target's own (`enemyHp`, `targetRepairedThisRound`,
+     *  `enemyDebuffNames`, `enemyBuffCount` come from the same derivation). Positional runs only;
+     *  `recipientGateCtx` reads it to ask a cast debuff's gate of each recipient. */
+    recipientGateReadings?: ReadonlyMap<string, RecipientGateReading>;
     /** Positional mode (per-victim detonation): when true, runPlayerTurn does NOT detonate the
      *  anchor enemy's containers (no consume, no credit, no bomb-detonated emit) and instead
      *  returns a `positionalDetonation` recipe for the engine to apply per footprint victim.
@@ -1593,6 +1609,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         onHitBreakStasis,
         aoeVictimIds,
         opposingVictimById,
+        recipientGateReadings,
         positional,
         activePattern,
         chargedPattern,
@@ -2299,7 +2316,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // — buff gates use the probability tier like modifierCtx. NOTE: a self-crit-gated buff
     // therefore resolves effectiveCritRate/100 > 0, i.e. passes whenever the crit rate is
     // non-zero — intended "live-subject, satisfiable" behaviour, not a bug.
-    const preDebuffGateCtx = buildRoundContext({
+    const preDebuffGateInput: Parameters<typeof buildRoundContext>[0] = {
         // Live adjacency / kill counts (Panguan, Centurion, Judge) — see `liveCountCtx`.
         ...liveCountCtx,
         selfBuffNames: [...scheduledSelfBuffNames, ...priorAbilitySelfNames],
@@ -2329,7 +2346,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         turnsTaken: actor.turnsTaken,
         // Owner-vs-target stat comparison. REQUIRED here (not just at the payload
         // hard-gate `ctx` further down) — this is the gate for TIMED ENEMY DEBUFF application
-        // (the `conditionsMet(status.conditions, preDebuffGateCtx)` check just below), which is
+        // (the per-recipient gate in `landStatusOnRecipients`, via `recipientGateCtx`), which is
         // how Bayah's crit-power-gated Stasis INFLICT actually lands (the `type:'control'`
         // ability gated by the later `ctx` only drives the `control-applied` reaction event, not
         // the debuff status itself). Same live actor/enemy sourcing as `ctx` (team-symmetric,
@@ -2344,7 +2361,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // The caster's own shield-presence gate, live-derived from
         // actor.shieldPool (SAME field/derivation as modifierCtx's selfShielded below) — REQUIRED
         // here because THIS ctx (not modifierCtx) gates the TIMED ENEMY DEBUFF application just
-        // below (the `conditionsMet(status.conditions, preDebuffGateCtx)` check). APEX's
+        // below (the per-recipient gate in `landStatusOnRecipients`). APEX's
         // charged Disable ("If this Unit has an active shield, the primary target is inflicted
         // with Disable") is a self-shield-gated NAMED debuff — without this field, selfShielded
         // defaults false here (buildRoundContext's DPS-safe default) and the debuff would never
@@ -2366,7 +2383,68 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // Malvex charged Barrier: the TARGET's shield-presence gate — derivation, PRE-strip reading
         // and the no-victim answer all documented on victimShieldGateCtx.
         ...victimShieldGateCtx(enemy),
-    });
+    };
+    const preDebuffGateCtx = buildRoundContext(preDebuffGateInput);
+
+    /** The gate context a cast enemy status's `conditions` are asked against for ONE recipient
+     *  (owner rulings 3 and 4: a per-enemy gate is checked per struck enemy). The bound target
+     *  reads `preDebuffGateCtx` itself. Every other recipient reads the same caster half with
+     *  the victim half re-pointed at that enemy: its DoT containers, HP, stats and shield straight
+     *  off the actor, and the engine-derived rest from `recipientGateReadings`. Built here, once,
+     *  before the first clause lands, so no recipient's gate sees this cast's own landings — the
+     *  same causality the bound target's pre-cast readings give it.
+     *
+     *  Side-wide subjects (the opposing buff-name union, the debuffed-enemy count, the destroyed
+     *  count) and the caster's own subjects read the same answer for every recipient. `enemyType`
+     *  is the fight-wide scalar and is not re-pointed. A recipient with no reading (none outside
+     *  positional runs, where the bound target is the only recipient) reads the bound target's
+     *  context. */
+    const recipientGateCtxById = new Map<string, ConditionContext>();
+    if (
+        hasVictim &&
+        recipientGateReadings &&
+        opposingVictimById &&
+        timedEnemyBySlot.some((s) => s.sourceSlot === action && s.conditions.length > 0)
+    ) {
+        for (const [id, reading] of recipientGateReadings) {
+            const v = opposingVictimById.get(id);
+            if (v === undefined || id === enemy.id) continue;
+            const vHp = reading.enemyHp;
+            recipientGateCtxById.set(
+                id,
+                buildRoundContext({
+                    ...preDebuffGateInput,
+                    corrosionEntryCount: v.corrosionEntries.length,
+                    infernoEntryCount: v.infernoEntries.length,
+                    bombCount: v.pendingBombs.length,
+                    genericCount: v.genericDoTEntries.length,
+                    enemyDotFamilyCounts: dotFamilyCounts(
+                        v.corrosionEntries,
+                        v.infernoEntries,
+                        v.genericDoTEntries
+                    ),
+                    // Same derivation as `enemyHpPct` above.
+                    enemyHpPct:
+                        vHp > 0 ? Math.max(0, 100 * (1 - Math.max(0, vHp - v.currentHp) / vHp)) : 0,
+                    targetRepairedThisRound: reading.targetRepairedThisRound,
+                    // Sentinels mirror the bound target's: absent there → absent here.
+                    enemyDebuffNames:
+                        enemyDebuffNamesArg === undefined ? undefined : reading.enemyDebuffNames,
+                    enemyBuffCount:
+                        enemyBuffCountArg === undefined ? undefined : reading.enemyBuffCount,
+                    ...(liveCountCtx.enemyAdjacentCount !== undefined && adjacentEnemyIdsFor
+                        ? { enemyAdjacentCount: adjacentEnemyIdsFor(id).length }
+                        : {}),
+                    ...victimStatGateCtx(v),
+                    ...victimShieldGateCtx(v),
+                })
+            );
+        }
+    }
+    const recipientGateCtx = (victim: CombatActor): ConditionContext =>
+        hasVictim && victim.id === enemy.id
+            ? preDebuffGateCtx
+            : (recipientGateCtxById.get(victim.id) ?? preDebuffGateCtx);
 
     // §4.5 Direct-damage Stasis break. Fires AFTER scheduled debuffs (sourceFired)
     // but BEFORE the ability timed-debuff loop, so a Stasis re-application from THIS attack's
@@ -2396,8 +2474,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     if (targetId !== undefined && hasDamageAbility) onHitBreakStasis?.(targetId);
 
     // (b) Gate + apply this round's firing-skill TIMED enemy debuff abilities.
-    // Each application that passes its condition gate draws the landing decision here:
-    // 'apply' → lands unless affinity-disadvantaged (no draw); otherwise draws
+    // Each recipient whose condition gate passes (asked per recipient, `recipientGateCtx`) draws
+    // the landing decision here: 'apply' → lands unless affinity-disadvantaged (no draw); otherwise draws
     // the hacking-vs-security gate. Resisted → the apply is SKIPPED (no status stored),
     // recorded resisted with its would-be duration, and emitted. Landed → emit
     // debuff-applied at this infliction site.
@@ -2407,7 +2485,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // re-roll every clause below against their OWN anchor and footprint, via
     // `applyDebuffsForSubAttack` (defined after this loop, driven by the engine's
     // sub-attack boundary hooks). Reading this block as "the cast's one landing decision"
-    // is only correct at N=1. The condition GATE, the resist bookkeeping and the
+    // is only correct at N=1. The gate CONTEXTS, the resist bookkeeping and the
     // `control-applied` gating below do stay cast-time — see `perSubAttackDebuffRecipes`
     // and `resistedTimedEnemyNames` for why each has to.
     const resistedAbilityTimedEnemy: ActiveBuff[] = [];
@@ -2472,6 +2550,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         collect?: DeferredEnemyApplication[]
     ): void => {
         let anyLanded = false;
+        // Some recipient passed its gate, so the clause was attempted on it — an outclassed
+        // (#590 R1) recipient included. A clause no recipient's gate admits did not happen.
+        let anyAttempted = false;
         for (const vid of recipientIds) {
             // The anchor fallback arm is dropped when there is no victim — with no victim
             // there is no anchor id for a vid to match, and the `vid === undefined` (non-positional
@@ -2491,6 +2572,11 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             // function total for the deferred/sub-attack callers too.
             if (resolvedVictim === undefined) continue;
             const emitTargetId = vid ?? resolvedVictim.id;
+
+            // The clause's condition gate, asked of THIS recipient (see `recipientGateCtx`).
+            // Before every draw: a recipient the gate turns away is neither landed nor resisted.
+            if (!conditionsMet(status.conditions, recipientGateCtx(resolvedVictim))) continue;
+            anyAttempted = true;
 
             // #590 R1: a weaker same-family debuff onto a victim already holding a stronger one
             // is never attempted — no roll, no landing, no resist. Checked PER VICTIM (this loop
@@ -2635,7 +2721,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // (below), which is emitted before any sub-attack ≥ 1 has rolled — a later sub-attack's
         // resist cannot retroactively suppress an event that already fired, and adding it here
         // would double-count the name in the round's display list.
-        if (!collect && !anyLanded && recipientIds.length > 0) {
+        if (!collect && !anyLanded && anyAttempted) {
             resistedAbilityTimedEnemy.push({
                 buffName: status.payload.buffName,
                 turnsRemaining: status.duration,
@@ -2645,15 +2731,12 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     };
 
     /**
-     * The condition-gated direct debuff clauses of THIS cast, captured for replay on sub-attacks
-     * ≥ 1.
+     * The direct debuff clauses of THIS cast, captured for replay on sub-attacks ≥ 1.
      *
-     * DELIBERATE SCOPE LINE: the recipe carries the RESULT of the cast-time
-     * `conditionsMet(status.conditions, preDebuffGateCtx)` gate, not the conditions themselves.
-     * Re-evaluating per sub-attack means rebuilding `preDebuffGateCtx` (a large live-sourced
-     * context, built earlier in this function) inside the hit loop. Consequence:
-     * a clause gated on state the cast itself changes (e.g. the victim's HP%) is judged once, at
-     * cast time, for all N sub-attacks.
+     * DELIBERATE SCOPE LINE: a sub-attack's recipient is gated against the SAME cast-time
+     * contexts the cast's own recipients read (`recipientGateCtx`), not against state rebuilt
+     * inside the hit loop. Consequence: a clause gated on state the cast itself changes (e.g. the
+     * victim's HP%) is judged at cast time for all N sub-attacks.
      */
     const perSubAttackDebuffRecipes: {
         status: TimedStatus;
@@ -2667,7 +2750,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // it), and no landing draw is taken. Fenced at the CLAUSE, not at the emit — a guard further
         // in would produce a debuff-applied/debuff-resisted event naming no victim.
         if (!hasVictim) continue;
-        if (!conditionsMet(status.conditions, preDebuffGateCtx)) continue;
+        // The condition gate is asked per recipient, inside `landStatusOnRecipients`.
 
         // #403 R3, KNOWN BOUNDARY: `config.type === 'debuff'` only. A status that reached the
         // ENEMY store from a BUFF-typed config aimed at an enemy (the other half of what #399's
