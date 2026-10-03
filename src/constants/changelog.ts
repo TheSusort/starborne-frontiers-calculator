@@ -11,7 +11,7 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator: Rhodium's active now adds one charge per buff on its target.",
     "Combat simulator: Nuqtu's active charges now need a target with three or more buffs.",
     "Combat simulator: Nuqtu's extra action now reads only its target's buffs.",
-    'Combat simulator: per-buff damage bonuses now count the buffs on the target.',
+    "Combat simulator: per-buff damage bonuses now count each struck enemy's own buffs.",
     "DPS calculator: Nuqtu's bonus charges now need three or more enemy buffs set.",
     "Combat simulator: Oleander's active repair now grows with each debuffed enemy.",
     "Combat simulator: Meatshield's charged skill now repairs per debuff on herself.",

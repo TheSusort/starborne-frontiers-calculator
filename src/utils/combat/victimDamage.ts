@@ -110,6 +110,14 @@ export interface VictimDefenseProfile {
      */
     outgoingDamageDeltaPct?: number;
     /**
+     * This victim's skill-multiplier DELTA (percentage points) vs `s.multiplierPct`, whose
+     * count-scaled bonus ("an additional 30% damage for each buff on the enemy") is scored once
+     * against the bound target. Each struck enemy counts its OWN buffs, so the engine supplies
+     * the difference between this victim's score and the bound target's. Added once per cast,
+     * like the bonus itself. Defaults to 0 — the bound target's own value by construction.
+     */
+    multiplierDeltaPct?: number;
+    /**
      * Forced-affinity override (defensive, victim-side). When true, THIS victim carries
      * an 'Defensive Affinity Override' buff (Isha/Nayra) that forces the incoming attacker to
      * affinity DISADVANTAGE (−25% damage) against this victim, superseding the real matchup.
@@ -190,7 +198,8 @@ export function victimHitDamageParts(
     attackerSideReductionPct = 0
 ): { damage: number; preMitigation: number } {
     // preCritDamage assembled exactly as the engine, then split evenly per hit.
-    const preCritDamage = s.effectiveAttack * (s.multiplierPct / 100) + s.secondaryStatValue;
+    const multiplierPct = s.multiplierPct + (v.multiplierDeltaPct ?? 0);
+    const preCritDamage = s.effectiveAttack * (multiplierPct / 100) + s.secondaryStatValue;
     const perHitShare = s.hits > 0 ? preCritDamage / s.hits : 0;
 
     // Per-VICTIM defense (mirrors `runPlayerTurn`'s aggregate). Delegated to victimDefenceMitigation

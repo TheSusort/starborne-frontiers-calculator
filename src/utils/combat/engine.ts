@@ -36,7 +36,7 @@ import {
     hasUsableChargedSkill,
     modifierTotalsFromAbilities,
 } from '../abilities/applyAbilities';
-import { conditionsMet, type ConditionContext } from '../abilities/evaluateConditions';
+import { conditionsMet, scaledBonus, type ConditionContext } from '../abilities/evaluateConditions';
 import { buildRoundContext } from '../abilities/roundContext';
 import {
     isEnemyTarget,
@@ -8022,6 +8022,32 @@ export function runCombat(rawInput: CombatEngineInput): {
         };
 
         /**
+         * Per-victim skill-multiplier delta for a count-scaled damage bonus ("an additional 30%
+         * damage for each buff on the enemy"). `positionalScalars.multiplierPct` scores the bonus
+         * once against the bound target; each struck enemy counts its OWN distinct buffs, so this
+         * re-scores it with only `enemyBuffCount` re-pointed at the victim (read from the same
+         * pre-turn snapshot as `perVictimOutgoingDeltaPct`) and returns the difference. Absent
+         * `enemyBuffCount` on the primary ctx (no target / DPS sentinel) → 0.
+         */
+        const perVictimScalingDeltaPct = (
+            perVictimScaling: PlayerTurnResult['perVictimScaling'],
+            preTurnStatus: Map<string, PreTurnVictimStatusSnapshot> | undefined,
+            victim: CombatActor
+        ): number => {
+            if (!perVictimScaling) return 0;
+            const { scalingAbility, primaryCtx } = perVictimScaling;
+            if (primaryCtx.enemyBuffCount === undefined) return 0;
+            const snap = preTurnStatus?.get(victim.id);
+            if (!snap) return 0;
+            return (
+                scaledBonus(scalingAbility, {
+                    ...primaryCtx,
+                    enemyBuffCount: snap.enemyBuffNames.length,
+                }) - scaledBonus(scalingAbility, primaryCtx)
+            );
+        };
+
+        /**
          * ONE victim's defensive profile for a positional damage read.
          *
          * The one profile builder `drivePositionalApply` and the passive-slot instance share, so
@@ -8160,6 +8186,9 @@ export function runCombat(rawInput: CombatEngineInput): {
             // Unsupplied/undefined → perVictimOutgoingDeltaPct short-circuits to 0 for every
             // victim.
             perVictimOutgoing?: PlayerTurnResult['perVictimOutgoing'];
+            // This turn's firing count-scaled bonus, forwarded from `turn.perVictimScaling`.
+            // Firing hit only — the passive-slot instance has its own multiplier.
+            perVictimScaling?: PlayerTurnResult['perVictimScaling'];
             // The PRE-TURN per-victim status snapshot (captured by the
             // call site via `snapshotPreTurnVictimStatus` BEFORE `runPlayerTurn` ran this turn),
             // keyed by victim id. Required for a non-zero delta — see the causality note above
@@ -8220,12 +8249,18 @@ export function runCombat(rawInput: CombatEngineInput): {
                         ignoresStealth: args.ignoresStealth,
                         provokedBy: provokerOf(statusEngine, args.actingId),
                     },
-                    defenseProfileOf: (v) =>
-                        victimDefenseProfileOf(v, {
+                    defenseProfileOf: (v) => ({
+                        ...victimDefenseProfileOf(v, {
                             scheduledEnemyEffects: args.scheduledEnemyEffects,
                             perVictimOutgoing: args.perVictimOutgoing,
                             preTurnVictimStatus: args.preTurnVictimStatus,
                         }),
+                        multiplierDeltaPct: perVictimScalingDeltaPct(
+                            args.perVictimScaling,
+                            args.preTurnVictimStatus,
+                            v
+                        ),
+                    }),
                     // Stamp the sub-attack under application so the funnel's deferred
                     // LOG buffers (reflect rows + consequence twins) can be drained per sub-attack
                     // rather than all under the first attack row. Save/restore rather than clear:
@@ -9564,6 +9599,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             scalars: AttackerDamageScalars;
             hitCrits: boolean[];
             perVictimOutgoing: PlayerTurnResult['perVictimOutgoing'];
+            perVictimScaling: PlayerTurnResult['perVictimScaling'];
             rollVictimCrit?: (victimAffinity: AffinityName) => boolean;
             deferredAbilityPerformed: PlayerTurnResult['deferredAbilityPerformed'];
             positionalDetonation: DetonationRecipe | undefined;
@@ -9723,6 +9759,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // stops cutting the victim's defence behind the reporting channel's back.
                 scheduledEnemyEffects: sel.scheduledEnemyEffects,
                 perVictimOutgoing: sel.perVictimOutgoing,
+                perVictimScaling: sel.perVictimScaling,
                 preTurnVictimStatus: sel.preTurnVictimStatus,
                 // Per-victim crit: each covered footprint victim rolls at ITS own affinity-capped
                 // rate against this attacker. sel.rollVictimCrit is defined for every positional turn
@@ -11680,6 +11717,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                         scalars: turn.positionalScalars!,
                                         hitCrits: turn.hitCrits,
                                         perVictimOutgoing: turn.perVictimOutgoing,
+                                        perVictimScaling: turn.perVictimScaling,
                                         rollVictimCrit: turn.rollVictimCrit,
                                         deferredAbilityPerformed: turn.deferredAbilityPerformed,
                                         positionalDetonation: turn.positionalDetonation,
@@ -11983,6 +12021,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                         scalars: teamTurn.positionalScalars!,
                                         hitCrits: teamTurn.hitCrits,
                                         perVictimOutgoing: teamTurn.perVictimOutgoing,
+                                        perVictimScaling: teamTurn.perVictimScaling,
                                         rollVictimCrit: teamTurn.rollVictimCrit,
                                         deferredAbilityPerformed: teamTurn.deferredAbilityPerformed,
                                         positionalDetonation: teamTurn.positionalDetonation,
@@ -12643,6 +12682,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                             scalars: enemyScalars!,
                                             hitCrits: enemyHitCrits,
                                             perVictimOutgoing: enemyPerVictimOutgoing,
+                                            perVictimScaling: enemyTurn.perVictimScaling,
                                             rollVictimCrit: enemyRollVictimCrit,
                                             deferredAbilityPerformed: enemyDeferredAbilityPerformed,
                                             positionalDetonation: enemyPositionalDetonation,

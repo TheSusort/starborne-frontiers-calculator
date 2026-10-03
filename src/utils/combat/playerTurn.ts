@@ -488,6 +488,13 @@ export interface PlayerTurnResult {
      *  Absent → the engine skips the per-victim fold and keeps the single primary-ctx result;
      *  read ONLY by the positional engine branch. */
     perVictimOutgoing?: { modifierAbilities: Ability[]; primaryCtx: ConditionContext };
+    /** The firing damage ability's count-scaled bonus ("an additional 30% damage for each buff on
+     *  the enemy") and the ctx `conditionalBonusPct` was scored against. `positionalScalars`
+     *  bakes that bonus in once, from the bound target; the engine re-scores it per footprint
+     *  victim with `enemyBuffCount` re-pointed at that victim's own distinct buffs and applies
+     *  the difference to that victim's hit. Present ONLY when a damage ability with `scaling`
+     *  fired; read ONLY by the positional engine branch, for the firing hit. */
+    perVictimScaling?: { scalingAbility: Ability; primaryCtx: ConditionContext };
     /** This turn's SCHEDULED enemy-debuff effects AFTER the per-round landing
      *  decision, i.e. exactly the entries that LANDED (`scheduledEnemy.roundEnemyDebuffs`:
      *  recurring/always/accumulating re-rolled through `roundDebuffLanded()` / the affinity
@@ -5619,6 +5626,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     const perVictimOutgoing: PlayerTurnResult['perVictimOutgoing'] = hasDamageAbility
         ? { modifierAbilities, primaryCtx: modifierCtx }
         : undefined;
+    const perVictimScaling: PlayerTurnResult['perVictimScaling'] =
+        hasDamageAbility && scalingAbility
+            ? { scalingAbility, primaryCtx: ctxFor.get(scalingAbility.id) ?? ctx }
+            : undefined;
 
     // Hand the PASSIVE-SLOT damage instance to the positional apply path, which
     // otherwise never sees it (`positionalScalars` above is the FIRING skill's scalars — the
@@ -5722,6 +5733,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         positionalScalars,
         passiveSlotHit,
         perVictimOutgoing,
+        perVictimScaling,
         // The landed half of this turn's scheduled enemy-debuff decision, handed to
         // the engine's per-victim damage read so both consumers share ONE draw.
         scheduledEnemyEffects: scheduledEnemy.roundEnemyDebuffs,
