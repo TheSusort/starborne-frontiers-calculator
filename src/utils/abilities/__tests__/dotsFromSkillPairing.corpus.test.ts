@@ -7,7 +7,7 @@
  *
  * Every ship × slot in docs/ship-skills.csv (refit 4, real parsed kits).
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import { buildShipAbilities } from '../buildShipAbilities';
 import { dotsFromSkill } from '../applyAbilities';
 import { buildTraceShip } from '../../../../scripts/lib/traceShipFactory';
@@ -15,39 +15,44 @@ import { csvAvailable, loadShipSkillRecords } from '../../../../scripts/lib/ship
 import { shipDataAvailable } from '../../../../scripts/lib/shipDataSnapshot';
 import type { Ship } from '../../../types/ship';
 
-describe.skipIf(!csvAvailable() || !shipDataAvailable())(
-    'dotsFromSkill maps the skill’s dot abilities in order, one entry each (corpus)',
-    () => {
-        it('every ship × slot: entry i is dot ability i (same dotType, tier, stacks, duration)', () => {
-            const mismatches: string[] = [];
-            let paired = 0;
-            for (const rec of loadShipSkillRecords()) {
-                const ship = buildTraceShip(rec.name, { refitLevel: 4 }) as Ship | undefined;
-                if (!ship) continue;
-                for (const skill of buildShipAbilities(ship).slots) {
-                    const dotAbilities = skill.abilities.flatMap((ab) =>
-                        ab.type === 'dot' && ab.config.type === 'dot' ? [ab.config] : []
-                    );
-                    const entries = dotsFromSkill(skill).map((d) => ({
-                        dotType: d.type,
-                        tier: d.tier,
-                        stacks: d.stacks,
-                        duration: d.duration,
-                    }));
-                    const expected = dotAbilities.map((c) => ({
-                        dotType: c.dotType,
-                        tier: c.tier,
-                        stacks: c.stacks,
-                        duration: c.duration,
-                    }));
-                    if (JSON.stringify(entries) !== JSON.stringify(expected))
-                        mismatches.push(`${rec.name}/${skill.slot}`);
-                    paired += expected.length;
-                }
+describe('dotsFromSkill maps the skill’s dot abilities in order, one entry each (corpus)', () => {
+    beforeAll(() => {
+        if (!csvAvailable() || !shipDataAvailable()) {
+            throw new Error(
+                'This suite requires docs/ship-skills.csv and docs/ship-data.json ' +
+                    '(gitignored reference data) — copy them in before running'
+            );
+        }
+    });
+    it('every ship × slot: entry i is dot ability i (same dotType, tier, stacks, duration)', () => {
+        const mismatches: string[] = [];
+        let paired = 0;
+        for (const rec of loadShipSkillRecords()) {
+            const ship = buildTraceShip(rec.name, { refitLevel: 4 }) as Ship | undefined;
+            if (!ship) continue;
+            for (const skill of buildShipAbilities(ship).slots) {
+                const dotAbilities = skill.abilities.flatMap((ab) =>
+                    ab.type === 'dot' && ab.config.type === 'dot' ? [ab.config] : []
+                );
+                const entries = dotsFromSkill(skill).map((d) => ({
+                    dotType: d.type,
+                    tier: d.tier,
+                    stacks: d.stacks,
+                    duration: d.duration,
+                }));
+                const expected = dotAbilities.map((c) => ({
+                    dotType: c.dotType,
+                    tier: c.tier,
+                    stacks: c.stacks,
+                    duration: c.duration,
+                }));
+                if (JSON.stringify(entries) !== JSON.stringify(expected))
+                    mismatches.push(`${rec.name}/${skill.slot}`);
+                paired += expected.length;
             }
-            expect(mismatches).toEqual([]);
-            // Non-vacuity: the corpus carries dozens of DoT clauses (every firing-slot DoT ship).
-            expect(paired).toBeGreaterThan(40);
-        });
-    }
-);
+        }
+        expect(mismatches).toEqual([]);
+        // Non-vacuity: the corpus carries dozens of DoT clauses (every firing-slot DoT ship).
+        expect(paired).toBeGreaterThan(40);
+    });
+});
