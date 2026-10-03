@@ -543,7 +543,7 @@ describe('buff steal takes one buff from EACH struck enemy', () => {
     });
 });
 
-describe('the single-ship DPS calculator is unchanged by the fan-out', () => {
+describe('the single-ship DPS calculator keeps one target', () => {
     const DPS_INPUT = {
         attack: 15000,
         crit: 50,
@@ -561,7 +561,7 @@ describe('the single-ship DPS calculator is unchanged by the fan-out', () => {
         hp: 30000,
     };
 
-    it("Arum's DPS run deals the same total it dealt before the fan-out", () => {
+    it("Arum's DPS run deals its pinned single-target total", () => {
         const built = buildTraceShip('Arum');
         if (!built) throw new Error('Arum missing');
         const result = simulateDPS({ ...DPS_INPUT, shipSkills: buildShipAbilities(built) });
@@ -569,5 +569,6 @@ describe('the single-ship DPS calculator is unchanged by the fan-out', () => {
     });
 });
 
-/** Arum's `simulateDPS` total measured on the pre-fan-out engine (same input, same seed). */
+/** Arum's single-target `simulateDPS` total for DPS_INPUT under the suite seed: one enemy, so
+ *  a footprint fan-out has nobody else to reach and must not move it. */
 const DPS_ARUM_TOTAL = 165_994;

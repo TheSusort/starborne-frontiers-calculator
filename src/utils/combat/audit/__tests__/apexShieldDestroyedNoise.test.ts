@@ -10,7 +10,8 @@ import { PLACEMENTS, type Placement } from '../types';
 
 /**
  * TRIAGE VERDICT — the placement-symmetry sweep's "Apex fires `shield-destroyed` as `enemy` but
- * never as `focus`/`team`" finding (#356). It was SEED NOISE, and it is now gone on every path.
+ * never as `focus`/`team`" finding (#356) is SEED NOISE: `shield-destroyed` is a landing-roll
+ * outcome, not a path, and on this window it appears on no placement.
  *
  * Apex's refit-active passive grants it a Shield worth 3% of max HP every time an enemy gets
  * debuffed, and its active inflicts two debuffs on EVERY enemy its pattern strikes (the plain
@@ -21,10 +22,10 @@ import { PLACEMENTS, type Placement } from '../types';
  * refills it. That is a landing roll on every struck enemy at once, and over the window below it
  * never happens on any placement: the kind appears nowhere, symmetrically.
  *
- * When the debuffs reached only the aimed enemy (two grants per cast) the same roll failed often
- * enough that the kind appeared on every placement at DIFFERENT seeds, which is what produced the
- * K=45 asymmetry #356 was filed from. If `shield-destroyed` reappears on one placement only, that
- * is the same landing-roll noise, not a path gap — the grant arm below is what separates the two.
+ * The fewer enemies a cast debuffs, the more often that roll fails and the kind appears — at
+ * DIFFERENT seeds per placement, because the RNG is ownerId-keyed. So if `shield-destroyed`
+ * appears on one placement only, that is landing-roll noise, not a path gap — the grant arm below
+ * is what separates the two.
  */
 
 const BASE_SEED = SEED; // 20260805 — the sweep's own default base seed
