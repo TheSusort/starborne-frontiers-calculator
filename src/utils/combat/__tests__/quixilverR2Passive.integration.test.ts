@@ -61,7 +61,7 @@ afterEach(() => resetRateGateRng());
 /** docs/ship-skills.csv, Quixilver, `second_passive_skill_text` — copied verbatim, tags and all.
  *  The tags matter: the parser's clause scoping reads them. */
 const QUIXILVER_P2 =
-    'This Unit gains <unit-damage>Shield equal to 25%</unit-damage> of the damage taken when taking HP damage and still having Shield.<br /><br />' +
+    'This Unit gains a <unit-damage>shield equal to 25%</unit-damage> of the damage taken when taking HP damage and still having a shield.<br /><br />' +
     "At the end of this Unit's turn if it has shield equal to 100% of its max HP, this Unit grants all allies <unit-skill>Barrier</unit-skill> for 1 hit and applies <unit-skill>Barrier Recharging</unit-skill> for 3 turns.";
 
 /** The REAL parsed passive slot, straight off the registry — two refits so `getShipSkillRows`

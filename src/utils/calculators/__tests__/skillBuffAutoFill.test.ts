@@ -111,7 +111,8 @@ describe('buildSkillBuffAutoFill', () => {
     // `stacks: stackTrigger ? (effect.stacks ?? 1) : 1` forced every Exposed grant to 1 stack
     // regardless of what the text actually said. Amartya's R4 passive explicitly inflicts "2
     // stacks of Exposed" — the parsed count must survive even though Exposed never accumulates
-    // across separate triggers. Exact clause from docs/ship-skills.csv (Amartya passive3).
+    // across separate triggers. Old-corpus wording of Amartya's passive3 clause (synthetic; the
+    // catalogue text differs).
     it('preserves an explicit multi-stack count on a non-mechanically-stackable debuff (Amartya Exposed, R4)', () => {
         const ship = {
             thirdPassiveSkillText:

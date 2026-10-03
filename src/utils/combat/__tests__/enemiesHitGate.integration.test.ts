@@ -10,7 +10,7 @@ import { bareEnemy } from '../__testutils__/bareRosterFixture';
 
 // ---------------------------------------------------------------------------
 // SP-D — Berserker's Marauder Rage II passive ("gains Marauder Rage II for 3 turns when
-// hitting 3 ore more enemies") gated live on the ACTUAL per-cast footprint size.
+// hitting 3 or more enemies") gated live on the ACTUAL per-cast footprint size.
 //
 // Harness mirrors aoePurge.test.ts's positional two-team battle-sim (healTargetId set unlocks
 // the enemy roster; the focus needs position + parsed target so selectTurnTarget resolves a
@@ -45,11 +45,10 @@ const allPattern = (): ParsedPattern => ({ raw: 'all', shape: 'all', range: 'all
 const hit = (): Ability =>
     ab({ type: 'damage', target: 'enemy', config: { type: 'damage', multiplier: 100 } });
 
-// Verbatim from docs/ship-skills.csv (second_passive_skill_text field). NOTE: CSV typo
-// "3 ore more" preserved verbatim (not "or more") — same constant used by the SP-D
-// modelCompletenessTriage probe / enemiesHitThisCast.test.ts parser block.
+// Verbatim from docs/ship-skills.csv (second_passive_skill_text field) — same constant used by
+// the SP-D modelCompletenessTriage probe / enemiesHitThisCast.test.ts parser block.
 const BERSERKER_P2 =
-    'This Unit gains <unit-skill>Marauder Rage II</unit-skill> for 3 turns when hitting 3 ore more enemies.';
+    'This Unit gains <unit-skill>Marauder Rage II</unit-skill> for 3 turns when hitting 3 or more enemies.';
 
 function berserkerShip(): Ship {
     return {

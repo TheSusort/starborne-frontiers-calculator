@@ -1,9 +1,9 @@
 /**
- * PR-B2 — Ravager's `on-own-debuff-resisted` inflictor-side reaction (ENGINE integration).
+ * Ravager's `on-own-debuff-resisted` inflictor-side reaction (ENGINE integration).
  *
- * Ravager's second passive (verbatim from docs/ship-skills.csv): "...If its debuff is
+ * Ravager's second passive (verbatim from docs/ship-skills.csv): "...If this Unit's debuff is
  * resisted, it gains <unit-skill>Hacking Module Overdrive</unit-skill> for 1 turn." This is
- * the INFLICTOR-scoped mirror of the RESISTER-scoped `on-debuff-resisted` (D-PR16 Lockdown /
+ * the INFLICTOR-scoped mirror of the RESISTER-scoped `on-debuff-resisted` (Lockdown /
  * Vindicator's on-resist HP retaliation): it fires on Ravager itself when a debuff RAVAGER
  * inflicted is resisted by its target, not when Ravager resists an incoming debuff.
  *
@@ -32,7 +32,7 @@ import { flattenCombatLog } from '../log/__testutils__/flattenCombatLog';
 
 // Verbatim from docs/ship-skills.csv (second_passive_skill_text field). Do NOT alter this text.
 const RAVAGER_P2 =
-    'This Unit ignores 10% of Defense. It gains 1 stack of <unit-skill>Overload</unit-skill> every turn. Upon killing an enemy, it loses <unit-skill>Overload</unit-skill> and gains <unit-skill>Marauder Rage III</unit-skill> for 3 turns. If its debuff is resisted, it gains <unit-skill>Hacking Module Overdrive</unit-skill> for 1 turn.';
+    "This Unit gains 1 stack of <unit-skill>Overload</unit-skill> every turn and, upon destroying an enemy, removes <unit-skill>Overload</unit-skill> and gains <unit-skill>Marauder Rage III</unit-skill> for 3 turns.<br /><br />If this Unit's debuff is resisted, it gains <unit-skill>Hacking Module Overdrive</unit-skill> for 1 turn. This Unit has <unit-damage>10% defense penetration</unit-damage>.";
 
 const HACKING_MODULE_OVERDRIVE = 'Hacking Module Overdrive';
 

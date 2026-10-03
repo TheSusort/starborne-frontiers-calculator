@@ -7,8 +7,8 @@
  *   scales by the number of enemies repaired by the triggering event (repairedEnemyIds.length),
  *   capped at 3 firing events per round.
  *
- * The Sansi heal is extracted through the REAL production path (`buildShipAbilities`) fed verbatim
- * skill text (the repair clause copied from docs/ship-skills.csv) — never a hand-built ability.
+ * The Sansi heal is extracted through the REAL production path (`buildShipAbilities`) fed skill
+ * text (the repair clause, old-corpus wording) — never a hand-built ability.
  * The surrounding cast (enemies/allies that merely need to perform a repair to generate the
  * triggering event) are minimal hand-built actors, following
  * `onEnemyRepairedReactivePromotion.integration.test.ts`'s harness style.
@@ -78,7 +78,8 @@ const healAllAllies = (id: string): Ability => ({
     config: { type: 'heal', pct: 10, basis: 'target-hp' },
 });
 
-// Verbatim Sansi repair clause (docs/ship-skills.csv 2nd passive, tail sentence).
+// Old-corpus wording of Sansi's repair clause, 2nd passive tail sentence (synthetic; the
+// catalogue text differs).
 const SANSI_HEAL_CLAUSE =
     'Additionally, when an enemy is directly repaired, limited to 3 times per Round, this Unit <unit-damage>repairs 5%</unit-damage> for every enemy repaired.';
 

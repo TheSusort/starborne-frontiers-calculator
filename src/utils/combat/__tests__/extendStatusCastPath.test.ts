@@ -1,15 +1,16 @@
 /**
- * Ship-kit Wave 4, Task 6 — on-cast `extend-status` executor (Sokol/Ripper/Lev).
+ * On-cast `extend-status` executor (Ripper/Lev, plus a synthetic single-target shape).
  *
- * Task 5 built the parser/buildShipAbilities emit for a new generic `extend-status`
- * ability (`{type:'extend-status', statusKind:'buff'|'debuff', turns}`), Task 4 built the
- * StatusEngine primitives (`extendAllDebuffsDuration` on `enemyMaps`, `extendAllBuffsDuration`
- * on `selfMaps`). This suite exercises the NEW on-cast executor block in `playerTurn.ts`
- * (beside the purge/steal/shield-strip blocks) that wires the two together:
- *   - Sokol (charged, target 'enemy', statusKind 'debuff'): extends the hit enemy's debuffs.
- *   - Ripper (PASSIVE slot, target 'all-allies', statusKind 'buff'): extends every living
- *     ally's timed self-buffs — sourced from `gatedPassive`, not `gatedSkill` (unlike the
- *     purge/steal blocks, whose abilities are never passive-slot in the corpus).
+ * The parser/buildShipAbilities emit a generic `extend-status` ability
+ * (`{type:'extend-status', statusKind:'buff'|'debuff', turns}`) and the StatusEngine owns the
+ * primitives (`extendAllDebuffsDuration` on `enemyMaps`, `extendAllBuffsDuration` on
+ * `selfMaps`). This suite exercises the on-cast executor block in `playerTurn.ts` (beside the
+ * purge/steal/shield-strip blocks) that wires the two together:
+ *   - Synthetic 'enemy'-target shape (hand-built; the parser no longer emits target 'enemy'
+ *     for any ship): extends the hit enemy's debuffs.
+ *   - Ripper-shaped (PASSIVE slot, target 'all-allies', statusKind 'buff', hand-built): extends
+ *     every living ally's timed self-buffs — sourced from `gatedPassive`, not `gatedSkill`
+ *     (unlike the purge/steal blocks, whose abilities are never passive-slot in the corpus).
  *   - Lev (charged, target 'all-enemies', statusKind 'debuff', gated on a `self-crit`
  *     condition): extends every hit enemy's debuffs ONLY when this cast crit.
  *
@@ -195,7 +196,7 @@ const selfBuffTurns = (statusEngine: StatusEngine, ownerId: string): number | un
         number | undefined;
 
 // ---------------------------------------------------------------------------
-// Sokol — charged debuff-extend (target 'enemy').
+// Synthetic charged debuff-extend with target 'enemy' (hand-built; not a parsed shape).
 // ---------------------------------------------------------------------------
 const sokolExtendDebuff = (turns = 1): Ability => ({
     id: 'sokol-extend',
@@ -210,7 +211,7 @@ const sokolSkills = (): ShipSkills => ({
     slots: [{ slot: 'charged', abilities: [sokolExtendDebuff(1)] }],
 });
 
-describe('Sokol — on-cast charged debuff-extend', () => {
+describe('synthetic enemy-target on-cast charged debuff-extend', () => {
     it('extends a 2-turn enemy debuff to 3 turns', () => {
         const runtime = makeRuntime('sokol', sokolSkills());
         const enemy = makeEnemy('enemy1');
@@ -223,8 +224,8 @@ describe('Sokol — on-cast charged debuff-extend', () => {
         expect(enemyDebuffTurns(statusEngine, enemy.id)).toBe(3);
     });
 
-    // Team symmetry: an ENEMY-side Sokol must extend a PLAYER-side victim's debuff identically.
-    it('is team-symmetric: an ENEMY-side Sokol extends a PLAYER-side debuff the same way', () => {
+    // Team symmetry: an ENEMY-side caster must extend a PLAYER-side victim's debuff identically.
+    it('is team-symmetric: an ENEMY-side caster extends a PLAYER-side debuff the same way', () => {
         const runtime = makeRuntime('enemy-sokol', sokolSkills(), { side: 'enemy' });
         const victim = makeEnemy('player1', 'player');
         const statusEngine = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
@@ -238,7 +239,7 @@ describe('Sokol — on-cast charged debuff-extend', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Ripper — PASSIVE all-allies buff-extend (target 'all-allies'); the ability lives on the
+// Ripper-shaped (hand-built) PASSIVE all-allies buff-extend; the ability lives on the
 // passive slot, so the executor must scan `gatedPassive`, not just `gatedSkill`.
 // ---------------------------------------------------------------------------
 const ripperExtendBuff = (turns = 1): Ability => ({
@@ -257,7 +258,7 @@ const ripperSkills = (): ShipSkills => ({
     ],
 });
 
-describe('Ripper — on-cast passive all-allies buff-extend', () => {
+describe('Ripper-shaped on-cast passive all-allies buff-extend (hand-built)', () => {
     it("extends a living ally's timed self-buff by 1 turn (fan-out beyond the caster)", () => {
         const runtime = makeRuntime('ripper', ripperSkills(), {
             hasChargedSkill: false,

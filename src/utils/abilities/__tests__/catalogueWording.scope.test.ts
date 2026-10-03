@@ -1,51 +1,15 @@
 import { describe, it, expect } from 'vitest';
-import { parseSlot, sigs, canonical, type RewordPair } from './helpers/catalogueWording';
+import {
+    parseSlot,
+    sigs,
+    canonical,
+    type RewordPair,
+    type SlotName,
+} from './helpers/catalogueWording';
 
 // Sentinel R2 is a number row whose numbers did not change: old and new carry the same 5% repair
 // and 60% hit, only reordered.
 const PAIRS: RewordPair[] = [
-    {
-        ship: 'Asphyxiator',
-        slot: 'active',
-        old: 'This Unit inflicts <unit-skill>Defense Down III</unit-skill> for 1 turn and deals <unit-damage>175% damage</unit-damage>, then inflicts <unit-skill>Inferno III</unit-skill> for 3 turns on the targeted enemy and all enemies adjacent to it.',
-        new: 'This Unit inflicts <unit-skill>Defense Down III</unit-skill> for 1 turn and deals <unit-damage>175% damage</unit-damage>, then inflicts <unit-skill>Inferno III</unit-skill> for 3 turns on the targeted enemy and all adjacent enemies.',
-        expects: 'dot|target-and-adjacent-enemies|on-cast|dot',
-    },
-    {
-        ship: 'Asphyxiator',
-        slot: 'charged',
-        old: 'This Unit inflicts <unit-skill>Inc. DoT Damage Up III</unit-skill> for 2 turns, deals <unit-damage>215% damage</unit-damage>, and inflicts <unit-skill>Inferno III</unit-skill> for 3 turns. If the targeted enemy of adjacent enemies have 3 or more debuffs, it inflicts <unit-skill>Stasis</unit-skill> for 1 turns on the targeted enemy and all enemies adjacent to the enemy.',
-        new: 'This Unit inflicts <unit-skill>Inc. DoT Damage Up III</unit-skill> for 2 turns, deals <unit-damage>215% damage</unit-damage>, and inflicts <unit-skill>Inferno III</unit-skill> for 3 turns. If the targeted enemy or adjacent enemies have 3 or more <unit-aid>debuffs</unit-aid>, it inflicts <unit-skill>Stasis</unit-skill> for 1 turn on the targeted enemy and all adjacent enemies.',
-        expects: 'control|target-and-adjacent-enemies|on-cast|control',
-    },
-    {
-        ship: 'Volk',
-        slot: 'passive',
-        old: 'At the start of its turn, this Unit <unit-damage>repairs 30%</unit-damage> of its Max HP to the ally with the most missing health.',
-        new: 'At the start of its turn, this Unit <unit-damage>repairs 30%</unit-damage> of its max HP to the ally with the most missing HP.',
-        expects: 'heal|lowest-hp-ally|on-cast|heal',
-    },
-    {
-        ship: 'Volk',
-        slot: 'passive',
-        old: 'At the start of its turn, this Unit <unit-damage>repairs 30%</unit-damage> of its Max HP to the ally with the most missing health.<br /><br />At the end of its t urn, it <unit-damage>repairs itself for 30%</unit-damage> of its Max HP.',
-        new: 'At the start of its turn, this Unit <unit-damage>repairs 30%</unit-damage> of its max HP to the ally with the most missing HP.<br /><br />At the end of its turn, it <unit-damage>repairs itself for 30%</unit-damage> of its max HP.',
-        expects: 'heal|lowest-hp-ally|on-cast|heal',
-    },
-    {
-        ship: 'Valkyrie',
-        slot: 'passive',
-        old: 'This Unit gains <unit-skill>Speed Up II</unit-skill> for 1 turn at the start of the round.<br /><br />When an <unit-aid>Echoing Burst</unit-aid> explodes on an enemy, this Unit and the ally with the lowest current health percentage <unit-damage>repair 5%</unit-damage> of damage dealt.',
-        new: 'This Unit ignores <unit-skill>Taunt</unit-skill> and <unit-skill>Provoke</unit-skill> effects and at the start of the round, this Unit gains <unit-skill>Speed Up II</unit-skill> for 1 turn. <br /><br />When an <unit-skill>Echoing Burst</unit-skill> explodes on an enemy, the Unit and the ally with the lowest current health percentage <unit-damage>repair 5%</unit-damage> of the damage dealt.',
-        expects: 'heal|self|on-own-echoing-burst-detonated|heal',
-    },
-    {
-        ship: 'Valkyrie',
-        slot: 'passive',
-        old: 'This Unit gains <unit-skill>Speed Up II</unit-skill> for 1 turn at the start of the round.<br /><br />When an <unit-aid>Echoing Burst</unit-aid> explodes on an enemy, this Unit and the ally with the lowest current health percentage <unit-damage>repair 5%</unit-damage> of damage dealt.<br /><br />This Unit starts combat fully Charged.',
-        new: 'This Unit ignores <unit-skill>Taunt</unit-skill> and <unit-skill>Provoke</unit-skill> effects and at the start of the round, this Unit gains <unit-skill>Speed Up II</unit-skill> for 1 turn. <br /><br />When an <unit-skill>Echoing Burst</unit-skill> explodes on an enemy, the Unit and the ally with the lowest current health percentage <unit-damage>repair 5%</unit-damage> of the damage dealt.<br /><br />This Unit starts combat <unit-skill>fully charged</unit-skill>.',
-        expects: 'heal|self|on-own-echoing-burst-detonated|heal',
-    },
     {
         ship: 'Sentinel',
         slot: 'passive',
@@ -77,12 +41,60 @@ const PAIRS: RewordPair[] = [
     },
 ];
 
+// Rows whose catalogue sentence is the only wording the parser reads: the parse must carry
+// `expects`.
+const CATALOGUE_ROWS: { ship: string; slot: SlotName; text: string; expects: string }[] = [
+    {
+        ship: 'Asphyxiator',
+        slot: 'active',
+        text: 'This Unit inflicts <unit-skill>Defense Down III</unit-skill> for 1 turn and deals <unit-damage>175% damage</unit-damage>, then inflicts <unit-skill>Inferno III</unit-skill> for 3 turns on the targeted enemy and all adjacent enemies.',
+        expects: 'dot|target-and-adjacent-enemies|on-cast|dot',
+    },
+    {
+        ship: 'Asphyxiator',
+        slot: 'charged',
+        text: 'This Unit inflicts <unit-skill>Inc. DoT Damage Up III</unit-skill> for 2 turns, deals <unit-damage>215% damage</unit-damage>, and inflicts <unit-skill>Inferno III</unit-skill> for 3 turns. If the targeted enemy or adjacent enemies have 3 or more <unit-aid>debuffs</unit-aid>, it inflicts <unit-skill>Stasis</unit-skill> for 1 turn on the targeted enemy and all adjacent enemies.',
+        expects: 'control|target-and-adjacent-enemies|on-cast|control',
+    },
+    {
+        ship: 'Volk',
+        slot: 'passive',
+        text: 'At the start of its turn, this Unit <unit-damage>repairs 30%</unit-damage> of its max HP to the ally with the most missing HP.',
+        expects: 'heal|lowest-hp-ally|on-cast|heal',
+    },
+    {
+        ship: 'Volk',
+        slot: 'passive',
+        text: 'At the start of its turn, this Unit <unit-damage>repairs 30%</unit-damage> of its max HP to the ally with the most missing HP.<br /><br />At the end of its turn, it <unit-damage>repairs itself for 30%</unit-damage> of its max HP.',
+        expects: 'heal|lowest-hp-ally|on-cast|heal',
+    },
+    {
+        ship: 'Valkyrie',
+        slot: 'passive',
+        text: 'This Unit ignores <unit-skill>Taunt</unit-skill> and <unit-skill>Provoke</unit-skill> effects and at the start of the round, this Unit gains <unit-skill>Speed Up II</unit-skill> for 1 turn. <br /><br />When an <unit-skill>Echoing Burst</unit-skill> explodes on an enemy, the Unit and the ally with the lowest current health percentage <unit-damage>repair 5%</unit-damage> of the damage dealt.',
+        expects: 'heal|self|on-own-echoing-burst-detonated|heal',
+    },
+    {
+        ship: 'Valkyrie',
+        slot: 'passive',
+        text: 'This Unit ignores <unit-skill>Taunt</unit-skill> and <unit-skill>Provoke</unit-skill> effects and at the start of the round, this Unit gains <unit-skill>Speed Up II</unit-skill> for 1 turn. <br /><br />When an <unit-skill>Echoing Burst</unit-skill> explodes on an enemy, the Unit and the ally with the lowest current health percentage <unit-damage>repair 5%</unit-damage> of the damage dealt.<br /><br />This Unit starts combat <unit-skill>fully charged</unit-skill>.',
+        expects: 'heal|self|on-own-echoing-burst-detonated|heal',
+    },
+];
+
 describe('target and scope phrases — catalogue wording parses like ours', () => {
     it.each(PAIRS)('$ship $slot', ({ slot, old, new: next, expects }) => {
         const before = parseSlot(slot, old);
         expect(sigs(before)).toContain(expects); // the reference parse is not vacuous
         expect(canonical(parseSlot(slot, next))).toEqual(canonical(before));
     });
+
+    it.each(CATALOGUE_ROWS)(
+        '$ship $slot: the catalogue sentence carries its parse',
+        ({ slot, text, expects }) => {
+            expect(sigs(parseSlot(slot, text))).toContain(expects);
+        }
+    );
 });
 
 // A ship that GAINS Taunt takes it itself. Taunt draws fire to the ship carrying it, so a

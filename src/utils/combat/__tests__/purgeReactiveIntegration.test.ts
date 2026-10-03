@@ -367,12 +367,12 @@ describe('Salvation heals HERSELF when her own buff is purged', () => {
 });
 
 // =============================================================================
-// Test 2: Sefuba chain (on-enemy-purged → self-heal + purge 1 more) + depth guard.
+// Test 2: Sefuba chain (on-enemy-purged → self-heal + purge 1 extra) + depth guard.
 // =============================================================================
 
 describe('C2b-1 T6 Step 2: Sefuba chain purge + self-heal (on-enemy-purged, depth-guarded)', () => {
     // Sefuba active: purges 1 enemy buff (on-cast). Passive p2: on-enemy-purged → self-heal
-    // 12% max HP + purge 1 more (fromPurgeEvent=true → depth-1 chain only).
+    // 12% max HP + purge 1 extra (fromPurgeEvent=true → depth-1 chain only).
     //
     // Enemy: faster (speed 200 → acts first each round) so it pre-loads 3 removable self-buffs
     // before the focus acts. Focus (speed 100) then purges on its turn.
@@ -433,7 +433,7 @@ describe('C2b-1 T6 Step 2: Sefuba chain purge + self-heal (on-enemy-purged, dept
 
     // Sefuba's skill set:
     //   active: purge 1 enemy buff (on-cast) + hit (positional, so targetId resolves to 'enemy-front')
-    //   passive: on-enemy-purged → heal self 12% max HP + purge 1 more (fromPurgeEvent is set by
+    //   passive: on-enemy-purged → heal self 12% max HP + purge 1 extra (fromPurgeEvent is set by
     //            the listener in triggers.ts → depth-1 guard prevents re-emission).
     const sefubaSkills = (): ShipSkills => ({
         slots: [

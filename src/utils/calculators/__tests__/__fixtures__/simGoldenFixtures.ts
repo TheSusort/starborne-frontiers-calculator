@@ -890,9 +890,10 @@ export function perVictimAffinityAoe(): BattleSimulationInput {
 //     enemy-debuff (Inferno) condition; its own active is what inflicts Inferno in the first
 //     place, onto whichever enemy its single-target row-scan lands on.
 //
-// Skill text is verbatim from `src/utils/combat/__tests__/reactiveDamagePositionalHp.test.ts`
-// (Tasks 2 and 7's `FRONTLINE_R2_TEXT` / `JUDGE_PASSIVE` / `INCINERATOR_PASSIVE` constants,
-// themselves confirmed against docs/ship-skills.csv / ships.ts) — do NOT alter.
+// Frontline's R2 passive is verbatim from docs/ship-skills.csv (second_passive_skill_text). The
+// Judge and Incinerator passives are verbatim from
+// `src/utils/combat/__tests__/reactiveDamagePositionalHp.test.ts` (`JUDGE_PASSIVE` /
+// `INCINERATOR_PASSIVE`).
 //
 // Positions are three independent row-pairs (own-row-first targeting, `selectTargets.ts`) so
 // each mechanic's SETUP is deterministic while the reactive AoEs (which are roster-wide, not
@@ -934,7 +935,7 @@ export function perVictimAffinityAoe(): BattleSimulationInput {
 // ===========================================================================
 
 const RDP_FRONTLINE_R2_TEXT =
-    'This ship has 20% Shield Penetration.<br />While Shielded, it gains 2500 additional Defense.<br />This Unit gains <unit-damage>Shield equal to 25%</unit-damage> of its Max HP at the start of combat.<br /><br />When an enemy uses their Charged skill, it deals <unit-damage>80%</unit-damage> and gains a Shield equal to <unit-damage>30%</unit-damage> of the damage dealt, once per round.';
+    'This ship has <unit-damage>20% shield penetration</unit-damage>.<br /><br />At the start of combat this Unit gains a <unit-damage>shield equal to 25%</unit-damage> of its max HP and while it has an active shield, it gains 2500 defense.<br /><br />When an enemy uses their charged skill, this Unit deals <unit-damage>80% damage</unit-damage> and gains a <unit-damage>shield equal to 30%</unit-damage> of the damage dealt, once per round.';
 
 const RDP_JUDGE_PASSIVE =
     'At the start of the round, this Unit deals <unit-damage>60% damage</unit-damage> to all ' +

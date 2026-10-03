@@ -106,8 +106,9 @@ export type EnemySelectorKind = 'most-buffs' | 'highest-attack' | 'highest-speed
  * Same instrument, same reason: the key set is DERIVED from `AbilityTarget`, so `tsc` rejects a new
  * variant until somebody classifies it here. Before #403 the footprint question was simply not
  * asked on the cast path — `resolveDebuffRecipientIds` had no selector arm at all and the three
- * selector targets fell through its tail to `[anchorId]`, so a clause reading "applies Stasis to
- * the highest attack enemy" landed on whichever enemy the cast's pattern happened to anchor on.
+ * selector targets fell through its tail to `[anchorId]`, so a hypothetical clause reading "applies
+ * <debuff> for 1 turn to the enemy with the highest attack" landed on whichever enemy the cast's
+ * pattern happened to anchor on.
  *
  * Resolving a kind to an actual actor id is the CALLER's job — it needs the live opposing roster
  * and live effective stats, which this module has no business knowing. `engine.ts`'s `buildTurnArgs`
@@ -167,8 +168,8 @@ export function enemySelectorKind(target: AbilityTarget): EnemySelectorKind | nu
  *   • `charge`        — self-gain (24), enemy-removal (8), ally-bulk grants (5);
  *   • `control`       — inflicted control (35 + 2 adjacency) AND Taunt, which
  *                       `parseControlInflicts` emits with `side: 'self'` (6);
- *   • `extend-status` — Ripper's `all-allies` buff-extend (2) AND Sokol/Lev's enemy debuff-extend
- *                       (2).
+ *   • `extend-status` — Ripper's `all-allies` buff-extend AND the enemy debuff-extends of Lev and
+ *                       Asphyxiator.
  * Every other type was observed on one side only. `buff` is `'self'` — 262 ally-side occurrences
  * (self 160, all-allies 87, ally 12, adjacent-allies 3) and NOT ONE enemy target — which is the
  * entry that closes the hole. `abilityTypeTargetSides.test.ts` re-runs that sweep as a gate.
@@ -187,7 +188,7 @@ export const ABILITY_TYPE_TARGET_SIDES: Record<AbilityType, 'self' | 'enemy' | '
     debuff: 'enemy',
     dot: 'enemy',
     'extend-dot': 'enemy',
-    // Ripper extends ally buffs; Sokol/Lev extend enemy debuffs. Genuinely both.
+    // Ripper extends ally buffs; Lev and Asphyxiator extend enemy debuffs. Genuinely both.
     'extend-status': 'both',
     'detonate-dot': 'enemy',
     'accumulate-detonate': 'enemy',

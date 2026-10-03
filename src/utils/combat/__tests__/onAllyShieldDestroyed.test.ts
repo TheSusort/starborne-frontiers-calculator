@@ -1,14 +1,15 @@
 /**
  * SP-F F2 — AEGIS's `on-ally-shield-destroyed` reactive trigger (ENGINE integration).
  *
- * AEGIS's R2 refit-active 2nd passive (verbatim from docs/ship-skills.csv): "This Unit grants
- * <unit-skill>Defense Up II</unit-skill> for 1 turn and <unit-aid>cleanses all</unit-aid> debuffs
- * when an ally within the Active pattern has their Shield destroyed." Before this task both
+ * AEGIS's R2 refit-active 2nd passive (old-corpus wording; synthetic, the catalogue text differs):
+ * "This Unit grants <unit-skill>Defense Up II</unit-skill> for 1 turn and
+ * <unit-aid>cleanses all</unit-aid> debuffs when an ally within the Active pattern has their
+ * Shield destroyed." Before this task both
  * halves defaulted to `trigger:'on-cast'` (an unconditioned, always-fires grant) — no
  * shield-DESTRUCTION-scoped trigger existed anywhere (the only shield trigger was
  * `on-shield-applied`, the opposite direction — fired on a GRANT, not a loss).
  *
- * Driven through the REAL pipeline: `buildShipAbilities` parses the verbatim passive text into
+ * Driven through the REAL pipeline: `buildShipAbilities` parses the passive text into
  * TWO `on-ally-shield-destroyed` reactive abilities (a 'buff' grant + a 'cleanse'), both
  * `target:'ally'`. `runCombat` is exercised directly (not `simulateBattle`) so the test can (a)
  * seed a deterministic pre-combat shield via the `type:'shield', trigger:'pre-combat'` ability
@@ -101,7 +102,8 @@ const preCombatShield = (): Ability => ({
 
 const SHIELD_TARGET_HP = 100_000;
 
-// Verbatim from docs/ship-skills.csv (second_passive_skill_text field, the R2 refit-active row).
+// Old-corpus wording of AEGIS's second passive, the R2 refit-active row (synthetic; the catalogue
+// text differs).
 const AEGIS_P2 =
     'This Unit grants <unit-skill>Defense Up II</unit-skill> for 1 turn and <unit-aid>cleanses all</unit-aid> debuffs when an ally within the Active pattern has their Shield destroyed.';
 

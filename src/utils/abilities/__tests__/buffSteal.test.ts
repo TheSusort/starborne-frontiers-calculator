@@ -3,9 +3,8 @@ import { buildShipAbilities } from '../buildShipAbilities';
 import { Ship } from '../../../types/ship';
 import { Ability, Skill } from '../../../types/abilities';
 
-// PR10: buff steal. RAW skill text verbatim from docs/ship-skills.csv (Pallas/Thresh/Tithonus
-// charged skills) — confirmed via `grep -iE "^(Pallas|Thresh|Tithonus)," docs/ship-skills.csv`
-// (2026-07-04).
+// PR10: buff steal. Skill texts are the old-corpus wording of Pallas/Thresh/Tithonus's charged
+// skills and Meatshield's (synthetic; the catalogue text differs).
 
 function ship(over: Partial<Ship>): Ship {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

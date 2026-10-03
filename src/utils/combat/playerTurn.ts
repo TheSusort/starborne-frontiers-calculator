@@ -1106,8 +1106,8 @@ function extendDoTs(args: {
 }
 
 // Step 3a: Extend INFLICTED-scope DoTs — runs AFTER applyNewDoTs, extending ONLY the
-// Corrosion/Inferno entries THIS cast just appended (Valerian's "the newly applied
-// Corrosion ... extended by 1 turn"). `*EntriesBefore` are the container lengths captured
+// Corrosion/Inferno entries THIS cast just appended (Valerian's "extends the duration the newly
+// inflicted Corrosion by 1 turn"). `*EntriesBefore` are the container lengths captured
 // before applyNewDoTs, so the slice from that index onward is exactly what landed this cast.
 // Bombs are excluded (matching extendDoTs). Gating is identical to extendDoTs: ability
 // conditions vs ctx (binary roundCrit), then extendChanceGate(critPowerFactor) for a
@@ -1749,7 +1749,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     //
     //  (1) SLOT. A PASSIVE-slot support ability is not part of the cast, so the pattern does not
     //      govern it (user-verified 2026-07-31 via Volk: its active buffs stay on-pattern, its
-    //      passive repair reaches the ally with the most missing health wherever that ally stands).
+    //      passive repair reaches the ally with the most missing HP wherever that ally stands).
     //      The exception is a passive whose own clause names the pattern —
     //      `Ability.patternScoped`, see the flag's doc comment. That is what `scopedByFootprint`
     //      below decides, and it is the ONLY axis this predicate knows about.
@@ -1757,7 +1757,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     //  (2) TARGET (user-confirmed 2026-08-20). A TEXT-NAMED ally selector is never
     //      footprint-scoped **on either slot**. The load-bearing half of the Volk observation
     //      above is the selector, not the slot: his text names "the ally with the most missing
-    //      health", and a named ally is reached wherever it stands.
+    //      HP", and a named ally is reached wherever it stands.
     //      `'lowest-hp-ally'` (Pallas, Volk, Valkyrie) therefore bypasses
     //      `supportRecipients` entirely — `recipientsFor` returns for it BEFORE calling this, and
     //      `resolveSupportRecipients` THROWS on the target by design so a future caller cannot
@@ -2327,8 +2327,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // actor.shieldPool (SAME field/derivation as modifierCtx's selfShielded below) — REQUIRED
         // here because THIS ctx (not modifierCtx) gates the TIMED ENEMY DEBUFF application just
         // below (the `conditionsMet(status.conditions, preDebuffGateCtx)` check). APEX's
-        // charged Disable ("If this Unit has Shield, the primary target is inflicted with
-        // Disable") is a self-shield-gated NAMED debuff — without this field, selfShielded
+        // charged Disable ("If this Unit has an active shield, the primary target is inflicted
+        // with Disable") is a self-shield-gated NAMED debuff — without this field, selfShielded
         // defaults false here (buildRoundContext's DPS-safe default) and the debuff would never
         // land regardless of the caster's real shieldPool, which is just as wrong as the
         // original unconditional-inflict bug this task fixes.
@@ -2858,13 +2858,13 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // `dmgStats`/`effectiveHp` exist in the turn (computed further down) and
         // cannot be reordered here without reordering the whole turn, which is out of scope.
         // THIS is the ctx that matters for the subject: the per-slot timed-SELF-buff loop just
-        // below (`timedSelfBySlot`, gated via
-        // `conditionsMet(status.conditions, postDebuffGateCtx)`) is what fires an ON-CAST ability gated on `self-shield-full` (Quixilver R2's
-        // shape, e.g. a charge/active-slot "if this Unit has Shield equal to 100% of its max HP"
-        // grant). Without this field, selfShieldFull defaults false here (buildRoundContext's
-        // DPS-safe default) and such a cast-path grant would be permanently suppressed regardless
-        // of the caster's real shieldPool — the same silent-failure class the sibling fields in
-        // the other three contexts already guard against.
+        // below (`timedSelfBySlot`, gated via `conditionsMet(status.conditions,
+        // postDebuffGateCtx)`) is what fires an ON-CAST ability gated on `self-shield-full`
+        // (Quixilver R2's shape, e.g. a charge/active-slot "if it has shield equal to 100% of its
+        // max HP" grant). Without this field, selfShieldFull defaults false here
+        // (buildRoundContext's DPS-safe default) and such a cast-path grant would be permanently
+        // suppressed regardless of the caster's real shieldPool — the same silent-failure class the
+        // sibling fields in the other three contexts already guard against.
         selfShieldFull: actor.stats.hp > 0 && actor.shieldPool >= actor.stats.hp,
         // Malvex charged Barrier: the TARGET's shield-presence gate (see victimShieldGateCtx). Note
         // `selfShielded` is still absent from THIS ctx (its only consumers gate enemy debuffs /
@@ -4525,22 +4525,23 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         }
     }
 
-    // On-cast extend-status (Sokol charged debuff-extend; Ripper passive
-    // all-allies buff-extend; Lev charged all-enemies debuff-extend gated on self-crit). Pure
+    // On-cast extend-status (Lev charged all-enemies debuff-extend gated on self-crit; Fuying
+    // charged named Stealth buff-extend; Asphyxiator passive inflicted-scope debuff-extend).
+    // Ripper's buff-extend rides on-debuff-inflicted and runs in triggers.ts, not here. Pure
     // StatusEngine duration mutation — side-symmetric (mirrors the purge/steal/shield-strip
     // blocks above: runs identically for player AND enemy casters, OUTSIDE the healing gate).
-    // Sourced from BOTH the firing slot (gatedSkill: Sokol/Lev, charged) AND the always-active
-    // passive slot (gatedPassive: Ripper) — mirroring the healAbilities combine
+    // Sourced from BOTH the firing slot (gatedSkill: Lev, Fuying) AND the always-active
+    // passive slot (gatedPassive: Asphyxiator) — mirroring the healAbilities combine
     // (below) and the extendDoTs/extendInflictedDoTs combine (above), since a
     // gatedSkill-only scan (like the purge/steal loops, whose abilities are never passive-slot
-    // in the corpus) would silently skip Ripper's passive-slot extend ability.
+    // in the corpus) would silently skip a passive-slot extend ability.
     // conditionsMet(ab.conditions, ctx) evaluates Lev's self-crit gate against THIS cast's live
     // `ctx.roundCrit` (set at buildRoundContext above from `roundCrit = critHits > 0`) — the
     // SAME ctx the purge/steal blocks gate against, so a non-crit cast correctly suppresses
     // Lev's extension (see evaluateConditions.ts's 'self-crit' case, binary off ctx.roundCrit).
     // The DEBUFF branch targets enemies, so it requires a hit target (targetId / aoeVictimIds)
     // and is skipped when there is none — a NO-VICTIM turn, which leaves targetId unset. The
-    // BUFF branch (Ripper 'all-allies') needs NO enemy target — it must run regardless of
+    // BUFF branch (Fuying 'all-allies') needs NO enemy target — it must run regardless of
     // targetId, otherwise the ally/self buff-extend is silently dropped in DPS mode and on any
     // enemy-less cast. extendAll{Debuffs,Buffs}Duration return 0 against an empty/missing store,
     // so both branches no-op harmlessly when the relevant roster is empty.
@@ -4557,10 +4558,11 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         }
         const { statusKind, turns } = ab.config;
         // #363 (Fuying): a NAMED extension ("extends Stealth by 1 turn") restricts the buff
-        // branch below to that exact status name. Absent (Ripper) → extend-everything, unchanged.
+        // branch below to that exact status name. Absent → extend-everything.
         const namedBuff = ab.config.type === 'extend-status' ? ab.config.buffName : undefined;
         if (statusKind === 'debuff') {
-            // Sokol: single hit enemy (targetId). Lev: fans over the cast's hit-enemy footprint
+            // 'enemy': single hit enemy (targetId); the parser no longer emits it (`extendTarget`
+            // falls back to all-enemies), so only editor-authored abilities reach this arm. Lev: fans over the cast's hit-enemy footprint
             // (aoeVictimIds) for an 'all-enemies' target — same E3 pattern the purge/shield-strip
             // blocks above use. Requires a hit target; skipped when there is none.
             if (targetId === undefined) continue;
@@ -4617,12 +4619,12 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 }
             }
         } else {
-            // Ripper: 'all-allies' — same allyRoster pattern the ally-charge-gain block uses
+            // 'all-allies' (Fuying) — same allyRoster pattern the ally-charge-gain block uses
             // (above): healing-mode roster when present, else the live same-side
             // roster, narrowed through supportRecipients (the caster's own footprint pattern,
-            // if any — undefined pattern/anchor leaves the roster unfiltered, so Ripper's own
-            // buffs extend too, matching "All allies extend their active Buffs"). Independent of
-            // targetId — an ally buff-extend needs no enemy target.
+            // if any — undefined pattern/anchor leaves the roster unfiltered, so the caster's own
+            // buffs extend too). Independent of targetId — an ally buff-extend needs no enemy
+            // target.
             const isEnemyCaster = actor.side === 'enemy';
             const allyRoster = args.healing
                 ? isEnemyCaster

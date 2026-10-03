@@ -1,9 +1,9 @@
 /**
- * SP-E, Task E4 — Belladonna's "When an ally inflicts Corrosion, this Unit has a chance to
- * convert the Corrosion into Acidic Decay of the same level, with the chance scaling at 1% per
- * 10 Hacking. Upon converting Corrosion, this Unit extends the newly applied Acidic Decay status
- * for 1 turn, with the chance to equal to its crit power." (docs/ship-skills.csv, second passive,
- * verbatim — matches the SP-E triage probe in modelCompletenessTriage.test.ts).
+ * Belladonna's "When an ally inflicts Corrosion, this Unit converts the Corrosion into Acidic
+ * Decay of the same level, with the chance scaling at 1% per 10 Hacking. Upon converting
+ * Corrosion, this Unit extends the newly inflicted Acidic Decay status for 1 turn, with the chance
+ * equal to its crit power." (docs/ship-skills.csv, second passive, verbatim — matches the SP-E
+ * triage probe in modelCompletenessTriage.test.ts).
  *
  * The convert-dot ability is extracted through the REAL production path (buildShipAbilities),
  * mirroring allyDebuffReactivePromotion.integration.test.ts's Oleander/Hayyan harness: a
@@ -35,7 +35,7 @@ function ship(over: Partial<Ship>): Ship {
 // Verbatim from docs/ship-skills.csv (second_passive_skill_text field) — matches
 // modelCompletenessTriage.test.ts's BELLADONNA_P2 constant exactly.
 const BELLADONNA_P2 =
-    'When an ally inflicts <unit-skill>Corrosion</unit-skill>, this Unit has a chance to convert the <unit-skill>Corrosion</unit-skill> into <unit-skill>Acidic Decay</unit-skill> of the same level, with the chance scaling at 1% per 10 Hacking.<br /><br />Upon converting <unit-skill>Corrosion</unit-skill>, this Unit extends the newly applied <unit-skill>Acidic Decay</unit-skill> status for 1 turn, with the chance to equal to its crit power.';
+    'When an ally inflicts <unit-skill>Corrosion</unit-skill>, this Unit converts the <unit-skill>Corrosion</unit-skill> into <unit-skill>Acidic Decay</unit-skill> of the same level, with the chance scaling at 1% per 10 Hacking.<br /><br />Upon converting <unit-skill>Corrosion</unit-skill>, this Unit <unit-skill>extends the newly inflicted</unit-skill> <unit-skill>Acidic Decay</unit-skill> status for 1 turn, with the chance equal to its crit power.';
 
 /** Extracts Belladonna's convert-dot ability through the REAL parser/builder (production routing). */
 function belladonnaConvertDot(): Ability {

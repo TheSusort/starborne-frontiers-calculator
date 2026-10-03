@@ -9,8 +9,8 @@
  *  - A drain-time `enemy-buff` gate reads the OWNER's opposing side, whichever side owns it.
  *
  * The reader is Graphite's refit passive ("at the start of the round, if an enemy Unit has
- * Stealth, add 2 charges to all allies within the active pattern") parsed from its real text; the
- * observable is the round-1 `charge 0→2 (manip)` entries in the combat log, per side.
+ * Stealth, add 2 charges to all allies within the active pattern") parsed from its old-corpus
+ * text; the observable is the round-1 `charge 0→2 (manip)` entries in the combat log, per side.
  */
 import { describe, it, expect } from 'vitest';
 import { simulateBattle, type BattlePlacement } from '../../calculators/battleSimulator';

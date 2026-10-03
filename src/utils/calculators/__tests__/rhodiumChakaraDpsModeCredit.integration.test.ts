@@ -16,8 +16,8 @@
  * SP-4c-2c deleted the old gate, and SP-4c-2d deleted the fallback arm together with the dummy —
  * all three resolvers now read the real positioned roster unconditionally.
  *
- * Both ships use their real corpus passive text (docs/ship-skills.csv), matching the positional
- * fixtures in reactiveDamagePositionalHp.test.ts verbatim.
+ * Chakara uses her catalogue passive text (docs/ship-skills.csv); Rhodium uses old-corpus wording
+ * (synthetic). Both match the positional fixtures in reactiveDamagePositionalHp.test.ts verbatim.
  *
  * Chakara (start-of-round trigger) is verified end-to-end through the PUBLIC `simulateDPS`
  * surface (`cumulativeDamage`/`directDamage`) — the same surface `judgeStartOfRoundDamage.
@@ -85,8 +85,9 @@ import { buildShipAbilities } from '../../abilities/buildShipAbilities';
 import type { Ship } from '../../../types/ship';
 import { dealtBy, dealtEntries } from '../../combat/__testutils__/perTargetDealt';
 
-// Verbatim from docs/ship-skills.csv (Rhodium, second_passive_skill_text — the R2/refit-active
-// slot getShipSkillRows resolves for a 2-refit ship). Matches reactiveDamagePositionalHp.test.ts.
+// Old-corpus wording of Rhodium's second passive (synthetic; the catalogue text differs) — the
+// R2/refit-active slot getShipSkillRows resolves for a 2-refit ship. Matches
+// reactiveDamagePositionalHp.test.ts.
 const RHODIUM_P2 =
     'At the end of the round, this Unit <unit-aid>purges 2</unit-aid> buffs from the enemy with ' +
     'the most buffs and deals <unit-damage>80% damage</unit-damage> that cannot critically hit.';
@@ -100,12 +101,13 @@ function rhodiumShipSkills() {
     return buildShipAbilities(rhodium);
 }
 
-// Verbatim from docs/ship-skills.csv (Chakara, third_passive_skill_text — the R4/refit-active
-// slot getShipSkillRows resolves for a 4-refit ship). Matches reactiveDamagePositionalHp.test.ts.
+// Verbatim from docs/ship-skills.csv (Chakara, second_passive_skill_text), fed through
+// thirdPassiveSkillText — the refit-active slot getShipSkillRows resolves for a 4-refit ship.
+// Matches reactiveDamagePositionalHp.test.ts.
 const CHAKARA_P4 =
-    'This Unit starts each round with <unit-skill>Attack Up II</unit-skill> and ' +
-    '<unit-skill>Defense Up II</unit-skill> for 1 turn if it has the lowest speed among all ' +
-    'Allies. Then, deals <unit-damage>60% damage</unit-damage> to the highest Speed Enemy.';
+    'At the start of the round, if this Unit has the lowest speed among all allies, it gains ' +
+    '<unit-skill>Attack Up II</unit-skill> and <unit-skill>Defense Up II</unit-skill> for 1 turn. ' +
+    'Then deals <unit-damage>60% damage</unit-damage> to the enemy with the highest speed.';
 
 function chakaraShipSkills(withPassive: boolean) {
     const chakara = {

@@ -1,23 +1,23 @@
 /**
- * frontLineWhileShieldedDefence.integration.test.ts — ship-kit Wave 4, Task 8.
+ * frontLineWhileShieldedDefence.integration.test.ts
  *
- * FrontLine's passive (docs/ship-skills.csv): "While Shielded, it gains 2500 additional Defense."
- * A NEW engine capability — a flat-points DEFENCE bonus folded into the DEFENSIVE stat read,
+ * FrontLine's passive (docs/ship-skills.csv): "while it has an active shield, it gains 2500
+ * defense."
+ * The engine models it as a flat-points DEFENCE bonus folded into the DEFENSIVE stat read,
  * gated on the actor CURRENTLY holding a shield (CombatActor.shieldPool > 0), re-evaluated fresh
- * on every hit via `substitutedDefenceFor` (engine.ts). Modelled with a NEW `conditional-stat`
+ * on every hit via `substitutedDefenceFor` (engine.ts), through the `conditional-stat`
  * AbilityConfig variant (see AbilityType's doc comment) — distinct from every existing stat-bonus
  * path: `modifier` is percentage-only and folds ONLY into the attacker-side DAMAGE-mode read,
  * never the defensive one; `pre-combat-stat` is a permanent one-shot with no `defence` option.
  *
  * Structurally mirrors malvexShieldedReduction.integration.test.ts (the closest existing
  * shield-gated DEFENSIVE precedent): the ability is injected directly (not parsed from CSV text)
- * to isolate the engine-plumbing fix under test from FrontLine's OTHER passive clauses (Shield
- * Penetration — explicitly out of scope for this task — and the start-of-combat/reactive shield
- * grants); the parser/build wiring itself is covered by buildShipAbilities.test.ts's FrontLine
- * case. Team-symmetry: the SAME ability config must produce the SAME defence bump whether
- * FrontLine is a PLAYER team victim (enemy→player positional path) or an ENEMY victim
- * (player→enemy positional path) — `substitutedDefenceFor` already runs for every victim
- * regardless of side, by construction.
+ * to isolate the engine plumbing under test from FrontLine's OTHER passive clauses (shield
+ * penetration and the start-of-combat/reactive shield grants); the parser/build wiring itself is
+ * covered by buildShipAbilities.test.ts's FrontLine case. Team-symmetry: the SAME ability config
+ * must produce the SAME defence bump whether FrontLine is a PLAYER team victim (enemy→player
+ * positional path) or an ENEMY victim (player→enemy positional path) — `substitutedDefenceFor`
+ * already runs for every victim regardless of side, by construction.
  *
  * MEASUREMENT: reads the `attacked` event's `damage` field (the per-attack landed hit AFTER
  * defence mitigation but BEFORE the shield-first drain split — same convention as the Malvex
@@ -37,8 +37,8 @@ import { emptyPreFightModifiers } from '../preFight/types';
 type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 type TeamActor = NonNullable<CombatEngineInput['teamActors']>[number];
 
-// FrontLine's "While Shielded, it gains 2500 additional Defense" clause, injected directly (see
-// file header for why this isn't parsed from the verbatim CSV text here).
+// FrontLine's "while it has an active shield, it gains 2500 defense" clause, injected directly
+// (see file header for why this isn't parsed from the verbatim CSV text here).
 const frontLineDefenceBonus: Ability = {
     id: 'frontline-while-shielded-defence',
     type: 'conditional-stat',

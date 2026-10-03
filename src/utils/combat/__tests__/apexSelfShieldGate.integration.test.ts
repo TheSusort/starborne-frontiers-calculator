@@ -1,14 +1,11 @@
 /**
- * apexSelfShieldGate.integration.test.ts — ship-kit Wave 4, Task 3.
+ * APEX's charged skill (docs/ship-skills.csv, charge_skill_text): "...If this Unit has an
+ * active shield, the primary target is inflicted with Disable for 2 turns." The Disable debuff
+ * (and its control twin, which inherits the debuff's conditions per buildShipAbilities.ts) is
+ * gated on APEX holding a shield at cast time, never inflicted on every charged cast.
  *
- * APEX's charged skill (docs/ship-skills.csv, charge_skill_text): "...If this Unit has Shield,
- * the primary target is inflicted with Disable for 2 turns." Previously `detectGrantConditions`
- * had no `self-shield` subject, so the Disable debuff (and its control twin, which inherits the
- * debuff's conditions per buildShipAbilities.ts) built with NO conditions — Disable
- * inflicted on every charged cast regardless of whether APEX actually held a shield.
- *
- * The fix has two pieces: (a) a new `self-shield` rule in `detectGrantConditions`
- * (skillTextParser.ts); (b) `'self-shield'` added to `LIVE_SUBJECTS` (abilityStatusGating.ts) —
+ * Two pieces carry the gate: (a) the `self-shield` rule in `detectGrantConditions`
+ * (skillTextParser.ts); (b) `'self-shield'` in `LIVE_SUBJECTS` (abilityStatusGating.ts) —
  * REQUIRED because the named Disable timed debuff is gated via
  * `liveGateConditions(ability.conditions)` (engine.ts), which neutralizes any derivable
  * subject NOT in LIVE_SUBJECTS to `'always'`; without (b), (a) alone would still let Disable
@@ -36,7 +33,7 @@ type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 
 // Verbatim from docs/ship-skills.csv (charge_skill_text field, APEX row).
 const APEX_CHARGE =
-    'This Unit deals <unit-damage>220% damage</unit-damage> and inflicts <unit-skill>Attack Down II</unit-skill> and <unit-skill>Out. Damage Down II</unit-skill> for 2 turns. If this Unit has Shield, the primary target is inflicted with <unit-skill>Disable</unit-skill> for 2 turns.';
+    'This Unit deals <unit-damage>220% damage</unit-damage> and inflicts <unit-skill>Attack Down II</unit-skill> and <unit-skill>Out. Damage Down II</unit-skill> for 2 turns. If this Unit has an active shield, the primary target is inflicted with <unit-skill>Disable</unit-skill> for 2 turns.';
 
 function apexShip(): Ship {
     return {
@@ -86,7 +83,7 @@ const apexShipSkills = (includeSelfShield: boolean): ShipSkills => ({
     ],
 });
 
-describe('APEX charged Disable — self-shield gate, player-side (ship-kit Wave 4, Task 3)', () => {
+describe('APEX charged Disable — self-shield gate, player-side', () => {
     const makeInput = (includeSelfShield: boolean): CombatEngineInput => ({
         // A real opponent for the Disable/Attack Down II debuffs to land on. Inert and
         // unkillable here — the focus deals 1000/round (10% of 10000 attack) for two rounds.

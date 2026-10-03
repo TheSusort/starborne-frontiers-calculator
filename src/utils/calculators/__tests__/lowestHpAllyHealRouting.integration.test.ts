@@ -221,7 +221,7 @@ describe('SP-4e: a text-named worst-HP repair reaches the worst-HP ally, not the
         expect(selector.healedIds).toEqual([WORST]);
     });
 
-    // Volk: PASSIVE slot, "repairs 30% of its Max HP to the ally with the most missing health"
+    // Volk: PASSIVE slot, "repairs 30% of its max HP to the ally with the most missing HP"
     // — loose phrasing for lowest HP PERCENTAGE, the same selector.
     it('Volk moves off the heal target onto the worst-HP ally', () => {
         const legacy = runHealing('Volk', 'legacy', fullTeam());
@@ -255,13 +255,13 @@ describe('SP-4e: a text-named worst-HP repair reaches the worst-HP ally, not the
 // ===========================================================================
 // Valkyrie — the BATTLE-mode arm (spec §6 item 4).
 //
-// Her dual repair ("this Unit and the ally with the lowest current health percentage repair 5% of
-// damage dealt") rides a DETONATION trigger, so nothing above reaches it: the healing harness never
-// detonates anything. An earlier report called her change "parse-only today" — that was WRONG, and
-// it was reached by measuring the wrong quantity. `BattleRound.ships[].healingReceived` documents
-// that it excludes reactive-heal channels (battleSimulator.ts, `healingReceived`), so it reads 0
-// for every actor in the run below even while every repair lands. The combat log's `heal` entries
-// are the channel that observes them.
+// Her dual repair ("the Unit and the ally with the lowest current health percentage repair 5% of
+// the damage dealt") rides a DETONATION trigger, so nothing above reaches it: the healing harness
+// never detonates anything. An earlier report called her change "parse-only today" — that was
+// WRONG, and it was reached by measuring the wrong quantity. `BattleRound.ships[].healingReceived`
+// documents that it excludes reactive-heal channels (battleSimulator.ts, `healingReceived`), so it
+// reads 0 for every actor in the run below even while every repair lands. The combat log's `heal`
+// entries are the channel that observes them.
 //
 // Fixture: Valkyrie as the focus at M4, plus a real Demolisher at M3 as the second ally. The two
 // enemies are synthetic, high-HP and low-Security, so nothing survives-or-dies differently between
@@ -385,7 +385,7 @@ describe("SP-4e: Valkyrie's detonation repair moves off herself onto the worst-H
     it('rewinding her text reproduces the pre-Task-3 parse, differing ONLY in target', () => {
         const legacy = healAbilitiesOf(traceShipForArm('Valkyrie', 'legacy'));
         const selector = healAbilitiesOf(traceShipForArm('Valkyrie', 'selector'));
-        // The ally half plus the mirrored self half ("this Unit AND the ally …").
+        // The ally half plus the mirrored self half ("the Unit AND the ally …").
         expect(legacy.map((a) => a.target)).toEqual(['ally', 'self']);
         expect(selector.map((a) => a.target)).toEqual(['lowest-hp-ally', 'self']);
         // Everything else — pct, basis, leechScope, trigger, slot — is identical, so the battle

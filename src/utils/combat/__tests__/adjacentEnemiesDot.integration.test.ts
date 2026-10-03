@@ -1,11 +1,10 @@
 /**
- * Ship-kit Wave 5, Task B2 — engine fan-out for a `target-and-adjacent-enemies` DoT
- * (Asphyxiator active Inferno III, set by Task B1's parser work). Prior to this task,
- * `dotsFromSkill` (applyAbilities.ts) drops the ability's `target` entirely, and the
- * `applyNewDoTs` call site (playerTurn.ts) only ever pushes onto the single resolved
- * primary target's containers — so a splash-scoped DoT lands on the primary target ONLY,
- * never its board-neighbours. This file drives the fix through a real positional battle
- * (`simulateBattle`), mirroring Task A3's debuff fan-out test
+ * Engine fan-out for a `target-and-adjacent-enemies` DoT (Asphyxiator active Inferno III). A
+ * splash-scoped DoT must land on the primary target AND its board-neighbours: `dotsFromSkill`
+ * (applyAbilities.ts) carries the ability's `target`, and the `applyNewDoTs` call site
+ * (playerTurn.ts) pushes onto every resolved victim's containers, not just the primary's. This
+ * file drives the fan-out through a real positional battle (`simulateBattle`), mirroring the
+ * debuff fan-out test
  * (`adjacentEnemiesDebuff.integration.test.ts`) for roster/board layout.
  *
  * Board layout (src/utils/targeting/board.ts hex adjacency): the primary target sits at M4
@@ -25,12 +24,12 @@ import { flattenCombatLog } from '../log/__testutils__/flattenCombatLog';
 import { bareEnemy, BARE_ENEMY_ID } from '../__testutils__/bareRosterFixture';
 
 // Verbatim-shaped phrasing (matches Asphyxiator's real active Inferno III sentence structure:
-// "... then inflicts Inferno III for 3 turns on the targeted enemy and all enemies adjacent to
-// it."). Parsed via `adjacentEnemyScopeForName` into `target: 'target-and-adjacent-
-// enemies'` on the `dot` ability, which `dotsFromSkill` (Task B2 Step 1) turns into
-// `splashTarget: 'target-and-adjacent-enemies'` on the DoT application entry.
+// "... then inflicts Inferno III for 3 turns on the targeted enemy and all adjacent enemies.").
+// Parsed via `adjacentEnemyScopeForName` into `target: 'target-and-adjacent-enemies'` on the
+// `dot` ability, which `dotsFromSkill` turns into `splashTarget: 'target-and-adjacent-enemies'`
+// on the DoT application entry.
 const SPLASH_INFERNO_TEXT =
-    'This Unit deals <unit-damage>1% damage</unit-damage>, then inflicts <unit-skill>Inferno III</unit-skill> for 3 turns on the targeted enemy and all enemies adjacent to it.';
+    'This Unit deals <unit-damage>1% damage</unit-damage>, then inflicts <unit-skill>Inferno III</unit-skill> for 3 turns on the targeted enemy and all adjacent enemies.';
 
 // Baseline: the SAME Inferno III DoT with plain `target: 'enemy'` (no adjacency phrase) — used
 // for the DPS-invariance byte-identical comparison.
@@ -123,7 +122,7 @@ const infernoResisted = (result: ReturnType<typeof simulateBattle>, actorId: str
         .map((e) => e.targets[0]?.targetId)
         .filter((id): id is string => id !== undefined);
 
-describe('Ship-kit W5 Task B2: target-and-adjacent-enemies Inferno DoT fan-out (positional, player caster)', () => {
+describe('target-and-adjacent-enemies Inferno DoT fan-out (positional, player caster)', () => {
     const run = (caster: Ship) =>
         simulateBattle({
             playerTeam: [place(caster, 'M4', 1000, 1e9)],
@@ -165,7 +164,7 @@ describe('Ship-kit W5 Task B2: target-and-adjacent-enemies Inferno DoT fan-out (
  * splash loop lived inside `if (dotsLanded)` — which is false here — so neither neighbour would
  * receive Inferno at all; this assertion is the load-bearing proof the splash is independent.
  */
-describe('Ship-kit W5 Task B2: per-victim independence — a neighbour lands Inferno even when the PRIMARY resists', () => {
+describe('per-victim independence — a neighbour lands Inferno even when the PRIMARY resists', () => {
     const run = (caster: Ship) =>
         simulateBattle({
             playerTeam: [place(caster, 'M4', 1000, 1e9)],
@@ -202,7 +201,7 @@ describe('Ship-kit W5 Task B2: per-victim independence — a neighbour lands Inf
  * keep default security (100) → LAND. The resisted neighbour must surface a resist event AND must
  * not accrue Inferno.
  */
-describe('Ship-kit W5 Task B2: a splash DoT that a neighbour resists emits a per-neighbour resist line', () => {
+describe('a splash DoT that a neighbour resists emits a per-neighbour resist line', () => {
     const run = (caster: Ship) =>
         simulateBattle({
             playerTeam: [place(caster, 'M4', 1000, 1e9)],
@@ -233,7 +232,7 @@ describe('Ship-kit W5 Task B2: a splash DoT that a neighbour resists emits a per
     });
 });
 
-describe('Ship-kit W5 Task B2: team symmetry — an ENEMY-side caster splashes onto its PLAYER-side mirror', () => {
+describe('team symmetry — an ENEMY-side caster splashes onto its PLAYER-side mirror', () => {
     const run = (caster: Ship) =>
         simulateBattle({
             playerTeam: [
@@ -299,7 +298,7 @@ describe('Ship-kit W5 Task B2: team symmetry — an ENEMY-side caster splashes o
  * re-created by a fresh fixture either: there is no non-positional shape left below the boundary.
  * What remains is the byte-identity claim above, demonstrated on a single-real-enemy positional run.
  */
-describe('Ship-kit W5 Task B2: single-entry roster edge case (positional, no neighbours to fan out to)', () => {
+describe('single-entry roster edge case (positional, no neighbours to fan out to)', () => {
     const BASE: Omit<CombatEngineInput, 'shipSkills' | 'bus'> = {
         enemyAttackers: bareEnemy({ stats: { hp: 1_000_000_000 } }),
         attack: 1000,

@@ -37,9 +37,9 @@ export function abilitiesFor(over: Partial<Ship>, name: string): Ability[] {
 // Ships probed from two SP angles share ONE verbatim text constant (single source of truth → no
 // drift between the two probes; both must stay byte-identical to docs/ship-skills.csv).
 const VORON_PASSIVE2 =
-    'When directly damaged, this Unit transforms the damage into a <unit-skill>Damage over Time effect</unit-skill> lasting for 3 turns.<br /><br />This Unit takes <unit-damage>20% less damage</unit-damage> from <unit-skill>Damage over Time effects</unit-skill>.';
+    'When directly damaged, this Unit transforms the damage into a <unit-skill>damage over time effect</unit-skill> lasting for 3 turns.<br /><br />This Unit takes <unit-damage>20% less damage</unit-damage> from <unit-skill>damage over time effects</unit-skill>.';
 const FRONTLINE_PASSIVE2 =
-    'This ship has 20% Shield Penetration.<br />While Shielded, it gains 2500 additional Defense.<br />This Unit gains <unit-damage>Shield equal to 25%</unit-damage> of its Max HP at the start of combat.<br /><br />When an enemy uses their Charged skill, it deals <unit-damage>80%</unit-damage> and gains a Shield equal to <unit-damage>30%</unit-damage> of the damage dealt, once per round.';
+    'This ship has <unit-damage>20% shield penetration</unit-damage>.<br /><br />At the start of combat this Unit gains a <unit-damage>shield equal to 25%</unit-damage> of its max HP and while it has an active shield, it gains 2500 defense.<br /><br />When an enemy uses their charged skill, this Unit deals <unit-damage>80% damage</unit-damage> and gains a <unit-damage>shield equal to 30%</unit-damage> of the damage dealt, once per round.';
 
 describe('SP0 triage — corpus scaffold', () => {
     it('abilitiesFor helper is available', () => {
@@ -52,9 +52,9 @@ describe('SP0 triage — corpus scaffold', () => {
 describe('SP-A — incoming-reduction condition gates', () => {
     // Verbatim from docs/ship-skills.csv (second_passive_skill_text field).
     const MALVEX_P2 =
-        'When Shielded, this Ship takes <unit-damage>10% less damage</unit-damage>. When directly damaged as a primary target, this Unit gains <unit-damage>Shield equal to 15%</unit-damage> of the Damage dealt to them.';
+        'When directly damaged as a primary target, this Unit gains <unit-damage>shield equal to 15%</unit-damage> of the damage dealt.<br /><br />When this Unit has an active shield, it gains <unit-damage>10% damage reduction</unit-damage>.';
 
-    it('Malvex: "When Shielded, takes 10% less damage" builds a shield-gated incoming-reduction', () => {
+    it('Malvex: "When this Unit has an active shield, it gains 10% damage reduction" builds a shield-gated incoming-reduction', () => {
         const abilities = abilitiesFor({ secondPassiveSkillText: MALVEX_P2 }, 'passive');
         expect(
             abilities.some(
@@ -92,12 +92,12 @@ describe('SP-A — incoming-reduction condition gates', () => {
 describe('SP-B — new reactive trigger families', () => {
     // Verbatim from docs/ship-skills.csv (second_passive_skill_text field).
     const PARACELSUS_P2 =
-        'Upon being killed by direct Damage, this Unit deals <unit-damage>Damage equal to 50%</unit-damage> of its max HP and grants allies <unit-skill>Everliving Regeneration II</unit-skill> for 4 turns.';
+        'Upon being destroyed by direct damage, this Unit deals <unit-damage>damage equal to 50%</unit-damage> of its max HP and grants all allies <unit-skill>Everliving Regeneration II</unit-skill> for 4 turns.';
 
-    it('Paracelsus: "Upon being killed by direct Damage, deals damage equal to 50% of its max HP" builds an on-destroyed HP-scaled retaliation', () => {
+    it('Paracelsus: "Upon being destroyed by direct damage, deals damage equal to 50% of its max HP" builds an on-destroyed HP-scaled retaliation', () => {
         const abilities = abilitiesFor({ secondPassiveSkillText: PARACELSUS_P2 }, 'passive');
         // Retaliation: on-destroyed HP-scaled damage. Assert the exact basis (skill text says
-        // "Damage equal to 50% of its max HP") so a wrong-scaling regression is caught.
+        // "damage equal to 50% of its max HP") so a wrong-scaling regression is caught.
         expect(
             abilities.some(
                 (a) =>
@@ -116,20 +116,20 @@ describe('SP-B — new reactive trigger families', () => {
 
     // Verbatim from docs/ship-skills.csv (second_passive_skill_text field).
     const FAUST_P2 =
-        'This Unit <unit-aid>purges 3</unit-aid> buffs from the enemy when killed by direct Damage.';
+        'This Unit <unit-skill>purges 3 buffs</unit-skill> from the enemy when destroyed by direct damage.';
 
     // FALSE POSITIVE — locked as a regression guard, NOT assigned to SP-B. Dry-run (plain `it`)
     // against production PASSES today: buildShipAbilities already routes this exact "purges N
-    // buffs ... when killed by direct Damage" clause onto `on-destroyed` via
+    // buffs ... when destroyed by direct damage" clause onto `on-destroyed` via
     // detectKilledByDirectDamageTrigger (skillTextParser.ts) — a detector whose own doc comment
     // names Faust as its target. The SP0 roadmap assumed this was an unmodelled reactive family;
     // it was already shipped independently of this epic.
-    it('Faust: "purges 3 buffs from the enemy when killed by direct Damage" already rides on-destroyed (FP)', () => {
+    it('Faust: "purges 3 buffs from the enemy when destroyed by direct damage" already rides on-destroyed (FP)', () => {
         const abilities = abilitiesFor({ secondPassiveSkillText: FAUST_P2 }, 'passive');
         expect(abilities.some((a) => a.trigger === 'on-destroyed')).toBe(true);
     });
 
-    // Verbatim from docs/ship-skills.csv (second_passive_skill_text field).
+    // Old-corpus wording (second_passive_skill_text field; synthetic, the catalogue text differs).
     const CURATOR_P2 =
         'This Unit has 20% Shield Penetration. <br /><br />\nWhen an enemy uses their charged skill, this unit <unit-aid>purges 1 buffs</unit-aid> from that enemy, and inflicts <unit-skill>Block Buff</unit-skill> for 1 turns.';
 
@@ -160,20 +160,19 @@ describe('SP-B — new reactive trigger families', () => {
 
     // Verbatim from docs/ship-skills.csv (second_passive_skill_text field).
     const RAVAGER_P2 =
-        'This Unit ignores 10% of Defense. It gains 1 stack of <unit-skill>Overload</unit-skill> every turn. Upon killing an enemy, it loses <unit-skill>Overload</unit-skill> and gains <unit-skill>Marauder Rage III</unit-skill> for 3 turns. If its debuff is resisted, it gains <unit-skill>Hacking Module Overdrive</unit-skill> for 1 turn.';
+        "This Unit gains 1 stack of <unit-skill>Overload</unit-skill> every turn and, upon destroying an enemy, removes <unit-skill>Overload</unit-skill> and gains <unit-skill>Marauder Rage III</unit-skill> for 3 turns.<br /><br />If this Unit's debuff is resisted, it gains <unit-skill>Hacking Module Overdrive</unit-skill> for 1 turn. This Unit has <unit-damage>10% defense penetration</unit-damage>.";
 
-    it('Ravager: "If its debuff is resisted, gains Hacking Module Overdrive" rides the INFLICTOR-side reaction', () => {
+    it('Ravager: "If this Unit\'s debuff is resisted, gains Hacking Module Overdrive" rides the INFLICTOR-side reaction', () => {
         const abilities = abilitiesFor({ secondPassiveSkillText: RAVAGER_P2 }, 'passive');
         const effect = abilities.find(
             (a) => a.config.type === 'buff' && a.config.buffName === 'Hacking Module Overdrive'
         );
-        // PR-B2: the INFLICTOR-side "when the debuff THIS unit inflicted gets resisted" trigger
-        // is now modelled as `on-own-debuff-resisted` — mirror of the RESISTER-scoped
-        // `on-debuff-resisted` (D-PR16 Lockdown).
+        // The INFLICTOR-side "when the debuff THIS unit inflicted gets resisted" trigger is
+        // `on-own-debuff-resisted` — mirror of the RESISTER-scoped `on-debuff-resisted` (Lockdown).
         expect(effect?.trigger).toBe('on-own-debuff-resisted');
     });
 
-    // Verbatim from docs/ship-skills.csv (second_passive_skill_text field).
+    // Old-corpus wording (second_passive_skill_text field; synthetic, the catalogue text differs).
     const NOSOROG_P2 =
         'This Unit reflects 40% of the Damage taken back to the enemy when directly damaged as a primary target. Additionally, when this Unit removes a Debuff, it gains <unit-skill>Defense Up II</unit-skill> for 1 turn.';
 
@@ -191,7 +190,7 @@ describe('SP-B — new reactive trigger families', () => {
 });
 
 describe('SP-C — stat-comparison gates', () => {
-    // Verbatim from docs/ship-skills.csv (charge_skill_text field).
+    // Old-corpus wording (charge_skill_text field; synthetic, the catalogue text differs).
     const BAYAH_CHARGE =
         'This Unit deals <unit-damage>150% damage</unit-damage> plus an additional amount equal to <unit-damage>30%</unit-damage> of its Defense and inflicts <unit-skill>Crit Rate Down II</unit-skill> for 2 turns. If this Unit has more Crit Power than the target, it inflicts <unit-skill>Stasis</unit-skill> for 1 turn.';
 
@@ -212,7 +211,7 @@ describe('SP-C — stat-comparison gates', () => {
         ).toBe(true);
     });
 
-    // Verbatim from docs/ship-skills.csv (active_skill_text field).
+    // Old-corpus wording (active_skill_text field; synthetic, the catalogue text differs).
     const CHAKARA_ACTIVE =
         'This Unit deals <unit-damage>180% damage</unit-damage> with additional damage equal to <unit-damage>80%</unit-damage> of its Defense. If all damaged enemies have more Speed than this Unit, it <unit-aid>adds 1 charge</unit-aid> to its Charged Skill.';
 
@@ -229,10 +228,10 @@ describe('SP-C — stat-comparison gates', () => {
         ).toBe(true);
     });
 
-    // Verbatim from docs/ship-skills.csv (active_skill_text field). NOTE: Cobalt also appears in
-    // SP-G (Task 8) for its passive "adds 1 charge ... at the start of the turn if it is at full
-    // HP" start-of-turn charge drain-ordering clauses — a DISTINCT engine-timing limitation. This
-    // probe is ONLY the active skill's owner-vs-target HP comparison.
+    // Old-corpus wording (active_skill_text field; synthetic, the catalogue text differs).
+    // NOTE: Cobalt also appears in SP-G for its passive "Every turn this Unit adds 1 charge … if it
+    // is at full HP" start-of-turn charge drain-ordering clauses — a DISTINCT engine-timing
+    // limitation. This probe is ONLY the active skill's owner-vs-target HP comparison.
     const COBALT_ACTIVE =
         "This Unit purges <unit-aid>1 buff</unit-aid> from the enemy and deals <unit-damage>200% damage</unit-damage>. If this Unit has more HP than the enemy, it additionally deals <unit-damage>damage equal to 25%</unit-damage> of this Unit's max HP.";
 
@@ -257,12 +256,11 @@ describe('SP-C — stat-comparison gates', () => {
 });
 
 describe('SP-D — count-based gates', () => {
-    // Verbatim from docs/ship-skills.csv (second_passive_skill_text field). NOTE: CSV typo
-    // "3 ore more" preserved verbatim (not "or more").
+    // Verbatim from docs/ship-skills.csv (second_passive_skill_text field).
     const BERSERKER_P2 =
-        'This Unit gains <unit-skill>Marauder Rage II</unit-skill> for 3 turns when hitting 3 ore more enemies.';
+        'This Unit gains <unit-skill>Marauder Rage II</unit-skill> for 3 turns when hitting 3 or more enemies.';
 
-    it('Berserker: "gains Marauder Rage II when hitting 3 ore more enemies" is gated on a hit-count threshold', () => {
+    it('Berserker: "gains Marauder Rage II when hitting 3 or more enemies" is gated on a hit-count threshold', () => {
         const abilities = abilitiesFor({ secondPassiveSkillText: BERSERKER_P2 }, 'passive');
         const rageBuff = abilities.find(
             (a) => a.config.type === 'buff' && a.config.buffName === 'Marauder Rage II'
@@ -280,7 +278,7 @@ describe('SP-D — count-based gates', () => {
         ).toBe(true);
     });
 
-    // Verbatim from docs/ship-skills.csv (active_skill_text field).
+    // Old-corpus wording (active_skill_text field; synthetic, the catalogue text differs).
     const TYGR_ACTIVE =
         'This Unit deals <unit-damage>180% damage</unit-damage> and inflicts <unit-skill>Security Down II</unit-skill> for 2 turns. If it damages 2 or more enemies, it adds <unit-aid>adds 1 charge</unit-aid> to its Charged Skill.';
 
@@ -295,9 +293,10 @@ describe('SP-D — count-based gates', () => {
         expect(cond?.subject === 'enemies-hit-this-cast' && cond?.countThreshold === 2).toBe(true);
     });
 
-    // Verbatim from docs/ship-skills.csv (charge_skill_text field). NOTE: Belladonna also
-    // appears in SP-E (Task 6) for its passive "convert Corrosion into Acidic Decay" clause —
-    // a DISTINCT clause. This probe is ONLY the charge skill's Acidic-Decay-count → Stasis gate.
+    // Old-corpus wording (charge_skill_text field; synthetic, the catalogue text differs).
+    // NOTE: Belladonna also appears in SP-E (Task 6) for its passive "convert Corrosion into Acidic
+    // Decay" clause — a DISTINCT clause. This probe is ONLY the charge skill's Acidic-Decay-count →
+    // Stasis gate.
     const BELLADONNA_CHARGE =
         'This Unit deals <unit-damage>180% damage</unit-damage> and inflicts <unit-skill>Corrosion II</unit-skill> for 2 turns.<br />If the enemy has 3 or more <unit-skill>Acidic Decay</unit-skill>, inflict <unit-skill>Stasis</unit-skill> for 1 turn.';
 
@@ -351,7 +350,7 @@ describe('SP-D — count-based gates', () => {
         expect(dotFamilyCounts([acidicDecayEntry], [], [])).toEqual({ [gateKey!]: 1 });
     });
 
-    // Verbatim from docs/ship-skills.csv (charge_skill_text field).
+    // Old-corpus wording (charge_skill_text field; synthetic, the catalogue text differs).
     const ANEMONE_CHARGE =
         'This Unit deals <unit-damage>200% damage</unit-damage> and inflicts <unit-skill>Corrosion III</unit-skill> for 2 turns. If the primary enemy has 3 or more Damage over Time effects, this Unit gains <unit-skill>Taunt</unit-skill> for 1 turn.';
 
@@ -374,7 +373,7 @@ describe('SP-D — count-based gates', () => {
         ).toBe(true);
     });
 
-    // Verbatim from docs/ship-skills.csv (second_passive_skill_text field).
+    // Old-corpus wording (second_passive_skill_text field; synthetic, the catalogue text differs).
     const SNAKEROOT_P2 =
         'This Unit deals <unit-damage>120% damage</unit-damage> for every 4 stacks of damage over time inflicted on to a single enemy.';
 
@@ -424,7 +423,7 @@ describe('SP-E — DoT transforms & conversions', () => {
     // Verbatim from docs/ship-skills.csv (second_passive_skill_text field) — Orel's variant of
     // the SAME transform family, gated on the ATTACKER holding Taunt or Provoke.
     const OREL_P2 =
-        'When directly damaged by an enemy effected by <unit-skill>Taunt</unit-skill> or <unit-skill>Provoke</unit-skill>, this unit transforms the damage into a <unit-skill>Damage over Time effect</unit-skill> for 3 turns.';
+        'When directly damaged by an enemy effected by <unit-skill>Taunt</unit-skill> or <unit-skill>Provoke</unit-skill>, this Unit transforms the damage into a <unit-skill>damage over time effect</unit-skill> lasting 3 turns.';
     it('Orel: transform is gated on the attacker being Taunted or Provoked', () => {
         const abilities = abilitiesFor({ secondPassiveSkillText: OREL_P2 }, 'passive');
         const transform = abilities.find((a) => a.config.type === 'transform-incoming-to-dot');
@@ -439,9 +438,9 @@ describe('SP-E — DoT transforms & conversions', () => {
     // appears in SP-D (Task 5) for the charge skill's "3+ Acidic Decay" count-gate clause — a
     // DISTINCT clause. This probe is ONLY the passive's Corrosion→Acidic Decay conversion.
     const BELLADONNA_P2 =
-        'When an ally inflicts <unit-skill>Corrosion</unit-skill>, this Unit has a chance to convert the <unit-skill>Corrosion</unit-skill> into <unit-skill>Acidic Decay</unit-skill> of the same level, with the chance scaling at 1% per 10 Hacking.<br /><br />Upon converting <unit-skill>Corrosion</unit-skill>, this Unit extends the newly applied <unit-skill>Acidic Decay</unit-skill> status for 1 turn, with the chance to equal to its crit power.';
+        'When an ally inflicts <unit-skill>Corrosion</unit-skill>, this Unit converts the <unit-skill>Corrosion</unit-skill> into <unit-skill>Acidic Decay</unit-skill> of the same level, with the chance scaling at 1% per 10 Hacking.<br /><br />Upon converting <unit-skill>Corrosion</unit-skill>, this Unit <unit-skill>extends the newly inflicted</unit-skill> <unit-skill>Acidic Decay</unit-skill> status for 1 turn, with the chance equal to its crit power.';
 
-    it('Belladonna: "convert the Corrosion into Acidic Decay" rides the live ally-inflicts-debuff reactive trigger (SP-E, Task E4 — closed)', () => {
+    it('Belladonna: "converts the Corrosion into Acidic Decay" rides the live ally-inflicts-debuff reactive trigger', () => {
         const abilities = abilitiesFor({ secondPassiveSkillText: BELLADONNA_P2 }, 'passive');
         // Anchor by `buffName` across ALL `config.type` values — NOT restricted to
         // `config.type === 'debuff'` (review finding). SP-E's family is literally "DoT
@@ -476,7 +475,7 @@ describe('SP-F — deep one-offs', () => {
     // ── Part A: the two KNOWN SP-F ships (allowlist: instead-replacement / detonation +
     // debuff-duration-reduction) ──────────────────────────────────────────────────────
 
-    // Verbatim from docs/ship-skills.csv (active_skill_text field).
+    // Old-corpus wording (active_skill_text field; synthetic, the catalogue text differs).
     const PANON_ACTIVE =
         'This Unit grants all allies <unit-skill>Terran Guard II</unit-skill> for 2 turns and deals <unit-damage>80% damage</unit-damage> with an additional Damage equal to <unit-damage>70%</unit-damage> of its Defense.<br /><br />If this Unit is Provoked or Taunted, this Unit instead gains <unit-skill>Terran Guard III</unit-skill> for 2 turns and deals <unit-damage>120% damage</unit-damage> with an additional Damage equal to <unit-damage>90%</unit-damage> of its Defense.';
 
@@ -497,8 +496,9 @@ describe('SP-F — deep one-offs', () => {
         ).toHaveLength(2);
     });
 
-    // Verbatim from docs/ship-skills.csv (charge_skill_text field) — the SAME "instead"
-    // structure as the active skill above, on the charged skill (Barrier grant + 170%/130%).
+    // Old-corpus wording (charge_skill_text field; synthetic, the catalogue text differs) — the
+    // SAME "instead" structure as the active skill above, on the charged skill (Barrier grant +
+    // 170%/130%).
     const PANON_CHARGED =
         'This Unit deals <unit-damage>140% damage</unit-damage> plus an additional <unit-damage>100%</unit-damage> of its Defense.<br /><br />If this Unit is affected by <unit-skill>Provoke</unit-skill> or <unit-skill>Taunt</unit-skill>, it instead gains <unit-skill>Barrier</unit-skill> for 1 hit and deals <unit-damage>170% damage</unit-damage> with an additional Damage equal to <unit-damage>130%</unit-damage> of its Defense.';
 
@@ -522,15 +522,13 @@ describe('SP-F — deep one-offs', () => {
     // Verbatim from docs/ship-skills.csv (charge_skill_text field). Lingshe's clause is a
     // CHARGED skill → slot 'charged' (not 'active').
     const LINGSHE_CHARGED =
-        'This Unit reduces all <unit-skill>Bombs</unit-skill> on the enemy targets by 1 turn, <unit-skill>Bombs</unit-skill> reduced to 0 turns by this skill will detonate.<br />This reduction effect requires hacking.<br /><br />This Unit inflicts <unit-skill>Bomb III</unit-skill> for 3 turns.';
+        'This Unit reduces all <unit-skill>Bomb</unit-skill> on the enemy targets by 1 turn.<br />This reduction effect requires hacking.<br /><br />This Unit inflicts <unit-skill>Bomb III</unit-skill> for 3 turns.';
 
-    it('Lingshe: charged "reduces all Bombs on the enemy targets by 1 turn ... will detonate" countdown-reduction rider builds a bomb-countdown-reduce ability alongside the Bomb III DoT-apply', () => {
+    it('Lingshe: charged "reduces all Bomb on the enemy targets by 1 turn" countdown-reduction rider builds a bomb-countdown-reduce ability alongside the Bomb III DoT-apply', () => {
         const abilities = abilitiesFor({ chargeSkillText: LINGSHE_CHARGED }, 'charged');
-        // SP-F F3: the countdown-reduction sentence now builds a dedicated
-        // `bomb-countdown-reduce` ability (all-enemies, hacking-gated at runtime via
-        // `landsTimedEnemyApplicationLive('inflict')`), alongside the existing Bomb III
-        // DoT-apply from the second sentence — so the array now has more than the lone
-        // Bomb III entry it had before this task.
+        // The countdown-reduction sentence builds a dedicated `bomb-countdown-reduce` ability
+        // (all-enemies, hacking-gated at runtime via `landsTimedEnemyApplicationLive('inflict')`),
+        // alongside the Bomb III DoT-apply from the last sentence.
         expect(abilities.length).toBeGreaterThan(1);
         const reduce = abilities.find((a) => a.config.type === 'bomb-countdown-reduce');
         expect(reduce).toBeDefined();
@@ -553,8 +551,8 @@ describe('SP-F — deep one-offs', () => {
     // -redirect shield-stack mechanic, unrelated to healing). DROPPED from SP-F — no probe.
 
     // defense-substitution — CARRIER: Meatshield (third_passive_skill_text, R4/refit-active;
-    // second_passive_skill_text at R2 lacks the substitution sentence). Verbatim from
-    // docs/ship-skills.csv.
+    // second_passive_skill_text at R2 lacks the substitution sentence). Old-corpus wording
+    // (synthetic; the catalogue text differs).
     const MEATSHIELD_P4 =
         "At the start of combat, this Unit gains 3 stacks of <unit-skill>Protection</unit-skill>.<br /><br />Any damage this Unit takes from <unit-skill>Protection</unit-skill> is transformed into a <unit-aid>Damage over Time effect</unit-aid> for 2 turns.<br /><br />Any direct damage dealt to a non-defender ally that is not transferred by <unit-skill>Protection</unit-skill> is dealt as if that ally had this Unit's defense.";
 
@@ -635,11 +633,12 @@ describe('SP-F — deep one-offs', () => {
     });
 
     // affinity-override (buff-driven, reciprocal) — CARRIERS: Isha + Nayra (second_passive,
-    // R2/refit-active). Verbatim from docs/ship-skills.csv. These build the correct ability
-    // SHAPE already (start-of-round self-buff grants + a reciprocal `ally-on-team` co-gate); the
-    // SP-F F4 work is the ENGINE CONSUMPTION of those Override buff names at the affinity seams
-    // + making `ally-on-team` a live roster check. Locked as regression guards on the shape; the
-    // runtime override + reciprocal gate are proven in forcedAffinityOverride.test.ts.
+    // R2/refit-active). Old-corpus wording (synthetic; the catalogue text differs). These build the
+    // correct ability SHAPE already (start-of-round self-buff grants + a reciprocal `ally-on-team`
+    // co-gate); the SP-F F4 work is the ENGINE CONSUMPTION of those Override buff names at the
+    // affinity seams + making `ally-on-team` a live roster check. Locked as regression guards on
+    // the shape; the runtime override + reciprocal gate are proven in
+    // forcedAffinityOverride.test.ts.
     const ISHA_P2 =
         'At the start of the round this Unit gains <unit-skill>Offensive Affinity Override</unit-skill>.<br />If Nayra is on the same team, it also gains <unit-skill>Defensive Affinity Override</unit-skill>.';
     const NAYRA_P2 =
@@ -685,7 +684,7 @@ describe('SP-F — deep one-offs', () => {
 
     // charge-loss-immunity — CARRIER: Lev (second_passive_skill_text, R2/refit-active;
     // third_passive_skill_text is the CSV's literal "null" placeholder, i.e. no R4 passive
-    // text exists for this ship). Verbatim from docs/ship-skills.csv.
+    // text exists for this ship). Old-corpus wording (synthetic; the catalogue text differs).
     const LEV_P2 =
         "This Unit is immune to charge loss effects. This Unit's Crit Rate and Crit Power are increased by 20%.<br />This Unit gains 1 stack of <unit-skill>Blast</unit-skill> every turn.";
 
@@ -700,8 +699,8 @@ describe('SP-F — deep one-offs', () => {
     });
 
     // on-ally-shield-destroyed — CARRIER: AEGIS (second_passive_skill_text, R2/refit-active;
-    // third_passive_skill_text is the CSV's literal "null" placeholder). Verbatim from
-    // docs/ship-skills.csv.
+    // third_passive_skill_text is the CSV's literal "null" placeholder). Old-corpus wording
+    // (synthetic; the catalogue text differs).
     const AEGIS_P2 =
         'This Unit grants <unit-skill>Defense Up II</unit-skill> for 1 turn and <unit-aid>cleanses all</unit-aid> debuffs when an ally within the Active pattern has their Shield destroyed.';
 
@@ -734,7 +733,7 @@ describe('SP-G — engine known-limitations', () => {
     // ── Cobalt: start-of-turn charge drain-ordering ─────────────────────────────────────
     // Verbatim from docs/ship-skills.csv (first_passive_skill_text field).
     const COBALT_P1_SPG =
-        'This Unit <unit-aid>adds 1 charge</unit-aid> to its charged skill at the start of the turn if it is at full HP.';
+        'Every turn this Unit <unit-skill>adds 1 charge</unit-skill> to its charged skill if it is at full HP.';
 
     it('Cobalt: start-of-turn charge ability builds correctly; the KNOWN LIMITATION is the engine drain-ordering, not this shape', () => {
         const abilities = abilitiesFor({ firstPassiveSkillText: COBALT_P1_SPG }, 'passive');
@@ -844,7 +843,7 @@ describe('confirm-GREEN-only — locked FPs', () => {
     // misfire, nothing for `buildShipAbilities` to assert on).
 
     // ── Asphodel: "always critical" is a data-layer fact (import sets crit 100%) ──────────
-    // Verbatim from docs/ship-skills.csv (second_passive_skill_text field).
+    // Old-corpus wording (second_passive_skill_text field; synthetic, the catalogue text differs).
     const ASPHODEL_P2 =
         "This Unit's attacks are always critical and <unit-aid>adds 1 charge</unit-aid> to its Charged Skill after critically damaging an enemy.";
 
@@ -862,16 +861,16 @@ describe('confirm-GREEN-only — locked FPs', () => {
         expect(abilities[0].conditions).toEqual([{ subject: 'self-crit', derivable: true }]);
     });
 
-    // ── Tormenter: "always lands critical hits" (same data-layer fact) + base-damage clause ──
+    // ── Tormenter: "attacks always critically hit" (same data-layer fact) + base-damage clause ──
     // Verbatim from docs/ship-skills.csv (second_passive_skill_text field).
     const TORMENTER_P2 =
-        'This Unit always lands critical hits and gains up to <unit-damage>30% damage</unit-damage> reduction as its health decreases.';
+        "This Unit's attacks always critically hit and gains up to <unit-damage>30% damage reduction</unit-damage> as its health decreases.";
 
-    it('Tormenter: "always lands critical hits" mints no phantom always-crit ability — only the two hp-scaled incoming-reduction abilities build (FP: same data-layer fact as Asphodel)', () => {
+    it('Tormenter: "attacks always critically hit" mints no phantom always-crit ability — only the two hp-scaled incoming-reduction abilities build (FP: same data-layer fact as Asphodel)', () => {
         const abilities = abilitiesFor({ secondPassiveSkillText: TORMENTER_P2 }, 'passive');
         // Dry-run confirmed: exactly TWO abilities build (a 'direct'-scope and a 'dot'-scope
-        // incoming-reduction, both carrying the same hpScaling) — nothing else. The "always
-        // lands critical hits" clause contributes no third ability and no crit-flag field on
+        // incoming-reduction, both carrying the same hpScaling) — nothing else. The "attacks
+        // always critically hit" clause contributes no third ability and no crit-flag field on
         // either of these two.
         expect(abilities.length).toBeGreaterThan(0);
         expect(abilities.every((a) => a.type === 'incoming-reduction')).toBe(true);
@@ -893,9 +892,9 @@ describe('confirm-GREEN-only — locked FPs', () => {
     // ── Rikra: clause-scoping — the Taunt/Provoke gate scopes the damage bonus, not the buff ──
     // Verbatim from docs/ship-skills.csv (charge_skill_text field).
     const RIKRA_CHARGE =
-        'This Unit gains <unit-skill>Defense Up II</unit-skill> for 2 turns, and deals <unit-damage>180% damage</unit-damage> with additional <unit-damage>80%</unit-damage> damage against Taunted or Provoked enemies.';
+        'This Unit gains <unit-skill>Defense Up II</unit-skill> for 2 turns and deals <unit-damage>180% damage</unit-damage> with an additional <unit-damage>80% damage</unit-damage> to enemies affected by <unit-skill>Taunt</unit-skill> or <unit-skill>Provoke</unit-skill>.';
 
-    it('Rikra: charged "gains Defense Up II ... deals 180% damage with additional 80% damage against Taunted or Provoked enemies" grants Defense Up II unconditionally — only the damage bonus is Taunt/Provoke-gated (FP: correct clause scoping)', () => {
+    it('Rikra: charged "gains Defense Up II ... deals 180% damage with an additional 80% damage to enemies affected by Taunt or Provoke" grants Defense Up II unconditionally — only the damage bonus is Taunt/Provoke-gated (FP: correct clause scoping)', () => {
         const abilities = abilitiesFor(
             { chargeSkillText: RIKRA_CHARGE, chargeSkillCharge: 2 },
             'charged'
@@ -903,7 +902,7 @@ describe('confirm-GREEN-only — locked FPs', () => {
         const buff = abilities.find(
             (a) => a.config.type === 'buff' && a.config.buffName === 'Defense Up II'
         );
-        // FP: "against Taunted or Provoked enemies" grammatically attaches only to the trailing
+        // FP: "to enemies affected by Taunt or Provoke" grammatically attaches only to the trailing
         // damage clause, not to the co-located "gains Defense Up II" grant earlier in the
         // sentence. buildShipAbilities scopes it correctly: the buff builds fully unconditional.
         expect(buff?.conditions).toEqual([]);
@@ -912,7 +911,7 @@ describe('confirm-GREEN-only — locked FPs', () => {
     });
 
     // ── Madax: "while this Unit deals..." is simultaneity, not a gate on the buff ───────────
-    // Verbatim from docs/ship-skills.csv (charge_skill_text field).
+    // Old-corpus wording (charge_skill_text field; synthetic, the catalogue text differs).
     const MADAX_CHARGE =
         "All allies are granted <unit-skill>Terran Bolster II</unit-skill> for 3 turns, while this Unit deals <unit-damage>130% damage</unit-damage>, including additional damage equal to <unit-damage>80%</unit-damage> of this Unit's Defense.";
 
@@ -933,7 +932,7 @@ describe('confirm-GREEN-only — locked FPs', () => {
     });
 
     // ── Oleander: "per debuffed enemy" scopes the repair, not the co-granted buff ───────────
-    // Verbatim from docs/ship-skills.csv (active_skill_text field).
+    // Old-corpus wording (active_skill_text field; synthetic, the catalogue text differs).
     const OLEANDER_ACTIVE =
         'This Unit grants <unit-skill>Hacking Up III</unit-skill> for 2 turns and <unit-damage>repairs 100%</unit-damage> of its Max HP, with an additional <unit-damage>8.5%</unit-damage> repair for each debuffed enemy.';
 
@@ -955,9 +954,9 @@ describe('confirm-GREEN-only — locked FPs', () => {
     // ── Valkyrie: the passive's "Echoing Burst explodes" REFERENCE is parser-guard-filtered ──
     // Verbatim from docs/ship-skills.csv (second_passive_skill_text field).
     const VALKYRIE_P2 =
-        'This Unit gains <unit-skill>Speed Up II</unit-skill> for 1 turn at the start of the round.<br /><br />When an <unit-aid>Echoing Burst</unit-aid> explodes on an enemy, this Unit and the ally with the lowest current health percentage <unit-damage>repair 5%</unit-damage> of damage dealt.<br /><br />This Unit starts combat fully Charged.';
+        'This Unit ignores <unit-skill>Taunt</unit-skill> and <unit-skill>Provoke</unit-skill> effects and at the start of the round, this Unit gains <unit-skill>Speed Up II</unit-skill> for 1 turn. <br /><br />When an <unit-skill>Echoing Burst</unit-skill> explodes on an enemy, the Unit and the ally with the lowest current health percentage <unit-damage>repair 5%</unit-damage> of the damage dealt.<br /><br />This Unit starts combat <unit-skill>fully charged</unit-skill>.';
 
-    it('Valkyrie: passive "When an Echoing Burst explodes on an enemy, ... repair 5% of damage dealt" does NOT mint a second accumulate-detonate application — it is a reactive heal off the Echoing Burst detonation trigger (FP: parser-guard-filtered)', () => {
+    it('Valkyrie: passive "When an Echoing Burst explodes on an enemy, ... repair 5% of the damage dealt" does NOT mint a second accumulate-detonate application — it is a reactive heal off the Echoing Burst detonation trigger (FP: parser-guard-filtered)', () => {
         const abilities = abilitiesFor({ secondPassiveSkillText: VALKYRIE_P2 }, 'passive');
         // FP: the passive merely REFERENCES an Echoing Burst detonating (to react with a heal);
         // it does not itself INFLICT Echoing Burst, so it must not mint its own
@@ -975,7 +974,7 @@ describe('confirm-GREEN-only — locked FPs', () => {
         expect(abilities.filter((a) => a.trigger === 'on-bomb-detonated')).toHaveLength(0);
     });
 
-    // Verbatim from docs/ship-skills.csv (charge_skill_text field).
+    // Old-corpus wording (charge_skill_text field; synthetic, the catalogue text differs).
     const VALKYRIE_CHARGE =
         "This Unit's attack ignores <unit-skill>Taunt</unit-skill> and <unit-skill>Provoke</unit-skill>, deals <unit-damage>240% damage</unit-damage>, and inflicts <unit-skill>Inc. Damage Up II</unit-skill> and <unit-skill>Echoing Burst</unit-skill> for 2 turns.";
 

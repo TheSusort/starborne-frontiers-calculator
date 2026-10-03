@@ -25,8 +25,9 @@ import type { Position } from '../../../types/encounters';
 
 type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 
-// Verbatim CSV-derived Nyxen text (docs/ship-skills.csv): active grants a 15%-Max-HP self-shield;
-// first passive parses to an on-attacked counter with requireShieldHit:true.
+// Old-corpus wording of Nyxen's kit (synthetic; the catalogue text differs): active grants a
+// 15%-Max-HP self-shield; first passive parses to an on-attacked counter with
+// requireShieldHit:true.
 const NYXEN_ACTIVE =
     'This Unit <unit-aid>Cleanses 2 bombs</unit-aid>, Grants a <unit-damage>Shield equal to 15%</unit-damage> of its Max HP, and Grants <unit-skill>Atlas Readiness II</unit-skill> for 1 turn.';
 const NYXEN_P1 =

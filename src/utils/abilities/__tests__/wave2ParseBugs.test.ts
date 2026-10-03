@@ -67,7 +67,7 @@ describe.skipIf(!csvAvailable())(
             expect(barrierGrant!.target).toBe('all-allies');
         });
 
-        it('B2: Rikra passive (R2) — "repairs 60% of its Max HP ... upon killing them" self-heal targets self, not ally', () => {
+        it('B2: Rikra passive (R2) — "repairs 60% of its max HP for each enemy destroyed by this Unit" self-heal targets self, not ally', () => {
             const rec = recordFor('Rikra');
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const s = ship({ refits: [{}, {}] as any, secondPassiveSkillText: rec.passives[1] });

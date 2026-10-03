@@ -71,7 +71,7 @@ describe.skipIf(!csvAvailable())(
 describe.skipIf(!csvAvailable())(
     'Task 3 — Harvester Speed Up I shares the on-ally-destroyed trigger (verbatim docs/ship-skills.csv)',
     () => {
-        it('Harvester p2 — "When an allied Unit is destroyed, this Unit gains 1 extra end of round action and Speed Up I for 6 turns" co-triggers Speed Up I on on-ally-destroyed', () => {
+        it('Harvester p2 — "When an ally is destroyed, this Unit gains 1 extra end of round action and Speed Up I for 6 turns" co-triggers Speed Up I on on-ally-destroyed', () => {
             const rec = recordFor('Harvester');
             const s = ship({ secondPassiveSkillText: rec.passives[1] });
             const { slots } = buildShipAbilities(s);
@@ -267,7 +267,7 @@ describe.skipIf(!csvAvailable())(
 describe.skipIf(!csvAvailable())(
     'Regression — Sokol Blast must stay on-cast despite a co-located extra-action kill phrase (verbatim docs/ship-skills.csv)',
     () => {
-        it('Sokol p2 — "gains 1 stack of Blast every turn and grants one extra end of round action upon a kill, once per round" keeps Blast on-cast (accumulating, not gated behind a kill)', () => {
+        it('Sokol p2 — "gains 1 stack of Blast every turn" beside "When an enemy is destroyed, once per round, this Unit gains 1 extra action" keeps Blast on-cast (accumulating, not gated behind a kill)', () => {
             const rec = recordFor('Sokol');
             const s = ship({ secondPassiveSkillText: rec.passives[1] });
             const { slots } = buildShipAbilities(s);

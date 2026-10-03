@@ -104,8 +104,9 @@ describe('parser → simulator integration (real ship)', () => {
 // emits for Heliodor/Pestilence-shaped ships is fully DPS-inert: total damage output is
 // byte-identical with or without it present.
 describe('debuff-duration reduction is DPS-inert (PR11 parity)', () => {
-    // A synthetic ship pairing a damaging active skill with Heliodor's EXACT verbatim
-    // first-passive text (docs/ship-skills.csv) — the reactive heal + duration-reduction pair.
+    // A synthetic ship pairing a damaging active skill with the old-corpus wording of Heliodor's
+    // first passive (synthetic; the catalogue text differs) — the reactive heal +
+    // duration-reduction pair.
     const heliodorShape = ship({
         activeSkillText: 'This Unit deals <unit-damage>200% damage</unit-damage>.',
         firstPassiveSkillText:

@@ -71,19 +71,6 @@ describe('parseExtendStatus — named arm (#363)', () => {
         });
     });
 
-    it('leaves the generic active-voice arm alone', () => {
-        expect(parseExtendStatus('All allies extend their active Buffs by 1 turn.')).toEqual({
-            turns: 1,
-            statusKind: 'buff',
-        });
-    });
-
-    it('leaves the generic active-voice debuff arm alone', () => {
-        expect(
-            parseExtendStatus('This Unit deals 150% damage and extends active Debuffs by 1 turn.')
-        ).toEqual({ turns: 1, statusKind: 'debuff' });
-    });
-
     it('leaves the generic passive-voice arm alone (Lev)', () => {
         expect(
             parseExtendStatus(
@@ -94,13 +81,13 @@ describe('parseExtendStatus — named arm (#363)', () => {
     });
 
     it('does not match a status name separated from "extends" by other words (Belladonna/Wisteria shape)', () => {
-        // "extends the newly applied <unit-skill>X</unit-skill> ... for/by N turn(s)" — the tag is
-        // NOT adjacent to the verb, so the named arm (which requires immediate adjacency) must not
-        // fire, and the generic arms (which require a literal buffs/debuffs token) must not either.
+        // "extends the newly inflicted <unit-skill>X</unit-skill> ... for/by N turn(s)" — the
+        // status tag is NOT adjacent to the verb, so the named arm (which requires immediate
+        // adjacency) must not fire, and the generic arms (which require a literal buffs/debuffs
+        // token) must not either.
         expect(
             parseExtendStatus(
-                'this Unit extends the newly applied <unit-skill>Acidic Decay</unit-skill> status ' +
-                    'for 1 turn, with the chance to equal to its crit power.'
+                'Upon converting <unit-skill>Corrosion</unit-skill>, this Unit <unit-skill>extends the newly inflicted</unit-skill> <unit-skill>Acidic Decay</unit-skill> status for 1 turn, with the chance equal to its crit power.'
             )
         ).toBeNull();
     });

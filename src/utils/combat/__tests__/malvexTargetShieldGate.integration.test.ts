@@ -189,11 +189,12 @@ describe('enemy-shield gate — player-side holder (Malvex shape)', () => {
     });
 });
 
-describe('enemy-shield gate — Malvex ACTIVE self-shield, built from the real skill row', () => {
+describe('enemy-shield gate — Malvex ACTIVE self-shield, built from the skill row (old-corpus text)', () => {
     // The charged-slot cases above drive a HAND-BUILT ability, so they prove the engine honours an
     // `enemy-shield` condition but say nothing about whether the parser attaches one. These two
-    // drive the verbatim docs/ship-skills.csv active row through buildShipAbilities into the engine
-    // — the only shape that fails when the heal/shield builder drops the gate on the floor.
+    // drive Malvex's active row (old-corpus wording; synthetic, the catalogue text differs) through
+    // buildShipAbilities into the engine — the only shape that fails when the heal/shield builder
+    // drops the gate on the floor.
     const MALVEX_ACTIVE =
         'This Unit deals <unit-damage>100% damage</unit-damage> with an additional damage equal to ' +
         '<unit-damage>5%</unit-damage> of its current Shield. If the target has a Shield this Unit ' +

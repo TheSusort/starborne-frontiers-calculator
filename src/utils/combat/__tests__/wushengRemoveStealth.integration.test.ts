@@ -1,19 +1,16 @@
 /**
- * Ship-kit Wave 8 Task 11 — Wusheng "if directly damaged while Stealth is active, remove
- * Stealth" engine dispatch coverage.
+ * Engine dispatch coverage for a hand-built "if directly damaged while Stealth is active, remove
+ * Stealth" ability: a `remove-self-buff` for Stealth on the `on-attacked` trigger, gated on
+ * `self-buff` Stealth being active. No ship's skill text parses to this ability (Wusheng keeps
+ * Stealth when hit — wave8Wusheng.test.ts); a user can still author it in the editor. This file
+ * mirrors wisteriaSelfCritDot.integration.test.ts's structure: a direct registerReactiveListeners
+ * unit test, plus a full runCombat integration test.
  *
- * wave8Wusheng.test.ts (abilities/__tests__) only asserts the parsed ability SHAPE — a
- * `remove-self-buff` ability for Stealth on the `on-attacked` trigger, gated on `self-buff`
- * Stealth being active. Nothing there exercises the reactive ENGINE path proving the trigger
- * actually DISPATCHES and the removal actually fires at runtime. This file mirrors
- * wisteriaSelfCritDot.integration.test.ts's structure: a direct registerReactiveListeners unit
- * test, plus a full runCombat integration test.
- *
- * The `on-attacked` trigger is a pre-existing LIVE trigger (triggers.ts's `case 'on-attacked':`,
- * registered generically for ANY ability type on that trigger — see e.g. the Task 8
- * "on-attacked engine integration" suite in triggers.test.ts). This file's job is to prove the
- * NEW `remove-self-buff` + `on-attacked` combination specifically dispatches and actually removes
- * the buff, not just that the ability shape parses correctly.
+ * The `on-attacked` trigger is a LIVE trigger (triggers.ts's `case 'on-attacked':`, registered
+ * generically for ANY ability type on that trigger — see e.g. the "on-attacked engine integration"
+ * suite in triggers.test.ts). This file's job is to prove the `remove-self-buff` + `on-attacked`
+ * combination specifically dispatches and actually removes the buff, not just that the ability
+ * shape parses correctly.
  */
 import { describe, expect, it } from 'vitest';
 import { runCombat, CombatEngineInput } from '../engine';
@@ -27,7 +24,7 @@ type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 type TeamActor = NonNullable<CombatEngineInput['teamActors']>[number];
 
 // ── Direct unit test of registerReactiveListeners ──────────────────────────────────────────
-describe('Wusheng remove-Stealth-on-attacked — reactive listener (unit)', () => {
+describe('hand-built remove-Stealth-on-attacked — reactive listener (unit)', () => {
     it('enqueues only for the OWNER’s own "attacked" event (target-scoped, mirrors on-attacked’s standard contract)', () => {
         const listeners = new Map<string, ((e: CombatEvent) => void)[]>();
         const handBus = {
@@ -123,9 +120,9 @@ const stealthSelfBuff = (id: string): Ability => ({
     },
 });
 
-// Wusheng's existing 25% direct-scope incoming reduction gated on self-stealth (D-PR3's
-// self-stealth IncomingCondition — unaffected by this task, included so the reduction's
-// interaction with the NEW removal is exercised end-to-end).
+// Wusheng's 25% direct-scope incoming reduction gated on self-stealth (the self-stealth
+// IncomingCondition), included so the reduction's interaction with the removal is exercised
+// end-to-end.
 const incomingReductionAbility: Ability = {
     id: 'wusheng-incoming-reduction',
     type: 'incoming-reduction',
@@ -265,7 +262,7 @@ const destroyedIds = (input: CombatEngineInput): Set<string> => {
 const diesAt = (build: (hp: number) => CombatEngineInput, hp: number, victimId: string): boolean =>
     destroyedIds(build(hp)).has(victimId);
 
-describe('Wusheng remove-Stealth-on-attacked — engine integration (runCombat)', () => {
+describe('hand-built remove-Stealth-on-attacked — engine integration (runCombat)', () => {
     // enemy-1 (speed 5) acts before enemy-2 (speed 1); both act after the victim (speed 1000).
     // The victim's HP is set per-call on the TeamActor's walk.stats.hp so diesAt's death-bracket
     // idiom (survives at hp+1, dies at hp) pins the exact cumulative damage landed.

@@ -31,7 +31,7 @@ import type { Position } from '../../../types/encounters';
 
 type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 
-// Verbatim CSV-derived skill text (docs/ship-skills.csv, Nyxen row). The active grants a
+// Old-corpus wording of Nyxen's kit (synthetic; the catalogue text differs). The active grants a
 // self-shield equal to 15% of Max HP; the first passive parses to an on-attacked counter with
 // requireShieldHit:true.
 const NYXEN_ACTIVE =
@@ -184,13 +184,13 @@ describe('Task 2 — POSITIONAL shieldWasHit: player Nyxen counters a positional
 //   - SECOND WIND self-repair → a `heal-performed` event keyed by the enemy casterId.
 // ───────────────────────────────────────────────────────────────────────────
 
-// Verbatim CSV-derived skill text (docs/ship-skills.csv).
+// Old-corpus wording (synthetic; the catalogue text differs).
 const STALWART_P1 =
     'When this Unit is directly damaged as a primary target, it deals <unit-damage>30% damage</unit-damage> to that enemy and gains <unit-skill>Legion Discipline II</unit-skill> for 3 turns.';
 const CENTURION_P2 =
     'At the start of combat, this Unit gains 750 attack per adjacent ally.<br /><br />When this Unit or an adjacent ally is directly damaged, this Unit retaliates dealing <unit-damage>50%</unit-damage>.';
 
-/** A reactive enemy ship built from verbatim skill text via the real registry. The parsed
+/** A reactive enemy ship built from skill text via the real registry. The parsed
  *  ShipSkills (the on-attacked counter passive) is fed straight into the enemy actor — no active
  *  needed, the reactive partition picks up the passive. */
 function reactiveEnemyShip(opts: {

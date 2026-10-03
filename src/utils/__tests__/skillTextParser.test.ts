@@ -38,7 +38,6 @@ import {
     parseCleanse,
     parsePurge,
     parseBuffSteal,
-    detectPassiveVoicePurge,
     detectPurgeStripsShield,
     parseShieldStrip,
     parseHealNoCrit,
@@ -117,10 +116,11 @@ describe('parseSkillDamage', () => {
     // Epic PR1 (skill-model gap, finding family 1): damage-REDUCTION / conversion clauses were
     // being read as outgoing attack multipliers because the tag content or nearby text merely
     // mentions the word "damage" — the heuristic never distinguished incoming reduction from an
-    // outgoing hit. Exact clauses from docs/ship-skills.csv.
+    // outgoing hit. Clauses are from docs/ship-skills.csv except Voron's and FrontLine's, which
+    // are old-corpus wording (synthetic; the catalogue text differs).
     it('skips "X% damage reduction" (Tormenter p2 — incoming HP-scaled reduction, not an attack)', () => {
         const text =
-            'This Unit always lands critical hits and gains up to <unit-damage>30% damage</unit-damage> reduction as its health decreases.';
+            "This Unit's attacks always critically hit and gains up to <unit-damage>30% damage reduction</unit-damage> as its health decreases.";
         expect(parseSkillDamage(text)).toBe(0);
     });
 
@@ -130,8 +130,9 @@ describe('parseSkillDamage', () => {
         expect(parseSkillDamage(text)).toBe(0);
     });
 
-    it('skips "takes X% less damage" (Malvex p2 — when-Shielded incoming reduction)', () => {
-        const text = 'When Shielded, this Ship takes <unit-damage>10% less damage</unit-damage>.';
+    it('skips a tag whose content says "X% damage reduction" (Malvex p2 — shield-gated incoming reduction)', () => {
+        const text =
+            'When this Unit has an active shield, it gains <unit-damage>10% damage reduction</unit-damage>.';
         expect(parseSkillDamage(text)).toBe(0);
     });
 
@@ -221,8 +222,9 @@ describe('detectFullyCharged', () => {
     });
 });
 
-// PR F4: permanent pre-fight base-stat passives. Every positive case below is the EXACT
-// docs/ship-skills.csv text (markup included) — the CSV is the parser's source of truth.
+// PR F4: permanent pre-fight base-stat passives. Positive cases are ship skill text with markup
+// included: docs/ship-skills.csv rows, or a ship's old-corpus wording (synthetic; the catalogue
+// text differs).
 describe('parsePreCombatStatGrants', () => {
     it('returns [] for null/undefined/empty', () => {
         expect(parsePreCombatStatGrants(null)).toEqual([]);
@@ -329,9 +331,9 @@ describe('parsePreCombatStatGrants', () => {
         expect(grants[0].pos).toBeLessThan(grants[1].pos);
     });
 
-    it('Defiant P2 (full row): leading supporter gate yields HP percent-of-own; shield clause untouched', () => {
+    it('Defiant P2 (full row): trailing supporter gate yields HP percent-of-own; shield clause untouched', () => {
         const grants = parsePreCombatStatGrants(
-            'When adjacent to a Supporter, this Unit gains 20% HP. This Unit gains <unit-damage>Shield equal to 30%</unit-damage> of its Max HP when applying Stasis.'
+            'This Unit gains a <unit-damage>shield equal to 30%</unit-damage> of its max HP after it inflicts <unit-skill>Stasis</unit-skill>.<br /><br />At the start of combat this Unit gains 20% HP if its adjacent to a supporter.'
         );
         expect(grants).toEqual([
             {
@@ -345,9 +347,9 @@ describe('parsePreCombatStatGrants', () => {
         ]);
     });
 
-    it('Stalwart P2 (full row): leading "this Unit is adjacent" gate yields attack percent-of-own', () => {
+    it('Stalwart P2 (full row): trailing "its adjacent" gate yields attack percent-of-own', () => {
         const grants = parsePreCombatStatGrants(
-            'When this Unit is directly damaged as a primary target, it deals <unit-damage>70% damage</unit-damage> to that enemy and gains <unit-skill>Legion Discipline II</unit-skill> for 3 turns.<br /><br />Additionally, when this Unit is adjacent to a Supporter, this Unit gains 20% Attack.'
+            'This Unit ignores <unit-skill>Taunt</unit-skill> and <unit-skill>Provoke</unit-skill> effects.<br /><br />When this Unit is directly damaged as a primary target, it deals <unit-damage>70% damage</unit-damage> to the enemy and gains <unit-skill>Legion Discipline II</unit-skill> for 3 turns.<br /><br />At the start of combat this Unit gains 20% attack if its adjacent to a supporter.'
         );
         expect(grants).toEqual([
             {
@@ -778,13 +780,24 @@ describe('parseSkillEffects', () => {
         ).toEqual([]);
     });
 
-    it('skips tags preceded by loses', () => {
+    it('skips tags preceded by removes (Ravager)', () => {
+        // The second Overload tag follows "removes", so it is not a second grant.
         expect(
             parseSkillEffects(
-                'Upon killing an enemy, this Unit loses <unit-skill>Overload</unit-skill>',
+                'This Unit gains 1 stack of <unit-skill>Overload</unit-skill> every turn and, upon destroying an enemy, removes <unit-skill>Overload</unit-skill> and gains <unit-skill>Marauder Rage III</unit-skill> for 3 turns.',
                 'passive1'
             )
-        ).toEqual([]);
+        ).toEqual([
+            {
+                buffName: 'Overload',
+                target: 'self',
+                duration: 'recurring',
+                stacks: 1,
+                stackTrigger: 'per-round',
+                source: 'passive1',
+            },
+            { buffName: 'Marauder Rage III', target: 'self', duration: 3, source: 'passive1' },
+        ]);
     });
 
     it('parses stack-based recurring effect', () => {
@@ -822,12 +835,27 @@ describe('parseSkillEffects', () => {
     });
 
     it('stops scanning backward at sentence boundary (.)', () => {
+        // Belladonna's charged skill: "Acidic Decay" opens the second sentence as a gate, and the
+        // "inflicts" before it belongs to the first sentence.
         const result = parseSkillEffects(
-            'This Unit loses <unit-skill>Overload</unit-skill>. This Unit gains <unit-skill>Attack Up III</unit-skill> for 3 turns',
-            'passive1'
+            'This Unit deals <unit-damage>180% damage</unit-damage> and inflicts <unit-skill>Corrosion II</unit-skill> for 2 turns. If the enemy has 3 or more <unit-skill>Acidic Decay</unit-skill>, inflict <unit-skill>Stasis</unit-skill> for 1 turn.',
+            'charge'
         );
         expect(result).toEqual([
-            { buffName: 'Attack Up III', target: 'self', duration: 3, source: 'passive1' },
+            {
+                buffName: 'Corrosion II',
+                target: 'enemy',
+                duration: 2,
+                application: 'inflict',
+                source: 'charge',
+            },
+            {
+                buffName: 'Stasis',
+                target: 'enemy',
+                duration: 1,
+                application: 'inflict',
+                source: 'charge',
+            },
         ]);
     });
 
@@ -921,9 +949,9 @@ describe('parseSkillEffects', () => {
         ]);
     });
 
-    it('parses "apply" (bare imperative) using BUFFS type to target', () => {
+    it('parses "applies" using BUFFS type to target (Lodolite)', () => {
         const result = parseSkillEffects(
-            'When targeting non-Defenders, apply <unit-skill>Concentrate Fire</unit-skill> for 2 turns.',
+            'When this attack targets non-defenders, it also applies <unit-skill>Concentrate Fire</unit-skill> for 2 turns.',
             'active'
         );
         expect(result).toEqual([
@@ -937,9 +965,11 @@ describe('parseSkillEffects', () => {
         ]);
     });
 
-    it('parses "is applied with" (passive voice) using BUFFS type to target', () => {
+    // Synthetic input: no catalogue sentence uses the bare imperative "apply". It keeps the
+    // `apply` entry of AMBIGUOUS_VERBS covered.
+    it('parses "apply" (bare imperative) using BUFFS type to target (synthetic)', () => {
         const result = parseSkillEffects(
-            'The highest attack enemy is applied with <unit-skill>Concentrate Fire</unit-skill> for 2 turns.',
+            'When targeting a defender, apply <unit-skill>Concentrate Fire</unit-skill> for 2 turns.',
             'active'
         );
         expect(result).toEqual([
@@ -949,6 +979,50 @@ describe('parseSkillEffects', () => {
                 duration: 2,
                 source: 'active',
                 application: 'apply',
+            },
+        ]);
+    });
+
+    // Synthetic input: no catalogue sentence uses the passive "is applied with". It keeps the
+    // `applied` entry of AMBIGUOUS_VERBS covered.
+    it('parses "is applied with" (passive voice) using BUFFS type to target (synthetic)', () => {
+        const result = parseSkillEffects(
+            'The enemy with the highest attack is applied with <unit-skill>Concentrate Fire</unit-skill> for 2 turns.',
+            'active'
+        );
+        expect(result).toEqual([
+            {
+                buffName: 'Concentrate Fire',
+                target: 'enemy',
+                duration: 2,
+                source: 'active',
+                application: 'apply',
+            },
+        ]);
+    });
+
+    // Synthetic input: every catalogue "newly inflicted" sits inside a tag or before a <unit-aid>
+    // debuff, so no catalogue sentence reaches the adjectival-marker skip. The pair below proves
+    // the marker is what suppresses the application.
+    it('does not treat an adjectival "newly inflicted" debuff as a fresh application (synthetic)', () => {
+        expect(
+            parseSkillEffects(
+                'extends the newly inflicted <unit-skill>Acidic Decay</unit-skill> by 1 turn.',
+                'active'
+            )
+        ).toEqual([]);
+        expect(
+            parseSkillEffects(
+                'extends the inflicted <unit-skill>Acidic Decay</unit-skill> by 1 turn.',
+                'active'
+            )
+        ).toEqual([
+            {
+                buffName: 'Acidic Decay',
+                target: 'enemy',
+                duration: null,
+                application: 'inflict',
+                source: 'active',
             },
         ]);
     });
@@ -963,20 +1037,12 @@ describe('parseSkillEffects', () => {
         ]);
     });
 
-    it('does not treat an adjectival "newly applied" debuff as a fresh application', () => {
-        expect(
-            parseSkillEffects(
-                'After a critical hit, this Unit extends the newly applied <unit-skill>Acidic Decay</unit-skill> by 1 turn.',
-                'active'
-            )
-        ).toEqual([]);
-    });
-
     // Epic PR1 (skill-model gap, finding family 3): Amartya's "When an enemy defender gains
     // Taunt, this Unit inflicts N stacks of Exposed on that defender." names Taunt only as the
     // TRIGGER condition (the enemy is the one gaining it) — the segment loop's verb scan doesn't
-    // check WHO the "gains" verb's subject is, so it minted a phantom self Taunt grant. Exact
-    // clause from docs/ship-skills.csv (Amartya passive2/passive3).
+    // check WHO the "gains" verb's subject is, so it minted a phantom self Taunt grant. The
+    // clause is the old-corpus wording of Amartya's passive2 (synthetic; the catalogue text
+    // differs).
     it('does not mint a phantom self Taunt grant from an enemy-gains-Taunt trigger clause (Amartya)', () => {
         const text =
             'When an enemy defender gains <unit-skill>Taunt</unit-skill>, this Unit inflicts 1 stacks of <unit-skill>Exposed</unit-skill> on that defender.';
@@ -1078,7 +1144,9 @@ describe('parseSecondaryDamage', () => {
     });
 
     // PR9(a): "additional damage equal to X% of its/their current Shield" — Malvex, Quixilver,
-    // Xcellence, FrontLine. RAW CSV rows (docs/ship-skills.csv), verbatim.
+    // Xcellence, FrontLine. The Xcellence row is verbatim docs/ship-skills.csv text; the
+    // Malvex, Quixilver and FrontLine rows are old-corpus wording (synthetic; the catalogue text
+    // differs).
     describe('shield-basis secondary damage (PR9a)', () => {
         it('parses FrontLine\'s "of their current Shield" (pronoun "their", not "its")', () => {
             const frontLineActive =
@@ -1109,13 +1177,13 @@ describe('parseSecondaryDamage', () => {
         // shield") — not additional damage tied to this unit's OWN skill cast. The existing
         // Phase-4 reactive guard (line ~316, "resists...debuff") intentionally excludes this
         // clause from parseSecondaryDamage both BEFORE and AFTER the shield-basis addition —
-        // it stays an unmodeled/deferred reactive proc (same bucket as "upon being killed").
+        // it stays an unmodeled/deferred reactive proc (same bucket as "upon being destroyed").
         // This is a protective regression test, not a red-to-green test: it passes identically
         // pre- and post-change, proving the shield-basis addition does not accidentally widen
         // the guard's scope.
         it("does NOT treat Xcellence's on-enemy-resist-debuff reactive proc as on-cast secondary damage", () => {
             const xcellencePassive2 =
-                "This Unit has 20% Shield Penetration.<br /><br />At the start of each turn this Unit gains <unit-damage>Shield equal to 20%</unit-damage> of its Max HP.<br /><br />When an enemy resists a debuff infliction, this Unit deals damage equal to <unit-damage>115%</unit-damage> of this Unit's current shield..";
+                "This Unit has <unit-damage>20% shield penetration</unit-damage>.<br /><br />Every turn this Unit gains a <unit-damage>shield equal to 20%</unit-damage> of its max HP.<br /><br />When an enemy resists a <unit-aid>debuff</unit-aid> infliction, this Unit deals damage equal to <unit-damage>115%</unit-damage> of this Unit's current shield.";
             expect(parseSecondaryDamage(xcellencePassive2)).toBeNull();
         });
 
@@ -1128,7 +1196,7 @@ describe('parseSecondaryDamage', () => {
         // FrontLine's own active row (tested above) already proves the ADDITIONAL-DAMAGE
         // shield clause ("60% of their current Shield") is picked over the co-located
         // shield-GRANT clause ("Shield equal to 30% of the damage dealt") in the SAME text —
-        // both clauses share the raw row, and only the damage-basis one is a SecondaryDamage.
+        // both clauses share the row, and only the damage-basis one is a SecondaryDamage.
     });
 });
 
@@ -1198,7 +1266,7 @@ describe('parseConditionalDamage', () => {
 
     it('ignores repair/heal scaling ("repairs X% ... for each enemy destroyed")', () => {
         const text =
-            'This Unit <unit-damage>repairs 60%</unit-damage> of its Max HP for each enemy Unit destroyed by the attack upon killing them.';
+            'This Unit <unit-damage>repairs 60%</unit-damage> of its max HP for each enemy destroyed by this Unit.';
         expect(parseConditionalDamage(text)).toBeNull();
     });
 
@@ -1247,11 +1315,11 @@ describe('parseConditionalDamage', () => {
         expect(parseConditionalDamage(null)).toBeNull();
     });
 
-    it('parses "if critical, additionally deals N% damage" as a self-crit bonus (Crucialis)', () => {
+    it('parses "if a critical hit, deals an additional N% damage" as a self-crit bonus (Crucialis)', () => {
         const text =
-            'This Unit deals <unit-damage>80% damage</unit-damage> and, if critical, additionally deals <unit-damage>75%</unit-damage> damage.';
+            'This Unit deals <unit-damage>80% damage</unit-damage> and, if a critical hit, deals an additional <unit-damage>90% damage</unit-damage>.';
         expect(parseConditionalDamage(text)).toEqual({
-            pct: 75,
+            pct: 90,
             condition: 'self-crit',
             derivable: true,
         });
@@ -1266,9 +1334,9 @@ describe('parseConditionalDamage', () => {
 });
 
 describe('parseExtendDoT', () => {
-    it('parses "extends active Damage Over Time effects by 1 turn" (Provider)', () => {
+    it('parses "all damage over time debuffs are extended by 1 turn" (Provider)', () => {
         const text =
-            'This Unit deals <unit-damage>200% damage</unit-damage>, removes 1 charge from the enemy, and extends active Damage Over Time effects by 1 turn.';
+            "This Unit deals <unit-damage>200% damage</unit-damage>, <unit-skill>removes 1 charge</unit-skill> from the enemy's charged skill and all <unit-skill>damage over time debuffs</unit-skill> are <unit-skill>extended by 1 turn</unit-skill>.";
         expect(parseExtendDoT(text)).toBe(1);
     });
 
@@ -1277,12 +1345,12 @@ describe('parseExtendDoT', () => {
         // crit-power chance, so parseCritPowerExtend returns null and the ability stays
         // scope 'active' via parseExtendDoT.
         const text =
-            'This Unit deals <unit-damage>200% damage</unit-damage>, removes 1 charge from the enemy, and extends active Damage Over Time effects by 1 turn.';
+            "This Unit deals <unit-damage>200% damage</unit-damage>, <unit-skill>removes 1 charge</unit-skill> from the enemy's charged skill and all <unit-skill>damage over time debuffs</unit-skill> are <unit-skill>extended by 1 turn</unit-skill>.";
         expect(parseCritPowerExtend(text)).toBeNull();
     });
 
-    it('parses a multi-turn extension and the "(DoT)" abbreviation', () => {
-        expect(parseExtendDoT('extends all Damage Over Time (DoT) effects by 2 turns.')).toBe(2);
+    it('parses a multi-turn extension', () => {
+        expect(parseExtendDoT('all damage over time debuffs are extended by 2 turns.')).toBe(2);
     });
 
     it('returns null when there is no DoT extension', () => {
@@ -1293,22 +1361,20 @@ describe('parseExtendDoT', () => {
         expect(parseExtendDoT(null)).toBeNull();
     });
 
-    it('does not match a debuff-duration extension that is not a DoT', () => {
-        expect(parseExtendDoT('extends the duration of all buffs by 1 turn.')).toBeNull();
+    // Differs from the matching "all damage over time debuffs are extended by N turns" only in the
+    // status family, so the literal "damage over time" in EXTEND_ALL_DOT_PASSIVE_RE is what rejects it.
+    it('does not match an extension of a non-DoT status family', () => {
+        expect(parseExtendDoT('all buffs are extended by 1 turn.')).toBeNull();
+        expect(parseExtendDoT('all debuffs are extended by 1 turn.')).toBeNull();
     });
 });
 
 describe('parseExtendStatus', () => {
-    it('parses Sokol active-voice debuff extend', () => {
-        expect(parseExtendStatus('extends active <unit-aid>Debuffs</unit-aid> by 1 turn')).toEqual({
-            turns: 1,
-            statusKind: 'debuff',
-        });
-    });
-
-    it('parses Ripper active-voice buff extend', () => {
+    it('parses Ripper passive-voice buff extend', () => {
         expect(
-            parseExtendStatus('All allies extend their active <unit-aid>Buffs</unit-aid> by 1 turn')
+            parseExtendStatus(
+                'When this Unit inflicts a <unit-aid>debuff</unit-aid> with its active or charged skills, it also inflicts <unit-skill>Inferno II</unit-skill> for 2 turns and all allies active <unit-skill>buffs are extended by 1 turn</unit-skill>.'
+            )
         ).toEqual({ turns: 1, statusKind: 'buff' });
     });
 
@@ -1319,24 +1385,30 @@ describe('parseExtendStatus', () => {
         });
     });
 
-    it('does NOT match extend-dot "damage over time" wording', () => {
-        expect(parseExtendStatus('extends damage over time effects by 1 turn')).toBeNull();
-    });
-
-    // Asphyxiator's refit passive. Unlike Sokol/Ripper/Lev — which grow every status already
-    // standing on the target — this one grows only what the cast just inflicted, so it carries
-    // scope 'inflicted' (the same axis extend-dot uses for Valerian's twin wording).
-    it("parses Asphyxiator's 'the newly applied Debuff is extended' as inflicted-scope", () => {
+    it('does NOT match extend-dot "damage over time" wording (Provider)', () => {
         expect(
             parseExtendStatus(
-                'After this Unit applies a Debuff with a Critical hit the newly applied Debuff is extended by 1 turn.'
+                "This Unit deals <unit-damage>200% damage</unit-damage>, <unit-skill>removes 1 charge</unit-skill> from the enemy's charged skill and all <unit-skill>damage over time debuffs</unit-skill> are <unit-skill>extended by 1 turn</unit-skill>."
+            )
+        ).toBeNull();
+    });
+
+    // Asphyxiator's refit passive. Unlike Ripper/Lev — which grow every status already
+    // standing on the target — this one grows only what the cast just inflicted, so it carries
+    // scope 'inflicted' (the same axis extend-dot uses for Valerian's twin wording).
+    it("parses Asphyxiator's 'the newly inflicted debuff is extended' as inflicted-scope", () => {
+        expect(
+            parseExtendStatus(
+                'After this Unit inflicts a <unit-aid>debuff</unit-aid> with a critical hit, the newly inflicted <unit-aid>debuff</unit-aid> is <unit-skill>extended by 1 turn</unit-skill>.'
             )
         ).toEqual({ turns: 1, statusKind: 'debuff', scope: 'inflicted' });
     });
 
-    it('leaves the standing-status extends unscoped (Sokol/Ripper/Lev keep extending everything)', () => {
+    it('leaves the standing-status extends unscoped (Ripper/Lev keep extending everything)', () => {
         expect(
-            parseExtendStatus('extends active <unit-aid>Debuffs</unit-aid> by 1 turn')?.scope
+            parseExtendStatus(
+                'When this Unit inflicts a <unit-aid>debuff</unit-aid> with its active or charged skills, it also inflicts <unit-skill>Inferno II</unit-skill> for 2 turns and all allies active <unit-skill>buffs are extended by 1 turn</unit-skill>.'
+            )?.scope
         ).toBeUndefined();
         expect(
             parseExtendStatus('all hit enemies have their debuffs extended by 1 turn')?.scope
@@ -1349,7 +1421,7 @@ describe('parseExtendStatus', () => {
     it("does NOT claim Valerian's crit-power-chance extension", () => {
         expect(
             parseExtendStatus(
-                'After inflicting <unit-skill>Corrosion</unit-skill> with a Critical hit, the duration of the newly applied <unit-skill>Corrosion</unit-skill> is extended by 1 turn, with the extension chance equal to the Critical Power.'
+                "This Unit <unit-damage>repairs 15%</unit-damage> of damage dealt to the enemy, including damage from <unit-skill>damage over time effects</unit-skill>.<br /><br />After inflicting <unit-skill>Corrosion</unit-skill> with a critical hit, <unit-skill>extends the duration the newly inflicted</unit-skill> <unit-skill>Corrosion</unit-skill> by 1 turn, with the extension chance equal to this Unit's critical power."
             )
         ).toBeNull();
     });
@@ -1363,9 +1435,9 @@ describe('parseExtendStatus', () => {
 
 describe('parseCritPowerExtend', () => {
     it('parses Valerian self-crit extension with inflicted scope (chance = crit power)', () => {
-        // Valerian's EXACT refit-active third passive text (docs/ship-skills.csv).
+        // Valerian's refit-active second passive text (docs/ship-skills.csv).
         const text =
-            'This Unit <unit-damage>repairs 15%</unit-damage> of damage dealt to an enemy, including damage from damage over time effects. After inflicting <unit-skill>Corrosion</unit-skill> with a Critical hit, the duration of the newly applied <unit-skill>Corrosion</unit-skill> is extended by 1 turn, with the extension chance equal to the Critical Power.';
+            "This Unit <unit-damage>repairs 15%</unit-damage> of damage dealt to the enemy, including damage from <unit-skill>damage over time effects</unit-skill>.<br /><br />After inflicting <unit-skill>Corrosion</unit-skill> with a critical hit, <unit-skill>extends the duration the newly inflicted</unit-skill> <unit-skill>Corrosion</unit-skill> by 1 turn, with the extension chance equal to this Unit's critical power.";
         expect(parseCritPowerExtend(text)).toEqual({
             turns: 1,
             condition: { subject: 'self-crit', derivable: true },
@@ -1375,7 +1447,7 @@ describe('parseCritPowerExtend', () => {
 
     it('parses Belladonna ally-triggered extension as ally-inflicts-debuff (inflicted scope)', () => {
         const text =
-            'When an ally inflicts <unit-skill>Corrosion</unit-skill>, this Unit has a chance to convert it. Upon converting Corrosion, this Unit extends the newly applied Acidic Decay status for 1 turn, with the chance to equal to its crit power.';
+            'When an ally inflicts <unit-skill>Corrosion</unit-skill>, this Unit converts the <unit-skill>Corrosion</unit-skill> into <unit-skill>Acidic Decay</unit-skill> of the same level, with the chance scaling at 1% per 10 Hacking.<br /><br />Upon converting <unit-skill>Corrosion</unit-skill>, this Unit <unit-skill>extends the newly inflicted</unit-skill> <unit-skill>Acidic Decay</unit-skill> status for 1 turn, with the chance equal to its crit power.';
         expect(parseCritPowerExtend(text)).toEqual({
             turns: 1,
             condition: { subject: 'ally-inflicts-debuff', derivable: false },
@@ -1385,14 +1457,15 @@ describe('parseCritPowerExtend', () => {
 
     it('returns null without a crit-power extension', () => {
         expect(
-            parseCritPowerExtend('extends active Damage Over Time effects by 1 turn.')
+            parseCritPowerExtend('all damage over time debuffs are extended by 1 turn.')
         ).toBeNull();
         expect(parseCritPowerExtend('')).toBeNull();
     });
 });
 
-// PR11 (epic PR11): debuff-duration reduction — the inverse of extend-dot. All texts below are
-// real CSV rows (docs/ship-skills.csv).
+// PR11 (epic PR11): debuff-duration reduction — the inverse of extend-dot. The Heliodor texts
+// are old-corpus wording (synthetic; the catalogue text differs); the Pestilence texts are
+// docs/ship-skills.csv rows.
 describe('parseDebuffDurationReduction', () => {
     it('Heliodor FIRST passive: self damage-reaction, target self, 1 turn', () => {
         expect(
@@ -1410,10 +1483,10 @@ describe('parseDebuffDurationReduction', () => {
         ).toEqual([{ turns: 1, target: 'all-allies', isDamageReaction: true }]);
     });
 
-    it('Pestilence passive: "On debuff infliction" gate, target all-allies, 1 turn (verbatim first_passive_skill_text)', () => {
+    it('Pestilence passive: "When this Unit inflicts a debuff" gate, target all-allies, 1 turn (verbatim first_passive_skill_text)', () => {
         expect(
             parseDebuffDurationReduction(
-                'On debuff infliction this Unit reduces the duration of active Debuffs on all allies by 1 turn.'
+                'When this Unit inflicts a <unit-aid>debuff</unit-aid>, it <unit-skill>reduces the duration of all active</unit-skill> <unit-aid>debuffs</unit-aid> on all allies by 1 turn.'
             )
         ).toEqual([{ turns: 1, target: 'all-allies', onDebuffInflicted: true }]);
     });
@@ -1421,15 +1494,15 @@ describe('parseDebuffDurationReduction', () => {
     it('Pestilence refit passive (tagged, with the trailing cleanse-reaction clause): the reduction clause still isolates cleanly', () => {
         expect(
             parseDebuffDurationReduction(
-                'On debuff infliction this Unit reduces the duration of active <unit-aid>Debuffs</unit-aid> on all allies by 1 turn.<br />When an enemy <unit-aid>cleanses a Debuff</unit-aid> this unit inflicts <unit-skill>Corrosion II</unit-skill> for 2 turns on all cleansed enemies.'
+                'When this Unit inflicts a <unit-aid>debuff</unit-aid>, it <unit-skill>reduces the duration of all active</unit-skill> <unit-aid>debuffs</unit-aid> on all allies by 1 turn.<br /><br />When an enemy <unit-skill>cleanses a debuff</unit-skill>, this Unit inflicts <unit-skill>Corrosion II</unit-skill> for 2 turns'
             )
         ).toEqual([{ turns: 1, target: 'all-allies', onDebuffInflicted: true }]);
     });
 
-    it('does NOT match Lingshe\'s Bomb-duration reduction (structurally different mechanic — "Bombs", not "Debuffs")', () => {
+    it('does NOT match Lingshe\'s Bomb-duration reduction (structurally different mechanic — "Bomb", not "Debuffs")', () => {
         expect(
             parseDebuffDurationReduction(
-                'This Unit reduces all <unit-skill>Bombs</unit-skill> on the enemy targets by 1 turn, <unit-skill>Bombs</unit-skill> reduced to 0 turns by this skill will detonate. This reduction effect requires hacking. This Unit inflicts <unit-skill>Bomb III</unit-skill> for 3 turns.'
+                'This Unit reduces all <unit-skill>Bomb</unit-skill> on the enemy targets by 1 turn.<br />This reduction effect requires hacking.<br /><br />This Unit inflicts <unit-skill>Bomb III</unit-skill> for 3 turns.'
             )
         ).toEqual([]);
     });
@@ -1444,11 +1517,11 @@ describe('parseDebuffDurationReduction', () => {
 
     it('does not match a plain extend-dot clause (no cross-talk with the growth mechanic)', () => {
         expect(
-            parseDebuffDurationReduction('extends active Damage Over Time effects by 1 turn.')
+            parseDebuffDurationReduction('all damage over time debuffs are extended by 1 turn.')
         ).toEqual([]);
     });
 
-    it('a reduction clause matching NEITHER gate (no "when directly damaged"/"on debuff infliction") carries NO trigger flag — the parse reports it, buildShipAbilities drops it', () => {
+    it('a reduction clause matching NEITHER gate (no "when directly damaged"/"when this Unit inflicts a debuff") carries NO trigger flag — the parse reports it, buildShipAbilities drops it', () => {
         // A hypothetical on-cast phrasing: the clause parses (turns/target extracted) but sets
         // neither isDamageReaction nor onDebuffInflicted. This is the signal buildShipAbilities
         // keys off to SKIP emission (rather than silently defaulting to on-attacked). No corpus
@@ -1548,7 +1621,7 @@ describe('parser false-positive guards', () => {
     it('on-resist proc is not secondary damage (Vindicator p2)', () => {
         expect(
             parseSecondaryDamage(
-                "This Unit has 20% Shield Penetration. At the start of combat, this Unit gains <unit-skill>Magnetized Shielding</unit-skill>.<br /><br />When this Unit resists a debuff infliction from an enemy, it deals <unit-damage>damage equal to 30%</unit-damage> of this Unit's max HP to that enemy."
+                "This Unit has <unit-damage>20% shield penetration</unit-damage>.<br /><br />At the start of combat, this Unit gains <unit-skill>Magnetized Shielding</unit-skill>.<br /><br />When this Unit resists a <unit-aid>debuff</unit-aid> infliction from an enemy, it deals damage equal to <unit-damage>30%</unit-damage> of this Unit's max HP to that enemy."
             )
         ).toBeNull();
     });
@@ -1556,7 +1629,7 @@ describe('parser false-positive guards', () => {
     it('on-death proc is not secondary damage (Paracelsus p1)', () => {
         expect(
             parseSecondaryDamage(
-                'Upon being killed by direct Damage, this Unit deals <unit-damage>Damage equal to 50%</unit-damage> of its max HP.'
+                'Upon being destroyed by direct damage, this Unit deals <unit-damage>damage equal to 50%</unit-damage> of its max HP.'
             )
         ).toBeNull();
     });
@@ -1564,7 +1637,7 @@ describe('parser false-positive guards', () => {
     it('burst-explosion reference is not an accumulate-detonate application (Valkyrie p1)', () => {
         expect(
             parseAccumulateDetonate(
-                'This Unit gains <unit-skill>Speed Up II</unit-skill> for 1 turn at the start of the round.<br /><br />When an <unit-aid>Echoing Burst</unit-aid> explodes on an enemy, this Unit and the ally with the lowest current health percentage <unit-damage>repair 5%</unit-damage> of damage dealt.'
+                'This Unit ignores <unit-skill>Taunt</unit-skill> and <unit-skill>Provoke</unit-skill> effects and at the start of the round, this Unit gains <unit-skill>Speed Up II</unit-skill> for 1 turn. <br /><br />When an <unit-skill>Echoing Burst</unit-skill> explodes on an enemy, the Unit and the ally with the lowest current health percentage <unit-damage>repair 5%</unit-damage> of the damage dealt.'
             )
         ).toBeNull();
     });
@@ -1650,10 +1723,10 @@ describe('parseHpThresholdCondition', () => {
     });
 
     it('does not match a damage-bonus phrasing (base damage stays ungated)', () => {
-        // "increases Damage by 100% to enemies with less than 30% HP" is a separate bonus on a
-        // ship with its own base damage — not a "deals N% damage to …" gate.
+        // Obsidian's charged skill: "deals 100% more damage to enemies with less than 30% HP" is a
+        // separate bonus on a ship with its own base damage — not a "deals N% damage to …" gate.
         const text =
-            'This Unit deals <unit-damage>250% Damage</unit-damage> and increases Damage by 100% to enemies with less than 30% HP.';
+            'This Unit deals <unit-damage>250% damage</unit-damage> with additional damage equal to <unit-damage>20%</unit-damage> of its max HP.<br /><br />This attack deals <unit-damage>100% more damage</unit-damage> to enemies with less than 30% HP.';
         expect(parseHpThresholdCondition(text)).toBeNull();
     });
 
@@ -1688,7 +1761,7 @@ describe('parseChargeGain', () => {
 
     it('parses start-of-turn full-HP self gain as start-of-turn + hp-threshold gate — Cobalt 1st passive', () => {
         const text =
-            'This Unit <unit-aid>adds 1 charge</unit-aid> to its charged skill at the start of the turn if it is at full HP.';
+            'Every turn this Unit <unit-skill>adds 1 charge</unit-skill> to its charged skill if it is at full HP.';
         expect(parseChargeGain(text)).toEqual({
             amount: 1,
             condition: 'always',
@@ -1708,7 +1781,7 @@ describe('parseChargeGain', () => {
 
     it('parses start-of-turn full-HP self gain (with separate buff clause) — Cobalt 2nd passive', () => {
         const text =
-            'This Unit <unit-aid>adds 1 charge</unit-aid> to its charged skill and gains <unit-aid>Out. Damage Up II</unit-aid> for 1 turn at the start of the turn if it is at full HP.';
+            'Every turn this Unit <unit-skill>adds 1 charge</unit-skill> to its charged skill and gains <unit-skill>Out. Damage Up II</unit-skill> for 1 turn if it is at full HP.';
         expect(parseChargeGain(text)).toMatchObject({
             amount: 1,
             trigger: 'start-of-turn',
@@ -1716,9 +1789,9 @@ describe('parseChargeGain', () => {
         });
     });
 
-    it('parses "each turn" phrasing as start-of-turn trigger (widened regex)', () => {
+    it('reads the trailing "each turn" wording (synthetic) in a full-HP self gain as start-of-turn', () => {
         const text =
-            'This Unit <unit-aid>adds 1 charge</unit-aid> to its charged skill at the start of each turn if it is at full HP.';
+            'This Unit <unit-aid>adds 1 charge</unit-aid> to its charged skill each turn if it is at full HP.';
         expect(parseChargeGain(text)).toMatchObject({
             amount: 1,
             trigger: 'start-of-turn',
@@ -1745,7 +1818,7 @@ describe('parseChargeGain', () => {
 
     it('parses "equal to the number of buffs" per-buff gain — Rhodium', () => {
         const text =
-            'Unit adds charges to the <unit-aid>Charged Skill</unit-aid> equal to the number of <unit-aid>Buffs</unit-aid> on the target.';
+            'This Unit <unit-skill>adds charges</unit-skill> to its charged skill equal to the number of <unit-aid>buffs</unit-aid> on the enemy.';
         expect(parseChargeGain(text)).toEqual({
             amount: 1,
             condition: 'enemy-buff',
@@ -1835,9 +1908,9 @@ describe('parseChargeGain', () => {
         expect(parseChargeGain(text)).toBeNull();
     });
 
-    it('parses on-kill gain as on-enemy-destroyed trigger — Valiant (Phase 3 PR-B)', () => {
+    it('parses on-kill gain as on-enemy-destroyed trigger — Valiant', () => {
         const text =
-            'This Unit <unit-aid>gains 1 charge</unit-aid> for its Charged Skill upon killing an enemy.';
+            'When this Unit destroys an enemy it <unit-skill>adds 1 charge</unit-skill> to its charged skill.';
         expect(parseChargeGain(text)).toEqual({
             amount: 1,
             condition: 'always',
@@ -1848,7 +1921,7 @@ describe('parseChargeGain', () => {
 
     it('returns null for ally-grant — Liberator', () => {
         const text =
-            'When an enemy dies, all allies <unit-aid>add 1 charge</unit-aid> to their Charged Skills.';
+            'This Unit has <unit-damage>40% shield penetration</unit-damage>.<br /><br />When an enemy is destroyed, all allies <unit-skill>add 1 charge</unit-skill> to their charged skills.';
         expect(parseChargeGain(text)).toBeNull();
     });
 
@@ -1874,9 +1947,9 @@ describe('parseChargeGain', () => {
         });
     });
 
-    it('still returns null for "when an enemy dies" on-kill ally charge — Liberator (death routing unchanged)', () => {
+    it('still returns null for "when an enemy is destroyed" ally charge — Liberator (death routing unchanged)', () => {
         const text =
-            'When an enemy dies, this unit <unit-aid>grants 1 charge</unit-aid> to all allies.';
+            'When an enemy is destroyed, all allies <unit-skill>add 1 charge</unit-skill> to their charged skills.';
         expect(parseChargeGain(text)).toBeNull();
     });
 
@@ -1909,9 +1982,9 @@ describe('parseAllyChargeGrant', () => {
         });
     });
 
-    it('tolerates the plural-with-1 CSV typo "adds 1 charges" — Graphite R-tier', () => {
+    it('reads the singular "adds 1 charge" form — Graphite R-tier', () => {
         const text =
-            'At the start of the round, if an enemy Unit has <unit-skill>Stealth</unit-skill>, this Unit <unit-aid>adds 1 charges</unit-aid> to the charged skill of all allies within the active pattern.';
+            'At the start of the round, if an enemy Unit has <unit-skill>Stealth</unit-skill>, this Unit <unit-skill>adds 1 charge</unit-skill> to the charged skill of all allies within the active pattern.';
         expect(parseAllyChargeGrant(text)).toEqual({
             amount: 1,
             trigger: 'start-of-round',
@@ -2036,21 +2109,27 @@ describe('detectReactiveTrigger', () => {
         expect(detectReactiveTrigger(text, 'Gelecek Contagion II')).toBe('on-enemy-cleansed');
     });
 
-    it('detects on-enemy-destroyed from "on kill"', () =>
-        expect(detectReactiveTrigger('loses Overload on kill', 'Overload')).toBe(
-            'on-enemy-destroyed'
-        ));
-    it('detects on-enemy-destroyed from "killing an opponent"', () =>
+    it('detects on-enemy-destroyed from "When this Unit destroys an enemy" (Obsidian R2)', () =>
         expect(
             detectReactiveTrigger(
-                'it gains Marauder Rage I for 2 turns upon killing an opponent',
+                'When this Unit destroys an enemy it <unit-skill>adds 2 charges</unit-skill> to its charged skill.<br /><br />At the start of each round, this Unit gains <unit-skill>Attack Up III</unit-skill> for 1 turn.',
+                'adds 2 charges'
+            )
+        ).toBe('on-enemy-destroyed'));
+    it('detects on-enemy-destroyed from a trailing "upon destroying an enemy" (Mangler)', () =>
+        expect(
+            detectReactiveTrigger(
+                'This Unit gains 1 stack of <unit-skill>Overload</unit-skill> every turn and, upon destroying an enemy, removes <unit-skill>Overload</unit-skill>. Additionally, it gains <unit-skill>Marauder Rage I</unit-skill> for 2 turns upon destroying an enemy.',
                 'Marauder Rage I'
             )
         ).toBe('on-enemy-destroyed'));
-    it('detects on-enemy-destroyed from "killing an enemy"', () =>
-        expect(detectReactiveTrigger('upon killing an enemy, loses Overload', 'Overload')).toBe(
-            'on-enemy-destroyed'
-        ));
+    it('detects on-enemy-destroyed from a leading "upon destroying an enemy" (Ravager)', () =>
+        expect(
+            detectReactiveTrigger(
+                'This Unit gains 1 stack of <unit-skill>Overload</unit-skill> every turn and, upon destroying an enemy, removes <unit-skill>Overload</unit-skill> and gains <unit-skill>Marauder Rage III</unit-skill> for 3 turns.',
+                'Marauder Rage III'
+            )
+        ).toBe('on-enemy-destroyed'));
     it('detects on-enemy-repaired', () =>
         expect(
             detectReactiveTrigger('gains Overload when an enemy performs a repair', 'Overload')
@@ -2065,7 +2144,7 @@ describe('detectReactiveTrigger', () => {
     it('routes Ruiner Overload grant to on-enemy-repaired despite a kill clause in the same sentence', () =>
         expect(
             detectReactiveTrigger(
-                'gains 1 stack of Overload when an enemy performs a repair, upon killing an enemy, this Unit removes Overload',
+                'This Unit gains 1 stack of <unit-skill>Overload</unit-skill> when an enemy preforms a <unit-aid>repair</unit-aid>, upon destroying an enemy, this Unit removes <unit-skill>Overload</unit-skill>.',
                 'Overload'
             )
         ).toBe('on-enemy-repaired'));
@@ -2074,42 +2153,44 @@ describe('detectReactiveTrigger', () => {
 describe('detectReactiveTrigger — non-Marauder reclassifications (Overload-lifecycle side effects)', () => {
     // The KILL_TRIGGER_RE / APPLYING_DEBUFF_RE patterns added for the Overload lifecycle also
     // (correctly) reclassify several non-Marauder buff grants from on-cast to reactive triggers.
-    // Each ship's buff genuinely is gated behind a kill / debuff-infliction in docs/ship-skills.csv,
-    // so these are semantically-correct reclassifications. Text below is the real CSV phrasing.
+    // Each ship's buff genuinely is gated behind a kill / debuff-infliction, so these are
+    // semantically-correct reclassifications. The KILL_TRIGGER_RE texts are docs/ship-skills.csv
+    // phrasing; the APPLYING_DEBUFF_RE texts are old-corpus wording (synthetic; the catalogue
+    // text differs).
 
     // --- KILL_TRIGGER_RE → on-enemy-destroyed ---
-    it('Gallant — Legion Discipline I gated on "on kill"', () =>
+    it('Gallant — Legion Discipline I gated on "When this Unit destroys an enemy"', () =>
         expect(
             detectReactiveTrigger(
-                'This Unit gains <unit-skill>Legion Discipline I</unit-skill> for 3 turns on kill.',
+                'When this Unit destroys an enemy it gains <unit-skill>Legion Discipline I</unit-skill> for 3 turns.',
                 'Legion Discipline I'
             )
         ).toBe('on-enemy-destroyed'));
-    it('Gallant — Legion Discipline II gated on "on kill"', () =>
+    it('Gallant — Legion Discipline II gated on "When this Unit destroys an enemy"', () =>
         expect(
             detectReactiveTrigger(
-                'This Unit gains <unit-skill>Legion Discipline II</unit-skill> for 4 turns on kill.',
+                'When this Unit destroys an enemy it gains <unit-skill>Legion Discipline II</unit-skill> for 4 turns.',
                 'Legion Discipline II'
             )
         ).toBe('on-enemy-destroyed'));
-    it('Medved — XAOC Swiftness I gated on "On kill"', () =>
+    it('Medved — XAOC Swiftness I gated on "When this Unit destroys an enemy"', () =>
         expect(
             detectReactiveTrigger(
-                'This Unit has 20% Shield Penetration. On kill, it gains <unit-skill>XAOC Swiftness I</unit-skill> for 2 turns.',
+                'This Unit has <unit-aid>20% shield penetration</unit-aid>.<br /><br />When this Unit destroys an enemy, it gains <unit-skill>XAOC Swiftness I</unit-skill> for 2 turns.',
                 'XAOC Swiftness I'
             )
         ).toBe('on-enemy-destroyed'));
-    it('Medved — XAOC Swiftness II gated on "On kill"', () =>
+    it('Medved — XAOC Swiftness II gated on "When this Unit destroys an enemy"', () =>
         expect(
             detectReactiveTrigger(
-                'This Unit has 20% Shield Penetration. On kill, it gains <unit-skill>XAOC Swiftness II</unit-skill> for 3 turns.',
+                'This Unit has <unit-aid>20% shield penetration</unit-aid>.<br /><br />When this Unit destroys an enemy, it gains <unit-skill>XAOC Swiftness II</unit-skill> for 3 turns.',
                 'XAOC Swiftness II'
             )
         ).toBe('on-enemy-destroyed'));
-    it('Meiying — Stasis gated on "Upon killing an enemy with a Debuff"', () =>
+    it('Meiying — Stasis gated on "Upon destroying an enemy with a debuff"', () =>
         expect(
             detectReactiveTrigger(
-                'Upon killing an enemy with a Debuff, this Unit inflicts <unit-skill>Stasis</unit-skill> on all adjacent enemies for 1 turn.',
+                "This Unit's attacks ignore <unit-skill>Taunt</unit-skill> and <unit-skill>Provoke</unit-skill> effects.<br /><br />Upon destroying an enemy with a <unit-aid>debuff</unit-aid>, this Unit inflicts <unit-skill>Stasis</unit-skill> on all adjacent enemies for 1 turn.",
                 'Stasis'
             )
         ).toBe('on-enemy-destroyed'));
@@ -2146,30 +2227,28 @@ describe('detectReactiveTrigger — non-Marauder reclassifications (Overload-lif
 });
 
 describe('parseSelfBuffRemovals', () => {
-    it('emits for "loses Overload on kill"', () =>
-        expect(parseSelfBuffRemovals('loses <unit-skill>Overload</unit-skill> on kill')).toEqual([
-            { buffName: 'Overload', trigger: 'on-enemy-destroyed' },
-        ]));
-    it('emits for "removes Overload" (Ruiner)', () =>
+    it('emits for "upon destroying an enemy, removes Overload" (Butcher)', () =>
         expect(
             parseSelfBuffRemovals(
-                'upon killing an enemy, this Unit removes <unit-skill>Overload</unit-skill>'
+                'This Unit gains 1 stack of <unit-skill>Overload</unit-skill> every turn and, upon destroying an enemy, removes <unit-skill>Overload</unit-skill>.'
             )
         ).toEqual([{ buffName: 'Overload', trigger: 'on-enemy-destroyed' }]));
-    it('emits for passive "Overload is lost" (Butcher R2)', () =>
-        expect(parseSelfBuffRemovals('On kill, <unit-skill>Overload</unit-skill> is lost')).toEqual(
-            [{ buffName: 'Overload', trigger: 'on-enemy-destroyed' }]
-        ));
+    it('emits for "removes Overload and gains Marauder Rage III" (Ravager)', () =>
+        expect(
+            parseSelfBuffRemovals(
+                'This Unit gains 1 stack of <unit-skill>Overload</unit-skill> every turn and, upon destroying an enemy, removes <unit-skill>Overload</unit-skill> and gains <unit-skill>Marauder Rage III</unit-skill> for 3 turns.'
+            )
+        ).toEqual([{ buffName: 'Overload', trigger: 'on-enemy-destroyed' }]));
     it('resolves the removal trigger by removal position, not first buff-name sentence (Asphyxiator)', () =>
         expect(
             parseSelfBuffRemovals(
-                'At the start of the round, this Unit gains 1 stack of <unit-skill>Overload</unit-skill>. Upon killing an enemy, this Unit loses <unit-skill>Overload</unit-skill>.'
+                'At the start of the round, if there are any enemies with 3 or more <unit-aid>debuffs</unit-aid>, this Unit gains 1 stack of <unit-skill>Overload</unit-skill> and gains <unit-skill>Marauder Rage II</unit-skill> for 3 turns. Upon destroying an enemy, this Unit removes <unit-skill>Overload</unit-skill>.'
             )
         ).toEqual([{ buffName: 'Overload', trigger: 'on-enemy-destroyed' }]));
     it('resolves the removal trigger by removal position within a shared sentence (Ruiner)', () =>
         expect(
             parseSelfBuffRemovals(
-                'This Unit gains 1 stack of <unit-skill>Overload</unit-skill> when an enemy performs a repair, upon killing an enemy, this Unit removes <unit-skill>Overload</unit-skill>'
+                'This Unit gains 1 stack of <unit-skill>Overload</unit-skill> when an enemy preforms a <unit-aid>repair</unit-aid>, upon destroying an enemy, this Unit removes <unit-skill>Overload</unit-skill>.'
             )
         ).toEqual([{ buffName: 'Overload', trigger: 'on-enemy-destroyed' }]));
     it('returns [] for no-loss text', () =>
@@ -2184,14 +2263,8 @@ describe('parseSelfBuffRemovals', () => {
 
 describe('detectCritRepairTrigger', () => {
     it('returns on-ally-critically-repaired when the anchor is in the crit-repair sentence', () => {
-        const text = 'When this unit critically repairs an ally, it cleanses 1 debuff from itself.';
-        expect(detectCritRepairTrigger(text, text.indexOf('cleanses'))).toBe(
-            'on-ally-critically-repaired'
-        );
-    });
-
-    it('handles the "allies" plural form', () => {
-        const text = 'When this unit critically repairs allies, it cleanses 1 debuff.';
+        const text =
+            "This Unit's defense is increased by 20% and when it critically repairs an ally, it <unit-skill>cleanses 1 debuff</unit-skill> from itself.";
         expect(detectCritRepairTrigger(text, text.indexOf('cleanses'))).toBe(
             'on-ally-critically-repaired'
         );
@@ -2200,7 +2273,7 @@ describe('detectCritRepairTrigger', () => {
     it('is position-scoped: an anchor in a DIFFERENT sentence is not stamped', () => {
         // The first sentence's cleanse anchor falls OUTSIDE the crit-repair sentence.
         const text =
-            'This Unit cleanses 1 debuff from itself. When this unit critically repairs an ally, it gains a buff.';
+            'This Unit cleanses 1 debuff from itself. When it critically repairs an ally, it gains a buff.';
         expect(detectCritRepairTrigger(text, text.indexOf('cleanses'))).toBeUndefined();
     });
 
@@ -2210,7 +2283,7 @@ describe('detectCritRepairTrigger', () => {
     });
 
     it('returns undefined for a negative anchor position', () => {
-        const text = 'When this unit critically repairs an ally, it cleanses 1 debuff.';
+        const text = 'When it critically repairs an ally, it cleanses 1 debuff.';
         expect(detectCritRepairTrigger(text, -1)).toBeUndefined();
     });
 
@@ -2222,7 +2295,7 @@ describe('detectCritRepairTrigger', () => {
         // anchor in the next — detectCritRepairTrigger would return undefined instead of the
         // trigger. Masking the abbreviation period before the boundary scan prevents the split.
         const text =
-            'When this unit critically repairs an ally, it grants Inc. Damage Up and heals the ally for 5% of its Max HP.';
+            'When it critically repairs an ally, it grants Inc. Damage Up and heals the ally for 5% of its Max HP.';
         const healAnchor = text.indexOf('heals');
         expect(detectCritRepairTrigger(text, healAnchor)).toBe('on-ally-critically-repaired');
     });
@@ -2232,7 +2305,7 @@ describe('detectCritRepairTrigger', () => {
         // boundary, the crit-repair phrase (paragraph 1) and the heal anchor (paragraph 2) would
         // be co-scoped in one segment and wrongly stamped.
         const text =
-            'When this unit critically repairs an ally, it gains a buff<br /><br />This unit heals the ally for 5% of its Max HP';
+            'When it critically repairs an ally, it gains a buff<br /><br />This unit heals the ally for 5% of its Max HP';
         const healAnchor = text.indexOf('heals');
         expect(detectCritRepairTrigger(text, healAnchor)).toBeUndefined();
     });
@@ -2241,7 +2314,7 @@ describe('detectCritRepairTrigger', () => {
         // Same paragraph 1 carries both the crit-repair phrase and the heal anchor; paragraph 2
         // (after <br />) is unrelated. The anchor must still be stamped.
         const text =
-            'When this unit critically repairs an ally, it heals the ally for 5% of its Max HP<br />This unit gains a buff';
+            'When it critically repairs an ally, it heals the ally for 5% of its Max HP<br />This unit gains a buff';
         const healAnchor = text.indexOf('heals');
         expect(detectCritRepairTrigger(text, healAnchor)).toBe('on-ally-critically-repaired');
     });
@@ -2343,7 +2416,8 @@ describe('parseAllSkillEffects', () => {
         expect(result.find((e) => e.source === 'charge')?.buffName).toBe('Attack Up III');
     });
 
-    // Lionheart R4 refit-active passive (docs/ship-skills.csv, verbatim). Its round-start
+    // Lionheart R4 refit-active passive, old-corpus wording (synthetic; the catalogue text
+    // differs). Its round-start
     // Protection grant is a FIXED pool (a redirect clears it entirely) — refresh-to-10, not
     // accumulate. maxStacks/clearAllOnRedirect tag this so the engine (Task 4) can cap +
     // clear it, distinct from Meatshield's accumulating start-of-combat grant below.
@@ -2485,7 +2559,7 @@ describe('detectGrantConditions', () => {
 
     it('scopes the count gate to its own sentence when an abbreviated buff name has an internal period (Asphyxiator)', () => {
         const text =
-            'This Unit inflicts <unit-skill>Inc. DoT Damage Up III</unit-skill> for 2 turns, deals <unit-damage>215% damage</unit-damage>, and inflicts <unit-skill>Inferno III</unit-skill> for 3 turns. If the targeted enemy or adjacent enemies have 3 or more debuffs, it inflicts <unit-skill>Stasis</unit-skill> for 2 turns on the targeted enemy and all enemies adjacent to the enemy.';
+            'This Unit inflicts <unit-skill>Inc. DoT Damage Up III</unit-skill> for 2 turns, deals <unit-damage>215% damage</unit-damage>, and inflicts <unit-skill>Inferno III</unit-skill> for 3 turns. If the targeted enemy or adjacent enemies have 3 or more <unit-aid>debuffs</unit-aid>, it inflicts <unit-skill>Stasis</unit-skill> for 1 turn on the targeted enemy and all adjacent enemies.';
         // "Inc. DoT Damage Up III" is inflicted unconditionally — the "3 or more debuffs"
         // gate belongs to the separate Stasis sentence and must not leak onto it.
         expect(detectGrantConditions(text, 'Inc. DoT Damage Up III')).toEqual([]);
@@ -2556,9 +2630,9 @@ describe('detectGrantConditions', () => {
         ]);
     });
 
-    it('classifies "When targeting non-Defenders" as a negated enemy-type gate (Lodolite)', () => {
+    it('classifies "When this attack targets non-defenders" as a negated enemy-type gate (Lodolite)', () => {
         const text =
-            'When targeting non-Defenders, apply <unit-skill>Concentrate Fire</unit-skill> for 2 turns.';
+            'When this attack targets non-defenders, it also applies <unit-skill>Concentrate Fire</unit-skill> for 2 turns.';
         expect(detectGrantConditions(text, 'Concentrate Fire')).toEqual([
             { subject: 'enemy-type', derivable: true, requiredEnemyType: 'Defender', negate: true },
         ]);
@@ -2566,7 +2640,7 @@ describe('detectGrantConditions', () => {
 
     it('classifies "if it is at full HP" as a self HP-threshold gate (Cobalt)', () => {
         const text =
-            'This Unit gains <unit-skill>Out. Damage Up II</unit-skill> for 1 turn at the start of the turn if it is at full HP.';
+            'Every turn this Unit <unit-skill>adds 1 charge</unit-skill> to its charged skill and gains <unit-skill>Out. Damage Up II</unit-skill> for 1 turn if it is at full HP.';
         expect(detectGrantConditions(text, 'Out. Damage Up II')).toEqual([
             {
                 subject: 'hp-threshold',
@@ -2589,27 +2663,27 @@ describe('detectGrantConditions', () => {
         expect(detectGrantConditions(text, 'Blast')).toEqual([]);
     });
 
-    it('recognises "when attacking a Defender" as an enemy-type gate (IonScorp)', () => {
+    it('recognises "when attacking a defender" as an enemy-type gate (IonScorp)', () => {
         const text =
-            'This Unit deals <unit-damage>190% damage</unit-damage>, but when attacking a Defender, it deals <unit-damage>200% damage</unit-damage> and inflicts <unit-skill>Disable</unit-skill> for 1 turn.';
+            'This Unit deals <unit-damage>190% damage</unit-damage>, but when attacking a defender, it instead deals <unit-damage>220% damage</unit-damage> and inflicts <unit-skill>Disable</unit-skill> for 1 turn.';
         expect(detectGrantConditions(text, 'Disable')).toEqual([
             { subject: 'enemy-type', derivable: true, requiredEnemyType: 'Defender' },
         ]);
     });
 
-    it('detectGrantConditions: APEX "If this Unit has Shield" → self-shield gate on Disable', () => {
+    it('detectGrantConditions: APEX "If this Unit has an active shield" → self-shield gate on Disable', () => {
         const text =
-            'This Unit deals <unit-damage>220% damage</unit-damage> and inflicts <unit-skill>Attack Down II</unit-skill> and <unit-skill>Out. Damage Down II</unit-skill> for 2 turns. If this Unit has Shield, the primary target is inflicted with <unit-skill>Disable</unit-skill> for 2 turns.';
+            'This Unit deals <unit-damage>220% damage</unit-damage> and inflicts <unit-skill>Attack Down II</unit-skill> and <unit-skill>Out. Damage Down II</unit-skill> for 2 turns. If this Unit has an active shield, the primary target is inflicted with <unit-skill>Disable</unit-skill> for 2 turns.';
         expect(detectGrantConditions(text, 'Disable')).toEqual([
             { subject: 'self-shield', derivable: true },
         ]);
     });
 
-    it('parseConditionalDamage: IonScorp "but when attacking a Defender, it deals 200%" → +10 delta gated Defender', () => {
+    it('parseConditionalDamage: IonScorp "but when attacking a defender, it instead deals 220%" → +30 delta gated Defender', () => {
         const text =
-            'This Unit deals <unit-damage>190% damage</unit-damage>, but when attacking a Defender, it deals <unit-damage>200%</unit-damage> damage and inflicts <unit-skill>Disable</unit-skill> for 1 turn.';
+            'This Unit deals <unit-damage>190% damage</unit-damage>, but when attacking a defender, it instead deals <unit-damage>220% damage</unit-damage> and inflicts <unit-skill>Disable</unit-skill> for 1 turn.';
         expect(parseConditionalDamage(text)).toEqual({
-            pct: 10,
+            pct: 30,
             condition: 'enemy-type',
             derivable: true,
             requiredEnemyType: 'Defender',
@@ -2670,14 +2744,6 @@ describe('detectGrantConditions', () => {
         ]);
     });
 
-    it('classifies "when an enemy gets buffed" as a manual enemy-buff trigger — Nuqtu', () => {
-        const text =
-            'This Unit <unit-aid>Cleanses 1</unit-aid> debuff from itself (once per round) and gains <unit-skill>Terran Bolster III</unit-skill> for 1 turn when an enemy gets buffed.';
-        expect(detectGrantConditions(text, 'Terran Bolster III')).toEqual([
-            { subject: 'enemy-buff', derivable: false },
-        ]);
-    });
-
     it('does not classify a reactive "when critically hit" clause', () => {
         const text = 'When this Unit is critically hit, it gains Attack Up II.';
         expect(detectGrantConditions(text, 'Attack Up II')).toEqual([]);
@@ -2694,7 +2760,7 @@ describe('detectGrantConditions', () => {
 
     it('classifies "lowest speed among all allies" as a derivable lowest-speed-ally gate', () => {
         const text =
-            'This Unit starts each round with <unit-skill>Attack Up II</unit-skill> and <unit-skill>Defense Up II</unit-skill> for 1 turn if it has the lowest speed among all Allies. Then, deals <unit-damage>60% damage</unit-damage> to the highest Speed Enemy.';
+            'At the start of the round, if this Unit has the lowest speed among all allies, it gains <unit-skill>Attack Up II</unit-skill> and <unit-skill>Defense Up II</unit-skill> for 1 turn. Then deals <unit-damage>60% damage</unit-damage> to the enemy with the highest speed.';
         expect(detectGrantConditions(text, 'Attack Up II')).toEqual([
             { subject: 'lowest-speed-ally', derivable: true },
         ]);
@@ -2712,19 +2778,18 @@ describe('parseChargeGain ally-crit trigger (Hermes)', () => {
         });
     });
 
-    // The ownerless "to the Charged Skill" disqualifies a charge only behind a GRANT verb
-    // (adds/grants/gives — ALLY_CHARGE_GRANT_RE's set); a "gains" with the same wording is
-    // still a self gain.
-    it('"gains 1 charge to the Charged Skill" stays a self gain', () => {
+    // Boundary twin of the Hermes case below: CHARGE_DISQUALIFY_RE rejects "of allies", not a bare
+    // "to the Charged Skill".
+    it('"gains 1 charge to the Charged Skill" with no ally scope is a self gain', () => {
         expect(
             parseChargeGain('This Unit <unit-aid>gains 1 charge</unit-aid> to the Charged Skill.')
         ).toEqual({ amount: 1, condition: 'always', derivable: true });
     });
 
-    it('our Hermes charged "adds 1 charge to the Charged Skill" is not a self gain', () => {
+    it('Hermes charged "adds 1 charge to the charged skill of allies" is not a self gain', () => {
         expect(
             parseChargeGain(
-                'This Unit <unit-damage>repairs 37%</unit-damage> of its Max HP and <unit-aid>adds 1 charge</unit-aid> to the Charged Skill.<br /><br />If the target has less than 40% HP, it grants <unit-skill>Cheat Death</unit-skill>.'
+                'This Unit <unit-damage>repairs 37%</unit-damage> of its max HP and <unit-skill>adds 1 charge</unit-skill> to the charged skill of allies.<br /><br />If an ally has less than 40% HP, it grants that ally <unit-skill>Cheat Death</unit-skill>.'
             )
         ).toBeNull();
     });
@@ -2757,7 +2822,8 @@ describe('parseExtraAction', () => {
         ).toBeUndefined();
     });
 
-    // Real texts from docs/ship-skills.csv.
+    // Ship texts: docs/ship-skills.csv rows, or old-corpus wording (synthetic; the catalogue text
+    // differs) for Nuqtu, Sustainer and Tormenter.
     it('Nuqtu: charged, gated on enemy having 3+ buffs', () => {
         const r = parseExtraAction(
             'This Unit deals <unit-damage>200% damage</unit-damage>, including additional Damage equal to <unit-damage>80%</unit-damage> of its Defense, and an extra 40% for each buff on the enemy. If the target has 3 or more buffs, this Unit grants itself 1 extra End Of Round Action.'
@@ -2816,7 +2882,7 @@ describe('parseExtraAction', () => {
 
     it('Liberator: on-enemy-destroyed, once per round', () => {
         const r = parseExtraAction(
-            'This Unit has 40% Shield Penetration. When an enemy dies, all allies <unit-aid>add 1 charge</unit-aid> to their Charged Skills, and once per round, this unit gains 1 extra action.'
+            'This Unit has <unit-damage>40% shield penetration</unit-damage>.<br /><br />When an enemy is destroyed, all allies <unit-skill>add 1 charge</unit-skill> to their charged skills and once per round, this unit <unit-skill>gains 1 extra action</unit-skill>.'
         );
         expect(r).toEqual({
             oncePerRound: true,
@@ -2844,14 +2910,14 @@ describe('parseExtraAction', () => {
         });
     });
 
-    it('Sokol: on-enemy-destroyed (upon a kill), once per round', () => {
+    it('Sokol: on-enemy-destroyed ("When an enemy is destroyed"), once per round', () => {
         const r = parseExtraAction(
-            'This Unit gains 1 stack of <unit-skill>Blast</unit-skill> every turn and grants one extra end of round action upon a kill, once per round.'
+            'This Unit gains 1 stack of <unit-skill>Blast</unit-skill> every turn.<br /><br />When an enemy is destroyed, once per round, this Unit <unit-skill>gains 1 extra action</unit-skill>.'
         );
         expect(r).toEqual({
             oncePerRound: true,
-            // Sokol's "extra end of round action" → drains after the speed pool.
-            endOfRound: true,
+            // Sokol's plain "1 extra action" → queued at speed, not after the speed pool.
+            endOfRound: false,
             conditions: [],
             trigger: 'on-enemy-destroyed',
         });
@@ -2859,7 +2925,7 @@ describe('parseExtraAction', () => {
 
     it('Harvester: on-ally-destroyed', () => {
         const r = parseExtraAction(
-            'When an allied Unit is destroyed, this Unit gains 1 extra end of round action and <unit-skill>Speed Up I</unit-skill> for 6 turns.'
+            'When an ally is destroyed, this Unit <unit-skill>gains 1 extra end of round action</unit-skill> and <unit-skill>Speed Up I</unit-skill> for 6 turns.'
         );
         expect(r).toEqual({
             oncePerRound: false,
@@ -3005,13 +3071,13 @@ describe('parseHealAbilities', () => {
             { kind: 'heal', pct: 80, basis: 'hp', target: 'all-allies', explicitTarget: true },
         ]);
     });
-    // SP-4e Task 3: "most missing health" NAMES its recipient by live HP, so it carries the
-    // 'lowest-hp-ally' selector rather than the generic 'ally' the engine used to resolve off the
-    // teamBattle run-mode flag. Loose phrasing for lowest HP PERCENTAGE, not an absolute basis.
-    it('most-missing-health routes as lowest-hp-ally', () => {
+    // "most missing HP" NAMES its recipient by live HP, so it carries the 'lowest-hp-ally'
+    // selector rather than the generic 'ally'. Loose phrasing for lowest HP PERCENTAGE, not an
+    // absolute basis.
+    it('most-missing-HP routes as lowest-hp-ally', () => {
         expect(
             parseHealAbilities(
-                'This unit <unit-damage>repairs 30%</unit-damage> of its Max HP to the ally with the most missing health.'
+                'At the start of its turn, this Unit <unit-damage>repairs 30%</unit-damage> of its max HP to the ally with the most missing HP.'
             )
         ).toEqual([
             { kind: 'heal', pct: 30, basis: 'hp', target: 'lowest-hp-ally', explicitTarget: true },
@@ -3025,7 +3091,7 @@ describe('parseHealAbilities', () => {
     it('multi-component heal: HP + Defense (bare → self, explicitTarget false)', () => {
         expect(
             parseHealAbilities(
-                'repairs <unit-damage>5%</unit-damage> of its Max HP with an additional repair equal to 100% of its Defense.'
+                '<unit-damage>repairs 5%</unit-damage> of its max HP with additional repair equal to <unit-damage>100%</unit-damage> of its defense'
             )
         ).toEqual([
             { kind: 'heal', pct: 5, basis: 'hp', target: 'self', explicitTarget: false },
@@ -3068,7 +3134,7 @@ describe('parseHealAbilities', () => {
     it('damage-taken shield IS parsed as a leech (basis damage-taken, requiresHpDamage)', () => {
         expect(
             parseHealAbilities(
-                'gains a Shield equal to 25% of the damage taken when taking HP damage and still having Shield'
+                'gains a <unit-damage>shield equal to 25%</unit-damage> of the damage taken when taking HP damage and still having a shield'
             )
         ).toEqual([
             {
@@ -3132,7 +3198,7 @@ describe('parseHealAbilities', () => {
     it('"X% of damage dealt" repair IS parsed as a dual-recipient leech (Valkyrie burst reaction)', () => {
         expect(
             parseHealAbilities(
-                'this Unit and the ally with the lowest current health percentage <unit-damage>repair 5%</unit-damage> of damage dealt.'
+                'the Unit and the ally with the lowest current health percentage <unit-damage>repair 5%</unit-damage> of the damage dealt.'
             )
         ).toEqual([
             {
@@ -3166,7 +3232,7 @@ describe('parseHealAbilities', () => {
     it('HEAL_ADDITIONAL_RE does not pick up a continuation in a LATER sentence', () => {
         expect(
             parseHealAbilities(
-                'This unit repairs 5% of its Max HP. An unrelated buff with an additional repair equal to 100% of its Defense exists.'
+                'This unit repairs 5% of its Max HP. An unrelated buff with additional repair equal to 100% of its Defense exists.'
             )
         ).toEqual([{ kind: 'heal', pct: 5, basis: 'hp', target: 'self', explicitTarget: false }]);
     });
@@ -3258,7 +3324,7 @@ describe('damage-leech parsing', () => {
 
     it('Valkyrie: dual recipient + Echoing Burst scope → two entries, detonation scope', () => {
         const r = parseHealAbilities(
-            'When an Echoing Burst explodes on an enemy, this Unit and the ally with the lowest current health percentage repair 5% of damage dealt.'
+            'When an <unit-skill>Echoing Burst</unit-skill> explodes on an enemy, the Unit and the ally with the lowest current health percentage <unit-damage>repair 5%</unit-damage> of the damage dealt.'
         );
         expect(r).toHaveLength(2);
         expect(r[0]).toMatchObject({
@@ -3282,7 +3348,7 @@ describe('damage-leech parsing', () => {
 
     it('Quixilver passive: Shield equal to 25% of the damage taken → damage-taken + requiresHpDamage', () => {
         const r = parseHealAbilities(
-            'This Unit gains Shield equal to 25% of the damage taken when taking HP damage and still having Shield.'
+            'This Unit gains a <unit-damage>shield equal to 25%</unit-damage> of the damage taken when taking HP damage and still having a shield.'
         );
         expect(r).toHaveLength(1);
         expect(r[0]).toMatchObject({
@@ -3392,7 +3458,7 @@ describe('parseHealAbilities — unmodeled reactive triggers are NOT emitted', (
     it('Makoli ACTIVE cleanse+repair (cleanses 1 debuff, repairs 5% + 100% Defense) still parses', () => {
         expect(
             parseHealAbilities(
-                'This Unit cleanses 1 debuff, repairs 5% of its Max HP with an additional repair equal to 100% of its Defense, and grants Inc. Damage Down II for 2 turns.'
+                'This Unit <unit-skill>cleanses 1 debuff</unit-skill>, <unit-damage>repairs 5%</unit-damage> of its max HP with additional repair equal to <unit-damage>100%</unit-damage> of its defense and grants <unit-skill>Inc. Damage Down II</unit-skill> for 2 turns.'
             )
         ).toEqual([
             { kind: 'heal', pct: 5, basis: 'hp', target: 'self', explicitTarget: false },
@@ -3401,7 +3467,8 @@ describe('parseHealAbilities — unmodeled reactive triggers are NOT emitted', (
     });
 
     it('Cultivator p2: ally-damage clause → ally-target heal with allySubject damageReaction; 4% cleanse clause carries ownCleanseReaction (Phase 3 PR-H)', () => {
-        // Full CSV p2 text (tags stripped; <br /><br /> → '. ' via the plain pipeline).
+        // Old-corpus p2 text (synthetic; the catalogue text differs), tags stripped and
+        // <br /><br /> → '. ' as the plain pipeline does.
         // The 4% cleanse-reaction clause now carries `ownCleanseReaction` (Phase 3 PR-H: routes
         // to the NEW on-own-cleanse trigger — "cleanses" is NOT a damageReaction shape, a
         // SEPARATE parser-level annotation, see its doc comment); the 8% ally-damaged clause was
@@ -3446,9 +3513,9 @@ describe('parseHealAbilities — unmodeled reactive triggers are NOT emitted', (
         expect(r[0]).toMatchObject({ kind: 'shield', pct: 15, basis: 'damage-taken' });
     });
 
-    it('GUARD: modeled reactive heal "when this Unit critically repairs an ally" still parses', () => {
+    it('GUARD: modeled reactive heal "when it critically repairs an ally" still parses', () => {
         const r = parseHealAbilities(
-            "When this Unit critically repairs an ally, it also repairs that ally for 5% of this Unit's Max HP."
+            "When it critically repairs an ally, it also repairs that ally for 5% of this Unit's Max HP."
         );
         expect(r).toHaveLength(1);
         expect(r[0]).toMatchObject({ kind: 'heal', pct: 5, basis: 'hp' });
@@ -3473,11 +3540,12 @@ describe('parseHealAbilities — unmodeled reactive triggers are NOT emitted', (
 // self hp-threshold). PR 2 (Task 8): ALLY-subject reactions ("when an ally is directly
 // damaged", Cultivator) parse with `damageReaction.allySubject: true`, and self triggers
 // whose heal RECIPIENT is not self (Heliodor's second-listed passive "repairs them
-// [all allies]") parse too. All texts below are real CSV rows.
+// [all allies]") parse too. Most texts below are old-corpus wording (synthetic; the catalogue
+// text differs).
 describe('parseHealAbilities — damage-reaction heals (Phase 4c)', () => {
-    // Makoli and Guardian share this CSV text BYTE-IDENTICALLY (both ships'
+    // Makoli and Guardian shared this old-corpus text byte-identically (both ships'
     // first_passive_skill_text column) — one test covers both.
-    it('Makoli/Guardian first passive (identical CSV text): below-40% gate → ONE heal with damageReaction.hpBelowPct', () => {
+    it('Makoli/Guardian first passive (identical old-corpus text): below-40% gate → ONE heal with damageReaction.hpBelowPct', () => {
         expect(
             parseHealAbilities(
                 'When directly damaged while below 40% HP, this Unit <unit-damage>repairs 20%</unit-damage> of its Max HP.'
@@ -3494,30 +3562,38 @@ describe('parseHealAbilities — damage-reaction heals (Phase 4c)', () => {
         ]);
     });
 
-    it('Isha second passive (CSV second_passive_skill_text): instead-on-crit pair → 3% non-crit + 6% crit (tolerates the "criticall" typo)', () => {
-        expect(
-            parseHealAbilities(
-                'When directly damaged, this Unit <unit-damage>repairs 3%</unit-damage> of its max HP, but when criticall hit, it instead <unit-damage>repairs 6%</unit-damage> of its max HP.'
-            )
-        ).toEqual([
-            {
-                kind: 'heal',
-                pct: 3,
-                basis: 'hp',
-                target: 'self',
-                explicitTarget: false,
-                damageReaction: { critFilter: 'non-crit' },
-            },
-            {
-                kind: 'heal',
-                pct: 6,
-                basis: 'hp',
-                target: 'self',
-                explicitTarget: false,
-                damageReaction: { critFilter: 'crit' },
-            },
-        ]);
-    });
+    // Isha's catalogue text spells it "critcally"; the correct "critically" must read the same,
+    // so an upstream typo fix cannot silently drop her crit / non-crit split.
+    it.each([
+        ['critcally', 'catalogue spelling'],
+        ['critically', 'correct spelling'],
+    ])(
+        'Isha second passive (CSV second_passive_skill_text): instead-on-crit pair → 3% non-crit + 6% crit ("%s", %s)',
+        (spelling) => {
+            expect(
+                parseHealAbilities(
+                    `When directly damaged, this Unit <unit-damage>repairs 3%</unit-damage> of its max HP, but when ${spelling} hit, it instead <unit-damage>repairs 6%</unit-damage> of its max HP.`
+                )
+            ).toEqual([
+                {
+                    kind: 'heal',
+                    pct: 3,
+                    basis: 'hp',
+                    target: 'self',
+                    explicitTarget: false,
+                    damageReaction: { critFilter: 'non-crit' },
+                },
+                {
+                    kind: 'heal',
+                    pct: 6,
+                    basis: 'hp',
+                    target: 'self',
+                    explicitTarget: false,
+                    damageReaction: { critFilter: 'crit' },
+                },
+            ]);
+        }
+    );
 
     it('Heliodor FIRST passive: self repair parses with bare damageReaction; the debuff-duration clause emits nothing', () => {
         expect(
@@ -3656,11 +3732,10 @@ describe('parseHealAbilities — damage-reaction heals (Phase 4c)', () => {
         ]);
     });
 
-    // LOCK: corpus typo "criticall hit" (no trailing 'y') is also matched
-    it('crit-only heal: tolerated typo "criticall hit" → ONE heal with critFilter crit', () => {
+    it('crit-only heal: "is critically hit" → ONE heal with critFilter crit', () => {
         expect(
             parseHealAbilities(
-                'When this unit is criticall hit, this Unit repairs 7% of its Max HP.'
+                'When this unit is critically hit, this Unit repairs 7% of its Max HP.'
             )
         ).toEqual([
             {
@@ -3693,7 +3768,7 @@ describe('parseHealAbilities — damage-reaction heals (Phase 4c)', () => {
     it('GUARD: Isha pair unchanged after crit-hit alternation addition', () => {
         expect(
             parseHealAbilities(
-                'When directly damaged, this Unit <unit-damage>repairs 3%</unit-damage> of its max HP, but when criticall hit, it instead <unit-damage>repairs 6%</unit-damage> of its max HP.'
+                'When directly damaged, this Unit <unit-damage>repairs 3%</unit-damage> of its max HP, but when critcally hit, it instead <unit-damage>repairs 6%</unit-damage> of its max HP.'
             )
         ).toEqual([
             {
@@ -4049,24 +4124,24 @@ describe('detectHpCrossingTrigger', () => {
     });
 });
 
-// Phase 4c PR 3 (Task 6): Hermes charged-skill "If the target has less than N% HP" gate on a
-// grant clause. Sentence-scoped at the grant's anchor; requires "the target".
+// Hermes charged-skill "If an ally has less than N% HP" gate on a grant clause. Sentence-scoped at
+// the grant's anchor.
 describe('detectTargetHpGate', () => {
     const at = (text: string, needle: string) => detectTargetHpGate(text, text.indexOf(needle));
 
-    it('Hermes charged: "If the target has less than 40% HP, it grants Cheat Death" → hpBelowPct 40', () => {
+    it('Hermes charged: "If an ally has less than 40% HP, it grants that ally Cheat Death" → hpBelowPct 40', () => {
         const text =
-            'This Unit <unit-damage>repairs 37%</unit-damage> of its Max HP and <unit-aid>adds 1 charge</unit-aid> to the Charged Skill. If the target has less than 40% HP, it grants <unit-skill>Cheat Death</unit-skill>.';
+            'This Unit <unit-damage>repairs 37%</unit-damage> of its max HP and <unit-skill>adds 1 charge</unit-skill> to the charged skill of allies.<br /><br />If an ally has less than 40% HP, it grants that ally <unit-skill>Cheat Death</unit-skill>.';
         expect(at(text, 'Cheat Death')).toEqual({ hpBelowPct: 40 });
     });
 
     it('Hermes charged: the repair sentence (no target gate) → undefined', () => {
         const text =
-            'This Unit <unit-damage>repairs 37%</unit-damage> of its Max HP and <unit-aid>adds 1 charge</unit-aid> to the Charged Skill. If the target has less than 40% HP, it grants <unit-skill>Cheat Death</unit-skill>.';
+            'This Unit <unit-damage>repairs 37%</unit-damage> of its max HP and <unit-skill>adds 1 charge</unit-skill> to the charged skill of allies.<br /><br />If an ally has less than 40% HP, it grants that ally <unit-skill>Cheat Death</unit-skill>.';
         expect(at(text, 'repairs 37%')).toBeUndefined();
     });
 
-    it('no "the target" in the gated text → undefined', () => {
+    it('no HP gate in the gated text → undefined', () => {
         const text =
             'This Unit gains <unit-skill>Terran Tenacity I</unit-skill> for 3 turns when HP drops below 50%.';
         expect(at(text, 'Terran Tenacity I')).toBeUndefined();
@@ -4074,7 +4149,10 @@ describe('detectTargetHpGate', () => {
 
     it('negative pos → undefined', () => {
         expect(
-            detectTargetHpGate('If the target has less than 40% HP, it grants Cheat Death.', -1)
+            detectTargetHpGate(
+                'If an ally has less than 40% HP, it grants that ally Cheat Death.',
+                -1
+            )
         ).toBeUndefined();
     });
 });
@@ -4180,12 +4258,12 @@ describe('parsePurge', () => {
     it('does not match passive-voice "is Purged of all buffs" (deferred to C2b)', () => {
         expect(parsePurge('is Purged of all buffs')).toEqual([]);
     });
-    it('context-free double-match on Sefuba p2 reactive text (EXPECTED — slot-gate in Task 3 excludes passives)', () => {
-        // parsePurge is context-free: both "purges an enemy buff" and "purges 1 more buff"
-        // match. Task 3 gates emission to active/charged slots only, so Sefuba's passive text
-        // is never emitted. This assertion pins the known double-match as deliberate.
+    it("context-free double-match on Sefuba p2 reactive text (expected — emission is not parsePurge's call)", () => {
+        // parsePurge is context-free: both "purges a buff" and "purges 1 extra buff" match.
+        // Whether a passive purge is emitted is decided by buildShipAbilities' purge loop, so this
+        // assertion pins the double-match as deliberate.
         const result = parsePurge(
-            'when this unit purges an enemy buff, it repairs itself for 12% and purges 1 more buff from the enemy'
+            'When this Unit <unit-skill>purges a buff</unit-skill> from an enemy, it <unit-damage>repairs 8%</unit-damage> of its max HP for each <unit-aid>buff</unit-aid> removed and also <unit-skill>purges 1 extra buff</unit-skill> from the enemy.'
         );
         expect(result).toHaveLength(2);
         expect(result[0]).toEqual({ count: 1, target: 'enemy', explicitTarget: true });
@@ -4212,9 +4290,8 @@ describe('parsePurge — E4 crit-power scaling', () => {
     });
 });
 
-// PR10: buff steal. RAW strings verbatim from docs/ship-skills.csv (Pallas/Thresh/Tithonus
-// charged-skill text). Confirmed via `grep -iE "^(Pallas|Thresh|Tithonus|Meatshield),"
-// docs/ship-skills.csv` (2026-07-04).
+// PR10: buff steal. Tagged strings in the old-corpus wording of Pallas/Thresh/Tithonus's
+// charged skills and Meatshield's passive (synthetic; the catalogue text differs).
 const PALLAS_CHARGED_RAW =
     'This Unit steals 1 buff from the primary target, then deals <unit-damage>260% damage</unit-damage>.';
 const THRESH_CHARGED_RAW =
@@ -4225,19 +4302,19 @@ const MEATSHIELD_PASSIVE_RAW =
     'This Unit <unit-damage>repairs 1.5%</unit-damage> of its max HP for each <unit-aid>debuff</unit-aid> on itself.<br /><br />If this Unit has less than 3 stacks of <unit-skill>Protection</unit-skill>, it steals <unit-skill>Protection</unit-skill> until this Unit has 3 stacks of <unit-skill>Protection</unit-skill>.';
 
 describe('parseBuffSteal (PR10)', () => {
-    it('parses Pallas charged RAW text: count 1, no adjacent-ally grant', () => {
+    it('parses Pallas charged old-corpus text: count 1, no adjacent-ally grant', () => {
         expect(parseBuffSteal(PALLAS_CHARGED_RAW)).toEqual([
             { count: 1, grantAdjacentAllies: false },
         ]);
     });
 
-    it('parses Thresh charged RAW text: count 1, no adjacent-ally grant (steal clause is independent of the trailing Defender-gated buff sentence)', () => {
+    it('parses Thresh charged old-corpus text: count 1, no adjacent-ally grant (steal clause is independent of the trailing Defender-gated buff sentence)', () => {
         expect(parseBuffSteal(THRESH_CHARGED_RAW)).toEqual([
             { count: 1, grantAdjacentAllies: false },
         ]);
     });
 
-    it('parses Tithonus charged RAW text: count 1, grantAdjacentAllies true — and does NOT cannibalize the sibling purge clause', () => {
+    it('parses Tithonus charged old-corpus text: count 1, grantAdjacentAllies true — and does NOT cannibalize the sibling purge clause', () => {
         expect(parseBuffSteal(TITHONUS_CHARGED_RAW)).toEqual([
             { count: 1, grantAdjacentAllies: true },
         ]);
@@ -4273,42 +4350,9 @@ describe('parseBuffSteal (PR10)', () => {
     });
 });
 
-// I6: Lodolite charged purge + legendary-refit shield strip. RAW strings verbatim from
-// docs/ship-skills.csv (Lodolite row).
-const LODOLITE_CHARGED_RAW =
-    "This Unit deals <unit-damage>310% damage</unit-damage> and additional damage equal to <unit-damage>10%</unit-damage> of this Unit's max HP. Then, the enemy with the most <unit-aid>Buffs</unit-aid> is Purged of all buffs.<br />This attack can target <unit-aid>Stealthed</unit-aid> enemies.";
+// I6: Lodolite legendary-refit shield strip. The R4 passive is verbatim from docs/ship-skills.csv.
 const LODOLITE_R4_PASSIVE_RAW =
-    "This Unit ignores <unit-skill>Stealth</unit-skill> effects.<br /><br />This Unit deals <unit-damage>10% more critical damage</unit-damage> to defenders, all allies deal <unit-damage>15% more direct damage</unit-damage> to enemies with <unit-skill>Concentrate Fire</unit-skill> or <unit-skill>Stealth</unit-skill>.<br /><br />When this Unit <unit-aid>Purges a buff</unit-aid> from an enemy, it <unit-damage>removes 100%</unit-damage> of the enemy's shield.";
-
-describe('detectPassiveVoicePurge (I6 — Lodolite charged purge)', () => {
-    it('parses the bare phrase "is Purged of all buffs" → count all, target enemy', () => {
-        expect(detectPassiveVoicePurge('is Purged of all buffs')).toEqual([
-            { count: 'all', target: 'enemy', explicitTarget: true },
-        ]);
-    });
-
-    it('parses a numeric count: "is purged of 2 buffs"', () => {
-        expect(detectPassiveVoicePurge('is purged of 2 buffs')).toEqual([
-            { count: 2, target: 'enemy', explicitTarget: true },
-        ]);
-    });
-
-    it('parses Lodolite charged RAW text (with tags) → count all, target enemy', () => {
-        expect(detectPassiveVoicePurge(LODOLITE_CHARGED_RAW)).toEqual([
-            { count: 'all', target: 'enemy', explicitTarget: true },
-        ]);
-    });
-
-    it('returns [] for text with no passive-voice purge phrase', () => {
-        expect(detectPassiveVoicePurge('This Unit purges 1 buff from the enemy.')).toEqual([]);
-        expect(detectPassiveVoicePurge('This Unit deals 100% damage.')).toEqual([]);
-    });
-
-    it('returns [] for null/undefined', () => {
-        expect(detectPassiveVoicePurge(null)).toEqual([]);
-        expect(detectPassiveVoicePurge(undefined)).toEqual([]);
-    });
-});
+    "This Unit ignores <unit-skill>Stealth</unit-skill> effects.<br /><br />This Unit deals <unit-damage>10% more critical damage</unit-damage> to defenders, all allies deal <unit-damage>15% more direct damage</unit-damage> to enemies with <unit-skill>Concentrate Fire</unit-skill> or <unit-skill>Stealth</unit-skill>.<br /><br />When this Unit <unit-aid>purges a buff</unit-aid> from an enemy, it <unit-damage>removes 100%</unit-damage> of the enemy's shield.";
 
 describe('detectPurgeStripsShield (I6 — Lodolite legendary refit)', () => {
     it('recognizes the RAW Lodolite R4 passive clause ("removes 100% of the enemy\'s shield")', () => {
@@ -4324,7 +4368,8 @@ describe('detectPurgeStripsShield (I6 — Lodolite legendary refit)', () => {
     });
 
     it('does NOT fire for a shield-removal clause with no purge language (guard against false positives)', () => {
-        // Real corpus lines (docs/ship-skills.csv) — "removes N% … Shield" with no self-purge trigger.
+        // Old-corpus lines (synthetic; the catalogue text differs) — "removes N% … Shield" with no
+        // self-purge trigger.
         expect(
             detectPurgeStripsShield(
                 'removes 30% of the enemy Shield, and inflicts Speed Down II and Crit Power Down III for 2 turns'
@@ -4358,8 +4403,8 @@ describe('detectPurgeStripsShield (I6 — Lodolite legendary refit)', () => {
 });
 
 describe('parseShieldStrip (PR9b — standalone "removes X% of the enemy Shield")', () => {
-    // RAW CSV rows (docs/ship-skills.csv), verbatim — the "other 3" rows referenced by
-    // detectPurgeStripsShield's comment ("the other 3 corpus rows carry no purge language
+    // Old-corpus wording of the APEX, Laika and Malvex rows (synthetic; the catalogue text
+    // differs) — the "other 3" rows referenced by detectPurgeStripsShield's comment ("the other 3 corpus rows carry no purge language
     // at all"). This is a STANDALONE on-cast strip, never gated on a purge landing.
     it('parses APEX\'s active skill ("removes 30% of the enemy Shield")', () => {
         const apexActive =
@@ -4386,14 +4431,12 @@ describe('parseShieldStrip (PR9b — standalone "removes X% of the enemy Shield"
     });
 
     // Negative: Lodolite's I6 clause carries "removes 100% of the enemy's shield" too, but it
-    // is PURGE-COUPLED ("When this Unit Purges a buff from an enemy, it removes...") — that
+    // is PURGE-COUPLED ("When this Unit purges a buff from an enemy, it removes...") — that
     // stays modeled exclusively by detectPurgeStripsShield's `stripsShield` flag (gated on the
     // purge landing). parseShieldStrip must NOT also mint a standalone ability for it, or the
     // strip would double-apply (100% + another 100%).
     it('does NOT fire for the Lodolite purge-coupled clause (guard against double-modeling with I6)', () => {
-        const lodoliteR4Passive =
-            "This Unit ignores <unit-skill>Stealth</unit-skill> effects.<br /><br />This Unit deals <unit-damage>10% more critical damage</unit-damage> to defenders, all allies deal <unit-damage>15% more direct damage</unit-damage> to enemies with <unit-skill>Concentrate Fire</unit-skill> or <unit-skill>Stealth</unit-skill>.<br /><br />When this Unit <unit-aid>Purges a buff</unit-aid> from an enemy, it <unit-damage>removes 100%</unit-damage> of the enemy's shield.";
-        expect(parseShieldStrip(lodoliteR4Passive)).toBeNull();
+        expect(parseShieldStrip(LODOLITE_R4_PASSIVE_RAW)).toBeNull();
         expect(
             parseShieldStrip(
                 "When this Unit purges a buff from an enemy, it removes 100% of the enemy's shield."
@@ -4421,9 +4464,9 @@ describe('parseHealNoCrit', () => {
     });
 });
 
-describe('Chakara "starts each round with" extraction (Gap A)', () => {
+describe('Chakara start-of-round self-buff extraction', () => {
     const txt =
-        'This Unit starts each round with <unit-skill>Attack Up II</unit-skill> and <unit-skill>Defense Up II</unit-skill> for 1 turn if it has the lowest speed among all Allies. Then, deals <unit-damage>60% damage</unit-damage> to the highest Speed Enemy.';
+        'At the start of the round, if this Unit has the lowest speed among all allies, it gains <unit-skill>Attack Up II</unit-skill> and <unit-skill>Defense Up II</unit-skill> for 1 turn. Then deals <unit-damage>60% damage</unit-damage> to the enemy with the highest speed.';
 
     it('extracts BOTH self-buffs with duration 1', () => {
         const effects = parseSkillEffects(txt, 'passive2');
@@ -4481,10 +4524,10 @@ describe('detectIgnoresForcedTargeting', () => {
         ).toBe(false);
     });
 
-    it('returns false for a condition reader ("against Taunted or Provoked enemies")', () => {
+    it('returns false for a condition reader ("to enemies affected by Taunt or Provoke", Rikra)', () => {
         expect(
             detectIgnoresForcedTargeting(
-                'deals 180% damage with additional 60% damage against Taunted or Provoked enemies.'
+                'This Unit deals <unit-damage>140% damage</unit-damage> with an additional <unit-damage>60% damage</unit-damage> to enemies affected by <unit-skill>Taunt</unit-skill> or <unit-skill>Provoke</unit-skill>.'
             )
         ).toBe(false);
     });
@@ -4515,12 +4558,20 @@ describe('parseStasisBreakExemption', () => {
     const UNGATED = { conditions: [] };
     const SHIELD_GATED = { conditions: [{ subject: 'self-shield', derivable: true }] };
 
-    it('detects Akula curly-apostrophe "don\'t break Stasis" — UNGATED', () => {
+    it('detects Akula "do not reduce Stasis" — UNGATED', () => {
         expect(
             parseStasisBreakExemption(
-                'This Unit’s attacks don’t break Stasis. Increases outgoing direct damage by up to 30% based on the target’s current HP percentage; the higher the percentage, the more the damage.'
+                "This Unit's attacks do not reduce <unit-skill>Stasis</unit-skill>, and also ignore <unit-skill>Taunt</unit-skill> and <unit-skill>Provoke</unit-skill> effects. <br /><br />This Unit <unit-damage>increases outgoing direct damage</unit-damage> based on the enemies current HP, up to <unit-damage>30%</unit-damage> when the enemy is at full HP."
             )
         ).toEqual(UNGATED);
+    });
+
+    // Synthetic input: the catalogue says "do not reduce Stasis"; this guards the typographic
+    // (curly-apostrophe) spelling of the "don't break" arm.
+    it('detects curly-apostrophe "don’t break Stasis" — UNGATED (synthetic)', () => {
+        expect(parseStasisBreakExemption('This Unit’s attacks don’t break Stasis.')).toEqual(
+            UNGATED
+        );
     });
 
     it('detects bare "do not break Stasis" (Tygr — regression guard)', () => {
@@ -4591,28 +4642,28 @@ describe('parseStasisBreakExemption', () => {
 
 // C2b-1 T5: on-enemy-purged and on-ally-purged heal trigger detectors.
 // All three RAW strings below are taken verbatim from docs/ship-skills.csv.
-// Regexes must match THROUGH <unit-aid>/<unit-damage> tags (loose [^.;]* gaps).
+// Regexes must match THROUGH <unit-skill>/<unit-damage> tags (loose [^.;]* gaps).
 const SEFUBA_P1_RAW =
-    'When this Unit <unit-aid>purges a buff</unit-aid> from an enemy, it <unit-damage>repairs itself for 8%</unit-damage> Max HP.';
+    'When this Unit <unit-skill>purges a buff</unit-skill> from an enemy, it <unit-damage>repairs 8%</unit-damage> of its max HP for each <unit-aid>buff</unit-aid> removed.';
 const SEFUBA_P2_RAW =
-    'When this Unit <unit-aid>purges an enemy buff</unit-aid>, it <unit-damage>repairs itself for 12%</unit-damage> Max HP and <unit-aid>purges 1</unit-aid> more buff from the enemy.';
-const SALVATION_P3_RAW =
-    "When this Unit is destroyed it <unit-damage>repairs 80%</unit-damage> of its max HP to all allies.<br /><br />When a <unit-aid>buff</unit-aid> is <unit-aid>purged</unit-aid> from an ally, this Unit <unit-damage>repairs that ally for 5%</unit-damage> of this Unit's max HP.";
+    'When this Unit <unit-skill>purges a buff</unit-skill> from an enemy, it <unit-damage>repairs 8%</unit-damage> of its max HP for each <unit-aid>buff</unit-aid> removed and also <unit-skill>purges 1 extra buff</unit-skill> from the enemy.';
+const SALVATION_P2_RAW =
+    "When this Unit is destroyed it <unit-damage>repairs 80%</unit-damage> of its max HP to all allies.<br /><br />When a <unit-aid>buff</unit-aid> is <unit-skill>purged</unit-skill> from an ally, this Unit <unit-damage>repairs that ally for 5%</unit-damage> of this Unit's max HP.";
 
 describe('detectEnemyPurgedTrigger', () => {
     it('returns on-enemy-purged for Sefuba p1 (anchor inside the purge sentence)', () => {
-        const pos = SEFUBA_P1_RAW.search(/repairs itself/i);
+        const pos = SEFUBA_P1_RAW.search(/repairs 8%/i);
         expect(detectEnemyPurgedTrigger(SEFUBA_P1_RAW, pos)).toBe('on-enemy-purged');
     });
 
     it('returns on-enemy-purged for Sefuba p2 (anchor inside the purge sentence)', () => {
-        const pos = SEFUBA_P2_RAW.search(/repairs itself/i);
+        const pos = SEFUBA_P2_RAW.search(/repairs 8%/i);
         expect(detectEnemyPurgedTrigger(SEFUBA_P2_RAW, pos)).toBe('on-enemy-purged');
     });
 
-    it('returns undefined for Salvation p3 (no "this unit purges … enemy" phrasing)', () => {
-        const pos = SALVATION_P3_RAW.search(/repairs that ally/i);
-        expect(detectEnemyPurgedTrigger(SALVATION_P3_RAW, pos)).toBeUndefined();
+    it('returns undefined for Salvation p2 (no "this unit purges … enemy" phrasing)', () => {
+        const pos = SALVATION_P2_RAW.search(/repairs that ally/i);
+        expect(detectEnemyPurgedTrigger(SALVATION_P2_RAW, pos)).toBeUndefined();
     });
 
     it('is position-scoped: returns undefined when anchor is in a different sentence', () => {
@@ -4631,36 +4682,36 @@ describe('detectEnemyPurgedTrigger', () => {
 });
 
 describe('detectAllyPurgedTrigger', () => {
-    it('returns on-ally-purged for Salvation p3 (anchor inside the ally-purge sentence)', () => {
-        const pos = SALVATION_P3_RAW.search(/repairs that ally/i);
-        expect(detectAllyPurgedTrigger(SALVATION_P3_RAW, pos)).toBe('on-ally-purged');
+    it('returns on-ally-purged for Salvation p2 (anchor inside the ally-purge sentence)', () => {
+        const pos = SALVATION_P2_RAW.search(/repairs that ally/i);
+        expect(detectAllyPurgedTrigger(SALVATION_P2_RAW, pos)).toBe('on-ally-purged');
     });
 
     it('returns undefined for Sefuba p1 (no "buff is purged from an ally" phrasing)', () => {
-        const pos = SEFUBA_P1_RAW.search(/repairs itself/i);
+        const pos = SEFUBA_P1_RAW.search(/repairs 8%/i);
         expect(detectAllyPurgedTrigger(SEFUBA_P1_RAW, pos)).toBeUndefined();
     });
 
     it('returns undefined for Sefuba p2 (no "buff is purged from an ally" phrasing)', () => {
-        const pos = SEFUBA_P2_RAW.search(/repairs itself/i);
+        const pos = SEFUBA_P2_RAW.search(/repairs 8%/i);
         expect(detectAllyPurgedTrigger(SEFUBA_P2_RAW, pos)).toBeUndefined();
     });
 
-    it('is position-scoped: an anchor in the on-destroyed sentence of Salvation p3 is not stamped', () => {
+    it('is position-scoped: an anchor in the on-destroyed sentence of Salvation p2 is not stamped', () => {
         // The on-destroyed sentence is before the <br /><br /> — its "repairs 80%" anchor
         // must NOT get on-ally-purged.
-        const pos = SALVATION_P3_RAW.search(/repairs 80%/i);
-        expect(detectAllyPurgedTrigger(SALVATION_P3_RAW, pos)).toBeUndefined();
+        const pos = SALVATION_P2_RAW.search(/repairs 80%/i);
+        expect(detectAllyPurgedTrigger(SALVATION_P2_RAW, pos)).toBeUndefined();
     });
 
     it('returns undefined for negative anchor', () => {
-        expect(detectAllyPurgedTrigger(SALVATION_P3_RAW, -1)).toBeUndefined();
+        expect(detectAllyPurgedTrigger(SALVATION_P2_RAW, -1)).toBeUndefined();
     });
 });
 
 // ---------------------------------------------------------------------------
 // C2b-2 T4: detectEndOfRoundPurgeTrigger + detectMostBuffsTarget (Rhodium)
-// RAW strings from docs/ship-skills.csv (Rhodium row).
+// Old-corpus wording of the Rhodium and Iridium rows (synthetic; the catalogue text differs).
 // Regexes must match THROUGH <unit-aid> tags (loose [^.;]* gaps).
 // ---------------------------------------------------------------------------
 const RHODIUM_P1_RAW =
@@ -4692,12 +4743,12 @@ describe('detectEndOfRoundPurgeTrigger', () => {
     });
 });
 
-// C2b-2 T6: detectKilledByDirectDamageTrigger (Faust)
+// detectKilledByDirectDamageTrigger (Faust)
 // RAW strings from docs/ship-skills.csv (Faust row, passive 1 & 2).
 const FAUST_P1_RAW =
-    'This Unit <unit-aid>purges 2</unit-aid> buffs from the enemy when killed by direct Damage.';
+    'This Unit <unit-skill>purges 2 buffs</unit-skill> from the enemy when destroyed by direct damage.';
 const FAUST_P2_RAW =
-    'This Unit <unit-aid>purges 3</unit-aid> buffs from the enemy when killed by direct Damage.';
+    'This Unit <unit-skill>purges 3 buffs</unit-skill> from the enemy when destroyed by direct damage.';
 
 describe('detectKilledByDirectDamageTrigger', () => {
     it('returns on-destroyed for Faust p1 (anchor inside the purge sentence)', () => {
@@ -4710,12 +4761,12 @@ describe('detectKilledByDirectDamageTrigger', () => {
         expect(detectKilledByDirectDamageTrigger(FAUST_P2_RAW, pos)).toBe('on-destroyed');
     });
 
-    it('returns undefined for Iridium p1 (no "killed by direct damage" phrase)', () => {
+    it('returns undefined for Iridium p1 (no "destroyed by direct damage" phrase)', () => {
         const pos = IRIDIUM_P1_RAW.search(/purge/i);
         expect(detectKilledByDirectDamageTrigger(IRIDIUM_P1_RAW, pos)).toBeUndefined();
     });
 
-    it('returns undefined for Rhodium p1 (no "killed by direct damage" phrase)', () => {
+    it('returns undefined for Rhodium p1 (no "destroyed by direct damage" phrase)', () => {
         const pos = RHODIUM_P1_RAW.search(/purge/i);
         expect(detectKilledByDirectDamageTrigger(RHODIUM_P1_RAW, pos)).toBeUndefined();
     });
@@ -4815,7 +4866,7 @@ describe('parseChargeRemoval', () => {
     it('on-cast removal — Provider (amount 1)', () => {
         expect(
             parseChargeRemoval(
-                'This Unit deals 200% damage, removes 1 charge from the enemy, and extends active Damage Over Time effects by 1 turn.'
+                "This Unit deals <unit-damage>200% damage</unit-damage>, <unit-skill>removes 1 charge</unit-skill> from the enemy's charged skill and all <unit-skill>damage over time debuffs</unit-skill> are <unit-skill>extended by 1 turn</unit-skill>."
             )
         ).toEqual({ amount: 1, trigger: 'on-cast' });
     });
@@ -4876,7 +4927,7 @@ describe('parseChargeRemoval', () => {
         ).toEqual({ amount: 2, trigger: 'on-cast' });
         expect(
             parseChargeRemoval(
-                'This Unit deals 200% damage, removes 1 charge from the enemy, and extends active Damage Over Time effects by 1 turn.'
+                "This Unit deals <unit-damage>200% damage</unit-damage>, <unit-skill>removes 1 charge</unit-skill> from the enemy's charged skill and all <unit-skill>damage over time debuffs</unit-skill> are <unit-skill>extended by 1 turn</unit-skill>."
             )
         ).toEqual({ amount: 1, trigger: 'on-cast' });
         expect(
@@ -5044,13 +5095,13 @@ describe('parseEnemyChargedCastReaction (Curator enemy-charged-cast reaction)', 
         ).toBeNull();
     });
 
-    // Real-corpus lock (Task 7): FrontLine's VERBATIM second-passive text from docs/ship-skills.csv
-    // — full <unit-damage> tags AND the "Shield equal to 25% of its Max HP at the start of combat"
-    // preamble (which must NOT be mistaken for the reaction's shield). Mirrors the Curator real-data
-    // test (Task 5): exercises tag stripping + preamble exclusion on the genuine game string.
+    // Real-corpus lock: FrontLine's VERBATIM second-passive text from docs/ship-skills.csv — full
+    // <unit-damage> tags AND the start-of-combat "shield equal to 25% of its max HP" preamble
+    // (which must NOT be mistaken for the reaction's shield). Exercises tag stripping + preamble
+    // exclusion on the genuine game string.
     it('FrontLine VERBATIM CSV second-passive text → exactly the damage(80)+shield(damage-dealt,30) pair', () => {
         const FRONTLINE_R2_VERBATIM =
-            'This ship has 20% Shield Penetration.<br />While Shielded, it gains 2500 additional Defense.<br />This Unit gains <unit-damage>Shield equal to 25%</unit-damage> of its Max HP at the start of combat.<br /><br />When an enemy uses their Charged skill, it deals <unit-damage>80%</unit-damage> and gains a Shield equal to <unit-damage>30%</unit-damage> of the damage dealt, once per round.';
+            'This ship has <unit-damage>20% shield penetration</unit-damage>.<br /><br />At the start of combat this Unit gains a <unit-damage>shield equal to 25%</unit-damage> of its max HP and while it has an active shield, it gains 2500 defense.<br /><br />When an enemy uses their charged skill, this Unit deals <unit-damage>80% damage</unit-damage> and gains a <unit-damage>shield equal to 30%</unit-damage> of the damage dealt, once per round.';
         const abilities = parseEnemyChargedCastReaction(FRONTLINE_R2_VERBATIM);
         expect(abilities).not.toBeNull();
         expect(abilities).toHaveLength(2);
@@ -5210,7 +5261,7 @@ describe('parseControlInflicts', () => {
 
 describe('parseOnResistHpDamage (Vindicator p2 reactive)', () => {
     const VINDICATOR_P2 =
-        "This Unit has 20% Shield Penetration. At the start of combat, this Unit gains <unit-skill>Magnetized Shielding</unit-skill>.<br /><br />When this Unit resists a debuff infliction from an enemy, it deals <unit-damage>damage equal to 30%</unit-damage> of this Unit's max HP to that enemy.";
+        "This Unit has <unit-damage>20% shield penetration</unit-damage>.<br /><br />At the start of combat, this Unit gains <unit-skill>Magnetized Shielding</unit-skill>.<br /><br />When this Unit resists a <unit-aid>debuff</unit-aid> infliction from an enemy, it deals damage equal to <unit-damage>30%</unit-damage> of this Unit's max HP to that enemy.";
 
     it('parses the on-resist max-HP damage percentage', () => {
         expect(parseOnResistHpDamage(VINDICATOR_P2)).toEqual({ pct: 30 });
@@ -5219,7 +5270,7 @@ describe('parseOnResistHpDamage (Vindicator p2 reactive)', () => {
     it('returns null for an on-death max-HP proc (Paracelsus p1 — different trigger)', () => {
         expect(
             parseOnResistHpDamage(
-                'Upon being killed by direct Damage, this Unit deals <unit-damage>Damage equal to 50%</unit-damage> of its max HP.'
+                'Upon being destroyed by direct damage, this Unit deals <unit-damage>damage equal to 50%</unit-damage> of its max HP.'
             )
         ).toBeNull();
     });
@@ -5357,7 +5408,7 @@ describe('parseOverRepairRedirect', () => {
 });
 
 describe("detectTopUpBuffSteal (Meatshield's charged Protection clause)", () => {
-    it('parses the real RAW charged text: Protection, up to 3 stacks', () => {
+    it('parses the old-corpus passive text: Protection, up to 3 stacks', () => {
         expect(detectTopUpBuffSteal(MEATSHIELD_PASSIVE_RAW)).toEqual([
             { buffName: 'Protection', upToStacks: 3 },
         ]);

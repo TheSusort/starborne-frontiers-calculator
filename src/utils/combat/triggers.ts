@@ -491,10 +491,10 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
  *    of on-enemy-cleansed. Stamps eventCtx.cleansedAllyIds = e.targets (the actually-cleansed
  *    recipients) so an 'ally'-target reaction fans out to exactly those ids (reactiveRecipients);
  *    a 'self'-target reaction ignores it. One enqueue per qualifying (>= 1 real removal) cast.
- *  - on-enemy-buffed → buff-applied where isOpposing(actorId) (Nuqtu's
- *    self-cleanse + Terran Bolster III grant, "when an enemy gets buffed"). actorId is the
- *    buff RECIPIENT (events.ts), so this fires once per opposing-side buff application. Both
- *    effects are self-target — no eventCtx capture needed.
+ *  - on-enemy-buffed → buff-applied where isOpposing(actorId) (Nuqtu's Terran Bolster III
+ *    grant and, at refit 2, her Core Charge I stack, "when an enemy gains a buff"). actorId is
+ *    the buff RECIPIENT (events.ts), so this fires once per opposing-side buff application.
+ *    Self-target — no eventCtx capture needed.
  *  - on-hp-threshold-crossed → hp-changed where targetId === ownerId and the event is a
  *    DOWNWARD crossing of N (oldPct >= N > newPct), N read from the ability's self
  *    hp-threshold condition (trigger CONFIG — executeIntent scrubs it from the drain-time
@@ -526,8 +526,8 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
  * debuff shape predating #592, matching the `application === 'apply'` landing branches in
  * playerTurn.ts and this file's reactive debuff executor).
  *
- * `filter === undefined` (a clause with no "inflict"/"apply" verb of its own — OLD APEX's "gets
- * debuffed", Firewall's "when debuffed") takes neither reading and passes unconditionally.
+ * `filter === undefined` (a clause with no "inflict"/"apply" verb of its own — Firewall's
+ * "when debuffed") takes neither reading and passes unconditionally.
  */
 function passesApplicationFilter(
     filter: 'inflict' | 'apply' | undefined,
@@ -1249,11 +1249,12 @@ export function registerReactiveListeners(args: {
                         // (hit, victim) collapse is what this one-enqueue-per-event shape guards: a
                         // single-hit 3-victim AoE that crits two victims still fires ONCE. Both
                         // halves are pinned by perSubAttackEvents.integration.test.ts. SELF-target
-                        // riders (Hermes's charge + Everliving Regeneration) behave the SAME as
-                        // ally-routed ones: `on-ally-crit` is NOT in PER_HIT_REACTIVE_TRIGGERS, so
-                        // oncePerAttackGuardKey does not collapse them across sub-attacks. This
-                        // one-enqueue-per-event shape is the whole collapse, and it is enough.
-                        // Locked by hermesOncePerAttack.integration.test.ts.
+                        // riders (Hermes's charge) behave the SAME as ally-routed ones (Hermes's
+                        // Everliving Regeneration grant to the critting ally): `on-ally-crit` is
+                        // NOT in PER_HIT_REACTIVE_TRIGGERS, so oncePerAttackGuardKey does not
+                        // collapse them across sub-attacks. This one-enqueue-per-event shape is
+                        // the whole collapse, and it is enough. Locked by
+                        // hermesOncePerAttack.integration.test.ts.
                         if (!e.didCrit && (e.critHits ?? 0) === 0) return;
                         // The enemies actually crit. `critVictimIds` is present only on the
                         // POSITIONAL deferred emit; the single-target inline emit omits it, where
@@ -1946,8 +1947,8 @@ export function registerReactiveListeners(args: {
                 case 'on-enemy-purged':
                     bus.on('purge-performed', (e) => {
                         // Self-scoped on the caster: THIS owner purged an enemy (Sefuba).
-                        // Route counterTargetId = e.targetId so Sefuba's chain "purge 1 more"
-                        // re-purges the SAME victim (victim-routing).
+                        // Route counterTargetId = e.targetId so Sefuba's chain "purges 1 extra
+                        // buff" re-purges the SAME victim (victim-routing).
                         // fromPurgeEvent guards the chain purge from re-emitting → depth-1.
                         // purgedBuffCount carries THIS purge's removed count to a "for each buff
                         // removed" repair. The chain purge emits no purge-performed, so its
@@ -2372,14 +2373,14 @@ export interface IntentExecContext {
      *  shrinks `PendingBomb.countdown` alongside the statusEngine debuffs (a Bomb is a Debuff).
      *  Absent (unit-test ctxs) → `reduceBombsOnVictim` falls back to a bare shield-then-HP debit. */
     forceDetonateBomb?: (victim: CombatActor, sourceId: string, damage: number) => void;
-    /** Resolve ANY actor's ship role (Ship.type) by id, either side — the
-     *  SAME `roleByActorId` map (side-agnostic by key) Meatshield's defense-substitution and
-     *  Graphite's `roleFilter` reaction-time check already consume. Used by the reactive `purge`
-     *  branch to re-check an `enemy-type` gate (scrubbed from the generic drain gate above)
-     *  against the REAL victim of an on-deal-damage purge (Zeolite: "… when dealing damage to a
-     *  Defender"), team-symmetrically. Optional — absent in unit-test ctxs that don't drive it
-     *  (an `enemy-type`-gated purge with no `roleOf` reads `undefined` → matchesRoleCategory
-     *  always false → conservative no-op).
+    /** Resolve ANY actor's ship role (Ship.type) by id, either side — the SAME `roleByActorId` map
+     *  (side-agnostic by key) Meatshield's defense-substitution and Graphite's `roleFilter`
+     *  reaction-time check already consume. Used by the reactive `purge` branch to re-check an
+     *  `enemy-type` gate (scrubbed from the generic drain gate above) against the REAL victim of an
+     *  on-deal-damage purge (Zeolite: "When this Unit deals damage to a defender …"),
+     *  team-symmetrically. Optional — absent in unit-test ctxs that don't drive it (an
+     *  `enemy-type`-gated purge with no `roleOf` reads `undefined` → matchesRoleCategory always
+     *  false → conservative no-op).
      *
      *  ALSO read by `recipientFilter.notRole` ("non-defender allies", Chimei R2) in
      *  `footprintFilteredRecipients`. Sharing this one map keeps the RECIPIENT axis and the
@@ -2668,9 +2669,9 @@ function dispatchType(intent: Intent): Ability['config']['type'] {
  *  so each half re-groups the way the author wrote it. DELIBERATELY NOT ATTEMPTED: it changes
  *  which conditions gate where, so it needs an owner ruling on the intended semantics and its own
  *  tests. */
-/** An on-deal-damage reaction's `enemy-type` conditions ("after damaging a Debuffer or
- *  Supporter", Zeolite's "when dealing damage to a Defender") name the role of a ship the attack
- *  HIT. They never gate globally — the fight-wide `ctx.enemyType` scalar describes no actor and is
+/** An on-deal-damage reaction's `enemy-type` conditions ("after damaging a debuffer or supporter",
+ *  Zeolite's "When this Unit deals damage to a defender") name the role of a ship the attack HIT.
+ *  They never gate globally — the fight-wide `ctx.enemyType` scalar describes no actor and is
  *  undefined for an enemy-owned reaction — and are checked by `dealtVictimRoleGateMet` instead.
  *  `perVictimOk` must not take them either: its per-victim ctx carries that same undefined
  *  `enemyType`, so they would always block. */
@@ -5604,7 +5605,7 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // gate tick the healing-on pass does not, desynchronizing the proc stream across sims.
         if (!ctx.healing) return; // healing mode off → not-simulated follow-up
         if (!passesProcChanceGate(intent, ctx)) return;
-        // "(once per round)" cap (Nuqtu's self-cleanse). Mirrors the heal/shield branch's
+        // "once per round" cap (Nuqtu's self-cleanse). Mirrors the heal/shield branch's
         // ordering (procChance, THEN oncePerRound). Every other cleanse ability leaves
         // `oncePerRound` unset and passes through.
         if (!passesOncePerRoundGate(intent, ctx)) return;
@@ -5977,7 +5978,7 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // Target: enemy-most-buffs (Rhodium) → the opposing actor with the most buffs;
         // else the routed attacker/killer (counterTargetId — Iridium/Faust) else the REAL
         // victim this event carries (eventCtx.victimId — the on-deal-damage purge,
-        // Zeolite: "purges 1 buff from the enemy when dealing damage to a Defender" — the
+        // Zeolite: "When this Unit deals damage to a defender it purges 1 buff" — the
         // owner's own damage target, mirrors the `dot`/`convert-dot` branches' victimId seam).
         // Nothing resolved → NO-OP.
         const targetId =

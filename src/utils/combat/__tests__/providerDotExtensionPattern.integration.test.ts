@@ -1,20 +1,16 @@
 /**
  * Provider's charged extends DoTs on the enemies it targets, resolved by the extend-dot ability's
- * `target`:
- *   - catalogue text "…and all damage over time debuffs are extended by 1 turn" parses
- *     `extend-dot|all-enemies` → every enemy the cast's pattern hits;
- *   - our docs/ship-skills.csv text "…and extends active Damage Over Time effects by 1 turn"
- *     parses `extend-dot|enemy` → the cast's primary target only.
+ * `target`: "…and all damage over time debuffs are extended by 1 turn" parses
+ * `extend-dot|all-enemies` → every enemy the cast's pattern hits.
  *
  * Fight cases:
  *   (1) the charged hits 3 enemies in its cone, each carrying Corrosion → all three +1 turn;
  *   (2) an enemy outside the cone carrying Corrosion → not extended (same board as (1));
- *   (3) the old `enemy`-targeted text → the primary only;
- *   (4) a DoT the SAME cast inflicts is not extended — the extension resolves before the cast
+ *   (3) a DoT the SAME cast inflicts is not extended — the extension resolves before the cast
  *       lands its own DoTs (KNOWN GAP for the dot-first order; see the describe block);
- *   (5) an enemy in the cone that died earlier in the round is skipped; the living ones still
+ *   (4) an enemy in the cone that died earlier in the round is skipped; the living ones still
  *       extend;
- *   (6) an enemy-side Provider mirrors (1)/(2) onto the player board.
+ *   (5) an enemy-side Provider mirrors (1)/(2) onto the player board.
  *
  * Instrument: `dot-ticked` events per victim. A Corrosion ticks once per round it is live, so an
  * extended one ticks once more than the no-extension control on the same board. The outsider's
@@ -40,12 +36,9 @@ import type { Ship } from '../../../types/ship';
 import type { ParsedPattern } from '../../targetingParser';
 import type { Position } from '../../../types/encounters';
 
-// Verbatim from docs/ship-skills.catalogue.csv (Provider charge_skill_text).
+// Verbatim from docs/ship-skills.csv (Provider charge_skill_text).
 const PROVIDER_CHARGED_CATALOGUE =
     "This Unit deals <unit-damage>200% damage</unit-damage>, <unit-skill>removes 1 charge</unit-skill> from the enemy's charged skill and all <unit-skill>damage over time debuffs</unit-skill> are <unit-skill>extended by 1 turn</unit-skill>.";
-// Verbatim from docs/ship-skills.csv (Provider charge_skill_text).
-const PROVIDER_CHARGED_OLD =
-    'This Unit deals <unit-damage>200% damage</unit-damage>, <unit-aid>removes 1 charge</unit-aid> from the enemy, and extends active <unit-aid>Damage Over Time</unit-aid> effects by 1 turn.';
 
 const parsedCharged = (text: string): Skill => {
     const ship = {
@@ -243,16 +236,12 @@ beforeEach(() => {
 });
 
 describe('Provider charged — parse', () => {
-    it('catalogue text targets all enemies; our current text targets the primary', () => {
-        const ext = (text: string) =>
-            parsedCharged(text).abilities.find((a) => a.config.type === 'extend-dot');
-        expect(ext(PROVIDER_CHARGED_CATALOGUE)).toMatchObject({
+    it('the extension targets all enemies', () => {
+        const ext = parsedCharged(PROVIDER_CHARGED_CATALOGUE).abilities.find(
+            (a) => a.config.type === 'extend-dot'
+        );
+        expect(ext).toMatchObject({
             target: 'all-enemies',
-            trigger: 'on-cast',
-            config: { type: 'extend-dot', turns: 1 },
-        });
-        expect(ext(PROVIDER_CHARGED_OLD)).toMatchObject({
-            target: 'enemy',
             trigger: 'on-cast',
             config: { type: 'extend-dot', turns: 1 },
         });
@@ -288,25 +277,15 @@ describe('Provider charged — DoT extension across the pattern (player side)', 
         for (const id of IN_CONE) expect(ext[id]).toBe(b[id] + 1);
         expect(ext[OUTSIDER]).toBe(b[OUTSIDER]);
     });
-
-    it('(3) our current text (target enemy): only the primary +1 turn', () => {
-        const b = baseline();
-        const ext = ticksBy(
-            run(BASE({ shipSkills: providerKit(parsedCharged(PROVIDER_CHARGED_OLD)) })),
-            ALL_ENEMIES
-        );
-        expect(ext['e-m4']).toBe(b['e-m4'] + 1);
-        for (const id of ['e-m3', 'e-t3', OUTSIDER]) expect(ext[id]).toBe(b[id]);
-    });
 });
 
-describe('Provider charged — a DoT the same cast inflicts is not extended (4)', () => {
+describe('Provider charged — a DoT the same cast inflicts is not extended (3)', () => {
     // Hand-authored charged skills: the parsed catalogue charged with Provider's own Corrosion
     // (tier 6, primary only) written BEFORE or AFTER the extension clause. The engine extends
     // before the cast lands its own DoTs, so his fresh Corrosion ticks its plain duration while the
     // seeded one on the same victim gains a turn.
     // KNOWN GAP: the dot-first arm departs from the locked written-order rule — a DoT written
-    // BEFORE the extension clause should be extended. No ship in either corpus reaches it: no cast
+    // BEFORE the extension clause should be extended. No ship in the corpus reaches it: no cast
     // carries an active-scope extend-dot alongside an on-cast DoT in the same slot.
     const charged = (order: 'dot-first' | 'extend-first'): Skill => {
         const s = parsedCharged(PROVIDER_CHARGED_CATALOGUE);
@@ -337,7 +316,7 @@ describe('Provider charged — a DoT the same cast inflicts is not extended (4)'
     });
 });
 
-describe('Provider charged — a dead enemy in the cone (5)', () => {
+describe('Provider charged — a dead enemy in the cone (4)', () => {
     // B3 is in the cone (covered cell) with 1 HP. A killer ally in the B lane (speed 140, after
     // the seeder) shoots it first, so B3 dies in round 1 before Provider casts. The cone's anchor
     // M4 survives, so the footprint geometry is unchanged.
@@ -366,7 +345,7 @@ describe('Provider charged — a dead enemy in the cone (5)', () => {
     });
 });
 
-describe('Provider charged — team symmetry (enemy-side Provider) (6)', () => {
+describe('Provider charged — team symmetry (enemy-side Provider) (5)', () => {
     // Mirror board: the enemy Provider at M4 casts its cone on the PLAYER board — focus at M4
     // (anchor), allies at M3 + T3 (covered), T4 (adjacent, outside). An enemy seeder lands the
     // splash Corrosion first.
@@ -441,7 +420,7 @@ describe('Provider charged — team symmetry (enemy-side Provider) (6)', () => {
         expect(struckIn(events, 'provider-enemy', 1).sort()).toEqual([...PLAYER_IN_CONE].sort());
     });
 
-    it('(6) every player ship in the cone +1 turn, the outsider unchanged', () => {
+    it('(5) every player ship in the cone +1 turn, the outsider unchanged', () => {
         const b = ticksBy(
             runEnemySide(withoutExtension(parsedCharged(PROVIDER_CHARGED_CATALOGUE))),
             PLAYERS
@@ -451,15 +430,5 @@ describe('Provider charged — team symmetry (enemy-side Provider) (6)', () => {
         const ext = ticksBy(runEnemySide(parsedCharged(PROVIDER_CHARGED_CATALOGUE)), PLAYERS);
         for (const id of PLAYER_IN_CONE) expect(ext[id]).toBe(b[id] + 1);
         expect(ext[PLAYER_OUTSIDER]).toBe(b[PLAYER_OUTSIDER]);
-    });
-
-    it('(6) our current text on the enemy side: only the primary +1 turn', () => {
-        const b = ticksBy(
-            runEnemySide(withoutExtension(parsedCharged(PROVIDER_CHARGED_CATALOGUE))),
-            PLAYERS
-        );
-        const ext = ticksBy(runEnemySide(parsedCharged(PROVIDER_CHARGED_OLD)), PLAYERS);
-        expect(ext.attacker).toBe(b.attacker + 1);
-        for (const id of ['p-m3', 'p-t3', PLAYER_OUTSIDER]) expect(ext[id]).toBe(b[id]);
     });
 });

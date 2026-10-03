@@ -4,7 +4,7 @@
  * actual per-target DoT entry counts (corrosion + inferno + bomb).
  *
  * Uses Anemone's REAL production-parsed charged-slot abilities (built via `buildShipAbilities`
- * on her verbatim charge_skill_text from docs/ship-skills.csv) so the `enemy-dot-count` condition
+ * on her charge_skill_text, in old-corpus wording) so the `enemy-dot-count` condition
  * under test is the production parser output, not a hand-written stand-in. The active slot is a
  * hand-crafted set of DoT-inflicting abilities (Anemone's own kit only inflicts Corrosion —
  * getting a THIRD, distinct DoT family onto the target organically would require other ships)
@@ -28,8 +28,8 @@ import type { Ship } from '../../../types/ship';
 import type { StatusEngine } from '../statusEngine';
 import { bareEnemy } from '../__testutils__/bareRosterFixture';
 
-// Verbatim from docs/ship-skills.csv (charge_skill_text field) — same constant used by the
-// Anemone triage probe / enemyDotCount.test.ts parser block.
+// Old-corpus wording of Anemone's charged skill (synthetic; the catalogue text differs) — same
+// constant used by the Anemone triage probe / enemyDotCount.test.ts parser block.
 const ANEMONE_CHARGE =
     'This Unit deals <unit-damage>200% damage</unit-damage> and inflicts <unit-skill>Corrosion III</unit-skill> for 2 turns. If the primary enemy has 3 or more Damage over Time effects, this Unit gains <unit-skill>Taunt</unit-skill> for 1 turn.';
 

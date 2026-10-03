@@ -10,10 +10,9 @@ import {
 } from '../../../../scripts/lib/shipSkillCsv';
 
 /**
- * Regression tests for Task B1 (ship-kit correctness audit, Wave 5): the Asphyxiator ACTIVE
- * Inferno III DoT carries an enemy-adjacency splash phrase ("on the targeted enemy and all
- * enemies adjacent to it") that the DoT builder (`buildShipAbilities.ts`, dotAbility) previously
- * hardcoded to `target: 'enemy'` and ignored. The CHARGED Inferno III sentence has no adjacency
+ * The Asphyxiator ACTIVE Inferno III DoT carries an enemy-adjacency splash phrase ("on the targeted
+ * enemy and all adjacent enemies"), so the DoT builder (`buildShipAbilities.ts`, dotAbility)
+ * targets it at 'target-and-adjacent-enemies'. The CHARGED Inferno III sentence has no adjacency
  * phrase (the adjacency phrasing there belongs to a SEPARATE Stasis sentence), so it must stay
  * 'enemy'. Skips gracefully when the gitignored reference CSV is absent (clean checkout / CI).
  */
@@ -73,10 +72,10 @@ describe.skipIf(!csvAvailable())(
 // Synthetic fixtures: feed hand-written skill text through the real `buildShipAbilities`
 // (NOT docs/ship-skills.csv), so the DoT adjacency parser→builder wiring stays covered in CI
 // even when the gitignored reference CSV is absent (the suite above skips there).
-describe('Task B1 — DoT enemy-adjacency splash target (synthetic, CSV-independent)', () => {
+describe('DoT enemy-adjacency splash target (synthetic, CSV-independent)', () => {
     it('active Inferno III DoT targets target-and-adjacent-enemies (splash phrase present)', () => {
         const text =
-            'This Unit inflicts <unit-skill>Inferno III</unit-skill> for 3 turns on the targeted enemy and all enemies adjacent to it.';
+            'This Unit inflicts <unit-skill>Inferno III</unit-skill> for 3 turns on the targeted enemy and all adjacent enemies.';
         const { slots } = buildShipAbilities(ship({ activeSkillText: text }));
         const active = slot(slots, 'active');
         expect(active).toBeDefined();
@@ -103,9 +102,9 @@ describe('Task B1 — DoT enemy-adjacency splash target (synthetic, CSV-independ
 });
 
 describe('adjacentEnemyScopeForName — synthetic clause isolation (CSV-independent)', () => {
-    it('"on the targeted enemy and all enemies adjacent to it" resolves to target-and-adjacent-enemies', () => {
+    it('"on the targeted enemy and all adjacent enemies" resolves to target-and-adjacent-enemies', () => {
         const text =
-            'This Unit deals 175% damage, then inflicts X for 3 turns on the targeted enemy and all enemies adjacent to it.';
+            'This Unit deals 175% damage, then inflicts X for 3 turns on the targeted enemy and all adjacent enemies.';
         expect(adjacentEnemyScopeForName(text, 'X')).toBe('target-and-adjacent-enemies');
     });
 

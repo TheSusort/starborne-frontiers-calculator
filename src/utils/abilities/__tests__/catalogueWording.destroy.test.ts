@@ -1,189 +1,164 @@
 import { describe, it, expect } from 'vitest';
-import { parseSlot, sigs, canonical, type RewordPair } from './helpers/catalogueWording';
+import { parseSlot, sigs, type SlotName } from './helpers/catalogueWording';
 
-const PAIRS: RewordPair[] = [
+// Each row's catalogue sentence is the only wording the parser reads: the parse must carry
+// `expects`.
+const ROWS: { ship: string; slot: SlotName; text: string; expects: string }[] = [
     {
         ship: 'Gallant',
         slot: 'passive',
-        old: 'This Unit gains <unit-skill>Legion Discipline I</unit-skill> for 3 turns on kill.',
-        new: 'When this Unit destroys an enemy it gains <unit-skill>Legion Discipline I</unit-skill> for 3 turns.',
+        text: 'When this Unit destroys an enemy it gains <unit-skill>Legion Discipline I</unit-skill> for 3 turns.',
         expects: 'buff|self|on-enemy-destroyed|Legion Discipline I',
     },
     {
         ship: 'Gallant',
         slot: 'passive',
-        old: 'This Unit gains <unit-skill>Legion Discipline II</unit-skill> for 4 turns on kill.',
-        new: 'When this Unit destroys an enemy it gains <unit-skill>Legion Discipline II</unit-skill> for 4 turns.',
+        text: 'When this Unit destroys an enemy it gains <unit-skill>Legion Discipline II</unit-skill> for 4 turns.',
         expects: 'buff|self|on-enemy-destroyed|Legion Discipline II',
     },
     {
         ship: 'Mangler',
         slot: 'passive',
-        old: 'This Unit gains 1 stack of <unit-skill>Overload</unit-skill> every turn and loses <unit-skill>Overload</unit-skill> on kill. Additionally, it gains <unit-skill>Marauder Rage I</unit-skill> for 2 turns upon killing an opponent.',
-        new: 'This Unit gains 1 stack of <unit-skill>Overload</unit-skill> every turn and, upon destroying an enemy, removes <unit-skill>Overload</unit-skill>. Additionally, it gains <unit-skill>Marauder Rage I</unit-skill> for 2 turns upon destroying an enemy.',
+        text: 'This Unit gains 1 stack of <unit-skill>Overload</unit-skill> every turn and, upon destroying an enemy, removes <unit-skill>Overload</unit-skill>. Additionally, it gains <unit-skill>Marauder Rage I</unit-skill> for 2 turns upon destroying an enemy.',
         expects: 'remove-self-buff|self|on-enemy-destroyed|Overload',
     },
     {
         ship: 'Mangler',
         slot: 'passive',
-        old: 'This Unit gains 1 stack of <unit-skill>Overload</unit-skill> every turn and loses <unit-skill>Overload</unit-skill> on kill. Additionally, it gains <unit-skill>Marauder Rage II</unit-skill> for 3 turns upon killing an opponent.',
-        new: 'This Unit gains 1 stack of <unit-skill>Overload</unit-skill> every turn and, upon destroying an enemy, removes <unit-skill>Overload</unit-skill>. Additionally, it gains <unit-skill>Marauder Rage II</unit-skill> for 3 turns upon destroying an enemy.',
+        text: 'This Unit gains 1 stack of <unit-skill>Overload</unit-skill> every turn and, upon destroying an enemy, removes <unit-skill>Overload</unit-skill>. Additionally, it gains <unit-skill>Marauder Rage II</unit-skill> for 3 turns upon destroying an enemy.',
         expects: 'remove-self-buff|self|on-enemy-destroyed|Overload',
     },
     {
         ship: 'Medved',
         slot: 'passive',
-        old: 'This Unit has 20% Shield Penetration. On kill, it gains <unit-skill>XAOC Swiftness I</unit-skill> for 2 turns.',
-        new: 'This Unit has <unit-aid>20% shield penetration</unit-aid>.<br /><br />When this Unit destroys an enemy, it gains <unit-skill>XAOC Swiftness I</unit-skill> for 2 turns.',
+        text: 'This Unit has <unit-aid>20% shield penetration</unit-aid>.<br /><br />When this Unit destroys an enemy, it gains <unit-skill>XAOC Swiftness I</unit-skill> for 2 turns.',
         expects: 'buff|self|on-enemy-destroyed|XAOC Swiftness I',
     },
     {
         ship: 'Medved',
         slot: 'passive',
-        old: 'This Unit has 20% Shield Penetration. On kill, it gains <unit-skill>XAOC Swiftness II</unit-skill> for 3 turns.',
-        new: 'This Unit has <unit-aid>20% shield penetration</unit-aid>.<br /><br />When this Unit destroys an enemy, it gains <unit-skill>XAOC Swiftness II</unit-skill> for 3 turns.',
+        text: 'This Unit has <unit-aid>20% shield penetration</unit-aid>.<br /><br />When this Unit destroys an enemy, it gains <unit-skill>XAOC Swiftness II</unit-skill> for 3 turns.',
         expects: 'buff|self|on-enemy-destroyed|XAOC Swiftness II',
     },
     {
         ship: 'Obsidian',
         slot: 'passive',
-        old: 'This Unit <unit-aid>adds 2 charges</unit-aid> to its Charged Skill upon killing an enemy.',
-        new: 'When this Unit destroys an enemy it <unit-skill>adds 2 charges</unit-skill> to its charged skill.',
+        text: 'When this Unit destroys an enemy it <unit-skill>adds 2 charges</unit-skill> to its charged skill.',
         expects: 'charge|self|on-enemy-destroyed|charge',
     },
     {
         ship: 'Obsidian',
         slot: 'passive',
-        old: 'This Unit <unit-aid>adds 2 charges</unit-aid> to its Charged Skill upon killing an enemy.<br />At the start of each round, it gains <unit-skill>Attack Up III</unit-skill> for 1 turn.',
-        new: 'When this Unit destroys an enemy it <unit-skill>adds 2 charges</unit-skill> to its charged skill.<br /><br />At the start of each round, this Unit gains <unit-skill>Attack Up III</unit-skill> for 1 turn.',
+        text: 'When this Unit destroys an enemy it <unit-skill>adds 2 charges</unit-skill> to its charged skill.<br /><br />At the start of each round, this Unit gains <unit-skill>Attack Up III</unit-skill> for 1 turn.',
         expects: 'charge|self|on-enemy-destroyed|charge',
     },
     {
         ship: 'Valiant',
         slot: 'passive',
-        old: 'This Unit <unit-aid>gains 1 charge</unit-aid> for its Charged Skill upon killing an enemy.',
-        new: 'When this Unit destroys an enemy it <unit-skill>adds 1 charge</unit-skill> to its charged skill.',
+        text: 'When this Unit destroys an enemy it <unit-skill>adds 1 charge</unit-skill> to its charged skill.',
         expects: 'charge|self|on-enemy-destroyed|charge',
     },
     {
         ship: 'Valiant',
         slot: 'passive',
-        old: 'This Unit <unit-aid>gains 2 charges</unit-aid> for its Charged Skill upon killing an enemy.',
-        new: 'When this Unit destroys an enemy it <unit-skill>adds 2 charges</unit-skill> to its charged skill.',
+        text: 'When this Unit destroys an enemy it <unit-skill>adds 2 charges</unit-skill> to its charged skill.',
         expects: 'charge|self|on-enemy-destroyed|charge',
     },
     {
         ship: 'Liberator',
         slot: 'passive',
-        old: 'This Unit has 40% Shield Penetration. When an enemy dies, all allies <unit-aid>add 1 charge</unit-aid> to their Charged Skills.',
-        new: 'This Unit has <unit-damage>40% shield penetration</unit-damage>.<br /><br />When an enemy is destroyed, all allies <unit-skill>add 1 charge</unit-skill> to their charged skills.',
+        text: 'This Unit has <unit-damage>40% shield penetration</unit-damage>.<br /><br />When an enemy is destroyed, all allies <unit-skill>add 1 charge</unit-skill> to their charged skills.',
         expects: 'charge|all-allies|on-enemy-destroyed|charge',
     },
     {
         ship: 'Liberator',
         slot: 'passive',
-        old: 'This Unit has 40% Shield Penetration. When an enemy dies, all allies <unit-aid>add 1 charge</unit-aid> to their Charged Skills, and once per round, this unit gains 1 extra action.',
-        new: 'This Unit has <unit-damage>40% shield penetration</unit-damage>.<br /><br />When an enemy is destroyed, all allies <unit-skill>add 1 charge</unit-skill> to their charged skills and once per round, this unit <unit-skill>gains 1 extra action</unit-skill>.',
+        text: 'This Unit has <unit-damage>40% shield penetration</unit-damage>.<br /><br />When an enemy is destroyed, all allies <unit-skill>add 1 charge</unit-skill> to their charged skills and once per round, this unit <unit-skill>gains 1 extra action</unit-skill>.',
         expects: 'charge|all-allies|on-enemy-destroyed|charge',
     },
     {
         ship: 'Butcher',
         slot: 'passive',
-        old: 'This Unit gains 1 stack of <unit-skill>Overload</unit-skill> every turn and loses <unit-skill>Overload</unit-skill> upon killing an enemy.',
-        new: 'This Unit gains 1 stack of <unit-skill>Overload</unit-skill> every turn and, upon destroying an enemy, removes <unit-skill>Overload</unit-skill>.',
+        text: 'This Unit gains 1 stack of <unit-skill>Overload</unit-skill> every turn and, upon destroying an enemy, removes <unit-skill>Overload</unit-skill>.',
         expects: 'remove-self-buff|self|on-enemy-destroyed|Overload',
     },
     {
         ship: 'Butcher',
         slot: 'passive',
-        old: 'This Unit gains 1 stack of <unit-skill>Overload</unit-skill> every turn. On kill, <unit-skill>Overload</unit-skill> is lost. On inflicting a debuff, this Unit gains <unit-skill>Marauder Rage II</unit-skill> for 3 turns.',
-        new: 'This Unit gains 1 stack of <unit-skill>Overload</unit-skill> every turn and, upon destroying an enemy, removes <unit-skill>Overload</unit-skill>.<br /><br />On inflicting a <unit-aid>debuff</unit-aid>, this Unit gains <unit-skill>Marauder Rage II</unit-skill> for 3 turns.',
+        text: 'This Unit gains 1 stack of <unit-skill>Overload</unit-skill> every turn and, upon destroying an enemy, removes <unit-skill>Overload</unit-skill>.<br /><br />On inflicting a <unit-aid>debuff</unit-aid>, this Unit gains <unit-skill>Marauder Rage II</unit-skill> for 3 turns.',
         expects: 'remove-self-buff|self|on-enemy-destroyed|Overload',
     },
     {
         ship: 'Asphyxiator',
         slot: 'passive',
-        old: 'At the start of the round, if there are any enemies with 3 or more debuffs, this Unit gains 1 stack of <unit-skill>Overload</unit-skill> and gains <unit-skill>Marauder Rage II</unit-skill> for 3 turns. Upon killing an enemy, this Unit loses <unit-skill>Overload</unit-skill>.',
-        new: 'At the start of the round, if there are any enemies with 3 or more <unit-aid>debuffs</unit-aid>, this Unit gains 1 stack of <unit-skill>Overload</unit-skill> and gains <unit-skill>Marauder Rage II</unit-skill> for 3 turns. Upon destroying an enemy, this Unit removes <unit-skill>Overload</unit-skill>.',
+        text: 'At the start of the round, if there are any enemies with 3 or more <unit-aid>debuffs</unit-aid>, this Unit gains 1 stack of <unit-skill>Overload</unit-skill> and gains <unit-skill>Marauder Rage II</unit-skill> for 3 turns. Upon destroying an enemy, this Unit removes <unit-skill>Overload</unit-skill>.',
         expects: 'remove-self-buff|self|on-enemy-destroyed|Overload',
     },
     {
         ship: 'Ruiner',
         slot: 'passive',
-        old: 'This Unit inflicts <unit-skill>Bomb II</unit-skill> for 2 turns on any enemy performing a <unit-aid>repair</unit-aid>, once per round per enemy.<br /><br />This Unit gains 1 stack of <unit-skill>Overload</unit-skill> when an enemy performs a <unit-aid>repair</unit-aid>, upon killing an enemy, this Unit removes <unit-skill>Overload</unit-skill>.',
-        new: 'This Unit inflicts <unit-skill>Bomb II</unit-skill> for 2 turns on any enemy performing a <unit-aid>repair</unit-aid>, once per round per enemy.<br /><br />This Unit gains 1 stack of <unit-skill>Overload</unit-skill> when an enemy preforms a <unit-aid>repair</unit-aid>, upon destroying an enemy, this Unit removes <unit-skill>Overload</unit-skill>.',
+        text: 'This Unit inflicts <unit-skill>Bomb II</unit-skill> for 2 turns on any enemy performing a <unit-aid>repair</unit-aid>, once per round per enemy.<br /><br />This Unit gains 1 stack of <unit-skill>Overload</unit-skill> when an enemy preforms a <unit-aid>repair</unit-aid>, upon destroying an enemy, this Unit removes <unit-skill>Overload</unit-skill>.',
         expects: 'remove-self-buff|self|on-enemy-destroyed|Overload',
     },
     {
         ship: 'Ravager',
         slot: 'passive',
-        old: 'This Unit gains 1 stack of <unit-skill>Overload</unit-skill> every turn and, upon killing an enemy, loses <unit-skill>Overload</unit-skill> and gains <unit-skill>Marauder Rage III</unit-skill> for 3 turns.',
-        new: 'This Unit gains 1 stack of <unit-skill>Overload</unit-skill> every turn and, upon destroying an enemy, removes <unit-skill>Overload</unit-skill> and gains <unit-skill>Marauder Rage III</unit-skill> for 3 turns.',
+        text: 'This Unit gains 1 stack of <unit-skill>Overload</unit-skill> every turn and, upon destroying an enemy, removes <unit-skill>Overload</unit-skill> and gains <unit-skill>Marauder Rage III</unit-skill> for 3 turns.',
         expects: 'remove-self-buff|self|on-enemy-destroyed|Overload',
     },
     {
         ship: 'Rikra',
         slot: 'passive',
-        old: 'This Unit <unit-damage>repairs 30%</unit-damage> of its Max HP for each enemy Unit destroyed by the attack upon killing them.',
-        new: 'This Unit <unit-damage>repairs 30%</unit-damage> of its max HP for each enemy destroyed by this Unit.',
+        text: 'This Unit <unit-damage>repairs 30%</unit-damage> of its max HP for each enemy destroyed by this Unit.',
         expects: 'heal|self|on-enemy-destroyed|heal',
     },
     {
         ship: 'Rikra',
         slot: 'passive',
-        old: 'This Unit <unit-damage>repairs 60%</unit-damage> of its Max HP for each enemy Unit destroyed by the attack upon killing them.',
-        new: 'This Unit <unit-damage>repairs 60%</unit-damage> of its max HP for each enemy destroyed by this Unit.',
+        text: 'This Unit <unit-damage>repairs 60%</unit-damage> of its max HP for each enemy destroyed by this Unit.',
         expects: 'heal|self|on-enemy-destroyed|heal',
     },
     {
         ship: 'Faust',
         slot: 'passive',
-        old: 'This Unit <unit-aid>purges 2</unit-aid> buffs from the enemy when killed by direct Damage.',
-        new: 'This Unit <unit-skill>purges 2 buffs</unit-skill> from the enemy when destroyed by direct damage.',
+        text: 'This Unit <unit-skill>purges 2 buffs</unit-skill> from the enemy when destroyed by direct damage.',
         expects: 'purge|enemy|on-destroyed|purge',
     },
     {
         ship: 'Faust',
         slot: 'passive',
-        old: 'This Unit <unit-aid>purges 3</unit-aid> buffs from the enemy when killed by direct Damage.',
-        new: 'This Unit <unit-skill>purges 3 buffs</unit-skill> from the enemy when destroyed by direct damage.',
+        text: 'This Unit <unit-skill>purges 3 buffs</unit-skill> from the enemy when destroyed by direct damage.',
         expects: 'purge|enemy|on-destroyed|purge',
     },
     {
         ship: 'Paracelsus',
         slot: 'passive',
-        old: 'Upon being killed by direct Damage, this Unit deals <unit-damage>Damage equal to 50%</unit-damage> of its max HP.',
-        new: 'Upon being destroyed by direct damage, this Unit deals <unit-damage>damage equal to 50%</unit-damage> of its max HP.',
+        text: 'Upon being destroyed by direct damage, this Unit deals <unit-damage>damage equal to 50%</unit-damage> of its max HP.',
         expects: 'damage|enemy|on-destroyed|damage',
     },
     {
         ship: 'Paracelsus',
         slot: 'passive',
-        old: 'Upon being killed by direct Damage, this Unit deals <unit-damage>Damage equal to 50%</unit-damage> of its max HP and grants allies <unit-skill>Everliving Regeneration II</unit-skill> for 4 turns.',
-        new: 'Upon being destroyed by direct damage, this Unit deals <unit-damage>damage equal to 50%</unit-damage> of its max HP and grants all allies <unit-skill>Everliving Regeneration II</unit-skill> for 4 turns.',
+        text: 'Upon being destroyed by direct damage, this Unit deals <unit-damage>damage equal to 50%</unit-damage> of its max HP and grants all allies <unit-skill>Everliving Regeneration II</unit-skill> for 4 turns.',
         expects: 'damage|enemy|on-destroyed|damage',
     },
     {
         ship: 'Meiying',
         slot: 'passive',
-        old: 'Upon killing an enemy with a Debuff, this Unit inflicts <unit-skill>Stasis</unit-skill> on all adjacent enemies for 1 turn.',
-        new: "This Unit's attacks ignore <unit-skill>Taunt</unit-skill> and <unit-skill>Provoke</unit-skill> effects.<br /><br />Upon destroying an enemy with a <unit-aid>debuff</unit-aid>, this Unit inflicts <unit-skill>Stasis</unit-skill> on all adjacent enemies for 1 turn.",
+        text: "This Unit's attacks ignore <unit-skill>Taunt</unit-skill> and <unit-skill>Provoke</unit-skill> effects.<br /><br />Upon destroying an enemy with a <unit-aid>debuff</unit-aid>, this Unit inflicts <unit-skill>Stasis</unit-skill> on all adjacent enemies for 1 turn.",
         expects: 'debuff|adjacent-enemies|on-enemy-destroyed|Stasis',
     },
     {
         ship: 'Meiying',
         slot: 'passive',
-        old: 'Upon killing an enemy with a Debuff, this Unit inflicts <unit-skill>Stasis</unit-skill> on all adjacent enemies for 1 turn.<br /><br />At the start of combat and every turn, this Unit gains <unit-skill>Stealth</unit-skill> for 2 turns.',
-        new: "This Unit's attacks ignore <unit-skill>Taunt</unit-skill> and <unit-skill>Provoke</unit-skill> effects.<br /><br />Upon destroying an enemy with a <unit-aid>debuff</unit-aid>, this Unit inflicts <unit-skill>Stasis</unit-skill> on all adjacent enemies for 1 turn.<br /><br />At the start of combat and every turn, this Unit gains <unit-skill>Stealth</unit-skill> for 2 turns.",
+        text: "This Unit's attacks ignore <unit-skill>Taunt</unit-skill> and <unit-skill>Provoke</unit-skill> effects.<br /><br />Upon destroying an enemy with a <unit-aid>debuff</unit-aid>, this Unit inflicts <unit-skill>Stasis</unit-skill> on all adjacent enemies for 1 turn.<br /><br />At the start of combat and every turn, this Unit gains <unit-skill>Stealth</unit-skill> for 2 turns.",
         expects: 'debuff|adjacent-enemies|on-enemy-destroyed|Stasis',
     },
 ];
 
-describe('kill/destroy vocabulary — catalogue wording parses like ours', () => {
-    it.each(PAIRS)('$ship $slot', ({ slot, old, new: next, expects }) => {
-        const before = parseSlot(slot, old);
-        expect(sigs(before)).toContain(expects); // the reference parse is not vacuous
-        expect(canonical(parseSlot(slot, next))).toEqual(canonical(before));
+describe('kill/destroy vocabulary — the catalogue sentence carries its parse', () => {
+    it.each(ROWS)('$ship $slot', ({ slot, text, expects }) => {
+        expect(sigs(parseSlot(slot, text))).toContain(expects);
     });
 });
 
@@ -216,12 +191,10 @@ describe('kill/destroy vocabulary — ruled rows', () => {
 // plain "extra action" is inserted into the turn queue at the ship's current speed (Liberator's
 // model); an "extra end of round action" is a full turn appended to the end of the round.
 describe("kill/destroy vocabulary — the wording decides the extra action's queue slot", () => {
-    const OLD =
-        'This Unit gains 1 stack of <unit-skill>Blast</unit-skill> every turn and grants one extra end of round action upon a kill, once per round.';
     const NEW =
         'This Unit gains 1 stack of <unit-skill>Blast</unit-skill> every turn.<br /><br />When an enemy is destroyed, once per round, this Unit <unit-skill>gains 1 extra action</unit-skill>.';
     const LIBERATOR_R2 =
-        'This Unit has 40% Shield Penetration. When an enemy dies, all allies <unit-aid>add 1 charge</unit-aid> to their Charged Skills, and once per round, this unit gains 1 extra action.';
+        'This Unit has <unit-damage>40% shield penetration</unit-damage>.<br /><br />When an enemy is destroyed, all allies <unit-skill>add 1 charge</unit-skill> to their charged skills and once per round, this unit <unit-skill>gains 1 extra action</unit-skill>.';
     const extraAction = (text: string) =>
         parseSlot('passive', text).find((a) => a.type === 'extra-action')!;
 
@@ -235,18 +208,9 @@ describe("kill/destroy vocabulary — the wording decides the extra action's que
         expect(extraAction(LIBERATOR_R2).config).toEqual(extraAction(NEW).config);
     });
 
-    it('Sokol passive R2, our text: "extra end of round action" stays end-of-round on a kill', () => {
-        expect(extraAction(OLD)).toMatchObject({
-            target: 'self',
-            trigger: 'on-enemy-destroyed',
-            conditions: [],
-            config: { type: 'extra-action', oncePerRound: true, endOfRound: true },
-        });
-    });
-
     it('Harvester keeps its end-of-round action (an ally death, not a kill)', () => {
         const harvester = extraAction(
-            'When an allied Unit is destroyed, this Unit gains 1 extra end of round action.'
+            'When an ally is destroyed, this Unit <unit-skill>gains 1 extra end of round action</unit-skill>.'
         );
         expect(harvester.trigger).toBe('on-ally-destroyed');
         expect(harvester.config).toMatchObject({ endOfRound: true });

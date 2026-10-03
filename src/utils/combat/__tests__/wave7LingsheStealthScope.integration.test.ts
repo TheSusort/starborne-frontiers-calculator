@@ -26,7 +26,8 @@ import type { Ability, ShipSkills } from '../../../types/abilities';
 import type { Ship } from '../../../types/ship';
 import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
 
-// Verbatim from docs/ship-skills.csv (Lingshe third_passive_skill_text — the R4 variant).
+// Old-corpus wording of Lingshe's third passive, the R4 variant (synthetic; the catalogue text
+// differs).
 const LINGSHE_PASSIVE_R4 =
     'When this Unit detonates a <unit-skill>Bomb</unit-skill> it gains <unit-skill>Stealth</unit-skill> for 2 turn.<br /><br />\n\nThis Unit deals 1% more detonation damage per 10% crit power it has.';
 

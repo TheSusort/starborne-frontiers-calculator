@@ -1737,7 +1737,8 @@ describe('healing — Task 9: reactive listeners (on-ally-critically-repaired / 
     it('on-debuff-inflicted shield (APEX): own infliction enqueues; ally/enemy infliction does not', () => {
         const handBus = makeHandBus();
         const enqueued: Intent[] = [];
-        // APEX's refit-active passive: gains a Shield = 3% Max HP when an enemy gets debuffed.
+        // APEX's refit-active passive: gains a shield = 3% max HP when an enemy gets inflicted
+        // with a debuff.
         // The trigger fires on THIS unit's own inflictions (Speed Down II / Crit Power Down III).
         const ability: Ability = {
             id: 'apex-shield-on-debuff',

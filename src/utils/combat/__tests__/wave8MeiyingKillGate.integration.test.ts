@@ -1,14 +1,13 @@
 /**
- * wave8MeiyingKillGate.integration.test.ts — Ship-kit Wave 8 Task 13 (Meiying).
+ * wave8MeiyingKillGate.integration.test.ts — Meiying's Stasis-on-kill.
  *
- * Meiying's first passive (docs/ship-skills.csv, verbatim): "Upon killing an enemy with a
- * Debuff, this Unit inflicts Stasis on all adjacent enemies for 1 turn." The target scope
- * (adjacent-enemies) and trigger (on-enemy-destroyed) shipped in Wave 5/parsed generically; this
- * task closes the KILL-GATE — the kill must land on a DEBUFFED enemy — and (as a necessary
- * engine seam this gate rides on) wires the REACTIVE `debuff`-type executor's adjacent-enemies
- * fan-out, which no prior ship exercised (Wave 5's adjacency work covered the ON-CAST fan-out in
- * playerTurn.ts and the reactive `damage` executor's bomb-splash branch; Meiying's Stasis-on-kill
- * is the first reactive DEBUFF consumer of `adjacent-enemies`).
+ * Meiying's first passive (docs/ship-skills.csv, verbatim): "Upon destroying an enemy with a
+ * debuff, this Unit inflicts Stasis on all adjacent enemies for 1 turn." The target scope is
+ * adjacent-enemies and the trigger on-enemy-destroyed; the KILL-GATE requires the kill to land on
+ * a DEBUFFED enemy, and the REACTIVE `debuff`-type executor fans the Stasis out to the victim's
+ * adjacent enemies (Meiying's Stasis-on-kill is the reactive DEBUFF consumer of
+ * `adjacent-enemies`; the ON-CAST fan-out lives in playerTurn.ts and the reactive `damage`
+ * executor's bomb-splash branch).
  *
  * Harness: mirrors demolisherBombSplash.integration.test.ts's raw `runCombat` + positional
  * `enemyAttackers` board layout (bomb lands on 'tgt' at M4; nbrA/M3 and nbrB/T3 are real
@@ -29,7 +28,7 @@ import { createEventBus, CombatEvent } from '../events';
 
 // Verbatim docs/ship-skills.csv Meiying first_passive_skill_text.
 const MEIYING_STASIS_ON_KILL =
-    'Upon killing an enemy with a Debuff, this Unit inflicts <unit-skill>Stasis</unit-skill> on all adjacent enemies for 1 turn.';
+    "This Unit's attacks ignore <unit-skill>Taunt</unit-skill> and <unit-skill>Provoke</unit-skill> effects.<br /><br />Upon destroying an enemy with a <unit-aid>debuff</unit-aid>, this Unit inflicts <unit-skill>Stasis</unit-skill> on all adjacent enemies for 1 turn.";
 
 // The REAL parsed Stasis-on-kill passive slot (adjacent-enemies target, on-enemy-destroyed
 // trigger, killed-enemy-had-debuff condition — see wave8Meiying.test.ts for parser coverage).

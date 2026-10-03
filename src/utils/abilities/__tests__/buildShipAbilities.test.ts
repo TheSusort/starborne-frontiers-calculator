@@ -102,7 +102,7 @@ describe('buildShipAbilities', () => {
         };
 
         const charge = chargeAbilityFrom(
-            'This Unit adds 1 charge to its charged skill at the start of the turn if it is at full HP.'
+            'Every turn this Unit <unit-skill>adds 1 charge</unit-skill> to its charged skill if it is at full HP.'
         );
         expect(charge).toMatchObject({
             type: 'charge',
@@ -196,11 +196,11 @@ describe('buildShipAbilities', () => {
         ).toBe(false);
     });
 
-    it('Provider charged: damage + extend-dot (charge removal now also emitted — see Phase 1 Task 3 block)', () => {
+    it('Provider charged: damage + extend-dot across all enemies', () => {
         const s = ship({
             activeSkillText: 'This Unit deals <unit-damage>100% damage</unit-damage>.',
             chargeSkillText:
-                'This Unit deals <unit-damage>200% damage</unit-damage>, removes 1 charge from the enemy, and extends active Damage Over Time effects by 1 turn.',
+                "This Unit deals <unit-damage>200% damage</unit-damage>, <unit-skill>removes 1 charge</unit-skill> from the enemy's charged skill and all <unit-skill>damage over time debuffs</unit-skill> are <unit-skill>extended by 1 turn</unit-skill>.",
             chargeSkillCharge: 3,
         });
 
@@ -210,7 +210,7 @@ describe('buildShipAbilities', () => {
         });
         const extend = abilityOfType(charged.abilities, 'extend-dot')!;
         expect(extend.config).toEqual({ type: 'extend-dot', turns: 1 });
-        expect(extend.target).toBe('enemy');
+        expect(extend.target).toBe('all-enemies');
     });
 
     it('Provider passive: no-crit damage + Crit Rate Down II both ride on-other-ally-debuff-inflicted (#590)', () => {
@@ -236,7 +236,7 @@ describe('buildShipAbilities', () => {
     it('Lodolite active: Concentrate Fire debuff gated by a negated enemy-type (non-Defenders)', () => {
         const s = ship({
             activeSkillText:
-                'This Unit deals <unit-damage>240% damage</unit-damage>. When targeting non-Defenders, apply <unit-skill>Concentrate Fire</unit-skill> for 2 turns.',
+                'This Unit deals <unit-damage>240% damage</unit-damage> with additional damage equal to <unit-damage>10%</unit-damage> of its max HP.<br /><br />When this attack targets non-defenders, it also applies <unit-skill>Concentrate Fire</unit-skill> for 2 turns.',
         });
 
         const active = slot(buildShipAbilities(s).slots, 'active')!;
@@ -280,10 +280,10 @@ describe('buildShipAbilities', () => {
         expect(mod.target).not.toBe('all-enemies');
     });
 
-    it('Obsidian charged: "increases Damage by 100% to enemies with less than 30% HP" → enemy-HP-gated modifier', () => {
+    it('Obsidian charged: "100% more damage to enemies with less than 30% HP" → enemy-HP-gated modifier', () => {
         const s = ship({
             chargeSkillText:
-                'This Unit deals <unit-damage>250% Damage</unit-damage>, with additional Damage equal to <unit-damage>20%</unit-damage> of its max HP and increases <unit-damage>Damage by 100%</unit-damage> to enemies with less than <unit-damage>30%</unit-damage> HP.',
+                'This Unit deals <unit-damage>250% damage</unit-damage> with additional damage equal to <unit-damage>20%</unit-damage> of its max HP.<br /><br />This attack deals <unit-damage>100% more damage</unit-damage> to enemies with less than 30% HP.',
             chargeSkillCharge: 3,
         });
         const charged = slot(buildShipAbilities(s).slots, 'charged')!;
@@ -311,13 +311,12 @@ describe('buildShipAbilities', () => {
     });
 
     it('Akula passive (R2 text): HP-proportional scaling modifier, not a flat +30%', () => {
-        // Was modelled flat at max while the sim assumed full enemy HP; enemy HP now
-        // declines per round, so the bonus scales on the live enemy-hp-pct count.
+        // Enemy HP declines per round, so the bonus scales on the live enemy-hp-pct count.
         const s = ship({
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             refits: [{}, {}] as any,
             secondPassiveSkillText:
-                "This Unit's attacks don't break <unit-skill>Stasis</unit-skill>. Starts combat fully Charged. Increases outgoing direct damage by up to <unit-damage>30%</unit-damage> based on the target's current HP percentage; the higher the percentage, the more the damage.",
+                "This Unit's attacks do not reduce <unit-skill>Stasis</unit-skill>, and also ignore <unit-skill>Taunt</unit-skill> and <unit-skill>Provoke</unit-skill> effects. <br /><br />This Unit <unit-damage>increases outgoing direct damage</unit-damage> based on the enemies current HP, up to <unit-damage>30%</unit-damage> when the enemy is at full HP.<br /><br />This Unit starts combat <unit-skill>fully charged</unit-skill>.",
         });
         const mod = slot(buildShipAbilities(s).slots, 'passive')!.abilities.find(
             (a) => a.config.type === 'modifier' && a.config.channel === 'outgoingDamage'
@@ -332,7 +331,7 @@ describe('buildShipAbilities', () => {
     it('Crucialis active: base damage + self-crit conditional bonus', () => {
         const s = ship({
             activeSkillText:
-                'This Unit deals <unit-damage>80% damage</unit-damage> and, if critical, additionally deals <unit-damage>75%</unit-damage> damage.',
+                'This Unit deals <unit-damage>80% damage</unit-damage> and, if a critical hit, deals an additional <unit-damage>90% damage</unit-damage>.',
         });
         const dmg = abilityOfType(
             slot(buildShipAbilities(s).slots, 'active')!.abilities,
@@ -340,7 +339,7 @@ describe('buildShipAbilities', () => {
         )!;
         expect(dmg.config).toMatchObject({ type: 'damage', multiplier: 80 });
         expect(dmg.conditions).toEqual([{ subject: 'self-crit', derivable: true }]);
-        expect(dmg.scaling).toMatchObject({ conditionIndex: 0, perUnit: 75 });
+        expect(dmg.scaling).toMatchObject({ conditionIndex: 0, perUnit: 90 });
     });
 
     it('Los passive: "30% more direct damage when its HP is below 50%" → self HP-gated modifier', () => {
@@ -371,7 +370,7 @@ describe('buildShipAbilities', () => {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             refits: [{}, {}] as any,
             secondPassiveSkillText:
-                'This Unit repairs 15% of damage dealt, including damage over time effects. After inflicting <unit-skill>Corrosion</unit-skill> with a Critical hit, the duration of the newly applied Corrosion is extended by 1 turn, with the extension chance equal to the Critical Power.',
+                "This Unit <unit-damage>repairs 15%</unit-damage> of damage dealt to the enemy, including damage from <unit-skill>damage over time effects</unit-skill>.<br /><br />After inflicting <unit-skill>Corrosion</unit-skill> with a critical hit, <unit-skill>extends the duration the newly inflicted</unit-skill> <unit-skill>Corrosion</unit-skill> by 1 turn, with the extension chance equal to this Unit's critical power.",
         });
         const ext = abilityOfType(
             slot(buildShipAbilities(s).slots, 'passive')!.abilities,
@@ -386,65 +385,7 @@ describe('buildShipAbilities', () => {
         expect(ext.conditions).toEqual([{ subject: 'self-crit', derivable: true }]);
     });
 
-    it('Belladonna passive: crit-power extension gated by ally-inflicts-debuff (team)', () => {
-        const s = ship({
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            refits: [{}, {}] as any,
-            secondPassiveSkillText:
-                'When an ally inflicts <unit-skill>Corrosion</unit-skill>, this Unit has a chance to convert it.<br /><br />Upon converting Corrosion, this Unit extends the newly applied Acidic Decay status for 1 turn, with the chance to equal to its crit power.',
-        });
-        const ext = abilityOfType(
-            slot(buildShipAbilities(s).slots, 'passive')!.abilities,
-            'extend-dot'
-        )!;
-        expect(ext.config).toMatchObject({ chanceFromCritPower: true, turns: 1 });
-        expect(ext.conditions).toEqual([{ subject: 'ally-inflicts-debuff', derivable: false }]);
-    });
-
-    describe('extend-status (ship-kit wave 4, Task 5)', () => {
-        it('Sokol charged: damage + extend-status(debuff) on the enemy', () => {
-            const s = ship({
-                chargeSkillText:
-                    'This Unit deals <unit-damage>150% damage</unit-damage> and extends active <unit-aid>Debuffs</unit-aid> by 1 turn.',
-                chargeSkillCharge: 2,
-            });
-            const charged = slot(buildShipAbilities(s).slots, 'charged')!;
-            expect(abilityOfType(charged.abilities, 'damage')!.config).toMatchObject({
-                multiplier: 150,
-            });
-            const extend = abilityOfType(charged.abilities, 'extend-status')!;
-            expect(extend.config).toEqual({
-                type: 'extend-status',
-                statusKind: 'debuff',
-                turns: 1,
-            });
-            expect(extend.target).toBe('enemy');
-            expect(extend.trigger).toBe('on-cast');
-            expect(extend.conditions).toEqual([]);
-        });
-
-        it('Ripper passive R2: Marauder Rage II self-buff STILL present + extend-status(buff) on all-allies', () => {
-            const s = ship({
-                // factory default refits + only secondPassiveSkillText → getShipSkillRows picks Passive R2
-                secondPassiveSkillText:
-                    'This Unit gains <unit-skill>Marauder Rage II</unit-skill> for 3 turns after it inflicts a debuff.<br /><br />All allies extend their active <unit-aid>Buffs</unit-aid> by 1 turn.',
-            });
-            const passive = slot(buildShipAbilities(s).slots, 'passive')!;
-            const rage = abilityOfType(passive.abilities, 'buff');
-            expect(rage).toMatchObject({
-                config: { type: 'buff', buffName: 'Marauder Rage II' },
-            });
-            const extend = abilityOfType(passive.abilities, 'extend-status')!;
-            expect(extend.config).toEqual({
-                type: 'extend-status',
-                statusKind: 'buff',
-                turns: 1,
-            });
-            expect(extend.target).toBe('all-allies');
-            expect(extend.trigger).toBe('on-cast');
-            expect(extend.conditions).toEqual([]);
-        });
-
+    describe('extend-status', () => {
         it('Lev charged: extend-status(debuff) on all-enemies, gated on a self-crit condition', () => {
             const s = ship({
                 chargeSkillText:
@@ -475,10 +416,10 @@ describe('buildShipAbilities', () => {
         // gated on the MAIN target's hit critting.
         it('Asphyxiator refit passive: inflicted-scope extend-status on all-enemies, self-crit gated', () => {
             const s = ship({
-                thirdPassiveSkillText:
-                    'At the start of the round, if there are any enemies with 3 or more debuffs, this Unit gains 1 stack of <unit-skill>Overload</unit-skill>. After this Unit applies a Debuff with a Critical hit the newly applied Debuff is extended by 1 turn.',
+                secondPassiveSkillText:
+                    'At the start of the round, if there are any enemies with 3 or more <unit-aid>debuffs</unit-aid>, this Unit gains 1 stack of <unit-skill>Overload</unit-skill> and gains <unit-skill>Marauder Rage II</unit-skill> for 3 turns. Upon destroying an enemy, this Unit removes <unit-skill>Overload</unit-skill>. <br /><br />After this Unit inflicts a <unit-aid>debuff</unit-aid> with a critical hit, the newly inflicted <unit-aid>debuff</unit-aid> is <unit-skill>extended by 1 turn</unit-skill>.',
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                refits: [{}, {}, {}, {}] as any,
+                refits: [{}, {}] as any,
             });
             const passive = slot(buildShipAbilities(s).slots, 'passive')!;
             const extend = abilityOfType(passive.abilities, 'extend-status')!;
@@ -991,10 +932,10 @@ describe('buildShipAbilities', () => {
         });
     });
 
-    it('IonScorp charged: 190 base damage carries Defender-gated +10 scaling (→200 vs Defender)', () => {
+    it('IonScorp charged: 190 base damage carries Defender-gated +30 scaling (→220 vs Defender)', () => {
         const s = ship({
             chargeSkillText:
-                'This Unit deals <unit-damage>190% damage</unit-damage>, but when attacking a Defender, it deals <unit-damage>200%</unit-damage> damage and inflicts <unit-skill>Disable</unit-skill> for 1 turn.',
+                'This Unit deals <unit-damage>190% damage</unit-damage>, but when attacking a defender, it instead deals <unit-damage>220% damage</unit-damage> and inflicts <unit-skill>Disable</unit-skill> for 1 turn.',
             chargeSkillCharge: 1,
         });
         const charged = slot(buildShipAbilities(s).slots, 'charged')!;
@@ -1003,7 +944,7 @@ describe('buildShipAbilities', () => {
         expect(dmg.conditions).toEqual([
             { subject: 'enemy-type', derivable: true, requiredEnemyType: 'Defender' },
         ]);
-        expect(dmg.scaling).toMatchObject({ conditionIndex: 0, perUnit: 10 });
+        expect(dmg.scaling).toMatchObject({ conditionIndex: 0, perUnit: 30 });
     });
 
     it('"% more damage for each debuff on the enemy" scales on a DERIVABLE enemy-debuff count', () => {
@@ -1022,10 +963,10 @@ describe('buildShipAbilities', () => {
     });
 
     it('Selenite passive: "for every enemy with Stealth" scales on the DERIVABLE stealthed-enemy count (sub-project I, PR I5)', () => {
-        // Real CSV text (docs/ship-skills.csv, first/second_passive_skill_text) — "for every",
-        // not "for each", and counting ENEMY UNITS with Stealth, not stacks on one target.
-        // A plain enemy-buff gate (pre-I5) can only tell "at least one enemy Stealthed", not
-        // how many — the dedicated count subject fixes that.
+        // Old-corpus wording of Selenite's passive (synthetic; the catalogue text differs) — "for
+        // every", not "for each", and counting ENEMY UNITS with Stealth, not stacks on one target.
+        // A plain enemy-buff gate (pre-I5) can only tell "at least one enemy Stealthed", not how
+        // many — the dedicated count subject fixes that.
         const s = ship({
             firstPassiveSkillText:
                 'This Unit deals 10% more direct damage for every enemy with <unit-skill>Stealth</unit-skill>.',
@@ -1045,7 +986,7 @@ describe('buildShipAbilities', () => {
     });
 
     it('Zenith passive: "for each ally with a shield" scales on the DERIVABLE own-side shielded count', () => {
-        // Verbatim third_passive_skill_text from docs/ship-skills.csv (`grep '^Zenith,'`). The
+        // Old-corpus wording of Zenith's R4 passive (synthetic; the catalogue text differs). The
         // own-side mirror of Selenite's enemy-stealth count: Zenith COUNTS ITSELF (owner ruling),
         // so its own round-start shield floors the bonus at +8% on any board. Linear, no cap.
         const s = ship({
@@ -1083,7 +1024,8 @@ describe('buildShipAbilities', () => {
     });
 
     describe('Wildfire dotDamage crit-power scaling (sub-project I, PR I4a)', () => {
-        // Real CSV text (docs/ship-skills.csv row 156, first/second_passive_skill_text).
+        // Old-corpus wording of Wildfire's first/second passives (synthetic; the catalogue text
+        // differs).
         const baseText =
             'When an enemy has <unit-skill>Scorching Radiation</unit-skill>, this Unit deals <unit-damage>1% additional</unit-damage> <unit-skill>Inferno</unit-skill> <unit-damage>damage</unit-damage> to that unit for every 10% crit power.';
         const refitText =
@@ -1160,7 +1102,7 @@ describe('buildShipAbilities', () => {
         it('Akula passive: outgoing damage scaling with CURRENT enemy HP% (up to 30%)', () => {
             const akula = ship({
                 firstPassiveSkillText:
-                    "This Unit's attacks don't break <unit-skill>Stasis</unit-skill>. Increases outgoing direct damage by up to 30% based on the target's current HP percentage; the higher the percentage, the more the damage.",
+                    "This Unit's attacks do not reduce <unit-skill>Stasis</unit-skill>, and also ignore <unit-skill>Taunt</unit-skill> and <unit-skill>Provoke</unit-skill> effects. <br /><br />This Unit <unit-damage>increases outgoing direct damage</unit-damage> based on the enemies current HP, up to <unit-damage>30%</unit-damage> when the enemy is at full HP.",
             });
             const { slots } = buildShipAbilities(akula);
             const mod = abilityOfType(slot(slots, 'passive')!.abilities, 'modifier');
@@ -1336,7 +1278,7 @@ describe('buildShipAbilities', () => {
     it('Chakara passive: round-start damage proc + both self-buffs gated on lowest-speed', () => {
         const s = ship({
             thirdPassiveSkillText:
-                'This Unit starts each round with <unit-skill>Attack Up II</unit-skill> and <unit-skill>Defense Up II</unit-skill> for 1 turn if it has the lowest speed among all Allies. Then, deals <unit-damage>60% damage</unit-damage> to the highest Speed Enemy.',
+                'At the start of the round, if this Unit has the lowest speed among all allies, it gains <unit-skill>Attack Up II</unit-skill> and <unit-skill>Defense Up II</unit-skill> for 1 turn. Then deals <unit-damage>60% damage</unit-damage> to the enemy with the highest speed.',
         });
         const passive = buildShipAbilities(s).slots.find((sl) => sl.slot === 'passive');
         // 60% damage proc still parses.
@@ -1359,15 +1301,15 @@ describe('buildShipAbilities', () => {
         it('Liberator third passive: once-per-round extra action on-enemy-destroyed in passive slot', () => {
             const s = ship({
                 thirdPassiveSkillText:
-                    'This Unit has 40% Shield Penetration. When an enemy dies, all allies <unit-aid>add 1 charge</unit-aid> to their Charged Skills, and once per round, this unit gains 1 extra action.',
+                    'This Unit has <unit-damage>40% shield penetration</unit-damage>.<br /><br />When an enemy is destroyed, all allies <unit-skill>add 1 charge</unit-skill> to their charged skills and once per round, this unit <unit-skill>gains 1 extra action</unit-skill>.',
                 chargeSkillCharge: 4,
             });
             const { slots } = buildShipAbilities(s);
             const passive = slot(slots, 'passive');
             expect(passive).toBeDefined();
             const extraAction = abilityOfType(passive!.abilities, 'extra-action');
-            // Phase 4b Task 10: the sentence's "When an enemy dies" scopes the grant to the
-            // on-enemy-destroyed death trigger (previously stamped on-cast pre-Task-10).
+            // The sentence's "When an enemy is destroyed" scopes the grant to the
+            // on-enemy-destroyed death trigger.
             expect(extraAction).toMatchObject({
                 target: 'self',
                 trigger: 'on-enemy-destroyed',
@@ -1456,7 +1398,7 @@ describe('buildShipAbilities', () => {
             // inflictions supply the on-debuff-inflicted events that fire this shield grant.
             const s = ship({
                 firstPassiveSkillText:
-                    'This Unit gains a <unit-damage>Shield equal to 3%</unit-damage> of their Max HP when an enemy gets debuffed.',
+                    'This Unit gains a <unit-damage>shield equal to 3%</unit-damage> of their max HP when an enemy gets inflicted with a <unit-aid>debuff</unit-aid>.',
             });
             const passive = buildShipAbilities(s).slots.find((x) => x.slot === 'passive');
             const shield = passive?.abilities.find((a) => a.type === 'shield');
@@ -1529,9 +1471,9 @@ describe('buildShipAbilities', () => {
     // block: the reach lives in the engine, pinned by
     // `plainAllyCleanseFootprintReach.integration.test.ts`.
     //
-    // An EXPLICIT recipient ("the ally with the most missing health" → Volk) sets explicitTarget
-    // and stays a genuine single recipient on every path — since SP-4e Task 3 it is parsed as
-    // 'lowest-hp-ally' rather than 'ally'. The parser defaults bare to 'self'; the flip lives in
+    // An EXPLICIT recipient ("the ally with the most missing HP" → Volk) sets explicitTarget
+    // and stays a genuine single recipient on every path — it is parsed as 'lowest-hp-ally'
+    // rather than 'ally'. The parser defaults bare to 'self'; the flip lives in
     // abilitiesFromText where the slot + damage component are known.
     describe('bare repair → all-allies (AoE) / cleanse → ally on pure-support active/charged skills', () => {
         it('Hermes active bare repair → AoE heal (all-allies)', () => {
@@ -1549,7 +1491,7 @@ describe('buildShipAbilities', () => {
         it('Hermes charged bare repair → AoE heal (all-allies); charge still parses', () => {
             const s = ship({
                 chargeSkillText:
-                    'This Unit repairs 37% of its Max HP and adds 1 charge to the Charged Skill. If the target has less than 40% HP, it grants Cheat Death.',
+                    'This Unit <unit-damage>repairs 37%</unit-damage> of its max HP and <unit-skill>adds 1 charge</unit-skill> to the charged skill of allies.<br /><br />If an ally has less than 40% HP, it grants that ally <unit-skill>Cheat Death</unit-skill>.',
                 chargeSkillCharge: 4,
             });
             const charged = buildShipAbilities(s).slots.find((x) => x.slot === 'charged');
@@ -1560,7 +1502,11 @@ describe('buildShipAbilities', () => {
                 config: { type: 'heal', pct: 37, basis: 'hp' },
             });
             const charge = charged?.abilities.find((a) => a.type === 'charge');
-            expect(charge).toMatchObject({ type: 'charge', config: { type: 'charge', amount: 1 } });
+            expect(charge).toMatchObject({
+                type: 'charge',
+                target: 'all-allies',
+                config: { type: 'charge', amount: 1 },
+            });
         });
 
         it('damage-rider bare repair stays self (skill has a damage component)', () => {
@@ -1644,7 +1590,7 @@ describe('buildShipAbilities', () => {
         // condition ("if this unit has been directly damaged this round") is a SELF-heal — the caster
         // tanks damage and heals itself. The flip to 'ally' must NOT apply even though the skill has
         // no damage component and no explicit target phrase.
-        it('Meatshield active: self-damage-conditional bare repair stays self (real text)', () => {
+        it('Meatshield active: self-damage-conditional bare repair stays self', () => {
             const s = ship({
                 activeSkillText:
                     'This Unit gains <unit-skill>Inc. Repair Up III</unit-skill> for 2 turns.<br /><br /> If this Unit has been directly damaged this round, it <unit-damage>repairs 5%</unit-damage> of its max HP.',
@@ -1675,10 +1621,11 @@ describe('buildShipAbilities', () => {
         });
     });
 
-    // Lionheart R4 refit-active passive (docs/ship-skills.csv, verbatim): the round-start
-    // Protection grant is a consumable FIXED pool (a redirected hit clears it entirely), so it
-    // must refresh to 10 each round rather than accumulate — maxStacks + clearAllOnRedirect are
-    // threaded through to the buff config for the engine (Task 4) to consume.
+    // Lionheart R4 refit-active passive (old-corpus wording; the catalogue text differs): the
+    // round-start Protection grant is a consumable FIXED pool (a redirected hit clears it
+    // entirely), so it must refresh to 10 each round rather than accumulate — maxStacks +
+    // clearAllOnRedirect are threaded through to the buff config for the engine (Task 4) to
+    // consume.
     it('Lionheart: Protection buff ability carries maxStacks:10 + clearAllOnRedirect', () => {
         const s = ship({
             thirdPassiveSkillText:
@@ -1777,8 +1724,8 @@ describe('buildShipAbilities', () => {
     // condition (evaluated against live tank HP at drain time); Isha's instead-on-crit
     // pair maps to triggerCritFilter 'non-crit' / 'crit'.
     describe('self-subject damage-reaction heals → on-attacked (Phase 4c)', () => {
-        // Makoli and Guardian share this CSV first_passive_skill_text byte-identically.
-        it('Makoli/Guardian first passive (identical CSV text): heal rides on-attacked with a derivable below-40% self hp-threshold', () => {
+        // Old-corpus wording of Makoli's first passive (synthetic; the catalogue text differs).
+        it('Makoli/Guardian first passive (old-corpus text): heal rides on-attacked with a derivable below-40% self hp-threshold', () => {
             const s = ship({
                 firstPassiveSkillText:
                     'When directly damaged while below 40% HP, this Unit <unit-damage>repairs 20%</unit-damage> of its Max HP.',
@@ -1806,7 +1753,7 @@ describe('buildShipAbilities', () => {
         it('Isha second passive (CSV second_passive_skill_text): instead-on-crit pair maps to triggerCritFilter non-crit (3%) / crit (6%)', () => {
             const s = ship({
                 firstPassiveSkillText:
-                    'When directly damaged, this Unit <unit-damage>repairs 3%</unit-damage> of its max HP, but when criticall hit, it instead <unit-damage>repairs 6%</unit-damage> of its max HP.',
+                    'When directly damaged, this Unit <unit-damage>repairs 3%</unit-damage> of its max HP, but when critcally hit, it instead <unit-damage>repairs 6%</unit-damage> of its max HP.',
             });
             const passive = buildShipAbilities(s).slots.find((x) => x.slot === 'passive');
             const heals = passive?.abilities.filter((a) => a.type === 'heal') ?? [];
@@ -1875,7 +1822,7 @@ describe('buildShipAbilities', () => {
     // previously emitted nothing (see skillTextParser.test.ts's "the debuff-duration clause
     // emits nothing" note on parseHealAbilities — that note is about the HEAL parser only; the
     // reduction now lives in its own ability, added alongside, not folded into the heal).
-    describe('debuff-duration reduction (PR11, inverse of extend-dot)', () => {
+    describe('debuff-duration reduction (inverse of extend-dot)', () => {
         it('Heliodor first passive: self damage-reaction reduces ALL active debuffs on itself by 1 turn', () => {
             const s = ship({
                 firstPassiveSkillText:
@@ -1924,7 +1871,7 @@ describe('buildShipAbilities', () => {
         it('Pestilence passive: on-debuff-inflicted reduces ALL active debuffs on all allies by 1 turn (verbatim first_passive_skill_text)', () => {
             const s = ship({
                 firstPassiveSkillText:
-                    'On debuff infliction this Unit reduces the duration of active Debuffs on all allies by 1 turn.',
+                    'When this Unit inflicts a <unit-aid>debuff</unit-aid>, it <unit-skill>reduces the duration of all active</unit-skill> <unit-aid>debuffs</unit-aid> on all allies by 1 turn.',
             });
             const passive = buildShipAbilities(s).slots.find((x) => x.slot === 'passive');
             const reduce = passive?.abilities.find((a) => a.type === 'cleanse');
@@ -1942,10 +1889,10 @@ describe('buildShipAbilities', () => {
             });
         });
 
-        it('Lingshe charge skill (Bomb-countdown reduction): emits a bomb-countdown-reduce ability, NOT a debuff-duration-reduction cleanse (SP-F F3 — see auditSkills.allowlist.ts history)', () => {
+        it('Lingshe charge skill (Bomb-countdown reduction): emits a bomb-countdown-reduce ability, NOT a debuff-duration-reduction cleanse', () => {
             const s = ship({
                 chargeSkillText:
-                    'This Unit reduces all <unit-skill>Bombs</unit-skill> on the enemy targets by 1 turn, <unit-skill>Bombs</unit-skill> reduced to 0 turns by this skill will detonate.<br />This reduction effect requires hacking.<br /><br />This Unit inflicts <unit-skill>Bomb III</unit-skill> for 3 turns.',
+                    'This Unit reduces all <unit-skill>Bomb</unit-skill> on the enemy targets by 1 turn.<br />This reduction effect requires hacking.<br /><br />This Unit inflicts <unit-skill>Bomb III</unit-skill> for 3 turns.',
             });
             const charged = buildShipAbilities(s).slots.find((x) => x.slot === 'charged');
             // Still no generic duration-reduction cleanse — that primitive deliberately excludes
@@ -1957,7 +1904,7 @@ describe('buildShipAbilities', () => {
                     a.config.mode === 'reduce-duration'
             );
             expect(reduce).toBeUndefined();
-            // SP-F F3: the dedicated bomb-countdown-reduce ability now builds instead.
+            // The dedicated bomb-countdown-reduce ability builds instead.
             const bombReduce = charged?.abilities.find((a) => a.type === 'bomb-countdown-reduce');
             expect(bombReduce).toMatchObject({
                 type: 'bomb-countdown-reduce',
@@ -1967,7 +1914,7 @@ describe('buildShipAbilities', () => {
             });
         });
 
-        it('an un-gated reduction clause (no "when directly damaged"/"on debuff infliction") is DROPPED, not emitted as a phantom on-attacked ability', () => {
+        it('an un-gated reduction clause (no "when directly damaged"/"when this Unit inflicts a debuff") is DROPPED, not emitted as a phantom on-attacked ability', () => {
             // The clause parses (parseDebuffDurationReduction returns turns/target) but carries
             // neither reactive gate flag → buildShipAbilities must NOT emit it (a silent on-cast /
             // on-attacked default would fire an all-debuff reduction with no real trigger). No
@@ -2022,7 +1969,7 @@ describe('buildShipAbilities', () => {
         it('Stalwart second passive (70%): emits an on-attacked counter with requirePrimaryTarget and keeps the Legion Discipline II buff', () => {
             const s = ship({
                 secondPassiveSkillText:
-                    'When this Unit is directly damaged as a primary target, it deals <unit-damage>70% damage</unit-damage> to that enemy and gains <unit-skill>Legion Discipline II</unit-skill> for 3 turns.<br /><br />Additionally, when this Unit is adjacent to a Supporter, this Unit gains <unit-skill>20% Attack</unit-skill>.',
+                    'This Unit ignores <unit-skill>Taunt</unit-skill> and <unit-skill>Provoke</unit-skill> effects.<br /><br />When this Unit is directly damaged as a primary target, it deals <unit-damage>70% damage</unit-damage> to the enemy and gains <unit-skill>Legion Discipline II</unit-skill> for 3 turns.<br /><br />At the start of combat this Unit gains 20% attack if its adjacent to a supporter.',
             });
             const passive = passiveOf(s);
             const counterAb = passive?.abilities.find((a) => a.type === 'counter');
@@ -2512,7 +2459,7 @@ describe('buildShipAbilities', () => {
             const s = ship({
                 refits: [{}, {}] as Ship['refits'],
                 secondPassiveSkillText:
-                    'This Unit gains <unit-skill>Stealth</unit-skill> for 1 turn after critically damaging an enemy.<br /><br />This Unit reduces direct damage by 25% while <unit-skill>Stealth</unit-skill> is active. If directly damaged while <unit-skill>Stealth</unit-skill> is active, remove <unit-skill>Stealth</unit-skill>.<br /><br />This Unit starts combat fully charged.',
+                    'This Unit gains <unit-skill>Stealth</unit-skill> for 1 turn after critically damaging an enemy.<br /><br />This Unit takes <unit-damage>25% less direct damage</unit-damage> while <unit-skill>Stealth</unit-skill> is active.<br /><br />This Unit starts combat <unit-skill>fully charged</unit-skill>.',
             });
             const buff = passiveOf(s)?.abilities.find((a) => a.type === 'buff');
             expect(buff).toMatchObject({ trigger: 'on-crit', config: { buffName: 'Stealth' } });
@@ -2520,16 +2467,19 @@ describe('buildShipAbilities', () => {
     });
 
     describe('Pallas-pattern ally-crit reactive triggers', () => {
-        // Real Pallas passive shape: a defense buff, then "when an ally critically hits" (charge +
-        // Everliving Regeneration buff), then "when this unit critically repairs an ally" (cleanse).
+        // A defense buff, then "when an ally critically hits" (charge + Everliving Regeneration
+        // buff), then "when it critically repairs an ally" (cleanse).
         const PALLAS_TEXT =
-            "This Unit's Defense is increased by 20%. When an ally critically hits an enemy, this unit gains 1 charge to its charged skill and Everliving Regeneration 3 for 2 turns. Additionally, when this unit critically repairs an ally, it cleanses 1 debuff from itself.";
+            "This Unit's Defense is increased by 20%. When an ally critically hits an enemy, this unit gains 1 charge to its charged skill and Everliving Regeneration 3 for 2 turns. Additionally, when it critically repairs an ally, it cleanses 1 debuff from itself.";
+        // Hermes passive R2 (docs/ship-skills.csv).
+        const HERMES_R2_TEXT =
+            "When an ally critically hits an enemy, this Unit <unit-skill>adds 1 charge</unit-skill> to its own charged skill and grants <unit-skill>Everliving Regeneration III</unit-skill> for 2 turns to the ally.<br /><br />This Unit's defense is increased by 20% and when it critically repairs an ally, it <unit-skill>cleanses 1 debuff</unit-skill> from itself.";
 
         it('cleanse rides on-ally-critically-repaired', () => {
             const s = ship({
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 refits: [{}, {}] as any,
-                firstPassiveSkillText: PALLAS_TEXT,
+                firstPassiveSkillText: HERMES_R2_TEXT,
             });
             const passive = buildShipAbilities(s).slots.find((x) => x.slot === 'passive');
             const cleanse = passive?.abilities.find((a) => a.type === 'cleanse');
@@ -2546,7 +2496,7 @@ describe('buildShipAbilities', () => {
             const s = ship({
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 refits: [{}, {}] as any,
-                firstPassiveSkillText: PALLAS_TEXT,
+                firstPassiveSkillText: HERMES_R2_TEXT,
             });
             const passive = buildShipAbilities(s).slots.find((x) => x.slot === 'passive');
             const charge = passive?.abilities.find((a) => a.type === 'charge');
@@ -2588,7 +2538,7 @@ describe('buildShipAbilities', () => {
             // inside the crit-repair sentence).
             const s = ship({
                 activeSkillText:
-                    'This Unit <unit-damage>repairs the ally for 4%</unit-damage> of its Max HP. When this unit critically repairs an ally, it <unit-damage>repairs itself for 7%</unit-damage> of its Max HP.',
+                    'This Unit <unit-damage>repairs the ally for 4%</unit-damage> of its Max HP. When it critically repairs an ally, it <unit-damage>repairs itself for 7%</unit-damage> of its Max HP.',
             });
             const active = buildShipAbilities(s).slots.find((x) => x.slot === 'active');
             const heals = active?.abilities.filter((a) => a.type === 'heal') ?? [];
@@ -2682,7 +2632,7 @@ describe('buildShipAbilities', () => {
         it('Valkyrie: passive detonation dual-recipient → lowest-hp-ally + self leech, scope detonation', () => {
             const s = ship({
                 firstPassiveSkillText:
-                    'This Unit gains <unit-skill>Speed Up II</unit-skill> for 1 turn at the start of the round.<br /><br />When an <unit-aid>Echoing Burst</unit-aid> explodes on an enemy, this Unit and the ally with the lowest current health percentage <unit-damage>repair 5%</unit-damage> of damage dealt.',
+                    'This Unit ignores <unit-skill>Taunt</unit-skill> and <unit-skill>Provoke</unit-skill> effects and at the start of the round, this Unit gains <unit-skill>Speed Up II</unit-skill> for 1 turn. <br /><br />When an <unit-skill>Echoing Burst</unit-skill> explodes on an enemy, the Unit and the ally with the lowest current health percentage <unit-damage>repair 5%</unit-damage> of the damage dealt.',
             });
             const passive = buildShipAbilities(s).slots.find((x) => x.slot === 'passive');
             const heals = passive?.abilities.filter((a) => a.type === 'heal') ?? [];
@@ -2695,7 +2645,7 @@ describe('buildShipAbilities', () => {
                     leechScope: 'detonation',
                 });
             }
-            // SP-4e Task 3: the ally half is the named worst-HP selector.
+            // The ally half is the named worst-HP selector.
             expect(heals.map((h) => h.target).sort()).toEqual(['lowest-hp-ally', 'self']);
         });
 
@@ -2717,7 +2667,7 @@ describe('buildShipAbilities', () => {
         it('Quixilver passive: damage-taken shield with requiresHpDamage, no leechScope', () => {
             const s = ship({
                 firstPassiveSkillText:
-                    'This Unit gains <unit-damage>Shield equal to 25%</unit-damage> of the damage taken when taking HP damage and still having Shield.',
+                    'This Unit gains a <unit-damage>shield equal to 25%</unit-damage> of the damage taken when taking HP damage and still having a shield.',
             });
             const passive = buildShipAbilities(s).slots.find((x) => x.slot === 'passive');
             const shield = passive?.abilities.find((a) => a.type === 'shield');
@@ -2765,10 +2715,10 @@ describe('buildShipAbilities', () => {
             });
         });
 
-        it('FrontLine R4 passive: start-of-combat max-HP shield + the on-enemy-charged-cast damage-dealt shield, no duplicate/taken shield', () => {
+        it('FrontLine R2 passive: start-of-combat max-HP shield + the on-enemy-charged-cast damage-dealt shield, no duplicate/taken shield', () => {
             const s = ship({
                 thirdPassiveSkillText:
-                    'This ship has 20% Shield Penetration.<br />While Shielded, it gains 2500 additional Defense.<br />This Unit gains <unit-damage>Shield equal to 25%</unit-damage> of its Max HP at the start of combat.<br /><br />When an enemy uses their Charged skill, it deals <unit-damage>80%</unit-damage> and gains a Shield equal to <unit-damage>30%</unit-damage> of the damage dealt, once per round.',
+                    'This ship has <unit-damage>20% shield penetration</unit-damage>.<br /><br />At the start of combat this Unit gains a <unit-damage>shield equal to 25%</unit-damage> of its max HP and while it has an active shield, it gains 2500 defense.<br /><br />When an enemy uses their charged skill, this Unit deals <unit-damage>80% damage</unit-damage> and gains a <unit-damage>shield equal to 30%</unit-damage> of the damage dealt, once per round.',
             });
             const passive = buildShipAbilities(s).slots.find((x) => x.slot === 'passive');
             const shields = passive?.abilities.filter((a) => a.type === 'shield') ?? [];
@@ -2881,11 +2831,11 @@ describe('buildShipAbilities', () => {
             });
         });
 
-        it('R0 passive "Shield equal to 30% of Max HP when applying Stasis" → shield on-stasis-applied', () => {
+        it('R0 passive "shield equal to 30% of its max HP after it inflicts Stasis" → shield on-stasis-applied', () => {
             const s = ship({
                 refits: [],
                 firstPassiveSkillText:
-                    'This Unit gains <unit-damage>Shield equal to 30%</unit-damage> of its Max HP when applying Stasis.',
+                    'This Unit gains a <unit-damage>shield equal to 30%</unit-damage> of its max HP after it inflicts <unit-skill>Stasis</unit-skill>.',
             });
             const passive = buildShipAbilities(s).slots.find((sl) => sl.slot === 'passive');
             const shield = passive?.abilities.find((a) => a.type === 'shield');
@@ -2897,12 +2847,12 @@ describe('buildShipAbilities', () => {
             });
         });
 
-        it('R2 passive parses the shield-on-Stasis clause AND the adjacency HP grant (PR F4)', () => {
+        it('R2 passive parses the shield-on-Stasis clause AND the adjacency HP grant', () => {
             const s = ship({
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 refits: [{}, {}] as any,
                 secondPassiveSkillText:
-                    'When adjacent to a Supporter, this Unit gains 20% HP. This Unit gains <unit-damage>Shield equal to 30%</unit-damage> of its Max HP when applying Stasis.',
+                    'This Unit gains a <unit-damage>shield equal to 30%</unit-damage> of its max HP after it inflicts <unit-skill>Stasis</unit-skill>.<br /><br />At the start of combat this Unit gains 20% HP if its adjacent to a supporter.',
             });
             const passive = buildShipAbilities(s).slots.find((sl) => sl.slot === 'passive');
             const shield = passive?.abilities.find((a) => a.type === 'shield');
@@ -2912,9 +2862,9 @@ describe('buildShipAbilities', () => {
                 trigger: 'on-stasis-applied',
                 config: { type: 'shield', pct: 30, basis: 'hp' },
             });
-            // PR F4: "When adjacent to a Supporter, this Unit gains 20% HP" is now parsed as a
+            // "At the start of combat this Unit gains 20% HP if its adjacent to a supporter" is a
             // permanent pre-fight stat grant (percent-of-own, Supporter-gated), applied by the
-            // battle sim's pre-fight layer in F5.
+            // battle sim's pre-fight layer.
             const preCombat = passive?.abilities.find((a) => a.type === 'pre-combat-stat');
             expect(preCombat).toMatchObject({
                 type: 'pre-combat-stat',
@@ -2978,7 +2928,7 @@ describe('buildShipAbilities', () => {
         it('Sokol 3rd passive: extra-action on-enemy-destroyed, once per round', () => {
             const s = ship({
                 thirdPassiveSkillText:
-                    'This Unit gains 1 stack of <unit-skill>Blast</unit-skill> every turn and grants one extra end of round action upon a kill, once per round.',
+                    'This Unit gains 1 stack of <unit-skill>Blast</unit-skill> every turn.<br /><br />When an enemy is destroyed, once per round, this Unit <unit-skill>gains 1 extra action</unit-skill>.',
             });
             const passive = slot(buildShipAbilities(s).slots, 'passive')!;
             const extra = passive.abilities.find((a) => a.type === 'extra-action')!;
@@ -2993,7 +2943,7 @@ describe('buildShipAbilities', () => {
         it('Harvester 3rd passive: extra-action on-ally-destroyed', () => {
             const s = ship({
                 thirdPassiveSkillText:
-                    'When an allied Unit is destroyed, this Unit gains 1 extra end of round action and <unit-skill>Speed Up I</unit-skill> for 6 turns.',
+                    'When an ally is destroyed, this Unit <unit-skill>gains 1 extra end of round action</unit-skill> and <unit-skill>Speed Up I</unit-skill> for 6 turns.',
             });
             const passive = slot(buildShipAbilities(s).slots, 'passive')!;
             const extra = passive.abilities.find((a) => a.type === 'extra-action')!;
@@ -3005,7 +2955,7 @@ describe('buildShipAbilities', () => {
         it('Liberator 3rd passive: all-allies charge + self extra-action, both on-enemy-destroyed', () => {
             const s = ship({
                 thirdPassiveSkillText:
-                    'This Unit has 40% Shield Penetration. When an enemy dies, all allies <unit-aid>add 1 charge</unit-aid> to their Charged Skills, and once per round, this unit gains 1 extra action.',
+                    'This Unit has <unit-damage>40% shield penetration</unit-damage>.<br /><br />When an enemy is destroyed, all allies <unit-skill>add 1 charge</unit-skill> to their charged skills and once per round, this unit <unit-skill>gains 1 extra action</unit-skill>.',
             });
             const passive = slot(buildShipAbilities(s).slots, 'passive')!;
 
@@ -3025,34 +2975,14 @@ describe('buildShipAbilities', () => {
                 expect(extra.config.oncePerRound).toBe(true);
             }
         });
-
-        it('Liberator (constants phrasing): "grants N charge to all allies" also emits the all-allies charge', () => {
-            // An older in-game phrasing reads "this unit grants 1 charge to all
-            // allies" (verb-first), distinct from the CSV's "all allies add 1 charge". Both must
-            // emit the same all-allies on-enemy-destroyed charge ability.
-            const s = ship({
-                secondPassiveSkillText:
-                    'When an enemy dies, this unit grants 1 charge to all allies, and once per round, it gains 1 extra action.',
-            });
-            const passive = slot(buildShipAbilities(s).slots, 'passive')!;
-            const charge = passive.abilities.find((a) => a.type === 'charge')!;
-            expect(charge).toBeDefined();
-            expect(charge.target).toBe('all-allies');
-            expect(charge.trigger).toBe('on-enemy-destroyed');
-            if (charge.config.type === 'charge') {
-                expect(charge.config.amount).toBe(1);
-            }
-            const extra = passive.abilities.find((a) => a.type === 'extra-action')!;
-            expect(extra.trigger).toBe('on-enemy-destroyed');
-        });
     });
 
-    // Phase 4c PR 3 (Task 7): "when HP drops/falls below N%" buff-grant reactives ride the
-    // on-hp-threshold-crossed trigger with a derivable self hp-threshold condition; "once per
-    // battle" maps to config.oncePerCombat. Sentence-scoped at the buff's anchor, so the
-    // start-of-combat Cheat Death / Everliving (Tycho) and the standing direct-damage modifier
-    // (Los) — which sit in different sentences/paragraphs — are untouched. Hermes's charged
-    // Cheat Death "if the target has less than N% HP" grant narrows to the heal target.
+    // "when HP drops/falls below N%" buff-grant reactives ride the on-hp-threshold-crossed
+    // trigger with a derivable self hp-threshold condition; "once per battle" maps to
+    // config.oncePerCombat. Sentence-scoped at the buff's anchor, so the start-of-combat Cheat
+    // Death / Everliving (Tycho) and the standing direct-damage modifier (Los) — which sit in
+    // different sentences/paragraphs — are untouched. Hermes's charged Cheat Death "if an ally
+    // has less than N% HP" grant reaches every ally the cast targets, each filtered on its own HP.
     describe('hp-crossing reactive buff grants → on-hp-threshold-crossed (Phase 4c PR 3)', () => {
         const selfHpBelow = (pct: number) => ({
             subject: 'hp-threshold',
@@ -3202,7 +3132,7 @@ describe('buildShipAbilities', () => {
         it('Hermes charged: Cheat Death is an all-allies grant with a per-recipient below-40% HP filter; heal + charge unchanged', () => {
             const s = ship({
                 chargeSkillText:
-                    'This Unit <unit-damage>repairs 37%</unit-damage> of its Max HP and <unit-aid>adds 1 charge</unit-aid> to the Charged Skill.<br /><br />If the target has less than 40% HP, it grants <unit-skill>Cheat Death</unit-skill>.',
+                    'This Unit <unit-damage>repairs 37%</unit-damage> of its max HP and <unit-skill>adds 1 charge</unit-skill> to the charged skill of allies.<br /><br />If an ally has less than 40% HP, it grants that ally <unit-skill>Cheat Death</unit-skill>.',
                 chargeSkillCharge: 4,
             });
             const charged = slot(buildShipAbilities(s).slots, 'charged')!;
@@ -3225,7 +3155,7 @@ describe('buildShipAbilities', () => {
                 target: 'all-allies',
                 config: { type: 'heal', pct: 37, basis: 'hp' },
             });
-            // "adds 1 charge to the Charged Skill" — ownerless, so every ally the cast targets.
+            // "adds 1 charge to the charged skill of allies" — every ally the cast targets.
             const charge = charged.abilities.find((a) => a.type === 'charge')!;
             expect(charge).toMatchObject({ target: 'all-allies', trigger: 'on-cast' });
             expect(charge.config).toMatchObject({ type: 'charge', amount: 1 });
@@ -3473,7 +3403,7 @@ describe('buildShipAbilities — all-allies charge-bar grants (Hayyan / Graphite
     it('Liberator real passive: emits EXACTLY ONE charge — on-enemy-destroyed / all-allies, no on-cast double', () => {
         const s = ship({
             firstPassiveSkillText:
-                'This Unit has 40% Shield Penetration. When an enemy dies, all allies <unit-aid>add 1 charge</unit-aid> to their Charged Skills.',
+                'This Unit has <unit-damage>40% shield penetration</unit-damage>.<br /><br />When an enemy is destroyed, all allies <unit-skill>add 1 charge</unit-skill> to their charged skills.',
         });
 
         const { slots } = buildShipAbilities(s);
@@ -3497,11 +3427,10 @@ describe('buildShipAbilities — all-allies charge-bar grants (Hayyan / Graphite
 // ── §4.5 Akula exception: doesntBreakStasis ───────────────────────────────────────────────
 
 describe('buildShipAbilities doesntBreakStasis', () => {
-    it("Akula: doesntBreakStasis=true (curly-apostrophe don't break Stasis in passive)", () => {
-        // Akula's refit-active passive text uses curly apostrophe + "don't break Stasis".
+    it('Akula: doesntBreakStasis=true ("do not reduce Stasis" in passive)', () => {
         const s = ship({
             firstPassiveSkillText:
-                "This Unit's attacks don’t break Stasis. Increases outgoing direct damage by up to 30% based on the target's current HP percentage; the higher the percentage, the more the damage.",
+                "This Unit's attacks do not reduce <unit-skill>Stasis</unit-skill>, and also ignore <unit-skill>Taunt</unit-skill> and <unit-skill>Provoke</unit-skill> effects. <br /><br />This Unit <unit-damage>increases outgoing direct damage</unit-damage> based on the enemies current HP, up to <unit-damage>30%</unit-damage> when the enemy is at full HP.",
         });
         const result = buildShipAbilities(s);
         expect(result.doesntBreakStasis).toBe(true);
@@ -3530,7 +3459,7 @@ describe('buildShipAbilities doesntBreakStasis', () => {
         const akula = buildShipAbilities(
             ship({
                 firstPassiveSkillText:
-                    "This Unit's attacks don’t break Stasis. Increases outgoing direct damage by up to 30% based on the target's current HP percentage; the higher the percentage, the more the damage.",
+                    "This Unit's attacks do not reduce <unit-skill>Stasis</unit-skill>, and also ignore <unit-skill>Taunt</unit-skill> and <unit-skill>Provoke</unit-skill> effects. <br /><br />This Unit <unit-damage>increases outgoing direct damage</unit-damage> based on the enemies current HP, up to <unit-damage>30%</unit-damage> when the enemy is at full HP.",
             })
         );
         expect(akula.stasisBreakExemptWhen).toBeUndefined();
@@ -3544,7 +3473,7 @@ describe('buildShipAbilities doesntBreakStasis', () => {
     });
 
     it('Zenith R4: "do not reduce Stasis" while shielded → a SELF-SHIELD-GATED exemption, never the unconditional flag', () => {
-        // Verbatim third_passive_skill_text from docs/ship-skills.csv (`grep '^Zenith,'`).
+        // Old-corpus wording of Zenith's R4 passive (synthetic; the catalogue text differs).
         const s = ship({
             refits: [{}, {}, {}, {}],
             thirdPassiveSkillText:
@@ -3589,10 +3518,8 @@ describe('buildShipAbilities chargeLossImmune', () => {
 
 // ── ship-kit correctness backlog: ignoresForcedTargeting (ignore Taunt/Provoke) ────────────
 // Judge/Stalwart/Yuyan/Huanying/Valkyrie/Vanguard's kit text states their attacks "ignore
-// Taunt and Provoke". RAW active-skill strings from docs/ship-skills.csv (the Supabase-fetched
-// master), fed through the production buildShipAbilities(ship) path. Skill data's master is
-// Supabase ship_templates → docs/ship-skills.csv; tagged CSV text is what production actually
-// parses, so fixtures use it verbatim rather than any hand-maintained constant.
+// Taunt and Provoke". Old-corpus active-skill texts (synthetic; the catalogue wording differs),
+// fed through the production buildShipAbilities(ship) path.
 describe('buildShipAbilities ignoresForcedTargeting', () => {
     it.each([
         [
@@ -3619,27 +3546,27 @@ describe('buildShipAbilities ignoresForcedTargeting', () => {
             'Vanguard',
             "This Unit's attack ignores <unit-skill>Taunt</unit-skill> and <unit-skill>Provoke</unit-skill> and deals <unit-damage>100% damage</unit-damage>.",
         ],
-    ])('%s: ignoresForcedTargeting=true from CSV active-skill text', (_name, activeSkillText) => {
+    ])('%s: ignoresForcedTargeting=true from its active-skill text', (_name, activeSkillText) => {
         const result = buildShipAbilities(ship({ activeSkillText }));
         expect(result.ignoresForcedTargeting).toBe(true);
     });
 
     it('unrelated ship (no ignore clause): ignoresForcedTargeting is absent (falsy)', () => {
         const activeSkillText =
-            'This Unit deals <unit-damage>50% damage</unit-damage> plus an additional amount equal to <unit-damage>60%</unit-damage> of its Defense and inflicts <unit-skill>Defense Down I</unit-skill> for 1 turn.';
+            'This Unit deals <unit-damage>50% damage</unit-damage> with additional damage equal to <unit-damage>60%</unit-damage> of its defense and inflicts <unit-skill>Defense Down I</unit-skill> for 1 turn.';
         const result = buildShipAbilities(ship({ activeSkillText }));
         expect(result.ignoresForcedTargeting).toBeFalsy();
     });
 });
 
-// C2b-1 T5: Sefuba and Salvation reactive heal triggers + Sefuba chain purge.
+// Sefuba and Salvation reactive heal triggers + Sefuba chain purge.
 // RAW strings from docs/ship-skills.csv.
-describe('buildShipAbilities — on-enemy-purged and on-ally-purged heal triggers (T5)', () => {
+describe('buildShipAbilities — on-enemy-purged and on-ally-purged heal triggers', () => {
     describe('Sefuba p1: on-enemy-purged self-heal, no chain purge', () => {
         const sefubaP1 = () =>
             ship({
                 firstPassiveSkillText:
-                    'When this Unit <unit-aid>purges a buff</unit-aid> from an enemy, it <unit-damage>repairs itself for 8%</unit-damage> Max HP.',
+                    'When this Unit <unit-skill>purges a buff</unit-skill> from an enemy, it <unit-damage>repairs 8%</unit-damage> of its max HP for each <unit-aid>buff</unit-aid> removed.',
             });
 
         it('emits a self heal with trigger on-enemy-purged', () => {
@@ -3664,7 +3591,7 @@ describe('buildShipAbilities — on-enemy-purged and on-ally-purged heal trigger
         const sefubaP2 = () =>
             ship({
                 secondPassiveSkillText:
-                    'When this Unit <unit-aid>purges an enemy buff</unit-aid>, it <unit-damage>repairs itself for 12%</unit-damage> Max HP and <unit-aid>purges 1</unit-aid> more buff from the enemy.',
+                    'When this Unit <unit-skill>purges a buff</unit-skill> from an enemy, it <unit-damage>repairs 8%</unit-damage> of its max HP for each <unit-aid>buff</unit-aid> removed and also <unit-skill>purges 1 extra buff</unit-skill> from the enemy.',
             });
 
         it('emits a self heal with trigger on-enemy-purged', () => {
@@ -3674,7 +3601,7 @@ describe('buildShipAbilities — on-enemy-purged and on-ally-purged heal trigger
             expect(heal!.trigger).toBe('on-enemy-purged');
             expect(heal!.target).toBe('self');
             if (heal!.config.type === 'heal') {
-                expect(heal!.config.pct).toBe(12);
+                expect(heal!.config.pct).toBe(8);
             }
         });
 
@@ -3691,11 +3618,11 @@ describe('buildShipAbilities — on-enemy-purged and on-ally-purged heal trigger
         });
     });
 
-    describe('Salvation p3: on-ally-purged 5% heal + on-destroyed 80% heal', () => {
+    describe('Salvation p2: on-ally-purged 5% heal + on-destroyed 80% heal', () => {
         const salvation = () =>
             ship({
                 thirdPassiveSkillText:
-                    "When this Unit is destroyed it <unit-damage>repairs 80%</unit-damage> of its max HP to all allies.<br /><br />When a <unit-aid>buff</unit-aid> is <unit-aid>purged</unit-aid> from an ally, this Unit <unit-damage>repairs that ally for 5%</unit-damage> of this Unit's max HP.",
+                    "When this Unit is destroyed it <unit-damage>repairs 80%</unit-damage> of its max HP to all allies.<br /><br />When a <unit-aid>buff</unit-aid> is <unit-skill>purged</unit-skill> from an ally, this Unit <unit-damage>repairs that ally for 5%</unit-damage> of this Unit's max HP.",
             });
 
         it('emits the 5% ally heal with trigger on-ally-purged', () => {
@@ -3727,7 +3654,8 @@ describe('buildShipAbilities — on-enemy-purged and on-ally-purged heal trigger
 });
 
 // C2b-2 T1: Iridium passive-slot purge emit (on-attacked trigger from "when directly damaged").
-// RAW strings from docs/ship-skills.csv.
+// Iridium p2 and the Sefuba p2 / Zeolite texts are catalogue text; Iridium p1, Sefuba p1 and
+// Cobalt are old-corpus wording (synthetic; the catalogue text differs).
 describe('buildShipAbilities — Iridium passive purge emit (C2b-2 T1)', () => {
     // Iridium p1: "When directly damaged, This Unit purges 1 buff from the enemy ..."
     // → exactly ONE purge ability with trigger:'on-attacked', count:1
@@ -3759,7 +3687,7 @@ describe('buildShipAbilities — Iridium passive purge emit (C2b-2 T1)', () => {
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 refits: [{}, {}] as any,
                 secondPassiveSkillText:
-                    'This Unit takes 35% less damage from Critical hits, and this effect does not stack with similar effects.<br /><br />When directly damaged, This Unit <unit-aid>purges 2</unit-aid> buffs from the enemy and inflicts <unit-skill>Speed Down II</unit-skill> for 1 turn.<br /><br />Start of combat, This Unit gains <unit-skill>Taunt</unit-skill> for 1 turn.',
+                    'When directly damaged, this Unit <unit-skill>purges 2 buffs</unit-skill> from the enemy and inflicts <unit-skill>Speed Down II</unit-skill> for 1 turn.<br /><br />This Unit has <unit-damage>35% damage reduction</unit-damage> from critical hits.<br /><br />At the start of combat, this Unit gains <unit-skill>Taunt</unit-skill> for 1 turn.',
             });
 
         it('emits exactly ONE purge ability with trigger on-attacked and count 2', () => {
@@ -3791,7 +3719,7 @@ describe('buildShipAbilities — Iridium passive purge emit (C2b-2 T1)', () => {
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 refits: [{}, {}] as any,
                 secondPassiveSkillText:
-                    'When this Unit <unit-aid>purges an enemy buff</unit-aid>, it <unit-damage>repairs itself for 12%</unit-damage> Max HP and <unit-aid>purges 1</unit-aid> more buff from the enemy.',
+                    'When this Unit <unit-skill>purges a buff</unit-skill> from an enemy, it <unit-damage>repairs 8%</unit-damage> of its max HP for each <unit-aid>buff</unit-aid> removed and also <unit-skill>purges 1 extra buff</unit-skill> from the enemy.',
             });
             const passive = slot(buildShipAbilities(sefubaP2).slots, 'passive')!;
             const purges = passive.abilities.filter((a) => a.type === 'purge');
@@ -3799,10 +3727,10 @@ describe('buildShipAbilities — Iridium passive purge emit (C2b-2 T1)', () => {
             expect(purges[0].trigger).toBe('on-enemy-purged'); // PURGE_MORE_RE path, not generic loop
         });
 
-        it('Zeolite p1 (Wave 8 Task 12): passive emits ONE purge, on-deal-damage, gated on enemy-type Defender', () => {
+        it('Zeolite p1: passive emits ONE purge, on-deal-damage, gated on enemy-type Defender', () => {
             const zeoliteP1 = ship({
                 firstPassiveSkillText:
-                    'This Unit <unit-aid>purges 1</unit-aid> buff from the enemy when dealing damage to a Defender.',
+                    'When this Unit deals damage to a defender it <unit-skill>purges 1 buff</unit-skill> from that enemy.',
             });
             const passive = slot(buildShipAbilities(zeoliteP1).slots, 'passive')!;
             const purges = passive.abilities.filter((a) => a.type === 'purge');
@@ -3817,10 +3745,10 @@ describe('buildShipAbilities — Iridium passive purge emit (C2b-2 T1)', () => {
             ]);
         });
 
-        it('Zeolite p2 (R2 refit-active): "+30% damage when hitting a Defender" is gated on enemy-type Defender', () => {
+        it('Zeolite p2 (R2 refit-active): "30% more damage when hitting a defender" is gated on enemy-type Defender', () => {
             const zeoliteP2 = ship({
                 secondPassiveSkillText:
-                    'This Unit increases <unit-damage>damage by 30%</unit-damage> when hitting a Defender and <unit-aid>purges 1</unit-aid> buff from the enemy when dealing damage to a Defender.',
+                    'When this Unit deals damage to a defender it <unit-skill>purges 1 buff</unit-skill> from that enemy.<br /><br />This Unit deals <unit-damage>30% more damage</unit-damage> when hitting a defender.',
             });
             const passive = slot(buildShipAbilities(zeoliteP2).slots, 'passive')!;
             const mod = passive.abilities.find(
@@ -3862,19 +3790,20 @@ describe('buildShipAbilities — Iridium passive purge emit (C2b-2 T1)', () => {
 
 // ---------------------------------------------------------------------------
 // C2b-2 T4: Rhodium end-of-round + enemy-most-buffs purge build tests.
-// RAW strings from docs/ship-skills.csv (Rhodium row).
+// Old-corpus wording of Rhodium's passives and Iridium's p1 (synthetic; the catalogue text
+// differs).
 // ---------------------------------------------------------------------------
 describe('buildShipAbilities — Rhodium end-of-round most-buffs purge (C2b-2 T4)', () => {
-    // Rhodium p1 RAW: "At the end of the round, this Unit <unit-aid>purges 2</unit-aid> buffs
-    // from the enemy with the most buffs."
+    // Rhodium p1 (old corpus): "At the end of the round, this Unit <unit-aid>purges 2</unit-aid>
+    // buffs from the enemy with the most buffs."
     const rhodiumP1 = () =>
         ship({
             firstPassiveSkillText:
                 'At the end of the round, this Unit <unit-aid>purges 2</unit-aid> buffs from the enemy with the most buffs.',
         });
 
-    // Rhodium p2 RAW: same purge phrase + "deals <unit-damage>80% damage</unit-damage> that
-    // cannot critically hit."
+    // Rhodium p2 (old corpus): same purge phrase + "deals <unit-damage>80% damage</unit-damage>
+    // that cannot critically hit."
     const rhodiumP2 = () =>
         ship({
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -3946,18 +3875,19 @@ describe('buildShipAbilities — Rhodium end-of-round most-buffs purge (C2b-2 T4
 });
 
 // ---------------------------------------------------------------------------
-// SP-M M1 Task 6: Chakara start-of-round enemy-highest-speed damage re-target build test.
-// RAW string from docs/ship-skills.csv (Chakara, third_passive_skill_text).
+// Chakara start-of-round enemy-highest-speed damage re-target build test.
+// RAW string from docs/ship-skills.csv (Chakara, second_passive_skill_text).
 // ---------------------------------------------------------------------------
-describe('buildShipAbilities — Chakara start-of-round highest-speed damage (SP-M M1 Task 6)', () => {
-    // Chakara p4 RAW: "This Unit starts each round with Attack Up II and Defense Up II for 1 turn
-    // if it has the lowest speed among all Allies. Then, deals 60% damage to the highest Speed
-    // Enemy." Default `ship()` helper seeds refits: [{}, {}, {}, {}] (4 refits) → thirdPassiveSkillText
-    // (R4, refit-active) is the active passive per getShipSkillRows.
+describe('buildShipAbilities — Chakara start-of-round highest-speed damage', () => {
+    // Chakara R2 passive RAW: "At the start of the round, if this Unit has the lowest speed among
+    // all allies, it gains Attack Up II and Defense Up II for 1 turn. Then deals 60% damage to the
+    // enemy with the highest speed." Default `ship()` helper seeds refits: [{}, {}, {}, {}]
+    // (4 refits) → thirdPassiveSkillText (R4, refit-active) is the active passive per
+    // getShipSkillRows.
     const chakaraP4 = () =>
         ship({
             thirdPassiveSkillText:
-                'This Unit starts each round with <unit-skill>Attack Up II</unit-skill> and <unit-skill>Defense Up II</unit-skill> for 1 turn if it has the lowest speed among all Allies. Then, deals <unit-damage>60% damage</unit-damage> to the highest Speed Enemy.',
+                'At the start of the round, if this Unit has the lowest speed among all allies, it gains <unit-skill>Attack Up II</unit-skill> and <unit-skill>Defense Up II</unit-skill> for 1 turn. Then deals <unit-damage>60% damage</unit-damage> to the enemy with the highest speed.',
         });
 
     it('the round-boundary damage ability carries trigger start-of-round, target enemy-highest-speed, multiplier 60', () => {
@@ -3974,22 +3904,23 @@ describe('buildShipAbilities — Chakara start-of-round highest-speed damage (SP
 });
 
 // ---------------------------------------------------------------------------
-// I6: Lodolite charged purge (passive-voice "is Purged of all buffs") + legendary-refit
-// shield strip. RAW strings verbatim from docs/ship-skills.csv (Lodolite row).
+// I6: Lodolite charged purge + refit-passive shield strip. RAW strings verbatim from
+// docs/ship-skills.csv (Lodolite row).
 // ---------------------------------------------------------------------------
 describe('buildShipAbilities — Lodolite charged purge + shield strip (I6)', () => {
     const LODOLITE_CHARGED_RAW =
-        "This Unit deals <unit-damage>310% damage</unit-damage> and additional damage equal to <unit-damage>10%</unit-damage> of this Unit's max HP. Then, the enemy with the most <unit-aid>Buffs</unit-aid> is Purged of all buffs.<br />This attack can target <unit-aid>Stealthed</unit-aid> enemies.";
-    const LODOLITE_R4_PASSIVE_RAW =
-        "This Unit ignores <unit-skill>Stealth</unit-skill> effects.<br /><br />This Unit deals <unit-damage>10% more critical damage</unit-damage> to defenders, all allies deal <unit-damage>15% more direct damage</unit-damage> to enemies with <unit-skill>Concentrate Fire</unit-skill> or <unit-skill>Stealth</unit-skill>.<br /><br />When this Unit <unit-aid>Purges a buff</unit-aid> from an enemy, it <unit-damage>removes 100%</unit-damage> of the enemy's shield.";
+        'This Unit deals <unit-damage>310% damage</unit-damage> with additional damage equal to <unit-damage>10%</unit-damage> of its max HP.<br /><br />Then this Unit <unit-skill>purges all buffs</unit-skill> from enemy with the most <unit-aid>buffs</unit-aid>.';
+    const LODOLITE_R2_PASSIVE_RAW =
+        "This Unit ignores <unit-skill>Stealth</unit-skill> effects.<br /><br />This Unit deals <unit-damage>10% more critical damage</unit-damage> to defenders, all allies deal <unit-damage>15% more direct damage</unit-damage> to enemies with <unit-skill>Concentrate Fire</unit-skill> or <unit-skill>Stealth</unit-skill>.<br /><br />When this Unit <unit-aid>purges a buff</unit-aid> from an enemy, it <unit-damage>removes 100%</unit-damage> of the enemy's shield.";
 
     // Default `ship()` helper seeds refits: [{}, {}, {}, {}] (4 refits) → thirdPassiveSkillText
-    // (R4, legendary refit) is the active passive per getShipSkillRows.
+    // is the active passive per getShipSkillRows; it carries the R2 passive, the one with the
+    // shield clause.
     const lodolite = () =>
         ship({
             chargeSkillText: LODOLITE_CHARGED_RAW,
             chargeSkillCharge: 3,
-            thirdPassiveSkillText: LODOLITE_R4_PASSIVE_RAW,
+            thirdPassiveSkillText: LODOLITE_R2_PASSIVE_RAW,
         });
 
     it('charged skill emits a purge ability: target enemy-most-buffs, count all, trigger on-cast', () => {
@@ -4002,27 +3933,26 @@ describe('buildShipAbilities — Lodolite charged purge + shield strip (I6)', ()
         expect(purge.config).toMatchObject({ type: 'purge', count: 'all' });
     });
 
-    it('the charged purge config carries stripsShield (from the R4 legendary passive clause)', () => {
+    it('the charged purge config carries stripsShield (from the R2 passive clause)', () => {
         const charged = slot(buildShipAbilities(lodolite()).slots, 'charged')!;
         const purge = charged.abilities.find((a) => a.type === 'purge')!;
         expect(purge.config).toMatchObject({ stripsShield: true });
     });
 
-    it('the R4 passive itself does NOT ALSO emit a spurious purge ability', () => {
+    it('the R2 passive itself does NOT ALSO emit a spurious purge ability', () => {
         const passive = slot(buildShipAbilities(lodolite()).slots, 'passive');
         const purges = (passive?.abilities ?? []).filter((a) => a.type === 'purge');
         expect(purges).toHaveLength(0);
     });
 
-    it('WITHOUT the R4 legendary refit (2 refits, R2 passive without the shield clause) the charged purge has NO stripsShield', () => {
+    it('WITHOUT a refit (R0 passive, no shield clause) the charged purge has NO stripsShield', () => {
         const nonLegendary = ship({
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            refits: [{}, {}] as any,
+            refits: [],
             chargeSkillText: LODOLITE_CHARGED_RAW,
             chargeSkillCharge: 3,
-            secondPassiveSkillText:
-                'This Unit ignores <unit-skill>Stealth</unit-skill> effects.<br /><br />This Unit deals <unit-damage>10% more critical damage</unit-damage> to defenders, all allies deal <unit-damage>15% more direct damage</unit-damage> to enemies with <unit-skill>Concentrate Fire</unit-skill>.',
-            thirdPassiveSkillText: LODOLITE_R4_PASSIVE_RAW,
+            firstPassiveSkillText:
+                'This Unit ignores <unit-skill>Stealth</unit-skill> effects.<br /><br />This Unit deals <unit-damage>10% more critical damage</unit-damage> to defenders and all allies deal <unit-damage>15% more direct damage</unit-damage> to enemies with <unit-skill>Concentrate Fire</unit-skill>.',
+            thirdPassiveSkillText: LODOLITE_R2_PASSIVE_RAW,
         });
         const charged = slot(buildShipAbilities(nonLegendary).slots, 'charged')!;
         const purge = charged.abilities.find((a) => a.type === 'purge')!;
@@ -4043,16 +3973,15 @@ describe('buildShipAbilities — Lodolite charged purge + shield strip (I6)', ()
 });
 
 // ---------------------------------------------------------------------------
-// C2b-2 T6: Faust on-destroyed killed-by-direct-damage purge build tests.
+// Faust on-destroyed destroyed-by-direct-damage purge build tests.
 // RAW strings from docs/ship-skills.csv (Faust row, passive 1 & 2).
 // ---------------------------------------------------------------------------
 describe('buildShipAbilities — Faust on-destroyed killer-targeted purge (C2b-2 T6)', () => {
-    // Faust p1 RAW: "This Unit <unit-aid>purges 2</unit-aid> buffs from the enemy when killed by
-    // direct Damage."
+    // Faust p1 RAW.
     const faustP1 = () =>
         ship({
             firstPassiveSkillText:
-                'This Unit <unit-aid>purges 2</unit-aid> buffs from the enemy when killed by direct Damage.',
+                'This Unit <unit-skill>purges 2 buffs</unit-skill> from the enemy when destroyed by direct damage.',
         });
 
     // Faust p2 RAW (refit-active 2nd passive): purges 3.
@@ -4061,7 +3990,7 @@ describe('buildShipAbilities — Faust on-destroyed killer-targeted purge (C2b-2
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             refits: [{}, {}] as any,
             secondPassiveSkillText:
-                'This Unit <unit-aid>purges 3</unit-aid> buffs from the enemy when killed by direct Damage.',
+                'This Unit <unit-skill>purges 3 buffs</unit-skill> from the enemy when destroyed by direct damage.',
         });
 
     describe('Faust p1: on-destroyed purge with target enemy, count 2', () => {
@@ -4164,15 +4093,15 @@ describe('buildShipAbilities — E4 Amartya crit-power-scaled purge (countScalin
 });
 
 // ---------------------------------------------------------------------------
-// D-PR3 T5: Iridium "takes N% less damage from Critical hits" parser rule.
+// Iridium "has N% damage reduction from critical hits" parser rule.
 // The ability is INERT (no engine consumer yet). Tests confirm the passive slot
 // emits exactly one `incoming-reduction` ability with the correct config and
 // that no other existing abilities on the slot are disturbed.
 // ---------------------------------------------------------------------------
-describe('buildShipAbilities — D-PR3 Iridium incoming-reduction parser (T5)', () => {
-    // RAW string from docs/ship-skills.csv (Iridium 3rd passive / refit-active 2nd passive).
+describe('buildShipAbilities — Iridium incoming-reduction parser', () => {
+    // RAW string from docs/ship-skills.csv (Iridium second_passive_skill_text, the R2 passive).
     const IRIDIUM_P2_RAW =
-        'This Unit takes 35% less damage from Critical hits, and this effect does not stack with similar effects.<br /><br />When directly damaged, This Unit <unit-aid>purges 2</unit-aid> buffs from the enemy and inflicts <unit-skill>Speed Down II</unit-skill> for 1 turn.<br /><br />Start of combat, This Unit gains <unit-skill>Taunt</unit-skill> for 1 turn.';
+        'When directly damaged, this Unit <unit-skill>purges 2 buffs</unit-skill> from the enemy and inflicts <unit-skill>Speed Down II</unit-skill> for 1 turn.<br /><br />This Unit has <unit-damage>35% damage reduction</unit-damage> from critical hits.<br /><br />At the start of combat, this Unit gains <unit-skill>Taunt</unit-skill> for 1 turn.';
 
     const iridiumWithCritReduction = () =>
         ship({
@@ -4307,9 +4236,9 @@ describe('buildShipAbilities — D-PR13 Disable active-skill: named debuff + add
 //     remains the sole model of the effect.
 describe('buildShipAbilities — control-twin gating parity (epic PR2)', () => {
     it('Crocus active: control{stasis} inherits the enemy-debuff-gte-4 condition from its Stasis debuff twin (on-cast twin → condition copy)', () => {
-        // docs/ship-skills.csv Crocus active_skill_text (exact clause, routed through the real
-        // active slot): "...If the target has more than 3 Debuffs, it inflicts Stasis for 2
-        // turns."
+        // Old-corpus wording of Crocus's active (synthetic; the catalogue text differs), routed
+        // through the real active slot: "...If the target has more than 3 Debuffs, it inflicts
+        // Stasis for 2 turns."
         const s = ship({
             activeSkillText:
                 'This Unit deals <unit-damage>150% Damage</unit-damage> and inflicts <unit-skill>Corrosion II</unit-skill> for 2 turns.<br />If the target has more than 3 Debuffs, it inflicts <unit-skill>Stasis</unit-skill> for 2 turns.',
@@ -4334,8 +4263,9 @@ describe('buildShipAbilities — control-twin gating parity (epic PR2)', () => {
     });
 
     it('Nayra active: control{stasis} inherits the target-repaired-this-round condition from its Stasis debuff twin (on-cast twin → condition copy)', () => {
-        // docs/ship-skills.csv Nayra active_skill_text (exact clause, routed through the real
-        // active slot): "...If the target was repaired this round, inflict Stasis for 1 turn."
+        // Old-corpus wording of Nayra's active (synthetic; the catalogue text differs), routed
+        // through the real active slot: "...If the target was repaired this round, inflict Stasis
+        // for 1 turn."
         const s = ship({
             activeSkillText:
                 'This Unit inflicts <unit-skill>Defense Down II</unit-skill> and <unit-skill>Crit Rate Down III</unit-skill> for 2 turns, dealing <unit-damage>170% damage</unit-damage> and additional <unit-damage>damage equal to 30%</unit-damage> of its Defense.<br />If the target was repaired this round, inflict <unit-skill>Stasis</unit-skill> for 1 turn.',
@@ -4359,9 +4289,9 @@ describe('buildShipAbilities — control-twin gating parity (epic PR2)', () => {
     });
 
     it('Makoli second passive: control{disable} is DROPPED — its Disable debuff twin resolves to a REACTIVE trigger (on-attacked + below-40%-HP), which the cast-path control-applied loop can never consume', () => {
-        // docs/ship-skills.csv Makoli second_passive_skill_text (exact clause, routed through
-        // the real passive slot via refits.length >= 2): "When directly damaged while below 40%
-        // HP, this Unit repairs 20% of its Max HP and inflicts Disable for 1 turn."
+        // Old-corpus wording of Makoli's second passive (synthetic; the catalogue text differs),
+        // routed through the real passive slot via refits.length >= 2: "When directly damaged while
+        // below 40% HP, this Unit repairs 20% of its Max HP and inflicts Disable for 1 turn."
         const s = ship({
             refits: [{}, {}] as Ship['refits'],
             secondPassiveSkillText:
@@ -4390,9 +4320,9 @@ describe('buildShipAbilities — control-twin gating parity (epic PR2)', () => {
     });
 
     it('Flamel second passive: control{stasis} is DROPPED — its Stasis debuff twin resolves to the REACTIVE on-attacked trigger', () => {
-        // docs/ship-skills.csv Flamel second_passive_skill_text (exact clause, routed through
-        // the real passive slot via refits.length >= 2): "When directly damaged, this Unit
-        // inflicts Speed Down I for 2 turns and Stasis for 2 turn."
+        // Old-corpus wording of Flamel's second passive (synthetic; the catalogue text differs),
+        // routed through the real passive slot via refits.length >= 2: "When directly damaged, this
+        // Unit inflicts Speed Down I for 2 turns and Stasis for 2 turn."
         const s = ship({
             refits: [{}, {}] as Ship['refits'],
             secondPassiveSkillText:
@@ -4412,9 +4342,9 @@ describe('buildShipAbilities — control-twin gating parity (epic PR2)', () => {
     });
 
     it('Guardian second passive: control{provoke} is DROPPED — its Provoke debuff twin resolves to the REACTIVE on-ally-attacked trigger', () => {
-        // docs/ship-skills.csv Guardian second_passive_skill_text (exact clause, routed through
-        // the real passive slot via refits.length >= 2): "...When an ally is critically hit by
-        // an enemy, apply Provoke for 1 turn to that enemy."
+        // Old-corpus wording of Guardian's second passive (synthetic; the catalogue text differs),
+        // routed through the real passive slot via refits.length >= 2: "...When an ally is
+        // critically hit by an enemy, apply Provoke for 1 turn to that enemy."
         const s = ship({
             refits: [{}, {}] as Ship['refits'],
             secondPassiveSkillText:
@@ -4434,12 +4364,11 @@ describe('buildShipAbilities — control-twin gating parity (epic PR2)', () => {
     });
 
     it('Meiying first passive: control{stasis} is DROPPED — its Stasis debuff twin resolves to the REACTIVE on-enemy-destroyed trigger', () => {
-        // docs/ship-skills.csv Meiying first_passive_skill_text (exact clause, routed through
-        // the real passive slot): "Upon killing an enemy with a Debuff, this Unit inflicts
-        // Stasis on all adjacent enemies for 1 turn."
+        // docs/ship-skills.csv Meiying first_passive_skill_text, routed through the real
+        // passive slot.
         const s = ship({
             firstPassiveSkillText:
-                'Upon killing an enemy with a Debuff, this Unit inflicts <unit-skill>Stasis</unit-skill> on all adjacent enemies for 1 turn.',
+                "This Unit's attacks ignore <unit-skill>Taunt</unit-skill> and <unit-skill>Provoke</unit-skill> effects.<br /><br />Upon destroying an enemy with a <unit-aid>debuff</unit-aid>, this Unit inflicts <unit-skill>Stasis</unit-skill> on all adjacent enemies for 1 turn.",
         });
         const passive = slot(buildShipAbilities(s).slots, 'passive');
         const debuff = passive?.abilities.find(
@@ -4488,7 +4417,7 @@ describe('buildShipAbilities — control-twin gating parity (epic PR2)', () => {
 
 describe('buildShipAbilities — enemy-targeted charge removal (Phase 1 Task 3)', () => {
     it('Opal charged: on-cast removal of 2 charges from the enemy', () => {
-        // Opal's real charge skill text (from docs/ship-skills.csv).
+        // Old-corpus wording of Opal's charged skill (synthetic; the catalogue text differs).
         const s = ship({
             chargeSkillText:
                 'This Unit deals 70% damage with an additional damage equal to 11% of its Max HP, and removes 2 charges from the enemy.',
@@ -4510,7 +4439,7 @@ describe('buildShipAbilities — enemy-targeted charge removal (Phase 1 Task 3)'
     });
 
     it('Demolisher passive: bomb-detonation removal of 2 charges from the enemy', () => {
-        // Demolisher's real passive text (from docs/ship-skills.csv).
+        // Old-corpus wording of Demolisher's passive (synthetic; the catalogue text differs).
         const s = ship({
             firstPassiveSkillText:
                 "When a bomb explodes on an enemy, this unit removes 2 charges from the enemy's charged skill.",
@@ -4531,7 +4460,8 @@ describe('buildShipAbilities — enemy-targeted charge removal (Phase 1 Task 3)'
     });
 
     it('Zosimos passive: BOTH self gain (on-enemy-repaired) AND enemy removal (every 2nd repair)', () => {
-        // Zosimos's real passive text includes both a self charge gain and an enemy charge removal.
+        // Old-corpus wording of Zosimos's passive (synthetic; the catalogue text differs). It
+        // includes both a self charge gain and an enemy charge removal.
         const s = ship({
             firstPassiveSkillText:
                 "When an enemy repairs, this unit gains a charge to its charged skill. Additionally, this unit decreases that enemy's charge by one for every second repair they perform.",
@@ -4561,14 +4491,10 @@ describe('buildShipAbilities — enemy-targeted charge removal (Phase 1 Task 3)'
         );
     });
 
-    it('Provider charged: removal of 1 charge from the enemy on-cast (previously ignored)', () => {
-        // Provider's charge skill text already existed in the test at line ~161 with a comment
-        // saying "charge removal is ignored". Now that the orchestrator wires parseChargeRemoval,
-        // the removal MUST be emitted. The existing test still passes (it only asserts damage +
-        // extend-dot exist); this complementary test locks the removal contract.
+    it('Provider charged: removal of 1 charge from the enemy on-cast', () => {
         const s = ship({
             chargeSkillText:
-                'This Unit deals <unit-damage>200% damage</unit-damage>, removes 1 charge from the enemy, and extends active Damage Over Time effects by 1 turn.',
+                "This Unit deals <unit-damage>200% damage</unit-damage>, <unit-skill>removes 1 charge</unit-skill> from the enemy's charged skill and all <unit-skill>damage over time debuffs</unit-skill> are <unit-skill>extended by 1 turn</unit-skill>.",
             chargeSkillCharge: 3,
         });
 
@@ -4586,8 +4512,9 @@ describe('buildShipAbilities — enemy-targeted charge removal (Phase 1 Task 3)'
     });
 
     it("Zenith charged: 'removes all charges' emits an enemy removal with amount 'all'", () => {
-        // Verbatim `charge_skill_text` from docs/ship-skills.csv (Zenith). The "all" quantifier
-        // is the corpus's first — every other removal names a count ("removes 1 charge").
+        // Old-corpus wording of Zenith's charged skill (synthetic; the catalogue text differs). The
+        // "all" quantifier is the corpus's first — every other removal names a count ("removes 1
+        // charge").
         const s = ship({
             chargeSkillText:
                 'This Unit deals <unit-damage>310% damage</unit-damage> and <unit-aid>removes all charges</unit-aid> from the enemy charged skill.',
@@ -4615,8 +4542,8 @@ describe('buildShipAbilities — enemy-targeted charge removal (Phase 1 Task 3)'
     });
 
     it("Zenith active: the numeric quantifier still parses as a number, not 'all'", () => {
-        // Verbatim `active_skill_text` from docs/ship-skills.csv (Zenith). Guards the numeric
-        // branch against the "all" branch swallowing it.
+        // Old-corpus wording of Zenith's active (synthetic; the catalogue text differs). Guards the
+        // numeric branch against the "all" branch swallowing it.
         const s = ship({
             activeSkillText:
                 'This Unit deals <unit-damage>230% damage</unit-damage> and <unit-aid>removes 1 charge</unit-aid> from the enemy charged skill.',
@@ -4700,7 +4627,7 @@ describe('buildShipAbilities — enemy-targeted charge removal (Phase 1 Task 3)'
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 refits: [{}, {}] as any,
                 secondPassiveSkillText:
-                    'This Unit gains 1 stack of <unit-skill>Overload</unit-skill> every turn and loses <unit-skill>Overload</unit-skill> on kill. Additionally, it gains <unit-skill>Marauder Rage II</unit-skill> for 3 turns upon killing an opponent.',
+                    'This Unit gains 1 stack of <unit-skill>Overload</unit-skill> every turn and, upon destroying an enemy, removes <unit-skill>Overload</unit-skill>. Additionally, it gains <unit-skill>Marauder Rage II</unit-skill> for 3 turns upon destroying an enemy.',
             });
             const abilities = slot(buildShipAbilities(s).slots, 'passive')!.abilities;
 
@@ -4725,7 +4652,7 @@ describe('buildShipAbilities — enemy-targeted charge removal (Phase 1 Task 3)'
         it('Ravager p1: remove Overload on kill + Marauder Rage III on kill', () => {
             const s = ship({
                 firstPassiveSkillText:
-                    'This Unit gains 1 stack of <unit-skill>Overload</unit-skill> every turn and, upon killing an enemy, loses <unit-skill>Overload</unit-skill> and gains <unit-skill>Marauder Rage III</unit-skill> for 3 turns.',
+                    'This Unit gains 1 stack of <unit-skill>Overload</unit-skill> every turn and, upon destroying an enemy, removes <unit-skill>Overload</unit-skill> and gains <unit-skill>Marauder Rage III</unit-skill> for 3 turns.',
                 refits: [],
             });
             const abilities = slot(buildShipAbilities(s).slots, 'passive')!.abilities;
@@ -4753,7 +4680,7 @@ describe('buildShipAbilities — enemy-targeted charge removal (Phase 1 Task 3)'
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 refits: [{}, {}] as any,
                 secondPassiveSkillText:
-                    'This Unit gains 1 stack of <unit-skill>Overload</unit-skill> every turn. On kill, <unit-skill>Overload</unit-skill> is lost. On inflicting a debuff, this Unit gains <unit-skill>Marauder Rage II</unit-skill> for 3 turns.',
+                    'This Unit gains 1 stack of <unit-skill>Overload</unit-skill> every turn and, upon destroying an enemy, removes <unit-skill>Overload</unit-skill>.<br /><br />On inflicting a <unit-aid>debuff</unit-aid>, this Unit gains <unit-skill>Marauder Rage II</unit-skill> for 3 turns.',
             });
             const abilities = slot(buildShipAbilities(s).slots, 'passive')!.abilities;
 
@@ -4778,7 +4705,7 @@ describe('buildShipAbilities — enemy-targeted charge removal (Phase 1 Task 3)'
         it('Asphyxiator p1: remove Overload on kill (SoR grant verified e2e)', () => {
             const s = ship({
                 firstPassiveSkillText:
-                    'At the start of the round, if there are any enemies with 3 or more debuffs, this Unit gains 1 stack of <unit-skill>Overload</unit-skill> and gains <unit-skill>Marauder Rage II</unit-skill> for 3 turns. Upon killing an enemy, this Unit loses <unit-skill>Overload</unit-skill>.',
+                    'At the start of the round, if there are any enemies with 3 or more <unit-aid>debuffs</unit-aid>, this Unit gains 1 stack of <unit-skill>Overload</unit-skill> and gains <unit-skill>Marauder Rage II</unit-skill> for 3 turns. Upon destroying an enemy, this Unit removes <unit-skill>Overload</unit-skill>.',
                 refits: [],
             });
             const abilities = slot(buildShipAbilities(s).slots, 'passive')!.abilities;
@@ -4809,7 +4736,7 @@ describe('buildShipAbilities — enemy-targeted charge removal (Phase 1 Task 3)'
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 refits: [{}, {}] as any,
                 secondPassiveSkillText:
-                    'This Unit inflicts <unit-skill>Bomb II</unit-skill> for 2 turns on any enemy performing a <unit-aid>repair</unit-aid>, once per round per enemy.<br /><br />This Unit gains 1 stack of <unit-skill>Overload</unit-skill> when an enemy performs a <unit-aid>repair</unit-aid>, upon killing an enemy, this Unit removes <unit-skill>Overload</unit-skill>.',
+                    'This Unit inflicts <unit-skill>Bomb II</unit-skill> for 2 turns on any enemy performing a <unit-aid>repair</unit-aid>, once per round per enemy.<br /><br />This Unit gains 1 stack of <unit-skill>Overload</unit-skill> when an enemy preforms a <unit-aid>repair</unit-aid>, upon destroying an enemy, this Unit removes <unit-skill>Overload</unit-skill>.',
             });
             const abilities = slot(buildShipAbilities(s).slots, 'passive')!.abilities;
 
@@ -4835,17 +4762,17 @@ describe('buildShipAbilities — enemy-targeted charge removal (Phase 1 Task 3)'
 // Epic PR1 (skill-model gap, finding family 1): damage-reduction / shield-scaled-off-damage
 // clauses were being minted as phantom on-cast attacks because parseSkillDamage's "does this
 // tag mention 'damage'?" heuristic can't distinguish an outgoing hit from an incoming-reduction
-// or shield-scaling clause. All texts below are exact CSV clauses (docs/ship-skills.csv),
-// assigned to their REAL slot fields (matching how buildShipAbilities is actually invoked in
-// production via getShipSkillRows) — not the audit script's "treat every slot as active"
-// simplification.
+// or shield-scaling clause. The texts below are catalogue clauses except Voron's, which is
+// old-corpus wording (synthetic; the catalogue text differs). They are assigned to their REAL
+// slot fields (matching how buildShipAbilities is actually invoked in production via
+// getShipSkillRows) — not the audit script's "treat every slot as active" simplification.
 describe('buildShipAbilities — PR1 phantom-ability suppression (reduction/conversion clauses)', () => {
     it('Tormenter passive2 (R2): no phantom damage ability from "30% damage reduction"', () => {
         const s = ship({
             refits: [{}, {}] as never,
-            firstPassiveSkillText: 'This Unit always lands critical hits.',
+            firstPassiveSkillText: "This Unit's attacks always critically hit.",
             secondPassiveSkillText:
-                'This Unit always lands critical hits and gains up to <unit-damage>30% damage</unit-damage> reduction as its health decreases.',
+                "This Unit's attacks always critically hit and gains up to <unit-damage>30% damage reduction</unit-damage> as its health decreases.",
         });
         const { slots } = buildShipAbilities(s);
         const passive = slot(slots, 'passive');
@@ -4877,13 +4804,13 @@ describe('buildShipAbilities — PR1 phantom-ability suppression (reduction/conv
         expect(passive?.abilities.some((a) => a.type === 'damage') ?? false).toBe(false);
     });
 
-    it('Malvex passive2 (R2): no phantom damage ability from "takes 10% less damage"', () => {
+    it('Malvex passive2 (R2): no phantom damage ability from "10% damage reduction"', () => {
         const s = ship({
             refits: [{}, {}] as never,
             firstPassiveSkillText:
-                'When directly damaged as a primary target, this Unit gains <unit-damage>Shield equal to 15%</unit-damage> of the Damage dealt to them.',
+                'When directly damaged as a primary target, this Unit gains <unit-damage>shield equal to 15%</unit-damage> of the damage dealt.',
             secondPassiveSkillText:
-                'When Shielded, this Ship takes <unit-damage>10% less damage</unit-damage>. When directly damaged as a primary target, this Unit gains <unit-damage>Shield equal to 15%</unit-damage> of the Damage dealt to them.',
+                'When directly damaged as a primary target, this Unit gains <unit-damage>shield equal to 15%</unit-damage> of the damage dealt.<br /><br />When this Unit has an active shield, it gains <unit-damage>10% damage reduction</unit-damage>.',
         });
         const { slots } = buildShipAbilities(s);
         const passive = slot(slots, 'passive');
@@ -4896,9 +4823,9 @@ describe('buildShipAbilities — PR1 phantom-ability suppression (reduction/conv
         const s = ship({
             refits: [{}, {}] as never,
             firstPassiveSkillText:
-                'This ship has 20% Shield Penetration.<br />While Shielded, it gains 2500 additional Defense.<br />This Unit gains <unit-damage>Shield equal to 25%</unit-damage> of its Max HP at the start of combat.',
+                'This ship has <unit-damage>20% shield penetration</unit-damage>.<br /><br />At the start of combat this Unit gains a <unit-damage>shield equal to 25%</unit-damage> of its max HP and while it has an active shield, it gains 2500 defense.',
             secondPassiveSkillText:
-                'This ship has 20% Shield Penetration.<br />While Shielded, it gains 2500 additional Defense.<br />This Unit gains <unit-damage>Shield equal to 25%</unit-damage> of its Max HP at the start of combat.<br /><br />When an enemy uses their Charged skill, it deals <unit-damage>80%</unit-damage> and gains a Shield equal to <unit-damage>30%</unit-damage> of the damage dealt, once per round.',
+                'This ship has <unit-damage>20% shield penetration</unit-damage>.<br /><br />At the start of combat this Unit gains a <unit-damage>shield equal to 25%</unit-damage> of its max HP and while it has an active shield, it gains 2500 defense.<br /><br />When an enemy uses their charged skill, this Unit deals <unit-damage>80% damage</unit-damage> and gains a <unit-damage>shield equal to 30%</unit-damage> of the damage dealt, once per round.',
         });
         const { slots } = buildShipAbilities(s);
         const passive = slot(slots, 'passive')!;
@@ -4923,22 +4850,20 @@ describe('buildShipAbilities — PR1 phantom-ability suppression (reduction/conv
 // passive text, so the phantom DoT does not reproduce for any of the four ships. These tests were
 // RED-checked (asserted the phantom absent) BEFORE any parser change and already passed —
 // confirmed FALSE POSITIVE; no parser change was made for this family. Kept as regression guards.
-// UPDATE (Ship-kit W8 Task 10): Wisteria's "after applying Corrosion with a Critical hit,
-// inflicts Inferno II" clause was itself UNMODELED (a real gap, distinct from the sweep's
-// false-positive phantom-DoT claim) — it now mints a genuine self-crit-dot Inferno II ability.
-// The phantom-Corrosion guard this test exists for still holds (see the updated assertion
-// below); Valerian/Lingshe/Belladonna remain untouched false positives.
+// Wisteria's "When this Unit inflicts Corrosion with a critical hit, it also inflicts Inferno II"
+// clause mints a genuine self-crit-dot Inferno II ability (a real modeled mechanic, distinct from
+// the sweep's false-positive phantom-DoT claim). The phantom-Corrosion guard this test exists for
+// still holds; Valerian/Lingshe/Belladonna remain untouched false positives.
 describe('buildShipAbilities — PR1 finding family 2 (confirmed FALSE POSITIVE under real usage)', () => {
-    it('Wisteria passive1 (R0): "after applying Corrosion with a Critical hit, inflicts Inferno II" mints ONLY the Inferno II dot — no phantom Corrosion dot', () => {
-        // Ship-kit W8 Task 10: this clause is now modeled (self-subject on-crit-after-Corrosion
-        // secondary-DoT injection, mirroring Crocus's ally-scoped on-ally-crit-dot). The ORIGINAL
-        // "no phantom Corrosion dot" guard still holds — DOT_TIER_MAP has a bare 'Corrosion' entry
-        // and a naive tag walk would mint a second, wrong dot from the trigger clause's own named
-        // DoT — so this test now asserts exactly ONE dot ability (Inferno II), never two.
+    it('Wisteria passive1 (R0): "When this Unit inflicts Corrosion with a critical hit, it also inflicts Inferno II" mints ONLY the Inferno II dot — no phantom Corrosion dot', () => {
+        // The clause is a self-subject on-crit-after-Corrosion secondary-DoT injection, mirroring
+        // Crocus's ally-scoped on-ally-crit-dot. DOT_TIER_MAP has a bare 'Corrosion' entry and a
+        // naive tag walk would mint a second, wrong dot from the trigger clause's own named DoT —
+        // so this test asserts exactly ONE dot ability (Inferno II), never two.
         const s = ship({
             refits: [] as never,
             firstPassiveSkillText:
-                'This Unit, after applying <unit-skill>Corrosion</unit-skill> with a Critical hit, inflicts <unit-skill>Inferno II</unit-skill> for 2 turns.',
+                'When this Unit inflicts <unit-skill>Corrosion</unit-skill> with a critical hit, it also inflicts <unit-skill>Inferno II</unit-skill> for 2 turns.',
         });
         const { slots } = buildShipAbilities(s);
         const passive = slot(slots, 'passive')!;
@@ -4950,13 +4875,13 @@ describe('buildShipAbilities — PR1 finding family 2 (confirmed FALSE POSITIVE 
         });
     });
 
-    it('Valerian passive2 (R2): no phantom Corrosion dot from "After inflicting Corrosion with a Critical hit"', () => {
+    it('Valerian passive2 (R2): no phantom Corrosion dot from "After inflicting Corrosion with a critical hit"', () => {
         const s = ship({
             refits: [{}, {}] as never,
             firstPassiveSkillText:
-                'This Unit <unit-damage>repairs 15%</unit-damage> of Damage dealt to the enemy, including inflcted Damage over Time effects.',
+                'This Unit <unit-damage>repairs 15%</unit-damage> of damage dealt to the enemy, including damage from <unit-skill>damage over time effects</unit-skill>.',
             secondPassiveSkillText:
-                'This Unit <unit-damage>repairs 15%</unit-damage> of damage dealt to an enemy, including damage from damage over time effects. After inflicting <unit-skill>Corrosion</unit-skill> with a Critical hit, the duration of the newly applied <unit-skill>Corrosion</unit-skill> is extended by 1 turn, with the extension chance equal to the Critical Power.',
+                "This Unit <unit-damage>repairs 15%</unit-damage> of damage dealt to the enemy, including damage from <unit-skill>damage over time effects</unit-skill>.<br /><br />After inflicting <unit-skill>Corrosion</unit-skill> with a critical hit, <unit-skill>extends the duration the newly inflicted</unit-skill> <unit-skill>Corrosion</unit-skill> by 1 turn, with the extension chance equal to this Unit's critical power.",
         });
         const { slots } = buildShipAbilities(s);
         const passive = slot(slots, 'passive')!;
@@ -4980,7 +4905,7 @@ describe('buildShipAbilities — PR1 finding family 2 (confirmed FALSE POSITIVE 
         const s = ship({
             refits: [] as never,
             firstPassiveSkillText:
-                'When an ally inflicts <unit-skill>Corrosion</unit-skill>, this Unit has a chance to convert the <unit-skill>Corrosion</unit-skill> into <unit-skill>Acidic Decay</unit-skill> of the same level, with the chance scaling at 1% per 10 Hacking.',
+                'When an ally inflicts <unit-skill>Corrosion</unit-skill>, this Unit converts the <unit-skill>Corrosion</unit-skill> into <unit-skill>Acidic Decay</unit-skill> of the same level, with the chance scaling at 1% per 10 Hacking.',
         });
         const { slots } = buildShipAbilities(s);
         const passive = slot(slots, 'passive');
@@ -5038,11 +4963,11 @@ describe('buildShipAbilities — PR1 Amartya phantom Taunt + Exposed stack count
 });
 
 // ── PR5 Finding 1: Panon self-Provoke/Taunt condition subject ─────────────────────────────
-// docs/ship-skills.csv Panon active_skill_text (exact clause, routed through the real active
-// slot): "...If this Unit is Provoked or Taunted, this Unit instead gains Terran Guard III for
-// 2 turns and deals 120% damage..." — the condition checks a status on THIS Unit (self), not the
-// enemy. Taunt is a self-buff per constants/buffs.ts ("Forces enemies to target this unit"), so
-// "this Unit is ... Taunted" must resolve as a self-buff gate, not an enemy-buff gate.
+// Old-corpus wording of Panon's active (synthetic; the catalogue text differs), routed through the
+// real active slot: "...If this Unit is Provoked or Taunted, this Unit instead gains Terran Guard
+// III for 2 turns and deals 120% damage..." — the condition checks a status on THIS Unit (self),
+// not the enemy. Taunt is a self-buff per constants/buffs.ts ("Forces enemies to target this
+// unit"), so "this Unit is ... Taunted" must resolve as a self-buff gate, not an enemy-buff gate.
 describe('buildShipAbilities — PR5 Finding 1 Panon self-Provoke/Taunt condition subject', () => {
     it('Panon active: "If this Unit is Provoked or Taunted" gates Terran Guard III with self-subject conditions (both self-debuff Provoke and self-buff Taunt)', () => {
         const s = ship({
@@ -5064,9 +4989,9 @@ describe('buildShipAbilities — PR5 Finding 1 Panon self-Provoke/Taunt conditio
     });
 
     it('Panon charged: "If this Unit is affected by Provoke or Taunt" gates the Barrier grant + damage modifier with self-subject conditions', () => {
-        // docs/ship-skills.csv Panon charge_skill_text (exact clause): "...If this Unit is
-        // affected by Provoke or Taunt, it instead gains Barrier for 1 hit and deals 170%
-        // damage..."
+        // Old-corpus wording of Panon's charged skill (synthetic; the catalogue text differs):
+        // "...If this Unit is affected by Provoke or Taunt, it instead gains Barrier for 1 hit and
+        // deals 170% damage..."
         const s = ship({
             activeSkillText: 'This Unit deals <unit-damage>100% damage</unit-damage>.',
             chargeSkillCharge: 3,
@@ -5088,8 +5013,8 @@ describe('buildShipAbilities — PR5 Finding 1 Panon self-Provoke/Taunt conditio
 // ── PR5 Finding 2: duration misattachment across multi-buff sentences ─────────────────────
 describe('buildShipAbilities — PR5 Finding 2 duration misattachment across multi-buff sentences', () => {
     it('Bayah first passive: "gains Terran Bolster II and inflicts Speed Down II on an enemy for 2 turns" — the trailing duration reaches BOTH buffs', () => {
-        // docs/ship-skills.csv Bayah first_passive_skill_text (exact clause, routed through the
-        // real passive slot).
+        // Old-corpus wording of Bayah's first passive (synthetic; the catalogue text differs),
+        // routed through the real passive slot.
         const s = ship({
             refits: [{}] as Ship['refits'],
             firstPassiveSkillText:
@@ -5109,8 +5034,8 @@ describe('buildShipAbilities — PR5 Finding 2 duration misattachment across mul
     });
 
     it('Bayah second passive: same shape with an added third buff (Out. Damage Down II) — all three share the trailing 2-turn duration', () => {
-        // docs/ship-skills.csv Bayah second_passive_skill_text (exact clause, routed through the
-        // real passive slot via refits.length >= 2).
+        // Old-corpus wording of Bayah's second passive (synthetic; the catalogue text differs),
+        // routed through the real passive slot via refits.length >= 2.
         const s = ship({
             refits: [{}, {}] as Ship['refits'],
             secondPassiveSkillText:
@@ -5132,8 +5057,8 @@ describe('buildShipAbilities — PR5 Finding 2 duration misattachment across mul
     });
 
     it('Oleander charged: "grants Repair Over Time II for 2 turns and, for 3 turns, grants both Out. DoT Damage Up II and Hit Mitigation" — the LEADING "for 3 turns" reaches both trailing buffs', () => {
-        // docs/ship-skills.csv Oleander charge_skill_text (exact clause, routed through the real
-        // charged slot).
+        // Old-corpus wording of Oleander's charged skill (synthetic; the catalogue text differs),
+        // routed through the real charged slot.
         const s = ship({
             activeSkillText: 'This Unit deals <unit-damage>100% damage</unit-damage>.',
             chargeSkillCharge: 6,
@@ -5183,8 +5108,8 @@ describe('buildShipAbilities — PR5 Finding 2 duration misattachment across mul
 // ── PR5 Finding 3: Nyxen typed cleanse filter ─────────────────────────────────────────────
 describe('buildShipAbilities — PR5 Finding 3 Nyxen typed cleanse filter', () => {
     it('Nyxen active: "Cleanses 2 bombs" carries a debuffType: bomb filter', () => {
-        // docs/ship-skills.csv Nyxen active_skill_text (exact clause, routed through the real
-        // active slot).
+        // Old-corpus wording of Nyxen's active (synthetic; the catalogue text differs), routed
+        // through the real active slot.
         const s = ship({
             activeSkillText:
                 'This Unit <unit-aid>Cleanses 2 bombs</unit-aid>, Grants a <unit-damage>Shield equal to 15%</unit-damage> of its Max HP, and Grants <unit-skill>Atlas Readiness II</unit-skill> for 1 turn.',
@@ -5196,8 +5121,8 @@ describe('buildShipAbilities — PR5 Finding 3 Nyxen typed cleanse filter', () =
     });
 
     it('Nyxen charged: "Cleanses 2 damage over time debuffs" carries a debuffType: dot filter', () => {
-        // docs/ship-skills.csv Nyxen charge_skill_text (exact clause, routed through the real
-        // charged slot).
+        // Old-corpus wording of Nyxen's charged skill (synthetic; the catalogue text differs),
+        // routed through the real charged slot.
         const s = ship({
             activeSkillText: 'This Unit deals <unit-damage>100% damage</unit-damage>.',
             chargeSkillCharge: 1,
@@ -5226,17 +5151,18 @@ describe('buildShipAbilities — PR5 Finding 3 Nyxen typed cleanse filter', () =
 // 6%) and Guardian's <40%-HP gate as dropped. Both are ALREADY correctly modeled (Phase 4c PR1):
 // Isha's "instead"-clause split produces a mutually-exclusive triggerCritFilter pair, and
 // Guardian's on-attacked heal keeps a derivable below-40% self hp-threshold condition. These
-// tests reproduce the exact CSV text through production slot routing and PASS with no code
-// change — kept as regression locks documenting the false positive.
+// tests run Isha's catalogue text and Guardian's old-corpus wording (synthetic; the catalogue
+// text differs) through production slot routing and PASS with no code change — kept as
+// regression locks documenting the false positive.
 describe('buildShipAbilities — PR5 Finding 4 Isha/Guardian reactive-heal gates (confirmed FALSE POSITIVE)', () => {
     it('Isha second passive: the two damage-reaction repairs are MUTUALLY EXCLUSIVE (non-crit 3% / crit 6% instead), not additive', () => {
         // docs/ship-skills.csv Isha second_passive_skill_text (exact clause, routed through the
         // real passive slot via refits.length >= 2): "...When directly damaged, this Unit repairs
-        // 3% of its max HP, but when criticall hit, it instead repairs 6% of its max HP."
+        // 3% of its max HP, but when critcally hit, it instead repairs 6% of its max HP."
         const s = ship({
             refits: [{}, {}] as Ship['refits'],
             secondPassiveSkillText:
-                'At the start of the round this Unit gains <unit-skill>Offensive Affinity Override</unit-skill>.<br />If Nayra is on the same team, it also gains <unit-skill>Defensive Affinity Override</unit-skill>.<br /><br />When directly damaged, this Unit <unit-damage>repairs 3%</unit-damage> of its max HP, but when criticall hit, it instead <unit-damage>repairs 6%</unit-damage> of its max HP.',
+                'At the start of the round this Unit gains <unit-skill>Offensive Affinity Override</unit-skill>. If Nayra is on the same team, it also gains <unit-skill>Defensive Affinity Override</unit-skill>.<br /><br />When directly damaged, this Unit <unit-damage>repairs 3%</unit-damage> of its max HP, but when critcally hit, it instead <unit-damage>repairs 6%</unit-damage> of its max HP.',
         });
         const passive = slot(buildShipAbilities(s).slots, 'passive')!;
         const heals = passive.abilities.filter((a) => a.type === 'heal');
@@ -5253,9 +5179,9 @@ describe('buildShipAbilities — PR5 Finding 4 Isha/Guardian reactive-heal gates
     });
 
     it('Guardian first passive: the reactive repair keeps its below-40%-HP gate (fires only below threshold, not on every hit)', () => {
-        // docs/ship-skills.csv Guardian first_passive_skill_text (exact clause, routed through the
-        // real passive slot as R0): "When directly damaged while below 40% HP, this Unit repairs
-        // 20% of its Max HP."
+        // Old-corpus wording of Guardian's first passive (synthetic; the catalogue text differs),
+        // routed through the real passive slot as R0: "When directly damaged while below 40% HP,
+        // this Unit repairs 20% of its Max HP."
         const s = ship({
             refits: [{}] as Ship['refits'],
             firstPassiveSkillText:
@@ -5281,7 +5207,7 @@ describe('buildShipAbilities — PR5 Finding 4 Isha/Guardian reactive-heal gates
 
 // ---------------------------------------------------------------------------
 // PR9(a): shield-basis "additional damage equal to X% of its/their current Shield" —
-// Malvex, Quixilver, FrontLine. RAW CSV rows (docs/ship-skills.csv), verbatim.
+// Malvex, Quixilver, FrontLine. Old-corpus texts (synthetic; the catalogue wording differs).
 // ---------------------------------------------------------------------------
 describe('buildShipAbilities — PR9a shield-basis additional-damage', () => {
     it('FrontLine active: additional-damage stat "shield", pct 60 (pronoun "their")', () => {
@@ -5376,18 +5302,18 @@ describe('buildShipAbilities — PR9b standalone shield-strip', () => {
 
     it('does NOT emit a shield-strip ability for the Lodolite I6 purge-coupled clause (guard against double-modeling)', () => {
         const LODOLITE_CHARGED_RAW =
-            "This Unit deals <unit-damage>310% damage</unit-damage> and additional damage equal to <unit-damage>10%</unit-damage> of this Unit's max HP. Then, the enemy with the most <unit-aid>Buffs</unit-aid> is Purged of all buffs.<br />This attack can target <unit-aid>Stealthed</unit-aid> enemies.";
-        const LODOLITE_R4_PASSIVE_RAW =
-            "This Unit ignores <unit-skill>Stealth</unit-skill> effects.<br /><br />This Unit deals <unit-damage>10% more critical damage</unit-damage> to defenders, all allies deal <unit-damage>15% more direct damage</unit-damage> to enemies with <unit-skill>Concentrate Fire</unit-skill> or <unit-skill>Stealth</unit-skill>.<br /><br />When this Unit <unit-aid>Purges a buff</unit-aid> from an enemy, it <unit-damage>removes 100%</unit-damage> of the enemy's shield.";
+            'This Unit deals <unit-damage>310% damage</unit-damage> with additional damage equal to <unit-damage>10%</unit-damage> of its max HP.<br /><br />Then this Unit <unit-skill>purges all buffs</unit-skill> from enemy with the most <unit-aid>buffs</unit-aid>.';
+        const LODOLITE_R2_PASSIVE_RAW =
+            "This Unit ignores <unit-skill>Stealth</unit-skill> effects.<br /><br />This Unit deals <unit-damage>10% more critical damage</unit-damage> to defenders, all allies deal <unit-damage>15% more direct damage</unit-damage> to enemies with <unit-skill>Concentrate Fire</unit-skill> or <unit-skill>Stealth</unit-skill>.<br /><br />When this Unit <unit-aid>purges a buff</unit-aid> from an enemy, it <unit-damage>removes 100%</unit-damage> of the enemy's shield.";
         const s = ship({
             chargeSkillText: LODOLITE_CHARGED_RAW,
             chargeSkillCharge: 3,
-            thirdPassiveSkillText: LODOLITE_R4_PASSIVE_RAW,
+            thirdPassiveSkillText: LODOLITE_R2_PASSIVE_RAW,
         });
         const { slots } = buildShipAbilities(s);
         const allAbilities = slots.flatMap((sk) => sk.abilities);
         expect(allAbilities.filter((a) => a.type === 'shield-strip')).toHaveLength(0);
-        // The purge ability still carries stripsShield (I6, unaffected by this PR).
+        // The purge ability still carries stripsShield (I6).
         const purge = allAbilities.find((a) => a.type === 'purge')!;
         expect(purge.config).toMatchObject({ stripsShield: true });
     });
@@ -5414,7 +5340,7 @@ describe('buildShipAbilities — epic PR12(A) Nosorog damage-reflection phrasing
         });
     });
 
-    it('Nosorog third passive (40%, verbatim CSV text with trailing Defense-Up clause): still emits the reflect ability', () => {
+    it('Nosorog third passive (40%, old-corpus text with trailing Defense-Up clause): still emits the reflect ability', () => {
         const s = ship({
             thirdPassiveSkillText:
                 'This Unit reflects 40% of the Damage taken back to the enemy when directly damaged as a primary target. Additionally, when this Unit removes a Debuff, it gains <unit-skill>Defense Up II</unit-skill> for 1 turn.',
@@ -5444,18 +5370,16 @@ describe('buildShipAbilities — epic PR12(A) Nosorog damage-reflection phrasing
 });
 
 // ---------------------------------------------------------------------------
-// Epic PR12(B): Chakara's charged "bypassing 20% of the enemy Defense" → a per-skill
-// defensePenetration modifier (the `defensePenetration` ModifierChannel already exists;
-// this wires the "bypassing X% of the enemy Defense" phrasing distinct from the existing
-// "X% defense penetration" wording). Because `abilitiesFromText` runs per skill ROW, the
-// resulting modifier ability is scoped to the CHARGED skill's own cast (folded via
-// `firingSkill.abilities` in playerTurn.ts) — not a standing self-buff.
+// Chakara's charged "This skill has 20% defense penetration" → a per-skill defensePenetration
+// modifier. Because `abilitiesFromText` runs per skill ROW, the resulting modifier ability is
+// scoped to the CHARGED skill's own cast (folded via `firingSkill.abilities` in playerTurn.ts) —
+// not a standing self-buff.
 // ---------------------------------------------------------------------------
-describe('buildShipAbilities — epic PR12(B) Chakara "bypassing N% of the enemy Defense"', () => {
+describe('buildShipAbilities — Chakara "This skill has N% defense penetration"', () => {
     it('Chakara charged: a self defensePenetration modifier (value 20) alongside the damage + additional-damage + purge abilities', () => {
         const s = ship({
             chargeSkillText:
-                'This Unit deals <unit-damage>220% damage</unit-damage> with an additional amount equal to <unit-damage>100%</unit-damage> of its Defense, bypassing 20% of the enemy Defense, and <unit-aid>purges 1</unit-aid> buff from the enemy.',
+                'This Unit deals <unit-damage>220% damage</unit-damage> with additional damage equal to <unit-damage>100%</unit-damage> of its defense and <unit-skill>purges 1 buff</unit-skill> from the enemy.<br /><br />This skill has <unit-damage>20% defense penetration</unit-damage>.',
             chargeSkillCharge: 2,
         });
         const charged = slot(buildShipAbilities(s).slots, 'charged')!;
@@ -5488,7 +5412,7 @@ describe('buildShipAbilities — epic PR12(B) Chakara "bypassing N% of the enemy
         const s = ship({
             activeSkillText: 'This Unit deals <unit-damage>160% damage</unit-damage>.',
             chargeSkillText:
-                'This Unit deals <unit-damage>220% damage</unit-damage>, bypassing 20% of the enemy Defense.',
+                'This Unit deals <unit-damage>220% damage</unit-damage> with additional damage equal to <unit-damage>100%</unit-damage> of its defense and <unit-skill>purges 1 buff</unit-skill> from the enemy.<br /><br />This skill has <unit-damage>20% defense penetration</unit-damage>.',
             chargeSkillCharge: 2,
         });
         const active = slot(buildShipAbilities(s).slots, 'active')!;
@@ -5535,7 +5459,7 @@ describe('buildShipAbilities — epic PR12(C) incoming-damage-reduction phrasing
     it('Panon third passive: 20% reduction (both direct + dot scope) gated on self-barrier-recharging', () => {
         const s = ship({
             thirdPassiveSkillText:
-                'If this Unit is directly damaged and does not have <unit-skill>Barrier Recharging</unit-skill>, it gains <unit-skill>Barrier</unit-skill> for 1 turn and applies <unit-skill>Barrier Recharging</unit-skill> to itself for 3 turns.<br /><br />This Unit reduces all incoming damage by 20% when affected by <unit-skill>Barrier Recharging</unit-skill>.',
+                'If this Unit is directly damaged and does not have <unit-skill>Barrier Recharging</unit-skill>, it gains <unit-skill>Barrier</unit-skill> for 1 turn and applies <unit-skill>Barrier Recharging</unit-skill> to itself for 3 turns.<br /><br />This Unit gains <unit-damage>20% damage reduction</unit-damage> from all sources when affected by <unit-skill>Barrier Recharging</unit-skill>.',
         });
         const passive = slot(buildShipAbilities(s).slots, 'passive')!;
         const reductions = passive.abilities.filter((a) => a.config.type === 'incoming-reduction');
@@ -5556,7 +5480,7 @@ describe('buildShipAbilities — epic PR12(C) incoming-damage-reduction phrasing
     it('Wusheng third passive: 25% direct-scope reduction gated on self-stealth (reuses the existing Voidshade condition)', () => {
         const s = ship({
             thirdPassiveSkillText:
-                'This Unit gains <unit-skill>Stealth</unit-skill> for 1 turn after critically damaging an enemy.<br /><br />This Unit reduces direct damage by 25% while <unit-skill>Stealth</unit-skill> is active. If directly damaged while <unit-skill>Stealth</unit-skill> is active, remove <unit-skill>Stealth</unit-skill>.<br /><br />This Unit starts combat fully charged.',
+                'This Unit gains <unit-skill>Stealth</unit-skill> for 1 turn after critically damaging an enemy.<br /><br />This Unit takes <unit-damage>25% less direct damage</unit-damage> while <unit-skill>Stealth</unit-skill> is active.<br /><br />This Unit starts combat <unit-skill>fully charged</unit-skill>.',
         });
         const passive = slot(buildShipAbilities(s).slots, 'passive')!;
         const reduction = passive.abilities.find((a) => a.config.type === 'incoming-reduction');
@@ -5574,7 +5498,7 @@ describe('buildShipAbilities — epic PR12(C) incoming-damage-reduction phrasing
     it('Tormenter third passive: HP-proportional reduction (up to 30%) on BOTH scopes, condition always, no phantom base-damage ability', () => {
         const s = ship({
             thirdPassiveSkillText:
-                'This Unit always lands critical hits and gains up to <unit-damage>30% damage</unit-damage> reduction as its health decreases.',
+                "This Unit's attacks always critically hit and gains up to <unit-damage>30% damage reduction</unit-damage> as its health decreases.",
         });
         const passive = slot(buildShipAbilities(s).slots, 'passive')!;
         // PR1 regression guard: no phantom on-cast damage ability from this clause.
@@ -5613,13 +5537,13 @@ describe('buildShipAbilities — epic PR12(C) incoming-damage-reduction phrasing
         expect(blockBuffs.some((a) => a.trigger === 'on-cast')).toBe(false);
     });
 
-    it('FrontLine passive: "While Shielded, it gains 2500 additional Defense" emits a self-shield-gated flat conditional-stat bonus (ship-kit wave 4, Task 8)', () => {
+    it('FrontLine passive: "while it has an active shield, it gains 2500 defense" emits a self-shield-gated flat conditional-stat bonus', () => {
         // Verbatim from docs/ship-skills.csv (first_passive_skill_text field, FrontLine row).
         // R0 passive (refits: []) so firstPassiveSkillText is the active row (getShipSkillRows).
         const s = ship({
             refits: [],
             firstPassiveSkillText:
-                'This ship has 20% Shield Penetration.<br />While Shielded, it gains 2500 additional Defense.<br />This Unit gains <unit-damage>Shield equal to 25%</unit-damage> of its Max HP at the start of combat.',
+                'This ship has <unit-damage>20% shield penetration</unit-damage>.<br /><br />At the start of combat this Unit gains a <unit-damage>shield equal to 25%</unit-damage> of its max HP and while it has an active shield, it gains 2500 defense.',
         });
         const passive = slot(buildShipAbilities(s).slots, 'passive')!;
         const cond = abilityOfType(passive.abilities, 'conditional-stat');
@@ -5638,8 +5562,8 @@ describe('buildShipAbilities — epic PR12(C) incoming-damage-reduction phrasing
 });
 
 describe('buildShipAbilities — round-start self shields', () => {
-    // Verbatim from docs/ship-skills.csv (Zenith row), including the newline the CSV's
-    // multi-line quoted passive carries after each `<br /><br />`.
+    // Old-corpus wording of Zenith's passives (synthetic; the catalogue text differs), including
+    // the newline the old CSV's multi-line quoted passive carried after each `<br /><br />`.
     const ZENITH_R4 =
         'When this Unit has a <unit-aid>shield</unit-aid> its attacks do not reduce <unit-skill>Stasis</unit-skill>. <br /><br />\nAt the start of each round this Unit gains a <unit-damage>shield equal to 50%</unit-damage> of its attack.<br /><br />\nThis Unit deals <unit-damage>8% more direct damage</unit-damage> for each ally with a shield.';
     const ZENITH_R0 =
@@ -5666,7 +5590,7 @@ describe('buildShipAbilities — round-start self shields', () => {
         });
     });
 
-    it('a per-TURN self shield keeps start-of-turn (Xcellence, Kinetik — verbatim CSV)', () => {
+    it('a per-TURN self shield keeps start-of-turn (Xcellence, Kinetik — old-corpus text)', () => {
         // The round-start detector is position-scoped on the phrase "start of the/each/every
         // ROUND"; these two say "turn" and must fall through to detectEveryTurnTrigger.
         const xcellence = ship({
@@ -5688,7 +5612,7 @@ describe('buildShipAbilities — round-start self shields', () => {
         ).toMatchObject({ trigger: 'start-of-turn', config: { pct: 4, basis: 'hp' } });
     });
 
-    it('a start-of-COMBAT self shield keeps pre-combat (Crucialis — verbatim CSV)', () => {
+    it('a start-of-COMBAT self shield keeps pre-combat (Crucialis — old-corpus text)', () => {
         const s = ship({
             refits: [],
             firstPassiveSkillText:

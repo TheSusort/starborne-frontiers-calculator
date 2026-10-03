@@ -79,7 +79,7 @@ describe('ungatedFinding damage-reaction parity', () => {
 /**
  * HP-threshold parity: "when HP drops/falls below N%" CROSSING grants
  * (Tycho/Shelter/Los/Kafa/Redeemer) ride the on-hp-threshold-crossed trigger and Hermes's
- * "If the target has less than N% HP" Cheat-Death grant carries a per-recipient HP filter —
+ * "If an ally has less than N% HP" Cheat-Death grant carries a per-recipient HP filter —
  * both parser-modeled, so an effect from such a clause that parses UNGATED on-cast is a parser
  * regression the audit must FLAG via the detectHpCrossingTrigger / detectTargetHpGate parity
  * guards. STATIC "while its HP is below N%" gates (no drops/falls verb) stay skipped.
@@ -107,8 +107,8 @@ describe('ungatedFinding hp-threshold parity', () => {
         );
     });
 
-    it('flags Hermes\'s "If the target has less than N% HP" Cheat-Death gate parsed ungated', () => {
-        const plain = 'If the target has less than 40% HP, it grants Cheat Death.';
+    it('flags Hermes\'s "If an ally has less than N% HP" Cheat-Death gate parsed ungated', () => {
+        const plain = 'If an ally has less than 40% HP, it grants that ally Cheat Death.';
         expect(ungatedFinding([ungatedBuff('Cheat Death')], plain)).toContain('Cheat Death');
     });
 

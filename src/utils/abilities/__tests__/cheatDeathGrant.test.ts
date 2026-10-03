@@ -157,10 +157,10 @@ describe('Cheat Death grant parsing', () => {
         });
     });
 
-    it('Hermes charged: "If the target has less than 40% HP, it grants Cheat Death" → no payload, recurring', () => {
+    it('Hermes charged: "If an ally has less than 40% HP, it grants that ally Cheat Death" → no payload, recurring', () => {
         const s = ship({
             chargeSkillText:
-                'This Unit <unit-damage>repairs 37%</unit-damage> of its Max HP and <unit-aid>adds 1 charge</unit-aid> to the Charged Skill.<br /><br />If the target has less than 40% HP, it grants <unit-skill>Cheat Death</unit-skill>.',
+                'This Unit <unit-damage>repairs 37%</unit-damage> of its max HP and <unit-skill>adds 1 charge</unit-skill> to the charged skill of allies.<br /><br />If an ally has less than 40% HP, it grants that ally <unit-skill>Cheat Death</unit-skill>.',
         });
         const charged = slot(buildShipAbilities(s).slots, 'charged')!;
         const cd = cheatDeath(charged.abilities)!;

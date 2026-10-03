@@ -162,8 +162,8 @@ describe('resolveDebuffRecipientIds', () => {
 
     // ── #403: the three enemy SELECTOR targets ────────────────────────────────────────────
     // Before #403 these fell through the whole ternary to its tail, `[anchorId]` — the cast's
-    // normal target — so a clause naming "the highest attack enemy" hit whoever the pattern
-    // anchored on. The delegate below stands in for engine.ts's buildTurnArgs closure.
+    // normal target — so a clause naming "the enemy with the highest attack" hit whoever the
+    // pattern anchored on. The delegate below stands in for engine.ts's buildTurnArgs closure.
     // #403 review Finding 3: typed against the real `EnemySelectorKind` union (not `string`) so a
     // typo'd kind key is a compile error instead of silently resolving to `undefined`.
     const selectorFor =

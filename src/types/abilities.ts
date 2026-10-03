@@ -14,7 +14,7 @@ export type AbilityType =
     | 'debuff'
     | 'dot'
     | 'extend-dot'
-    // Wave 4 (Sokol/Ripper/Lev): generic extend-status — grows every eligible timed
+    // Generic extend-status (Ripper/Lev) — grows every eligible timed
     // buff or debuff by N turns (StatusEngine selfMaps/enemyMaps), the clean inverse of
     // the shipped duration-reduce ('cleanse' mode:'reduce-duration'). Distinct from
     // 'extend-dot', which operates on the separate DoT tick-stack store, not these maps.
@@ -43,10 +43,10 @@ export type AbilityType =
     | 'outgoing-amplification'
     | 'heal-amplification'
     | 'incoming-heal-amplification'
-    // PR F4: permanent pre-fight base-stat grant, adjacency-conditioned (Lionheart/Centurion/
-    // Enforcer/Defiant/Stalwart "At the start of combat …" / "when adjacent to a Supporter …"
-    // passives). Applied ONCE to PlacementPlan stats by the battle sim's pre-fight layer (F5) —
-    // never a status (hidden, non-purgeable, not reset on death). DPS calculators ignore it.
+    // Permanent pre-fight base-stat grant, adjacency-conditioned (Lionheart/Centurion/
+    // Enforcer/Defiant/Stalwart "At the start of combat …" passives). Applied ONCE to
+    // PlacementPlan stats by the battle sim's pre-fight layer (F5) — never a status (hidden,
+    // non-purgeable, not reset on death). DPS calculators ignore it.
     | 'pre-combat-stat'
     // SP-E: Voron/Orel "transforms the [incoming direct] damage into a DoT lasting N turns" —
     // reactive self-ability (trigger:'on-attacked', target:'self'). See AbilityConfig's
@@ -68,17 +68,16 @@ export type AbilityType =
     // AbilityConfig's 'defense-substitution' variant (a no-op marker — consumed at the engine's
     // defence-read sites, never through the ability-fold/executor pipeline).
     | 'defense-substitution'
-    // SP-F F3 (Lingshe): "reduces all Bombs on the enemy targets by N turn(s), Bombs reduced
-    // to 0 turns by this skill will detonate. This reduction effect requires hacking." Enemy-
-    // targeted (all-enemies), hacking-gated (runtime always draws the 'inflict' landing roll —
-    // see AbilityConfig's 'bomb-countdown-reduce' variant). Structurally distinct from the
-    // generic `cleanse`/`reduce-duration` primitive (which deliberately excludes bombs and only
-    // ever targets self/allies) — this shrinks the ENEMY's own PendingBomb.countdown, and any
-    // bomb reaching <= 0 detonates immediately (bespoke runtime loop in playerTurn.ts,
+    // Lingshe: "reduces all Bomb on the enemy targets by 1 turn. This reduction effect requires
+    // hacking." Enemy-targeted (all-enemies), hacking-gated (runtime always draws the 'inflict'
+    // landing roll — see AbilityConfig's 'bomb-countdown-reduce' variant). Structurally distinct
+    // from the generic `cleanse`/`reduce-duration` primitive (which deliberately excludes bombs
+    // and only ever targets self/allies) — this shrinks the ENEMY's own PendingBomb.countdown,
+    // and any bomb reaching <= 0 detonates immediately (bespoke runtime loop in playerTurn.ts,
     // `reduceEnemyBombs` — NOT detonateContainers/detonate(), which credit the CASTER
     // unconditionally and ignore countdown).
     | 'bomb-countdown-reduce'
-    // Wave 4 Task 8 (FrontLine passive): "While Shielded, it gains N additional Defense" — a
+    // FrontLine passive: "while it has an active shield, it gains 2500 defense" — a
     // FLAT-points DEFENSIVE stat bonus gated on the owner CURRENTLY holding a shield
     // (CombatActor.shieldPool > 0). No-op marker config (mirrors 'defense-substitution' /
     // 'damage-reflection' / 'buff-duration-extension') — the engine collects every carrier into
@@ -96,7 +95,7 @@ export type AbilityTarget =
     | 'lowest-hp-ally' // SP-4e: the living same-side ally with the lowest currentHp/maxHp, caster
     // EXCLUDED, ties broken by source order. Named by the ability's own text
     // (Pallas "the other ally with the lowest current health percentage", Volk
-    // "the ally with the most missing health", Valkyrie "the ally with the lowest
+    // "the ally with the most missing HP", Valkyrie "the ally with the lowest
     // current health percentage"). NEVER narrowed by the caster's support
     // footprint — it reaches its ally wherever they stand, on either slot
     // (user-confirmed 2026-08-20). Resolves to NO recipient when the caster is the
@@ -183,8 +182,8 @@ export type AbilityTrigger =
     // block for the carve-out list.
     | 'on-other-ally-debuff-inflicted'
     | 'on-ally-crit-dot'
-    // Ship-kit W8 Task 10 (Wisteria): self-subject sibling of on-ally-crit-dot — THIS unit's
-    // OWN crit-cast DoT infliction ("after applying Corrosion with a Critical hit, inflicts
+    // Wisteria: self-subject sibling of on-ally-crit-dot — THIS unit's OWN crit-cast DoT
+    // infliction ("When this Unit inflicts Corrosion with a critical hit, it also inflicts
     // Inferno II for 2 turns"), not an ally's. See buildShipAbilities' dot-effects branch.
     | 'on-self-crit-dot'
     | 'on-ally-critically-repaired'
@@ -225,12 +224,10 @@ export type AbilityTrigger =
     // repair; Arum/Yarrow/Larkspur/Grif reactions on enemy cleanse. Phase 4c PR 4.
     | 'on-enemy-repaired'
     | 'on-enemy-cleansed'
-    // Phase 3 PR-I: fires when an OPPOSING-side actor receives a timed buff (rides the
-    // existing `buff-applied` event, opposing-scoped on actorId — the buff RECIPIENT).
-    // Nuqtu's self-cleanse + Terran Bolster III grant ("when an enemy gets buffed"),
-    // promoted from a manual, non-derivable `enemy-buff` CONDITION (single-ship DPS has
-    // no enemy casting buffs, so it never fires there) to a live reactive trigger for the
-    // team simulator. Both effects are self-target — no capture needed.
+    // Fires when an OPPOSING-side actor receives a timed buff (rides the `buff-applied`
+    // event, opposing-scoped on actorId — the buff RECIPIENT). Nuqtu's Terran Bolster III
+    // grant and, at refit 2, her Core Charge I stack ("when an enemy gains a buff"), a live
+    // reactive trigger for the team simulator. Self-target — no capture needed.
     | 'on-enemy-buffed'
     // Purge ecosystem C2b: Sefuba self-purge / Salvation ally-purged
     | 'on-enemy-purged'
@@ -582,7 +579,7 @@ export interface Condition {
     anyOf?: boolean;
     requiredEnemyType?: EnemyBaseClass;
     // For 'enemy-type': when true, the gate means the enemy is NOT `requiredEnemyType`
-    // (e.g. "when targeting non-Defenders").
+    // (e.g. "when this attack targets non-defenders").
     negate?: boolean;
     buffName?: string;
     hpComparator?: 'below' | 'above';
@@ -627,16 +624,16 @@ export type IncomingCondition =
     // Distinct from `dot-inferno-corrosion` (a fact about THIS hit being a DoT tick); this is a
     // fact about the ATTACKER's own status, checked on an ordinary direct hit.
     | 'attacker-has-dot'
-    // Epic PR12 (C): the VICTIM currently carries its own "Barrier Recharging" self-status
-    // (Panon — "reduces all incoming damage by 20% when affected by Barrier Recharging").
+    // The VICTIM currently carries its own "Barrier Recharging" self-status (Panon — "gains 20%
+    // damage reduction from all sources when affected by Barrier Recharging").
     // A literal named-status check, mirroring the self-stealth/self-stasis precedent.
     | 'self-barrier-recharging'
-    // Model-completeness epic (SP-A): the VICTIM currently holds an active shield pool
-    // (Malvex — "When Shielded, this Ship takes 10% less damage"). Context-driven, not
-    // side-gated — evaluated per-hit against the victim's live shieldPool.
+    // The VICTIM currently holds an active shield pool (Malvex — "When this Unit has an active
+    // shield, it gains 10% damage reduction"). Context-driven, not side-gated — evaluated per-hit
+    // against the victim's live shieldPool.
     | 'self-shielded'
-    // Epic PR12 (C): unconditional — used with `hpScaling` (Tormenter's HP-proportional
-    // reduction, which carries no trigger/status gate, only continuous HP scaling).
+    // Unconditional — used with `hpScaling` (Tormenter's HP-proportional reduction, which
+    // carries no trigger/status gate, only continuous HP scaling).
     | 'always'
     // SP-E: Orel — the transform fires only when the ATTACKER of this hit currently carries
     // Taunt (self-buff) or Provoke (debuff placed on it by someone else). Distinct from
@@ -901,16 +898,16 @@ export type AbilityConfig =
     // supports both 'inflict' and 'apply').
     | { type: 'bomb-countdown-reduce'; turns: number }
     // `scope`: 'active'/undefined extends ALL standing DoT entries (Provider's
-    // "extends active Damage Over Time effects"; default + back-compat for stored
+    // "all damage over time debuffs are extended"; default + back-compat for stored
     // configs). 'inflicted' extends ONLY the DoT entries this cast just applied
-    // (Valerian's "the newly applied Corrosion ... extended by 1 turn").
+    // (Valerian's "the newly inflicted Corrosion by 1 turn").
     | {
           type: 'extend-dot';
           turns: number;
           chanceFromCritPower?: boolean;
           scope?: 'active' | 'inflicted';
       }
-    // Wave 4: generic extend-status (Sokol/Ripper/Lev) — extends every eligible timed
+    // Generic extend-status (Ripper/Lev) — extends every eligible timed
     // buff ('buff') or debuff ('debuff') on the StatusEngine selfMaps/enemyMaps store by
     // `turns`. See src/utils/combat/statusEngine.ts extendAllBuffsDuration/
     // extendAllDebuffsDuration.
@@ -920,12 +917,12 @@ export type AbilityConfig =
           turns: number;
           /** #363 (Fuying): restrict the extension to statuses with this exact name
            *  ("extends Stealth by 1 turn"). Absent → extend EVERY eligible timed status of
-           *  `statusKind`, which is what Sokol/Ripper/Lev do. */
+           *  `statusKind`, which is what Ripper/Lev do. */
           buffName?: string;
           /** Asphyxiator: 'inflicted' extends ONLY the statuses THIS cast just applied
-           *  ("the newly applied Debuff is extended by 1 turn") — a status already standing
+           *  ("the newly inflicted debuff is extended by 1 turn") — a status already standing
            *  from an earlier round is left alone. Absent → extend every eligible standing
-           *  status, which is what Sokol/Ripper/Lev do. Same axis as `extend-dot`'s `scope`,
+           *  status, which is what Ripper/Lev do. Same axis as `extend-dot`'s `scope`,
            *  and an inflicted-scope debuff extension covers the cast's DoT applications too:
            *  the game counts a DoT as one of the debuffs it inflicted. */
           scope?: 'active' | 'inflicted';
@@ -1054,8 +1051,9 @@ export type AbilityConfig =
           type: 'control';
           effect: ControlEffect;
       }
-    // Overload lifecycle: "loses/removes Overload on kill". Removes a named self-buff family from
-    // ALL of the owner's self stores. target:'self'; trigger carries the reactive moment.
+    // Overload lifecycle: "upon destroying an enemy, removes Overload". Removes a named self-buff
+    // family from ALL of the owner's self stores. target:'self'; trigger carries the reactive
+    // moment.
     | { type: 'remove-self-buff'; buffName: string; scope: 'all' }
     // D-PR3 victim-side incoming-damage reduction (folded at the crit-aware computation sites).
     | {
@@ -1175,9 +1173,10 @@ export type AbilityConfig =
     // trigger:'on-ally-debuff-inflicted', target:'enemy' (widened gate — see buildShipAbilities'
     // mergeBuff). `chanceFromStat` is the conversion-chance stat scaling (1% per 10 Hacking →
     // pctPerPoint 0.1). `extendTurns`/`extendChanceFromCritPower` fold Belladonna's paired
-    // "extends the newly applied <family> for N turns, chance = crit power" clause (otherwise
-    // parsed standalone by parseCritPowerExtend into an `extend-dot` ability — suppressed for
-    // this row to avoid a double-extend) directly into the SAME conversion executor.
+    // "extends the newly inflicted <family> status for N turns, chance = crit power" clause
+    // (otherwise parsed standalone by parseCritPowerExtend into an `extend-dot` ability —
+    // suppressed for this row to avoid a double-extend) directly into the SAME conversion
+    // executor.
     | {
           type: 'convert-dot';
           fromDotType: DoTType;
@@ -1194,7 +1193,7 @@ export type AbilityConfig =
     // dedicated per-owner set and substitutes the carrier's effective defence for a living
     // non-defender ally's own defence at every defence-read site.
     | { type: 'defense-substitution' }
-    // Wave 4 Task 8 (FrontLine passive): "While Shielded, it gains 2500 additional Defense" — a
+    // FrontLine passive: "while it has an active shield, it gains 2500 defense" — a
     // flat-points DEFENSIVE stat bonus, gated on the owner CURRENTLY holding a shield
     // (CombatActor.shieldPool > 0). Distinct from every existing stat-bonus path: `modifier` is
     // percentage-only and folds ONLY into the attacker-side/DAMAGE-mode read
@@ -1242,10 +1241,10 @@ export interface Ability {
      *  'inflict' fires only on a status whose source text says "inflicts", 'apply' only on one
      *  whose source says "applies" (Provoke, Concentrate Fire, Disable; the Burner gear set's
      *  Inferno). Set by the parser from the clause's own verb ("inflicts"/"inflicting" →
-     *  'inflict', "applies"/"applying" → 'apply'); absent when the clause uses neither (a neutral
-     *  phrasing like OLD APEX's "gets debuffed"), which fires on any landing. The Insidiousness
-     *  implant ("When debuffing an enemy") is the one hand-set exception: 'inflict' by user ruling
-     *  (2026-10-02). What each event counts as — `passesApplicationFilter`'s doc in triggers.ts. */
+     *  'inflict', "applies"/"applying" → 'apply'); absent when the clause uses neither, which
+     *  fires on any landing. The Insidiousness implant ("When debuffing an enemy") is the one
+     *  hand-set exception: 'inflict' by user ruling (2026-10-02). What each event counts as —
+     *  `passesApplicationFilter`'s doc in triggers.ts. */
     triggerApplicationFilter?: 'inflict' | 'apply';
     /** Status-FAMILY filter for `on-debuff-inflicted`: the reaction fires only when the landed
      *  status belongs to this family — Lingshe's "When this Unit inflicts a Bomb it gains
@@ -1360,7 +1359,7 @@ export interface Ability {
      *  buffs, charge) is NOT narrowed to the firing skill's support footprint — user-verified
      *  2026-07-31 via Volk, whose active buffs land inside
      *  `Pattern-Line-Support-from-centre-Range-1` while its passive "repairs … the ally with the
-     *  most missing health" reaches any ally. This flag is the opt-BACK-IN for the handful of
+     *  most missing HP" reaches any ally. This flag is the opt-BACK-IN for the handful of
      *  passives that name the pattern themselves; cast-slot support is footprint-scoped
      *  regardless of the flag. Set by buildShipAbilities from the ability's own sentence. */
     patternScoped?: boolean;

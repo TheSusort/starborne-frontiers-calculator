@@ -137,7 +137,7 @@ describe('buildShipAbilities.coverage', () => {
     it('Lodolite active: damage + additional-damage(hp) + modifier (Concentrate Fire)', () => {
         const s = ship({
             activeSkillText:
-                'This Unit deals <unit-damage>240% damage</unit-damage> with additional damage equal to <unit-damage>10%</unit-damage> of its max HP. When targeting non-Defenders, apply <unit-skill>Concentrate Fire</unit-skill> for 2 turns.<br />This attack can target <unit-aid>Stealthed</unit-aid> enemies.',
+                'This Unit deals <unit-damage>240% damage</unit-damage> with additional damage equal to <unit-damage>10%</unit-damage> of its max HP.<br /><br />When this attack targets non-defenders, it also applies <unit-skill>Concentrate Fire</unit-skill> for 2 turns.',
         });
 
         const { slots } = buildShipAbilities(s);
@@ -154,7 +154,7 @@ describe('buildShipAbilities.coverage', () => {
     it('Rhodium active: damage with conditional scaling (per buff on enemy) + charge', () => {
         const s = ship({
             activeSkillText:
-                'This Unit deals <unit-damage>140% damage</unit-damage> with an additional <unit-damage>25%</unit-damage> for each buff on the enemy. Unit adds charges to the <unit-aid>Charged Skill</unit-aid> equal to the number of <unit-aid>Buffs</unit-aid> on the target.',
+                'This Unit deals <unit-damage>140% damage</unit-damage> with an additional <unit-damage>25%</unit-damage> for each <unit-aid>buff</unit-aid> on the enemy. <br /><br />This Unit <unit-skill>adds charges</unit-skill> to its charged skill equal to the number of <unit-aid>buffs</unit-aid> on the enemy.',
             chargeSkillCharge: 6,
         });
 

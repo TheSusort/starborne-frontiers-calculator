@@ -8,7 +8,7 @@
  * PROVEN DEFENDER) meant a Meatshield would substitute a real Defender ally's damage too.
  *
  * This file exercises the REAL production surface end-to-end: a Ship carrying Meatshield's
- * verbatim R4 refit-active passive text (parsed via `skillTextParser`/`buildShipAbilities`,
+ * old-corpus R4 refit-active passive text (parsed via `skillTextParser`/`buildShipAbilities`,
  * NOT hand-injected like `defenseSubstitution.test.ts`), run through `simulateBattle` itself
  * — proving (a) role now reaches the engine from the real placement pipeline and (b) the
  * DEFENDER/non-defender split is now correctly observed on that path.
@@ -23,9 +23,9 @@ import type { ShipTypeName } from '../../../constants/shipTypes';
 beforeEach(() => setRateGateRng(() => 0.999999)); // never crit — deterministic single-hit damage
 afterEach(() => resetRateGateRng());
 
-// Meatshield's R4 refit-active passive, verbatim from docs/ship-skills.csv (also used by
-// modelCompletenessTriage.test.ts's parser-level probe). Requires refits.length >= 4 to
-// resolve as the active passive (getShipSkillRows).
+// Old-corpus wording of Meatshield's R4 refit-active passive (synthetic; the catalogue text
+// differs). Also used by modelCompletenessTriage.test.ts's parser-level probe. Requires
+// refits.length >= 4 to resolve as the active passive (getShipSkillRows).
 const MEATSHIELD_P4 =
     "At the start of combat, this Unit gains 3 stacks of <unit-skill>Protection</unit-skill>.<br /><br />Any damage this Unit takes from <unit-skill>Protection</unit-skill> is transformed into a <unit-aid>Damage over Time effect</unit-aid> for 2 turns.<br /><br />Any direct damage dealt to a non-defender ally that is not transferred by <unit-skill>Protection</unit-skill> is dealt as if that ally had this Unit's defense.";
 

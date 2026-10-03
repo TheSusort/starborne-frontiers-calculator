@@ -54,7 +54,6 @@ import {
     detectHitCount,
     parseHpThresholdCondition,
     parseExtendDoT,
-    parseExtendDoTTarget,
     parseExtendStatus,
     parseCritPowerExtend,
     parseDebuffDurationReduction,
@@ -98,7 +97,6 @@ import {
     PURGE_MORE_RE,
     parseControlInflicts,
     detectAllyCritTrigger,
-    detectEnemyBuffedTrigger,
     detectAllyShieldDestroyedTrigger,
     detectCleanseOncePerRound,
     parseNoCrit,
@@ -126,7 +124,6 @@ import {
     parsePurge,
     parseBuffSteal,
     detectTopUpBuffSteal,
-    detectPassiveVoicePurge,
     detectPurgeStripsShield,
     parseHealNoCrit,
     parseSkillEffects,
@@ -427,10 +424,9 @@ function forEveryEnemyStealthCondition(sentence: string, rawText: string): Condi
 
 /**
  * Detects an HP-proportional "up to X%" bonus: the value scales linearly with the
- * target's CURRENT HP% (Akula — "based on the target's current HP percentage; the
- * higher the percentage, the more", or "based on the enemies current HP, up to X% when the
- * enemy is at full HP") or MISSING HP% (Tithonus — "based on the
- * target's missing HP, with the maximum achieved when the target is below 10% HP").
+ * target's CURRENT HP% (Akula — "based on the enemies current HP, up to X% when the enemy is
+ * at full HP") or MISSING HP% (Tithonus — "based on the target's missing HP, with the maximum
+ * achieved when the target is below 10% HP").
  * Returns the count condition + scaling rule (perUnit per HP point, capped at the
  * full value), or null when the sentence has no HP-proportional phrasing. The
  * "below N% HP" anchor in the missing-HP form sets where the maximum is reached
@@ -440,7 +436,7 @@ function hpProportionalScaling(
     sentence: string,
     value: number
 ): { condition: Condition; scaling: ScalingRule } | null {
-    if (/based on the (?:target|enem(?:y|ies))'?s?\s+current\s+hp/i.test(sentence)) {
+    if (/based on the enem(?:y|ies)'?s?\s+current\s+hp/i.test(sentence)) {
         return {
             condition: { subject: 'enemy-hp-pct', derivable: true },
             scaling: { conditionIndex: 0, perUnit: value / 100, cap: value },
@@ -476,8 +472,8 @@ export const UNIT_HAS_DEFENSE_PENETRATION_RE =
  *    a capped scaling modifier instead of a flat bonus.
  *  - "X% defense penetration for each buff it has, up to a max of Y%" → a per-self-buff
  *    scaling defense-penetration modifier (capped).
- *  - flat "This skill has X% defense penetration" / "bypassing X% of the enemy Defense" → a
- *    flat defense-penetration modifier (Chakara's charged). A unit-subject "This Unit has X%
+ *  - flat "This skill has X% defense penetration" → a flat defense-penetration modifier
+ *    (Chakara's charged). A unit-subject "This Unit has X%
  *    defense penetration" describes the refit stat and mints nothing (see the branch below).
  */
 function parseModifiers(text: string): ParsedModifier[] {
@@ -699,18 +695,15 @@ function parseModifiers(text: string): ParsedModifier[] {
         });
     }
 
-    // "increases [outgoing] [direct] Damage by [up to] N% [to enemies with <effect> / below X% HP]"
-    // → an outgoing-damage bonus (Obsidian). HP-proportional phrasings (Akula's "up to 30%
-    // based on the target's current HP percentage") become a scaling modifier on the live
-    // enemy-hp-pct count — the sim derives enemy HP from cumulative damage per round.
-    // The amount follows "by" ("increases damage by up to 30% based on…") or the HP basis
-    // ("increases outgoing direct damage based on the enemies current HP, up to 30%…").
+    // "increases outgoing direct damage based on the enemies current HP, up to N%" (Akula) → a
+    // scaling modifier on the live enemy-hp-pct count — the sim derives enemy HP from cumulative
+    // damage per round.
     const incM = plain.match(
-        /increases?\s+(?:outgoing\s+)?(?:direct\s+)?damage\s+(?:by\s+(?:up\s+to\s+)?(\d+(?:\.\d+)?)%|based\s+on\s+the\s+enem(?:y|ies)'?s?\s+current\s+hp,?\s+up\s+to\s+(\d+(?:\.\d+)?)%)/i
+        /increases?\s+(?:outgoing\s+)?(?:direct\s+)?damage\s+based\s+on\s+the\s+enem(?:y|ies)'?s?\s+current\s+hp,?\s+up\s+to\s+(\d+(?:\.\d+)?)%/i
     );
     if (incM) {
         const sentence = sentenceContaining(plain, incM.index!);
-        const incValue = parseFloat(incM[1] ?? incM[2]);
+        const incValue = parseFloat(incM[1]);
         const incTarget: AbilityTarget = /friendly|all allies|allies/i.test(sentence)
             ? 'all-allies'
             : 'self';
@@ -723,34 +716,6 @@ function parseModifiers(text: string): ParsedModifier[] {
                 target: incTarget,
                 conditions: [incHpScaling.condition],
                 scaling: incHpScaling.scaling,
-            });
-        } else {
-            const conditions: Condition[] = [];
-            if (/\benem(?:y|ies)\b[^.]*\bwith\b/i.test(sentence)) {
-                conditions.push(...enemyEffectConditions(enemyEffectNamesFromClause(text)));
-            }
-            // Enemy-type gate (Zeolite's "increases damage by 30% when hitting a Defender").
-            // Verb set differs from the crit-damage branch's template (adds hitting/attacking)
-            // and tolerates an optional article ("hitting a Defender" vs Lodolite's "to defenders").
-            const typeM = sentence.match(
-                /\b(?:to|against|targeting|damaging|attacking|hitting)\s+(?:an?\s+)?(defender|attacker|debuffer|supporter)s?\b/i
-            );
-            if (typeM) {
-                conditions.push({
-                    subject: 'enemy-type',
-                    derivable: true,
-                    requiredEnemyType: (typeM[1].charAt(0).toUpperCase() +
-                        typeM[1].slice(1).toLowerCase()) as EnemyBaseClass,
-                });
-            }
-            const hpCond = hpThresholdFromSentence(sentence);
-            if (hpCond) conditions.push(hpCond);
-            out.push({
-                channel: 'outgoingDamage',
-                value: incValue,
-                isMultiplicative: true,
-                target: incTarget,
-                conditions,
             });
         }
     }
@@ -806,6 +771,9 @@ function parseModifiers(text: string): ParsedModifier[] {
         // Judge's innate 20%, Ravager's refit-2 10%), which already reaches the ship's stats, so
         // it mints nothing — a modifier on top would count the penetration twice. A skill-scoped
         // "This skill has X% defense penetration" is not a ship stat and mints the modifier.
+        // parseModifiers runs PER SKILL ROW, so a charged-skill modifier (Chakara) folds into
+        // `dmgStats.effectivePen` only on the turn THAT skill fires (playerTurn.ts's
+        // `selfModifierAbilities = firingSkill.abilities + passiveSkill.abilities`).
         const flatPenM = plain.match(/(\d+(?:\.\d+)?)%\s+defense penetration(?!\s+for each)/i);
         const describesShipStat =
             !!flatPenM &&
@@ -819,27 +787,6 @@ function parseModifiers(text: string): ParsedModifier[] {
                 target: 'self',
                 conditions: [],
             });
-        } else if (!flatPenM) {
-            // Chakara's charged: "…bypassing 20% of the enemy Defense…". Distinct
-            // wording from "X% defense penetration" above; same defensePenetration modifier
-            // shape. Because parseModifiers runs PER SKILL ROW (abilitiesFromText is called once
-            // per Active/Charge/Passive text), this is inherently a PER-SKILL modifier — it only
-            // folds into `dmgStats.effectivePen` on the turn THIS skill fires (playerTurn.ts's
-            // `selfModifierAbilities = firingSkill.abilities + passiveSkill.abilities`), not a
-            // permanent standing pen like the flat-text branch above (which corpus rows only ever
-            // carry on a PASSIVE, so the distinction is inert there — passives fire every turn).
-            const bypassM = plain.match(
-                /bypassing\s+(\d+(?:\.\d+)?)%\s+of\s+the\s+enemy\s+defense/i
-            );
-            if (bypassM) {
-                out.push({
-                    channel: 'defensePenetration',
-                    value: parseFloat(bypassM[1]),
-                    isMultiplicative: false,
-                    target: 'self',
-                    conditions: [],
-                });
-            }
         }
     }
 
@@ -847,9 +794,8 @@ function parseModifiers(text: string): ParsedModifier[] {
 }
 
 /**
- * Detects Iridium's crit reduction — "takes N% less damage from Critical hits" or "has N% damage
- * reduction from critical hits" — and returns the reduction percentage, or null when the phrase
- * is absent.
+ * Detects Iridium's crit reduction — "has N% damage reduction from critical hits" — and returns
+ * the reduction percentage, or null when the phrase is absent.
  *
  * The match is intentionally narrow: only a reduction stated "from critical hits" maps to the
  * crit-family incoming-reduction ability. A generic "less damage" clause (e.g. "takes 20% less
@@ -860,11 +806,9 @@ function parseModifiers(text: string): ParsedModifier[] {
  */
 function parseIncomingCritReduction(text: string): number | null {
     const plain = stripTags(text).replace(/<br\s*\/?>/gi, '. ');
-    const m = plain.match(
-        /(?:takes\s+(\d+(?:\.\d+)?)%\s+less\s+damage|has\s+(\d+(?:\.\d+)?)%\s+damage\s+reduction)\s+from\s+critical\s+hits/i
-    );
+    const m = plain.match(/has\s+(\d+(?:\.\d+)?)%\s+damage\s+reduction\s+from\s+critical\s+hits/i);
     if (!m) return null;
-    return parseFloat(m[1] ?? m[2]);
+    return parseFloat(m[1]);
 }
 
 /** One parsed incoming-damage-reduction directive. `scopes` lists every
@@ -895,11 +839,11 @@ interface ParsedIncomingDamageReduction {
  * AbilityConfig / IncomingCondition (the crit-family reduction is parseIncomingCritReduction):
  *  - Anemone: "takes N% less direct damage from enemies debuffed with a Damage over Time
  *    effect" — the ATTACKER carries a live DoT (`attacker-has-dot`).
- *  - Panon: "reduces all incoming damage by N%" / "gains N% damage reduction from all sources"
- *    "when affected by Barrier Recharging" — the VICTIM carries its own named self-status
- *    (`self-barrier-recharging`). Every incoming source → both scope:'direct' and scope:'dot'.
- *  - Wusheng: "reduces direct damage by N%" / "takes N% less direct damage" "while Stealth is
- *    active" — `self-stealth`, direct only.
+ *  - Panon: "gains N% damage reduction from all sources when affected by Barrier Recharging" —
+ *    the VICTIM carries its own named self-status (`self-barrier-recharging`). Every incoming
+ *    source → both scope:'direct' and scope:'dot'.
+ *  - Wusheng: "takes N% less direct damage while Stealth is active" — `self-stealth`, direct
+ *    only.
  *  - Tormenter: "gains up to N% damage reduction as its health decreases" — no status gate,
  *    continuous HP-proportional scaling (`hpScaling`, condition 'always'). perUnit = cap/100 so
  *    the reduction reaches exactly `cap`% at 0 HP (the Revenge gear set's self-hp-missing-pct
@@ -922,30 +866,29 @@ function parseIncomingDamageReductionPhrasings(text: string): ParsedIncomingDama
         });
     }
 
-    // "reduces all incoming damage by N%" and "gains N% damage reduction from all sources" both
-    // cover every incoming source.
+    // "gains N% damage reduction from all sources" covers every incoming source.
     const panonM =
-        /(?:reduces\s+all\s+incoming\s+damage\s+by\s+(\d+(?:\.\d+)?)%|gains\s+(\d+(?:\.\d+)?)%\s+damage\s+reduction\s+from\s+all\s+sources)\s+when\s+affected\s+by\s+barrier\s+recharging/i.exec(
+        /gains\s+(\d+(?:\.\d+)?)%\s+damage\s+reduction\s+from\s+all\s+sources\s+when\s+affected\s+by\s+barrier\s+recharging/i.exec(
             plain
         );
     if (panonM) {
         out.push({
             scopes: ['direct', 'dot'],
             condition: 'self-barrier-recharging',
-            pct: parseFloat(panonM[1] ?? panonM[2]),
+            pct: parseFloat(panonM[1]),
             matchIndex: panonM.index,
         });
     }
 
     const wushengM =
-        /(?:reduces\s+direct\s+damage\s+by\s+(\d+(?:\.\d+)?)%|takes\s+(\d+(?:\.\d+)?)%\s+less\s+direct\s+damage)\s+while\s+stealth\s+is\s+active/i.exec(
+        /takes\s+(\d+(?:\.\d+)?)%\s+less\s+direct\s+damage\s+while\s+stealth\s+is\s+active/i.exec(
             plain
         );
     if (wushengM) {
         out.push({
             scopes: ['direct'],
             condition: 'self-stealth',
-            pct: parseFloat(wushengM[1] ?? wushengM[2]),
+            pct: parseFloat(wushengM[1]),
             matchIndex: wushengM.index,
         });
     }
@@ -980,20 +923,19 @@ function parseIncomingDamageReductionPhrasings(text: string): ParsedIncomingDama
         });
     }
 
-    // Malvex: "When Shielded, this Ship takes N% less damage" / "When this Unit has an active
-    // shield, it gains N% damage reduction" — a self-shield-gated flat reduction. The
-    // self-shielded IncomingCondition is evaluated per-hit against the victim's live shieldPool.
-    // Anchored on the shield gate so it never matches Voron's DoT phrasing or a bare "takes N%
-    // less damage".
+    // Malvex: "When this Unit has an active shield, it gains N% damage reduction" — a
+    // self-shield-gated flat reduction. The self-shielded IncomingCondition is evaluated per-hit
+    // against the victim's live shieldPool. Anchored on the shield gate so it never matches a
+    // bare "N% damage reduction".
     const malvexM =
-        /(?:when\s+shielded,?\s+this\s+(?:ship|unit)\s+takes\s+(\d+(?:\.\d+)?)%\s+less\s+damage|when\s+this\s+unit\s+has\s+an\s+active\s+shield,?\s+it\s+gains\s+(\d+(?:\.\d+)?)%\s+damage\s+reduction)/i.exec(
+        /when\s+this\s+unit\s+has\s+an\s+active\s+shield,?\s+it\s+gains\s+(\d+(?:\.\d+)?)%\s+damage\s+reduction/i.exec(
             plain
         );
     if (malvexM) {
         out.push({
             scopes: ['direct'],
             condition: 'self-shielded',
-            pct: parseFloat(malvexM[1] ?? malvexM[2]),
+            pct: parseFloat(malvexM[1]),
             matchIndex: malvexM.index,
         });
     }
@@ -1143,7 +1085,7 @@ const MAX_POS = Number.MAX_SAFE_INTEGER;
  * A bare repair/cleanse (no recipient phrase, so the parser defaulted target to 'self') on an
  * ACTIVE or CHARGED skill with NO damage component is a pure support skill — it targets an ally,
  * so the heal/cleanse routes to the ally, not the caster. Example: Hermes' active "This Unit
- * Repairs 27% of its Max HP." with charged "If the target has less than 40% HP …" — the skill
+ * Repairs 27% of its Max HP." with charged "If an ally has less than 40% HP …" — the skill
  * targets an ally. Damage-rider repairs (skill has a damage component → it targets an enemy, the
  * repair is a self rider), passive repairs, and explicit recipients are unaffected.
  *
@@ -1187,9 +1129,9 @@ function flipBareSupportTarget(
     // is a NO-OP for cast routing and still load-bearing on the REACTIVE path, where
     // `reactiveRecipients` (triggers.ts) treats 'ally' as the ONE ally the triggering event named.
     //
-    // An EXPLICIT recipient ("the ally with the most missing health" → Volk) sets explicitTarget
-    // and never reaches this branch; since SP-4e Task 3 that recipient is parsed as
-    // 'lowest-hp-ally', which IS a genuine single-recipient target on every path.
+    // An EXPLICIT recipient ("the ally with the most missing HP" → Volk) sets explicitTarget
+    // and never reaches this branch; that recipient is parsed as 'lowest-hp-ally', which IS a
+    // genuine single-recipient target on every path.
     bareActiveScope: 'ally' | 'all-allies' = 'ally'
 ): 'self' | 'ally' | 'all-allies' | 'lowest-hp-ally' {
     if (
@@ -1360,16 +1302,16 @@ function abilitiesFromText(
         const ignoresDefense = parseIgnoresDefense(text);
         // Ship-kit W6 (Lodolite/Rhodium/Selenite): "This attack can target Stealthed enemies".
         const ignoresStealth = parseIgnoresStealth(text);
-        // SP-F F4 (Wusheng): "deals 220% damage with affinity advantage" forces this on-cast hit
-        // (and its paired Stasis 'apply' landing) to affinity advantage at the engine seams.
+        // Wusheng: "deals 220% damage with affinity advantage" forces this on-cast hit (and its
+        // paired Stasis 'apply' landing) to affinity advantage at the engine seams.
         const forceAffinityAdvantage = parseForceAffinityAdvantage(text);
-        // Epic PR4 (round-boundary trigger consistency): a base damage ability whose OWN
-        // sentence carries "at the start of the round" (Judge, Chakara's "Then," continuation)
-        // or "at the end of the round" (Incinerator, Rhodium p2's co-located 80%-no-crit hit)
-        // rides that LIVE trigger instead of the on-cast default — the reactive damage executor
-        // (triggers.ts cfg.type==='damage' branch) and, for start-of-round specifically, the
-        // partition machinery removing it from the old passive-payload-hit cast-time fold
-        // (playerTurn.ts) both already exist; this ability just needs the correct label.
+        // A base damage ability whose OWN sentence carries "at the start of the round" (Judge,
+        // Chakara's "Then," continuation) or "at the end of the round" (Incinerator, Rhodium p2's
+        // co-located 80%-no-crit hit) rides that LIVE trigger instead of the on-cast default — the
+        // reactive damage executor (triggers.ts cfg.type==='damage' branch) and, for start-of-round
+        // specifically, the partition machinery removing it from the old passive-payload-hit
+        // cast-time fold (playerTurn.ts) both already exist; this ability just needs the correct
+        // label.
         // #2 (Sentinel): a passive damage clause anchored in a "when an ally critically hits an
         // enemy … deals X% damage to that enemy" sentence rides the on-ally-crit reactive trigger
         // (the crit-victim enemy is routed via eventCtx.counterTargetId — triggers.ts on-ally-crit
@@ -1417,29 +1359,29 @@ function abilitiesFromText(
         if (damageTrigger === 'end-of-round' && detectMostBuffsTarget(text, damagePos)) {
             out[0].ability.target = 'enemy-most-buffs';
         }
-        // SP-M M1 (Task 6): a round-boundary (start-of-round, INCLUDING the "Then," continuation
-        // sentence — Chakara p4: "starts each round with Attack Up II/Defense Up II … if it has
-        // the lowest speed among all Allies. Then, deals 60% damage to the highest Speed Enemy.")
-        // damage clause carrying "to the highest Speed Enemy" re-targets from the default 'enemy'
-        // to 'enemy-highest-speed'. Sentence/position-scoped on damagePos (parseHighestSpeedEnemyTarget
-        // mirrors detectMostBuffsTarget's scoping), so an unrelated damage clause elsewhere in the
-        // text is unaffected. out[0] is safe to mutate here (SP-F F1's out[0] invariant).
+        // A round-boundary (start-of-round, INCLUDING the "Then" continuation sentence — Chakara's
+        // R2 passive: "At the start of the round, if this Unit has the lowest speed among all
+        // allies, it gains Attack Up II and Defense Up II for 1 turn. Then deals 60% damage to the
+        // enemy with the highest speed.") damage clause carrying "to the enemy with the highest
+        // speed" re-targets from the default 'enemy' to 'enemy-highest-speed'.
+        // Sentence/position-scoped on damagePos (parseHighestSpeedEnemyTarget mirrors
+        // detectMostBuffsTarget's scoping), so an unrelated damage clause elsewhere in the text is
+        // unaffected. out[0] is safe to mutate here: it is the base branch pushed first (see above).
         if (damageTrigger === 'start-of-round' && parseHighestSpeedEnemyTarget(text, damagePos)) {
             out[0].ability.target = 'enemy-highest-speed';
         }
         // Ship-kit W5 (Demolisher bomb-splash): the reactive bomb-detonated damage clause
-        // ("... deals 100% of the Bomb's damage to all adjavent enemies") re-targets from the
+        // ("... deals 100% of the Bomb's damage to all adjacent enemies") re-targets from the
         // default 'enemy' to the adjacency scope. GATED on damageTrigger === 'on-bomb-detonated'
         // (same pattern as the end-of-round/start-of-round retargets above) rather than a bare
         // sentence-position check: an on-cast damage clause can share its SENTENCE with an
         // unrelated debuff/control clause that owns its own adjacency phrase (Asphyxiator's
         // "...deals 175% damage, then inflicts Inferno III... on the targeted enemy and all
-        // enemies adjacent to it" — the adjacency belongs to Inferno III, not the 175% hit;
+        // adjacent enemies" — the adjacency belongs to Inferno III, not the 175% hit;
         // Vindicator's "...deals 100% damage and applies Provoke... to all enemies adjacent to
-        // the target" — the adjacency belongs to Provoke, not the 100% hit). Both are corpus
-        // regressions caught by the Task C1 corpus-regression check and fixed by this gate,
-        // which restricts the position-scoped adjacency read to the one trigger only Demolisher's
-        // passive carries.
+        // the target" — the adjacency belongs to Provoke, not the 100% hit). This gate restricts
+        // the position-scoped adjacency read to the one trigger only Demolisher's passive
+        // carries.
         if (damageTrigger === 'on-bomb-detonated') {
             const adjacentDamageScope = adjacentEnemyScopeAtPos(text, damagePos);
             if (adjacentDamageScope) {
@@ -1642,7 +1584,7 @@ function abilitiesFromText(
             });
         }
 
-        // Paracelsus p2: "Upon being killed by direct Damage, this Unit deals Damage equal to
+        // Paracelsus p2: "Upon being destroyed by direct damage, this Unit deals damage equal to
         // N% of its max HP." on-destroyed HP-scaled retaliation — composes the existing
         // on-destroyed trigger with hpBasisPct (multiplier:0), same executor shape as Vindicator.
         const onKilled = parseKilledByDirectHpDamage(text);
@@ -1668,17 +1610,14 @@ function abilitiesFromText(
         }
 
         // Xcellence p2: "When an enemy resists a debuff infliction, this Unit deals damage
-        // equal to X% of this Unit's current shield." Ship-kit W8.
+        // equal to X% of this Unit's current shield."
         //
-        // #413: routes on `on-enemy-debuff-resisted` — enemy resister, INFLICTOR-AGNOSTIC. It stood
-        // on `on-own-debuff-resisted` because the parser's own doc comment glossed the text as
-        // "when an enemy resists A DEBUFF [THIS UNIT INFLICTED]", and that bracketed clause is not
-        // in the skill row: the subject is "an enemy" (the resister) and the object is "a debuff
-        // infliction", with no possessive anywhere. So an ally's resisted debuff procs her too,
-        // which the inflictor-scoped trigger (`e.sourceId !== ownerId` → drop) silently discarded.
-        // Contrast the two shipped neighbours, both of which are correctly scoped and unchanged:
+        // #413: routes on `on-enemy-debuff-resisted` — enemy resister, INFLICTOR-AGNOSTIC. The
+        // subject is "an enemy" (the resister) and the object is "a debuff infliction", with no
+        // possessive anywhere, so an ally's resisted debuff procs her too; the inflictor-scoped
+        // trigger (`e.sourceId !== ownerId` → drop) would discard it. Contrast the two neighbours:
         // Vindicator's "When THIS UNIT resists…" is resister-scoped (`on-debuff-resisted`) and
-        // Ravager's "If ITS debuff is resisted" really is inflictor-scoped (`on-own-debuff-resisted`).
+        // Ravager's "If THIS UNIT'S debuff is resisted" is inflictor-scoped (`on-own-debuff-resisted`).
         //
         // Both triggers stamp counterTargetId = the resister, so the retaliation still hits the
         // enemy that resisted. multiplier:0 — the amount rides shieldBasisPct (owner's current
@@ -1748,8 +1687,8 @@ function abilitiesFromText(
         };
     }
 
-    // Conditional damage BONUS gated on the ENEMY carrying an effect: Rikra "additional 60%
-    // damage against Taunted or Provoked enemies", Wrecker "if affected by Inferno, additional
+    // Conditional damage BONUS gated on the ENEMY carrying an effect: Rikra "an additional 60%
+    // damage to enemies affected by Taunt or Provoke", Wrecker "if affected by Inferno, additional
     // 50%". enemyEffectConditions classifies each name into an enemy-buff/enemy-debuff condition
     // (anyOf when >1); scaledBonus/gateConditions treat the group as one bare scaling source, so
     // the base damage always fires and the bonus adds only when the enemy has the effect(s).
@@ -1864,17 +1803,18 @@ function abilitiesFromText(
         out[0].ability.target = 'all-enemies';
     }
 
-    // Phase 4c PR 4 (Task 6): Grif's NAMELESS damage proc — "When an enemy cleanses a Debuff,
-    // this Unit deals 75% Damage that cannot critically hit" — rides the LIVE on-enemy-cleansed
-    // trigger. Sentence-scoped at the damage anchor (`damagePos`), so Grif's standing "increases
-    // its Defense by 20%." in a DIFFERENT leading sentence never co-triggers the proc. noCrit is
-    // already attached above (parseNoCrit). The buff/debuff-grant cleanse cases (Arum/Yarrow/
-    // Larkspur) are handled by detectReactiveTrigger in the buff-merge path (they have a buffName).
+    // Grif's NAMELESS damage proc — "When an enemy cleanses a Debuff, this Unit deals 75% Damage
+    // that cannot critically hit" — rides the LIVE on-enemy-cleansed trigger. Sentence-scoped at
+    // the damage anchor (`damagePos`), so Grif's standing "increases its Defense by 20%." in a
+    // DIFFERENT leading sentence never co-triggers the proc. noCrit is already attached above
+    // (parseNoCrit). The buff/debuff-grant cleanse cases (Arum/Yarrow/Larkspur) are handled by
+    // detectReactiveTrigger in the buff-merge path (they have a buffName).
     if (out[0]?.ability.type === 'damage') {
         const cleanseTrigger = detectEnemyCleanseTrigger(text, damagePos);
         if (cleanseTrigger) out[0].ability.trigger = cleanseTrigger;
     }
 
+    // Provider's DoT extension targets 'all-enemies' — see EXTEND_ALL_DOT_PASSIVE_RE for why.
     const extendTurns = parseExtendDoT(text);
     if (extendTurns) {
         const extendPos = text.search(/extend/i);
@@ -1882,7 +1822,7 @@ function abilitiesFromText(
             ability: {
                 id: nextId(),
                 type: 'extend-dot',
-                target: parseExtendDoTTarget(text),
+                target: 'all-enemies',
                 trigger: 'on-cast',
                 conditions: [],
                 config: { type: 'extend-dot', turns: extendTurns },
@@ -1892,41 +1832,26 @@ function abilitiesFromText(
         });
     }
 
-    // Ship-kit Wave 4, Task 5: generic buff/debuff DURATION EXTENSION — the inverse of the
-    // debuff-duration-reduction mechanic above, riding the NEW extend-status ability type
-    // (Task 4's StatusEngine primitives; executors are Task 6). Distinct from extend-dot
+    // Generic buff/debuff DURATION EXTENSION — the inverse of the debuff-duration-reduction
+    // mechanic above, riding the extend-status ability type. Distinct from extend-dot
     // above (a different store — DoT tick stacks, not the StatusEngine buff/debuff maps).
-    // Three corpus shapes, all sentence-scoped off the "extend"/"extended" match:
-    //  - Sokol (charged): "extends active Debuffs by 1 turn" — no "all allies"/"all enemies"
-    //    subject in the clause → default target 'enemy' (the primary/hit enemy, mirroring
-    //    extend-dot's own 'enemy' default).
-    //  - Ripper (passive R2): "All allies extend their active Buffs by 1 turn" — the "All
-    //    allies" subject (checked in the PREFIX before the extend verb, so it can never
-    //    false-match a later "all allies" clause in the same sentence — see Lev) → target
-    //    'all-allies'. This is an ADDITIONAL ability alongside the co-located Marauder Rage
-    //    II self-buff parsed elsewhere in this function — this block never touches out[0]/
-    //    mutates any existing entry, so that self-buff keeps parsing unchanged.
-    //  - Lev (charged): "If a critical hit occurs, all hit enemies have their debuffs
-    //    extended by 1 turn and all allies are granted Crit Power Up II for 2 turns." — the
-    //    "all hit enemies" subject precedes "extended" → target 'all-enemies'; the LATER
-    //    "all allies are granted…" clause (a different, unrelated buff-grant subject) is
-    //    excluded from the subject check by construction (prefix-only), so it can never
-    //    flip Lev's target to 'all-allies'.
+    // The target is read from the subject in the sentence PREFIX before the extend verb, so a
+    // later "all allies" clause in the same sentence never counts:
+    //  - Ripper (passive R2): "… and all allies active buffs are extended by 1 turn" →
+    //    'all-allies'. It is an ADDITIONAL ability: this block never mutates an existing entry.
+    //  - Lev (charged): "If a critical hit occurs, all hit enemies have their debuffs extended by
+    //    1 turn and all allies are granted Crit Power Up II for 1 turn." → 'all-enemies'; the
+    //    later "all allies are granted…" clause is outside the prefix.
+    //  - No subject: the fallback in `extendTarget` below.
     //
-    // Lev on-crit shape — THIS TASK'S JUDGMENT CALL (see task-5-report.md for the full
-    // writeup): kept on trigger:'on-cast' with a live-derivable `self-crit` CONDITION
-    // (abilityStatusGating.ts LIVE_SUBJECTS), gated the SAME way parseCritPowerExtend's
-    // Valerian condition is above (conditions:[{subject:'self-crit', derivable:true}]) —
-    // NOT the reactive 'on-crit' AbilityTrigger. Rationale: 'on-crit' carries no AoE fan-out
-    // plumbing — reactiveRecipients has no 'all-enemies' branch, and the reactive on-crit listener
-    // stamps no hit-enemy ids in eventCtx. (Measured 2026-08-08: the corpus has FOUR on-crit
-    // abilities — Enforcer's Defense Shred, Lionheart's two Attack Up grants and Wusheng's Stealth —
-    // plus Bloodthirst from equipment. An earlier version of this comment claimed Bloodthirst was
-    // the only one; it was wrong.) Staying on-cast instead reuses the SAME aoeVictimIds fan-out
-    // the on-cast purge/steal blocks already use for "all hit enemies" semantics (this cast's
-    // actual hit set), which is the literal wording of Lev's clause — reusing existing on-cast
-    // plumbing rather than adding new reactive machinery. Task 6's executor MUST honor this shape
-    // (on-cast + condition).
+    // Lev's crit gate stays on trigger:'on-cast' with a live-derivable `self-crit` CONDITION
+    // (abilityStatusGating.ts LIVE_SUBJECTS), the same gate the crit-power extend-dot below
+    // carries — NOT the reactive 'on-crit' AbilityTrigger. 'on-crit' carries no AoE fan-out
+    // plumbing: reactiveRecipients has no 'all-enemies' branch, and the reactive on-crit listener
+    // stamps no hit-enemy ids in eventCtx. On-cast reuses the aoeVictimIds fan-out the on-cast
+    // purge/steal blocks use for "all hit enemies" (this cast's actual hit set), which is the
+    // literal wording of Lev's clause. The extend-status executor honours this shape (on-cast +
+    // condition).
     const extendStatus = parseExtendStatus(text);
     if (extendStatus) {
         const plainForExtend = stripTags(text);
@@ -1937,26 +1862,24 @@ function abilitiesFromText(
         const localVerbIdx = extendSentence.search(/\bextend(?:s|ed)?\b/i);
         const extendSubjectPrefix =
             localVerbIdx >= 0 ? extendSentence.slice(0, localVerbIdx) : extendSentence;
-        // #363 (Fuying): the named arm carries no "all allies"/"all enemies" subject in its
-        // own clause ("...and extends Stealth by 1 turn" — the subject is inherited, not
-        // restated), so the no-subject fallback for a BUFF-kind extension is 'all-allies' —
-        // matching Ripper's explicit "All allies extend..." semantics and letting the runtime's
-        // existing allyRoster + supportRecipients pattern-scoping apply. A DEBUFF-kind
-        // extension's no-subject fallback stays 'enemy' (Sokol, unchanged: a single hit target).
-        // An INFLICTED-scope extension (Asphyxiator) names no scope word at all — its object is
-        // "the debuffs this cast inflicted", which spans every enemy the cast landed one on, not
-        // just the anchor. Owner ruling 2026-09-02: a crit on the main target extends the
-        // adjacent enemies' freshly applied debuffs too. So it takes the cast's whole hit
-        // footprint, which is what 'all-enemies' resolves to at the seam (aoeVictimIds).
+        // #363 (Fuying): the named arm carries no "all allies"/"all enemies" subject in its own
+        // clause ("...and extends Stealth by 1 turn" — the subject is inherited, not restated), so
+        // the no-subject fallback for a BUFF-kind extension is 'all-allies' — matching Ripper's
+        // explicit "all allies active buffs are extended" semantics and letting the runtime's
+        // existing allyRoster + supportRecipients pattern-scoping apply. An INFLICTED-scope
+        // extension (Asphyxiator) names no scope word at all — its object is "the debuffs this
+        // cast inflicted", which spans every enemy the cast landed one on, not just the anchor.
+        // Owner ruling 2026-09-02: a crit on the main target extends the adjacent enemies'
+        // freshly inflicted debuffs too. So it takes the cast's whole hit footprint, which is what
+        // 'all-enemies' resolves to at the seam (aoeVictimIds). A no-subject DEBUFF-kind
+        // extension takes the same footprint, as Lev's "all hit enemies" does.
         const extendTarget: AbilityTarget = /\ball\s+allies\b/i.test(extendSubjectPrefix)
             ? 'all-allies'
             : /\ball\s+(?:hit\s+)?enemies\b/i.test(extendSubjectPrefix)
               ? 'all-enemies'
-              : extendStatus.scope === 'inflicted'
+              : extendStatus.scope === 'inflicted' || extendStatus.statusKind === 'debuff'
                 ? 'all-enemies'
-                : extendStatus.statusKind === 'buff'
-                  ? 'all-allies'
-                  : 'enemy';
+                : 'all-allies';
         // Two corpus wordings for the same self-crit gate: Lev's "if a critical hit occurs" and
         // Asphyxiator's "applies a Debuff with a Critical hit". Both mean THIS cast crit, which
         // is what the live-derivable 'self-crit' condition reads (ctx.roundCrit).
@@ -1995,15 +1918,15 @@ function abilitiesFromText(
         });
     }
 
-    // SP-F F3 (Lingshe charged skill): "reduces all Bombs on the enemy targets by N turn(s),
-    // Bombs reduced to 0 turns by this skill will detonate. This reduction effect requires
-    // hacking." Builds a dedicated all-enemies ability; the hacking gate + forced-detonate-at-
-    // zero rider are fixed runtime behavior (playerTurn.ts's reduceEnemyBombs), not parsed here.
+    // Lingshe charged skill: "This Unit reduces all Bomb on the enemy targets by 1 turn. This
+    // reduction effect requires hacking." Builds a dedicated all-enemies ability; the hacking
+    // gate + forced-detonate-at-zero rider are fixed runtime behavior (playerTurn.ts's
+    // reduceEnemyBombs), not parsed here.
     // Kept structurally separate from the "inflicts Bomb III" DoT-apply below (a different
     // sentence, unaffected).
     const bombCountdownReduceTurns = parseBombCountdownReduce(text);
     if (bombCountdownReduceTurns) {
-        const bombReducePos = text.search(/reduces?\s+all\s+bombs/i);
+        const bombReducePos = text.search(/reduces?\s+all\s+(?:<[^>]*>\s*)?bomb/i);
         out.push({
             ability: {
                 id: nextId(),
@@ -2018,9 +1941,10 @@ function abilitiesFromText(
         });
     }
 
-    // Crit-power-chance extension (Valerian self-crit; Belladonna ally-inflicts → team).
-    // SP-E, Task E4: a row that ALSO carries a "convert the Corrosion into <family>" clause
-    // (Belladonna) folds this SAME crit-power extension into the convert-dot ability's
+    // Crit-power-chance extension, carrying the condition parseCritPowerExtend parsed. Only
+    // self-crit rows (Valerian, Wisteria) reach it today, because convert-dot rows are fenced off
+    // here: a row that ALSO carries a "converts the Corrosion into <family>" clause (Belladonna)
+    // folds this SAME crit-power extension into the convert-dot ability's
     // extendTurns/extendChanceFromCritPower (see mergeBuff below) — emitting the standalone
     // extend-dot here too would double-apply the extension on every successful conversion.
     const critExtend = detectConvertDot(text) ? null : parseCritPowerExtend(text);
@@ -2076,15 +2000,14 @@ function abilitiesFromText(
     }
 
     // Self-subject sibling of the Crocus on-ally-crit-dot block above — THIS unit's own crit-cast
-    // DoT infliction re-inflicts a second DoT (Wisteria: "after applying Corrosion with a Critical
-    // hit, inflicts Inferno II for 2 turns" / "When this Unit inflicts Corrosion with a critical
-    // hit, it also inflicts Inferno II for 2 turns"). Deliberately NOT reusing the
+    // DoT infliction re-inflicts a second DoT (Wisteria: "When this Unit inflicts Corrosion with a
+    // critical hit, it also inflicts Inferno II for 2 turns"). Deliberately NOT reusing the
     // parseSkillEffects tag walk the on-ally-crit-dot block uses above: the TRIGGER clause names a
     // DoT (Corrosion), and DOT_TIER_MAP carries a bare 'Corrosion' entry — that walk would mint a
     // phantom Corrosion dot from the trigger's own named DoT (see parseSelfCritDotEffect's
     // comment; buildShipAbilities.test.ts's "no phantom Corrosion dot" guard covers exactly this).
     // parseSelfCritDotEffect instead anchors on the "inflicts X for N turns" clause specifically,
-    // in EITHER ordering, so only the genuinely injected DoT (Inferno II) is ever extracted,
+    // so only the genuinely injected DoT (Inferno II) is ever extracted,
     // landing on the reactive on-self-crit-dot trigger (see triggers.ts/types/abilities.ts).
     const selfCritDotEffect = parseSelfCritDotEffect(text);
     if (selfCritDotEffect) {
@@ -2241,10 +2164,10 @@ function abilitiesFromText(
     // forced-targeting; the control ability only sources the `control-applied` event
     // (reaction substrate, e.g. Defiant's shield-on-Stasis). Carries no conditions (see the
     // gated-control caveat below); no damage/modifier → DPS pipeline ignores it.
-    // Wave 5 (Task A2): an enemy-side control's target is re-derived via detectEnemyGrantScope
-    // (same clause-adjacency detection as the paired named-status SkillEffect, keyed on the
-    // effect's display name) so an enemy-adjacency phrasing ("Stasis ... on the targeted enemy
-    // and all enemies adjacent to the enemy") routes the control to the same adjacency scope as
+    // An enemy-side control's target is re-derived via detectEnemyGrantScope (same
+    // clause-adjacency detection as the paired named-status SkillEffect, keyed on the effect's
+    // display name) so an enemy-adjacency phrasing ("Stasis ... on the targeted enemy and all
+    // adjacent enemies") routes the control to the same adjacency scope as
     // its paired debuff, instead of always collapsing to plain 'enemy'.
     for (const ctrl of parseControlInflicts(text)) {
         const controlTargetName = CONTROL_EFFECT_DISPLAY_NAME[ctrl.effect];
@@ -2355,8 +2278,8 @@ function abilitiesFromText(
         // the trigger), where the detectors infer from an anchor position that can land
         // on the wrong tag when pcts repeat.
         //
-        // Pallas: a heal/shield whose anchor falls in the "when this unit critically repairs an
-        // ally" sentence rides the on-ally-critically-repaired reactive trigger (position-scoped;
+        // Hermes: a heal/shield whose anchor falls in the "when it critically repairs an ally"
+        // sentence rides the on-ally-critically-repaired reactive trigger (position-scoped;
         // undefined → on-cast). APEX: a SHIELD whose anchor falls in the "when an enemy gets
         // debuffed" sentence rides on-debuff-inflicted (own inflictions; position-scoped). Both
         // are position-scoped so an unrelated heal/shield in another sentence is never co-triggered.
@@ -2380,16 +2303,15 @@ function abilitiesFromText(
                 // "every turn") falls through to detectEveryTurnTrigger below, and a
                 // start-of-COMBAT one to detectPreCombatShieldTrigger.
                 (detectStartOfRoundTrigger(text, healPos) ??
-                // Epic PR4 (start-of-combat one-time grant family): Crucialis's "At the start of
-                // combat, this Unit gains a Shield equal to 20% of its Max HP …" and FrontLine's
-                // "This Unit gains Shield equal to 25% of its Max HP at the start of combat" parsed
-                // on-cast — the shield would re-grant the pool on every skill use instead of once
-                // at combat start. Position-scoped (no buff name to resolve a clause on), checked
-                // for shields only (no corpus heal carries this phrase — verified ship-skills.csv;
-                // Lionheart's start-of-combat "grants adjacent allies 10% of its HP" is a HEAL, not
-                // a shield, and is out of this PR's named scope). The engine seeds the pool exactly
-                // once via seedPreCombatShields (round 1, before any turn); the cast path
-                // (runPlayerTurn) skips pre-combat abilities entirely.
+                // A start-of-combat shield (Crucialis: "At the start of combat, this Unit gains a
+                // shield equal to 20% of its max HP …"; FrontLine: "At the start of combat this
+                // Unit gains a shield equal to 25% of its max HP …") is 'pre-combat', not on-cast —
+                // on-cast would re-grant the pool on every skill use instead of once at combat
+                // start. Position-scoped (no buff name to resolve a clause on), checked for shields
+                // only: Lionheart's start-of-combat "grants all adjacent allies 10% of its HP" is a
+                // HEAL, not a shield. The engine seeds the pool exactly once via
+                // seedPreCombatShields (round 1, before any turn); the cast path (runPlayerTurn)
+                // skips pre-combat abilities entirely.
                 // basis GUARD (#210 review): the engine's seedPreCombatShields only seeds
                 // hp-basis pools — tagging a non-hp pre-combat shield would strip it from the
                 // cast path (notPreCombat filter) AND skip it at the seed = silently dropped
@@ -2409,7 +2331,7 @@ function abilitiesFromText(
                 // repairs the ally" sentence rides on-ally-crit — the crit-ing ally is routed via
                 // eventCtx.damagedAllyId (triggers.ts on-ally-crit listener; the same lane Howler's
                 // cleanse uses). Distinct from detectCritRepairTrigger above, which matches "when
-                // this Unit critically REPAIRS an ally" (Pallas). Position-scoped; corpus:
+                // it critically REPAIRS an ally" (Hermes). Position-scoped; corpus:
                 // Sentinel alone carries an ally-crit HEAL clause (Hermes/Howler self-heal in
                 // active/charge slots, no ally-crit phrase there).
                 detectAllyCritTrigger(text, healPos) ??
@@ -2485,7 +2407,7 @@ function abilitiesFromText(
                       // on-own-cleanse). Shield-only (no corpus heal carries this phrase).
                       (detectShieldStrippedTrigger(text, healPos) ??
                       detectDebuffInflictedTrigger(text, healPos) ??
-                      // Defiant: a SHIELD anchored in the "when applying Stasis" clause rides the
+                      // Defiant: a SHIELD anchored in the "after it inflicts Stasis" clause rides the
                       // on-stasis-applied reactive trigger (own-cast scoped; position-scoped).
                       detectStasisAppliedTrigger(text, healPos))
                     : undefined));
@@ -2537,7 +2459,7 @@ function abilitiesFromText(
                       role,
                       // AoE: a bare support-cast heal repairs every ally in the pattern footprint
                       // (like all-allies buffs), not a single ally. An explicit "most missing
-                      // health" recipient sets explicitTarget and stays a single recipient, parsed
+                      // HP" recipient sets explicitTarget and stays a single recipient, parsed
                       // as 'lowest-hp-ally'. A bare CLEANSE parses as 'ally', which resolves to the
                       // same cast reach as this 'all-allies' in `recipientsFor`; see
                       // flipBareSupportTarget's `bareActiveScope` doc.
@@ -2609,8 +2531,8 @@ function abilitiesFromText(
                     ? { triggerApplicationFilter: 'inflict' as const }
                     : {}),
                 // APEX: the shield's own sentence carries the trigger clause, so its verb is the
-                // filter — catalogue "gets inflicted with a debuff" → 'inflict'; OLD "gets
-                // debuffed" names no verb and stays unfiltered.
+                // filter — "gets inflicted with a debuff" → 'inflict'. A clause naming no verb
+                // stays unfiltered.
                 ...(reactiveTrigger === 'on-debuff-inflicted'
                     ? (() => {
                           const verb = debuffTriggerVerb(healSentence);
@@ -2655,16 +2577,14 @@ function abilitiesFromText(
         const cleansePos = text.search(/cleanse/i);
         // A cleanse rides a reactive trigger when ITS OWN sentence carries the reaction phrase
         // (each detector is position-scoped to the cleanse). Detectors run in this order:
-        //  - crit-repair ("when this unit critically repairs an ally") ->
+        //  - crit-repair ("when it critically repairs an ally") ->
         //    on-ally-critically-repaired.
         //  - ally-crit ("cleanses 1 debuff from an ally when that ally crits an enemy") ->
         //    on-ally-crit, which fires on any same-side crit (owner included, see triggers.ts's
         //    trigger doc block) and is routed to the crit-er via eventCtx.damagedAllyId.
         //  - every-turn ("Every turn this Unit cleanses ...") is a per-turn cleanse: the leading
         //    "every turn" governs the cleanse and a trailing "when" clause governs only the grants
-        //    after it, so this check runs BEFORE the enemy-buffed one when a sentence carries both.
-        //  - enemy-buffed ("cleanses ... when an enemy gets buffed") -> on-enemy-buffed
-        //    (opposing-scoped trigger).
+        //    after it.
         //  - ally-shield-destroyed ("cleanses all debuffs when an ally has their Shield
         //    destroyed") -> on-ally-shield-destroyed.
         //  - a PASSIVE-slot cleanse whose sentence carries a direct-damage reaction phrase ->
@@ -2673,7 +2593,6 @@ function abilitiesFromText(
             detectCritRepairTrigger(text, cleansePos) ??
             detectAllyCritTrigger(text, cleansePos) ??
             detectEveryTurnTrigger(text, cleansePos) ??
-            detectEnemyBuffedTrigger(text, cleansePos) ??
             detectAllyShieldDestroyedTrigger(text, cleansePos) ??
             (slot === 'passive' &&
             detectDamageReactionTrigger(text, cleansePos)?.trigger === 'on-attacked'
@@ -2687,7 +2606,8 @@ function abilitiesFromText(
             reactiveTrigger === 'on-ally-shield-destroyed'
                 ? 'ally'
                 : flipBareSupportTarget(c.target, c.explicitTarget, slot, mult > 0);
-        // Nuqtu's "(once per round)" cap — the plain self-scoped Ability.oncePerRound flag.
+        // Nuqtu's "cleanses 1 debuff, once per round" cap — the plain self-scoped
+        // Ability.oncePerRound flag.
         const cleanseOncePerRound = detectCleanseOncePerRound(text, cleansePos);
         out.push({
             ability: {
@@ -2763,7 +2683,7 @@ function abilitiesFromText(
         }
     }
 
-    // PR11 (epic PR11): debuff-duration reduction — the inverse of extend-dot. Modeled as a
+    // Debuff-duration reduction — the inverse of extend-dot. Modeled as a
     // 'cleanse' ability with mode:'reduce-duration' + count:'all' (shrinks EVERY eligible
     // debuff on the recipient by durationTurns, not just the newest — the Warpstrike implant's
     // count:0/mode:'reduce-duration' shape stays newest-only and is unaffected by count:'all'
@@ -2773,16 +2693,16 @@ function abilitiesFromText(
     //    The unit being damaged is always itself (never the ally-subject shape) — only the
     //    RECIPIENT (self vs all-allies) varies, mirroring parseHealAbilities' identical
     //    treatment of Heliodor's co-occurring repair clause in the same sentence.
-    //  - Pestilence: gated on this unit's OWN debuff infliction ("On debuff infliction this
-    //    Unit reduces …") → trigger 'on-debuff-inflicted', target all-allies.
+    //  - Pestilence: gated on this unit's OWN debuff infliction ("When this Unit inflicts a
+    //    debuff, it reduces …") → trigger 'on-debuff-inflicted', target all-allies.
     // Lingshe's charge-skill Bomb-countdown reduction is a structurally different mechanic
     // (enemy-targeted, hacking-gated, PendingBomb countdown with a forced-detonation-at-zero
     // rider — not the generic timed-debuff store this touches) and is deliberately NOT parsed
     // here; see scripts/auditSkills.allowlist.ts.
     for (const dr of parseDebuffDurationReduction(text)) {
         // Map the parsed gate to a reactive trigger EXPLICITLY (not by absence): Pestilence's
-        // "on debuff infliction" → on-debuff-inflicted; Heliodor's "when directly damaged" self
-        // reaction → on-attacked. A clause matching NEITHER gate carries no recognized reactive
+        // "when this Unit inflicts a debuff" → on-debuff-inflicted; Heliodor's "when directly
+        // damaged" self reaction → on-attacked. A clause matching NEITHER gate carries no recognized reactive
         // trigger — it is NOT emitted (a silent on-cast default would fire an all-debuff reduction
         // every round, phantom behaviour). No corpus ship hits this branch today (both shapes are
         // reactive); the audit's debuff-duration-reduction rule would flag such a future ship so
@@ -2800,8 +2720,8 @@ function abilitiesFromText(
                 type: 'cleanse',
                 target: dr.target,
                 trigger,
-                // ON_DEBUFF_INFLICTION_RE only ever matches the literal "on debuff infliction"
-                // noun phrase — there is no "application" counterpart for this detector to miss.
+                // The on-debuff gate (SELF_INFLICTS_DEBUFF_RE) only matches the "inflicts" verb —
+                // there is no "applies" counterpart for this detector to miss.
                 ...(dr.onDebuffInflicted ? { triggerApplicationFilter: 'inflict' as const } : {}),
                 conditions: [],
                 config: {
@@ -2819,26 +2739,18 @@ function abilitiesFromText(
     // Emit purge from active/charged (on-cast, C2a) AND from a PASSIVE slot WHEN a purge
     // trigger is detected in the purge's own sentence (C2b-2): Iridium "when directly damaged"
     // → on-attacked. Rhodium end-of-round + Faust killed-by-direct-damage detectors, plus
-    // Zeolite's "when dealing damage to a Defender" (Wave 8 Task 12) → on-deal-damage, carrying
-    // an `enemy-type` Defender condition (see detectPurgeEnemyTypeCondition below — same
-    // extraction the outgoing-damage-modifier branch above uses for Zeolite's sibling "+30%
-    // damage when hitting a Defender" gate). A passive purge with NO detected trigger is NOT
-    // emitted (Sefuba's chain stays on PURGE_MORE_RE below). Purge is enemy-only (no support-flip).
+    // Zeolite's "When this Unit deals damage to a defender" → on-deal-damage, carrying
+    // an `enemy-type` Defender condition (see detectPurgeEnemyTypeCondition below). A passive
+    // purge with NO detected trigger is NOT emitted (Sefuba's chain stays on PURGE_MORE_RE
+    // below). Purge is enemy-only (no support-flip).
     //
     // Nayra's "if the target was repaired this round, purge all buffs" emits with
     // conditions:[{subject:'target-repaired-this-round', derivable:true}] (see
     // detectRepairedThisRoundCondition below); the engine cast path evaluates it against
     // ConditionContext.targetRepairedThisRound.
     //
-    // I6: the passive-voice "is Purged of all buffs" form (Lodolite charged) is picked up by
-    // detectPassiveVoicePurge, merged in ONLY for the on-cast (active/charged) slots — the
-    // passive-slot trigger-detection loop below never sees it (see detectPassiveVoicePurge's
-    // doc comment for why that separation matters). Amartya count-scaling under-counts to 1 —
-    // SAFE under direction.
-    const purgeMatches =
-        slot === 'active' || slot === 'charged'
-            ? [...parsePurge(text), ...detectPassiveVoicePurge(text)]
-            : parsePurge(text);
+    // Amartya count-scaling under-counts to 1 — SAFE under direction.
+    const purgeMatches = parsePurge(text);
     for (const p of purgeMatches) {
         const purgePos = text.search(/purge/i);
         const passiveTrigger: AbilityTrigger | undefined =
@@ -2848,7 +2760,7 @@ function abilitiesFromText(
                 ? ('on-attacked' as const)
                 : (detectEndOfRoundPurgeTrigger(text, purgePos) ?? // Rhodium
                   detectKilledByDirectDamageTrigger(text, purgePos) ?? // Faust
-                  detectDealDamageToRoleTrigger(text, purgePos)); // Zeolite (Task 12)
+                  detectDealDamageToRoleTrigger(text, purgePos)); // Zeolite
         const trigger: AbilityTrigger | undefined =
             slot === 'active' || slot === 'charged' ? 'on-cast' : passiveTrigger;
         if (!trigger) continue; // passive purge with no recognized trigger → not emitted
@@ -2858,10 +2770,9 @@ function abilitiesFromText(
             ? 'enemy-most-buffs'
             : p.target;
         const repairedCond = detectRepairedThisRoundCondition(text, purgePos);
-        // Task 12: an on-deal-damage purge (Zeolite) is gated on the DAMAGED enemy being the
-        // named role (Defender) — reuses the enemy-type extraction shared with the +30%
-        // damage-modifier branch above. Only computed for the on-deal-damage trigger so no
-        // other purge (Iridium/Rhodium/Faust) picks up a spurious condition.
+        // An on-deal-damage purge (Zeolite) is gated on the DAMAGED enemy being the named role
+        // (Defender). Only computed for the on-deal-damage trigger so no other purge
+        // (Iridium/Rhodium/Faust) picks up a spurious condition.
         const enemyTypeCond =
             trigger === 'on-deal-damage'
                 ? detectPurgeEnemyTypeCondition(text, purgePos)
@@ -2888,7 +2799,7 @@ function abilitiesFromText(
         });
     }
 
-    // Chain purge — "purges N more/extra buff from the enemy" on on-enemy-purged. Emitted here,
+    // Chain purge — "purges N extra buff from the enemy" on on-enemy-purged. Emitted here,
     // separately from the generic loop above, which skips any purge sentence without a recognized
     // trigger, so a chain purge is never emitted twice. Count: PURGE_MORE_RE capture group 1
     // (digit or 'a'/'an' → 1).
@@ -2924,8 +2835,8 @@ function abilitiesFromText(
     const charge = parseChargeGain(text);
     if (charge) {
         const chargePos = text.search(/charge/i);
-        // Inflict-driven charge gains fire on a reactive event (+amount per infliction). Pallas's
-        // "when an ally critically hits ... gains 1 charge" rides the on-ally-crit reactive trigger
+        // Inflict-driven charge gains fire on a reactive event (+amount per infliction). Hermes's
+        // "when an ally critically hits ... adds 1 charge" rides the on-ally-crit reactive trigger
         // (sentence-scoped). Either reactive source means the trigger IS the gate → no gating
         // condition. parseChargeGain's own trigger (inflict-driven) takes precedence when present.
         const allyCritChargeTrigger = detectAllyCritTrigger(text, chargePos);
@@ -3038,8 +2949,8 @@ function abilitiesFromText(
         });
     }
 
-    // Liberator (Phase 4b Task 10): "When an enemy dies, all allies add 1 charge to their
-    // Charged Skills" → an all-allies charge ability on the on-enemy-destroyed reactive trigger
+    // Liberator: "When an enemy is destroyed, all allies add 1 charge to their charged skills"
+    // → an all-allies charge ability on the on-enemy-destroyed reactive trigger
     // (rides the existing charge executor's ally/all-allies path). Emitted BEFORE the extra-action
     // block so the slot keeps text-position order (the charge phrase precedes the extra-action one).
     const allyCharge = parseAllyChargeOnEnemyDeath(text);
@@ -3109,18 +3020,10 @@ function abilitiesFromText(
         });
     }
 
-    // Overload lose-on-kill (and "removes"/"is lost" phrasings): the 5 Marauder ships drop a
-    // named self-buff on a reactive trigger. parseSelfBuffRemovals (Task 5) scopes the trigger to
-    // the removal clause's position; the buff is cleared from ALL self stores (scope: 'all').
-    //
-    // Wave 8 Task 11 (Wusheng): an `on-attacked` removal ("if directly damaged … remove Stealth")
-    // additionally gates on the named buff still being ACTIVE at drain time — unlike the Marauder
-    // kill/repair/debuff triggers (which fire unconditionally; removeSelfBuffByName is a safe
-    // no-op if the buff was never present, so those never needed a gate), Wusheng's text is
-    // explicitly conditional ("if directly damaged WHILE Stealth is active"). The generic
-    // `self-buff` ConditionSubject (evaluateConditions.ts) already reads a live buff-presence
-    // count off the owner's snapshot, so this reuses existing machinery rather than adding a new
-    // condition kind.
+    // Overload removal ("removes Overload"): the Marauder ships drop a named self-buff on a
+    // reactive trigger. parseSelfBuffRemovals scopes the trigger to the removal clause's position;
+    // the buff is cleared from ALL self stores (scope: 'all'). The removal fires unconditionally:
+    // removeSelfBuffByName is a safe no-op if the buff was never present.
     for (const rem of parseSelfBuffRemovals(text)) {
         const removePos = findBuffNamePos(text, rem.buffName);
         out.push({
@@ -3129,10 +3032,7 @@ function abilitiesFromText(
                 type: 'remove-self-buff',
                 target: 'self',
                 trigger: rem.trigger,
-                conditions:
-                    rem.trigger === 'on-attacked'
-                        ? [{ subject: 'self-buff', buffName: rem.buffName, derivable: true }]
-                        : [],
+                conditions: [],
                 config: { type: 'remove-self-buff', buffName: rem.buffName, scope: 'all' },
                 autoFilled: true,
             },
@@ -3168,7 +3068,7 @@ function abilitiesFromText(
     const critReductionPct = parseIncomingCritReduction(text);
     if (critReductionPct !== null) {
         const critRedPos = text.search(
-            /(?:less\s+damage|damage\s+reduction)(?:<\/unit-damage>)?\s+from\s+critical\s+hits/i
+            /damage\s+reduction(?:<\/unit-damage>)?\s+from\s+critical\s+hits/i
         );
         out.push({
             ability: {
@@ -3246,7 +3146,7 @@ function abilitiesFromText(
         });
     }
 
-    // Wave 4 Task 8 (FrontLine passive): "While Shielded, it gains 2500 additional Defense" — a
+    // FrontLine passive: "while it has an active shield, it gains 2500 defense" — a
     // flat-points DEFENSIVE stat bonus gated on the owner currently holding a shield. No-op
     // marker config (mirrors defense-substitution above) — the engine collects every carrier
     // into a per-owner map and folds `flat` into `substitutedDefenceFor`'s defensive read, gated
@@ -3255,7 +3155,7 @@ function abilitiesFromText(
     // the bonus is applied dynamically at the defensive read, never fired.
     const whileShieldedFlatDefence = parseWhileShieldedFlatDefence(text);
     if (whileShieldedFlatDefence !== undefined) {
-        const whileShieldedPos = text.search(/while\s+shielded/i);
+        const whileShieldedPos = text.search(/while\s+it\s+has\s+an\s+active\s+shield/i);
         out.push({
             ability: {
                 id: nextId(),
@@ -3439,10 +3339,10 @@ function crossing(rowText: string, pos: number, ability: Ability): boolean {
 }
 
 /**
- * Hermes charged "If the target / an ally has less than N% HP, it grants (that ally) Cheat
- * Death". The grant reaches every ally the cast targets (his support pattern, himself included —
- * owner ruling 2026-10-02: the pattern targets them all equally, so "the target" is each of them),
- * and the HP test is asked of EACH recipient: an `all-allies` grant carrying
+ * Hermes charged "If an ally has less than N% HP, it grants that ally Cheat Death". The grant
+ * reaches every ally the cast targets (his support pattern, himself included — owner ruling
+ * 2026-10-02: the pattern targets them all equally, so the gated ally is each of them), and the
+ * HP test is asked of EACH recipient: an `all-allies` grant carrying
  * `recipientFilter.hpBelowPct`, not a single cast-time condition. Caller gates this to the
  * Cheat-Death family; sentence-scoped at the grant's anchor `pos`, so the preceding repair/charge
  * sentence (no gate) never matches. Returns true when it handled the buff.
@@ -3514,7 +3414,7 @@ export function buildShipAbilities(rawShip: Ship): ShipSkills {
                 : undefined;
             if (reactiveTrigger) ability.trigger = reactiveTrigger;
             // Enemy-adjacency splash (Asphyxiator active Inferno III: "on the targeted enemy
-            // and all enemies adjacent to it"). Charged Inferno's adjacency phrase belongs to a
+            // and all adjacent enemies"). Charged Inferno's adjacency phrase belongs to a
             // separate Stasis sentence, so it resolves to null and the DoT stays 'enemy'.
             const adjacentScope = rowText ? adjacentEnemyScopeForName(rowText, entry.type) : null;
             if (adjacentScope) ability.target = adjacentScope;
@@ -3549,8 +3449,8 @@ export function buildShipAbilities(rawShip: Ship): ShipSkills {
         }
         const slot = slotForBuffSource(buff.skillSource);
         const rowText = getSkillRowForSlot(ship, slot)?.text ?? '';
-        // SP-E, Task E4: Belladonna's "convert the Corrosion into Acidic Decay ... 1% per 10
-        // Hacking" clause auto-fills a bare, ungated enemy-target 'debuff' named after the
+        // Belladonna's "converts the Corrosion into Acidic Decay ... 1% per 10 Hacking"
+        // clause auto-fills a bare, ungated enemy-target 'debuff' named after the
         // conversion's TARGET family ("Acidic Decay") — the generic buff/debuff-name auto-fill
         // has no notion of "conversion", it just sees a named status in the clause. Recognise
         // that shape here (enemy-target + the row's own convert-dot clause names THIS buff) and
@@ -3627,14 +3527,15 @@ export function buildShipAbilities(rawShip: Ship): ShipSkills {
             : undefined;
         // Overload lifecycle guard: a kill never GRANTS a recurring/accumulating buff — it only
         // REMOVES it (the kill phrasing belongs to the remove-self-buff path, parsed separately by
-        // parseSelfBuffRemovals). The Marauder "gains <buff> every turn … loses it on kill" shape
-        // makes Overload's name appear in BOTH the per-turn grant clause and the kill-removal
-        // clause; resolveBuffClause can pick up the kill phrasing and mis-trigger the accumulating
-        // GRANT on on-enemy-destroyed (Mangler/Ravager), which would gate the every-turn accrual
-        // behind a kill. Strip a kill trigger from an accumulating (recurring) grant so it keeps its
-        // per-round accumulation; the legitimate recurring-grant triggers (Asphyxiator
-        // start-of-round, Ruiner on-enemy-repaired) are unaffected, and finite grants (Marauder Rage
-        // on-kill) keep their kill trigger.
+        // parseSelfBuffRemovals). The Marauder "gains 1 stack of Overload every turn and, upon
+        // destroying an enemy, removes Overload" shape makes Overload's name appear in BOTH the
+        // per-turn grant clause and the kill-removal clause; resolveBuffClause can pick up the
+        // kill phrasing and mis-trigger the accumulating GRANT on on-enemy-destroyed
+        // (Mangler/Ravager), which would gate the every-turn accrual behind a kill. Strip a kill
+        // trigger from an accumulating (recurring) grant so it keeps its per-round accumulation;
+        // the legitimate recurring-grant triggers (Asphyxiator start-of-round, Ruiner
+        // on-enemy-repaired) are unaffected, and finite grants (Marauder Rage on-kill) keep their
+        // kill trigger.
         const isAccumulatingGrant =
             ability.config.type === 'buff' && ability.config.duration === 'recurring';
         if (reactiveTrigger === 'on-enemy-destroyed' && isAccumulatingGrant) {
@@ -3660,7 +3561,7 @@ export function buildShipAbilities(rawShip: Ship): ShipSkills {
             const hits = detectHitCount(rowText, pos);
             if (hits !== undefined) ability.config.hits = hits;
         }
-        // Epic PR4: a split-sentence "… also gains <Buff>" continuing an IMMEDIATELY PRECEDING
+        // A split-sentence "… also gains <Buff>" continuing an IMMEDIATELY PRECEDING
         // "At the start of the round, this Unit gains …" sentence (Nayra p2's Offensive Affinity
         // Override, Isha p1/p2's Defensive Affinity Override) has no round-start phrase of its
         // OWN clause, so detectReactiveTrigger above misses it — fall back to the continuation
@@ -3697,25 +3598,15 @@ export function buildShipAbilities(rawShip: Ship): ShipSkills {
                 occurrence
             );
         }
-        // Harvester p2: "When an allied Unit is destroyed, this Unit gains 1 extra end of round
+        // Harvester p2: "When an ally is destroyed, this Unit gains 1 extra end of round
         // action and Speed Up I for 6 turns" — the extra-action grant resolves on-ally-destroyed
         // via parseExtraAction, but Speed Up I is a separate (plain) buff ability that otherwise
         // falls through to the on-cast default. Position-scoped on THIS buff's own sentence
         // (rather than buffName-scoped) so a co-located death-trigger phrase is only inherited
         // when it actually shares the sentence — an unrelated buff elsewhere in the row text is
         // unaffected.
-        //
-        // Reuse the same Overload-lifecycle guard as detectReactiveTrigger above
-        // (isAccumulatingGrant): Sokol's "gains 1 stack of Blast every turn and grants one extra
-        // end of round action upon a kill, once per round" shares ITS OWN sentence with both the
-        // EXTRA_ACTION_RE phrase and the enemy-death phrase, so detectExtraActionCoTrigger alone
-        // would co-trigger the recurring/accumulating Blast stack onto on-enemy-destroyed — gating
-        // its every-turn accrual behind a kill, the exact regression class the guard above exists
-        // to prevent. isAccumulatingGrant must gate this branch too, since it runs after (and was
-        // never re-applied here).
         if (
             reactiveTrigger === undefined &&
-            !isAccumulatingGrant &&
             ability.config.type === 'buff' &&
             rowText &&
             pos >= 0
@@ -3727,18 +3618,10 @@ export function buildShipAbilities(rawShip: Ship): ShipSkills {
             ability.conditions = ability.conditions.filter(
                 (c) =>
                     c.subject !== 'self-crit' &&
-                    // Phase 3 PR-I (COLLISION-SCOPE / "PR-E Provider lesson"): drop the now-
-                    // redundant manual enemy-buff condition once the clause is promoted to the
-                    // on-enemy-buffed trigger — the trigger IS the gate. Without this, Nuqtu's
-                    // Terran Bolster III would carry BOTH the reactive trigger AND the stale
-                    // manual condition (harmless today since a manual condition with no
-                    // manualCount defaults to "met", but leaving it is misleading and the
-                    // brief calls it out explicitly).
-                    !(reactiveTrigger === 'on-enemy-buffed' && c.subject === 'enemy-buff') &&
-                    // SP-G G4 (same COLLISION-SCOPE pattern): "On inflicting a debuff, gains X"
-                    // is double-classified — detectReactiveTrigger promotes it to on-debuff-inflicted
-                    // (APPLYING_DEBUFF_RE) AND detectGrantConditions' appliesDebuffGate emits a
-                    // redundant enemy-debuff condition from the SAME phrase. The trigger already
+                    // "On inflicting a debuff, gains X" is double-classified: detectReactiveTrigger
+                    // promotes it to on-debuff-inflicted (APPLYING_DEBUFF_RE) AND
+                    // detectGrantConditions' appliesDebuffGate emits a redundant enemy-debuff
+                    // condition from the SAME phrase. The trigger already
                     // proves a debuff was inflicted, so drop the enemy-debuff condition. Leaving it
                     // is not harmless here: enemy-debuff is `derivable:true`, so at reactive drain it
                     // gates against the enemy's LIVE debuff store. That store is populated on the
@@ -3750,8 +3633,8 @@ export function buildShipAbilities(rawShip: Ship): ShipSkills {
                     // Provider (#590): detectGrantConditions' rule 4a independently attaches the
                     // manual ally-inflicts-debuff condition from the SAME "another ally inflicts a
                     // debuff" clause the on-other-ally-debuff-inflicted trigger above just
-                    // resolved from. Same COLLISION-SCOPE pattern as the two drops above — drop
-                    // the now-redundant condition since the trigger is the gate.
+                    // resolved from. Same pattern as the drop above — drop the now-redundant
+                    // condition since the trigger is the gate.
                     !(
                         reactiveTrigger === 'on-other-ally-debuff-inflicted' &&
                         c.subject === 'ally-inflicts-debuff'
@@ -3801,18 +3684,18 @@ export function buildShipAbilities(rawShip: Ship): ShipSkills {
                 ability.target = 'ally';
             }
         } else if (
-            // Phase 4c PR 3 (Task 7): "when HP drops/falls below N%" buff-grant reactives
-            // (Tycho/Shelter/Los/Kafa/Redeemer) ride the LIVE on-hp-threshold-crossed trigger.
-            // Checked BEFORE the damage-reaction detector and short-circuiting: a crossing grant is
-            // never also target-gated, and the (drops|falls) verb excludes the static "while below
-            // N% HP" damage-reaction phrasing, so the two paths are mutually exclusive by corpus.
+            // "when HP drops/falls below N%" buff-grant reactives (Tycho/Shelter/Los/Kafa/Redeemer)
+            // ride the LIVE on-hp-threshold-crossed trigger. Checked BEFORE the damage-reaction
+            // detector and short-circuiting: a crossing grant is never also target-gated, and the
+            // (drops|falls) verb excludes the static "while below N% HP" damage-reaction phrasing,
+            // so the two paths are mutually exclusive by corpus.
             rowText &&
             pos >= 0 &&
             crossing(rowText, pos, ability)
         ) {
             // crossing grant handled in the helper; nothing further to do for this buff.
         } else if (
-            // Hermes charged "If the target / an ally has less than N% HP, it grants Cheat Death" —
+            // Hermes charged "If an ally has less than N% HP, it grants that ally Cheat Death" —
             // a per-recipient HP filter on the all-allies grant (see `targetGate`). Only the
             // Cheat-Death family is gated this way; the preceding repair/charge sentence has no
             // such gate, so detectTargetHpGate returns undefined there.
@@ -3823,14 +3706,14 @@ export function buildShipAbilities(rawShip: Ship): ShipSkills {
         ) {
             // target-gated Cheat Death handled in the helper; nothing further to do for this buff.
         } else {
-            // Phase 4c PR 1 (Task 8): a SELF-subject damage-reaction grant/infliction ("When
-            // directly damaged, … inflicts Speed Down I"; Guardian's "When this Unit is
-            // critically hit, it gains …") rides the LIVE on-attacked trigger (+ crit filter)
-            // instead of registering as an unconditional per-round aura (a phantom — the
-            // reactive partition routes it OUT of registerActorAbilityStatuses and into the
-            // executor, which lands enemy-target counter-debuffs on the attacking enemy via
-            // eventCtx.counterTargetId). Sentence-scoped at the buff's own anchor, so grants
-            // in other sentences of the same row are never co-triggered.
+            // A SELF-subject damage-reaction grant/infliction ("When directly damaged, … inflicts
+            // Speed Down I"; Guardian's "When this Unit is critically hit, it gains …") rides the
+            // LIVE on-attacked trigger (+ crit filter) instead of registering as an unconditional
+            // per-round aura (a phantom — the reactive partition routes it OUT of
+            // registerActorAbilityStatuses and into the executor, which lands enemy-target
+            // counter-debuffs on the attacking enemy via eventCtx.counterTargetId). Sentence-scoped
+            // at the buff's own anchor, so grants in other sentences of the same row are never
+            // co-triggered.
             const reaction =
                 rowText && pos >= 0 ? detectDamageReactionTrigger(rowText, pos) : undefined;
             if (reaction) {
@@ -3913,19 +3796,18 @@ export function buildShipAbilities(rawShip: Ship): ShipSkills {
                 }
             }
         }
-        // Epic PR4 (start-of-combat one-time grant family): a still-on-cast, NON-STACKING buff
-        // whose OWN clause reads "At the start of combat, this Unit gains …" (Crucialis's Atlas
-        // Coordination I/II, Tycho's Cheat Death + Everliving Regeneration I/II) is relabeled
-        // 'pre-combat' — a data-model/annotation correction only. 'pre-combat' is deliberately
-        // excluded from LIVE_TRIGGERS, so this is INERT at the engine level: the ability stays on
-        // the normal cast path, where registerActorAbilityStatuses' duration/slot-based
-        // classification already seeds a finite-duration passive buff exactly once at round start
-        // (seedPassiveTimedStatuses) and treats a 'recurring'-duration one (Cheat Death) as a
-        // standing aura — see src/utils/combat/engine.ts. EXCLUDES Meatshield's "gains 3 stacks of
-        // Protection" (stackTrigger:'per-round', isStackable): that ability still climbs every
-        // round under the parser's generic "gains N stacks" default, so it is NOT actually a
-        // one-time grant yet — relabeling only the trigger without fixing the stacking default
-        // would be actively misleading (deferred to a follow-up PR; see the epic report).
+        // A still-on-cast, NON-STACKING buff whose OWN clause reads "At the start of combat, this
+        // Unit gains …" (Crucialis's Atlas Coordination I/II, Tycho's Cheat Death + Everliving
+        // Regeneration I/II) is relabeled 'pre-combat' — a data-model/annotation correction only.
+        // 'pre-combat' is deliberately excluded from LIVE_TRIGGERS, so this is INERT at the engine
+        // level: the ability stays on the normal cast path, where registerActorAbilityStatuses'
+        // duration/slot-based classification already seeds a finite-duration passive buff exactly
+        // once at round start (seedPassiveTimedStatuses) and treats a 'recurring'-duration one
+        // (Cheat Death) as a standing aura — see src/utils/combat/engine.ts. EXCLUDES Meatshield's
+        // "gains 3 stacks of Protection" (stackTrigger:'per-round', isStackable): that ability
+        // still climbs every round under the parser's generic "gains N stacks" default, so it is
+        // NOT actually a one-time grant yet — relabeling only the trigger without fixing the
+        // stacking default would be actively misleading.
         const isAccumulatingBuff =
             ability.config.type === 'buff' &&
             !!ability.config.stackTrigger &&
@@ -3989,15 +3871,14 @@ export function buildShipAbilities(rawShip: Ship): ShipSkills {
         // enemy debuffs now do too ('enemy' vs 'all-enemies' — detectEnemyGrantScope). Defaults
         // to 'enemy' for round-trip debuffs that predate the effectTarget field.
         let enemyTarget: AbilityTarget = buff.effectTarget ?? 'enemy';
-        // Ship-kit W8 (Task 5): Selenite p3's round-start "the highest attack enemy is applied
-        // with Concentrate Fire" re-targets from the plain 'enemy' default to 'enemy-highest-
-        // attack' (the selector already resolves live at applyAbilities.ts, used by gear procs —
-        // this wires an existing selector, not a new one). Sentence/position-scoped on this buff's
-        // own name anchor (mirrors parseHighestSpeedEnemyTarget's damagePos scoping above) and
-        // gated on the plain 'enemy' scope only, so a co-located all-enemies/adjacent debuff in
-        // the same row is unaffected. The other seven Concentrate Fire ships in the corpus
-        // (Huanying, Judge, Lodolite, Stalwart, Valkyrie, Vanguard, Yuyan) carry no "highest
-        // attack enemy" phrase, so the narrow regex leaves them at the plain 'enemy' target.
+        // Selenite p3's round-start "applies Concentrate Fire for 1 turn to the enemy with the
+        // highest attack" re-targets from the plain 'enemy' default to 'enemy-highest-attack' (the
+        // selector already resolves live at applyAbilities.ts, used by gear procs). Sentence/
+        // position-scoped on this buff's own name anchor (mirrors parseHighestSpeedEnemyTarget's
+        // damagePos scoping above) and gated on the plain 'enemy' scope only, so a co-located
+        // all-enemies/adjacent debuff in the same row is unaffected. Other Concentrate Fire ships
+        // carry no "enemy with the highest attack" phrase, so the narrow regex leaves them at the
+        // plain 'enemy' target.
         if (enemyTarget === 'enemy') {
             const slotForThisBuff = slotForBuffSource(buff.skillSource);
             const rowTextForThisBuff = getSkillRowForSlot(ship, slotForThisBuff)?.text ?? '';

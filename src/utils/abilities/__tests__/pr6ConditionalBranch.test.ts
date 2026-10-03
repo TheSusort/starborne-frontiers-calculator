@@ -49,24 +49,24 @@ describe('PR6a conditional-branch phrasing', () => {
     });
 
     describe('self-crit conditional', () => {
-        it('Crucialis charged: "when it is critical, deals and additional 190%" → self-crit scaling', () => {
+        it('Crucialis charged: "if a critical hit, deals an additional 210%" → self-crit scaling', () => {
             const s = ship({
                 chargeSkillText:
-                    'This Unit deals <unit-damage>200% damage</unit-damage> and when it is critical, deals and additional <unit-damage>190%</unit-damage> damage.',
+                    'This Unit deals <unit-damage>200% damage</unit-damage> and, if a critical hit, deals an additional <unit-damage>210% damage</unit-damage>.',
                 chargeSkillCharge: 3,
             });
             const dmg = damageOf(slot(buildShipAbilities(s).slots, 'charged')!.abilities)!;
             expect(dmg.config).toMatchObject({ type: 'damage', multiplier: 200 });
-            expect(dmg.scaling).toMatchObject({ conditionIndex: 0, perUnit: 190 });
+            expect(dmg.scaling).toMatchObject({ conditionIndex: 0, perUnit: 210 });
             expect(dmg.conditions[0]).toMatchObject({ subject: 'self-crit', derivable: true });
         });
     });
 
-    describe('self-Stealth conditional (word-order variant)', () => {
-        it('Yin Jian active: "if Stealthed, additional deals 50%" → self-buff(Stealth) scaling', () => {
+    describe('self-Stealth conditional', () => {
+        it('Yin Jian active: "if it has Stealth it deals an additional 50% damage" → self-buff(Stealth) scaling', () => {
             const s = ship({
                 activeSkillText:
-                    'This Unit deals <unit-damage>95% damage</unit-damage> and, if <unit-aid>Stealthed</unit-aid>, additional deals <unit-damage>50%</unit-damage> damage.',
+                    'This Unit deals <unit-damage>95% damage</unit-damage> and if it has <unit-skill>Stealth</unit-skill> it deals an additional <unit-damage>50% damage</unit-damage>.',
             });
             const dmg = damageOf(slot(buildShipAbilities(s).slots, 'active')!.abilities)!;
             expect(dmg.config).toMatchObject({ type: 'damage', multiplier: 95 });
@@ -94,10 +94,10 @@ describe('PR6a conditional-branch phrasing', () => {
             });
         });
 
-        it('Rikra active: "additional 60% against Taunted or Provoked enemies" → enemy-debuff OR-group scaling', () => {
+        it('Rikra active: "an additional 60% damage to enemies affected by Taunt or Provoke" → enemy-debuff OR-group scaling', () => {
             const s = ship({
                 activeSkillText:
-                    'This Unit deals <unit-damage>140% damage</unit-damage>, with additional <unit-damage>60%</unit-damage> damage against Taunted or Provoked enemies.',
+                    'This Unit deals <unit-damage>140% damage</unit-damage> with an additional <unit-damage>60% damage</unit-damage> to enemies affected by <unit-skill>Taunt</unit-skill> or <unit-skill>Provoke</unit-skill>.',
             });
             const dmg = damageOf(slot(buildShipAbilities(s).slots, 'active')!.abilities)!;
             expect(dmg.config).toMatchObject({ type: 'damage', multiplier: 140 });
@@ -117,7 +117,7 @@ describe('PR6a conditional-branch phrasing', () => {
         it('Rikra charged: conditional bonus attaches to the damage ability even when a buff precedes it', () => {
             const s = ship({
                 chargeSkillText:
-                    'This Unit gains <unit-skill>Defense Up II</unit-skill> for 2 turns, and deals <unit-damage>180% damage</unit-damage> with additional <unit-damage>80%</unit-damage> damage against Taunted or Provoked enemies.',
+                    'This Unit gains <unit-skill>Defense Up II</unit-skill> for 2 turns and deals <unit-damage>180% damage</unit-damage> with an additional <unit-damage>80% damage</unit-damage> to enemies affected by <unit-skill>Taunt</unit-skill> or <unit-skill>Provoke</unit-skill>.',
                 chargeSkillCharge: 2,
             });
             const abilities = slot(buildShipAbilities(s).slots, 'charged')!.abilities;
@@ -232,7 +232,7 @@ describe('PR6a conditional-branch phrasing', () => {
         const rikraActive = (): Skill => {
             const s = ship({
                 activeSkillText:
-                    'This Unit deals <unit-damage>140% damage</unit-damage>, with additional <unit-damage>60%</unit-damage> damage against Taunted or Provoked enemies.',
+                    'This Unit deals <unit-damage>140% damage</unit-damage> with an additional <unit-damage>60% damage</unit-damage> to enemies affected by <unit-skill>Taunt</unit-skill> or <unit-skill>Provoke</unit-skill>.',
             });
             return buildShipAbilities(s).slots.find((sl) => sl.slot === 'active')!;
         };

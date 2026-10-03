@@ -4,7 +4,7 @@
  * EXISTING bus event, `dot-ticked`), this trigger rides a BRAND-NEW `shield-stripped` event
  * (combat/events.ts) emitted from `stripShieldPct` (playerTurn.ts).
  *
- * Laika's kit (verbatim from docs/ship-skills.csv):
+ * Laika's kit (old-corpus wording; synthetic, the catalogue text differs):
  *   - Active: "This Unit cleanses 1 debuff and deals 110% damage." — NO shield removal.
  *   - Charged: "This Unit removes 40% of the enemy Shield and deals 150% damage." — the ONLY
  *     slot that actually strips shield.
@@ -15,7 +15,7 @@
  * an unconditioned self-shield that fired on EVERY cast, including active-skill rounds that never
  * touch an enemy's shield at all (investigation appendix §D/finding #3).
  *
- * Exercised through the REAL production pipeline (`buildShipAbilities` fed verbatim skill text,
+ * Exercised through the REAL production pipeline (`buildShipAbilities` fed skill text,
  * never a hand-built ability) for BOTH the active/charged skills AND the reactive passive, so a
  * regression in either the shield-strip ability build OR the reactive-trigger wiring surfaces
  * here. Follows the `anemoneEnemyDotDamageHeal.test.ts` / `sansiEnemyRepairedHeal.test.ts` harness
@@ -57,7 +57,8 @@ const parsedTarget = (selection: ParsedTarget['selection']): ParsedTarget => ({
 });
 const basePattern = (): ParsedPattern => ({ raw: 'base', shape: 'base', range: 0, modifiers: {} });
 
-// Verbatim Laika skill text (docs/ship-skills.csv) — active/charged/second-passive.
+// Old-corpus wording of Laika's active/charged/second-passive (synthetic; the catalogue text
+// differs).
 const LAIKA_ACTIVE =
     'This Unit <unit-aid>cleanses 1</unit-aid> debuff and deals <unit-damage>110% damage</unit-damage>.';
 const LAIKA_CHARGE =

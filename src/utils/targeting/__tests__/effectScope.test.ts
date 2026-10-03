@@ -26,10 +26,6 @@ describe('parseEffectScope', () => {
         ).toBe('adjacent enemies');
     });
 
-    it('tolerates the "adjavent" typo in the source data', () => {
-        expect(parseEffectScope('inflicts X on all adjavent enemies')).toBe('adjacent enemies');
-    });
-
     it('detects all allies and all other allies', () => {
         expect(parseEffectScope('grants Attack Up to all allies')).toBe('all allies');
         expect(parseEffectScope('heals all other allies')).toBe('all allies');

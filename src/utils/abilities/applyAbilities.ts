@@ -259,7 +259,7 @@ export function detonationsFromSkill(
  * countComparator (e.g. "if the enemy has 3+ debuffs…") is deliberately both
  * scaler and gate (the count-threshold invariant: comparator gates, raw count
  * scales). When the scaling source is one member of an anyOf OR-group (Rikra's
- * "against Taunted OR Provoked enemies"), the WHOLE group is stripped from the gate
+ * "to enemies affected by Taunt OR Provoke"), the WHOLE group is stripped from the gate
  * so the base damage still fires unconditionally — the group only scales the bonus.
  * A lone scaling condition is its own singleton group → filters just that one index,
  * identical to the previous behavior for every existing single-condition scaling.

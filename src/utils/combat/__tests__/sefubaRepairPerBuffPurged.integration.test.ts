@@ -4,8 +4,6 @@
  *   catalogue R2: "When this Unit purges a buff from an enemy, it repairs 8% of its max HP for
  *                  each buff removed and also purges 1 extra buff from the enemy."
  *   catalogue R0: the same sentence without the extra purge.
- *   ours R2:      "When this Unit purges an enemy buff, it repairs itself for 12% Max HP and
- *                  purges 1 more buff from the enemy." — a FLAT 12% per purge.
  *
  * The count is the TRIGGERING purge's removed count (`purge-performed.count`). The chained
  * "1 extra buff" purge adds nothing to the repair.
@@ -16,8 +14,7 @@
  *   (3) the enemy has no buffs → her purge removes nothing → no repair at all;
  *   (4) the chained extra purge removes a third buff → the repair stays 16%, not 24%;
  *   (5) an enemy-side Sefuba mirrors (1) to (4);
- *   (6) the repair is capped at her max HP;
- *   our text stays a flat 12% however many buffs the purge removes.
+ *   (6) the repair is capped at her max HP.
  *
  * Board: Sefuba (10,000 max HP) enters at 50% HP. The opposing ship acts first, has 0 attack
  * and stacks up to four removable self-buffs, so the only HP movement is Sefuba's repair.
@@ -49,9 +46,6 @@ const SEFUBA_R0_CATALOGUE =
     'When this Unit <unit-skill>purges a buff</unit-skill> from an enemy, it <unit-damage>repairs 8%</unit-damage> of its max HP for each <unit-aid>buff</unit-aid> removed.';
 const SEFUBA_R2_CATALOGUE =
     'When this Unit <unit-skill>purges a buff</unit-skill> from an enemy, it <unit-damage>repairs 8%</unit-damage> of its max HP for each <unit-aid>buff</unit-aid> removed and also <unit-skill>purges 1 extra buff</unit-skill> from the enemy.';
-// Verbatim from docs/ship-skills.csv (Sefuba second passive).
-const SEFUBA_R2_OLD =
-    'When this Unit <unit-aid>purges an enemy buff</unit-aid>, it <unit-damage>repairs itself for 12%</unit-damage> Max HP and <unit-aid>purges 1</unit-aid> more buff from the enemy.';
 
 const sefubaKit = (active: string, passive: string): ShipSkills => {
     const ship = {
@@ -147,15 +141,6 @@ describe('Sefuba passive — parse', () => {
             scaling: { perUnit: 8, countSource: 'purged-buff-count' },
             config: { type: 'heal', basis: 'hp', pct: 8 },
         });
-    });
-
-    it('our R2: a flat 12% repair with no count scaling', () => {
-        const heal = sefubaKit(SEFUBA_ACTIVE_CATALOGUE, SEFUBA_R2_OLD).slots[1].abilities.filter(
-            (a) => a.type === 'heal'
-        );
-        expect(heal).toHaveLength(1);
-        expect(heal[0].scaling).toBeUndefined();
-        expect(heal[0].config).toMatchObject({ type: 'heal', basis: 'hp', pct: 12 });
     });
 
     it('the variant active purges 2 buffs; the catalogue active purges 1', () => {
@@ -260,12 +245,6 @@ describe('Sefuba passive — repair per buff removed (player side)', () => {
         expect(hpPct(runPlayer(r0Purge2, 3, 0.5).actors, 'attacker')).toBeCloseTo(66, 5);
         const { actors } = runPlayer(r0Purge2, 3, 0.9);
         expect(actors.get('attacker')!.currentHp).toBe(SEFUBA_MAX_HP);
-    });
-
-    it('our R2 stays a flat 12% when her purge removes 2 buffs', () => {
-        const { purges, actors } = runPlayer(sefubaKit(SEFUBA_ACTIVE_PURGE_2, SEFUBA_R2_OLD), 4);
-        expect(purges.map((p) => p.count)).toEqual([2]);
-        expect(hpPct(actors, 'attacker')).toBeCloseTo(62, 5);
     });
 });
 

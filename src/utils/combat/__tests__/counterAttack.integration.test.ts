@@ -2,7 +2,7 @@
  * counterAttack.integration.test.ts — G PR1: END-TO-END counter via the REAL registry.
  *
  * Unlike counterAttack.test.ts (which builds the `counter` ability INLINE), this test drives the
- * counter through the REAL parse path: a player ship constructed with Stalwart's verbatim skill text
+ * counter through the REAL parse path: a player ship constructed with Stalwart's skill text
  * is run through `buildShipAbilities` (the same registry every production ship uses), and the
  * resulting `ShipSkills` is fed straight into `runCombat`. This makes the test mutation-resistant:
  * removing the parser branch OR the executor branch breaks it.
@@ -41,13 +41,13 @@ function stalwartShip(passiveText: string): Ship {
     } as Ship;
 }
 
-// Verbatim CSV-derived skill text (docs/ship-skills.csv, Stalwart row). The real registry parses
-// the `<unit-damage>`/`<unit-skill>`-tagged source — using the exact in-game strings keeps the
-// test grounded in the canonical data the parser actually consumes.
+// Old-corpus wording of Stalwart's passives (synthetic; the catalogue text differs). The real
+// registry parses the `<unit-damage>`/`<unit-skill>`-tagged source, so the fixtures keep that
+// markup.
 const STALWART_P1 =
     'When this Unit is directly damaged as a primary target, it deals <unit-damage>30% damage</unit-damage> to that enemy and gains <unit-skill>Legion Discipline II</unit-skill> for 3 turns.';
 const STALWART_P2 =
-    'When this Unit is directly damaged as a primary target, it deals <unit-damage>70% damage</unit-damage> to that enemy and gains <unit-skill>Legion Discipline II</unit-skill> for 3 turns.<br /><br />Additionally, when this Unit is adjacent to a Supporter, this Unit gains 20% Attack.';
+    'This Unit ignores <unit-skill>Taunt</unit-skill> and <unit-skill>Provoke</unit-skill> effects.<br /><br />When this Unit is directly damaged as a primary target, it deals <unit-damage>70% damage</unit-damage> to the enemy and gains <unit-skill>Legion Discipline II</unit-skill> for 3 turns.<br /><br />At the start of combat this Unit gains 20% attack if its adjacent to a supporter.';
 
 type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 
@@ -189,8 +189,8 @@ const NYXEN_P1 =
 const NYXEN_P2 =
     'This Unit deals <unit-damage>200% damage</unit-damage> when its Shield is directly damaged.';
 
-/** A Ship carrying Nyxen's active (self-shield) and a chosen passive (shield-hit counter),
- *  verbatim from docs/ship-skills.csv, parsed through the real registry. */
+/** A Ship carrying Nyxen's active (self-shield) and a chosen passive (shield-hit counter), in
+ *  old-corpus wording (synthetic; the catalogue text differs), parsed through the real registry. */
 function nyxenShip(passiveText: string, withActiveShield = true): Ship {
     return {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any

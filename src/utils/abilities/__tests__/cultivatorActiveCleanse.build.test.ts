@@ -1,6 +1,6 @@
 /**
- * Cultivator active-slot cleanse — production-routed builder probe. Skill text VERBATIM from
- * docs/ship-skills.csv (parser source of truth). Drives the REAL buildShipAbilities path.
+ * Cultivator active-slot cleanse — production-routed builder probe. Skill text is the old-corpus
+ * wording (synthetic; the catalogue text differs). Drives the REAL buildShipAbilities path.
  *
  * Wave 2 Finding A1: the active slot's `<unit-aid>cleanses 1</unit-aid>debuff.` has no space at
  * the tag-removal boundary, so after stripUnitTags the plain text reads "...cleanses 1debuff."
@@ -24,7 +24,7 @@ function abilitiesFor(over: Partial<Ship>, name: string): Ability[] {
     return slot(buildShipAbilities(ship(over)).slots, name)?.abilities ?? [];
 }
 
-// Verbatim from docs/ship-skills.csv row "Cultivator" (active_skill_text column).
+// Old-corpus wording of Cultivator's active (synthetic; the catalogue text differs).
 const CULTIVATOR_ACTIVE =
     'This Unit grants <unit-skill>Defense Up III</unit-skill> for 2 turns and <unit-aid>cleanses 1</unit-aid>debuff.';
 

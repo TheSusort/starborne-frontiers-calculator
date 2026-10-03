@@ -3913,10 +3913,10 @@ export function runCombat(rawInput: CombatEngineInput): {
     // — draws N counters rather than collapsing into one.
     const counterFiredThisTurn = new Set<string>();
 
-    // Sibling once-per-attack guard for SELF-scoped reactive buff/heal/charge riders
-    // (Hermes's Everliving Regeneration + charge on on-ally-crit). Same lifecycle as
-    // counterFiredThisTurn — cleared at every actor turn-start so a multi-hit / AoE attack applies
-    // a self-rider once, while a later attack (a different turn) applies it again.
+    // Sibling once-per-attack guard for SELF-scoped reactive buff/heal/charge riders on the
+    // per-hit triggers (on-attacked / on-ally-attacked; see oncePerAttackGuardKey). Same
+    // lifecycle as counterFiredThisTurn — cleared at every actor turn-start so a multi-hit / AoE
+    // attack applies a self-rider once, while a later attack (a different turn) applies it again.
     const reactionFiredThisAttack = new Set<string>();
 
     // Installed per ROUND (below, where the deferral flags live — inside the `for (let r …)` body,
@@ -4685,7 +4685,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             }
         }
     }
-    // FrontLine's "While Shielded, it gains 2500 additional Defense": per-actor
+    // FrontLine's "while it has an active shield, it gains 2500 defense": per-actor
     // flat conditional-defence bonus, keyed by owner id -> flat bonus points. Side-agnostic, built
     // once from BOTH runtime maps, mirroring defenseSubstitutionCarrierIds. The GATE
     // (hasShield(ownerId)) is deliberately NOT checked here — it must be re-evaluated fresh on
@@ -4796,7 +4796,7 @@ export function runCombat(rawInput: CombatEngineInput): {
     // case): the HIGHEST effective defence among living, same-side carriers wins.
     const substitutedDefenceFor = (victim: CombatActor, fallback: number): number => {
         if (victim.currentHp <= 0) return fallback; // dead victims are never substituted
-        // FrontLine's "While Shielded, it gains 2500 additional Defense" — an
+        // FrontLine's "while it has an active shield, it gains 2500 defense" — an
         // ADDITIVE flat bonus on top of whatever defence value this victim would otherwise read
         // (the substitution below, or the site's own fallback), gated live on hasShield(victim.id)
         // so it is re-evaluated fresh on every hit and reverts the instant the shield is consumed
@@ -4856,14 +4856,14 @@ export function runCombat(rawInput: CombatEngineInput): {
         return !!a && (a.corrosionEntries.length > 0 || a.infernoEntries.length > 0);
     };
     // Does the given actor currently carry its own "Barrier Recharging"
-    // self-status? (Panon — "reduces all incoming damage by 20% when affected by Barrier
-    // Recharging.") Local alias over barrierRecharging.ts's lookup, which is shared with
+    // self-status? (Panon — "gains 20% damage reduction from all sources when affected by
+    // Barrier Recharging.") Local alias over barrierRecharging.ts's lookup, which is shared with
     // triggers.ts's Barrier-grant gate.
     const hasBarrierRecharging = (actorId: string): boolean =>
         holdsBarrierRecharging(statusEngine, actorId);
-    // Does the given actor currently hold an active shield
-    // pool? (Malvex — "When Shielded, this Ship takes 10% less damage.") Reads the live
-    // absorption pool directly off the CombatActor, mirroring hasBarrierRecharging.
+    // Does the given actor currently hold an active shield pool? (Malvex — "When this Unit has an
+    // active shield, it gains 10% damage reduction.") Reads the live absorption pool directly off
+    // the CombatActor, mirroring hasBarrierRecharging.
     const hasShield = (actorId: string): boolean =>
         (allActorsById.get(actorId)?.shieldPool ?? 0) > 0;
     // The given actor's own live HP% (0..100) at this instant, for
@@ -8432,7 +8432,7 @@ export function runCombat(rawInput: CombatEngineInput): {
          *       version of this comment was WRONG to call that half a defect. Owner ruling
          *       2026-08-18: a passive-slot instance does not proc a taken leech, because the victim
          *       is not its primary target — Malvex reads "when directly damaged as a PRIMARY
-         *       TARGET", Quixilver "when taking HP damage and still having Shield". The repo's
+         *       TARGET", Quixilver "when taking HP damage and still having a shield". The repo's
          *       locked granularity rule ("outgoing per attack, incoming per occurrence") governs
          *       HOW OFTEN an incoming proc fires, NOT which channels qualify; which channels
          *       qualify is decided by the ability's own text qualifier. Routing this site through
@@ -10421,8 +10421,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                         // Side-agnostic ship-role lookup (the SAME
                         // roleByActorId map Meatshield's defense-substitution and Graphite's
                         // roleFilter already consume) — feeds the reactive `purge` branch's
-                        // per-victim `enemy-type` re-check (Zeolite: "when dealing damage to a
-                        // Defender"), team-symmetrically.
+                        // per-victim `enemy-type` re-check (Zeolite: "When this Unit deals
+                        // damage to a defender"), team-symmetrically.
                         roleOf: (id) => roleByActorId.get(id),
                         // Live hacking/critDamage for `id` (either side), feeding
                         // Belladonna's conversion-chance (hacking) and paired extend-chance
@@ -11004,7 +11004,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // clear separates one turn from the next.
                 counterFiredThisTurn.clear();
                 // Reset the self-rider once-per-attack guard beside the counter guard so a
-                // later attack re-applies Hermes's Everliving Regeneration / charge.
+                // later attack re-applies a self-scoped on-attacked rider.
                 reactionFiredThisAttack.clear();
                 // Drop the scoped proc verdicts so this turn rolls afresh (Insidiousness: this
                 // turn's cast gets its own roll and its own one-success cap).

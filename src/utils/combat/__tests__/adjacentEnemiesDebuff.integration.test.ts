@@ -1,11 +1,10 @@
 /**
- * Ship-kit Wave 5, Task A3 — engine fan-out for the two enemy-adjacency `AbilityTarget` scopes
- * (`adjacent-enemies` / `target-and-adjacent-enemies`) added in Task A1 and parsed in Task A2
- * (Vindicator Provoke / Out. Damage Down I → `adjacent-enemies`; Asphyxiator Stasis →
- * `target-and-adjacent-enemies`). Prior to this task, engine.ts's self-vs-enemy
- * classification does not list either scope, so both fall through to `self` — the applied
- * status is misregistered as a SELF buff on the caster instead of an enemy debuff on the board
- * neighbours. This file drives the fix through a real positional battle (`simulateBattle`) using
+ * Engine fan-out for the two enemy-adjacency `AbilityTarget` scopes (`adjacent-enemies` /
+ * `target-and-adjacent-enemies`; Vindicator Provoke / Out. Damage Down I → `adjacent-enemies`;
+ * Asphyxiator Stasis → `target-and-adjacent-enemies`). engine.ts's self-vs-enemy classification
+ * must list both scopes, or they fall through to `self` and the applied status is misregistered
+ * as a SELF buff on the caster instead of an enemy debuff on the board neighbours. This file
+ * drives the fan-out through a real positional battle (`simulateBattle`) using
  * synthetic ships whose skill text carries the SAME two adjacency phrasings the parser recognises
  * (`detectAdjacentEnemyScope` in skillTextParser.ts — verbatim structure from Vindicator/
  * Asphyxiator in docs/ship-skills.csv), so the parser → engine pipeline is exercised end to end.
@@ -34,8 +33,8 @@ const DEBUFF_NAME = 'Defense Down II';
 // hacking-vs-security landing RNG.
 const ADJACENT_ONLY_TEXT = `This Unit applies <unit-skill>${DEBUFF_NAME}</unit-skill> for 2 turns to all enemies adjacent to the target.`;
 // Verbatim-shaped phrasing (matches TARGET_AND_ADJACENT_ENEMY_RE / real Asphyxiator text: "... on
-// the targeted enemy and all enemies adjacent to it.").
-const TARGET_AND_ADJACENT_TEXT = `This Unit applies <unit-skill>${DEBUFF_NAME}</unit-skill> for 2 turns to the targeted enemy and all enemies adjacent to it.`;
+// the targeted enemy and all adjacent enemies.").
+const TARGET_AND_ADJACENT_TEXT = `This Unit applies <unit-skill>${DEBUFF_NAME}</unit-skill> for 2 turns to the targeted enemy and all adjacent enemies.`;
 
 const ship = (id: string, over: Partial<Ship>): Ship => ({
     id,
@@ -97,7 +96,7 @@ const debuffRecipients = (result: ReturnType<typeof simulateBattle>, actorId: st
         .map((e) => e.targets[0]?.targetId)
         .filter((id): id is string => id !== undefined);
 
-describe('Ship-kit W5 Task A3: adjacent-enemies debuff fan-out (positional, player caster)', () => {
+describe('adjacent-enemies debuff fan-out (positional, player caster)', () => {
     const run = (caster: Ship) =>
         simulateBattle({
             playerTeam: [place(caster, 'M4', 1, 1e9)],
@@ -136,7 +135,7 @@ describe('Ship-kit W5 Task A3: adjacent-enemies debuff fan-out (positional, play
     });
 });
 
-describe('Ship-kit W5 Task A3: team symmetry — an ENEMY-side caster fans out onto its PLAYER-side mirror', () => {
+describe('team symmetry — an ENEMY-side caster fans out onto its PLAYER-side mirror', () => {
     const run = (caster: Ship) =>
         simulateBattle({
             playerTeam: [
@@ -182,15 +181,15 @@ describe('Ship-kit W5 Task A3: team symmetry — an ENEMY-side caster fans out o
  * Control-path smoke test: buildShipAbilities additively emits a `type:'control'` ability
  * alongside a named control-effect debuff (Stasis/Provoke/…, CONTROL_EFFECT_DISPLAY_NAME —
  * buildShipAbilities.ts) whose `target` is RE-DERIVED from the named twin's
- * `detectEnemyGrantScope` (buildShipAbilities.ts, Task A2) — so a real Vindicator
+ * `detectEnemyGrantScope` (buildShipAbilities.ts) — so a real Vindicator
  * Provoke / Asphyxiator Stasis cast carries a control ability with `target:'adjacent-enemies'` /
  * `'target-and-adjacent-enemies'` too. playerTurn.ts's control-applied loop only special-cases
  * `ctrl.target === 'enemy'` (Block-Debuff/resisted-suppression) — a non-'enemy' string just
- * always emits (same as the pre-existing standalone-control path), so the new target values must
- * not throw. This does not assert control-applied semantics (out of scope here, unchanged by
- * this task) — only that the control-twin's presence doesn't break the fan-out this task owns.
+ * always emits (same as the standalone-control path), so these target values must not throw.
+ * This does not assert control-applied semantics — only that the control-twin's presence doesn't
+ * break the fan-out.
  */
-describe('Ship-kit W5 Task A3: control-path smoke test (real control-effect buff names)', () => {
+describe('control-path smoke test (real control-effect buff names)', () => {
     const controlCaster = (id: string, text: string): Ship => ship(id, { activeSkillText: text });
 
     it('a Provoke (adjacent-enemies) cast does not throw and still fans out to neighbours only', () => {
@@ -217,7 +216,7 @@ describe('Ship-kit W5 Task A3: control-path smoke test (real control-effect buff
     });
 
     it('a Stasis (target-and-adjacent-enemies) cast does not throw and still fans out to target+neighbours', () => {
-        const stasisText = `This Unit applies <unit-skill>Stasis</unit-skill> for 1 turn to the targeted enemy and all enemies adjacent to it.`;
+        const stasisText = `This Unit applies <unit-skill>Stasis</unit-skill> for 1 turn to the targeted enemy and all adjacent enemies.`;
         const run = () =>
             simulateBattle({
                 playerTeam: [place(controlCaster('atk', stasisText), 'M4', 1, 1e9)],
@@ -278,7 +277,7 @@ describe('Ship-kit W5 Task A3: control-path smoke test (real control-effect buff
  * cannot be re-created by a fresh fixture either: there is no non-positional shape left below the
  * boundary. What remains is the single-real-enemy positional edge case described above.
  */
-describe('Ship-kit W5 Task A3: single-entry roster edge case (positional, no neighbours to fan out to)', () => {
+describe('single-entry roster edge case (positional, no neighbours to fan out to)', () => {
     const BASE: Omit<CombatEngineInput, 'shipSkills' | 'bus'> = {
         enemyAttackers: bareEnemy({ stats: { hp: 1_000_000_000 } }),
         attack: 1000,

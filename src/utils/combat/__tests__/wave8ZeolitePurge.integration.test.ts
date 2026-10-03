@@ -1,19 +1,13 @@
 /**
- * wave8ZeolitePurge.integration.test.ts — Ship-kit Wave 8 Task 12 (Zeolite).
+ * Zeolite's R2 passive (the refit-active one): "When this Unit deals damage to a defender it
+ * purges 1 buff from that enemy. This Unit deals 30% more damage when hitting a defender."
  *
- * Zeolite's refit-active (R4) passive: "This Unit increases damage by 30% when hitting a
- * Defender and purges 1 buff from the enemy when dealing damage to a Defender." The +30%
- * damage gate shipped in Wave 4; the purge half ("purges 1 buff from the enemy when dealing
- * damage to a Defender") was deferred — buildShipAbilities.ts's passive-purge trigger chain had
- * no "when dealing damage to a Defender" detector, so it was silently dropped.
- *
- * The parser now emits a `purge` ability (target enemy, count 1, trigger 'on-deal-damage',
+ * The parser emits a `purge` ability (target enemy, count 1, trigger 'on-deal-damage',
  * `enemy-type` Defender condition) — see wave8Zeolite.test.ts for the parser-level coverage.
- * This file proves the ENGINE actually fires it: triggers.ts's on-deal-damage listener already
- * routes the owner's own damage-dealing turn (Burner's Inferno rider — see
- * reactiveDotPositionalRouting.test.ts); this task additionally (a) threads the reactive
- * `victimId` seam onto the `purge` executor's target routing (it previously only read
- * `counterTargetId`) and (b) re-checks the `enemy-type` gate at drain time against the REAL
+ * This file proves the ENGINE actually fires it: triggers.ts's on-deal-damage listener routes
+ * the owner's own damage-dealing turn (Burner's Inferno rider — see
+ * reactiveDotPositionalRouting.test.ts); the `purge` executor routes on the reactive
+ * `victimId` seam, and the `enemy-type` gate is re-checked at drain time against the REAL
  * victim's ship role via `ctx.roleOf` (the SAME side-agnostic `roleByActorId` map Meatshield's
  * defense-substitution and Graphite's roleFilter already consume) — the generic drain gate
  * reads only the single fight-wide `enemyType`, which is undefined for an enemy-owned reaction
@@ -35,9 +29,10 @@ import type { StatusEngine } from '../statusEngine';
 type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 type TeamActor = NonNullable<CombatEngineInput['teamActors']>[number];
 
-// Verbatim from docs/ship-skills.csv (Zeolite refit-3/R4 passive).
+// Verbatim from docs/ship-skills.csv (Zeolite, second_passive_skill_text), fed through
+// thirdPassiveSkillText — the refit-active slot getShipSkillRows resolves for a 4-refit ship.
 const ZEOLITE_PASSIVE_R4 =
-    'This Unit increases <unit-damage>damage by 30%</unit-damage> when hitting a Defender and <unit-aid>purges 1</unit-aid> buff from the enemy when dealing damage to a Defender.';
+    'When this Unit deals damage to a defender it <unit-skill>purges 1 buff</unit-skill> from that enemy.<br /><br />This Unit deals <unit-damage>30% more damage</unit-damage> when hitting a defender.';
 // Zeolite's REAL active ALSO carries its own unconditional on-cast purge ("purges 1 buff from
 // the enemy, inflicts Defense Down III …") — a separate, pre-existing mechanic that would
 // confound isolating the passive's on-deal-damage reactive under test here. Swapped for a plain
@@ -48,7 +43,7 @@ const zeoliteShip = (): Ship =>
     ({
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         ...({} as any),
-        refits: [{}, {}, {}, {}], // R4 — third passive (the "+30%/purge vs Defender" sentence)
+        refits: [{}, {}, {}, {}], // 4 refits → the third-passive slot carries the R2 text
         activeSkillText: PLAIN_ACTIVE,
         thirdPassiveSkillText: ZEOLITE_PASSIVE_R4,
     }) as Ship;
@@ -108,7 +103,7 @@ const runTapStatus = (input: CombatEngineInput): StatusEngine => {
 const selfBuffNames = (engine: StatusEngine, id: string): string[] =>
     engine.timedAbilityStatuses('self', id).map((b) => b.active.buffName);
 
-describe('Wave 8 Task 12: Zeolite purges a buff when damaging a Defender (engine integration)', () => {
+describe('Zeolite purges a buff when damaging a Defender (engine integration)', () => {
     // A self-buffing enemy at speed 150 (> the focus's 100) so it grants itself Attack Up
     // BEFORE Zeolite's turn every round — giving the reactive purge something to remove.
     const buffingEnemy = (role: EnemyAttacker['role']): EnemyAttacker => ({
@@ -168,7 +163,7 @@ describe('Wave 8 Task 12: Zeolite purges a buff when damaging a Defender (engine
     });
 });
 
-describe('Wave 8 Task 12: team symmetry — an enemy-side Zeolite purges a player Defender', () => {
+describe('team symmetry — an enemy-side Zeolite purges a player Defender', () => {
     // Mirror of the player-side harness: the focus (player) self-buffs at speed 150 (acts
     // before the enemy Zeolite, speed 100), giving the enemy-owned reactive purge something to
     // remove from a Defender-classed FOCUS.

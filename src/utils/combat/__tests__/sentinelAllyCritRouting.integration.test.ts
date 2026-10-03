@@ -25,8 +25,8 @@
  * Fixed by carrying `critVictimIds` (the DISTINCT crit victims) on `ability-performed` and
  * enqueuing ONCE per critting attack, with the damage executor fanning out over that set.
  *
- * Everything runs through the REAL production path — Sentinel's verbatim R2 passive text from
- * docs/ship-skills.csv through buildShipAbilities, driven by runCombat.
+ * Everything runs through the REAL production path — Sentinel's R2 passive text (old-corpus
+ * wording) through buildShipAbilities, driven by runCombat.
  */
 import { describe, it, expect, afterEach } from 'vitest';
 import { runCombat, CombatEngineInput, TeamActorEngineInput } from '../engine';
@@ -45,7 +45,8 @@ function ship(over: Partial<Ship>): Ship {
     return { ...({} as any), refits: [{}, {}], ...over } as Ship;
 }
 
-/** Sentinel's R2 (refit-active at 2 refits) passive, verbatim from docs/ship-skills.csv. */
+/** Old-corpus wording of Sentinel's R2 (refit-active at 2 refits) passive (synthetic; the
+ *  catalogue text differs). */
 const SENTINEL_R2 =
     'When an ally critically hits an enemy, this Unit ' +
     "<unit-damage>repairs the ally for 5%</unit-damage> of this Unit's Max HP and deals " +

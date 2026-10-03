@@ -12,8 +12,8 @@
  *     (not just the cleanse ability's nominal target set).
  *
  * Both owner abilities are extracted through the REAL production path (`buildShipAbilities`) fed
- * skill text copied verbatim from `docs/ship-skills.csv` (parser source of truth) — never a
- * hand-built ability array. The cleanse ACTION itself (which drives the reaction) is hand-built,
+ * skill text (old-corpus wording; synthetic, the catalogue text differs) — never a hand-built
+ * ability array. The cleanse ACTION itself (which drives the reaction) is hand-built,
  * mirroring `cleanseCastPath.test.ts`/`enemyCleanse.integration.test.ts`'s harness style.
  *
  * Non-vacuity: reverting the PR-H src changes (skillTextParser.ts / buildShipAbilities.ts /
@@ -88,8 +88,8 @@ function sumBucket(
 
 // =============================================================================
 // Morao — "This Unit repairs 5% of its Max HP every turn and, upon Cleansing a Debuff, repairs
-// an additional 5% of its Max HP while gaining Defense Up II for 2 turns" (docs/ship-skills.csv,
-// verbatim).
+// an additional 5% of its Max HP while gaining Defense Up II for 2 turns" (old-corpus wording;
+// synthetic, the catalogue text differs).
 // =============================================================================
 
 const MORAO_P3 =
@@ -333,7 +333,8 @@ describe('Morao (enemy-side) — team symmetry: an enemy Morao self-cleanses and
 
 // =============================================================================
 // Cultivator — "When this Unit cleanses a Debuff, it also repairs that ally for 4% of this
-// Unit's Max HP" (docs/ship-skills.csv, verbatim isolated sentence — matches the triage probe).
+// Unit's Max HP" (old-corpus wording, isolated sentence — matches the triage probe; synthetic,
+// the catalogue text differs).
 // =============================================================================
 
 const CULTIVATOR_P2 =

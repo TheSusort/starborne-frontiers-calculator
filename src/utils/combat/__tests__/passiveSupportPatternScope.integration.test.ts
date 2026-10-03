@@ -3,8 +3,8 @@
  *
  * User-verified game rule (2026-07-31, Volk): a ship's targeting pattern belongs to its CAST.
  * Volk's active grants Crit Rate Up III / Attack Up II inside
- * `Pattern-Line-Support-from-centre-Range-1`, but its passive "repairs 30% of its Max HP to the
- * ally with the most missing health" reaches ANY ally — the pattern does not constrain it.
+ * `Pattern-Line-Support-from-centre-Range-1`, but its passive "repairs 30% of its max HP to the
+ * ally with the most missing HP" reaches ANY ally — the pattern does not constrain it.
  *
  * The one exception is a clause that says so in so many words — "… all allies **within the
  * active pattern**" (Graphite R2/R4's charge grant; AEGIS's and Cultivator's ally-scoped
@@ -201,9 +201,9 @@ describe('passive-slot support vs the firing skill support footprint', () => {
 // =============================================================================
 
 const VOLK_P1 =
-    'At the start of its turn, this Unit <unit-damage>repairs 30%</unit-damage> of its Max HP to the ally with the most missing health.';
+    'At the start of its turn, this Unit <unit-damage>repairs 30%</unit-damage> of its max HP to the ally with the most missing HP.';
 const GRAPHITE_P2 =
-    '<br /><br />\nAt the start of the round, if an enemy Unit has <unit-skill>Stealth</unit-skill>, this Unit <unit-aid>adds 1 charges</unit-aid> to the charged skill of all allies within the active pattern.';
+    '<br /><br />\nAt the start of the round, if an enemy Unit has <unit-skill>Stealth</unit-skill>, this Unit <unit-skill>adds 1 charge</unit-skill> to the charged skill of all allies within the active pattern.';
 
 function passiveAbilities(text: string, refits: number) {
     const ship = {
@@ -219,7 +219,7 @@ describe('patternScoped is set from the skill text, not the slot', () => {
         const heal = passiveAbilities(VOLK_P1, 0).find((a) => a.type === 'heal');
         expect(heal).toBeDefined();
         // Volk's clause NAMES its recipient ("the ally with the most missing
-        // health"), so it carries the 'lowest-hp-ally' selector. Orthogonal to patternScoped —
+        // HP"), so it carries the 'lowest-hp-ally' selector. Orthogonal to patternScoped —
         // and doubly unscoped, since a named selector is never footprint-narrowed either.
         expect(heal!.target).toBe('lowest-hp-ally');
         expect(heal!.patternScoped).toBeUndefined();

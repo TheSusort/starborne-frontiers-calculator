@@ -25,9 +25,10 @@ function shipFromCsv(name: string): Ship {
 describe.skipIf(!csvAvailable())(
     'Wave 8 Task 9 — Madax adjacent-Supporter Defense grant (was mis-parsed self-heal)',
     () => {
-        // Madax's refit-active (second) passive: "This Unit repairs itself for 13% of its Max
-        // HP when an enemy dies. When adjacent to a Supporter, this Unit receives 30% more
-        // Repairs and increases that Supporter's Defense by 20% of this Unit's Defense." The
+        // Madax's refit-active (second) passive, quoted in its old-corpus wording: "This Unit
+        // repairs itself for 13% of its Max HP when an enemy dies. When adjacent to a Supporter,
+        // this Unit receives 30% more Repairs and increases that Supporter's Defense by 20% of
+        // this Unit's Defense." The
         // "increases that Supporter's Defense by 20%…" clause was mis-parsed as a phantom SELF
         // heal (HEAL_REPAIR_RE's lazy walk matched the noun "Repairs" and ran past the clause
         // to its unrelated "20%"). It should instead be a Defense stat-GRANT to the adjacent

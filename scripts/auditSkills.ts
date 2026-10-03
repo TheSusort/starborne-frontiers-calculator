@@ -136,9 +136,8 @@ const RULES: Rule[] = [
         id: 'extend-status',
         severity: 'high',
         // Generic buff/debuff duration EXTEND (the inverse of extend-dot and of
-        // debuff-duration-reduction below): "extends active Buffs/Debuffs by N turn(s)"
-        // (Sokol/Ripper, active voice) or "debuffs extended by N turn(s)" (Lev, passive
-        // voice). Excludes the DoT-specific extend-dot wording so the two rules don't
+        // debuff-duration-reduction below): "<buffs|debuffs> extended by N turn(s)" (Lev,
+        // Ripper). Excludes the DoT-specific extend-dot wording so the two rules don't
         // double-count the same clause.
         keyword: (t) =>
             /extend/i.test(t) &&
@@ -149,14 +148,14 @@ const RULES: Rule[] = [
     {
         id: 'debuff-duration-reduction',
         severity: 'high',
-        // PR11 (epic PR11): "reduces the duration of [all] active Debuffs on <recipient> by N
-        // turn(s)" (Heliodor/Pestilence) — the inverse of extend-dot. ALSO matches Lingshe's
-        // structurally different "reduces all Bombs on the enemy targets by N turn(s)" clause (a
-        // hacking-gated, enemy-targeted PendingBomb countdown shrink with a forced-detonation-at-
-        // zero rider) — SP-F F3 models that shape as its own `bomb-countdown-reduce` ability
-        // (not the generic cleanse/reduce-duration primitive, which deliberately excludes bombs).
+        // "reduces the duration of [all] active Debuffs on <recipient> by N turn(s)"
+        // (Heliodor/Pestilence) — the inverse of extend-dot. ALSO matches Lingshe's structurally
+        // different "reduces all Bomb on the enemy targets by N turn(s)" clause (a hacking-gated,
+        // enemy-targeted PendingBomb countdown shrink with a forced-detonation-at-zero rider),
+        // modelled as its own `bomb-countdown-reduce` ability (not the generic
+        // cleanse/reduce-duration primitive, which deliberately excludes bombs).
         keyword: (t) =>
-            /reduces?\s+(?:the\s+duration\s+of\s+)?(?:all\s+)?(?:active\s+)?(?:debuffs|bombs)\s+on\b/i.test(
+            /reduces?\s+(?:the\s+duration\s+of\s+)?(?:all\s+)?(?:active\s+)?(?:debuffs|bombs?)\s+on\b/i.test(
                 t
             ),
         handled: (a) =>
@@ -197,13 +196,10 @@ const RULES: Rule[] = [
     {
         id: 'defense-penetration',
         severity: 'medium',
-        // Also matches "bypassing N% of the enemy Defense" (Chakara) — a
-        // differently-worded synonym for the same defensePenetration modifier as the
-        // "X% defense penetration" phrasing. The unit-subject "has X% defense penetration" is
-        // `defense-penetration-innate`'s, never this rule's.
+        // The unit-subject "has X% defense penetration" is `defense-penetration-innate`'s, never
+        // this rule's.
         keyword: (t) =>
-            (/defense\s+penetration/i.test(t) && !UNIT_HAS_DEFENSE_PENETRATION_RE.test(t)) ||
-            /bypassing\s+\d+(?:\.\d+)?%\s+of\s+the\s+enemy\s+defense/i.test(t),
+            /defense\s+penetration/i.test(t) && !UNIT_HAS_DEFENSE_PENETRATION_RE.test(t),
         handled: (a) => hasModifier(a, 'defensePenetration'),
     },
     {
@@ -396,12 +392,12 @@ const RULES: Rule[] = [
     {
         id: 'while-shielded-flat-defence',
         severity: 'high',
-        // Ship-kit wave 4 Task 8 (FrontLine): "While Shielded, it gains N additional Defense" — a
-        // flat-points DEFENSIVE stat bonus gated on the owner currently holding a shield. Narrow —
-        // corpus-wide this phrasing matches exactly FrontLine (verified via `grep -io "while
-        // shielded[^.]*"` / `"additional defen[cs]e[^.]*"` across docs/ship-skills.csv).
+        // FrontLine: "while it has an active shield, it gains N defense" — a flat-points
+        // DEFENSIVE stat bonus gated on the owner currently holding a shield.
         keyword: (t) =>
-            /while\s+shielded[,]?\s+(?:it\s+)?gains\s+\d+\s+additional\s+defen[cs]e/i.test(t),
+            /while\s+it\s+has\s+an\s+active\s+shield[,]?\s+(?:it\s+)?gains\s+\d+\s+defen[cs]e/i.test(
+                t
+            ),
         handled: (a) => hasType(a, 'conditional-stat'),
     },
 ];
@@ -434,7 +430,7 @@ const TRIGGER_RE =
 //     this alternation were removed; Crocus's crit-DoT reaction is modeled as on-ally-crit-dot)
 //
 // HP-threshold nuance: the reactive "when HP drops/falls below N%" CROSSING
-// grants (Tycho/Shelter/Los/Kafa/Redeemer) AND Hermes's "If the target has less than N% HP"
+// grants (Tycho/Shelter/Los/Kafa/Redeemer) AND Hermes's "If an ally has less than N% HP"
 // Cheat-Death gate are parser-modeled (on-hp-threshold-crossed trigger / per-recipient
 // `recipientFilter`), so their effects never reach `ungatedEffects` and any that DOES parse ungated is
 // flagged by the detectHpCrossingTrigger / detectTargetHpGate parity guards in `ungatedFinding`
@@ -492,7 +488,7 @@ export function ungatedFinding(abilities: Ability[], plain: string): string | nu
         if (detectDamageReactionTrigger(plain, namePos)) return clause.trim().slice(0, 160);
         // Parity guard: "when HP drops/falls below N%" crossing reactives
         // (Tycho/Shelter/Los/Kafa/Redeemer) ride the LIVE on-hp-threshold-crossed trigger, and
-        // Hermes's "If the target has less than N% HP" Cheat-Death grant carries a per-recipient
+        // Hermes's "If an ally has less than N% HP" Cheat-Death grant carries a per-recipient
         // HP filter — both are parser-modeled (the trigger/gate IS the gate), so an effect
         // that parsed UNGATED on-cast from a clause either detector classifies is a regression —
         // flag it BEFORE the reactive skip below can hide it. Both detectors do their own

@@ -1,8 +1,9 @@
 /**
  * Phase 3 reactive-trigger promotion — TRIAGE PROBE CORPUS (PR0).
  *
- * One probe per family-C ship, routed through the REAL production path (buildShipAbilities)
- * with skill text copied VERBATIM from docs/ship-skills.csv (parser source of truth).
+ * One probe per family-C ship, routed through the REAL production path (buildShipAbilities).
+ * Skill texts mix verbatim docs/ship-skills.csv text with old-corpus wording (synthetic; the
+ * catalogue text differs).
  *
  * GREEN = the reactive effect is already correctly triggered → the sweep finding was a false
  * positive (locked here as a regression guard). RED = a real gap; the matching cluster fix-PR
@@ -37,11 +38,12 @@ describe('Phase 3 reactive-trigger triage — corpus scaffold', () => {
 
 // ─── Task 2 / Cluster 1 — on-attacked ───────────────────────────────────────────────────────
 //
-// Bizon, Purifier, Quixilver, Iridium, Malvex, Warden, Nyxen, Sansi, Panguan. Every text below
-// is copied VERBATIM from docs/ship-skills.csv's first_passive_skill_text column (parser source
-// of truth). Each probe was first run with a console.log of the raw abilities array (per the
-// task's ambiguity clause) to confirm the actual ability `type` before asserting — several
-// ships' real ability shape differs from the task brief's illustrative text (see report).
+// Bizon, Purifier, Quixilver, Iridium, Malvex, Warden, Nyxen, Sansi, Panguan. Texts below are
+// first_passive_skill_text wording; all but Quixilver's and Panguan's are old-corpus wording
+// (synthetic; the catalogue text differs). Each probe was first run with a console.log of the raw
+// abilities array (per the task's ambiguity clause) to confirm the actual ability `type` before
+// asserting — several ships' real ability shape differs from the task brief's illustrative text
+// (see report).
 describe('cluster 1 — on-attacked', () => {
     // Bizon's passive is a self-BUFF grant (XAOC Swiftness II), NOT a damage ability as the task
     // brief's illustrative example text assumed — confirmed via buildShipAbilities output.
@@ -71,14 +73,14 @@ describe('cluster 1 — on-attacked', () => {
     });
 
     const QUIXILVER_PASSIVE =
-        'This Unit gains <unit-damage>Shield equal to 25%</unit-damage> of the damage taken when taking HP damage and still having Shield.';
+        'This Unit gains a <unit-damage>shield equal to 25%</unit-damage> of the damage taken when taking HP damage and still having a shield.';
 
     it('Quixilver: damage-taken leech shield with the requiresHpDamage punch-through gate (FP — engine-modeled)', () => {
         const abilities = abilitiesFor({ firstPassiveSkillText: QUIXILVER_PASSIVE }, 'passive');
         const shield = abilities.find((a) => a.type === 'shield');
         // FP (re-classified PR-A): NOT a trigger gap. This is a `damage-taken` leech shield the
         // engine procs per enemy attack via its dedicated leech block (engine.ts ~2627/2887),
-        // which IGNORES the ability trigger. The "when taking HP damage and still having Shield"
+        // which IGNORES the ability trigger. The "when taking HP damage and still having a shield"
         // clause is modeled by requiresHpDamage (punch-through gate — leech.test.ts locks it).
         // Promoting the trigger to on-attacked would partition it OFF the leech path onto the
         // reactive path (no requiresHpDamage gate there), REGRESSING behavior — so it correctly
@@ -106,7 +108,7 @@ describe('cluster 1 — on-attacked', () => {
         const shield = abilities.find((a) => a.type === 'shield');
         // FP (re-classified PR-A): same as Quixilver — a `damage-taken` leech shield procced per
         // attack by the engine's leech block ("15% of the Damage dealt to them"; leech.test.ts
-        // locks it), NOT a trigger gap. No "still having Shield" clause, so no requiresHpDamage
+        // locks it), NOT a trigger gap. No "still having a shield" clause, so no requiresHpDamage
         // gate. Trigger stays on-cast (leech path ignores it); promoting it would regress.
         expect(shield?.config).toMatchObject({ basis: 'damage-taken' });
         expect(shield?.config).not.toHaveProperty('requiresHpDamage');
@@ -193,27 +195,23 @@ describe('cluster 3 — on-ally-debuff-inflicted', () => {
 // ─── cluster 4 — on-enemy-buffed (event correction: NOT on-enemy-cleansed) ───────────────────
 describe('cluster 4 — on-enemy-buffed (Nuqtu)', () => {
     const NUQTU_P2 =
-        'This Unit <unit-aid>Cleanses 1</unit-aid> debuff from itself (once per round) and gains <unit-skill>Terran Bolster III</unit-skill> for 1 turn when an enemy gets buffed.';
+        'Every turn this Unit <unit-skill>cleanses 1 debuff</unit-skill>, once per round, and when an enemy gains a <unit-aid>buff</unit-aid> this Unit gains <unit-skill>Terran Bolster III</unit-skill> for 1 turn.';
 
-    it('Nuqtu: self-cleanse + self-buff ride the "enemy gets buffed" reactive trigger, not on-cast', () => {
+    it('Nuqtu: the self-buff rides the "enemy gains a buff" reactive trigger; the cleanse is every-turn', () => {
         const ab = abilitiesFor({ firstPassiveSkillText: NUQTU_P2 }, 'passive');
         const cleanse = ab.find((a) => a.type === 'cleanse');
-        expect(cleanse?.trigger).not.toBe('on-cast');
-        // FIXED (Phase 3 PR-I): the sweep's original GAP comment claimed no buff-applied
-        // CombatEvent existed — that was factually wrong; buff-applied already existed and
-        // already fired for enemy-side actors (events.ts, playerTurn.ts, engine.ts, triggers.ts).
-        // Only a NEW `on-enemy-buffed` trigger + listener (triggers.ts, subscribing to
-        // buff-applied, isOpposing-gated) was needed, plus promoting the "enemy gets/is buffed"
-        // clause (skillTextParser.ts, previously a manual `enemy-buff` CONDITION) to a live
-        // trigger. Both the cleanse (once-per-round, self-scoped Ability.oncePerRound) and the
-        // Terran Bolster III buff grant now ride on-enemy-buffed.
+        expect(cleanse?.trigger).toBe('start-of-turn');
+        const bolster = ab.find(
+            (a) => a.config.type === 'buff' && a.config.buffName === 'Terran Bolster III'
+        );
+        expect(bolster?.trigger).toBe('on-enemy-buffed');
     });
 });
 
 // ─── cluster 5 — on-enemy-destroyed / on-kill ───────────────────────────────────────────────
 describe('cluster 5 — on-enemy-destroyed / on-kill', () => {
     const HARVESTER_P2 =
-        'When an allied Unit is destroyed, this Unit gains 1 extra end of round action.';
+        'When an ally is destroyed, this Unit <unit-skill>gains 1 extra end of round action</unit-skill>.';
     it('Harvester: extra-action on ally-destroyed already rides on-ally-destroyed (FP lock)', () => {
         const ab = abilitiesFor({ firstPassiveSkillText: HARVESTER_P2 }, 'passive');
         const ea = ab.find((a) => a.type === 'extra-action');
@@ -221,51 +219,44 @@ describe('cluster 5 — on-enemy-destroyed / on-kill', () => {
     });
 
     const RAVAGER_P2 =
-        'This Unit gains 1 stack of <unit-skill>Overload</unit-skill> every turn and, upon killing an enemy, loses <unit-skill>Overload</unit-skill> and gains <unit-skill>Marauder Rage III</unit-skill> for 3 turns.';
+        'This Unit gains 1 stack of <unit-skill>Overload</unit-skill> every turn and, upon destroying an enemy, removes <unit-skill>Overload</unit-skill> and gains <unit-skill>Marauder Rage III</unit-skill> for 3 turns.';
     it('Ravager: Overload kill-reset buff already rides on-enemy-destroyed (FP lock)', () => {
         const ab = abilitiesFor({ firstPassiveSkillText: RAVAGER_P2 }, 'passive');
         expect(ab.some((a) => a.type === 'buff' && a.trigger === 'on-enemy-destroyed')).toBe(true);
     });
 
-    const MADAX_P2 =
-        'This Unit <unit-damage>repairs itself for 13%</unit-damage> of its Max HP when an enemy dies.';
+    const MADAX_P1 =
+        'This Unit <unit-damage>repairs 13%</unit-damage> of its max HP when an enemy dies.';
     it('Madax: self-heal-on-enemy-death rides on-enemy-destroyed', () => {
-        const ab = abilitiesFor({ firstPassiveSkillText: MADAX_P2 }, 'passive');
+        const ab = abilitiesFor({ firstPassiveSkillText: MADAX_P1 }, 'passive');
         const heal = ab.find((a) => a.type === 'heal');
         expect(heal?.trigger).toBe('on-enemy-destroyed');
-        // GAP: tag-only — heal is self-target (no actor needed); the heal builder's reaction chain
-        // doesn't recognize "when an enemy dies" → stays on-cast. on-enemy-destroyed trigger exists.
     });
 
     const OBSIDIAN_P2 =
-        'This Unit <unit-aid>adds 2 charges</unit-aid> to its Charged Skill upon killing an enemy.';
+        'When this Unit destroys an enemy it <unit-skill>adds 2 charges</unit-skill> to its charged skill.';
     it('Obsidian: charge-on-kill rides on-enemy-destroyed', () => {
         const ab = abilitiesFor({ firstPassiveSkillText: OBSIDIAN_P2 }, 'passive');
         expect(ab.some((a) => a.type === 'charge' && a.trigger === 'on-enemy-destroyed')).toBe(
             true
         );
-        // GAP: tag-only (detector-recognition) — emits NO ability; the charge builder doesn't
-        // detect "upon killing an enemy". Self charge, no actor needed; on-enemy-destroyed exists.
     });
 
     const VALIANT_P2 =
-        'This Unit <unit-aid>gains 1 charge</unit-aid> for its Charged Skill upon killing an enemy.';
+        'When this Unit destroys an enemy it <unit-skill>adds 1 charge</unit-skill> to its charged skill.';
     it('Valiant: charge-on-kill rides on-enemy-destroyed', () => {
         const ab = abilitiesFor({ firstPassiveSkillText: VALIANT_P2 }, 'passive');
         expect(ab.some((a) => a.type === 'charge' && a.trigger === 'on-enemy-destroyed')).toBe(
             true
         );
-        // GAP: tag-only (detector-recognition) — same as Obsidian, emits nothing.
     });
 
     const RIKRA_P2 =
-        'This Unit <unit-damage>repairs 30%</unit-damage> of its Max HP for each enemy Unit destroyed by the attack upon killing them.';
+        'This Unit <unit-damage>repairs 30%</unit-damage> of its max HP for each enemy destroyed by this Unit.';
     it('Rikra: self-heal-on-kill rides on-enemy-destroyed', () => {
         const ab = abilitiesFor({ firstPassiveSkillText: RIKRA_P2 }, 'passive');
         const heal = ab.find((a) => a.type === 'heal');
         expect(heal?.trigger).toBe('on-enemy-destroyed');
-        // GAP: tag-only — self-target heal on self-kill; heal builder doesn't recognize "upon
-        // killing". (Rikra already allowlisted for the ungated against-Taunted damage bonus — distinct.)
     });
 });
 
@@ -280,7 +271,7 @@ describe('cluster 6 — on-bomb-detonated', () => {
     });
 
     const VALKYRIE_P2 =
-        'When an <unit-aid>Echoing Burst</unit-aid> explodes on an enemy, this Unit and the ally with the lowest current health percentage <unit-damage>repair 5%</unit-damage> of damage dealt.';
+        'When an <unit-skill>Echoing Burst</unit-skill> explodes on an enemy, the Unit and the ally with the lowest current health percentage <unit-damage>repair 5%</unit-damage> of the damage dealt.';
     // #345: the earlier lock here ("rides on-bomb-detonated") was itself the bug, in the same
     // shape as Lingshe's below. An Echoing Burst is not a Bomb — it is an accumulate-then-detonate
     // container — so sharing the Bomb trigger fired her repair on any teammate's Bomb and never on
@@ -330,13 +321,13 @@ describe('cluster 7 — ally-crit / cleanse-reactive / DoT-crit / debuff-resiste
     });
 
     const HAYYAN_P3 =
-        "When a debuff is inflicted on an ally, this Unit <unit-damage>repairs the ally for 6%</unit-damage> of this Unit's Max HP.";
+        "When a <unit-aid>debuff</unit-aid> is inflicted on an ally, this Unit <unit-damage>repairs the ally for 6%</unit-damage> of this Unit's max HP.";
     it('Hayyan: repair-on-ally-debuffed rides on-ally-debuffed', () => {
         const ab = abilitiesFor({ firstPassiveSkillText: HAYYAN_P3 }, 'passive');
         const heal = ab.find((a) => a.type === 'heal');
         expect(heal?.trigger).toBe('on-ally-debuffed');
-        // GAP: needs-capture — NEW `on-ally-debuffed` trigger (victim-scoped `debuff-applied`,
-        // targetId is the debuffed ally; mirrors self-scoped `on-debuffed`).
+        // `on-ally-debuffed` is victim-scoped `debuff-applied` (targetId is the debuffed ally;
+        // mirrors self-scoped `on-debuffed`).
     });
 
     // Hayyan's SIBLING clause (same passive, first sentence — PR-E's on-ally-debuffed fix
@@ -376,18 +367,12 @@ describe('cluster 7 — ally-crit / cleanse-reactive / DoT-crit / debuff-resiste
     });
 
     const VINDICATOR_P3 =
-        "When this Unit resists a debuff infliction from an enemy, it deals <unit-damage>damage equal to 30%</unit-damage> of this Unit's max HP to that enemy.";
+        "When this Unit resists a <unit-aid>debuff</unit-aid> infliction from an enemy, it deals damage equal to <unit-damage>30%</unit-damage> of this Unit's max HP to that enemy.";
     it('Vindicator: reactive damage on debuff-resisted rides on-debuff-resisted', () => {
         const ab = abilitiesFor({ firstPassiveSkillText: VINDICATOR_P3 }, 'passive');
         expect(ab.some((a) => a.type === 'damage' && a.trigger === 'on-debuff-resisted')).toBe(
             true
         );
-        // GAP: DEFERRED (Phase 3 PR-C, 2026-07-04) — two independent infra gaps beyond Layer-1 tag
-        // inheritance: (1) no maxHP-scaled damage model — the 'damage' AbilityConfig only carries an
-        // attack%-based multiplier (applyReactiveDamage sources ownerStats.attack), so "30% of max HP"
-        // cannot be emitted faithfully; (2) no-capturable-actor — the debuff-resisted event carries only
-        // targetId (the resister), no source/attacker id, so "that enemy" cannot be resolved. Spec-locked
-        // out-of-scope (no-capturable-actor → candidate future work). Probe intentionally left RED.
     });
 
     const AMARTYA_P2 =
@@ -401,7 +386,7 @@ describe('cluster 7 — ally-crit / cleanse-reactive / DoT-crit / debuff-resiste
     });
 
     const APEX_P2 =
-        'This Unit gains a <unit-damage>Shield equal to 3%</unit-damage> of their Max HP when an enemy gets debuffed.';
+        'This Unit gains a <unit-damage>shield equal to 3%</unit-damage> of their max HP when an enemy gets inflicted with a <unit-aid>debuff</unit-aid>.';
     it('APEX: shield-on-enemy-debuffed already rides on-debuff-inflicted (FP lock)', () => {
         const ab = abilitiesFor({ firstPassiveSkillText: APEX_P2 }, 'passive');
         const shield = ab.find((a) => a.type === 'shield');

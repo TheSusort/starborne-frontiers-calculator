@@ -22,7 +22,7 @@
  *
  * Driven through the REAL pipeline: `simulateBattle` (placement-based two-team battle, mirrors
  * `ravagerResistReaction.integration.test.ts` — Ravager stays on `on-own-debuff-resisted`, which
- * its text ("if ITS debuff is resisted") really does scope to the inflictor) → `buildShipAbilities`
+ * its text ("if THIS UNIT'S debuff is resisted") really does scope to the inflictor) → `buildShipAbilities`
  * parses the verbatim CSV passive text
  * into the `on-enemy-debuff-resisted` damage ability (`shieldBasisPct: 115`) AND the `start-of-turn`
  * shield ability (`pct: 20`, `basis: 'hp'`) → the engine drains the shield grant BEFORE the acting

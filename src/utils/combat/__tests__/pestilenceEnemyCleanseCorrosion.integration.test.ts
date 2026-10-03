@@ -2,8 +2,9 @@
  * Ship-kit correctness audit, Wave 3, Task 8 — Pestilence's `on-enemy-cleansed` reactive DoT
  * (ENGINE integration).
  *
- * Pestilence's second passive (verbatim from docs/ship-skills.csv, the cleanse clause): "When an
- * enemy cleanses a Debuff this unit inflicts Corrosion II for 2 turns on all cleansed enemies."
+ * Pestilence's second passive (the cleanse clause, old-corpus wording; synthetic, the catalogue
+ * text differs): "When an enemy cleanses a Debuff this unit inflicts Corrosion II for 2 turns on
+ * all cleansed enemies."
  * Before this task NO ability of any kind existed for it: DoT abilities were built ONLY by
  * `buildDoTAutoFill` (active/charge sources — passive-slot DoTs categorically excluded) and
  * `dotAbility()` hardcodes `trigger:'on-cast'`, so there was no code path that could produce a
@@ -11,7 +12,7 @@
  * dot builder; engine: a `cleansedEnemyIds` eventCtx field on the `on-enemy-cleansed` trigger case
  * + a multi-recipient fan-out in the reactive `dot` executor).
  *
- * Exercised through the REAL production pipeline (`buildShipAbilities` fed verbatim skill text,
+ * Exercised through the REAL production pipeline (`buildShipAbilities` fed skill text,
  * never a hand-built ability). Follows the `onEnemyTauntGainedReactivePromotion.integration.test.ts`
  * harness (mutation guard, then `runCombat` positional battles). The DoT must land on the REAL
  * cleansed enemies — ALL of them ("on all cleansed enemies") — never on the DPS dummy sink
@@ -39,7 +40,8 @@ function ship(over: Partial<Ship>): Ship {
     return { ...({} as any), refits: [{}, {}, {}, {}], ...over } as Ship;
 }
 
-// Verbatim docs/ship-skills.csv Corrosion clause of Pestilence's second (refit-active) passive.
+// Old-corpus wording of the Corrosion clause of Pestilence's second (refit-active) passive
+// (synthetic; the catalogue text differs).
 const PESTILENCE_CLEANSE_P2 =
     'When an enemy <unit-aid>cleanses a Debuff</unit-aid> this unit inflicts <unit-skill>Corrosion II</unit-skill> for 2 turns on all cleansed enemies.';
 

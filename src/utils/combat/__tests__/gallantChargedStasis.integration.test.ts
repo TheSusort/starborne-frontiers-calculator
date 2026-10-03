@@ -5,7 +5,8 @@
  * In-fight example: Gallant fires his charged skill at an enemy Defender — the Defender takes
  * Stasis for 1 turn. Fired at an Attacker, no Stasis.
  *
- * Driven through the real parser (`buildShipAbilities` on the verbatim text) and `runCombat`.
+ * Driven through the real parser (`buildShipAbilities` on old-corpus wording of the charged skill,
+ * synthetic; the catalogue text differs) and `runCombat`.
  * "applied" is an apply, which lands unless Gallant is at an affinity disadvantage — neither side
  * carries an affinity here, so it always lands and no assertion depends on the seed.
  */

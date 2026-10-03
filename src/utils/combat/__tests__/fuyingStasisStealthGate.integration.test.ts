@@ -68,8 +68,8 @@ const fuyingShip = (): Ship => {
     return s;
 };
 
-/** Her R4 passive row, verbatim from docs/ship-skills.csv (the DR-aura sentence, then the
- *  reactive one, separated by the row's own `<br />` paragraph break). */
+/** Her R4 passive row in its old-corpus copy (the DR-aura sentence, then the reactive one,
+ *  separated by a `<br />` paragraph break; the catalogue row has no newline after it). */
 const FUYING_PASSIVE_R4 =
     'All Tianchen allies with <unit-skill>Stealth</unit-skill> take ' +
     '<unit-damage>30% less direct damage</unit-damage>.<br /><br />\n' +

@@ -25,14 +25,13 @@ function shipFromCsv(name: string): Ship {
 describe.skipIf(!csvAvailable())(
     'Wave 8 Task 10 — Wisteria self-crit Corrosion → Inferno II injection',
     () => {
-        // Wisteria's refit-active (R2) passive: "This Unit inflicts Inferno II for 2 turns after
-        // applying Corrosion with a Critical hit and extends the newly applied Corrosion by 1
-        // turn with a chance to hit equal to Crit Power." Two mechanics in ONE clause:
-        //  1. A self-crit-gated secondary DoT injection ("inflicts Inferno II for 2 turns after
-        //     applying Corrosion with a Critical hit") — previously UNMODELED entirely.
-        //  2. The Corrosion extension ("extends the newly applied Corrosion by 1 turn with a
-        //     chance to hit equal to Crit Power") — already modeled as `extend-dot` and must
-        //     keep working unchanged alongside the new dot injection.
+        // Wisteria's refit-active (R2) passive: "When this Unit inflicts Corrosion with a critical
+        // hit, it also inflicts Inferno II for 2 turns and extends the newly inflicted Corrosion by
+        // 1 turn with the extension chance equal to this Unit's crit power." Two mechanics in ONE
+        // clause:
+        //  1. A self-crit-gated secondary DoT injection ("also inflicts Inferno II for 2 turns").
+        //  2. The Corrosion extension ("extends the newly inflicted Corrosion by 1 turn"), modeled
+        //     as `extend-dot`, alongside the dot injection.
         it('emits an Inferno II dot (duration 2) on the self on-crit-after-Corrosion trigger', () => {
             const { slots } = buildShipAbilities(shipFromCsv('Wisteria'));
             const flat = slots.flatMap((s) => s.abilities);

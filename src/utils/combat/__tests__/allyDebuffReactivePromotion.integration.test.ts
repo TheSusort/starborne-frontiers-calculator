@@ -8,10 +8,10 @@
  *     victim-scoped, routed to the debuffed ally via eventCtx.damagedAllyId.
  *
  * Both owner abilities are extracted through the REAL production path (`buildShipAbilities`)
- * fed verbatim skill text copied from `docs/ship-skills.csv` (parser source of truth) — never a
- * hand-built ability array. The surrounding cast (allies/enemies that merely need to inflict a
- * debuff/DoT to generate the triggering event) are minimal hand-built actors, following the
- * `enemySideAttacked.integration.test.ts` harness style.
+ * fed skill text — Hayyan's catalogue sentence, Oleander's old-corpus wording (synthetic) —
+ * never a hand-built ability array. The surrounding cast (allies/enemies that merely need to
+ * inflict a debuff/DoT to generate the triggering event) are minimal hand-built actors, following
+ * the `enemySideAttacked.integration.test.ts` harness style.
  *
  * Non-vacuity: reverting the Task 2/3/4 src changes (skillTextParser.ts / buildShipAbilities.ts /
  * triggers.ts) turns every "fires" assertion in this file red (verified manually; see the PR-E
@@ -62,7 +62,7 @@ function runAndCollectBuffs(input: CombatEngineInput) {
 
 // =============================================================================
 // Oleander — "When an ally inflicts a debuff ... once per ally per round, grants Repair Over
-// Time II to that Ally" (docs/ship-skills.csv, verbatim).
+// Time II to that Ally" (old-corpus wording; synthetic, the catalogue text differs).
 // =============================================================================
 
 const OLEANDER_P3 =
@@ -349,7 +349,7 @@ describe('Oleander (enemy-side) — team symmetry: an enemy Oleander reacts to i
 // =============================================================================
 
 const HAYYAN_P3 =
-    "When a debuff is inflicted on an ally, this Unit <unit-damage>repairs the ally for 6%</unit-damage> of this Unit's Max HP.";
+    "When a <unit-aid>debuff</unit-aid> is inflicted on an ally, this Unit <unit-damage>repairs the ally for 6%</unit-damage> of this Unit's max HP.";
 
 /** Extracts Hayyan's ally-debuffed repair through the REAL parser/builder (production routing). */
 function hayyanAllyDebuffedHeal(): Ability {

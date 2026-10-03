@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { parseSlot, sigs, canonical, type RewordPair } from './helpers/catalogueWording';
+import {
+    parseSlot,
+    sigs,
+    canonical,
+    type RewordPair,
+    type SlotName,
+} from './helpers/catalogueWording';
 
 const PAIRS: RewordPair[] = [
     {
@@ -9,13 +15,6 @@ const PAIRS: RewordPair[] = [
         new: 'This Unit <unit-skill>cleanses 1 debuff</unit-skill> and deals <unit-damage>180% damage</unit-damage> with an additional <unit-damage>15%</unit-damage> for each <unit-aid>debuff</unit-aid> on the enemy.',
         expects: 'damage|enemy|on-cast|damage',
         scalingPerUnit: 15,
-    },
-    {
-        ship: 'Vindicator',
-        slot: 'passive',
-        old: "This Unit has 20% Shield Penetration. At the start of combat, this Unit gains <unit-skill>Magnetized Shielding</unit-skill>.<br /><br />When this Unit resists a debuff infliction from an enemy, it deals <unit-damage>damage equal to 30%</unit-damage> of this Unit's max HP to that enemy.",
-        new: "This Unit has <unit-damage>20% shield penetration</unit-damage>.<br /><br />At the start of combat, this Unit gains <unit-skill>Magnetized Shielding</unit-skill>.<br /><br />When this Unit resists a <unit-aid>debuff</unit-aid> infliction from an enemy, it deals damage equal to <unit-damage>30%</unit-damage> of this Unit's max HP to that enemy.",
-        expects: 'damage|enemy|on-debuff-resisted|damage',
     },
     {
         ship: 'Anemone',
@@ -82,6 +81,17 @@ const PAIRS: RewordPair[] = [
     },
 ];
 
+// Rows whose catalogue sentence is the only wording the parser reads: the parse must carry
+// `expects`.
+const CATALOGUE_ROWS: { ship: string; slot: SlotName; text: string; expects: string }[] = [
+    {
+        ship: 'Vindicator',
+        slot: 'passive',
+        text: "This Unit has <unit-damage>20% shield penetration</unit-damage>.<br /><br />At the start of combat, this Unit gains <unit-skill>Magnetized Shielding</unit-skill>.<br /><br />When this Unit resists a <unit-aid>debuff</unit-aid> infliction from an enemy, it deals damage equal to <unit-damage>30%</unit-damage> of this Unit's max HP to that enemy.",
+        expects: 'damage|enemy|on-debuff-resisted|damage',
+    },
+];
+
 describe('case and tag scheme — catalogue wording parses like ours', () => {
     it.each(PAIRS)('$ship $slot', ({ slot, old, new: next, expects, scalingPerUnit }) => {
         const before = parseSlot(slot, old);
@@ -92,4 +102,11 @@ describe('case and tag scheme — catalogue wording parses like ours', () => {
         }
         expect(canonical(parseSlot(slot, next))).toEqual(canonical(before));
     });
+
+    it.each(CATALOGUE_ROWS)(
+        '$ship $slot: the catalogue sentence carries its parse',
+        ({ slot, text, expects }) => {
+            expect(sigs(parseSlot(slot, text))).toContain(expects);
+        }
+    );
 });

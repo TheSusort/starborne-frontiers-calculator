@@ -83,8 +83,8 @@ describe('stat-vs-target condition', () => {
 });
 
 describe('parser via buildShipAbilities', () => {
-    // Verbatim from docs/ship-skills.csv (charge_skill_text field) — same constant used by the
-    // SP-C Bayah triage probe in modelCompletenessTriage.test.ts.
+    // Old-corpus wording of Bayah's charged (synthetic; the catalogue text differs) — same
+    // constant used by the SP-C Bayah triage probe in modelCompletenessTriage.test.ts.
     const BAYAH_CHARGE =
         'This Unit deals <unit-damage>150% damage</unit-damage> plus an additional amount equal to <unit-damage>30%</unit-damage> of its Defense and inflicts <unit-skill>Crit Rate Down II</unit-skill> for 2 turns. If this Unit has more Crit Power than the target, it inflicts <unit-skill>Stasis</unit-skill> for 1 turn.';
 
@@ -106,8 +106,8 @@ describe('parser via buildShipAbilities', () => {
         ).toBe(true);
     });
 
-    // Verbatim from docs/ship-skills.csv (active_skill_text field) — same constant used by the
-    // SP-C Cobalt triage probe.
+    // Old-corpus wording of Cobalt's active (synthetic; the catalogue text differs) — same
+    // constant used by the SP-C Cobalt triage probe.
     const COBALT_ACTIVE =
         "This Unit purges <unit-aid>1 buff</unit-aid> from the enemy and deals <unit-damage>200% damage</unit-damage>. If this Unit has more HP than the enemy, it additionally deals <unit-damage>damage equal to 25%</unit-damage> of this Unit's max HP.";
 
@@ -129,8 +129,8 @@ describe('parser via buildShipAbilities', () => {
         ).toBe(true);
     });
 
-    // Verbatim from docs/ship-skills.csv (active_skill_text field) — same constant used by the
-    // SP-C Chakara triage probe.
+    // Old-corpus wording of Chakara's active (synthetic; the catalogue text differs) — same
+    // constant used by the SP-C Chakara triage probe.
     const CHAKARA_ACTIVE =
         'This Unit deals <unit-damage>180% damage</unit-damage> with additional damage equal to <unit-damage>80%</unit-damage> of its Defense. If all damaged enemies have more Speed than this Unit, it <unit-aid>adds 1 charge</unit-aid> to its Charged Skill.';
 

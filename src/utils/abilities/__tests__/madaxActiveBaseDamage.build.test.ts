@@ -1,6 +1,6 @@
 /**
- * Madax active-slot base damage — production-routed builder probe. Skill text VERBATIM from
- * docs/ship-skills.csv (parser source of truth). Drives the REAL buildShipAbilities path.
+ * Madax active-slot base damage — production-routed builder probe. Skill text is the old-corpus
+ * wording (synthetic; the catalogue text differs). Drives the REAL buildShipAbilities path.
  *
  * Wave 2 Finding A3: the active slot's first `<unit-damage>` tag content is "Damage equal to
  * 70%" (non-numeric-leading — the number sits after "equal to", not at the start of the tag).
@@ -24,7 +24,7 @@ function abilitiesFor(over: Partial<Ship>, name: string): Ability[] {
     return slot(buildShipAbilities(ship(over)).slots, name)?.abilities ?? [];
 }
 
-// Verbatim from docs/ship-skills.csv row "Madax" (active_skill_text column).
+// Old-corpus wording of Madax's active (synthetic; the catalogue text differs).
 const MADAX_ACTIVE =
     'This Unit grants <unit-skill>Taunt</unit-skill> for 1 turn and deals <unit-damage>Damage equal to 70%</unit-damage> plus an additional <unit-damage>60%</unit-damage> of its Defense.';
 

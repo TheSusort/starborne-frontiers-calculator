@@ -154,9 +154,10 @@ describe('implant real-path repro — Martyrdom through planPlacement -> simulat
 
     it("killer with Liberator's on-enemy-death extra-action passive still triggers the victim's Martyrdom", () => {
         // Liberator (fails in the user's logs) differs from Selenite (works) by its passive:
-        // "When an enemy dies, ... once per round, this unit gains 1 extra action." That on-death
-        // reaction fires simultaneously with the dying carrier's own Martyrdom. This isolates
-        // whether that simultaneous on-enemy-death reaction suppresses the victim's on-destroyed.
+        // "When an enemy is destroyed, ... once per round, this unit gains 1 extra action." That
+        // on-death reaction fires simultaneously with the dying carrier's own Martyrdom. This
+        // isolates whether that simultaneous on-enemy-death reaction suppresses the victim's
+        // on-destroyed.
         const carrier = makeShip('carrier', 'Carrier', {
             implants: { implant_ultimate: 'mart' },
         });
@@ -164,7 +165,7 @@ describe('implant real-path repro — Martyrdom through planPlacement -> simulat
             // Plain lethal active (Selenite-style kill), PLUS Liberator's extra-action passive.
             activeSkillText: 'This Unit deals <unit-damage>100000% damage</unit-damage>.',
             secondPassiveSkillText:
-                'This Unit has 40% Shield Penetration. When an enemy dies, all allies <unit-aid>add 1 charge</unit-aid> to their Charged Skills, and once per round, this unit gains 1 extra action.',
+                'This Unit has <unit-damage>40% shield penetration</unit-damage>.<br /><br />When an enemy is destroyed, all allies <unit-skill>add 1 charge</unit-skill> to their charged skills and once per round, this unit <unit-skill>gains 1 extra action</unit-skill>.',
             refits: Array.from({ length: 2 }, () => ({})) as unknown as Ship['refits'],
         });
 
@@ -189,7 +190,7 @@ describe('implant real-path repro — Martyrdom through planPlacement -> simulat
 
     it('combat-log #6: a reactive on-enemy-death charge-grant is NESTED under the kill, not surfaced as a turn action that the Martyrdom Disable wrongly nests under', () => {
         // Bug repro (combat-sim finding #6 secondary). A killer kills a Martyrdom victim. A killer-
-        // side ALLY carries an on-enemy-death "grants 1 charge to all allies" passive — that reaction
+        // side ALLY carries an on-enemy-death "all allies add 1 charge" passive — that reaction
         // fires on the death, DURING the killer's turn, and routes through the engine's
         // grantAllyCharges delegate. Pre-fix the delegate emitted `charge-changed` on the UNSTAMPED
         // outer bus, so the log builder surfaced it as a NON-reactive TOP-LEVEL entry in the killer's
@@ -209,7 +210,8 @@ describe('implant real-path repro — Martyrdom through planPlacement -> simulat
         const chargedAlly = makeShip('ally', 'Charged Ally', {
             chargeSkillCharge: 3,
             chargeSkillText: 'This Unit deals <unit-damage>200% damage</unit-damage>.',
-            firstPassiveSkillText: 'When an enemy dies, this unit grants 1 charge to all allies.',
+            firstPassiveSkillText:
+                'This Unit has <unit-damage>40% shield penetration</unit-damage>.<br /><br />When an enemy is destroyed, all allies <unit-skill>add 1 charge</unit-skill> to their charged skills.',
         });
 
         const result = simulateBattle(

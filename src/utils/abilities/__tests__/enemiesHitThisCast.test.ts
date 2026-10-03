@@ -42,10 +42,9 @@ describe('enemies-hit-this-cast condition', () => {
 });
 
 describe('enemies-hit-this-cast — parser output (buildShipAbilities)', () => {
-    // Verbatim from docs/ship-skills.csv (second_passive_skill_text field). NOTE: CSV typo
-    // "3 ore more" preserved verbatim (not "or more").
+    // Verbatim from docs/ship-skills.csv (second_passive_skill_text field).
     const BERSERKER_P2 =
-        'This Unit gains <unit-skill>Marauder Rage II</unit-skill> for 3 turns when hitting 3 ore more enemies.';
+        'This Unit gains <unit-skill>Marauder Rage II</unit-skill> for 3 turns when hitting 3 or more enemies.';
 
     it('Berserker passive2: Marauder Rage II buff gated on >=3 hits', () => {
         const abilities = abilitiesFor({ secondPassiveSkillText: BERSERKER_P2 }, 'passive');
@@ -62,7 +61,7 @@ describe('enemies-hit-this-cast — parser output (buildShipAbilities)', () => {
         ).toBe(true);
     });
 
-    // Verbatim from docs/ship-skills.csv (active_skill_text field).
+    // Old-corpus wording (active_skill_text field; synthetic, the catalogue text differs).
     const TYGR_ACTIVE =
         'This Unit deals <unit-damage>180% damage</unit-damage> and inflicts <unit-skill>Security Down II</unit-skill> for 2 turns. If it damages <unit-aid>2 or more enemies, it adds 1 charge</unit-aid> to its Charged Skill.';
 
