@@ -1053,7 +1053,9 @@ function markPatternScoped(positioned: PositionedAbility[], text: string): Posit
  *  - "that enemy" whose sentence first introduces an indefinite enemy — Crocus's "If an enemy has 3
  *    or more debuffs, … inflicts Stasis … on that enemy" gates each struck enemy on its own count;
  *  - "the targeted enemy and all adjacent enemies" — more than one enemy;
- *  - "the target" — read as each struck enemy (Gallant, Nayra), not as the primary.
+ *  - "the target" — not a ruled narrowing phrase. In a condition the owner reads it as each struck
+ *    enemy (Gallant, Nayra); as a recipient ("purges 1 buff from the target") it is unruled and no
+ *    skill text uses it, so it stays `'enemy'` until ruled.
  *
  * Only `trigger: 'on-cast'`: a reactive clause's `'enemy'` already means the triggering enemy, and
  * its "that enemy" names exactly that one. `primaryEnemyNarrowingTripwire.test.ts` holds the corpus

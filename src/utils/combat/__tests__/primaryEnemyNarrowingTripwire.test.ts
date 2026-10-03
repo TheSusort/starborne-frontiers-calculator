@@ -14,7 +14,8 @@
  *  - "that enemy" whose sentence introduces an indefinite enemy first (Crocus: "If an enemy has 3
  *    or more debuffs, … inflicts Stasis … on that enemy") — the gate picks each qualifying enemy;
  *  - "the targeted enemy and all adjacent enemies" — names more than one enemy;
- *  - "the target" — the owner reads it as each struck enemy (Gallant, Nayra);
+ *  - "the target" — not a ruled narrowing phrase: in a condition the owner reads it as each struck
+ *    enemy (Gallant, Nayra), and as a recipient it is unruled and unused by any skill text;
  *  - a phrase that is not the effect's own object ("… and deals 100% damage to the primary
  *    target" does not narrow the debuff before it).
  */
