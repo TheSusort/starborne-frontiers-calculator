@@ -178,10 +178,10 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         const uncachedNames = [
             ...new Set(normalisedStorageShips.map((s) => s.name).filter((n) => !cache.has(n))),
         ];
-        if (uncachedNames.length === 0) {
-            setShips(overlay(normalisedStorageShips));
-            return;
-        }
+        // The stored ships (with whatever templates are cached) show at once; the request
+        // only refines their text, so a slow or failed one never hides the fleet.
+        setShips(overlay(normalisedStorageShips));
+        if (uncachedNames.length === 0) return;
 
         const controller = new AbortController();
         void supabase
@@ -191,17 +191,19 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             )
             .in('name', uncachedNames)
             .abortSignal(controller.signal)
-            .then(({ data }) => {
-                if (controller.signal.aborted) return;
-                if (!data) {
+            .then(
+                ({ data }) => {
+                    if (controller.signal.aborted || !data) return;
+                    // A name with no row is cached as null so it is not asked for again.
+                    uncachedNames.forEach((n) => cache.set(n, null));
+                    (data as TemplateRow[]).forEach((t) => cache.set(t.name, t));
                     setShips(overlay(normalisedStorageShips));
-                    return;
+                },
+                () => {
+                    // Network failure: the stored ships are already shown; a later storage
+                    // change retries the uncached names.
                 }
-                // A name with no row is cached as null so it is not asked for again.
-                uncachedNames.forEach((n) => cache.set(n, null));
-                (data as TemplateRow[]).forEach((t) => cache.set(t.name, t));
-                setShips(overlay(normalisedStorageShips));
-            });
+            );
 
         return () => {
             controller.abort();

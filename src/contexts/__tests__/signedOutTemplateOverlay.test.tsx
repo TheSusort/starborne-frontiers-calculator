@@ -129,4 +129,28 @@ describe('signed-out ships overlay ship_templates text', () => {
         await waitFor(() => expect(result.current.ships).toHaveLength(2));
         await waitFor(() => expect(inNames).toEqual([['Alpha'], ['Nu']]));
     });
+
+    const installQuery = (
+        then: (resolve: (v: unknown) => unknown, reject: (e: unknown) => unknown) => unknown
+    ) =>
+        vi.mocked(supabase.from).mockImplementation((() => {
+            const chain: Record<string, unknown> = {};
+            chain.select = () => chain;
+            chain.in = () => chain;
+            chain.abortSignal = () => chain;
+            chain.then = then;
+            return chain;
+        }) as never);
+
+    it('shows the stored ships while the template request is still pending', async () => {
+        installQuery(() => undefined); // never settles
+        const { result } = await mount([ship('a1', 'Alpha')]);
+        expect(result.current.ships[0].activeSkillText).toBe('OLD TEXT');
+    });
+
+    it('keeps showing the stored ships when the template request fails', async () => {
+        installQuery((_resolve, reject) => reject(new Error('network down')));
+        const { result } = await mount([ship('a1', 'Alpha')]);
+        expect(result.current.ships[0].activeSkillText).toBe('OLD TEXT');
+    });
 });
