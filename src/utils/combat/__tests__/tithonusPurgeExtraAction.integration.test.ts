@@ -209,17 +209,17 @@ describe('player-side Tithonus — 4+ buffs purged by one skill', () => {
 });
 
 describe('a stolen buff does not count', () => {
-    // His charged skill steals 1 buff from the primary target (A), THEN purges 2 from each enemy.
+    // His charged skill steals 1 buff from EACH enemy it strikes, THEN purges 2 from each.
     const charged = (buffs: [number, number, number]) => player(buffs, { startCharged: true });
 
-    it('A 2, B 1, C 1: 1 stolen + 3 purged → no extra action', () => {
-        const m = charged([2, 1, 1]);
+    it('A 2, B 2, C 2: 3 stolen + 3 purged → no extra action', () => {
+        const m = charged([2, 2, 2]);
         expect(m.purgedPerTurn).toEqual([3]);
         expect(m.turns).toBe(1);
     });
 
-    it('control — A 3, B 1, C 1: 1 stolen + 4 purged → one extra action', () => {
-        const m = charged([3, 1, 1]);
+    it('control — A 3, B 2, C 2: 3 stolen + 4 purged → one extra action', () => {
+        const m = charged([3, 2, 2]);
         expect(m.purgedPerTurn).toEqual([4, 0]);
         expect(m.turns).toBe(2);
     });
@@ -316,10 +316,11 @@ describe('enemy-side Tithonus counts buffs purged from player ships', () => {
 
 describe('enemies that regain a buff when hit keep the chain going', () => {
     // Opal, Bizon, Nayra and Panguan each gain a buff whenever they are directly damaged (no
-    // once-per-round). His purge resolves before his damage, so every cast strips the buff his
-    // previous cast handed back: five of them in his pattern give 5 purged per active cast and 4
-    // on a charged cast (its steal takes the primary's buff first). Owner ruling 2026-10-03: the
-    // chain continues until something else stops it.
+    // once-per-round). His purge resolves before his damage, so every active cast strips the buff
+    // his previous cast handed back: five of them in his pattern give 5 purged per active cast.
+    // His charged cast steals each one's single buff before it purges, so it purges none and ends
+    // the chain; the chain-length arms therefore run him without a charged skill. Owner ruling
+    // 2026-10-03: the chain continues until something else stops it.
     const REGAINERS = ['Opal', 'Bizon', 'Nayra', 'Panguan', 'Opal'];
     const CELLS: Position[] = ['M4', 'M3', 'M2', 'T3', 'B3'];
     const regainer = (i: number, hp: number): EnemyAttacker => ({
@@ -333,15 +334,23 @@ describe('enemies that regain a buff when hit keep the chain going', () => {
         },
     });
     // His real targeting: 'skip' on Circle-Range-1 anchors on M3 and strikes all five cells.
-    const run = (hp: number) =>
+    const run = (hp: number, hasChargedSkill = false) =>
         measure(
             base({
                 attack: 1000,
                 target: parseTarget('skip'),
+                hasChargedSkill,
                 enemyAttackers: REGAINERS.map((_, i) => regainer(i, hp)),
             }),
             'attacker'
         );
+
+    it('with his charged skill: the first charged cast steals every buff, purges none, and ends the chain', () => {
+        const m = run(1e9, true);
+        expect(m.turns).toBeLessThan(1 + MAX_CHAINED_EXTRA_ACTIONS_PER_ROUND);
+        expect(m.purgedPerTurn.slice(0, -1).every((n) => n === 5)).toBe(true);
+        expect(m.purgedPerTurn[m.purgedPerTurn.length - 1]).toBe(0);
+    });
 
     it('durable regainers: the chain runs to the sim-safety cap and nothing throws', () => {
         expect(MAX_CHAINED_EXTRA_ACTIONS_PER_ROUND).toBe(20);

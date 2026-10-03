@@ -16,8 +16,8 @@
  * Fixture shape (mirrors enemyDebuffNameSpecificGate.integration.test.ts's Tygr-shape,
  * extended to TWO footprint victims via a whole-team ('all' shape) damage pattern):
  *   - The damage ability is AoE ('all' pattern) → hits BOTH enemy attackers every round.
- *   - The debuff-inflict ability targets 'enemy' (single-target, NOT AoE) → lands ONLY on the
- *     resolved anchor ('front', bound via the parsed `target`).
+ *   - The debuff-inflict ability targets 'enemy', so it reaches both struck enemies; 'covered'
+ *     resists it (security ≫ the caster's hacking), so it lands ONLY on 'front'.
  *   - The modifier is gated on `enemy-debuff` (buffName: 'Stasis').
  *
  * Round 1: neither victim carries Stasis pre-turn → gate false for both → both take BASE
@@ -54,7 +54,7 @@ type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 
 // A single positioned, passive (attack:0) enemy — security:0 so any inflict-type debuff
 // always lands (mirrors enemyDebuffNameSpecificGate.integration.test.ts).
-const passiveEnemyAt = (id: string, position: Position): EnemyAttacker => ({
+const passiveEnemyAt = (id: string, position: Position, security = 0): EnemyAttacker => ({
     id,
     stats: {
         attack: 0,
@@ -63,7 +63,7 @@ const passiveEnemyAt = (id: string, position: Position): EnemyAttacker => ({
         defence: 0,
         hp: 1_000_000_000,
         speed: 1,
-        security: 0,
+        security,
     },
     chargeCount: 0,
     startCharged: false,
@@ -151,7 +151,8 @@ describe('per-victim outgoing-modifier gate (sub-project I, PR I2) — AoE mixed
         const result = runCombat(
             engineBase(skillsWithGate(), [
                 passiveEnemyAt('front', 'M4'),
-                passiveEnemyAt('covered', 'M3'),
+                // Security 1000 vs the caster's hacking 200: 'covered' resists the Stasis.
+                passiveEnemyAt('covered', 'M3', 1000),
             ])
         );
 

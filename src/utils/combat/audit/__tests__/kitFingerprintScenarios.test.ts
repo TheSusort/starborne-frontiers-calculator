@@ -531,7 +531,9 @@ describe('statusRich scenario', () => {
 
     it.each([
         ['Sefuba', 'purge:active'],
-        ['Zeolite', 'purge:active'],
+        // Bare: Zeolite's active lands Defense Down III on every struck enemy before its purge
+        // row is written, so a debuff row wins the cast's one-shot skill tag (`fingerprint.ts`).
+        ['Zeolite', 'purge'],
         ['Tithonus', 'purge:active'],
     ])('NON-VACUITY (purge): %s produces %s, which no other scenario can', (name, token) => {
         expect(tokensFor(name, 'statusRich')).toContain(token);
