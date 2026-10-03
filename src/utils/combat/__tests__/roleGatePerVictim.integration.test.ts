@@ -209,6 +209,82 @@ describe('a role gate on a cast that reaches several enemies reads each one', ()
     });
 });
 
+describe('an enemy role gate on a cast that reaches several player ships reads each one', () => {
+    const ally = (id: string, position: Position, role: ShipTypeName) => ({
+        id,
+        role,
+        speed: 150,
+        chargeCount: 0,
+        startCharged: false,
+        selfBuffs: [],
+        enemyDebuffs: [],
+        position,
+        target: parseTarget('front'),
+        pattern: parsePattern('Pattern-Base'),
+        walk: {
+            shipSkills: { slots: [{ slot: 'active' as const, abilities: [] }] },
+            stats: {
+                attack: 0,
+                crit: 0,
+                critDamage: 0,
+                defensePenetration: 0,
+                hacking: 0,
+                defence: 0,
+                hp: 1e9,
+            },
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            hasChargedSkill: false,
+        },
+    });
+
+    it('focus and B defenders, C an attacker → focus and B', () => {
+        expect(
+            landed(
+                base({
+                    attack: 0,
+                    hacking: 0,
+                    chargeCount: 0,
+                    hasChargedSkill: false,
+                    startCharged: false,
+                    speed: 150,
+                    role: 'DEFENDER',
+                    teamActors: [
+                        ally('ally-b', 'M3', 'DEFENDER_SECURITY'),
+                        ally('ally-c', 'T4', 'ATTACKER'),
+                    ],
+                    enemyAttackers: [
+                        {
+                            id: 'enemy-caster',
+                            stats: {
+                                attack: 1000,
+                                crit: 0,
+                                critDamage: 0,
+                                defence: 0,
+                                hp: 1e9,
+                                speed: 10,
+                                security: 0,
+                                hacking: 1e6,
+                            },
+                            chargeCount: 0,
+                            startCharged: false,
+                            position: 'M4',
+                            target: parseTarget('front'),
+                            pattern: parsePattern('Pattern-Circle-Range-1'),
+                            shipSkills: defenderGatedStasis(),
+                        },
+                    ],
+                }),
+                'enemy-caster',
+                'Stasis'
+            )
+        ).toEqual(['ally-b', 'attacker']);
+    });
+});
+
 describe("enemy-side Gallant reads the targeted player ship's role", () => {
     const enemyGallant = (): EnemyAttacker => ({
         id: 'enemy-gallant',

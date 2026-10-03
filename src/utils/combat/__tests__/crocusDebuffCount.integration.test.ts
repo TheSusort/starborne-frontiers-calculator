@@ -160,6 +160,14 @@ const teammate = (kit: ShipSkills, pattern: string): TeamActor => ({
     },
 });
 
+/** An inert player-side ship. */
+const playerShip = (id: string, position: Position): TeamActor => ({
+    ...teammate({ slots: [{ slot: 'active', abilities: [] }] }, 'Pattern-Base'),
+    id,
+    speed: 150,
+    position,
+});
+
 const base = (over: Partial<CombatEngineInput>): CombatEngineInput => ({
     enemyAttackers: [],
     attack: 1,
@@ -317,5 +325,33 @@ describe('enemy-side Crocus counts every debuff on the player ship', () => {
                 { attacker: 2 }
             )
         ).toEqual(['attacker']);
+    });
+    it('Attack Down on all three; Corrosion focus 0, B 2, C 1 → B alone', () => {
+        const enemyAoeMate: EnemyAttacker = {
+            ...enemyMate,
+            id: 'enemy-aoe-mate',
+            pattern: parsePattern('Pattern-Circle-Range-1'),
+            shipSkills: attackDownKit('all-enemies'),
+        };
+        const enemyGated: EnemyAttacker = {
+            ...enemyCrocus,
+            id: 'enemy-gated',
+            pattern: parsePattern('Pattern-Circle-Range-1'),
+            shipSkills: gatedAllEnemiesStasis(),
+        };
+        expect(
+            stasised(
+                base({
+                    attack: 0,
+                    hacking: 0,
+                    speed: 150,
+                    shipSkills: { slots: [{ slot: 'active', abilities: [] }] },
+                    teamActors: [playerShip('ally-b', 'M3'), playerShip('ally-c', 'T4')],
+                    enemyAttackers: [enemyAoeMate, enemyGated],
+                }),
+                'enemy-gated',
+                { 'ally-b': 2, 'ally-c': 1 }
+            )
+        ).toEqual(['ally-b']);
     });
 });
