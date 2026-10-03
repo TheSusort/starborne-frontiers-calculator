@@ -173,6 +173,10 @@ export interface ConditionContext {
      *  case (b), retired). Only "no cast recorded at all for this owner" stays absent/unknown.
      *  Live-derived by the positional engine from the firing actor's footprint. */
     enemiesHitThisCast?: number;
+    /** The total buffs this cast's on-cast purges removed across every victim, steals excluded.
+     *  Supplied only by runPlayerTurn's post-purge re-gate; absent means the cast's purges have
+     *  not resolved, which does not resolve the `buffs-purged-this-cast` subject. */
+    buffsPurgedThisCast?: number;
     /** SP-D — per-target DoT-ONLY entry subtotal (corrosion + inferno + bomb entry-array
      *  lengths, +acidicDecay once SP-E adds it). Distinct from `enemyDebuffCount`, which also
      *  folds in landed CONTROL/marker debuffs — `enemy-dot-count` must never be satisfied by a
@@ -302,6 +306,8 @@ export function evaluateCondition(cond: Condition, ctx: ConditionContext): numbe
         // `gte 3` are unaffected either way; an `lte`/`eq 0` reader is the case this closes.
         case 'enemies-hit-this-cast':
             return ctx.enemiesHitThisCast;
+        case 'buffs-purged-this-cast':
+            return ctx.buffsPurgedThisCast;
         case 'enemy-dot-count':
             // Named-family branch (Belladonna's "3+ Acidic Decay") is untouched by SP-4d: it is
             // runtime-inert today (no DoT family exists in the game yet — `enemyDotFamilyCounts`

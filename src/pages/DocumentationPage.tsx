@@ -2843,9 +2843,13 @@ const DocumentationPage: React.FC = () => {
                                         the turn queue at their current Speed, including any live
                                         Speed buffs or debuffs. End-of-round extra actions (such as
                                         Harvester&apos;s on-ally-destroyed passive) drain after
-                                        every other ship has acted, regardless of Speed.
-                                        Start-of-combat, start-of-round and end-of-round effects
-                                        resolve in the same turn order, across both teams.
+                                        every other ship has acted, regardless of Speed. A purge on
+                                        an area-pattern skill strips buffs from every enemy the
+                                        skill hits. Tithonus gains another action each time one of
+                                        his skills purges four or more buffs, so he can chain them;
+                                        the simulator stops a chain after 20 extra actions in one
+                                        round. Start-of-combat, start-of-round and end-of-round
+                                        effects resolve in the same turn order, across both teams.
                                         Start-of-combat effects, such as the Cloaking set&apos;s
                                         Stealth, land before any start-of-round effect.
                                     </p>

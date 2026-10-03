@@ -4232,12 +4232,18 @@ export function parseAllyChargeGrant(
 
 // --- Extra actions ("extra End Of Round Action" / "extra action") --------------------
 
-// Phrasings we deliberately DO NOT parse (annotation-only seams): purge-count (purges
-// are not modeled — Tithonus stays disqualified). The enemy-death / ally-destroyed phrasings
-// are MODELED as death-triggered extra actions (EXTRA_ACTION_ENEMY_DESTROYED_RE /
-// EXTRA_ACTION_ALLY_DESTROYED_RE below), NOT disqualified. The user can still add a disqualified
-// ability manually in the editor. Reference: docs/ship-skills.csv (Sokol, Harvester, Tithonus).
+// Phrasings we deliberately DO NOT parse (annotation-only seams): any purge wording other than
+// the purge-count gate below. The enemy-death / ally-destroyed phrasings are MODELED as
+// death-triggered extra actions (EXTRA_ACTION_ENEMY_DESTROYED_RE / EXTRA_ACTION_ALLY_DESTROYED_RE
+// below), NOT disqualified. The user can still add a disqualified ability manually in the editor.
+// Reference: docs/ship-skills.csv (Sokol, Harvester, Tithonus).
 const EXTRA_ACTION_DISQUALIFY_RE = /\bpurg/i;
+
+// Tithonus: "after it purges at least N buffs with a single skill" — a count of the buffs one cast
+// purges (steals excluded), gated after that cast's purges resolve. See the
+// `buffs-purged-this-cast` subject.
+const EXTRA_ACTION_PURGE_COUNT_RE =
+    /\bpurges?\s+at\s+least\s+(\d+)\s+buffs?\s+with\s+a\s+single\s+skill\b/i;
 
 // Death-trigger detection on the matched clause: an enemy-death phrasing (Sokol and Liberator
 // "When an enemy is destroyed") → on-enemy-destroyed; an ally-destroyed phrasing (Harvester) →
@@ -4279,6 +4285,9 @@ export interface ExtraActionParse {
      *  speed; a plain "extra action" (Liberator, Sokol "gains 1 extra action") is inserted into
      *  the queue at the ship's current speed. */
     endOfRound: boolean;
+    /** Set for a grant whose own extra turn can satisfy it again with no once-per-round wording
+     *  (Tithonus's purge-count gate). See the `chains` field on the `extra-action` config. */
+    chains?: boolean;
 }
 
 /**
@@ -4300,12 +4309,22 @@ export function parseExtraAction(text: string | null | undefined): ExtraActionPa
     // if two matched, find() would take the first and oncePerRound could mis-scope.
     const clauseMasked = parts.find((p) => EXTRA_ACTION_RE.test(p)) ?? sentence;
     const clause = clauseMasked.split(ABBR_MARK).join(' ');
-    if (EXTRA_ACTION_DISQUALIFY_RE.test(clause)) return null;
+    const purgeCount = EXTRA_ACTION_PURGE_COUNT_RE.exec(clause);
+    if (!purgeCount && EXTRA_ACTION_DISQUALIFY_RE.test(clause)) return null;
 
     const conditions: Condition[] = [];
+    if (purgeCount) {
+        conditions.push({
+            subject: 'buffs-purged-this-cast',
+            derivable: true,
+            countComparator: 'gte',
+            countThreshold: parseInt(purgeCount[1], 10),
+        });
+    }
     // Buff/debuff count gates: Nuqtu "If the target has 3 or more buffs" → enemy-buff
-    // gte 3; Sustainer "If this Unit has no debuffs" → self-debuff eq 0.
-    const countGate = countGateCondition(clause);
+    // gte 3; Sustainer "If this Unit has no debuffs" → self-debuff eq 0. The purge-count gate
+    // already claimed its "at least N buffs", which names purged buffs, not held ones.
+    const countGate = purgeCount ? null : countGateCondition(clause);
     if (countGate) conditions.push(countGate);
     const hpMatch = EXTRA_ACTION_SELF_HP_RE.exec(clause);
     if (hpMatch) {
@@ -4351,11 +4370,13 @@ export function parseExtraAction(text: string | null | undefined): ExtraActionPa
           : EXTRA_ACTION_SELF_RESIST_RE.test(sentenceUnmasked)
             ? 'on-debuff-resisted'
             : undefined;
+    const oncePerRound = /once per round/i.test(clause);
     return {
-        oncePerRound: /once per round/i.test(clause),
+        oncePerRound,
         conditions,
         endOfRound: /end\s+of\s+round/i.test(clause),
         ...(trigger ? { trigger } : {}),
+        ...(purgeCount && !oncePerRound ? { chains: true } : {}),
     };
 }
 

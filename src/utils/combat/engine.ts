@@ -163,11 +163,19 @@ import { supportFootprintAllyIds } from './supportFootprint';
 import type { PreFightCombatModifiers } from './preFight/types';
 import { protectionCascade } from './protectionTransfer';
 
-/** Backstop for pathological extra-action loops (a non-once-per-round grant whose
- *  conditions stay true re-fires on the extra turn it granted). Real texts are
- *  self-limited (charged-skill grants consume charges; passive grants are once per
- *  round), so any round needing more than this is a config/parser bug. */
+/** Tripwire for NON-chainable extra-action grants: a non-once-per-round grant whose conditions
+ *  stay true re-fires on the extra turn it granted. Every non-chainable corpus grant is
+ *  self-limited (charged-skill grants consume charges; passive grants are once per round), so a
+ *  round needing more than this is a config/parser bug and the engine throws. Chainable grants
+ *  (`ExtraActionGrant.chains`) never count toward it — see MAX_CHAINED_EXTRA_ACTIONS_PER_ROUND. */
 const MAX_EXTRA_TURNS_PER_ROUND = 8;
+
+/** Sim-safety limit, NOT a game rule: the game puts no limit on a chainable grant (Tithonus keeps
+ *  taking actions while each one purges 4+ buffs, e.g. against enemies that regain a buff every
+ *  time they are hit). Each actor takes at most this many chained extra actions per round; any
+ *  further chainable grant that round is dropped silently, so the fight ends normally instead of
+ *  looping forever. */
+export const MAX_CHAINED_EXTRA_ACTIONS_PER_ROUND = 20;
 
 /** §4.3: the id the side-wide scheduled-enemy-debuff bucket emits `buff-expired`
  *  under. NO actor carries it — the name is honest about what it is: an id for a bucket, not a
@@ -10196,14 +10204,17 @@ export function runCombat(rawInput: CombatEngineInput): {
         };
 
         // Per-round extra-action bookkeeping: oncePerRound abilities fire at most once
-        // per actor per round (key `${actorId}:${abilityId}`); total insertions are
-        // backstopped. A grant bumps the granter's PENDING count by 1 — the selection
+        // per actor per round (key `${actorId}:${abilityId}`); non-chainable insertions are
+        // backstopped by the MAX_EXTRA_TURNS_PER_ROUND tripwire, chainable ones capped per granter
+        // by MAX_CHAINED_EXTRA_ACTIONS_PER_ROUND. A grant bumps the granter's PENDING count by 1 — the selection
         // loop then re-picks it at its LIVE speed-rank among the remaining unacted actors
         // (game-verified: re-added to the turn order; acts immediately only when fastest
         // remaining). The selection comparator (orderByTurnPriority via selectNextBySpeed)
         // owns the speed-position + equal-speed tiebreak, so there is no splice to position.
         const extraActionFired = new Set<string>();
         let extraTurnInsertions = 0;
+        // Chained extra actions taken this round, per granter (MAX_CHAINED_EXTRA_ACTIONS_PER_ROUND).
+        const chainedExtraActions = new Map<string, number>();
         const processExtraActionGrants = (
             granter: CombatActor,
             grants: ExtraActionGrant[]
@@ -10212,18 +10223,24 @@ export function runCombat(rawInput: CombatEngineInput): {
                 const key = `${granter.id}:${g.abilityId}`;
                 if (g.oncePerRound && extraActionFired.has(key)) continue;
                 if (g.oncePerRound) extraActionFired.add(key);
-                extraTurnInsertions += 1;
-                if (extraTurnInsertions > MAX_EXTRA_TURNS_PER_ROUND) {
-                    throw new Error(
-                        `combat round ${r}: extra-action insertions exceeded ` +
-                            `MAX_EXTRA_TURNS_PER_ROUND (${MAX_EXTRA_TURNS_PER_ROUND}) — ` +
-                            `an extra-action grant is re-firing without bound`
-                    );
+                if (g.chains) {
+                    const taken = chainedExtraActions.get(granter.id) ?? 0;
+                    if (taken >= MAX_CHAINED_EXTRA_ACTIONS_PER_ROUND) continue;
+                    chainedExtraActions.set(granter.id, taken + 1);
+                } else {
+                    extraTurnInsertions += 1;
+                    if (extraTurnInsertions > MAX_EXTRA_TURNS_PER_ROUND) {
+                        throw new Error(
+                            `combat round ${r}: extra-action insertions exceeded ` +
+                                `MAX_EXTRA_TURNS_PER_ROUND (${MAX_EXTRA_TURNS_PER_ROUND}) — ` +
+                                `an extra-action grant is re-firing without bound`
+                        );
+                    }
                 }
                 // Route by pool: end-of-round grants (Harvester) bump the end-of-round
                 // pool, drained after the normal speed pool; default grants stay speed-positioned
-                // in the normal pool. The oncePerRound gate + MAX_EXTRA_TURNS_PER_ROUND backstop
-                // above apply to BOTH pools.
+                // in the normal pool. The oncePerRound gate and both caps above apply to BOTH
+                // pools.
                 if (g.endOfRound) {
                     endOfRoundPending.set(granter.id, endOfRoundPendingOf(granter.id) + 1);
                 } else {

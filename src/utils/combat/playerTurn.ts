@@ -4416,6 +4416,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // condition) so conditional purges only fire when their precondition holds.
     // An 'enemy' or 'all-enemies' purge fans over the cast's footprint victims (aoeVictimIds)
     // instead of just targetId.
+    // `buffsPurgedThisCast` totals what these purges removed across every victim — the
+    // `buffs-purged-this-cast` count the post-purge extra-action re-gate below reads. Steals
+    // (the loop above) never add to it.
+    let buffsPurgedThisCast = 0;
     if (targetId !== undefined) {
         for (const ab of gatedSkill?.abilities ?? []) {
             if (
@@ -4473,6 +4477,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 );
                 for (const vid of recipients) {
                     const removed = statusEngine.purge(vid, purgeCount);
+                    buffsPurgedThisCast += removed;
                     if (removed > 0) {
                         bus.emit({
                             type: 'purge-performed',
@@ -4507,6 +4512,26 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                     }
                 }
             }
+        }
+    }
+
+    // Extra-action grants gated on `buffs-purged-this-cast` (Tithonus) can only be decided now,
+    // after the purge loop: the pre-cast gate (gateFiringAbilities above) evaluates them with no
+    // count and drops them. Re-gate those abilities from the firing and passive slots against the
+    // same per-ability contexts plus the cast's purge total. A grant the pre-cast gate already
+    // kept (e.g. through an `anyOf` sibling) is not added twice.
+    for (const [slotSkill, slotCtxFor] of [
+        [firingSkill, ctxFor],
+        [passiveSkill, passiveCtxFor],
+    ] as const) {
+        for (const ab of slotSkill?.abilities ?? []) {
+            if (!ab.conditions.some((c) => c.subject === 'buffs-purged-this-cast')) continue;
+            if (extraActionGrants.some((g) => g.abilityId === ab.id)) continue;
+            const regated = gateFiringAbilities(
+                { ...slotSkill!, abilities: [ab] },
+                { ...(slotCtxFor.get(ab.id) ?? ctx), buffsPurgedThisCast }
+            );
+            extraActionGrants.push(...extraActionsFromSkill(regated.gatedSkill));
         }
     }
 

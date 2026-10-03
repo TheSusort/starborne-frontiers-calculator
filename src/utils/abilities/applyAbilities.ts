@@ -330,6 +330,8 @@ export interface ExtraActionGrant {
     oncePerRound: boolean;
     /** "end of round" grant (Harvester): drains after the normal speed pool. */
     endOfRound: boolean;
+    /** A chainable grant (see the `extra-action` config's `chains`). */
+    chains?: boolean;
 }
 
 /** `extra-action` abilities on the skill that fire on cast. Conditions are already
@@ -346,6 +348,7 @@ export function extraActionsFromSkill(skill: Skill | undefined): ExtraActionGran
             abilityId: ability.id,
             oncePerRound: ability.config.oncePerRound,
             endOfRound: ability.config.endOfRound ?? false,
+            ...(ability.config.chains ? { chains: true } : {}),
         });
     }
     return out;

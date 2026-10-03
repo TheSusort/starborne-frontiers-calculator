@@ -555,6 +555,13 @@ export type ConditionSubject =
     // — the faithful behaviour (Tygr genuinely doesn't add charge against a single target). The
     // positional engine live-derives the real per-cast footprint size. Always derivable:true.
     | 'enemies-hit-this-cast'
+    // COUNT subject: the total buffs THIS cast's on-cast purges actually removed, summed across
+    // every victim the cast reached (Tithonus's "gains 1 extra action after it purges at least 4
+    // buffs with a single skill"). Buffs moved by a steal never count. Known only once the
+    // cast's purges have resolved: runPlayerTurn re-gates on-cast EXTRA-ACTION abilities carrying
+    // this subject after its purge loop (ConditionContext.buffsPurgedThisCast); absent anywhere
+    // else, so any other ability gated on it never passes. Always derivable:true.
+    | 'buffs-purged-this-cast'
     // Model-completeness SP-D: COUNT subject — per-target DoT ENTRY count (corrosion + inferno +
     // bomb entry-array lengths, +acidicDecay once SP-E adds it). Bare (no buffName) = the sum of
     // ALL DoT entries, regardless of family (Anemone's charged "If the primary enemy has 3 or
@@ -960,7 +967,17 @@ export type AbilityConfig =
     | { type: 'stat-gain'; stat: 'shieldPenetration'; pct: number }
     // A full extra turn: the engine re-inserts the granting actor into the round's
     // remaining turn queue at its speed position (game-verified 2026-06-06).
-    | { type: 'extra-action'; oncePerRound: boolean; endOfRound?: boolean }
+    | {
+          type: 'extra-action';
+          oncePerRound: boolean;
+          endOfRound?: boolean;
+          /** A CHAINABLE grant: the extra turn it grants can satisfy its own condition again, and
+           *  the game lets that repeat without limit (Tithonus's "gains 1 extra action after it
+           *  purges at least 4 buffs with a single skill" — owner ruling 2026-10-03). The engine
+           *  bounds it with MAX_CHAINED_EXTRA_ACTIONS_PER_ROUND instead of the
+           *  MAX_EXTRA_TURNS_PER_ROUND tripwire. */
+          chains?: boolean;
+      }
     | {
           type: 'heal' | 'shield';
           pct: number;

@@ -3017,6 +3017,7 @@ function abilitiesFromText(
                     type: 'extra-action',
                     oncePerRound: extra.oncePerRound,
                     endOfRound: extra.endOfRound,
+                    ...(extra.chains ? { chains: true } : {}),
                 },
                 autoFilled: true,
             },

@@ -2952,12 +2952,24 @@ describe('parseExtraAction', () => {
         });
     });
 
-    it('disqualified: Tithonus purge-count', () => {
+    it('Tithonus: gated on the buffs one skill purges, chainable, no once-per-round', () => {
         expect(
             parseExtraAction(
-                'This Unit <unit-aid>gains 1 extra action</unit-aid> after it <unit-aid>purges</unit-aid> at least 4 <unit-aid>buffs</unit-aid> with a single skill.'
+                'This Unit <unit-skill>gains 1 extra action</unit-skill> after it <unit-skill>purges</unit-skill> at least 4 <unit-aid>buffs</unit-aid> with a single skill.'
             )
-        ).toBeNull();
+        ).toEqual({
+            oncePerRound: false,
+            chains: true,
+            endOfRound: false,
+            conditions: [
+                {
+                    subject: 'buffs-purged-this-cast',
+                    derivable: true,
+                    countComparator: 'gte',
+                    countThreshold: 4,
+                },
+            ],
+        });
     });
 
     it('no false positive on unrelated text', () => {
