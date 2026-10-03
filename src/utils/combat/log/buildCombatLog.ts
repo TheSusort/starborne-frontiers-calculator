@@ -893,7 +893,7 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
         const entry: CombatLogEntry = {
             kind: 'control',
             actorId: e.casterId,
-            targets: [],
+            targets: [{ targetId: e.targetId }],
             reactions: [],
             note: e.effect,
             ...(ctx.consumePendingSkill() ?? {}),

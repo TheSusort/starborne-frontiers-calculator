@@ -1390,13 +1390,14 @@ describe('buildCombatLog', () => {
         expect(entry!.targets[0].amount).toBe(9000);
     });
 
-    it('control-applied: casterId → actorId, targets empty, note has effect', () => {
+    it('control-applied: casterId → actorId, the controlled actor as target, note has effect', () => {
         const events: CombatEvent[] = [
             ev({ type: 'round-started', round: 1 }),
             ev({ type: 'turn-started', actorId: 'A', round: 1 }),
             ev({
                 type: 'control-applied',
                 casterId: 'A',
+                targetId: 'B',
                 effect: 'stasis',
                 round: 1,
             }),
@@ -1409,7 +1410,7 @@ describe('buildCombatLog', () => {
         const entry = entries[0];
         expect(entry.kind).toBe('control');
         expect(entry.actorId).toBe('A');
-        expect(entry.targets).toEqual([]);
+        expect(entry.targets).toEqual([{ targetId: 'B' }]);
         expect(entry.note).toBe('stasis');
     });
 
