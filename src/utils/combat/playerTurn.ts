@@ -387,13 +387,16 @@ export interface PlayerTurnResult {
      *  overview to attribute each debuff to the enemy that applied it. */
     inflictedEnemyDebuffs: ActiveBuff[];
     /**
-     * Whether THIS cast landed Stasis on `victimId` — at cast time, at the post-damage flush, or on
-     * a later sub-attack (each landing decision records its victim). A Stasis the cast lands wins
-     * over that same cast's Stasis break on that victim, so the engine skips the victim's break
-     * mark when this answers true. Read it after the positional drive, when every sub-attack has
-     * rolled.
+     * Whether a Stasis THIS cast wrote on `victimId` is, so far, the one standing there — it won
+     * the duration contest against whatever the victim held. Owner ruling: the standing Stasis
+     * after a hit that also inflicts Stasis is max(held − 1, new), and a Stasis the cast itself
+     * left standing is never shortened by that cast's hit. So the engine skips the victim's break
+     * mark when this answers true, and otherwise lets the mark shorten the held Stasis. A write
+     * that has not happened yet (a clause written after the damage, flushed after the marks
+     * resolve) answers false; the pending mark then settles at the apply seam
+     * (`setBeforeTimedEnemyApplication`): held − 1 first, then the contest.
      */
-    inflictedStasisOn: (victimId: string) => boolean;
+    castStasisStandsOn: (victimId: string) => boolean;
     resistedEnemyDebuffs: ActiveBuff[];
     /**
      * Enemy-debuff landings this cast decided but held back, because their clause follows a damage
@@ -419,7 +422,7 @@ export interface PlayerTurnResult {
      * and `resistedEnemyDebuffs` (the round display list). Keeping the k=0 draw where it is also keeps the `${ownerId}:landing`
      * RNG stream's draw order untouched for a single-hit cast.
      *
-     * `inflictedStasisOn` is NOT one of those consumers: the engine reads it after the positional
+     * `castStasisStandsOn` is NOT one of those consumers: the engine reads it after the positional
      * drive returns, so it constrains nothing here.
      *
      * `phase` selects clause order WITHIN the sub-attack: `'before-damage'` for clauses written
@@ -2607,6 +2610,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     );
     /** A scheduled (manual-list) Stasis this turn applied, which lands on the bound target. */
     const scheduledStasisOnTarget = inflictedEnemyDebuffs.some((ab) => isStasis(ab.buffName));
+    /** Victims on which a Stasis this cast wrote won its duration contest (see
+     *  `castStasisStandsOn`). Written by `writeState`. */
+    const castStasisStanding = new Set<string>();
     // Buff NAMES of the ability-timed enemy debuffs the landing decision REJECTED this cast (the
     // condition gate passed but the application was resisted — by affinity disadvantage, the
     // landing-roll gate, or Block-Debuff immunity, since landsTimedEnemyApplicationLive folds all
@@ -2727,16 +2733,17 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 //    its RNG draw order and the resist bookkeeping below, which gates this turn's
                 //    control-applied emission, are untouched;
                 //  - `inflictedEnemyDebuffs` and the per-victim record below, records of what THIS
-                //    cast inflicted rather than of store state. The Stasis-break re-inflict check
-                //    (`inflictedStasisOn`) reads the per-victim record before the flush runs;
-                //    deferring it would let that check conclude "not re-inflicted" and shave a
-                //    turn off a freshly applied Stasis.
+                //    cast inflicted rather than of store state.
                 // Single source of truth for the store write — both the deferred `applyState`
                 // path and the cast-time inline branch below call this instead of each keeping
                 // their own copy of `statusEngine.applyTimedAbilityStatus(...)` (a second copy is
-                // exactly how the two paths would drift, per the doc comment above).
+                // exactly how the two paths would drift, per the doc comment above). It also
+                // records a Stasis write that won its contest, for `castStasisStandsOn`.
                 const writeState = (): void => {
-                    statusEngine.applyTimedAbilityStatus(r, status, actor.id, vid);
+                    const standing = statusEngine.applyTimedAbilityStatus(r, status, actor.id, vid);
+                    const standingOn = vid ?? targetId;
+                    if (standing && standingOn !== undefined && isStasis(status.payload.buffName))
+                        castStasisStanding.add(standingOn);
                 };
                 // DISPLAY ONLY: the round's reported enemy-debuff window
                 // (RoundData.activeEnemyDebuffs, sourced from `landedEnemyDebuffs`) is
@@ -2800,8 +2807,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 // Per-VICTIM record of what this cast landed, which `inflictedEnemyDebuffs`
                 // above deliberately is not (it collapses the recipient list to one row). An
                 // inflicted-scope extension needs to know that victim V got status S from THIS
-                // cast, so it can grow S on V and leave V's other debuffs alone, and the
-                // Stasis-break re-inflict check (`inflictedStasisOn`) asks the same of Stasis.
+                // cast, so it can grow S on V and leave V's other debuffs alone.
                 // Recorded for the deferred branch too: the pair has not written yet, and the
                 // extension block below is what waits for it.
                 // The non-positional `undefined` recipient sink has no id to key on, so it is
@@ -5966,10 +5972,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         activeSelfBuffs: activeSelfBuffsForRound,
         landedEnemyDebuffs,
         inflictedEnemyDebuffs,
-        // Live over the per-victim record, so landings a later sub-attack decides are seen.
-        inflictedStasisOn: (victimId) =>
-            (scheduledStasisOnTarget && victimId === targetId) ||
-            [...(inflictedDebuffNamesByVictim.get(victimId) ?? [])].some(isStasis),
+        // Live over the set, so a write a later sub-attack makes before the marks resolve is seen.
+        castStasisStandsOn: (victimId) =>
+            (scheduledStasisOnTarget && victimId === targetId) || castStasisStanding.has(victimId),
         resistedEnemyDebuffs,
         deferredEnemyApplications,
         // Only meaningful on a positional cast that has gated clauses to replay. Left

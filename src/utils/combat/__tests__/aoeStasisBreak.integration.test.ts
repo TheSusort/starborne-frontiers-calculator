@@ -1,8 +1,10 @@
 /**
  * A Stasis this cast lands on an enemy is not shortened by this same cast's hit, on EVERY enemy
  * the cast strikes — the aimed one and each covered one alike. A Stasis an enemy already held is
- * shortened by the hit unless this cast re-inflicted Stasis on THAT enemy (a resist elsewhere in
- * the footprint, or a landing elsewhere, decides nothing for it).
+ * shortened by the hit; this cast's own Stasis on THAT enemy then contests the shortened one (the
+ * standing Stasis is max(held − 1, new) — the duration arithmetic lives in
+ * `aoeStasisDuration.integration.test.ts`). A resist or a landing elsewhere in the footprint
+ * decides nothing for it.
  *
  * The caster fires Pattern-Circle-Range-1 anchored on M4, striking M4 (A), M3 (B) and T4 (C). One
  * round is run. A hit on a stasised enemy takes one turn off its Stasis; with Stasis(2) applied in

@@ -2,12 +2,12 @@
  * THE STASIS-BREAK RE-INFLICT CHECK SEES CAST-PATH LANDINGS ONLY — the corpus census of what it
  * cannot see.
  *
- * A hit on a stasised enemy queues a §4.5 break, which the engine skips for any victim the SAME
- * cast landed Stasis on (`resolveStasisBreaks` in engine.ts, asked per victim — the aimed enemy and
- * every covered one alike). The "did this cast land Stasis on V" answer is `inflictedStasisOn`,
- * playerTurn's per-victim record of its own FIRING-slot clauses. A Stasis landed by a PASSIVE
- * clause routes through `triggers.ts` and never enters that record, so if such a clause lands on a
- * victim of its owner's own cast, that victim's break is NOT skipped (#534, awaiting a ruling).
+ * A hit on a stasised enemy queues a §4.5 break, which the engine skips for any victim on which a
+ * Stasis the SAME cast wrote is the one standing (`resolveStasisBreaks` in engine.ts, asked per
+ * victim — the aimed enemy and every covered one alike). That answer is `castStasisStandsOn`,
+ * playerTurn's record of its own FIRING-slot Stasis writes. A Stasis landed by a PASSIVE clause
+ * routes through `triggers.ts` and never enters that record, so if such a clause lands on a victim
+ * of its owner's own cast, that victim's break is NOT skipped (#534, awaiting a ruling).
  *
  * The census below pins every passive-slot Stasis clause aimed at the enemy side, each read:
  *   - Flamel ("on-attacked") and Fuying ("on-ally-attacked") stasis the enemy that attacked —

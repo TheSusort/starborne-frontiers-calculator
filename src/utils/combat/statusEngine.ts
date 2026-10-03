@@ -404,13 +404,15 @@ export interface StatusEngine {
      *  `recipientId` selects which player-side carrier receives a self-side status (defaults to
      *  'attacker'); ignored for enemy-side statuses.
      *  `enemyTargetId` selects which enemy target's debuff store receives an enemy-side status
-     *  (defaults to the singular default enemy target); ignored for self-side statuses. */
+     *  (defaults to the singular default enemy target); ignored for self-side statuses.
+     *  Returns true when this application is now the standing entry (it won the family contest,
+     *  or added a persistent stack); false when a stronger or longer incumbent absorbed it. */
     applyTimedAbilityStatus(
         round: number,
         status: Extract<RegisteredAbilityStatus, { kind: 'timed' }>,
         recipientId?: string,
         enemyTargetId?: string
-    ): void;
+    ): boolean;
     /** Install the engine's Stasis-OR-Disable reader. A ship's PASSIVE SKILL is inactive while its
      *  owner is turn-blocked (owner ruling 2026-09-15), so a passive-slot AURA or ACCUMULATING
      *  status contributes nothing for as long as its caster is blocked, and contributes again the
@@ -1973,7 +1975,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         status: Extract<RegisteredAbilityStatus, { kind: 'timed' }>,
         recipientId?: string,
         enemyTargetId?: string
-    ): void => {
+    ): boolean => {
         if (round < 1) {
             // lastRound initializes to 0, so the equality check alone would accept
             // round 0 before the first beginRound call. Rounds are 1-based.
@@ -2023,7 +2025,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
                 status.payload,
                 status.side === 'self' ? selfEffectiveId : enemyEffectiveId
             );
-            return;
+            return true;
         }
         // status.duration is guaranteed numeric by the timed variant — no runtime guard needed.
         // Self-side statuses go to the player-side carrier; enemy-side statuses go to the
@@ -2044,7 +2046,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         // was already consumed by the caller's gate (the family rule runs AFTER the landing
         // hook), so a blocked application is NOT recorded as resisted — the stronger/longer
         // buff simply persists and this entry never enters the timed-ability folding.
-        if (!familyApplicationWins(existing, tier, duration)) return;
+        if (!familyApplicationWins(existing, tier, duration)) return false;
         // LIVE stack count for this entry (see BuffState.stacks). Re-application semantics
         // (owner ruling 2026-08-10):
         //  - a stackable status landing on a victim that still holds it ADDS the incoming stacks,
@@ -2088,6 +2090,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
             // every existing timed write leaves the field undefined and behaves as before.
             ...(status.hits !== undefined ? { hitsRemaining: status.hits } : {}),
         });
+        return true;
     };
 
     const activeAbilityStatuses = (
