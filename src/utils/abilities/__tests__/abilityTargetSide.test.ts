@@ -27,6 +27,7 @@ describe('ABILITY_TARGET_SIDE', () => {
     ];
     const ENEMY: AbilityTarget[] = [
         'enemy',
+        'primary-enemy',
         'all-enemies',
         'adjacent-enemies',
         'target-and-adjacent-enemies',
@@ -71,6 +72,7 @@ describe('#403 ABILITY_TARGET_SELECTOR — the footprint axis', () => {
 
     it('every non-selector target resolves to null (the tail must stay reachable)', () => {
         expect(enemySelectorKind('enemy')).toBeNull();
+        expect(enemySelectorKind('primary-enemy')).toBeNull();
         expect(enemySelectorKind('all-enemies')).toBeNull();
         expect(enemySelectorKind('adjacent-enemies')).toBeNull();
         expect(enemySelectorKind('target-and-adjacent-enemies')).toBeNull();

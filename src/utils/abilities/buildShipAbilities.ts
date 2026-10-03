@@ -1041,6 +1041,88 @@ function markPatternScoped(positioned: PositionedAbility[], text: string): Posit
 }
 
 /**
+ * Narrows an on-cast enemy clause from `'enemy'` (every enemy the cast strikes) to
+ * `'primary-enemy'` (the cast's bound target only) when the clause's own recipient is ONE named
+ * enemy: "the primary target is inflicted with Disable" (APEX), "steals 1 buff from the primary
+ * target" (Pallas, Tithonus), "… on that enemy", "… from the targeted enemy". Owner ruling: those
+ * three phrases are the only narrowing wording.
+ *
+ * The recipient is read per CLAUSE at the ability's own `pos`, never per sentence: Tithonus's one
+ * sentence steals "from the primary target" and then purges "from the enemy", and only the steal
+ * narrows. Not narrowing:
+ *  - "that enemy" whose sentence first introduces an indefinite enemy — Crocus's "If an enemy has 3
+ *    or more debuffs, … inflicts Stasis … on that enemy" gates each struck enemy on its own count;
+ *  - "the targeted enemy and all adjacent enemies" — more than one enemy;
+ *  - "the target" — read as each struck enemy (Gallant, Nayra), not as the primary.
+ *
+ * Only `trigger: 'on-cast'`: a reactive clause's `'enemy'` already means the triggering enemy, and
+ * its "that enemy" names exactly that one. `primaryEnemyNarrowingTripwire.test.ts` holds the corpus
+ * to this with an independent reading of the text.
+ */
+const PRIMARY_ENEMY_SCOPABLE: ReadonlySet<Ability['type']> = new Set([
+    'debuff',
+    'control',
+    'dot',
+    'purge',
+    'shield-strip',
+    'buff-steal',
+] as const);
+const ONE_ENEMY_PHRASE = String.raw`(?:the\s+primary\s+target|that\s+enemy|the\s+targeted\s+enemy)`;
+const ONE_ENEMY_ANYWHERE_RE = new RegExp(ONE_ENEMY_PHRASE, 'i');
+const ONE_ENEMY_PASSIVE_SUBJECT_RE = new RegExp(
+    String.raw`\b${ONE_ENEMY_PHRASE}\s+(?:is|are)\s+(?:inflicted|applied)\s+with\s*$`,
+    'i'
+);
+const ONE_ENEMY_OBJECT_RE = new RegExp(
+    String.raw`\b(?:from|on|onto|to|of)\s+(${ONE_ENEMY_PHRASE})\b`,
+    'i'
+);
+const FURTHER_ENEMIES_RE = /^\s+(?:and|or)\s+(?:all\s+)?adjacent\b/i;
+const INDEFINITE_ENEMY_RE = /\b(?:an|any|each|every)\s+enemy\b/i;
+
+function namesPrimaryEnemyAt(masked: string, pos: number): boolean {
+    const boundary = /[.;](?=\s|$)/g;
+    let start = 0;
+    let end = masked.length;
+    let m: RegExpExecArray | null;
+    while ((m = boundary.exec(masked)) !== null) {
+        if (m.index < pos) start = m.index + 1;
+        else {
+            end = m.index;
+            break;
+        }
+    }
+    const before = masked.slice(start, pos);
+    if (ONE_ENEMY_PASSIVE_SUBJECT_RE.test(before)) return true;
+    const after = masked.slice(pos, end);
+    // The effect's own object comes before the clause hands over to another verb or clause.
+    const clauseEnd = after.search(/,|\band\b|\bthen\b/i);
+    const own = clauseEnd >= 0 ? after.slice(0, clauseEnd) : after;
+    const obj = ONE_ENEMY_OBJECT_RE.exec(own);
+    if (!obj) return false;
+    if (FURTHER_ENEMIES_RE.test(after.slice(obj.index + obj[0].length))) return false;
+    if (/^that\s+enemy$/i.test(obj[1]) && INDEFINITE_ENEMY_RE.test(before)) return false;
+    return true;
+}
+
+function markPrimaryEnemyScoped(positioned: PositionedAbility[], text: string): void {
+    if (!ONE_ENEMY_ANYWHERE_RE.test(text)) return;
+    // A `<br />` run separates sentences in the row text; keep it a boundary, length-preserving.
+    const masked = maskAbbrev(
+        maskTagsPreservingLength(
+            text.replace(/<br\s*\/?>/gi, (br) => '.' + ' '.repeat(br.length - 1))
+        )
+    );
+    for (const p of positioned) {
+        const a = p.ability;
+        if (a.trigger !== 'on-cast' || a.target !== 'enemy') continue;
+        if (!PRIMARY_ENEMY_SCOPABLE.has(a.type)) continue;
+        if (p.pos < 0 || p.pos >= masked.length) continue;
+        if (namesPrimaryEnemyAt(masked, p.pos)) a.target = 'primary-enemy';
+    }
+}
+
+/**
  * Maps an existing-detector ConditionalCondition into a model Condition. The
  * subject strings are identical between the two unions, so this is mostly a
  * passthrough carrying derivable / manualCount / requiredEnemyType. Neither
@@ -4035,7 +4117,9 @@ export function buildShipAbilities(rawShip: Ship): ShipSkills {
         // Runs over EVERY producer's output (abilitiesFromText, the DoT/buff auto-fill merges,
         // the passive damage-reaction pass) while the `pos` anchors are still available — each
         // slot's anchors index that slot's own row text.
-        markPatternScoped(positioned, getSkillRowForSlot(ship, slot)?.text ?? '');
+        const slotText = getSkillRowForSlot(ship, slot)?.text ?? '';
+        markPatternScoped(positioned, slotText);
+        markPrimaryEnemyScoped(positioned, slotText);
         positioned.sort((a, b) => a.pos - b.pos);
         slots.push({ slot, abilities: positioned.map((p) => p.ability) });
     }

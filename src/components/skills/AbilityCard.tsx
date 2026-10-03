@@ -90,6 +90,7 @@ const TARGET_OPTIONS: { value: AbilityTarget; label: string }[] = [
     { value: 'lowest-hp-ally', label: 'Lowest HP ally' },
     { value: 'adjacent-allies', label: 'Adjacent allies' },
     { value: 'enemy', label: 'Enemy' },
+    { value: 'primary-enemy', label: 'Primary target' },
     { value: 'all-enemies', label: 'All enemies' },
     { value: 'adjacent-enemies', label: 'Adjacent enemies' },
     { value: 'target-and-adjacent-enemies', label: 'Target + adjacent enemies' },

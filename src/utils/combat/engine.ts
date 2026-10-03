@@ -8524,6 +8524,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // Ally-facing targets cannot occur on a `damage` ability; they resolve to the
                 // anchor too rather than being silently dropped.
                 case 'enemy':
+                case 'primary-enemy':
                 case 'enemy-most-buffs':
                 case 'enemy-highest-attack':
                 case 'enemy-highest-speed':

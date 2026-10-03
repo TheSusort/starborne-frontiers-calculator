@@ -32,7 +32,8 @@ describe('buildShipAbilities — buff steal (PR10)', () => {
         expect(steal).toHaveLength(1);
         expect(steal[0]).toMatchObject({
             type: 'buff-steal',
-            target: 'enemy',
+            // "from the primary target" narrows the steal to the cast's bound target.
+            target: 'primary-enemy',
             trigger: 'on-cast',
             config: { type: 'buff-steal', count: 1 },
         });
@@ -55,7 +56,8 @@ describe('buildShipAbilities — buff steal (PR10)', () => {
         expect(steal).toHaveLength(1);
         expect(steal[0]).toMatchObject({
             type: 'buff-steal',
-            target: 'enemy',
+            // "from the primary target" narrows the steal to the cast's bound target.
+            target: 'primary-enemy',
             trigger: 'on-cast',
             config: { type: 'buff-steal', count: 1 },
         });
@@ -83,7 +85,8 @@ describe('buildShipAbilities — buff steal (PR10)', () => {
         expect(steal).toHaveLength(1);
         expect(steal[0]).toMatchObject({
             type: 'buff-steal',
-            target: 'enemy',
+            // "from the primary target" narrows the steal to the cast's bound target.
+            target: 'primary-enemy',
             trigger: 'on-cast',
             config: { type: 'buff-steal', count: 1, grantAdjacentAllies: true },
         });

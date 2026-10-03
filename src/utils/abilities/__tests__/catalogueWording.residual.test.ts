@@ -55,7 +55,7 @@ const CATALOGUE_ROWS: ResidualRow[] = [
         ship: 'APEX',
         slot: 'charged',
         text: 'This Unit deals <unit-damage>220% damage</unit-damage> and inflicts <unit-skill>Attack Down II</unit-skill> and <unit-skill>Out. Damage Down II</unit-skill> for 2 turns. If this Unit has an active shield, the primary target is inflicted with <unit-skill>Disable</unit-skill> for 2 turns.',
-        expects: 'debuff|enemy|on-cast|Disable',
+        expects: 'debuff|primary-enemy|on-cast|Disable',
         carries: { conditions: [expect.objectContaining({ subject: 'self-shield' })] },
     },
     {

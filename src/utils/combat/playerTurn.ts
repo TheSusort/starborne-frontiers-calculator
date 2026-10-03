@@ -3501,7 +3501,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     ]);
     for (const ctrl of controlAbilitiesFromSkill(gatedSkill)) {
         if (ctrl.config.type !== 'control') continue;
-        if (ctrl.target === 'enemy') {
+        if (ctrl.target === 'enemy' || ctrl.target === 'primary-enemy') {
             // NO VICTIM ⇒ nothing was controlled, so there is no success to announce. Fenced at
             // the enclosing CLAUSE (a `continue`) rather than at the `bus.emit`, which is the same
             // rule every other no-victim fence in this file follows.
@@ -3515,7 +3515,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             // unconditional on a no-victim turn, and the event is not inert — it wakes
             // `on-stasis-applied` reactions.
             //
-            // `ctrl.target === 'enemy'` scoping is load-bearing: a SELF-targeted control (Taunt) has
+            // The enemy-target scoping is load-bearing: a SELF-targeted control (Taunt) has
             // nothing to do with the opposing side and must keep emitting on a no-victim turn.
             if (!hasVictim) continue;
             // Standalone control with no named status: only Block-Debuff immunity gates it.

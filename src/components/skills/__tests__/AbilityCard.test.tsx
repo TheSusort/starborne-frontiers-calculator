@@ -1170,6 +1170,7 @@ describe('AbilityCard target options (#407)', () => {
         render(<AbilityCard ability={damageAbility} onChange={vi.fn()} onRemove={vi.fn()} />);
         expect(openTargetOptions()).toEqual([
             'Enemy',
+            'Primary target',
             'All enemies',
             'Adjacent enemies',
             'Target + adjacent enemies',
