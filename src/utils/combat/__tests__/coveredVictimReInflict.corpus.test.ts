@@ -17,9 +17,9 @@
  *     same cast: the #534 gap.
  * A new entry is a new route around the re-inflict check and needs reading before it is added.
  *
- * CORPUS ACCESS: the reference file is gitignored, so this skips on a clean checkout.
+ * CORPUS ACCESS: both reference files are gitignored; this census fails if either is missing.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import { buildShipAbilities } from '../../abilities/buildShipAbilities';
 import { buildTraceShip } from '../../../../scripts/lib/traceShipFactory';
 import { csvAvailable, loadShipSkillRecords } from '../../../../scripts/lib/shipSkillCsv';
@@ -47,21 +47,26 @@ const passiveEnemyClauses = (matches: (a: Ability) => boolean): string[] => {
     return [...found].sort();
 };
 
-describe.skipIf(!csvAvailable() || !shipDataAvailable())(
-    'passive-slot Stasis clauses the re-inflict check cannot see (census)',
-    () => {
-        it('the census of enemy-aimed passive Stasis clauses is unchanged', () => {
-            expect(passiveEnemyClauses(isControlStatus('stasis'))).toEqual([
-                'Flamel/on-attacked/enemy',
-                'Fuying/on-ally-attacked/enemy',
-                'Meiying/on-enemy-destroyed/adjacent-enemies',
-            ]);
-        });
+describe('passive-slot Stasis clauses the re-inflict check cannot see (census)', () => {
+    beforeAll(() => {
+        if (!csvAvailable() || !shipDataAvailable()) {
+            throw new Error(
+                'This census requires docs/ship-skills.csv and docs/ship-data.json ' +
+                    '(gitignored reference data) — copy them in before running'
+            );
+        }
+    });
+    it('the census of enemy-aimed passive Stasis clauses is unchanged', () => {
+        expect(passiveEnemyClauses(isControlStatus('stasis'))).toEqual([
+            'Flamel/on-attacked/enemy',
+            'Fuying/on-ally-attacked/enemy',
+            'Meiying/on-enemy-destroyed/adjacent-enemies',
+        ]);
+    });
 
-        it('the census can see a passive control clause of another kind (validity)', () => {
-            // Proves the scan reads passive slots at all: an empty Stasis census would otherwise
-            // be indistinguishable from a scan that never looked.
-            expect(passiveEnemyClauses(isControlStatus('provoke')).length).toBeGreaterThan(0);
-        });
-    }
-);
+    it('the census can see a passive control clause of another kind (validity)', () => {
+        // Proves the scan reads passive slots at all: an empty Stasis census would otherwise
+        // be indistinguishable from a scan that never looked.
+        expect(passiveEnemyClauses(isControlStatus('provoke')).length).toBeGreaterThan(0);
+    });
+});
