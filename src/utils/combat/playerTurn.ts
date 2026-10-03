@@ -23,6 +23,7 @@ import {
     detonationsFromSkill,
     accumulatorsFromSkill,
     gateFiringAbilities,
+    gateConditions,
     extraActionsFromSkill,
     partitionDotDamageAbilities,
     type ExtraActionGrant,
@@ -1304,6 +1305,18 @@ function extendInflictedStatusDoTs(args: {
         }
     }
 }
+
+/** A condition list gated on this cast's crit ("if this critically hits"). */
+const hasSelfCritGate = (conditions: readonly { subject: string }[] | undefined): boolean =>
+    (conditions ?? []).some((c) => c.subject === 'self-crit');
+
+/** A cast-wide crit clause: a crit-gated on-cast buff grant or status extension (Lev's charged
+ *  "If a critical hit occurs, all hit enemies have their debuffs extended … and all allies are
+ *  granted Crit Power Up II"). It reads `anyVictimCrit` in runPlayerTurn. */
+const isCastWideCritClause = (ab: Ability): boolean =>
+    ab.trigger === 'on-cast' &&
+    (ab.config.type === 'buff' || ab.config.type === 'extend-status') &&
+    hasSelfCritGate(ab.conditions);
 
 // Charge gain from a GATED skill's charge abilities. Gating already happened in
 // gateFiringAbilities (full AND/OR + thresholds) — for the firing skill via
@@ -4511,6 +4524,11 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // Cast-time only, like the primary's Step-3 apply: a multi-hit cast lands its DoTs once,
     // against the cast's footprint, not per sub-attack.
     const coveredDots = new Map<string, DoTApplicationConfig>();
+    /** The firing skill carries a cast-wide crit clause — a crit-gated (`self-crit`) on-cast
+     *  buff grant or status extension, whose "if a critical hit occurs" asks about the whole
+     *  cast. Crit-gated DoT effects are per struck enemy instead (`victimCritOf`); every other
+     *  crit-gated payload keeps reading `ctx.roundCrit`. */
+    const hasCastWideCritClause = (firingSkill?.abilities ?? []).some(isCastWideCritClause);
     if (targetId !== undefined) {
         // `dotsFromSkill` maps the skill's `dot` abilities in order, one entry each, so the i-th
         // entry is the i-th of these (tripwire: `dotsFromSkillPairing.corpus.test.ts`).
@@ -4552,13 +4570,21 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // would have. Only a cast the engine will strike positionally (a damage ability) rolls here.
     // An enemy outside the footprint (an adjacency splash neighbour) or a cast with no damage
     // ability has no per-enemy hit, and reads the cast's crit (`ctx.roundCrit`, the primary's).
-    if (coveredDots.size > 0 && positionalLanding && hasDamageAbility) {
+    // A cast carrying a cast-wide crit clause (`hasCastWideCritClause`) rolls here too, so that
+    // clause can ask whether ANY struck enemy was crit (`anyVictimCrit`).
+    if ((coveredDots.size > 0 || hasCastWideCritClause) && positionalLanding && hasDamageAbility) {
         for (const id of aoeVictimIds ?? []) {
             if (id === targetId) continue;
             const v = opposingVictimById?.get(id);
             if (v) coveredFirstHitCrit.set(id, rollVictimCrit(v.affinity ?? 'antimatter'));
         }
     }
+    /** Whether this cast crit ANY enemy it struck: the aimed enemy on any of its hits
+     *  (`roundCrit`) or a covered one on the first sub-attack (the covered crits known while the
+     *  turn runs). What a cast-wide crit clause reads (owner ruling 2026-10-03, Lev: "If a
+     *  critical hit occurs, all hit enemies have their debuffs extended" fires on a crit against
+     *  B alone). Equals `roundCrit` on a cast with no covered rolls (DPS, single target). */
+    const anyVictimCrit = roundCrit || [...coveredFirstHitCrit.values()].some(Boolean);
     const victimCritOf = (id: string): boolean => coveredFirstHitCrit.get(id) ?? roundCrit;
     for (const [rid, victimDots] of coveredDots) {
         const victim = opposingVictimById?.get(rid);
@@ -4967,24 +4993,33 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // (below) and the extendDoTs/extendInflictedDoTs combine (above), since a
     // gatedSkill-only scan (like the purge/steal loops, whose abilities are never passive-slot
     // in the corpus) would silently skip a passive-slot extend ability.
-    // conditionsMet(ab.conditions, ctx) evaluates Lev's self-crit gate against THIS cast's live
-    // `ctx.roundCrit` (set at buildRoundContext above from `roundCrit = critHits > 0`) — the
-    // SAME ctx the purge/steal blocks gate against, so a non-crit cast correctly suppresses
-    // Lev's extension (see evaluateConditions.ts's 'self-crit' case, binary off ctx.roundCrit).
+    // A firing-slot extension's crit gate is cast-wide: Lev's "If a critical hit occurs, all hit
+    // enemies have their debuffs extended" reads `anyVictimCrit` (a crit on ANY struck enemy),
+    // via `castWideCritCtx`. Because `gatedSkill` was gated on the aimed enemy's crit
+    // (`ctx.roundCrit`), firing-slot extensions are taken from `firingSkill` and re-gated here
+    // against the same per-ability ctx with only `roundCrit` swapped. A passive-slot extension
+    // (Asphyxiator: "inflicts a debuff with a critical hit") keeps `ctx`.
     // The DEBUFF branch targets enemies, so it requires a hit target (targetId / aoeVictimIds)
     // and is skipped when there is none — a NO-VICTIM turn, which leaves targetId unset. The
     // BUFF branch (Fuying 'all-allies') needs NO enemy target — it must run regardless of
     // targetId, otherwise the ally/self buff-extend is silently dropped in DPS mode and on any
     // enemy-less cast. extendAll{Debuffs,Buffs}Duration return 0 against an empty/missing store,
     // so both branches no-op harmlessly when the relevant roster is empty.
+    const castWideCritCtx = (base: ConditionContext): ConditionContext =>
+        base.roundCrit === anyVictimCrit ? base : { ...base, roundCrit: anyVictimCrit };
+    const firingExtensions = (firingSkill?.abilities ?? []).filter(
+        (ab) =>
+            ab.config.type === 'extend-status' &&
+            conditionsMet(gateConditions(ab), castWideCritCtx(ctxFor.get(ab.id) ?? ctx))
+    );
     for (const { ability: ab, fromPassive } of [
-        ...(gatedSkill?.abilities ?? []).map((ability) => ({ ability, fromPassive: false })),
+        ...firingExtensions.map((ability) => ({ ability, fromPassive: false })),
         ...(gatedPassive?.abilities ?? []).map((ability) => ({ ability, fromPassive: true })),
     ]) {
         if (
             ab.config.type !== 'extend-status' ||
             ab.trigger !== 'on-cast' ||
-            !conditionsMet(ab.conditions, ctx)
+            !conditionsMet(ab.conditions, fromPassive ? ctx : castWideCritCtx(ctx))
         ) {
             continue;
         }
