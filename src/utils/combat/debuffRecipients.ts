@@ -25,10 +25,18 @@ import { enemySelectorKind, type EnemySelectorKind } from '../abilities/abilityT
  *                          matched the status, which behaves as single-target (the ternary's tail).
  * @param anchorId          the resolved victim id this clause hangs off — the cast's `targetId` at
  *                          cast time, or the sub-attack's own re-resolved anchor.
- * @param aoeVictimIds      the footprint to fan `all-enemies` over. Cast time passes the cast's
- *                          splash footprint; the per-sub-attack path passes the victims THAT
- *                          sub-attack actually struck, which is what makes overkill retargeting
- *                          correct for free.
+ * @param aoeVictimIds      the footprint to fan `all-enemies` (and a firing clause's `enemy`) over.
+ *                          Cast time passes the cast's splash footprint; the per-sub-attack path
+ *                          passes the victims THAT sub-attack actually struck, which is what makes
+ *                          overkill retargeting correct for free.
+ * @param firingClause      true when the clause belongs to the slot the cast FIRED (active or
+ *                          charged). Its `enemy` then means every enemy the cast strikes (owner
+ *                          ruling: an AoE-pattern skill's effects reach every enemy in the pattern,
+ *                          and no wording on a firing slot narrows that — "the primary target"
+ *                          included). A positional cast fans it over `aoeVictimIds`; with no
+ *                          footprint (non-positional / DPS, or an empty one) it stays on the
+ *                          anchor. A passive-slot clause keeps `enemy` = the anchor: patterns
+ *                          govern the cast, not the passive riding on it.
  * @param positionalLanding `deferAbilityPerformedToEngine` — true when the engine resolves this
  *                          cast against a real positioned roster.
  * @param selectorEnemyIdFor #403: resolves one of the three enemy SELECTOR kinds
@@ -45,6 +53,7 @@ export function resolveDebuffRecipientIds(args: {
     aoeVictimIds: string[] | undefined;
     adjacentEnemyIdsFor: ((anchorId: string) => string[]) | undefined;
     positionalLanding: boolean;
+    firingClause: boolean;
     selectorEnemyIdFor?: (kind: EnemySelectorKind) => string | undefined;
 }): (string | undefined)[] {
     const {
@@ -53,6 +62,7 @@ export function resolveDebuffRecipientIds(args: {
         aoeVictimIds,
         adjacentEnemyIdsFor,
         positionalLanding,
+        firingClause,
         selectorEnemyIdFor,
     } = args;
     // #403: the three enemy SELECTOR targets ('enemy-most-buffs', 'enemy-highest-attack',
@@ -89,6 +99,15 @@ export function resolveDebuffRecipientIds(args: {
         return positionalLanding ? [] : [undefined];
     }
     const isAllEnemies = abTarget === 'all-enemies';
+    if (
+        firingClause &&
+        abTarget === 'enemy' &&
+        positionalLanding &&
+        aoeVictimIds !== undefined &&
+        aoeVictimIds.length > 0
+    ) {
+        return aoeVictimIds;
+    }
     const adjacentEnemyRecipients: string[] =
         anchorId !== undefined && adjacentEnemyIdsFor ? adjacentEnemyIdsFor(anchorId) : [];
     return abTarget === 'adjacent-enemies'

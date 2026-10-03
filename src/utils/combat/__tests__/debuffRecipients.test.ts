@@ -23,6 +23,7 @@ describe('resolveDebuffRecipientIds', () => {
                 aoeVictimIds: undefined,
                 adjacentEnemyIdsFor: adjacentOf,
                 positionalLanding: true,
+                firingClause: false,
             })
         ).toEqual(['v1-left', 'v1-right']);
     });
@@ -35,6 +36,7 @@ describe('resolveDebuffRecipientIds', () => {
                 aoeVictimIds: undefined,
                 adjacentEnemyIdsFor: adjacentOf,
                 positionalLanding: true,
+                firingClause: false,
             })
         ).toEqual([]);
     });
@@ -47,6 +49,7 @@ describe('resolveDebuffRecipientIds', () => {
                 aoeVictimIds: undefined,
                 adjacentEnemyIdsFor: adjacentOf,
                 positionalLanding: true,
+                firingClause: false,
             })
         ).toEqual(['v1', 'v1-left', 'v1-right']);
     });
@@ -58,10 +61,12 @@ describe('resolveDebuffRecipientIds', () => {
             aoeVictimIds: undefined,
             adjacentEnemyIdsFor: adjacentOf,
         };
-        expect(resolveDebuffRecipientIds({ ...base, positionalLanding: true })).toEqual([]);
-        expect(resolveDebuffRecipientIds({ ...base, positionalLanding: false })).toEqual([
-            undefined,
-        ]);
+        expect(
+            resolveDebuffRecipientIds({ ...base, positionalLanding: true, firingClause: false })
+        ).toEqual([]);
+        expect(
+            resolveDebuffRecipientIds({ ...base, positionalLanding: false, firingClause: false })
+        ).toEqual([undefined]);
     });
 
     it('all-enemies positional uses the supplied footprint, even when empty', () => {
@@ -72,6 +77,7 @@ describe('resolveDebuffRecipientIds', () => {
                 aoeVictimIds: ['v1', 'v2'],
                 adjacentEnemyIdsFor: undefined,
                 positionalLanding: true,
+                firingClause: false,
             })
         ).toEqual(['v1', 'v2']);
         expect(
@@ -81,6 +87,7 @@ describe('resolveDebuffRecipientIds', () => {
                 aoeVictimIds: undefined,
                 adjacentEnemyIdsFor: undefined,
                 positionalLanding: true,
+                firingClause: false,
             })
         ).toEqual([]);
     });
@@ -93,6 +100,7 @@ describe('resolveDebuffRecipientIds', () => {
                 aoeVictimIds: ['v2', 'v3'],
                 adjacentEnemyIdsFor: undefined,
                 positionalLanding: false,
+                firingClause: false,
             })
         ).toEqual(['v2', 'v3']);
         expect(
@@ -102,6 +110,7 @@ describe('resolveDebuffRecipientIds', () => {
                 aoeVictimIds: [],
                 adjacentEnemyIdsFor: undefined,
                 positionalLanding: false,
+                firingClause: false,
             })
         ).toEqual(['v1']);
     });
@@ -114,6 +123,7 @@ describe('resolveDebuffRecipientIds', () => {
                 aoeVictimIds: undefined,
                 adjacentEnemyIdsFor: undefined,
                 positionalLanding: true,
+                firingClause: false,
             })
         ).toEqual(['v1']);
         expect(
@@ -123,6 +133,7 @@ describe('resolveDebuffRecipientIds', () => {
                 aoeVictimIds: undefined,
                 adjacentEnemyIdsFor: undefined,
                 positionalLanding: true,
+                firingClause: false,
             })
         ).toEqual([]);
         expect(
@@ -132,8 +143,48 @@ describe('resolveDebuffRecipientIds', () => {
                 aoeVictimIds: undefined,
                 adjacentEnemyIdsFor: undefined,
                 positionalLanding: false,
+                firingClause: false,
             })
         ).toEqual([undefined]);
+    });
+
+    it("a firing clause's 'enemy' reaches every struck enemy on a positional cast", () => {
+        const base = {
+            abTarget: 'enemy' as const,
+            anchorId: 'v1',
+            adjacentEnemyIdsFor: undefined,
+            firingClause: true,
+        };
+        expect(
+            resolveDebuffRecipientIds({
+                ...base,
+                aoeVictimIds: ['v1', 'v2', 'v3'],
+                positionalLanding: true,
+            })
+        ).toEqual(['v1', 'v2', 'v3']);
+        // No footprint, an empty one, or a non-positional cast: the anchor.
+        expect(
+            resolveDebuffRecipientIds({ ...base, aoeVictimIds: undefined, positionalLanding: true })
+        ).toEqual(['v1']);
+        expect(
+            resolveDebuffRecipientIds({ ...base, aoeVictimIds: [], positionalLanding: true })
+        ).toEqual(['v1']);
+        expect(
+            resolveDebuffRecipientIds({ ...base, aoeVictimIds: ['v2'], positionalLanding: false })
+        ).toEqual(['v1']);
+    });
+
+    it("a passive-slot clause's 'enemy' stays on the anchor even with a footprint", () => {
+        expect(
+            resolveDebuffRecipientIds({
+                abTarget: 'enemy',
+                anchorId: 'v1',
+                aoeVictimIds: ['v1', 'v2', 'v3'],
+                adjacentEnemyIdsFor: undefined,
+                positionalLanding: true,
+                firingClause: false,
+            })
+        ).toEqual(['v1']);
     });
 
     it('an undefined abTarget (no matching ability found) behaves as single-target', () => {
@@ -144,6 +195,7 @@ describe('resolveDebuffRecipientIds', () => {
                 aoeVictimIds: ['v1', 'v2'],
                 adjacentEnemyIdsFor: adjacentOf,
                 positionalLanding: true,
+                firingClause: false,
             })
         ).toEqual(['v1']);
     });
@@ -156,6 +208,7 @@ describe('resolveDebuffRecipientIds', () => {
                 aoeVictimIds: undefined,
                 adjacentEnemyIdsFor: undefined,
                 positionalLanding: true,
+                firingClause: false,
             })
         ).toEqual(['v1']);
     });
@@ -179,6 +232,7 @@ describe('resolveDebuffRecipientIds', () => {
                 aoeVictimIds: ['anchor', 'big'],
                 adjacentEnemyIdsFor: adjacentOf,
                 positionalLanding: true,
+                firingClause: false,
                 selectorEnemyIdFor: selectorFor({ 'highest-attack': 'big' }),
             })
         ).toEqual(['big']);
@@ -192,6 +246,7 @@ describe('resolveDebuffRecipientIds', () => {
                 aoeVictimIds: undefined,
                 adjacentEnemyIdsFor: undefined,
                 positionalLanding: true,
+                firingClause: false,
                 selectorEnemyIdFor: selectorFor({ 'most-buffs': 'buffed' }),
             })
         ).toEqual(['buffed']);
@@ -205,6 +260,7 @@ describe('resolveDebuffRecipientIds', () => {
                 aoeVictimIds: undefined,
                 adjacentEnemyIdsFor: undefined,
                 positionalLanding: true,
+                firingClause: false,
                 selectorEnemyIdFor: selectorFor({ 'highest-speed': 'fast' }),
             })
         ).toEqual(['fast']);
@@ -221,6 +277,7 @@ describe('resolveDebuffRecipientIds', () => {
                 aoeVictimIds: ['anchor', 'big', 'third'],
                 adjacentEnemyIdsFor: adjacentOf,
                 positionalLanding: true,
+                firingClause: false,
                 selectorEnemyIdFor: selectorFor({ 'highest-attack': 'big' }),
             })
         ).toEqual(['big']);
@@ -238,10 +295,12 @@ describe('resolveDebuffRecipientIds', () => {
             adjacentEnemyIdsFor: undefined,
             selectorEnemyIdFor: selectorFor({}), // delegate present, resolves to undefined
         };
-        expect(resolveDebuffRecipientIds({ ...base, positionalLanding: true })).toEqual([]);
-        expect(resolveDebuffRecipientIds({ ...base, positionalLanding: false })).toEqual([
-            undefined,
-        ]);
+        expect(
+            resolveDebuffRecipientIds({ ...base, positionalLanding: true, firingClause: false })
+        ).toEqual([]);
+        expect(
+            resolveDebuffRecipientIds({ ...base, positionalLanding: false, firingClause: false })
+        ).toEqual([undefined]);
     });
 
     it('#403 R1 delegate ABSENT behaves the same as unresolved (the DPS caller supplies none)', () => {
@@ -251,10 +310,12 @@ describe('resolveDebuffRecipientIds', () => {
             aoeVictimIds: undefined,
             adjacentEnemyIdsFor: undefined,
         };
-        expect(resolveDebuffRecipientIds({ ...base, positionalLanding: true })).toEqual([]);
-        expect(resolveDebuffRecipientIds({ ...base, positionalLanding: false })).toEqual([
-            undefined,
-        ]);
+        expect(
+            resolveDebuffRecipientIds({ ...base, positionalLanding: true, firingClause: false })
+        ).toEqual([]);
+        expect(
+            resolveDebuffRecipientIds({ ...base, positionalLanding: false, firingClause: false })
+        ).toEqual([undefined]);
     });
 
     it('#403 a NON-selector target ignores the delegate entirely', () => {
@@ -266,6 +327,7 @@ describe('resolveDebuffRecipientIds', () => {
                 aoeVictimIds: undefined,
                 adjacentEnemyIdsFor: undefined,
                 positionalLanding: true,
+                firingClause: false,
                 selectorEnemyIdFor: selectorFor({ 'highest-attack': 'big' }),
             })
         ).toEqual(['anchor']);
@@ -276,6 +338,7 @@ describe('resolveDebuffRecipientIds', () => {
                 aoeVictimIds: ['anchor', 'big'],
                 adjacentEnemyIdsFor: undefined,
                 positionalLanding: true,
+                firingClause: false,
                 selectorEnemyIdFor: selectorFor({ 'highest-attack': 'big' }),
             })
         ).toEqual(['anchor', 'big']);

@@ -98,6 +98,7 @@ import {
 } from './buffTotals';
 export { calculateBuffTotals, expandEnemyDebuffs, payloadToSelectedBuff };
 import { scaledStatusCount } from './statusCountScaling';
+import { isStasis } from './stasisBuffs';
 export { scaledStatusCount };
 
 type StatusEngine = ReturnType<typeof createStatusEngine>;
@@ -385,6 +386,17 @@ export interface PlayerTurnResult {
      *  the shared-per-target landedEnemyDebuffs window). Used by the healing enemy-effects
      *  overview to attribute each debuff to the enemy that applied it. */
     inflictedEnemyDebuffs: ActiveBuff[];
+    /**
+     * Whether a Stasis THIS cast wrote on `victimId` is, so far, the one standing there — it won
+     * the duration contest against whatever the victim held. Owner ruling: the standing Stasis
+     * after a hit that also inflicts Stasis is max(held − 1, new), and a Stasis the cast itself
+     * left standing is never shortened by that cast's hit. So the engine skips the victim's break
+     * mark when this answers true, and otherwise lets the mark shorten the held Stasis. A write
+     * that has not happened yet (a clause written after the damage, flushed after the marks
+     * resolve) answers false; the pending mark then settles at the apply seam
+     * (`setBeforeTimedEnemyApplication`): held − 1 first, then the contest.
+     */
+    castStasisStandsOn: (victimId: string) => boolean;
     resistedEnemyDebuffs: ActiveBuff[];
     /**
      * Enemy-debuff landings this cast decided but held back, because their clause follows a damage
@@ -410,8 +422,8 @@ export interface PlayerTurnResult {
      * and `resistedEnemyDebuffs` (the round display list). Keeping the k=0 draw where it is also keeps the `${ownerId}:landing`
      * RNG stream's draw order untouched for a single-hit cast.
      *
-     * `inflictedEnemyDebuffs` is NOT one of those consumers: `resolveAnchorStasisBreak` reads it
-     * after the positional drive returns, so it constrains nothing here.
+     * `castStasisStandsOn` is NOT one of those consumers: the engine reads it after the positional
+     * drive returns, so it constrains nothing here.
      *
      * `phase` selects clause order WITHIN the sub-attack: `'before-damage'` for clauses written
      * ahead of the damage clause (applied at the sub-attack's start), `'after-damage'` for those
@@ -1143,9 +1155,10 @@ function foldTimedEnemyDebuffs(args: {
  * adds nothing); 'inflicted'-scope extensions are `extendInflictedDoTs`' job.
  *
  * Recipients follow the ability's `target` through `resolveDebuffRecipientIds`, the resolver every
- * direct enemy clause uses: 'all-enemies' fans over the cast's pattern footprint (`aoeVictimIds`,
- * living victims only — `footprintVictims`), 'enemy' is the primary alone, and a non-positional
- * cast with no footprint falls back to the primary. A POSITIONAL cast with no footprint reaches
+ * direct enemy clause uses: 'all-enemies' — and 'enemy' on a firing-slot clause — fan over the
+ * cast's pattern footprint (`aoeVictimIds`, living victims only — `footprintVictims`), a
+ * passive-slot 'enemy' is the primary alone, and a non-positional cast with no footprint falls
+ * back to the primary. A POSITIONAL cast with no footprint reaches
  * nobody with an 'all-enemies' extension — the debuff resolver's answer, unlike the on-cast purge
  * loop's primary fallback. The primary's containers are the loose
  * `corrosionEntries`/`infernoEntries`; every other recipient's come off `opposingVictimById`.
@@ -1163,6 +1176,8 @@ function foldTimedEnemyDebuffs(args: {
  */
 function extendDoTs(args: {
     abilities: Ability[];
+    /** Whether an ability belongs to the cast's firing slot (see `resolveDebuffRecipientIds`). */
+    isFiringClause: (ab: Ability) => boolean;
     ctx: ConditionContext;
     effectiveCritDamage: number;
     extendChanceGate: (rate: number) => boolean;
@@ -1190,6 +1205,7 @@ function extendDoTs(args: {
             aoeVictimIds: args.aoeVictimIds,
             adjacentEnemyIdsFor: args.adjacentEnemyIdsFor,
             positionalLanding: args.positionalLanding,
+            firingClause: args.isFiringClause(ab),
             selectorEnemyIdFor: args.selectorEnemyIdFor,
         });
         for (const vid of recipients) {
@@ -1606,6 +1622,8 @@ function reduceEnemyBombs(args: {
             aoeVictimIds: args.aoeVictimIds,
             adjacentEnemyIdsFor: args.adjacentEnemyIdsFor,
             positionalLanding: args.positionalLanding,
+            // `gatedSkill` is the firing slot.
+            firingClause: true,
             selectorEnemyIdFor: args.selectorEnemyIdFor,
         }).map((id) => id ?? boundVictimId);
         for (const vid of recipients) {
@@ -2590,6 +2608,11 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     const inflictedEnemyDebuffs: ActiveBuff[] = scheduledEnemy.landedEnemyDebuffs.filter((ab) =>
         appliedScheduledSet.has(ab.buffName)
     );
+    /** A scheduled (manual-list) Stasis this turn applied, which lands on the bound target. */
+    const scheduledStasisOnTarget = inflictedEnemyDebuffs.some((ab) => isStasis(ab.buffName));
+    /** Victims on which a Stasis this cast wrote won its duration contest (see
+     *  `castStasisStandsOn`). Written by `writeState`. */
+    const castStasisStanding = new Set<string>();
     // Buff NAMES of the ability-timed enemy debuffs the landing decision REJECTED this cast (the
     // condition gate passed but the application was resisted — by affinity disadvantage, the
     // landing-roll gate, or Block-Debuff immunity, since landsTimedEnemyApplicationLive folds all
@@ -2709,16 +2732,18 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 //  - the LANDING decision for sub-attack 0 (drawn at the cast-time call site) — so
                 //    its RNG draw order and the resist bookkeeping below, which gates this turn's
                 //    control-applied emission, are untouched;
-                //  - `inflictedEnemyDebuffs`, a record of what THIS cast inflicted rather than of
-                //    store state. The Stasis-break re-inflict check reads it back before the
-                //    flush runs (engine, `resolveAnchorStasisBreak`); deferring the row let that
-                //    check conclude "not re-inflicted" and shave a turn off a freshly applied Stasis.
+                //  - `inflictedEnemyDebuffs` and the per-victim record below, records of what THIS
+                //    cast inflicted rather than of store state.
                 // Single source of truth for the store write — both the deferred `applyState`
                 // path and the cast-time inline branch below call this instead of each keeping
                 // their own copy of `statusEngine.applyTimedAbilityStatus(...)` (a second copy is
-                // exactly how the two paths would drift, per the doc comment above).
+                // exactly how the two paths would drift, per the doc comment above). It also
+                // records a Stasis write that won its contest, for `castStasisStandsOn`.
                 const writeState = (): void => {
-                    statusEngine.applyTimedAbilityStatus(r, status, actor.id, vid);
+                    const standing = statusEngine.applyTimedAbilityStatus(r, status, actor.id, vid);
+                    const standingOn = vid ?? targetId;
+                    if (standing && standingOn !== undefined && isStasis(status.payload.buffName))
+                        castStasisStanding.add(standingOn);
                 };
                 // DISPLAY ONLY: the round's reported enemy-debuff window
                 // (RoundData.activeEnemyDebuffs, sourced from `landedEnemyDebuffs`) is
@@ -2780,11 +2805,11 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                     });
                 }
                 // Per-VICTIM record of what this cast landed, which `inflictedEnemyDebuffs`
-                // above deliberately is not (it collapses the recipient list to one row for the
-                // Stasis-break check). An inflicted-scope extension needs to know that victim V
-                // got status S from THIS cast, so it can grow S on V and leave V's other
-                // debuffs alone. Recorded for the deferred branch too: the pair has not written
-                // yet, and the extension block below is what waits for it.
+                // above deliberately is not (it collapses the recipient list to one row). An
+                // inflicted-scope extension needs to know that victim V got status S from THIS
+                // cast, so it can grow S on V and leave V's other debuffs alone.
+                // Recorded for the deferred branch too: the pair has not written yet, and the
+                // extension block below is what waits for it.
                 // The non-positional `undefined` recipient sink has no id to key on, so it is
                 // skipped here — an extension that cannot name its victim cannot extend it.
                 if (vid !== undefined) {
@@ -2897,6 +2922,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             aoeVictimIds,
             adjacentEnemyIdsFor,
             positionalLanding,
+            // `timedEnemyBySlot` is filtered to the slot this cast fired.
+            firingClause: true,
             selectorEnemyIdFor,
         });
 
@@ -2919,11 +2946,12 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 resolveDebuffRecipientIds({
                     abTarget,
                     anchorId: sub.anchorId,
-                    // THIS sub-attack's real footprint, not the cast's — so an `all-enemies`
-                    // clause fans over who it actually struck and a killed victim drops out.
+                    // THIS sub-attack's real footprint, not the cast's — so an `all-enemies` or
+                    // `enemy` clause fans over who it actually struck and a killed victim drops out.
                     aoeVictimIds: sub.victimIds,
                     adjacentEnemyIdsFor,
                     positionalLanding: true,
+                    firingClause: true,
                     selectorEnemyIdFor,
                 }),
                 collected
@@ -4178,6 +4206,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
 
     extendDoTs({
         abilities: [...(firingSkill?.abilities ?? []), ...(passiveSkill?.abilities ?? [])],
+        isFiringClause: (ab) => firingSkill?.abilities.includes(ab) ?? false,
         ctx,
         effectiveCritDamage,
         extendChanceGate,
@@ -4496,8 +4525,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         }
     }
 
-    // On-cast buff-steal: move the newest removable TIMED buff(s) held by the acting
-    // actor's target onto the caster — and, when the ability says so, every living adjacent
+    // On-cast buff-steal: move the newest removable TIMED buff(s) held by each enemy the cast
+    // strikes onto the caster — and, when the ability says so, every living adjacent
     // ally of the caster (Tithonus) — via statusEngine.steal. Side-symmetric with the on-cast
     // purge loop below (works for player AND enemy casters; no healEventOnly gate — a buff
     // transfer, not a heal/shield/cleanse consumption). A DPS cast anchors on a real positioned
@@ -4607,42 +4636,56 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             // resolved target there is nothing to steal FROM and no honest way to pick a source.
             // The named branch above resolves its own; this one stays a no-op.
             if (targetId === undefined) continue;
-            // How many stacks of each STACK-STEALABLE status the source holds right now.
-            // Computed HERE and passed in, rather than inside statusEngine.steal: the count
-            // has to aggregate all four status stores AND evaluate aura conditions against a
-            // neutral context, which is exactly what `selfBuffStacksForOwner` does. Passing
-            // its answer keeps ONE aggregator and avoids a statusEngine → triggers cycle.
-            // Empty for every source holding none, which is every ship but Meatshield and
-            // Lionheart — so this is inert on the rest of the corpus.
-            const stackStealable = new Map<string, number>();
-            for (const name of STACK_STEALABLE_STATUSES) {
-                const held = selfBuffStacksForOwner(statusEngine, targetId, name);
-                if (held > 0) stackStealable.set(name, held);
-            }
-            const stolenNames = statusEngine.steal(
-                targetId,
-                recipients,
-                ab.config.count,
-                stackStealable
-            );
-            // Same suppression rule as the top-up above and as `purge-performed`. Emitting the
-            // NAMES rather than a count is the point of the event: this is the only channel
-            // that can tell a player their Protection changed hands. Before it existed, buff
-            // steal produced no log row at all and the kit fingerprints — which record the set
-            // of log entry KINDS per actor — could not see the mechanic, so Pallas/Thresh/
-            // Tithonus had never had a golden observing their steals.
-            if (stolenNames.length > 0) {
-                bus.emit({
-                    type: 'steal-performed',
-                    casterId: actor.id,
-                    targetId,
-                    // Tithonus's clause DUPLICATES to its adjacent allies rather than
-                    // splitting (owner ruling 2026-09-03), so every recipient holds the full
-                    // `buffNames` set — a reader must not divide one by the other.
-                    recipientIds: recipients,
-                    buffNames: stolenNames,
-                    round: r,
-                });
+            // The SOURCES follow the same resolver as every direct enemy clause: "steals 1 buff
+            // from the primary target" on a pattern skill steals `count` from EACH struck enemy
+            // (owner ruling 2026-10-03 — Tithonus on Circle hitting A, B and C takes one from
+            // each), and every stolen buff goes to every recipient. Each source is stolen from
+            // and logged on its own.
+            const sources = resolveDebuffRecipientIds({
+                abTarget: ab.target,
+                anchorId: targetId,
+                aoeVictimIds,
+                adjacentEnemyIdsFor,
+                positionalLanding,
+                firingClause: true,
+                selectorEnemyIdFor,
+            }).map((id) => id ?? targetId);
+            for (const sourceId of sources) {
+                // How many stacks of each STACK-STEALABLE status the source holds right now.
+                // Computed HERE and passed in, rather than inside statusEngine.steal: the count
+                // has to aggregate all four status stores AND evaluate aura conditions against a
+                // neutral context, which is exactly what `selfBuffStacksForOwner` does. Passing
+                // its answer keeps ONE aggregator and avoids a statusEngine → triggers cycle.
+                // Empty for every source holding none, which is every ship but Meatshield and
+                // Lionheart — so this is inert on the rest of the corpus.
+                const stackStealable = new Map<string, number>();
+                for (const name of STACK_STEALABLE_STATUSES) {
+                    const held = selfBuffStacksForOwner(statusEngine, sourceId, name);
+                    if (held > 0) stackStealable.set(name, held);
+                }
+                const stolenNames = statusEngine.steal(
+                    sourceId,
+                    recipients,
+                    ab.config.count,
+                    stackStealable
+                );
+                // Same suppression rule as the top-up above and as `purge-performed`. Emitting
+                // the NAMES rather than a count is the point of the event: this is the only
+                // channel that can tell a player their Protection changed hands, and the only
+                // log row — so the only fingerprint kind — a steal produces.
+                if (stolenNames.length > 0) {
+                    bus.emit({
+                        type: 'steal-performed',
+                        casterId: actor.id,
+                        targetId: sourceId,
+                        // Tithonus's clause DUPLICATES to its adjacent allies rather than
+                        // splitting (owner ruling 2026-09-03), so every recipient holds the full
+                        // `buffNames` set — a reader must not divide one by the other.
+                        recipientIds: recipients,
+                        buffNames: stolenNames,
+                        round: r,
+                    });
+                }
             }
         }
     }
@@ -4697,8 +4740,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 // and on the two enemy-adjacency scopes (#403, #407).
                 //
                 // THIS purge loop is the one that differs, deliberately: it keeps its anchor
-                // fall-back for an unresolved selector (see the R4 paragraph above), and a plain
-                // 'enemy' purge follows the footprint where the debuff resolver keeps the anchor.
+                // fall-back for an unresolved selector (see the R4 paragraph above). A plain
+                // 'enemy' purge follows the footprint here as a firing-slot 'enemy' clause does
+                // in the resolver.
                 const recipients =
                     (ab.target === 'all-enemies' || ab.target === 'enemy') && aoeVictimIds
                         ? aoeVictimIds
@@ -4797,6 +4841,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                     aoeVictimIds,
                     adjacentEnemyIdsFor,
                     positionalLanding,
+                    firingClause: true,
                     selectorEnemyIdFor,
                 }).map((id) => id ?? targetId);
                 for (const vid of recipients) {
@@ -4847,10 +4892,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // branch below to that exact status name. Absent → extend-everything.
         const namedBuff = ab.config.type === 'extend-status' ? ab.config.buffName : undefined;
         if (statusKind === 'debuff') {
-            // 'enemy': single hit enemy (targetId); the parser no longer emits it (`extendTarget`
-            // falls back to all-enemies), so only editor-authored abilities reach this arm. Lev: fans over the cast's hit-enemy footprint
-            // (aoeVictimIds) for an 'all-enemies' target — same E3 pattern the purge/shield-strip
-            // blocks above use. Requires a hit target; skipped when there is none.
+            // Lev: fans over the cast's hit-enemy footprint (aoeVictimIds) for an 'all-enemies'
+            // target, as does a firing-slot 'enemy' (only editor-authored abilities carry one —
+            // the parser's `extendTarget` falls back to all-enemies); a passive-slot 'enemy' stays
+            // on the hit enemy (targetId). Requires a hit target; skipped when there is none.
             if (targetId === undefined) continue;
             // #407: same widening as the bomb-countdown and shield-strip loops above — this was a
             // bare `all-enemies`-or-anchor ternary with no selector arm. See the bomb loop for why
@@ -4861,6 +4906,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 aoeVictimIds,
                 adjacentEnemyIdsFor,
                 positionalLanding,
+                firingClause: !fromPassive,
                 selectorEnemyIdFor,
             }).map((id) => id ?? targetId);
             // Asphyxiator: an INFLICTED-scope extension grows only what THIS cast landed on
@@ -5926,6 +5972,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         activeSelfBuffs: activeSelfBuffsForRound,
         landedEnemyDebuffs,
         inflictedEnemyDebuffs,
+        // Live over the set, so a write a later sub-attack makes before the marks resolve is seen.
+        castStasisStandsOn: (victimId) =>
+            (scheduledStasisOnTarget && victimId === targetId) || castStasisStanding.has(victimId),
         resistedEnemyDebuffs,
         deferredEnemyApplications,
         // Only meaningful on a positional cast that has gated clauses to replay. Left

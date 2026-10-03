@@ -9,8 +9,9 @@
  * walked-team, enemy). For every hit footprint victim that was stasised at hit time (and only when
  * the attacker does NOT have doesntBreakStasis), a DEFERRED break is recorded via stasisBreakPending
  * — the same deferral the anchor uses — so the victim's own skip branch reduces the Stasis and it
- * eventually resumes acting. Covered victims have NO same-turn re-apply vector (the turn's debuffs
- * only ever target the anchor), so their break fires UNCONDITIONALLY (no re-apply guard).
+ * eventually resumes acting. A covered victim the same cast re-inflicted Stasis on keeps its fresh
+ * Stasis, exactly as the anchor does (`aoeStasisBreak.integration.test.ts`); the breakers here
+ * carry no Stasis clause, so every covered break below stands.
  *
  * Harness mirrors perVictimAttacked.integration.test.ts (positioned actors, Line-Range-1 AoE) +
  * stasis.test.ts (Stasis applied once by fast stasis-bots that are then killed; break observed via

@@ -26,6 +26,13 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator: Gallant, IonScorp and Lodolite now check each enemy's actual role.",
     'Combat simulator: Crocus now counts every debuff on an enemy for Stasis.',
     'Combat simulator: battle log control entries now name every enemy they land on.',
+    'Combat simulator: area skills now land their debuffs on every enemy hit.',
+    'Combat simulator: area Stasis, Provoke, Disable and Concentrate Fire reach every enemy hit.',
+    'Combat simulator: APEX, Laika and Malvex now strip shields from every enemy hit.',
+    'Combat simulator: Tithonus and Pallas now steal a buff from every enemy hit.',
+    'Combat simulator: Stasis an area skill lands is no longer shortened by that hit.',
+    "Combat simulator: an area hit now shortens a resisting enemy's existing Stasis.",
+    "Combat simulator: a shorter re-inflicted Stasis no longer shields an enemy's longer one.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

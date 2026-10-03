@@ -43,8 +43,8 @@ exports[`kit fingerprints > APEX 1`] = `
   "plain": [
     "attack",
     "attack:active",
-    "attack:charged",
     "charge-changed",
+    "control",
     "control:charged",
     "debuff",
     "debuff-resisted",
@@ -53,8 +53,8 @@ exports[`kit fingerprints > APEX 1`] = `
   "richEnemy": [
     "attack",
     "attack:active",
-    "attack:charged",
     "charge-changed",
+    "control",
     "control:charged",
     "debuff",
     "debuff-resisted",
@@ -63,8 +63,8 @@ exports[`kit fingerprints > APEX 1`] = `
   "wounded": [
     "attack",
     "attack:active",
-    "attack:charged",
     "charge-changed",
+    "control",
     "control:charged",
     "debuff",
     "debuff-resisted",
@@ -132,7 +132,6 @@ exports[`kit fingerprints > Anemone 1`] = `
     "debuff",
     "debuff-resisted",
     "dot-applied:active",
-    "dot-applied:charged",
     "heal",
   ],
   "richEnemy": [
@@ -143,7 +142,6 @@ exports[`kit fingerprints > Anemone 1`] = `
     "debuff",
     "debuff-resisted",
     "dot-applied:active",
-    "dot-applied:charged",
     "heal",
   ],
   "wounded": [
@@ -154,7 +152,6 @@ exports[`kit fingerprints > Anemone 1`] = `
     "debuff",
     "debuff-resisted",
     "dot-applied:active",
-    "dot-applied:charged",
     "heal",
   ],
 }
@@ -217,6 +214,7 @@ exports[`kit fingerprints > Asphodel 1`] = `
     "buff-expired",
     "buff:active",
     "charge-changed",
+    "debuff",
     "debuff:charged",
   ],
   "richEnemy": [
@@ -225,6 +223,7 @@ exports[`kit fingerprints > Asphodel 1`] = `
     "buff-expired",
     "buff:active",
     "charge-changed",
+    "debuff",
     "debuff:charged",
   ],
   "wounded": [
@@ -233,6 +232,7 @@ exports[`kit fingerprints > Asphodel 1`] = `
     "buff-expired",
     "buff:active",
     "charge-changed",
+    "debuff",
     "debuff:charged",
   ],
 }
@@ -781,9 +781,10 @@ exports[`kit fingerprints > Defiant 1`] = `
 {
   "plain": [
     "attack",
-    "attack:active",
     "attack:charged",
     "charge-changed",
+    "control",
+    "control:active",
     "control:charged",
     "debuff",
     "debuff-resisted",
@@ -791,9 +792,10 @@ exports[`kit fingerprints > Defiant 1`] = `
   ],
   "richEnemy": [
     "attack",
-    "attack:active",
     "attack:charged",
     "charge-changed",
+    "control",
+    "control:active",
     "control:charged",
     "debuff",
     "debuff-resisted",
@@ -801,9 +803,10 @@ exports[`kit fingerprints > Defiant 1`] = `
   ],
   "wounded": [
     "attack",
-    "attack:active",
     "attack:charged",
     "charge-changed",
+    "control",
+    "control:active",
     "control:charged",
     "debuff",
     "debuff-resisted",
@@ -1083,6 +1086,7 @@ exports[`kit fingerprints > Guardian 1`] = `
     "attack",
     "attack:charged",
     "charge-changed",
+    "control",
     "control:active",
     "debuff",
     "debuff-resisted",
@@ -1091,6 +1095,7 @@ exports[`kit fingerprints > Guardian 1`] = `
     "attack",
     "attack:charged",
     "charge-changed",
+    "control",
     "control:active",
     "debuff",
     "debuff-resisted",
@@ -1099,6 +1104,7 @@ exports[`kit fingerprints > Guardian 1`] = `
     "attack",
     "attack:charged",
     "charge-changed",
+    "control",
     "control:active",
     "debuff",
     "debuff-resisted",
@@ -1541,6 +1547,7 @@ exports[`kit fingerprints > Kafa 1`] = `
     "attack",
     "attack:active",
     "charge-changed",
+    "control",
     "control:charged",
     "debuff",
     "debuff-resisted",
@@ -1549,6 +1556,7 @@ exports[`kit fingerprints > Kafa 1`] = `
     "attack",
     "attack:active",
     "charge-changed",
+    "control",
     "control:charged",
     "debuff",
     "debuff-resisted",
@@ -1557,6 +1565,7 @@ exports[`kit fingerprints > Kafa 1`] = `
     "attack",
     "attack:active",
     "charge-changed",
+    "control",
     "control:charged",
     "debuff",
     "debuff-resisted",
@@ -1844,8 +1853,10 @@ exports[`kit fingerprints > Lionheart 1`] = `
     "buff-expired",
     "buff:active",
     "charge-changed",
+    "control",
     "control:charged",
     "debuff",
+    "debuff-resisted",
   ],
   "richEnemy": [
     "attack",
@@ -1853,8 +1864,10 @@ exports[`kit fingerprints > Lionheart 1`] = `
     "buff-expired",
     "buff:active",
     "charge-changed",
+    "control",
     "control:charged",
     "debuff",
+    "debuff-resisted",
   ],
   "wounded": [
     "attack",
@@ -1862,8 +1875,10 @@ exports[`kit fingerprints > Lionheart 1`] = `
     "buff-expired",
     "buff:active",
     "charge-changed",
+    "control",
     "control:charged",
     "debuff",
+    "debuff-resisted",
   ],
 }
 `;
@@ -1871,25 +1886,32 @@ exports[`kit fingerprints > Lionheart 1`] = `
 exports[`kit fingerprints > Lodolite 1`] = `
 {
   "plain": [
-    "attack:active",
+    "attack",
     "attack:charged",
     "charge-changed",
+    "control:active",
+    "debuff",
   ],
   "richEnemy": [
-    "attack:active",
+    "attack",
     "attack:charged",
     "charge-changed",
+    "control:active",
+    "debuff",
   ],
   "statusRich": [
     "attack",
-    "attack:active",
     "charge-changed",
+    "control:active",
+    "debuff",
     "purge:charged",
   ],
   "wounded": [
-    "attack:active",
+    "attack",
     "attack:charged",
     "charge-changed",
+    "control:active",
+    "debuff",
   ],
 }
 `;
@@ -2128,8 +2150,8 @@ exports[`kit fingerprints > Medved 1`] = `
   "plain": [
     "attack",
     "attack:active",
-    "attack:charged",
     "charge-changed",
+    "control",
     "control:charged",
     "debuff",
     "debuff-resisted",
@@ -2137,8 +2159,8 @@ exports[`kit fingerprints > Medved 1`] = `
   "richEnemy": [
     "attack",
     "attack:active",
-    "attack:charged",
     "charge-changed",
+    "control",
     "control:charged",
     "debuff",
     "debuff-resisted",
@@ -2146,8 +2168,8 @@ exports[`kit fingerprints > Medved 1`] = `
   "wounded": [
     "attack",
     "attack:active",
-    "attack:charged",
     "charge-changed",
+    "control",
     "control:charged",
     "debuff",
     "debuff-resisted",
@@ -2160,9 +2182,9 @@ exports[`kit fingerprints > Meiying 1`] = `
   "plain": [
     "attack",
     "attack:active",
-    "attack:charged",
     "buff",
     "charge-changed",
+    "control",
     "control:charged",
     "debuff",
     "debuff-resisted",
@@ -2170,9 +2192,9 @@ exports[`kit fingerprints > Meiying 1`] = `
   "richEnemy": [
     "attack",
     "attack:active",
-    "attack:charged",
     "buff",
     "charge-changed",
+    "control",
     "control:charged",
     "debuff",
     "debuff-resisted",
@@ -2180,9 +2202,9 @@ exports[`kit fingerprints > Meiying 1`] = `
   "wounded": [
     "attack",
     "attack:active",
-    "attack:charged",
     "buff",
     "charge-changed",
+    "control",
     "control:charged",
     "debuff",
     "debuff-resisted",
@@ -2301,6 +2323,7 @@ exports[`kit fingerprints > Nemesis 1`] = `
     "buff:charged",
     "charge-changed",
     "debuff",
+    "debuff-resisted",
     "shield",
   ],
   "richEnemy": [
@@ -2310,6 +2333,7 @@ exports[`kit fingerprints > Nemesis 1`] = `
     "buff:charged",
     "charge-changed",
     "debuff",
+    "debuff-resisted",
     "shield",
   ],
   "wounded": [
@@ -2319,6 +2343,7 @@ exports[`kit fingerprints > Nemesis 1`] = `
     "buff:charged",
     "charge-changed",
     "debuff",
+    "debuff-resisted",
     "shield",
   ],
 }
@@ -2584,6 +2609,7 @@ exports[`kit fingerprints > Pallas 1`] = `
     "buff-expired",
     "charge-changed",
     "heal",
+    "steal",
     "steal:charged",
   ],
   "wounded": [
@@ -3302,7 +3328,6 @@ exports[`kit fingerprints > Sha Xing 1`] = `
 {
   "plain": [
     "attack",
-    "attack:active",
     "bomb",
     "charge-changed",
     "debuff",
@@ -3312,7 +3337,6 @@ exports[`kit fingerprints > Sha Xing 1`] = `
   ],
   "richEnemy": [
     "attack",
-    "attack:active",
     "bomb",
     "charge-changed",
     "debuff",
@@ -3322,7 +3346,6 @@ exports[`kit fingerprints > Sha Xing 1`] = `
   ],
   "wounded": [
     "attack",
-    "attack:active",
     "bomb",
     "charge-changed",
     "debuff",
@@ -3647,6 +3670,7 @@ exports[`kit fingerprints > Tithonus 1`] = `
     "heal",
     "purge",
     "purge:active",
+    "steal",
     "steal:charged",
   ],
   "wounded": [
@@ -3665,6 +3689,7 @@ exports[`kit fingerprints > Torcher 1`] = `
     "buff",
     "charge-changed",
     "debuff",
+    "debuff-resisted",
     "dot-applied:active",
     "dot-applied:charged",
   ],
@@ -3673,6 +3698,7 @@ exports[`kit fingerprints > Torcher 1`] = `
     "buff",
     "charge-changed",
     "debuff",
+    "debuff-resisted",
     "dot-applied:active",
     "dot-applied:charged",
   ],
@@ -3681,6 +3707,7 @@ exports[`kit fingerprints > Torcher 1`] = `
     "buff",
     "charge-changed",
     "debuff",
+    "debuff-resisted",
     "dot-applied:active",
     "dot-applied:charged",
   ],
@@ -4157,9 +4184,8 @@ exports[`kit fingerprints > Xcellence 1`] = `
 {
   "plain": [
     "attack",
-    "attack:active",
-    "attack:charged",
     "charge-changed",
+    "control",
     "control:active",
     "control:charged",
     "debuff",
@@ -4168,9 +4194,8 @@ exports[`kit fingerprints > Xcellence 1`] = `
   ],
   "richEnemy": [
     "attack",
-    "attack:active",
-    "attack:charged",
     "charge-changed",
+    "control",
     "control:active",
     "control:charged",
     "debuff",
@@ -4179,9 +4204,8 @@ exports[`kit fingerprints > Xcellence 1`] = `
   ],
   "wounded": [
     "attack",
-    "attack:active",
-    "attack:charged",
     "charge-changed",
+    "control",
     "control:active",
     "control:charged",
     "debuff",
@@ -4345,38 +4369,34 @@ exports[`kit fingerprints > Zeolite 1`] = `
 {
   "plain": [
     "attack",
-    "attack:active",
-    "attack:charged",
     "charge-changed",
+    "debuff",
     "debuff-resisted",
     "debuff:active",
     "debuff:charged",
   ],
   "richEnemy": [
     "attack",
-    "attack:active",
-    "attack:charged",
     "charge-changed",
+    "debuff",
     "debuff-resisted",
     "debuff:active",
     "debuff:charged",
   ],
   "statusRich": [
     "attack",
-    "attack:charged",
     "buff-expired",
     "charge-changed",
+    "debuff",
     "debuff-resisted",
     "debuff:active",
     "debuff:charged",
     "purge",
-    "purge:active",
   ],
   "wounded": [
     "attack",
-    "attack:active",
-    "attack:charged",
     "charge-changed",
+    "debuff",
     "debuff-resisted",
     "debuff:active",
     "debuff:charged",

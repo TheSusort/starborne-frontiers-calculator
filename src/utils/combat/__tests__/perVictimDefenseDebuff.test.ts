@@ -11,10 +11,11 @@
  *   The attacker fires a line|3| pattern: origin M4 + covered M3/M2/M1.
  *   Only M4 and M1 have enemies, so both are hit.
  *
- * Ability debuffs applied to enemy-front ONLY (via targetId from Task 3):
+ * Ability debuffs reach every enemy the cast strikes; in the first case enemy-back resists them
+ * (its security dwarfs the caster's hacking), so they stand on enemy-front ONLY:
  *   - Defense Down: parsedEffects.defense = -50 (enemy-front effective defense halved)
  *   - Incoming Damage Up: parsedEffects.incomingDamage = +30 (enemy-front takes +30% more)
- *   enemy-back has no debuffs.
+ *   enemy-back has no debuffs. The second case lets both land and expects both amplified.
  *
  * Expected damage (from victimHitDamage formula, attack=1000, mult=100%, 1 hit, no crit,
  * defence=500, no affinity modifier, no outgoing buff, no pen):
@@ -92,7 +93,9 @@ const lineRange3Pattern = (): ParsedPattern => ({
 // plumbing in the positional apply). With the damage clause first, intra-cast clause order defers
 // both debuffs past it and round 1 lands unmodified, exercising nothing. See
 // intraCastClauseOrder.integration.test.ts for the ordering rule itself.
-const damageWithTwoDebuffsSlot = (): ShipSkills['slots'][number] => ({
+const damageWithTwoDebuffsSlot = (
+    application: 'apply' | 'inflict' = 'apply'
+): ShipSkills['slots'][number] => ({
     slot: 'active',
     abilities: [
         ab({
@@ -104,7 +107,7 @@ const damageWithTwoDebuffsSlot = (): ShipSkills['slots'][number] => ({
                 parsedEffects: { defense: -50 },
                 stacks: 1,
                 isStackable: false,
-                application: 'apply',
+                application,
                 duration: 3,
             },
         }),
@@ -117,7 +120,7 @@ const damageWithTwoDebuffsSlot = (): ShipSkills['slots'][number] => ({
                 parsedEffects: { incomingDamage: 30 },
                 stacks: 1,
                 isStackable: false,
-                application: 'apply',
+                application,
                 duration: 3,
             },
         }),
@@ -126,9 +129,17 @@ const damageWithTwoDebuffsSlot = (): ShipSkills['slots'][number] => ({
 });
 
 // Passive enemy with no offensive abilities — its turns do not muddy debuff stores.
-const passiveEnemyAt = (id: string, position: Position): EnemyAttacker => ({
+const passiveEnemyAt = (id: string, position: Position, security = 0): EnemyAttacker => ({
     id,
-    stats: { attack: 0, crit: 0, critDamage: 0, defence: 500, hp: 100_000_000, speed: 1 },
+    stats: {
+        attack: 0,
+        crit: 0,
+        critDamage: 0,
+        defence: 500,
+        hp: 100_000_000,
+        speed: 1,
+        security,
+    },
     chargeCount: 0,
     startCharged: false,
     position,
@@ -196,7 +207,11 @@ describe('B1 Task 4 — per-victim defense + incoming-damage debuff in positiona
         expect(EXPECTED_FRONT).toBeGreaterThan(EXPECTED_BACK);
     });
 
-    it('perTargetDamage reflects per-victim defense-down and incoming-damage debuffs', () => {
+    /** One round of the Line-range-3 cast; returns round 1's per-target damage. */
+    const perTargetDamage = (
+        application: 'apply' | 'inflict',
+        backSecurity: number
+    ): Record<string, number> => {
         idc = 0;
 
         const result = runCombat({
@@ -206,11 +221,11 @@ describe('B1 Task 4 — per-victim defense + incoming-damage debuff in positiona
             critDamage: 0,
             defensePenetration: 0,
             chargeCount: 0,
-            // Active slot fires damage + two debuffs onto the targeted enemy (enemy-front).
-            shipSkills: { slots: [damageWithTwoDebuffsSlot()] },
+            // Active slot fires two debuffs onto every enemy the cast strikes, then damage.
+            shipSkills: { slots: [damageWithTwoDebuffsSlot(application)] },
             numRounds: 1,
             selfBuffs: [],
-            // No scheduled enemy debuffs — all debuffs are ability-sourced (per-victim via targetId).
+            // No scheduled enemy debuffs — all debuffs are ability-sourced (per-victim).
             enemyDebuffs: [],
             selfDotModifier: 0,
             defensePenetrationBuff: 0,
@@ -221,6 +236,7 @@ describe('B1 Task 4 — per-victim defense + incoming-damage debuff in positiona
             affinityCritPenalty: 0,
             defence: 0,
             hp: 1_000_000_000,
+            hacking: 1e4,
             // Healing mode: required to unlock the positioned enemy roster.
             healTargetId: 'attacker',
             mode: 'healing',
@@ -233,24 +249,48 @@ describe('B1 Task 4 — per-victim defense + incoming-damage debuff in positiona
             // Two enemies: front (M4, origin) and back (M1, covered).
             enemyAttackers: [
                 passiveEnemyAt('enemy-front', 'M4'),
-                passiveEnemyAt('enemy-back', 'M1'),
+                passiveEnemyAt('enemy-back', 'M1', backSecurity),
             ],
         });
 
         const round0 = result.rounds[0];
         expect(round0.perTargetDamage).toBeDefined();
-        const ptd = round0.perTargetDamage!;
+        return round0.perTargetDamage!;
+    };
+
+    it('perTargetDamage reflects per-victim defense-down and incoming-damage debuffs', () => {
+        // The debuffs reach both struck enemies; enemy-back's security dwarfs the caster's
+        // hacking, so it resists both and stands as the undebuffed control.
+        const ptd = perTargetDamage('inflict', 1e9);
 
         // EXACT values pinned from victimHitDamage — both defense-down AND incoming-damage
         // modifiers must be sourced per-victim for these to match.
         expect(ptd['enemy-front']).toBeCloseTo(EXPECTED_FRONT, 10);
-        // enemy-back passes both pre- and post-fix (it has no debuffs); guards LEAK
-        // PREVENTION — front's defense-down/incoming-damage debuffs must not bleed onto back.
+        // LEAK PREVENTION — front's defense-down/incoming-damage debuffs must not bleed onto back.
         expect(ptd['enemy-back']).toBeCloseTo(EXPECTED_BACK, 10);
 
         // Relative ordering: front has lower effective defense AND incoming boost → more damage
         // despite same attack stats (the roleScale difference alone would make front > back, but
         // the defense + incoming modifiers further separate them).
         expect(ptd['enemy-front']).toBeGreaterThan(ptd['enemy-back']);
+    });
+
+    it('a covered victim that receives the before-damage debuffs takes the amplified hit', () => {
+        // Clause order: the debuffs are written before the damage, so each struck enemy holds
+        // them when its own share of this cast's damage resolves.
+        const ptd = perTargetDamage('apply', 0);
+        const expectedBackDebuffed = victimHitDamage(
+            scalars,
+            {
+                ...profileBack,
+                defenceModifierPct: DEF_MOD_FRONT,
+                incomingDamageModifierPct: INCOMING_MOD_FRONT,
+            },
+            false,
+            0.5
+        );
+        expect(ptd['enemy-front']).toBeCloseTo(EXPECTED_FRONT, 10);
+        expect(ptd['enemy-back']).toBeCloseTo(expectedBackDebuffed, 10);
+        expect(expectedBackDebuffed).toBeGreaterThan(EXPECTED_BACK);
     });
 });

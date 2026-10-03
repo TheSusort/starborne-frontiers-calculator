@@ -10,36 +10,28 @@ import { PLACEMENTS, type Placement } from '../types';
 
 /**
  * TRIAGE VERDICT — the placement-symmetry sweep's "Apex fires `shield-destroyed` as `enemy` but
- * never as `focus`/`team`" finding (#356) is SEED NOISE. Do not re-triage it.
+ * never as `focus`/`team`" finding (#356) is SEED NOISE: `shield-destroyed` is a landing-roll
+ * outcome, not a path, and on this window it appears on no placement.
  *
- * Apex's refit-active passive grants it a Shield worth 3% of max HP (355) every time an enemy gets
- * debuffed, and its active inflicts two debuffs per cast — so the pool GROWS faster than the
- * board's incoming damage drains it. `shield-destroyed` only emits when a direct hit takes a
- * non-empty pool to exactly 0 (engine.ts), which here needs a round where Apex's debuffs fail to
- * land at all, so the standing pool gets spent before the next grant refills it. That is a landing
- * roll, and the RNG is ownerId-keyed and re-drawn per placement, so the kind appears in every
- * placement at DIFFERENT seeds.
+ * Apex's refit-active passive grants it a Shield worth 3% of max HP every time an enemy gets
+ * debuffed, and its active inflicts two debuffs on EVERY enemy its pattern strikes (the plain
+ * scenario puts two enemies in it), so each cast grants once per debuff per struck enemy — the
+ * pool grows far faster than the board's incoming damage drains it. `shield-destroyed` only emits
+ * when a direct hit takes a non-empty pool to exactly 0 (engine.ts), which needs a round where
+ * Apex's debuffs fail to land at all, so the standing pool gets spent before the next grant
+ * refills it. That is a landing roll on every struck enemy at once, and over the window below it
+ * never happens on any placement: the kind appears nowhere, symmetrically.
  *
- * Measured over 180 consecutive seeds from the harness's own base seed, all three scenarios
- * (occurrences / 540 runs): focus 3, team 12, enemy 21 — every hit reproduced identically in all
- * three scenarios, i.e. the scenario tap does not move this draw. `plain`-only first-hit offsets
- * are +45 (focus), +94 (team) and +20 (enemy), which is exactly why the K=45 sweep the issue was
- * filed from reported enemy 6/135 and a clean 0 on the other two: focus's first hit sits one seed
- * PAST the window and team's is more than twice as far out.
- *
- * The trajectories on the firing seeds are the same shape on both sides — `enemy` +20 and `focus`
- * +45 both grant in round 1, grant nothing in round 2 and destroy in round 3, on mirrored turn
- * orders — which is what rules out a path gap rather than merely failing to prove one.
- *
- * Unlike the Enforcer verdict, `enemy` IS the most frequent path here. That is not evidence either
- * way: the ranking rule is survival across seeds, never direction or frequency agreement.
+ * The fewer enemies a cast debuffs, the more often that roll fails and the kind appears — at
+ * DIFFERENT seeds per placement, because the RNG is ownerId-keyed. So if `shield-destroyed`
+ * appears on one placement only, that is landing-roll noise, not a path gap — the grant arm below
+ * is what separates the two.
  */
 
 const BASE_SEED = SEED; // 20260805 — the sweep's own default base seed
 const WINDOW = 100;
-const LEDGER_K = 45; // the K the standing finding was recorded at
 
-describe('Apex `shield-destroyed` placement asymmetry is seed noise', () => {
+describe('Apex `shield-destroyed` is placement-symmetric', () => {
     const hitOffsets: Record<Placement, number[]> = { focus: [], team: [], enemy: [] };
     const grantCounts: Record<Placement, number> = { focus: 0, team: 0, enemy: 0 };
 
@@ -68,20 +60,8 @@ describe('Apex `shield-destroyed` placement asymmetry is seed noise', () => {
         }
     });
 
-    it('reproduces the ledger asymmetry inside the K=45 seed window it was filed at', () => {
-        const within = (p: Placement) => hitOffsets[p].some((o) => o < LEDGER_K);
-        expect(within('enemy')).toBe(true);
-        expect(within('focus')).toBe(false);
-        expect(within('team')).toBe(false);
-    });
-
-    it('but every placement emits it once the seed window is wide enough', () => {
-        for (const placement of PLACEMENTS) {
-            expect(
-                hitOffsets[placement].length,
-                `${placement} never emitted shield-destroyed in ${WINDOW} seeds — that WOULD be a real path gap`
-            ).toBeGreaterThan(0);
-        }
+    it('no placement destroys the shield inside the window — the asymmetry is gone', () => {
+        expect(hitOffsets).toEqual({ focus: [], team: [], enemy: [] });
     });
 
     it('and the shield GRANT itself is not path-gated at all — every seed, every placement', () => {
