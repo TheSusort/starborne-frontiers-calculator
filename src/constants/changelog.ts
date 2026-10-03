@@ -22,6 +22,10 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: Tithonus chains extra actions after purging four or more buffs.',
     'Combat simulator: Opal, Provider and Sefuba drain charges only from enemies they hit.',
     'Combat simulator: allies pick randomly among several Concentrate Fire targets.',
+    "Combat simulator: Asphyxiator's charged Stasis now lands only on the targeted enemy.",
+    "Combat simulator: Gallant, IonScorp and Lodolite now check each enemy's actual role.",
+    'Combat simulator: Crocus now counts every debuff on an enemy for Stasis.',
+    'Combat simulator: battle log control entries now name every enemy they land on.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

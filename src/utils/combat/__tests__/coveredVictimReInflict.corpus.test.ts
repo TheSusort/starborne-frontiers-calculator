@@ -52,9 +52,12 @@ type FiringSlot = (typeof FIRING_SLOTS)[number];
  *  today, which is exactly why leaving them out of the census would hide the day one does. */
 const ANCHOR_ONLY_ENEMY_TARGETS = ['enemy'];
 
-const isStasis = (a: Ability): boolean =>
-    (a.config.type === 'control' && a.config.effect === 'stasis') ||
-    (a.config.type === 'debuff' && /stasis/i.test(a.config.buffName ?? ''));
+const isControlStatus =
+    (effect: 'stasis' | 'provoke') =>
+    (a: Ability): boolean =>
+        (a.config.type === 'control' && a.config.effect === effect) ||
+        (a.config.type === 'debuff' && new RegExp(effect, 'i').test(a.config.buffName ?? ''));
+const isStasis = isControlStatus('stasis');
 
 /** Widest footprint the pattern reaches ANYWHERE on the board. Measuring at one anchor understates
  *  it in the direction that hides a hit: `Pattern-Scattershot-Range-1` and `Pattern-Split-Range-1`
@@ -77,7 +80,9 @@ interface WideStasisClause {
     footprint: number | 'unresolvable';
 }
 
-const wideScopedStasisClauses = (): WideStasisClause[] => {
+const wideScopedStasisClauses = (
+    matches: (a: Ability) => boolean = isStasis
+): WideStasisClause[] => {
     const found: WideStasisClause[] = [];
     for (const rec of loadShipSkillRecords()) {
         const ship = buildTraceShip(rec.name, { refitLevel: 4 }) as Ship;
@@ -85,7 +90,7 @@ const wideScopedStasisClauses = (): WideStasisClause[] => {
         for (const slot of FIRING_SLOTS) {
             const abilities = skills.slots.find((s) => s.slot === slot)?.abilities ?? [];
             const wide = abilities.filter(
-                (a) => isStasis(a) && !ANCHOR_ONLY_ENEMY_TARGETS.includes(a.target)
+                (a) => matches(a) && !ANCHOR_ONLY_ENEMY_TARGETS.includes(a.target)
             );
             if (wide.length === 0) continue;
             // A charged row with no pattern of its own fires on the active's (`chargedPattern ??
@@ -104,15 +109,26 @@ describe.skipIf(!csvAvailable() || !shipDataAvailable())(
     'covered-victim Stasis re-inflict precondition (tripwire)',
     () => {
         it('the census of past-the-anchor firing-slot Stasis clauses is unchanged', () => {
-            // Doubles as the non-vacuity guard: a parser change that stopped producing a
-            // past-the-anchor Stasis target would otherwise leave the assertion below passing over
-            // an empty list forever. Asphyxiator's charged reads "on the targeted enemy and all
-            // adjacent enemies"; it contributes both a control and a debuff ability, hence the
-            // dedupe to ship/slot.
+            // Empty: Asphyxiator's charged text reads "on the targeted enemy and all adjacent
+            // enemies", but its Stasis is pinned to the targeted enemy (`ENEMY_SCOPE_PINS`). A new
+            // entry here makes the arm below meaningful again and needs reading.
             const census = [
                 ...new Set(wideScopedStasisClauses().map((c) => `${c.ship}/${c.slot}`)),
             ].sort();
-            expect(census).toEqual(['Asphyxiator/charged']);
+            expect(census).toEqual([]);
+        });
+
+        it('the census can see a past-the-anchor control clause (validity)', () => {
+            // The Stasis census above is empty, so prove the scan reports one when it exists:
+            // Vindicator's active "applies Provoke … to all adjacent enemies".
+            const census = [
+                ...new Set(
+                    wideScopedStasisClauses(isControlStatus('provoke')).map(
+                        (c) => `${c.ship}/${c.slot}`
+                    )
+                ),
+            ];
+            expect(census).toContain('Vindicator/active');
         });
 
         it('no firing-slot clause combines a past-the-anchor Stasis with a multi-cell footprint', () => {

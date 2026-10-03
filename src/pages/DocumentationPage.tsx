@@ -2916,14 +2916,25 @@ const DocumentationPage: React.FC = () => {
                                         <span className="text-primary">Enemy Adjacency:</span> Some
                                         skills splash their effect onto enemies adjacent to the
                                         target on the board, either including the targeted enemy
-                                        (e.g. Asphyxiator&apos;s Inferno and Stasis) or hitting only
-                                        its neighbours (e.g. Vindicator&apos;s Provoke and Out.
-                                        Damage Down, Meiying&apos;s Stasis). Demolisher&apos;s
-                                        passive also detonates a splash equal to 100% of the
-                                        exploded Bomb&apos;s damage onto the bombed enemy&apos;s
-                                        neighbours, ignoring Defense and unable to critically hit.
-                                        This resolves on the positioned board; in the single-target
-                                        DPS calculator there are no neighbours, so it has no effect.
+                                        (e.g. Asphyxiator&apos;s active Inferno) or hitting only its
+                                        neighbours (e.g. Vindicator&apos;s Provoke and Out. Damage
+                                        Down, Meiying&apos;s Stasis). Demolisher&apos;s passive also
+                                        detonates a splash equal to 100% of the exploded Bomb&apos;s
+                                        damage onto the bombed enemy&apos;s neighbours, ignoring
+                                        Defense and unable to critically hit. This resolves on the
+                                        positioned board; in the single-target DPS calculator there
+                                        are no neighbours, so it has no effect.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
+                                        <span className="text-primary">Per-enemy conditions:</span>{' '}
+                                        When a skill&apos;s debuff reaches several enemies, a
+                                        condition about the enemy (its debuffs, HP, stats, whether
+                                        it was repaired this round, or its role) is checked against
+                                        each enemy separately. A role condition such as
+                                        Gallant&apos;s &ldquo;if the target is a defender&rdquo;
+                                        reads the enemy ship&apos;s own role; the Enemy Type
+                                        selector only answers in the DPS calculator, where the enemy
+                                        has no ship.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Team Ships:</span> Pick a

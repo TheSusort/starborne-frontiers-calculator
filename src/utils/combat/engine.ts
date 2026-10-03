@@ -6,7 +6,7 @@ import {
     TeamActorInput,
 } from '../../types/calculator';
 import type { ShipTypeName } from '../../constants/shipTypes';
-import { matchesRoleCategory } from '../../constants/shipTypes';
+import { matchesRoleCategory, roleBaseClass } from '../../constants/shipTypes';
 import type { FactionName } from '../../constants/factions';
 import {
     TOXIC_OVERFLOW,
@@ -128,6 +128,7 @@ import {
     PassiveSlotHit,
     PlayerTurnResult,
     RateGate,
+    RecipientGateReading,
     runPlayerTurn,
 } from './playerTurn';
 import {
@@ -9248,9 +9249,39 @@ export function runCombat(rawInput: CombatEngineInput): {
             // the later clause must see the post-purge, post-death board.
             const aliveOpposing = (): AliveRoster => aliveTargetsOf(tb.opposingRoster);
             const enemyMostBuffsId = mostBuffsAmong(aliveOpposing());
+            // The engine-derived half of one victim's gate readings — the ONE derivation for the
+            // bound target's own turn args below and for every other struck enemy's
+            // (`recipientGateReadings`). Read here, before the cast, for all of them at once: a
+            // clause earlier in the same cast must not change what a later clause's gate sees.
+            const victimGateReading = (v: CombatActor): RecipientGateReading => {
+                const role = roleByActorId.get(v.id);
+                const roleClass = role ? roleBaseClass(role) : undefined;
+                return {
+                    enemyHp: tb.victimMaxHpFor(v),
+                    targetRepairedThisRound: repairedThisRound.has(v.id),
+                    enemyDebuffNames: enemyDebuffNamesForTarget(v),
+                    statusDebuffNames: ownerDebuffNamesFor(statusEngine, v.id),
+                    // WITHHELD under `mode: 'dps'` — see `liveCountsMeasurable`.
+                    ...(liveCountsMeasurable
+                        ? { enemyBuffCount: selfBuffNamesForOwners(statusEngine, [v.id]).length }
+                        : {}),
+                    // An actor with no role (the DPS calculator's synthesized enemy) carries none.
+                    ...(roleClass ? { role: roleClass } : {}),
+                };
+            };
+            const tgtReading = tgt ? victimGateReading(tgt) : undefined;
             return {
                 runtime: rt,
                 enemyMostBuffsId,
+                // Positional runs only — the same discriminator as `opposingVictimById`, the map
+                // a cast's per-recipient landing resolves its victims through.
+                ...(opposingVictimById
+                    ? {
+                          recipientGateReadings: new Map(
+                              aliveOpposing().map((v) => [v.id, victimGateReading(v)])
+                          ),
+                      }
+                    : {}),
                 // Source resolver for a TOP-UP buff-steal (Meatshield's charged Protection
                 // clause). Same `aliveOpposing()` thunk, same unmemoized-on-purpose reasoning as
                 // `enemyMostBuffsId` above: rosters mutate in place as actors die, and an earlier
@@ -9333,7 +9364,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // an empty/zero placeholder) is what routes the consumer to its documented
                 // "no enemy" defaults (`?? []` / `?? 0` / `!== undefined` guards in playerTurn.ts),
                 // instead of resurrecting the dummy ghost this rung deletes.
-                ...(tgt
+                ...(tgt && tgtReading
                     ? {
                           enemy: tgt,
                           corrosionEntries: tgt.corrosionEntries,
@@ -9342,8 +9373,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                           pendingBombs: tgt.pendingBombs,
                           pendingAccumulators: tgt.pendingAccumulators,
                           enemyDefense: tb.victimDefenceFor(tgt),
-                          enemyHp: tb.victimMaxHpFor(tgt),
-                          targetRepairedThisRound: repairedThisRound.has(tgt.id),
+                          enemyHp: tgtReading.enemyHp,
+                          targetRepairedThisRound: tgtReading.targetRepairedThisRound,
+                          targetGateReading: tgtReading,
                           targetEffectiveAttack: effectiveStatsOf(statusEngine, selfBuffLookup, tgt)
                               .attack,
                       }
@@ -9411,11 +9443,11 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // victim this turn, so buildRoundContext leaves enemyDebuffNames undefined (the
                 // no-enemy sentinel) and the round contexts fall back to the name-agnostic
                 // enemyDebuffCount path.
-                ...(tgt ? { enemyDebuffNames: enemyDebuffNamesForTarget(tgt) } : {}),
+                ...(tgtReading ? { enemyDebuffNames: tgtReading.enemyDebuffNames } : {}),
                 // Distinct buffs on the bound target, read pre-cast like the names above.
                 // WITHHELD under `mode: 'dps'` — see `liveCountsMeasurable`.
-                ...(tgt && liveCountsMeasurable
-                    ? { enemyBuffCount: selfBuffNamesForOwners(statusEngine, [tgt.id]).length }
+                ...(tgtReading?.enemyBuffCount !== undefined
+                    ? { enemyBuffCount: tgtReading.enemyBuffCount }
                     : {}),
                 // Living opposing units carrying a debuff, by the same per-unit read as
                 // `enemyDebuffNames` above. Supplied whether or not the cast binds a victim (an

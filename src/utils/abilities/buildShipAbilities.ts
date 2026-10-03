@@ -2165,8 +2165,8 @@ function abilitiesFromText(
     // provoke, taunt, concentrate-fire, disable). ADDITIVE — the parallel named status
     // (parseSkillEffects → applyTimedAbilityStatus) still performs the actual lockout/
     // forced-targeting; the control ability only sources the `control-applied` event
-    // (reaction substrate, e.g. Defiant's shield-on-Stasis). Carries no conditions (see the
-    // gated-control caveat below); no damage/modifier → DPS pipeline ignores it.
+    // (reaction substrate, e.g. Defiant's shield-on-Stasis). No damage/modifier → the DPS
+    // pipeline ignores it.
     // An enemy-side control's target is re-derived via detectEnemyGrantScope (same
     // clause-adjacency detection as the paired named-status SkillEffect, keyed on the effect's
     // display name) so an enemy-adjacency phrasing ("Stasis ... on the targeted enemy and all
@@ -2182,13 +2182,9 @@ function abilitiesFromText(
                 type: 'control',
                 target: controlTarget, // 'enemy'/adjacency for inflicted, 'self' for Taunt
                 trigger: 'on-cast',
-                // Control abilities carry no conditions: a GATED control (e.g. Crocus's "if
-                // target has >3 debuffs" Stasis) therefore emits control-applied unconditionally
-                // on the cast path. Inert today (the only on-stasis-applied reactor, Defiant, has
-                // an UNCONDITIONAL Stasis, and no ship both gates its own control and reacts to
-                // it). If a future ship pairs a gated control with an own-control reaction, thread
-                // the inflicting ability's conditions onto the control ability so a gated-off
-                // control doesn't over-fire the reaction.
+                // Built ungated here; the control-twin pass near the end of this builder copies
+                // the paired named status's conditions onto it, or drops it when that status
+                // resolved to a reactive trigger.
                 conditions: [],
                 config: { type: 'control', effect: ctrl.effect },
                 autoFilled: true,
@@ -3379,6 +3375,43 @@ function slotForBuffSource(skillSource: SelectedGameBuff['skillSource']): SkillS
     }
 }
 
+/**
+ * Enemy statuses whose in-game reach is narrower than their skill text says, keyed by ship name,
+ * slot and status name. Each entry is an owner ruling about the live game.
+ *
+ * - Asphyxiator's charged Stasis lands on the targeted enemy alone (owner ruling 2026-10-03): the
+ *   skill is single-target, and its "on the targeted enemy and all adjacent enemies" wording does
+ *   not reach the neighbours. The gate reads the targeted enemy's own debuff count. His ACTIVE's
+ *   Inferno keeps its adjacency reach.
+ *
+ * Applies to the named status and to its `type:'control'` twin. `enemyScopePins.test.ts` fails
+ * when a pinned ship's text stops carrying the wording the pin overrides.
+ */
+export const ENEMY_SCOPE_PINS: Readonly<
+    Record<string, Partial<Record<SkillSlot, Readonly<Record<string, AbilityTarget>>>>>
+> = {
+    Asphyxiator: { charged: { Stasis: 'enemy' } },
+};
+
+function applyEnemyScopePins(shipName: string, bySlot: Map<SkillSlot, PositionedAbility[]>) {
+    const pins = Object.hasOwn(ENEMY_SCOPE_PINS, shipName) ? ENEMY_SCOPE_PINS[shipName] : undefined;
+    if (!pins) return;
+    for (const [slot, positioned] of bySlot) {
+        const slotPins = pins[slot];
+        if (!slotPins) continue;
+        for (const { ability } of positioned) {
+            const statusName =
+                ability.config.type === 'debuff'
+                    ? ability.config.buffName
+                    : ability.config.type === 'control'
+                      ? CONTROL_EFFECT_DISPLAY_NAME[ability.config.effect]
+                      : undefined;
+            if (statusName === undefined || !Object.hasOwn(slotPins, statusName)) continue;
+            ability.target = slotPins[statusName];
+        }
+    }
+}
+
 export function buildShipAbilities(rawShip: Ship): ShipSkills {
     counter = 0;
     // Every pass below reads status names off the text by position (canonicaliseStatusNames).
@@ -3977,6 +4010,8 @@ export function buildShipAbilities(rawShip: Ship): ShipSkills {
             pushToSlot(bySlot, 'passive', [{ ability, pos }]);
         }
     }
+
+    applyEnemyScopePins(ship.name, bySlot);
 
     // Control-twin gating parity (epic PR2): a `type:'control'` ability is emitted
     // ADDITIVELY alongside the named debuff/buff that actually performs the status

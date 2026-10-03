@@ -993,19 +993,31 @@ exports[`kit fingerprints > Fuying 1`] = `
 exports[`kit fingerprints > Gallant 1`] = `
 {
   "plain": [
+    "attack",
     "attack:active",
     "attack:charged",
     "charge-changed",
+    "control:charged",
+    "debuff",
+    "debuff-resisted",
   ],
   "richEnemy": [
+    "attack",
     "attack:active",
     "attack:charged",
     "charge-changed",
+    "control:charged",
+    "debuff",
+    "debuff-resisted",
   ],
   "wounded": [
+    "attack",
     "attack:active",
     "attack:charged",
     "charge-changed",
+    "control:charged",
+    "debuff",
+    "debuff-resisted",
   ],
 }
 `;
@@ -1372,22 +1384,28 @@ exports[`kit fingerprints > Incinerator 1`] = `
 exports[`kit fingerprints > IonScorp 1`] = `
 {
   "plain": [
+    "attack",
     "attack:active",
-    "attack:charged",
     "buff-expired",
     "charge-changed",
+    "control:charged",
+    "debuff",
   ],
   "richEnemy": [
+    "attack",
     "attack:active",
-    "attack:charged",
     "buff-expired",
     "charge-changed",
+    "control:charged",
+    "debuff",
   ],
   "wounded": [
+    "attack",
     "attack:active",
-    "attack:charged",
     "buff-expired",
     "charge-changed",
+    "control:charged",
+    "debuff",
   ],
 }
 `;
@@ -3901,6 +3919,7 @@ exports[`kit fingerprints > Vindicator 1`] = `
     "attack",
     "attack:charged",
     "charge-changed",
+    "control",
     "control:active",
     "debuff",
     "debuff-resisted",
@@ -3910,6 +3929,7 @@ exports[`kit fingerprints > Vindicator 1`] = `
     "attack",
     "attack:charged",
     "charge-changed",
+    "control",
     "control:active",
     "debuff",
     "debuff-resisted",
@@ -3919,6 +3939,7 @@ exports[`kit fingerprints > Vindicator 1`] = `
     "attack",
     "attack:charged",
     "charge-changed",
+    "control",
     "control:active",
     "debuff",
     "debuff-resisted",
