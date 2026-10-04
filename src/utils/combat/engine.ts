@@ -48,6 +48,7 @@ import {
     isAllEnemiesTarget,
     type EnemySelectorKind,
 } from '../abilities/abilityTargetSide';
+import { TITANITE_PLATING } from '../../constants/persistentStackingBuffs';
 import { aliveTargetsOf, type AliveRoster } from './targetableActors';
 import {
     foldActorBuffTotals,
@@ -7342,6 +7343,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                 immediateDamage - transformedToDot > 0
             ) {
                 consumeExposed(statusEngine, victim.id);
+                // Titanite Plating: "removes one stack after taking direct damage" — the same
+                // landed-direct-hit predicate as Exposed.
+                statusEngine.consumeSelfStatusStack(victim.id, TITANITE_PLATING);
             }
             return {
                 // Report the PRE-deposit pool for a

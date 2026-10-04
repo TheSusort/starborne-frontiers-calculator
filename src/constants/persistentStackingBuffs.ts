@@ -3,8 +3,7 @@
  *
  * Certain stackable buffs/debuffs are NOT timed, regardless of what the skill text
  * says: each landed application adds a stack (capped at the buff DB's max) and the
- * status persists until cleansed/consumed. Cleanse, kills, and incoming hits are not
- * simulated in the DPS engine, so these statuses are effectively PERMANENT in-sim.
+ * status persists until its own removal rule (below) or a cleanse/purge takes it.
  *
  * The buff-name rule OVERRIDES skill-text durations: Enforcer's skill text says
  * "inflicts Defense Shred for 3 turns", but in-game the stacks persist and climb —
@@ -16,8 +15,8 @@
  *   now models that lose-on-kill via the remove-self-buff path. In the DPS
  *   calculator it stays permanent: the dummy enemy is indestructible, so the
  *   kill never fires there.
- * - Titanite Plating (max 5) — persists, loses 1 stack per incoming hit; the attacker
- *   is never hit in-sim → permanent here (per-incoming-hit removal is a Phase 4 concern).
+ * - Titanite Plating (max 5) — persists, loses 1 stack each time its holder takes direct
+ *   damage (`TITANITE_PLATING`; spent in the engine's damage funnel beside Exposed).
  *
  * Deliberately ABSENT:
  * - Warding Screen ("Stackable up to 4") — unverified in-game. OPEN QUESTION: if it
@@ -40,3 +39,7 @@ export const PERSISTENT_STACKING_BUFFS: ReadonlyMap<string, number | undefined> 
     ['Overload', 10],
     ['Titanite Plating', 5],
 ]);
+
+/** "Removes one stack after taking direct damage." The engine spends one stack per landed direct
+ *  hit, on the same predicate that spends an Exposed stack (`applyVictimDamage`). */
+export const TITANITE_PLATING = 'Titanite Plating';
