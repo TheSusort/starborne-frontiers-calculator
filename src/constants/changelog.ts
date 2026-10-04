@@ -13,9 +13,8 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator: APEX's passive shield now reacts to debuffs inflicted by allies too.",
     "Combat simulator: APEX's Block Shield now lands on enemies reaching three debuffs.",
     'Combat simulator: Malvex, Zosimos, Anemone and Nuqtu bonuses now check every enemy hit.',
-    "Combat simulator: Meiying's on-kill Stasis now needs her own kill.",
     "Combat simulator: Meiying's on-kill Stasis now counts DoTs as debuffs on the victim.",
-    'Combat simulator: "Upon destroying an enemy" passives now trigger only on own kills.',
+    "Combat simulator: 'upon destroying' passives, Meiying's included, now need the ship's own kill.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
