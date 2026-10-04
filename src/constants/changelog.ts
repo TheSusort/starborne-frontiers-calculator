@@ -59,6 +59,8 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator: Centurion's counter-attack now carries his Core Charge damage bonus.",
     'Combat simulator: Defensive Affinity Override now also lowers area-attack crits on its holder.',
     'Combat simulator: Tormenter always crits from refit 0, as the text says.',
+    'Combat simulator: Chimei, Harvester and Everliving Regeneration buff values now match the game.',
+    'Combat simulator: Binderburg Resilience I and II now also raise Defense.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

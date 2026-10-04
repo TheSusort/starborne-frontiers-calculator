@@ -85,7 +85,7 @@ export const BUFFS: Buff[] = [
     },
     {
         name: 'Speed Up I',
-        description: '+10% Speed',
+        description: '+15% Speed',
         type: 'buff',
     },
     {
@@ -222,12 +222,12 @@ export const BUFFS: Buff[] = [
     {
         name: 'Inc. DoT Damage Up II',
         description: '+20% DoT Damage',
-        type: 'buff',
+        type: 'debuff',
     },
     {
         name: 'Inc. DoT Damage Up III',
         description: '+30% DoT Damage',
-        type: 'buff',
+        type: 'debuff',
     },
     {
         name: 'Overload',
@@ -314,7 +314,7 @@ export const BUFFS: Buff[] = [
     },
     {
         name: 'Binderburg Resilience II',
-        description: '+20 Security',
+        description: '+20 Security, +10% Defense',
         type: 'buff',
     },
     {
@@ -339,7 +339,7 @@ export const BUFFS: Buff[] = [
     },
     {
         name: 'Everliving Regeneration II',
-        description: '+20% Incoming Repair, +20 Security',
+        description: '+20% Incoming Repair, +15 Security',
         type: 'buff',
     },
     {
@@ -409,7 +409,7 @@ export const BUFFS: Buff[] = [
     },
     {
         name: 'Binderburg Resilience I',
-        description: '+10 Security',
+        description: '+10 Security, +5% Defense',
         type: 'buff',
     },
     {
@@ -711,7 +711,7 @@ export const BUFFS: Buff[] = [
     {
         name: 'Inc. DoT Damage Up I',
         description: '+10% DoT Damage',
-        type: 'buff',
+        type: 'debuff',
     },
     {
         name: 'Out. DoT Damage Up II',
@@ -725,7 +725,7 @@ export const BUFFS: Buff[] = [
     },
     {
         name: 'Everliving Regeneration I',
-        description: '+10% Incoming Repair',
+        description: '+10% Incoming Repair, +10 Security',
         type: 'buff',
     },
     {
@@ -755,7 +755,7 @@ export const BUFFS: Buff[] = [
     },
     {
         name: 'Out. Detonation Damage Up III',
-        description: '+45% Outgoing Detonation Damage',
+        description: '+30% Outgoing Detonation Damage',
         type: 'buff',
     },
     {

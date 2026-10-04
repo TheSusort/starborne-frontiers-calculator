@@ -3,6 +3,7 @@ import { dirname } from 'path';
 import * as fs from 'fs';
 import * as path from 'path';
 import { fetchBuffsFromRocky } from './updateBuffsDataFetcher';
+import { MANUAL_DESCRIPTION_OVERRIDES, MANUAL_TYPE_OVERRIDES } from './buffDataOverrides';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -23,14 +24,6 @@ function loadShipNames(): string[] {
     const parsed = JSON.parse(fs.readFileSync(SHIP_DATA_PATH, 'utf8')) as Array<{ name: string }>;
     return parsed.map((s) => s.name);
 }
-
-// Manual description overrides applied after fetching upstream data.
-// Add entries here when the upstream source has incorrect descriptions.
-// Keep in sync with manual corrections already present in src/constants/buffs.ts.
-const MANUAL_DESCRIPTION_OVERRIDES: Record<string, string> = {
-    // upstream says "Damage" but the game scales bombs off Attack
-    'Bomb III': '300% Attack',
-};
 
 // Implant-only buffs that never appear in ship-buff fetch data and so are never
 // produced upstream — re-added here so a regen preserves them. (D-PR9: Font of Power.)
@@ -99,6 +92,12 @@ async function updateBuffsData() {
         const existing = buffsMap.get(name);
         if (existing) {
             buffsMap.set(name, { ...existing, description });
+        }
+    }
+    for (const [name, type] of Object.entries(MANUAL_TYPE_OVERRIDES)) {
+        const existing = buffsMap.get(name);
+        if (existing) {
+            buffsMap.set(name, { ...existing, type });
         }
     }
 

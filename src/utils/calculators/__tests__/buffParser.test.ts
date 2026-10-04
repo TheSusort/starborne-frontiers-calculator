@@ -313,7 +313,7 @@ describe('Out. Detonation Damage Up — outgoing detonation channel', () => {
     it('parses the real BUFFS entry into detonationDamage', () => {
         const buff = BUFFS.find((b) => b.name === 'Out. Detonation Damage Up III')!;
         const effects = parseBuffEffects(buff.name, buff.description);
-        expect(effects.detonationDamage).toBe(45);
+        expect(effects.detonationDamage).toBe(30);
     });
 
     it('does not leak into the direct outgoingDamage channel', () => {
