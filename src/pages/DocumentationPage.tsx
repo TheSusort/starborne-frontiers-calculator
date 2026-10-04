@@ -2888,8 +2888,10 @@ const DocumentationPage: React.FC = () => {
                                         charged skill extends every hit enemy&apos;s debuffs and
                                         grants Crit Power Up II. Effects tied to one enemy&apos;s
                                         crit, such as Wisteria&apos;s Inferno, read that
-                                        enemy&apos;s own crit. The DPS calculator still grants a
-                                        crit-gated buff whenever crit rate is above zero.
+                                        enemy&apos;s own crit. Asphodel adds one charge for each
+                                        enemy her skill crits, so an area hit that crits two enemies
+                                        adds two. The DPS calculator still grants a crit-gated buff
+                                        whenever crit rate is above zero.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Buff Steal:</span> Skills

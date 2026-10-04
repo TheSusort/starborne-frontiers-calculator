@@ -16,6 +16,10 @@
  * Lionheart's "If this critically hits, grants Attack Up … to all adjacent allies" is a reactive
  * on-crit grant fed by the same positional `ability-performed`; its arm pins that it already
  * follows the cast's real crits.
+ *
+ * Asphodel's passive "adds 1 charge to its charged skill after critically damaging an enemy" is
+ * counted per struck enemy instead: her charge gain (`charge-changed` reason 'manip') must equal
+ * the number of distinct enemies in the cast's `critVictimIds`.
  */
 import { describe, it, expect, beforeAll, vi } from 'vitest';
 import { runCombat, CombatEngineInput } from '../engine';
@@ -65,6 +69,13 @@ const realKit = (ship: string, slot: 'active' | 'charged'): ShipSkills => {
     const found = buildShipAbilities(built).slots.find((s) => s.slot === slot);
     if (!found) throw new Error(`${ship} has no ${slot} slot`);
     return { slots: [{ slot, abilities: found.abilities }] };
+};
+
+/** Every slot of the ship's kit (active, charged, passive). */
+const fullKit = (ship: string): ShipSkills => {
+    const built = buildTraceShip(ship);
+    if (!built) throw new Error(`${ship} missing from reference data`);
+    return buildShipAbilities(built);
 };
 
 const cone = () => parsePattern('Pattern-Cone-Range-1');
@@ -195,6 +206,8 @@ interface CastReading {
     struck: Set<string>;
     extended: Set<string>;
     granted: string[];
+    /** The caster's charge gain from charge manipulation (`charge-changed` reason 'manip'). */
+    chargeGain: number;
 }
 
 const readCast = (input: CombatEngineInput, casterId: string, seed: number): CastReading => {
@@ -204,6 +217,11 @@ const readCast = (input: CombatEngineInput, casterId: string, seed: number): Cas
     const critVictims = new Set<string>();
     const struck = new Set<string>();
     const granted: string[] = [];
+    let chargeGain = 0;
+    bus.on('charge-changed', (e: Extract<CombatEvent, { type: 'charge-changed' }>) => {
+        if (e.actorId === casterId && e.round === 1 && e.reason === 'manip')
+            chargeGain += e.newCharge - e.oldCharge;
+    });
     bus.on('ability-performed', (e: Extract<CombatEvent, { type: 'ability-performed' }>) => {
         if (e.actorId !== casterId || e.round !== 1) return;
         for (const id of e.critVictimIds ?? []) critVictims.add(id);
@@ -215,7 +233,13 @@ const readCast = (input: CombatEngineInput, casterId: string, seed: number): Cas
         if (e.granterId === casterId && e.round === 1) granted.push(`${e.buffName}@${e.actorId}`);
     });
     runCombat({ ...input, bus });
-    return { critVictims, struck, extended: new Set(extendCalls.map((c) => c.victimId)), granted };
+    return {
+        critVictims,
+        struck,
+        extended: new Set(extendCalls.map((c) => c.victimId)),
+        granted,
+        chargeGain,
+    };
 };
 
 /** Seeds on which `fired(reading)` disagrees with "some struck enemy was crit". */
@@ -327,5 +351,91 @@ describe("Lionheart's crit grant already follows the cast's real crits", () => {
         const input = withAdjacentAlly(playerCast('Lionheart', 'active'));
         expect(mismatches(input, 'attacker', grantsAttackUp)).toEqual([]);
         expect(SEEDS.some((s) => grantsAttackUp(readCast(input, 'attacker', s)))).toBe(true);
+    });
+});
+
+describe("Asphodel's passive adds 1 charge per enemy her cast crits", () => {
+    // "This Unit adds 1 charge to its charged skill after critically damaging an enemy" (owner
+    // ruling 13, 2026-10-04): an area cast critting A and C adds 2. Charge count 4 so the cap
+    // (her real count is 2) cannot hide a +2 or +3; round 1 is an active cast on every seed.
+    const playerAsphodel = (): CombatEngineInput => ({
+        ...playerCast('Asphodel', 'active'),
+        shipSkills: fullKit('Asphodel'),
+        chargeCount: 4,
+        hasChargedSkill: true,
+        startCharged: false,
+    });
+    const enemyAsphodel = (): CombatEngineInput => {
+        const input = enemyCast('Asphodel', 'active');
+        const [caster] = input.enemyAttackers;
+        return {
+            ...input,
+            enemyAttackers: [
+                { ...caster, shipSkills: fullKit('Asphodel'), chargeCount: 4, startCharged: false },
+            ],
+        };
+    };
+
+    const expectPerCritCharge = (input: CombatEngineInput, casterId: string, aimedId: string) => {
+        const readings = SEEDS.map((seed) => ({ seed, ...readCast(input, casterId, seed) }));
+        const wrong = readings
+            .filter((r) => r.chargeGain !== r.critVictims.size)
+            .map((r) => ({ seed: r.seed, crit: [...r.critVictims], gain: r.chargeGain }));
+        expect(wrong).toEqual([]);
+        const covered = (r: CastReading) => [...r.critVictims].filter((id) => id !== aimedId);
+        // Crits on the aimed enemy and one covered enemy: +2.
+        expect(
+            readings.some(
+                (r) => r.critVictims.has(aimedId) && covered(r).length === 1 && r.chargeGain === 2
+            )
+        ).toBe(true);
+        // A crit on a covered enemy alone: +1.
+        expect(
+            readings.some(
+                (r) => !r.critVictims.has(aimedId) && covered(r).length === 1 && r.chargeGain === 1
+            )
+        ).toBe(true);
+        // No crit: nothing.
+        expect(readings.some((r) => r.critVictims.size === 0 && r.chargeGain === 0)).toBe(true);
+        // Every struck enemy crit: +3.
+        expect(readings.some((r) => r.critVictims.size === 3 && r.chargeGain === 3)).toBe(true);
+    };
+
+    it('player Asphodel: +1 per struck enemy crit', () => {
+        expectPerCritCharge(playerAsphodel(), 'attacker', 'enemy-a');
+    });
+
+    it('enemy Asphodel: +1 per struck player ship crit', () => {
+        expectPerCritCharge(enemyAsphodel(), 'caster', 'attacker');
+    });
+
+    it('DPS calculator: one enemy, so +1 on a critting active cast and nothing otherwise', () => {
+        const bus = createEventBus();
+        const gainByRound = new Map<number, number>();
+        bus.on('charge-changed', (e: Extract<CombatEvent, { type: 'charge-changed' }>) => {
+            if (e.reason !== 'manip') return;
+            gainByRound.set(e.round, (gainByRound.get(e.round) ?? 0) + e.newCharge - e.oldCharge);
+        });
+        const result = simulateDPS({
+            attack: 1000,
+            crit: 50,
+            critDamage: 0,
+            defensePenetration: 0,
+            chargeCount: 50,
+            startCharged: false,
+            enemyDefense: 0,
+            enemyHp: 1e9,
+            rounds: 12,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            hacking: 0,
+            enemySecurity: 0,
+            shipSkills: fullKit('Asphodel'),
+            bus,
+        });
+        const active = result.rounds.filter((r) => r.action === 'active');
+        expect(active.some((r) => r.didCrit)).toBe(true);
+        expect(active.some((r) => !r.didCrit)).toBe(true);
+        for (const r of active) expect(gainByRound.get(r.round) ?? 0).toBe(r.didCrit ? 1 : 0);
     });
 });

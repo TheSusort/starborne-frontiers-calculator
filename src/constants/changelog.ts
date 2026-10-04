@@ -44,6 +44,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: buffs a skill grants after its damage no longer boost that hit.',
     "Combat simulator: Lev's charged now extends debuffs on a crit against any enemy hit.",
     "Combat simulator: Lev's charged grants Crit Power Up II only after a real crit.",
+    'Combat simulator: Asphodel now gains a charge for each enemy she crits.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
