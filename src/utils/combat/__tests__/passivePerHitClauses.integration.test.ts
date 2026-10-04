@@ -408,34 +408,4 @@ describe('DPS calculator: the one enemy is the struck set', () => {
             speedDownRounds: [1, 2, 3],
         });
     });
-
-    it("a role-gated passive gain keeps its combat-start seed (Anjian's Stealth against a Debuffer)", () => {
-        const built = buildTraceShip('Anjian');
-        if (!built) throw new Error('Anjian missing');
-        const bus = createEventBus();
-        const stealthRounds: number[] = [];
-        bus.on('buff-applied', (e: Extract<CombatEvent, { type: 'buff-applied' }>) => {
-            if (e.buffName === 'Stealth') stealthRounds.push(e.round);
-        });
-        simulateDPS({
-            attack: 15000,
-            crit: 0,
-            critDamage: 150,
-            defensePenetration: 0,
-            chargeCount: 99,
-            enemyDefense: 8000,
-            enemyHp: 1e12,
-            rounds: 3,
-            selfBuffs: [],
-            enemyDebuffs: [],
-            enemyType: 'Debuffer',
-            hacking: 1e6,
-            enemySecurity: 0,
-            defence: 6000,
-            hp: 30000,
-            shipSkills: buildShipAbilities(built),
-            bus,
-        });
-        expect(stealthRounds).toEqual([1]);
-    });
 });

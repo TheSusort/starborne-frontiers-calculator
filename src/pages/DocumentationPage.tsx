@@ -2969,7 +2969,15 @@ const DocumentationPage: React.FC = () => {
                                         way. A bonus the ship gains for itself when &ldquo;the
                                         target&rdquo; qualifies (Malvex&apos;s shield,
                                         Zosimos&apos;s and Nuqtu&apos;s charges, Anemone&apos;s
-                                        Taunt) is gained once if any struck enemy qualifies.
+                                        Taunt) is gained once if any struck enemy qualifies, and so
+                                        is a passive gain for hitting a debuffer or supporter
+                                        (Anjian, Rys, Sha Xing, Shashou), judged by each struck
+                                        enemy&apos;s own role (in the DPS calculator, the Enemy Type
+                                        selection: Debuffer or Supporter matches, Any / Unknown does
+                                        not). Selenite&apos;s charge for &ldquo;any target&rdquo;
+                                        with Stealth counts only the enemies her skill hits, and
+                                        Chakara&apos;s charge for &ldquo;all damaged enemies&rdquo;
+                                        being faster needs every enemy her skill hits to be faster.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">On-kill passives:</span> A
@@ -2980,6 +2988,13 @@ const DocumentationPage: React.FC = () => {
                                         damage-over-time tick. One worded &ldquo;when an enemy is
                                         destroyed&rdquo; (Liberator, Sokol) reacts to any enemy
                                         death.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
+                                        <span className="text-primary">Debuff counts:</span> A
+                                        condition that counts debuffs, on an enemy or on the ship
+                                        itself (Sustainer&apos;s &ldquo;if this Unit has no
+                                        debuffs&rdquo;, Meatshield&apos;s repair for each debuff on
+                                        itself), counts every damage-over-time stack as a debuff.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Team Ships:</span> Pick a

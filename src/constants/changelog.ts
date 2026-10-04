@@ -15,6 +15,13 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: Malvex, Zosimos, Anemone and Nuqtu bonuses now check every enemy hit.',
     "Combat simulator: Meiying's on-kill Stasis now counts DoTs as debuffs on the victim.",
     "Combat simulator: 'upon destroying' passives, Meiying's included, now need the ship's own kill.",
+    'Combat simulator: Anjian, Rys, Sha Xing and Shashou passives now check every enemy hit.',
+    'DPS calculator: Anjian, Rys, Sha Xing and Shashou passives now fire every turn.',
+    "Combat simulator: Sustainer's no-debuff bonuses now treat DoTs as debuffs.",
+    "Combat simulator: Meatshield's charged repair now counts DoTs on itself as debuffs.",
+    "Combat simulator: Warpstrike implant's while-debuffed bonus now counts DoTs as debuffs.",
+    "Combat simulator: Selenite's Stealth charge now only counts enemies her skill hits.",
+    "Combat simulator: Chakara's speed charge now needs every damaged enemy faster.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

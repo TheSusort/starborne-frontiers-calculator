@@ -2570,6 +2570,9 @@ export function buildActorConditionContext(
         /** Active debuff names on self. Default [] (DPS-assumption). Populated by
          *  buildDrainContext. */
         selfDebuffNames?: string[];
+        /** Debuffs on self, DoT entries included (`actorDebuffCount`). Absent → the count of
+         *  `selfDebuffNames`. Populated by buildDrainContext. */
+        selfDebuffCount?: number;
         /** Owner has the lowest Speed among its player team. Default true (lone-actor /
          *  DPS assumption). Populated by buildDrainContext. */
         isLowestSpeedAlly?: boolean;
@@ -2667,6 +2670,7 @@ export function buildActorConditionContext(
         selfHpPct: shared.selfHpPct,
         enemyBuffNames: shared.enemyBuffNames,
         selfDebuffNames: shared.selfDebuffNames,
+        selfDebuffCount: shared.selfDebuffCount,
         isLowestSpeedAlly: shared.isLowestSpeedAlly,
         selfShieldFull: shared.selfShieldFull,
         enemyShielded: shared.enemyShielded,
@@ -2762,9 +2766,12 @@ function splitDrainGateConditions(intent: Intent): DrainGateSplit {
 }
 
 /** True when an on-deal-damage reaction's `enemy-type` conditions hold for at least ONE ship its
- *  sub-attack struck (`eventCtx.dealtVictimIds`), judged by that ship's role via `ctx.roleOf`.
- *  The conditions combine as `conditionsMet` does (an `anyOf` run is one OR-group, every group
- *  must hold) and each victim is judged on its own. An unknown role never matches. No
+ *  sub-attack struck (`eventCtx.dealtVictimIds`), judged by that ship's role via `ctx.roleOf`
+ *  (owner ruling R21: Shashou's "after damaging a debuffer or supporter" fires once if any struck
+ *  enemy has the role). The conditions combine as `conditionsMet` does (an `anyOf` run is one
+ *  OR-group, every group must hold) and each victim is judged on its own. A victim with no role
+ *  (the DPS calculator's synthesized enemy) reads the fight-wide `ctx.enemyType` instead — the
+ *  configured class there, absent in battle — and with neither it never matches. No
  *  `enemy-type` condition, or a trigger other than on-deal-damage → true. */
 function dealtVictimRoleGateMet(intent: Intent, ctx: IntentExecContext): boolean {
     if (intent.ability.trigger !== 'on-deal-damage') return true;
@@ -2780,9 +2787,12 @@ function dealtVictimRoleGateMet(intent: Intent, ctx: IntentExecContext): boolean
         const role = ctx.roleOf?.(victimId);
         return groups.every((group) =>
             group.some((c) => {
-                const matches = matchesRoleCategory(role, [
-                    c.requiredEnemyType!.toUpperCase() as ShipRoleCategory,
-                ]);
+                const matches =
+                    role !== undefined
+                        ? matchesRoleCategory(role, [
+                              c.requiredEnemyType!.toUpperCase() as ShipRoleCategory,
+                          ])
+                        : ctx.enemyType === c.requiredEnemyType;
                 return c.negate ? !matches : matches;
             })
         );
@@ -2883,6 +2893,7 @@ function perVictimEnemyConditions(intent: Intent): Ability['conditions'] {
 }
 
 function buildDrainContext(ctx: IntentExecContext, ownerId: string) {
+    const ownerActor = ctx.actorById?.(ownerId);
     // Owner-aware drain gate: self-buff names come from the OWNER's snapshot so each
     // owner's reactive follow-up is gated against ITS OWN active buffs + the shared enemy state.
     // `includeAbilitySelfNames` is now TRUE at drain time so the gate ALSO sees ability-sourced
@@ -2930,6 +2941,8 @@ function buildDrainContext(ctx: IntentExecContext, ownerId: string) {
             (ctx.enemyAttackerIds ?? []).filter((id) => ctx.isActorAlive?.(id) ?? true)
         ),
         selfDebuffNames: ownerDebuffNamesFor(ctx.statusEngine, ownerId),
+        // Named debuffs plus every DoT entry on the owner (R22) — absent without an actor reader.
+        ...(ownerActor ? { selfDebuffCount: actorDebuffCount(ctx.statusEngine, ownerActor) } : {}),
         // Live lowest-speed-ally gate (Chakara). Default true → DPS / no-delegate
         // paths keep the lone-actor assumption.
         isLowestSpeedAlly: ctx.isLowestSpeedAllyFor?.(ownerId) ?? true,

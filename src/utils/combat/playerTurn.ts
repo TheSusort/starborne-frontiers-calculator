@@ -671,6 +671,10 @@ export interface RecipientGateReading {
     role?: EnemyBaseClass;
     /** Distinct non-DoT debuffs on the actor (its per-target status store). */
     statusDebuffNames: string[];
+    /** The buffs the actor itself holds. A self gain asking whether a STRUCK enemy holds a named
+     *  buff ("If any target has Stealth" — Selenite) reads these rather than the side-wide
+     *  `enemyBuffNames` union (owner ruling R23). */
+    buffNames: string[];
 }
 
 /** Which side of a cast each `ConditionContext` field describes. A `'victim'` field answers about
@@ -680,6 +684,7 @@ export interface RecipientGateReading {
 const CONDITION_CONTEXT_SUBJECT = {
     selfBuffNames: 'caster',
     selfDebuffNames: 'caster',
+    selfDebuffCount: 'caster',
     enemyBuffNames: 'caster',
     enemyBuffCount: 'victim',
     enemyDebuffCount: 'victim',
@@ -726,8 +731,8 @@ const VICTIM_CONTEXT_KEYS = (
  *  the primary target has 3 or more damage over time effects"). A self gain gated on one fires
  *  ONCE when ANY enemy the cast strikes qualifies (owner ruling R17) — see `anyStruckVictimMeets`.
  *  `stat-vs-target` is deliberately absent: its only self-gain carrier reads "If ALL damaged
- *  enemies have more speed than this Unit" (Chakara), an every-enemy quantifier, so it keeps
- *  reading the bound target. */
+ *  enemies have more speed than this Unit" (Chakara), an every-enemy quantifier — see
+ *  `isEveryStruckSelfGain`. */
 const ANY_STRUCK_GATE_SUBJECTS: ReadonlySet<ConditionSubject> = new Set<ConditionSubject>([
     'enemy-shield',
     'target-repaired-this-round',
@@ -762,6 +767,15 @@ const isAnyStruckSelfGain = (ability: Ability): boolean =>
     ability.trigger === 'on-cast' &&
     SELF_GAIN_TYPES.has(ability.config.type) &&
     readsStruckEnemy(gateConditions(ability));
+/** A firing-slot self gain gated on comparing the owner against the struck enemy
+ *  (`stat-vs-target`): it needs EVERY enemy the cast strikes to pass — "If all damaged enemies have
+ *  more speed than this Unit, it adds 1 charge" (Chakara, owner ruling R24). With one struck
+ *  enemy, that enemy decides. */
+const isEveryStruckSelfGain = (ability: Ability): boolean =>
+    ability.target === 'self' &&
+    ability.trigger === 'on-cast' &&
+    SELF_GAIN_TYPES.has(ability.config.type) &&
+    gateConditions(ability).some((c) => c.subject === 'stat-vs-target');
 
 /** `casterCtx` with every victim field taken from `victimCtx` — present there → copied, absent
  *  there → absent here (absence is a meaningful answer for several fields). */
@@ -912,6 +926,10 @@ export interface PlayerTurnArgs {
      *  its own id). NAMES ONLY — never folded. Defaults to [] (the DPS assumption).
      *  Sourced by the engine via triggers.ownerDebuffNamesFor. */
     selfDebuffNames?: string[];
+    /** How many debuffs THIS actor carries, its DoT entries included (`actorDebuffCount`) — the
+     *  count a `self-debuff` gate without a name reads. Absent (DPS/standalone callers) → the
+     *  count of `selfDebuffNames`. */
+    selfDebuffCount?: number;
     /** Stasis direct-damage break hook. When supplied, fires AFTER scheduled
      *  debuffs are applied (sourceFired) but BEFORE the ability timed-debuff loop, so the break
      *  correctly precedes any Stasis re-application from the same attack's debuff abilities.
@@ -1808,6 +1826,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // No default — undefined is the DPS-parity sentinel (see PlayerTurnArgs doc).
         enemyDebuffNames: enemyDebuffNamesArg,
         selfDebuffNames: selfDebuffNamesArg = [],
+        selfDebuffCount: selfDebuffCountArg,
         healEventOnly = false,
         onHitBreakStasis,
         aoeVictimIds,
@@ -2568,6 +2587,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         debuffedEnemyCount: debuffedEnemyCountArg,
         enemyDebuffNames: enemyDebuffNamesArg,
         selfDebuffNames: selfDebuffNamesArg,
+        selfDebuffCount: selfDebuffCountArg,
         turnsTaken: actor.turnsTaken,
         // Owner-vs-target stat comparison. REQUIRED here (not just at the payload
         // hard-gate `ctx` further down) — this is the gate for TIMED ENEMY DEBUFF application
@@ -2636,7 +2656,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             timedSelfBySlot.some(
                 (s) => ridesThisCast(s) && (s.perHit === true || readsStruckEnemy(s.conditions))
             ) ||
-            (firingSkill?.abilities ?? []).some(isAnyStruckSelfGain) ||
+            (firingSkill?.abilities ?? []).some(
+                (a) => isAnyStruckSelfGain(a) || isEveryStruckSelfGain(a)
+            ) ||
             controlAbilitiesFromSkill(firingSkill).some((c) => c.conditions.length > 0))
     ) {
         for (const [id, reading] of recipientGateReadings) {
@@ -2689,27 +2711,52 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                   .map((id) => opposingVictimById.get(id))
                   .filter((v): v is CombatActor => v !== undefined)
             : [];
-    /** The context of the first struck enemy OTHER than the bound target that passes
-     *  `conditions` — `anchorCtx`'s caster half with that enemy's own victim half
-     *  (`recipientGateCtx`, read before the cast's own landings) — or undefined when none does. */
-    const otherStruckVictimCtx = (
+    /** `c` with its named-buff reading narrowed to `buffNames` — one struck enemy's own buffs in
+     *  place of the side-wide union (R23). Unchanged when that enemy has no reading (a
+     *  non-positional caller). */
+    const withStruckBuffNames = (
+        c: ConditionContext,
+        buffNames: string[] | undefined
+    ): ConditionContext => (buffNames ? { ...c, enemyBuffNames: buffNames } : c);
+    /** The bound target as a struck-enemy gate sees it: `anchorCtx` reading the target's own
+     *  buffs. */
+    const struckAnchorCtx = (anchorCtx: ConditionContext): ConditionContext =>
+        withStruckBuffNames(anchorCtx, targetGateReading?.buffNames);
+    /** A struck enemy OTHER than the bound target as a gate sees it: `anchorCtx`'s caster half
+     *  with that enemy's own victim half (`recipientGateCtx`, read before the cast's own
+     *  landings) and its own buffs. */
+    const otherStruckCtx = (v: CombatActor, anchorCtx: ConditionContext): ConditionContext =>
+        withStruckBuffNames(
+            withVictimHalf(anchorCtx, recipientGateCtx(v)),
+            recipientGateReadings?.get(v.id)?.buffNames
+        );
+    /** The context of the first enemy the cast strikes — the bound target first — that passes
+     *  `conditions`, or undefined when none does. A self gain gated on "the target" fires ONCE
+     *  when ANY struck enemy qualifies (owner rulings R17, R23). */
+    const anyStruckVictimCtx = (
         conditions: Ability['conditions'],
         anchorCtx: ConditionContext
     ): ConditionContext | undefined => {
+        const anchor = struckAnchorCtx(anchorCtx);
+        if (conditionsMet(conditions, anchor)) return anchor;
         for (const v of otherStruckVictims) {
-            const c = withVictimHalf(anchorCtx, recipientGateCtx(v));
+            const c = otherStruckCtx(v, anchorCtx);
             if (conditionsMet(conditions, c)) return c;
         }
         return undefined;
     };
-    /** A self gain gated on "the target" fires ONCE when ANY enemy the cast strikes qualifies
-     *  (owner ruling R17): the bound target against `anchorCtx`, or any other struck enemy. */
     const anyStruckVictimMeets = (
         conditions: Ability['conditions'],
         anchorCtx: ConditionContext
+    ): boolean => anyStruckVictimCtx(conditions, anchorCtx) !== undefined;
+    /** Whether EVERY enemy the cast strikes passes `conditions` — the bound target against
+     *  `anchorCtx`, each other struck enemy against its own context (R24). */
+    const everyStruckVictimMeets = (
+        conditions: Ability['conditions'],
+        anchorCtx: ConditionContext
     ): boolean =>
-        conditionsMet(conditions, anchorCtx) ||
-        otherStruckVictimCtx(conditions, anchorCtx) !== undefined;
+        conditionsMet(conditions, struckAnchorCtx(anchorCtx)) &&
+        otherStruckVictims.every((v) => conditionsMet(conditions, otherStruckCtx(v, anchorCtx)));
 
     // §4.5 Direct-damage Stasis break. Fires AFTER scheduled debuffs (sourceFired)
     // but BEFORE the ability timed-debuff loop, so a Stasis re-application from THIS attack's
@@ -3261,6 +3308,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         debuffedEnemyCount: debuffedEnemyCountArg,
         enemyDebuffNames: enemyDebuffNamesArg,
         selfDebuffNames: selfDebuffNamesArg,
+        selfDebuffCount: selfDebuffCountArg,
         turnsTaken: actor.turnsTaken,
         // Approximates max HP with the static base stat (`actor.stats.hp`), same limitation and
         // same reasoning as preDebuffGateCtx above — this ctx is also built before
@@ -3451,6 +3499,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         debuffedEnemyCount: debuffedEnemyCountArg,
         enemyDebuffNames: enemyDebuffNamesArg,
         selfDebuffNames: selfDebuffNamesArg,
+        selfDebuffCount: selfDebuffCountArg,
         selfShielded: actor.shieldPool > 0,
         // Approximates max HP with the static base stat, same limitation as preDebuffGateCtx
         // above — but here it is a hard dependency ordering, not just "not yet
@@ -3836,6 +3885,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                       ),
                   ],
         selfDebuffNames: selfDebuffNamesArg,
+        selfDebuffCount: selfDebuffCountArg,
         // Thread the acting actor's live own-turn counter so cast-path `every-n-turns` gates
         // (on-cast/active/charged) evaluate against the real N — symmetric with the reactive
         // (end-of-turn) drain path, which already reads it via the turnsTakenFor delegate.
@@ -3852,11 +3902,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // both this ctx and modifierCtx sit AFTER critDamageForGates' final += (line ~1431), so
         // the value is identical and stable here.
         selfCritPower: critDamage + critDamageForGates,
-        // Cobalt/Bayah are single-target casts, so the primary `enemy` IS "the target". Chakara's
-        // charge gate ("all damaged enemies have more Speed") is also single-target in the
-        // corpus today — the MIN-across-damaged-enemies aggregate the game text describes
-        // degenerates to this one target's speed. A future multi-target stat-vs-target ship
-        // would need real per-victim aggregation; out of scope here (no corpus ship needs it).
+        // The bound target's stats. Chakara's charge gate ("all damaged enemies have more
+        // Speed") also asks every other struck enemy — see `isEveryStruckSelfGain`.
         ...victimStatGateCtx(enemy),
         // Enemies-hit-this-cast, gating Tygr's self-charge-gain (a `type:'charge'` on-cast
         // ability evaluated via gateFiringAbilities below, NOT a timed self-buff — so it needs
@@ -3895,12 +3942,17 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
 
     // Hard gate: payload abilities whose conditions fail contribute nothing this
     // round. Walked in text order with a same-cast DoT overlay (see applyAbilities).
-    // A self gain asking about "the target" passes once if any struck enemy qualifies (R17).
+    // A self gain asking about "the target" passes once if any struck enemy qualifies (R17, R23);
+    // one comparing the owner against the struck enemies needs every one of them to pass (R24).
     const { gatedSkill, ctxFor } = gateFiringAbilities(
         firingSkill,
         ctx,
-        (ability, gate, abilityCtx) =>
-            isAnyStruckSelfGain(ability) ? otherStruckVictimCtx(gate, abilityCtx) : undefined
+        (ability, gate, abilityCtx) => {
+            if (isAnyStruckSelfGain(ability)) return anyStruckVictimCtx(gate, abilityCtx) ?? null;
+            if (isEveryStruckSelfGain(ability))
+                return everyStruckVictimMeets(gate, abilityCtx) ? abilityCtx : null;
+            return undefined;
+        }
     );
 
     // Control inflictions (Stasis, Provoke, Taunt, Concentrate Fire, Disable): emit `control-applied`

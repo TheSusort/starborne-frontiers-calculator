@@ -295,19 +295,20 @@ export function gateConditions(ability: Ability): Ability['conditions'] {
  * the combat engine (src/utils/combat/engine.ts + abilityStatusGating.ts) — timed
  * at application, auras per-round — not statically at conversion.
  *
- * `passingCtx` is a second chance for an ability whose gate fails against its positional context:
- * the combat engine's "any struck enemy" reading of a self gain's target gate. It returns the
- * context the gate passes under (that enemy's), which `ctxFor` then records, so a count read off
- * the gate's first condition (a charge gain's scale) reads the enemy that qualified.
+ * `resolveGate` lets the caller decide an ability's gate itself — the combat engine's reading of a
+ * self gain's gate over the enemies its cast strikes. It returns the context the gate passes under
+ * (which `ctxFor` then records, so a count read off the gate's first condition — a charge gain's
+ * scale — reads the enemy that qualified), `null` when the gate fails, or `undefined` to leave the
+ * ability to the default rule: its gate against its positional context.
  */
 export function gateFiringAbilities(
     skill: Skill | undefined,
     baseCtx: ConditionContext,
-    passingCtx?: (
+    resolveGate?: (
         ability: Ability,
         gate: Ability['conditions'],
         ctx: ConditionContext
-    ) => ConditionContext | undefined
+    ) => ConditionContext | null | undefined
 ): { gatedSkill: Skill | undefined; ctxFor: Map<string, ConditionContext> } {
     const ctxFor = new Map<string, ConditionContext>();
     if (!skill) return { gatedSkill: undefined, ctxFor };
@@ -326,11 +327,10 @@ export function gateFiringAbilities(
                 : baseCtx;
         ctxFor.set(ability.id, ctx);
         const gate = gateConditions(ability);
-        if (!conditionsMet(gate, ctx)) {
-            const passed = passingCtx?.(ability, gate, ctx);
-            if (!passed) continue;
-            ctxFor.set(ability.id, passed);
-        }
+        const resolved = resolveGate?.(ability, gate, ctx);
+        if (resolved === null) continue;
+        if (resolved !== undefined) ctxFor.set(ability.id, resolved);
+        else if (!conditionsMet(gate, ctx)) continue;
         kept.push(ability);
         if (ability.config.type === 'dot') overlay += 1;
     }

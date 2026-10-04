@@ -9361,6 +9361,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                     targetRepairedThisRound: repairedThisRound.has(v.id),
                     enemyDebuffNames: enemyDebuffNamesForTarget(v),
                     statusDebuffNames: ownerDebuffNamesFor(statusEngine, v.id),
+                    buffNames: selfBuffNamesForOwners(statusEngine, [v.id]),
                     // WITHHELD under `mode: 'dps'` — see `liveCountsMeasurable`.
                     ...(liveCountsMeasurable
                         ? { enemyBuffCount: selfBuffNamesForOwners(statusEngine, [v.id]).length }
@@ -9557,6 +9558,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                     (v) => enemyDebuffNamesForTarget(v).length > 0
                 ).length,
                 selfDebuffNames: ownerDebuffNames(a.id),
+                selfDebuffCount: actorDebuffCount(statusEngine, a),
                 ...(aoeVictimIds ? { aoeVictimIds } : {}),
                 ...(opposingVictimById ? { opposingVictimById } : {}),
                 // Forced bomb-detonation sink (Lingshe's countdown-reduce-to-0). `sink` serves
