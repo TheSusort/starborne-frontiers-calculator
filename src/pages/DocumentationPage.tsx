@@ -2972,11 +2972,12 @@ const DocumentationPage: React.FC = () => {
                                         Taunt) is gained once if any struck enemy qualifies, and so
                                         is a passive gain for hitting a debuffer or supporter
                                         (Anjian, Rys, Sha Xing, Shashou), judged by each struck
-                                        enemy&apos;s own role. Selenite&apos;s charge for &ldquo;any
-                                        target&rdquo; with Stealth counts only the enemies her skill
-                                        hits, and Chakara&apos;s charge for &ldquo;all damaged
-                                        enemies&rdquo; being faster needs every enemy her skill hits
-                                        to be faster.
+                                        enemy&apos;s own role (in the DPS calculator, the Enemy Type
+                                        selection: Debuffer or Supporter matches, Any / Unknown does
+                                        not). Selenite&apos;s charge for &ldquo;any target&rdquo;
+                                        with Stealth counts only the enemies her skill hits, and
+                                        Chakara&apos;s charge for &ldquo;all damaged enemies&rdquo;
+                                        being faster needs every enemy her skill hits to be faster.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">On-kill passives:</span> A
