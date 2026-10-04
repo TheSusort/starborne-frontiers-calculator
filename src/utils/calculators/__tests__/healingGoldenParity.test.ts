@@ -946,10 +946,11 @@ describe('healingGoldenParity', () => {
     // =========================================================================
 
     // ── Scenario 14 (a): enemy full-kit (debuff + DoT + self-buff) ───────────
-    // HAND-VERIFIED. A ship-backed enemy whose ACTIVE slot is: a 100% damage cast, a
-    // 'Defense Down' debuff (inflict, 2 turns), an inferno DoT (tier 100, 1 stack, 3 turns),
-    // and a SELF 'Attack Up' buff (+50% attack, 2 turns). The self-buff is an on-cast active
-    // self-buff → it folds into THIS turn's effectiveAttack before the damage assembly:
+    // HAND-VERIFIED. A ship-backed enemy whose ACTIVE slot is, in written order: a SELF
+    // 'Attack Up' buff (+50% attack, 2 turns), a 100% damage cast, a 'Defense Down' debuff
+    // (inflict, 2 turns) and an inferno DoT (tier 100, 1 stack, 3 turns). The self-buff is an
+    // on-cast active self-buff written BEFORE the damage clause → it folds into THIS turn's
+    // effectiveAttack before the damage assembly:
     //   enemy hit = 4000 × 1.50 (Attack Up) × 100% × 1 (defence 0, crit 0, neutral aff) = 6000.
     // The heal target (hp 100000, defence 0) self-heals 5% of its own max HP = 5000/round.
     //   • DoT TICK (Task 11b): the enemy applies the inferno to the TARGET's DoT container, and
@@ -1005,6 +1006,18 @@ describe('healingGoldenParity', () => {
                                 slot: 'active',
                                 abilities: [
                                     ab({
+                                        type: 'buff',
+                                        target: 'self',
+                                        config: {
+                                            type: 'buff',
+                                            buffName: 'Attack Up',
+                                            parsedEffects: { attack: 50 },
+                                            stacks: 1,
+                                            isStackable: false,
+                                            duration: 2,
+                                        },
+                                    }),
+                                    ab({
                                         type: 'damage',
                                         target: 'enemy',
                                         config: { type: 'damage', multiplier: 100, hits: 1 },
@@ -1031,18 +1044,6 @@ describe('healingGoldenParity', () => {
                                             tier: 100,
                                             stacks: 1,
                                             duration: 3,
-                                        },
-                                    }),
-                                    ab({
-                                        type: 'buff',
-                                        target: 'self',
-                                        config: {
-                                            type: 'buff',
-                                            buffName: 'Attack Up',
-                                            parsedEffects: { attack: 50 },
-                                            stacks: 1,
-                                            isStackable: false,
-                                            duration: 2,
                                         },
                                     }),
                                 ],
@@ -1229,7 +1230,8 @@ describe('healingGoldenParity', () => {
     // HAND-VERIFIED. A PLAYER ship self-heal (10% hp = 10000 of its 100000) GATED on a
     // DERIVABLE `enemy-buff: 'Attack Up'` condition (hand-built — ship-data enemy-buff gates are
     // non-derivable/manual, so this exercises the LIVE enemy-buff path). The enemy grants ITSELF
-    // 'Attack Up' (+50% attack, 10 turns) on every cast → its hit = 4000 × 1.5 = 6000. The
+    // 'Attack Up' (+50% attack, 10 turns) on every cast, written before its damage clause → its
+    // hit = 4000 × 1.5 = 6000. The
     // player gate reads the enemyBuffNames union sourced from the PRIOR state: the focus (speed
     // 100) acts BEFORE the enemy (speed 50), so on round 1 the enemy has not yet applied Attack
     // Up → gate empty → no heal. From round 2 the buff is live → the gate fires:
@@ -1265,11 +1267,6 @@ describe('healingGoldenParity', () => {
                                 slot: 'active',
                                 abilities: [
                                     ab({
-                                        type: 'damage',
-                                        target: 'enemy',
-                                        config: { type: 'damage', multiplier: 100, hits: 1 },
-                                    }),
-                                    ab({
                                         type: 'buff',
                                         target: 'self',
                                         config: {
@@ -1280,6 +1277,11 @@ describe('healingGoldenParity', () => {
                                             isStackable: false,
                                             duration: 10,
                                         },
+                                    }),
+                                    ab({
+                                        type: 'damage',
+                                        target: 'enemy',
+                                        config: { type: 'damage', multiplier: 100, hits: 1 },
                                     }),
                                 ],
                             },

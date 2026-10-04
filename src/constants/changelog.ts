@@ -41,6 +41,9 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator: per-debuff damage bonuses now count each enemy hit's own debuffs.",
     'Combat simulator: Sokol, Wrecker and Rikra bonus damage now checks each enemy hit.',
     "Combat simulator: Panguan's bonus now counts the units next to each enemy hit.",
+    'Combat simulator: buffs a skill grants after its damage no longer boost that hit.',
+    "Combat simulator: Lev's charged now extends debuffs on a crit against any enemy hit.",
+    "Combat simulator: Lev's charged grants Crit Power Up II only after a real crit.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

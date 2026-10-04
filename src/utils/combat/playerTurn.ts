@@ -23,6 +23,7 @@ import {
     detonationsFromSkill,
     accumulatorsFromSkill,
     gateFiringAbilities,
+    gateConditions,
     extraActionsFromSkill,
     partitionDotDamageAbilities,
     type ExtraActionGrant,
@@ -973,6 +974,11 @@ export interface PlayerTurnArgs {
      *  all three counts from the round contexts, which is what routes their conditions back to the
      *  user's manual `manualCount ?? 1`. Set by engine.ts's `liveCountsMeasurable`. */
     liveCountsMeasurable?: boolean;
+    /** A crit-gated timed buff grant needs a REAL crit: when true, a `self-crit`-gated status of
+     *  the timed-self loop is decided after the hit, on `anyVictimCrit`. Absent/false — the
+     *  single-ship DPS calculator — keeps the pre-hit gate, which passes whenever crit rate > 0
+     *  (see the pre-debuff gate ctx note). Set by engine.ts's `critGatedGrantsNeedRealCrit`. */
+    critGatedGrantsNeedRealCrit?: boolean;
     /** Opposing actors destroyed SO FAR THIS BATTLE, regardless of who landed the kill (owner
      *  ruling 2026-08-30) — the live source for Judge's R2 "20% more direct damage for each
      *  destroyed enemy, up to max of 100%". Supplied by engine.ts's `buildTurnArgs` off
@@ -1304,6 +1310,18 @@ function extendInflictedStatusDoTs(args: {
         }
     }
 }
+
+/** A condition list gated on this cast's crit ("if this critically hits"). */
+const hasSelfCritGate = (conditions: readonly { subject: string }[] | undefined): boolean =>
+    (conditions ?? []).some((c) => c.subject === 'self-crit');
+
+/** A cast-wide crit clause: a crit-gated on-cast buff grant or status extension (Lev's charged
+ *  "If a critical hit occurs, all hit enemies have their debuffs extended … and all allies are
+ *  granted Crit Power Up II"). It reads `anyVictimCrit` in runPlayerTurn. */
+const isCastWideCritClause = (ab: Ability): boolean =>
+    ab.trigger === 'on-cast' &&
+    (ab.config.type === 'buff' || ab.config.type === 'extend-status') &&
+    hasSelfCritGate(ab.conditions);
 
 // Charge gain from a GATED skill's charge abilities. Gating already happened in
 // gateFiringAbilities (full AND/OR + thresholds) — for the firing skill via
@@ -1697,6 +1715,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         adjacentAllyIds,
         adjacentEnemyIdsFor,
         liveCountsMeasurable,
+        critGatedGrantsNeedRealCrit = false,
         enemyDestroyedCount: enemyDestroyedCountArg,
         selectorEnemyIdFor,
         enemyBuffNames: enemyBuffNamesArg = [],
@@ -2422,9 +2441,11 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
 
     // (a) Pre-application gate context (before ability debuffs land). effectiveCritRate uses
     // the scheduled crit buff only (modifiers/ability buffs not yet folded), and NO roundCrit
-    // — buff gates use the probability tier like modifierCtx. NOTE: a self-crit-gated buff
-    // therefore resolves effectiveCritRate/100 > 0, i.e. passes whenever the crit rate is
-    // non-zero — intended "live-subject, satisfiable" behaviour, not a bug.
+    // — buff gates use the probability tier like modifierCtx. NOTE: in the single-ship DPS
+    // calculator a self-crit-gated buff therefore resolves effectiveCritRate/100 > 0, i.e.
+    // passes whenever the crit rate is non-zero — intended "live-subject, satisfiable"
+    // behaviour, not a bug. Under `critGatedGrantsNeedRealCrit` (battle, healing) the timed-self
+    // loop does not gate such a status here: it is decided after the hit on `anyVictimCrit`.
     // "N or more debuffs" on an enemy counts every debuff on THAT enemy: its own per-target
     // statuses, unioned by name with the scheduled channel (in the DPS calculator, the debuffs
     // the user configured on its one enemy; empty in battle), plus — inside buildRoundContext —
@@ -3210,13 +3231,31 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             });
         }
     };
+    // Self statuses that land at the end of this function, after every figure of this cast's
+    // damage is fixed, in slot order:
+    //  - a passed status whose clause follows the damage clause (`afterDamageClause`);
+    //  - under `critGatedGrantsNeedRealCrit`, a crit-gated status (`critDecided`): its crit does
+    //    not exist until the hit, so its whole gate is decided there, against postDebuffGateCtx
+    //    with `roundCrit: anyVictimCrit`.
+    const endOfTurnSelfStatuses: {
+        status: (typeof timedSelfBySlot)[number];
+        critDecided: boolean;
+    }[] = [];
     for (const status of timedSelfBySlot) {
         if (status.sourceSlot !== action) continue;
+        if (critGatedGrantsNeedRealCrit && hasSelfCritGate(status.conditions)) {
+            endOfTurnSelfStatuses.push({ status, critDecided: true });
+            continue;
+        }
         // The gate evaluates against THIS CASTER's post-debuff ctx (the status belongs to the
         // acting runtime — postDebuffGateCtx IS the caster's context). Once it passes, the status
         // is applied to EVERY recipient: self → [caster]; ally/all-allies → all players, narrowed
         // per recipient inside `applyTimedSelfStatus`.
         if (!conditionsMet(status.conditions, postDebuffGateCtx)) continue;
+        if (status.afterDamageClause === true) {
+            endOfTurnSelfStatuses.push({ status, critDecided: false });
+            continue;
+        }
         applyTimedSelfStatus(status);
     }
 
@@ -4504,6 +4543,11 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // Cast-time only, like the primary's Step-3 apply: a multi-hit cast lands its DoTs once,
     // against the cast's footprint, not per sub-attack.
     const coveredDots = new Map<string, DoTApplicationConfig>();
+    /** The firing skill carries a cast-wide crit clause — a crit-gated (`self-crit`) on-cast
+     *  buff grant or status extension, whose "if a critical hit occurs" asks about the whole
+     *  cast. Crit-gated DoT effects are per struck enemy instead (`victimCritOf`); every other
+     *  crit-gated payload keeps reading `ctx.roundCrit`. */
+    const hasCastWideCritClause = (firingSkill?.abilities ?? []).some(isCastWideCritClause);
     if (targetId !== undefined) {
         // `dotsFromSkill` maps the skill's `dot` abilities in order, one entry each, so the i-th
         // entry is the i-th of these (tripwire: `dotsFromSkillPairing.corpus.test.ts`).
@@ -4545,13 +4589,21 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // would have. Only a cast the engine will strike positionally (a damage ability) rolls here.
     // An enemy outside the footprint (an adjacency splash neighbour) or a cast with no damage
     // ability has no per-enemy hit, and reads the cast's crit (`ctx.roundCrit`, the primary's).
-    if (coveredDots.size > 0 && positionalLanding && hasDamageAbility) {
+    // A cast carrying a cast-wide crit clause (`hasCastWideCritClause`) rolls here too, so that
+    // clause can ask whether ANY struck enemy was crit (`anyVictimCrit`).
+    if ((coveredDots.size > 0 || hasCastWideCritClause) && positionalLanding && hasDamageAbility) {
         for (const id of aoeVictimIds ?? []) {
             if (id === targetId) continue;
             const v = opposingVictimById?.get(id);
             if (v) coveredFirstHitCrit.set(id, rollVictimCrit(v.affinity ?? 'antimatter'));
         }
     }
+    /** Whether this cast crit ANY enemy it struck: the aimed enemy on any of its hits
+     *  (`roundCrit`) or a covered one on the first sub-attack (the covered crits known while the
+     *  turn runs). What a cast-wide crit clause reads (owner ruling 2026-10-03, Lev: "If a
+     *  critical hit occurs, all hit enemies have their debuffs extended" fires on a crit against
+     *  B alone). Equals `roundCrit` on a cast with no covered rolls (DPS, single target). */
+    const anyVictimCrit = roundCrit || [...coveredFirstHitCrit.values()].some(Boolean);
     const victimCritOf = (id: string): boolean => coveredFirstHitCrit.get(id) ?? roundCrit;
     for (const [rid, victimDots] of coveredDots) {
         const victim = opposingVictimById?.get(rid);
@@ -4960,24 +5012,33 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // (below) and the extendDoTs/extendInflictedDoTs combine (above), since a
     // gatedSkill-only scan (like the purge/steal loops, whose abilities are never passive-slot
     // in the corpus) would silently skip a passive-slot extend ability.
-    // conditionsMet(ab.conditions, ctx) evaluates Lev's self-crit gate against THIS cast's live
-    // `ctx.roundCrit` (set at buildRoundContext above from `roundCrit = critHits > 0`) — the
-    // SAME ctx the purge/steal blocks gate against, so a non-crit cast correctly suppresses
-    // Lev's extension (see evaluateConditions.ts's 'self-crit' case, binary off ctx.roundCrit).
+    // A firing-slot extension's crit gate is cast-wide: Lev's "If a critical hit occurs, all hit
+    // enemies have their debuffs extended" reads `anyVictimCrit` (a crit on ANY struck enemy),
+    // via `castWideCritCtx`. Because `gatedSkill` was gated on the aimed enemy's crit
+    // (`ctx.roundCrit`), firing-slot extensions are taken from `firingSkill` and re-gated here
+    // against the same per-ability ctx with only `roundCrit` swapped. A passive-slot extension
+    // (Asphyxiator: "inflicts a debuff with a critical hit") keeps `ctx`.
     // The DEBUFF branch targets enemies, so it requires a hit target (targetId / aoeVictimIds)
     // and is skipped when there is none — a NO-VICTIM turn, which leaves targetId unset. The
     // BUFF branch (Fuying 'all-allies') needs NO enemy target — it must run regardless of
     // targetId, otherwise the ally/self buff-extend is silently dropped in DPS mode and on any
     // enemy-less cast. extendAll{Debuffs,Buffs}Duration return 0 against an empty/missing store,
     // so both branches no-op harmlessly when the relevant roster is empty.
+    const castWideCritCtx = (base: ConditionContext): ConditionContext =>
+        base.roundCrit === anyVictimCrit ? base : { ...base, roundCrit: anyVictimCrit };
+    const firingExtensions = (firingSkill?.abilities ?? []).filter(
+        (ab) =>
+            ab.config.type === 'extend-status' &&
+            conditionsMet(gateConditions(ab), castWideCritCtx(ctxFor.get(ab.id) ?? ctx))
+    );
     for (const { ability: ab, fromPassive } of [
-        ...(gatedSkill?.abilities ?? []).map((ability) => ({ ability, fromPassive: false })),
+        ...firingExtensions.map((ability) => ({ ability, fromPassive: false })),
         ...(gatedPassive?.abilities ?? []).map((ability) => ({ ability, fromPassive: true })),
     ]) {
         if (
             ab.config.type !== 'extend-status' ||
             ab.trigger !== 'on-cast' ||
-            !conditionsMet(ab.conditions, ctx)
+            !conditionsMet(ab.conditions, fromPassive ? ctx : castWideCritCtx(ctx))
         ) {
             continue;
         }
@@ -6056,6 +6117,28 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                   target: passiveDamageAbility.target,
               }
             : undefined;
+
+    // After-damage self/ally buffs, and crit-gated ones whose crit is now known, land now: the
+    // scalars above (and the aggregate damage) were computed without them, so they boost only
+    // later hits. DISPLAY ONLY afterwards: the round's reported self-buff list
+    // (`activeSelfBuffs`) gains/refreshes the caster's row for each, the same refresh a deferred
+    // enemy debuff gives `landedEnemyDebuffs` — the buff was granted this round. Every gate ctx
+    // and damage fold has already read its own copy.
+    for (const { status, critDecided } of endOfTurnSelfStatuses) {
+        if (
+            critDecided &&
+            !conditionsMet(status.conditions, { ...postDebuffGateCtx, roundCrit: anyVictimCrit })
+        )
+            continue;
+        applyTimedSelfStatus(status);
+        const live = statusEngine
+            .timedAbilityStatuses('self', actor.id)
+            .find((s) => s.payload.buffName === status.payload.buffName);
+        if (!live) continue;
+        const at = activeSelfBuffsForRound.findIndex((b) => b.buffName === live.active.buffName);
+        if (at >= 0) activeSelfBuffsForRound[at] = live.active;
+        else activeSelfBuffsForRound.push(live.active);
+    }
 
     return {
         action,

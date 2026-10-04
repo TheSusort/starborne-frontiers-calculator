@@ -1003,14 +1003,14 @@ describe('enemyBuffNames / selfDebuffNames in player gates (Task 7)', () => {
         ...partial,
     });
 
-    // An enemy attacker whose active slot deals damage AND grants itself a 99-turn +30%
-    // attack self-buff (so the buff is live for every subsequent round).
+    // An enemy attacker whose active slot grants itself a 99-turn +30% attack self-buff and
+    // then deals damage (so the buff is live for that hit and every subsequent round — the
+    // grant is written before the damage clause).
     const enemyWithSelfBuff: ShipSkills = {
         slots: [
             {
                 slot: 'active',
                 abilities: [
-                    enemyAb({ type: 'damage', config: { type: 'damage', multiplier: 100 } }),
                     enemyAb({
                         type: 'buff',
                         target: 'self',
@@ -1023,6 +1023,7 @@ describe('enemyBuffNames / selfDebuffNames in player gates (Task 7)', () => {
                             duration: 99,
                         },
                     }),
+                    enemyAb({ type: 'damage', config: { type: 'damage', multiplier: 100 } }),
                 ],
             },
         ],

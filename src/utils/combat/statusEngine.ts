@@ -144,12 +144,17 @@ export type RegisteredAbilityStatus =
           /** Intra-cast clause order (user-confirmed game rule, 2026-08-03): true when THIS
            *  status's clause sits AFTER a damage-dealing clause in the same firing slot — "deals
            *  X% damage and inflicts Defense Down" resolves the damage first, so the debuff must
-           *  not be in the store while that cast's damage resolves. playerTurn defers the
-           *  application (and its `debuff-applied` emission) of a flagged status to the engine's
-           *  post-apply flush; the landing ROLL still happens at the original point, so the RNG
-           *  draw order is unchanged. Set by the engine's status-collection walk, which sees the
-           *  clause order directly (`buildShipAbilities` sorts each slot by text position).
-           *  Enemy-side firing-slot statuses only; absent → applies inline exactly as before. */
+           *  not be in the store while that cast's damage resolves. Both sides:
+           *   - enemy side: playerTurn defers the application (and its `debuff-applied` emission)
+           *     to the engine's post-apply flush; the landing ROLL still happens at the original
+           *     point, so the RNG draw order is unchanged.
+           *   - self side (a self/ally buff, e.g. Thresh's "deals 300% damage. After targeting a
+           *     defender, gains Crit Power Up II"): the gate is evaluated at its usual point, the
+           *     store write and `buff-applied` happen at the end of runPlayerTurn, after the
+           *     cast's damage figures are fixed, so the buff boosts only later hits.
+           *  Set by the engine's status-collection walk, which sees the clause order directly
+           *  (`buildShipAbilities` sorts each slot by text position). Firing-slot statuses only;
+           *  absent → applies inline. */
           afterDamageClause?: boolean;
           /** Hit-counted lifecycle (Quixilver R2 / "Barrier for 1 hit"). When set, the status
            *  additionally expires after this many qualifying hits, spent via consumeStatusHit.
