@@ -162,6 +162,12 @@ export type RegisteredAbilityStatus =
            *  LANDED on the enemy it asks about — `castLandingsOverlay` in playerTurn. Set by the
            *  engine's status-collection walk; absent → no DoT clause precedes it. */
           afterDotClauseIds?: string[];
+          /** A SELF-side status whose clause precedes an enemy infliction (a debuff or DoT
+           *  clause) in the same firing slot — written order: it is held when that infliction's
+           *  landing roll is drawn. playerTurn lands an ungated one that moves the roll (a hacking
+           *  gain) before the cast's landing chance is read. Set by the engine's
+           *  status-collection walk. Absent → no infliction follows it. */
+          beforeInflictClause?: true;
           /** A PASSIVE-slot status that rides each hit of its owner's cast rather than standing
            *  from combat start — `isPassivePerHitStatus` (abilityStatusGating.ts) decides which.
            *  playerTurn applies it on every active or charged cast: an enemy debuff on each struck

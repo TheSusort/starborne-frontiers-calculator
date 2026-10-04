@@ -3153,7 +3153,6 @@ exports[`kit fingerprints > Rys 1`] = `
     "buff:charged",
     "charge-changed",
     "debuff",
-    "debuff-resisted",
   ],
   "richEnemy": [
     "attack",
@@ -3162,7 +3161,6 @@ exports[`kit fingerprints > Rys 1`] = `
     "buff:charged",
     "charge-changed",
     "debuff",
-    "debuff-resisted",
   ],
   "wounded": [
     "attack",
@@ -3171,7 +3169,6 @@ exports[`kit fingerprints > Rys 1`] = `
     "buff:charged",
     "charge-changed",
     "debuff",
-    "debuff-resisted",
   ],
 }
 `;
