@@ -1,54 +1,26 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '1.73.0';
+export const CURRENT_VERSION = '1.74.0';
 
 // Accumulates between releases. `npm run release` folds these into a new ChangelogEntry at the
 // top of CHANGELOG, bumps CURRENT_VERSION and empties this array — all three together, because a
 // bumped version whose entries are still unreleased shows users a what's-new dialog listing
 // nothing. Do it by hand only if that script cannot.
-export const UNRELEASED_CHANGES: string[] = [
-    "Combat simulator: Tygr's extra action now needs a Stasis target.",
-    "Combat simulator: Rhodium's active now adds one charge per buff on its target.",
-    "Combat simulator: Nuqtu's active charges now need a target with three or more buffs.",
-    "Combat simulator: Nuqtu's extra action now reads only its target's buffs.",
-    "Combat simulator: per-buff damage bonuses now count each struck enemy's own buffs.",
-    "DPS calculator: Nuqtu's bonus charges now need three or more enemy buffs set.",
-    "Combat simulator: Oleander's active repair now grows with each debuffed enemy.",
-    "Combat simulator: Meatshield's charged skill now repairs per debuff on herself.",
-    "Healing calculator: Oleander's active now repairs more for each debuffed enemy.",
-    "Healing calculator: Meatshield's charged skill now repairs per debuff on herself.",
-    'Combat simulator: area-pattern purges now strip buffs from every enemy hit.',
-    'Healing calculator: Sefuba and Tithonus purges now strip every enemy their skills hit.',
-    'Combat simulator: Tithonus chains extra actions after purging four or more buffs.',
-    'Combat simulator: Opal, Provider and Sefuba drain charges only from enemies they hit.',
-    'Combat simulator: allies pick randomly among several Concentrate Fire targets.',
-    "Combat simulator: Asphyxiator's charged Stasis now lands only on the targeted enemy.",
-    "Combat simulator: Gallant, IonScorp and Lodolite now check each enemy's actual role.",
-    'Combat simulator: Crocus now counts every debuff on an enemy for Stasis.',
-    'Combat simulator: battle log control entries now name every enemy they land on.',
-    'Combat simulator: area skills now land their debuffs on every enemy hit.',
-    'Combat simulator: area Stasis, Provoke, Disable and Concentrate Fire reach every enemy hit.',
-    'Combat simulator: APEX, Laika and Malvex now strip shields from every enemy hit.',
-    'Combat simulator: Tithonus and Pallas now steal a buff from every enemy hit.',
-    'Combat simulator: Stasis an area skill lands is no longer shortened by that hit.',
-    "Combat simulator: an area hit now shortens a resisting enemy's existing Stasis.",
-    "Combat simulator: a shorter re-inflicted Stasis no longer shields an enemy's longer one.",
-    'Combat simulator: area skills now spread Corrosion, Inferno and Bombs to every enemy hit.',
-    'Combat simulator: Gallant, IonScorp and Meiying role damage bonuses now apply in battles.',
-    'Combat simulator: Zeolite and Lodolite bonuses against defenders now apply in battles.',
-    'Combat simulator: Thresh now gains Crit Power Up II after targeting a defender.',
-    "Combat simulator: Thresh's active now takes a charge from a targeted defender.",
-    "Combat simulator: per-debuff damage bonuses now count each enemy hit's own debuffs.",
-    'Combat simulator: Sokol, Wrecker and Rikra bonus damage now checks each enemy hit.',
-    "Combat simulator: Panguan's bonus now counts the units next to each enemy hit.",
-    'Combat simulator: buffs a skill grants after its damage no longer boost that hit.',
-    "Combat simulator: Lev's charged now extends debuffs on a crit against any enemy hit.",
-    "Combat simulator: Lev's charged grants Crit Power Up II only after a real crit.",
-    'Combat simulator: Asphodel now gains a charge for each enemy she crits.',
-    'DPS calculator: crit-gated buffs like Crit Power Up II now need a real crit.',
-];
+export const UNRELEASED_CHANGES: string[] = [];
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.74.0',
+        date: '2026-10-04',
+        changes: [
+            "DPS calculator: Nuqtu's bonus charges now need three or more enemy buffs set.",
+            "Healing calculator: Oleander's active now repairs more for each debuffed enemy.",
+            "Healing calculator: Meatshield's charged skill now repairs per debuff on herself.",
+            'Healing calculator: Sefuba and Tithonus purges now strip every enemy their skills hit.',
+            'DPS calculator: crit-gated buffs like Crit Power Up II now need a real crit.',
+            '34 combat simulator fixes.',
+        ],
+    },
     {
         version: '1.73.0',
         date: '2026-10-03',
