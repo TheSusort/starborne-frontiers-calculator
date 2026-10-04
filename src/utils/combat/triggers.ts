@@ -2812,35 +2812,47 @@ function splitDrainGateConditions(intent: Intent): DrainGateSplit {
 /** True when an on-deal-damage reaction's `enemy-type` conditions hold for at least ONE ship its
  *  sub-attack struck (`eventCtx.dealtVictimIds`), judged by that ship's role via `ctx.roleOf`
  *  (owner ruling R21: Shashou's "after damaging a debuffer or supporter" fires once if any struck
- *  enemy has the role). The conditions combine as `conditionsMet` does (an `anyOf` run is one
- *  OR-group, every group must hold) and each victim is judged on its own. A victim with no role
- *  (the DPS calculator's synthesized enemy) reads the fight-wide `ctx.enemyType` instead — the
- *  configured class there, absent in battle — and with neither it never matches. No
+ *  enemy has the role). Each victim is judged on its own by `victimRoleMatches`. No
  *  `enemy-type` condition, or a trigger other than on-deal-damage → true. */
 function dealtVictimRoleGateMet(intent: Intent, ctx: IntentExecContext): boolean {
     if (intent.ability.trigger !== 'on-deal-damage') return true;
-    const roleConditions = intent.ability.conditions.filter(
-        (c) => c.subject === 'enemy-type' && c.requiredEnemyType !== undefined
-    );
+    const roleConditions = enemyRoleConditionsOf(intent.ability);
     if (roleConditions.length === 0) return true;
     const victims =
         intent.eventCtx?.dealtVictimIds ??
         (intent.eventCtx?.victimId !== undefined ? [intent.eventCtx.victimId] : []);
-    const groups = groupConditions(roleConditions);
-    return victims.some((victimId) => {
-        const role = ctx.roleOf?.(victimId);
-        return groups.every((group) =>
-            group.some((c) => {
-                const matches =
-                    role !== undefined
-                        ? matchesRoleCategory(role, [
-                              c.requiredEnemyType!.toUpperCase() as ShipRoleCategory,
-                          ])
-                        : ctx.enemyType === c.requiredEnemyType;
-                return c.negate ? !matches : matches;
-            })
-        );
-    });
+    return victims.some((victimId) => victimRoleMatches(roleConditions, victimId, ctx));
+}
+
+/** The ability's `enemy-type` conditions that name a role. */
+function enemyRoleConditionsOf(ability: Ability): Ability['conditions'] {
+    return ability.conditions.filter(
+        (c) => c.subject === 'enemy-type' && c.requiredEnemyType !== undefined
+    );
+}
+
+/** True when ONE opposing ship satisfies `roleConditions`, judged by its own role via
+ *  `ctx.roleOf`. The conditions combine as `conditionsMet` does (an `anyOf` run is one OR-group,
+ *  every group must hold). A ship with no role (the DPS calculator's synthesized enemy) reads the
+ *  fight-wide `ctx.enemyType` instead — the configured class there, absent in battle — and with
+ *  neither it never matches. Empty `roleConditions` → true. */
+function victimRoleMatches(
+    roleConditions: Ability['conditions'],
+    victimId: string,
+    ctx: IntentExecContext
+): boolean {
+    const role = ctx.roleOf?.(victimId);
+    return groupConditions(roleConditions).every((group) =>
+        group.some((c) => {
+            const matches =
+                role !== undefined
+                    ? matchesRoleCategory(role, [
+                          c.requiredEnemyType!.toUpperCase() as ShipRoleCategory,
+                      ])
+                    : ctx.enemyType === c.requiredEnemyType;
+            return c.negate ? !matches : matches;
+        })
+    );
 }
 
 function splitDrainGateConditionsByShape(intent: Intent): DrainGateSplit {
@@ -6203,56 +6215,45 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
     }
 
     if (cfg.type === 'purge') {
-        // Single-target BY DESIGN (counter-attacker / killer / most-buffs routing): no
-        // 'all-enemies' reactive purge exists in the corpus and the firing skill's
-        // footprint (pattern + opposing roster) is not reachable at drain time.
-        // Remove buffs from the victim. Target = the routed attacker/killer (counterTargetId — set
-        // by on-attacked/on-destroyed, and by on-enemy-purged for Sefuba's chain victim-routing).
-        // statusEngine is in ctx scope — call it directly (mirrors cleanse). Emit
-        // purge-performed UNLESS this purge was itself triggered by a purge (depth-1 guard).
-        // Target: enemy-most-buffs (Rhodium) → the opposing actor with the most buffs;
-        // else the routed attacker/killer (counterTargetId — Iridium/Faust) else the REAL
-        // victim this event carries (eventCtx.victimId — the on-deal-damage purge,
-        // Zeolite: "When this Unit deals damage to a defender it purges 1 buff" — the
-        // owner's own damage target, mirrors the `dot`/`convert-dot` branches' victimId seam).
+        // Target: enemy-most-buffs (Rhodium) → the opposing actor with the most buffs; an
+        // on-deal-damage purge (Zeolite: "When this Unit deals damage to a defender it purges 1
+        // buff from that enemy") → EACH ship the sub-attack struck (AoE rulings 1–2), each judged
+        // on its own role; else the routed attacker/killer (counterTargetId — set by
+        // on-attacked/on-destroyed, and by on-enemy-purged for Sefuba's chain victim-routing).
         // Nothing resolved → NO-OP.
-        const targetId =
+        const targetIds: (string | undefined)[] =
             intent.ability.target === 'enemy-most-buffs'
-                ? ctx.enemyWithMostBuffs?.(intent.ownerId)
-                : (intent.eventCtx?.counterTargetId ?? intent.eventCtx?.victimId);
-        // Reachable: Rhodium's end-of-round purge in any round where no enemy carries a buff
-        // (`mostBuffsAmong` returns undefined there, `engine.ts`). Its `damage` half on the same
-        // trigger and target returns on undefined too, so both halves agree.
-        if (targetId === undefined) return;
-        // As in the debuff branch — re-check against the real routed target.
-        if (!perVictimOk(targetId)) return;
-        // Zeolite: `dealtVictimRoleGateMet` has already required SOME struck ship to hold the
-        // `enemy-type` role; this re-checks it against the ship the purge actually LANDS on, via
-        // `ctx.roleOf` (side-agnostic — roleByActorId is populated from BOTH TeamActorInput.role
-        // and EnemyActorInput.role). An unknown role never matches, mirroring matchesRoleCategory.
-        // Scoped to trigger==='on-deal-damage', where `splitDrainGateConditions` removes the
-        // condition from the global gate; on any other trigger it still gates globally, so
-        // re-evaluating it here would double-gate it against the wrong target.
-        const enemyTypeCond =
+                ? [ctx.enemyWithMostBuffs?.(intent.ownerId)]
+                : intent.ability.trigger === 'on-deal-damage'
+                  ? (intent.eventCtx?.dealtVictimIds ?? [intent.eventCtx?.victimId])
+                  : [intent.eventCtx?.counterTargetId ?? intent.eventCtx?.victimId];
+        // On on-deal-damage `splitDrainGateConditions` lifts the `enemy-type` condition off the
+        // global gate; it is re-checked here against each ship the purge lands on. On any other
+        // trigger it still gates globally, so it is not re-read here.
+        const roleConditions =
             intent.ability.trigger === 'on-deal-damage'
-                ? intent.ability.conditions.find((c) => c.subject === 'enemy-type')
-                : undefined;
-        if (enemyTypeCond?.requiredEnemyType) {
-            const matchesRole = matchesRoleCategory(ctx.roleOf?.(targetId), [
-                enemyTypeCond.requiredEnemyType.toUpperCase() as ShipRoleCategory,
-            ]);
-            const gateMet = enemyTypeCond.negate ? !matchesRole : matchesRole;
-            if (!gateMet) return;
-        }
-        const removed = ctx.statusEngine.purge(targetId, cfg.count);
-        if (removed > 0 && !intent.eventCtx?.fromPurgeEvent) {
-            ctx.bus.emit({
-                type: 'purge-performed',
-                casterId: intent.ownerId,
-                targetId,
-                count: removed,
-                round: ctx.round,
-            });
+                ? enemyRoleConditionsOf(intent.ability)
+                : NO_CONDITIONS;
+        for (const targetId of targetIds) {
+            // Reachable: Rhodium's end-of-round purge in any round where no enemy carries a buff
+            // (`mostBuffsAmong` returns undefined there, `engine.ts`). Its `damage` half on the
+            // same trigger and target returns on undefined too, so both halves agree.
+            if (targetId === undefined) continue;
+            // As in the debuff branch — re-check against the real routed target.
+            if (!perVictimOk(targetId)) continue;
+            if (!victimRoleMatches(roleConditions, targetId, ctx)) continue;
+            const removed = ctx.statusEngine.purge(targetId, cfg.count);
+            // Emit purge-performed UNLESS this purge was itself triggered by a purge (depth-1
+            // guard).
+            if (removed > 0 && !intent.eventCtx?.fromPurgeEvent) {
+                ctx.bus.emit({
+                    type: 'purge-performed',
+                    casterId: intent.ownerId,
+                    targetId,
+                    count: removed,
+                    round: ctx.round,
+                });
+            }
         }
         return;
     }

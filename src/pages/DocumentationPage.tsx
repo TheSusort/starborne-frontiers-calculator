@@ -2960,8 +2960,9 @@ const DocumentationPage: React.FC = () => {
                                         has no ship. Role damage bonuses work the same way: an area
                                         hit from Gallant, IonScorp, Meiying, Zeolite or Lodolite
                                         deals its bonus only to the struck enemies of the named
-                                        role. A bonus that counts something on the enemy (its
-                                        debuffs, buffs or neighbours, as with Ravager, Lev or
+                                        role, and Zeolite&apos;s passive purges a buff from each
+                                        struck defender. A bonus that counts something on the enemy
+                                        (its debuffs, buffs or neighbours, as with Ravager, Lev or
                                         Panguan) or checks its status (Wrecker&apos;s Inferno) is
                                         worked out for each struck enemy from what it carried before
                                         the hit. A passive that reacts to the ship&apos;s own hits
