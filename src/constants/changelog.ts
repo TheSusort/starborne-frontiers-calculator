@@ -54,6 +54,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: a Taunted or Provoked Panon now grants only Terran Guard III.',
     'Combat simulator: Nebula Nullifier implant now reduces damage while Disabled too.',
     'Combat simulator: Nourishment and Vivacious Repair implants now boost passive repairs too.',
+    'Combat simulator: Exuberance implant now boosts leech repairs, including the Leech set.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

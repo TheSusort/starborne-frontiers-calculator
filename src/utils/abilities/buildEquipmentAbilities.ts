@@ -921,8 +921,9 @@ const IMPLANT_ABILITIES: Partial<Record<string, ImplantAbilityBuilder>> = {
     // No common rarity.
     NOURISHMENT: (rarity) => mkHealAmp(NOURISHMENT_AMP[rarity], 'target-hp-below-self'),
     // D-PR6: incoming-heal-amplification implants
-    // Exuberance: X% chance to increase incoming repair by Y%. No common rarity.
-    // Recipient-side fold is wired in a later task; this entry is inert until then.
+    // Exuberance: X% chance to increase incoming repair by Y%. No common rarity. Read through the
+    // healing ctx's `recipientIncomingHealAmpPct` by every repair channel: cast, HoT tick,
+    // reactive repair and leech.
     EXUBERANCE: (rarity) => {
         const amp = EXUBERANCE_AMP[rarity];
         const pc = EXUBERANCE_PROC[rarity];

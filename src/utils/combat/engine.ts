@@ -5212,8 +5212,14 @@ export function runCombat(rawInput: CombatEngineInput): {
                     // being ATTACKED and therefore never the actor on turn. Closing those needs a
                     // live self-side buff fold outside `runPlayerTurn`, which is a new engine seam,
                     // not a fold.
+                    //
+                    // THE RECIPIENT'S EXUBERANCE rolls here too, once per recipient per proc: it is
+                    // a recipient-side repair modifier, and a leech is a repair (heal ruling 4,
+                    // #447). `leechIsAFullHeal.test.ts` section 9 pins it on both procs.
                     const scaled =
-                        raw * incomingHealFactor(recipientIncomingHealPct(rid, actingSelfCtx(rid)));
+                        raw *
+                        incomingHealFactor(recipientIncomingHealPct(rid, actingSelfCtx(rid))) *
+                        (1 + (healingCtx.recipientIncomingHealAmpPct?.(rid) ?? 0) / 100);
                     // R10′ (#362): the gross `directHeal` credit moved BELOW the apply so a
                     // reversed repair suppresses it too. An UNRESOLVABLE recipient still credits
                     // gross (unchanged) — nothing was applied there, so nothing was reversed.
@@ -5454,7 +5460,11 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // — folding it in there would silently skip it for a victim with no runtime entry.
                 // Not a claim that the shield arm needed protecting: that arm never enters the
                 // chain above either, since it is `e.kind === 'heal' && rt`.
-                const scaled = raw * incomingHealFactor(recipientIncomingHealPct(victim.id));
+                // The victim's Exuberance rolls here as well, as in the sibling proc.
+                const scaled =
+                    raw *
+                    incomingHealFactor(recipientIncomingHealPct(victim.id)) *
+                    (1 + (healingCtx.recipientIncomingHealAmpPct?.(victim.id) ?? 0) / 100);
                 // R10′ (#362): every bucket, gross included, is booked BELOW the apply and only
                 // when the repair was not reversed. This site always applies (the victim is
                 // resolved), so there is no third case here.
