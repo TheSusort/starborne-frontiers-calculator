@@ -1414,7 +1414,8 @@ export function registerReactiveListeners(args: {
                     // eventCtx so the reactive `damage` executor's `adjacent-enemies`
                     // branch can anchor its fan-out on the bombed enemy (NOT the owner)
                     // and scale the splash off the bomb's own payout rather than the owner's
-                    // attack. Both fields are existing eventCtx channels (on-attacked already
+                    // attack; the charge executor removes the charges from that same enemy.
+                    // Both fields are existing eventCtx channels (on-attacked already
                     // stamps them for the counter-routing / damage-taken-basis consumers) — this
                     // listener is just a second writer, gated by its own distinct event type.
                     bus.on('bomb-detonated', (e) => {
@@ -4279,7 +4280,8 @@ function resolveAoEReactiveDamageVictims(intent: Intent, ctx: IntentExecContext)
  * The arms:
  *   - each SELECTOR target resolves to ONE opposing actor;
  *   - `enemy` / `all-enemies` remove from the enemy the triggering event names (the repairer on
- *     `on-enemy-repaired`), else bulk-remove from every opposing actor;
+ *     `on-enemy-repaired`, the bombed enemy on `on-bomb-detonated`), else bulk-remove from every
+ *     opposing actor;
  *   - `lowest-hp-ally` bumps the one lowest-HP ally;
  *   - `ally` / `all-allies` bump every same-side actor;
  *   - everything else — `self`, `adjacent-allies`, and (deliberately) the enemy-adjacency targets
@@ -4531,6 +4533,15 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                         if (n % intent.ability.everyNthEvent !== 0) return; // not the Nth repair yet
                     }
                     ctx.removeChargesFrom(repairerId, cfg.amount, owner.attackerAffinity, ctx.bus);
+                    return;
+                }
+                // A Bomb-driven removal names the enemy the Bomb exploded on (Demolisher: "When a
+                // Bomb explodes on an enemy, this Unit removes 2 charges from the enemy's charged
+                // skill"), stamped as `eventCtx.victimId` by the on-bomb-detonated listener.
+                if (intent.ability.trigger === 'on-bomb-detonated') {
+                    const bombedId = intent.eventCtx?.victimId;
+                    if (!bombedId) return;
+                    ctx.removeChargesFrom(bombedId, cfg.amount, owner.attackerAffinity, ctx.bus);
                     return;
                 }
                 // Any other trigger: "the enemy" = bulk all-opposing.

@@ -3092,7 +3092,8 @@ const DocumentationPage: React.FC = () => {
                                         skill that removes charges from the enemy&apos;s charged
                                         skill (Opal, Provider, Sefuba) drains every enemy it hits
                                         and no one outside its pattern. Zosimos&apos;s passive
-                                        drains only the enemy that performed the repair.
+                                        drains only the enemy that performed the repair, and
+                                        Demolisher&apos;s only the enemy its Bomb exploded on.
                                     </p>
                                     <p className="text-theme-text">
                                         <span className="text-primary">

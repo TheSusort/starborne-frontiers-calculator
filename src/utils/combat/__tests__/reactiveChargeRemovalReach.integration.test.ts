@@ -15,7 +15,8 @@ import { setupKeyedRng } from '../../calculators/rateAccumulator';
 import { csvAvailable } from '../../../../scripts/lib/shipSkillCsv';
 import { shipDataAvailable } from '../../../../scripts/lib/shipDataSnapshot';
 import type { ShipSkills } from '../../../types/abilities';
-import type { CombatActor } from '../state';
+import type { CombatActor, PendingBomb } from '../state';
+import { createEventBus } from '../events';
 import { mirrorBoard, realSlots, ShipSpec, MirrorTeams } from './__fixtures__/mirrorBoard';
 
 beforeAll(() => {
@@ -107,6 +108,84 @@ describe('Zosimos: a repair drains only the repairer', () => {
         });
         it(`${side}-side Zosimos: no repair → nobody loses a charge`, () => {
             expect(chargesAfter(teams([]), side, IDS)).toEqual({ 'e-a': 3, 'e-b': 3, 'e-c': 3 });
+        });
+    }
+});
+
+/**
+ * Demolisher: "When a Bomb explodes on an enemy, this Unit removes 2 charges from the enemy's
+ * charged skill" — the enemy the Bomb exploded on. A Bomb seeded at countdown 1 on one holder
+ * explodes on that holder's turn; the other holders keep their charges.
+ */
+describe('Demolisher: a Bomb explosion drains only the enemy it exploded on', () => {
+    const demolisher = (): ShipSpec => ({
+        id: 'demolisher',
+        position: 'M4',
+        speed: 10,
+        skills: {
+            slots: [{ slot: 'active', abilities: [] }, ...realSlots('Demolisher', ['passive'])],
+        },
+    });
+    const teams: MirrorTeams = {
+        caster: [demolisher()],
+        other: [holder('e-a', 'M4', false), holder('e-b', 'M3', false), holder('e-c', 'M1', false)],
+    };
+    const IDS = ['e-a', 'e-b', 'e-c'];
+    const bomb = (): PendingBomb => ({
+        countdown: 1,
+        damagePerStack: 10,
+        stacks: 1,
+        tier: 100,
+        sourceId: 'seed',
+        affinityMult: 1,
+        detonationDamageModifier: 0,
+        splashModifier: 0,
+    });
+    const run = (side: 'player' | 'enemy', bombed: string[]) => {
+        const { input, idOf } = mirrorBoard(teams, side);
+        const bus = createEventBus();
+        const exploded: string[] = [];
+        bus.on('bomb-detonated', (e) => exploded.push(e.victimId));
+        let actors: CombatActor[] = [];
+        runCombat({
+            ...input,
+            bus,
+            __testTapActors: (all) => {
+                actors = all;
+                for (const id of bombed)
+                    all.find((a) => a.id === idOf(id))!.pendingBombs.push(bomb());
+            },
+        });
+        const charges = Object.fromEntries(
+            IDS.map((id) => [id, actors.find((a) => a.id === idOf(id))?.charges])
+        );
+        return { charges, exploded: exploded.length };
+    };
+
+    for (const side of ['player', 'enemy'] as const) {
+        it(`${side}-side Demolisher: a Bomb explodes on e-a → only e-a loses 2 charges`, () => {
+            expect(run(side, ['e-a'])).toEqual({
+                charges: { 'e-a': 1, 'e-b': 3, 'e-c': 3 },
+                exploded: 1,
+            });
+        });
+        it(`${side}-side Demolisher, reverse board: a Bomb explodes on e-c → only e-c loses 2`, () => {
+            expect(run(side, ['e-c'])).toEqual({
+                charges: { 'e-a': 3, 'e-b': 3, 'e-c': 1 },
+                exploded: 1,
+            });
+        });
+        it(`${side}-side Demolisher: Bombs explode on e-a and e-b → 2 each, e-c none`, () => {
+            expect(run(side, ['e-a', 'e-b'])).toEqual({
+                charges: { 'e-a': 1, 'e-b': 1, 'e-c': 3 },
+                exploded: 2,
+            });
+        });
+        it(`${side}-side Demolisher: no Bomb → nobody loses a charge`, () => {
+            expect(run(side, [])).toEqual({
+                charges: { 'e-a': 3, 'e-b': 3, 'e-c': 3 },
+                exploded: 0,
+            });
         });
     }
 });
