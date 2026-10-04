@@ -258,6 +258,12 @@ export interface HealingRuntimeCtx {
      *  recipient's incoming-heal-amp procs ONCE (combat-lifetime gate keyed rid+ability). Absent →
      *  callers use 0. */
     recipientIncomingHealAmpPct?: (rid: string) => number;
+    /** Summed caster-side heal amplification % (Nourishment / Vivacious Repair) for ONE repair
+     *  `casterId` performs on `rid`, with both HP%s read LIVE off the two actors. Rolls the
+     *  caster's proc gates once per call, on the same `${casterId}:${abilityId}` stream the cast
+     *  path's `rollOutgoingProc` draws from. Read by the reactive heal executor (`triggers.ts`);
+     *  the cast path folds the same abilities itself (`healAmpPctFor`). Absent → callers use 0. */
+    casterHealAmpPct?: (casterId: string, rid: string) => number;
     /** A FOREIGN HoT applier's effective max HP at tick time: reads
      *  lastTurnCtxByActor ONLY — NO base-stat fallback (the strict corrosion applier-ctx
      *  rule). Returns undefined when the applier has not acted this run yet, in which case

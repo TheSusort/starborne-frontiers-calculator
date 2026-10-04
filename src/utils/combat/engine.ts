@@ -101,7 +101,7 @@ import { reflectedDamageParts } from './damageReflection';
 import { splashDamageForBomb } from './bombSplash';
 import { detonateContainers, type DetonationRecipe } from './detonation';
 import { outgoingAmplificationForHit } from './outgoingEffects';
-import { incomingHealAmpForRecipient } from './healAmplification';
+import { healAmplificationForCast, incomingHealAmpForRecipient } from './healAmplification';
 import { CHEAT_DEATH_BUFFS } from './cheatDeathBuffs';
 import { BARRIER_BUFFS } from './barrierBuffs';
 import { BARRIER_RECHARGING, holdsBarrierRecharging } from './barrierRecharging';
@@ -4026,6 +4026,16 @@ export function runCombat(rawInput: CombatEngineInput): {
                       (abilityId, chance) =>
                           rollRateGate(procChanceGates, `${rid}:${abilityId}`, chance)
                   ),
+              casterHealAmpPct: (casterId, rid) => {
+                  const amps = healAmpAbilitiesOf(casterId);
+                  if (amps.length === 0) return 0;
+                  return healAmplificationForCast(
+                      amps,
+                      { targetHpPct: selfHpPctOf(rid), selfHpPct: selfHpPctOf(casterId) },
+                      (abilityId, chance) =>
+                          rollRateGate(procChanceGates, `${casterId}:${abilityId}`, chance)
+                  );
+              },
               // Foreign HoT applier max HP: lastTurnCtxByActor ONLY, NO base-stat
               // fallback (strict corrosion applier-ctx rule — undefined → the holder skips the tick).
               applierMaxHp: (id) => lastTurnCtxByActor.get(id)?.effectiveMaxHp,
@@ -4700,20 +4710,31 @@ export function runCombat(rawInput: CombatEngineInput): {
     // maps; empty for actors without the relevant equipment. Read via
     // `incomingHealAmpAbilitiesOf` at the heal-apply fold, which hands the list to
     // `incomingHealAmpForRecipient` (healAmplification.ts) per recipient.
+    //
+    // The same walk collects the CASTER-side twin (Nourishment / Vivacious Repair:
+    // `heal-amplification`), read via `healAmpAbilitiesOf` by the healing ctx's
+    // `casterHealAmpPct` for repairs that do not come from a cast.
     const incomingHealAmpAbilitiesById = new Map<string, Ability[]>();
+    const healAmpAbilitiesById = new Map<string, Ability[]>();
     for (const rt of [...runtimesById.values(), ...enemyPlayerRuntimeByActorId.values()]) {
-        if (incomingHealAmpAbilitiesById.has(rt.actor.id)) continue; // dedupe if an actor is in both maps
+        if (incomingHealAmpAbilitiesById.has(rt.actor.id) || healAmpAbilitiesById.has(rt.actor.id))
+            continue; // dedupe if an actor is in both maps
         const heals: Ability[] = [];
+        const amps: Ability[] = [];
         for (const slot of rt.castSkills.slots) {
             if (slot.slot !== 'passive') continue;
             for (const a of slot.abilities) {
                 if (a.config.type === 'incoming-heal-amplification') heals.push(a);
+                if (a.config.type === 'heal-amplification') amps.push(a);
             }
         }
         if (heals.length) incomingHealAmpAbilitiesById.set(rt.actor.id, heals);
+        if (amps.length) healAmpAbilitiesById.set(rt.actor.id, amps);
     }
     const incomingHealAmpAbilitiesOf = (id: string): Ability[] =>
         livePassiveEntries(id, incomingHealAmpAbilitiesById.get(id) ?? []);
+    const healAmpAbilitiesOf = (id: string): Ability[] =>
+        livePassiveEntries(id, healAmpAbilitiesById.get(id) ?? []);
 
     // Per-actor attacker-side outgoing-amplification abilities (Menace/Giant Slayer),
     // side-agnostic (a ship amplifies on either team). Built once from BOTH runtime maps; empty for
