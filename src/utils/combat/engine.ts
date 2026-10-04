@@ -4823,24 +4823,31 @@ export function runCombat(rawInput: CombatEngineInput): {
             }
         }
     }
-    // Ships whose Protection is consumable (Lionheart R4: "all Protection is removed" after a
-    // redirect). Scanned once from both runtime maps, slot-agnostic, mirroring hasAnyProtectionGrant.
-    const clearProtectionOnRedirectIds = new Set<string>();
-    for (const rt of [...runtimesById.values(), ...enemyPlayerRuntimeByActorId.values()]) {
-        for (const slot of rt.castSkills.slots) {
-            if (
-                slot.abilities.some(
+    // Every ability each runtime carries, cast path AND reactive list. A Protection grant can sit
+    // on either: Lionheart's round-start grant rides a live trigger, so `partitionReactiveAbilities`
+    // moves it out of `castSkills`.
+    const protectionScanRuntimes = [
+        ...runtimesById.values(),
+        ...enemyPlayerRuntimeByActorId.values(),
+    ];
+    const allAbilitiesOf = (rt: PlayerActorRuntime): Ability[] => [
+        ...rt.castSkills.slots.flatMap((slot) => slot.abilities),
+        ...rt.reactiveAbilities.map((r) => r.ability),
+    ];
+    // Ships whose Protection is consumable (Lionheart: "all Protection is removed" after a
+    // redirect). Keyed on the ability CARRIER, so a stack another ship stole from him is not.
+    const clearProtectionOnRedirectIds = new Set<string>(
+        protectionScanRuntimes
+            .filter((rt) =>
+                allAbilitiesOf(rt).some(
                     (a) =>
                         a.config.type === 'buff' &&
                         a.config.buffName === 'Protection' &&
                         a.config.clearAllOnRedirect === true
                 )
-            ) {
-                clearProtectionOnRedirectIds.add(rt.actor.id);
-                break;
-            }
-        }
-    }
+            )
+            .map((rt) => rt.actor.id)
+    );
     // Board-level Protection gate: true iff ANY ability on the board grants Protection, OR any
     // actor carries a SCHEDULED Protection self-buff (SelectedGameBuff — the DPS/Healing
     // Calculator's manual "active buffs" input, e.g. protectionAccum in tests; independent of any
@@ -4848,22 +4855,16 @@ export function runCombat(rawInput: CombatEngineInput): {
     // t.selfBuffs)]`) already indexes every scheduled self-buff by name, so re-using it here is
     // the cheapest correct check for that source. A board-level boolean (not a per-actor carrier
     // Set) is deliberate — Protection can be stolen/transferred onto a ship that carries no grant
-    // of its own (deferred mechanic), and the boolean only asserts "Protection is possible here,"
-    // which is the gate protectorsFor needs. Scans ALL slots (not just passive, unlike
-    // defenseSubstitutionCarrierIds) because Lionheart's round-start grant and a future
-    // charge-slot steal are not passive-slot auras.
+    // of its own, and the boolean only asserts "Protection is possible here," which is the gate
+    // protectorsFor needs. Scans every slot and the reactive list, since a grant need not be a
+    // passive-slot aura.
     const hasAnyProtectionGrant =
         (selfBuffLookup.get('Protection')?.length ?? 0) > 0 ||
-        [...runtimesById.values(), ...enemyPlayerRuntimeByActorId.values()].some((rt) =>
-            rt.castSkills.slots.some((slot) =>
-                slot.abilities.some(
-                    (a) => a.config.type === 'buff' && a.config.buffName === 'Protection'
-                )
+        protectionScanRuntimes.some((rt) =>
+            allAbilitiesOf(rt).some(
+                (a) => a.config.type === 'buff' && a.config.buffName === 'Protection'
             )
         );
-    // NOTE: neither `hasAnyProtectionGrant` nor `clearProtectionOnRedirectIds` scans
-    // `reactiveAbilities` (partitioned out of `castSkills` above) — no ship grants Protection
-    // reactively today. If one is added, both gates need a matching branch over the reactive list.
     // Protection damage transfer (deferred mechanic, now consumed). A protector is any living
     // ally that holds >=1 Protection stack; it intercepts a fraction of its allies' direct
     // damage. Side-agnostic by construction (resolves allies via bySide), mirroring
@@ -6539,7 +6540,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                     // redirects a hit. The cascade was precomputed from pre-hit stacks, so THIS
                     // hit already redirected fully; clearing now only affects later hits this
                     // round. `removeSelfBuffByName` zeroes the accumulating stacks (Overload
-                    // precedent) → next round's beginRound re-accumulates to maxStacks (=10).
+                    // precedent) → his next round-start grant re-adds them, capped at 10.
                     // Gate on the protector's OWN chunk having actually redirected something —
                     // a faster protector upstream in the cascade can absorb the hit fully,
                     // leaving THIS protector's chunk at 0 even though it holds Protection stacks;

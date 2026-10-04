@@ -4654,8 +4654,9 @@ const DocumentationPage: React.FC = () => {
                                     <strong>Lionheart</strong> uses a once-per-round variant: it
                                     gains 10 stacks of Protection at the start of each round, and
                                     after it absorbs the first hit redirected from an ally, it loses
-                                    all Protection until the next round. More implant and gear-set
-                                    effects will be added in future updates.
+                                    all Protection until the next round. The stacks hold whether an
+                                    enemy moves before or after Lionheart, on either team. More
+                                    implant and gear-set effects will be added in future updates.
                                 </p>
                             </div>
                         </div>
