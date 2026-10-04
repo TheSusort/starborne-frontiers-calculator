@@ -42,6 +42,8 @@ export interface ShipSpec {
     position: Position;
     skills?: ShipSkills;
     role?: ShipTypeName;
+    /** Targeting preference in ship-targeting.csv's vocabulary. Default `'front'`. */
+    target?: string;
     pattern?: string;
     chargedPattern?: string;
     attack?: number;
@@ -84,7 +86,7 @@ const enemyFrom = (s: ShipSpec): EnemyAttacker => ({
     chargeCount: s.chargeCount ?? 0,
     startCharged: s.startCharged ?? false,
     position: s.position,
-    target: parseTarget('front'),
+    target: parseTarget(s.target ?? 'front'),
     pattern: parsePattern(s.pattern ?? 'Pattern-Base'),
     ...(s.chargedPattern ? { chargedPattern: parsePattern(s.chargedPattern) } : {}),
     shipSkills: s.skills ?? NO_SKILLS,
@@ -99,7 +101,7 @@ const teamFrom = (s: ShipSpec): TeamActor => ({
     selfBuffs: [],
     enemyDebuffs: [],
     position: s.position,
-    target: parseTarget('front'),
+    target: parseTarget(s.target ?? 'front'),
     pattern: parsePattern(s.pattern ?? 'Pattern-Base'),
     ...(s.chargedPattern ? { chargedPattern: parsePattern(s.chargedPattern) } : {}),
     ...(s.role ? { role: s.role } : {}),
@@ -152,7 +154,7 @@ export const mirrorBoard = (teams: MirrorTeams, side: 'player' | 'enemy'): Mount
         security: focus.security ?? 0,
         mode: 'battle',
         position: focus.position,
-        target: parseTarget('front'),
+        target: parseTarget(focus.target ?? 'front'),
         pattern: parsePattern(focus.pattern ?? 'Pattern-Base'),
         ...(focus.chargedPattern ? { chargedPattern: parsePattern(focus.chargedPattern) } : {}),
         speed: focus.speed ?? 100,

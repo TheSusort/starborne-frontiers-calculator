@@ -2705,7 +2705,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
      *  target's (see `RecipientGateReading.role`).
      *
      *  Built only when this cast has something to ask: a gated enemy status in the firing slot,
-     *  or a gated control (its per-recipient emission reads these too). A recipient with no
+     *  a self gain (firing or passive slot) whose gate reads the struck enemies, or a gated control (its per-recipient emission reads these too). A recipient with no
      *  context reads the bound target's — outside positional runs (no readings) the bound target
      *  is the only recipient, and inside one every living opposing actor has a reading. */
     const recipientGateCtxById = new Map<string, ConditionContext>();
@@ -2717,7 +2717,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             timedSelfBySlot.some(
                 (s) => ridesThisCast(s) && (s.perHit === true || readsStruckEnemy(s.conditions))
             ) ||
-            (firingSkill?.abilities ?? []).some(
+            [...(firingSkill?.abilities ?? []), ...(passiveSkill?.abilities ?? [])].some(
                 (a) => isAnyStruckSelfGain(a) || isEveryStruckSelfGain(a)
             ) ||
             controlAbilitiesFromSkill(firingSkill).some((c) => c.conditions.length > 0))
@@ -4245,28 +4245,31 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // round. Walked in text order with a same-cast DoT overlay (see applyAbilities).
     // A self gain asking about "the target" passes once if any struck enemy qualifies (R17, R23);
     // one comparing the owner against the struck enemies needs every one of them to pass (R24).
-    const { gatedSkill, ctxFor } = gateFiringAbilities(
-        firingSkill,
-        ctx,
-        (ability, gate, abilityCtx) => {
-            if (isAnyStruckSelfGain(ability)) {
-                // A count gate written after a DoT clause reads the stacks that clause LANDED on
-                // each struck enemy (`castLandingsOverlay`, R29 — Anemone's Taunt), in place of
-                // the payload gating's own count of every earlier stack.
-                const dotsBefore = dotClausesBefore(ability.id);
-                if (dotsBefore.length > 0 && readsCastCount(gate))
-                    return (
-                        anyStruckVictimCtx(gate, ctx, (c, vid) =>
-                            castLandingsOverlay(c, vid, gate, dotsBefore)
-                        ) ?? null
-                    );
-                return anyStruckVictimCtx(gate, abilityCtx) ?? null;
-            }
-            if (isEveryStruckSelfGain(ability))
-                return everyStruckVictimMeets(gate, abilityCtx) ? abilityCtx : null;
-            return undefined;
+    // The passive slot's on-cast self gains are judged the same way (Tygr's "After damaging an
+    // enemy affected by Stasis … gains one extra action").
+    const struckSelfGainGate = (
+        ability: Ability,
+        gate: Ability['conditions'],
+        abilityCtx: ConditionContext
+    ): ConditionContext | null | undefined => {
+        if (isAnyStruckSelfGain(ability)) {
+            // A count gate written after a DoT clause reads the stacks that clause LANDED on
+            // each struck enemy (`castLandingsOverlay`, R29 — Anemone's Taunt), in place of
+            // the payload gating's own count of every earlier stack.
+            const dotsBefore = dotClausesBefore(ability.id);
+            if (dotsBefore.length > 0 && readsCastCount(gate))
+                return (
+                    anyStruckVictimCtx(gate, ctx, (c, vid) =>
+                        castLandingsOverlay(c, vid, gate, dotsBefore)
+                    ) ?? null
+                );
+            return anyStruckVictimCtx(gate, abilityCtx) ?? null;
         }
-    );
+        if (isEveryStruckSelfGain(ability))
+            return everyStruckVictimMeets(gate, abilityCtx) ? abilityCtx : null;
+        return undefined;
+    };
+    const { gatedSkill, ctxFor } = gateFiringAbilities(firingSkill, ctx, struckSelfGainGate);
 
     // Control inflictions (Stasis, Provoke, Taunt, Concentrate Fire, Disable): emit `control-applied`
     // so reactions (on-stasis-applied) can fire. Each control effect's combat impact is modelled
@@ -4398,7 +4401,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // outcome and defense math like the firing hit; its own noCrit is respected.
     const { gatedSkill: gatedPassive, ctxFor: passiveCtxFor } = gateFiringAbilities(
         passiveSkill,
-        ctx
+        ctx,
+        struckSelfGainGate
     );
     const passiveHit = damageInputsFromSkill(gatedPassive);
     const passiveScalingBonus = passiveHit.scalingAbility
