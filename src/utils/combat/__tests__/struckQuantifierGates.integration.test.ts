@@ -1,8 +1,10 @@
 /**
- * A self-gain gate whose quantifier ranges over the enemies the cast STRIKES — the footprint on a
- * pattern cast, the aimed enemy alone on a single-target (Pattern-Base) or DPS cast:
+ * Two self-gain gates whose quantifier ranges over the enemies the cast STRIKES — the footprint on
+ * a pattern cast, the aimed enemy alone on a single-target (Pattern-Base) or DPS cast:
  *  - Selenite: "If any target has Stealth, this Unit adds 1 charge" counts only struck enemies
  *    (owner ruling R23). A Stealthed enemy outside her pattern does not count.
+ *  - Chakara: "If all damaged enemies have more speed than this Unit, it adds 1 charge" needs
+ *    EVERY struck enemy faster than her (R24); an enemy outside her pattern does not matter.
  *
  * Real parsed kits (buildTraceShip on docs/ship-skills.csv, refit 4), each firing its real active
  * pattern, Pattern-Line-Range-1, from M4: it strikes M4 (A) and M3 (B); M2 (D) stands outside.
@@ -12,6 +14,7 @@ import { describe, it, expect, beforeEach, beforeAll } from 'vitest';
 import { runCombat, CombatEngineInput } from '../engine';
 import { createEventBus, CombatEvent } from '../events';
 import { setupKeyedRng } from '../../calculators/rateAccumulator';
+import { simulateDPS } from '../../calculators/dpsSimulator';
 import { buildTraceShip } from '../../../../scripts/lib/traceShipFactory';
 import { csvAvailable } from '../../../../scripts/lib/shipSkillCsv';
 import { shipDataAvailable } from '../../../../scripts/lib/shipDataSnapshot';
@@ -290,5 +293,68 @@ describe("Selenite: 'If any target has Stealth' counts only the enemies she stri
         expect(measure(PLAYER, 'Selenite', BASE, { A: { stealth: true } }).chargeGains).toEqual([
             1,
         ]);
+    });
+});
+
+describe("Chakara: 'If all damaged enemies have more speed' needs every struck enemy faster", () => {
+    for (const side of [PLAYER, ENEMY]) {
+        const tag = side === PLAYER ? 'player' : 'enemy-side';
+        it(`${tag}: A faster, B slower → no charge`, () => {
+            const m = measure(side, 'Chakara', LINE1, { B: { speed: 50 } });
+            expect(m.struck).toEqual([side.ids.A, side.ids.B].sort());
+            expect(m.chargeGains).toEqual([]);
+        });
+        it(`${tag}, reversed: A slower, B faster → no charge`, () => {
+            expect(measure(side, 'Chakara', LINE1, { A: { speed: 50 } }).chargeGains).toEqual([]);
+        });
+        it(`${tag}: A and B both faster → +1 charge`, () => {
+            expect(measure(side, 'Chakara', LINE1, {}).chargeGains).toEqual([1]);
+        });
+        it(`${tag}: A and B faster, D outside the pattern slower → +1 charge`, () => {
+            expect(measure(side, 'Chakara', LINE1, { D: { speed: 50 } }).chargeGains).toEqual([1]);
+        });
+    }
+    it('player, Pattern-Base: the one struck enemy decides — B slower is not struck', () => {
+        const m = measure(PLAYER, 'Chakara', BASE, { B: { speed: 50 } });
+        expect(m.struck).toEqual(['enemy-a']);
+        expect(m.chargeGains).toEqual([1]);
+        expect(measure(PLAYER, 'Chakara', BASE, { A: { speed: 50 } }).chargeGains).toEqual([]);
+    });
+});
+
+describe('DPS calculator: the one configured enemy decides Chakara’s charge', () => {
+    const run = (enemySpeed: number): number => {
+        const built = buildTraceShip('Chakara');
+        if (!built) throw new Error('Chakara missing');
+        const bus = createEventBus();
+        let gained = 0;
+        bus.on('charge-changed', (e: Extract<CombatEvent, { type: 'charge-changed' }>) => {
+            if (e.reason === 'manip' && e.round === 1) gained += e.newCharge - e.oldCharge;
+        });
+        simulateDPS({
+            attack: 15000,
+            crit: 0,
+            critDamage: 150,
+            defensePenetration: 0,
+            chargeCount: 99,
+            enemyDefense: 8000,
+            enemyHp: 1e12,
+            enemySpeed,
+            speed: CASTER_SPEED,
+            rounds: 1,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            hacking: 0,
+            enemySecurity: 0,
+            defence: 6000,
+            hp: 30000,
+            shipSkills: buildShipAbilities(built),
+            bus,
+        });
+        return gained;
+    };
+    it('a faster enemy → +1; a slower one → nothing', () => {
+        expect(run(150)).toBe(1);
+        expect(run(50)).toBe(0);
     });
 });

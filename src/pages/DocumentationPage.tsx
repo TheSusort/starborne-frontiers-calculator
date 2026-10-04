@@ -2974,7 +2974,9 @@ const DocumentationPage: React.FC = () => {
                                         (Anjian, Rys, Sha Xing, Shashou), judged by each struck
                                         enemy&apos;s own role. Selenite&apos;s charge for &ldquo;any
                                         target&rdquo; with Stealth counts only the enemies her skill
-                                        hits.
+                                        hits, and Chakara&apos;s charge for &ldquo;all damaged
+                                        enemies&rdquo; being faster needs every enemy her skill hits
+                                        to be faster.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">On-kill passives:</span> A

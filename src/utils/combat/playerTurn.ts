@@ -731,8 +731,8 @@ const VICTIM_CONTEXT_KEYS = (
  *  the primary target has 3 or more damage over time effects"). A self gain gated on one fires
  *  ONCE when ANY enemy the cast strikes qualifies (owner ruling R17) — see `anyStruckVictimMeets`.
  *  `stat-vs-target` is deliberately absent: its only self-gain carrier reads "If ALL damaged
- *  enemies have more speed than this Unit" (Chakara), an every-enemy quantifier, so it keeps
- *  reading the bound target. */
+ *  enemies have more speed than this Unit" (Chakara), an every-enemy quantifier — see
+ *  `isEveryStruckSelfGain`. */
 const ANY_STRUCK_GATE_SUBJECTS: ReadonlySet<ConditionSubject> = new Set<ConditionSubject>([
     'enemy-shield',
     'target-repaired-this-round',
@@ -767,6 +767,15 @@ const isAnyStruckSelfGain = (ability: Ability): boolean =>
     ability.trigger === 'on-cast' &&
     SELF_GAIN_TYPES.has(ability.config.type) &&
     readsStruckEnemy(gateConditions(ability));
+/** A firing-slot self gain gated on comparing the owner against the struck enemy
+ *  (`stat-vs-target`): it needs EVERY enemy the cast strikes to pass — "If all damaged enemies have
+ *  more speed than this Unit, it adds 1 charge" (Chakara, owner ruling R24). With one struck
+ *  enemy, that enemy decides. */
+const isEveryStruckSelfGain = (ability: Ability): boolean =>
+    ability.target === 'self' &&
+    ability.trigger === 'on-cast' &&
+    SELF_GAIN_TYPES.has(ability.config.type) &&
+    gateConditions(ability).some((c) => c.subject === 'stat-vs-target');
 
 /** `casterCtx` with every victim field taken from `victimCtx` — present there → copied, absent
  *  there → absent here (absence is a meaningful answer for several fields). */
@@ -2647,7 +2656,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             timedSelfBySlot.some(
                 (s) => ridesThisCast(s) && (s.perHit === true || readsStruckEnemy(s.conditions))
             ) ||
-            (firingSkill?.abilities ?? []).some(isAnyStruckSelfGain) ||
+            (firingSkill?.abilities ?? []).some(
+                (a) => isAnyStruckSelfGain(a) || isEveryStruckSelfGain(a)
+            ) ||
             controlAbilitiesFromSkill(firingSkill).some((c) => c.conditions.length > 0))
     ) {
         for (const [id, reading] of recipientGateReadings) {
@@ -2738,6 +2749,14 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         conditions: Ability['conditions'],
         anchorCtx: ConditionContext
     ): boolean => anyStruckVictimCtx(conditions, anchorCtx) !== undefined;
+    /** Whether EVERY enemy the cast strikes passes `conditions` — the bound target against
+     *  `anchorCtx`, each other struck enemy against its own context (R24). */
+    const everyStruckVictimMeets = (
+        conditions: Ability['conditions'],
+        anchorCtx: ConditionContext
+    ): boolean =>
+        conditionsMet(conditions, struckAnchorCtx(anchorCtx)) &&
+        otherStruckVictims.every((v) => conditionsMet(conditions, otherStruckCtx(v, anchorCtx)));
 
     // §4.5 Direct-damage Stasis break. Fires AFTER scheduled debuffs (sourceFired)
     // but BEFORE the ability timed-debuff loop, so a Stasis re-application from THIS attack's
@@ -3883,11 +3902,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // both this ctx and modifierCtx sit AFTER critDamageForGates' final += (line ~1431), so
         // the value is identical and stable here.
         selfCritPower: critDamage + critDamageForGates,
-        // Cobalt/Bayah are single-target casts, so the primary `enemy` IS "the target". Chakara's
-        // charge gate ("all damaged enemies have more Speed") is also single-target in the
-        // corpus today — the MIN-across-damaged-enemies aggregate the game text describes
-        // degenerates to this one target's speed. A future multi-target stat-vs-target ship
-        // would need real per-victim aggregation; out of scope here (no corpus ship needs it).
+        // The bound target's stats. Chakara's charge gate ("all damaged enemies have more
+        // Speed") also asks every other struck enemy — see `isEveryStruckSelfGain`.
         ...victimStatGateCtx(enemy),
         // Enemies-hit-this-cast, gating Tygr's self-charge-gain (a `type:'charge'` on-cast
         // ability evaluated via gateFiringAbilities below, NOT a timed self-buff — so it needs
@@ -3926,14 +3942,17 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
 
     // Hard gate: payload abilities whose conditions fail contribute nothing this
     // round. Walked in text order with a same-cast DoT overlay (see applyAbilities).
-    // A self gain asking about "the target" passes once if any struck enemy qualifies (R17, R23).
+    // A self gain asking about "the target" passes once if any struck enemy qualifies (R17, R23);
+    // one comparing the owner against the struck enemies needs every one of them to pass (R24).
     const { gatedSkill, ctxFor } = gateFiringAbilities(
         firingSkill,
         ctx,
-        (ability, gate, abilityCtx) =>
-            isAnyStruckSelfGain(ability)
-                ? (anyStruckVictimCtx(gate, abilityCtx) ?? null)
-                : undefined
+        (ability, gate, abilityCtx) => {
+            if (isAnyStruckSelfGain(ability)) return anyStruckVictimCtx(gate, abilityCtx) ?? null;
+            if (isEveryStruckSelfGain(ability))
+                return everyStruckVictimMeets(gate, abilityCtx) ? abilityCtx : null;
+            return undefined;
+        }
     );
 
     // Control inflictions (Stasis, Provoke, Taunt, Concentrate Fire, Disable): emit `control-applied`

@@ -161,9 +161,10 @@ export interface ConditionContext {
     targetCritPower?: number;
     /** SP-C — the acting unit's own Speed. Default 0. Live-derived (ship stat / real actor). */
     selfSpeed?: number;
-    /** SP-C — comparison target Speed. DPS: configured enemySpeed. Positional: MIN Speed among
-     *  damaged enemies (Chakara "all damaged enemies have more Speed"). SP-4d: OPTIONAL, and
-     *  absent means no target — unresolvable, not a fabricated 0. */
+    /** SP-C — comparison target Speed: the enemy this context describes (DPS: the configured
+     *  enemySpeed). Chakara's "all damaged enemies have more Speed" asks it of every struck enemy
+     *  in turn (playerTurn's `isEveryStruckSelfGain`). SP-4d: OPTIONAL, and absent means no
+     *  target — unresolvable, not a fabricated 0. */
     targetSpeed?: number;
     /** SP-C — the acting unit's ABSOLUTE current HP (not %). Default 0. DPS: ship max HP
      *  (full-HP assumption). Live-derived in the engine. */
