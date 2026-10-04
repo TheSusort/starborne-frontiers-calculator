@@ -411,7 +411,9 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
  *    while both carry 0, but not "already a share" like the rest.
  *  - on-debuff-inflicted → debuff-applied | dot-applied with `sourceId === ownerId`.
  *    Cardinality follows the LANDING, which is once per SUB-ATTACK for a direct debuff clause,
- *    not once per cast: an N-hit cast that lands its clause every hit enqueues N times.
+ *    not once per cast: an N-hit cast that lands its clause every hit enqueues N times. A
+ *    dot-applied enqueues once per stack it landed (`dotInflictions`, R28), and so do the three
+ *    sibling infliction triggers below; the crit-DoT triggers stay once per event.
  *    `triggerStatusFilter` narrows it to one status family (`passesStatusFilter` — Lingshe's
  *    "inflicts a Bomb"); `triggerSourceSlotFilter` to the inflicting ability's slot
  *    (`passesSourceSlotFilter` — Ripper's "with its active or charged skills").
@@ -525,6 +527,17 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
  * `ra.ability.triggerApplicationFilter` via `passesApplicationFilter` below — see that function's
  * doc for what counts as an inflict vs an apply.
  */
+
+/**
+ * How many debuff inflictions one `dot-applied` is: one per STACK it landed (owner ruling R28 —
+ * each DoT stack is its own debuff, `dotStackCount`). Snakeroot's one "2 stacks of Corrosion" on B
+ * is two inflictions, so APEX gains two shields. The listeners that react per debuff inflicted
+ * enqueue this many times (a `debuff-applied` is one); a reaction's own once-per cap still applies
+ * at execution.
+ */
+function dotInflictions(e: { stacks: number }): number {
+    return Math.max(0, e.stacks);
+}
 
 /**
  * Whether a landed debuff/DoT satisfies a reactive ability's `triggerApplicationFilter` — the
@@ -916,7 +929,7 @@ export function registerReactiveListeners(args: {
                         // The same self-chain guard as the debuff-applied arm above: a DoT an
                         // on-debuff-inflicted reaction lands (Ripper's Inferno II) never re-wakes
                         // that reaction, and still reaches the owner's other abilities on this
-                        // trigger.
+                        // trigger. One enqueue per stack landed (`dotInflictions`).
                         if (
                             e.sourceId === ownerId &&
                             !inDebuffInflictedReactionChain(
@@ -933,15 +946,17 @@ export function registerReactiveListeners(args: {
                             ) &&
                             passesSourceSlotFilter(ra.ability.triggerSourceSlotFilter, e.sourceSlot)
                         )
-                            enqueue({
-                                ...intent,
-                                eventCtx: {
-                                    ...intent.eventCtx,
-                                    debuffVictimId: e.targetId,
-                                    debuffInflictedReactionChain: e.debuffInflictedReactionChain,
-                                    ...inflictionReactionCtx(e),
-                                },
-                            });
+                            for (let i = 0; i < dotInflictions(e); i++)
+                                enqueue({
+                                    ...intent,
+                                    eventCtx: {
+                                        ...intent.eventCtx,
+                                        debuffVictimId: e.targetId,
+                                        debuffInflictedReactionChain:
+                                            e.debuffInflictedReactionChain,
+                                        ...inflictionReactionCtx(e),
+                                    },
+                                });
                     });
                     break;
                 case 'on-ally-debuff-inflicted':
@@ -976,7 +991,9 @@ export function registerReactiveListeners(args: {
                     bus.on('dot-applied', (e) => {
                         // Team DoT applications emit dot-applied with the team sourceId — an ally
                         // DoT infliction triggers this listener exactly as an ally debuff does. Same
-                        // self-chain guard as the debuff-applied arm above.
+                        // self-chain guard as the debuff-applied arm above. One enqueue per stack
+                        // landed (`dotInflictions`), except Belladonna's `convert-dot`, which
+                        // converts THE application's entry — one chance per application.
                         if (
                             !isOpposing(e.sourceId) &&
                             !(e.sourceId === ownerId && e.viaAllyDebuffInflictedReaction) &&
@@ -984,18 +1001,22 @@ export function registerReactiveListeners(args: {
                                 ra.ability.triggerApplicationFilter,
                                 e.application
                             )
-                        )
-                            enqueue({
-                                ...intent,
-                                eventCtx: {
-                                    ...intent.eventCtx,
-                                    damagedAllyId: e.sourceId,
-                                    // Belladonna's convert-dot executor needs the
-                                    // actual victim + DoT type of THIS application.
-                                    victimId: e.targetId,
-                                    dotType: e.dotType,
-                                },
-                            });
+                        ) {
+                            const times =
+                                ra.ability.config.type === 'convert-dot' ? 1 : dotInflictions(e);
+                            for (let i = 0; i < times; i++)
+                                enqueue({
+                                    ...intent,
+                                    eventCtx: {
+                                        ...intent.eventCtx,
+                                        damagedAllyId: e.sourceId,
+                                        // Belladonna's convert-dot executor needs the
+                                        // actual victim + DoT type of THIS application.
+                                        victimId: e.targetId,
+                                        dotType: e.dotType,
+                                    },
+                                });
+                        }
                     });
                     break;
                 case 'on-other-ally-debuff-inflicted':
@@ -1037,9 +1058,10 @@ export function registerReactiveListeners(args: {
                             });
                     });
                     bus.on('dot-applied', (e) => {
-                        // An ally's DoT landing counts as a debuff inflicted — same guard as the
-                        // debuff-applied arm above (an applied DoT — Burner's Inferno — does not;
-                        // see passesApplicationFilter's doc).
+                        // An ally's DoT landing counts as a debuff inflicted per stack landed
+                        // (`dotInflictions`) — same guard as the debuff-applied arm above (an
+                        // applied DoT — Burner's Inferno — does not; see passesApplicationFilter's
+                        // doc).
                         if (
                             isSameSideAlly(e.sourceId, ownerId) &&
                             !e.viaOtherAllyDebuffInflictedReaction &&
@@ -1048,26 +1070,33 @@ export function registerReactiveListeners(args: {
                                 e.application
                             )
                         )
-                            enqueue({
-                                ...intent,
-                                eventCtx: { ...intent.eventCtx, debuffVictimId: e.targetId },
-                            });
+                            for (let i = 0; i < dotInflictions(e); i++)
+                                enqueue({
+                                    ...intent,
+                                    eventCtx: { ...intent.eventCtx, debuffVictimId: e.targetId },
+                                });
                     });
                     break;
                 case 'on-enemy-debuff-inflicted': {
                     // VICTIM-scoped, inflictor-agnostic (R16, APEX): any debuff or DoT landing on
                     // an opposing actor, whoever inflicted it — the owner, an ally, anyone. One
-                    // enqueue per landing. The landed enemy rides along as `debuffVictimId` (a
-                    // debuff reaction lands "on that enemy"), with its debuff count as of THIS
-                    // landing. The self-chain guard is `on-debuff-inflicted`'s: a reaction never
-                    // re-wakes itself off its own landing (Block Shield lands → the owner's 3%
-                    // shield fires again, Block Shield does not), while the owner's OTHER
-                    // reactions on this trigger still see it.
-                    const onLanded = (e: {
-                        targetId: string;
-                        application?: 'inflict' | 'apply';
-                        debuffInflictedReactionChain?: readonly string[];
-                    }): void => {
+                    // enqueue per debuff landed: one per `debuff-applied`, one per stack of a
+                    // `dot-applied` (`dotInflictions`). The landed enemy rides along as
+                    // `debuffVictimId` (a debuff reaction lands "on that enemy"), with its debuff
+                    // count as of THAT landing — the k-th of a DoT's n stacks reads the count less
+                    // the n−1−k stacks after it, so "3 or more debuffs" fires on the stack that
+                    // brings the enemy to 3, not on all of them. The self-chain guard is
+                    // `on-debuff-inflicted`'s: a reaction never re-wakes itself off its own landing
+                    // (Block Shield lands → the owner's 3% shield fires again, Block Shield does
+                    // not), while the owner's OTHER reactions on this trigger still see it.
+                    const onLanded = (
+                        e: {
+                            targetId: string;
+                            application?: 'inflict' | 'apply';
+                            debuffInflictedReactionChain?: readonly string[];
+                        },
+                        inflictions: number
+                    ): void => {
                         if (
                             !isOpposing(e.targetId) ||
                             inDebuffInflictedReactionChain(
@@ -1081,18 +1110,24 @@ export function registerReactiveListeners(args: {
                         )
                             return;
                         const count = debuffCountOf?.(e.targetId);
-                        enqueue({
-                            ...intent,
-                            eventCtx: {
-                                ...intent.eventCtx,
-                                debuffVictimId: e.targetId,
-                                debuffInflictedReactionChain: e.debuffInflictedReactionChain,
-                                ...(count !== undefined ? { debuffVictimDebuffCount: count } : {}),
-                            },
-                        });
+                        for (let k = 0; k < inflictions; k++) {
+                            const countAtK =
+                                count === undefined ? undefined : count - (inflictions - 1 - k);
+                            enqueue({
+                                ...intent,
+                                eventCtx: {
+                                    ...intent.eventCtx,
+                                    debuffVictimId: e.targetId,
+                                    debuffInflictedReactionChain: e.debuffInflictedReactionChain,
+                                    ...(countAtK !== undefined
+                                        ? { debuffVictimDebuffCount: countAtK }
+                                        : {}),
+                                },
+                            });
+                        }
                     };
-                    bus.on('debuff-applied', onLanded);
-                    bus.on('dot-applied', onLanded);
+                    bus.on('debuff-applied', (e) => onLanded(e, 1));
+                    bus.on('dot-applied', (e) => onLanded(e, dotInflictions(e)));
                     break;
                 }
                 case 'on-ally-crit-dot':

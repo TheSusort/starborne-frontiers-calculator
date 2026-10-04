@@ -25,6 +25,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: each stack of a damage-over-time effect now counts as one debuff.',
     "DPS calculator: Snakeroot's passive now scales with every damage-over-time stack.",
     'Combat simulator: each damage-over-time stack now rolls separately to land.',
+    'Combat simulator: per-debuff reactions now trigger once per damage-over-time stack.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

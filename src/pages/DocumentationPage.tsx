@@ -2999,7 +2999,10 @@ const DocumentationPage: React.FC = () => {
                                         debuffs. A count of damage-over-time effects (Anemone,
                                         Snakeroot) counts each stack too. Each stack also rolls its
                                         own landing: Snakeroot&apos;s 2 stacks can land 0, 1 or 2,
-                                        and every stack that fails is its own resist.
+                                        and every stack that fails is its own resist. A reaction to
+                                        a debuff being inflicted (APEX&apos;s shield,
+                                        Oleander&apos;s charge, Provider&apos;s hit, Lingshe&apos;s
+                                        Stealth) fires once per stack that lands.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Team Ships:</span> Pick a
