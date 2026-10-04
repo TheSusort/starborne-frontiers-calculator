@@ -49,6 +49,12 @@ import {
     type EnemySelectorKind,
 } from '../abilities/abilityTargetSide';
 import { TITANITE_PLATING } from '../../constants/persistentStackingBuffs';
+import { targetCarriesBlockDebuff } from './debuffImmunity';
+import {
+    createOverclockHangoverTracker,
+    isOverclock,
+    overclockHangoverStatuses,
+} from './overclockHangover';
 import { aliveTargetsOf, type AliveRoster } from './targetableActors';
 import {
     foldActorBuffTotals,
@@ -5709,6 +5715,29 @@ export function runCombat(rawInput: CombatEngineInput): {
         for (const victimId of markedVictims) {
             if (castStasisStandsOn(victimId)) continue;
             stasisBreakPending.set(victimId, true);
+        }
+    };
+
+    // Overclock's "on removal or expiration" hangover — see overclockHangover.ts.
+    const overclockHangover = createOverclockHangoverTracker();
+    const settleOverclockHangovers = (round: number): void => {
+        const lost = overclockHangover.settle(
+            (id) => selfBuffNamesForOwners(statusEngine, [id]).some(isOverclock),
+            [...allActorsById.values()].filter((a) => a.currentHp > 0).map((a) => a.id)
+        );
+        for (const holderId of lost) {
+            if (targetCarriesBlockDebuff(statusEngine, holderId)) continue;
+            for (const status of overclockHangoverStatuses(holderId)) {
+                statusEngine.applyTimedAbilityStatus(round, status, undefined, holderId);
+                bus.emit({
+                    type: 'debuff-applied',
+                    sourceId: holderId,
+                    targetId: holderId,
+                    round,
+                    buffName: status.payload.buffName,
+                    application: 'apply',
+                });
+            }
         }
     };
 
@@ -13242,6 +13271,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                 for (const buffName of statusEngine.decrementEnemy(actor.id).expired) {
                     bus.emit({ type: 'buff-expired', actorId: actor.id, round: r, buffName });
                 }
+                // After BOTH decrements, so a hangover landing on this actor keeps its full 2 turns.
+                settleOverclockHangovers(r);
 
                 bus.emit({ type: 'turn-ended', actorId: actor.id, round: r });
                 // Drain intents enqueued by end-of-turn triggers before the next actor acts.

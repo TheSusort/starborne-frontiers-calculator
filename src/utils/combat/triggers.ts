@@ -927,8 +927,11 @@ export function registerReactiveListeners(args: {
                         // 'inflict') so her Provoke-only active (an apply) does not wake this
                         // listener — only her inflicted Corrosion does. Yuyan's sibling clause
                         // reads "applying" (filter 'apply') and is gated the other way.
+                        // `e.targetId !== ownerId`: a debuff a unit puts on ITSELF (Overclock's
+                        // hangover, overclockHangover.ts) is not one it inflicts or applies.
                         if (
                             e.sourceId === ownerId &&
+                            e.targetId !== ownerId &&
                             !inDebuffInflictedReactionChain(
                                 e.debuffInflictedReactionChain,
                                 ra.ability.id

@@ -63,6 +63,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: Binderburg Resilience I and II now also raise Defense.',
     "Combat simulator: Protection no longer redirects Curator's whole-battlefield attacks.",
     "Combat simulator: Isha's Titanite Plating now loses a stack each time she's hit.",
+    'Combat simulator: Overclock now leaves Attack Down I and Speed Down I when it ends.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
