@@ -3808,6 +3808,12 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // the buff totals. The PRE-modifier crit estimate (cappedCrit(critBuffForGates), layers
     // 1+2+3) is used only for the rare self-crit-gated modifier condition, avoiding a
     // self-referential gate.
+    /** The bound target's OWN buffs, for the damage gates asking about the enemy being hit ("+15%
+     *  to enemies with Stealth" — Lodolite; "additional damage to enemies affected by Taunt" —
+     *  Rikra), read by the modifier and payload contexts below. The side-wide union is what
+     *  `enemyBuffNamesArg` carries. Without a reading (a non-positional run) the one enemy's union
+     *  is its own. */
+    const boundTargetBuffNames = targetGateReading?.buffNames ?? enemyBuffNamesArg;
     const modifierCtx = buildRoundContext({
         // Live adjacency / kill counts (Panguan, Centurion, Judge) — see `liveCountCtx`.
         ...liveCountCtx,
@@ -3822,7 +3828,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         selfHpPct: selfHpPctArg,
         targetHpPct: targetHpPctArg,
         targetRepairedThisRound: targetRepairedThisRoundArg,
-        enemyBuffNames: enemyBuffNamesArg,
+        enemyBuffNames: boundTargetBuffNames,
         enemyBuffCount: enemyBuffCountArg,
         debuffedEnemyCount: debuffedEnemyCountArg,
         enemyDebuffNames: enemyDebuffNamesArg,
@@ -4189,7 +4195,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         selfHpPct: selfHpPctArg,
         targetHpPct: targetHpPctArg,
         targetRepairedThisRound: targetRepairedThisRoundArg,
-        enemyBuffNames: enemyBuffNamesArg,
+        enemyBuffNames: boundTargetBuffNames,
         enemyBuffCount: enemyBuffCountArg,
         debuffedEnemyCount: debuffedEnemyCountArg,
         // The bound target's pre-turn debuff names plus what this cast landed on it before its

@@ -49,6 +49,8 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator: buffs re-gained every turn, like Wusheng's Stealth, no longer lapse.",
     'Combat simulator: Pallas now gains her passive buffs when an ally is critically repaired.',
     "Combat simulator: Rys's own Hacking Up III now helps his charged Speed Down II land.",
+    "Combat simulator: Lodolite's Stealth bonus now needs the struck enemy itself Stealthed.",
+    "Combat simulator: Rikra's and Sokol's Taunt bonuses now need the struck enemy Taunting.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
