@@ -8,7 +8,7 @@ import {
     EnemyBaseClass,
     SelectedGameBuff,
 } from '../../types/calculator';
-import { Ability, ControlEffect, ShipSkills, Skill } from '../../types/abilities';
+import { Ability, ControlEffect, ShipSkills, Skill, SkillSlot } from '../../types/abilities';
 import type { AffinityName } from '../../types/ship';
 import type { FactionName } from '../../constants/factions';
 import type { ParsedPattern } from '../targetingParser';
@@ -2019,6 +2019,11 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         : undefined;
 
     const firingSkill = selectFiringSkill(shipSkills, action);
+    const passiveSkill = shipSkills.slots.find((s) => s.slot === 'passive');
+    /** A timed status this cast applies: the firing slot's own, and a passive one that rides each
+     *  hit of a damaging cast (`TimedStatus.perHit`). */
+    const ridesThisCast = (status: TimedStatus): boolean =>
+        status.sourceSlot === action || (status.perHit === true && hasDamageAbility);
     // noCrit is read from the UNGATED skill: the flag is a property of the attack
     // itself and must be known before the ctx (and therefore the gate) exists.
     // Assumes one base-damage ability per skill (true for all parser output); a
@@ -2062,7 +2067,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         sourceId: string,
         buffName: string,
         victimId: string,
-        application?: 'inflict' | 'apply'
+        application?: 'inflict' | 'apply',
+        sourceSlot: SkillSlot = action
     ) =>
         bus.emit({
             type: 'debuff-applied',
@@ -2071,7 +2077,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             round: r,
             buffName,
             ...(application !== undefined ? { application } : {}),
-            sourceSlot: action,
+            sourceSlot,
         });
 
     // LIVE per-target debuff-landing chance. The sole producer of
@@ -2578,7 +2584,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         hasVictim &&
         recipientGateReadings &&
         opposingVictimById &&
-        (timedEnemyBySlot.some((s) => s.sourceSlot === action && s.conditions.length > 0) ||
+        (timedEnemyBySlot.some((s) => ridesThisCast(s) && s.conditions.length > 0) ||
+            timedSelfBySlot.some((s) => s.perHit === true && ridesThisCast(s)) ||
             controlAbilitiesFromSkill(firingSkill).some((c) => c.conditions.length > 0))
     ) {
         for (const [id, reading] of recipientGateReadings) {
@@ -2622,6 +2629,27 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         hasVictim && victim.id === enemy.id
             ? preDebuffGateCtx
             : (recipientGateCtxById.get(victim.id) ?? preDebuffGateCtx);
+    /** The enemies this cast strikes besides the bound target: the footprint's other living
+     *  victims on a positional cast; none on a single-target (Pattern-Base) or DPS cast. */
+    const otherStruckVictims: CombatActor[] =
+        hasVictim && positionalLanding && aoeVictimIds && opposingVictimById
+            ? aoeVictimIds
+                  .filter((id) => id !== enemy.id)
+                  .map((id) => opposingVictimById.get(id))
+                  .filter((v): v is CombatActor => v !== undefined)
+            : [];
+    /** A self gain gated on "the target" fires ONCE when ANY enemy the cast strikes qualifies
+     *  (owner ruling R17): the bound target against `anchorCtx`, every other struck enemy against
+     *  `anchorCtx`'s caster half with its own victim half (`recipientGateCtx`, read before the
+     *  cast's own landings). */
+    const anyStruckVictimMeets = (
+        conditions: Ability['conditions'],
+        anchorCtx: ConditionContext
+    ): boolean =>
+        conditionsMet(conditions, anchorCtx) ||
+        otherStruckVictims.some((v) =>
+            conditionsMet(conditions, withVictimHalf(anchorCtx, recipientGateCtx(v)))
+        );
 
     // §4.5 Direct-damage Stasis break. Fires AFTER scheduled debuffs (sourceFired)
     // but BEFORE the ability timed-debuff loop, so a Stasis re-application from THIS attack's
@@ -2849,7 +2877,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                             actor.id,
                             status.payload.buffName,
                             emitTargetId,
-                            status.payload.application
+                            status.payload.application,
+                            status.sourceSlot
                         );
                     },
                     victimId: vid,
@@ -2949,7 +2978,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     }[] = [];
 
     for (const status of timedEnemyBySlot) {
-        if (status.sourceSlot !== action) continue;
+        if (!ridesThisCast(status)) continue;
         // An enemy-debuff clause needs an enemy. With no victim this whole clause does not
         // happen: nothing is inflicted, nothing is resisted (a resist implies a target that resisted
         // it), and no landing draw is taken. Fenced at the CLAUSE, not at the emit — a guard further
@@ -2972,7 +3001,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // `ABILITY_TYPE_TARGET_SIDES`, which marks `buff` ally-side only. The remaining route is
         // hand-edited persisted data (#404's axis), and for that shape the behaviour pinned by the
         // RESIDUAL arm is the accepted answer. Do not widen this predicate without a new ruling.
-        const matchingAbility = firingSkill?.abilities.find(
+        const matchingAbility = (
+            status.sourceSlot === action ? firingSkill : passiveSkill
+        )?.abilities.find(
             (a) => a.config.type === 'debuff' && a.config.buffName === status.payload.buffName
         );
         // Recipient resolution — including the 'adjacent-enemies' / 'target-and-adjacent-enemies'
@@ -2991,7 +3022,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             aoeVictimIds,
             adjacentEnemyIdsFor,
             positionalLanding,
-            // `timedEnemyBySlot` is filtered to the slot this cast fired.
+            // Filtered to the slot this cast fired, plus the passive statuses riding its hits —
+            // an enemy one of those hits ("deals damage to an enemy that …") is each struck enemy.
             firingClause: true,
             selectorEnemyIdFor,
         });
@@ -3275,7 +3307,14 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         critDecided: boolean;
     }[] = [];
     for (const status of timedSelfBySlot) {
-        if (status.sourceSlot !== action) continue;
+        if (!ridesThisCast(status)) continue;
+        if (status.perHit === true) {
+            // A passive gain riding the cast's hits reads the struck enemies as they stood BEFORE
+            // the cast (owner ruling R15), and lands after the damage (`afterDamageClause`).
+            if (hasVictim && anyStruckVictimMeets(status.conditions, preDebuffGateCtx))
+                endOfTurnSelfStatuses.push({ status, critDecided: false });
+            continue;
+        }
         if (hasSelfCritGate(status.conditions)) {
             endOfTurnSelfStatuses.push({ status, critDecided: true });
             continue;
@@ -3385,7 +3424,6 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // deliberately excluded (self-referential-gate avoidance, mirrors critBuffForGates).
         selfCritPower: critDamage + critDamageForGates,
     });
-    const passiveSkill = shipSkills.slots.find((s) => s.slot === 'passive');
     // Distributed all-allies auras (Lodolite/Panguan-shape)
     // append AFTER this actor's own firing + passive abilities — array order only affects
     // scaling-condition positional context (ctxFor in gateFiringAbilities, which this list

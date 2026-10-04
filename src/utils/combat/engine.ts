@@ -72,7 +72,7 @@ import {
     StatusEngine,
     createStatusEngine,
 } from './statusEngine';
-import { liveGateConditions } from './abilityStatusGating';
+import { isPassivePerHitStatus, liveGateConditions } from './abilityStatusGating';
 import {
     isPositional,
     resolvePositionalTarget,
@@ -333,7 +333,8 @@ function registerActorAbilityStatuses(
         // Down", "deals 300% damage. After targeting a defender, gains Crit Power Up II").
         // `slot.abilities` IS clause order — buildShipAbilities sorts each slot by text position.
         // Only the two FIRING slots cast; a passive row has no damage clause to order against
-        // (its statuses are seeded, not cast), so the tracker stays false there.
+        // (its statuses are seeded, or ride the cast's hits — `perHit` below), so the tracker
+        // stays false there.
         const isFiringSlot = slot.slot === 'active' || slot.slot === 'charged';
         let sawDamageClause = false;
         for (const ability of slot.abilities) {
@@ -577,6 +578,16 @@ function registerActorAbilityStatuses(
                     // After targeting a defender, gains Crit Power Up II"). Consumed by
                     // playerTurn's timed-enemy and timed-self application loops.
                     ...(sawDamageClause ? { afterDamageClause: true } : {}),
+                    // A passive status riding each hit of the owner's cast (see
+                    // `isPassivePerHitStatus`) reacts to the damage, so it lands after it.
+                    ...(isPassivePerHitStatus({
+                        sourceSlot: slot.slot,
+                        side,
+                        trigger: ability.trigger,
+                        conditions: ability.conditions,
+                    })
+                        ? { perHit: true as const, afterDamageClause: true }
+                        : {}),
                 };
                 (side === 'self' ? timedSelfBySlot : timedEnemyBySlot).push(status);
             }
@@ -649,6 +660,8 @@ function seedPassiveTimedStatuses(
         });
         for (const status of rt.timedSelfBySlot) {
             if (status.sourceSlot !== 'passive') continue;
+            // Applied by the owner's casts instead — see `RegisteredAbilityStatus.perHit`.
+            if (status.perHit) continue;
             if (!conditionsMet(status.conditions, seedCtx)) continue;
             // recipients is populated by registerActorAbilityStatuses for every timed-by-slot
             // status; the [rt.actor.id] fallback only guards test fixtures that omit it.
