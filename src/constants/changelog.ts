@@ -18,6 +18,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: Paracelsus no longer grants Everliving Regeneration II after a DoT death.',
     'Combat simulator: Hayyan now repairs allies for each damage-over-time stack inflicted.',
     'Combat simulator: the Firewall implant now rolls for each damage-over-time stack received.',
+    "Combat simulator: Pestilence, Larkspur and Grif now react to passive cleanses like Nuqtu's.",
     "Combat simulator: Bayah's and Bizon's passive debuffs now land on each qualifying enemy hit.",
     "Combat simulator: Bayah's and Sha Xing's passive buffs now trigger when hitting debuffed enemies.",
     "DPS calculator: Bayah's passive now fires each turn against a debuffed enemy.",

@@ -2,7 +2,7 @@
  * A drain-time REACTIVE cleanse must surface in the combat log. AEGIS's on-ally-shield-destroyed
  * "cleanses all debuffs" credits cleanseCount but emitted no log event (cleanse-performed is
  * cast-time only, and re-emitting it would chain on-cleanse listeners) — so the reaction was
- * invisible ("no reactions logged"). It now emits a LOG-ONLY `reactive-cleanse-performed`,
+ * invisible ("no reactions logged"). It now emits a `reactive-cleanse-performed`,
  * attributed to the reacting owner (AEGIS) and carrying the cleansed ally.
  */
 import { describe, it, expect } from 'vitest';

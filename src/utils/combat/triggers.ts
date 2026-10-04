@@ -173,6 +173,14 @@ export interface Intent {
         counterTargetId?: string;
         damagedAllyId?: string;
         fromPurgeEvent?: boolean;
+        /** Depth-1 enemy-cleanse chain guard, the cleanse twin of `fromPurgeEvent`: this intent
+         *  was born of an `on-enemy-cleansed` reaction, or provoked while one resolved. A reactive
+         *  cleanse resolved under it emits a `reactive-cleanse-performed` flagged
+         *  `viaEnemyCleanseReaction`, which wakes no `on-enemy-cleansed` listener — so
+         *  Pestilence's Corrosion landing on an enemy that cleanses whenever it is debuffed is
+         *  cleansed once more and the chain stops. Carried across owners by the enqueue wrapper
+         *  in `registerReactiveListeners` (`resolvingIntent`). */
+        fromEnemyCleanseReaction?: boolean;
         /** The sub-attack that raised the triggering event.
          *  Stamped by the OUTGOING listeners (`on-crit`, `on-deal-damage`) from
          *  `ability-performed.subAttackIndex`, AND by the INCOMING ones (`on-attacked`,
@@ -657,7 +665,7 @@ export function registerReactiveListeners(args: {
     const {
         bus,
         perOwner,
-        enqueue,
+        enqueue: enqueueRaw,
         isOpposing,
         roleOf,
         adjacentAllyIdsFor,
@@ -666,6 +674,15 @@ export function registerReactiveListeners(args: {
         footprintAllyIdsFor,
         maxHpOf,
     } = args;
+    // An intent provoked while an enemy-cleanse reaction resolves inherits its chain guard
+    // (`fromEnemyCleanseReaction`'s doc).
+    const enqueue = (intent: Intent): void =>
+        enqueueRaw(
+            resolvingIntent?.eventCtx?.fromEnemyCleanseReaction &&
+                !intent.eventCtx?.fromEnemyCleanseReaction
+                ? { ...intent, eventCtx: { ...intent.eventCtx, fromEnemyCleanseReaction: true } }
+                : intent
+        );
     // Same-side ally, OWNER EXCLUDED — for a trigger whose skill text names "another/other
     // ally", or whose subject structurally cannot be the owner (a destroyed ship cannot take the
     // reaction it would grant itself). See the 2026-09-30 "an ally includes the caster" ruling in
@@ -1965,11 +1982,14 @@ export function registerReactiveListeners(args: {
                             });
                     });
                     break;
-                case 'on-enemy-cleansed':
-                    bus.on('cleanse-performed', (e) => {
-                        // Opposing-scoped: any opposing-side actor's cleanse. For the player
-                        // call: enemy side. For the enemy call: player side.
-                        if (!isOpposing(e.casterId)) return;
+                case 'on-enemy-cleansed': {
+                    // Opposing-scoped: any opposing-side actor's cleanse — a cast one
+                    // (`cleanse-performed`) or one its passive performs (`reactive-cleanse-
+                    // performed`: Nuqtu's start-of-turn, Purifier's on-damaged, AEGIS, Hermes,
+                    // Howler). A duration cut (`mode: 'reduce-duration'` — Heliodor) removes
+                    // nothing and is not a cleanse.
+                    const onEnemyCleanse = (casterId: string, targets: string[]) => {
+                        if (!isOpposing(casterId)) return;
                         // Grif's damage reaction hits EACH cleansed enemy once per cast (owner
                         // ruling 2026-09-30): one enqueue per DISTINCT id in e.targets, routed via
                         // counterTargetId so the damage branch's single-victim resolution lands on
@@ -1979,10 +1999,14 @@ export function registerReactiveListeners(args: {
                         // abilities that both cleanse the same enemy) to one hit — one hit per
                         // cleansed enemy per cast, not per removed debuff.
                         if (ra.ability.config.type === 'damage') {
-                            for (const targetId of new Set(e.targets ?? [])) {
+                            for (const targetId of new Set(targets)) {
                                 enqueue({
                                     ...intent,
-                                    eventCtx: { ...intent.eventCtx, counterTargetId: targetId },
+                                    eventCtx: {
+                                        ...intent.eventCtx,
+                                        counterTargetId: targetId,
+                                        fromEnemyCleanseReaction: true,
+                                    },
                                 });
                             }
                             return;
@@ -1997,12 +2021,22 @@ export function registerReactiveListeners(args: {
                             ...intent,
                             eventCtx: {
                                 ...intent.eventCtx,
-                                counterTargetId: e.casterId,
-                                cleansedEnemyIds: e.targets,
+                                counterTargetId: casterId,
+                                cleansedEnemyIds: targets,
+                                fromEnemyCleanseReaction: true,
                             },
                         });
+                    };
+                    bus.on('cleanse-performed', (e) => onEnemyCleanse(e.casterId, e.targets ?? []));
+                    bus.on('reactive-cleanse-performed', (e) => {
+                        if (e.mode === 'reduce-duration' || e.viaEnemyCleanseReaction) return;
+                        onEnemyCleanse(
+                            e.casterId,
+                            e.perTarget.map((t) => t.targetId)
+                        );
                     });
                     break;
+                }
                 case 'on-enemy-buffed':
                     bus.on('buff-applied', (e) => {
                         // Opposing-scoped: any opposing-side actor RECEIVING a timed buff
@@ -4119,13 +4153,14 @@ const REACTIVE_STAMPED_EVENT_TYPE_LIST = exhaustiveArrayOf<StampedEventType>()([
     // it under the triggering turn instead. On-turn charge emissions use the captured outer bus
     // (unstamped) → unchanged.
     'charge-changed',
-    // #2 log visibility: drain-time reactive damage/heal procs emit these LOG-ONLY events so the
-    // combat log can surface them (they deliberately emit no ability-performed/heal-performed —
-    // chain guard). Emitted through ctx.bus during a reactive intent → stamped duringTurnOf so
-    // they nest under the triggering turn. `-damage`/`-cleanse` have no combat subscriber at all;
-    // `-heal` has exactly one (on-enemy-repaired — a reactive repair is still an enemy repairing),
-    // which cannot chain because no on-enemy-repaired rider heals. See the events.ts note before
-    // adding another subscriber to any of the three.
+    // #2 log visibility: drain-time reactive damage/heal/cleanse procs emit these events so the
+    // combat log can surface them (they deliberately emit no ability-performed/heal-performed/
+    // cleanse-performed). Emitted through ctx.bus during a reactive intent → stamped duringTurnOf
+    // so they nest under the triggering turn. `-damage` has no combat subscriber; `-heal` has one
+    // (on-enemy-repaired — a reactive repair is still an enemy repairing), which cannot chain
+    // because no on-enemy-repaired rider heals; `-cleanse` has one (on-enemy-cleansed), bounded by
+    // the `fromEnemyCleanseReaction` guard. See the events.ts notes before adding another
+    // subscriber to any of the three.
     'reactive-damage-performed',
     'reactive-heal-performed',
     'reactive-cleanse-performed',
@@ -4400,7 +4435,22 @@ export const CHARGE_TARGET_KIND: Record<AbilityTarget, ChargeTargetKind> = {
     'enemy-highest-speed': selectorChargeKind('enemy-highest-speed'),
 };
 
+/** The intent `executeIntent` is resolving right now; undefined between resolutions. The engine
+ *  is synchronous, so every listener a resolution wakes enqueues while this is set. Read only by
+ *  `registerReactiveListeners`' enqueue wrapper. */
+let resolvingIntent: Intent | undefined;
+
 export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
+    const outer = resolvingIntent;
+    resolvingIntent = intent;
+    try {
+        resolveIntent(intent, rawCtx);
+    } finally {
+        resolvingIntent = outer;
+    }
+}
+
+function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
     // Brand every reactive-capable event this resolution emits with duringTurnOf/triggerActorId
     // (combat-log attribution). The wrapped bus is local to THIS call — on-turn emissions never
     // route through it, so non-reactive events stay unstamped; nested/re-entrant drains each
@@ -5874,10 +5924,10 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
             }
             ctx.healing?.credit(intent.ownerId, 'cleanseCount', affected);
             // Log visibility for Heliodor's "reduces the duration of all active Debuffs … by 1
-            // turn": reuses the LOG-ONLY
-            // reactive-cleanse-performed (no combat listener subscribes → cannot chain), flagged
-            // `mode: 'reduce-duration'` so the renderer says "-N turn" rather than "cleansed N".
-            // Silent when nothing was shrunk (no debuffs present), matching the remove twin.
+            // turn": reuses reactive-cleanse-performed, flagged `mode: 'reduce-duration'` so the
+            // renderer says "-N turn" rather than "cleansed N" and the on-enemy-cleansed listener
+            // ignores it (a duration cut removes nothing). Silent when nothing was shrunk (no
+            // debuffs present), matching the remove twin.
             if (reducePerTarget.length > 0 && ctx.bus) {
                 ctx.bus.emit({
                     type: 'reactive-cleanse-performed',
@@ -5921,17 +5971,21 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         }
         // Credit the ACTUAL removed count, not the nominal cfg.count.
         ctx.healing.credit(intent.ownerId, 'cleanseCount', removed);
-        // #2 log visibility: surface the reaction via the LOG-ONLY reactive-cleanse-performed (NOT
-        // cleanse-performed — that drives on-enemy-cleansed/on-own-cleanse listeners and would
-        // chain). No combat listener subscribes to this type, so it can't chain; buildCombatLog
-        // renders it, stamped duringTurnOf via ctx.bus so it nests under the triggering turn. Only
-        // emitted when a debuff was actually removed (empty perTarget → silent, like the heal twin).
+        // Surface the reaction via reactive-cleanse-performed (NOT cleanse-performed, which drives
+        // the owner's own on-own-cleanse listeners). buildCombatLog renders it, stamped
+        // duringTurnOf via ctx.bus so it nests under the triggering turn, and the opposing
+        // side's on-enemy-cleansed reactions hear it — unless this cleanse was itself provoked by
+        // one (`fromEnemyCleanseReaction`). Only emitted when a debuff was actually removed (empty
+        // perTarget → silent, like the heal twin).
         if (cleansePerTarget.length > 0 && ctx.bus) {
             ctx.bus.emit({
                 type: 'reactive-cleanse-performed',
                 casterId: intent.ownerId,
                 round: ctx.round,
                 perTarget: cleansePerTarget,
+                ...(intent.eventCtx?.fromEnemyCleanseReaction
+                    ? { viaEnemyCleanseReaction: true }
+                    : {}),
             });
         }
         return;
