@@ -131,6 +131,7 @@ export const TRIGGER_PROSE: Record<string, string> = {
     'on-debuff-resisted': 'when it resists a debuff',
     'on-enemy-debuff-resisted': 'when an enemy resists a debuff',
     'on-ally-crit': 'when an ally crits',
+    'on-any-ally-critically-repaired': 'when an ally is critically repaired',
     'on-ally-crit-dot': 'when an ally crits a damaged-over-time enemy',
     'on-ally-debuffed': 'when an ally is debuffed',
     'on-corrosion-spread': 'when Corrosion spreads',

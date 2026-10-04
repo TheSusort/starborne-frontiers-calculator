@@ -3718,6 +3718,12 @@ export function buildShipAbilities(rawShip: Ship): ShipSkills {
                     !(
                         reactiveTrigger === 'on-other-ally-debuff-inflicted' &&
                         c.subject === 'ally-inflicts-debuff'
+                    ) &&
+                    // Pallas: same drop — the manual "after an ally is critically repaired"
+                    // condition comes from the clause the trigger was resolved from.
+                    !(
+                        reactiveTrigger === 'on-any-ally-critically-repaired' &&
+                        c.subject === 'ally-critically-repaired'
                     )
             );
             // The debuff-inflicted trigger family reads this clause's OWN landing verb

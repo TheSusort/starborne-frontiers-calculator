@@ -47,6 +47,7 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator: Heliodor's and Pestilence's duration cuts now shorten damage-over-time effects.",
     'Combat simulator: Warpstrike now shortens a random debuff, including damage-over-time stacks.',
     "Combat simulator: buffs re-gained every turn, like Wusheng's Stealth, no longer lapse.",
+    'Combat simulator: Pallas now gains her passive buffs when an ally is critically repaired.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

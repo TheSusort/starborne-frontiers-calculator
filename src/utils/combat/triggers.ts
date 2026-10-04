@@ -455,8 +455,11 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
  *  - on-ally-crit-dot → dot-applied with viaCrit from any OTHER same-side actor (opposing sources
  *    excluded, own casts excluded) — carved out of the ruling above, see there.
  *  - on-ally-critically-repaired → the OWNER's OWN heal-performed (casterId === ownerId) with
- *    >= 1 critting draw (Pallas). The recipient may be the owner itself — owner ruling
+ *    >= 1 critting draw (Hermes). The recipient may be the owner itself — owner ruling
  *    2026-08-31, #446. One enqueue per qualifying cast.
+ *  - on-any-ally-critically-repaired → heal-performed, any caster, with >= 1 critting recipient on
+ *    the owner's side (not opposing) — owner included, see the ruling above (Pallas). One enqueue
+ *    per qualifying cast.
  *  - on-own-repair-to-ally → the OWNER's OWN repair — the on-ally-critically-repaired twin
  *    WITHOUT the crit filter (Font of Power). NAME IS A MISNOMER since #444 (kept because the
  *    string is a persisted `Ability.trigger` value). Qualifying is SHAPE-SCOPED: a buff reaction
@@ -1196,8 +1199,8 @@ export function registerReactiveListeners(args: {
                     break;
                 case 'on-ally-critically-repaired':
                     bus.on('heal-performed', (e) => {
-                        // The OWNER's own crit repair (Pallas: "after an ally is critically
-                        // repaired"): own cast and >= 1 critting draw. One enqueue per qualifying
+                        // The OWNER's own crit repair (Hermes: "when it critically repairs an
+                        // ally"): own cast and >= 1 critting draw. One enqueue per qualifying
                         // cast.
                         //
                         // #446, owner ruling 2026-08-31: a critical SELF-repair procs it too — no
@@ -1208,6 +1211,22 @@ export function registerReactiveListeners(args: {
                         if (e.casterId === ownerId && (e.critHits ?? 0) >= 1) {
                             enqueue(intent);
                         }
+                    });
+                    break;
+                case 'on-any-ally-critically-repaired':
+                    bus.on('heal-performed', (e) => {
+                        // Pallas: "after an ally is critically repaired" — any caster's repair that
+                        // crit on a ship of the owner's side, the owner included. Keyed on the
+                        // RECIPIENT's side: an opposing healer's crit lands on its own side and
+                        // never qualifies. One enqueue per qualifying cast. Only cast repairs
+                        // roll a crit (a reactive repair draws none), so `heal-performed` is the
+                        // whole source.
+                        const critOnOwnSide = e.perTarget
+                            ? e.perTarget.some(
+                                  (pt) => pt.didCrit === true && !isOpposing(pt.targetId)
+                              )
+                            : (e.critHits ?? 0) >= 1 && !isOpposing(e.casterId);
+                        if (critOnOwnSide) enqueue(intent);
                     });
                     break;
                 case 'on-own-repair-to-ally': {

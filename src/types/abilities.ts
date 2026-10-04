@@ -192,6 +192,11 @@ export type AbilityTrigger =
     // Inferno II for 2 turns"), not an ally's. See buildShipAbilities' dot-effects branch.
     | 'on-self-crit-dot'
     | 'on-ally-critically-repaired'
+    // REPAIRER-agnostic: a critting repair lands on any ship of the owner's side, the owner
+    // included, whoever cast it ("after an ally is critically repaired" — Pallas; passive voice,
+    // no repairer named). Distinct from 'on-ally-critically-repaired', which is the OWNER's own
+    // crit repair (Hermes's "when it critically repairs an ally").
+    | 'on-any-ally-critically-repaired'
     | 'on-ally-crit'
     | 'on-stasis-applied'
     // VICTIM-scoped: a Bomb bursts on an opposing actor, regardless of who caused it
@@ -375,6 +380,7 @@ export const LIVE_TRIGGERS = new Set<AbilityTrigger>([
     // Ship-kit W8 Task 10 (Wisteria): self-subject sibling of on-ally-crit-dot.
     'on-self-crit-dot',
     'on-ally-critically-repaired',
+    'on-any-ally-critically-repaired',
     'on-ally-crit',
     'on-stasis-applied',
     'on-bomb-detonated',
