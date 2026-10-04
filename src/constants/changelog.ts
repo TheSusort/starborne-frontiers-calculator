@@ -7,6 +7,7 @@ export const CURRENT_VERSION = '1.74.0';
 // bumped version whose entries are still unreleased shows users a what's-new dialog listing
 // nothing. Do it by hand only if that script cannot.
 export const UNRELEASED_CHANGES: string[] = [
+    "Combat simulator: Zosimos's passive now drains charges only from the repairing enemy.",
     "Combat simulator: Bayah's and Bizon's passive debuffs now land on each qualifying enemy hit.",
     "Combat simulator: Bayah's and Sha Xing's passive buffs now trigger when hitting debuffed enemies.",
     "DPS calculator: Bayah's passive now fires each turn against a debuffed enemy.",

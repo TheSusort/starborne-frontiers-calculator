@@ -3091,7 +3091,8 @@ const DocumentationPage: React.FC = () => {
                                         <span className="text-primary">Charge removal:</span> A
                                         skill that removes charges from the enemy&apos;s charged
                                         skill (Opal, Provider, Sefuba) drains every enemy it hits
-                                        and no one outside its pattern.
+                                        and no one outside its pattern. Zosimos&apos;s passive
+                                        drains only the enemy that performed the repair.
                                     </p>
                                     <p className="text-theme-text">
                                         <span className="text-primary">

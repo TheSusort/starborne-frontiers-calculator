@@ -4278,7 +4278,8 @@ function resolveAoEReactiveDamageVictims(intent: Intent, ctx: IntentExecContext)
  *
  * The arms:
  *   - each SELECTOR target resolves to ONE opposing actor;
- *   - `enemy` / `all-enemies` bulk-remove from every opposing actor (`everyNthEvent` included);
+ *   - `enemy` / `all-enemies` remove from the enemy the triggering event names (the repairer on
+ *     `on-enemy-repaired`), else bulk-remove from every opposing actor;
  *   - `lowest-hp-ally` bumps the one lowest-HP ally;
  *   - `ally` / `all-allies` bump every same-side actor;
  *   - everything else — `self`, `adjacent-allies`, and (deliberately) the enemy-adjacency targets
@@ -4514,19 +4515,25 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 return;
             }
             case 'enemy-bulk': {
-                // every-Nth-event gate (Zosimos "every second repair"): count per (owner, ability,
-                // repairer); only act on the Nth event. Requires a repairer id and the counter map.
-                if (intent.ability.everyNthEvent) {
+                // A repair-driven removal names the REPAIRER (Zosimos: "removes 1 charge from the
+                // enemy's charged skill for every repair they perform"), stamped as
+                // `eventCtx.repairerId` by the on-enemy-repaired listener — never the whole board.
+                if (intent.ability.trigger === 'on-enemy-repaired') {
                     const repairerId = intent.eventCtx?.repairerId;
-                    if (!repairerId || !ctx.repairCountBySource) return;
-                    const key = `${intent.ownerId}:${intent.ability.id}:${repairerId}`;
-                    const n = (ctx.repairCountBySource.get(key) ?? 0) + 1;
-                    ctx.repairCountBySource.set(key, n);
-                    if (n % intent.ability.everyNthEvent !== 0) return; // not the Nth repair yet
-                    ctx.removeChargesFrom(repairerId, cfg.amount, owner.attackerAffinity, ctx.bus); // "that enemy" only
+                    if (!repairerId) return;
+                    // every-Nth-event gate: count per (owner, ability, repairer); only act on
+                    // the Nth repair. Unset → every repair.
+                    if (intent.ability.everyNthEvent) {
+                        if (!ctx.repairCountBySource) return;
+                        const key = `${intent.ownerId}:${intent.ability.id}:${repairerId}`;
+                        const n = (ctx.repairCountBySource.get(key) ?? 0) + 1;
+                        ctx.repairCountBySource.set(key, n);
+                        if (n % intent.ability.everyNthEvent !== 0) return; // not the Nth repair yet
+                    }
+                    ctx.removeChargesFrom(repairerId, cfg.amount, owner.attackerAffinity, ctx.bus);
                     return;
                 }
-                // On-cast / bomb removal: "the enemy" = bulk all-opposing.
+                // Any other trigger: "the enemy" = bulk all-opposing.
                 // Selector enemy-targets ('enemy-most-buffs'/'enemy-highest-attack'/
                 // 'enemy-highest-speed') are matched ABOVE this arm — see the #399 block.
                 ctx.removeEnemyCharges(cfg.amount, owner.attackerAffinity, ctx.bus);
