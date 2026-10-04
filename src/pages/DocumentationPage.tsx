@@ -2881,15 +2881,17 @@ const DocumentationPage: React.FC = () => {
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Crit-Gated Effects:</span> In
-                                        a battle or healing simulation, an effect that says &quot;if
-                                        a critical hit occurs&quot; or &quot;if this critically
-                                        hits&quot; fires only when the hit really crits. On an area
-                                        skill a crit against any enemy hit counts, so Lev&apos;s
-                                        charged skill extends every hit enemy&apos;s debuffs and
-                                        grants Crit Power Up II. Effects tied to one enemy&apos;s
-                                        crit, such as Wisteria&apos;s Inferno, read that
-                                        enemy&apos;s own crit. The DPS calculator still grants a
-                                        crit-gated buff whenever crit rate is above zero.
+                                        a battle, a healing simulation and the DPS calculator, an
+                                        effect that says &quot;if a critical hit occurs&quot; or
+                                        &quot;if this critically hits&quot; fires only when the hit
+                                        really crits, and a buff it grants lands after that hit, so
+                                        it only boosts later ones. On an area skill a crit against
+                                        any enemy hit counts, so Lev&apos;s charged skill extends
+                                        every hit enemy&apos;s debuffs and grants Crit Power Up II.
+                                        Effects tied to one enemy&apos;s crit, such as
+                                        Wisteria&apos;s Inferno, read that enemy&apos;s own crit.
+                                        Asphodel adds one charge for each enemy her skill crits, so
+                                        an area hit that crits two enemies adds two.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Buff Steal:</span> Skills

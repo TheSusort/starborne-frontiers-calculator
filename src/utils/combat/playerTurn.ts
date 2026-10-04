@@ -974,11 +974,6 @@ export interface PlayerTurnArgs {
      *  all three counts from the round contexts, which is what routes their conditions back to the
      *  user's manual `manualCount ?? 1`. Set by engine.ts's `liveCountsMeasurable`. */
     liveCountsMeasurable?: boolean;
-    /** A crit-gated timed buff grant needs a REAL crit: when true, a `self-crit`-gated status of
-     *  the timed-self loop is decided after the hit, on `anyVictimCrit`. Absent/false — the
-     *  single-ship DPS calculator — keeps the pre-hit gate, which passes whenever crit rate > 0
-     *  (see the pre-debuff gate ctx note). Set by engine.ts's `critGatedGrantsNeedRealCrit`. */
-    critGatedGrantsNeedRealCrit?: boolean;
     /** Opposing actors destroyed SO FAR THIS BATTLE, regardless of who landed the kill (owner
      *  ruling 2026-08-30) — the live source for Judge's R2 "20% more direct damage for each
      *  destroyed enemy, up to max of 100%". Supplied by engine.ts's `buildTurnArgs` off
@@ -1323,6 +1318,46 @@ const isCastWideCritClause = (ab: Ability): boolean =>
     (ab.config.type === 'buff' || ab.config.type === 'extend-status') &&
     hasSelfCritGate(ab.conditions);
 
+/** A charge ability granted to an ally-side recipient ('own' covers the caster itself). See
+ *  chargeGainFromSkill's classification notes. */
+const isAllyChargeTarget = (ability: Ability): boolean =>
+    ability.target === 'ally' ||
+    ability.target === 'all-allies' ||
+    ability.target === 'lowest-hp-ally';
+
+/** A crit-gated charge the caster gains for itself (Asphodel: "adds 1 charge to its charged skill
+ *  after critically damaging an enemy"). It is earned once per struck enemy the cast crits (owner
+ *  ruling 2026-10-04: an area cast critting A and C adds 2), so it is counted by
+ *  `perCritChargeGain`, never by chargeGainFromSkill's cast-level sum. */
+const isPerCritOwnCharge = (ability: Ability): boolean =>
+    ability.type === 'charge' &&
+    ability.trigger === 'on-cast' &&
+    !isAllyChargeTarget(ability) &&
+    !isEnemyTarget(ability.target) &&
+    hasSelfCritGate(ability.conditions);
+
+/** The charge a skill's per-crit own charges (`isPerCritOwnCharge`) add: each is gated and scaled
+ *  once per struck enemy, against that enemy's own crit (`victimCrits`, one entry per enemy). */
+function perCritChargeGain(
+    skill: Skill | undefined,
+    ctxFor: Map<string, ConditionContext>,
+    fallbackCtx: ConditionContext,
+    victimCrits: readonly boolean[]
+): number {
+    let gain = 0;
+    for (const ability of chargeAbilitiesFromSkill(skill)) {
+        if (!isPerCritOwnCharge(ability) || ability.config.type !== 'charge') continue;
+        if (ability.config.amount === 'all') continue;
+        const base = ctxFor.get(ability.id) ?? fallbackCtx;
+        for (const crit of victimCrits) {
+            const victimCtx: ConditionContext = { ...base, roundCrit: crit };
+            if (!conditionsMet(gateConditions(ability), victimCtx)) continue;
+            gain += chargeAbilityScale(ability, new Map(), victimCtx) * ability.config.amount;
+        }
+    }
+    return gain;
+}
+
 // Charge gain from a GATED skill's charge abilities. Gating already happened in
 // gateFiringAbilities (full AND/OR + thresholds) — for the firing skill via
 // gatedSkill and for the passive slot via gatedPassive. A thresholded gate
@@ -1358,10 +1393,7 @@ function chargeGainFromSkill(args: {
         // carrying `'lowest-hp-ally'` in the shipped roster is a HEAL, never a charge — pinned by
         // the inventory gate in `lowestHpAllySelector.test.ts`. Only a hand-authored charge
         // ability can reach it.
-        const isAlly =
-            ability.target === 'ally' ||
-            ability.target === 'all-allies' ||
-            ability.target === 'lowest-hp-ally';
+        const isAlly = isAllyChargeTarget(ability);
         const isEnemy = isEnemyTarget(ability.target);
         // 'own' sums everything that is neither ally- nor enemy-targeted; the other filters
         // sum only their matching target class.
@@ -1403,6 +1435,8 @@ function chargeGainFromSkill(args: {
                   ? isEnemy
                   : !isAlly && !isEnemy;
         if (!matches) continue;
+        // A crit-gated own charge counts once per struck enemy crit (`perCritChargeGain`).
+        if (isPerCritOwnCharge(ability)) continue;
         // `'all'` is empty-the-pool, not a count, so it cannot join this sum. The enemy-removal
         // caller reads it through `firesFullChargeWipe` below; on the own/ally (gain) filters it
         // has no meaning — see the `charge` config's doc comment in types/abilities.ts.
@@ -1715,7 +1749,6 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         adjacentAllyIds,
         adjacentEnemyIdsFor,
         liveCountsMeasurable,
-        critGatedGrantsNeedRealCrit = false,
         enemyDestroyedCount: enemyDestroyedCountArg,
         selectorEnemyIdFor,
         enemyBuffNames: enemyBuffNamesArg = [],
@@ -2441,11 +2474,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
 
     // (a) Pre-application gate context (before ability debuffs land). effectiveCritRate uses
     // the scheduled crit buff only (modifiers/ability buffs not yet folded), and NO roundCrit
-    // — buff gates use the probability tier like modifierCtx. NOTE: in the single-ship DPS
-    // calculator a self-crit-gated buff therefore resolves effectiveCritRate/100 > 0, i.e.
-    // passes whenever the crit rate is non-zero — intended "live-subject, satisfiable"
-    // behaviour, not a bug. Under `critGatedGrantsNeedRealCrit` (battle, healing) the timed-self
-    // loop does not gate such a status here: it is decided after the hit on `anyVictimCrit`.
+    // — buff gates use the probability tier like modifierCtx, so a self-crit gate read here
+    // passes whenever the crit rate is non-zero. A crit-gated TIMED SELF status is therefore not
+    // gated against this ctx (or postDebuffGateCtx): the timed-self loop decides it after the hit,
+    // on `anyVictimCrit`, in every mode — a grant needs a real crit.
     // "N or more debuffs" on an enemy counts every debuff on THAT enemy: its own per-target
     // statuses, unioned by name with the scheduled channel (in the DPS calculator, the debuffs
     // the user configured on its one enemy; empty in battle), plus — inside buildRoundContext —
@@ -3234,16 +3266,17 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // Self statuses that land at the end of this function, after every figure of this cast's
     // damage is fixed, in slot order:
     //  - a passed status whose clause follows the damage clause (`afterDamageClause`);
-    //  - under `critGatedGrantsNeedRealCrit`, a crit-gated status (`critDecided`): its crit does
-    //    not exist until the hit, so its whole gate is decided there, against postDebuffGateCtx
-    //    with `roundCrit: anyVictimCrit`.
+    //  - a crit-gated status (`critDecided`): its crit does not exist until the hit, so its whole
+    //    gate is decided there, against postDebuffGateCtx with `roundCrit: anyVictimCrit` (a crit
+    //    on any struck enemy; the one bound enemy's crit in the DPS calculator). Landing after the
+    //    hit, it never boosts the cast that earned it.
     const endOfTurnSelfStatuses: {
         status: (typeof timedSelfBySlot)[number];
         critDecided: boolean;
     }[] = [];
     for (const status of timedSelfBySlot) {
         if (status.sourceSlot !== action) continue;
-        if (critGatedGrantsNeedRealCrit && hasSelfCritGate(status.conditions)) {
+        if (hasSelfCritGate(status.conditions)) {
             endOfTurnSelfStatuses.push({ status, critDecided: true });
             continue;
         }
@@ -3897,10 +3930,11 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // round fires the charged skill, which consumes all charges (reset to 0 at
     // the top of the loop) — nothing banks toward the next charge on that round.
     // Sourced from the firing skill AND the always-active passive slot (charge
-    // auras: Hermes/Asphodel/Hemlock/Oleander/Cobalt) — both pre-gated by
+    // auras: Hermes/Hemlock/Oleander/Cobalt) — both pre-gated by
     // gateFiringAbilities with their positional contexts. Self + ally gains are
     // added here and the total is capped at chargeCount, since charges never
-    // exceed what the charged skill requires.
+    // exceed what the charged skill requires. A per-crit own charge (Asphodel) is
+    // counted once every struck enemy's crit is known (`perCritChargeGain`).
     if (hasChargedSkill && action === 'active') {
         // OWN charge gains: self-targeted (and unscoped) charge abilities from the firing skill
         // + the always-active passive slot. Bumps the caster only, capped at its own chargeCount.
@@ -4548,6 +4582,14 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
      *  cast. Crit-gated DoT effects are per struck enemy instead (`victimCritOf`); every other
      *  crit-gated payload keeps reading `ctx.roundCrit`. */
     const hasCastWideCritClause = (firingSkill?.abilities ?? []).some(isCastWideCritClause);
+    /** This cast earns per-crit own charges (`isPerCritOwnCharge`) — counted per struck enemy
+     *  crit, so every struck enemy's crit must be known here. Charges accrue on active casts. */
+    const earnsPerCritCharge =
+        hasChargedSkill &&
+        action === 'active' &&
+        [firingSkill, passiveSkill].some((s) =>
+            chargeAbilitiesFromSkill(s).some(isPerCritOwnCharge)
+        );
     if (targetId !== undefined) {
         // `dotsFromSkill` maps the skill's `dot` abilities in order, one entry each, so the i-th
         // entry is the i-th of these (tripwire: `dotsFromSkillPairing.corpus.test.ts`).
@@ -4590,8 +4632,13 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // An enemy outside the footprint (an adjacency splash neighbour) or a cast with no damage
     // ability has no per-enemy hit, and reads the cast's crit (`ctx.roundCrit`, the primary's).
     // A cast carrying a cast-wide crit clause (`hasCastWideCritClause`) rolls here too, so that
-    // clause can ask whether ANY struck enemy was crit (`anyVictimCrit`).
-    if ((coveredDots.size > 0 || hasCastWideCritClause) && positionalLanding && hasDamageAbility) {
+    // clause can ask whether ANY struck enemy was crit (`anyVictimCrit`), and so does one earning
+    // per-crit charges (`earnsPerCritCharge`), which counts the struck enemies crit.
+    if (
+        (coveredDots.size > 0 || hasCastWideCritClause || earnsPerCritCharge) &&
+        positionalLanding &&
+        hasDamageAbility
+    ) {
         for (const id of aoeVictimIds ?? []) {
             if (id === targetId) continue;
             const v = opposingVictimById?.get(id);
@@ -4605,6 +4652,27 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
      *  B alone). Equals `roundCrit` on a cast with no covered rolls (DPS, single target). */
     const anyVictimCrit = roundCrit || [...coveredFirstHitCrit.values()].some(Boolean);
     const victimCritOf = (id: string): boolean => coveredFirstHitCrit.get(id) ?? roundCrit;
+    // Per-crit own charges (Asphodel): one gain per struck enemy crit — the aimed enemy on any of
+    // its hits (`roundCrit`), each covered enemy on its first sub-attack. Same cap and event as
+    // the cast-level own gains above.
+    if (earnsPerCritCharge) {
+        const victimCrits = [roundCrit, ...coveredFirstHitCrit.values()];
+        const gain =
+            perCritChargeGain(firingSkill, ctxFor, ctx, victimCrits) +
+            perCritChargeGain(passiveSkill, passiveCtxFor, ctx, victimCrits);
+        const before = actor.charges;
+        actor.charges = Math.min(actor.charges + gain, chargeCount);
+        if (actor.charges !== before) {
+            bus.emit({
+                type: 'charge-changed',
+                actorId: actor.id,
+                round: r,
+                oldCharge: before,
+                newCharge: actor.charges,
+                reason: 'manip',
+            });
+        }
+    }
     for (const [rid, victimDots] of coveredDots) {
         const victim = opposingVictimById?.get(rid);
         if (!victim) continue;
