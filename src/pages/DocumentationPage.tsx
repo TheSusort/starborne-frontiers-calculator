@@ -2964,7 +2964,22 @@ const DocumentationPage: React.FC = () => {
                                         debuffs, buffs or neighbours, as with Ravager, Lev or
                                         Panguan) or checks its status (Wrecker&apos;s Inferno) is
                                         worked out for each struck enemy from what it carried before
-                                        the hit.
+                                        the hit. A passive that reacts to the ship&apos;s own hits
+                                        (Bayah&apos;s and Bizon&apos;s debuffs) is checked the same
+                                        way. A bonus the ship gains for itself when &ldquo;the
+                                        target&rdquo; qualifies (Malvex&apos;s shield,
+                                        Zosimos&apos;s and Nuqtu&apos;s charges, Anemone&apos;s
+                                        Taunt) is gained once if any struck enemy qualifies.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
+                                        <span className="text-primary">On-kill passives:</span> A
+                                        passive worded &ldquo;upon destroying an enemy&rdquo; or
+                                        &ldquo;when this Unit destroys an enemy&rdquo; (Meiying,
+                                        Gallant, Valiant) needs the ship&apos;s own kill: a direct
+                                        hit or its own Bomb, not a teammate&apos;s hit or a
+                                        damage-over-time tick. One worded &ldquo;when an enemy is
+                                        destroyed&rdquo; (Liberator, Sokol) reacts to any enemy
+                                        death.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Team Ships:</span> Pick a

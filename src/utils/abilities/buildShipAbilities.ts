@@ -68,6 +68,7 @@ import {
     detectEchoingBurstDetonatedTrigger,
     detectCritRepairTrigger,
     detectEnemyDebuffedTrigger,
+    killSentenceScope,
     detectStasisAppliedTrigger,
     detectCheatDeathActivatedTrigger,
     detectDestroyedTrigger,
@@ -1038,6 +1039,32 @@ function markPatternScoped(positioned: PositionedAbility[], text: string): Posit
         }
     }
     return positioned;
+}
+
+/**
+ * Stamps `triggerKillerScope: 'owner'` on every on-kill reaction whose clause makes this Unit the
+ * killer — "upon destroying an enemy", "When this Unit destroys an enemy" (owner ruling R18; see
+ * `killSentenceScope`). The ability's own sentence decides. An ability anchored outside any kill
+ * sentence (no anchor, or an anchor the kill clause does not share) reads the row instead:
+ * owner-scoped only when every kill sentence in it names this Unit as the killer.
+ */
+function markKillerScope(positioned: PositionedAbility[], text: string): void {
+    const onKill = positioned.filter((p) => p.ability.trigger === 'on-enemy-destroyed');
+    if (onKill.length === 0) return;
+    const masked = maskTagsPreservingLength(text);
+    const rowScopes = masked
+        .split(/[.;](?=\s|$)/)
+        .map(killSentenceScope)
+        .filter((s): s is 'owner' | 'any' => s !== undefined);
+    const rowIsOwner = rowScopes.length > 0 && rowScopes.every((s) => s === 'owner');
+    for (const p of onKill) {
+        const own =
+            p.pos >= 0 && p.pos < masked.length
+                ? killSentenceScope(sentenceContaining(masked, p.pos))
+                : undefined;
+        if ((own ?? (rowIsOwner ? 'owner' : 'any')) === 'owner')
+            p.ability.triggerKillerScope = 'owner';
+    }
 }
 
 /**
@@ -4086,6 +4113,7 @@ export function buildShipAbilities(rawShip: Ship): ShipSkills {
         // the passive damage-reaction pass) while the `pos` anchors are still available — each
         // slot's anchors index that slot's own row text.
         markPatternScoped(positioned, getSkillRowForSlot(ship, slot)?.text ?? '');
+        markKillerScope(positioned, getSkillRowForSlot(ship, slot)?.text ?? '');
         positioned.sort((a, b) => a.pos - b.pos);
         slots.push({ slot, abilities: positioned.map((p) => p.ability) });
     }

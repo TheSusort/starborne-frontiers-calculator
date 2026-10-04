@@ -743,8 +743,8 @@ export type CombatEvent =
      *  participating actor: 'attacker', a team actor id, or 'enemy'. `killerId`/
      *  `byDirectDamage` (C2b-2 Faust): the lethal attacker and whether the kill was a
      *  DIRECT hit (vs a DoT-tick batch, which has no single killer → byDirectDamage:false,
-     *  killerId undefined). Optional — only Faust's on-destroyed purge reads them; all other
-     *  listeners ignore them (backward-compatible). */
+     *  killerId undefined). Optional. Read by Faust's on-destroyed purge, and by an
+     *  `on-enemy-destroyed` reaction scoped to its owner's kills (`Ability.triggerKillerScope`). */
     | ({
           type: 'ship-destroyed';
           actorId: string;

@@ -1531,6 +1531,23 @@ const ENEMY_BUFFED_RE = /\bwhen\s+an?\s+enemy\s+gains\s+an?\s+buff\b/i;
 // extra-action trigger), which keeps its own enemy-death list.
 const KILL_TRIGGER_RE =
     /when\s+an\s+enemy\s+dies|\bdestroying\s+an\s+(?:enemy|opponent)\b|\bthis\s+unit\s+destroys\s+an\s+enemy\b|\bwhen\s+an\s+enemy\s+is\s+destroyed\b/i;
+// The kill phrasings that make the OWNER the killer — "upon destroying an enemy", "When this
+// Unit destroys an enemy", "each enemy destroyed by this Unit" — as opposed to any death ("When
+// an enemy is destroyed", "when an enemy dies"). See `killSentenceScope`.
+const OWNER_KILL_RE =
+    /\bdestroying\s+an\s+(?:enemy|opponent)\b|\bthis\s+unit\s+destroys\s+an\s+enemy\b|\benemy\s+destroyed\s+by\s+this\s+unit\b/i;
+
+/**
+ * Whose kill a sentence's on-kill clause reacts to: `'owner'` when it names this Unit as the
+ * killer (OWNER_KILL_RE), `'any'` for a bare enemy death (KILL_TRIGGER_RE without the owner
+ * wording), undefined when the sentence carries no kill clause at all (owner ruling R18).
+ */
+export function killSentenceScope(sentence: string): 'owner' | 'any' | undefined {
+    if (OWNER_KILL_RE.test(sentence)) return 'owner';
+    if (KILL_TRIGGER_RE.test(sentence) || ENEMY_DESTROYED_BY_ATTACK_RE.test(sentence)) return 'any';
+    return undefined;
+}
+
 // "destroying an enemy WITH A DEBUFF" (Meiying) — the qualifier KILL_TRIGGER_RE drops.
 // Consumed only by detectGrantConditions, where it attaches the `killed-enemy-had-debuff` gating
 // CONDITION to the debuff a kill clause grants; trigger resolution stays with KILL_TRIGGER_RE, so

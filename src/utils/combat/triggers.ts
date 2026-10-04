@@ -333,6 +333,10 @@ export interface Intent {
          *  debuffs on a debuff infliction" gate (APEX's Block Shield) is read on THAT infliction,
          *  not at drain time, when the cast's later landings would already be counted. */
         debuffVictimDebuffCount?: number;
+        /** How many debuffs the enemy an `on-enemy-destroyed` intent's death names (`victimId`)
+         *  carried as it died — named debuffs plus every DoT entry (`debuffCountOf`). Read by
+         *  the `killed-enemy-had-debuff` gate (Meiying's "destroying an enemy with a debuff"). */
+        killedEnemyDebuffCount?: number;
         /** The triggering infliction's `debuffInflictedReactionChain` (events.ts), stamped by
          *  the on-debuff-inflicted and on-enemy-debuff-inflicted listeners. The debuff and dot
          *  executors extend it with the reacting ability's own id when that ability rides one of
@@ -1812,11 +1816,27 @@ export function registerReactiveListeners(args: {
                         // fires and never clears it) rather than the fight-wide enemy-debuff
                         // count. Inert for every OTHER on-enemy-destroyed ability (Sokol/
                         // Liberator's extra-action/charge branches never read eventCtx).
-                        if (isOpposing(e.actorId))
-                            enqueue({
-                                ...intent,
-                                eventCtx: { ...intent.eventCtx, victimId: e.actorId },
-                            });
+                        //
+                        // An owner-worded kill clause ("upon destroying an enemy" — Meiying,
+                        // Valiant, Gallant …; `triggerKillerScope`) fires only on a death the
+                        // owner dealt: `killerId` names the lethal attacker, or a Bomb's applier;
+                        // a DoT-tick batch names nobody. The slain enemy's debuff count (named
+                        // debuffs + DoT entries) is read HERE, at the death, because the death
+                        // itself consumes its Bombs before the reaction drains.
+                        if (!isOpposing(e.actorId)) return;
+                        if (ra.ability.triggerKillerScope === 'owner' && e.killerId !== ownerId)
+                            return;
+                        const killedDebuffs = debuffCountOf?.(e.actorId);
+                        enqueue({
+                            ...intent,
+                            eventCtx: {
+                                ...intent.eventCtx,
+                                victimId: e.actorId,
+                                ...(killedDebuffs !== undefined
+                                    ? { killedEnemyDebuffCount: killedDebuffs }
+                                    : {}),
+                            },
+                        });
                     });
                     break;
                 case 'on-enemy-repaired': {
@@ -4333,9 +4353,9 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
     // victim THIS on-enemy-destroyed intent carries (eventCtx.victimId, stamped by the listener
     // above), not the fight-wide owner-scoped context buildDrainContext returns — so it is folded
     // in here as a targeted override rather than threaded through buildDrainContext's owner-only
-    // signature. Reads the slain actor's OWN per-target debuff store (ownerDebuffNamesFor is the
-    // same reader `selfDebuffNames`/`buildActorConditionContext` already use for a target's
-    // debuffs); no victimId (every other reactive trigger, or DPS mode) → false.
+    // signature. Reads what the slain actor carried as it died (`killedEnemyDebuffCount`, its
+    // named debuffs plus every DoT entry — ruling 8: a DoT is a debuff); without that stamp, its
+    // named debuffs now. No victimId (every other reactive trigger, or DPS mode) → false.
     // Explicitly gated on trigger==='on-enemy-destroyed' — other
     // triggers (on-deal-damage, on-bomb-detonated, on-own-echoing-burst-detonated,
     // on-ally-crit-dot, on-self-crit-dot, on-enemy-dot-damage, on-ally-debuff-inflicted) also
@@ -4347,7 +4367,9 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
             ? {
                   ...baseDrainCtx,
                   killedEnemyHadDebuff:
-                      ownerDebuffNamesFor(ctx.statusEngine, intent.eventCtx.victimId).length > 0,
+                      (intent.eventCtx.killedEnemyDebuffCount ??
+                          ownerDebuffNamesFor(ctx.statusEngine, intent.eventCtx.victimId).length) >
+                      0,
               }
             : baseDrainCtx;
     if (!conditionsMet(gateConditions, drainCtx)) return;
