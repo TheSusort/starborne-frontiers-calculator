@@ -24,6 +24,7 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator: Chakara's speed charge now needs every damaged enemy faster.",
     'Combat simulator: each stack of a damage-over-time effect now counts as one debuff.',
     "DPS calculator: Snakeroot's passive now scales with every damage-over-time stack.",
+    'Combat simulator: each damage-over-time stack now rolls separately to land.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

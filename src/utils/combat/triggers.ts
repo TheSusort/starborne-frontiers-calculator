@@ -4973,17 +4973,22 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // the per-entry tick attributes to (and scales with) the applier; bombs snapshot the
         // owner's last-turn effective attack + affinity. Shared by the single-victim path below
         // and the Pestilence multi-recipient fan-out above (identical per-victim landing).
-        const landDotOn = (victim: CombatActor | undefined, victimId: string): void => {
+        // `stacks` is how many of the DoT's stacks landed (`landedStacksOn`).
+        const landDotOn = (
+            victim: CombatActor | undefined,
+            victimId: string,
+            stacks: number
+        ): void => {
             if (cfg.dotType === 'corrosion') {
                 (victim?.corrosionEntries ?? ctx.corrosionEntries).push({
-                    stacks: cfg.stacks,
+                    stacks,
                     tier: cfg.tier,
                     remainingRounds: cfg.duration,
                     sourceId: intent.ownerId,
                 });
             } else if (cfg.dotType === 'inferno') {
                 (victim?.infernoEntries ?? ctx.infernoEntries).push({
-                    stacks: cfg.stacks,
+                    stacks,
                     tier: cfg.tier,
                     remainingRounds: cfg.duration,
                     sourceId: intent.ownerId,
@@ -5016,7 +5021,7 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 (victim?.pendingBombs ?? ctx.pendingBombs).push({
                     countdown: Math.max(1, cfg.duration),
                     damagePerStack: effectiveAttack * (cfg.tier / 100),
-                    stacks: cfg.stacks,
+                    stacks,
                     tier: cfg.tier,
                     sourceId: intent.ownerId,
                     affinityMult,
@@ -5039,7 +5044,7 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 targetId: victimId,
                 round: ctx.round,
                 dotType: cfg.dotType,
-                stacks: cfg.stacks,
+                stacks,
                 tier: cfg.tier,
                 ...(cfg.application !== undefined ? { application: cfg.application } : {}),
                 sourceSlot: intent.sourceSlot,
@@ -5070,6 +5075,26 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 intent.eventCtx?.subAttackIndex
             );
 
+        /** How many of the DoT's stacks land on `victimId`: one landing check per stack (owner
+         *  ruling R30), each through the owner's gate exactly as a single stack's — the first is
+         *  the draw a 1-stack DoT always took, and each later stack draws after it. A failed stack
+         *  surfaces as its own resist. */
+        const landedStacksOn = (victimId: string): number => {
+            let landed = 0;
+            for (let i = 0; i < cfg.stacks; i++) {
+                if (
+                    owner.landsTimedEnemyApplication(
+                        cfg.application,
+                        ctx.affinityOf?.(victimId),
+                        ctx.liveDebuffLandingChanceFor?.(intent.ownerId, victimId)
+                    )
+                )
+                    landed += 1;
+                else emitFailedDotLanding(victimId);
+            }
+            return landed;
+        };
+
         // Pestilence: a reactive DoT whose ability targets 'all-enemies' and whose triggering
         // event stamped cleansedEnemyIds fans out over EVERY cleansed enemy ("inflicts
         // Corrosion II … on all cleansed enemies"), keyed off the reactive event's actual cleansed
@@ -5078,8 +5103,8 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // THE LANDING DRAW IS INSIDE THE LOOP. There is no single "the enemy" for a fan-out to
         // measure itself against, so each recipient draws its own gate at its OWN
         // hacking-vs-security chance — exactly what the sibling `debuff` branch does ("One draw
-        // PER TARGET, matching the established per-victim precedent"). So the draw cardinality for
-        // this branch is N, and the loop is NOT RNG-free.
+        // PER TARGET, matching the established per-victim precedent"), one per stack
+        // (`landedStacksOn`). So the loop is NOT RNG-free.
         //
         // The immunity check runs BEFORE the draw (see the loop body), so a Block-Debuff victim
         // auto-resists, emits its `blockDebuffResist` unconditionally, and consumes NO gate draw.
@@ -5114,17 +5139,8 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                     continue;
                 }
                 // The timed-debuff landing path, shared — see the single-victim draw below.
-                if (
-                    !owner.landsTimedEnemyApplication(
-                        cfg.application,
-                        ctx.affinityOf?.(victimId),
-                        ctx.liveDebuffLandingChanceFor?.(intent.ownerId, victimId)
-                    )
-                ) {
-                    emitFailedDotLanding(victimId);
-                    continue;
-                }
-                landDotOn(victim, victimId);
+                const landed = landedStacksOn(victimId);
+                if (landed > 0) landDotOn(victim, victimId, landed);
             }
             return;
         }
@@ -5176,22 +5192,13 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // sibling `debuff` branch's gate), keyed on the DoT's own verb (owner ruling, 2026-10-01):
         //  - 'apply' (the Burner gear set's "Applies Inferno") — the affinity check against THIS
         //    victim only, no hacking-vs-security roll and no draw;
-        //  - anything else — one draw of the OWNER's landing gate at THIS victim's
+        //  - anything else — one draw per stack of the OWNER's landing gate at THIS victim's
         //    hacking-vs-security chance (a team ship's DoT lands at ITS rate), not the owner's
         //    cached turn-target chance: a reactive DoT lands on the enemy the triggering event
         //    carries. An undefined chance (unit ctxs, a read before the owner's first turn) falls
         //    back to the owner's cached chance, then 1, inside the gate.
-        if (
-            !owner.landsTimedEnemyApplication(
-                cfg.application,
-                ctx.affinityOf?.(victimId),
-                ctx.liveDebuffLandingChanceFor?.(intent.ownerId, victimId)
-            )
-        ) {
-            emitFailedDotLanding(victimId);
-            return;
-        }
-        landDotOn(victim, victimId);
+        const landed = landedStacksOn(victimId);
+        if (landed > 0) landDotOn(victim, victimId, landed);
         return;
     }
 

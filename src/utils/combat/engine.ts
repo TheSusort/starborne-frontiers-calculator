@@ -12607,9 +12607,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // window, which would leak other attackers' debuffs into this enemy's group).
                             // resistedEnemyDebuffs = the TIMED debuffs THIS enemy attempted but were
                             // resisted by its hacking-vs-security landing roll (display-only).
-                            // resistedEnemyDots = the DoTs THIS enemy attempted this turn that were
-                            // resisted by the SAME landing roll (the whole turn's DoTs share one
-                            // dotsLanded draw — all land or all miss together). Only corrosion/inferno
+                            // resistedEnemyDots = the DoTs THIS enemy attempted this turn when no
+                            // stack of them landed (`dotsLanded` false; a stack resisted beside a
+                            // landed one shows only in the combat log). Only corrosion/inferno
                             // are modelled by EnemyDoTState; any bomb entry is skipped
                             // (display-only). The guard also fires on resists alone so a
                             // fully-resisted enemy (nothing landed) still gets an entry and

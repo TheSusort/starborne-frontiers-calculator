@@ -4,6 +4,7 @@ import { buildRoundContext, dotReadings } from '../abilities/roundContext';
 import { isEnemyTarget, type EnemySelectorKind } from '../abilities/abilityTargetSide';
 import {
     DoTApplicationConfig,
+    DoTApplicationEntry,
     DoTType,
     EnemyBaseClass,
     SelectedGameBuff,
@@ -1587,6 +1588,32 @@ function detonate(args: {
         args.emitBombDetonated?.(result.bombStacks, result.bomb);
     }
     return result.total;
+}
+
+/**
+ * Resolves DoT applications STACK BY STACK: every stack inflicted rolls its own landing (owner
+ * ruling R30 — Snakeroot's "2 stacks of Corrosion" on B is two hacking-vs-security rolls, so 0, 1
+ * or 2 land). `landsNextStack` is asked once per stack, in order; `onStackResisted` is called once
+ * per stack that failed. Returns each DoT with `stacks` cut to the stacks that landed; a DoT none
+ * of whose stacks landed is dropped, so no 0-stack entry is ever appended. An inert DoT (no stacks
+ * or no tier) is dropped without a roll, as `applyNewDoTs` skips it.
+ */
+function rollDotStacks(
+    dots: DoTApplicationConfig,
+    landsNextStack: () => boolean,
+    onStackResisted: (dot: DoTApplicationEntry) => void
+): DoTApplicationConfig {
+    const landed: DoTApplicationConfig = [];
+    for (const dot of dots) {
+        if (dot.stacks <= 0 || dot.tier <= 0) continue;
+        let stacks = 0;
+        for (let i = 0; i < dot.stacks; i++) {
+            if (landsNextStack()) stacks += 1;
+            else onStackResisted(dot);
+        }
+        if (stacks > 0) landed.push({ ...dot, stacks });
+    }
+    return landed;
 }
 
 // Step 3: Apply new DoT stacks from this round's skill (subject to landing roll).
@@ -4561,13 +4588,17 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     }
 
     // Step 3: Apply new DoT stacks from this round's skill (subject to landing roll).
-    // Block Debuff: when the turn target is immune, every cast-side DoT is
-    // BLOCKED and recorded as a resist here. Normal DoT landing-roll failures (the else
-    // branch's `else if`) ALSO emit a resist event now (a resisted DoT is a log line,
-    // symmetric with stat-debuff resists) — the two paths differ only in cause (immunity
-    // vs a failed roll). `dotsLanded` is set false so the downstream display surfaces the
-    // blocked DoTs as resisted (symmetric with timed/persistent resists).
+    // Block Debuff: when the turn target is immune, every cast-side DoT is BLOCKED whole — one
+    // resist per DoT, no roll drawn — and recorded as a resist here. Normal landing-roll failures
+    // (the else branch, one per failed stack) ALSO emit a resist event (a resisted DoT is a log
+    // line, symmetric with stat-debuff resists) — the two paths differ only in cause (immunity
+    // vs a failed roll). `dotsLanded` is false when no stack landed, so the downstream display
+    // surfaces the DoTs as resisted (symmetric with timed/persistent resists).
     let dotsLanded: boolean;
+    /** The primary's DoTs the round row reports: the stacks that landed when any did, otherwise
+     *  the configured DoTs (all resisted when `dotsLanded` is false). A stack resisted beside a
+     *  landed one shows only in the combat log. */
+    let reportedDots: DoTApplicationConfig = dotsConfig;
     if (!hasVictim) {
         // No victim — this cast's DoT clauses have nobody to be inflicted on, so none is
         // applied and none is resisted (a resist implies a target that resisted it), and no landing
@@ -4598,55 +4629,35 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     } else {
         // DoTs gate at application: draw the shared per-round roll only when there are
         // DoTs to apply this round (memoized — shares the recurring partition's single
-        // draw). With nothing to apply, dotsLanded is vacuously true (no draw taken),
+        // draw). With nothing to apply, `castRoll` is vacuously true (no draw taken),
         // preserving the all-landing fixtures where no-DoT rounds report dotsLanded:true.
-        dotsLanded = dotsConfig.length > 0 ? roundDebuffLanded() : true;
+        const castRoll = dotsConfig.length > 0 ? roundDebuffLanded() : true;
         // Capture pre-application lengths so 'inflicted'-scope extensions touch only
         // the entries this cast adds below (the slice from these indices onward).
         const corrosionEntriesBefore = corrosionEntries.length;
         const infernoEntriesBefore = infernoEntries.length;
         // 'adjacent-enemies' (neighbours-only) is filtered OUT of the primary apply — it is
         // applied only via the covered-victim loop below. Every other DoT lands on the primary
-        // here, on this cast-level draw; the loop below carries it to the other struck enemies.
+        // here; the loop below carries it to the other struck enemies.
         const primaryDots = dotsConfig.filter((d) => d.splashTarget !== 'adjacent-enemies');
-        if (dotsLanded) {
-            applyNewDoTs({
-                dotsConfig: primaryDots,
-                effectiveAttack,
-                affinityMult,
-                detonationDamageModifier: dmgStats.detonationDamageModifier,
-                splashModifier: dmgStats.bombSplashModifier,
-                sourceId: actor.id,
-                corrosionEntries,
-                infernoEntries,
-                genericDoTEntries,
-                pendingBombs,
-                emitDotApplied: (dotType, stacks, tier) =>
-                    bus.emit({
-                        type: 'dot-applied',
-                        sourceId: actor.id,
-                        targetId: enemy.id,
-                        round: r,
-                        dotType,
-                        stacks,
-                        tier,
-                        ...(critHits > 0 ? { viaCrit: true } : {}),
-                        sourceSlot: action,
-                    }),
-            });
-        } else if (dotsConfig.length > 0) {
-            // Landing roll FAILED → the DoT(s) resisted. Emit a resist event per DoT so the
-            // combat log shows "Inferno III resisted" etc., symmetric with the stat-debuff
-            // resist path (emitDebuffResisted) and the Block-Debuff branch above. `primaryDots`
-            // filters out adjacent-only splash DoTs (which land on OTHER victims, not enemy.id) —
-            // corpus has none today, so this equals dotsConfig, but stays victim-correct if one
-            // is ever added.
-            for (const dot of primaryDots) {
-                // #413: this arm is the LANDING-ROLL FAILURE (`dotsLanded` came back false from
-                // `roundDebuffLanded`), despite the callee's Block-Debuff name — so it DOES proc an
-                // on-resist reaction. Note the loop emits one event per DoT for a single enemy in a
-                // single attack; the reaction's own per-(resister, sub-attack) key is what collapses
-                // a Corrosion+Inferno cast back to one proc.
+        // One landing roll per stack (`rollDotStacks`, R30). The cast's first stack takes the
+        // shared round roll drawn above; every later stack draws its own from the same gate at the
+        // same chance, after it. A failed stack is a roll resist: one event per stack, so the
+        // combat log shows each resisted stack and an on-resist reaction counting resisted
+        // debuffs counts each.
+        let firstStackPending = true;
+        const landedPrimaryDots = rollDotStacks(
+            primaryDots,
+            () => {
+                if (firstStackPending) {
+                    firstStackPending = false;
+                    return castRoll;
+                }
+                return debuffLandingGate(liveLandingChance);
+            },
+            (dot) =>
+                // #413: a LANDING-ROLL failure, despite the callee's Block-Debuff name — so it
+                // DOES proc an on-resist reaction.
                 emitBlockDebuffResist(
                     bus,
                     actor.id,
@@ -4654,16 +4665,41 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                     r,
                     dotResistLabel(dot.type, dot.tier),
                     true
-                );
-            }
-        }
+                )
+        );
+        dotsLanded = dotsConfig.length === 0 || landedPrimaryDots.length > 0;
+        if (landedPrimaryDots.length > 0) reportedDots = landedPrimaryDots;
+        applyNewDoTs({
+            dotsConfig: landedPrimaryDots,
+            effectiveAttack,
+            affinityMult,
+            detonationDamageModifier: dmgStats.detonationDamageModifier,
+            splashModifier: dmgStats.bombSplashModifier,
+            sourceId: actor.id,
+            corrosionEntries,
+            infernoEntries,
+            genericDoTEntries,
+            pendingBombs,
+            emitDotApplied: (dotType, stacks, tier) =>
+                bus.emit({
+                    type: 'dot-applied',
+                    sourceId: actor.id,
+                    targetId: enemy.id,
+                    round: r,
+                    dotType,
+                    stacks,
+                    tier,
+                    ...(critHits > 0 ? { viaCrit: true } : {}),
+                    sourceSlot: action,
+                }),
+        });
 
         // Step 3a: 'inflicted'-scope extensions grow ONLY this cast's new DoTs
         // (Valerian). Sourced from the same firing+passive ability set as Step 2.9.
-        // Guarded by dotsLanded (like applyNewDoTs/applyAccumulators): when the
-        // landing roll failed nothing was appended, and skipping the call keeps
-        // the deterministic extendChanceGate schedule free of phantom draws.
-        if (dotsLanded) {
+        // Skipped when the cast's first roll failed and no later stack landed either: nothing was
+        // appended, and skipping keeps the deterministic extendChanceGate schedule free of
+        // phantom draws.
+        if (castRoll || landedPrimaryDots.length > 0) {
             extendInflictedDoTs({
                 abilities: [...(firingSkill?.abilities ?? []), ...(passiveSkill?.abilities ?? [])],
                 ctx,
@@ -4684,7 +4720,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             });
         }
 
-        if (dotsLanded) {
+        // Accumulators ride the cast's shared round roll, not the per-stack DoT rolls.
+        if (castRoll) {
             applyAccumulators({ gatedSkill, pendingAccumulators, sourceId: actor.id });
         }
     }
@@ -4704,8 +4741,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     //
     // Each covered enemy is resolved on its OWN, independent of the primary's outcome either way:
     // one landing decision (`decideDebuffOnVictim` — its Block Debuff, the caster's affinity-scaled
-    // hacking vs its security) for every DoT that reaches it, a resist line per DoT when that
-    // fails; its own containers and `dot-applied` (so an inflict reaction fires once per enemy);
+    // hacking vs its security) for the first stack that reaches it and one more per later stack
+    // (`rollDotStacks`, R30), a resist line per failed stack; its own containers and
+    // `dot-applied` (so an inflict reaction fires once per enemy);
     // a Bomb snapshotting the caster's affinity against THAT enemy; and both inflicted-scope
     // extensions over the slice it just received, Valerian's crit-power chance drawn per enemy.
     //
@@ -4820,12 +4858,28 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // is told apart from one that drew and failed. `'inflict'` is hardcoded here, so the
         // affinity arm is unreachable on this path — but the immunity arm is not.
         const splashDecision = decideDebuffOnVictim('inflict', victim);
-        if (!splashDecision.landed) {
+        // Block Debuff blocks the whole application: no stack rolls.
+        if (!splashDecision.landed && !splashDecision.viaRoll) {
             for (const dot of victimDots) {
-                emitDebuffResisted(dotResistLabel(dot.type, dot.tier), rid, splashDecision.viaRoll);
+                emitDebuffResisted(dotResistLabel(dot.type, dot.tier), rid, false);
             }
             continue;
         }
+        // One roll per stack (`rollDotStacks`, R30): the first stack takes the decision above,
+        // every later stack draws its own against this enemy.
+        let firstStackPending = true;
+        const landedVictimDots = rollDotStacks(
+            victimDots,
+            () => {
+                if (firstStackPending) {
+                    firstStackPending = false;
+                    return splashDecision.landed;
+                }
+                return decideDebuffOnVictim('inflict', victim).landed;
+            },
+            (dot) => emitDebuffResisted(dotResistLabel(dot.type, dot.tier), rid, true)
+        );
+        if (!splashDecision.landed && landedVictimDots.length === 0) continue;
         // Per-VICTIM slice bounds, captured immediately before this victim's apply — the
         // primary's `*EntriesBefore` describe a different container entirely.
         const splashCorrosionBefore = victim.corrosionEntries.length;
@@ -4833,7 +4887,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         const victimCrit = victimCritOf(rid);
         const victimCtx: ConditionContext = { ...ctx, roundCrit: victimCrit };
         applyNewDoTs({
-            dotsConfig: victimDots,
+            dotsConfig: landedVictimDots,
             effectiveAttack,
             affinityMult: 1 + affinityModsVsVictim(victim).damageModifier / 100,
             detonationDamageModifier: dmgStats.detonationDamageModifier,
@@ -6360,7 +6414,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // if `dotsLanded` were flipped to false — a resist implies a target that resisted. Emptying
         // the LIST makes both answer "nothing happened" and leaves `dotsLanded` immaterial, which is
         // exactly the reading a cast with no DoT clauses already gets.
-        dotsConfig: hasVictim ? dotsConfig : [],
+        dotsConfig: hasVictim ? reportedDots : [],
         dotsLanded,
         activeSelfBuffs: activeSelfBuffsForRound,
         landedEnemyDebuffs,

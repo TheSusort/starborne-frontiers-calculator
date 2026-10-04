@@ -2997,7 +2997,9 @@ const DocumentationPage: React.FC = () => {
                                         itself), counts every damage-over-time stack as a debuff:
                                         one &ldquo;2 stacks of Corrosion&rdquo; application is two
                                         debuffs. A count of damage-over-time effects (Anemone,
-                                        Snakeroot) counts each stack too.
+                                        Snakeroot) counts each stack too. Each stack also rolls its
+                                        own landing: Snakeroot&apos;s 2 stacks can land 0, 1 or 2,
+                                        and every stack that fails is its own resist.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Team Ships:</span> Pick a
