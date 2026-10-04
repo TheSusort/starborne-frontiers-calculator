@@ -294,10 +294,20 @@ export function gateConditions(ability: Ability): Ability['conditions'] {
  * keep their own firing+passive gating. Buff/debuff abilities gate dynamically in
  * the combat engine (src/utils/combat/engine.ts + abilityStatusGating.ts) — timed
  * at application, auras per-round — not statically at conversion.
+ *
+ * `passingCtx` is a second chance for an ability whose gate fails against its positional context:
+ * the combat engine's "any struck enemy" reading of a self gain's target gate. It returns the
+ * context the gate passes under (that enemy's), which `ctxFor` then records, so a count read off
+ * the gate's first condition (a charge gain's scale) reads the enemy that qualified.
  */
 export function gateFiringAbilities(
     skill: Skill | undefined,
-    baseCtx: ConditionContext
+    baseCtx: ConditionContext,
+    passingCtx?: (
+        ability: Ability,
+        gate: Ability['conditions'],
+        ctx: ConditionContext
+    ) => ConditionContext | undefined
 ): { gatedSkill: Skill | undefined; ctxFor: Map<string, ConditionContext> } {
     const ctxFor = new Map<string, ConditionContext>();
     if (!skill) return { gatedSkill: undefined, ctxFor };
@@ -315,7 +325,12 @@ export function gateFiringAbilities(
                 ? { ...baseCtx, enemyDebuffCount: baseCtx.enemyDebuffCount + overlay }
                 : baseCtx;
         ctxFor.set(ability.id, ctx);
-        if (!conditionsMet(gateConditions(ability), ctx)) continue;
+        const gate = gateConditions(ability);
+        if (!conditionsMet(gate, ctx)) {
+            const passed = passingCtx?.(ability, gate, ctx);
+            if (!passed) continue;
+            ctxFor.set(ability.id, passed);
+        }
         kept.push(ability);
         if (ability.config.type === 'dot') overlay += 1;
     }

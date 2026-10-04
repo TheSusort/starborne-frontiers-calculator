@@ -12,6 +12,7 @@ export const UNRELEASED_CHANGES: string[] = [
     "DPS calculator: Bayah's passive now fires each turn against a debuffed enemy.",
     "Combat simulator: APEX's passive shield now reacts to debuffs inflicted by allies too.",
     "Combat simulator: APEX's Block Shield now lands on enemies reaching three debuffs.",
+    'Combat simulator: Malvex, Zosimos, Anemone and Nuqtu bonuses now check every enemy hit.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
