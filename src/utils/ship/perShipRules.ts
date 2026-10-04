@@ -20,19 +20,24 @@ export const getDamageReduction = (name: string, refitCount: number): number =>
     name === 'Iridium' && refitCount >= 2 ? 35 : 0;
 
 /**
- * Asphodel and Tormenter crit on every hit once their second refit lands. The refit that grants
- * it carries no crit in any data source, so the top-up to 100 is written onto the first refit.
+ * "This Unit's attacks always critically hit": Tormenter's first passive carries it, so he has it
+ * at every refit; Asphodel gets it with her second refit. No data source carries the crit, so it
+ * is topped up to 100 — on the first refit when the ship has one, otherwise on the base stats.
  *
- * Mutates `refits` in place and returns it.
+ * Mutates `refits` (or `baseStats.crit`) in place and returns `refits`.
  */
 export const applyGuaranteedCrit = (
     name: string,
     refitCount: number,
     refits: Refit[],
-    baseCrit: number
+    baseStats: { crit: number }
 ): Refit[] => {
-    if ((name === 'Asphodel' || name === 'Tormenter') && refitCount >= 2 && refits.length > 0) {
-        refits[0].stats.push(createStat('crit', 100 - baseCrit, 'percentage'));
+    const guaranteed = name === 'Tormenter' || (name === 'Asphodel' && refitCount >= 2);
+    if (!guaranteed) return refits;
+    if (refits.length > 0) {
+        refits[0].stats.push(createStat('crit', 100 - baseStats.crit, 'percentage'));
+    } else {
+        baseStats.crit = 100;
     }
     return refits;
 };

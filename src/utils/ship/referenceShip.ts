@@ -121,7 +121,7 @@ export const referenceShip = (
         damageReduction: getDamageReduction(template.name, refitCount),
     };
     const refits = variant === 'refitted' ? refitsFromAscensionStats(rows) : [];
-    applyGuaranteedCrit(template.name, refitCount, refits, baseStats.crit);
+    applyGuaranteedCrit(template.name, refitCount, refits, baseStats);
     padEmptyRefits(refits);
 
     return {

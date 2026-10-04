@@ -58,6 +58,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: counter-attacks and passive hits now respect debuffs and affinity.',
     "Combat simulator: Centurion's counter-attack now carries his Core Charge damage bonus.",
     "Combat simulator: Nayra's Defensive Affinity Override now also lowers area-attack crits on her.",
+    'Combat simulator: Tormenter always crits from refit 0, as the text says.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

@@ -123,6 +123,22 @@ describe('referenceShip', () => {
         it('leaves an r0 Asphodel alone, since its second refit is what grants it', () => {
             const ship = referenceShip(template({ name: 'Asphodel' }), 'r0', ascension);
             expect(ship.refits).toEqual([]);
+            expect(ship.baseStats.crit).toBe(10);
+        });
+
+        // Tormenter's FIRST passive (innate, refit 0) reads "This Unit's attacks always
+        // critically hit", so he needs no refit for it.
+        it('gives an r0 Tormenter a guaranteed crit on his base stats', () => {
+            const ship = referenceShip(template({ name: 'Tormenter' }), 'r0', ascension);
+            expect(ship.refits).toEqual([]);
+            expect(ship.baseStats.crit).toBe(100);
+        });
+
+        it('tops a refitted Tormenter up to a guaranteed crit', () => {
+            const ship = referenceShip(template({ name: 'Tormenter' }), 'refitted', ascension);
+            const crit = ship.refits.flatMap((r) => r.stats).find((s) => s.name === 'crit');
+            expect(crit).toEqual({ name: 'crit', value: 90, type: 'percentage' });
+            expect(ship.baseStats.crit).toBe(10);
         });
 
         it('gives a refitted Iridium its damage reduction', () => {

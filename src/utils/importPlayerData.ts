@@ -150,7 +150,7 @@ const transformShips = (data: ExportedPlayData['Units']): Ship[] => {
             }
         });
 
-        applyGuaranteedCrit(unit.Name, unit.Refit, refits, baseStats.crit);
+        applyGuaranteedCrit(unit.Name, unit.Refit, refits, baseStats);
         padEmptyRefits(refits);
 
         return {
