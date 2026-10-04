@@ -276,8 +276,13 @@ describe("Anemone: '3 or more damage over time effects' counts each DoT stack", 
             const m = measure(side, anemone(), { victim: { corrosion: [2], inferno: [1] } });
             expect(m.buffs).toContain('Taunt');
         });
-        it(`${side.tag}: 1-stack Corrosion + 1 Inferno → no Taunt`, () => {
-            const m = measure(side, anemone(), { victim: { corrosion: [1], inferno: [1] } });
+        // Her own Corrosion III, written before the gate, adds one more (R29).
+        it(`${side.tag}: 2-stack Corrosion + her Corrosion III → Taunt`, () => {
+            const m = measure(side, anemone(), { victim: { corrosion: [2] } });
+            expect(m.buffs).toContain('Taunt');
+        });
+        it(`${side.tag}: 1-stack Corrosion + her Corrosion III → no Taunt`, () => {
+            const m = measure(side, anemone(), { victim: { corrosion: [1] } });
             // The instrument can see her cast: the charged Corrosion III lands as a DoT, not a
             // named debuff, so the dealt hit is the visible landing here.
             expect(m.dealt).toBeGreaterThan(0);

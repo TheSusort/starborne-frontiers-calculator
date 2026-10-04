@@ -753,6 +753,16 @@ const readsStruckEnemy = (conditions: Ability['conditions']): boolean =>
             ANY_STRUCK_GATE_SUBJECTS.has(c.subject) ||
             (c.subject === 'hp-threshold' && c.hpSubject !== undefined && c.hpSubject !== 'self')
     );
+/** A gate that counts an enemy's debuffs or DoT effects without naming one ("If an enemy has 3 or
+ *  more debuffs", "3 or more damage over time effects") — what a cast's own earlier-written
+ *  landings add to (owner ruling R29). A named count (Belladonna's "3 or more Acidic Decay") is
+ *  not: no clause written before it inflicts that name. */
+const readsCastCount = (conditions: Ability['conditions']): boolean =>
+    conditions.some(
+        (c) =>
+            (c.subject === 'enemy-debuff' || c.subject === 'enemy-dot-count') &&
+            c.buffName === undefined
+    );
 /** The payload kinds a firing slot's self gain takes besides a timed buff (which the timed-self
  *  loop gates): a shield, a repair, a cleanse, charges, an extra action, a self control (Taunt).
  *  A damage-shaping `modifier` aimed at self is not a gain — its enemy gate is per victim. */
@@ -2669,8 +2679,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
      *  reads `preDebuffGateCtx` itself. Every other recipient reads the same caster half with
      *  the victim half re-pointed at that enemy: its DoT containers, HP, stats and shield straight
      *  off the actor, and the engine-derived rest from `recipientGateReadings`. Built here, once,
-     *  before the first clause lands, so no recipient's gate sees this cast's own landings — the
-     *  same causality the bound target's pre-cast readings give it.
+     *  before the first clause lands: it is every recipient as it stood before the cast, the same
+     *  causality the bound target's pre-cast readings give it. A count gate written after a
+     *  same-skill infliction adds that infliction's landings on top (`statusGateOverlay`, R29).
      *
      *  Side-wide subjects (the opposing buff-name union, the debuffed-enemy count, the destroyed
      *  count) and the caster's own subjects read the same answer for every recipient. `enemyType`
@@ -2759,22 +2770,28 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     /** The context of the first enemy the cast strikes — the bound target first — that passes
      *  `conditions`, or undefined when none does. A self gain gated on "the target" fires ONCE
      *  when ANY struck enemy qualifies (owner rulings R17, R23). */
+    /** `adjust` re-reads one struck enemy's context before its gate is asked — the cast's own
+     *  earlier-written landings on that enemy (`castLandingsOverlay`, R29). */
     const anyStruckVictimCtx = (
         conditions: Ability['conditions'],
-        anchorCtx: ConditionContext
+        anchorCtx: ConditionContext,
+        adjust: (c: ConditionContext, victimId: string) => ConditionContext = (c) => c
     ): ConditionContext | undefined => {
-        const anchor = struckAnchorCtx(anchorCtx);
+        const anchor = hasVictim
+            ? adjust(struckAnchorCtx(anchorCtx), enemy.id)
+            : struckAnchorCtx(anchorCtx);
         if (conditionsMet(conditions, anchor)) return anchor;
         for (const v of otherStruckVictims) {
-            const c = otherStruckCtx(v, anchorCtx);
+            const c = adjust(otherStruckCtx(v, anchorCtx), v.id);
             if (conditionsMet(conditions, c)) return c;
         }
         return undefined;
     };
     const anyStruckVictimMeets = (
         conditions: Ability['conditions'],
-        anchorCtx: ConditionContext
-    ): boolean => anyStruckVictimCtx(conditions, anchorCtx) !== undefined;
+        anchorCtx: ConditionContext,
+        adjust?: (c: ConditionContext, victimId: string) => ConditionContext
+    ): boolean => anyStruckVictimCtx(conditions, anchorCtx, adjust) !== undefined;
     /** Whether EVERY enemy the cast strikes passes `conditions` — the bound target against
      *  `anchorCtx`, each other struck enemy against its own context (R24). */
     const everyStruckVictimMeets = (
@@ -2783,6 +2800,241 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     ): boolean =>
         conditionsMet(conditions, struckAnchorCtx(anchorCtx)) &&
         otherStruckVictims.every((v) => conditionsMet(conditions, otherStruckCtx(v, anchorCtx)));
+
+    // ── The cast's DoT landings, decided once ─────────────────────────────────────────────────
+    // Step 3 (the bound target) and the covered-enemy loop after it apply this cast's DoTs. Their
+    // landing rolls are decided HERE, once per enemy, by whoever asks first: normally Step 3 and
+    // the loop, at their usual point; earlier only when a count gate written after a DoT clause
+    // needs to know what that clause landed (`castLandingsOverlay`, R29). Nothing else asks early,
+    // so every other cast draws in its old order.
+    //
+    // The DoTs are known ahead of Step 3 only when no DoT clause carries a gate: then the payload
+    // gating keeps every one of them and `dotsConfig` equals the firing skill's own DoTs.
+    const firingDotAbilities = (firingSkill?.abilities ?? []).filter(
+        (a) => a.type === 'dot' && a.config.type === 'dot'
+    );
+    const dotsKnownAhead: DoTApplicationConfig | undefined = firingDotAbilities.every(
+        (a) => gateConditions(a).length === 0
+    )
+        ? dotsFromSkill(firingSkill)
+        : undefined;
+    /** The enemies besides the bound target each of `dots` reaches (`skill` holds their
+     *  abilities). Recipients follow the DoT ability's own `target` through
+     *  `resolveDebuffRecipientIds`, the resolver every direct enemy clause uses (each is a firing
+     *  clause):
+     *  - 'enemy' / 'all-enemies' → every enemy the cast strikes (`aoeVictimIds`; owner ruling, an
+     *    AoE-pattern skill's effects reach every enemy in the pattern). With no footprint
+     *    (non-positional / DPS) it resolves to the primary alone, as it does on a single-target
+     *    pattern — so those casts reach nobody here and draw nothing extra.
+     *  - the adjacency scopes (Asphyxiator's active Inferno) → the primary's board-neighbours;
+     *    'adjacent-enemies' never reaches the primary at all.
+     *  - any other target (an enemy selector) stays on the primary alone. */
+    const coveredDotsFor = (
+        skill: Skill | undefined,
+        dots: DoTApplicationConfig
+    ): Map<string, DoTApplicationConfig> => {
+        const covered = new Map<string, DoTApplicationConfig>();
+        if (targetId === undefined) return covered;
+        // `dotsFromSkill` maps the skill's `dot` abilities in order, one entry each, so the i-th
+        // entry is the i-th of these (tripwire: `dotsFromSkillPairing.corpus.test.ts`).
+        const dotAbilities = (skill?.abilities ?? []).filter(
+            (ab) => ab.type === 'dot' && ab.config.type === 'dot'
+        );
+        for (const [i, dot] of dots.entries()) {
+            const abTarget = dotAbilities[i]?.target;
+            if (
+                abTarget !== 'enemy' &&
+                abTarget !== 'all-enemies' &&
+                abTarget !== 'adjacent-enemies' &&
+                abTarget !== 'target-and-adjacent-enemies'
+            )
+                continue;
+            const recipients = resolveDebuffRecipientIds({
+                abTarget,
+                anchorId: targetId,
+                aoeVictimIds,
+                adjacentEnemyIdsFor,
+                positionalLanding,
+                firingClause: true,
+                selectorEnemyIdFor,
+            });
+            for (const rid of recipients) {
+                if (rid === undefined || rid === targetId) continue;
+                const list = covered.get(rid);
+                if (list) list.push(dot);
+                else covered.set(rid, [dot]);
+            }
+        }
+        return covered;
+    };
+    let coveredDotsAhead: Map<string, DoTApplicationConfig> | undefined;
+    /** The bound target's DoT landing (Step 3): `castRoll` is the cast's shared round roll, which
+     *  its first stack takes and the accumulators ride; every later stack draws its own after it
+     *  (`rollDotStacks`, R30), and each failed stack is a roll resist. Only for a real victim not
+     *  immune to debuffs — Step 3's other branches decide those without a roll. */
+    let primaryDotPlan: { castRoll: boolean; landed: DoTApplicationConfig } | undefined;
+    const planPrimaryDots = (
+        dots: DoTApplicationConfig
+    ): { castRoll: boolean; landed: DoTApplicationConfig } => {
+        if (primaryDotPlan) return primaryDotPlan;
+        // Every caller is fenced on `hasVictim`; no victim lands nothing and draws nothing.
+        const victim = enemy;
+        if (victim === undefined) return { castRoll: true, landed: [] };
+        // With nothing to apply no draw is taken and `castRoll` is vacuously true, preserving the
+        // all-landing fixtures where no-DoT rounds report dotsLanded:true.
+        const castRoll = dots.length > 0 ? roundDebuffLanded() : true;
+        // 'adjacent-enemies' (neighbours-only) never lands on the primary — only via the covered
+        // loop.
+        const primaryDots = dots.filter((d) => d.splashTarget !== 'adjacent-enemies');
+        let firstStackPending = true;
+        const landed = rollDotStacks(
+            primaryDots,
+            () => {
+                if (firstStackPending) {
+                    firstStackPending = false;
+                    return castRoll;
+                }
+                return debuffLandingGate(liveLandingChance);
+            },
+            (dot) =>
+                // #413: a LANDING-ROLL failure, despite the callee's Block-Debuff name — so it
+                // DOES proc an on-resist reaction.
+                emitBlockDebuffResist(
+                    bus,
+                    actor.id,
+                    victim.id,
+                    r,
+                    dotResistLabel(dot.type, dot.tier),
+                    true
+                )
+        );
+        primaryDotPlan = { castRoll, landed };
+        return primaryDotPlan;
+    };
+    /** A covered enemy's DoT landing: the first stack takes one per-victim decision
+     *  (`decideDebuffOnVictim` — its Block Debuff, the caster's affinity-scaled hacking vs its
+     *  security), every later stack draws its own against this enemy (R30), a resist line per
+     *  failed stack. `blocked`: its Block Debuff stopped the whole application, no roll drawn. */
+    const coveredDotPlans = new Map<
+        string,
+        { blocked: boolean; firstLanded: boolean; landed: DoTApplicationConfig }
+    >();
+    const planCoveredDots = (
+        victim: CombatActor,
+        victimDots: DoTApplicationConfig
+    ): { blocked: boolean; firstLanded: boolean; landed: DoTApplicationConfig } => {
+        const known = coveredDotPlans.get(victim.id);
+        if (known) return known;
+        // #413: the decision, so an enemy blocked by its own Block Debuff (no gate drawn) is told
+        // apart from one that drew and failed. `'inflict'` is hardcoded here, so the affinity arm
+        // is unreachable on this path — but the immunity arm is not.
+        const decision = decideDebuffOnVictim('inflict', victim);
+        let plan: { blocked: boolean; firstLanded: boolean; landed: DoTApplicationConfig };
+        if (!decision.landed && !decision.viaRoll) {
+            plan = { blocked: true, firstLanded: false, landed: [] };
+        } else {
+            let firstStackPending = true;
+            const landed = rollDotStacks(
+                victimDots,
+                () => {
+                    if (firstStackPending) {
+                        firstStackPending = false;
+                        return decision.landed;
+                    }
+                    return decideDebuffOnVictim('inflict', victim).landed;
+                },
+                (dot) => emitDebuffResisted(dotResistLabel(dot.type, dot.tier), victim.id, true)
+            );
+            plan = { blocked: false, firstLanded: decision.landed, landed };
+        }
+        coveredDotPlans.set(victim.id, plan);
+        return plan;
+    };
+    /** Ability ids of the firing skill's DoT clauses written before `abilityId`'s clause. */
+    const dotClausesBefore = (abilityId: string): string[] => {
+        const ids: string[] = [];
+        for (const a of firingSkill?.abilities ?? []) {
+            if (a.id === abilityId) return ids;
+            if (a.type === 'dot' && a.config.type === 'dot') ids.push(a.id);
+        }
+        return [];
+    };
+    /** Which named debuffs THIS cast's clauses landed on each enemy, each with the index (in
+     *  `timedEnemyBySlot`) of the first clause that landed it. Written at the landing funnel. */
+    const castLandedNamesById = new Map<string, Map<string, number>>();
+    /**
+     * `c` — the context a gate is asked against for enemy `victimId` — with this cast's own
+     * EARLIER-WRITTEN landings on that enemy counted in (owner ruling R29, the written-order rule:
+     * Crocus's "inflicts Corrosion II … If an enemy has 3 or more debuffs, inflicts Stasis" counts
+     * the Corrosion that landed). Only a firing-slot gate counting debuffs or DoT effects without
+     * naming one reads them (a passive riding the hits reads the enemies as they stood before the
+     * cast, R15):
+     *  - each stack of a DoT clause in `dotsBefore` that LANDED on the enemy — one more debuff and
+     *    one more DoT effect (a resisted stack adds nothing);
+     *  - with `namesBeforeIndex`, each named debuff a clause before that index in
+     *    `timedEnemyBySlot` landed on it that it did not already carry — one more debuff. Left out
+     *    where `c` already counts the cast's landed debuffs (`postDebuffGateCtx`).
+     */
+    const castLandingsOverlay = (
+        c: ConditionContext,
+        victimId: string,
+        conditions: Ability['conditions'],
+        dotsBefore: readonly string[] | undefined,
+        namesBeforeIndex?: number
+    ): ConditionContext => {
+        if (!hasVictim || !readsCastCount(conditions)) return c;
+        let dotStacks = 0;
+        if (dotsBefore && dotsBefore.length > 0 && dotsKnownAhead) {
+            let landed: DoTApplicationConfig = [];
+            if (victimId === enemy.id) {
+                if (!targetImmuneToDebuffs) landed = planPrimaryDots(dotsKnownAhead).landed;
+            } else {
+                coveredDotsAhead ??= coveredDotsFor(firingSkill, dotsKnownAhead);
+                const v = opposingVictimById?.get(victimId);
+                const victimDots = coveredDotsAhead.get(victimId);
+                if (v && victimDots) landed = planCoveredDots(v, victimDots).landed;
+            }
+            for (const d of landed) if (dotsBefore.includes(d.id)) dotStacks += d.stacks;
+        }
+        let newNames = 0;
+        if (namesBeforeIndex !== undefined) {
+            const reading =
+                victimId === enemy.id ? targetGateReading : recipientGateReadings?.get(victimId);
+            const carried = new Set([
+                ...scheduledLandedNames,
+                ...(reading?.statusDebuffNames ?? []),
+            ]);
+            for (const [name, at] of castLandedNamesById.get(victimId) ?? []) {
+                if (at < namesBeforeIndex && !carried.has(name)) newNames += 1;
+            }
+        }
+        if (dotStacks === 0 && newNames === 0) return c;
+        return {
+            ...c,
+            ...(c.enemyDebuffCount !== undefined
+                ? { enemyDebuffCount: c.enemyDebuffCount + dotStacks + newNames }
+                : {}),
+            ...(c.enemyDotCount !== undefined
+                ? { enemyDotCount: c.enemyDotCount + dotStacks }
+                : {}),
+        };
+    };
+    /** `castLandingsOverlay` for one cast enemy status's gate: the DoT clauses written before it
+     *  (`afterDotClauseIds`) and the named debuffs the clauses before it landed. */
+    const statusGateOverlay = (
+        c: ConditionContext,
+        victimId: string,
+        status: TimedStatus
+    ): ConditionContext =>
+        status.sourceSlot !== action || status.perHit === true
+            ? c
+            : castLandingsOverlay(
+                  c,
+                  victimId,
+                  status.conditions,
+                  status.afterDotClauseIds,
+                  timedEnemyBySlot.indexOf(status)
+              );
 
     // §4.5 Direct-damage Stasis break. Fires AFTER scheduled debuffs (sourceFired)
     // but BEFORE the ability timed-debuff loop, so a Stasis re-application from THIS attack's
@@ -2923,9 +3175,15 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             if (resolvedVictim === undefined) continue;
             const emitTargetId = vid ?? resolvedVictim.id;
 
-            // The clause's condition gate, asked of THIS recipient (see `recipientGateCtx`).
+            // The clause's condition gate, asked of THIS recipient (see `recipientGateCtx`), with
+            // the cast's earlier-written landings on it counted in (`statusGateOverlay`, R29).
             // Before every draw: a recipient the gate turns away is neither landed nor resisted.
-            if (!conditionsMet(status.conditions, recipientGateCtx(resolvedVictim))) {
+            if (
+                !conditionsMet(
+                    status.conditions,
+                    statusGateOverlay(recipientGateCtx(resolvedVictim), resolvedVictim.id, status)
+                )
+            ) {
                 anyGateRejected = true;
                 continue;
             }
@@ -3050,6 +3308,21 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                         inflictedDebuffNamesByVictim.set(vid, landedHere);
                     }
                     landedHere.add(status.payload.buffName);
+                }
+                // The firing slot's landings keyed on the resolved victim (the non-positional
+                // recipient too), with the clause's position — what a later clause's count gate
+                // reads. A passive riding the hits is no clause of this skill.
+                if (status.sourceSlot === action && status.perHit !== true) {
+                    let namesOnVictim = castLandedNamesById.get(resolvedVictim.id);
+                    if (!namesOnVictim) {
+                        namesOnVictim = new Map<string, number>();
+                        castLandedNamesById.set(resolvedVictim.id, namesOnVictim);
+                    }
+                    if (!namesOnVictim.has(status.payload.buffName))
+                        namesOnVictim.set(
+                            status.payload.buffName,
+                            timedEnemyBySlot.indexOf(status)
+                        );
                 }
                 if (!collect) {
                     let landedOn = castLandedRecipients.get(status.payload.buffName);
@@ -3446,9 +3719,17 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // target" passes once if any struck enemy qualifies (R17). Once it passes, the status
         // is applied to EVERY recipient: self → [caster]; ally/all-allies → all players, narrowed
         // per recipient inside `applyTimedSelfStatus`.
+        // Each struck enemy is read with this cast's earlier-written DoT landings on it
+        // (`castLandingsOverlay`, R29 — Anemone's "inflicts Corrosion III … If the primary target
+        // has 3 or more damage over time effects"). postDebuffGateCtx already counts the cast's
+        // landed named debuffs on the bound target, so only the DoTs are added.
         if (
             !(readsStruckEnemy(status.conditions)
-                ? anyStruckVictimMeets(status.conditions, postDebuffGateCtx)
+                ? anyStruckVictimMeets(status.conditions, postDebuffGateCtx, (c, vid) =>
+                      status.sourceSlot === action
+                          ? castLandingsOverlay(c, vid, status.conditions, status.afterDotClauseIds)
+                          : c
+                  )
                 : conditionsMet(status.conditions, postDebuffGateCtx))
         )
             continue;
@@ -3954,7 +4235,19 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         firingSkill,
         ctx,
         (ability, gate, abilityCtx) => {
-            if (isAnyStruckSelfGain(ability)) return anyStruckVictimCtx(gate, abilityCtx) ?? null;
+            if (isAnyStruckSelfGain(ability)) {
+                // A count gate written after a DoT clause reads the stacks that clause LANDED on
+                // each struck enemy (`castLandingsOverlay`, R29 — Anemone's Taunt), in place of
+                // the payload gating's own count of every earlier stack.
+                const dotsBefore = dotClausesBefore(ability.id);
+                if (dotsBefore.length > 0 && readsCastCount(gate))
+                    return (
+                        anyStruckVictimCtx(gate, ctx, (c, vid) =>
+                            castLandingsOverlay(c, vid, gate, dotsBefore)
+                        ) ?? null
+                    );
+                return anyStruckVictimCtx(gate, abilityCtx) ?? null;
+            }
             if (isEveryStruckSelfGain(ability))
                 return everyStruckVictimMeets(gate, abilityCtx) ? abilityCtx : null;
             return undefined;
@@ -4007,8 +4300,16 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         const effect = ctrl.config.effect;
         const pairedName = controlEffectLabel(effect);
         if (ctrl.target !== 'self' && castAttemptedStatusNames.has(pairedName)) {
+            // Re-read each recipient as its status's gate saw it, the cast's earlier-written
+            // landings included (`statusGateOverlay`).
+            const paired = timedEnemyBySlot.find(
+                (s) => ridesThisCast(s) && s.payload.buffName === pairedName
+            );
             for (const { id, victim } of castLandedRecipients.get(pairedName) ?? []) {
-                if (conditionsMet(ctrl.conditions, withVictimHalf(ctx, recipientGateCtx(victim))))
+                const victimCtx = paired
+                    ? statusGateOverlay(recipientGateCtx(victim), victim.id, paired)
+                    : recipientGateCtx(victim);
+                if (conditionsMet(ctrl.conditions, withVictimHalf(ctx, victimCtx)))
                     emitControl(effect, id);
             }
             continue;
@@ -4628,46 +4929,17 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             );
         }
     } else {
-        // DoTs gate at application: draw the shared per-round roll only when there are
-        // DoTs to apply this round (memoized — shares the recurring partition's single
-        // draw). With nothing to apply, `castRoll` is vacuously true (no draw taken),
-        // preserving the all-landing fixtures where no-DoT rounds report dotsLanded:true.
-        const castRoll = dotsConfig.length > 0 ? roundDebuffLanded() : true;
+        // DoTs gate at application, one landing roll per stack (`planPrimaryDots`): the cast's
+        // first stack takes the shared per-round roll (memoized — shared with the recurring
+        // partition's single draw), every later stack draws its own. A failed stack is a roll
+        // resist: one event per stack, so the combat log shows each resisted stack and an
+        // on-resist reaction counting resisted debuffs counts each. Already decided when a count
+        // gate written after a DoT clause asked for it.
+        const { castRoll, landed: landedPrimaryDots } = planPrimaryDots(dotsConfig);
         // Capture pre-application lengths so 'inflicted'-scope extensions touch only
         // the entries this cast adds below (the slice from these indices onward).
         const corrosionEntriesBefore = corrosionEntries.length;
         const infernoEntriesBefore = infernoEntries.length;
-        // 'adjacent-enemies' (neighbours-only) is filtered OUT of the primary apply — it is
-        // applied only via the covered-victim loop below. Every other DoT lands on the primary
-        // here; the loop below carries it to the other struck enemies.
-        const primaryDots = dotsConfig.filter((d) => d.splashTarget !== 'adjacent-enemies');
-        // One landing roll per stack (`rollDotStacks`, R30). The cast's first stack takes the
-        // shared round roll drawn above; every later stack draws its own from the same gate at the
-        // same chance, after it. A failed stack is a roll resist: one event per stack, so the
-        // combat log shows each resisted stack and an on-resist reaction counting resisted
-        // debuffs counts each.
-        let firstStackPending = true;
-        const landedPrimaryDots = rollDotStacks(
-            primaryDots,
-            () => {
-                if (firstStackPending) {
-                    firstStackPending = false;
-                    return castRoll;
-                }
-                return debuffLandingGate(liveLandingChance);
-            },
-            (dot) =>
-                // #413: a LANDING-ROLL failure, despite the callee's Block-Debuff name — so it
-                // DOES proc an on-resist reaction.
-                emitBlockDebuffResist(
-                    bus,
-                    actor.id,
-                    enemy.id,
-                    r,
-                    dotResistLabel(dot.type, dot.tier),
-                    true
-                )
-        );
         dotsLanded = dotsConfig.length === 0 || landedPrimaryDots.length > 0;
         if (landedPrimaryDots.length > 0) reportedDots = landedPrimaryDots;
         applyNewDoTs({
@@ -4727,24 +4999,13 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         }
     }
 
-    // Carry this cast's DoTs past the primary to every OTHER enemy each one reaches. Recipients
-    // follow the DoT ability's own `target` through `resolveDebuffRecipientIds`, the resolver
-    // every direct enemy clause uses (`dotsConfig` is the firing slot's, so each is a firing
-    // clause):
-    //  - 'enemy' / 'all-enemies' → every enemy the cast strikes (`aoeVictimIds`; owner ruling, an
-    //    AoE-pattern skill's effects reach every enemy in the pattern). With no footprint
-    //    (non-positional / DPS) it resolves to the primary alone, as it does on a single-target
-    //    pattern — so those casts reach nobody here and draw nothing extra.
-    //  - the adjacency scopes (Asphyxiator's active Inferno) → the primary's board-neighbours;
-    //    'adjacent-enemies' never reaches the primary at all.
-    //  - any other target (an enemy selector) stays on the primary alone.
-    // The primary is skipped: the block above already decided it, on the cast-level draw.
+    // Carry this cast's DoTs past the primary to every OTHER enemy each one reaches
+    // (`coveredDotsFor`). The primary is skipped: the block above already decided it.
     //
     // Each covered enemy is resolved on its OWN, independent of the primary's outcome either way:
-    // one landing decision (`decideDebuffOnVictim` — its Block Debuff, the caster's affinity-scaled
-    // hacking vs its security) for the first stack that reaches it and one more per later stack
-    // (`rollDotStacks`, R30), a resist line per failed stack; its own containers and
-    // `dot-applied` (so an inflict reaction fires once per enemy);
+    // its landing (`planCoveredDots` — one decision for the first stack, one more draw per later
+    // stack, a resist line per failed stack); its own containers and `dot-applied` (so an inflict
+    // reaction fires once per enemy);
     // a Bomb snapshotting the caster's affinity against THAT enemy; and both inflicted-scope
     // extensions over the slice it just received, Valerian's crit-power chance drawn per enemy.
     //
@@ -4755,7 +5016,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     //
     // Cast-time only, like the primary's Step-3 apply: a multi-hit cast lands its DoTs once,
     // against the cast's footprint, not per sub-attack.
-    const coveredDots = new Map<string, DoTApplicationConfig>();
+    const coveredDots = coveredDotsFor(gatedSkill, dotsConfig);
     /** The firing skill carries a cast-wide crit clause — a crit-gated (`self-crit`) on-cast
      *  buff grant or status extension, whose "if a critical hit occurs" asks about the whole
      *  cast. Crit-gated DoT effects are per struck enemy instead (`victimCritOf`); every other
@@ -4769,38 +5030,6 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         [firingSkill, passiveSkill].some((s) =>
             chargeAbilitiesFromSkill(s).some(isPerCritOwnCharge)
         );
-    if (targetId !== undefined) {
-        // `dotsFromSkill` maps the skill's `dot` abilities in order, one entry each, so the i-th
-        // entry is the i-th of these (tripwire: `dotsFromSkillPairing.corpus.test.ts`).
-        const dotAbilities = (gatedSkill?.abilities ?? []).filter(
-            (ab) => ab.type === 'dot' && ab.config.type === 'dot'
-        );
-        for (const [i, dot] of dotsConfig.entries()) {
-            const abTarget = dotAbilities[i]?.target;
-            if (
-                abTarget !== 'enemy' &&
-                abTarget !== 'all-enemies' &&
-                abTarget !== 'adjacent-enemies' &&
-                abTarget !== 'target-and-adjacent-enemies'
-            )
-                continue;
-            const recipients = resolveDebuffRecipientIds({
-                abTarget,
-                anchorId: targetId,
-                aoeVictimIds,
-                adjacentEnemyIdsFor,
-                positionalLanding,
-                firingClause: true,
-                selectorEnemyIdFor,
-            });
-            for (const rid of recipients) {
-                if (rid === undefined || rid === targetId) continue;
-                const list = coveredDots.get(rid);
-                if (list) list.push(dot);
-                else coveredDots.set(rid, [dot]);
-            }
-        }
-    }
     // Each covered footprint enemy's crit is the one the engine's damage apply uses for it, so the
     // DoT effects and the hit agree. That apply rolls a covered enemy's crit with `rollVictimCrit`
     // AFTER this function returns, so the first sub-attack's rolls are taken HERE instead, in the
@@ -4855,32 +5084,17 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     for (const [rid, victimDots] of coveredDots) {
         const victim = opposingVictimById?.get(rid);
         if (!victim) continue;
-        // #413: the decision, so an enemy blocked by its own Block Debuff (no gate drawn)
-        // is told apart from one that drew and failed. `'inflict'` is hardcoded here, so the
-        // affinity arm is unreachable on this path — but the immunity arm is not.
-        const splashDecision = decideDebuffOnVictim('inflict', victim);
-        // Block Debuff blocks the whole application: no stack rolls.
-        if (!splashDecision.landed && !splashDecision.viaRoll) {
+        const plan = planCoveredDots(victim, victimDots);
+        // Block Debuff blocks the whole application: one resist per DoT, no roll drawn, so none
+        // procs an on-resist reaction (#413).
+        if (plan.blocked) {
             for (const dot of victimDots) {
                 emitDebuffResisted(dotResistLabel(dot.type, dot.tier), rid, false);
             }
             continue;
         }
-        // One roll per stack (`rollDotStacks`, R30): the first stack takes the decision above,
-        // every later stack draws its own against this enemy.
-        let firstStackPending = true;
-        const landedVictimDots = rollDotStacks(
-            victimDots,
-            () => {
-                if (firstStackPending) {
-                    firstStackPending = false;
-                    return splashDecision.landed;
-                }
-                return decideDebuffOnVictim('inflict', victim).landed;
-            },
-            (dot) => emitDebuffResisted(dotResistLabel(dot.type, dot.tier), rid, true)
-        );
-        if (!splashDecision.landed && landedVictimDots.length === 0) continue;
+        const landedVictimDots = plan.landed;
+        if (!plan.firstLanded && landedVictimDots.length === 0) continue;
         // Per-VICTIM slice bounds, captured immediately before this victim's apply — the
         // primary's `*EntriesBefore` describe a different container entirely.
         const splashCorrosionBefore = victim.corrosionEntries.length;

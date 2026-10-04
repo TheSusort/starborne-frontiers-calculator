@@ -347,12 +347,16 @@ describe('SP-4d Task 9: enemy-debuff/enemy-dot-count/enemy-shield close on a no-
 
         it('POSITIVE: fires against a real victim with 0 DoTs, stops once it carries one', () => {
             idc = 0;
+            // The gated shield is written BEFORE the Corrosion, so it reads the victim as it stood
+            // before this cast (a count gate written after a DoT clause counts what that clause
+            // landed — R29).
             const skills: ShipSkills = {
                 slots: [
                     {
                         slot: 'active',
                         abilities: [
                             ab({ type: 'damage', config: { type: 'damage', multiplier: 100 } }),
+                            eqZeroShield(gate()),
                             ab({
                                 type: 'dot',
                                 config: {
@@ -363,7 +367,6 @@ describe('SP-4d Task 9: enemy-debuff/enemy-dot-count/enemy-shield close on a no-
                                     duration: 5,
                                 },
                             }),
-                            eqZeroShield(gate()),
                         ],
                     },
                 ],

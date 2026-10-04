@@ -156,6 +156,12 @@ export type RegisteredAbilityStatus =
            *  (`buildShipAbilities` sorts each slot by text position). Absent → applies inline. A
            *  `perHit` passive status always carries it: it reacts to damage the cast dealt. */
           afterDamageClause?: boolean;
+          /** Ability ids of the DoT clauses written before this status's clause in the same
+           *  firing slot (written order, owner ruling R29). A debuff-count gate on this status
+           *  ("If an enemy has 3 or more debuffs", Crocus) counts the stacks of those DoTs that
+           *  LANDED on the enemy it asks about — `castLandingsOverlay` in playerTurn. Set by the
+           *  engine's status-collection walk; absent → no DoT clause precedes it. */
+          afterDotClauseIds?: string[];
           /** A PASSIVE-slot status that rides each hit of its owner's cast rather than standing
            *  from combat start — `isPassivePerHitStatus` (abilityStatusGating.ts) decides which.
            *  playerTurn applies it on every active or charged cast: an enemy debuff on each struck

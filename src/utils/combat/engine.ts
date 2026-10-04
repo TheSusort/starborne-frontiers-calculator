@@ -340,11 +340,14 @@ function registerActorAbilityStatuses(
         // stays false there.
         const isFiringSlot = slot.slot === 'active' || slot.slot === 'charged';
         let sawDamageClause = false;
+        /** The firing slot's DoT clauses written so far — see `afterDotClauseIds`. */
+        const dotClauseIds: string[] = [];
         for (const ability of slot.abilities) {
             const cfg = ability.config;
             // A real damage-dealing clause. A 0-multiplier entry is a structural no-op (the
             // fixtures' "took a turn" placeholder) and orders nothing.
             if (isFiringSlot && cfg.type === 'damage' && cfg.multiplier > 0) sawDamageClause = true;
+            if (isFiringSlot && cfg.type === 'dot') dotClauseIds.push(ability.id);
             if (cfg.type !== 'buff' && cfg.type !== 'debuff') continue;
             // #399: the store side comes from the ONE classifier (abilityTargetSide.ts), not a
             // local list. The list this replaced omitted the three selector targets, so a
@@ -581,6 +584,9 @@ function registerActorAbilityStatuses(
                     // After targeting a defender, gains Crit Power Up II"). Consumed by
                     // playerTurn's timed-enemy and timed-self application loops.
                     ...(sawDamageClause ? { afterDamageClause: true } : {}),
+                    // The same slot's DoT clauses written before this one — what its debuff-count
+                    // gate reads as already inflicted (owner ruling R29, Crocus).
+                    ...(dotClauseIds.length > 0 ? { afterDotClauseIds: [...dotClauseIds] } : {}),
                     // A passive status riding each hit of the owner's cast (see
                     // `isPassivePerHitStatus`) reacts to the damage, so it lands after it.
                     ...(isPassivePerHitStatus({

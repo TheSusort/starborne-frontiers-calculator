@@ -387,11 +387,12 @@ describe("Anemone: 'If the primary target has 3 or more DoTs' gains Taunt once i
             expect(m.buffs.filter((n) => n === 'Taunt')).toEqual(['Taunt']);
             expect(m.selfControls).toEqual(['taunt']);
         });
-        it(`${tag}: everyone at 2 → none`, () => {
+        // At 1 each, her own Corrosion III (written first, R29) brings a struck enemy to 2 at most.
+        it(`${tag}: everyone at 1 → none`, () => {
             const m = measure(side, 'Anemone', 'charged', SC, SCATTER, {
-                A: { dots: 2 },
-                B: { dots: 2 },
-                C: { dots: 2 },
+                A: { dots: 1 },
+                B: { dots: 1 },
+                C: { dots: 1 },
             });
             expect(m.buffs.filter((n) => n === 'Taunt')).toEqual([]);
             expect(m.selfControls).toEqual([]);
