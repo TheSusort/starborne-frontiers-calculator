@@ -357,8 +357,9 @@ describe('Phase 3 reactive triggers', () => {
     });
 
     // ----------------------------------------------------------------------
-    // Scenario 5 — DoT applications count: a corrosion DoT feeds dot-applied
-    // ⇒ +1/active cast while landing ⇒ same +2/active-round cadence as #1.
+    // Scenario 5 — DoT applications count: a 2-stack corrosion DoT feeds dot-applied
+    // ⇒ +1 per stack landed (owner ruling R28) = +2/active cast, on top of the +1 bank
+    // ⇒ +3 per active round, charged every 2nd round.
     // ----------------------------------------------------------------------
     it('scenario 5: a landed DoT feeds the on-debuff-inflicted trigger', () => {
         const skills: ShipSkills = {
@@ -409,15 +410,15 @@ describe('Phase 3 reactive triggers', () => {
         const charges = result.rounds.map((r) => r.charges);
         expect(actions).toEqual([
             'active',
+            'charged',
             'active',
             'charged',
             'active',
-            'active',
             'charged',
             'active',
-            'active',
+            'charged',
         ]);
-        expect(charges).toEqual([2, 3, 0, 2, 3, 0, 2, 3]);
+        expect(charges).toEqual([3, 0, 3, 0, 3, 0, 3, 0]);
     });
 
     // ----------------------------------------------------------------------

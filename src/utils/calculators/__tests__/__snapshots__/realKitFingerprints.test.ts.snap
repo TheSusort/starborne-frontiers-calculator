@@ -1840,7 +1840,6 @@ exports[`kit fingerprints > Lingshe 1`] = `
   "plain": [
     "bomb",
     "buff",
-    "buff-expired",
     "charge-changed",
     "debuff-resisted",
     "dot-applied",
@@ -1848,7 +1847,6 @@ exports[`kit fingerprints > Lingshe 1`] = `
   "richEnemy": [
     "bomb",
     "buff",
-    "buff-expired",
     "charge-changed",
     "debuff-resisted",
     "dot-applied",
@@ -1856,7 +1854,6 @@ exports[`kit fingerprints > Lingshe 1`] = `
   "wounded": [
     "bomb",
     "buff",
-    "buff-expired",
     "charge-changed",
     "debuff-resisted",
     "dot-applied",
@@ -2457,7 +2454,6 @@ exports[`kit fingerprints > Nyxen 1`] = `
     "buff:active",
     "buff:charged",
     "charge-changed",
-    "cleanse",
     "shield",
   ],
   "wounded": [

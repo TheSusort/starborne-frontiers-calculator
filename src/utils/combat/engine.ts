@@ -340,11 +340,14 @@ function registerActorAbilityStatuses(
         // stays false there.
         const isFiringSlot = slot.slot === 'active' || slot.slot === 'charged';
         let sawDamageClause = false;
+        /** The firing slot's DoT clauses written so far — see `afterDotClauseIds`. */
+        const dotClauseIds: string[] = [];
         for (const ability of slot.abilities) {
             const cfg = ability.config;
             // A real damage-dealing clause. A 0-multiplier entry is a structural no-op (the
             // fixtures' "took a turn" placeholder) and orders nothing.
             if (isFiringSlot && cfg.type === 'damage' && cfg.multiplier > 0) sawDamageClause = true;
+            if (isFiringSlot && cfg.type === 'dot') dotClauseIds.push(ability.id);
             if (cfg.type !== 'buff' && cfg.type !== 'debuff') continue;
             // #399: the store side comes from the ONE classifier (abilityTargetSide.ts), not a
             // local list. The list this replaced omitted the three selector targets, so a
@@ -581,6 +584,9 @@ function registerActorAbilityStatuses(
                     // After targeting a defender, gains Crit Power Up II"). Consumed by
                     // playerTurn's timed-enemy and timed-self application loops.
                     ...(sawDamageClause ? { afterDamageClause: true } : {}),
+                    // The same slot's DoT clauses written before this one — what its debuff-count
+                    // gate reads as already inflicted (owner ruling R29, Crocus).
+                    ...(dotClauseIds.length > 0 ? { afterDotClauseIds: [...dotClauseIds] } : {}),
                     // A passive status riding each hit of the owner's cast (see
                     // `isPassivePerHitStatus`) reacts to the damage, so it lands after it.
                     ...(isPassivePerHitStatus({
@@ -1791,10 +1797,10 @@ export interface EnemyRoundEffects {
      *  De-duped by buffName WITHIN this enemy. NAMES ONLY for display — never folded into any sim
      *  value. Empty when every attempted debuff landed (or the enemy attempted none). */
     resistedDebuffs: ActiveBuff[];
-    /** DoTs this enemy attacker ATTEMPTED to inflict on the heal target this round but that were
-     *  RESISTED by the live hacking-vs-security landing roll (the whole turn's DoTs share one draw).
-     *  Summed per type+tier like `dots`. NAMES/COUNTS ONLY for display — never folded into any sim
-     *  value. Empty when the turn's DoTs landed (or the enemy attempted none). */
+    /** DoTs this enemy attacker ATTEMPTED to inflict on the heal target this round when no stack
+     *  of them landed (each stack rolls its own landing; a stack resisted beside a landed one shows
+     *  only in the combat log). Summed per type+tier like `dots`. NAMES/COUNTS ONLY for display —
+     *  never folded into any sim value. Empty when a stack landed (or the enemy attempted none). */
     resistedDots: EnemyDoTState[];
 }
 
@@ -2105,6 +2111,8 @@ function convertHitToSelfDot(
     sink: DamageAccountingSink,
     damage: number,
     rounds: number,
+    /** The status store's application-sequence source (`StatusEngine.nextAppliedSeq`). */
+    nextAppliedSeq: () => number,
     /** Who threw the hit being converted. Omitted/empty (an aggregate intake with no single
      *  attacker) leaves `dealtCreditId` absent, and every display reader falls back to
      *  `sourceId`. */
@@ -2115,6 +2123,7 @@ function convertHitToSelfDot(
         stacks: 1,
         tier: 0,
         remainingRounds: rounds,
+        appliedSeq: nextAppliedSeq(),
         // The MECHANICS axis stays on the victim: a converted hit buys the attacker no leech.
         // `dealtCreditId` carries the DISPLAY axis — read `ActiveDoTStack.dealtCreditId`'s doc.
         sourceId: victim.id,
@@ -6513,6 +6522,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                             sink,
                             damage,
                             transform.config.turns,
+                            statusEngine.nextAppliedSeq,
                             attackerId
                         );
                         // Only zero `damage` on a REAL conversion (see convertHitToSelfDot's
@@ -6606,6 +6616,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                     sink,
                     damage,
                     HIT_MITIGATION_DOT_ROUNDS,
+                    statusEngine.nextAppliedSeq,
                     cause?.killerId
                 );
                 damage = 0;
@@ -12607,9 +12618,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // window, which would leak other attackers' debuffs into this enemy's group).
                             // resistedEnemyDebuffs = the TIMED debuffs THIS enemy attempted but were
                             // resisted by its hacking-vs-security landing roll (display-only).
-                            // resistedEnemyDots = the DoTs THIS enemy attempted this turn that were
-                            // resisted by the SAME landing roll (the whole turn's DoTs share one
-                            // dotsLanded draw — all land or all miss together). Only corrosion/inferno
+                            // resistedEnemyDots = the DoTs THIS enemy attempted this turn when no
+                            // stack of them landed (`dotsLanded` false; a stack resisted beside a
+                            // landed one shows only in the combat log). Only corrosion/inferno
                             // are modelled by EnemyDoTState; any bomb entry is skipped
                             // (display-only). The guard also fires on resists alone so a
                             // fully-resisted enemy (nothing landed) still gets an entry and
@@ -13321,6 +13332,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                     tier: SPREAD_CORROSION_TIER,
                     remainingRounds: SPREAD_CORROSION_DURATION,
                     sourceId: holder.id,
+                    appliedSeq: statusEngine.nextAppliedSeq(),
                 });
             }
             // Remove Toxic Overflow from the holder (targeted single-family removal — preserves any

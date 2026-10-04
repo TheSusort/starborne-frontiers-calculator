@@ -59,7 +59,14 @@ import {
 import { reduceBombsOnVictim } from './bombCountdown';
 import { liveGateConditions } from './abilityStatusGating';
 import { CombatEvent, CombatEventBus, CombatEventType, ShieldApplyAccumulator } from './events';
-import { CombatActor, ActiveDoTStack, PendingBomb, carriedDotStacks } from './state';
+import {
+    CombatActor,
+    ActiveDoTStack,
+    PendingBomb,
+    carriedDotStacks,
+    dotCleanseCandidates,
+    shortenDotDurations,
+} from './state';
 import {
     ActiveAbilityStatus,
     ActiveBuff,
@@ -411,7 +418,9 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
  *    while both carry 0, but not "already a share" like the rest.
  *  - on-debuff-inflicted → debuff-applied | dot-applied with `sourceId === ownerId`.
  *    Cardinality follows the LANDING, which is once per SUB-ATTACK for a direct debuff clause,
- *    not once per cast: an N-hit cast that lands its clause every hit enqueues N times.
+ *    not once per cast: an N-hit cast that lands its clause every hit enqueues N times. A
+ *    dot-applied enqueues once per stack it landed (`dotInflictions`, R28), and so do the three
+ *    sibling infliction triggers below; the crit-DoT triggers stay once per event.
  *    `triggerStatusFilter` narrows it to one status family (`passesStatusFilter` — Lingshe's
  *    "inflicts a Bomb"); `triggerSourceSlotFilter` to the inflicting ability's slot
  *    (`passesSourceSlotFilter` — Ripper's "with its active or charged skills").
@@ -525,6 +534,17 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
  * `ra.ability.triggerApplicationFilter` via `passesApplicationFilter` below — see that function's
  * doc for what counts as an inflict vs an apply.
  */
+
+/**
+ * How many debuff inflictions one `dot-applied` is: one per STACK it landed (owner ruling R28 —
+ * each DoT stack is its own debuff, `dotStackCount`). Snakeroot's one "2 stacks of Corrosion" on B
+ * is two inflictions, so APEX gains two shields. The listeners that react per debuff inflicted
+ * enqueue this many times (a `debuff-applied` is one); a reaction's own once-per cap still applies
+ * at execution.
+ */
+function dotInflictions(e: { stacks: number }): number {
+    return Math.max(0, e.stacks);
+}
 
 /**
  * Whether a landed debuff/DoT satisfies a reactive ability's `triggerApplicationFilter` — the
@@ -916,7 +936,7 @@ export function registerReactiveListeners(args: {
                         // The same self-chain guard as the debuff-applied arm above: a DoT an
                         // on-debuff-inflicted reaction lands (Ripper's Inferno II) never re-wakes
                         // that reaction, and still reaches the owner's other abilities on this
-                        // trigger.
+                        // trigger. One enqueue per stack landed (`dotInflictions`).
                         if (
                             e.sourceId === ownerId &&
                             !inDebuffInflictedReactionChain(
@@ -933,15 +953,17 @@ export function registerReactiveListeners(args: {
                             ) &&
                             passesSourceSlotFilter(ra.ability.triggerSourceSlotFilter, e.sourceSlot)
                         )
-                            enqueue({
-                                ...intent,
-                                eventCtx: {
-                                    ...intent.eventCtx,
-                                    debuffVictimId: e.targetId,
-                                    debuffInflictedReactionChain: e.debuffInflictedReactionChain,
-                                    ...inflictionReactionCtx(e),
-                                },
-                            });
+                            for (let i = 0; i < dotInflictions(e); i++)
+                                enqueue({
+                                    ...intent,
+                                    eventCtx: {
+                                        ...intent.eventCtx,
+                                        debuffVictimId: e.targetId,
+                                        debuffInflictedReactionChain:
+                                            e.debuffInflictedReactionChain,
+                                        ...inflictionReactionCtx(e),
+                                    },
+                                });
                     });
                     break;
                 case 'on-ally-debuff-inflicted':
@@ -976,7 +998,9 @@ export function registerReactiveListeners(args: {
                     bus.on('dot-applied', (e) => {
                         // Team DoT applications emit dot-applied with the team sourceId — an ally
                         // DoT infliction triggers this listener exactly as an ally debuff does. Same
-                        // self-chain guard as the debuff-applied arm above.
+                        // self-chain guard as the debuff-applied arm above. One enqueue per stack
+                        // landed (`dotInflictions`), except Belladonna's `convert-dot`, which
+                        // converts THE application's entry — one chance per application.
                         if (
                             !isOpposing(e.sourceId) &&
                             !(e.sourceId === ownerId && e.viaAllyDebuffInflictedReaction) &&
@@ -984,18 +1008,22 @@ export function registerReactiveListeners(args: {
                                 ra.ability.triggerApplicationFilter,
                                 e.application
                             )
-                        )
-                            enqueue({
-                                ...intent,
-                                eventCtx: {
-                                    ...intent.eventCtx,
-                                    damagedAllyId: e.sourceId,
-                                    // Belladonna's convert-dot executor needs the
-                                    // actual victim + DoT type of THIS application.
-                                    victimId: e.targetId,
-                                    dotType: e.dotType,
-                                },
-                            });
+                        ) {
+                            const times =
+                                ra.ability.config.type === 'convert-dot' ? 1 : dotInflictions(e);
+                            for (let i = 0; i < times; i++)
+                                enqueue({
+                                    ...intent,
+                                    eventCtx: {
+                                        ...intent.eventCtx,
+                                        damagedAllyId: e.sourceId,
+                                        // Belladonna's convert-dot executor needs the
+                                        // actual victim + DoT type of THIS application.
+                                        victimId: e.targetId,
+                                        dotType: e.dotType,
+                                    },
+                                });
+                        }
                     });
                     break;
                 case 'on-other-ally-debuff-inflicted':
@@ -1037,9 +1065,10 @@ export function registerReactiveListeners(args: {
                             });
                     });
                     bus.on('dot-applied', (e) => {
-                        // An ally's DoT landing counts as a debuff inflicted — same guard as the
-                        // debuff-applied arm above (an applied DoT — Burner's Inferno — does not;
-                        // see passesApplicationFilter's doc).
+                        // An ally's DoT landing counts as a debuff inflicted per stack landed
+                        // (`dotInflictions`) — same guard as the debuff-applied arm above (an
+                        // applied DoT — Burner's Inferno — does not; see passesApplicationFilter's
+                        // doc).
                         if (
                             isSameSideAlly(e.sourceId, ownerId) &&
                             !e.viaOtherAllyDebuffInflictedReaction &&
@@ -1048,26 +1077,33 @@ export function registerReactiveListeners(args: {
                                 e.application
                             )
                         )
-                            enqueue({
-                                ...intent,
-                                eventCtx: { ...intent.eventCtx, debuffVictimId: e.targetId },
-                            });
+                            for (let i = 0; i < dotInflictions(e); i++)
+                                enqueue({
+                                    ...intent,
+                                    eventCtx: { ...intent.eventCtx, debuffVictimId: e.targetId },
+                                });
                     });
                     break;
                 case 'on-enemy-debuff-inflicted': {
                     // VICTIM-scoped, inflictor-agnostic (R16, APEX): any debuff or DoT landing on
                     // an opposing actor, whoever inflicted it — the owner, an ally, anyone. One
-                    // enqueue per landing. The landed enemy rides along as `debuffVictimId` (a
-                    // debuff reaction lands "on that enemy"), with its debuff count as of THIS
-                    // landing. The self-chain guard is `on-debuff-inflicted`'s: a reaction never
-                    // re-wakes itself off its own landing (Block Shield lands → the owner's 3%
-                    // shield fires again, Block Shield does not), while the owner's OTHER
-                    // reactions on this trigger still see it.
-                    const onLanded = (e: {
-                        targetId: string;
-                        application?: 'inflict' | 'apply';
-                        debuffInflictedReactionChain?: readonly string[];
-                    }): void => {
+                    // enqueue per debuff landed: one per `debuff-applied`, one per stack of a
+                    // `dot-applied` (`dotInflictions`). The landed enemy rides along as
+                    // `debuffVictimId` (a debuff reaction lands "on that enemy"), with its debuff
+                    // count as of THAT landing — the k-th of a DoT's n stacks reads the count less
+                    // the n−1−k stacks after it, so "3 or more debuffs" fires on the stack that
+                    // brings the enemy to 3, not on all of them. The self-chain guard is
+                    // `on-debuff-inflicted`'s: a reaction never re-wakes itself off its own landing
+                    // (Block Shield lands → the owner's 3% shield fires again, Block Shield does
+                    // not), while the owner's OTHER reactions on this trigger still see it.
+                    const onLanded = (
+                        e: {
+                            targetId: string;
+                            application?: 'inflict' | 'apply';
+                            debuffInflictedReactionChain?: readonly string[];
+                        },
+                        inflictions: number
+                    ): void => {
                         if (
                             !isOpposing(e.targetId) ||
                             inDebuffInflictedReactionChain(
@@ -1081,18 +1117,24 @@ export function registerReactiveListeners(args: {
                         )
                             return;
                         const count = debuffCountOf?.(e.targetId);
-                        enqueue({
-                            ...intent,
-                            eventCtx: {
-                                ...intent.eventCtx,
-                                debuffVictimId: e.targetId,
-                                debuffInflictedReactionChain: e.debuffInflictedReactionChain,
-                                ...(count !== undefined ? { debuffVictimDebuffCount: count } : {}),
-                            },
-                        });
+                        for (let k = 0; k < inflictions; k++) {
+                            const countAtK =
+                                count === undefined ? undefined : count - (inflictions - 1 - k);
+                            enqueue({
+                                ...intent,
+                                eventCtx: {
+                                    ...intent.eventCtx,
+                                    debuffVictimId: e.targetId,
+                                    debuffInflictedReactionChain: e.debuffInflictedReactionChain,
+                                    ...(countAtK !== undefined
+                                        ? { debuffVictimDebuffCount: countAtK }
+                                        : {}),
+                                },
+                            });
+                        }
                     };
-                    bus.on('debuff-applied', onLanded);
-                    bus.on('dot-applied', onLanded);
+                    bus.on('debuff-applied', (e) => onLanded(e, 1));
+                    bus.on('dot-applied', (e) => onLanded(e, dotInflictions(e)));
                     break;
                 }
                 case 'on-ally-crit-dot':
@@ -3167,6 +3209,31 @@ export function actorDebuffCount(statusEngine: StatusEngine, actor: CombatActor)
     return ownerDebuffNamesFor(statusEngine, actor.id).length + carriedDotStacks(actor);
 }
 
+/**
+ * Cleanses up to `count` debuffs from `actorId` — the one removal both cleanse executors (cast and
+ * reactive) call. The pool is every debuff `actorDebuffCount` counts: its named debuffs and each
+ * DoT stack it carries (`dotCleanseCandidates`, owner ruling R27), taken NEWEST APPLIED FIRST
+ * across both kinds (owner ruling 2026-10-04: Attack Down and 2 Corrosion stacks, "cleanses 1
+ * debuff" → whichever was inflicted last goes). A typed cleanse (`debuffType`, Nyxen's "cleanses
+ * 2 Bomb" / "2 damage over time debuffs") filters to DoT stacks of that kind, then takes the
+ * newest. `actor` absent (a hand-built ctx without an actor reader) → named debuffs only. Returns
+ * how many were removed.
+ */
+export function cleanseDebuffs(
+    statusEngine: StatusEngine,
+    actorId: string,
+    actor: CombatActor | undefined,
+    count: number | 'all',
+    debuffType?: 'bomb' | 'dot'
+): number {
+    return statusEngine.cleanse(
+        actorId,
+        count,
+        actor ? dotCleanseCandidates(actor, debuffType) : [],
+        debuffType === undefined
+    );
+}
+
 /** The two heal channels an enemy-applied debuff can move, as additive percentage POINTS (-50
  *  means -50%). One named shape rather than hand-written copies of the same object literal: it is
  *  `victimOwnEnemyHealModifiers`'s return and `liveHealChannelPct`'s channel key (#367). The heal
@@ -4973,20 +5040,27 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // the per-entry tick attributes to (and scales with) the applier; bombs snapshot the
         // owner's last-turn effective attack + affinity. Shared by the single-victim path below
         // and the Pestilence multi-recipient fan-out above (identical per-victim landing).
-        const landDotOn = (victim: CombatActor | undefined, victimId: string): void => {
+        // `stacks` is how many of the DoT's stacks landed (`landedStacksOn`).
+        const landDotOn = (
+            victim: CombatActor | undefined,
+            victimId: string,
+            stacks: number
+        ): void => {
             if (cfg.dotType === 'corrosion') {
                 (victim?.corrosionEntries ?? ctx.corrosionEntries).push({
-                    stacks: cfg.stacks,
+                    stacks,
                     tier: cfg.tier,
                     remainingRounds: cfg.duration,
                     sourceId: intent.ownerId,
+                    appliedSeq: ctx.statusEngine.nextAppliedSeq(),
                 });
             } else if (cfg.dotType === 'inferno') {
                 (victim?.infernoEntries ?? ctx.infernoEntries).push({
-                    stacks: cfg.stacks,
+                    stacks,
                     tier: cfg.tier,
                     remainingRounds: cfg.duration,
                     sourceId: intent.ownerId,
+                    appliedSeq: ctx.statusEngine.nextAppliedSeq(),
                 });
             } else if (cfg.dotType === 'bomb') {
                 // A bomb SNAPSHOTS the owner's effective attack + affinity at application (unlike
@@ -5016,7 +5090,7 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 (victim?.pendingBombs ?? ctx.pendingBombs).push({
                     countdown: Math.max(1, cfg.duration),
                     damagePerStack: effectiveAttack * (cfg.tier / 100),
-                    stacks: cfg.stacks,
+                    stacks,
                     tier: cfg.tier,
                     sourceId: intent.ownerId,
                     affinityMult,
@@ -5026,6 +5100,7 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                     detonationDamageModifier: 0,
                     // Same approximation: reactive ctx does not carry the live splash modifier.
                     splashModifier: 0,
+                    appliedSeq: ctx.statusEngine.nextAppliedSeq(),
                 });
             }
             // Discrete infliction event — sourceId = the owner so the application is chainable
@@ -5039,7 +5114,7 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 targetId: victimId,
                 round: ctx.round,
                 dotType: cfg.dotType,
-                stacks: cfg.stacks,
+                stacks,
                 tier: cfg.tier,
                 ...(cfg.application !== undefined ? { application: cfg.application } : {}),
                 sourceSlot: intent.sourceSlot,
@@ -5070,6 +5145,26 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 intent.eventCtx?.subAttackIndex
             );
 
+        /** How many of the DoT's stacks land on `victimId`: one landing check per stack (owner
+         *  ruling R30), each through the owner's gate exactly as a single stack's — the first is
+         *  the draw a 1-stack DoT always took, and each later stack draws after it. A failed stack
+         *  surfaces as its own resist. */
+        const landedStacksOn = (victimId: string): number => {
+            let landed = 0;
+            for (let i = 0; i < cfg.stacks; i++) {
+                if (
+                    owner.landsTimedEnemyApplication(
+                        cfg.application,
+                        ctx.affinityOf?.(victimId),
+                        ctx.liveDebuffLandingChanceFor?.(intent.ownerId, victimId)
+                    )
+                )
+                    landed += 1;
+                else emitFailedDotLanding(victimId);
+            }
+            return landed;
+        };
+
         // Pestilence: a reactive DoT whose ability targets 'all-enemies' and whose triggering
         // event stamped cleansedEnemyIds fans out over EVERY cleansed enemy ("inflicts
         // Corrosion II … on all cleansed enemies"), keyed off the reactive event's actual cleansed
@@ -5078,8 +5173,8 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // THE LANDING DRAW IS INSIDE THE LOOP. There is no single "the enemy" for a fan-out to
         // measure itself against, so each recipient draws its own gate at its OWN
         // hacking-vs-security chance — exactly what the sibling `debuff` branch does ("One draw
-        // PER TARGET, matching the established per-victim precedent"). So the draw cardinality for
-        // this branch is N, and the loop is NOT RNG-free.
+        // PER TARGET, matching the established per-victim precedent"), one per stack
+        // (`landedStacksOn`). So the loop is NOT RNG-free.
         //
         // The immunity check runs BEFORE the draw (see the loop body), so a Block-Debuff victim
         // auto-resists, emits its `blockDebuffResist` unconditionally, and consumes NO gate draw.
@@ -5114,17 +5209,8 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                     continue;
                 }
                 // The timed-debuff landing path, shared — see the single-victim draw below.
-                if (
-                    !owner.landsTimedEnemyApplication(
-                        cfg.application,
-                        ctx.affinityOf?.(victimId),
-                        ctx.liveDebuffLandingChanceFor?.(intent.ownerId, victimId)
-                    )
-                ) {
-                    emitFailedDotLanding(victimId);
-                    continue;
-                }
-                landDotOn(victim, victimId);
+                const landed = landedStacksOn(victimId);
+                if (landed > 0) landDotOn(victim, victimId, landed);
             }
             return;
         }
@@ -5176,22 +5262,13 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // sibling `debuff` branch's gate), keyed on the DoT's own verb (owner ruling, 2026-10-01):
         //  - 'apply' (the Burner gear set's "Applies Inferno") — the affinity check against THIS
         //    victim only, no hacking-vs-security roll and no draw;
-        //  - anything else — one draw of the OWNER's landing gate at THIS victim's
+        //  - anything else — one draw per stack of the OWNER's landing gate at THIS victim's
         //    hacking-vs-security chance (a team ship's DoT lands at ITS rate), not the owner's
         //    cached turn-target chance: a reactive DoT lands on the enemy the triggering event
         //    carries. An undefined chance (unit ctxs, a read before the owner's first turn) falls
         //    back to the owner's cached chance, then 1, inside the gate.
-        if (
-            !owner.landsTimedEnemyApplication(
-                cfg.application,
-                ctx.affinityOf?.(victimId),
-                ctx.liveDebuffLandingChanceFor?.(intent.ownerId, victimId)
-            )
-        ) {
-            emitFailedDotLanding(victimId);
-            return;
-        }
-        landDotOn(victim, victimId);
+        const landed = landedStacksOn(victimId);
+        if (landed > 0) landDotOn(victim, victimId, landed);
         return;
     }
 
@@ -5679,6 +5756,10 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 // routes through the per-victim damage sink. `count:'all'` only: a newest-debuff-
                 // only shrink (Warpstrike) picks one status and must not also eat a bomb.
                 const bombVictim = cfg.count === 'all' ? ctx.actorById?.(rid) : undefined;
+                // DoTs are debuffs too (owner ruling 2026-10-04): every Corrosion, Inferno and
+                // generic entry loses the same turns, one cut to 0 expiring without a tick
+                // (`shortenDotDurations`). `count:'all'` only, like the Bomb shrink below.
+                if (bombVictim) n += shortenDotDurations(bombVictim, durationTurns);
                 if (bombVictim) {
                     n += reduceBombsOnVictim(
                         bombVictim,
@@ -5729,7 +5810,13 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         let removed = 0;
         const cleansePerTarget: { targetId: string; count: number }[] = [];
         for (const rid of recipients) {
-            const n = ctx.statusEngine.cleanse(rid, count);
+            const n = cleanseDebuffs(
+                ctx.statusEngine,
+                rid,
+                ctx.actorById?.(rid),
+                count,
+                cfg.debuffType
+            );
             if (n > 0) cleansePerTarget.push({ targetId: rid, count: n });
             removed += n;
         }

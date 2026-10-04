@@ -2997,7 +2997,31 @@ const DocumentationPage: React.FC = () => {
                                         itself), counts every damage-over-time stack as a debuff:
                                         one &ldquo;2 stacks of Corrosion&rdquo; application is two
                                         debuffs. A count of damage-over-time effects (Anemone,
-                                        Snakeroot) counts each stack too.
+                                        Snakeroot) counts each stack too. Each stack also rolls its
+                                        own landing: Snakeroot&apos;s 2 stacks can land 0, 1 or 2,
+                                        and every stack that fails is its own resist. A reaction to
+                                        a debuff being inflicted (APEX&apos;s shield,
+                                        Oleander&apos;s charge, Provider&apos;s hit, Lingshe&apos;s
+                                        Stealth) fires once per stack that lands, within its own
+                                        once-per-cast or once-per-round limits; reactions to a
+                                        critical DoT (Crocus, Wisteria) and Belladonna&apos;s
+                                        conversion still fire once per application. A cleanse
+                                        removes stacks the same way: &ldquo;cleanses 1 debuff&rdquo;
+                                        on 2 Corrosion stacks leaves 1. The most recently inflicted
+                                        debuff goes first, named debuff or damage-over-time stack
+                                        alike (stacks inflicted together share one time); Acidic
+                                        Decay cannot be cleansed. Nyxen&apos;s cleanses take only
+                                        Bombs or only damage-over-time effects, as written, newest
+                                        first. Heliodor&apos;s and Pestilence&apos;s cut to the
+                                        duration of all debuffs shortens Corrosion and Inferno too;
+                                        one cut to 0 turns ends without ticking again. A count
+                                        written after an infliction in the same skill includes what
+                                        that skill landed, enemy by enemy: Crocus&apos;s Corrosion
+                                        II counts toward her own &ldquo;3 or more debuffs&rdquo;
+                                        Stasis (Asphyxiator&apos;s and Anemone&apos;s gates
+                                        likewise), and a resisted one does not. A passive reacting
+                                        to the hit (Bayah) counts only the debuffs from before the
+                                        skill.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Team Ships:</span> Pick a

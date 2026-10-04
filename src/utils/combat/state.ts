@@ -121,6 +121,11 @@ export interface ActiveDoTStack {
     family?: string;
     /** Survives the Cheat-Death DoT-array wipe and any DoT cleanse (Acidic Decay). */
     unremovable?: boolean;
+    /** When this entry was applied, on the status store's application sequence
+     *  (`StatusEngine.nextAppliedSeq`) — what a cleanse or a duration cut orders it by against
+     *  named debuffs, newest first. Its stacks share it. Absent (a hand-seeded entry) reads as
+     *  older than anything stamped. Every engine push site sets it (`dotAppliedSeqTripwire`). */
+    appliedSeq?: number;
 }
 
 /** How many debuffs — and how many damage-over-time effects — a list of DoT entries (or pending
@@ -152,6 +157,93 @@ export function carriedDotStacks(holder: DoTContainers): number {
     );
 }
 
+/**
+ * The DoT half of a cleanse's pool: one candidate per DoT STACK `holder` carries (owner ruling
+ * R27 — each stack is one debuff, so "cleanses 1 debuff" on 2 Corrosion stacks leaves 1), each
+ * dated by its entry's `appliedSeq` (absent → 0, older than anything stamped). The cleanse takes
+ * candidates newest first together with the named debuffs (`StatusEngine.cleanse`). Removing one
+ * decrements its entry's `stacks` and splices the entry out at 0, in place, so every holder of a
+ * reference sees it. An `unremovable` entry (Acidic Decay) offers none.
+ *
+ * `debuffType` narrows the pool (Nyxen's typed cleanse): `'bomb'` offers Bomb stacks only;
+ * `'dot'` and an untyped cleanse offer every DoT, Bombs included. Within one `appliedSeq` the
+ * newer entry (the array's tail) comes first.
+ */
+export function dotCleanseCandidates(
+    holder: {
+        corrosionEntries: ActiveDoTStack[];
+        infernoEntries: ActiveDoTStack[];
+        genericDoTEntries: ActiveDoTStack[];
+        pendingBombs: PendingBomb[];
+    },
+    debuffType?: 'bomb' | 'dot'
+): { seq: number; remove: () => void }[] {
+    const containers: { stacks: number; unremovable?: boolean; appliedSeq?: number }[][] =
+        debuffType === 'bomb'
+            ? [holder.pendingBombs]
+            : [
+                  holder.corrosionEntries,
+                  holder.infernoEntries,
+                  holder.genericDoTEntries,
+                  holder.pendingBombs,
+              ];
+    const out: { seq: number; remove: () => void }[] = [];
+    for (const entries of containers) {
+        for (let i = entries.length - 1; i >= 0; i--) {
+            const e = entries[i];
+            if (e.unremovable) continue;
+            for (let s = 0; s < e.stacks; s++) {
+                out.push({
+                    seq: e.appliedSeq ?? 0,
+                    remove: () => {
+                        e.stacks -= 1;
+                        if (e.stacks <= 0) {
+                            const at = entries.indexOf(e);
+                            if (at >= 0) entries.splice(at, 1);
+                        }
+                    },
+                });
+            }
+        }
+    }
+    return out;
+}
+
+/**
+ * The DoT half of a duration cut on "all active debuffs" (Heliodor, Pestilence — owner ruling
+ * 2026-10-04: DoTs are debuffs): takes `turns` off every Corrosion, Inferno and generic entry
+ * `holder` carries. An entry cut to 0 is spliced out in place, as its own expiry does after a tick
+ * (`expireStacks`) — so it does not tick again. An `unremovable` entry (Acidic Decay) is left
+ * alone. Bombs are not touched here: a Bomb's countdown is a detonation timer. Returns the number
+ * of DoT stacks shortened (each stack one debuff). A non-positive / non-finite `turns` → 0.
+ */
+export function shortenDotDurations(
+    holder: {
+        corrosionEntries: ActiveDoTStack[];
+        infernoEntries: ActiveDoTStack[];
+        genericDoTEntries: ActiveDoTStack[];
+    },
+    turns: number
+): number {
+    const delta = Number.isFinite(turns) ? Math.trunc(turns) : 0;
+    if (delta <= 0) return 0;
+    let shortened = 0;
+    for (const entries of [
+        holder.corrosionEntries,
+        holder.infernoEntries,
+        holder.genericDoTEntries,
+    ]) {
+        for (let i = entries.length - 1; i >= 0; i--) {
+            const e = entries[i];
+            if (e.unremovable) continue;
+            e.remainingRounds -= delta;
+            shortened += e.stacks;
+            if (e.remainingRounds <= 0) entries.splice(i, 1);
+        }
+    }
+    return shortened;
+}
+
 export interface PendingBomb {
     countdown: number;
     damagePerStack: number;
@@ -168,6 +260,8 @@ export interface PendingBomb {
     /** The applier's bomb-splash-damage modifier (%), snapshotted at application like
      *  affinityMult/detonationDamageModifier. Scales splash-on-death. Default 0. */
     splashModifier: number;
+    /** When this Bomb was applied — see `ActiveDoTStack.appliedSeq`. */
+    appliedSeq?: number;
 }
 
 // Echoing Burst-style debuff: gathers the direct damage dealt to the enemy each round it

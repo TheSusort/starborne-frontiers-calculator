@@ -256,8 +256,10 @@ describe('suite health', () => {
     // `dot-ticked` token it would not otherwise have); Huanying "When this Unit inflicts a debuff
     // it gains Stealth ... for 2 turns", and every cast lands a Bomb on this board, so she is
     // Stealthed every round and no enemy attack reaches her. Her Stealth grant needs a
-    // LANDED infliction.
-    const KNOWN_ZERO_DAMAGE: readonly string[] = ['Meiying', 'Voron', 'Huanying'];
+    // LANDED infliction. Lingshe is the same shape: "When this Unit inflicts a Bomb it gains
+    // Stealth", and her active's 3 Bomb stacks each roll to land (R30), so at least one lands on
+    // every cast on this board and her Stealth never lapses.
+    const KNOWN_ZERO_DAMAGE: readonly string[] = ['Meiying', 'Voron', 'Huanying', 'Lingshe'];
 
     it('every corpus ship takes real incoming damage and survives all 20 rounds, in every scenario', () => {
         // The corpus-wide version of the two-ship spot-check in kitFingerprintScenarios.test.ts's

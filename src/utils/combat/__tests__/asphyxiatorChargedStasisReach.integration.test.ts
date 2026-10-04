@@ -145,10 +145,12 @@ describe("player Asphyxiator's charged Stasis", () => {
         );
     });
 
-    it('targeted enemy at 1 debuff, a neighbour at 4 → nobody is stasised', () => {
+    // The cast's own Inc. DoT Damage Up III and Inferno III, written before the gate, bring the
+    // targeted enemy from 0 to 2 (R29).
+    it('targeted enemy at 0 debuffs, a neighbour at 4 → nobody is stasised', () => {
         expect(
             stasised(base({ enemyAttackers: enemies() }), 'attacker', {
-                'enemy-a': 1,
+                'enemy-a': 0,
                 'enemy-b': 4,
             })
         ).toEqual([]);

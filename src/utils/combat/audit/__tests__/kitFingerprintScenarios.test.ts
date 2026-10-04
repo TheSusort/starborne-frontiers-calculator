@@ -577,9 +577,9 @@ describe('statusRich scenario', () => {
     });
 
     /**
-     * MEASURED RESIDUAL: 30 of the 36 arm-running ships now emit a status-consuming token
-     * (18 cleanse, 12 purge, 3 steal). These SIX still do not, and every one has a named cause —
-     * pinned here so the number cannot drift silently in either direction. A ship LEAVING this list
+     * MEASURED RESIDUAL: the arm-running ships that still emit no status-consuming token (cleanse,
+     * purge, steal), each with a named cause — pinned here so the list cannot drift silently in
+     * either direction. A ship LEAVING this list
      * is good news that should be seen; a ship JOINING it means a clause went quiet.
      *
      *  - MEATSHIELD  — locked ruling (owner, 2026-09-03): only an ENEMY STEALING them can put him
@@ -597,6 +597,9 @@ describe('statusRich scenario', () => {
      *                  (un-geared) placement, NOT a kit defect — and NOT a general blind spot
      *                  either: 33 corpus ships have base critDamage >= 50, so `per: 50` scaling is
      *                  alive in this suite for most of them.
+     *  - NYXEN       — both her cleanses are TYPED ("cleanses 2 Bomb", "cleanses 2 damage over
+     *                  time debuffs"), so they remove Bomb / DoT stacks only. The statusRich fillers
+     *                  inflict named debuffs, never a DoT, so her clause has nothing to take.
      *
      *  CURATOR and FUYING were on this list and are not any more, and BOTH were defects in the ARM
      *  rather than in their kits — see the filler doc in `kitFingerprintScenarios` for what each
@@ -607,10 +610,10 @@ describe('statusRich scenario', () => {
     // Simulates every status-rich ship: ~4s alone, so the 5s default times out under the full
     // parallel suite.
     it(
-        'pins the four ships whose clause is still silent, each for a known reason',
+        'pins the ships whose clause is still silent, each for a known reason',
         { timeout: 20_000 },
         () => {
-            const STILL_SILENT = ['Amartya', 'Faust', 'Meatshield', 'Nayra'];
+            const STILL_SILENT = ['Amartya', 'Faust', 'Meatshield', 'Nayra', 'Nyxen'];
             const silent = statusRichNames()
                 .filter((name) => {
                     const tokens = tokensFor(name, 'statusRich');

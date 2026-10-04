@@ -14,8 +14,8 @@
  *
  * chargeCount is set to the CAP (1): round 1 (bank 0 < cap 1) fires the active seed abilities and
  * banks the unconditional +1 cadence; round 2 (bank 1 >= cap 1) fires the charged skill, whose
- * gate reads the round-1 DoT entries (2-turn duration — still present) BEFORE this cast's own new
- * Corrosion III application.
+ * gate reads the round-1 DoT entries (2-turn duration — still present) plus this cast's own
+ * Corrosion III, written before the gate (owner ruling R29).
  *
  * Team-symmetry: the SAME gate must fire whether Anemone is the focus PLAYER attacker or an
  * ENEMY attacker splashing a player-side target — no player/enemy branch in the implementation.
@@ -113,8 +113,12 @@ describe('enemy-dot-count engine gate — Anemone charged-skill Taunt (player si
         expect(tauntGranted(['corrosion', 'inferno', 'bomb'])).toBe(true);
     });
 
-    it('target carries only 2 pre-existing DoT entries → Taunt is NOT granted', () => {
-        expect(tauntGranted(['corrosion', 'inferno'])).toBe(false);
+    it('target carries 2 pre-existing DoT entries + her own Corrosion III → Taunt IS granted', () => {
+        expect(tauntGranted(['corrosion', 'inferno'])).toBe(true);
+    });
+
+    it('target carries only 1 pre-existing DoT entry (+ her Corrosion III = 2) → Taunt is NOT granted', () => {
+        expect(tauntGranted(['corrosion'])).toBe(false);
     });
 });
 
@@ -182,8 +186,12 @@ describe('enemy-dot-count engine gate — Anemone charged-skill Taunt (enemy sid
         expect(enemyTauntGranted(['corrosion', 'inferno', 'bomb'])).toBe(true);
     });
 
-    it('an ENEMY Anemone whose target carries only 2 pre-existing DoT entries is NOT granted Taunt', () => {
-        expect(enemyTauntGranted(['corrosion', 'inferno'])).toBe(false);
+    it('an ENEMY Anemone whose target carries 2 pre-existing DoT entries + her Corrosion III IS granted Taunt', () => {
+        expect(enemyTauntGranted(['corrosion', 'inferno'])).toBe(true);
+    });
+
+    it('an ENEMY Anemone whose target carries only 1 pre-existing DoT entry is NOT granted Taunt', () => {
+        expect(enemyTauntGranted(['corrosion'])).toBe(false);
     });
 });
 

@@ -4,8 +4,8 @@
  * is three, so the enemy is stasised. Each struck enemy is counted on its own.
  *
  * A faster teammate lands Attack Down before the caster acts (hacking dwarfs every security);
- * Corrosion entries are seeded before round 1. The caster's own Corrosion lands after the gate,
- * so it adds nothing to this cast's count.
+ * Corrosion entries are seeded before round 1. The caster's own Corrosion II is written before the
+ * gate, so when it lands it is one more debuff on that enemy (owner ruling R29).
  */
 import { describe, it, expect, beforeEach, beforeAll } from 'vitest';
 import { runCombat, CombatEngineInput } from '../engine';
@@ -243,9 +243,16 @@ describe("player Crocus's active counts every debuff on the enemy", () => {
         ).toEqual(['enemy-a']);
     });
 
-    it('two Corrosion stacks alone → not stasised', () => {
-        expect(stasised(base({ enemyAttackers: enemies() }), 'attacker', { 'enemy-a': 2 })).toEqual(
+    // Her own Corrosion II, written before the gate, is the second debuff (R29).
+    it('one Corrosion stack alone → not stasised', () => {
+        expect(stasised(base({ enemyAttackers: enemies() }), 'attacker', { 'enemy-a': 1 })).toEqual(
             []
+        );
+    });
+
+    it('two Corrosion stacks and her own Corrosion II → stasised', () => {
+        expect(stasised(base({ enemyAttackers: enemies() }), 'attacker', { 'enemy-a': 2 })).toEqual(
+            ['enemy-a']
         );
     });
 });

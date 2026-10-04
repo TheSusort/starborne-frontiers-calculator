@@ -190,9 +190,13 @@ const stealthRounds = (events: CombatEvent[], ownerId: string): number[] =>
             ? [e.round]
             : []
     );
+/** The round of each Bomb STACK `sourceId` landed — one entry per stack, since the passive reacts
+ *  once per stack inflicted (owner ruling R28). */
 const bombLandingRounds = (events: CombatEvent[], sourceId: string): number[] =>
     events.flatMap((e) =>
-        e.type === 'dot-applied' && e.sourceId === sourceId && e.dotType === 'bomb' ? [e.round] : []
+        e.type === 'dot-applied' && e.sourceId === sourceId && e.dotType === 'bomb'
+            ? Array.from({ length: e.stacks }, () => e.round)
+            : []
     );
 const corrosionLandingRounds = (events: CombatEvent[], sourceId: string): number[] =>
     events.flatMap((e) =>

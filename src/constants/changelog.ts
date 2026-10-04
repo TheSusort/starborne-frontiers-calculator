@@ -24,6 +24,15 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator: Chakara's speed charge now needs every damaged enemy faster.",
     'Combat simulator: each stack of a damage-over-time effect now counts as one debuff.',
     "DPS calculator: Snakeroot's passive now scales with every damage-over-time stack.",
+    'Combat simulator: each damage-over-time stack now rolls separately to land.',
+    'Combat simulator: per-debuff reactions now trigger once per damage-over-time stack.',
+    'Combat simulator: cleanses now remove damage-over-time stacks as debuffs.',
+    "Combat simulator: Nyxen's cleanses now remove only Bombs or damage-over-time effects.",
+    "Combat simulator: Crocus's Stasis now counts the Corrosion from the same skill.",
+    "Combat simulator: Asphyxiator's charged Stasis now counts debuffs from the same skill.",
+    "Combat simulator: Anemone's Taunt now counts the Corrosion from the same skill.",
+    'Combat simulator: cleanses now remove the most recent debuff first.',
+    "Combat simulator: Heliodor's and Pestilence's duration cuts now shorten damage-over-time effects.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
