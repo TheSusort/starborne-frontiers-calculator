@@ -2246,7 +2246,7 @@ describe('D-PR7 Task 5 integration — Last Wish repairs living allies on death'
     );
 });
 
-describe('D-PR7 Task 5 integration — Battlecry emits Inc. Damage Down II on living allies (emit-only)', () => {
+describe('D-PR7 Task 5 integration — Battlecry grants Inc. Damage Down II to living allies', () => {
     const DYER_HP = 1_000;
     const FOCUS_HP = 1_000_000;
     const ALLY_HP = 1_000_000;
@@ -2290,7 +2290,7 @@ describe('D-PR7 Task 5 integration — Battlecry emits Inc. Damage Down II on li
 
     it(
         'A Battlecry carrier dies → a Inc. Damage Down II buff-applied fires once for each living ' +
-            'ally, carrying the legendary duration (3); no damage-reduction asserted (emit-only)',
+            'ally, carrying the legendary duration (3)',
         () => {
             // Dying carrier at the front origin (M4). Two SURVIVORS: focus at M3 (covered, survives)
             // and a second team ally at M2 (outside the AoE footprint → untouched, survives).

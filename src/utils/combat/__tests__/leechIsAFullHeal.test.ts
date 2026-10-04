@@ -70,7 +70,8 @@
  * NO RNG SEEDING, exactly as both source files: `crit: 0` removes the crit stream rather than
  * fixing it and `application: 'apply'` skips the landing roll, so both arms of every comparison
  * are deterministic without a keyed provider (which is keyed per `ownerId` and would hand the two
- * SIDE arms different draws).
+ * SIDE arms different draws). Section 9 is the one exception: Exuberance's proc is a roll, so it
+ * seeds each run and compares the SET of amounts seen, never one side's number against the other's.
  */
 import { describe, it, expect } from 'vitest';
 import { runCombat, type CombatEngineInput, type TeamActorEngineInput } from '../engine';

@@ -4533,17 +4533,18 @@ const DocumentationPage: React.FC = () => {
                                     to increase the amount of a repair this unit receives). Charge
                                     manipulation is also modeled: <strong>Chrono Reaver</strong>{' '}
                                     (grants a bonus charge to the carrier&apos;s charged skill every
-                                    2nd turn at legendary rarity or every 3rd turn at epic; units in
-                                    Stasis bank no charge on skipped turns). Two damage-over-time
-                                    gear sets are also modeled: <strong>Burner</strong> (applies
-                                    Inferno for 2 turns when the ship attacks; an applied Inferno
-                                    lands without a hacking roll, failing only when the ship is at
-                                    an affinity disadvantage against the target) and{' '}
-                                    <strong>Decimation</strong> (+10% DoT damage per equipped set,
-                                    up to +30%, boosting your Inferno and Corrosion ticks in both
-                                    the combat simulator and the DPS calculator). Five shield
-                                    sources are also modeled: the <strong>Shield</strong> gear set
-                                    (grants the equipped ship a shield each turn, 4% of its max HP),{' '}
+                                    2nd turn at legendary rarity or every 3rd turn at epic; a unit
+                                    in Stasis or Disabled still gets this bonus, but not its usual
+                                    charge for the skipped turn). Two damage-over-time gear sets are
+                                    also modeled: <strong>Burner</strong> (applies Inferno for 2
+                                    turns when the ship attacks; an applied Inferno lands without a
+                                    hacking roll, failing only when the ship is at an affinity
+                                    disadvantage against the target) and <strong>Decimation</strong>{' '}
+                                    (+10% DoT damage per equipped set, up to +30%, boosting your
+                                    Inferno and Corrosion ticks in both the combat simulator and the
+                                    DPS calculator). Five shield sources are also modeled: the{' '}
+                                    <strong>Shield</strong> gear set (grants the equipped ship a
+                                    shield each turn, 4% of its max HP),{' '}
                                     <strong>Adaptive Plating</strong> (grants the ship a shield from
                                     the damage it takes, once per round),{' '}
                                     <strong>Abundant Renewal</strong> (turns over-healing on an ally

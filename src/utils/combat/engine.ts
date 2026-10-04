@@ -11331,18 +11331,14 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // instead the cadence loses the skipped tick and resumes on the original residue
                 // (the next own-turn that satisfies `t % period === offset`).
                 //
-                // The every-n-turns periodic proc IS already fully suppressed on a turn-blocked turn
-                // — NO gating is needed HERE. A periodic charge (e.g. Chrono Reaver's `end-of-turn`
-                // charge) is a REACTIVE intent carrying intent.ownerId; on a blocked owner's turn the
-                // §4.4 reactive-intent drain filter
-                // (`if (isTurnBlocked(intent.ownerId)) continue;`) DROPS it before executeIntent
-                // applies the charge. So a
-                // stasised/disabled unit banks NO periodic charge, matching the +1/turn baseline.
-                // Golden: chronoReaverCharge.integration.test.ts ("stasis suppression"). NOTE: the
-                // suppression relies on the owner being STILL turn-blocked at the drain pass — for
-                // a 1-turn block the Post-Turn decrement can clear the block before the deferred
-                // end-of-turn intent drains, so that golden uses a ≥2-turn block spanning a proc
-                // turn.
+                // NO gating is needed HERE for an every-n-turns periodic proc: it is a REACTIVE
+                // intent carrying intent.ownerId, so the §4.4 reactive-intent drain filter decides
+                // it. That filter drops a turn-blocked owner's SHIP-PASSIVE intent but keeps an
+                // EQUIPMENT one (`intent.ability.source === 'equipment'`) — gear keeps working while
+                // its holder is stasised or disabled (owner ruling 2026-09-15). So a blocked
+                // Chrono Reaver turn still banks the implant's periodic charge, while the +1/turn
+                // baseline (advanceChargeCadence, gated behind !isTurnBlocked) banks nothing.
+                // Golden: chronoReaverCharge.integration.test.ts ("stasis suppression").
                 actor.turnsTaken += 1;
 
                 // Apply this actor's start-of-turn GRANTS before it acts (see
