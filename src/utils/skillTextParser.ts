@@ -2420,23 +2420,27 @@ export function detectCleanseOncePerRound(
     return sentence !== undefined && CLEANSE_ONCE_PER_ROUND_RE.test(sentence);
 }
 
-// "when an enemy gets inflicted with a debuff" — a reactive own-infliction trigger (APEX's
-// shield-on-debuff). Requires the generic "debuff" noun, so a named status ("the primary target
-// is inflicted with Disable") is not a reaction. Scanned on the RAW sentence, so the noun may sit
-// inside a tag. Fires on this Unit's OWN inflictions (on-debuff-inflicted), not allies'.
+// A debuff landing on an enemy, whoever inflicted it — APEX's passive (owner ruling R16). Two
+// sentences carry it:
+//  - "… when an enemy gets inflicted with a debuff": passive voice with no "this Unit", so it
+//    reacts to every inflictor, not only this Unit (the 3% shield);
+//  - "If that enemy has 3 or more debuffs on a debuff infliction, this Unit inflicts Block
+//    Shield": "that enemy" is the one just inflicted, so the same event, landing on it.
+// Both require the generic "debuff" noun, so a named status ("the primary target is inflicted
+// with Disable") is not a reaction. Scanned on the RAW sentence, so the noun may sit inside a tag.
 const ENEMY_DEBUFFED_RE =
-    /\bwhen\b[^.]*?\benem(?:y|ies)\b[^.]*?\bgets?\s+inflicted\s+with\s+an?\s+(?:<[^>]*>\s*)?debuff\b/i;
+    /\bwhen\b[^.]*?\benem(?:y|ies)\b[^.]*?\bgets?\s+inflicted\s+with\s+an?\s+(?:<[^>]*>\s*)?debuff\b|\bthat\s+enemy\b[^.]*?\bon\s+an?\s+(?:<[^>]*>\s*)?debuff(?:\s*<\/[^>]*>)?\s+infliction\b/i;
 
 /**
- * Returns 'on-debuff-inflicted' when `anchorPos` falls inside a sentence carrying a phrase
+ * Returns 'on-enemy-debuff-inflicted' when `anchorPos` falls inside a sentence carrying a phrase
  * matching ENEMY_DEBUFFED_RE; otherwise undefined. Position-scoped on the RAW text
  * (mirrors detectCritRepairTrigger). Reference data: docs/ship-skills.csv (APEX).
  */
-export function detectDebuffInflictedTrigger(
+export function detectEnemyDebuffedTrigger(
     text: string | null | undefined,
     anchorPos: number
 ): AbilityTrigger | undefined {
-    return phrasePosTrigger(text, ENEMY_DEBUFFED_RE, anchorPos, 'on-debuff-inflicted');
+    return phrasePosTrigger(text, ENEMY_DEBUFFED_RE, anchorPos, 'on-enemy-debuff-inflicted');
 }
 
 // Control-infliction recognition for the control EVENT. A skill that inflicts/grants one of the
@@ -2568,14 +2572,14 @@ export function parseControlInflicts(
 
 // "after it inflicts Stasis" — the reactive trigger for a grant that procs when THIS unit
 // inflicts Stasis (Defiant's "gains a shield equal to 30% of its max HP"). Position-scoped on the
-// RAW sentence (mirrors detectDebuffInflictedTrigger), so the status name may be tagged; no
+// RAW sentence (mirrors detectEnemyDebuffedTrigger), so the status name may be tagged; no
 // lookbehind.
 const APPLYING_STASIS_RE = /\bafter\s+it\s+inflicts\s+(?:<unit-skill>\s*)?stasis\b/i;
 
 /**
  * Returns 'on-stasis-applied' when `anchorPos` (the ability's raw-text anchor position) falls
  * inside a sentence matching APPLYING_STASIS_RE; otherwise undefined.
- * Position-scoped on the RAW text (mirrors detectDebuffInflictedTrigger). Reference data:
+ * Position-scoped on the RAW text (mirrors detectEnemyDebuffedTrigger). Reference data:
  * docs/ship-skills.csv (Defiant passive).
  */
 export function detectStasisAppliedTrigger(

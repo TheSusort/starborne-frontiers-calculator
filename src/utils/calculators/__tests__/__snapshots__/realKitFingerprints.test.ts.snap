@@ -43,7 +43,6 @@ exports[`kit fingerprints > APEX 1`] = `
   "plain": [
     "attack",
     "attack:active",
-    "attack:charged",
     "charge-changed",
     "control",
     "control:charged",
@@ -54,7 +53,6 @@ exports[`kit fingerprints > APEX 1`] = `
   "richEnemy": [
     "attack",
     "attack:active",
-    "attack:charged",
     "charge-changed",
     "control",
     "control:charged",
@@ -65,7 +63,6 @@ exports[`kit fingerprints > APEX 1`] = `
   "wounded": [
     "attack",
     "attack:active",
-    "attack:charged",
     "charge-changed",
     "control",
     "control:charged",

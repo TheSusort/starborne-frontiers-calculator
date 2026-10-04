@@ -181,6 +181,11 @@ export type AbilityTrigger =
     // isSameSideAlly (owner excluded) instead of !isOpposing. See triggers.ts's trigger doc
     // block for the carve-out list.
     | 'on-other-ally-debuff-inflicted'
+    // VICTIM-scoped and inflictor-AGNOSTIC: a debuff or DoT lands on an OPPOSING actor, whoever
+    // inflicted it — the owner, an ally, anyone (APEX's "when an enemy gets inflicted with a
+    // debuff": passive voice, no "this Unit"; owner ruling R16). Rides `debuff-applied` and
+    // `dot-applied` keyed on the TARGET, unlike the three inflictor-scoped siblings above.
+    | 'on-enemy-debuff-inflicted'
     | 'on-ally-crit-dot'
     // Wisteria: self-subject sibling of on-ally-crit-dot — THIS unit's OWN crit-cast DoT
     // infliction ("When this Unit inflicts Corrosion with a critical hit, it also inflicts
@@ -361,6 +366,8 @@ export const LIVE_TRIGGERS = new Set<AbilityTrigger>([
     'on-ally-debuff-inflicted',
     // Owner-excluded sibling (Provider — #590): "another/other ally" phrasing.
     'on-other-ally-debuff-inflicted',
+    // R16 (APEX): any debuff landing on an opposing actor, whoever inflicted it.
+    'on-enemy-debuff-inflicted',
     // Phase 3 PR-E: ally-scoped counterpart of on-debuffed.
     'on-ally-debuffed',
     // Phase 3 PR-H: self-scoped reaction to THIS unit's own cleanse actually removing a debuff.

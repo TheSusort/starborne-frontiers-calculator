@@ -215,6 +215,10 @@ const TRIGGER_OPTIONS: { value: AbilityTrigger; label: string }[] = [
         value: 'on-other-ally-debuff-inflicted',
         label: 'After another ally inflicts a debuff (excludes self)',
     },
+    {
+        value: 'on-enemy-debuff-inflicted',
+        label: 'When an enemy is inflicted with a debuff (any inflictor)',
+    },
     { value: 'on-ally-crit-dot', label: 'After an ally inflicts a DoT with a crit' },
     { value: 'on-ally-critically-repaired', label: 'After this unit critically repairs an ally' },
     { value: 'on-ally-crit', label: 'After an ally critically hits' },

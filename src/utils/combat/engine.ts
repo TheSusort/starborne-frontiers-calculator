@@ -140,6 +140,7 @@ import {
     executeIntent,
     liveHealChannelPct,
     ownerDebuffNamesFor,
+    actorDebuffCount,
     partitionReactiveAbilities,
     provokerOf,
     registerReactiveListeners,
@@ -4409,6 +4410,12 @@ export function runCombat(rawInput: CombatEngineInput): {
             // already share), so an enemy-side Fuying gates on her enemy-side allies' Stealth with
             // no mirrored branch.
             statusNamesOf: (actorId: string) => selfBuffNamesForOwners(statusEngine, [actorId]),
+            // A landed enemy's debuff count, read at the landing (`on-enemy-debuff-inflicted`).
+            // Combat-wide map, so one closure serves both side registrations.
+            debuffCountOf: (actorId: string) => {
+                const a = allActorsById.get(actorId);
+                return a ? actorDebuffCount(statusEngine, a) : 0;
+            },
             // #363: the owner's ACTIVE support footprint, for the `patternScoped` reactive
             // family's affected-ally gate ("when an ally within the active pattern is directly
             // damaged / has their shield destroyed"). Threaded exactly like `adjacentAllyIdsFor`

@@ -10,6 +10,8 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator: Bayah's and Bizon's passive debuffs now land on every enemy hit.",
     "Combat simulator: Bayah's and Sha Xing's passive buffs now trigger when hitting debuffed enemies.",
     "DPS calculator: Bayah's passive now fires each turn against a debuffed enemy.",
+    "Combat simulator: APEX's passive shield now reacts to debuffs inflicted by allies too.",
+    "Combat simulator: APEX's Block Shield now lands on enemies reaching three debuffs.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

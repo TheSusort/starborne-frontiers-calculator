@@ -67,7 +67,7 @@ import {
     detectBombDetonatedTrigger,
     detectEchoingBurstDetonatedTrigger,
     detectCritRepairTrigger,
-    detectDebuffInflictedTrigger,
+    detectEnemyDebuffedTrigger,
     detectStasisAppliedTrigger,
     detectCheatDeathActivatedTrigger,
     detectDestroyedTrigger,
@@ -2405,7 +2405,7 @@ function abilitiesFromText(
                       // bus event (combat/events.ts), self-scoped in triggers.ts (mirrors
                       // on-own-cleanse). Shield-only (no corpus heal carries this phrase).
                       (detectShieldStrippedTrigger(text, healPos) ??
-                      detectDebuffInflictedTrigger(text, healPos) ??
+                      detectEnemyDebuffedTrigger(text, healPos) ??
                       // Defiant: a SHIELD anchored in the "after it inflicts Stasis" clause rides the
                       // on-stasis-applied reactive trigger (own-cast scoped; position-scoped).
                       detectStasisAppliedTrigger(text, healPos))
@@ -2533,7 +2533,8 @@ function abilitiesFromText(
                 // APEX: the shield's own sentence carries the trigger clause, so its verb is the
                 // filter — "gets inflicted with a debuff" → 'inflict'. A clause naming no verb
                 // stays unfiltered.
-                ...(reactiveTrigger === 'on-debuff-inflicted'
+                ...(reactiveTrigger === 'on-debuff-inflicted' ||
+                reactiveTrigger === 'on-enemy-debuff-inflicted'
                     ? (() => {
                           const verb = debuffTriggerVerb(healSentence);
                           return verb ? { triggerApplicationFilter: verb } : {};
@@ -3636,6 +3637,19 @@ export function buildShipAbilities(rawShip: Ship): ShipSkills {
                 occurrence
             );
         }
+        // APEX: "If that enemy has 3 or more debuffs on a debuff infliction, this Unit inflicts
+        // Block Shield" rides the same any-source enemy-debuffed event as her shield, landing on
+        // the enemy just inflicted (eventCtx.debuffVictimId). Its enemy-debuff count stays as the
+        // gate — read on that enemy as of the triggering infliction (triggers.ts).
+        if (
+            reactiveTrigger === undefined &&
+            target === 'enemy' &&
+            ability.config.type === 'debuff' &&
+            rowText &&
+            pos >= 0
+        ) {
+            reactiveTrigger = detectEnemyDebuffedTrigger(rowText, pos);
+        }
         // Harvester p2: "When an ally is destroyed, this Unit gains 1 extra end of round
         // action and Speed Up I for 6 turns" — the extra-action grant resolves on-ally-destroyed
         // via parseExtraAction, but Speed Up I is a separate (plain) buff ability that otherwise
@@ -3687,7 +3701,8 @@ export function buildShipAbilities(rawShip: Ship): ShipSkills {
                 rowText &&
                 (reactiveTrigger === 'on-debuff-inflicted' ||
                     reactiveTrigger === 'on-ally-debuff-inflicted' ||
-                    reactiveTrigger === 'on-other-ally-debuff-inflicted')
+                    reactiveTrigger === 'on-other-ally-debuff-inflicted' ||
+                    reactiveTrigger === 'on-enemy-debuff-inflicted')
             ) {
                 const verb = detectDebuffInflictionVerb(rowText, buff.buffName, occurrence);
                 if (verb) ability.triggerApplicationFilter = verb;

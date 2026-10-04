@@ -1393,9 +1393,9 @@ describe('buildShipAbilities', () => {
             });
         });
 
-        it('APEX refit-active passive: shield-on-debuff rides on-debuff-inflicted', () => {
-            // APEX's active inflicts Speed Down II / Crit Power Down III — those own
-            // inflictions supply the on-debuff-inflicted events that fire this shield grant.
+        it('APEX refit-active passive: shield-on-debuff rides on-enemy-debuff-inflicted', () => {
+            // "when an enemy gets inflicted with a debuff": any debuff landing on an enemy, her
+            // own Speed Down II / Crit Power Down III or an ally's (owner ruling R16).
             const s = ship({
                 firstPassiveSkillText:
                     'This Unit gains a <unit-damage>shield equal to 3%</unit-damage> of their max HP when an enemy gets inflicted with a <unit-aid>debuff</unit-aid>.',
@@ -1405,7 +1405,7 @@ describe('buildShipAbilities', () => {
             expect(shield).toMatchObject({
                 type: 'shield',
                 target: 'self',
-                trigger: 'on-debuff-inflicted',
+                trigger: 'on-enemy-debuff-inflicted',
                 config: { type: 'shield', pct: 3, basis: 'hp' },
             });
         });
