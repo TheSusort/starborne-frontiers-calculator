@@ -9557,6 +9557,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                     (v) => enemyDebuffNamesForTarget(v).length > 0
                 ).length,
                 selfDebuffNames: ownerDebuffNames(a.id),
+                selfDebuffCount: actorDebuffCount(statusEngine, a),
                 ...(aoeVictimIds ? { aoeVictimIds } : {}),
                 ...(opposingVictimById ? { opposingVictimById } : {}),
                 // Forced bomb-detonation sink (Lingshe's countdown-reduce-to-0). `sink` serves

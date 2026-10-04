@@ -680,6 +680,7 @@ export interface RecipientGateReading {
 const CONDITION_CONTEXT_SUBJECT = {
     selfBuffNames: 'caster',
     selfDebuffNames: 'caster',
+    selfDebuffCount: 'caster',
     enemyBuffNames: 'caster',
     enemyBuffCount: 'victim',
     enemyDebuffCount: 'victim',
@@ -912,6 +913,10 @@ export interface PlayerTurnArgs {
      *  its own id). NAMES ONLY — never folded. Defaults to [] (the DPS assumption).
      *  Sourced by the engine via triggers.ownerDebuffNamesFor. */
     selfDebuffNames?: string[];
+    /** How many debuffs THIS actor carries, its DoT entries included (`actorDebuffCount`) — the
+     *  count a `self-debuff` gate without a name reads. Absent (DPS/standalone callers) → the
+     *  count of `selfDebuffNames`. */
+    selfDebuffCount?: number;
     /** Stasis direct-damage break hook. When supplied, fires AFTER scheduled
      *  debuffs are applied (sourceFired) but BEFORE the ability timed-debuff loop, so the break
      *  correctly precedes any Stasis re-application from the same attack's debuff abilities.
@@ -1808,6 +1813,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // No default — undefined is the DPS-parity sentinel (see PlayerTurnArgs doc).
         enemyDebuffNames: enemyDebuffNamesArg,
         selfDebuffNames: selfDebuffNamesArg = [],
+        selfDebuffCount: selfDebuffCountArg,
         healEventOnly = false,
         onHitBreakStasis,
         aoeVictimIds,
@@ -2568,6 +2574,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         debuffedEnemyCount: debuffedEnemyCountArg,
         enemyDebuffNames: enemyDebuffNamesArg,
         selfDebuffNames: selfDebuffNamesArg,
+        selfDebuffCount: selfDebuffCountArg,
         turnsTaken: actor.turnsTaken,
         // Owner-vs-target stat comparison. REQUIRED here (not just at the payload
         // hard-gate `ctx` further down) — this is the gate for TIMED ENEMY DEBUFF application
@@ -3261,6 +3268,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         debuffedEnemyCount: debuffedEnemyCountArg,
         enemyDebuffNames: enemyDebuffNamesArg,
         selfDebuffNames: selfDebuffNamesArg,
+        selfDebuffCount: selfDebuffCountArg,
         turnsTaken: actor.turnsTaken,
         // Approximates max HP with the static base stat (`actor.stats.hp`), same limitation and
         // same reasoning as preDebuffGateCtx above — this ctx is also built before
@@ -3451,6 +3459,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         debuffedEnemyCount: debuffedEnemyCountArg,
         enemyDebuffNames: enemyDebuffNamesArg,
         selfDebuffNames: selfDebuffNamesArg,
+        selfDebuffCount: selfDebuffCountArg,
         selfShielded: actor.shieldPool > 0,
         // Approximates max HP with the static base stat, same limitation as preDebuffGateCtx
         // above — but here it is a hard dependency ordering, not just "not yet
@@ -3836,6 +3845,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                       ),
                   ],
         selfDebuffNames: selfDebuffNamesArg,
+        selfDebuffCount: selfDebuffCountArg,
         // Thread the acting actor's live own-turn counter so cast-path `every-n-turns` gates
         // (on-cast/active/charged) evaluate against the real N — symmetric with the reactive
         // (end-of-turn) drain path, which already reads it via the turnsTakenFor delegate.

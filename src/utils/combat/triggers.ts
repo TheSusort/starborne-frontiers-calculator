@@ -2570,6 +2570,9 @@ export function buildActorConditionContext(
         /** Active debuff names on self. Default [] (DPS-assumption). Populated by
          *  buildDrainContext. */
         selfDebuffNames?: string[];
+        /** Debuffs on self, DoT entries included (`actorDebuffCount`). Absent → the count of
+         *  `selfDebuffNames`. Populated by buildDrainContext. */
+        selfDebuffCount?: number;
         /** Owner has the lowest Speed among its player team. Default true (lone-actor /
          *  DPS assumption). Populated by buildDrainContext. */
         isLowestSpeedAlly?: boolean;
@@ -2667,6 +2670,7 @@ export function buildActorConditionContext(
         selfHpPct: shared.selfHpPct,
         enemyBuffNames: shared.enemyBuffNames,
         selfDebuffNames: shared.selfDebuffNames,
+        selfDebuffCount: shared.selfDebuffCount,
         isLowestSpeedAlly: shared.isLowestSpeedAlly,
         selfShieldFull: shared.selfShieldFull,
         enemyShielded: shared.enemyShielded,
@@ -2889,6 +2893,7 @@ function perVictimEnemyConditions(intent: Intent): Ability['conditions'] {
 }
 
 function buildDrainContext(ctx: IntentExecContext, ownerId: string) {
+    const ownerActor = ctx.actorById?.(ownerId);
     // Owner-aware drain gate: self-buff names come from the OWNER's snapshot so each
     // owner's reactive follow-up is gated against ITS OWN active buffs + the shared enemy state.
     // `includeAbilitySelfNames` is now TRUE at drain time so the gate ALSO sees ability-sourced
@@ -2936,6 +2941,8 @@ function buildDrainContext(ctx: IntentExecContext, ownerId: string) {
             (ctx.enemyAttackerIds ?? []).filter((id) => ctx.isActorAlive?.(id) ?? true)
         ),
         selfDebuffNames: ownerDebuffNamesFor(ctx.statusEngine, ownerId),
+        // Named debuffs plus every DoT entry on the owner (R22) — absent without an actor reader.
+        ...(ownerActor ? { selfDebuffCount: actorDebuffCount(ctx.statusEngine, ownerActor) } : {}),
         // Live lowest-speed-ally gate (Chakara). Default true → DPS / no-delegate
         // paths keep the lone-actor assumption.
         isLowestSpeedAlly: ctx.isLowestSpeedAllyFor?.(ownerId) ?? true,

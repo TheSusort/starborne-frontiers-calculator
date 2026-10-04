@@ -4,6 +4,13 @@ import { EnemyBaseClass } from '../../types/calculator';
 export interface ConditionContext {
     selfBuffNames: string[];
     selfDebuffNames: string[];
+    /** How many debuffs the unit itself carries: its distinct named debuffs plus every DoT entry
+     *  on it, each stack counting as one debuff (owner ruling R22 — ruling 8 applied to self).
+     *  Read by every `self-debuff` condition WITHOUT a `buffName` ("if this Unit has no debuffs",
+     *  "for each debuff on itself", "while debuffed"); a named one keeps matching
+     *  `selfDebuffNames`. Absent → the count of `selfDebuffNames` (a caller that does not measure
+     *  the unit's DoTs, e.g. the DPS calculator, whose ship carries none). */
+    selfDebuffCount?: number;
     enemyBuffNames: string[];
     /** DISTINCT buffs on the cast's bound target — a buff held at several stacks counts once.
      *  Read by every `enemy-buff` condition WITHOUT a `buffName`, whatever its `derivable` flag
@@ -258,6 +265,7 @@ export function evaluateCondition(cond: Condition, ctx: ConditionContext): numbe
         case 'self-buff':
             return countNames(ctx.selfBuffNames, cond.buffName);
         case 'self-debuff':
+            if (!cond.buffName && ctx.selfDebuffCount !== undefined) return ctx.selfDebuffCount;
             return countNames(ctx.selfDebuffNames, cond.buffName);
         case 'enemy-buff':
             return countNames(ctx.enemyBuffNames, cond.buffName);

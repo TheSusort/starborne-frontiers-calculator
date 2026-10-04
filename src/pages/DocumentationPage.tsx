@@ -2985,6 +2985,13 @@ const DocumentationPage: React.FC = () => {
                                         death.
                                     </p>
                                     <p className="text-theme-text mb-2">
+                                        <span className="text-primary">Debuff counts:</span> A
+                                        condition that counts debuffs, on an enemy or on the ship
+                                        itself (Sustainer&apos;s &ldquo;if this Unit has no
+                                        debuffs&rdquo;, Meatshield&apos;s repair for each debuff on
+                                        itself), counts every damage-over-time stack as a debuff.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
                                         <span className="text-primary">Team Ships:</span> Pick a
                                         ship into any of the four team slots and its real skills are
                                         parsed and simulated — the same full ability editor as the

@@ -66,6 +66,9 @@ export function buildRoundContext(state: {
     enemyDebuffNames?: string[];
     /** Active debuff names on self. Default [] (DPS-assumption: no self-debuffs). */
     selfDebuffNames?: string[];
+    /** Debuffs on self, DoT entries included — `ConditionContext.selfDebuffCount`. Pass-through;
+     *  absent stays absent. */
+    selfDebuffCount?: number;
     /** Owner has the lowest Speed among its (player) team. Default true (lone-actor /
      *  DPS assumption: a single attacker is trivially the slowest). Populated live by the
      *  engine drain context (Phase 4c PR 6). */
@@ -196,6 +199,7 @@ export function buildRoundContext(state: {
         enemyType: state.enemyType,
         // DPS-assumption defaults (overridable for live-engine population)
         selfDebuffNames: state.selfDebuffNames ?? [],
+        ...(state.selfDebuffCount !== undefined ? { selfDebuffCount: state.selfDebuffCount } : {}),
         enemyBuffNames: state.enemyBuffNames ?? [],
         // Pass-through, NOT `?? 0` — see the fields' doc on the state interface above.
         adjacentAllyCount: state.adjacentAllyCount,

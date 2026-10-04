@@ -17,6 +17,9 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator: 'upon destroying' passives, Meiying's included, now need the ship's own kill.",
     'Combat simulator: Anjian, Rys, Sha Xing and Shashou passives now check every enemy hit.',
     'DPS calculator: Anjian, Rys, Sha Xing and Shashou passives now fire every turn.',
+    "Combat simulator: Sustainer's no-debuff bonuses now treat DoTs as debuffs.",
+    "Combat simulator: Meatshield's charged repair now counts DoTs on himself as debuffs.",
+    "Combat simulator: Warpstrike implant's while-debuffed bonus now counts DoTs as debuffs.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
