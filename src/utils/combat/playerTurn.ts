@@ -1601,6 +1601,16 @@ function detonate(args: {
     return result.total;
 }
 
+/** A DoT with stacks and a tier to apply. An inert one (either 0) is skipped without a roll by
+ *  `rollDotStacks` and `applyNewDoTs`. */
+const isLiveDot = (dot: DoTApplicationEntry): boolean => dot.stacks > 0 && dot.tier > 0;
+
+/** A DoT the cast rolls against its bound target: a live one not aimed at the target's neighbours
+ *  only ('adjacent-enemies' reaches them through the covered-enemy loop). `planPrimaryDots` rolls
+ *  exactly these, and the round row's `dotsLanded` is decided over them. */
+const rollsOnPrimary = (dot: DoTApplicationEntry): boolean =>
+    dot.splashTarget !== 'adjacent-enemies' && isLiveDot(dot);
+
 /**
  * Resolves DoT applications STACK BY STACK: every stack inflicted rolls its own landing (owner
  * ruling R30 — Snakeroot's "2 stacks of Corrosion" on B is two hacking-vs-security rolls, so 0, 1
@@ -1616,7 +1626,7 @@ function rollDotStacks(
 ): DoTApplicationConfig {
     const landed: DoTApplicationConfig = [];
     for (const dot of dots) {
-        if (dot.stacks <= 0 || dot.tier <= 0) continue;
+        if (!isLiveDot(dot)) continue;
         let stacks = 0;
         for (let i = 0; i < dot.stacks; i++) {
             if (landsNextStack()) stacks += 1;
@@ -1650,7 +1660,7 @@ function applyNewDoTs(args: {
     nextAppliedSeq: () => number;
 }): void {
     for (const dot of args.dotsConfig) {
-        if (dot.stacks <= 0 || dot.tier <= 0) continue;
+        if (!isLiveDot(dot)) continue;
         if (dot.type === 'corrosion') {
             args.corrosionEntries.push({
                 stacks: dot.stacks,
@@ -2889,9 +2899,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // With nothing to apply no draw is taken and `castRoll` is vacuously true, preserving the
         // all-landing fixtures where no-DoT rounds report dotsLanded:true.
         const castRoll = dots.length > 0 ? roundDebuffLanded() : true;
-        // 'adjacent-enemies' (neighbours-only) never lands on the primary — only via the covered
-        // loop.
-        const primaryDots = dots.filter((d) => d.splashTarget !== 'adjacent-enemies');
+        const primaryDots = dots.filter(rollsOnPrimary);
         let firstStackPending = true;
         const landed = rollDotStacks(
             primaryDots,
@@ -4946,7 +4954,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // the entries this cast adds below (the slice from these indices onward).
         const corrosionEntriesBefore = corrosionEntries.length;
         const infernoEntriesBefore = infernoEntries.length;
-        dotsLanded = dotsConfig.length === 0 || landedPrimaryDots.length > 0;
+        // Over the DoTs rolled against the primary only: one aimed at its neighbours, or inert,
+        // was never resisted here.
+        dotsLanded = !dotsConfig.some(rollsOnPrimary) || landedPrimaryDots.length > 0;
         if (landedPrimaryDots.length > 0) reportedDots = landedPrimaryDots;
         applyNewDoTs({
             dotsConfig: landedPrimaryDots,

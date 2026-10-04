@@ -1797,10 +1797,10 @@ export interface EnemyRoundEffects {
      *  De-duped by buffName WITHIN this enemy. NAMES ONLY for display — never folded into any sim
      *  value. Empty when every attempted debuff landed (or the enemy attempted none). */
     resistedDebuffs: ActiveBuff[];
-    /** DoTs this enemy attacker ATTEMPTED to inflict on the heal target this round but that were
-     *  RESISTED by the live hacking-vs-security landing roll (the whole turn's DoTs share one draw).
-     *  Summed per type+tier like `dots`. NAMES/COUNTS ONLY for display — never folded into any sim
-     *  value. Empty when the turn's DoTs landed (or the enemy attempted none). */
+    /** DoTs this enemy attacker ATTEMPTED to inflict on the heal target this round when no stack
+     *  of them landed (each stack rolls its own landing; a stack resisted beside a landed one shows
+     *  only in the combat log). Summed per type+tier like `dots`. NAMES/COUNTS ONLY for display —
+     *  never folded into any sim value. Empty when a stack landed (or the enemy attempted none). */
     resistedDots: EnemyDoTState[];
 }
 
