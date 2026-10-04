@@ -414,9 +414,9 @@ describe('extraActions', () => {
         //
         // Bus tap: collect buff-expired events for "Attack Up" on 'attacker'.
         // With the own-turn reprieve, a 1-turn self-buff applied during the carrier's own
-        // turn survives through the carrier's NEXT turn; both the normal-turn and extra-turn
-        // applications are reprieved, so the buff no longer expires twice within a round.
-        // The reprieved window still elapses, yielding exactly one expiry per round.
+        // turn survives through the carrier's NEXT turn, where the re-gain (reprieve pending)
+        // replaces the held copy (reprieve spent). Re-gained on every turn, normal and extra
+        // alike, it never expires.
         const busWithExtra = createEventBus();
         const expiryRounds: number[] = [];
         busWithExtra.on('buff-expired', (e) => {
@@ -435,9 +435,8 @@ describe('extraActions', () => {
             expect(round.totalRoundDamage).toBe(40000);
             expect(round.extraTurns).toBe(1);
         }
-        // Assertion 2 — the reprieved 1-turn self-buff still expires exactly once per
-        // round (one per round across all 3 rounds), confirming the extra-action
-        // interaction does not leak/accumulate stale buffs despite double application.
-        expect(expiryRounds).toEqual([1, 2, 3]);
+        // Assertion 2 — the double application never stacks the buff (the damage above is
+        // exactly 2 × buffed) and never lets it lapse.
+        expect(expiryRounds).toEqual([]);
     });
 });

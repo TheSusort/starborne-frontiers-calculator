@@ -91,26 +91,36 @@ describe('hit-counted Barrier — status layer', () => {
 // =============================================================================
 // The family rule vs the Infinity encoding — RECORDED, NOT ENDORSED.
 //
-// `familyApplicationWins` compares `duration > existing.turnsRemaining`. Encoding "no turn window"
-// as Infinity therefore has three consequences for a name that carries BOTH kinds of grant in the
-// corpus (Panon has a turn-duration Barrier and a hit-counted one). All three are pinned below as
-// they ACTUALLY BEHAVE, so a future change to the family rule or to the encoding shows up as a test
-// diff rather than a silent behaviour change. None of the three is claimed to be the desired game
-// behaviour — the owner has not ruled on it, and the family rule is deliberately left alone.
+// `familyApplicationWins` keeps whichever same-tier copy lasts longer in TURNS, and only on a turn
+// tie compares hit counts. Encoding "no turn window" as Infinity therefore has these consequences
+// for a name that carries BOTH kinds of grant in the corpus (Panon has a turn-duration Barrier and a
+// hit-counted one). All are pinned below as they ACTUALLY BEHAVE, so a future change to the family
+// rule or to the encoding shows up as a test diff rather than a silent behaviour change. The
+// turn-vs-hit cases are not claimed to be the desired game behaviour — the owner has not ruled on
+// them.
 // =============================================================================
 
 describe('hit-counted Barrier vs the buff-family rule (known Infinity-encoding consequences)', () => {
-    it('cannot be refreshed while active — Infinity > Infinity is false, so the charge count is NOT topped up', () => {
+    it('a richer re-grant while active tops the charge count up (an equal-tier re-application refreshes)', () => {
         const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
         eng.beginRound(1);
         eng.applyTimedAbilityStatus(1, timedBarrier({ hits: 2 }), 'a1');
         // A second, RICHER grant (5 charges) while the first is still up.
         eng.applyTimedAbilityStatus(1, timedBarrier({ hits: 5 }), 'a1');
 
-        // Still the original 2 charges, not 5: the second application was family-blocked.
-        expect(eng.consumeStatusHit('a1', 'Barrier')).toBe(false);
+        for (let i = 0; i < 4; i++) expect(eng.consumeStatusHit('a1', 'Barrier')).toBe(false);
         expect(eng.consumeStatusHit('a1', 'Barrier')).toBe(true);
         expect(barrierNames(eng, 'a1')).not.toContain('Barrier');
+    });
+
+    it('a poorer re-grant while active never shortens the charge count', () => {
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        eng.beginRound(1);
+        eng.applyTimedAbilityStatus(1, timedBarrier({ hits: 2 }), 'a4');
+        eng.applyTimedAbilityStatus(1, timedBarrier({ hits: 1 }), 'a4');
+
+        expect(eng.consumeStatusHit('a4', 'Barrier')).toBe(false);
+        expect(eng.consumeStatusHit('a4', 'Barrier')).toBe(true);
     });
 
     it('always replaces an active turn-duration Barrier, discarding its remaining turns', () => {

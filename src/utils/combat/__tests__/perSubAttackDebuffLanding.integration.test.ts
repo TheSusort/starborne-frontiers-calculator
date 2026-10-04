@@ -119,7 +119,8 @@ const damageClause = (hits: number): Ability =>
 const debuffClause = (
     buffName: string,
     parsedEffects: Record<string, number>,
-    abTarget: Ability['target'] = 'enemy'
+    abTarget: Ability['target'] = 'enemy',
+    isStackable = true
 ): Ability =>
     ab({
         type: 'debuff',
@@ -129,7 +130,7 @@ const debuffClause = (
             buffName,
             parsedEffects,
             stacks: 1,
-            isStackable: true,
+            isStackable,
             maxStacks: 20,
             duration: 3,
             application: 'inflict',
@@ -425,7 +426,7 @@ const firstNamedVictims = (
 };
 
 const EXPOSED = () => debuffClause('Exposed', {});
-const INC_UP = () => debuffClause('Inc. Damage Up', { incomingDamage: 50 });
+const INC_UP = () => debuffClause('Inc. Damage Up', { incomingDamage: 50 }, 'enemy', false);
 
 describe('PR8 Task 3 — runPlayerTurn exposes a per-sub-attack landing applier', () => {
     afterEach(() => resetRateGateRng());
@@ -492,9 +493,9 @@ describe('PR8 — cross-sub-attack visibility (the user-locked rule: later hits 
         // percentage points, `parsedEffects.incomingDamage`) is never consumed, so DERIVATION:
         //   sub-attack 0: plain 10,000, then lands the debuff
         //   sub-attack 1: 10,000 x (1 + 50%) = 15,000
-        //   sub-attack 2: 15,000 as well — MEASURED, and deliberately not 20,000: re-applying the
-        //     same buffName REFRESHES the timed payload rather than adding a second stack, so the
-        //     amplification does not climb. The discriminator is that BOTH later sub-attacks are
+        //   sub-attack 2: 15,000 as well, not 20,000: re-applying a non-stackable status
+        //     REFRESHES the timed payload rather than adding a second stack, so the amplification
+        //     does not climb. The discriminator is that BOTH later sub-attacks are
         //     amplified while a per-cast landing leaves all three at the control's flat 10,000.
         // KILLED BY: the same three mutations as the test above.
         expect(

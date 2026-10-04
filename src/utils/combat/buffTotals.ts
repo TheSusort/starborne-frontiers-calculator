@@ -168,7 +168,8 @@ export function incomingHealFactor(pct: number): number {
 //
 // ONE RULE, NOT TWO (spec §6, and #389's review). The comparison below is
 // `statusEngine.familyChallengerWins` — the SAME predicate the engine's own within-store upsert
-// uses: TIER first, tie-break second. The tie-break axis is the only thing that differs, and it
+// uses: TIER first, tie-break second (the upsert additionally lets an exact lifetime tie refresh,
+// since a re-application replaces the held copy). The tie-break axis is what differs, and it
 // has to: across the boundary there is no shared duration to compare on, so magnitude stands in
 // for it. Comparing magnitude ALONE (which is what shipped first) is a genuinely different rule
 // and diverges wherever stacks or duplicates invert the tier order — self `Attack Down I` at four

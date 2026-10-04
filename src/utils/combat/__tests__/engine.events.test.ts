@@ -423,12 +423,11 @@ describe('owner Post-Turn buff-expired windows (same-turn decrement rule)', () =
         expect(e).toMatchObject({ actorId: 'attacker', round: 3, buffName: 'Attack Up' });
     });
 
-    it('duration-1 self-buff re-applied every round expires every other round (own-turn reprieve)', () => {
+    it('duration-1 self-buff re-applied every round never expires (each re-gain refreshes it)', () => {
         // Active source, 1-turn duration, fires every (active) round. A 1-turn self-buff applied
         // during the carrier's OWN turn gets a one-turn reprieve, so it survives through the
-        // carrier's NEXT turn before expiring. Re-application refreshes the window: round-1
-        // application expires at round 2 (and is re-applied that same round), round-2 re-application
-        // expires at round 4, etc. → expiries land on every OTHER round.
+        // carrier's NEXT turn. There it is re-gained: the fresh copy (reprieve pending) outlasts the
+        // held one (reprieve spent), so it replaces it and the buff is never missing.
         const buff: SelectedGameBuff = {
             id: 's1',
             buffName: 'Attack Up',
@@ -439,7 +438,7 @@ describe('owner Post-Turn buff-expired windows (same-turn decrement rule)', () =
             skillDuration: 1,
         };
         const numRounds = 4;
-        const { events } = collect(
+        const { events, result } = collect(
             baseInput({
                 shipSkills: plainSkills(),
                 selfBuffs: [buff],
@@ -451,9 +450,11 @@ describe('owner Post-Turn buff-expired windows (same-turn decrement rule)', () =
         const expiredRounds = events
             .filter((e) => e.type === 'buff-expired')
             .map((e) => (e.type === 'buff-expired' ? e.round : 0));
-        // With the own-turn reprieve, expiries land on every other round (the round-1
-        // application expires round 2 and re-arms, round-2 re-application expires round 4).
-        expect(expiredRounds).toEqual([2, 4]);
+        expect(expiredRounds).toEqual([]);
+        // Non-vacuous: the buff is held in every round.
+        expect(
+            result.rounds.map((r) => r.activeSelfBuffs.some((b) => b.buffName === 'Attack Up'))
+        ).toEqual(Array(numRounds).fill(true));
     });
 
     // A 2-turn enemy debuff, applied once in round 1, observed via the buff-expired round it

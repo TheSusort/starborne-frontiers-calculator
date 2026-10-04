@@ -948,12 +948,23 @@ describe('enemy attacker kit application (runPlayerTurn walk)', () => {
                     {
                         id: 'e1',
                         stats: { attack: 1000, crit: 0, critDamage: 0, speed: 10 },
-                        chargeCount: 0,
-                        startCharged: false,
+                        // Charged on round 1 only: a self-buff re-gained every turn is refreshed
+                        // by each re-gain and never expires, so the grant is one-shot.
+                        chargeCount: 10,
+                        startCharged: true,
                         shipSkills: {
                             slots: [
                                 {
                                     slot: 'active',
+                                    abilities: [
+                                        enemyAb({
+                                            type: 'damage',
+                                            config: { type: 'damage', multiplier: 100 },
+                                        }),
+                                    ],
+                                },
+                                {
+                                    slot: 'charged',
                                     abilities: [
                                         enemyAb({
                                             type: 'damage',

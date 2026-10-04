@@ -4,7 +4,6 @@ exports[`kit fingerprints > AEGIS 1`] = `
 {
   "plain": [
     "buff",
-    "buff-expired",
     "buff:active",
     "charge-changed",
     "shield",
@@ -12,7 +11,6 @@ exports[`kit fingerprints > AEGIS 1`] = `
   ],
   "richEnemy": [
     "buff",
-    "buff-expired",
     "buff:active",
     "charge-changed",
     "shield",
@@ -29,7 +27,6 @@ exports[`kit fingerprints > AEGIS 1`] = `
   ],
   "wounded": [
     "buff",
-    "buff-expired",
     "buff:active",
     "charge-changed",
     "shield",
@@ -214,7 +211,6 @@ exports[`kit fingerprints > Asphodel 1`] = `
   "plain": [
     "attack",
     "buff",
-    "buff-expired",
     "buff:active",
     "charge-changed",
     "debuff",
@@ -223,7 +219,6 @@ exports[`kit fingerprints > Asphodel 1`] = `
   "richEnemy": [
     "attack",
     "buff",
-    "buff-expired",
     "buff:active",
     "charge-changed",
     "debuff",
@@ -232,7 +227,6 @@ exports[`kit fingerprints > Asphodel 1`] = `
   "wounded": [
     "attack",
     "buff",
-    "buff-expired",
     "buff:active",
     "charge-changed",
     "debuff",
@@ -4342,7 +4336,6 @@ exports[`kit fingerprints > Yuyan 1`] = `
   "plain": [
     "attack",
     "buff",
-    "buff-expired",
     "charge-changed",
     "control:active",
     "control:charged",
@@ -4351,7 +4344,6 @@ exports[`kit fingerprints > Yuyan 1`] = `
   "richEnemy": [
     "attack",
     "buff",
-    "buff-expired",
     "charge-changed",
     "control:active",
     "control:charged",
@@ -4360,7 +4352,6 @@ exports[`kit fingerprints > Yuyan 1`] = `
   "wounded": [
     "attack",
     "buff",
-    "buff-expired",
     "charge-changed",
     "control:active",
     "control:charged",

@@ -46,6 +46,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: cleanses now remove the most recent debuff first.',
     "Combat simulator: Heliodor's and Pestilence's duration cuts now shorten damage-over-time effects.",
     'Combat simulator: Warpstrike now shortens a random debuff, including damage-over-time stacks.',
+    "Combat simulator: buffs re-gained every turn, like Wusheng's Stealth, no longer lapse.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

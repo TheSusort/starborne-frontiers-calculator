@@ -63,14 +63,20 @@ const damageSkills = (): ShipSkills => ({
 });
 
 /**
- * Minimal active-slot skill that deals damage AND applies a 1-turn self-buff.
- * Duration 1: applied in the firing round, decremented to 0 at the same Post Turn,
- * expires the same round it was applied (same-turn decrement rule).
+ * A charged skill that deals damage AND applies an N-turn self-buff, beside a damage-only active.
+ * Run with `ONE_SHOT_CHARGE` the charged skill fires on round 1 only: a buff re-gained every turn
+ * is refreshed by each re-gain and never expires, so a one-shot grant is what makes its expiry
+ * observable. Applied on the carrier's own turn, a 1-turn buff takes the own-turn reprieve and
+ * expires at the round-2 Post Turn.
  */
 const selfBuffSkills = (buffName: string, duration: number): ShipSkills => ({
     slots: [
         {
             slot: 'active',
+            abilities: [ab({ type: 'damage', config: { type: 'damage', multiplier: 100 } })],
+        },
+        {
+            slot: 'charged',
             abilities: [
                 ab({ type: 'damage', config: { type: 'damage', multiplier: 100 } }),
                 ab({
@@ -117,6 +123,9 @@ const debuffEnemySkills = (buffName: string, duration: number): ShipSkills => ({
 type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 
 /** Collect all CombatEvents from a runCombat call. */
+/** Charged on round 1, never again within the run. */
+const ONE_SHOT_CHARGE = { chargeCount: 10, startCharged: true, hasChargedSkill: true } as const;
+
 const collect = (input: CombatEngineInput): CombatEvent[] => {
     idCounter = 0; // Resets before each run so ability ids are deterministic within this call; the module-level counter can safely accumulate across tests.
     const bus = createEventBus();
@@ -307,18 +316,18 @@ describe('Case 2 — invariant: dummy enemy self store is always empty (no buff-
 describe('Case 3 — heal-target self-buff + enemy debuff both expire attributed to "attacker"', () => {
     /**
      * The focus 'attacker' is the heal target (healTargetId: 'attacker').
-     * Its active skill grants itself a 1-turn self-buff ('Attack Up', duration 1).
+     * Its round-1 charged skill grants itself a 1-turn self-buff ('Attack Up', duration 1).
      * An enemy attacker (speed 10 → acts AFTER the focus at 100) inflicts a 1-turn
      * debuff ('Def Down', duration 1) on the heal target via an ability.
      *
-     * Turn order in round 1: focus (speed 100) fires first — applies self-buff, then
-     * Post Turn: decrementPlayer('attacker') → self-buff expires ROUND 1.
+     * Turn order in round 1: focus (speed 100) fires first — applies self-buff, which takes the
+     * own-turn reprieve and expires at its round-2 Post Turn (decrementPlayer('attacker')).
      * Then the enemy attacker (speed 10) fires — inflicts 'Def Down' on heal-target's
      * per-target store (enemyMaps['attacker']). The focus already did its Post Turn this
      * round; the first decrement is ROUND 2 when the focus fires again.
      *
      * Expected:
-     *  - 'Attack Up' buff-expired on 'attacker', round 1 (decrementPlayer path)
+     *  - 'Attack Up' buff-expired on 'attacker' (decrementPlayer path)
      *  - 'Def Down'  buff-expired on 'attacker', round 2 (decrementEnemy path)
      *
      * Both attributed to 'attacker' — locks Branch 3 (attacker Post Turn: both calls).
@@ -346,6 +355,7 @@ describe('Case 3 — heal-target self-buff + enemy debuff both expire attributed
         const events = collect(
             healBase({
                 shipSkills: selfBuffSkills('Attack Up', 1),
+                ...ONE_SHOT_CHARGE,
                 hp: 1_000_000,
                 numRounds: 3,
                 enemyAttackers: [ea1Damage()],
@@ -363,6 +373,7 @@ describe('Case 3 — heal-target self-buff + enemy debuff both expire attributed
         const events = collect(
             healBase({
                 shipSkills: selfBuffSkills('Attack Up', 1),
+                ...ONE_SHOT_CHARGE,
                 hp: 1_000_000,
                 numRounds: 3,
                 enemyAttackers: [ea1Debuff()],
@@ -378,10 +389,11 @@ describe('Case 3 — heal-target self-buff + enemy debuff both expire attributed
         expect(debuffApplied[0].targetId).toBe('attacker');
     });
 
-    it('self-buff "Attack Up" expires round 1 attributed to "attacker" (decrementPlayer path)', () => {
+    it('self-buff "Attack Up" expires attributed to "attacker" (decrementPlayer path)', () => {
         const events = collect(
             healBase({
                 shipSkills: selfBuffSkills('Attack Up', 1),
+                ...ONE_SHOT_CHARGE,
                 hp: 1_000_000,
                 numRounds: 3,
                 enemyAttackers: [ea1Debuff()],
@@ -391,9 +403,7 @@ describe('Case 3 — heal-target self-buff + enemy debuff both expire attributed
             (e): e is Extract<CombatEvent, { type: 'buff-expired' }> =>
                 e.type === 'buff-expired' && e.buffName === 'Attack Up'
         );
-        // The 1-turn self-buff expires on round 1 (same-turn decrement rule: applied in the
-        // active round, decremented at that same Post Turn → expires round 1). Fires every
-        // round (re-applied each active turn), but we assert at least round 1 is present.
+        // The one-shot 1-turn self-buff expires (round 2, after its own-turn reprieve).
         expect(selfExpired.length).toBeGreaterThan(0);
         // Lock: self-buff expiry is attributed to 'attacker', not 'enemy'.
         for (const e of selfExpired) {
@@ -405,6 +415,7 @@ describe('Case 3 — heal-target self-buff + enemy debuff both expire attributed
         const events = collect(
             healBase({
                 shipSkills: selfBuffSkills('Attack Up', 1),
+                ...ONE_SHOT_CHARGE,
                 hp: 1_000_000,
                 numRounds: 3,
                 enemyAttackers: [ea1Debuff()],
