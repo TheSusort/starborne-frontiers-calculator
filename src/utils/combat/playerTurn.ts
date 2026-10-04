@@ -1,6 +1,6 @@
 import { calculateDamageReduction } from '../autogear/priorityScore';
 import { evaluateCondition, scaledBonus, conditionsMet } from '../abilities/evaluateConditions';
-import { buildRoundContext, dotFamilyCounts } from '../abilities/roundContext';
+import { buildRoundContext, dotReadings } from '../abilities/roundContext';
 import { isEnemyTarget, type EnemySelectorKind } from '../abilities/abilityTargetSide';
 import {
     DoTApplicationConfig,
@@ -43,6 +43,7 @@ import {
     PendingAccumulator,
     PendingBomb,
     CombatActor,
+    DoTContainers,
     advanceChargeCadence,
 } from './state';
 import {
@@ -926,7 +927,7 @@ export interface PlayerTurnArgs {
      *  its own id). NAMES ONLY — never folded. Defaults to [] (the DPS assumption).
      *  Sourced by the engine via triggers.ownerDebuffNamesFor. */
     selfDebuffNames?: string[];
-    /** How many debuffs THIS actor carries, its DoT entries included (`actorDebuffCount`) — the
+    /** How many debuffs THIS actor carries, its DoT stacks included (`actorDebuffCount`) — the
      *  count a `self-debuff` gate without a name reads. Absent (DPS/standalone callers) → the
      *  count of `selfDebuffNames`. */
     selfDebuffCount?: number;
@@ -1837,6 +1838,14 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         chargedPattern,
         sameSideLiving,
     } = args;
+    // The bound target's DoT containers. Arrays mutate in place over the turn, so each context
+    // below reads `dotReadings(boundTargetDoTs)` at its own point in the turn.
+    const boundTargetDoTs: DoTContainers = {
+        corrosionEntries,
+        infernoEntries,
+        pendingBombs,
+        genericDoTEntries,
+    };
     // The bound target's role class for every `enemy-type` gate and role-scaled bonus asked of
     // this turn ("if the target is a defender", "when attacking a supporter") — the struck enemy's
     // own role (owner ruling 4). The fight-wide class answers only where the target carries no
@@ -2554,7 +2563,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // "N or more debuffs" on an enemy counts every debuff on THAT enemy: its own per-target
     // statuses, unioned by name with the scheduled channel (in the DPS calculator, the debuffs
     // the user configured on its one enemy; empty in battle), plus — inside buildRoundContext —
-    // its DoT entries. A caller with no reading for the enemy counts the scheduled channel alone.
+    // its DoT stacks (`dotReadings`). A caller with no reading for the enemy counts the scheduled
+    // channel alone.
     const scheduledLandedNames = scheduledEnemy.landedEnemyDebuffs.map((b) => b.buffName);
     const landedDebuffCountOn = (reading: RecipientGateReading | undefined): number =>
         reading === undefined
@@ -2565,15 +2575,11 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         ...liveCountCtx,
         selfBuffNames: [...scheduledSelfBuffNames, ...priorAbilitySelfNames],
         landedEnemyDebuffCount: landedDebuffCountOn(targetGateReading),
-        corrosionEntryCount: corrosionEntries.length,
-        infernoEntryCount: infernoEntries.length,
-        bombCount: pendingBombs.length,
-        genericCount: genericDoTEntries.length,
-        enemyDotFamilyCounts: dotFamilyCounts(corrosionEntries, infernoEntries, genericDoTEntries),
+        ...dotReadings(boundTargetDoTs),
         effectiveCritRate: cappedCrit(critBuffForGates),
         enemyType,
         enemyHpPct,
-        // The entry counts above are all 0 on a no-victim turn (see the `corrosionEntries
+        // The DoT counts above are all 0 on a no-victim turn (see the `corrosionEntries
         // = []` default note at this function's destructure), which is ALSO what a real victim
         // with no debuffs/DoTs looks like — the sum alone cannot tell the two apart. `hasVictim`
         // is the same discriminator every other victim-derived field in this ctx already uses
@@ -2670,15 +2676,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 buildRoundContext({
                     ...preDebuffGateInput,
                     landedEnemyDebuffCount: landedDebuffCountOn(reading),
-                    corrosionEntryCount: v.corrosionEntries.length,
-                    infernoEntryCount: v.infernoEntries.length,
-                    bombCount: v.pendingBombs.length,
-                    genericCount: v.genericDoTEntries.length,
-                    enemyDotFamilyCounts: dotFamilyCounts(
-                        v.corrosionEntries,
-                        v.infernoEntries,
-                        v.genericDoTEntries
-                    ),
+                    ...dotReadings(v),
                     // Same derivation as `enemyHpPct` above.
                     enemyHpPct:
                         vHp > 0 ? Math.max(0, 100 * (1 - Math.max(0, vHp - v.currentHp) / vHp)) : 0,
@@ -3192,15 +3190,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         let c = foreignCtxMemo.get(casterId);
         if (!c) {
             c = buildActorConditionContext(statusEngine, casterId, {
-                corrosionEntryCount: corrosionEntries.length,
-                infernoEntryCount: infernoEntries.length,
-                bombCount: pendingBombs.length,
-                genericCount: genericDoTEntries.length,
-                enemyDotFamilyCounts: dotFamilyCounts(
-                    corrosionEntries,
-                    infernoEntries,
-                    genericDoTEntries
-                ),
+                ...dotReadings(boundTargetDoTs),
                 enemyType,
                 enemyHpPct,
                 // Include the foreign caster's ability-sourced self statuses (e.g. its self-granted
@@ -3290,11 +3280,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         ...liveCountCtx,
         selfBuffNames: [...scheduledSelfBuffNames, ...priorAbilitySelfNames],
         landedEnemyDebuffCount: landedEnemyDebuffs.length,
-        corrosionEntryCount: corrosionEntries.length,
-        infernoEntryCount: infernoEntries.length,
-        bombCount: pendingBombs.length,
-        genericCount: genericDoTEntries.length,
-        enemyDotFamilyCounts: dotFamilyCounts(corrosionEntries, infernoEntries, genericDoTEntries),
+        ...dotReadings(boundTargetDoTs),
         effectiveCritRate: cappedCrit(critBuffForGates),
         enemyType,
         enemyHpPct,
@@ -3481,11 +3467,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         ...liveCountCtx,
         selfBuffNames: activeSelfBuffNames,
         landedEnemyDebuffCount: landedEnemyDebuffs.length,
-        corrosionEntryCount: corrosionEntries.length,
-        infernoEntryCount: infernoEntries.length,
-        bombCount: pendingBombs.length,
-        genericCount: genericDoTEntries.length,
-        enemyDotFamilyCounts: dotFamilyCounts(corrosionEntries, infernoEntries, genericDoTEntries),
+        ...dotReadings(boundTargetDoTs),
         effectiveCritRate: cappedCrit(critBuffForGates),
         enemyType,
         enemyHpPct,
@@ -3849,11 +3831,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         ...liveCountCtx,
         selfBuffNames: activeSelfBuffNames,
         landedEnemyDebuffCount: landedEnemyDebuffs.length,
-        corrosionEntryCount: corrosionEntries.length,
-        infernoEntryCount: infernoEntries.length,
-        bombCount: pendingBombs.length,
-        genericCount: genericDoTEntries.length,
-        enemyDotFamilyCounts: dotFamilyCounts(corrosionEntries, infernoEntries, genericDoTEntries),
+        ...dotReadings(boundTargetDoTs),
         effectiveCritRate: effectiveCrit,
         enemyType,
         roundCrit,

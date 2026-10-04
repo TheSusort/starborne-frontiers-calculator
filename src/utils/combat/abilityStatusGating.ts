@@ -47,9 +47,9 @@ const LIVE_SUBJECTS: ReadonlySet<ConditionSubject> = new Set([
     // trigger (a passive-sourced timed self-buff can otherwise only be seeded once at combat
     // start, before any cast has happened — see seedPassiveTimedStatuses).
     'enemies-hit-this-cast',
-    // Per-target DoT-only entry count is live-derivable — buildRoundContext derives
-    // ConditionContext.enemyDotCount from the SAME corrosionEntryCount/infernoEntryCount/
-    // bombCount already threaded through preDebuffGateCtx/postDebuffGateCtx (populated at cast
+    // Per-target DoT-only stack count is live-derivable — buildRoundContext derives
+    // ConditionContext.enemyDotCount from the SAME DoT stack counts (`dotReadings`) already
+    // threaded through preDebuffGateCtx/postDebuffGateCtx (populated at cast
     // time by playerTurn.ts's ctx builders, and at reactive drain time by
     // buildDrainContext/buildActorConditionContext). Needed here for Anemone's Taunt (a timed
     // SELF-buff gated on "3+ Damage over Time effects on the primary enemy") and Belladonna's

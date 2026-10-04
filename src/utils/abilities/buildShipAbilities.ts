@@ -1745,12 +1745,12 @@ function abilitiesFromText(
     }
 
     // SP-D (Task 4/PR-D3): "deals X% damage for every N stacks of damage over time inflicted
-    // on[to] a single enemy" (Snakeroot p1/p2) — an OPEN-ENDED per-DoT-entry SCALING multiplier.
+    // on[to] a single enemy" (Snakeroot p1/p2) — an OPEN-ENDED per-DoT-stack SCALING multiplier.
     // Unlike the enemy-effect BONUS above (a flat, capped add-on to a standing base), the WHOLE
-    // X% here IS the per-N-entries rate, so the base multiplier this row's <unit-damage> tag
+    // X% here IS the per-N-stacks rate, so the base multiplier this row's <unit-damage> tag
     // parsed into `mult` must be zeroed and replaced entirely by the scaling bonus (0 tracked
-    // DoT entries → 0% damage). Attaches a bare `enemy-dot-count` condition (Task 3) as the
-    // scaling source — bare so `evaluateCondition` returns the raw entry count, not a
+    // DoT stacks → 0% damage). Attaches a bare `enemy-dot-count` condition (Task 3) as the
+    // scaling source — bare so `evaluateCondition` returns the raw stack count, not a
     // threshold-gated 0/1 (see docs/model-completeness-triage… SP-D). Only when no scaling was
     // attached above (mirrors the other conditional-scaling attach points' precedence).
     if (

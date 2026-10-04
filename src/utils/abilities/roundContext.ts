@@ -1,32 +1,52 @@
 import { EnemyBaseClass } from '../../types/calculator';
-import type { ActiveDoTStack } from '../combat/state';
+import { dotStackCount, type ActiveDoTStack, type DoTContainers } from '../combat/state';
 import { ConditionContext } from './evaluateConditions';
 
 /**
- * SP-E — sums live DoT entries by their `family` tag (e.g. Belladonna's named "Acidic
- * Decay" gate). Untagged entries — every DoT stack in the game today, since only E4's
- * Corrosion→Acidic-Decay conversion sets `family` — contribute to no named family, so this
- * returns `{}` for every existing ship. That keeps `enemyDotFamilyCounts` (and therefore any
- * `enemy-dot-count` named-family gate) DPS-byte-identical until a family-tagged stack actually
- * exists at runtime.
+ * SP-E — sums live DoT stacks by their entry's `family` tag (Belladonna's named "Acidic Decay"
+ * gate), each stack counting one (`dotStackCount`). Untagged entries — every DoT outside
+ * Belladonna's Corrosion→Acidic-Decay conversion — contribute to no named family.
  */
 export function dotFamilyCounts(
-    corrosion: ActiveDoTStack[],
-    inferno: ActiveDoTStack[],
-    generic: ActiveDoTStack[]
+    corrosion: readonly ActiveDoTStack[],
+    inferno: readonly ActiveDoTStack[],
+    generic: readonly ActiveDoTStack[]
 ): Record<string, number> {
     const out: Record<string, number> = {};
     for (const e of [...corrosion, ...inferno, ...generic]) {
-        if (e.family) out[e.family] = (out[e.family] ?? 0) + 1;
+        if (e.family) out[e.family] = (out[e.family] ?? 0) + dotStackCount([e]);
     }
     return out;
+}
+
+/** The DoT readings {@link buildRoundContext} takes, read off ONE unit's DoT containers — the
+ *  unit whose debuffs the context's `enemy-debuff` / `enemy-dot-count` subjects ask about. Each is a
+ *  count of stacks (`dotStackCount`). */
+export function dotReadings(holder: DoTContainers): {
+    corrosionStacks: number;
+    infernoStacks: number;
+    bombStacks: number;
+    genericStacks: number;
+    enemyDotFamilyCounts: Record<string, number>;
+} {
+    const generic = holder.genericDoTEntries ?? [];
+    return {
+        corrosionStacks: dotStackCount(holder.corrosionEntries),
+        infernoStacks: dotStackCount(holder.infernoEntries),
+        bombStacks: dotStackCount(holder.pendingBombs),
+        genericStacks: dotStackCount(generic),
+        enemyDotFamilyCounts: dotFamilyCounts(
+            holder.corrosionEntries,
+            holder.infernoEntries,
+            generic
+        ),
+    };
 }
 
 /**
  * Assemble a {@link ConditionContext} from per-round DPS-sim state.
  *
- * `enemyDebuffCount` uses ENTRY-ARRAY LENGTHS (active DoT entries / pending bombs),
- * NOT total stacks — matching the inline conditional/charge logic it replaces.
+ * `enemyDebuffCount` adds the DoT stack counts (see `dotReadings`) to the landed named debuffs.
  * The remaining fields are DPS-assumption defaults: self HP is fixed at 100 (the sim
  * never takes damage); enemy HP is caller-derived (`enemyHpPct`, passed through as-is with
  * no default — SP-4d: absent means no enemy/victim reading exists this round);
@@ -35,9 +55,10 @@ export function dotFamilyCounts(
 export function buildRoundContext(state: {
     selfBuffNames: string[];
     landedEnemyDebuffCount: number;
-    corrosionEntryCount: number; // = corrosionEntries.length (active DoT entries, NOT total stacks)
-    infernoEntryCount: number; // = infernoEntries.length
-    bombCount: number; // = pendingBombs.length
+    /** Corrosion / Inferno / Bomb stacks on the unit asked about — `dotReadings`. */
+    corrosionStacks: number;
+    infernoStacks: number;
+    bombStacks: number;
     effectiveCritRate: number; // 0..100
     enemyType?: EnemyBaseClass;
     roundCrit?: boolean;
@@ -66,7 +87,7 @@ export function buildRoundContext(state: {
     enemyDebuffNames?: string[];
     /** Active debuff names on self. Default [] (DPS-assumption: no self-debuffs). */
     selfDebuffNames?: string[];
-    /** Debuffs on self, DoT entries included — `ConditionContext.selfDebuffCount`. Pass-through;
+    /** Debuffs on self, DoT stacks included — `ConditionContext.selfDebuffCount`. Pass-through;
      *  absent stays absent. */
     selfDebuffCount?: number;
     /** Owner has the lowest Speed among its (player) team. Default true (lone-actor /
@@ -129,14 +150,13 @@ export function buildRoundContext(state: {
      *  the real per-cast footprint size (0 is a real value — an empty/whiffed footprint — and is
      *  NOT re-defaulted here). See ConditionContext.enemiesHitThisCast. */
     enemiesHitThisCast?: number;
-    /** SP-D — optional per-family DoT entry count lookup (Belladonna's named "3+ Acidic Decay"
-     *  gate). Default undefined (no family tracking today — every family reads 0 via
-     *  ConditionContext.enemyDotFamilyCounts' own fallback). See ConditionContext.enemyDotFamilyCounts. */
+    /** SP-D — optional per-family DoT stack count lookup (Belladonna's named "3+ Acidic Decay"
+     *  gate; `dotFamilyCounts`). Absent → every family reads 0 via
+     *  ConditionContext.enemyDotFamilyCounts' own fallback. */
     enemyDotFamilyCounts?: Record<string, number>;
-    /** SP-E — `genericDoTEntries.length` (Voron/Orel absolute-per-tick DoT). Default 0 (no
-     *  generic DoT tracking today for any DPS caller — every existing ship reports 0). Folded
-     *  into the bare `enemyDotCount` sum alongside corrosion/inferno/bomb. */
-    genericCount?: number;
+    /** Generic (Voron/Orel absolute-per-tick) DoT stacks — `dotReadings`. Default 0. Folded into
+     *  the bare `enemyDotCount` sum alongside corrosion/inferno/bomb. */
+    genericStacks?: number;
     /** SP-F F4 — living same-team ally ship names for `ally-on-team` (team-sim only). SENTINEL:
      *  leave undefined (do NOT pass []) to keep the manual assume-met fallback (single-ship DPS).
      *  Only the live combat engine's drain context supplies a real array. */
@@ -161,9 +181,9 @@ export function buildRoundContext(state: {
      *  about (e.g. an ally-targeted cast that resolves nobody). Default `false`/omitted preserves
      *  every existing caller's behaviour unchanged (a real victim, or the DPS-assumption default).
      *
-     *  WHY THIS EXISTS: `enemyDebuffCount` and `enemyDotCount` below are SUMS of entry-array
-     *  lengths (`landedEnemyDebuffCount`, `corrosionEntryCount`, `infernoEntryCount`, `bombCount`,
-     *  `genericCount`) that this function's callers compute unconditionally and that are
+     *  WHY THIS EXISTS: `enemyDebuffCount` and `enemyDotCount` below are SUMS of counts
+     *  (`landedEnemyDebuffCount`, `corrosionStacks`, `infernoStacks`, `bombStacks`,
+     *  `genericStacks`) that this function's callers compute unconditionally and that are
      *  themselves required numbers — they read exactly `0` both when there is no opposing victim
      *  AND when there is a real victim carrying no debuffs/DoTs. Those two situations must answer
      *  differently (unresolvable vs. a real `0`), and no arithmetic on the counts alone can tell
@@ -180,21 +200,13 @@ export function buildRoundContext(state: {
     noOpposingVictim?: boolean;
 }): ConditionContext {
     const hasVictim = !state.noOpposingVictim;
+    const dotStacks =
+        state.corrosionStacks + state.infernoStacks + state.bombStacks + (state.genericStacks ?? 0);
     return {
         selfBuffNames: state.selfBuffNames,
         // SP-4d: absent (not a fabricated 0) when this round has no opposing victim — see
         // `noOpposingVictim`'s doc above for why the sum alone can't distinguish the two.
-        enemyDebuffCount: hasVictim
-            ? state.landedEnemyDebuffCount +
-              state.corrosionEntryCount +
-              state.infernoEntryCount +
-              state.bombCount +
-              // SP-E (Task E3 forward-note): now that generic DoTs become live (Voron/Orel
-              // transform), fold genericCount in here too — closes the DoT-vs-debuff asymmetry
-              // vs enemyDotCount below, which already includes it (E2). Inert (0) for every
-              // existing ship without a live generic DoT.
-              (state.genericCount ?? 0)
-            : undefined,
+        enemyDebuffCount: hasVictim ? state.landedEnemyDebuffCount + dotStacks : undefined,
         effectiveCritRate: state.effectiveCritRate,
         enemyType: state.enemyType,
         // DPS-assumption defaults (overridable for live-engine population)
@@ -225,17 +237,12 @@ export function buildRoundContext(state: {
         selfCritPower: state.selfCritPower ?? 0,
         selfSpeed: state.selfSpeed ?? 0,
         selfCurrentHp: state.selfCurrentHp ?? 0,
-        // SP-D — DoT-ONLY subtotal, derived from the SAME entry counts already folded into
-        // enemyDebuffCount above. Deliberately excludes landedEnemyDebuffCount (control/marker
-        // debuffs) — that is the whole DoT-ONLY point of this subject vs `enemy-debuff`.
+        // SP-D — DoT-ONLY subtotal, the SAME stacks already folded into enemyDebuffCount above.
+        // Deliberately excludes landedEnemyDebuffCount (control/marker debuffs) — that is the
+        // whole DoT-ONLY point of this subject vs `enemy-debuff`.
         // SP-4d: absent (not a fabricated 0) when there is no opposing victim — same reasoning as
         // enemyDebuffCount above; see `noOpposingVictim`'s doc.
-        enemyDotCount: hasVictim
-            ? state.corrosionEntryCount +
-              state.infernoEntryCount +
-              state.bombCount +
-              (state.genericCount ?? 0)
-            : undefined,
+        enemyDotCount: hasVictim ? dotStacks : undefined,
         // SP-4d: these five are NOT defaulted. An absent reading means the subject does not exist
         // (no victim resolved this turn), and evaluateConditions answers that honestly; inventing
         // `100` / `0` / `1` here is exactly the phantom the rung deletes, and it hid itself by

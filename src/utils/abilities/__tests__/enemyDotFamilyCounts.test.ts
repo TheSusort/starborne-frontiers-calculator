@@ -1,12 +1,12 @@
 /**
- * SP-E, Task E2 — `dotFamilyCounts` (the new per-family DoT-entry summarizer) and its wiring
+ * SP-E, Task E2 — `dotFamilyCounts` (the per-family DoT-stack summarizer) and its wiring
  * into `enemyDotFamilyCounts`/`enemyDotCount` via `buildRoundContext`.
  *
  * The brief's original Step-1 sketch (`buildRoundContext` trivially passes an already-built
  * `enemyDotFamilyCounts` map through) is a no-op pass-through that already worked before this
  * task — it would pass red/green vacuously, so per the task's ambiguity resolution it is NOT
  * included here. What's genuinely new in this task is (a) the `dotFamilyCounts` derivation
- * helper itself, and (b) `genericCount` folding into the bare `enemyDotCount` sum. Both are
+ * helper itself, and (b) `genericStacks` folding into the bare `enemyDotCount` sum. Both are
  * exercised below as real (non-vacuous) unit tests.
  *
  * The full engine-level integration (cheat-death unremovable-survival + a live family count)
@@ -51,13 +51,13 @@ describe('dotFamilyCounts', () => {
     });
 });
 
-describe('enemyDotFamilyCounts / genericCount via buildRoundContext', () => {
+describe('enemyDotFamilyCounts / genericStacks via buildRoundContext', () => {
     const base = {
         selfBuffNames: [],
         landedEnemyDebuffCount: 0,
-        corrosionEntryCount: 0,
-        infernoEntryCount: 0,
-        bombCount: 0,
+        corrosionStacks: 0,
+        infernoStacks: 0,
+        bombStacks: 0,
         effectiveCritRate: 0,
     };
 
@@ -69,7 +69,7 @@ describe('enemyDotFamilyCounts / genericCount via buildRoundContext', () => {
         ];
         const ctx = buildRoundContext({
             ...base,
-            corrosionEntryCount: corrosion.length,
+            corrosionStacks: corrosion.length,
             enemyDotFamilyCounts: dotFamilyCounts(corrosion, [], []),
         });
         expect(ctx.enemyDotFamilyCounts).toEqual({ 'Acidic Decay': 2 });
@@ -80,23 +80,23 @@ describe('enemyDotFamilyCounts / genericCount via buildRoundContext', () => {
         expect(ctx.enemyDotFamilyCounts).toBeUndefined();
     });
 
-    it('genericCount folds into the bare enemyDotCount sum alongside corrosion/inferno/bomb', () => {
+    it('genericStacks folds into the bare enemyDotCount sum alongside corrosion/inferno/bomb', () => {
         const ctx = buildRoundContext({
             ...base,
-            corrosionEntryCount: 1,
-            infernoEntryCount: 1,
-            bombCount: 1,
-            genericCount: 2,
+            corrosionStacks: 1,
+            infernoStacks: 1,
+            bombStacks: 1,
+            genericStacks: 2,
         });
         expect(ctx.enemyDotCount).toBe(5);
     });
 
-    it('omitting genericCount defaults it to 0 (byte-identical for every existing DPS caller)', () => {
+    it('omitting genericStacks defaults it to 0 (byte-identical for every existing DPS caller)', () => {
         const ctx = buildRoundContext({
             ...base,
-            corrosionEntryCount: 1,
-            infernoEntryCount: 1,
-            bombCount: 1,
+            corrosionStacks: 1,
+            infernoStacks: 1,
+            bombStacks: 1,
         });
         expect(ctx.enemyDotCount).toBe(3);
     });

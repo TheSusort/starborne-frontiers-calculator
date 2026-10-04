@@ -114,9 +114,9 @@ describe('#537 gated-off damage vs the direct-damage Stasis break', () => {
                         selfBuffNames: taunt ? ['Taunt'] : [],
                         selfDebuffNames: provoke ? ['Provoke'] : [],
                         landedEnemyDebuffCount: 0,
-                        corrosionEntryCount: 0,
-                        infernoEntryCount: 0,
-                        bombCount: 0,
+                        corrosionStacks: 0,
+                        infernoStacks: 0,
+                        bombStacks: 0,
                         effectiveCritRate: 0,
                     });
                     const { gatedSkill } = gateFiringAbilities(

@@ -64,6 +64,8 @@ import {
     MAX_SELECTION_TICKS,
     emptyActorDamage,
     emptyActorHealing,
+    dotStackCount,
+    carriedDotStacks,
 } from './state';
 import {
     ActiveBuff,
@@ -652,9 +654,9 @@ function seedPassiveTimedStatuses(
 ): void {
     for (const rt of runtimes) {
         const seedCtx = buildActorConditionContext(statusEngine, rt.actor.id, {
-            corrosionEntryCount: 0,
-            infernoEntryCount: 0,
-            bombCount: 0,
+            corrosionStacks: 0,
+            infernoStacks: 0,
+            bombStacks: 0,
             enemyHpPct: 100,
             enemyType, // `enemy-type` survives liveGateConditions, so omitting it would
             // wrongly skip an enemy-class-gated passive buff.
@@ -1035,10 +1037,6 @@ export function buildEnemyPlayerActorRuntime(
         enemyDebuffLookup,
     };
     return runtime;
-}
-
-function totalStacks(entries: ActiveDoTStack[]): number {
-    return entries.reduce((sum, e) => sum + e.stacks, 0);
 }
 
 /** De-dupe ActiveBuffs by buffName, keeping the first occurrence. Used to collapse the
@@ -2228,9 +2226,9 @@ function attackBreaksStasis(actor: CombatActor): boolean {
         buildRoundContext({
             selfBuffNames: [],
             landedEnemyDebuffCount: 0,
-            corrosionEntryCount: 0,
-            infernoEntryCount: 0,
-            bombCount: 0,
+            corrosionStacks: 0,
+            infernoStacks: 0,
+            bombStacks: 0,
             effectiveCritRate: 0,
             selfShielded: actor.shieldPool > 0,
         })
@@ -2917,7 +2915,7 @@ export function runCombat(rawInput: CombatEngineInput): {
     // them. They exist for exactly one reason: `executeIntent`'s `ctx.corrosionEntries` /
     // `ctx.infernoEntries` / `ctx.genericDoTEntries` / `ctx.pendingBombs`, which
     // `buildDrainContext` reads as the drain-time DoT-count condition scalars
-    // (`corrosionEntryCount` & co., triggers.ts). So the containers stay — empty, but present, so
+    // (`dotReadings`, triggers.ts). So the containers stay — empty, but present, so
     // the scalars keep answering 0 rather than crashing.
     //
     // ⚠️ OPEN RESIDUAL, not pending work: the side-biased read in `buildDrainContext` has
@@ -8007,10 +8005,10 @@ export function runCombat(rawInput: CombatEngineInput): {
             enemyDebuffNames: string[];
             enemyBuffNames: string[];
             enemyHpPct: number;
-            /** Debuffs on the victim: its distinct per-target statuses plus one per DoT entry /
-             *  pending bomb — the bound target's `enemyDebuffCount` derivation. */
+            /** Debuffs on the victim: its distinct per-target statuses plus its DoT stacks — the
+             *  bound target's `enemyDebuffCount` derivation. */
             enemyDebuffCount: number;
-            /** DoT entries / pending bombs on the victim (`enemyDotCount`'s derivation). */
+            /** DoT stacks on the victim (`carriedDotStacks`; `enemyDotCount`'s derivation). */
             enemyDotCount: number;
             /** Living units next to the victim on its own side (`enemyAdjacentCount`). */
             enemyAdjacentCount: number;
@@ -8020,11 +8018,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         ): Map<string, PreTurnVictimStatusSnapshot> =>
             new Map(
                 opposingLiving.map((v) => {
-                    const dots =
-                        v.corrosionEntries.length +
-                        v.infernoEntries.length +
-                        v.pendingBombs.length +
-                        v.genericDoTEntries.length;
+                    const dots = carriedDotStacks(v);
                     return [
                         v.id,
                         {
@@ -13284,7 +13278,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         // allies (board-neighbours positionally, all same-side allies otherwise).
         // Snapshot the qualifying spreaders BEFORE applying any spread. Applying spreads inline
         // while iterating would let an EARLIER holder's spread deposit a Corrosion stack on a
-        // LATER holder, which — read live via totalStacks below — would then chain-spread that same
+        // LATER holder, which — read live via dotStackCount below — would then chain-spread that same
         // round off a stack it only just received. That is order-dependent (it hinges on allActors
         // ordering) and breaks combat symmetry/determinism. Collecting the holders that pass every
         // guard against the fixed round-end state first, then applying from that snapshot, makes the
@@ -13308,7 +13302,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             // unspendable door. Hemlock's real charged application lands in the timed store,
             // non-expiring, by construction — see constants/toxicOverflow.ts.
             if (!holdsToxicOverflow(statusEngine, holder.id)) continue;
-            if (totalStacks(holder.corrosionEntries) < 1) continue;
+            if (dotStackCount(holder.corrosionEntries) < 1) continue;
             toxicSpreaders.push(holder);
         }
         for (const holder of toxicSpreaders) {
@@ -13560,10 +13554,10 @@ export function runCombat(rawInput: CombatEngineInput): {
             // Reporting only `enemyAttackers[0]` is explicitly rejected here.
             activeCorrosionStacks: dotCarrierActors
                 .filter(dotCarrierReports)
-                .reduce((sum, a) => sum + totalStacks(a.corrosionEntries), 0),
+                .reduce((sum, a) => sum + dotStackCount(a.corrosionEntries), 0),
             activeInfernoStacks: dotCarrierActors
                 .filter(dotCarrierReports)
-                .reduce((sum, a) => sum + totalStacks(a.infernoEntries), 0),
+                .reduce((sum, a) => sum + dotStackCount(a.infernoEntries), 0),
             activeBombCount: dotCarrierActors
                 .filter(dotCarrierReports)
                 .reduce((sum, a) => sum + a.pendingBombs.length, 0),

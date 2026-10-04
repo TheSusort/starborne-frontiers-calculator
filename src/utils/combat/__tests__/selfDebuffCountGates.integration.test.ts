@@ -1,10 +1,10 @@
 /**
- * A self debuff-COUNT gate counts the DoTs the unit carries, one per entry, alongside its named
+ * A self debuff-COUNT gate counts the DoTs the unit carries, one per stack (R26), alongside its named
  * debuffs (owner ruling R22, 2026-10-04 — ruling 8 applied to the unit itself): Sustainer
  * carrying only Corrosion has a debuff, so "At the start of the round, if this Unit has no
  * debuffs it gains Out. Damage Up III" does not fire, and neither does its charged "If this Unit
  * has no debuffs, it gains one extra action". Meatshield's charged "repairs 1.5% of its max HP for
- * each debuff on itself" counts each DoT entry. A NAME-keyed self gate (Panon's "If this Unit is
+ * each debuff on itself" counts each DoT stack. A NAME-keyed self gate (Panon's "If this Unit is
  * affected by Provoke or Taunt") is not a count and ignores DoTs.
  *
  * Real parsed kits (buildTraceShip on docs/ship-skills.csv, refit 4). DoTs are seeded on the unit
@@ -239,7 +239,7 @@ describe("Sustainer: 'if this Unit has no debuffs' counts its DoTs", () => {
     }
 });
 
-describe("Meatshield: 'repairs 1.5% for each debuff on itself' counts each DoT entry", () => {
+describe("Meatshield: 'repairs 1.5% for each debuff on itself' counts each DoT stack", () => {
     const cast = (): Cast => ({ kit: kit('Meatshield', ['charged']), charged: true });
     for (const side of [PLAYER, ENEMY]) {
         const tag = side === PLAYER ? 'player' : 'enemy-side';
@@ -272,9 +272,9 @@ describe('the self-debuff reading: a count includes DoTs, a name does not', () =
     const ctx = buildRoundContext({
         selfBuffNames: [],
         landedEnemyDebuffCount: 0,
-        corrosionEntryCount: 0,
-        infernoEntryCount: 0,
-        bombCount: 0,
+        corrosionStacks: 0,
+        infernoStacks: 0,
+        bombStacks: 0,
         effectiveCritRate: 0,
         selfDebuffNames: ['Provoke'],
         selfDebuffCount: 3,

@@ -1,5 +1,6 @@
 import { Ability, ShipSkills, Skill } from '../../types/abilities';
 import { DoTApplicationConfig, DoTType, SecondaryDamage } from '../../types/calculator';
+import { dotStackCount } from '../combat/state';
 import {
     ConditionContext,
     conditionsMet,
@@ -284,10 +285,10 @@ export function gateConditions(ability: Ability): Ability['conditions'] {
  * ORDER (the parser emits in skill-text order — the game's execution order).
  * An ability whose GATE conditions fail contributes nothing this round (dropped
  * from the returned skill); a bare scaling-source condition only scales, never
- * gates (see gateConditions). A kept `dot` ability increments an enemy-debuff
- * overlay (+1 ENTRY, matching the sim's entry-count semantics) so LATER abilities
- * in the same cast see it — "Inflicts 2 Corrosion. Deals 90% +30% per debuff"
- * resolves like the game. `ctxFor` records each ability's positional context so
+ * gates (see gateConditions). A kept `dot` ability raises an enemy-debuff
+ * overlay by its stacks (`dotStackCount`) so LATER abilities in the same cast see
+ * them — "Inflicts 2 stacks of Corrosion. Deals 90% +30% per debuff" resolves like
+ * the game. `ctxFor` records each ability's positional context so
  * scaling (scaledBonus) uses the counts as of that ability's position.
  *
  * Covers the firing-skill payload path only; modifier and extend-dot abilities
@@ -332,7 +333,7 @@ export function gateFiringAbilities(
         if (resolved !== undefined) ctxFor.set(ability.id, resolved);
         else if (!conditionsMet(gate, ctx)) continue;
         kept.push(ability);
-        if (ability.config.type === 'dot') overlay += 1;
+        if (ability.config.type === 'dot') overlay += dotStackCount([ability.config]);
     }
     return { gatedSkill: { ...skill, abilities: kept }, ctxFor };
 }
