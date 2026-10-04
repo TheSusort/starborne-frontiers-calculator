@@ -2141,7 +2141,6 @@ exports[`kit fingerprints > Meatshield 1`] = `
     "buff-expired",
     "buff:active",
     "charge-changed",
-    "dot-ticked",
     "heal",
     "heal:charged",
   ],

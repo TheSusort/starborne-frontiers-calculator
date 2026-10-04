@@ -14,7 +14,12 @@
 import type { CombatEngineInput } from '../engine';
 import type { ShipSkills } from '../../../types/abilities';
 import type { Position } from '../../../types/encounters';
-import { parsePattern, parseTarget, type ParsedPattern } from '../../targetingParser';
+import {
+    parsePattern,
+    parseTarget,
+    type ParsedPattern,
+    type ParsedTarget,
+} from '../../targetingParser';
 import { buildTraceShip } from '../../../../scripts/lib/traceShipFactory';
 import { buildShipAbilities } from '../../abilities/buildShipAbilities';
 
@@ -36,12 +41,14 @@ export interface BoardUnit {
     chargeCount?: number;
     startCharged?: boolean;
     pattern?: ParsedPattern;
+    target?: ParsedTarget;
 }
 
 export const NO_KIT: ShipSkills = { slots: [{ slot: 'active', abilities: [] }] };
 
-/** A plain 100%-damage active, single target, so a unit can be made to hit someone. */
-export const hitKit = (hits = 1): ShipSkills => ({
+/** A plain single-target damage active (`multiplier`%, `hits` hits), so a unit can be made to
+ *  hit someone. */
+export const hitKit = (multiplier = 100, hits = 1): ShipSkills => ({
     slots: [
         {
             slot: 'active',
@@ -52,7 +59,7 @@ export const hitKit = (hits = 1): ShipSkills => ({
                     target: 'enemy',
                     trigger: 'on-cast',
                     conditions: [],
-                    config: { type: 'damage', multiplier: 100, ...(hits > 1 ? { hits } : {}) },
+                    config: { type: 'damage', multiplier, ...(hits > 1 ? { hits } : {}) },
                 },
             ],
         },
@@ -77,6 +84,7 @@ export function boardInput(
     const [focus, ...focusTeam] = placement === 'player' ? [carrier, ...allies] : opponents;
     const enemies = placement === 'player' ? opponents : [carrier, ...allies];
     const pattern = (u: BoardUnit) => u.pattern ?? parsePattern('Pattern-Base');
+    const target = (u: BoardUnit) => u.target ?? parseTarget('front');
     const id = (u: BoardUnit) => (u === focus ? FOCUS_ID : u.id);
     const input: CombatEngineInput = {
         attack: focus.attack ?? 0,
@@ -102,7 +110,7 @@ export function boardInput(
         speed: focus.speed,
         mode: 'battle',
         position: focus.position,
-        target: parseTarget('front'),
+        target: target(focus),
         pattern: pattern(focus),
         teamActors: focusTeam.map((u) => ({
             id: u.id,
@@ -112,7 +120,7 @@ export function boardInput(
             selfBuffs: [],
             enemyDebuffs: [],
             position: u.position,
-            target: parseTarget('front'),
+            target: target(u),
             pattern: pattern(u),
             walk: {
                 shipSkills: u.kit,
@@ -149,7 +157,7 @@ export function boardInput(
             chargeCount: u.chargeCount ?? 0,
             startCharged: u.startCharged ?? false,
             position: u.position,
-            target: parseTarget('front'),
+            target: target(u),
             pattern: pattern(u),
             shipSkills: u.kit,
         })),

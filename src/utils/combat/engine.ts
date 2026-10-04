@@ -6067,6 +6067,14 @@ export function runCombat(rawInput: CombatEngineInput): {
          * sub-attack 0's attack row.
          */
         let currentSubAttackIndex: number | undefined;
+        /**
+         * True while the funnel is applying a cast whose pattern is the whole battlefield
+         * (`Pattern-All`, Curator). Protection skips such a hit — its game text: "Damage is not
+         * redirected for skills that target the entire battlefield." Set beside
+         * `currentSubAttackIndex` by `drivePositionalApply`'s `applyToVictim` wrapper, so a
+         * filtered-set passive hit ("all enemies with Inferno") never sets it.
+         */
+        let wholeBattlefieldHit = false;
         const pendingReflectLogs: {
             sourceId: string;
             targetId: string;
@@ -6305,6 +6313,8 @@ export function runCombat(rawInput: CombatEngineInput): {
             // !carriesBarrier: Barrier sits strictly in front of every incoming-effect mechanism
             // (matches the incoming-block step and the transform step) — an invulnerable target
             // has no incoming hit for allies to soak.
+            // !wholeBattlefieldHit: a Pattern-All cast is never redirected (see its doc), so it
+            // also never triggers Lionheart's clear-on-redirect.
             //
             // How much of this hit a Protection cascade diverted to protectors. Deliberately
             // NOT folded into `incomingBooked` — that is the VICTIM's own booked intake, and the
@@ -6319,6 +6329,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 !cause.isProtectionTransfer &&
                 !cause.isReflected &&
                 !cause.isCounter &&
+                !wholeBattlefieldHit &&
                 damage > 0
             ) {
                 const protectors = protectorsFor(victim);
@@ -8515,7 +8526,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                         preMitigation
                     ) => {
                         const prevSubAttack = currentSubAttackIndex;
+                        const prevWholeBattlefield = wholeBattlefieldHit;
                         currentSubAttackIndex = subAttackIndex;
+                        wholeBattlefieldHit = args.pattern.shape === 'all';
                         try {
                             return args.applyToVictim(
                                 victim,
@@ -8526,6 +8539,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                             );
                         } finally {
                             currentSubAttackIndex = prevSubAttack;
+                            wholeBattlefieldHit = prevWholeBattlefield;
                         }
                     },
                     // Pure ACCUMULATOR (not a bus emit): record per-victim damage into the
