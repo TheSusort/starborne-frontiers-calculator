@@ -521,7 +521,9 @@ describe('statusRich scenario', () => {
 
     it.each([
         ['Pallas', 'steal:charged'],
-        ['Thresh', 'steal:charged'],
+        // Bare: Thresh's charged targets a defender filler, so its "After targeting a defender"
+        // Crit Power Up II row wins the cast's one-shot skill tag (`fingerprint.ts`).
+        ['Thresh', 'steal'],
         ['Tithonus', 'steal:charged'],
     ])('NON-VACUITY (steal): %s produces %s, which no other scenario can', (name, token) => {
         expect(tokensFor(name, 'statusRich')).toContain(token);

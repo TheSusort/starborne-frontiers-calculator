@@ -2935,7 +2935,14 @@ const DocumentationPage: React.FC = () => {
                                         Gallant&apos;s &ldquo;if the target is a defender&rdquo;
                                         reads the enemy ship&apos;s own role; the Enemy Type
                                         selector only answers in the DPS calculator, where the enemy
-                                        has no ship.
+                                        has no ship. Role damage bonuses work the same way: an area
+                                        hit from Gallant, IonScorp, Meiying, Zeolite or Lodolite
+                                        deals its bonus only to the struck enemies of the named
+                                        role. A bonus that counts something on the enemy (its
+                                        debuffs, buffs or neighbours, as with Ravager, Lev or
+                                        Panguan) or checks its status (Wrecker&apos;s Inferno) is
+                                        worked out for each struck enemy from what it carried before
+                                        the hit.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Team Ships:</span> Pick a

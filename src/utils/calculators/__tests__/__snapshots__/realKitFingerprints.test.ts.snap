@@ -3628,30 +3628,31 @@ exports[`kit fingerprints > Thresh 1`] = `
 {
   "plain": [
     "attack",
-    "attack:charged",
     "buff-expired",
     "buff:active",
+    "buff:charged",
     "charge-changed",
   ],
   "richEnemy": [
     "attack",
-    "attack:charged",
     "buff-expired",
     "buff:active",
+    "buff:charged",
     "charge-changed",
   ],
   "statusRich": [
     "attack",
     "buff-expired",
     "buff:active",
+    "buff:charged",
     "charge-changed",
-    "steal:charged",
+    "steal",
   ],
   "wounded": [
     "attack",
-    "attack:charged",
     "buff-expired",
     "buff:active",
+    "buff:charged",
     "charge-changed",
   ],
 }
