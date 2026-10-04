@@ -212,6 +212,13 @@ export interface CleanseCandidate {
     remove: () => void;
 }
 
+/** One more debuff a single duration cut may pick, beside the store's own timed statuses (a DoT
+ *  or Bomb stack): `seq` is when it was applied, `cut` takes `turns` off it. */
+export interface DurationCutCandidate {
+    seq: number;
+    cut: (turns: number) => void;
+}
+
 export interface StatusEngine {
     /** Advance the round counter (strictly sequential, 1-based). Increments
      *  per-round accumulating stacks. Call once at the top of each round, before
@@ -335,17 +342,24 @@ export interface StatusEngine {
      *  a DoT entry when it is applied (`ActiveDoTStack.appliedSeq`), so newest-first cleanse and
      *  duration orders compare DoT stacks with named statuses. Each call advances it. */
     nextAppliedSeq(): number;
-    /** Reduce the duration of ONE timed debuff on `actorId` by `turns`, newest-applied first
-     *  (highest appliedSeq). Reduced to <= 0 → removed (expired). Only timed debuffs are
-     *  eligible; 'recurring'/'permanent' and UNREMOVABLE_STATUSES are skipped (consistent with
-     *  cleanse). Returns 1 if a debuff was affected, else 0. Unknown id → 0. */
-    reduceNewestDebuffDuration(actorId: string, turns: number): number;
-    /** Reduce the duration of EVERY eligible timed debuff on `actorId` by `turns` —
-     *  the ALL-scoped sibling of reduceNewestDebuffDuration (Heliodor/Pestilence's "reduces the
-     *  duration of all active Debuffs … by 1 turn", vs Warpstrike's single-newest reduce).
-     *  Same eligibility rules as reduceNewestDebuffDuration (timed only; skips 'recurring'/
-     *  'permanent' and UNREMOVABLE_STATUSES) and the same non-positive/non-finite `turns`
-     *  rejection. Returns the number of debuffs affected (removed early if their reduced
+    /** Reduce the duration of ONE debuff on `actorId` by `turns`, picked at RANDOM (owner ruling
+     *  R35, Warpstrike's "reduces a random active debuff's duration by 1 turn"). The pool is every
+     *  removable timed debuff in the actor's per-victim enemy store plus `extra` — its DoT and Bomb
+     *  stacks, one candidate per stack (`dotDurationCutCandidates`, `bombDurationCutCandidates`).
+     *  'recurring'/'permanent' and UNREMOVABLE_STATUSES are skipped (consistent with cleanse); a
+     *  named debuff reduced to <= 0 is removed (expired). The pool is ordered newest-applied first
+     *  and `draw` (uniform in [0, 1)) indexes it; a one-candidate pool takes no draw. Returns 1 if
+     *  a debuff was affected, else 0 (empty pool, or a non-positive / non-finite `turns`). */
+    reduceRandomDebuffDuration(
+        actorId: string,
+        turns: number,
+        draw: () => number,
+        extra?: readonly DurationCutCandidate[]
+    ): number;
+    /** Reduce the duration of EVERY eligible timed debuff on `actorId` by `turns` (Heliodor/
+     *  Pestilence's "reduces the duration of all active Debuffs … by 1 turn"). Timed only; skips
+     *  'recurring'/'permanent' and UNREMOVABLE_STATUSES; a non-positive/non-finite `turns` is
+     *  rejected. Returns the number of debuffs affected (removed early if their reduced
      *  duration is <= 0). Unknown id → 0. */
     reduceAllDebuffsDuration(actorId: string, turns: number): number;
     /** The clean inverse of reduceAllDebuffsDuration (Lev) — extends EVERY eligible
@@ -1697,38 +1711,47 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         namedToo?: boolean
     ): number => removeNewestFirst(actorId, 'debuffs', count, extra, namedToo);
 
-    /** Reduce the duration of ONE timed debuff on `actorId` by `turns`, newest-applied first
-     *  (highest appliedSeq). Reduced to <= 0 → removed (expired). Only the per-victim timed
-     *  enemy store is visited — accumulating/persistent maps have no finite duration (so the
-     *  "newest" picked here is the newest TIMED debuff, which may differ from cleanse's newest
-     *  across all stores). Skips 'recurring'/'permanent' sentinels and UNREMOVABLE_STATUSES (same
-     *  skip rules as cleanse). Returns 1 if a debuff was affected, else 0. Unknown id → 0.
-     *  A non-positive / non-finite `turns` is rejected (→ 0): only a positive whole-turn
-     *  reduction is meaningful — 0 would credit a no-op as success, a negative value would
+    /** Reduce ONE removable debuff on `actorId` by `turns`, picked at random from the store's
+     *  timed debuffs and `extra` — see the interface doc. Only the per-victim timed enemy store is
+     *  visited: accumulating/persistent maps have no finite duration. A non-positive / non-finite
+     *  `turns` is rejected (→ 0): 0 would credit a no-op as success, a negative value would
      *  INCREASE the duration, and NaN would corrupt `turnsRemaining`. */
-    const reduceNewestDebuffDuration = (actorId: string, turns: number): number => {
+    const reduceRandomDebuffDuration = (
+        actorId: string,
+        turns: number,
+        draw: () => number,
+        extra: readonly DurationCutCandidate[] = []
+    ): number => {
         const delta = Number.isFinite(turns) ? Math.trunc(turns) : 0;
         if (delta <= 0) return 0;
+        const pool: DurationCutCandidate[] = [...extra];
         const timedMap = enemyMaps.get(actorId);
-        if (!timedMap) return 0;
-        let best: { seq: number; key: string; s: BuffState } | undefined;
-        for (const [key, s] of timedMap) {
-            // Defensive: BuffState.turnsRemaining is typed `number` — non-numeric durations
-            // ('recurring'/'permanent') live in separate maps and cannot reach enemyMaps today.
-            // Belt-and-braces only (this exact guard is not present in removeNewestFirst).
-            if (typeof s.turnsRemaining !== 'number') continue;
-            if (isUnremovable(s.buffName, s.turnsRemaining)) continue;
-            if (!best || s.appliedSeq > best.seq) best = { seq: s.appliedSeq, key, s };
+        if (timedMap) {
+            for (const [key, s] of timedMap) {
+                // Defensive: BuffState.turnsRemaining is typed `number` — non-numeric durations
+                // ('recurring'/'permanent') live in separate maps and cannot reach enemyMaps.
+                if (typeof s.turnsRemaining !== 'number') continue;
+                if (isUnremovable(s.buffName, s.turnsRemaining)) continue;
+                pool.push({
+                    seq: s.appliedSeq,
+                    cut: (t) => {
+                        s.turnsRemaining -= t;
+                        if (s.turnsRemaining <= 0) timedMap.delete(key);
+                    },
+                });
+            }
         }
-        if (!best) return 0;
-        best.s.turnsRemaining -= delta;
-        if (best.s.turnsRemaining <= 0) timedMap.delete(best.key);
+        if (pool.length === 0) return 0;
+        // Stable: equal `seq`s (the stacks of one DoT entry) keep `extra`'s order.
+        pool.sort((a, b) => b.seq - a.seq);
+        const at =
+            pool.length === 1 ? 0 : Math.min(pool.length - 1, Math.floor(draw() * pool.length));
+        pool[at].cut(delta);
         return 1;
     };
 
-    /** ALL-scoped sibling of reduceNewestDebuffDuration — shrinks EVERY eligible timed
-     *  debuff on `actorId` by `turns` rather than just the newest. Same store (per-victim
-     *  `enemyMaps`) and eligibility rules (numeric turnsRemaining only, skip
+    /** Shrinks EVERY eligible timed debuff on `actorId` by `turns`. Reads the per-victim
+     *  `enemyMaps` with the eligibility rules of reduceRandomDebuffDuration (numeric turnsRemaining only, skip
      *  isUnremovable(name, turnsRemaining)); a reduced entry <= 0 is deleted (expired). Collects
      *  keys to delete in a separate pass so mutating the map mid-iteration is safe. Returns the
      *  count of debuffs affected; a non-positive/non-finite `turns` or unknown id returns 0. */
@@ -2325,7 +2348,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         removeSelfBuffByName,
         consumeStatusHit,
         cleanse,
-        reduceNewestDebuffDuration,
+        reduceRandomDebuffDuration,
         reduceAllDebuffsDuration,
         extendAllDebuffsDuration,
         extendAllBuffsDuration,

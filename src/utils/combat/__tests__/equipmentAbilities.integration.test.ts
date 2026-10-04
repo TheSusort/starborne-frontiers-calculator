@@ -3834,9 +3834,9 @@ describe('D-PR11 integration — Fortifying Shroud: enemy-side mirror (team-agno
 //
 //   Warpstrike (WARPSTRIKE): TWO abilities —
 //     (1) D-PR2 +X% outgoing-damage modifier while self-debuffed (on-cast modifier), and
-//     (2) NEW: on-deal-damage reactive cleanse in 'reduce-duration' mode — each damage-dealing
-//         turn while self-debuffed reduces the carrier's NEWEST own debuff by 1 turn
-//         (durationTurns 1, DETERMINISTIC — no procChance).
+//     (2) on-deal-damage reactive cleanse in 'reduce-duration' mode — each damage-dealing
+//         turn while self-debuffed reduces ONE random own debuff by 1 turn (durationTurns 1,
+//         no procChance; the pick is warpstrikeRandomDebuff.integration.test.ts's subject).
 //
 // DETERMINISM THROUGH THE REAL REGISTRY (the D-PR16 lesson): the abilities below are built
 // by `buildShipAbilitiesWithEquipment(makeShip({ setBonus }), getGearPiece)` and read out of
@@ -4078,9 +4078,7 @@ describe('D-PR reactive cleanse — Warpstrike duration-reduction + damage half'
      * self-debuffs on the carrier each round (apply → always lands) and acts BEFORE the carrier
      * so the carrier is already self-debuffed when it deals its OWN damage (which is what gates
      * both Warpstrike halves — the duration-reduction rides the carrier's on-deal-damage, not the
-     * enemy's hit). attack:1 keeps any incidental damage from killing the fat carrier. The two
-     * debuffs are applied in a fixed order ('Older' then 'Newer') so 'Newer' is the newest → the
-     * one Warpstrike's reduce-duration half targets.
+     * enemy's hit). attack:1 keeps any incidental damage from killing the fat carrier.
      */
     function selfDebuffer() {
         const debuff = (name: string): Ability => ({
@@ -4149,8 +4147,8 @@ describe('D-PR reactive cleanse — Warpstrike duration-reduction + damage half'
         ...overrides,
     });
 
-    /** Total cleanseCount credited to the carrier across all rounds (= count of newest-debuff
-     *  duration reductions Warpstrike performed). */
+    /** Total cleanseCount credited to the carrier across all rounds (= count of duration
+     *  reductions Warpstrike performed). */
     function totalCleanse(result: ReturnType<typeof runCombat>): number {
         return (result.healing?.rounds ?? []).reduce(
             (sum, rd) => sum + (rd.perActor.get('attacker')?.cleanseCount ?? 0),
@@ -4160,7 +4158,7 @@ describe('D-PR reactive cleanse — Warpstrike duration-reduction + damage half'
 
     it(
         'reduce-duration half fires once per self-debuffed damage turn (control credits 0); ' +
-            'the credited reduction count = Warpstrike’s extra ticks on the newest debuff',
+            'the credited reduction count = one debuff cut per fire',
         () => {
             const withWarp = runCombat(
                 WS_BASE({
@@ -4180,15 +4178,13 @@ describe('D-PR reactive cleanse — Warpstrike duration-reduction + damage half'
             expect(totalCleanse(control)).toBe(0);
 
             // Warpstrike: each round the carrier is already self-debuffed (enemy acts first) and
-            // deals direct damage → on-deal-damage reduce-duration fires once, reducing the NEWEST
-            // debuff by 1 turn → cleanseCount += 1 each round. reduceNewestDebuffDuration returns 1
-            // per fire (a SINGLE debuff — the newest — is reduced, never bulk). Over NUM_ROUNDS
-            // self-debuffed damage turns the total extra ticks = NUM_ROUNDS.
+            // deals direct damage → on-deal-damage reduce-duration fires once, reducing ONE
+            // debuff by 1 turn → cleanseCount += 1 each round. Over NUM_ROUNDS self-debuffed
+            // damage turns the total = NUM_ROUNDS.
             expect(totalCleanse(withWarp)).toBe(NUM_ROUNDS);
 
-            // Per-round shape: exactly 1 reduction per round (one debuff — the newest — reduced),
-            // never 0 (would mean the reduce half never fired) and never >1 (would mean it bulk-
-            // reduced rather than targeting only the newest).
+            // Per-round shape: exactly 1 reduction per round, never 0 (would mean the reduce half
+            // never fired) and never >1 (would mean it bulk-reduced rather than cutting one).
             for (let r = 0; r < NUM_ROUNDS; r++) {
                 expect(withWarp.healing!.rounds[r]?.perActor.get('attacker')?.cleanseCount).toBe(1);
             }

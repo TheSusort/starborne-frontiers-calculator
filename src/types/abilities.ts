@@ -1033,7 +1033,8 @@ export type AbilityConfig =
            *  Read from intent.eventCtx.didCrit by the reactive cleanse executor. cleanse-only. */
           critCount?: number;
           /** 'remove' (default) deletes whole debuffs (cleanse); 'reduce-duration' shaves
-           *  `durationTurns` off the newest debuff (Warpstrike). cleanse-only. */
+           *  `durationTurns` off one random debuff (Warpstrike), or off every debuff with
+           *  `count: 'all'` (Heliodor, Pestilence). cleanse-only. */
           mode?: 'remove' | 'reduce-duration';
           /** Turns to reduce in 'reduce-duration' mode (default 1). cleanse-only. */
           durationTurns?: number;

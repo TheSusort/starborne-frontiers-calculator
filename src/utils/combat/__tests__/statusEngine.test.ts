@@ -1779,7 +1779,7 @@ describe('per-target debuff stores (Task 1)', () => {
     });
 });
 
-describe('reduceNewestDebuffDuration', () => {
+describe('reduceRandomDebuffDuration', () => {
     // Timed enemy-side debuff fixture.
     const timedEnemyStatus = (
         buffName: string,
@@ -1792,22 +1792,53 @@ describe('reduceNewestDebuffDuration', () => {
         duration,
         payload: { buffName, stacks: 1, parsedEffects: { defense: -5 } },
     });
+    /** A `draw` that always returns `v`. */
+    const at = (v: number) => () => v;
+    const turnsOf = (eng: ReturnType<typeof createStatusEngine>, name: string) =>
+        eng.timedAbilityStatuses('enemy').find((s) => s.payload.buffName === name)?.active
+            .turnsRemaining;
 
-    it('reduces the newest-applied debuff by `turns`, leaves others untouched', () => {
+    it.each([
+        [0, 'Defense Down', 'Armor Break'],
+        [0.99, 'Armor Break', 'Defense Down'],
+    ])(
+        'the draw (%s) indexes the newest-first pool: %s loses a turn, %s is untouched',
+        (draw, cut, kept) => {
+            const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+            eng.beginRound(1);
+            // Armor Break first (lower seq), then Defense Down (newest).
+            eng.applyTimedAbilityStatus(1, timedEnemyStatus('Armor Break', 3));
+            eng.applyTimedAbilityStatus(1, timedEnemyStatus('Defense Down', 3));
+
+            expect(eng.reduceRandomDebuffDuration(DEFAULT_ENEMY_TARGET, 1, at(draw))).toBe(1);
+            expect(turnsOf(eng, cut)).toBe(2);
+            expect(turnsOf(eng, kept)).toBe(3);
+        }
+    );
+
+    it('`extra` candidates join the pool by seq; a picked one is cut by `turns`', () => {
         const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
         eng.beginRound(1);
-        // Apply debuff A first (seq lower), then debuff B (seq higher → newest).
-        eng.applyTimedAbilityStatus(1, timedEnemyStatus('Armor Break', 3));
         eng.applyTimedAbilityStatus(1, timedEnemyStatus('Defense Down', 3));
+        const cuts: number[] = [];
+        // seq 0 = older than anything stamped → last in the pool.
+        const extra = [{ seq: 0, cut: (t: number) => cuts.push(t) }];
 
-        const result = eng.reduceNewestDebuffDuration(DEFAULT_ENEMY_TARGET, 1);
+        expect(eng.reduceRandomDebuffDuration(DEFAULT_ENEMY_TARGET, 2, at(0.99), extra)).toBe(1);
+        expect(cuts).toEqual([2]);
+        expect(turnsOf(eng, 'Defense Down')).toBe(3);
+    });
 
-        expect(result).toBe(1);
-        const timed = eng.timedAbilityStatuses('enemy');
-        const a = timed.find((s) => s.payload.buffName === 'Armor Break');
-        const b = timed.find((s) => s.payload.buffName === 'Defense Down');
-        expect(a?.active.turnsRemaining).toBe(3); // untouched
-        expect(b?.active.turnsRemaining).toBe(2); // reduced by 1
+    it('a one-candidate pool takes no draw', () => {
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        eng.beginRound(1);
+        eng.applyTimedAbilityStatus(1, timedEnemyStatus('Defense Down', 3));
+        const draw = () => {
+            throw new Error('drew for a single candidate');
+        };
+
+        expect(eng.reduceRandomDebuffDuration(DEFAULT_ENEMY_TARGET, 1, draw)).toBe(1);
+        expect(turnsOf(eng, 'Defense Down')).toBe(2);
     });
 
     it('removes a debuff whose duration is reduced to exactly 0', () => {
@@ -1815,7 +1846,7 @@ describe('reduceNewestDebuffDuration', () => {
         eng.beginRound(1);
         eng.applyTimedAbilityStatus(1, timedEnemyStatus('Defense Down', 1));
 
-        const result = eng.reduceNewestDebuffDuration(DEFAULT_ENEMY_TARGET, 1);
+        const result = eng.reduceRandomDebuffDuration(DEFAULT_ENEMY_TARGET, 1, at(0));
 
         expect(result).toBe(1);
         expect(eng.timedAbilityStatuses('enemy')).toHaveLength(0);
@@ -1826,7 +1857,7 @@ describe('reduceNewestDebuffDuration', () => {
         eng.beginRound(1);
         eng.applyTimedAbilityStatus(1, timedEnemyStatus('Defense Down', 2));
 
-        const result = eng.reduceNewestDebuffDuration(DEFAULT_ENEMY_TARGET, 2);
+        const result = eng.reduceRandomDebuffDuration(DEFAULT_ENEMY_TARGET, 2, at(0));
 
         expect(result).toBe(1);
         expect(eng.timedAbilityStatuses('enemy')).toHaveLength(0);
@@ -1838,7 +1869,7 @@ describe('reduceNewestDebuffDuration', () => {
         // 'Acidic Decay' is a real member of UNREMOVABLE_STATUSES.
         eng.applyTimedAbilityStatus(1, timedEnemyStatus('Acidic Decay', 3));
 
-        const result = eng.reduceNewestDebuffDuration(DEFAULT_ENEMY_TARGET, 1);
+        const result = eng.reduceRandomDebuffDuration(DEFAULT_ENEMY_TARGET, 1, at(0));
 
         expect(result).toBe(0);
         // The debuff must be untouched.
@@ -1847,19 +1878,18 @@ describe('reduceNewestDebuffDuration', () => {
         expect(timed[0].active.turnsRemaining).toBe(3);
     });
 
-    it('skips the newest UNREMOVABLE debuff and reduces the newest REMOVABLE one instead', () => {
-        // Scenario: actor has two timed debuffs — a removable one applied first, then an
-        // unremovable one (Acidic Decay, a real UNREMOVABLE_STATUSES member) applied second
-        // (higher appliedSeq = technically "newer"). The function must skip the unremovable
-        // entry and reduce the removable one, proving the skip logic executes on reachable state.
+    it('leaves an UNREMOVABLE debuff out of the pool, whatever the draw', () => {
+        // Acidic Decay (a real UNREMOVABLE_STATUSES member) is applied second, so it would be the
+        // newest — the head of the pool a draw of 0 picks — if it were a candidate.
         const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
         eng.beginRound(1);
-        // Apply removable debuff first (lower seq).
         eng.applyTimedAbilityStatus(1, timedEnemyStatus('Defense Down', 3));
-        // Apply unremovable debuff second (higher seq — it IS the "newest" by sequence).
         eng.applyTimedAbilityStatus(1, timedEnemyStatus('Acidic Decay', 3));
+        const draw = () => {
+            throw new Error('drew although only one candidate is removable');
+        };
 
-        const result = eng.reduceNewestDebuffDuration(DEFAULT_ENEMY_TARGET, 1);
+        const result = eng.reduceRandomDebuffDuration(DEFAULT_ENEMY_TARGET, 1, draw);
 
         // Should have found a target (the removable Defense Down).
         expect(result).toBe(1);
@@ -1877,7 +1907,7 @@ describe('reduceNewestDebuffDuration', () => {
         eng.beginRound(1);
 
         // A throw would fail the test; a wrong return value fails the assertion.
-        expect(eng.reduceNewestDebuffDuration('no-such-actor', 1)).toBe(0);
+        expect(eng.reduceRandomDebuffDuration('no-such-actor', 1, at(0))).toBe(0);
     });
 
     it.each([0, -1, NaN, Infinity, 1.5])(
@@ -1889,7 +1919,7 @@ describe('reduceNewestDebuffDuration', () => {
 
             // 1.5 truncates to 1 → it WOULD reduce; assert the guard rejects only <= 0 / non-finite
             // and that a fractional value is floored (truncated) rather than corrupting state.
-            const result = eng.reduceNewestDebuffDuration(DEFAULT_ENEMY_TARGET, turns);
+            const result = eng.reduceRandomDebuffDuration(DEFAULT_ENEMY_TARGET, turns, at(0));
             const remaining = eng
                 .timedAbilityStatuses('enemy')
                 .find((s) => s.payload.buffName === 'Defense Down')?.active.turnsRemaining;
@@ -1907,12 +1937,9 @@ describe('reduceNewestDebuffDuration', () => {
     );
 });
 
-// PR11 (epic PR11): reduceAllDebuffsDuration — the ALL-scoped sibling of
-// reduceNewestDebuffDuration (Heliodor/Pestilence's "reduces the duration of all active
-// Debuffs … by 1 turn", vs Warpstrike's single-newest reduce above). The defining behavioral
-// difference from reduceNewestDebuffDuration is proven directly: with TWO removable timed
-// debuffs present, reduceNewestDebuffDuration only ever touches one (asserted above), while
-// reduceAllDebuffsDuration touches BOTH.
+// reduceAllDebuffsDuration — Heliodor/Pestilence's "reduces the duration of all active Debuffs …
+// by 1 turn": with TWO removable timed debuffs present, reduceRandomDebuffDuration touches one
+// (asserted above), while reduceAllDebuffsDuration touches BOTH.
 describe('reduceAllDebuffsDuration', () => {
     const timedEnemyStatus = (
         buffName: string,
@@ -1926,7 +1953,7 @@ describe('reduceAllDebuffsDuration', () => {
         payload: { buffName, stacks: 1, parsedEffects: { defense: -5 } },
     });
 
-    it('reduces EVERY removable timed debuff by `turns` — proves the ALL-scope, distinct from reduceNewestDebuffDuration (which would leave the older one untouched)', () => {
+    it('reduces EVERY removable timed debuff by `turns` — the ALL-scope, distinct from reduceRandomDebuffDuration (which cuts one)', () => {
         const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
         eng.beginRound(1);
         eng.applyTimedAbilityStatus(1, timedEnemyStatus('Armor Break', 3));
@@ -1938,7 +1965,7 @@ describe('reduceAllDebuffsDuration', () => {
         const timed = eng.timedAbilityStatuses('enemy');
         const a = timed.find((s) => s.payload.buffName === 'Armor Break');
         const b = timed.find((s) => s.payload.buffName === 'Defense Down');
-        // BOTH shrink by 1 turn — reduceNewestDebuffDuration would have left Armor Break at 3.
+        // BOTH shrink by 1 turn.
         expect(a?.active.turnsRemaining).toBe(2);
         expect(b?.active.turnsRemaining).toBe(3);
     });
