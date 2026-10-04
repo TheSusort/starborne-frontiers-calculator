@@ -90,6 +90,7 @@ import {
     parseHighestAttackEnemyTarget,
     detectRepairedThisRoundCondition,
     detectEnemyRepairedTrigger,
+    detectReactionEnemyRole,
     detectEnemyDotDamageTrigger,
     detectCorrosionSpreadTrigger,
     detectShieldStrippedTrigger,
@@ -3873,6 +3874,23 @@ export function buildShipAbilities(rawShip: Ship): ShipSkills {
                         ability.repairedRecipientTargeted = true;
                     }
                 }
+            }
+        }
+        // "When an enemy DEFENDER is directly repaired / gains Taunt, this Unit inflicts … on that
+        // defender" (Amartya): the role is a condition on the enemy the debuff lands on, judged per
+        // recipient by the reactive debuff executor (`victimRoleMatches` in triggers.ts).
+        if (
+            ability.type === 'debuff' &&
+            (ability.trigger === 'on-enemy-repaired' ||
+                ability.trigger === 'on-enemy-taunt-gained') &&
+            rowText
+        ) {
+            const role = detectReactionEnemyRole(rowText, buff.buffName, occurrence);
+            if (role) {
+                ability.conditions = [
+                    ...ability.conditions,
+                    { subject: 'enemy-type', derivable: true, requiredEnemyType: role },
+                ];
             }
         }
         // A still-on-cast, NON-STACKING buff whose OWN clause reads "At the start of combat, this

@@ -2802,11 +2802,30 @@ function dispatchType(intent: Intent): Ability['config']['type'] {
  *  `enemyType`, so they would always block. */
 function splitDrainGateConditions(intent: Intent): DrainGateSplit {
     const split = splitDrainGateConditionsByShape(intent);
-    if (intent.ability.trigger !== 'on-deal-damage') return split;
+    if (!liftsEnemyRoleGate(intent)) return split;
     return {
         kept: split.kept.filter((c) => c.subject !== 'enemy-type'),
         perVictim: split.perVictim,
     };
+}
+
+/** Triggers whose reactive DEBUFF names its recipient by role ("When an enemy defender is
+ *  directly repaired / gains Taunt, … on that defender" — Amartya). The `enemy-type` condition is
+ *  lifted off the global gate and re-checked against each recipient in the debuff branch. */
+const RECIPIENT_ROLE_DEBUFF_TRIGGERS: ReadonlySet<Ability['trigger']> = new Set([
+    'on-enemy-repaired',
+    'on-enemy-taunt-gained',
+]);
+
+/** Whether `intent`'s `enemy-type` conditions are judged per struck/receiving ship rather than
+ *  globally: on-deal-damage (`dealtVictimRoleGateMet`), and a debuff on a
+ *  `RECIPIENT_ROLE_DEBUFF_TRIGGERS` trigger (the debuff branch's per-recipient check). */
+function liftsEnemyRoleGate(intent: Intent): boolean {
+    return (
+        intent.ability.trigger === 'on-deal-damage' ||
+        (dispatchType(intent) === 'debuff' &&
+            RECIPIENT_ROLE_DEBUFF_TRIGGERS.has(intent.ability.trigger))
+    );
 }
 
 /** True when an on-deal-damage reaction's `enemy-type` conditions hold for at least ONE ship its
@@ -4921,10 +4940,16 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                       intent.eventCtx?.critVictimIds !== undefined
                     ? intent.eventCtx.critVictimIds
                     : [counterTargetId];
+        // The recipient's role, lifted off the global gate by `liftsEnemyRoleGate` (Amartya's
+        // "on that defender"), is asked of each recipient on its own.
+        const recipientRoleConditions = RECIPIENT_ROLE_DEBUFF_TRIGGERS.has(intent.ability.trigger)
+            ? enemyRoleConditionsOf(intent.ability)
+            : NO_CONDITIONS;
         for (const applicationTargetId of applicationTargetIds) {
             // A victimless infliction is a NO-OP — the rule the reactive damage
             // branch also states above its selector arms.
             if (applicationTargetId === undefined) continue;
+            if (!victimRoleMatches(recipientRoleConditions, applicationTargetId, ctx)) continue;
             // The enemy-oriented gate scrubbed from the global check is re-evaluated
             // against the target THIS application actually lands on — PER fanned-out target, so a
             // route that resolves several enemies (critVictimIds / adjacent-enemies /

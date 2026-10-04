@@ -117,11 +117,14 @@ function amartyaExposedAbility(): Ability {
 // regression in the parser/builder wiring fails loudly here rather than silently no-op'ing the
 // engine tests below.
 describe('Amartya Exposed (on Taunt gain) — extracted ability shape (mutation guard)', () => {
-    it('rides on-enemy-taunt-gained, enemy-targeted, 2 stacks', () => {
+    it('rides on-enemy-taunt-gained, enemy-targeted, 2 stacks, gated on a Defender recipient', () => {
         const exposed = amartyaExposedAbility();
         expect(exposed.trigger).toBe('on-enemy-taunt-gained');
         expect(exposed.target).toBe('enemy');
         expect(exposed.config).toMatchObject({ type: 'debuff', buffName: 'Exposed', stacks: 2 });
+        expect(exposed.conditions).toEqual([
+            { subject: 'enemy-type', derivable: true, requiredEnemyType: 'Defender' },
+        ]);
     });
 });
 
@@ -133,6 +136,7 @@ describe('Amartya (player-side) — Exposed lands on the SPECIFIC opposing actor
     // enemy-tauntgainer grants itself Taunt on its own turn.
     const enemyTauntGainer = (): EnemyAttacker => ({
         id: 'enemy-tauntgainer',
+        role: 'DEFENDER',
         stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000, speed: 1000 },
         chargeCount: 0,
         startCharged: false,
@@ -211,6 +215,7 @@ describe('Amartya (enemy-side) — team symmetry: an enemy Amartya reacts to a P
 
         const tauntGainingAlly: TeamActor = {
             id: 'ally-tauntgainer',
+            role: 'DEFENDER',
             speed: 1000,
             chargeCount: 0,
             startCharged: false,

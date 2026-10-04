@@ -3343,6 +3343,26 @@ export function detectEnemyRepairedTrigger(
     return undefined;
 }
 
+const ENEMY_ROLE_SUBJECT_RE = /\bwhen\s+an?\s+enemy\s+(defender|attacker|debuffer|supporter)\b/i;
+
+/**
+ * The enemy role a reaction clause names as its subject — "When an enemy DEFENDER is directly
+ * repaired", "When an enemy DEFENDER gains Taunt" (Amartya) → 'Defender'. Read from `buffName`'s
+ * own clause, so a role named in another sentence of the row never leaks onto it. Undefined when
+ * the clause names no role.
+ */
+export function detectReactionEnemyRole(
+    skillText: string,
+    buffName: string,
+    occurrenceIndex = 0
+): EnemyBaseClass | undefined {
+    const m = ENEMY_ROLE_SUBJECT_RE.exec(
+        stripUnitTags(resolveBuffClause(skillText, buffName, occurrenceIndex))
+    );
+    if (!m) return undefined;
+    return (m[1].charAt(0).toUpperCase() + m[1].slice(1).toLowerCase()) as EnemyBaseClass;
+}
+
 // ship-kit W3 (Anemone, Task 6): "When an enemy takes damage from a Damage over Time effect,
 // repair 5% of this Unit's Max HP." Distinct from Anemone's own FIRST-passive sentence ("This
 // Unit takes 25% less direct damage from enemies debuffed with a Damage over Time effect."),

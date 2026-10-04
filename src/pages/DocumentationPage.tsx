@@ -2961,25 +2961,28 @@ const DocumentationPage: React.FC = () => {
                                         hit from Gallant, IonScorp, Meiying, Zeolite or Lodolite
                                         deals its bonus only to the struck enemies of the named
                                         role, and Zeolite&apos;s passive purges a buff from each
-                                        struck defender. A bonus that counts something on the enemy
-                                        (its debuffs, buffs or neighbours, as with Ravager, Lev or
-                                        Panguan) or checks its status (Wrecker&apos;s Inferno) is
-                                        worked out for each struck enemy from what it carried before
-                                        the hit. A passive that reacts to the ship&apos;s own hits
-                                        (Bayah&apos;s and Bizon&apos;s debuffs) is checked the same
-                                        way. A bonus the ship gains for itself when &ldquo;the
-                                        target&rdquo; qualifies (Malvex&apos;s shield,
-                                        Zosimos&apos;s and Nuqtu&apos;s charges, Anemone&apos;s
-                                        Taunt, Tygr&apos;s extra action for hitting an enemy in
-                                        Stasis) is gained once if any struck enemy qualifies, and so
-                                        is a passive gain for hitting a debuffer or supporter
-                                        (Anjian, Rys, Sha Xing, Shashou), judged by each struck
-                                        enemy&apos;s own role (in the DPS calculator, the Enemy Type
-                                        selection: Debuffer or Supporter matches, Any / Unknown does
-                                        not). Selenite&apos;s charge for &ldquo;any target&rdquo;
-                                        with Stealth counts only the enemies her skill hits, and
-                                        Chakara&apos;s charge for &ldquo;all damaged enemies&rdquo;
-                                        being faster needs every enemy her skill hits to be faster.
+                                        struck defender. Amartya&apos;s Defense Shred and Exposed
+                                        land only on a repaired or Taunt-gaining enemy that is
+                                        itself a defender. A bonus that counts something on the
+                                        enemy (its debuffs, buffs or neighbours, as with Ravager,
+                                        Lev or Panguan) or checks its status (Wrecker&apos;s
+                                        Inferno) is worked out for each struck enemy from what it
+                                        carried before the hit. A passive that reacts to the
+                                        ship&apos;s own hits (Bayah&apos;s and Bizon&apos;s debuffs)
+                                        is checked the same way. A bonus the ship gains for itself
+                                        when &ldquo;the target&rdquo; qualifies (Malvex&apos;s
+                                        shield, Zosimos&apos;s and Nuqtu&apos;s charges,
+                                        Anemone&apos;s Taunt, Tygr&apos;s extra action for hitting
+                                        an enemy in Stasis) is gained once if any struck enemy
+                                        qualifies, and so is a passive gain for hitting a debuffer
+                                        or supporter (Anjian, Rys, Sha Xing, Shashou), judged by
+                                        each struck enemy&apos;s own role (in the DPS calculator,
+                                        the Enemy Type selection: Debuffer or Supporter matches, Any
+                                        / Unknown does not). Selenite&apos;s charge for &ldquo;any
+                                        target&rdquo; with Stealth counts only the enemies her skill
+                                        hits, and Chakara&apos;s charge for &ldquo;all damaged
+                                        enemies&rdquo; being faster needs every enemy her skill hits
+                                        to be faster.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">On-kill passives:</span> A
