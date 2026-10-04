@@ -456,6 +456,21 @@ export interface StatusEngine {
     /** The accumulated delta written by {@link adjustSelfBuffStacks}. 0 for an unknown owner or an
      *  untouched name. Signed — callers clamp the TOTAL, not this term. */
     selfBuffStackAdjustment(ownerId: string, buffName: string): number;
+    /** Add `amount` stacks of a self-side status to `ownerId`'s ACCUMULATING store, clamped to
+     *  the entry's cap — the door for a stacking grant with no turn timer that arrives from an
+     *  EVENT rather than a cadence (a reactive `duration: 'recurring'` buff: Nuqtu's "gains 1
+     *  stack of Core Charge I" per enemy buff gain, Lionheart's round-start Protection). The
+     *  stacks never expire; they leave only by `removeSelfBuffByName`, a purge or a steal.
+     *  Creates the entry on first use with no cadence share, so `beginRound`/`sourceFired` never
+     *  add to it on their own. An entry the owner already holds under this name (another
+     *  granter's cadence share — a neighbouring Centurion's Core Charge I) takes the stacks
+     *  instead, under ITS cap and payload, so the total still stops at one cap. */
+    addSelfAccumulatingStacks(
+        ownerId: string,
+        payload: AbilityStatusPayload,
+        amount: number,
+        opts: { maxStacks?: number; casterId?: string }
+    ): void;
     /** Register all buff/debuff abilities once at creation (classified by `kind`).
      *  `ownerId` routes self-side statuses to the correct per-owner store (defaults to 'attacker').
      *  `enemyTargetId` routes enemy-side accum/aura statuses to the correct per-target store
@@ -694,7 +709,9 @@ interface AccumulatingState {
     buffName: string;
     stacks: number;
     maxStacks: number | undefined;
-    /** One share per granter (see AccumulatingContribution). Never empty. */
+    /** One share per granter whose CADENCE accrues stacks (see AccumulatingContribution). Empty
+     *  for an entry created by `addSelfAccumulatingStacks`, whose stacks arrive only from the
+     *  events that call it — nothing ticks it. */
     contributions: AccumulatingContribution[];
     /** Present for ability-sourced accumulating statuses (payload + aura-gate conditions). */
     payload?: AbilityStatusPayload;
@@ -1613,6 +1630,29 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
     const selfBuffStackAdjustment = (ownerId: string, buffName: string): number =>
         stackAdjustments.get(ownerId)?.get(buffName) ?? 0;
 
+    const addSelfAccumulatingStacks = (
+        ownerId: string,
+        payload: AbilityStatusPayload,
+        amount: number,
+        opts: { maxStacks?: number; casterId?: string }
+    ): void => {
+        const map = getAccumSelf(ownerId);
+        let state = map.get(payload.buffName);
+        if (!state) {
+            state = {
+                buffName: payload.buffName,
+                stacks: 0,
+                maxStacks: opts.maxStacks,
+                contributions: [],
+                payload,
+                conditions: [],
+                casterId: opts.casterId,
+            };
+            map.set(payload.buffName, state);
+        }
+        addAccumStacks(state, amount);
+    };
+
     /** Move ONE stack of `buffName` off `sourceId` and onto EVERY id in `recipientIds`.
      *
      *  ⚠️ STACKS ARE NOT CONSERVED through a `grantAdjacentAllies` steal, and that is a RULING,
@@ -2419,6 +2459,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         stealStacks,
         adjustSelfBuffStacks,
         selfBuffStackAdjustment,
+        addSelfAccumulatingStacks,
         registerAbilityStatuses,
         applyTimedAbilityStatus,
         activeAbilityStatuses,

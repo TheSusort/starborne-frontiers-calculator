@@ -17,6 +17,7 @@ import {
 } from '../../types/calculator';
 import type { AffinityName } from '../../types/ship';
 import { PERSISTENT_STACKING_BUFFS } from '../../constants/persistentStackingBuffs';
+import { isPersistentByName } from '../../constants/oneShotPersistentBuffs';
 import { conditionsMet, groupConditions } from '../abilities/evaluateConditions';
 import { enemySelectorKind, type EnemySelectorKind } from '../abilities/abilityTargetSide';
 import { buildRoundContext, dotReadings } from '../abilities/roundContext';
@@ -4811,6 +4812,13 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // expires it (a 1-turn default would silently cap a multi-hit Barrier at one turn).
         const duration =
             typeof cfg.duration === 'number' ? cfg.duration : cfg.hits !== undefined ? Infinity : 1;
+        // A `'recurring'` stacking grant (Nuqtu's Core Charge I, Lionheart's round-start
+        // Protection) is NOT duration-less: its stacks add up per trigger, capped, and are kept —
+        // they bank in the accumulating store instead of the 1-turn window above. Keyed on
+        // `'recurring'` alone; a buff with no duration at all (Isha/Nayra's Affinity Overrides)
+        // keeps the window. Persistent-by-name statuses keep their own door in
+        // `applyTimedAbilityStatus`.
+        const banksStacks = cfg.duration === 'recurring' && !isPersistentByName(cfg.buffName);
         // Recipients: an ally-damage reaction grant ('ally' target + eventCtx naming the
         // damaged ally — Graphite's "grants the ally Repair Over Time III") lands on EXACTLY
         // that ally; granting all playerIds would put the HoT on the whole team and inflate
@@ -4925,14 +4933,21 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
             ) {
                 continue;
             }
-            ctx.statusEngine.applyTimedAbilityStatus(ctx.round, status, rid);
+            if (banksStacks) {
+                ctx.statusEngine.addSelfAccumulatingStacks(rid, status.payload, cfg.stacks, {
+                    maxStacks: cfg.maxStacks ?? (cfg.isStackable ? undefined : cfg.stacks),
+                    casterId: intent.ownerId,
+                });
+            } else {
+                ctx.statusEngine.applyTimedAbilityStatus(ctx.round, status, rid);
+            }
             ctx.bus.emit({
                 type: 'buff-applied',
                 actorId: rid,
                 granterId: intent.ownerId,
                 round: ctx.round,
                 buffName: cfg.buffName,
-                duration,
+                duration: banksStacks ? 'recurring' : duration,
             });
         }
         // Co-granted buffs (Last Stand's Barrier + Block Debuff) — applied in the

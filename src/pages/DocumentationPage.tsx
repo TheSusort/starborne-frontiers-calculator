@@ -2894,6 +2894,16 @@ const DocumentationPage: React.FC = () => {
                                         an area hit that crits two enemies adds two.
                                     </p>
                                     <p className="text-theme-text mb-2">
+                                        <span className="text-primary">Stacking Reactions:</span> A
+                                        passive that gains stacks of a buff each time something
+                                        happens, with no duration written, adds them every time and
+                                        keeps them up to the buff&apos;s cap. Nuqtu gains one stack
+                                        of Core Charge I for every buff an enemy gains, so four
+                                        enemy buffs before his turn give +16% damage, and the stacks
+                                        carry into later rounds until he holds 10. Works for both
+                                        teams.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
                                         <span className="text-primary">Buff Steal:</span> Skills
                                         that &quot;steal a buff from the target&quot; (Pallas,
                                         Thresh, Tithonus) are now modeled as a dedicated Buff Steal

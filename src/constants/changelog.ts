@@ -66,6 +66,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: Overclock now applies Attack Down I and Speed Down I on expiry.',
     "Combat simulator: Vindicator's Magnetized Shielding now adds Defense equal to 10x Security.",
     "Combat simulator: Terran Guard now scales with the granting ship's Defense.",
+    "Combat simulator: Nuqtu's Core Charge I now stacks once per enemy buff gained.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
