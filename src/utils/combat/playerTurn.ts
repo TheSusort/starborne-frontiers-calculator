@@ -1754,10 +1754,12 @@ function stripShieldPct(
 /**
  * Fans `reduceBombsOnVictim` over the firing skill's `bomb-countdown-reduce`
  * ability/abilities (all-enemies), across the AoE footprint (`aoeVictimIds` when present, else
- * the single anchor). Hacking-gated: reuses the SAME single-draw landing infra as every other
- * ability-timed 'inflict' enemy application in this file (`landsTimedEnemyApplicationLive`) — one
- * roll gates the whole cast, not a per-victim re-roll. Called BEFORE `applyNewDoTs` (mirrors
- * `extendDoTs`'s ordering) so a Bomb III this SAME cast inflicts is never itself reduced.
+ * the single anchor). Hacking-gated PER ENEMY ("This reduction effect requires hacking" — Lingshe):
+ * each recipient draws its own 'inflict' landing roll against its own security
+ * (`landsReductionOn`), so one well-defended enemy keeps its countdown while the rest lose a turn.
+ * A failed roll emits nothing (whether it counts as a resist is unruled). Called BEFORE
+ * `applyNewDoTs` (mirrors `extendDoTs`'s ordering) so a Bomb III this SAME cast inflicts is never
+ * itself reduced.
  */
 function reduceEnemyBombs(args: {
     gatedSkill: Skill | undefined;
@@ -1771,7 +1773,8 @@ function reduceEnemyBombs(args: {
     // The caster forcing these detonations (Lingshe) — becomes each burst's
     // `detonatorId`. See reduceBombsOnVictim.
     detonatorId: string;
-    landsTimedEnemyApplicationLive: (application?: 'inflict' | 'apply') => boolean;
+    /** One 'inflict' landing roll against `victim` — DRAWS, so call it once per recipient. */
+    landsReductionOn: (victim: CombatActor) => boolean;
     forceDetonateBomb?: (victim: CombatActor, sourceId: string, damage: number) => void;
     /** #407: the board-neighbour fan-out and the SELECTOR delegate, threaded so this loop resolves
      *  recipients by exactly the same rules as the debuff-clause path. */
@@ -1786,7 +1789,6 @@ function reduceEnemyBombs(args: {
     for (const ab of args.gatedSkill?.abilities ?? []) {
         if (ab.config.type !== 'bomb-countdown-reduce') continue;
         if (!conditionsMet(ab.conditions, args.ctx)) continue;
-        if (!args.landsTimedEnemyApplicationLive('inflict')) continue;
         // #407: was a bare `all-enemies`-or-anchor ternary with no selector arm at all, so a
         // `bomb-countdown-reduce` aimed at 'enemy-highest-attack' reduced the countdown on
         // whichever enemy the pattern anchored on. Now routed through the SAME resolver the
@@ -1816,6 +1818,7 @@ function reduceEnemyBombs(args: {
                 args.opposingVictimById?.get(vid) ??
                 (vid === args.anchor.id ? args.anchor : undefined);
             if (!victim) continue;
+            if (!args.landsReductionOn(victim)) continue;
             reduceBombsOnVictim(
                 victim,
                 ab.config.turns,
@@ -4827,7 +4830,13 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             round: r,
             bus,
             detonatorId: actor.id, // The countdown-reduce caster is the detonator.
-            landsTimedEnemyApplicationLive,
+            // The same per-victim / bound-target split the timed debuff loop uses: a positioned
+            // recipient rolls against its own security, a non-positional cast against the bound
+            // target's.
+            landsReductionOn: (victim) =>
+                positionalLanding && opposingVictimById?.has(victim.id)
+                    ? decideDebuffOnVictim('inflict', victim).landed
+                    : landsTimedEnemyApplicationLive('inflict'),
             forceDetonateBomb: args.forceDetonateBomb,
             adjacentEnemyIdsFor,
             positionalLanding,

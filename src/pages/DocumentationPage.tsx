@@ -3073,7 +3073,8 @@ const DocumentationPage: React.FC = () => {
                                         every enemy it hits &mdash; Stasis, Provoke, Disable and
                                         Concentrate Fire included &mdash; and its shield removal
                                         strips each of them, even where the text says &ldquo;the
-                                        primary target&rdquo;. Each enemy rolls its own resist.
+                                        primary target&rdquo;. Each enemy rolls its own resist,
+                                        including against Lingshe&apos;s Bomb countdown cut.
                                         Reactions follow suit: Hemlock gains a charge, Defiant a
                                         shield, Warden lands its extra debuff, once per enemy, and
                                         Laika gains a shield per enemy stripped. A Stasis the skill

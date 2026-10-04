@@ -1841,21 +1841,18 @@ exports[`kit fingerprints > Lingshe 1`] = `
     "bomb",
     "buff",
     "charge-changed",
-    "debuff-resisted",
     "dot-applied",
   ],
   "richEnemy": [
     "bomb",
     "buff",
     "charge-changed",
-    "debuff-resisted",
     "dot-applied",
   ],
   "wounded": [
     "bomb",
     "buff",
     "charge-changed",
-    "debuff-resisted",
     "dot-applied",
   ],
 }
