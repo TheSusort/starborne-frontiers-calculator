@@ -974,11 +974,6 @@ export interface PlayerTurnArgs {
      *  all three counts from the round contexts, which is what routes their conditions back to the
      *  user's manual `manualCount ?? 1`. Set by engine.ts's `liveCountsMeasurable`. */
     liveCountsMeasurable?: boolean;
-    /** A crit-gated timed buff grant needs a REAL crit: when true, a `self-crit`-gated status of
-     *  the timed-self loop is decided after the hit, on `anyVictimCrit`. Absent/false — the
-     *  single-ship DPS calculator — keeps the pre-hit gate, which passes whenever crit rate > 0
-     *  (see the pre-debuff gate ctx note). Set by engine.ts's `critGatedGrantsNeedRealCrit`. */
-    critGatedGrantsNeedRealCrit?: boolean;
     /** Opposing actors destroyed SO FAR THIS BATTLE, regardless of who landed the kill (owner
      *  ruling 2026-08-30) — the live source for Judge's R2 "20% more direct damage for each
      *  destroyed enemy, up to max of 100%". Supplied by engine.ts's `buildTurnArgs` off
@@ -1754,7 +1749,6 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         adjacentAllyIds,
         adjacentEnemyIdsFor,
         liveCountsMeasurable,
-        critGatedGrantsNeedRealCrit = false,
         enemyDestroyedCount: enemyDestroyedCountArg,
         selectorEnemyIdFor,
         enemyBuffNames: enemyBuffNamesArg = [],
@@ -2480,11 +2474,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
 
     // (a) Pre-application gate context (before ability debuffs land). effectiveCritRate uses
     // the scheduled crit buff only (modifiers/ability buffs not yet folded), and NO roundCrit
-    // — buff gates use the probability tier like modifierCtx. NOTE: in the single-ship DPS
-    // calculator a self-crit-gated buff therefore resolves effectiveCritRate/100 > 0, i.e.
-    // passes whenever the crit rate is non-zero — intended "live-subject, satisfiable"
-    // behaviour, not a bug. Under `critGatedGrantsNeedRealCrit` (battle, healing) the timed-self
-    // loop does not gate such a status here: it is decided after the hit on `anyVictimCrit`.
+    // — buff gates use the probability tier like modifierCtx, so a self-crit gate read here
+    // passes whenever the crit rate is non-zero. A crit-gated TIMED SELF status is therefore not
+    // gated against this ctx (or postDebuffGateCtx): the timed-self loop decides it after the hit,
+    // on `anyVictimCrit`, in every mode — a grant needs a real crit.
     // "N or more debuffs" on an enemy counts every debuff on THAT enemy: its own per-target
     // statuses, unioned by name with the scheduled channel (in the DPS calculator, the debuffs
     // the user configured on its one enemy; empty in battle), plus — inside buildRoundContext —
@@ -3273,16 +3266,17 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // Self statuses that land at the end of this function, after every figure of this cast's
     // damage is fixed, in slot order:
     //  - a passed status whose clause follows the damage clause (`afterDamageClause`);
-    //  - under `critGatedGrantsNeedRealCrit`, a crit-gated status (`critDecided`): its crit does
-    //    not exist until the hit, so its whole gate is decided there, against postDebuffGateCtx
-    //    with `roundCrit: anyVictimCrit`.
+    //  - a crit-gated status (`critDecided`): its crit does not exist until the hit, so its whole
+    //    gate is decided there, against postDebuffGateCtx with `roundCrit: anyVictimCrit` (a crit
+    //    on any struck enemy; the one bound enemy's crit in the DPS calculator). Landing after the
+    //    hit, it never boosts the cast that earned it.
     const endOfTurnSelfStatuses: {
         status: (typeof timedSelfBySlot)[number];
         critDecided: boolean;
     }[] = [];
     for (const status of timedSelfBySlot) {
         if (status.sourceSlot !== action) continue;
-        if (critGatedGrantsNeedRealCrit && hasSelfCritGate(status.conditions)) {
+        if (hasSelfCritGate(status.conditions)) {
             endOfTurnSelfStatuses.push({ status, critDecided: true });
             continue;
         }

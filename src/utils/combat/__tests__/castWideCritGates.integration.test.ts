@@ -2,8 +2,8 @@
  * A cast-wide crit clause fires on a crit against ANY enemy the skill strikes, aimed or covered
  * (owner ruling 11, 2026-10-03): Lev's charged "If a critical hit occurs, all hit enemies have
  * their debuffs extended by 1 turn and all allies are granted Crit Power Up II" — a crit on B
- * alone extends A, B and C and grants the buff. In a battle the clause needs a REAL crit: a cast
- * on which no enemy is crit grants nothing.
+ * alone extends A, B and C and grants the buff. The clause needs a REAL crit, in a battle and in
+ * the DPS calculator: a cast on which no enemy is crit grants nothing.
  *
  * Observables, per seeded run of one Lev charged cast on Pattern-Cone-Range-1 (A at the anchor,
  * B and C covered, OUT outside the footprint), crit 50:
@@ -284,7 +284,7 @@ describe("Lev's charged: a crit on any struck enemy extends every struck enemy's
     });
 });
 
-describe("Lev's charged Crit Power Up II needs a real crit in a battle", () => {
+describe("Lev's charged Crit Power Up II needs a real crit", () => {
     const grantsCritPower = (r: CastReading) =>
         r.granted.some((g) => g.startsWith('Crit Power Up II@'));
 
@@ -304,9 +304,10 @@ describe("Lev's charged Crit Power Up II needs a real crit in a battle", () => {
         expect(readings.some((r) => r.critVictims.size === 0)).toBe(true);
     });
 
-    it('DPS calculator keeps the optimistic gate: crit 50 grants it on every charged cast', () => {
-        // The single-ship DPS calculator decides timed buff gates before the hit's crit roll and
-        // passes a crit-gated grant whenever crit rate > 0 (playerTurn's pre-debuff gate note).
+    /** One seeded DPS-calculator run with crit 50 and no base crit power, recording the rounds
+     *  Crit Power Up II is granted on. */
+    const dpsRun = (shipSkills: ShipSkills) => {
+        setupKeyedRng(1);
         const bus = createEventBus();
         const grantRounds: number[] = [];
         bus.on('buff-applied', (e: Extract<CombatEvent, { type: 'buff-applied' }>) => {
@@ -326,13 +327,41 @@ describe("Lev's charged Crit Power Up II needs a real crit in a battle", () => {
             enemyDebuffs: [],
             hacking: 0,
             enemySecurity: 0,
-            shipSkills: realKit('Lev', 'charged'),
+            shipSkills,
             bus,
         });
-        const chargedRounds = result.rounds.filter((r) => r.action === 'charged');
-        // Non-vacuity: some charged casts did not crit, and they still granted it.
-        expect(chargedRounds.some((r) => !r.didCrit)).toBe(true);
-        expect(grantRounds).toEqual(chargedRounds.map((r) => r.round));
+        return { rounds: result.rounds, grantRounds };
+    };
+
+    it('DPS calculator: granted only on a charged cast that crits', () => {
+        const { rounds, grantRounds } = dpsRun(realKit('Lev', 'charged'));
+        const charged = rounds.filter((r) => r.action === 'charged');
+        // Non-vacuity: the run holds charged casts that crit and ones that do not.
+        expect(charged.some((r) => r.didCrit)).toBe(true);
+        expect(charged.some((r) => !r.didCrit)).toBe(true);
+        expect(grantRounds).toEqual(charged.filter((r) => r.didCrit).map((r) => r.round));
+    });
+
+    it('DPS calculator: a crit-gated grant written before the damage still waits for the hit', () => {
+        // Lev's charged clauses with the grant moved ahead of the damage: its crit does not exist
+        // until the hit, so it is decided after it, on crit casts only, and never boosts the hit
+        // that earned it — that round's damage equals a run whose kit has no grant at all.
+        const [lev] = realKit('Lev', 'charged').slots;
+        const grant = lev.abilities.filter((ab) => ab.type === 'buff');
+        const rest = lev.abilities.filter((ab) => ab.type !== 'buff');
+        expect(grant).toHaveLength(1);
+        const { rounds, grantRounds } = dpsRun({
+            slots: [{ slot: 'charged', abilities: [...grant, ...rest] }],
+        });
+        const without = dpsRun({ slots: [{ slot: 'charged', abilities: rest }] });
+        const charged = rounds.filter((r) => r.action === 'charged');
+        expect(charged.some((r) => !r.didCrit)).toBe(true);
+        expect(grantRounds.length).toBeGreaterThan(0);
+        const boosted = grantRounds.filter(
+            (round) => rounds[round - 1].directDamage !== without.rounds[round - 1].directDamage
+        );
+        expect(boosted).toEqual([]);
+        expect(grantRounds).toEqual(charged.filter((r) => r.didCrit).map((r) => r.round));
     });
 });
 
