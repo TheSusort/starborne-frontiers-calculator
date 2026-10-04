@@ -51,6 +51,7 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator: Rys's own Hacking Up III now helps his charged Speed Down II land.",
     "Combat simulator: Lodolite's Stealth bonus now needs the struck enemy itself Stealthed.",
     "Combat simulator: Rikra's and Sokol's Taunt bonuses now need the struck enemy Taunting.",
+    'Combat simulator: a Taunted or Provoked Panon now grants only Terran Guard III.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

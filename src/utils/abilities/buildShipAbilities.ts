@@ -140,6 +140,7 @@ import {
     detectGrantRecipientFilter,
     detectRecipientFilter,
     parseInsteadDamageReplacement,
+    isInsteadReplacedGrant,
     parseDefenseSubstitution,
     parseWhileShieldedFlatDefence,
     parseAllyDebuffResistShieldPenGain,
@@ -3560,6 +3561,11 @@ export function buildShipAbilities(rawShip: Ship): ShipSkills {
         const conditions = rowText ? detectGrantConditions(rowText, buff.buffName, occurrence) : [];
         if (conditions.length) {
             ability.conditions = conditions;
+        }
+        // The base grant of a self-gated "instead" pair (Panon's Terran Guard II) is replaced when
+        // the instead branch fires, so it takes the base damage's not-Provoked, not-Taunted gate.
+        if (rowText && isInsteadReplacedGrant(rowText, buff.buffName, occurrence)) {
+            ability.conditions = [...ability.conditions, ...tauntProvokeAbsentConditions()];
         }
         // #363 (Fuying): recipient FACTION scope on an ally-scoped grant ("grants Tianchen allies
         // Stealth"). Attached ONLY when the clause actually names one, so every other ship's
