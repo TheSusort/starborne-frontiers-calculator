@@ -26,6 +26,8 @@ export const UNRELEASED_CHANGES: string[] = [
     "DPS calculator: Snakeroot's passive now scales with every damage-over-time stack.",
     'Combat simulator: each damage-over-time stack now rolls separately to land.',
     'Combat simulator: per-debuff reactions now trigger once per damage-over-time stack.',
+    'Combat simulator: cleanses now remove damage-over-time stacks as debuffs.',
+    "Combat simulator: Nyxen's cleanses now remove only Bombs or damage-over-time effects.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

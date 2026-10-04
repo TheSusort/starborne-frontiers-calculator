@@ -59,7 +59,13 @@ import {
 import { reduceBombsOnVictim } from './bombCountdown';
 import { liveGateConditions } from './abilityStatusGating';
 import { CombatEvent, CombatEventBus, CombatEventType, ShieldApplyAccumulator } from './events';
-import { CombatActor, ActiveDoTStack, PendingBomb, carriedDotStacks } from './state';
+import {
+    CombatActor,
+    ActiveDoTStack,
+    PendingBomb,
+    carriedDotStacks,
+    cleanseDotStacks,
+} from './state';
 import {
     ActiveAbilityStatus,
     ActiveBuff,
@@ -3202,6 +3208,29 @@ export function actorDebuffCount(statusEngine: StatusEngine, actor: CombatActor)
     return ownerDebuffNamesFor(statusEngine, actor.id).length + carriedDotStacks(actor);
 }
 
+/**
+ * Cleanses up to `count` debuffs from `actorId` — the one removal both cleanse executors (cast and
+ * reactive) call. The pool is every debuff `actorDebuffCount` counts: its named debuffs
+ * (`statusEngine.cleanse`, newest applied first) and each DoT stack it carries (`cleanseDotStacks`,
+ * owner ruling R27). Named debuffs go first, then DoT stacks with whatever count is left — no
+ * ruling orders the two kinds against each other. A typed cleanse (`debuffType`, Nyxen's "cleanses
+ * 2 Bomb" / "2 damage over time debuffs") removes DoT stacks of that kind only. `actor` absent (a
+ * hand-built ctx without an actor reader) → named debuffs only. Returns how many were removed.
+ */
+export function cleanseDebuffs(
+    statusEngine: StatusEngine,
+    actorId: string,
+    actor: CombatActor | undefined,
+    count: number | 'all',
+    debuffType?: 'bomb' | 'dot'
+): number {
+    const named = debuffType === undefined ? statusEngine.cleanse(actorId, count) : 0;
+    if (!actor) return named;
+    const left = count === 'all' ? 'all' : count - named;
+    if (left !== 'all' && left <= 0) return named;
+    return named + cleanseDotStacks(actor, left, debuffType);
+}
+
 /** The two heal channels an enemy-applied debuff can move, as additive percentage POINTS (-50
  *  means -50%). One named shape rather than hand-written copies of the same object literal: it is
  *  `victimOwnEnemyHealModifiers`'s return and `liveHealChannelPct`'s channel key (#367). The heal
@@ -5771,7 +5800,13 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         let removed = 0;
         const cleansePerTarget: { targetId: string; count: number }[] = [];
         for (const rid of recipients) {
-            const n = ctx.statusEngine.cleanse(rid, count);
+            const n = cleanseDebuffs(
+                ctx.statusEngine,
+                rid,
+                ctx.actorById?.(rid),
+                count,
+                cfg.debuffType
+            );
             if (n > 0) cleansePerTarget.push({ targetId: rid, count: n });
             removed += n;
         }

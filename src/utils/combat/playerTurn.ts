@@ -58,6 +58,7 @@ import { detonateContainers, type DetonationRecipe } from './detonation';
 import { synthesizeResisted } from './shared';
 import {
     buildActorConditionContext,
+    cleanseDebuffs,
     selfBuffNamesForOwners,
     selfBuffStacksForOwner,
     LIVE_TRIGGERS,
@@ -6131,7 +6132,14 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                     );
                     let removed = 0;
                     for (const rid of recipientsFor(ability, fromPassive)) {
-                        const removedForRid = statusEngine.cleanse(rid, cleanseCount);
+                        // Named debuffs and DoT stacks alike (`cleanseDebuffs`).
+                        const removedForRid = cleanseDebuffs(
+                            statusEngine,
+                            rid,
+                            rid === actor.id ? actor : sameSideLiving?.find((a) => a.id === rid),
+                            cleanseCount,
+                            cfg.debuffType
+                        );
                         removed += removedForRid;
                         // PR-H: only recipients with a REAL removal are on-own-cleanse's
                         // ally-routing candidates (mirrors shieldRecipientIds' granted>0 gate) — a

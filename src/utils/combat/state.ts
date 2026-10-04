@@ -152,6 +152,55 @@ export function carriedDotStacks(holder: DoTContainers): number {
     );
 }
 
+/**
+ * Removes up to `count` DoT stacks from `holder` — the DoT half of a cleanse (owner ruling R27:
+ * each stack is one debuff, so "cleanses 1 debuff" on 2 Corrosion stacks leaves 1). A removed
+ * stack decrements its entry's `stacks`; an entry reaching 0 is spliced out. The arrays are
+ * mutated in place, so every holder of a reference sees the removal. An `unremovable` entry
+ * (Acidic Decay) is never touched.
+ *
+ * `debuffType` narrows the pool (Nyxen's typed cleanse): `'bomb'` takes Bomb stacks only; `'dot'`
+ * and an untyped cleanse take every DoT, Bombs included.
+ *
+ * ORDER: no entry carries an application time comparable across containers, so the pool is walked
+ * container by container — Corrosion, Inferno, generic, then Bombs — newest entry (the array's
+ * tail) first within each. Returns the number of stacks removed.
+ */
+export function cleanseDotStacks(
+    holder: {
+        corrosionEntries: ActiveDoTStack[];
+        infernoEntries: ActiveDoTStack[];
+        genericDoTEntries: ActiveDoTStack[];
+        pendingBombs: PendingBomb[];
+    },
+    count: number | 'all',
+    debuffType?: 'bomb' | 'dot'
+): number {
+    const containers: { stacks: number; unremovable?: boolean }[][] =
+        debuffType === 'bomb'
+            ? [holder.pendingBombs]
+            : [
+                  holder.corrosionEntries,
+                  holder.infernoEntries,
+                  holder.genericDoTEntries,
+                  holder.pendingBombs,
+              ];
+    let left = count === 'all' ? Infinity : Math.max(0, count);
+    let removed = 0;
+    for (const entries of containers) {
+        for (let i = entries.length - 1; i >= 0 && left > 0; i--) {
+            const e = entries[i];
+            if (e.unremovable) continue;
+            const take = Math.min(e.stacks, left);
+            e.stacks -= take;
+            left -= take;
+            removed += take;
+            if (e.stacks <= 0) entries.splice(i, 1);
+        }
+    }
+    return removed;
+}
+
 export interface PendingBomb {
     countdown: number;
     damagePerStack: number;

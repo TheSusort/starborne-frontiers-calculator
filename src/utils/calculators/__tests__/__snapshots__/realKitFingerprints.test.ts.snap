@@ -2454,7 +2454,6 @@ exports[`kit fingerprints > Nyxen 1`] = `
     "buff:active",
     "buff:charged",
     "charge-changed",
-    "cleanse",
     "shield",
   ],
   "wounded": [

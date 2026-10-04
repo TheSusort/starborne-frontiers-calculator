@@ -3002,7 +3002,12 @@ const DocumentationPage: React.FC = () => {
                                         and every stack that fails is its own resist. A reaction to
                                         a debuff being inflicted (APEX&apos;s shield,
                                         Oleander&apos;s charge, Provider&apos;s hit, Lingshe&apos;s
-                                        Stealth) fires once per stack that lands.
+                                        Stealth) fires once per stack that lands. A cleanse removes
+                                        stacks the same way: &ldquo;cleanses 1 debuff&rdquo; on 2
+                                        Corrosion stacks leaves 1. Named debuffs are cleansed first,
+                                        then damage-over-time stacks; Acidic Decay cannot be
+                                        cleansed. Nyxen&apos;s cleanses take only Bombs or only
+                                        damage-over-time effects, as written.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Team Ships:</span> Pick a
