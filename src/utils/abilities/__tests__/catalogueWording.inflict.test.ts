@@ -114,28 +114,33 @@ describe('inflict/apply vocabulary — catalogue wording parses like ours', () =
 
 // APEX: "when an enemy gets inflicted with a debuff" says "inflicted", so its shield reacts only
 // to inflicted debuffs (#593's split; the user's rule that a reaction's own verb decides what it
-// sees).
-const APEX_ROWS: { ship: string; slot: SlotName; text: string; expects: string }[] = [
+// sees). Passive voice with no "this Unit": any inflictor counts (owner ruling R16), and R2's
+// Block Shield rides the same event.
+const APEX_ROWS: { ship: string; slot: SlotName; text: string; expects: string[] }[] = [
     {
         ship: 'APEX',
         slot: 'passive',
         text: 'This Unit gains a <unit-damage>shield equal to 3%</unit-damage> of their max HP when an enemy gets inflicted with a <unit-aid>debuff</unit-aid>.',
-        expects: 'shield|self|on-debuff-inflicted|shield',
+        expects: ['shield|self|on-enemy-debuff-inflicted|shield'],
     },
     {
         ship: 'APEX',
         slot: 'passive',
         text: 'This Unit gains a <unit-damage>shield equal to 3%</unit-damage> of their max HP when an enemy gets inflicted with a <unit-aid>debuff</unit-aid>.<br /><br />If that enemy has 3 or more <unit-aid>debuffs</unit-aid> on a <unit-aid>debuff</unit-aid> infliction, this Unit inflicts <unit-skill>Block Shield</unit-skill> for 1 turn.',
-        expects: 'shield|self|on-debuff-inflicted|shield',
+        expects: [
+            'shield|self|on-enemy-debuff-inflicted|shield',
+            'debuff|enemy|on-enemy-debuff-inflicted|Block Shield',
+        ],
     },
 ];
 
 describe('inflict/apply vocabulary — APEX: the inflict verb sets the inflict filter', () => {
     it.each(APEX_ROWS)('$ship $slot', ({ slot, text, expects }) => {
         const abilities = parseSlot(slot, text);
-        expect(sigs(abilities)).toContain(expects);
-        const shield = abilities.find((a) => a.trigger === 'on-debuff-inflicted');
-        expect(shield?.triggerApplicationFilter).toBe('inflict');
+        for (const e of expects) expect(sigs(abilities)).toContain(e);
+        const reactions = abilities.filter((a) => a.trigger === 'on-enemy-debuff-inflicted');
+        expect(reactions).toHaveLength(expects.length);
+        for (const r of reactions) expect(r.triggerApplicationFilter).toBe('inflict');
     });
 });
 

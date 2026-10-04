@@ -387,10 +387,10 @@ describe('cluster 7 — ally-crit / cleanse-reactive / DoT-crit / debuff-resiste
 
     const APEX_P2 =
         'This Unit gains a <unit-damage>shield equal to 3%</unit-damage> of their max HP when an enemy gets inflicted with a <unit-aid>debuff</unit-aid>.';
-    it('APEX: shield-on-enemy-debuffed already rides on-debuff-inflicted (FP lock)', () => {
+    it('APEX: shield-on-enemy-debuffed rides the any-inflictor on-enemy-debuff-inflicted (R16)', () => {
         const ab = abilitiesFor({ firstPassiveSkillText: APEX_P2 }, 'passive');
         const shield = ab.find((a) => a.type === 'shield');
-        expect(shield?.trigger).toBe('on-debuff-inflicted');
+        expect(shield?.trigger).toBe('on-enemy-debuff-inflicted');
     });
 });
 

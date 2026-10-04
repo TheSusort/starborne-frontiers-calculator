@@ -127,6 +127,7 @@ export const TRIGGER_PROSE: Record<string, string> = {
     'on-enemy-purged': 'when it purges an enemy buff',
     'on-ally-purged': 'when a buff is purged from an ally',
     'on-debuff-inflicted': 'when it lands a debuff',
+    'on-enemy-debuff-inflicted': 'when an enemy is inflicted with a debuff',
     'on-debuff-resisted': 'when it resists a debuff',
     'on-enemy-debuff-resisted': 'when an enemy resists a debuff',
     'on-ally-crit': 'when an ally crits',

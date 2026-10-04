@@ -153,9 +153,16 @@ export type RegisteredAbilityStatus =
            *     store write and `buff-applied` happen at the end of runPlayerTurn, after the
            *     cast's damage figures are fixed, so the buff boosts only later hits.
            *  Set by the engine's status-collection walk, which sees the clause order directly
-           *  (`buildShipAbilities` sorts each slot by text position). Firing-slot statuses only;
-           *  absent → applies inline. */
+           *  (`buildShipAbilities` sorts each slot by text position). Absent → applies inline. A
+           *  `perHit` passive status always carries it: it reacts to damage the cast dealt. */
           afterDamageClause?: boolean;
+          /** A PASSIVE-slot status that rides each hit of its owner's cast rather than standing
+           *  from combat start — `isPassivePerHitStatus` (abilityStatusGating.ts) decides which.
+           *  playerTurn applies it on every active or charged cast: an enemy debuff on each struck
+           *  enemy whose own gate passes, a self gain once if any struck enemy's gate passes, both
+           *  gated on the struck enemies' state from before the cast (owner rulings R15, R17).
+           *  The combat-start passive seed skips it. Absent → the slot's ordinary lifecycle. */
+          perHit?: true;
           /** Hit-counted lifecycle (Quixilver R2 / "Barrier for 1 hit"). When set, the status
            *  additionally expires after this many qualifying hits, spent via consumeStatusHit.
            *  Orthogonal to `duration`: a status with both expires on whichever comes first. A

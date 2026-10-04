@@ -279,22 +279,28 @@ exports[`kit fingerprints > Asphyxiator 1`] = `
 exports[`kit fingerprints > Bayah 1`] = `
 {
   "plain": [
+    "attack",
     "attack:active",
-    "attack:charged",
+    "buff:active",
+    "buff:charged",
     "charge-changed",
     "debuff",
     "debuff-resisted",
   ],
   "richEnemy": [
+    "attack",
     "attack:active",
-    "attack:charged",
+    "buff:active",
+    "buff:charged",
     "charge-changed",
     "debuff",
     "debuff-resisted",
   ],
   "wounded": [
+    "attack",
     "attack:active",
-    "attack:charged",
+    "buff:active",
+    "buff:charged",
     "charge-changed",
     "debuff",
     "debuff-resisted",
@@ -3335,6 +3341,7 @@ exports[`kit fingerprints > Sha Xing 1`] = `
   "plain": [
     "attack",
     "bomb",
+    "buff",
     "charge-changed",
     "debuff",
     "debuff-resisted",
@@ -3345,6 +3352,7 @@ exports[`kit fingerprints > Sha Xing 1`] = `
   "richEnemy": [
     "attack",
     "bomb",
+    "buff",
     "charge-changed",
     "debuff",
     "debuff-resisted",
@@ -3355,6 +3363,7 @@ exports[`kit fingerprints > Sha Xing 1`] = `
   "wounded": [
     "attack",
     "bomb",
+    "buff",
     "charge-changed",
     "debuff",
     "debuff-resisted",

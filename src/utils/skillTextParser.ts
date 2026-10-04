@@ -1531,6 +1531,23 @@ const ENEMY_BUFFED_RE = /\bwhen\s+an?\s+enemy\s+gains\s+an?\s+buff\b/i;
 // extra-action trigger), which keeps its own enemy-death list.
 const KILL_TRIGGER_RE =
     /when\s+an\s+enemy\s+dies|\bdestroying\s+an\s+(?:enemy|opponent)\b|\bthis\s+unit\s+destroys\s+an\s+enemy\b|\bwhen\s+an\s+enemy\s+is\s+destroyed\b/i;
+// The kill phrasings that make the OWNER the killer — "upon destroying an enemy", "When this
+// Unit destroys an enemy", "each enemy destroyed by this Unit" — as opposed to any death ("When
+// an enemy is destroyed", "when an enemy dies"). See `killSentenceScope`.
+const OWNER_KILL_RE =
+    /\bdestroying\s+an\s+(?:enemy|opponent)\b|\bthis\s+unit\s+destroys\s+an\s+enemy\b|\benemy\s+destroyed\s+by\s+this\s+unit\b/i;
+
+/**
+ * Whose kill a sentence's on-kill clause reacts to: `'owner'` when it names this Unit as the
+ * killer (OWNER_KILL_RE), `'any'` for a bare enemy death (KILL_TRIGGER_RE without the owner
+ * wording), undefined when the sentence carries no kill clause at all (owner ruling R18).
+ */
+export function killSentenceScope(sentence: string): 'owner' | 'any' | undefined {
+    if (OWNER_KILL_RE.test(sentence)) return 'owner';
+    if (KILL_TRIGGER_RE.test(sentence) || ENEMY_DESTROYED_BY_ATTACK_RE.test(sentence)) return 'any';
+    return undefined;
+}
+
 // "destroying an enemy WITH A DEBUFF" (Meiying) — the qualifier KILL_TRIGGER_RE drops.
 // Consumed only by detectGrantConditions, where it attaches the `killed-enemy-had-debuff` gating
 // CONDITION to the debuff a kill clause grants; trigger resolution stays with KILL_TRIGGER_RE, so
@@ -2420,23 +2437,27 @@ export function detectCleanseOncePerRound(
     return sentence !== undefined && CLEANSE_ONCE_PER_ROUND_RE.test(sentence);
 }
 
-// "when an enemy gets inflicted with a debuff" — a reactive own-infliction trigger (APEX's
-// shield-on-debuff). Requires the generic "debuff" noun, so a named status ("the primary target
-// is inflicted with Disable") is not a reaction. Scanned on the RAW sentence, so the noun may sit
-// inside a tag. Fires on this Unit's OWN inflictions (on-debuff-inflicted), not allies'.
+// A debuff landing on an enemy, whoever inflicted it — APEX's passive (owner ruling R16). Two
+// sentences carry it:
+//  - "… when an enemy gets inflicted with a debuff": passive voice with no "this Unit", so it
+//    reacts to every inflictor, not only this Unit (the 3% shield);
+//  - "If that enemy has 3 or more debuffs on a debuff infliction, this Unit inflicts Block
+//    Shield": "that enemy" is the one just inflicted, so the same event, landing on it.
+// Both require the generic "debuff" noun, so a named status ("the primary target is inflicted
+// with Disable") is not a reaction. Scanned on the RAW sentence, so the noun may sit inside a tag.
 const ENEMY_DEBUFFED_RE =
-    /\bwhen\b[^.]*?\benem(?:y|ies)\b[^.]*?\bgets?\s+inflicted\s+with\s+an?\s+(?:<[^>]*>\s*)?debuff\b/i;
+    /\bwhen\b[^.]*?\benem(?:y|ies)\b[^.]*?\bgets?\s+inflicted\s+with\s+an?\s+(?:<[^>]*>\s*)?debuff\b|\bthat\s+enemy\b[^.]*?\bon\s+an?\s+(?:<[^>]*>\s*)?debuff(?:\s*<\/[^>]*>)?\s+infliction\b/i;
 
 /**
- * Returns 'on-debuff-inflicted' when `anchorPos` falls inside a sentence carrying a phrase
+ * Returns 'on-enemy-debuff-inflicted' when `anchorPos` falls inside a sentence carrying a phrase
  * matching ENEMY_DEBUFFED_RE; otherwise undefined. Position-scoped on the RAW text
  * (mirrors detectCritRepairTrigger). Reference data: docs/ship-skills.csv (APEX).
  */
-export function detectDebuffInflictedTrigger(
+export function detectEnemyDebuffedTrigger(
     text: string | null | undefined,
     anchorPos: number
 ): AbilityTrigger | undefined {
-    return phrasePosTrigger(text, ENEMY_DEBUFFED_RE, anchorPos, 'on-debuff-inflicted');
+    return phrasePosTrigger(text, ENEMY_DEBUFFED_RE, anchorPos, 'on-enemy-debuff-inflicted');
 }
 
 // Control-infliction recognition for the control EVENT. A skill that inflicts/grants one of the
@@ -2568,14 +2589,14 @@ export function parseControlInflicts(
 
 // "after it inflicts Stasis" — the reactive trigger for a grant that procs when THIS unit
 // inflicts Stasis (Defiant's "gains a shield equal to 30% of its max HP"). Position-scoped on the
-// RAW sentence (mirrors detectDebuffInflictedTrigger), so the status name may be tagged; no
+// RAW sentence (mirrors detectEnemyDebuffedTrigger), so the status name may be tagged; no
 // lookbehind.
 const APPLYING_STASIS_RE = /\bafter\s+it\s+inflicts\s+(?:<unit-skill>\s*)?stasis\b/i;
 
 /**
  * Returns 'on-stasis-applied' when `anchorPos` (the ability's raw-text anchor position) falls
  * inside a sentence matching APPLYING_STASIS_RE; otherwise undefined.
- * Position-scoped on the RAW text (mirrors detectDebuffInflictedTrigger). Reference data:
+ * Position-scoped on the RAW text (mirrors detectEnemyDebuffedTrigger). Reference data:
  * docs/ship-skills.csv (Defiant passive).
  */
 export function detectStasisAppliedTrigger(

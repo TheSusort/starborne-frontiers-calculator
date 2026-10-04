@@ -102,3 +102,29 @@ export function liveGateConditions(conditions: Condition[]): Condition[] {
             : c
     );
 }
+
+/**
+ * Whether a buff/debuff on its owner's PASSIVE slot rides each hit of the owner's cast instead of
+ * standing from combat start. The passive slot never fires, so an on-cast passive status otherwise
+ * applies once, at combat start (`seedPassiveTimedStatuses` in engine.ts). Two shapes ride the
+ * cast's hits instead (owner rulings R15 and R17):
+ *  - an ENEMY-side status. The only enemy it can land on is one the owner's cast just damaged —
+ *    "When this Unit deals damage to an enemy that has 2 or more debuffs, it inflicts Speed Down
+ *    II" (Bayah), "After dealing damage to an enemy with more than 2 debuffs, this Unit inflicts
+ *    Block Buff" (Bizon).
+ *  - a SELF-side status gated on an enemy's debuffs — "… and gains Terran Bolster II" in that same
+ *    Bayah sentence, "When damaging a debuffed enemy, this Unit gains Tianchen Precision II" (Sha
+ *    Xing). No enemy carries a debuff at combat start, so on a battle board the seed never passes.
+ * A self status gated on the enemy's ROLE ("When damaging a debuffer or supporter, this Unit gains
+ * Stealth" — Anjian, Rys, Sha Xing) is neither: it keeps the combat-start seed, read against the
+ * fight-wide enemy class.
+ */
+export function isPassivePerHitStatus(args: {
+    sourceSlot: string;
+    side: 'self' | 'enemy';
+    trigger: string;
+    conditions: readonly Condition[];
+}): boolean {
+    if (args.sourceSlot !== 'passive' || args.trigger !== 'on-cast') return false;
+    return args.side === 'enemy' || args.conditions.some((c) => c.subject === 'enemy-debuff');
+}

@@ -67,7 +67,8 @@ import {
     detectBombDetonatedTrigger,
     detectEchoingBurstDetonatedTrigger,
     detectCritRepairTrigger,
-    detectDebuffInflictedTrigger,
+    detectEnemyDebuffedTrigger,
+    killSentenceScope,
     detectStasisAppliedTrigger,
     detectCheatDeathActivatedTrigger,
     detectDestroyedTrigger,
@@ -1038,6 +1039,32 @@ function markPatternScoped(positioned: PositionedAbility[], text: string): Posit
         }
     }
     return positioned;
+}
+
+/**
+ * Stamps `triggerKillerScope: 'owner'` on every on-kill reaction whose clause makes this Unit the
+ * killer — "upon destroying an enemy", "When this Unit destroys an enemy" (owner ruling R18; see
+ * `killSentenceScope`). The ability's own sentence decides. An ability anchored outside any kill
+ * sentence (no anchor, or an anchor the kill clause does not share) reads the row instead:
+ * owner-scoped only when every kill sentence in it names this Unit as the killer.
+ */
+function markKillerScope(positioned: PositionedAbility[], text: string): void {
+    const onKill = positioned.filter((p) => p.ability.trigger === 'on-enemy-destroyed');
+    if (onKill.length === 0) return;
+    const masked = maskTagsPreservingLength(text);
+    const rowScopes = masked
+        .split(/[.;](?=\s|$)/)
+        .map(killSentenceScope)
+        .filter((s): s is 'owner' | 'any' => s !== undefined);
+    const rowIsOwner = rowScopes.length > 0 && rowScopes.every((s) => s === 'owner');
+    for (const p of onKill) {
+        const own =
+            p.pos >= 0 && p.pos < masked.length
+                ? killSentenceScope(sentenceContaining(masked, p.pos))
+                : undefined;
+        if ((own ?? (rowIsOwner ? 'owner' : 'any')) === 'owner')
+            p.ability.triggerKillerScope = 'owner';
+    }
 }
 
 /**
@@ -2405,7 +2432,7 @@ function abilitiesFromText(
                       // bus event (combat/events.ts), self-scoped in triggers.ts (mirrors
                       // on-own-cleanse). Shield-only (no corpus heal carries this phrase).
                       (detectShieldStrippedTrigger(text, healPos) ??
-                      detectDebuffInflictedTrigger(text, healPos) ??
+                      detectEnemyDebuffedTrigger(text, healPos) ??
                       // Defiant: a SHIELD anchored in the "after it inflicts Stasis" clause rides the
                       // on-stasis-applied reactive trigger (own-cast scoped; position-scoped).
                       detectStasisAppliedTrigger(text, healPos))
@@ -2533,7 +2560,8 @@ function abilitiesFromText(
                 // APEX: the shield's own sentence carries the trigger clause, so its verb is the
                 // filter — "gets inflicted with a debuff" → 'inflict'. A clause naming no verb
                 // stays unfiltered.
-                ...(reactiveTrigger === 'on-debuff-inflicted'
+                ...(reactiveTrigger === 'on-debuff-inflicted' ||
+                reactiveTrigger === 'on-enemy-debuff-inflicted'
                     ? (() => {
                           const verb = debuffTriggerVerb(healSentence);
                           return verb ? { triggerApplicationFilter: verb } : {};
@@ -3636,6 +3664,19 @@ export function buildShipAbilities(rawShip: Ship): ShipSkills {
                 occurrence
             );
         }
+        // APEX: "If that enemy has 3 or more debuffs on a debuff infliction, this Unit inflicts
+        // Block Shield" rides the same any-source enemy-debuffed event as her shield, landing on
+        // the enemy just inflicted (eventCtx.debuffVictimId). Its enemy-debuff count stays as the
+        // gate — read on that enemy as of the triggering infliction (triggers.ts).
+        if (
+            reactiveTrigger === undefined &&
+            target === 'enemy' &&
+            ability.config.type === 'debuff' &&
+            rowText &&
+            pos >= 0
+        ) {
+            reactiveTrigger = detectEnemyDebuffedTrigger(rowText, pos);
+        }
         // Harvester p2: "When an ally is destroyed, this Unit gains 1 extra end of round
         // action and Speed Up I for 6 turns" — the extra-action grant resolves on-ally-destroyed
         // via parseExtraAction, but Speed Up I is a separate (plain) buff ability that otherwise
@@ -3687,7 +3728,8 @@ export function buildShipAbilities(rawShip: Ship): ShipSkills {
                 rowText &&
                 (reactiveTrigger === 'on-debuff-inflicted' ||
                     reactiveTrigger === 'on-ally-debuff-inflicted' ||
-                    reactiveTrigger === 'on-other-ally-debuff-inflicted')
+                    reactiveTrigger === 'on-other-ally-debuff-inflicted' ||
+                    reactiveTrigger === 'on-enemy-debuff-inflicted')
             ) {
                 const verb = detectDebuffInflictionVerb(rowText, buff.buffName, occurrence);
                 if (verb) ability.triggerApplicationFilter = verb;
@@ -4071,6 +4113,7 @@ export function buildShipAbilities(rawShip: Ship): ShipSkills {
         // the passive damage-reaction pass) while the `pos` anchors are still available — each
         // slot's anchors index that slot's own row text.
         markPatternScoped(positioned, getSkillRowForSlot(ship, slot)?.text ?? '');
+        markKillerScope(positioned, getSkillRowForSlot(ship, slot)?.text ?? '');
         positioned.sort((a, b) => a.pos - b.pos);
         slots.push({ slot, abilities: positioned.map((p) => p.ability) });
     }

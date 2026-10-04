@@ -181,6 +181,11 @@ export type AbilityTrigger =
     // isSameSideAlly (owner excluded) instead of !isOpposing. See triggers.ts's trigger doc
     // block for the carve-out list.
     | 'on-other-ally-debuff-inflicted'
+    // VICTIM-scoped and inflictor-AGNOSTIC: a debuff or DoT lands on an OPPOSING actor, whoever
+    // inflicted it — the owner, an ally, anyone (APEX's "when an enemy gets inflicted with a
+    // debuff": passive voice, no "this Unit"; owner ruling R16). Rides `debuff-applied` and
+    // `dot-applied` keyed on the TARGET, unlike the three inflictor-scoped siblings above.
+    | 'on-enemy-debuff-inflicted'
     | 'on-ally-crit-dot'
     // Wisteria: self-subject sibling of on-ally-crit-dot — THIS unit's OWN crit-cast DoT
     // infliction ("When this Unit inflicts Corrosion with a critical hit, it also inflicts
@@ -361,6 +366,8 @@ export const LIVE_TRIGGERS = new Set<AbilityTrigger>([
     'on-ally-debuff-inflicted',
     // Owner-excluded sibling (Provider — #590): "another/other ally" phrasing.
     'on-other-ally-debuff-inflicted',
+    // R16 (APEX): any debuff landing on an opposing actor, whoever inflicted it.
+    'on-enemy-debuff-inflicted',
     // Phase 3 PR-E: ally-scoped counterpart of on-debuffed.
     'on-ally-debuffed',
     // Phase 3 PR-H: self-scoped reaction to THIS unit's own cleanse actually removing a debuff.
@@ -1263,7 +1270,8 @@ export interface Ability {
      *  Isha parses as a mutually exclusive pair (3% non-crit / 6% crit — "instead"). */
     triggerCritFilter?: 'crit' | 'non-crit';
     /** Landing-verb filter for the debuff-inflicted trigger family (on-debuff-inflicted,
-     *  on-ally-debuff-inflicted, on-other-ally-debuff-inflicted, on-ally-debuffed, on-debuffed):
+     *  on-ally-debuff-inflicted, on-other-ally-debuff-inflicted, on-enemy-debuff-inflicted,
+     *  on-ally-debuffed, on-debuffed):
      *  'inflict' fires only on a status whose source text says "inflicts", 'apply' only on one
      *  whose source says "applies" (Provoke, Concentrate Fire, Disable; the Burner gear set's
      *  Inferno). Set by the parser from the clause's own verb ("inflicts"/"inflicting" →
@@ -1294,6 +1302,13 @@ export interface Ability {
      *  the other `trigger*Filter` fields (all must pass). Set by the parser from the clause's own
      *  words; absent → any slot passes. Read by `passesSourceSlotFilter` in triggers.ts. */
     triggerSourceSlotFilter?: ('active' | 'charged')[];
+    /** Killer filter for `on-enemy-destroyed`: `'owner'` fires only on a death the OWNER dealt
+     *  (the `ship-destroyed` event's `killerId` — a direct hit or the owner's own Bomb burst; a
+     *  DoT-tick batch names no killer, so it never qualifies). Set by the parser when the kill
+     *  clause makes the owner the killer — "upon destroying an enemy", "When this Unit destroys
+     *  an enemy", "each enemy destroyed by this Unit" (owner ruling R18, Meiying). Absent → every
+     *  opposing death fires it ("When an enemy is destroyed", "when an enemy dies"). */
+    triggerKillerScope?: 'owner';
     /** Once-per-CAST cap for a reaction to the owner's own cast (Ripper: "When this Unit
      *  inflicts a debuff with its active or charged skills, it also inflicts Inferno II … and all
      *  allies active buffs are extended by 1 turn"). `'cast'` fires at most once per owner cast
