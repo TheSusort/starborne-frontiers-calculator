@@ -3,13 +3,13 @@ import { buildRoundContext } from '../roundContext';
 import { buildActorConditionContext } from '../../combat/triggers';
 
 describe('buildRoundContext', () => {
-    it('sums enemyDebuffCount from landed + corrosion + inferno + bomb entry counts', () => {
+    it('sums enemyDebuffCount from landed + corrosion + inferno + bomb stack counts', () => {
         const ctx = buildRoundContext({
             selfBuffNames: [],
             landedEnemyDebuffCount: 2,
-            corrosionEntryCount: 1,
-            infernoEntryCount: 0,
-            bombCount: 1,
+            corrosionStacks: 1,
+            infernoStacks: 0,
+            bombStacks: 1,
             effectiveCritRate: 50,
         });
         expect(ctx.enemyDebuffCount).toBe(4);
@@ -19,9 +19,9 @@ describe('buildRoundContext', () => {
         const ctx = buildRoundContext({
             selfBuffNames: ['Rally', 'Focus'],
             landedEnemyDebuffCount: 0,
-            corrosionEntryCount: 0,
-            infernoEntryCount: 0,
-            bombCount: 0,
+            corrosionStacks: 0,
+            infernoStacks: 0,
+            bombStacks: 0,
             effectiveCritRate: 73,
             enemyType: 'Defender',
         });
@@ -39,9 +39,9 @@ describe('buildRoundContext', () => {
         const ctx = buildRoundContext({
             selfBuffNames: [],
             landedEnemyDebuffCount: 0,
-            corrosionEntryCount: 0,
-            infernoEntryCount: 0,
-            bombCount: 0,
+            corrosionStacks: 0,
+            infernoStacks: 0,
+            bombStacks: 0,
             effectiveCritRate: 0,
             adjacentAllyCount: 3,
             enemyAdjacentCount: 2,
@@ -56,9 +56,9 @@ describe('buildRoundContext', () => {
         const ctx = buildRoundContext({
             selfBuffNames: [],
             landedEnemyDebuffCount: 0,
-            corrosionEntryCount: 0,
-            infernoEntryCount: 0,
-            bombCount: 0,
+            corrosionStacks: 0,
+            infernoStacks: 0,
+            bombStacks: 0,
             effectiveCritRate: 0,
         });
         expect(ctx.selfDebuffNames).toEqual([]);
@@ -81,9 +81,9 @@ describe('buildRoundContext', () => {
         const ctx = buildRoundContext({
             selfBuffNames: [],
             landedEnemyDebuffCount: 0,
-            corrosionEntryCount: 0,
-            infernoEntryCount: 0,
-            bombCount: 0,
+            corrosionStacks: 0,
+            infernoStacks: 0,
+            bombStacks: 0,
             effectiveCritRate: 0,
             selfCritPower: 150,
         });
@@ -94,9 +94,9 @@ describe('buildRoundContext', () => {
         const ctx = buildRoundContext({
             selfBuffNames: [],
             landedEnemyDebuffCount: 0,
-            corrosionEntryCount: 0,
-            infernoEntryCount: 0,
-            bombCount: 0,
+            corrosionStacks: 0,
+            infernoStacks: 0,
+            bombStacks: 0,
             effectiveCritRate: 0,
         });
         expect(ctx.enemyType).toBeUndefined();
@@ -106,9 +106,9 @@ describe('buildRoundContext', () => {
         const base = {
             selfBuffNames: [],
             landedEnemyDebuffCount: 0,
-            corrosionEntryCount: 0,
-            infernoEntryCount: 0,
-            bombCount: 0,
+            corrosionStacks: 0,
+            infernoStacks: 0,
+            bombStacks: 0,
             effectiveCritRate: 50,
         };
         expect(buildRoundContext(base).roundCrit).toBeUndefined();
@@ -124,9 +124,9 @@ describe('buildRoundContext', () => {
         const base = {
             selfBuffNames: [],
             landedEnemyDebuffCount: 0,
-            corrosionEntryCount: 0,
-            infernoEntryCount: 0,
-            bombCount: 0,
+            corrosionStacks: 0,
+            infernoStacks: 0,
+            bombStacks: 0,
             effectiveCritRate: 50,
         };
         const ctx = buildRoundContext(base);
@@ -141,9 +141,9 @@ describe('buildRoundContext', () => {
         const base = {
             selfBuffNames: [],
             landedEnemyDebuffCount: 0,
-            corrosionEntryCount: 0,
-            infernoEntryCount: 0,
-            bombCount: 0,
+            corrosionStacks: 0,
+            infernoStacks: 0,
+            bombStacks: 0,
             effectiveCritRate: 50,
         };
         const ctx = buildRoundContext({
@@ -165,9 +165,9 @@ describe('buildRoundContext', () => {
         const ctx = buildRoundContext({
             selfBuffNames: [],
             landedEnemyDebuffCount: 0,
-            corrosionEntryCount: 0,
-            infernoEntryCount: 0,
-            bombCount: 0,
+            corrosionStacks: 0,
+            infernoStacks: 0,
+            bombStacks: 0,
             effectiveCritRate: 0,
             selfHpPct: 40,
             enemyBuffNames: ['Attack Up III'],
@@ -182,9 +182,9 @@ describe('buildRoundContext', () => {
         const ctx = buildRoundContext({
             selfBuffNames: [],
             landedEnemyDebuffCount: 0,
-            corrosionEntryCount: 0,
-            infernoEntryCount: 0,
-            bombCount: 0,
+            corrosionStacks: 0,
+            infernoStacks: 0,
+            bombStacks: 0,
             effectiveCritRate: 0,
         });
         expect(ctx.selfHpPct).toBe(100);
@@ -196,9 +196,9 @@ describe('buildRoundContext', () => {
         const base = {
             selfBuffNames: [],
             landedEnemyDebuffCount: 2,
-            corrosionEntryCount: 0,
-            infernoEntryCount: 0,
-            bombCount: 0,
+            corrosionStacks: 0,
+            infernoStacks: 0,
+            bombStacks: 0,
             effectiveCritRate: 0,
         };
 
@@ -234,9 +234,9 @@ describe('buildActorConditionContext – condition-context plumbing', () => {
     }
 
     const sharedBase = {
-        corrosionEntryCount: 0,
-        infernoEntryCount: 0,
-        bombCount: 0,
+        corrosionStacks: 0,
+        infernoStacks: 0,
+        bombStacks: 0,
         enemyHpPct: 100,
     };
 
@@ -259,29 +259,29 @@ describe('buildActorConditionContext – condition-context plumbing', () => {
         expect(ctx.selfDebuffNames).toEqual([]);
     });
 
-    // SP-E, Task E2: `genericCount`/`enemyDotFamilyCounts` thread through the drain-time
+    // SP-E, Task E2: `genericStacks`/`enemyDotFamilyCounts` thread through the drain-time
     // (reactive) condition context the same way the four playerTurn.ts buildRoundContext calls
     // do — a foreign-caster aura or a drain-time reactive gated on a named DoT family (or the
     // bare enemy-dot-count subject) must see the SAME live counts a local cast-path gate does.
-    it('threads genericCount into enemyDotCount and enemyDotFamilyCounts through untouched', () => {
+    it('threads genericStacks into enemyDotCount and enemyDotFamilyCounts through untouched', () => {
         const ctx = buildActorConditionContext(makeStatusEngine() as never, 'attacker', {
             ...sharedBase,
-            corrosionEntryCount: 1,
-            infernoEntryCount: 1,
-            bombCount: 1,
-            genericCount: 2,
+            corrosionStacks: 1,
+            infernoStacks: 1,
+            bombStacks: 1,
+            genericStacks: 2,
             enemyDotFamilyCounts: { 'Acidic Decay': 2 },
         });
         expect(ctx.enemyDotCount).toBe(5);
         expect(ctx.enemyDotFamilyCounts).toEqual({ 'Acidic Decay': 2 });
     });
 
-    it('defaults genericCount to 0 and leaves enemyDotFamilyCounts undefined when omitted', () => {
+    it('defaults genericStacks to 0 and leaves enemyDotFamilyCounts undefined when omitted', () => {
         const ctx = buildActorConditionContext(makeStatusEngine() as never, 'attacker', {
             ...sharedBase,
-            corrosionEntryCount: 1,
-            infernoEntryCount: 1,
-            bombCount: 1,
+            corrosionStacks: 1,
+            infernoStacks: 1,
+            bombStacks: 1,
         });
         expect(ctx.enemyDotCount).toBe(3);
         expect(ctx.enemyDotFamilyCounts).toBeUndefined();

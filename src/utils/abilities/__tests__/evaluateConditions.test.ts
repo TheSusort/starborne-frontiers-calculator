@@ -691,9 +691,9 @@ describe('lowest-speed-ally', () => {
         const ctx = buildRoundContext({
             selfBuffNames: [],
             landedEnemyDebuffCount: 0,
-            corrosionEntryCount: 0,
-            infernoEntryCount: 0,
-            bombCount: 0,
+            corrosionStacks: 0,
+            infernoStacks: 0,
+            bombStacks: 0,
             effectiveCritRate: 0,
             isLowestSpeedAlly: true,
         });
@@ -704,9 +704,9 @@ describe('lowest-speed-ally', () => {
         const ctx = buildRoundContext({
             selfBuffNames: [],
             landedEnemyDebuffCount: 0,
-            corrosionEntryCount: 0,
-            infernoEntryCount: 0,
-            bombCount: 0,
+            corrosionStacks: 0,
+            infernoStacks: 0,
+            bombStacks: 0,
             effectiveCritRate: 0,
             isLowestSpeedAlly: false,
         });
@@ -717,9 +717,9 @@ describe('lowest-speed-ally', () => {
         const ctx = buildRoundContext({
             selfBuffNames: [],
             landedEnemyDebuffCount: 0,
-            corrosionEntryCount: 0,
-            infernoEntryCount: 0,
-            bombCount: 0,
+            corrosionStacks: 0,
+            infernoStacks: 0,
+            bombStacks: 0,
             effectiveCritRate: 0,
         });
         expect(evaluateCondition({ subject: 'lowest-speed-ally', derivable: true }, ctx)).toBe(1);
@@ -737,18 +737,18 @@ describe("SP-F F4 — 'ally-on-team' live roster vs assume-met fallback", () => 
         const withNayra = buildRoundContext({
             selfBuffNames: [],
             landedEnemyDebuffCount: 0,
-            corrosionEntryCount: 0,
-            infernoEntryCount: 0,
-            bombCount: 0,
+            corrosionStacks: 0,
+            infernoStacks: 0,
+            bombStacks: 0,
             effectiveCritRate: 0,
             allyTeamNames: ['Isha', 'Nayra'],
         });
         const withoutNayra = buildRoundContext({
             selfBuffNames: [],
             landedEnemyDebuffCount: 0,
-            corrosionEntryCount: 0,
-            infernoEntryCount: 0,
-            bombCount: 0,
+            corrosionStacks: 0,
+            infernoStacks: 0,
+            bombStacks: 0,
             effectiveCritRate: 0,
             allyTeamNames: ['Isha', 'Corvus'],
         });
@@ -762,9 +762,9 @@ describe("SP-F F4 — 'ally-on-team' live roster vs assume-met fallback", () => 
         const ctx = buildRoundContext({
             selfBuffNames: [],
             landedEnemyDebuffCount: 0,
-            corrosionEntryCount: 0,
-            infernoEntryCount: 0,
-            bombCount: 0,
+            corrosionStacks: 0,
+            infernoStacks: 0,
+            bombStacks: 0,
             effectiveCritRate: 0,
         });
         expect(ctx.allyTeamNames).toBeUndefined();

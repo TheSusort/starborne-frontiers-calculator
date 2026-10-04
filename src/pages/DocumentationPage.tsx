@@ -2994,7 +2994,10 @@ const DocumentationPage: React.FC = () => {
                                         condition that counts debuffs, on an enemy or on the ship
                                         itself (Sustainer&apos;s &ldquo;if this Unit has no
                                         debuffs&rdquo;, Meatshield&apos;s repair for each debuff on
-                                        itself), counts every damage-over-time stack as a debuff.
+                                        itself), counts every damage-over-time stack as a debuff:
+                                        one &ldquo;2 stacks of Corrosion&rdquo; application is two
+                                        debuffs. A count of damage-over-time effects (Anemone,
+                                        Snakeroot) counts each stack too.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Team Ships:</span> Pick a

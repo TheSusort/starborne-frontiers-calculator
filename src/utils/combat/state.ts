@@ -123,6 +123,35 @@ export interface ActiveDoTStack {
     unremovable?: boolean;
 }
 
+/** How many debuffs — and how many damage-over-time effects — a list of DoT entries (or pending
+ *  bombs) is: one per STACK, not one per entry (owner ruling R26: stacks display in game as
+ *  separate debuffs). One "inflicts 2 stacks of Corrosion I" application is 2; two 1-stack
+ *  applications are 2 as well. Every debuff or DoT-effect COUNT reads DoT entries through this
+ *  (or `carriedDotStacks`); tick damage, expiry and detonation walk the entries themselves. */
+export function dotStackCount(entries: readonly { stacks: number }[]): number {
+    return entries.reduce((sum, e) => sum + e.stacks, 0);
+}
+
+/** A unit's four DoT containers. `genericDoTEntries` is optional for the hand-built reaction
+ *  contexts that carry none. */
+export interface DoTContainers {
+    corrosionEntries: readonly ActiveDoTStack[];
+    infernoEntries: readonly ActiveDoTStack[];
+    pendingBombs: readonly PendingBomb[];
+    genericDoTEntries?: readonly ActiveDoTStack[];
+}
+
+/** Every DoT stack a unit carries across its four containers — the DoT half of its debuff count
+ *  and the whole of its damage-over-time-effect count (`dotStackCount`). */
+export function carriedDotStacks(holder: DoTContainers): number {
+    return (
+        dotStackCount(holder.corrosionEntries) +
+        dotStackCount(holder.infernoEntries) +
+        dotStackCount(holder.pendingBombs) +
+        dotStackCount(holder.genericDoTEntries ?? [])
+    );
+}
+
 export interface PendingBomb {
     countdown: number;
     damagePerStack: number;

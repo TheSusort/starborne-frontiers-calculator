@@ -4,8 +4,8 @@ import { EnemyBaseClass } from '../../types/calculator';
 export interface ConditionContext {
     selfBuffNames: string[];
     selfDebuffNames: string[];
-    /** How many debuffs the unit itself carries: its distinct named debuffs plus every DoT entry
-     *  on it, each stack counting as one debuff (owner ruling R22 — ruling 8 applied to self).
+    /** How many debuffs the unit itself carries: its distinct named debuffs plus every DoT stack
+     *  on it (`actorDebuffCount`; owner ruling R22 — ruling 8 applied to self).
      *  Read by every `self-debuff` condition WITHOUT a `buffName` ("if this Unit has no debuffs",
      *  "for each debuff on itself", "while debuffed"); a named one keeps matching
      *  `selfDebuffNames`. Absent → the count of `selfDebuffNames` (a caller that does not measure
@@ -185,24 +185,22 @@ export interface ConditionContext {
      *  Supplied only by runPlayerTurn's post-purge re-gate; absent means the cast's purges have
      *  not resolved, which does not resolve the `buffs-purged-this-cast` subject. */
     buffsPurgedThisCast?: number;
-    /** SP-D — per-target DoT-ONLY entry subtotal (corrosion + inferno + bomb entry-array
-     *  lengths, +acidicDecay once SP-E adds it). Distinct from `enemyDebuffCount`, which also
-     *  folds in landed CONTROL/marker debuffs — `enemy-dot-count` must never be satisfied by a
-     *  non-DoT debuff (e.g. Stasis). Derived by buildRoundContext from the SAME
-     *  corrosionEntryCount/infernoEntryCount/bombCount already threaded through the funnel for
-     *  `enemyDebuffCount` — no new engine seam required. SP-4d: OPTIONAL, and absent means "there
+    /** SP-D — per-target DoT-ONLY subtotal: the DoT stacks on the victim (`dotReadings`).
+     *  Distinct from `enemyDebuffCount`, which also folds in landed CONTROL/marker debuffs —
+     *  `enemy-dot-count` must never be satisfied by a non-DoT debuff (e.g. Stasis). Derived by
+     *  buildRoundContext from the SAME stack counts it folds into `enemyDebuffCount`. SP-4d:
+     *  OPTIONAL, and absent means "there
      *  is no opposing victim to count DoTs on" — not "the victim carries zero DoTs". Same
-     *  per-victim distinction as `enemyDebuffCount`/`enemyHpPct`/`enemyShielded`: the entry-array
-     *  lengths this is summed from are themselves 0 on both a no-victim turn AND a DoT-free real
+     *  per-victim distinction as `enemyDebuffCount`/`enemyHpPct`/`enemyShielded`: the stack
+     *  counts this is summed from are themselves 0 on both a no-victim turn AND a DoT-free real
      *  victim, so `buildRoundContext` needs its own `noOpposingVictim` signal (not the counts) to
      *  tell the two apart. `evaluateCondition`'s bare `enemy-dot-count` arm reads this field
      *  as-is — no `?? 0` — so the absence propagates instead of being fabricated back into a
      *  satisfiable 0. */
     enemyDotCount?: number;
-    /** SP-D — optional per-family DoT entry count lookup, for `enemy-dot-count` conditions that
-     *  carry a `buffName` (Belladonna's "3+ Acidic Decay"). Absent/missing family → 0 (the
-     *  Acidic Decay DoT family does not exist until SP-E introduces it, so Belladonna's gate is
-     *  runtime-inert today by design, not a bug). */
+    /** SP-D — optional per-family DoT stack count lookup (`dotFamilyCounts`), for
+     *  `enemy-dot-count` conditions that carry a `buffName` (Belladonna's "3+ Acidic Decay").
+     *  Absent/missing family → 0. */
     enemyDotFamilyCounts?: Record<string, number>;
     /** SP-F F4 — ship names of the acting unit's LIVING same-team allies (team-sim only; the
      *  drain context maps living same-side actor ids → ship names). Present ONLY when the sim

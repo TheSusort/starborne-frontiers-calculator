@@ -22,6 +22,8 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator: Warpstrike implant's while-debuffed bonus now counts DoTs as debuffs.",
     "Combat simulator: Selenite's Stealth charge now only counts enemies her skill hits.",
     "Combat simulator: Chakara's speed charge now needs every damaged enemy faster.",
+    'Combat simulator: each stack of a damage-over-time effect now counts as one debuff.',
+    "DPS calculator: Snakeroot's passive now scales with every damage-over-time stack.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

@@ -19,7 +19,7 @@ import type { AffinityName } from '../../types/ship';
 import { PERSISTENT_STACKING_BUFFS } from '../../constants/persistentStackingBuffs';
 import { conditionsMet, groupConditions } from '../abilities/evaluateConditions';
 import { enemySelectorKind, type EnemySelectorKind } from '../abilities/abilityTargetSide';
-import { buildRoundContext, dotFamilyCounts } from '../abilities/roundContext';
+import { buildRoundContext, dotReadings } from '../abilities/roundContext';
 import { makeRateGate } from '../calculators/rateAccumulator';
 import { computeAffinityModifiers } from '../calculators/affinityUtils';
 import {
@@ -59,7 +59,7 @@ import {
 import { reduceBombsOnVictim } from './bombCountdown';
 import { liveGateConditions } from './abilityStatusGating';
 import { CombatEvent, CombatEventBus, CombatEventType, ShieldApplyAccumulator } from './events';
-import { CombatActor, ActiveDoTStack, PendingBomb } from './state';
+import { CombatActor, ActiveDoTStack, PendingBomb, carriedDotStacks } from './state';
 import {
     ActiveAbilityStatus,
     ActiveBuff,
@@ -328,13 +328,13 @@ export interface Intent {
          *  charge, Pestilence's cleanse) ignore it. */
         debuffVictimId?: string;
         /** How many debuffs `debuffVictimId` carried the moment the triggering debuff landed,
-         *  that debuff included (its named debuffs plus every DoT entry — `debuffCountOf`).
+         *  that debuff included (`debuffCountOf`).
          *  Stamped by the `on-enemy-debuff-inflicted` listener: its "if that enemy has 3 or more
          *  debuffs on a debuff infliction" gate (APEX's Block Shield) is read on THAT infliction,
          *  not at drain time, when the cast's later landings would already be counted. */
         debuffVictimDebuffCount?: number;
         /** How many debuffs the enemy an `on-enemy-destroyed` intent's death names (`victimId`)
-         *  carried as it died — named debuffs plus every DoT entry (`debuffCountOf`). Read by
+         *  carried as it died (`debuffCountOf`). Read by
          *  the `killed-enemy-had-debuff` gate (Meiying's "destroying an enemy with a debuff"). */
         killedEnemyDebuffCount?: number;
         /** The triggering infliction's `debuffInflictedReactionChain` (events.ts), stamped by
@@ -603,9 +603,8 @@ export function registerReactiveListeners(args: {
      *  unknown-never-matches contract rather than `adjacentAllyIdsFor`'s absent-allows one — a
      *  status gate that silently opened would restore the very defect it exists to fix. */
     statusNamesOf?: (actorId: string) => string[];
-    /** How many debuffs an actor carries right now: its named debuffs plus every DoT entry —
-     *  the count an "N or more debuffs" gate reads on a cast (ruling 8: each DoT stack is a
-     *  debuff). Side-agnostic. Read by the `on-enemy-debuff-inflicted` listener to stamp
+    /** How many debuffs an actor carries right now (`actorDebuffCount`) — the count an "N or
+     *  more debuffs" gate reads on a cast. Side-agnostic. Read by the `on-enemy-debuff-inflicted` listener to stamp
      *  `debuffVictimDebuffCount`; absent (unit fixtures) → no stamp. */
     debuffCountOf?: (actorId: string) => number;
     /** #363: living same-side ids on `ownerId`'s ACTIVE support-pattern footprint — the
@@ -2138,8 +2137,8 @@ export interface IntentExecContext {
     corrosionEntries: ActiveDoTStack[];
     infernoEntries: ActiveDoTStack[];
     pendingBombs: PendingBomb[];
-    /** Generic (absolute per-tick) DoT entries, for `enemyDotFamilyCounts`/`genericCount`
-     *  drain-time derivation. Optional: absent → `[]`, so the derived family map is `{}`. */
+    /** Generic (absolute per-tick) DoT entries, for the drain-time `dotReadings`. Optional:
+     *  absent → `[]`, so the derived family map is `{}`. */
     genericDoTEntries?: ActiveDoTStack[];
     /** Player actor runtimes keyed by owner id ('attacker' + every walked team id). The
      *  executor resolves the intent's owner from this map for per-owner landing gates,
@@ -2551,9 +2550,10 @@ export function buildActorConditionContext(
     statusEngine: StatusEngine,
     ownerId: string,
     shared: {
-        corrosionEntryCount: number;
-        infernoEntryCount: number;
-        bombCount: number;
+        /** DoT stacks on the unit the enemy subjects ask about — `dotReadings`. */
+        corrosionStacks: number;
+        infernoStacks: number;
+        bombStacks: number;
         enemyType?: EnemyBaseClass;
         /** Passed through as-is to `buildRoundContext` below — absent means no enemy/victim
          *  reading exists this round (no phantom is invented). Every existing caller still supplies
@@ -2570,8 +2570,8 @@ export function buildActorConditionContext(
         /** Active debuff names on self. Default [] (DPS-assumption). Populated by
          *  buildDrainContext. */
         selfDebuffNames?: string[];
-        /** Debuffs on self, DoT entries included (`actorDebuffCount`). Absent → the count of
-         *  `selfDebuffNames`. Populated by buildDrainContext. */
+        /** Debuffs on self (`actorDebuffCount`). Absent → the count of `selfDebuffNames`.
+         *  Populated by buildDrainContext. */
         selfDebuffCount?: number;
         /** Owner has the lowest Speed among its player team. Default true (lone-actor /
          *  DPS assumption). Populated by buildDrainContext. */
@@ -2632,10 +2632,10 @@ export function buildActorConditionContext(
          *  on this subject (Berserker's Marauder Rage) to actually re-evaluate on-cast instead of
          *  only at the one-time combat-start seed (see seedPassiveTimedStatuses). */
         enemiesHitThisCast?: number;
-        /** `genericDoTEntries.length` at drain time. Default 0 (no generic DoT tracked
+        /** Generic DoT stacks at drain time (`dotReadings`). Default 0 (no generic DoT tracked
          *  by this caller). Folded into `enemyDotCount` alongside corrosion/inferno/bomb. */
-        genericCount?: number;
-        /** Live per-family DoT entry counts (Belladonna's "3+ Acidic Decay" gate) at
+        genericStacks?: number;
+        /** Live per-family DoT stack counts (Belladonna's "3+ Acidic Decay" gate) at
          *  drain time. Default undefined — every family reads 0 via
          *  ConditionContext.enemyDotFamilyCounts' own fallback. */
         enemyDotFamilyCounts?: Record<string, number>;
@@ -2659,10 +2659,10 @@ export function buildActorConditionContext(
     return buildRoundContext({
         selfBuffNames,
         landedEnemyDebuffCount: snap.activeEnemyDebuffs.length,
-        corrosionEntryCount: shared.corrosionEntryCount,
-        infernoEntryCount: shared.infernoEntryCount,
-        bombCount: shared.bombCount,
-        genericCount: shared.genericCount,
+        corrosionStacks: shared.corrosionStacks,
+        infernoStacks: shared.infernoStacks,
+        bombStacks: shared.bombStacks,
+        genericStacks: shared.genericStacks,
         enemyDotFamilyCounts: shared.enemyDotFamilyCounts,
         effectiveCritRate: shared.effectiveCritRate ?? 0,
         enemyType: shared.enemyType,
@@ -2907,18 +2907,9 @@ function buildDrainContext(ctx: IntentExecContext, ownerId: string) {
     // see buildActorConditionContext doc.)
     return buildActorConditionContext(ctx.statusEngine, ownerId, {
         includeAbilitySelfNames: true,
-        corrosionEntryCount: ctx.corrosionEntries.length,
-        infernoEntryCount: ctx.infernoEntries.length,
-        bombCount: ctx.pendingBombs.length,
-        // Live generic-DoT count + per-family map (Belladonna's "3+ Acidic Decay" gate) at
-        // drain time. `ctx.genericDoTEntries` is optional (test fixtures may omit it) → `[]`
-        // fallback, matching every other optional IntentExecContext field's default pattern.
-        genericCount: (ctx.genericDoTEntries ?? []).length,
-        enemyDotFamilyCounts: dotFamilyCounts(
-            ctx.corrosionEntries,
-            ctx.infernoEntries,
-            ctx.genericDoTEntries ?? []
-        ),
+        // Live DoT stack counts + per-family map (Belladonna's "3+ Acidic Decay" gate) at drain
+        // time. `ctx.genericDoTEntries` is optional (test fixtures may omit it).
+        ...dotReadings(ctx),
         enemyType: ctx.enemyType,
         // NO fight-wide enemy-HP reading. Enemy-HP gates that CAN be re-checked per resolved
         // target already are (`perVictimOk`, see splitDrainGateConditions); the rest are honestly
@@ -2941,7 +2932,7 @@ function buildDrainContext(ctx: IntentExecContext, ownerId: string) {
             (ctx.enemyAttackerIds ?? []).filter((id) => ctx.isActorAlive?.(id) ?? true)
         ),
         selfDebuffNames: ownerDebuffNamesFor(ctx.statusEngine, ownerId),
-        // Named debuffs plus every DoT entry on the owner (R22) — absent without an actor reader.
+        // Named debuffs plus every DoT stack on the owner (R22) — absent without an actor reader.
         ...(ownerActor ? { selfDebuffCount: actorDebuffCount(ctx.statusEngine, ownerActor) } : {}),
         // Live lowest-speed-ally gate (Chakara). Default true → DPS / no-delegate
         // paths keep the lone-actor assumption.
@@ -3007,7 +2998,7 @@ function buildDrainContext(ctx: IntentExecContext, ownerId: string) {
 // "enemy has a buff" / "self has a debuff" gate only needs to know the status is present.
 //
 // `noOpposingVictim: true` is EXPLICIT, not incidental — this constant already passes
-// literal `0`s for every entry count, which `buildRoundContext` would otherwise sum into a real
+// literal `0`s for every DoT stack count, which `buildRoundContext` would otherwise sum into a real
 // (satisfiable-by-`eq 0`) `enemyDebuffCount`/`enemyDotCount` of exactly 0, and default
 // `enemyShielded` to a real `false`. `tsc` cannot flag a missing optional field, and a call site
 // that "looks obviously zero, obviously fine" is exactly the shape this class of bug hides in.
@@ -3016,9 +3007,9 @@ function buildDrainContext(ctx: IntentExecContext, ownerId: string) {
 const NEUTRAL_NAMES_CTX = buildRoundContext({
     selfBuffNames: [],
     landedEnemyDebuffCount: 0,
-    corrosionEntryCount: 0,
-    infernoEntryCount: 0,
-    bombCount: 0,
+    corrosionStacks: 0,
+    infernoStacks: 0,
+    bombStacks: 0,
     effectiveCritRate: 0,
     noOpposingVictim: true,
 });
@@ -3170,16 +3161,10 @@ export function ownerDebuffNamesFor(statusEngine: StatusEngine, targetId: string
 }
 
 /** How many debuffs `actor` carries right now: its distinct named debuffs (`ownerDebuffNamesFor`)
- *  plus every DoT entry, each stack counting as one debuff (ruling 8) — the same sum a cast's
- *  "N or more debuffs" gate reads for a struck enemy. */
+ *  plus every DoT stack it carries (`carriedDotStacks`) — the same sum a cast's "N or more
+ *  debuffs" gate reads for a struck enemy. */
 export function actorDebuffCount(statusEngine: StatusEngine, actor: CombatActor): number {
-    return (
-        ownerDebuffNamesFor(statusEngine, actor.id).length +
-        actor.corrosionEntries.length +
-        actor.infernoEntries.length +
-        actor.pendingBombs.length +
-        actor.genericDoTEntries.length
-    );
+    return ownerDebuffNamesFor(statusEngine, actor.id).length + carriedDotStacks(actor);
 }
 
 /** The two heal channels an enemy-applied debuff can move, as additive percentage POINTS (-50
@@ -4366,8 +4351,8 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
     // victim THIS on-enemy-destroyed intent carries (eventCtx.victimId, stamped by the listener
     // above), not the fight-wide owner-scoped context buildDrainContext returns — so it is folded
     // in here as a targeted override rather than threaded through buildDrainContext's owner-only
-    // signature. Reads what the slain actor carried as it died (`killedEnemyDebuffCount`, its
-    // named debuffs plus every DoT entry — ruling 8: a DoT is a debuff); without that stamp, its
+    // signature. Reads what the slain actor carried as it died (`killedEnemyDebuffCount`,
+    // `actorDebuffCount` — ruling 8: a DoT is a debuff); without that stamp, its
     // named debuffs now. No victimId (every other reactive trigger, or DPS mode) → false.
     // Explicitly gated on trigger==='on-enemy-destroyed' — other
     // triggers (on-deal-damage, on-bomb-detonated, on-own-echoing-burst-detonated,
