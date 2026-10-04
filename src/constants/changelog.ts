@@ -31,6 +31,7 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator: Crocus's Stasis now counts the Corrosion from the same skill.",
     "Combat simulator: Asphyxiator's charged Stasis now counts debuffs from the same skill.",
     "Combat simulator: Anemone's Taunt now counts the Corrosion from the same skill.",
+    'Combat simulator: cleanses now remove the most recent debuff first.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

@@ -204,6 +204,14 @@ export interface ActiveAbilityStatus {
     casterId?: string;
 }
 
+/** One more thing a cleanse may remove, beside the store's own statuses: `seq` is when it was
+ *  applied (the store's application sequence — `StatusEngine.nextAppliedSeq`), `remove` takes it
+ *  off. Newest first across both. */
+export interface CleanseCandidate {
+    seq: number;
+    remove: () => void;
+}
+
 export interface StatusEngine {
     /** Advance the round counter (strictly sequential, 1-based). Increments
      *  per-round accumulating stacks. Call once at the top of each round, before
@@ -311,8 +319,22 @@ export interface StatusEngine {
     consumeStatusHit(actorId: string, buffName: string): boolean;
     /** Remove up to `count` removable debuffs from `actorId`'s per-victim enemy store, newest
      *  applied first (see removeNewestFirst). `'all'` removes every removable debuff. Returns
-     *  the number actually removed. Unknown id → no-op (returns 0). */
-    cleanse(actorId: string, count: number | 'all'): number;
+     *  the number actually removed. Unknown id → no-op (returns 0).
+     *
+     *  `extra` joins further candidates to the same newest-first pool — the actor's DoT stacks
+     *  (`cleanseDebuffs`, combat/triggers.ts), each stamped from `nextAppliedSeq` so it orders
+     *  among the named debuffs by when it was applied. `namedToo: false` leaves the named debuffs
+     *  out of the pool (a typed cleanse). */
+    cleanse(
+        actorId: string,
+        count: number | 'all',
+        extra?: readonly CleanseCandidate[],
+        namedToo?: boolean
+    ): number;
+    /** The next number of the application sequence every status write is stamped with — taken by
+     *  a DoT entry when it is applied (`ActiveDoTStack.appliedSeq`), so newest-first cleanse and
+     *  duration orders compare DoT stacks with named statuses. Each call advances it. */
+    nextAppliedSeq(): number;
     /** Reduce the duration of ONE timed debuff on `actorId` by `turns`, newest-applied first
      *  (highest appliedSeq). Reduced to <= 0 → removed (expired). Only timed debuffs are
      *  eligible; 'recurring'/'permanent' and UNREMOVABLE_STATUSES are skipped (consistent with
@@ -1619,18 +1641,30 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
      *  NOT in these maps (re-derive each round, no stored entry to remove):
      *  - always-active / aura statuses.
      *
+     *  `extra` candidates (a cleanse's DoT stacks) join the same pool; `namedToo: false` leaves
+     *  the store's own statuses out. The sort is stable, so equal `seq`s keep `extra`'s order.
+     *
      *  `count === 'all'` removes every removable candidate.
      *  Unknown actor id → lazy-empty maps → no-op (returns 0).
      *  Returns the number of statuses actually removed. */
     const removeNewestFirst = (
         actorId: string,
         side: 'debuffs' | 'buffs',
-        count: number | 'all'
+        count: number | 'all',
+        extra: readonly CleanseCandidate[] = [],
+        namedToo = true
     ): number => {
-        const timedMap = side === 'debuffs' ? enemyMaps.get(actorId) : selfMaps.get(actorId);
-        const accumMap =
-            side === 'debuffs' ? accumEnemyMaps.get(actorId) : accumSelfMaps.get(actorId);
-        const candidates: { seq: number; remove: () => void }[] = [];
+        const timedMap = !namedToo
+            ? undefined
+            : side === 'debuffs'
+              ? enemyMaps.get(actorId)
+              : selfMaps.get(actorId);
+        const accumMap = !namedToo
+            ? undefined
+            : side === 'debuffs'
+              ? accumEnemyMaps.get(actorId)
+              : accumSelfMaps.get(actorId);
+        const candidates: CleanseCandidate[] = [...extra];
         if (timedMap) {
             for (const [key, s] of timedMap) {
                 if (isUnremovable(s.buffName, s.turnsRemaining)) continue;
@@ -1655,9 +1689,13 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
 
     /** Remove up to `count` removable debuffs from `actorId`'s per-victim enemy store, newest
      *  first (see removeNewestFirst). `'all'` removes every removable debuff. Returns the number
-     *  actually removed. Unknown id → no-op (returns 0). */
-    const cleanse = (actorId: string, count: number | 'all'): number =>
-        removeNewestFirst(actorId, 'debuffs', count);
+     *  actually removed. Unknown id → no-op (returns 0). `extra` / `namedToo`: see the interface. */
+    const cleanse = (
+        actorId: string,
+        count: number | 'all',
+        extra?: readonly CleanseCandidate[],
+        namedToo?: boolean
+    ): number => removeNewestFirst(actorId, 'debuffs', count, extra, namedToo);
 
     /** Reduce the duration of ONE timed debuff on `actorId` by `turns`, newest-applied first
      *  (highest appliedSeq). Reduced to <= 0 → removed (expired). Only the per-victim timed
@@ -2271,6 +2309,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
 
     return {
         beginRound,
+        nextAppliedSeq,
         sourceFired,
         setLandsTimedEnemyApplication,
         setTurnBlockedReader,

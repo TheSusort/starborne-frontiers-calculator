@@ -2,7 +2,9 @@
  * A cleanse removes DoT STACKS (owner ruling R27, 2026-10-04): each stack is one debuff, so
  * "cleanses 1 debuff" on a ship holding only 2 Corrosion stacks removes ONE stack and leaves 1;
  * "cleanses all debuffs" removes every stack. A named debuff and a DoT stack are both candidates —
- * named debuffs go first, newest first, then DoT stacks. An unremovable DoT (Acidic Decay) stays.
+ * the newest applied goes first (cleanseRecency.integration.test.ts pins the order; a DoT entry
+ * seeded here before the fight is older than anything landed in it). An unremovable DoT (Acidic
+ * Decay) stays.
  * A typed cleanse (Nyxen's "cleanses 2 Bomb", "cleanses 2 damage over time debuffs") removes only
  * that kind.
  *
@@ -340,7 +342,7 @@ for (const side of [PLAYER, ENEMY]) {
             expect(a.corrosion).toEqual([]);
         });
 
-        it('named debuffs go first: cleanse 1 on Attack Down II + a Corrosion stack keeps the stack', () => {
+        it('newest first: cleanse 1 on a seeded Corrosion stack + the later Attack Down II keeps the stack', () => {
             const a = run(side, kit('Laika', ['active']), { corrosion: [1], named: true });
             expect(a.named).toEqual([]);
             expect(a.corrosion).toEqual([1]);

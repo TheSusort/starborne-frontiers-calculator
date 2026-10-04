@@ -1646,6 +1646,8 @@ function applyNewDoTs(args: {
     genericDoTEntries: ActiveDoTStack[];
     pendingBombs: PendingBomb[];
     emitDotApplied: (dotType: DoTType, stacks: number, tier: number) => void;
+    /** Stamps each new entry's `appliedSeq` (`StatusEngine.nextAppliedSeq`). */
+    nextAppliedSeq: () => number;
 }): void {
     for (const dot of args.dotsConfig) {
         if (dot.stacks <= 0 || dot.tier <= 0) continue;
@@ -1655,6 +1657,7 @@ function applyNewDoTs(args: {
                 tier: dot.tier,
                 remainingRounds: dot.duration,
                 sourceId: args.sourceId,
+                appliedSeq: args.nextAppliedSeq(),
             });
             args.emitDotApplied('corrosion', dot.stacks, dot.tier);
         } else if (dot.type === 'inferno') {
@@ -1663,6 +1666,7 @@ function applyNewDoTs(args: {
                 tier: dot.tier,
                 remainingRounds: dot.duration,
                 sourceId: args.sourceId,
+                appliedSeq: args.nextAppliedSeq(),
             });
             args.emitDotApplied('inferno', dot.stacks, dot.tier);
         } else if (dot.type === 'bomb') {
@@ -1675,6 +1679,7 @@ function applyNewDoTs(args: {
                 affinityMult: args.affinityMult,
                 detonationDamageModifier: args.detonationDamageModifier,
                 splashModifier: args.splashModifier,
+                appliedSeq: args.nextAppliedSeq(),
             });
             args.emitDotApplied('bomb', dot.stacks, dot.tier);
         } else if (dot.type === 'generic') {
@@ -1683,6 +1688,7 @@ function applyNewDoTs(args: {
                 tier: dot.tier,
                 remainingRounds: dot.duration,
                 sourceId: args.sourceId,
+                appliedSeq: args.nextAppliedSeq(),
             });
             args.emitDotApplied('generic', dot.stacks, dot.tier);
         }
@@ -4953,6 +4959,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             infernoEntries,
             genericDoTEntries,
             pendingBombs,
+            nextAppliedSeq: statusEngine.nextAppliedSeq,
             emitDotApplied: (dotType, stacks, tier) =>
                 bus.emit({
                     type: 'dot-applied',
@@ -5112,6 +5119,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             infernoEntries: victim.infernoEntries,
             genericDoTEntries: victim.genericDoTEntries,
             pendingBombs: victim.pendingBombs,
+            nextAppliedSeq: statusEngine.nextAppliedSeq,
             emitDotApplied: (dotType, stacks, tier) =>
                 bus.emit({
                     type: 'dot-applied',

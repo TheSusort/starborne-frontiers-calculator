@@ -2111,6 +2111,8 @@ function convertHitToSelfDot(
     sink: DamageAccountingSink,
     damage: number,
     rounds: number,
+    /** The status store's application-sequence source (`StatusEngine.nextAppliedSeq`). */
+    nextAppliedSeq: () => number,
     /** Who threw the hit being converted. Omitted/empty (an aggregate intake with no single
      *  attacker) leaves `dealtCreditId` absent, and every display reader falls back to
      *  `sourceId`. */
@@ -2121,6 +2123,7 @@ function convertHitToSelfDot(
         stacks: 1,
         tier: 0,
         remainingRounds: rounds,
+        appliedSeq: nextAppliedSeq(),
         // The MECHANICS axis stays on the victim: a converted hit buys the attacker no leech.
         // `dealtCreditId` carries the DISPLAY axis — read `ActiveDoTStack.dealtCreditId`'s doc.
         sourceId: victim.id,
@@ -6519,6 +6522,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                             sink,
                             damage,
                             transform.config.turns,
+                            statusEngine.nextAppliedSeq,
                             attackerId
                         );
                         // Only zero `damage` on a REAL conversion (see convertHitToSelfDot's
@@ -6612,6 +6616,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                     sink,
                     damage,
                     HIT_MITIGATION_DOT_ROUNDS,
+                    statusEngine.nextAppliedSeq,
                     cause?.killerId
                 );
                 damage = 0;
@@ -13327,6 +13332,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                     tier: SPREAD_CORROSION_TIER,
                     remainingRounds: SPREAD_CORROSION_DURATION,
                     sourceId: holder.id,
+                    appliedSeq: statusEngine.nextAppliedSeq(),
                 });
             }
             // Remove Toxic Overflow from the holder (targeted single-family removal — preserves any

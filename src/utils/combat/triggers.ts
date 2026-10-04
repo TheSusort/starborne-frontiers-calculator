@@ -64,7 +64,7 @@ import {
     ActiveDoTStack,
     PendingBomb,
     carriedDotStacks,
-    cleanseDotStacks,
+    dotCleanseCandidates,
 } from './state';
 import {
     ActiveAbilityStatus,
@@ -3210,12 +3210,13 @@ export function actorDebuffCount(statusEngine: StatusEngine, actor: CombatActor)
 
 /**
  * Cleanses up to `count` debuffs from `actorId` — the one removal both cleanse executors (cast and
- * reactive) call. The pool is every debuff `actorDebuffCount` counts: its named debuffs
- * (`statusEngine.cleanse`, newest applied first) and each DoT stack it carries (`cleanseDotStacks`,
- * owner ruling R27). Named debuffs go first, then DoT stacks with whatever count is left — no
- * ruling orders the two kinds against each other. A typed cleanse (`debuffType`, Nyxen's "cleanses
- * 2 Bomb" / "2 damage over time debuffs") removes DoT stacks of that kind only. `actor` absent (a
- * hand-built ctx without an actor reader) → named debuffs only. Returns how many were removed.
+ * reactive) call. The pool is every debuff `actorDebuffCount` counts: its named debuffs and each
+ * DoT stack it carries (`dotCleanseCandidates`, owner ruling R27), taken NEWEST APPLIED FIRST
+ * across both kinds (owner ruling 2026-10-04: Attack Down and 2 Corrosion stacks, "cleanses 1
+ * debuff" → whichever was inflicted last goes). A typed cleanse (`debuffType`, Nyxen's "cleanses
+ * 2 Bomb" / "2 damage over time debuffs") filters to DoT stacks of that kind, then takes the
+ * newest. `actor` absent (a hand-built ctx without an actor reader) → named debuffs only. Returns
+ * how many were removed.
  */
 export function cleanseDebuffs(
     statusEngine: StatusEngine,
@@ -3224,11 +3225,12 @@ export function cleanseDebuffs(
     count: number | 'all',
     debuffType?: 'bomb' | 'dot'
 ): number {
-    const named = debuffType === undefined ? statusEngine.cleanse(actorId, count) : 0;
-    if (!actor) return named;
-    const left = count === 'all' ? 'all' : count - named;
-    if (left !== 'all' && left <= 0) return named;
-    return named + cleanseDotStacks(actor, left, debuffType);
+    return statusEngine.cleanse(
+        actorId,
+        count,
+        actor ? dotCleanseCandidates(actor, debuffType) : [],
+        debuffType === undefined
+    );
 }
 
 /** The two heal channels an enemy-applied debuff can move, as additive percentage POINTS (-50
@@ -5049,6 +5051,7 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                     tier: cfg.tier,
                     remainingRounds: cfg.duration,
                     sourceId: intent.ownerId,
+                    appliedSeq: ctx.statusEngine.nextAppliedSeq(),
                 });
             } else if (cfg.dotType === 'inferno') {
                 (victim?.infernoEntries ?? ctx.infernoEntries).push({
@@ -5056,6 +5059,7 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                     tier: cfg.tier,
                     remainingRounds: cfg.duration,
                     sourceId: intent.ownerId,
+                    appliedSeq: ctx.statusEngine.nextAppliedSeq(),
                 });
             } else if (cfg.dotType === 'bomb') {
                 // A bomb SNAPSHOTS the owner's effective attack + affinity at application (unlike
@@ -5095,6 +5099,7 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                     detonationDamageModifier: 0,
                     // Same approximation: reactive ctx does not carry the live splash modifier.
                     splashModifier: 0,
+                    appliedSeq: ctx.statusEngine.nextAppliedSeq(),
                 });
             }
             // Discrete infliction event — sourceId = the owner so the application is chainable

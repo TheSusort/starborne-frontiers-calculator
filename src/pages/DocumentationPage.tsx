@@ -3004,16 +3004,18 @@ const DocumentationPage: React.FC = () => {
                                         Oleander&apos;s charge, Provider&apos;s hit, Lingshe&apos;s
                                         Stealth) fires once per stack that lands. A cleanse removes
                                         stacks the same way: &ldquo;cleanses 1 debuff&rdquo; on 2
-                                        Corrosion stacks leaves 1. Named debuffs are cleansed first,
-                                        then damage-over-time stacks; Acidic Decay cannot be
-                                        cleansed. Nyxen&apos;s cleanses take only Bombs or only
-                                        damage-over-time effects, as written. A count written after
-                                        an infliction in the same skill includes what that skill
-                                        landed, enemy by enemy: Crocus&apos;s Corrosion II counts
-                                        toward her own &ldquo;3 or more debuffs&rdquo; Stasis
-                                        (Asphyxiator&apos;s and Anemone&apos;s gates likewise), and
-                                        a resisted one does not. A passive reacting to the hit
-                                        (Bayah) counts only the debuffs from before the skill.
+                                        Corrosion stacks leaves 1. The most recently inflicted
+                                        debuff goes first, named debuff or damage-over-time stack
+                                        alike (stacks inflicted together share one time); Acidic
+                                        Decay cannot be cleansed. Nyxen&apos;s cleanses take only
+                                        Bombs or only damage-over-time effects, as written, newest
+                                        first. A count written after an infliction in the same skill
+                                        includes what that skill landed, enemy by enemy:
+                                        Crocus&apos;s Corrosion II counts toward her own &ldquo;3 or
+                                        more debuffs&rdquo; Stasis (Asphyxiator&apos;s and
+                                        Anemone&apos;s gates likewise), and a resisted one does not.
+                                        A passive reacting to the hit (Bayah) counts only the
+                                        debuffs from before the skill.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Team Ships:</span> Pick a
