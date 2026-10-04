@@ -1279,6 +1279,10 @@ export interface Ability {
      *  hit of an area pattern — "When this Unit is directly damaged as a primary target, … gains
      *  Legion Discipline II" (Stalwart). Absent → any hit. */
     triggerPrimaryTargetOnly?: boolean;
+    /** on-destroyed only: fire only when the owner died to DIRECT damage, never to a
+     *  damage-over-time tick — "Upon being destroyed by direct damage, … grants all allies
+     *  Everliving Regeneration II" (Paracelsus). Absent → the listener's per-type rule. */
+    triggerRequiresDirectDeath?: boolean;
     /** Landing-verb filter for the debuff-inflicted trigger family (on-debuff-inflicted,
      *  on-ally-debuff-inflicted, on-other-ally-debuff-inflicted, on-enemy-debuff-inflicted,
      *  on-ally-debuffed, on-debuffed):

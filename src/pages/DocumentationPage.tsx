@@ -2992,7 +2992,9 @@ const DocumentationPage: React.FC = () => {
                                         hit or its own Bomb, not a teammate&apos;s hit or a
                                         damage-over-time tick. One worded &ldquo;when an enemy is
                                         destroyed&rdquo; (Liberator, Sokol) reacts to any enemy
-                                        death.
+                                        death. Paracelsus&apos;s &ldquo;upon being destroyed by
+                                        direct damage&rdquo; needs a direct hit for both its damage
+                                        and its Everliving Regeneration II.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Debuff counts:</span> A

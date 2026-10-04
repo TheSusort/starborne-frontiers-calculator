@@ -3878,6 +3878,16 @@ export function buildShipAbilities(rawShip: Ship): ShipSkills {
                 }
             }
         }
+        // "Upon being destroyed by direct damage, … grants all allies Everliving Regeneration II"
+        // (Paracelsus): the death must be a direct hit, like the sentence's damage half.
+        if (
+            ability.trigger === 'on-destroyed' &&
+            rowText &&
+            pos >= 0 &&
+            detectKilledByDirectDamageTrigger(rowText, pos)
+        ) {
+            ability.triggerRequiresDirectDeath = true;
+        }
         // "When an enemy DEFENDER is directly repaired / gains Taunt, this Unit inflicts … on that
         // defender" (Amartya): the role is a condition on the enemy the debuff lands on, judged per
         // recipient by the reactive debuff executor (`victimRoleMatches` in triggers.ts).
