@@ -1536,14 +1536,13 @@ export function registerReactiveListeners(args: {
                     });
                     break;
                 case 'on-debuffed':
+                    // Self-scoped: fires when THIS owner receives a debuff — a timed debuff, or a
+                    // DoT once per stack landed (`dotInflictions`, R26/R28: every stack is a
+                    // debuff, and an incoming effect rolls once per occurrence, so Firewall's proc
+                    // is drawn per stack). Firewall's implant text ("when debuffed") names no verb,
+                    // so it carries no triggerApplicationFilter and both arms pass it
+                    // unconditionally (passesApplicationFilter's doc).
                     bus.on('debuff-applied', (e) => {
-                        // Self-scoped: fires when THIS owner receives a timed debuff. Mirrors
-                        // on-attacked's targetId === ownerId scoping. DoTs use dot-applied (not
-                        // this event) → Firewall does not fire on DoT application, by design.
-                        // Firewall's implant text ("when debuffed") names no verb, so it carries
-                        // no triggerApplicationFilter and this call always passes unconditionally
-                        // (passesApplicationFilter's doc) — unchanged from before this trigger
-                        // family's gate existed.
                         if (
                             e.targetId === ownerId &&
                             passesApplicationFilter(
@@ -1553,29 +1552,47 @@ export function registerReactiveListeners(args: {
                         )
                             enqueue(intent);
                     });
-                    break;
-                case 'on-ally-debuffed':
-                    bus.on('debuff-applied', (e) => {
-                        // Victim-scoped: a timed debuff landed on a same-side unit (Hayyan) —
-                        // owner included, see the ruling in the trigger doc block above. Route
-                        // the reactive repair to that unit via damagedAllyId. Excludes every
-                        // opposing actor and DoTs (dot-applied), matching on-debuffed's
-                        // debuff-applied-only scoping. Hayyan's own clause reads "inflicted"
-                        // (filter 'inflict' — passesApplicationFilter) so an enemy applying
-                        // Provoke to her ally gives her nothing; only an inflicted debuff repairs.
+                    bus.on('dot-applied', (e) => {
                         if (
-                            !isOpposing(e.targetId) &&
+                            e.targetId === ownerId &&
                             passesApplicationFilter(
                                 ra.ability.triggerApplicationFilter,
                                 e.application
                             )
                         )
+                            for (let i = 0; i < dotInflictions(e); i++) enqueue(intent);
+                    });
+                    break;
+                case 'on-ally-debuffed': {
+                    // Victim-scoped: a debuff landed on a same-side unit (Hayyan) — owner
+                    // included, see the ruling in the trigger doc block above. A timed debuff
+                    // fires once, a DoT once per stack landed (`dotInflictions`, R26/R28). Route
+                    // the reactive repair to that unit via damagedAllyId. Excludes every opposing
+                    // actor. Hayyan's own clause reads "inflicted" (filter 'inflict' —
+                    // passesApplicationFilter) so an enemy applying Provoke, or the Burner set's
+                    // applied Inferno, to her ally gives her nothing.
+                    const onAllyDebuffed = (
+                        e: { targetId: string; application?: 'inflict' | 'apply' },
+                        times: number
+                    ) => {
+                        if (
+                            isOpposing(e.targetId) ||
+                            !passesApplicationFilter(
+                                ra.ability.triggerApplicationFilter,
+                                e.application
+                            )
+                        )
+                            return;
+                        for (let i = 0; i < times; i++)
                             enqueue({
                                 ...intent,
                                 eventCtx: { ...intent.eventCtx, damagedAllyId: e.targetId },
                             });
-                    });
+                    };
+                    bus.on('debuff-applied', (e) => onAllyDebuffed(e, 1));
+                    bus.on('dot-applied', (e) => onAllyDebuffed(e, dotInflictions(e)));
                     break;
+                }
                 case 'on-ally-shield-destroyed':
                     bus.on('shield-destroyed', (e) => {
                         // Victim-scoped: a same-side unit's shield pool was fully depleted (AEGIS).

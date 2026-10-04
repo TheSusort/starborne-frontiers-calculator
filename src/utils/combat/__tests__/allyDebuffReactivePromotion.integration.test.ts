@@ -409,7 +409,7 @@ const debuffEnemy = (id: string): EnemyAttacker => ({
     },
 });
 
-/** An enemy that lands a DoT (not a timed debuff) on the player focus every round. */
+/** An enemy that lands one Corrosion stack on the player focus every round. */
 const dotEnemy = (id: string): EnemyAttacker => ({
     id,
     stats: { attack: 1, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 1000 },
@@ -507,7 +507,7 @@ function sumDirectHeal(result: ReturnType<typeof runCombat>, actorId: string): n
     );
 }
 
-describe('Hayyan (player-side) — repairs the debuffed ally, HERSELF included, not on a DoT', () => {
+describe('Hayyan (player-side) — repairs the debuffed ally, HERSELF included, DoTs included', () => {
     it('an enemy debuff on the ally (focus) is repaired by Hayyan (team actor) for 6% of Hayyan Max HP', () => {
         const result = runCombat(
             HAYYAN_BASE({
@@ -540,14 +540,16 @@ describe('Hayyan (player-side) — repairs the debuffed ally, HERSELF included, 
         );
     });
 
-    it('a DoT (not a timed debuff) landing on the ally does NOT fire on-ally-debuffed', () => {
+    it('a DoT landing on the ally fires on-ally-debuffed once per stack (one stack → one repair)', () => {
+        // Every DoT stack is a debuff (R26/R28); per-stack cardinality over real kits is pinned in
+        // debuffedReactionsCountDotStacks.integration.test.ts.
         const result = runCombat(
             HAYYAN_BASE({
                 teamActors: [hayyanTeamActor()],
                 enemyAttackers: [dotEnemy('enemy-dot')],
             })
         );
-        expect(sumDirectHeal(result, 'hayyan')).toBe(0);
+        expect(sumDirectHeal(result, 'hayyan')).toBeCloseTo((HAYYAN_HP * HAYYAN_HEAL_PCT) / 100, 6);
     });
 });
 

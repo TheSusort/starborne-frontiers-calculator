@@ -3009,7 +3009,8 @@ const DocumentationPage: React.FC = () => {
                                         and every stack that fails is its own resist. A reaction to
                                         a debuff being inflicted (APEX&apos;s shield,
                                         Oleander&apos;s charge, Provider&apos;s hit, Lingshe&apos;s
-                                        Stealth) fires once per stack that lands, within its own
+                                        Stealth, Hayyan&apos;s repair, the Firewall implant&apos;s
+                                        chance) fires once per stack that lands, within its own
                                         once-per-cast or once-per-round limits; reactions to a
                                         critical DoT (Crocus, Wisteria) and Belladonna&apos;s
                                         conversion still fire once per application. A cleanse

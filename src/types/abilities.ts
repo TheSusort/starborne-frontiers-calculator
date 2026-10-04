@@ -258,14 +258,13 @@ export type AbilityTrigger =
     // repaired allies a buff). Distinct from on-ally-critically-repaired (no crit filter).
     | 'on-own-repair-to-ally'
     // D-PR16 Firewall: fires when THIS unit receives a timed debuff (rides the existing
-    // `debuff-applied` event, self-scoped on targetId === ownerId). Does NOT fire for DoTs
-    // (separate `dot-applied` event) — matches "when debuffed".
+    // `debuff-applied` event, self-scoped on targetId === ownerId), or a DoT — once per stack
+    // landed (`dot-applied`).
     | 'on-debuffed'
     // Fires when a same-side ally receives a timed debuff (rides the existing
     // `debuff-applied` event, ally-scoped on targetId being any same-side actor — owner included,
     // see the 2026-09-30 "an ally includes the caster" ruling in triggers.ts's trigger doc block).
-    // The ally counterpart of `on-debuffed`. Does NOT fire for DoTs (dot-applied), matching
-    // on-debuffed's debuff-applied-only scoping.
+    // The ally counterpart of `on-debuffed`; a DoT fires it once per stack landed.
     | 'on-ally-debuffed'
     // Phase 3 PR-H: fires when THIS unit performs a cleanse that actually removes >= 1 debuff
     // (rides the existing `cleanse-performed` event, self-scoped on casterId === ownerId).
