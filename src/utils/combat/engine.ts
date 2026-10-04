@@ -8136,7 +8136,9 @@ export function runCombat(rawInput: CombatEngineInput): {
          * Per-victim skill-multiplier delta for a scaled damage bonus — per-enemy count ("an
          * additional 25% damage for each debuff on the enemy", "for each buff on the enemy",
          * "for each Unit adjacent to the enemy"), named ("if the target is affected by Inferno")
-         * or role ("if the target is a defender it instead deals 205% damage").
+         * or role ("if the target is a defender it instead deals 205% damage"), or a crit bonus
+         * ("if a critical hit, deals an additional 90% damage" — Crucialis), which reads THIS
+         * victim's own crit on the hit (`didCrit`, AoE rulings 10/13).
          * `positionalScalars.multiplierPct` scores the bonus once against the bound target; each
          * other struck enemy answers for itself (owner rulings 3 and 4), so this re-scores it
          * against `victimReadingCtx` and returns the difference.
@@ -8144,7 +8146,8 @@ export function runCombat(rawInput: CombatEngineInput): {
         const perVictimScalingDeltaPct = (
             perVictimScaling: PlayerTurnResult['perVictimScaling'],
             preTurnStatus: Map<string, PreTurnVictimStatusSnapshot> | undefined,
-            victim: CombatActor
+            victim: CombatActor,
+            didCrit: boolean
         ): number => {
             if (!perVictimScaling) return 0;
             const { scalingAbility, primaryCtx, boundTargetId } = perVictimScaling;
@@ -8153,9 +8156,15 @@ export function runCombat(rawInput: CombatEngineInput): {
             if (victim.id === boundTargetId) return 0;
             const snap = preTurnStatus?.get(victim.id);
             if (!snap) return 0;
+            const readsOwnCrit =
+                primaryCtx.roundCrit !== undefined &&
+                scalingAbility.conditions.some((c) => c.subject === 'self-crit');
+            const victimCtx = victimReadingCtx(primaryCtx, snap, victim);
             return (
-                scaledBonus(scalingAbility, victimReadingCtx(primaryCtx, snap, victim)) -
-                scaledBonus(scalingAbility, primaryCtx)
+                scaledBonus(
+                    scalingAbility,
+                    readsOwnCrit ? { ...victimCtx, roundCrit: didCrit } : victimCtx
+                ) - scaledBonus(scalingAbility, primaryCtx)
             );
         };
 
@@ -8368,7 +8377,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                         attackerId: args.actingId,
                         concentrateFirePickId: args.castTargetId,
                     },
-                    defenseProfileOf: (v) => ({
+                    defenseProfileOf: (v, didCrit) => ({
                         ...victimDefenseProfileOf(v, {
                             scheduledEnemyEffects: args.scheduledEnemyEffects,
                             perVictimOutgoing: args.perVictimOutgoing,
@@ -8377,7 +8386,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                         multiplierDeltaPct: perVictimScalingDeltaPct(
                             args.perVictimScaling,
                             args.preTurnVictimStatus,
-                            v
+                            v,
+                            didCrit
                         ),
                     }),
                     // Stamp the sub-attack under application so the funnel's deferred

@@ -3083,7 +3083,9 @@ const DocumentationPage: React.FC = () => {
                                         enemy hit gets its own stacks, and a Bomb uses the
                                         attacker&apos;s affinity against that enemy. Crits are per
                                         enemy too: Wisteria&apos;s crit Inferno and Valerian&apos;s
-                                        crit extension land only on the enemies the hit critted.
+                                        crit extension land only on the enemies the hit critted, and
+                                        Crucialis&apos;s extra damage on a critical hit is added
+                                        only to the enemies she critted.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Purges:</span> A purge on a

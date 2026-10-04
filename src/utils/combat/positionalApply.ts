@@ -231,7 +231,9 @@ export function applyPositionalDamage(args: {
     opposingLiving: CombatActor[];
     statusOf?: (id: string) => ActorTargetingStatus | undefined;
     acting?: PositionalActing;
-    defenseProfileOf: (v: CombatActor) => VictimDefenseProfile;
+    /** `didCrit` is this victim's own crit on the hit being read (a per-enemy crit bonus scales
+     *  off it — Crucialis). */
+    defenseProfileOf: (v: CombatActor, didCrit: boolean) => VictimDefenseProfile;
     /**
      * SUB-ATTACK INDEX. Every per-victim callback below
      * takes a trailing optional `subAttackIndex` — the 0-based index of the sub-attack currently
@@ -460,7 +462,7 @@ export function applyPositionalDamage(args: {
                 typeof reductionParts === 'number' ? 0 : reductionParts.attackerSidePct;
             // Read the profile ONCE and derive both the hit and the mitigation factor from it, so
             // the factor handed to `applyToVictim` is provably the one baked into `dmg`.
-            const defenseProfile = defenseProfileOf(victim);
+            const defenseProfile = defenseProfileOf(victim, didCrit);
             // ONE call, both figures. Calling `victimHitDamage` and a separate pre-mitigation
             // helper would repeat the whole assembly — the same profile read, the same affinity
             // resolve — on the hottest path in the engine, and would leave the two figures as
