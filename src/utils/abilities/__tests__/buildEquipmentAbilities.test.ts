@@ -269,10 +269,10 @@ describe('D-PR3 incoming-reduction implants', () => {
             critFamily: false,
         });
     });
-    it('Nebula Nullifier (epic) → self-stasis direct reduction 28', () => {
+    it('Nebula Nullifier (epic) → self-stasis-or-disable direct reduction 28', () => {
         expect(buildForImplant('NEBULA_NULLIFIER', 'epic')[0].config).toMatchObject({
             type: 'incoming-reduction',
-            condition: 'self-stasis',
+            condition: 'self-stasis-or-disable',
             pct: 28,
             critFamily: false,
         });

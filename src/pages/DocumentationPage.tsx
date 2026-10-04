@@ -4505,7 +4505,7 @@ const DocumentationPage: React.FC = () => {
                                     <strong>Voidshade</strong> and <strong>Shadowguard</strong>{' '}
                                     (reduced damage while stealthed),{' '}
                                     <strong>Nebula Nullifier</strong> (reduced damage while in
-                                    Stasis), <strong>Hyperion Gaze</strong> and the{' '}
+                                    Stasis or Disabled), <strong>Hyperion Gaze</strong> and the{' '}
                                     <strong>Hardened</strong> gear set (reduced incoming
                                     critical-hit damage), <strong>Iridium&apos;s</strong> passive
                                     (reduced crit damage taken, scaling with rarity),{' '}

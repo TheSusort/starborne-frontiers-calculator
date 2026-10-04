@@ -606,7 +606,7 @@ describe('Fuying Stealth DR aura (#363) — the per-hit gate', () => {
         didCrit: false,
         attackerStealthed: false,
         victimStealthed: true,
-        victimStasised: false,
+        victimTurnBlocked: false,
         hitIndexThisRound: 1,
         attackerHasDot: false,
         victimHasBarrierRecharging: false,

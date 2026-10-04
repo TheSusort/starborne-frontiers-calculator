@@ -780,8 +780,9 @@ const IMPLANT_ABILITIES: Partial<Record<string, ImplantAbilityBuilder>> = {
     // D-PR3: incoming-reduction implants
     // Voidshade: reduce incoming direct damage by X% while stealthed.
     VOIDSHADE: (rarity) => mkReduction(VOIDSHADE_PCT[rarity], 'direct', 'self-stealth', false),
-    // Nebula Nullifier: reduce incoming direct damage by X% while in stasis.
-    NEBULA_NULLIFIER: (rarity) => mkReduction(NEBULA_PCT[rarity], 'direct', 'self-stasis', false),
+    // Nebula Nullifier: reduce incoming direct damage by X% while under Stasis or Disable.
+    NEBULA_NULLIFIER: (rarity) =>
+        mkReduction(NEBULA_PCT[rarity], 'direct', 'self-stasis-or-disable', false),
     // Hyperion Gaze: reduce incoming crits from stealthed attackers by X% (crit-reduction family).
     HYPERION_GAZE: (rarity) =>
         mkReduction(HYPERION_PCT[rarity], 'direct', 'incoming-crit-by-stealthed', true),

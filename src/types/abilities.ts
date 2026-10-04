@@ -642,7 +642,7 @@ export interface Condition {
  *  attacker-turn standing facts; these are per-incoming-hit facts). */
 export type IncomingCondition =
     | 'self-stealth' // Voidshade (reduction), Shadowguard (block); Wusheng (epic PR12)
-    | 'self-stasis' // Nebula Nullifier (Disable folds in here when modeled)
+    | 'self-stasis-or-disable' // Nebula Nullifier: the victim carries Stasis OR Disable
     | 'incoming-crit' // Hardened set, Iridium
     | 'incoming-crit-by-stealthed' // Hyperion Gaze
     | 'nth-hit-2plus' // Ironclad (block)
@@ -654,7 +654,7 @@ export type IncomingCondition =
     | 'attacker-has-dot'
     // The VICTIM currently carries its own "Barrier Recharging" self-status (Panon — "gains 20%
     // damage reduction from all sources when affected by Barrier Recharging").
-    // A literal named-status check, mirroring the self-stealth/self-stasis precedent.
+    // A literal named-status check, mirroring the self-stealth precedent.
     | 'self-barrier-recharging'
     // The VICTIM currently holds an active shield pool (Malvex — "When this Unit has an active
     // shield, it gains 10% damage reduction"). Context-driven, not side-gated — evaluated per-hit
@@ -678,7 +678,8 @@ export interface IncomingHitContext {
     didCrit: boolean;
     attackerStealthed: boolean;
     victimStealthed: boolean;
-    victimStasised: boolean;
+    /** The victim is turn-blocked: it carries Stasis OR Disable. */
+    victimTurnBlocked: boolean;
     /** 1-based direct-damage intake index for this victim this round (Ironclad). */
     hitIndexThisRound: number;
     /** Set only on the DoT-tick path (Vortex Veil). SP-E: widened to DoTType (was

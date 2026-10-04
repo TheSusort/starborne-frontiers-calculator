@@ -3413,8 +3413,9 @@ export function runCombat(rawInput: CombatEngineInput): {
     };
     const isStasised = (actorId: string): boolean => ownerDebuffNames(actorId).some(isStasis);
     const isDisabled = (actorId: string): boolean => ownerDebuffNames(actorId).some(isDisable);
-    /** Turn-blocked = cannot take its scheduled action this turn (Stasis OR Disable). Used by the
-     *  three turn-action gates AND the reactive drain filter (drainQueue). The Stasis-only break /
+    /** Turn-blocked = cannot take its scheduled action this turn (Stasis OR Disable). Read by the
+     *  turn-action gates, the reactive drain filter (drainQueue) and the incoming-hit ctx's
+     *  `victimTurnBlocked` (Nebula Nullifier's "Stasis or Disable"). The Stasis-only break /
      *  immunity sites intentionally keep using isStasised — Disable never breaks. */
     const isTurnBlocked = (actorId: string): boolean => isStasised(actorId) || isDisabled(actorId);
     // A passive-slot AURA or accumulating status from a SHIP skill stops contributing while its
@@ -6204,7 +6205,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                             didCrit: false,
                             attackerStealthed: false,
                             victimStealthed: isStealthed(victim.id),
-                            victimStasised: isStasised(victim.id),
+                            victimTurnBlocked: isTurnBlocked(victim.id),
                             hitIndexThisRound: idx,
                             attackerHasDot: attackerHasDot(cause?.killerId ?? ''),
                             victimHasBarrierRecharging: hasBarrierRecharging(victim.id),
@@ -6523,7 +6524,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                         didCrit: false,
                         attackerStealthed: isStealthed(attackerId),
                         victimStealthed: isStealthed(victim.id),
-                        victimStasised: isStasised(victim.id),
+                        victimTurnBlocked: isTurnBlocked(victim.id),
                         hitIndexThisRound: 0, // unused by this condition family
                         attackerHasDot: attackerHasDot(attackerId),
                         victimHasBarrierRecharging: hasBarrierRecharging(victim.id),
@@ -7119,7 +7120,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 didCrit: false,
                                 attackerStealthed: false,
                                 victimStealthed: false,
-                                victimStasised: false,
+                                victimTurnBlocked: false,
                                 hitIndexThisRound: 0,
                                 // The reflected hit's "attacker" is the reflector (victim, outer
                                 // scope) and its "victim" is `attacker` (receiving the bounce-back).
@@ -8481,7 +8482,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                             didCrit,
                             attackerStealthed: isStealthed(args.actingId),
                             victimStealthed: isStealthed(victim.id),
-                            victimStasised: isStasised(victim.id),
+                            victimTurnBlocked: isTurnBlocked(victim.id),
                             hitIndexThisRound: 0, // unused by reduction (only block reads it)
                             attackerHasDot: attackerHasDot(args.actingId),
                             victimHasBarrierRecharging: hasBarrierRecharging(victim.id),
@@ -11427,7 +11428,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 didCrit: false,
                                 attackerStealthed: false,
                                 victimStealthed: isStealthed(healTarget.id),
-                                victimStasised: isStasised(healTarget.id),
+                                victimTurnBlocked: isTurnBlocked(healTarget.id),
                                 hitIndexThisRound: 0,
                                 dotType,
                                 // A DoT tick has no single attacker (aggregate of appliers) —
@@ -11592,7 +11593,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                     didCrit: false,
                                     attackerStealthed: false,
                                     victimStealthed: isStealthed(actor.id),
-                                    victimStasised: isStasised(actor.id),
+                                    victimTurnBlocked: isTurnBlocked(actor.id),
                                     hitIndexThisRound: 0,
                                     dotType,
                                     // See the sibling tank-path call above: no single attacker
@@ -12516,7 +12517,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                           didCrit: false,
                                           attackerStealthed: isStealthed(actor.id),
                                           victimStealthed: isStealthed(tgt.id),
-                                          victimStasised: isStasised(tgt.id),
+                                          victimTurnBlocked: isTurnBlocked(tgt.id),
                                           hitIndexThisRound: 0,
                                           attackerHasDot: attackerHasDot(actor.id),
                                           victimHasBarrierRecharging: hasBarrierRecharging(tgt.id),
@@ -12532,7 +12533,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                           didCrit: true,
                                           attackerStealthed: isStealthed(actor.id),
                                           victimStealthed: isStealthed(tgt.id),
-                                          victimStasised: isStasised(tgt.id),
+                                          victimTurnBlocked: isTurnBlocked(tgt.id),
                                           hitIndexThisRound: 0,
                                           attackerHasDot: attackerHasDot(actor.id),
                                           victimHasBarrierRecharging: hasBarrierRecharging(tgt.id),
