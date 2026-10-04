@@ -9361,6 +9361,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                     targetRepairedThisRound: repairedThisRound.has(v.id),
                     enemyDebuffNames: enemyDebuffNamesForTarget(v),
                     statusDebuffNames: ownerDebuffNamesFor(statusEngine, v.id),
+                    buffNames: selfBuffNamesForOwners(statusEngine, [v.id]),
                     // WITHHELD under `mode: 'dps'` — see `liveCountsMeasurable`.
                     ...(liveCountsMeasurable
                         ? { enemyBuffCount: selfBuffNamesForOwners(statusEngine, [v.id]).length }

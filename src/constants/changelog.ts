@@ -20,6 +20,7 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator: Sustainer's no-debuff bonuses now treat DoTs as debuffs.",
     "Combat simulator: Meatshield's charged repair now counts DoTs on himself as debuffs.",
     "Combat simulator: Warpstrike implant's while-debuffed bonus now counts DoTs as debuffs.",
+    "Combat simulator: Selenite's Stealth charge now only counts enemies her skill hits.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

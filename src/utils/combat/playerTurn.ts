@@ -671,6 +671,10 @@ export interface RecipientGateReading {
     role?: EnemyBaseClass;
     /** Distinct non-DoT debuffs on the actor (its per-target status store). */
     statusDebuffNames: string[];
+    /** The buffs the actor itself holds. A self gain asking whether a STRUCK enemy holds a named
+     *  buff ("If any target has Stealth" — Selenite) reads these rather than the side-wide
+     *  `enemyBuffNames` union (owner ruling R23). */
+    buffNames: string[];
 }
 
 /** Which side of a cast each `ConditionContext` field describes. A `'victim'` field answers about
@@ -2696,27 +2700,44 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                   .map((id) => opposingVictimById.get(id))
                   .filter((v): v is CombatActor => v !== undefined)
             : [];
-    /** The context of the first struck enemy OTHER than the bound target that passes
-     *  `conditions` — `anchorCtx`'s caster half with that enemy's own victim half
-     *  (`recipientGateCtx`, read before the cast's own landings) — or undefined when none does. */
-    const otherStruckVictimCtx = (
+    /** `c` with its named-buff reading narrowed to `buffNames` — one struck enemy's own buffs in
+     *  place of the side-wide union (R23). Unchanged when that enemy has no reading (a
+     *  non-positional caller). */
+    const withStruckBuffNames = (
+        c: ConditionContext,
+        buffNames: string[] | undefined
+    ): ConditionContext => (buffNames ? { ...c, enemyBuffNames: buffNames } : c);
+    /** The bound target as a struck-enemy gate sees it: `anchorCtx` reading the target's own
+     *  buffs. */
+    const struckAnchorCtx = (anchorCtx: ConditionContext): ConditionContext =>
+        withStruckBuffNames(anchorCtx, targetGateReading?.buffNames);
+    /** A struck enemy OTHER than the bound target as a gate sees it: `anchorCtx`'s caster half
+     *  with that enemy's own victim half (`recipientGateCtx`, read before the cast's own
+     *  landings) and its own buffs. */
+    const otherStruckCtx = (v: CombatActor, anchorCtx: ConditionContext): ConditionContext =>
+        withStruckBuffNames(
+            withVictimHalf(anchorCtx, recipientGateCtx(v)),
+            recipientGateReadings?.get(v.id)?.buffNames
+        );
+    /** The context of the first enemy the cast strikes — the bound target first — that passes
+     *  `conditions`, or undefined when none does. A self gain gated on "the target" fires ONCE
+     *  when ANY struck enemy qualifies (owner rulings R17, R23). */
+    const anyStruckVictimCtx = (
         conditions: Ability['conditions'],
         anchorCtx: ConditionContext
     ): ConditionContext | undefined => {
+        const anchor = struckAnchorCtx(anchorCtx);
+        if (conditionsMet(conditions, anchor)) return anchor;
         for (const v of otherStruckVictims) {
-            const c = withVictimHalf(anchorCtx, recipientGateCtx(v));
+            const c = otherStruckCtx(v, anchorCtx);
             if (conditionsMet(conditions, c)) return c;
         }
         return undefined;
     };
-    /** A self gain gated on "the target" fires ONCE when ANY enemy the cast strikes qualifies
-     *  (owner ruling R17): the bound target against `anchorCtx`, or any other struck enemy. */
     const anyStruckVictimMeets = (
         conditions: Ability['conditions'],
         anchorCtx: ConditionContext
-    ): boolean =>
-        conditionsMet(conditions, anchorCtx) ||
-        otherStruckVictimCtx(conditions, anchorCtx) !== undefined;
+    ): boolean => anyStruckVictimCtx(conditions, anchorCtx) !== undefined;
 
     // §4.5 Direct-damage Stasis break. Fires AFTER scheduled debuffs (sourceFired)
     // but BEFORE the ability timed-debuff loop, so a Stasis re-application from THIS attack's
@@ -3905,12 +3926,14 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
 
     // Hard gate: payload abilities whose conditions fail contribute nothing this
     // round. Walked in text order with a same-cast DoT overlay (see applyAbilities).
-    // A self gain asking about "the target" passes once if any struck enemy qualifies (R17).
+    // A self gain asking about "the target" passes once if any struck enemy qualifies (R17, R23).
     const { gatedSkill, ctxFor } = gateFiringAbilities(
         firingSkill,
         ctx,
         (ability, gate, abilityCtx) =>
-            isAnyStruckSelfGain(ability) ? otherStruckVictimCtx(gate, abilityCtx) : undefined
+            isAnyStruckSelfGain(ability)
+                ? (anyStruckVictimCtx(gate, abilityCtx) ?? null)
+                : undefined
     );
 
     // Control inflictions (Stasis, Provoke, Taunt, Concentrate Fire, Disable): emit `control-applied`
