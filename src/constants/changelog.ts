@@ -15,6 +15,8 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: Malvex, Zosimos, Anemone and Nuqtu bonuses now check every enemy hit.',
     "Combat simulator: Meiying's on-kill Stasis now counts DoTs as debuffs on the victim.",
     "Combat simulator: 'upon destroying' passives, Meiying's included, now need the ship's own kill.",
+    'Combat simulator: Anjian, Rys, Sha Xing and Shashou passives now check every enemy hit.',
+    'DPS calculator: Anjian, Rys, Sha Xing and Shashou passives now fire every turn.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

@@ -2969,7 +2969,10 @@ const DocumentationPage: React.FC = () => {
                                         way. A bonus the ship gains for itself when &ldquo;the
                                         target&rdquo; qualifies (Malvex&apos;s shield,
                                         Zosimos&apos;s and Nuqtu&apos;s charges, Anemone&apos;s
-                                        Taunt) is gained once if any struck enemy qualifies.
+                                        Taunt) is gained once if any struck enemy qualifies, and so
+                                        is a passive gain for hitting a debuffer or supporter
+                                        (Anjian, Rys, Sha Xing, Shashou), judged by each struck
+                                        enemy&apos;s own role.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">On-kill passives:</span> A

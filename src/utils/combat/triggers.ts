@@ -2762,9 +2762,12 @@ function splitDrainGateConditions(intent: Intent): DrainGateSplit {
 }
 
 /** True when an on-deal-damage reaction's `enemy-type` conditions hold for at least ONE ship its
- *  sub-attack struck (`eventCtx.dealtVictimIds`), judged by that ship's role via `ctx.roleOf`.
- *  The conditions combine as `conditionsMet` does (an `anyOf` run is one OR-group, every group
- *  must hold) and each victim is judged on its own. An unknown role never matches. No
+ *  sub-attack struck (`eventCtx.dealtVictimIds`), judged by that ship's role via `ctx.roleOf`
+ *  (owner ruling R21: Shashou's "after damaging a debuffer or supporter" fires once if any struck
+ *  enemy has the role). The conditions combine as `conditionsMet` does (an `anyOf` run is one
+ *  OR-group, every group must hold) and each victim is judged on its own. A victim with no role
+ *  (the DPS calculator's synthesized enemy) reads the fight-wide `ctx.enemyType` instead — the
+ *  configured class there, absent in battle — and with neither it never matches. No
  *  `enemy-type` condition, or a trigger other than on-deal-damage → true. */
 function dealtVictimRoleGateMet(intent: Intent, ctx: IntentExecContext): boolean {
     if (intent.ability.trigger !== 'on-deal-damage') return true;
@@ -2780,9 +2783,12 @@ function dealtVictimRoleGateMet(intent: Intent, ctx: IntentExecContext): boolean
         const role = ctx.roleOf?.(victimId);
         return groups.every((group) =>
             group.some((c) => {
-                const matches = matchesRoleCategory(role, [
-                    c.requiredEnemyType!.toUpperCase() as ShipRoleCategory,
-                ]);
+                const matches =
+                    role !== undefined
+                        ? matchesRoleCategory(role, [
+                              c.requiredEnemyType!.toUpperCase() as ShipRoleCategory,
+                          ])
+                        : ctx.enemyType === c.requiredEnemyType;
                 return c.negate ? !matches : matches;
             })
         );
