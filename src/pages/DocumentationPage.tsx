@@ -3009,13 +3009,16 @@ const DocumentationPage: React.FC = () => {
                                         alike (stacks inflicted together share one time); Acidic
                                         Decay cannot be cleansed. Nyxen&apos;s cleanses take only
                                         Bombs or only damage-over-time effects, as written, newest
-                                        first. A count written after an infliction in the same skill
-                                        includes what that skill landed, enemy by enemy:
-                                        Crocus&apos;s Corrosion II counts toward her own &ldquo;3 or
-                                        more debuffs&rdquo; Stasis (Asphyxiator&apos;s and
-                                        Anemone&apos;s gates likewise), and a resisted one does not.
-                                        A passive reacting to the hit (Bayah) counts only the
-                                        debuffs from before the skill.
+                                        first. Heliodor&apos;s and Pestilence&apos;s cut to the
+                                        duration of all debuffs shortens Corrosion and Inferno too;
+                                        one cut to 0 turns ends without ticking again. A count
+                                        written after an infliction in the same skill includes what
+                                        that skill landed, enemy by enemy: Crocus&apos;s Corrosion
+                                        II counts toward her own &ldquo;3 or more debuffs&rdquo;
+                                        Stasis (Asphyxiator&apos;s and Anemone&apos;s gates
+                                        likewise), and a resisted one does not. A passive reacting
+                                        to the hit (Bayah) counts only the debuffs from before the
+                                        skill.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Team Ships:</span> Pick a

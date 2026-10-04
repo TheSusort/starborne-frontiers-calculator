@@ -209,6 +209,41 @@ export function dotCleanseCandidates(
     return out;
 }
 
+/**
+ * The DoT half of a duration cut on "all active debuffs" (Heliodor, Pestilence — owner ruling
+ * 2026-10-04: DoTs are debuffs): takes `turns` off every Corrosion, Inferno and generic entry
+ * `holder` carries. An entry cut to 0 is spliced out in place, as its own expiry does after a tick
+ * (`expireStacks`) — so it does not tick again. An `unremovable` entry (Acidic Decay) is left
+ * alone. Bombs are not touched here: a Bomb's countdown is a detonation timer. Returns the number
+ * of DoT stacks shortened (each stack one debuff). A non-positive / non-finite `turns` → 0.
+ */
+export function shortenDotDurations(
+    holder: {
+        corrosionEntries: ActiveDoTStack[];
+        infernoEntries: ActiveDoTStack[];
+        genericDoTEntries: ActiveDoTStack[];
+    },
+    turns: number
+): number {
+    const delta = Number.isFinite(turns) ? Math.trunc(turns) : 0;
+    if (delta <= 0) return 0;
+    let shortened = 0;
+    for (const entries of [
+        holder.corrosionEntries,
+        holder.infernoEntries,
+        holder.genericDoTEntries,
+    ]) {
+        for (let i = entries.length - 1; i >= 0; i--) {
+            const e = entries[i];
+            if (e.unremovable) continue;
+            e.remainingRounds -= delta;
+            shortened += e.stacks;
+            if (e.remainingRounds <= 0) entries.splice(i, 1);
+        }
+    }
+    return shortened;
+}
+
 export interface PendingBomb {
     countdown: number;
     damagePerStack: number;

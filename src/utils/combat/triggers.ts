@@ -65,6 +65,7 @@ import {
     PendingBomb,
     carriedDotStacks,
     dotCleanseCandidates,
+    shortenDotDurations,
 } from './state';
 import {
     ActiveAbilityStatus,
@@ -5755,6 +5756,10 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 // routes through the per-victim damage sink. `count:'all'` only: a newest-debuff-
                 // only shrink (Warpstrike) picks one status and must not also eat a bomb.
                 const bombVictim = cfg.count === 'all' ? ctx.actorById?.(rid) : undefined;
+                // DoTs are debuffs too (owner ruling 2026-10-04): every Corrosion, Inferno and
+                // generic entry loses the same turns, one cut to 0 expiring without a tick
+                // (`shortenDotDurations`). `count:'all'` only, like the Bomb shrink below.
+                if (bombVictim) n += shortenDotDurations(bombVictim, durationTurns);
                 if (bombVictim) {
                     n += reduceBombsOnVictim(
                         bombVictim,

@@ -32,6 +32,7 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator: Asphyxiator's charged Stasis now counts debuffs from the same skill.",
     "Combat simulator: Anemone's Taunt now counts the Corrosion from the same skill.",
     'Combat simulator: cleanses now remove the most recent debuff first.',
+    "Combat simulator: Heliodor's and Pestilence's duration cuts now shorten damage-over-time effects.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
