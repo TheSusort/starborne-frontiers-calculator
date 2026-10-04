@@ -29,7 +29,12 @@ import { DEFAULT_BASE_PATTERN } from '../calculators/dpsEnemyPlacement';
 import { makeRateGate, rollRateGate } from '../calculators/rateAccumulator';
 import type { RoundData } from '../calculators/dpsSimulator';
 import { toSelfDefenseModifier, toSelfIncomingDamageModifier } from '../calculators/dpsBuffHelpers';
-import { computeAffinityModifiers, getAffinityMatchup } from '../calculators/affinityUtils';
+import {
+    affinityCappedCritRate,
+    affinityModifiersWithOverrides,
+    computeAffinityModifiers,
+    getAffinityMatchup,
+} from '../calculators/affinityUtils';
 import { calculateDamageReduction } from '../autogear/priorityScore';
 import {
     type ExtraActionGrant,
@@ -4876,7 +4881,8 @@ export function runCombat(rawInput: CombatEngineInput): {
     // ally's damage; the transferred portion is a separate hit re-mitigated on the protector's own
     // defence via `protectionCascade`. Called from EVERY defence-read site (defenseProfileOf, the
     // reactive read, both victimDefenceFor bindings) so every attack type sees the same
-    // mitigation — wiring it into only one path would silently diverge across attack types.
+    // mitigation — wiring it into only one path would silently diverge across attack types. The
+    // one exception is a counter-attack, held out pending a ruling (see `reactiveHitInputs`).
     // `fallback` is the site's OWN pre-substitution defence value (raw stats, buffed/effective, or
     // a last-turn-ctx read — whichever that site already computed), so a victim with no applicable
     // carrier reads that value unchanged. Multi-carrier tie-break (no known in-game dup
@@ -7307,8 +7313,9 @@ export function runCombat(rawInput: CombatEngineInput): {
             // accepted, not an oversight: making it once-only would mean converting the UNAMPLIFIED
             // amount, which contradicts what a deferral is. Do not "fix" it in this guard.
             //
-            // If a secondary path ever starts folding the per-victim incoming channel, drop its flag
-            // from this guard in the same commit — amplify and consume must stay in lockstep.
+            // If a secondary path ever starts reading `Exposed`, drop its flag from this guard in the
+            // same commit — amplify and consume must stay in lockstep. A counter or reactive proc
+            // folds the rest of the incoming channel but not `Exposed` (`reactiveHitInputs`).
             if (
                 cause?.byDirectDamage === true &&
                 (cause.bombPortion ?? 0) === 0 &&
@@ -7478,6 +7485,56 @@ export function runCombat(rawInput: CombatEngineInput): {
         // sufficient.
         input.__testTapApplyOutgoingToEnemy?.(applyOutgoingToEnemy);
 
+        /**
+         * What a hit thrown OUTSIDE a cast — a counter-attack or a reactive damage proc — is
+         * walked with, from the same two reads the cast path uses: the owner side from
+         * `effectiveOutgoingStatsOf`, the victim side from `victimDefenseProfileOf`, and the crit
+         * rate from `affinityModifiersWithOverrides` over both (the 75% disadvantage cap and the
+         * Offensive/Defensive Affinity Overrides included).
+         *
+         * What such a hit does NOT read, pending the ruling on whether a counter or a proc is
+         * "direct damage" (the same open question keeps Protection, reflect and shield
+         * penetration off them in `applyVictimDamage`):
+         *  - `Exposed` — `applyVictimDamage` does not spend it on an `isCounter` hit, and a stack
+         *    read but not spent would amplify every later hit too;
+         *  - Meatshield's defence substitution, on a COUNTER only (`substituteDefence`); a proc
+         *    takes it. Skipping `substitutedDefenceFor` also skips FrontLine's shielded defence
+         *    bonus on a counter's victim.
+         * It also does not read the victim's gear/kit incoming-reduction abilities
+         * (`incomingReductionForHit`), which the cast path takes outside the profile.
+         *
+         * The scheduled (input-level) enemy-debuff bucket is the PLAYER's picks against the enemy
+         * side, so it is read raw for an enemy victim and never for a player one.
+         */
+        const reactiveHitInputs = (
+            owner: CombatActor,
+            victim: CombatActor,
+            opts: { substituteDefence: boolean }
+        ): {
+            ownerOutgoing: ReturnType<typeof effectiveOutgoingStatsOf>;
+            profile: VictimDefenseProfile;
+            forceAffinityAdvantage: boolean;
+            critRate: number;
+        } => {
+            const ownerOutgoing = effectiveOutgoingStatsOf(statusEngine, selfBuffLookup, owner);
+            const profile = victimDefenseProfileOf(victim, {
+                scheduledEnemyEffects: victim.side === 'enemy' ? undefined : [],
+                includeExposed: false,
+                substituteDefence: opts.substituteDefence,
+            });
+            const forceAffinityAdvantage = selfBuffNamesForOwners(statusEngine, [
+                owner.id,
+            ]).includes('Offensive Affinity Override');
+            const critRate = affinityCappedCritRate(
+                ownerOutgoing.crit,
+                affinityModifiersWithOverrides(owner.affinity ?? 'antimatter', profile.affinity, {
+                    forceAdvantage: forceAffinityAdvantage,
+                    forceDisadvantage: profile.forceAffinityDisadvantage,
+                })
+            );
+            return { ownerOutgoing, profile, forceAffinityAdvantage, critRate };
+        };
+
         // Full mitigated/crit counter walk from the counter owner to the attacker. Handed to the
         // reactive executor as `ctx.applyCounterAttack`, which triggers.ts calls for the
         // `counter` branch. Reuses applyVictimDamage (no attacked event → no re-counter).
@@ -7495,20 +7552,16 @@ export function runCombat(rawInput: CombatEngineInput): {
             if (owner.destroyedRound !== undefined) return;
             if (attacker.destroyedRound !== undefined || attacker.id === owner.id) return;
 
-            const ownerStats = effectiveStatsOf(statusEngine, selfBuffLookup, owner);
-            // #395: the two outgoing-damage channels, which STATUS mode does not carry — the
-            // owner's own `Out. Damage Up` plus the shadowed enemy-APPLIED `Attack Down` /
-            // `Out. Damage Down`. Everything else below still reads `ownerStats` (crit, crit
-            // damage, base pen), which is the correct fold for those.
-            const ownerOutgoing = effectiveOutgoingStatsOf(statusEngine, selfBuffLookup, owner);
-            const attackerStats = effectiveStatsOf(statusEngine, selfBuffLookup, attacker);
+            // A counter mitigates on the attacker's own defence, never Meatshield's (see
+            // `reactiveHitInputs`).
+            const { ownerOutgoing, profile, forceAffinityAdvantage, critRate } = reactiveHitInputs(
+                owner,
+                attacker,
+                { substituteDefence: false }
+            );
 
             // Roll the OWNER's crit via the dedicated gate (one stream per counter ability per owner).
-            const didCrit = rollRateGate(
-                counterCritGates,
-                `${ownerId}:${abilityId}`,
-                ownerStats.crit / 100
-            );
+            const didCrit = rollRateGate(counterCritGates, `${ownerId}:${abilityId}`, critRate);
 
             const rawParts = victimHitDamageParts(
                 {
@@ -7522,7 +7575,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                     multiplierPct: multiplier * hits,
                     secondaryStatValue: 0,
                     hits: 1,
-                    effectiveCritDamage: ownerStats.critDamage,
+                    effectiveCritDamage: ownerOutgoing.critDamage,
                     // #395 / #389: a counter carries BOTH halves of the outgoing channel — the
                     // enemy-APPLIED `Out. Damage Down` on the owner AND the owner's OWN
                     // `Out. Damage Up` (Grif grants it to all allies).
@@ -7530,22 +7583,13 @@ export function runCombat(rawInput: CombatEngineInput): {
                     // No ship kit in the corpus produces a suppressed counter owner, so
                     // `reactiveOutgoingFold.test.ts` hand-authors that shape.
                     outgoingDamageBuffPct: ownerOutgoing.outgoingDamageBuffPct,
-                    // APPROXIMATION (asymmetry vs Reflect, which threads the attacker's
-                    // incomingReductionForHit): the counter does NOT apply the attacker's
-                    // incoming-damage-reduction abilities. Harmless today (no Stalwart fixture).
-                    // Threading incomingReductionForHit(incomingAbilitiesOf(attacker.id)) here
-                    // would match the Reflect path exactly.
+                    // Unread: the profile below carries the victim's own incoming channel.
                     incomingDamageModifierPct: 0,
-                    // effectiveStatsOf.defensePenetration is BASE-only (buff folds separately) —
-                    // acceptable approximation (no Stalwart fixture; counters ignore pen-buffs).
-                    defensePenetrationPct: ownerStats.defensePenetration,
+                    defensePenetrationPct: ownerOutgoing.defensePenetration,
                     attackerAffinity: owner.affinity ?? 'antimatter',
+                    forceAffinityAdvantage,
                 },
-                {
-                    defence: attackerStats.defence,
-                    defenceModifierPct: 0,
-                    affinity: attacker.affinity ?? 'antimatter',
-                },
+                profile,
                 didCrit,
                 1 // roleScale: a counter is a single full hit
             );
@@ -7611,9 +7655,9 @@ export function runCombat(rawInput: CombatEngineInput): {
         // The reactive `damage` executor branch (triggers.ts cfg.type==='damage') — Grif's
         // on-enemy-cleansed, FrontLine's on-enemy-charged-cast, and the re-tagged Judge/
         // Chakara/Incinerator/Rhodium start-of-round/end-of-round passives. Mirrors
-        // applyCounterAttack's mitigated/crit walk (SAME victimHitDamage call, SAME documented
-        // approximations: no outgoing-damage buff, no per-victim incoming-damage modifier,
-        // base-only defense penetration, no shield penetration). There is exactly ONE
+        // applyCounterAttack's mitigated/crit walk: the same `victimHitDamageParts` call over the
+        // same `reactiveHitInputs` (whose doc lists what a reactive hit does not read), and no
+        // shield penetration. There is exactly ONE
         // destination: the proc reduces the resolved victim's HP via applyVictimDamage and books
         // per-victim (creditDealt). It never books into the owner's round damage-dealt scalar
         // bucket (creditDamage), and there is no gate in the body choosing between destinations.
@@ -7667,13 +7711,15 @@ export function runCombat(rawInput: CombatEngineInput): {
             // correct reading (you can't hit a corpse).
             if (!victim || victim.destroyedRound !== undefined) return;
 
-            const ownerStats = effectiveStatsOf(statusEngine, selfBuffLookup, owner);
-            // #395: twin of the counter site's read — the two outgoing-damage channels STATUS mode
-            // does not carry. Only the ATTACK-basis arm of `basisStat` below consumes `.attack`; an
+            // Only the ATTACK-basis arm of `basisStat` below consumes `ownerOutgoing.attack`; an
             // hp-basis or shield-basis proc is not attack-scaled, so an `Attack Down` must not
             // touch its basis, while `Out. Damage Down` still reduces the resulting damage.
-            const ownerOutgoing = effectiveOutgoingStatsOf(statusEngine, selfBuffLookup, owner);
-            const victimStats = effectiveStatsOf(statusEngine, selfBuffLookup, victim);
+            // A proc mitigates on Meatshield's substitute defence (see `reactiveHitInputs`).
+            const { ownerOutgoing, profile, forceAffinityAdvantage, critRate } = reactiveHitInputs(
+                owner,
+                victim,
+                { substituteDefence: true }
+            );
 
             let raw: number;
             /** #358 ADDENDUM 2: the pre-defence twin of `raw`. */
@@ -7710,12 +7756,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // drawing from that point on.
                 didCrit =
                     !noCrit &&
-                    ownerStats.crit > 0 &&
-                    rollRateGate(
-                        reactiveDamageCritGates,
-                        `${ownerId}:${abilityId}`,
-                        ownerStats.crit / 100
-                    );
+                    ownerOutgoing.crit > 0 &&
+                    rollRateGate(reactiveDamageCritGates, `${ownerId}:${abilityId}`, critRate);
 
                 // Vindicator on-resist: raw = owner effective max HP × hpBasisPct% (mitigated below the
                 // same as any direct hit — defence + affinity + crit). Xcellence's
@@ -7742,7 +7784,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                         multiplierPct: basisPct * hits,
                         secondaryStatValue: 0,
                         hits: 1,
-                        effectiveCritDamage: ownerStats.critDamage,
+                        effectiveCritDamage: ownerOutgoing.critDamage,
                         // #395 CLOSED THE #389 RESIDUAL HERE — twin of the counter-attack site's
                         // note. Was a hardcoded 0, dropping the enemy-APPLIED `Out. Damage Down` on
                         // the owner AND the owner's own `Out. Damage Up`. Applies on every basis:
@@ -7751,22 +7793,15 @@ export function runCombat(rawInput: CombatEngineInput): {
                         // (it never reaches `victimHitDamageParts`, being a copy of an
                         // already-resolved number rather than a new attack).
                         outgoingDamageBuffPct: ownerOutgoing.outgoingDamageBuffPct,
+                        // Unread: the profile below carries the victim's own incoming channel.
                         incomingDamageModifierPct: 0,
-                        defensePenetrationPct: ownerStats.defensePenetration,
+                        defensePenetrationPct: ownerOutgoing.defensePenetration,
                         attackerAffinity: owner.affinity ?? 'antimatter',
+                        forceAffinityAdvantage,
                     },
-                    {
-                        // Meatshield defense-substitution (approximation) — see the
-                        // substitutedDefenceFor doc comment above for the full rule.
-                        // `ignoresDefense` (non-flat generality path) bypasses the
-                        // victim's Defense term entirely (defence: 0) instead of the normal
-                        // substituted defence.
-                        defence: opts?.ignoresDefense
-                            ? 0
-                            : substitutedDefenceFor(victim, victimStats.defence),
-                        defenceModifierPct: 0,
-                        affinity: victim.affinity ?? 'antimatter',
-                    },
+                    // `ignoresDefense` (non-flat generality path) bypasses the victim's Defense
+                    // term entirely (defence: 0) instead of the normal substituted defence.
+                    opts?.ignoresDefense ? { ...profile, defence: 0 } : profile,
                     didCrit,
                     1 // roleScale: a reactive proc is a single full hit
                 );
@@ -7900,7 +7935,11 @@ export function runCombat(rawInput: CombatEngineInput): {
              *  victim's defence — the reporting channel said "resisted", the damage channel said
              *  "landed". Optional: the test tap and any future non-positional caller pass nothing
              *  and keep the raw read, so nothing off the positional path moves. */
-            scheduledEffects?: SelectedGameBuff[]
+            scheduledEffects?: SelectedGameBuff[],
+            /** `false` leaves `Exposed` out of the incoming channel — for a hit whose landing does
+             *  not spend it (the consume guard in `applyVictimDamage`), since a stack it read but
+             *  did not spend would amplify every later hit too. Default true. */
+            includeExposed = true
         ): {
             enemyDefenseModifier: number;
             incomingDamageModifier: number;
@@ -7925,7 +7964,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             // rather than folding off `victimDebuffs` above: a one-shot must be read from exactly
             // the channel its removal can spend, which is narrower than the three-channel list
             // `toEnemyModifiers` needs.
-            const exposed = exposedIncomingPct(statusEngine, victimId);
+            const exposed = includeExposed ? exposedIncomingPct(statusEngine, victimId) : 0;
             // Friendly-side incoming-DIRECT-damage buffs on the victim's OWN 'self' store
             // (Inc. Damage Down/Up — Makoli/Salvation/Shelter/Refine/Battlecry). Summed into the SAME
             // per-victim incomingDamageModifier as enemy debuffs. Team-agnostic for the TIMED + AURA
@@ -8233,9 +8272,19 @@ export function runCombat(rawInput: CombatEngineInput): {
                 scheduledEnemyEffects?: SelectedGameBuff[];
                 perVictimOutgoing?: PlayerTurnResult['perVictimOutgoing'];
                 preTurnVictimStatus?: Map<string, PreTurnVictimStatusSnapshot>;
+                /** See `victimIncomingModifiers`' `includeExposed`. Default true. */
+                includeExposed?: boolean;
+                /** `false` mitigates on the victim's own defence stat, skipping
+                 *  `substitutedDefenceFor` entirely (Meatshield's substitute AND FrontLine's
+                 *  shielded defence bonus). Default true. */
+                substituteDefence?: boolean;
             }
         ): VictimDefenseProfile => {
-            const m = victimIncomingModifiers(v.id, opts.scheduledEnemyEffects);
+            const m = victimIncomingModifiers(
+                v.id,
+                opts.scheduledEnemyEffects,
+                opts.includeExposed ?? true
+            );
             const outgoingDelta = perVictimOutgoingDeltaPct(
                 opts.perVictimOutgoing,
                 opts.preTurnVictimStatus,
@@ -8244,7 +8293,10 @@ export function runCombat(rawInput: CombatEngineInput): {
             return {
                 // Meatshield defense-substitution (approximation) — see the
                 // substitutedDefenceFor doc comment above for the full rule.
-                defence: substitutedDefenceFor(v, v.stats.defence),
+                defence:
+                    (opts.substituteDefence ?? true)
+                        ? substitutedDefenceFor(v, v.stats.defence)
+                        : v.stats.defence,
                 // Per-victim defense-debuff sourcing (was hardcoded 0).
                 // Addendum A2: ALSO the victim's own self-sourced defence modifiers (Defense Up,
                 // and by the A5 ruling the negative Overload/Supercharged half) — see the

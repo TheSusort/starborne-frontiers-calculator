@@ -55,6 +55,9 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: Nebula Nullifier implant now reduces damage while Disabled too.',
     'Combat simulator: Nourishment and Vivacious Repair implants now boost passive repairs too.',
     'Combat simulator: Exuberance implant now boosts leech repairs, including the Leech set.',
+    'Combat simulator: counter-attacks and passive hits now respect debuffs and affinity.',
+    "Combat simulator: Centurion's counter-attack now carries his Core Charge damage bonus.",
+    "Combat simulator: Nayra's Defensive Affinity Override now also lowers area-attack crits on her.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

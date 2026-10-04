@@ -37,7 +37,11 @@ import {
     type ExtraActionGrant,
 } from '../abilities/applyAbilities';
 import { toSimBuffs, toEnemyModifiers, toEnemyDotModifier } from '../calculators/dpsBuffHelpers';
-import { computeAffinityModifiers } from '../calculators/affinityUtils';
+import {
+    affinityCappedCritRate,
+    affinityModifiersWithOverrides,
+    computeAffinityModifiers,
+} from '../calculators/affinityUtils';
 import {
     ActiveDoTStack,
     ActorHealing,
@@ -2244,12 +2248,13 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     //      DISADVANTAGE against that victim ("advantage while getting attacked" = the defender
     //      holds the advantage, so the attacker is disadvantaged): −25 dmg, crit cap 75, +25 crit
     //      penalty, 'apply' debuffs resist.
-    //  PRECEDENCE: an outgoing-advantage force wins over a victim's defensive force (rare collision).
+    //  PRECEDENCE: decided in `affinityModifiersWithOverrides`.
     //  DEFAULT (no override, incl. single-ship DPS against a synthesized enemy that carries no
     //  skills and so grants itself no buffs): the effective values equal the destructured
     //  runtime scalars / real matchup.
-    //  SCOPE: the anchor (primary/bound target) path is fully covered. Per-covered-victim AoE
-    //  offensive/defensive forcing is a documented limitation (no corpus override ship is AoE).
+    //  SCOPE: every struck victim — the anchor and each covered AoE victim — resolves its crit
+    //  through `affinityModsVsVictim`, and its damage through `victimHitDamageParts`, which reads
+    //  the same overrides.
     const damageForcesAffinityAdvantage =
         damageAbility !== undefined &&
         damageAbility.config.type === 'damage' &&
@@ -2264,12 +2269,11 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // defensive override to honour and the neutral 'antimatter' answer stands.
     const affinityModsVsVictim = (
         victim: CombatActor | undefined
-    ): { damageModifier: number; critCap: number; critPenalty: number } => {
-        if (forceOutgoingAdvantage) return { damageModifier: 25, critCap: 100, critPenalty: 0 };
-        if (victim !== undefined && victimHasDefensiveOverride(victim))
-            return { damageModifier: -25, critCap: 75, critPenalty: 25 };
-        return computeAffinityModifiers(attackerAff, victim?.affinity ?? 'antimatter');
-    };
+    ): { damageModifier: number; critCap: number; critPenalty: number } =>
+        affinityModifiersWithOverrides(attackerAff, victim?.affinity ?? 'antimatter', {
+            forceAdvantage: forceOutgoingAdvantage,
+            forceDisadvantage: victim !== undefined && victimHasDefensiveOverride(victim),
+        });
     // Primary/bound-target effective scalars — supersede the pre-baked flat fields when an override
     // is active; otherwise equal the destructured runtime values.
     // No victim ⇒ nobody can be holding a defensive override against this cast.
@@ -4062,20 +4066,14 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // (before any affinity cap) is `crit + dmgStats.totals.critBuff`; we cap it against THIS
     // victim's matchup (NOT the representative cappedCrit, which uses the bound target's cap).
     const uncappedCritTotal = crit + dmgStats.totals.critBuff;
-    const rollVictimCrit = (victimAffinity: AffinityName): boolean => {
+    const rollVictimCrit = (victim: CombatActor): boolean => {
         // A noCrit attack can never crit — mirror the anchor (drawHits=0 → hitCrits empty
         // → anchorCrit false) and, critically, draw NOTHING so the RNG schedule stays
         // unperturbed for noCrit AoE.
         if (damageNoCrit) return false;
-        // An outgoing-advantage force lifts the cap for every victim; otherwise the real
-        // per-victim matchup (a covered victim's own Defensive Override is NOT resolved here —
-        // rollVictimCrit receives only the affinity, not the victim actor — a documented AoE
-        // limitation; no corpus override ship is AoE).
-        const { critCap, critPenalty } = forceOutgoingAdvantage
-            ? { critCap: 100, critPenalty: 0 }
-            : computeAffinityModifiers(attackerAff, victimAffinity);
-        const rate = Math.min(critCap, Math.max(0, uncappedCritTotal - critPenalty)) / 100;
-        return critGate(rate);
+        // This victim's own matchup, overrides included: a covered victim holding a Defensive
+        // Affinity Override caps this attacker's crit against it exactly as the anchor would.
+        return critGate(affinityCappedCritRate(uncappedCritTotal, affinityModsVsVictim(victim)));
     };
     /** Covered footprint enemies' sub-attack-0 crits, rolled early for the DoT block (see its
      *  `victimCritOf`). The engine's apply takes each one from here instead of rolling again. */
@@ -4089,7 +4087,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 return early;
             }
         }
-        return rollVictimCrit(victim.affinity ?? 'antimatter');
+        return rollVictimCrit(victim);
     };
     // Per-hit outgoing amplification (Menace/Giant Slayer) on the firing hit only.
     // Sourced from the always-active passive slot. With no amplification ability OR no
@@ -5112,7 +5110,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         for (const id of aoeVictimIds ?? []) {
             if (id === targetId) continue;
             const v = opposingVictimById?.get(id);
-            if (v) coveredFirstHitCrit.set(id, rollVictimCrit(v.affinity ?? 'antimatter'));
+            if (v) coveredFirstHitCrit.set(id, rollVictimCrit(v));
         }
     }
     /** Whether this cast crit ANY enemy it struck: the aimed enemy on any of its hits
