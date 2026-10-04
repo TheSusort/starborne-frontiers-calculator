@@ -179,7 +179,7 @@ describe('applyPositionalDamage — subAttackIndex threading', () => {
                 emitIdx.push(subAttackIndex as number);
             },
             onVictimResolved: (_v, _d, _o, _c, subAttackIndex) => {
-                resolvedIdx.push(subAttackIndex as number);
+                resolvedIdx.push(subAttackIndex);
             },
             incomingReductionFor: (_v, _c, subAttackIndex) => {
                 reductionIdx.push(subAttackIndex as number);

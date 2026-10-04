@@ -1504,6 +1504,10 @@ export function registerReactiveListeners(args: {
                         const filter = ra.ability.triggerCritFilter;
                         if (filter === 'crit' && !e.didCrit) return;
                         if (filter === 'non-crit' && e.didCrit) return;
+                        // "directly damaged as a primary target" (Stalwart's buff): a covered hit
+                        // of an area pattern does not count.
+                        if (ra.ability.triggerPrimaryTargetOnly && e.isPrimaryTarget !== true)
+                            return;
                         // What the owner actually TOOK from this hit — owner ruling 2026-09-03,
                         // the basis for BOTH consumers below. `?? e.damage` is the
                         // non-positional path, which stamps no funnel figure. Read

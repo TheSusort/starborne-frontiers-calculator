@@ -3882,7 +3882,7 @@ describe('detectDamageReactionTrigger', () => {
                 'When this Unit is directly damaged as a primary target, it deals <unit-damage>30% damage</unit-damage> to that enemy and gains <unit-skill>Legion Discipline II</unit-skill> for 3 turns.',
                 'Legion Discipline II'
             )
-        ).toEqual({ trigger: 'on-attacked' });
+        ).toEqual({ trigger: 'on-attacked', primaryTargetOnly: true });
     });
 
     it('Provider: "another ally" subject with a "cannont critically hit" rider → undefined', () => {

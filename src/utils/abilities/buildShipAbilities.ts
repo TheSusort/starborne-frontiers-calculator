@@ -2594,6 +2594,7 @@ function abilitiesFromText(
                         ? { leechScope: h.leechScope ?? 'all' }
                         : {}),
                     ...(h.requiresHpDamage ? { requiresHpDamage: true } : {}),
+                    ...(h.requirePrimaryTarget ? { requirePrimaryTarget: true } : {}),
                     ...(oncePerCombat ? { oncePerCombat: true } : {}),
                 },
                 autoFilled: true,
@@ -3799,6 +3800,7 @@ export function buildShipAbilities(rawShip: Ship): ShipSkills {
             if (reaction) {
                 ability.trigger = reaction.trigger;
                 if (reaction.critFilter) ability.triggerCritFilter = reaction.critFilter;
+                if (reaction.primaryTargetOnly) ability.triggerPrimaryTargetOnly = true;
                 // Ally-role words in the trigger phrase (Graphite "when an ally attacker
                 // or debuffer is directly damaged") → CATEGORY-semantic roleFilter; the
                 // engine's on-ally-attacked listener fires only when the damaged ally's

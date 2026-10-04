@@ -4601,21 +4601,22 @@ const DocumentationPage: React.FC = () => {
                                     ship passives are now modeled too: <strong>Nosorog</strong>{' '}
                                     reflects a portion of the damage it takes back at an attacker
                                     that hits it as its primary target (not on splash or
-                                    area-of-effect hits), <strong>Chakara&apos;s</strong> charged
-                                    skill bypasses part of the enemy&apos;s Defense, and{' '}
-                                    <strong>Anemone</strong>, <strong>Panon</strong>,{' '}
-                                    <strong>Wusheng</strong>, and <strong>Tormenter</strong> each
-                                    take reduced damage under their own stated conditions.{' '}
-                                    <strong>Anemone</strong> and <strong>Wusheng</strong> take less
-                                    direct damage (from an attacking enemy afflicted with a
-                                    damage-over-time effect, and while Stealthed, respectively),{' '}
-                                    <strong>Panon</strong> reduces all incoming damage — direct and
-                                    damage-over-time — while she has Barrier Recharging, and{' '}
-                                    <strong>Tormenter&apos;s</strong> reduction (direct and
-                                    damage-over-time) grows the lower her HP falls.{' '}
-                                    <strong>Vindicator</strong> retaliates when it resists an enemy
-                                    debuff, dealing damage equal to 30% of its own max HP back to
-                                    the ship that attempted it. <strong>Protection</strong> (e.g.{' '}
+                                    area-of-effect hits; Stalwart&apos;s counter and Legion
+                                    Discipline II and Malvex&apos;s shield follow the same rule),{' '}
+                                    <strong>Chakara&apos;s</strong> charged skill bypasses part of
+                                    the enemy&apos;s Defense, and <strong>Anemone</strong>,{' '}
+                                    <strong>Panon</strong>, <strong>Wusheng</strong>, and{' '}
+                                    <strong>Tormenter</strong> each take reduced damage under their
+                                    own stated conditions. <strong>Anemone</strong> and{' '}
+                                    <strong>Wusheng</strong> take less direct damage (from an
+                                    attacking enemy afflicted with a damage-over-time effect, and
+                                    while Stealthed, respectively), <strong>Panon</strong> reduces
+                                    all incoming damage — direct and damage-over-time — while she
+                                    has Barrier Recharging, and <strong>Tormenter&apos;s</strong>{' '}
+                                    reduction (direct and damage-over-time) grows the lower her HP
+                                    falls. <strong>Vindicator</strong> retaliates when it resists an
+                                    enemy debuff, dealing damage equal to 30% of its own max HP back
+                                    to the ship that attempted it. <strong>Protection</strong> (e.g.{' '}
                                     <strong>Meatshield</strong>) now works as a damage transfer
                                     instead of a plain unremovable buff: each stack a living ally
                                     holds intercepts 10% of the direct damage another ally would

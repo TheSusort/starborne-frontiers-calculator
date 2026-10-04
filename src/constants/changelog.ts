@@ -12,6 +12,7 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator: Zeolite's passive now purges a buff from every struck defender.",
     "Combat simulator: Tygr's extra action now triggers when any struck enemy has Stasis.",
     "Combat simulator: Amartya's passive debuffs now land only on enemy defenders.",
+    "Combat simulator: Stalwart's buff and Malvex's shield now need a primary-target hit.",
     "Combat simulator: Bayah's and Bizon's passive debuffs now land on each qualifying enemy hit.",
     "Combat simulator: Bayah's and Sha Xing's passive buffs now trigger when hitting debuffed enemies.",
     "DPS calculator: Bayah's passive now fires each turn against a debuffed enemy.",

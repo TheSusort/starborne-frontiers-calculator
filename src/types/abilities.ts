@@ -1015,6 +1015,10 @@ export type AbilityConfig =
            *  Shield"): proc only when the attack started with shield > 0 AND dealt HP
            *  damage (punched through the pool). Absent → unconditional (Malvex). */
           requiresHpDamage?: boolean;
+          /** 'damage-taken' only (Malvex "When directly damaged as a primary target"): proc only
+           *  on a hit where this actor is the attack's PRIMARY target, never on a covered hit of
+           *  an area pattern. Absent → any hit. */
+          requirePrimaryTarget?: boolean;
           /** "Once per battle" reactive repair (Yazid's on-cheat-death-activated 60%
            *  repair): the executor fires its consumption AT MOST ONCE per combat, tracked
            *  by a combat-lifetime Set keyed `${ownerId}:${abilityId}` in IntentExecContext.
@@ -1271,6 +1275,10 @@ export interface Ability {
      *  on critting hits, 'non-crit' only on non-critting hits. Absent → fires on any hit.
      *  Isha parses as a mutually exclusive pair (3% non-crit / 6% crit — "instead"). */
     triggerCritFilter?: 'crit' | 'non-crit';
+    /** on-attacked only: fire only when the owner is the hit's PRIMARY target, never on a covered
+     *  hit of an area pattern — "When this Unit is directly damaged as a primary target, … gains
+     *  Legion Discipline II" (Stalwart). Absent → any hit. */
+    triggerPrimaryTargetOnly?: boolean;
     /** Landing-verb filter for the debuff-inflicted trigger family (on-debuff-inflicted,
      *  on-ally-debuff-inflicted, on-other-ally-debuff-inflicted, on-enemy-debuff-inflicted,
      *  on-ally-debuffed, on-debuffed):

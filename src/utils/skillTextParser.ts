@@ -3189,6 +3189,7 @@ export function detectDamageReactionTrigger(
           hpBelowPct?: number;
           roleFilter?: ShipRoleCategory[];
           allyStatusName?: string;
+          primaryTargetOnly?: true;
       }
     | undefined {
     const sentence = rawSentenceAround(text, pos);
@@ -3227,6 +3228,9 @@ export function detectDamageReactionTrigger(
             ...(hpM ? { hpBelowPct: parseInt(hpM[1], 10) } : {}),
             ...(roleFilter ? { roleFilter } : {}),
             ...(allyStatusName ? { allyStatusName } : {}),
+            ...(!allySubject && PRIMARY_TARGET_RE.test(scrubbed)
+                ? { primaryTargetOnly: true as const }
+                : {}),
         };
     }
     return undefined;
@@ -4477,6 +4481,8 @@ export interface ParsedHealAbility {
     leechScope?: 'all' | 'detonation';
     /** Quixilver: damage-taken proc gated on shield punch-through. */
     requiresHpDamage?: boolean;
+    /** Malvex: damage-taken proc only "when directly damaged as a primary target". */
+    requirePrimaryTarget?: boolean;
     /** Present when the heal is a damage reaction ("when directly damaged", "when
      *  attacked", "when (critically) hit"). buildShipAbilities maps it to trigger
      *  'on-attacked' — or 'on-ally-attacked' when `allySubject` is set — plus
@@ -4690,6 +4696,9 @@ const HEAL_ADDITIONAL_RE =
 // gains shield equal to 15% of the damage dealt"), is also damage TAKEN: the incoming hit is the
 // only damage the sentence names.
 const SELF_DIRECTLY_DAMAGED_RE = /^\s*when\s+(?:this\s+unit\s+is\s+)?directly\s+damaged\b/i;
+/** "… directly damaged as a primary target" — the reaction needs the owner to be the hit's primary
+ *  target (Stalwart, Malvex, Nosorog). */
+const PRIMARY_TARGET_RE = /\bas\s+a\s+primary\s+target\b/i;
 function resolveLeechBasis(
     after: string,
     sentence: string
@@ -5041,6 +5050,9 @@ export function parseHealAbilities(text: string | null | undefined): ParsedHealA
                 explicitTarget,
                 ...(leechScope ? { leechScope } : {}),
                 ...(requiresHpDamage ? { requiresHpDamage } : {}),
+                ...(leechBasis === 'damage-taken' && PRIMARY_TARGET_RE.test(sentence)
+                    ? { requirePrimaryTarget: true }
+                    : {}),
                 ...(damageReaction ? { damageReaction } : {}),
                 ...(ownCleanseReaction ? { ownCleanseReaction } : {}),
                 ...(countScaling
