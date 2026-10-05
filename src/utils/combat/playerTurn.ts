@@ -61,8 +61,10 @@ import { CombatEventBus, ShieldApplyAccumulator } from './events';
 import { detonateContainers, type DetonationRecipe } from './detonation';
 import { synthesizeResisted } from './shared';
 import {
+    applierDefenceOf,
     buildActorConditionContext,
     cleanseDebuffs,
+    pinApplierDefence,
     selfBuffNamesForOwners,
     selfBuffStacksForOwner,
     LIVE_TRIGGERS,
@@ -2358,6 +2360,20 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 hpFractionOf: allyHpFractionOf,
             }
         );
+        // Terran Guard's "N% of the applying unit's Defense": snapshot the caster's defence now,
+        // one value for every recipient (`pinApplierDefence`).
+        const grant: typeof status =
+            status.payload.parsedEffects.defenceFlatPctOfCaster === undefined
+                ? status
+                : {
+                      ...status,
+                      payload: {
+                          ...status.payload,
+                          parsedEffects: pinApplierDefence(status.payload.parsedEffects, () =>
+                              applierDefenceOf(statusEngine, actor, selfBuffLookup)
+                          ),
+                      },
+                  };
         for (const rid of stateFiltered) {
             // Block Buff: a recipient carrying it cannot receive new buffs. Covers self-buffs,
             // single-ally grants, and all-allies grants (each recipient guarded independently);
@@ -2374,7 +2390,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             ) {
                 continue;
             }
-            statusEngine.applyTimedAbilityStatus(r, status, rid);
+            statusEngine.applyTimedAbilityStatus(r, grant, rid);
             bus.emit({
                 type: 'buff-applied',
                 actorId: rid,

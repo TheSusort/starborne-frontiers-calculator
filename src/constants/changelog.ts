@@ -59,6 +59,13 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator: Centurion's counter-attack now carries his Core Charge damage bonus.",
     'Combat simulator: Defensive Affinity Override now also lowers area-attack crits on its holder.',
     'Combat simulator: Tormenter always crits from refit 0, as the text says.',
+    'Combat simulator: Chimei, Harvester and Everliving Regeneration buff values now match the game.',
+    'Combat simulator: Binderburg Resilience I and II now also raise Defense.',
+    "Combat simulator: Protection no longer redirects damage from Curator's whole-battlefield attacks.",
+    "Combat simulator: Isha's Titanite Plating now loses a stack each time she's hit.",
+    'Combat simulator: Overclock now applies Attack Down I and Speed Down I on expiry.',
+    "Combat simulator: Vindicator's Magnetized Shielding now adds Defense equal to 10x Security.",
+    "Combat simulator: Terran Guard now scales with the granting ship's Defense.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

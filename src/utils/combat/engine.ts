@@ -28,7 +28,11 @@ import type { ParsedTarget, ParsedPattern } from '../targetingParser';
 import { DEFAULT_BASE_PATTERN } from '../calculators/dpsEnemyPlacement';
 import { makeRateGate, rollRateGate } from '../calculators/rateAccumulator';
 import type { RoundData } from '../calculators/dpsSimulator';
-import { toSelfDefenseModifier, toSelfIncomingDamageModifier } from '../calculators/dpsBuffHelpers';
+import {
+    toSelfDefenseModifier,
+    toSelfIncomingDamageModifier,
+    toSimBuffs,
+} from '../calculators/dpsBuffHelpers';
 import {
     affinityCappedCritRate,
     affinityModifiersWithOverrides,
@@ -48,6 +52,13 @@ import {
     isAllEnemiesTarget,
     type EnemySelectorKind,
 } from '../abilities/abilityTargetSide';
+import { TITANITE_PLATING } from '../../constants/persistentStackingBuffs';
+import { targetCarriesBlockDebuff } from './debuffImmunity';
+import {
+    createOverclockHangoverTracker,
+    isOverclock,
+    overclockHangoverStatuses,
+} from './overclockHangover';
 import { aliveTargetsOf, type AliveRoster } from './targetableActors';
 import {
     foldActorBuffTotals,
@@ -124,7 +135,14 @@ import { reversedRepairsOn } from './reversedRepairs';
 // incoming-repair channel shares ONE floored definition — read its doc for why a channel clamped
 // at some of its sites and not others is worse than one clamped nowhere. The two per-victim leech
 // procs below are its fifth and sixth call sites.
-import { incomingHealFactor, familiesOf, shadowedDelta, ShadowChannel } from './buffTotals';
+import {
+    calculateBuffTotals,
+    flatDefence,
+    incomingHealFactor,
+    familiesOf,
+    shadowedDelta,
+    ShadowChannel,
+} from './buffTotals';
 import { normalizeTeamActorsToWalked } from './teamActorWalk';
 import { normalizeCombatRoster } from './normalizeRoster';
 import { buildBuffDurationExtensionByOwner } from './buffDurationExtension';
@@ -5711,6 +5729,29 @@ export function runCombat(rawInput: CombatEngineInput): {
         }
     };
 
+    // Overclock's "on removal or expiration" hangover — see overclockHangover.ts.
+    const overclockHangover = createOverclockHangoverTracker();
+    const settleOverclockHangovers = (round: number): void => {
+        const lost = overclockHangover.settle(
+            (id) => selfBuffNamesForOwners(statusEngine, [id]).some(isOverclock),
+            [...allActorsById.values()].filter((a) => a.currentHp > 0).map((a) => a.id)
+        );
+        for (const holderId of lost) {
+            if (targetCarriesBlockDebuff(statusEngine, holderId)) continue;
+            for (const status of overclockHangoverStatuses(holderId)) {
+                statusEngine.applyTimedAbilityStatus(round, status, undefined, holderId);
+                bus.emit({
+                    type: 'debuff-applied',
+                    sourceId: holderId,
+                    targetId: holderId,
+                    round,
+                    buffName: status.payload.buffName,
+                    application: 'apply',
+                });
+            }
+        }
+    };
+
     for (let r = 1; r <= numRounds; r++) {
         // Advance the status engine's round counter (per-round accumulating stacks
         // tick here, before any turn fires). Sources notify via sourceFired in turn.
@@ -6067,6 +6108,14 @@ export function runCombat(rawInput: CombatEngineInput): {
          * sub-attack 0's attack row.
          */
         let currentSubAttackIndex: number | undefined;
+        /**
+         * True while the funnel is applying a cast whose pattern is the whole battlefield
+         * (`Pattern-All`, Curator). Protection skips such a hit — its game text: "Damage is not
+         * redirected for skills that target the entire battlefield." Set beside
+         * `currentSubAttackIndex` by `drivePositionalApply`'s `applyToVictim` wrapper, so a
+         * filtered-set passive hit ("all enemies with Inferno") never sets it.
+         */
+        let wholeBattlefieldHit = false;
         const pendingReflectLogs: {
             sourceId: string;
             targetId: string;
@@ -6305,6 +6354,8 @@ export function runCombat(rawInput: CombatEngineInput): {
             // !carriesBarrier: Barrier sits strictly in front of every incoming-effect mechanism
             // (matches the incoming-block step and the transform step) — an invulnerable target
             // has no incoming hit for allies to soak.
+            // !wholeBattlefieldHit: a Pattern-All cast is never redirected (see its doc), so it
+            // also never triggers Lionheart's clear-on-redirect.
             //
             // How much of this hit a Protection cascade diverted to protectors. Deliberately
             // NOT folded into `incomingBooked` — that is the VICTIM's own booked intake, and the
@@ -6319,6 +6370,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 !cause.isProtectionTransfer &&
                 !cause.isReflected &&
                 !cause.isCounter &&
+                !wholeBattlefieldHit &&
                 damage > 0
             ) {
                 const protectors = protectorsFor(victim);
@@ -7331,6 +7383,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                 immediateDamage - transformedToDot > 0
             ) {
                 consumeExposed(statusEngine, victim.id);
+                // Titanite Plating: "removes one stack after taking direct damage" — the same
+                // landed-direct-hit predicate as Exposed.
+                statusEngine.consumeSelfStatusStack(victim.id, TITANITE_PLATING);
             }
             return {
                 // Report the PRE-deposit pool for a
@@ -7956,6 +8011,8 @@ export function runCombat(rawInput: CombatEngineInput): {
              *  (`selfIncoming + preFightIncoming`), split out so the pre-mitigation damage axis can
              *  strip them while keeping the attacker-applied amplification. */
             victimSideIncomingModifier: number;
+            /** Flat defence from the victim's own three self-buff channels (`flatDefence`). */
+            defenceFlat: number;
         } => {
             const victimDebuffs = victimEnemyBuffs(
                 statusEngine,
@@ -8032,6 +8089,15 @@ export function runCombat(rawInput: CombatEngineInput): {
             // raw stat MUTATION (`PreFightStatBlock.defence`), not a modifier channel — unlike the
             // incoming twin, which needs its `preFightIncoming` term for exactly that reason.
             const selfDefense = toSelfDefenseModifier(victimSelf);
+            // Flat defence (Terran Guard, Magnetized Shielding) from the same three-channel list;
+            // Magnetized Shielding's term reads the victim's LIVE security, Security Down included.
+            const victimActor = allActorsById.get(victimId);
+            const defenceFlat = victimActor
+                ? flatDefence(
+                      calculateBuffTotals(toSimBuffs(victimSelf)),
+                      effectiveStatsOf(statusEngine, selfBuffLookup, victimActor).security
+                  )
+                : 0;
             // The victim's pre-fight incomingDamage baseline (squad-leader "±N% incoming
             // direct damage") folds ADDITIVELY into the same per-victim channel the
             // self-buff term rides (consumed via defenseProfileOf → incomingDamageModifierPct).
@@ -8082,6 +8148,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // otherwise "damage absorbed" would strip a term the mixed total does not hold.
                 victimSideIncomingModifier:
                     selfIncoming - (shadow.ownSuppressed.incomingDamage ?? 0) + preFightIncoming,
+                defenceFlat,
             };
         };
         // TEST-ONLY: expose victimIncomingModifiers (enemy-debuff + friendly self-buff term) to
@@ -8314,6 +8381,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // Direction-agnostic — v.id keys the victim's own enemy-debuff AND self-buff
                 // stores regardless of side.
                 defenceModifierPct: m.enemyDefenseModifier,
+                defenceFlat: m.defenceFlat,
                 // Per-victim incoming-damage modifier; combines
                 // enemy-debuff (Out. Damage Up) AND victim's own self-buffs (Inc. Damage
                 // Down/Up). Attacker-sourced scalars (outgoing buff, pen) stay attacker-fixed.
@@ -8515,7 +8583,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                         preMitigation
                     ) => {
                         const prevSubAttack = currentSubAttackIndex;
+                        const prevWholeBattlefield = wholeBattlefieldHit;
                         currentSubAttackIndex = subAttackIndex;
+                        wholeBattlefieldHit = args.pattern.shape === 'all';
                         try {
                             return args.applyToVictim(
                                 victim,
@@ -8526,6 +8596,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                             );
                         } finally {
                             currentSubAttackIndex = prevSubAttack;
+                            wholeBattlefieldHit = prevWholeBattlefield;
                         }
                     },
                     // Pure ACCUMULATOR (not a bus emit): record per-victim damage into the
@@ -13224,6 +13295,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                 for (const buffName of statusEngine.decrementEnemy(actor.id).expired) {
                     bus.emit({ type: 'buff-expired', actorId: actor.id, round: r, buffName });
                 }
+                // After BOTH decrements, so a hangover landing on this actor keeps its full 2 turns.
+                settleOverclockHangovers(r);
 
                 bus.emit({ type: 'turn-ended', actorId: actor.id, round: r });
                 // Drain intents enqueued by end-of-turn triggers before the next actor acts.

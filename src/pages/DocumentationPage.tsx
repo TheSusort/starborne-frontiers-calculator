@@ -4639,12 +4639,13 @@ const DocumentationPage: React.FC = () => {
                                     adjacent ones), allowing any protected ship to intercept damage
                                     for any teammate. When more than one ally holds Protection, the
                                     faster protector intercepts first and only its unabsorbed
-                                    remainder cascades to the next. <strong>Lionheart</strong> uses
-                                    a once-per-round variant: it gains 10 stacks of Protection at
-                                    the start of each round, and after it absorbs the first hit
-                                    redirected from an ally, it loses all Protection until the next
-                                    round. More implant and gear-set effects will be added in future
-                                    updates.
+                                    remainder cascades to the next. A skill that targets the whole
+                                    battlefield (<strong>Curator</strong>) is never redirected.{' '}
+                                    <strong>Lionheart</strong> uses a once-per-round variant: it
+                                    gains 10 stacks of Protection at the start of each round, and
+                                    after it absorbs the first hit redirected from an ally, it loses
+                                    all Protection until the next round. More implant and gear-set
+                                    effects will be added in future updates.
                                 </p>
                             </div>
                         </div>

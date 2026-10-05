@@ -1,4 +1,5 @@
 import { Buff, SelectedGameBuff } from '../../types/calculator';
+import { holderDefencePct } from './buffParser';
 
 export function toSimBuffs(selected: SelectedGameBuff[]): Buff[] {
     return selected.flatMap((s) => {
@@ -24,11 +25,12 @@ export function toSimBuffs(selected: SelectedGameBuff[]): Buff[] {
                 stat: 'outgoingDamage',
                 value: parsedEffects.outgoingDamage * stacks,
             });
-        if (parsedEffects.defense !== undefined)
+        const defencePct = holderDefencePct(parsedEffects);
+        if (defencePct !== undefined)
             entries.push({
                 id: `${s.id}-def`,
                 stat: 'defence',
-                value: parsedEffects.defense * stacks,
+                value: defencePct * stacks,
             });
         if (parsedEffects.hp !== undefined)
             entries.push({ id: `${s.id}-hp`, stat: 'hp', value: parsedEffects.hp * stacks });
@@ -70,6 +72,18 @@ export function toSimBuffs(selected: SelectedGameBuff[]): Buff[] {
                 stat: 'attackFlat',
                 value: parsedEffects.attackFlat * stacks,
             });
+        if (parsedEffects.defenceFlat !== undefined)
+            entries.push({
+                id: `${s.id}-defenceFlat`,
+                stat: 'defenceFlat',
+                value: parsedEffects.defenceFlat * stacks,
+            });
+        if (parsedEffects.defencePerSecurity !== undefined)
+            entries.push({
+                id: `${s.id}-defencePerSecurity`,
+                stat: 'defencePerSecurity',
+                value: parsedEffects.defencePerSecurity * stacks,
+            });
         return entries;
     });
 }
@@ -80,7 +94,7 @@ export function toEnemyModifiers(selected: SelectedGameBuff[]): {
 } {
     return {
         enemyDefenseModifier: selected.reduce(
-            (sum, s) => sum + (s.parsedEffects.defense ?? 0) * s.stacks,
+            (sum, s) => sum + (holderDefencePct(s.parsedEffects) ?? 0) * s.stacks,
             0
         ),
         incomingDamageModifier: selected.reduce(
@@ -120,7 +134,10 @@ export function toSelfIncomingDamageModifier(selected: SelectedGameBuff[]): numb
  *  already exactly 0, and `calculateDamageReduction(0)` is already 0) — only an overshoot below
  *  -100% exercises it at all. */
 export function toSelfDefenseModifier(selected: SelectedGameBuff[]): number {
-    return selected.reduce((sum, s) => sum + (s.parsedEffects.defense ?? 0) * s.stacks, 0);
+    return selected.reduce(
+        (sum, s) => sum + (holderDefencePct(s.parsedEffects) ?? 0) * s.stacks,
+        0
+    );
 }
 
 export function toDotAndPenModifiers(

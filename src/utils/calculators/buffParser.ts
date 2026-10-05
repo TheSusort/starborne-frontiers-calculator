@@ -42,9 +42,18 @@ export function parseBuffEffects(name: string, description: string): ParsedBuffE
         }
     }
 
+    // Defense as a share of the APPLYING unit's defence ("+10% Defense (Applying Unit)", Terran
+    // Guard) is a flat grant snapshotted from the applier, never a holder-relative percentage.
+    const defenseOfApplier = extract(/([+-]?\d+(?:\.\d+)?)%\s*Defense\s*\(Applying\s*Unit\)/i);
+    if (defenseOfApplier !== undefined) effects.defenceFlatPctOfCaster = defenseOfApplier;
+
     // Defense: negative lookahead to exclude "Defense Penetration"
     const defense = extract(/([+-]\d+)%\s*Defense(?!\s*Penetration)/);
-    if (defense !== undefined) effects.defense = defense;
+    if (defense !== undefined && defenseOfApplier === undefined) effects.defense = defense;
+
+    // Flat defence as a multiple of the holder's security ("Increase DEF by 10x Unit Security").
+    const defencePerSecurity = extract(/(\d+(?:\.\d+)?)x\s*Unit\s*Security/i);
+    if (defencePerSecurity !== undefined) effects.defencePerSecurity = defencePerSecurity;
 
     const incomingHeal = extract(/([+-]\d+(?:\.\d+)?)%\s*Incoming\s*Repair/);
     if (incomingHeal !== undefined) effects.incomingHeal = incomingHeal;
@@ -77,6 +86,17 @@ export function parseBuffEffects(name: string, description: string): ParsedBuffE
     if (hp !== undefined) effects.hp = hp;
 
     return effects;
+}
+
+/**
+ * The holder-relative defence percentage a buff carries. An UNPINNED `defenceFlatPctOfCaster`
+ * (Terran Guard picked by hand in a calculator, where no applier exists to snapshot) falls back
+ * to N% of the holder's own defence; once a grant site pins it into `defenceFlat`, the flat value
+ * is the whole effect and this returns nothing for it.
+ */
+export function holderDefencePct(effects: ParsedBuffEffects): number | undefined {
+    if (effects.defense !== undefined) return effects.defense;
+    return effects.defenceFlat === undefined ? effects.defenceFlatPctOfCaster : undefined;
 }
 
 export function isStackable(description: string): { stackable: boolean; maxStacks?: number } {

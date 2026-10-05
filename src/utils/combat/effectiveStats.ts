@@ -8,6 +8,7 @@ import { StatusEngine } from './statusEngine';
 import { CombatActor } from './state';
 import {
     calculateBuffTotals,
+    flatDefence,
     payloadToSelectedBuff,
     shadowedDelta,
     shadowedOutgoingDelta,
@@ -158,6 +159,8 @@ export function foldActorBuffTotals(
         hackingBuff: scheduled.hackingBuff + timed.hackingBuff + (enemyDelta.hacking ?? 0),
         securityBuff: scheduled.securityBuff + timed.securityBuff + (enemyDelta.security ?? 0),
         attackFlatBuff: scheduled.attackFlatBuff + timed.attackFlatBuff,
+        defenceFlatBuff: scheduled.defenceFlatBuff + timed.defenceFlatBuff,
+        defencePerSecurityBuff: scheduled.defencePerSecurityBuff + timed.defencePerSecurityBuff,
     };
 }
 
@@ -168,16 +171,17 @@ export function effectiveStatsOf(
 ): EffectiveStats {
     const t = foldActorBuffTotals(statusEngine, selfBuffLookup, actor.id);
     const s = actor.stats;
+    const security = (s.security ?? 0) + t.securityBuff;
     return {
         attack: s.attack * (1 + t.attackBuff / 100) + t.attackFlatBuff, // base × (1+%) + attackFlatBuff (absolute units)
-        defence: s.defence * (1 + t.defenceBuff / 100),
+        defence: s.defence * (1 + t.defenceBuff / 100) + flatDefence(t, security),
         crit: s.crit + t.critBuff,
         critDamage: s.critDamage + t.critDamageBuff,
         defensePenetration: s.defensePenetration,
         hp: s.hp,
         speed: s.speed * (1 + t.speedBuff / 100),
         hacking: (s.hacking ?? 0) + t.hackingBuff,
-        security: (s.security ?? 0) + t.securityBuff,
+        security,
     };
 }
 
@@ -380,15 +384,19 @@ export function effectiveDamageStatsOf(args: {
         hackingBuff: scheduledTotals.hackingBuff + ability.hackingBuff,
         securityBuff: scheduledTotals.securityBuff + ability.securityBuff,
         attackFlatBuff: scheduledTotals.attackFlatBuff + ability.attackFlatBuff,
+        defenceFlatBuff: scheduledTotals.defenceFlatBuff + ability.defenceFlatBuff,
+        defencePerSecurityBuff:
+            scheduledTotals.defencePerSecurityBuff + ability.defencePerSecurityBuff,
     };
+    const security = base.security + totals.securityBuff;
 
     return {
         attack: base.attack * (1 + totals.attackBuff / 100) + totals.attackFlatBuff, // base × (1+%) + attackFlatBuff (absolute units)
-        defence: base.defence * (1 + totals.defenceBuff / 100),
+        defence: base.defence * (1 + totals.defenceBuff / 100) + flatDefence(totals, security),
         crit: base.crit + totals.critBuff,
         critDamage: base.critDamage + totals.critDamageBuff,
         hp: base.hp * (1 + totals.hpBuff / 100),
-        security: base.security + totals.securityBuff,
+        security,
         effectivePen:
             base.defensePenetration +
             base.defensePenetrationBuff +

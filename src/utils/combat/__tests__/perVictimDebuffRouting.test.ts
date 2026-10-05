@@ -153,6 +153,7 @@ describe('B1 Task 3 — per-victim ability-debuff routing (perVictimDebuffRoutin
             enemyDefenseModifier: -50,
             incomingDamageModifier: 0,
             victimSideIncomingModifier: 0,
+            defenceFlat: 0,
         });
 
         // enemy-back was NOT targeted → its per-victim ability store is empty.
@@ -161,6 +162,7 @@ describe('B1 Task 3 — per-victim ability-debuff routing (perVictimDebuffRoutin
             enemyDefenseModifier: 0,
             incomingDamageModifier: 0,
             victimSideIncomingModifier: 0,
+            defenceFlat: 0,
         });
     });
 });

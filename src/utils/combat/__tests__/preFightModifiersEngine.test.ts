@@ -132,6 +132,7 @@ describe('F3 — victim-side incomingDamage rides the per-victim modifier channe
             // `victimHitDamageParts` subtracts back off the "damage absorbed" axis. A squad-leader
             // protection that failed to register here would silently shrink its own ship's headline.
             victimSideIncomingModifier: -5,
+            defenceFlat: 0,
         });
         // …and does NOT bleed onto other actors: neither the vestigial dummy sink nor the real
         // positioned opponent has any preFight of its own.
@@ -139,11 +140,13 @@ describe('F3 — victim-side incomingDamage rides the per-victim modifier channe
             enemyDefenseModifier: 0,
             incomingDamageModifier: 0,
             victimSideIncomingModifier: 0,
+            defenceFlat: 0,
         });
         expect(captured!(BARE_ENEMY_ID)).toEqual({
             enemyDefenseModifier: 0,
             incomingDamageModifier: 0,
             victimSideIncomingModifier: 0,
+            defenceFlat: 0,
         });
     });
 
@@ -178,6 +181,7 @@ describe('F3 — victim-side incomingDamage rides the per-victim modifier channe
             // `victimHitDamageParts` subtracts back off the "damage absorbed" axis. A squad-leader
             // protection that failed to register here would silently shrink its own ship's headline.
             victimSideIncomingModifier: -9,
+            defenceFlat: 0,
         });
         // …and the focus, which supplied no preFight of its own this time, still reads zeros — so
         // the -9 is scoped to the roster entry rather than being a fight-wide fold.
@@ -185,6 +189,7 @@ describe('F3 — victim-side incomingDamage rides the per-victim modifier channe
             enemyDefenseModifier: 0,
             incomingDamageModifier: 0,
             victimSideIncomingModifier: 0,
+            defenceFlat: 0,
         });
     });
 });

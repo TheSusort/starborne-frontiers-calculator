@@ -1,5 +1,5 @@
 /**
- * `Out. Detonation Damage Up III` (+45% Outgoing Detonation Damage) must scale detonation
+ * `Out. Detonation Damage Up III` (+30% Outgoing Detonation Damage) must scale detonation
  * bursts. Chimei grants it to an ally for 1 turn; it built as a name-only buff (empty
  * parsedEffects) so nothing read it.
  *
@@ -9,7 +9,7 @@
  *
  * The buff's parsedEffects are produced by the PRODUCTION parser (`parseBuffEffects`) over the
  * real `BUFFS` entry, so this fails if either the buffParser pattern or the
- * `toDotAndPenModifiers` fold regresses — a hand-written `{ detonationDamage: 45 }` would prove
+ * `toDotAndPenModifiers` fold regresses — a hand-written `{ detonationDamage: 30 }` would prove
  * nothing about either.
  *
  * TWO DETONATION PATHS, both fed by the same `EffectiveDamageStats.detonationDamageModifier`
@@ -31,15 +31,14 @@
  * damage clause all three cases measure 0 (a green-and-vacuous trap the ratio assertions would
  * NOT have caught, since 0/0 is NaN and the `> 0` guard is what fires). Every ship in the corpus
  * that takes this parser path carries damage in the same clause, so the damage clause is the
- * CORPUS-FAITHFUL shape, not a workaround. The pinned ratios are unchanged (+45%), and the
- * absolute burst totals are byte-identical to the pre-branch run: corrosion 120000 -> 174000,
- * bomb 600 -> 870.
+ * CORPUS-FAITHFUL shape, not a workaround. Absolute burst totals: corrosion 120000 -> 156000,
+ * bomb 600 -> 780.
  *
  * ROUND SHAPE: the buff-grant, the DoT-apply, and the detonate-dot all sit in the SAME active
  * slot, recast every round. `detonate-dot` resolves BEFORE that round's own apply (playerTurn.ts
  * Step 2.95 vs Step 3), so round 1 has nothing to detonate yet (0 credited); round 2 detonates
  * round 1's application; round 3 detonates round 2's. `numRounds: 3` (from BASE) gives two
- * non-zero bursts, confirmed empirically to land at an exact, uncontaminated +45% every round —
+ * non-zero bursts, confirmed empirically to land at an exact, uncontaminated +30% every round —
  * including for the bomb snapshot, because the buff-grant ability resolves before this SAME
  * cast's own DoT-apply step, so even round 1's bomb is snapshotted already-buffed.
  */
@@ -51,7 +50,7 @@ import type { Ability, ShipSkills } from '../../../types/abilities';
 import { bareEnemy } from '../__testutils__/bareRosterFixture';
 
 const BUFF_NAME = 'Out. Detonation Damage Up III';
-const EXPECTED_PCT = 45;
+const EXPECTED_PCT = 30;
 const HP = 10_000_000;
 const ATTACK = 10_000;
 
@@ -180,7 +179,7 @@ describe('Out. Detonation Damage Up III scales detonation bursts', () => {
         expect(withoutBuff).toBe(120000);
     });
 
-    it('scales the burst by exactly +45% when the buff is held (live detonationMult path)', () => {
+    it('scales the burst by exactly +30% when the buff is held (live detonationMult path)', () => {
         const withoutBuff = detonationTotal(
             BASE({
                 shipSkills: {
@@ -203,11 +202,11 @@ describe('Out. Detonation Damage Up III scales detonation bursts', () => {
             })
         );
         expect(withoutBuff).toBe(120000);
-        expect(withBuff).toBe(174000);
+        expect(withBuff).toBe(156000);
         expect(withBuff / withoutBuff).toBeCloseTo(1 + EXPECTED_PCT / 100, 6);
     });
 
-    it('scales a bomb applied while holding the buff by exactly +45% (PendingBomb snapshot path)', () => {
+    it('scales a bomb applied while holding the buff by exactly +30% (PendingBomb snapshot path)', () => {
         const withoutBuff = detonationTotal(
             BASE({
                 shipSkills: { slots: [activeSlot([basicDamage(), applyBomb(), detonateBomb()])] },
@@ -223,7 +222,7 @@ describe('Out. Detonation Damage Up III scales detonation bursts', () => {
             })
         );
         expect(withoutBuff).toBe(600);
-        expect(withBuff).toBe(870);
+        expect(withBuff).toBe(780);
         expect(withBuff / withoutBuff).toBeCloseTo(1 + EXPECTED_PCT / 100, 6);
     });
 });

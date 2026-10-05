@@ -9,6 +9,7 @@ import { DefenseSettingsPanel } from '../../components/calculator/DefenseSetting
 import { DefenseShipCard } from '../../components/calculator/DefenseShipCard';
 import { SecurityEHPChart } from '../../components/calculator/SecurityEHPChart';
 import { computeBuffedStats } from '../../utils/calculators/defenseCalculator';
+import { holderDefencePct } from '../../utils/calculators/buffParser';
 import {
     simulateDefenseSurvivability,
     DefenseSurvivabilityResult,
@@ -338,7 +339,7 @@ const DefenseCalculatorPage: React.FC = () => {
     const globalBuffTotals = useMemo(
         () => ({
             defenseBuff: globalBuffs.reduce(
-                (sum, b) => sum + (b.parsedEffects.defense ?? 0) * b.stacks,
+                (sum, b) => sum + (holderDefencePct(b.parsedEffects) ?? 0) * b.stacks,
                 0
             ),
             incomingDamageBuff: globalBuffs.reduce(
@@ -404,7 +405,8 @@ const DefenseCalculatorPage: React.FC = () => {
                             defenseBuff:
                                 globalBuffTotals.defenseBuff +
                                 countedBuffs.reduce(
-                                    (sum, b) => sum + (b.parsedEffects.defense ?? 0) * b.stacks,
+                                    (sum, b) =>
+                                        sum + (holderDefencePct(b.parsedEffects) ?? 0) * b.stacks,
                                     0
                                 ),
                             incomingDamageBuff:

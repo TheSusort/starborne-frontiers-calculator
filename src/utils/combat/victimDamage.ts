@@ -64,6 +64,9 @@ export interface VictimDefenseProfile {
     defence: number;
     /** enemyDefenseModifier — percent. */
     defenceModifierPct: number;
+    /** Flat defence (absolute units) added after the percentage term — Terran Guard's applier
+     *  snapshot and Magnetized Shielding's 10x security (`flatDefence`, buffTotals.ts). Absent → 0. */
+    defenceFlat?: number;
     affinity: AffinityName;
     /** per-victim incoming-damage debuff; when present, overrides the attacker-fixed scalar */
     incomingDamageModifierPct?: number;
@@ -147,7 +150,7 @@ export interface VictimDefenseProfile {
  * victim's raw and buff-folded defence stat — and skewed every chunk. Exported so the two can
  * never drift again: `victimHitDamage` applies this and nothing else as its defence term.
  *
- * @param v    this victim's defensive profile (defence + defenceModifierPct)
+ * @param v    this victim's defensive profile (defence × (1 + defenceModifierPct) + defenceFlat)
  * @param defensePenetrationPct the ATTACKER's effective defence penetration, percent
  */
 export function victimDefenceMitigation(
@@ -155,7 +158,8 @@ export function victimDefenceMitigation(
     defensePenetrationPct: number
 ): number {
     const effectiveDefense =
-        v.defence * (1 + v.defenceModifierPct / 100) * (1 - defensePenetrationPct / 100);
+        (v.defence * (1 + v.defenceModifierPct / 100) + (v.defenceFlat ?? 0)) *
+        (1 - defensePenetrationPct / 100);
     const damageReduction = effectiveDefense > 0 ? calculateDamageReduction(effectiveDefense) : 0;
     return 1 - damageReduction / 100;
 }

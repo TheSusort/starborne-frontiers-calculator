@@ -317,6 +317,13 @@ export interface StatusEngine {
      *  two independent axes. An entry carrying no live stack count is treated as its last stack.
      *  Lazy-empty / unknown id / unknown name → safe no-op. */
     consumeTimedEnemyStatusStack(targetId: string, buffName: string): void;
+    /** Spend ONE STACK of a stacking self status on `ownerId` — the accumulating store
+     *  (`accumSelfMaps`, where an ability's "gains N stacks" lands) and the persistent store
+     *  (`persistentSelfMaps`). An accumulating entry stays registered at 0 stacks, inert until its
+     *  next grant; a persistent entry is deleted at its last stack. Used by Titanite Plating
+     *  ("removes one stack after taking direct damage"). Lazy-empty / unknown id / unknown name /
+     *  already at 0 → safe no-op. */
+    consumeSelfStatusStack(ownerId: string, buffName: string): void;
     /** Remove a named buff family from ALL of `actorId`'s self stores (timed selfMaps,
      *  accumulating accumSelfMaps, persistent persistentSelfMaps). Lazy-empty / unknown id /
      *  unknown name → safe no-op. */
@@ -1576,6 +1583,21 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         s.stacks = live - 1;
     };
 
+    const consumeSelfStatusStack = (ownerId: string, buffName: string): void => {
+        const accum = accumSelfMaps.get(ownerId)?.get(buffName);
+        if (accum && accum.stacks > 0) {
+            accum.stacks -= 1;
+            // Same reset as removeSelfBuffByName: the next 0→positive grant re-stamps ordering.
+            if (accum.stacks === 0) accum.appliedSeq = undefined;
+        }
+        const persistentMap = persistentSelfMaps.get(ownerId);
+        const persistent = persistentMap?.get(buffName);
+        if (persistent) {
+            if (persistent.stacks <= 1) persistentMap!.delete(buffName);
+            else persistent.stacks -= 1;
+        }
+    };
+
     // Per-owner signed stack ledger — see the interface doc for why this is a delta and not a
     // mutation of the registered payload.
     const stackAdjustments = new Map<string, Map<string, number>>();
@@ -2384,6 +2406,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         removeTimedEnemyStatus,
         reduceTimedEnemyStatus,
         consumeTimedEnemyStatusStack,
+        consumeSelfStatusStack,
         removeSelfBuffByName,
         consumeStatusHit,
         cleanse,
