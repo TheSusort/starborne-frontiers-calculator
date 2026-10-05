@@ -31,7 +31,9 @@ beforeEach(() => setupKeyedRng(7));
 
 type Snapshot = Extract<CombatEvent, { type: 'stats-snapshot' }>['stats'];
 
-/** The FIRST `stats-snapshot` of every actor in each round, keyed `${actorId}@${round}`. */
+/** The FIRST `stats-snapshot` of every actor in each round, keyed `${actorId}@${round}` — the
+ *  start of its regular turn. Harvester's ally-destroyed passive also grants an extra end-of-round
+ *  action, which emits a second snapshot that round. */
 const snapshots = (input: Parameters<typeof runCombat>[0]): Map<string, Snapshot> => {
     const bus = createEventBus();
     const out = new Map<string, Snapshot>();
