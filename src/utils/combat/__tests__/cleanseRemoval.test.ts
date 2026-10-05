@@ -98,7 +98,7 @@ describe('statusEngine.cleanse (newest-first removal)', () => {
         expect(names).toHaveLength(0);
     });
 
-    it('accumulating debuff with stacks > 0 is removed; persistent-stacking debuff (Defense Shred) survives cleanse(all)', () => {
+    it('accumulating debuff with stacks > 0 is removed; so is every Defense Shred stack on cleanse(all) (R44)', () => {
         // Seed a non-persistent accumulating enemy debuff via registerAbilityStatuses.
         // 'Vulnerability' is a made-up name, not in PERSISTENT_STACKING_BUFFS or UNREMOVABLE_STATUSES.
         const accumDebuff: RegisteredAbilityStatus = {
@@ -115,23 +115,76 @@ describe('statusEngine.cleanse (newest-first removal)', () => {
         // Round 1: per-round increment fires at beginRound — stacks become 1 (0→positive).
         eng.beginRound(1);
 
-        // Apply a real persistent-stacking debuff (Defense Shred) via the normal timed path.
-        // The engine routes PERSISTENT_STACKING_BUFFS by name into the separate persistent map
-        // — removeNewestFirst never visits that map, so it is unremovable by construction.
+        // Apply a real persistent-stacking debuff (Defense Shred) via the normal timed path; the
+        // name routes it into the persistent map. Owner ruling R44 (2026-10-05) overturned the
+        // earlier "survives cleanse" pin: each of its stacks is one cleansable debuff.
+        eng.applyTimedAbilityStatus(1, mkTimed('Defense Shred'), 'attacker', 'v1');
         eng.applyTimedAbilityStatus(1, mkTimed('Defense Shred'), 'attacker', 'v1');
 
         const removed = eng.cleanse('v1', 'all');
-        // Vulnerability (stacks=1, accumulating, non-persistent) should be removed (1).
-        // Defense Shred lives in the persistent map — never gathered → not counted.
-        expect(removed).toBe(1);
+        // Vulnerability (1) + both Defense Shred stacks (2).
+        expect(removed).toBe(3);
+        expect(eng.timedAbilityStatuses('enemy', 'attacker', 'v1')).toEqual([]);
+    });
 
-        // Defense Shred must still be present in the persistent map after cleanse.
-        // It carries a payload (ability-sourced), so it appears via timedAbilityStatuses
-        // (not snapshot, which excludes payload-carrying entries).
-        const persistentNames = eng
-            .timedAbilityStatuses('enemy', 'attacker', 'v1')
-            .map((s) => s.payload.buffName);
-        expect(persistentNames).toContain('Defense Shred');
+    describe('Defense Shred stacks in the newest-first pool (R44)', () => {
+        const shredOf = (eng: ReturnType<typeof createStatusEngine>) =>
+            eng
+                .timedAbilityStatuses('enemy', 'attacker', 'v1')
+                .find((s) => s.payload.buffName === 'Defense Shred')?.active.stacks ?? 0;
+        const names = (eng: ReturnType<typeof createStatusEngine>) =>
+            eng
+                .timedAbilityStatuses('enemy', 'attacker', 'v1')
+                .map((s) => s.payload.buffName)
+                .sort();
+
+        it('3 stacks, cleanse 1 → 2 stacks', () => {
+            const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+            eng.beginRound(1);
+            for (let i = 0; i < 3; i++)
+                eng.applyTimedAbilityStatus(1, mkTimed('Defense Shred'), 'attacker', 'v1');
+            expect(eng.cleanse('v1', 1)).toBe(1);
+            expect(shredOf(eng)).toBe(2);
+        });
+
+        it('a named debuff inflicted AFTER the shred goes first', () => {
+            const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+            eng.beginRound(1);
+            eng.applyTimedAbilityStatus(1, mkTimed('Defense Shred'), 'attacker', 'v1');
+            eng.applyTimedAbilityStatus(1, mkTimed('Attack Down'), 'attacker', 'v1');
+            expect(eng.cleanse('v1', 1)).toBe(1);
+            expect(names(eng)).toEqual(['Defense Shred']);
+        });
+
+        it('a shred stack inflicted AFTER a named debuff goes first; the older stack stays', () => {
+            const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+            eng.beginRound(1);
+            eng.applyTimedAbilityStatus(1, mkTimed('Defense Shred'), 'attacker', 'v1');
+            eng.applyTimedAbilityStatus(1, mkTimed('Attack Down'), 'attacker', 'v1');
+            eng.applyTimedAbilityStatus(1, mkTimed('Defense Shred'), 'attacker', 'v1');
+            expect(eng.cleanse('v1', 1)).toBe(1);
+            expect(names(eng)).toEqual(['Attack Down', 'Defense Shred']);
+            expect(shredOf(eng)).toBe(1);
+            // Next newest is Attack Down, then the first shred stack.
+            expect(eng.cleanse('v1', 1)).toBe(1);
+            expect(names(eng)).toEqual(['Defense Shred']);
+        });
+
+        it('a typed (DoT-only) cleanse leaves the shred alone', () => {
+            const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+            eng.beginRound(1);
+            eng.applyTimedAbilityStatus(1, mkTimed('Defense Shred'), 'attacker', 'v1');
+            expect(eng.cleanse('v1', 'all', [], false)).toBe(0);
+            expect(shredOf(eng)).toBe(1);
+        });
+
+        it("a purge never reaches the victim's own debuff store", () => {
+            const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+            eng.beginRound(1);
+            eng.applyTimedAbilityStatus(1, mkTimed('Defense Shred'), 'attacker', 'v1');
+            expect(eng.purge('v1', 'all')).toBe(0);
+            expect(shredOf(eng)).toBe(1);
+        });
     });
 
     it('cross-store interleave: cleanse removes the NEWER entry regardless of which store it lives in', () => {

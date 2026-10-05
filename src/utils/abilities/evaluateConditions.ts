@@ -3,6 +3,11 @@ import { EnemyBaseClass } from '../../types/calculator';
 
 export interface ConditionContext {
     selfBuffNames: string[];
+    /** How many buffs the unit itself carries, one per STACK (owner ruling R37: Core Charge I ×4
+     *  is 4 buffs; `buffStackCount`). Read by every `self-buff` condition WITHOUT a `buffName`
+     *  ("for each buff on itself", "for each buff it has"); a named one keeps matching
+     *  `selfBuffNames`. Absent → the count of `selfBuffNames`. */
+    selfBuffCount?: number;
     selfDebuffNames: string[];
     /** How many debuffs the unit itself carries: its distinct named debuffs plus every DoT stack
      *  on it (`actorDebuffCount`; owner ruling R22 — ruling 8 applied to self).
@@ -12,7 +17,7 @@ export interface ConditionContext {
      *  the unit's DoTs, e.g. the DPS calculator, whose ship carries none). */
     selfDebuffCount?: number;
     enemyBuffNames: string[];
-    /** DISTINCT buffs on the cast's bound target — a buff held at several stacks counts once.
+    /** Buffs on the cast's bound target, one per STACK (owner ruling R37 — `actorBuffCount`).
      *  Read by every `enemy-buff` condition WITHOUT a `buffName`, whatever its `derivable` flag
      *  ("for each buff on the enemy", "equal to the number of buffs", "if the target has 3 or
      *  more buffs"); a named `enemy-buff` condition keeps reading the side-wide `enemyBuffNames`
@@ -262,6 +267,7 @@ export function evaluateCondition(cond: Condition, ctx: ConditionContext): numbe
         case 'always':
             return 1;
         case 'self-buff':
+            if (!cond.buffName && ctx.selfBuffCount !== undefined) return ctx.selfBuffCount;
             return countNames(ctx.selfBuffNames, cond.buffName);
         case 'self-debuff':
             if (!cond.buffName && ctx.selfDebuffCount !== undefined) return ctx.selfDebuffCount;

@@ -3035,6 +3035,17 @@ const DocumentationPage: React.FC = () => {
                                         and its Everliving Regeneration II.
                                     </p>
                                     <p className="text-theme-text mb-2">
+                                        <span className="text-primary">Buff counts:</span> Every
+                                        stack of a buff counts as one buff. Butcher&apos;s
+                                        &ldquo;35% for each buff on the enemy&rdquo; counts a
+                                        Centurion holding 4 stacks of Core Charge I as 4 buffs; the
+                                        same goes for Nuqtu&apos;s &ldquo;3 or more buffs&rdquo;,
+                                        Rhodium, Valiant, Sustainer and Thresh, and for &ldquo;the
+                                        enemy with the most buffs&rdquo;. A purge still removes the
+                                        newest whole buff, all its stacks at once. Works for both
+                                        teams.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
                                         <span className="text-primary">Debuff counts:</span> A
                                         condition that counts debuffs, on an enemy or on the ship
                                         itself (Sustainer&apos;s &ldquo;if this Unit has no
@@ -3044,33 +3055,43 @@ const DocumentationPage: React.FC = () => {
                                         debuffs. A count of damage-over-time effects (Anemone,
                                         Snakeroot) counts each stack too. Each stack also rolls its
                                         own landing: Snakeroot&apos;s 2 stacks can land 0, 1 or 2,
-                                        and every stack that fails is its own resist. A reaction to
-                                        a debuff being inflicted (APEX&apos;s shield,
+                                        and every stack that fails is its own resist. The same goes
+                                        for Amartya&apos;s 2 stacks of Defense Shred or Exposed, and
+                                        each of her stacks that lands counts as its own infliction.
+                                        A reaction to a debuff being inflicted (APEX&apos;s shield,
                                         Oleander&apos;s charge, Provider&apos;s hit, Lingshe&apos;s
                                         Stealth, Hayyan&apos;s repair, the Firewall implant&apos;s
                                         chance) fires once per stack that lands, within its own
                                         once-per-cast or once-per-round limits; reactions to a
                                         critical DoT (Crocus, Wisteria) and Belladonna&apos;s
-                                        conversion still fire once per application. A cleanse
-                                        removes stacks the same way: &ldquo;cleanses 1 debuff&rdquo;
-                                        on 2 Corrosion stacks leaves 1. The most recently inflicted
-                                        debuff goes first, named debuff or damage-over-time stack
-                                        alike (stacks inflicted together share one time); Acidic
-                                        Decay cannot be cleansed. Nyxen&apos;s cleanses take only
-                                        Bombs or only damage-over-time effects, as written, newest
-                                        first. Heliodor&apos;s and Pestilence&apos;s cut to the
-                                        duration of all debuffs shortens Corrosion and Inferno too;
-                                        one cut to 0 turns ends without ticking again. Reactions to
-                                        an enemy cleansing a debuff (Pestilence, Larkspur, Grif,
-                                        Arum, Yarrow) also hear the cleanses an enemy&apos;s passive
-                                        performs (Nuqtu, Purifier, AEGIS, Hermes, Howler), but not a
-                                        duration cut; a cleanse that such a reaction provoked does
-                                        not trigger another one. A count written after an infliction
-                                        in the same skill includes what that skill landed, enemy by
-                                        enemy: Crocus&apos;s Corrosion II counts toward her own
-                                        &ldquo;3 or more debuffs&rdquo; Stasis (Asphyxiator&apos;s
-                                        and Anemone&apos;s gates likewise), and a resisted one does
-                                        not. A passive reacting to the hit (Bayah) counts only the
+                                        conversion still fire once per application. Anemone&apos;s
+                                        repair when an enemy takes damage-over-time damage fires
+                                        once per stack that ticks: 3 Corrosion stacks and 1 Inferno
+                                        give four repairs. A cleanse removes stacks the same way:
+                                        &ldquo;cleanses 1 debuff&rdquo; on 2 Corrosion stacks leaves
+                                        1. The most recently inflicted debuff goes first, named
+                                        debuff or damage-over-time stack alike (stacks inflicted
+                                        together share one time); Acidic Decay cannot be cleansed.
+                                        Defense Shred is cleansed one stack at a time: 3 stacks,
+                                        &ldquo;cleanses 1 debuff&rdquo;, 2 stacks left. Each Defense
+                                        Shred stack also counts as one debuff (3 stacks meet
+                                        Crocus&apos;s &ldquo;3 or more debuffs&rdquo;), and Cheat
+                                        Death wipes all of them like any other debuff. Nyxen&apos;s
+                                        cleanses take only Bombs or only damage-over-time effects,
+                                        as written, newest first. Heliodor&apos;s and
+                                        Pestilence&apos;s cut to the duration of all debuffs
+                                        shortens Corrosion and Inferno too; one cut to 0 turns ends
+                                        without ticking again. Reactions to an enemy cleansing a
+                                        debuff (Pestilence, Larkspur, Grif, Arum, Yarrow) also hear
+                                        the cleanses an enemy&apos;s passive performs (Nuqtu,
+                                        Purifier, AEGIS, Hermes, Howler), but not a duration cut; a
+                                        cleanse that such a reaction provoked does not trigger
+                                        another one. A count written after an infliction in the same
+                                        skill includes what that skill landed, enemy by enemy:
+                                        Crocus&apos;s Corrosion II counts toward her own &ldquo;3 or
+                                        more debuffs&rdquo; Stasis (Asphyxiator&apos;s and
+                                        Anemone&apos;s gates likewise), and a resisted one does not.
+                                        A passive reacting to the hit (Bayah) counts only the
                                         debuffs from before the skill.
                                     </p>
                                     <p className="text-theme-text mb-2">
@@ -3158,8 +3179,11 @@ const DocumentationPage: React.FC = () => {
                                         Ships with &quot;extra action&quot; passives (Nuqtu,
                                         Sustainer, Liberator, Tygr, Tormenter) take a full
                                         additional turn each round, re-entering the turn queue at
-                                        their Speed position. When an extra turn occurs, the round
-                                        tooltip shows a{' '}
+                                        their Speed position. An extra action is a turn, so a stack
+                                        gained &quot;every turn&quot; (Sokol&apos;s and Lev&apos;s
+                                        Blast, Butcher&apos;s Overload, Nemesis&apos;s Warding
+                                        Screen) is gained again on it. When an extra turn occurs,
+                                        the round tooltip shows a{' '}
                                         <span className="font-semibold">+N extra turn</span> line
                                         beneath the charge counter.
                                     </p>

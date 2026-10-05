@@ -1994,16 +1994,20 @@ export function registerReactiveListeners(args: {
                 case 'on-enemy-dot-damage':
                     bus.on('dot-ticked', (e) => {
                         // Anemone: opposing-scoped reaction to an ENEMY-side actor taking a DoT
-                        // TICK (any dotType). Stamp victimId = the tick's real target — Anemone's
+                        // TICK (any dotType). One enqueue per STACK that ticked (owner ruling R45:
+                        // each DoT stack is its own damage-over-time effect, so 3 Corrosion stacks
+                        // and 1 Inferno are four repairs); `e.stacks` is the tick group's summed
+                        // ticking stacks. Stamp victimId = the tick's real target — Anemone's
                         // heal is SELF-target, so `reactiveRecipients` resolves it to
                         // [intent.ownerId] regardless (target==='self' branch never reads
                         // victimId); the stamp exists for parity with the sibling cases and for any
                         // future non-self consumer of this trigger.
                         if (isOpposing(e.targetId))
-                            enqueue({
-                                ...intent,
-                                eventCtx: { ...intent.eventCtx, victimId: e.targetId },
-                            });
+                            for (let i = 0; i < Math.max(0, e.stacks); i++)
+                                enqueue({
+                                    ...intent,
+                                    eventCtx: { ...intent.eventCtx, victimId: e.targetId },
+                                });
                     });
                     break;
                 case 'on-enemy-cleansed': {
@@ -2774,19 +2778,20 @@ export function buildActorConditionContext(
     }
 ) {
     const snap = statusEngine.snapshot(ownerId);
-    const selfBuffNames = snap.activeSelfBuffs
-        .filter((ab) => ab.stacks === undefined || ab.stacks > 0)
-        .map((ab) => ab.buffName);
-    if (shared.includeAbilitySelfNames) {
-        // Ability-sourced self statuses are payload-carrying → excluded from snapshot(); add their
-        // names so a caster's self-granted gate buffs are visible to its own aura/accum gate.
-        for (const s of statusEngine.timedAbilityStatuses('self', ownerId)) {
-            selfBuffNames.push(s.active.buffName);
-        }
-    }
+    const scheduled = snap.activeSelfBuffs.filter((ab) => ab.stacks === undefined || ab.stacks > 0);
+    const selfBuffNames = scheduled.map((ab) => ab.buffName);
+    // Ability-sourced self statuses are payload-carrying → excluded from snapshot(); add their
+    // names so a caster's self-granted gate buffs are visible to its own aura/accum gate.
+    const abilitySelf = shared.includeAbilitySelfNames
+        ? statusEngine.timedAbilityStatuses('self', ownerId)
+        : [];
+    for (const s of abilitySelf) selfBuffNames.push(s.active.buffName);
     return buildRoundContext({
         selfBuffNames,
-        landedEnemyDebuffCount: shared.ownerIsEnemySide ? 0 : snap.activeEnemyDebuffs.length,
+        selfBuffCount: buffStackCount([...scheduled, ...abilitySelf]),
+        landedEnemyDebuffCount: shared.ownerIsEnemySide
+            ? 0
+            : namedDebuffCount(snap.activeEnemyDebuffs),
         corrosionStacks: shared.corrosionStacks,
         infernoStacks: shared.infernoStacks,
         bombStacks: shared.bombStacks,
@@ -3292,6 +3297,43 @@ export function selfBuffStacksForOwner(
     return Math.max(0, total + statusEngine.selfBuffStackAdjustment(ownerId, buffName));
 }
 
+/** How many buffs a list of held buff entries is: one per STACK, not one per entry or name (owner
+ *  ruling R37, the buff-side mirror of R26 — Core Charge I ×4 is 4 buffs). An entry with a live
+ *  `active.stacks` counts that many (0 for a seeded-but-inert accumulating entry); otherwise an
+ *  ability status counts its payload's declared stacks and a scheduled entry counts 1. Every
+ *  buff COUNT ("for each buff on the enemy", "for each buff on itself", "3 or more buffs", "the
+ *  enemy with the most buffs") reads through this — or `actorBuffCount` for a stored actor;
+ *  presence and NAME reads stay on the deduped name lists. */
+export function buffStackCount(entries: readonly (ActiveBuff | ActiveAbilityStatus)[]): number {
+    let total = 0;
+    for (const e of entries) {
+        const active = 'active' in e ? e.active : e;
+        if (active.stacks !== undefined) total += Math.max(0, active.stacks);
+        else total += Math.max(1, ('payload' in e ? e.payload.stacks : undefined) ?? 1);
+    }
+    return total;
+}
+
+/** How many buffs `ownerId` carries right now (`buffStackCount`), across the SAME three sources as
+ *  {@link selfBuffNamesForOwners} plus the per-owner stack ledger a steal writes (a stolen
+ *  Protection stack is one buff fewer), each name clamped at 0. */
+export function actorBuffCount(statusEngine: StatusEngine, ownerId: string): number {
+    const byName = new Map<string, number>();
+    const add = (name: string, n: number): void => {
+        byName.set(name, (byName.get(name) ?? 0) + n);
+    };
+    for (const ab of statusEngine.snapshot(ownerId).activeSelfBuffs)
+        add(ab.buffName, buffStackCount([ab]));
+    for (const s of statusEngine.timedAbilityStatuses('self', ownerId))
+        add(s.active.buffName, buffStackCount([s]));
+    for (const s of statusEngine.activeAbilityStatuses('self', () => NEUTRAL_NAMES_CTX, ownerId))
+        add(s.active.buffName, buffStackCount([s]));
+    let total = 0;
+    for (const [name, n] of byName)
+        total += Math.max(0, n + statusEngine.selfBuffStackAdjustment(ownerId, name));
+    return total;
+}
+
 /** Enemy-debuff NAMES carried in the per-TARGET store keyed by `targetId` (an actor's
  *  OWN debuffs). Scheduled non-payload debuffs come from snapshot(_, targetId).activeEnemyDebuffs;
  *  payload-carrying ability debuffs (timed + aura/accum) come from the ability-status reads
@@ -3317,11 +3359,40 @@ export function ownerDebuffNamesFor(statusEngine: StatusEngine, targetId: string
     return [...names];
 }
 
-/** How many debuffs `actor` carries right now: its distinct named debuffs (`ownerDebuffNamesFor`)
- *  plus every DoT stack it carries (`carriedDotStacks`) — the same sum a cast's "N or more
- *  debuffs" gate reads for a struck enemy. */
+/** How many debuffs one landed named-debuff entry is: a persistent-stacking debuff (Defense Shred)
+ *  is one per STACK (owner ruling R73 — 3 stacks are 3 debuffs, matching the cleanse, which takes
+ *  one stack per cleansed debuff, R44); any other named debuff is one. */
+function namedDebuffEntryCount(e: ActiveBuff): number {
+    return PERSISTENT_STACKING_BUFFS.has(e.buffName) ? Math.max(0, e.stacks ?? 1) : 1;
+}
+
+/** How many debuffs a list of landed named-debuff entries is (`namedDebuffEntryCount` each). The
+ *  named half of every debuff COUNT; DoT stacks are the other half (`carriedDotStacks`). */
+export function namedDebuffCount(entries: readonly ActiveBuff[]): number {
+    return entries.reduce((n, e) => n + namedDebuffEntryCount(e), 0);
+}
+
+/** How many named debuffs `targetId` carries: its distinct named debuffs (`ownerDebuffNamesFor`),
+ *  a persistent-stacking one counted per stack (`namedDebuffEntryCount`). */
+export function ownerDebuffCount(statusEngine: StatusEngine, targetId: string): number {
+    const byName = new Map<string, number>(
+        ownerDebuffNamesFor(statusEngine, targetId).map((n) => [n, 1])
+    );
+    const persistent = [
+        ...statusEngine.snapshot(undefined, targetId).activeEnemyDebuffs,
+        ...statusEngine.timedAbilityStatuses('enemy', undefined, targetId).map((s) => s.active),
+    ].filter((e) => e.turnsRemaining === 'permanent' && byName.has(e.buffName));
+    for (const e of persistent) byName.set(e.buffName, namedDebuffEntryCount(e));
+    let total = 0;
+    for (const n of byName.values()) total += n;
+    return total;
+}
+
+/** How many debuffs `actor` carries right now: its named debuffs (`ownerDebuffCount`) plus every
+ *  DoT stack it carries (`carriedDotStacks`) — the same sum a cast's "N or more debuffs" gate
+ *  reads for a struck enemy. */
 export function actorDebuffCount(statusEngine: StatusEngine, actor: CombatActor): number {
-    return ownerDebuffNamesFor(statusEngine, actor.id).length + carriedDotStacks(actor);
+    return ownerDebuffCount(statusEngine, actor.id) + carriedDotStacks(actor);
 }
 
 /**
@@ -5132,24 +5203,20 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 )
             )
                 continue;
-            // Block Debuff fold: a target carrying Block Debuff auto-resists
-            // every incoming timed debuff. Gate immunity into the landing condition so the
-            // resist `else` below handles it (no duplicated resist code); `&&` short-circuits
-            // when not immune.
+            // Block Debuff: a target carrying Block Debuff auto-resists the whole application —
+            // one resist, no landing roll drawn (the same rule the DoT branch keeps per DoT).
             const blockedByImmunity = targetCarriesBlockDebuff(ctx.statusEngine, debuffTargetId);
-            // #413: computed HERE, beside `blockedByImmunity` and before the `if`, because the
-            // `else` below cannot tell which of the two short-circuits sent it there — that fold is
-            // deliberate ("so the EXISTING resist `else` handles it"). `cfg.application` is the sole
-            // input `owner.landsTimedEnemyApplication` uses to pick its arm: `'apply'` resolves on
-            // affinity and draws nothing, anything else calls `debuffLandingGate`. So this reads the
-            // arm choice rather than re-deciding the outcome, and it can only be true when the
-            // immunity short-circuit did NOT fire.
+            // #413: `cfg.application` is the sole input `owner.landsTimedEnemyApplication` uses to
+            // pick its arm: `'apply'` resolves on affinity and draws nothing, anything else calls
+            // `debuffLandingGate`. So this reads the arm choice rather than re-deciding the
+            // outcome, and it is false on the immunity arm, which draws nothing either.
             const drewLandingRoll = !blockedByImmunity && cfg.application !== 'apply';
-            // Draw the OWNER's landing gate (its hacking-vs-security / affinity disadvantage),
-            // NOT a global one — a team ship's debuff lands at ITS landing chance. One draw PER
-            // TARGET (per-victim landing, matching the established per-victim precedent) — a
-            // single-target route hands `applicationTargetIds` one element, so that is one draw.
-            // The SECOND argument resolves an 'apply' debuff's landing vs the ACTUAL target's
+            // Each stack of "inflicts N stacks of X" rolls its own landing (owner ruling R48, the
+            // R30 mirror for non-DoT statuses): Amartya's 2 stacks of Defense Shred land 0, 1 or
+            // 2, and every failed stack is its own resist. Each draw is the OWNER's landing gate
+            // (its hacking-vs-security / affinity disadvantage), NOT a global one — a team ship's
+            // debuff lands at ITS landing chance — and per TARGET (per-victim landing). The
+            // SECOND argument resolves an 'apply' debuff's landing vs the ACTUAL target's
             // affinity, not the applier's precomputed-vs-representative static flag. `affinityOf`
             // is absent in unit-test ctxs → undefined target affinity → static fallback.
             // The THIRD closes the other half of the same per-target seam: the 'inflict' arm draws
@@ -5157,27 +5224,43 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
             // matchup applied) rather than the owner's cached `liveDebuffLandingChance`, which is
             // its own turn TARGET's security from an unrelated earlier turn. Undefined delegate
             // (unit ctxs) → the closure's `?? liveDebuffLandingChance ?? 1` chain.
-            if (
-                !blockedByImmunity &&
-                owner.landsTimedEnemyApplication(
-                    cfg.application,
-                    ctx.affinityOf?.(debuffTargetId),
-                    ctx.liveDebuffLandingChanceFor?.(intent.ownerId, debuffTargetId)
-                )
-            ) {
+            const attempted = Math.max(1, status.payload.stacks ?? 1);
+            let landed = 0;
+            if (!blockedByImmunity) {
+                for (let i = 0; i < attempted; i++) {
+                    if (
+                        owner.landsTimedEnemyApplication(
+                            cfg.application,
+                            ctx.affinityOf?.(debuffTargetId),
+                            ctx.liveDebuffLandingChanceFor?.(intent.ownerId, debuffTargetId)
+                        )
+                    )
+                        landed += 1;
+                }
+            }
+            const resists = blockedByImmunity ? 1 : attempted - landed;
+            if (landed > 0) {
+                // ONE application carrying the landed stacks: a second 1-stack application of a
+                // payload without `isStackable` would refresh to 1 rather than add (see
+                // `applyTimedAbilityStatus`'s re-application rule).
                 ctx.statusEngine.applyTimedAbilityStatus(
                     ctx.round,
-                    status,
+                    landed === attempted
+                        ? status
+                        : { ...status, payload: { ...status.payload, stacks: landed } },
                     undefined,
                     applicationTargetId
                 );
-                // Discrete infliction event — sourceId = the owner so the application is chainable.
-                // Mark the event when THIS reaction is itself an on-debuff-inflicted follow-up
-                // (Warden's Out. Damage Down II — the reaction chain) or an
-                // on-(other-)ally-debuff-inflicted follow-up (the brands), so the reaction cannot
-                // re-trigger itself (bounded, no generation-cap throw) — see events.ts's doc on
-                // each field for its scope. Other reactive debuffs (on-crit/on-attacked) stay
-                // unmarked → still chain.
+            }
+            // Discrete infliction events, one per landed stack (R28: a reaction to a debuff being
+            // inflicted fires once per stack — an ally APEX gains one shield each). sourceId = the
+            // owner so the application is chainable. Mark the event when THIS reaction is itself
+            // an on-debuff-inflicted follow-up (Warden's Out. Damage Down II — the reaction chain)
+            // or an on-(other-)ally-debuff-inflicted follow-up (the brands), so the reaction cannot
+            // re-trigger itself (bounded, no generation-cap throw) — see events.ts's doc on each
+            // field for its scope. Other reactive debuffs (on-crit/on-attacked) stay unmarked →
+            // still chain.
+            for (let i = 0; i < landed; i++) {
                 ctx.bus.emit({
                     type: 'debuff-applied',
                     sourceId: intent.ownerId,
@@ -5195,7 +5278,8 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
                         ? { viaOtherAllyDebuffInflictedReaction: true as const }
                         : {}),
                 });
-            } else {
+            }
+            for (let i = 0; i < resists; i++) {
                 // A persistent-stacking name (would have landed as a never-expiring stack)
                 // surfaces its resisted display row as 'permanent', not its turn count.
                 const turnsRemaining: ActiveBuff['turnsRemaining'] = PERSISTENT_STACKING_BUFFS.has(

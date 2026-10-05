@@ -77,6 +77,14 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: extra complete Shield, Leech, Reflect, Revenge and Hardened sets now stack.',
     'DPS calculator: your enemy-debuff picks no longer land on your own ship.',
     'Combat simulator: both teams wiped in the same round is now an enemy win.',
+    "Combat simulator: Anemone's DoT-damage repair now fires once per ticking stack.",
+    'Combat simulator: Blast and Overload gained every turn now stack on extra actions.',
+    "Combat simulator: each of Amartya's Defense Shred and Exposed stacks now rolls separately.",
+    'Combat simulator: cleanses now remove Defense Shred, one stack per cleansed debuff.',
+    'Combat simulator: each stack of a buff now counts as one buff.',
+    'DPS calculator: Valiant, Sustainer and Thresh now count each stack of their buffs.',
+    'Combat simulator: each Defense Shred stack now counts as one debuff.',
+    'Combat simulator: Cheat Death now wipes Defense Shred like any other debuff.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

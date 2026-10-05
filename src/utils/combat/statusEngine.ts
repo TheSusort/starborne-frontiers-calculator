@@ -228,8 +228,8 @@ export interface DurationCutCandidate {
 
 export interface StatusEngine {
     /** Advance the round counter (strictly sequential, 1-based). Increments
-     *  per-round accumulating stacks. Call once at the top of each round, before
-     *  any turns. */
+     *  per-round accumulating stacks — each granter's FIRST turn of the round; `beginTurn` adds
+     *  its later ones. Call once at the top of each round, before any turns. */
     beginRound(round: number): void;
     /** Notification that a source actually fired a slot this round. 'attacker'
      *  covers the attacker's own cadence AND all legacy/merged scheduled buffs
@@ -285,15 +285,22 @@ export interface StatusEngine {
     /** Mark the start of an actor's turn. Sets the "active carrier" so self-side timed
      *  writes during this turn are flagged appliedThisTurn (own-turn reprieve). The id MUST
      *  match the self-store key for that actor: the focus actor uses 'attacker'; team actors
-     *  use their real id. Called at each turn-started. */
+     *  use their real id. Called at each turn-started, extra actions included.
+     *
+     *  A `'per-round'` accumulating share is gained once per TURN its granter takes ("gains 1
+     *  stack of Blast every turn" — owner ruling R58: every action is a turn, so Sokol's extra
+     *  action adds a stack). `beginRound` banks the round's first turn up front, so every
+     *  reader before the granter acts keeps seeing it; this call banks each LATER turn the same
+     *  granter takes in the same round. */
     beginTurn(actorId: string): void;
     /** Owner Post-Turn (enemy side): decrement ALL timed enemy statuses for the given
      *  `targetId` (defaults to the singular default enemy target).
      *  Returns expired buff names so the engine can emit buff-expired. */
     decrementEnemy(targetId?: string): { expired: string[] };
     /** Remove every REMOVABLE timed status carried by this id, across both the player-side
-     *  self store (keyed by ownerId) and the enemy-side store (keyed by targetId). Preserves:
-     *  persistent-stacking entries (separate maps, never touched), entries flagged
+     *  self store (keyed by ownerId) and the enemy-side store (keyed by targetId), plus the
+     *  removable persistent-stacking DEBUFFS it carries (Defense Shred — owner ruling R74).
+     *  Preserves: persistent-stacking self BUFFS, entries flagged
      *  `turnsRemaining === 'permanent'`, and entries whose buffName ∈ UNREMOVABLE_STATUSES.
      *  Standing always-active/aura source lists are NOT touched — they re-derive each round
      *  from ship data, so a wipe of applied statuses is the model and auras re-apply next round.
@@ -736,6 +743,12 @@ interface PersistentStackState {
     stacks: number;
     maxStacks?: number;
     payload?: AbilityStatusPayload;
+    /** When each stack was gained, oldest first, on the store's application sequence
+     *  (`nextAppliedSeq`); the stacks of one application share one value. What a cleanse orders a
+     *  persistent DEBUFF's stacks by against every other debuff (owner ruling R44). A self-side
+     *  spend (`consumeSelfStatusStack`, Titanite) does not trim it, so on the self side it may run
+     *  longer than `stacks`; only the enemy side reads it. */
+    stackSeqs: number[];
 }
 
 /** Per-source timed buff/debuff sets used by `createStatusEngine` to route scheduled
@@ -1051,23 +1064,21 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
                 : getPersistentEnemy(ownerOrTargetId);
         const maxStacks = persistentCapFor(buffName);
         const existing = map.get(buffName);
+        const before = existing?.stacks ?? 0;
+        const after =
+            maxStacks !== undefined
+                ? Math.min(before + applicationStacks, maxStacks)
+                : before + applicationStacks;
+        // One seq for this application's stacks; a capped application that adds none stamps none.
+        const seq = after > before ? nextAppliedSeq() : 0;
+        const added = Array.from({ length: after - before }, () => seq);
         if (existing) {
-            existing.stacks =
-                maxStacks !== undefined
-                    ? Math.min(existing.stacks + applicationStacks, maxStacks)
-                    : existing.stacks + applicationStacks;
+            existing.stacks = after;
+            existing.stackSeqs.push(...added);
             if (payload) existing.payload = payload;
             return;
         }
-        map.set(buffName, {
-            buffName,
-            stacks:
-                maxStacks !== undefined
-                    ? Math.min(applicationStacks, maxStacks)
-                    : applicationStacks,
-            maxStacks,
-            payload,
-        });
+        map.set(buffName, { buffName, stacks: after, maxStacks, payload, stackSeqs: added });
     };
 
     // Ability-sourced aura statuses (recurring/passive): held with their (already
@@ -1132,14 +1143,50 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
     // Self-side timed writes stamp appliedThisTurn when the carrier id matches this — the
     // own-turn reprieve. Undefined before the first beginTurn → no reprieve (safe default).
     let currentTurnActorId: string | undefined;
+    // Turns each actor has begun this round (cleared by beginRound) — what tells a granter's
+    // later turn from its first, which beginRound already banked.
+    const turnsBegunThisRound = new Map<string, number>();
     const beginTurn = (actorId: string): void => {
         currentTurnActorId = actorId;
+        const begun = (turnsBegunThisRound.get(actorId) ?? 0) + 1;
+        turnsBegunThisRound.set(actorId, begun);
+        if (begun < 2) return;
+        // A later turn this round (an extra action): bank the shares THIS granter owns.
+        for (const map of [...accumSelfMaps.values(), ...accumEnemyMaps.values()]) {
+            for (const state of map.values()) addAccumStacks(state, perRoundShare(state, actorId));
+        }
+    };
+
+    /** The stacks one round-cadence tick adds to `state`: the sum of its `'per-round'`
+     *  contributions — every granter's (#436: two granters of one buff on one owner both
+     *  accrue), or only `granterId`'s when given. A turn-blocked granter's SHIP passive banks
+     *  nothing further; stacks it already banked stay — they are standing state, the same line
+     *  that keeps a stasised ship's Barrier working. */
+    const perRoundShare = (state: AccumulatingState, granterId?: string): number => {
+        let amount = 0;
+        for (const c of state.contributions) {
+            if (c.trigger !== 'per-round') continue;
+            if (granterId !== undefined && c.granterId !== granterId) continue;
+            if (
+                c.sourceSlot !== undefined &&
+                shipPassiveSuppressed({
+                    sourceSlot: c.sourceSlot,
+                    source: c.source,
+                    casterId: c.granterId,
+                })
+            ) {
+                continue;
+            }
+            amount += c.rate;
+        }
+        return amount;
     };
 
     // beginRound: advance the round counter (strictly sequential) and apply the
-    // per-round accumulating increment. Per-round stacks tick once at round top,
-    // independent of any source firing. Called before any turns — preserving the
-    // old step()'s ordering of "per-round accum BEFORE timed upserts".
+    // per-round accumulating increment for each granter's first turn of the round, banked at
+    // round top independent of any source firing (`beginTurn` banks its later turns). Called
+    // before any turns — preserving the old step()'s ordering of "per-round accum BEFORE timed
+    // upserts".
     const beginRound = (r: number): void => {
         if (r !== lastRound + 1) {
             throw new Error(
@@ -1156,34 +1203,11 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         // (Decrement+expire moved out to decrementPlayer/decrementEnemy, called from each
         //  owner's Post Turn in the engine.)
 
+        turnsBegunThisRound.clear();
+        // The `per-active`/`per-charge` triggers need no turn-block gate: they accrue on the
+        // granter's own cast, which a blocked ship does not take.
         const incrementPerRound = (map: Map<string, AccumulatingState>) => {
-            for (const state of map.values()) {
-                // #436: sum EVERY granter's per-round share. Two granters of one buff on one
-                // owner both accrue — Howler's `ally`-scoped Blast landing on a Lev who also
-                // self-grants Blast reads 2 per round, capped at 4. Pre-#436 the second
-                // registration REPLACED the first, so only one share existed.
-                let amount = 0;
-                for (const c of state.contributions) {
-                    if (c.trigger !== 'per-round') continue;
-                    // A turn-blocked granter's SHIP passive banks nothing further. Stacks it
-                    // already banked stay — they are standing state, the same line that keeps a
-                    // stasised ship's Barrier working. The `per-active`/`per-charge` triggers need
-                    // no gate: they accrue on the granter's own cast, which a blocked ship
-                    // does not take.
-                    if (
-                        c.sourceSlot !== undefined &&
-                        shipPassiveSuppressed({
-                            sourceSlot: c.sourceSlot,
-                            source: c.source,
-                            casterId: c.granterId,
-                        })
-                    ) {
-                        continue;
-                    }
-                    amount += c.rate;
-                }
-                addAccumStacks(state, amount);
-            }
+            for (const state of map.values()) addAccumStacks(state, perRoundShare(state));
         };
         // Iterate EVERY owner's accum map so per-round stacks tick for all owners. Today only
         // 'attacker' is seeded from scheduled buffs — team-actor accumulating ability statuses
@@ -1541,18 +1565,20 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
      *  Reusable by a later phase's cleanse/purge. A status is unremovable when it is a
      *  persistent stack (the 'permanent' sentinel — those also live in separate maps that
      *  clearRemovable never visits, so this is a belt-and-braces guard) or its buffName is
-     *  named in UNREMOVABLE_STATUSES. Persistent-stacking debuffs are unremovable by
-     *  construction (separate maps); UNREMOVABLE_STATUSES names any ADDITIONAL effects. */
+     *  named in UNREMOVABLE_STATUSES. The persistent maps are a separate pool, which the
+     *  cleanse (`removeNewestFirst`) and the Cheat-Death wipe (`clearRemovable`) visit for
+     *  debuffs only. */
     const isUnremovable = (
         buffName: string,
         turnsRemaining: number | 'recurring' | 'permanent'
     ): boolean => turnsRemaining === 'permanent' || UNREMOVABLE_STATUSES.has(buffName);
 
     /** Remove every removable timed entry for `id` across the player-side self store
-     *  (keyed by ownerId) and the enemy-side store (keyed by targetId). Persistent-stack
-     *  maps are not visited (unremovable by construction). Unknown id → lazy-empty maps →
-     *  no-op. Always/aura source lists are intentionally left intact (they re-derive each
-     *  round from ship data). */
+     *  (keyed by ownerId) and the enemy-side store (keyed by targetId), and every removable
+     *  persistent-stacking DEBUFF it carries, all stacks (owner ruling R74: Cheat Death wipes
+     *  Defense Shred like any other debuff). Persistent self BUFFS (Blast, Overload, Titanite
+     *  Plating) are not visited. Unknown id → lazy-empty maps → no-op. Always/aura source lists
+     *  are intentionally left intact (they re-derive each round from ship data). */
     const clearRemovable = (id: string): void => {
         const sweep = (map: Map<string, BuffState> | undefined): void => {
             if (!map) return;
@@ -1563,6 +1589,12 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         };
         sweep(selfMaps.get(id));
         sweep(enemyMaps.get(id));
+        const persistentDebuffs = persistentEnemyMaps.get(id);
+        if (persistentDebuffs) {
+            for (const [key, s] of persistentDebuffs) {
+                if (!UNREMOVABLE_STATUSES.has(s.buffName)) persistentDebuffs.delete(key);
+            }
+        }
     };
 
     /** Remove a SINGLE named timed enemy status from `targetId`'s per-actor enemy store (the
@@ -1740,8 +1772,9 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
      *  FIRST (highest `appliedSeq` removed first).
      *
      *  Side mapping:
-     *  - `'debuffs'` → the actor's per-victim enemy-side timed + accumulating stores (cleanse).
-     *  - `'buffs'`   → the actor's player-side self stores (purge).
+     *  - `'debuffs'` → the actor's per-victim enemy-side timed + accumulating stores, and its
+     *    persistent-stacking debuffs one STACK per candidate (cleanse; owner ruling R44).
+     *  - `'buffs'`   → the actor's player-side timed + accumulating self stores (purge).
      *
      *  Skips:
      *  - entries whose `buffName` is in `UNREMOVABLE_STATUSES`.
@@ -1749,8 +1782,9 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
      *    practice 'permanent'-sentinel entries live in the separate persistent maps, not here).
      *  - accumulating entries that are still inert (`stacks <= 0` or `appliedSeq` not yet stamped).
      *
-     *  NOT gathered (unremovable by construction):
-     *  - persistent-stacking maps (`persistentSelfMaps` / `persistentEnemyMaps`) — never visited.
+     *  NOT gathered:
+     *  - persistent-stacking BUFFS (`persistentSelfMaps`) — a purge takes the newest WHOLE buff
+     *    from the timed and accumulating stores only (owner ruling R38).
      *
      *  NOT in these maps (re-derive each round, no stored entry to remove):
      *  - always-active / aura statuses.
@@ -1792,6 +1826,27 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
                 // (accum entries have no duration; 0 is an inert placeholder — only the name gate applies)
                 if (isUnremovable(s.buffName, 0)) continue;
                 candidates.push({ seq: s.appliedSeq, remove: () => accumMap.delete(key) });
+            }
+        }
+        // A persistent-stacking DEBUFF offers one candidate per STACK (owner ruling R44: Defense
+        // Shred ×3, "cleanses 1 debuff" → 2), each dated by its own `stackSeqs` entry. Removing
+        // one drops the newest stack; the entry goes with its last stack.
+        const persistentMap =
+            namedToo && side === 'debuffs' ? persistentEnemyMaps.get(actorId) : undefined;
+        if (persistentMap) {
+            for (const [key, s] of persistentMap) {
+                if (UNREMOVABLE_STATUSES.has(s.buffName)) continue;
+                const seqs = s.stackSeqs.slice(-s.stacks);
+                for (let i = 0; i < s.stacks; i++) {
+                    candidates.push({
+                        seq: seqs[i] ?? 0,
+                        remove: () => {
+                            s.stacks -= 1;
+                            s.stackSeqs.splice(s.stackSeqs.indexOf(Math.max(...s.stackSeqs)), 1);
+                            if (s.stacks <= 0) persistentMap.delete(key);
+                        },
+                    });
+                }
             }
         }
         candidates.sort((a, b) => b.seq - a.seq);

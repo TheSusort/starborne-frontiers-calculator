@@ -5,6 +5,10 @@ import { AffinityName } from './ship';
 import type { Condition, ShipSkills } from './abilities';
 import type { Position } from './encounters';
 
+/** How an accumulating stackable status gains stacks. `'per-round'` is the passive "gains 1 stack
+ *  every turn" cadence: one stack per TURN its granter takes, extra actions included (owner ruling
+ *  R58) — the name predates that ruling and is kept because it is persisted on `SelectedGameBuff`.
+ *  `'per-active'` / `'per-charge'`: one grant per cast of that slot. */
 export type StackTrigger = 'per-round' | 'per-active' | 'per-charge';
 
 // 'security' (#361): a scalar MULTIPLE of a stat rather than a percentage of attack —

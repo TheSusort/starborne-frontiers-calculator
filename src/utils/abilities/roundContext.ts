@@ -54,6 +54,9 @@ export function dotReadings(holder: DoTContainers): {
  */
 export function buildRoundContext(state: {
     selfBuffNames: string[];
+    /** Buffs on self, one per stack — `ConditionContext.selfBuffCount`. Pass-through; absent stays
+     *  absent. */
+    selfBuffCount?: number;
     landedEnemyDebuffCount: number;
     /** Corrosion / Inferno / Bomb stacks on the unit asked about — `dotReadings`. */
     corrosionStacks: number;
@@ -72,7 +75,7 @@ export function buildRoundContext(state: {
     targetHpPct?: number;
     /** Active buff names on the enemy. Default [] (DPS-assumption: no enemy buffs). */
     enemyBuffNames?: string[];
-    /** Distinct buffs on the cast's bound target. Passed through with NO default — absent routes
+    /** Buffs on the cast's bound target, one per stack. Passed through with NO default — absent routes
      *  bare `enemy-buff` conditions to their manual/union fallback; see
      *  ConditionContext.enemyBuffCount. */
     enemyBuffCount?: number;
@@ -204,6 +207,7 @@ export function buildRoundContext(state: {
         state.corrosionStacks + state.infernoStacks + state.bombStacks + (state.genericStacks ?? 0);
     return {
         selfBuffNames: state.selfBuffNames,
+        ...(state.selfBuffCount !== undefined ? { selfBuffCount: state.selfBuffCount } : {}),
         // SP-4d: absent (not a fabricated 0) when this round has no opposing victim — see
         // `noOpposingVictim`'s doc above for why the sum alone can't distinguish the two.
         enemyDebuffCount: hasVictim ? state.landedEnemyDebuffCount + dotStacks : undefined,

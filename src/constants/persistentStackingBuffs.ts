@@ -9,7 +9,8 @@
  * "inflicts Defense Shred for 3 turns", but in-game the stacks persist and climb —
  * the name wins over the text duration.
  *
- * - Defense Shred (max 20, -2% Defense/stack) — persists until cleansed.
+ * - Defense Shred (max 20, -2% Defense/stack) — persists until cleansed; a cleanse removes one
+ *   stack per debuff it cleanses, newest first (owner ruling R44).
  * - Blast (max 4, +15% Outgoing/stack) — persists.
  * - Overload (max 10) — persists until the unit kills an enemy. The combat sim
  *   now models that lose-on-kill via the remove-self-buff path. In the DPS

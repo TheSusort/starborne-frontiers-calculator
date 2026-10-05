@@ -2219,19 +2219,29 @@ describe('clearRemovable', () => {
         expect(eng.timedAbilityStatuses('enemy', 'tank', 'tank')).toEqual([]);
     });
 
-    it('preserves a persistent-stack debuff (Defense Shred)', () => {
+    // Owner ruling R74 (2026-10-05) overturned the earlier "preserves a persistent-stack debuff"
+    // pin: Cheat Death wipes Defense Shred like any other debuff, every stack.
+    it('wipes a persistent-stack debuff (Defense Shred), all stacks (R74)', () => {
         const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
         eng.beginRound(1);
-        // Apply the persistent debuff to the 'tank' enemy target store.
-        eng.applyTimedAbilityStatus(1, persistentShred(), undefined, 'tank');
-        // Also a removable timed debuff so we confirm the wipe ran.
+        // Three stacks on the 'tank' enemy target store, plus a removable timed debuff.
+        for (let i = 0; i < 3; i++)
+            eng.applyTimedAbilityStatus(1, persistentShred(), undefined, 'tank');
         eng.applyTimedAbilityStatus(1, timedEnemyStatus('Defense Down', 3), undefined, 'tank');
 
         eng.clearRemovable('tank');
 
-        const remaining = eng.timedAbilityStatuses('enemy', 'tank', 'tank');
-        expect(remaining.map((s) => s.active.buffName)).toEqual(['Defense Shred']);
-        expect(remaining[0].active.turnsRemaining).toBe('permanent');
+        expect(eng.timedAbilityStatuses('enemy', 'tank', 'tank')).toEqual([]);
+    });
+
+    it("leaves another ship's Defense Shred alone", () => {
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        eng.beginRound(1);
+        eng.applyTimedAbilityStatus(1, persistentShred(), undefined, 'other');
+        eng.clearRemovable('tank');
+        expect(
+            eng.timedAbilityStatuses('enemy', 'other', 'other').map((s) => s.active.buffName)
+        ).toEqual(['Defense Shred']);
     });
 
     it('preserves a buff named in UNREMOVABLE_STATUSES (real shipped set: Acidic Decay)', () => {
