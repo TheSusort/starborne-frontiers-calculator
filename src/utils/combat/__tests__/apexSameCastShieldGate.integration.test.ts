@@ -5,8 +5,11 @@
  * Charged: "This Unit deals 220% damage and inflicts Attack Down II and Out. Damage Down II for 2
  * turns. If this Unit has an active shield, the primary target is inflicted with Disable for 2
  * turns." Passive: "This Unit gains a shield equal to 3% of their max HP when an enemy gets
- * inflicted with a debuff." Each 3% shield arrives as its debuff lands, in written order, so APEX
- * starting the cast unshielded is shielded by the time the Disable clause is checked.
+ * inflicted with a debuff." The 3% shield arrives as the cast's first debuff lands, in written
+ * order (once per skill cast — `Ability.oncePerRootCast`), so APEX starting the cast unshielded is
+ * shielded by the time the Disable clause is checked. Her Block Shield shares that cap but spends
+ * it only when its "3 or more debuffs" condition passes, so the Disable that brings the enemy to 3
+ * still inflicts it.
  *
  * Board: APEX starts charged with no shield and casts once at a lone enemy. Her hacking dwarfs its
  * security unless a case says otherwise. Run with APEX on the player side and on the enemy side.

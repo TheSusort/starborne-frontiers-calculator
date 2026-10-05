@@ -212,14 +212,19 @@ export interface Intent {
         /** `attacked.reactiveHitId` of the triggering hit, stamped by `on-attacked` /
          *  `on-ally-attacked`: a counter's or proc's hit is its own attack (`attackKeyOf`). */
         reactiveHitId?: number;
-        /** Stamped by the `on-debuff-inflicted` listener when the triggering infliction was
-         *  landed by a REACTION (`e.reactive`) rather than by the owner's cast: `firingId` is that
-         *  reaction firing's `reactionFiringId`, and `duringTurnOf` is the actor whose turn was
-         *  active when it fired — the caster of the skill that set the reaction off (the owner
-         *  itself, or e.g. the enemy whose attack woke an on-attacked reaction). Undefined
-         *  `duringTurnOf`: no turn was active (round start / end of round). Absent for the cast's
-         *  own inflictions. Read only by `passesPerCastProcGate`. */
+        /** Stamped by the `on-debuff-inflicted` and `on-enemy-debuff-inflicted` listeners when
+         *  the triggering infliction was landed by a REACTION (`e.reactive`) rather than by a
+         *  cast: `firingId` is that reaction firing's `reactionFiringId`, and `duringTurnOf` is the
+         *  actor whose turn was active when it fired — the caster of the skill that set the
+         *  reaction off (the owner itself, or e.g. the enemy whose attack woke an on-attacked
+         *  reaction). Undefined `duringTurnOf`: no turn was active (round start / end of round).
+         *  Absent for a cast's own inflictions. Read by `rootCastKey`. */
         inflictionReaction?: { firingId?: number; duringTurnOf?: string };
+        /** The actor whose application landed the triggering debuff/DoT (`debuff-applied` /
+         *  `dot-applied` `sourceId`), stamped by the `on-enemy-debuff-inflicted` listener. When
+         *  no `inflictionReaction` is stamped the infliction is that actor's own cast, so
+         *  `rootCastKey` keys the cast on it. */
+        inflictorId?: string;
         /** The damage of the triggering event, used by a reactive heal/shield to scale off
          *  that hit rather than the owner's max HP. Two consumers: `basis:'damage-dealt'`
          *  (ability-performed — damage the owner DEALT, e.g. Bloodthirst) and
@@ -466,7 +471,8 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
  *    owner exclusion makes the loop risk cross-owner, not self.
  *  - on-enemy-debuff-inflicted → debuff-applied OR dot-applied whose TARGET is opposing, any
  *    inflictor (APEX — R16). Stamps debuffVictimId plus that enemy's debuff count at the landing
- *    (debuffVictimDebuffCount); shares on-debuff-inflicted's reaction-chain self-guard.
+ *    (debuffVictimDebuffCount), and the inflictor + reaction stamp `rootCastKey` reads; shares
+ *    on-debuff-inflicted's reaction-chain self-guard.
  *  - on-ally-debuffed → debuff-applied where the TARGET is same-side (not opposing) — owner
  *    included, see the ruling above; the ally counterpart of on-debuffed (Hayyan). Does NOT
  *    subscribe to dot-applied, matching on-debuffed's scoping.
@@ -569,9 +575,9 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
 /**
  * How many debuff inflictions one `dot-applied` is: one per STACK it landed (owner ruling R28 —
  * each DoT stack is its own debuff, `dotStackCount`). Snakeroot's one "2 stacks of Corrosion" on B
- * is two inflictions, so APEX gains two shields. The listeners that react per debuff inflicted
- * enqueue this many times (a `debuff-applied` is one); a reaction's own once-per cap still applies
- * at execution.
+ * is two inflictions, so it wakes a per-debuff reaction twice. The listeners that react per
+ * debuff inflicted enqueue this many times (a `debuff-applied` is one); a reaction's own once-per
+ * cap still applies at execution (APEX's shield fires once for the whole cast).
  */
 /**
  * Reactive grants with no written duration that last until purged (owner ruling R51): Isha and
@@ -1200,13 +1206,18 @@ export function registerReactiveListeners(args: {
                     // the n−1−k stacks after it, so "3 or more debuffs" fires on the stack that
                     // brings the enemy to 3, not on all of them. The self-chain guard is
                     // `on-debuff-inflicted`'s: a reaction never re-wakes itself off its own landing
-                    // (Block Shield lands → the owner's 3% shield fires again, Block Shield does
-                    // not), while the owner's OTHER reactions on this trigger still see it.
+                    // (Block Shield landing never wakes Block Shield), while the owner's OTHER
+                    // reactions on this trigger still see it. The inflictor and the reaction stamp
+                    // ride along so `Ability.oncePerRootCast` can name the cast that set it off.
                     const onLanded = (
                         e: {
+                            sourceId: string;
                             targetId: string;
                             application?: 'inflict' | 'apply';
                             debuffInflictedReactionChain?: readonly string[];
+                            reactive?: true;
+                            duringTurnOf?: string;
+                            reactionFiringId?: number;
                         },
                         inflictions: number
                     ): void => {
@@ -1232,6 +1243,8 @@ export function registerReactiveListeners(args: {
                                     ...intent.eventCtx,
                                     debuffVictimId: e.targetId,
                                     debuffInflictedReactionChain: e.debuffInflictedReactionChain,
+                                    inflictorId: e.sourceId,
+                                    ...inflictionReactionCtx(e),
                                     ...(countAtK !== undefined
                                         ? { debuffVictimDebuffCount: countAtK }
                                         : {}),
@@ -4160,28 +4173,64 @@ function inflictionReactionCtx(e: {
     };
 }
 
+/** A skill cast's identity: its caster's `turnsTaken`, so an extra action is a cast of its own. */
+function castKeyOf(ctx: IntentExecContext, casterId: string): string {
+    return `cast:${casterId}:${ctx.turnsTakenFor?.(casterId) ?? 0}`;
+}
+
+/** One reaction firing's identity (`reactionFiringId`). */
+function reactionFiringKey(reaction: { firingId?: number }): string {
+    return `reaction:${reaction.firingId ?? 'unstamped'}`;
+}
+
+/** The SKILL CAST that set an infliction off, whoever cast it (user, 2026-10-02):
+ *  - A cast's own infliction (no `reaction` stamp): `inflictorId`'s cast.
+ *  - An infliction a reaction landed during an actor's turn: THAT actor's cast. An enemy's attack
+ *    waking an on-attacked Corrosion I, which wakes an Out. Damage Down II, is that enemy's one
+ *    cast.
+ *  - An infliction a reaction landed with no turn active (round start / end of round): that
+ *    reaction firing stands as its own cast. UNCONFIRMED — the rule covers only inflictions a
+ *    skill cast sets off. */
+function rootCastKey(
+    ctx: IntentExecContext,
+    inflictorId: string,
+    reaction: { firingId?: number; duringTurnOf?: string } | undefined
+): string {
+    if (!reaction) return castKeyOf(ctx, inflictorId);
+    return reaction.duringTurnOf !== undefined
+        ? castKeyOf(ctx, reaction.duringTurnOf)
+        : reactionFiringKey(reaction);
+}
+
 /** The roll and the one-success cap a `procScope:'per-cast'` intent belongs to. The cap is the
- *  SKILL CAST that set the infliction off, whoever cast it (user, 2026-10-02):
- *  - The owner's cast's own inflictions (no `inflictionReaction`): roll = cap = that cast.
- *  - A reaction firing during an actor's turn: its own roll, under the cap of THAT actor's cast.
- *    The owner's own charged setting off its Out. Damage Down II shares the owner's cast cap; an
- *    enemy's attack waking the owner's on-attacked Corrosion I, which wakes its Out. Damage Down
- *    II, is one skill too — one cap for the whole chain.
- *  - A reaction firing with no turn active (round start / end of round): its own roll and its own
- *    cap. UNCONFIRMED — the rule covers only inflictions a skill cast sets off.
- *  A cast is keyed by its caster's `turnsTaken`, so an extra action is a cast of its own. */
+ *  root cast (`rootCastKey`; on this owner-only trigger a cast's inflictions are the owner's).
+ *  The owner's cast's own inflictions roll once under that cast; each reaction firing rolls on
+ *  its own under the cap of the cast that set it off — the owner's own charged setting off its
+ *  Out. Damage Down II shares the owner's cast cap. */
 function perCastProcKeys(intent: Intent, ctx: IntentExecContext): { roll: string; cap: string } {
-    const castOf = (casterId: string) => `cast:${casterId}:${ctx.turnsTakenFor?.(casterId) ?? 0}`;
     const reaction = intent.eventCtx?.inflictionReaction;
-    if (!reaction) {
-        const cast = castOf(intent.ownerId);
-        return { roll: cast, cap: cast };
-    }
-    const firing = `reaction:${reaction.firingId ?? 'unstamped'}`;
-    return {
-        roll: firing,
-        cap: reaction.duringTurnOf !== undefined ? castOf(reaction.duringTurnOf) : firing,
-    };
+    const cap = rootCastKey(ctx, intent.ownerId, reaction);
+    return { roll: reaction ? reactionFiringKey(reaction) : cap, cap };
+}
+
+/** Once-per-root-cast gate backing `Ability.oncePerRootCast` (see that field's doc). Returns false
+ *  when this (owner, ability) already fired under the root cast of the triggering infliction
+ *  (`rootCastKey`); otherwise marks it consumed and returns true. Call it where the reaction is
+ *  known to fire — after every condition the branch checks — so a skipped fire never spends the
+ *  slot. The mark lives in the per-round `oncePerRoundConsumed` set: a cast never spans a round,
+ *  and a reaction firing id is unique for the whole run. Pass-through when the ability carries no
+ *  `oncePerRootCast`. */
+function passesOncePerRootCastGate(intent: Intent, ctx: IntentExecContext): boolean {
+    if (!intent.ability.oncePerRootCast) return true;
+    const root = rootCastKey(
+        ctx,
+        intent.eventCtx?.inflictorId ?? intent.ownerId,
+        intent.eventCtx?.inflictionReaction
+    );
+    const key = `${intent.ownerId}:${intent.ability.id}:root-${root}`;
+    if (ctx.oncePerRoundConsumed?.has(key)) return false;
+    ctx.oncePerRoundConsumed?.add(key);
+    return true;
 }
 
 /**
@@ -5367,6 +5416,7 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 )
             )
                 continue;
+            if (!passesOncePerRootCastGate(intent, ctx)) continue;
             // Block Debuff: a target carrying Block Debuff auto-resists the whole application —
             // one resist, no landing roll drawn (the same rule the DoT branch keeps per DoT).
             const blockedByImmunity = targetCarriesBlockDebuff(ctx.statusEngine, debuffTargetId);
@@ -5417,7 +5467,8 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 );
             }
             // Discrete infliction events, one per landed stack (R28: a reaction to a debuff being
-            // inflicted fires once per stack — an ally APEX gains one shield each). sourceId = the
+            // inflicted is woken once per stack; a capped reaction such as APEX's
+            // `oncePerRootCast` shield then decides whether it fires). sourceId = the
             // owner so the application is chainable. Mark the event when THIS reaction is itself
             // an on-debuff-inflicted follow-up (Warden's Out. Damage Down II — the reaction chain)
             // or an on-(other-)ally-debuff-inflicted follow-up (the brands), so the reaction cannot
@@ -5820,6 +5871,7 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
         }
         if (!passesProcChanceGate(intent, ctx)) return;
         if (!passesOncePerRoundGate(intent, ctx)) return;
+        if (!passesOncePerRootCastGate(intent, ctx)) return;
         // Sansi: numeric per-round cap ("limited to 3 times per Round"). Checked
         // AFTER the proc/once-per-round gates so a blocked fire never burns a charge; a
         // no-maxPerRound heal passes through.

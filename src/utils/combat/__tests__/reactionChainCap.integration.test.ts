@@ -4,10 +4,13 @@
  *   - the real-kit fingerprint battles never reach it: their deepest chain is 1;
  *   - a board of reacting real kits (Purifier, Opal and Stalwart against Hemlock, Wrecker and
  *     Ravager, each named ship in turn as the subject, on both sides) settles by depth 3;
- *   - loop boards reach it and still finish: Grif/Pestilence/Larkspur against Purifier, AEGIS,
- *     Nuqtu and Hermes (a cleanse wakes a hit that wakes a cleanse; two Nuqtus answering each
- *     other's buff gains double at every step), and APEX with Provider/Opal/Shepherd against
- *     Provider/Opal/Shepherd/Warden (a debuff wakes a hit that wakes a debuff).
+ *   - a loop board reaches it and still finishes: Nuqtu with Grif/Pestilence/Larkspur against
+ *     Purifier, AEGIS, Nuqtu and Hermes, where the two opposing Nuqtus answer each other's buff
+ *     gains, doubling at every step (Purifier never has a debuff to cleanse there, so Grif does
+ *     not loop);
+ *   - APEX with Provider/Opal/Shepherd against Provider/Opal/Shepherd/Warden, where every debuff
+ *     wakes Provider's hit-and-debuff and APEX's Block Shield, settles by depth 5 without
+ *     reaching it: Block Shield fires at most once per root cast (`Ability.oncePerRootCast`).
  */
 import { describe, it, expect, beforeAll } from 'vitest';
 import {
@@ -121,7 +124,7 @@ describe('the reaction-chain cap', () => {
     );
 
     it.each([false, true])(
-        'stops the debuff loop: APEX, Provider, Opal and Shepherd against Provider, Opal, Shepherd, Warden (mirror=%s)',
+        'the debuff board settles under the cap: APEX, Provider, Opal and Shepherd against Provider, Opal, Shepherd, Warden (mirror=%s)',
         (mirror) => {
             const p = probe(
                 board(
@@ -132,8 +135,10 @@ describe('the reaction-chain cap', () => {
                 ),
                 1
             );
-            expect(p.maxDepth).toBe(MAX_REACTION_CHAIN_DEPTH);
-            expect(p.dropped).toBeGreaterThan(0);
+            // Instrument: chains really form here, several reactions deep.
+            expect(p.maxDepth).toBeGreaterThan(1);
+            expect(p.maxDepth).toBeLessThanOrEqual(5);
+            expect(p.dropped).toBe(0);
         },
         60_000
     );

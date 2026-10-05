@@ -2,9 +2,10 @@
  * A non-DoT "inflicts N stacks of X" rolls each stack on its own (owner ruling R48, 2026-10-05 —
  * the R30 mirror): Amartya's "When an enemy defender is directly repaired, this Unit inflicts 2
  * stacks of Defense Shred on that defender" against a 50% landing chance lands 0, 1 or 2 stacks,
- * and each failed stack is its own resist. A reaction to a debuff being inflicted fires once per
- * stack that lands (R28): an ally APEX gains one 3% shield per landed stack. The same holds for her
- * "When an enemy defender gains Taunt, … inflicts 2 stacks of Exposed".
+ * and each failed stack is its own resist. A reaction to a debuff being inflicted is woken once per
+ * stack that lands (R28), counted here by an ally APEX whose 3% shield has its once-per-cast cap
+ * removed, so it gains one shield per landed stack. The same holds for her "When an enemy defender
+ * gains Taunt, … inflicts 2 stacks of Exposed".
  *
  * Real parsed passives (buildTraceShip, refit 4): Amartya, APEX; Madax's real active (a DEFENDER
  * that gains Taunt). Amartya's hacking 50 against security 0 is a 50% chance per stack.
@@ -40,13 +41,22 @@ const amartya = (hacking: number): ShipSpec => ({
 });
 
 /** APEX's passive alone, beside Amartya: "gains a shield equal to 3% of their max HP when an enemy
- *  gets inflicted with a debuff". */
+ *  gets inflicted with a debuff" — with `oncePerRootCast` stripped, so every landing it is woken
+ *  by grants a shield and the count reads the landings (the real cap gives one per cast). */
 const apex = (): ShipSpec => ({
     id: 'apex',
     position: 'M3',
     speed: 5,
     hp: APEX_HP,
-    skills: { slots: [{ slot: 'active', abilities: [] }, ...realSlots('APEX', ['passive'])] },
+    skills: {
+        slots: [
+            { slot: 'active', abilities: [] },
+            ...realSlots('APEX', ['passive']).map((slot) => ({
+                ...slot,
+                abilities: slot.abilities.map((a) => ({ ...a, oncePerRootCast: undefined })),
+            })),
+        ],
+    },
 });
 
 const healAll = (): ShipSkills => ({
