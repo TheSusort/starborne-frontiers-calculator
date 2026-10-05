@@ -3044,8 +3044,10 @@ const DocumentationPage: React.FC = () => {
                                         debuffs. A count of damage-over-time effects (Anemone,
                                         Snakeroot) counts each stack too. Each stack also rolls its
                                         own landing: Snakeroot&apos;s 2 stacks can land 0, 1 or 2,
-                                        and every stack that fails is its own resist. A reaction to
-                                        a debuff being inflicted (APEX&apos;s shield,
+                                        and every stack that fails is its own resist. The same goes
+                                        for Amartya&apos;s 2 stacks of Defense Shred or Exposed, and
+                                        each of her stacks that lands counts as its own infliction.
+                                        A reaction to a debuff being inflicted (APEX&apos;s shield,
                                         Oleander&apos;s charge, Provider&apos;s hit, Lingshe&apos;s
                                         Stealth, Hayyan&apos;s repair, the Firewall implant&apos;s
                                         chance) fires once per stack that lands, within its own

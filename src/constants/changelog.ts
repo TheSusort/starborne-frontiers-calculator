@@ -70,6 +70,7 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator: Lionheart's round-start Protection now redirects damage from his allies.",
     "Combat simulator: Anemone's DoT-damage repair now fires once per ticking stack.",
     'Combat simulator: Blast and Overload gained every turn now stack on extra actions.',
+    "Combat simulator: each of Amartya's Defense Shred and Exposed stacks now rolls separately.",
     "Combat simulator: Cobalt's and Makoli's passives now check their own HP on either team.",
     "Combat simulator: Cobalt's charged bonus damage now requires him to be at full HP.",
     "Combat log: a hit's main target now shows the damage it actually took.",

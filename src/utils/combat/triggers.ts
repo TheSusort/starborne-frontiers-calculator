@@ -5136,24 +5136,20 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 )
             )
                 continue;
-            // Block Debuff fold: a target carrying Block Debuff auto-resists
-            // every incoming timed debuff. Gate immunity into the landing condition so the
-            // resist `else` below handles it (no duplicated resist code); `&&` short-circuits
-            // when not immune.
+            // Block Debuff: a target carrying Block Debuff auto-resists the whole application —
+            // one resist, no landing roll drawn (the same rule the DoT branch keeps per DoT).
             const blockedByImmunity = targetCarriesBlockDebuff(ctx.statusEngine, debuffTargetId);
-            // #413: computed HERE, beside `blockedByImmunity` and before the `if`, because the
-            // `else` below cannot tell which of the two short-circuits sent it there — that fold is
-            // deliberate ("so the EXISTING resist `else` handles it"). `cfg.application` is the sole
-            // input `owner.landsTimedEnemyApplication` uses to pick its arm: `'apply'` resolves on
-            // affinity and draws nothing, anything else calls `debuffLandingGate`. So this reads the
-            // arm choice rather than re-deciding the outcome, and it can only be true when the
-            // immunity short-circuit did NOT fire.
+            // #413: `cfg.application` is the sole input `owner.landsTimedEnemyApplication` uses to
+            // pick its arm: `'apply'` resolves on affinity and draws nothing, anything else calls
+            // `debuffLandingGate`. So this reads the arm choice rather than re-deciding the
+            // outcome, and it is false on the immunity arm, which draws nothing either.
             const drewLandingRoll = !blockedByImmunity && cfg.application !== 'apply';
-            // Draw the OWNER's landing gate (its hacking-vs-security / affinity disadvantage),
-            // NOT a global one — a team ship's debuff lands at ITS landing chance. One draw PER
-            // TARGET (per-victim landing, matching the established per-victim precedent) — a
-            // single-target route hands `applicationTargetIds` one element, so that is one draw.
-            // The SECOND argument resolves an 'apply' debuff's landing vs the ACTUAL target's
+            // Each stack of "inflicts N stacks of X" rolls its own landing (owner ruling R48, the
+            // R30 mirror for non-DoT statuses): Amartya's 2 stacks of Defense Shred land 0, 1 or
+            // 2, and every failed stack is its own resist. Each draw is the OWNER's landing gate
+            // (its hacking-vs-security / affinity disadvantage), NOT a global one — a team ship's
+            // debuff lands at ITS landing chance — and per TARGET (per-victim landing). The
+            // SECOND argument resolves an 'apply' debuff's landing vs the ACTUAL target's
             // affinity, not the applier's precomputed-vs-representative static flag. `affinityOf`
             // is absent in unit-test ctxs → undefined target affinity → static fallback.
             // The THIRD closes the other half of the same per-target seam: the 'inflict' arm draws
@@ -5161,27 +5157,43 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
             // matchup applied) rather than the owner's cached `liveDebuffLandingChance`, which is
             // its own turn TARGET's security from an unrelated earlier turn. Undefined delegate
             // (unit ctxs) → the closure's `?? liveDebuffLandingChance ?? 1` chain.
-            if (
-                !blockedByImmunity &&
-                owner.landsTimedEnemyApplication(
-                    cfg.application,
-                    ctx.affinityOf?.(debuffTargetId),
-                    ctx.liveDebuffLandingChanceFor?.(intent.ownerId, debuffTargetId)
-                )
-            ) {
+            const attempted = Math.max(1, status.payload.stacks ?? 1);
+            let landed = 0;
+            if (!blockedByImmunity) {
+                for (let i = 0; i < attempted; i++) {
+                    if (
+                        owner.landsTimedEnemyApplication(
+                            cfg.application,
+                            ctx.affinityOf?.(debuffTargetId),
+                            ctx.liveDebuffLandingChanceFor?.(intent.ownerId, debuffTargetId)
+                        )
+                    )
+                        landed += 1;
+                }
+            }
+            const resists = blockedByImmunity ? 1 : attempted - landed;
+            if (landed > 0) {
+                // ONE application carrying the landed stacks: a second 1-stack application of a
+                // payload without `isStackable` would refresh to 1 rather than add (see
+                // `applyTimedAbilityStatus`'s re-application rule).
                 ctx.statusEngine.applyTimedAbilityStatus(
                     ctx.round,
-                    status,
+                    landed === attempted
+                        ? status
+                        : { ...status, payload: { ...status.payload, stacks: landed } },
                     undefined,
                     applicationTargetId
                 );
-                // Discrete infliction event — sourceId = the owner so the application is chainable.
-                // Mark the event when THIS reaction is itself an on-debuff-inflicted follow-up
-                // (Warden's Out. Damage Down II — the reaction chain) or an
-                // on-(other-)ally-debuff-inflicted follow-up (the brands), so the reaction cannot
-                // re-trigger itself (bounded, no generation-cap throw) — see events.ts's doc on
-                // each field for its scope. Other reactive debuffs (on-crit/on-attacked) stay
-                // unmarked → still chain.
+            }
+            // Discrete infliction events, one per landed stack (R28: a reaction to a debuff being
+            // inflicted fires once per stack — an ally APEX gains one shield each). sourceId = the
+            // owner so the application is chainable. Mark the event when THIS reaction is itself
+            // an on-debuff-inflicted follow-up (Warden's Out. Damage Down II — the reaction chain)
+            // or an on-(other-)ally-debuff-inflicted follow-up (the brands), so the reaction cannot
+            // re-trigger itself (bounded, no generation-cap throw) — see events.ts's doc on each
+            // field for its scope. Other reactive debuffs (on-crit/on-attacked) stay unmarked →
+            // still chain.
+            for (let i = 0; i < landed; i++) {
                 ctx.bus.emit({
                     type: 'debuff-applied',
                     sourceId: intent.ownerId,
@@ -5199,7 +5211,8 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
                         ? { viaOtherAllyDebuffInflictedReaction: true as const }
                         : {}),
                 });
-            } else {
+            }
+            for (let i = 0; i < resists; i++) {
                 // A persistent-stacking name (would have landed as a never-expiring stack)
                 // surfaces its resisted display row as 'permanent', not its turn count.
                 const turnsRemaining: ActiveBuff['turnsRemaining'] = PERSISTENT_STACKING_BUFFS.has(
