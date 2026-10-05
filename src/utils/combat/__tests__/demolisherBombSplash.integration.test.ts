@@ -160,6 +160,45 @@ describe('Ship-kit W5 Task C3: Demolisher reactive bomb-splash to adjacent enemi
         expect(splashes.every((e) => e.sourceId === 'attacker')).toBe(true);
     });
 
+    it('a splash copy is Bomb damage: a Reflect-carrying neighbour reflects none of it (Q3 ruling)', () => {
+        const reflectingNeighbour: EnemyAttacker = {
+            ...enemyAt('nbrB', 'T3', 0),
+            shipSkills: {
+                slots: [
+                    {
+                        slot: 'passive',
+                        abilities: [
+                            {
+                                id: 'reflect',
+                                type: 'modifier',
+                                target: 'self',
+                                trigger: 'on-cast',
+                                conditions: [],
+                                config: { type: 'damage-reflection', pct: 40 },
+                            },
+                        ],
+                    },
+                ],
+            },
+        };
+        const { events, result } = collect(
+            CASTER_BASE({
+                enemyAttackers: [enemyAt('tgt', 'M4', 0), reflectingNeighbour],
+                __testTapActors: (actors: CombatActor[]) => {
+                    actors.find((a) => a.id === 'tgt')?.pendingBombs.push(bomb('attacker'));
+                },
+            })
+        );
+        // Instrument: the splash really struck the Reflect carrier.
+        expect(
+            events.some(
+                (e) =>
+                    e.type === 'reactive-damage-performed' && e.targetId === 'nbrB' && e.amount > 0
+            )
+        ).toBe(true);
+        expect(result.rounds[0].perActorReflected?.attacker ?? 0).toBe(0);
+    });
+
     it('team symmetry: an ENEMY-side Demolisher splashes onto PLAYER-side neighbours of the bombed player', () => {
         // Mirror roster: the bombed victim is the focus 'attacker' (player side, M4); its
         // neighbours + non-neighbour are PLAYER-side walked team actors (teamActors is the only

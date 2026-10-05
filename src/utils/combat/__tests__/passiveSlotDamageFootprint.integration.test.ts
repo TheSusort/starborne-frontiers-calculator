@@ -338,7 +338,7 @@ describe('SP-4b-2 D6 — a zero-damage cast still lands its passive-slot instanc
  *   • the victim's `directIntakeIndex` advances (so the instance counts as an nth direct hit);
  *   • an `incoming-block` ability is consulted, which ROLLS a `makeRateGate` draw on that victim's
  *     own `<id>:proc` sub-stream — a draw, whatever its outcome;
- *   • it sets neither `isReflected` nor `isCounter`, so it provokes Reflect thorns.
+ *   • it does not set `isReflected`, so it provokes Reflect thorns.
  *
  * That behaviour is correct — it IS a real damage instance — but nothing pinned it, so the false
  * claim could have been carried into a later PR as a planning assumption. These are the pins.

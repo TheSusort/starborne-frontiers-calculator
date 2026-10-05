@@ -2718,9 +2718,11 @@ const DocumentationPage: React.FC = () => {
                                         five families landed and displayed correctly but changed
                                         nothing at all. So an enemy Speed Down really does push your
                                         ship later in the turn order, a Crit Rate Down really does
-                                        stop a ship critting, and Hacking/Security Down really do
-                                        move how often debuffs land. Where a ship carries its own
-                                        instance of the same debuff family, the{' '}
+                                        stop a ship critting (except a ship whose attacks always
+                                        critically hit, such as Tormenter, which crits every attack
+                                        even at an affinity disadvantage), and Hacking/Security Down
+                                        really do move how often debuffs land. Where a ship carries
+                                        its own instance of the same debuff family, the{' '}
                                         <span className="text-primary">stronger one wins</span> —
                                         the two never add together.
                                     </p>
@@ -2894,7 +2896,10 @@ const DocumentationPage: React.FC = () => {
                                         Effects tied to one enemy&apos;s crit, such as
                                         Wisteria&apos;s Inferno, read that enemy&apos;s own crit.
                                         Asphodel adds one charge for each enemy her skill crits, so
-                                        an area hit that crits two enemies adds two.
+                                        an area hit that crits two enemies adds two. &quot;When an
+                                        ally critically hits&quot; (Sentinel, Hermes, Howler) also
+                                        counts an ally&apos;s critting passive damage, such as
+                                        Chakara&apos;s round-start hit or a counter-attack.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Stacking Reactions:</span> A
@@ -3162,6 +3167,38 @@ const DocumentationPage: React.FC = () => {
                                         crit extension land only on the enemies the hit critted, and
                                         Crucialis&apos;s extra damage on a critical hit is added
                                         only to the enemies she critted.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
+                                        <span className="text-primary">Stasis:</span> Every direct
+                                        hit on a ship in Stasis takes one turn off it as it lands,
+                                        whoever lands it. Two hits before its turn free a ship from
+                                        a 2-turn Stasis, and it acts that same round. Damage over
+                                        time and Bombs do not shorten Stasis, and neither do ships
+                                        whose attacks &ldquo;do not reduce Stasis&rdquo;, such as
+                                        Akula.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
+                                        <span className="text-primary">
+                                            Passive damage is direct damage:
+                                        </span>{' '}
+                                        A hit from a passive (Chakara&apos;s round-start hit, Grif,
+                                        Provider, Sentinel and the like) and a counter-attack are
+                                        direct hits like any skill hit. They wake &ldquo;when
+                                        directly damaged&rdquo; passives, shorten Stasis, are
+                                        redirected by Protection, use the attacker&apos;s shield
+                                        penetration and spend Exposed. A counter-attack never sets
+                                        off another counter-attack. Damage over time and Bomb
+                                        explosions are not direct hits.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
+                                        <span className="text-primary">Chained reactions:</span> A
+                                        reaction can set off further reactions, on either team: an
+                                        enemy cleanse wakes Grif, whose hit wakes Purifier&apos;s
+                                        cleanse, which wakes Grif again. A chain that could run
+                                        forever stops after eight steps. Reactions to the same event
+                                        resolve in turn order across both teams, fastest ship first,
+                                        and a reaction set off by another reaction resolves after
+                                        it, within the same turn.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Purges:</span> A purge on a
@@ -4706,7 +4743,8 @@ const DocumentationPage: React.FC = () => {
                                     repairs — not just the primary target, on both teams. A few more
                                     ship passives are now modeled too: <strong>Nosorog</strong>{' '}
                                     reflects a portion of the damage it takes back at an attacker
-                                    that hits it as its primary target (not on splash or
+                                    that hits it as its primary target, counter-attacks and passive
+                                    hits included (never a reflected hit, and not on splash or
                                     area-of-effect hits; Stalwart&apos;s counter and Legion
                                     Discipline II and Malvex&apos;s shield follow the same rule),{' '}
                                     <strong>Chakara&apos;s</strong> charged skill bypasses part of

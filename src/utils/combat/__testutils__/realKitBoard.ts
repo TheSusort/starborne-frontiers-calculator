@@ -86,6 +86,11 @@ export function boardInput(
     const pattern = (u: BoardUnit) => u.pattern ?? parsePattern('Pattern-Base');
     const target = (u: BoardUnit) => u.target ?? parseTarget('front');
     const id = (u: BoardUnit) => (u === focus ? FOCUS_ID : u.id);
+    // A kit's Stasis exemptions ride the actor, not the slots — thread them as battleSimulator does.
+    const stasisFlags = (u: BoardUnit) => ({
+        doesntBreakStasis: u.kit.doesntBreakStasis,
+        stasisBreakExemptWhen: u.kit.stasisBreakExemptWhen,
+    });
     const input: CombatEngineInput = {
         attack: focus.attack ?? 0,
         crit: focus.crit ?? 0,
@@ -96,6 +101,7 @@ export function boardInput(
         hasChargedSkill: focus.kit.slots.some((s) => s.slot === 'charged'),
         shipSkills: focus.kit,
         numRounds,
+        ...stasisFlags(focus),
         selfBuffs: [],
         enemyDebuffs: [],
         selfDotModifier: 0,
@@ -114,6 +120,7 @@ export function boardInput(
         pattern: pattern(focus),
         teamActors: focusTeam.map((u) => ({
             id: u.id,
+            ...stasisFlags(u),
             speed: u.speed,
             chargeCount: u.chargeCount ?? 0,
             startCharged: u.startCharged ?? false,
@@ -144,6 +151,7 @@ export function boardInput(
         })),
         enemyAttackers: enemies.map((u) => ({
             id: u.id,
+            ...stasisFlags(u),
             stats: {
                 attack: u.attack ?? 0,
                 crit: u.crit ?? 0,

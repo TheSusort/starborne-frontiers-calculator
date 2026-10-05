@@ -5,7 +5,7 @@ import type { CombatEventBus } from './events';
  * the caller supplies the victim/attacker ids, the per-hit crit list, and the pre-decided
  * focus-victim signals. Conditional spreads keep the emitted shape minimal (and identical to the
  * historical inline enemy-turn emit it replaces). DoT/bomb/detonation hits never call this — only
- * direct weapon hits emit `attacked`.
+ * direct hits emit `attacked`: cast hits, counter-attacks and reactive damage procs.
  */
 export function emitAttacked(args: {
     bus: CombatEventBus;
@@ -48,6 +48,10 @@ export function emitAttacked(args: {
      * it is used as the fallback rather than leaving the field absent.
      */
     subAttackIndex?: number;
+    /** A counter-attack's or reactive proc's hit — see `attacked.reactiveHitId`. */
+    reactiveHitId?: number;
+    /** See `attacked.fromCounter`. */
+    fromCounter?: boolean;
 }): void {
     const {
         bus,
@@ -60,6 +64,8 @@ export function emitAttacked(args: {
         damage,
         takenDamage,
         subAttackIndex,
+        reactiveHitId,
+        fromCounter,
     } = args;
     hitOutcomes.forEach((hitCrit, hitIndex) => {
         bus.emit({
@@ -73,6 +79,8 @@ export function emitAttacked(args: {
             ...(damage > 0 ? { damage } : {}),
             ...(takenDamage !== undefined ? { takenDamage } : {}),
             subAttackIndex: subAttackIndex ?? hitIndex,
+            ...(reactiveHitId !== undefined ? { reactiveHitId } : {}),
+            ...(fromCounter ? { fromCounter: true as const } : {}),
         });
     });
 }

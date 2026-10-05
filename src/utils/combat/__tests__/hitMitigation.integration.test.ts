@@ -855,7 +855,7 @@ describe('a Protection-redirected chunk is blocked by the protector’s Hit Miti
 // Two amounts, deliberately unequal, split the two questions:
 //   the DoT ticks at BOUNCE / ROUNDS  → the bounce is what got CONVERTED;
 //   the round-1 intake reads FOCUS_HIT → the follow-up hit was NOT blocked, so the bounce SPENT it.
-// Add `!cause.isReflected` / `!cause.isCounter` to the guard and the two swap places: the bounce
+// Exempt reflected and counter hits from the guard and the two swap places: the bounce
 // lands (intake reads BOUNCE) and the focus's hit is converted instead (ticks at FOCUS_HIT / ROUNDS)
 // — both assertions fail, in both legs.
 //

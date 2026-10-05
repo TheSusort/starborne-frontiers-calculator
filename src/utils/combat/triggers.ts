@@ -91,10 +91,22 @@ import type { ActorTargetingStatus } from './positionalBinding';
  *  AbilityTrigger doc note). */
 export { LIVE_TRIGGERS };
 
-/** Safety backstop far above any real follow-up chain — not a tuned value. A
- *  drain that fans out more than this many generations is a pathological loop;
- *  the engine throws naming the constant rather than hanging. */
-export const MAX_INTENT_GENERATIONS = 10;
+/**
+ * The runaway cap on a chain of reactions (owner ruling 66: chained reactions DO trigger, a cap
+ * stops only runaway loops). A reaction to a cast or a phase event has depth 0; a reaction to
+ * something a reaction did has its cause's depth + 1. An intent deeper than this is dropped.
+ * Real kits loop — Grif's hit wakes Purifier's on-damaged cleanse, which wakes Grif and
+ * Pestilence again — and each such chain otherwise ends only when a ship dies.
+ *
+ * Sized from a measurement, not a guess: `reactionChainCap.integration.test.ts` pins that the
+ * real-kit fingerprint battles never reach it and that the loop boards do and still complete.
+ * A capped loop is cut off, not thrown: the fight goes on without the dropped reactions.
+ */
+export const MAX_REACTION_CHAIN_DEPTH = 8;
+
+/** TEST-ONLY probe of reaction-chain depth, written by the engine's drain: the deepest chain
+ *  depth an executed intent had, and how many intents the cap dropped. Reset it before a run. */
+export const reactionChainProbe = { maxDepth: 0, dropped: 0 };
 
 /** Ability types the executor knows how to follow up (see executeIntent). These reactive
  *  types are routed through the trigger machinery; any other type carrying a live trigger
@@ -171,18 +183,19 @@ export interface Intent {
      *  the inflicting ally; Hayyan's on-ally-debuffed repair routes to the debuffed ally).
      *  `fromPurgeEvent`: depth-1 purge chain guard — a purge triggered by a
      *  purge-performed event does not re-emit purge-performed, preventing infinite chains. */
+    /** Reaction-chain depth (`MAX_REACTION_CHAIN_DEPTH`): 0 for a reaction to a cast or phase
+     *  event, the resolving intent's depth + 1 for one woken while an intent resolved. Stamped by
+     *  `registerReactiveListeners`' enqueue wrapper; absent reads as 0. */
+    chainDepth?: number;
+    /** Which bus event woke this intent, as a run-wide increasing number: every listener of one
+     *  emitted event stamps the same value, and a later event a larger one. The engine's drain
+     *  resolves the intents of the earliest event first, owner by owner in turn order (ruling 39).
+     *  Absent reads as 0. */
+    eventSeq?: number;
     eventCtx?: {
         counterTargetId?: string;
         damagedAllyId?: string;
         fromPurgeEvent?: boolean;
-        /** Depth-1 enemy-cleanse chain guard, the cleanse twin of `fromPurgeEvent`: this intent
-         *  was born of an `on-enemy-cleansed` reaction, or provoked while one resolved. A reactive
-         *  cleanse resolved under it emits a `reactive-cleanse-performed` flagged
-         *  `viaEnemyCleanseReaction`, which wakes no `on-enemy-cleansed` listener — so
-         *  Pestilence's Corrosion landing on an enemy that cleanses whenever it is debuffed is
-         *  cleansed once more and the chain stops. Carried across owners by the enqueue wrapper
-         *  in `registerReactiveListeners` (`resolvingIntent`). */
-        fromEnemyCleanseReaction?: boolean;
         /** The sub-attack that raised the triggering event.
          *  Stamped by the OUTGOING listeners (`on-crit`, `on-deal-damage`) from
          *  `ability-performed.subAttackIndex`, AND by the INCOMING ones (`on-attacked`,
@@ -196,6 +209,9 @@ export interface Intent {
          *  carry no sub-attack index. Insidiousness, that trigger's proc, rolls per SKILL CAST by
          *  rule (`procScope:'per-cast'`, keyed by `inflictionReaction` below), not per attack. */
         subAttackIndex?: number;
+        /** `attacked.reactiveHitId` of the triggering hit, stamped by `on-attacked` /
+         *  `on-ally-attacked`: a counter's or proc's hit is its own attack (`attackKeyOf`). */
+        reactiveHitId?: number;
         /** Stamped by the `on-debuff-inflicted` listener when the triggering infliction was
          *  landed by a REACTION (`e.reactive`) rather than by the owner's cast: `firingId` is that
          *  reaction firing's `reactionFiringId`, and `duringTurnOf` is the actor whose turn was
@@ -480,7 +496,8 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
  *    the ruling above: fires once per critting ability-performed — i.e. once per critting
  *    SUB-ATTACK, and ONCE for an AoE footprint however many victims it crit, never per (hit,
  *    victim) pair; every opposing actor is excluded (a walked enemy attacker emits
- *    ability-performed too, but its crit is never an ally crit).
+ *    ability-performed too, but its crit is never an ally crit). Also a same-side actor's critting
+ *    reactive-damage-performed (a passive proc or counter, ruling 53), once per critting hit.
  *  - start-of-round → round-started (global — every owner's start-of-round fires once per round)
  *  - end-of-round → round-ended (global — every owner's end-of-round fires once per round)
  *  - on-charged-cast → skill-fired where actorId === ownerId && slot === 'charged' (self-scoped;
@@ -719,7 +736,7 @@ export function registerReactiveListeners(args: {
     maxHpOf?: (ownerId: string) => number;
 }): void {
     const {
-        bus,
+        bus: rawBus,
         perOwner,
         enqueue: enqueueRaw,
         isOpposing,
@@ -731,15 +748,26 @@ export function registerReactiveListeners(args: {
         footprintAllyIdsFor,
         maxHpOf,
     } = args;
-    // An intent provoked while an enemy-cleanse reaction resolves inherits its chain guard
-    // (`fromEnemyCleanseReaction`'s doc).
+    // Every listener below records which event it is answering (`Intent.eventSeq`).
+    const bus: Pick<CombatEventBus, 'on'> = {
+        on: (type, listener) =>
+            rawBus.on(type, (e) => {
+                const outer = listeningEventSeq;
+                listeningEventSeq = seqOfEvent(e);
+                try {
+                    listener(e);
+                } finally {
+                    listeningEventSeq = outer;
+                }
+            }),
+    };
+    // An intent woken while another resolves is one step deeper in its chain (`Intent.chainDepth`).
     const enqueue = (intent: Intent): void =>
-        enqueueRaw(
-            resolvingIntent?.eventCtx?.fromEnemyCleanseReaction &&
-                !intent.eventCtx?.fromEnemyCleanseReaction
-                ? { ...intent, eventCtx: { ...intent.eventCtx, fromEnemyCleanseReaction: true } }
-                : intent
-        );
+        enqueueRaw({
+            ...intent,
+            chainDepth: resolvingIntent ? (resolvingIntent.chainDepth ?? 0) + 1 : 0,
+            eventSeq: listeningEventSeq ?? 0,
+        });
     // Same-side ally, OWNER EXCLUDED — for a trigger whose skill text names "another/other
     // ally", or whose subject structurally cannot be the owner (a destroyed ship cannot take the
     // reaction it would grant itself). See the 2026-09-30 "an ally includes the caster" ruling in
@@ -967,7 +995,7 @@ export function registerReactiveListeners(args: {
                         // `inDebuffInflictedReactionChain` breaks a self-chain: Warden's "when this
                         // Unit inflicts a Debuff → Out. Damage Down II" follow-up is ITSELF a debuff,
                         // and without the guard its own debuff-applied would re-enter this listener
-                        // every generation until MAX_INTENT_GENERATIONS throws. The guard skips only
+                        // every step until MAX_REACTION_CHAIN_DEPTH cuts it off. The guard skips only
                         // the abilities already in the infliction's reaction chain, so the owner's
                         // OTHER on-debuff-inflicted abilities still see a reactive infliction
                         // (Insidiousness on Warden's Out. Damage Down II), and debuffs from
@@ -1052,7 +1080,7 @@ export function registerReactiveListeners(args: {
                         // ally). `viaAllyDebuffInflictedReaction` + `sourceId === ownerId` breaks a
                         // SELF-chain: an on-ally-debuff-inflicted reaction whose own application is
                         // itself a qualifying infliction would otherwise re-enter this same listener
-                        // every generation until MAX_INTENT_GENERATIONS throws (the corrosionToAcidicDecay
+                        // every step until MAX_REACTION_CHAIN_DEPTH cuts it off (the corrosionToAcidicDecay
                         // Belladonna case chains fine — her convert-dot executor never emits a new
                         // debuff-applied/dot-applied, so it never reaches this guard at all). Does
                         // NOT bound a two-ship ping-pong (A's reaction waking B's, B's waking A's
@@ -1415,7 +1443,7 @@ export function registerReactiveListeners(args: {
                     //  3. The corpus has exactly one (Chimei's R2 redirect, #435), and the guard
                     //     below excludes an ability from its OWN output — which kills the only
                     //     cycle that exists, the length-1 self-loop.
-                    //  4. MAX_INTENT_GENERATIONS backstops any future second one.
+                    //  4. MAX_REACTION_CHAIN_DEPTH backstops any future second one.
                     //
                     // The guard is deliberately SELF-exclusion and not an emit suppression: owner
                     // ruling 2026-08-30 is that the redirect's own over-repair must still be
@@ -1506,6 +1534,22 @@ export function registerReactiveListeners(args: {
                                 damagedAllyId: e.actorId,
                                 counterTargetId: critVictimIds[0],
                                 critVictimIds,
+                            },
+                        });
+                    });
+                    // An ally's PASSIVE damage crits count too (owner ruling 53): a critting
+                    // counter-attack or reactive proc — Nyxen's counter, Chakara's round-start hit —
+                    // wakes the same reaction, once per critting hit, routed to that hit's victim.
+                    // Sentinel's own proc cannot crit, so his reaction never re-wakes itself.
+                    bus.on('reactive-damage-performed', (e) => {
+                        if (isOpposing(e.sourceId) || e.didCrit !== true) return;
+                        enqueue({
+                            ...intent,
+                            eventCtx: {
+                                ...intent.eventCtx,
+                                damagedAllyId: e.sourceId,
+                                counterTargetId: e.targetId,
+                                critVictimIds: [e.targetId],
                             },
                         });
                     });
@@ -1626,6 +1670,8 @@ export function registerReactiveListeners(args: {
                         // absent → every hit. The intent is per-EVENT (not the shared const):
                         // eventCtx captures the attacker for "on that enemy" counter routing.
                         if (e.targetId !== ownerId) return;
+                        // A counter never wakes a counter (#163); it wakes every other reaction.
+                        if (e.fromCounter && ra.ability.config.type === 'counter') return;
                         const filter = ra.ability.triggerCritFilter;
                         if (filter === 'crit' && !e.didCrit) return;
                         if (filter === 'non-crit' && e.didCrit) return;
@@ -1656,6 +1702,7 @@ export function registerReactiveListeners(args: {
                                 // cardinality this trigger fans out at is unchanged (and correct:
                                 // incoming effects resolve per hit, R2).
                                 subAttackIndex: e.subAttackIndex,
+                                reactiveHitId: e.reactiveHitId,
                             },
                         });
                     });
@@ -1882,6 +1929,8 @@ export function registerReactiveListeners(args: {
                         // inflating numbers); an EMPTY filter array is treated as absent (any
                         // ally), not never-match.
                         if (isOpposing(e.targetId)) return;
+                        // A counter never wakes a counter (#163) — Centurion's ally branch.
+                        if (e.fromCounter && ra.ability.config.type === 'counter') return;
                         const filter = ra.ability.triggerCritFilter;
                         if (filter === 'crit' && !e.didCrit) return;
                         if (filter === 'non-crit' && e.didCrit) return;
@@ -1945,6 +1994,7 @@ export function registerReactiveListeners(args: {
                                 // See the on-attacked listener — read only by
                                 // `oncePerAttackGuardKey`.
                                 subAttackIndex: e.subAttackIndex,
+                                reactiveHitId: e.reactiveHitId,
                             },
                         });
                     });
@@ -2066,7 +2116,7 @@ export function registerReactiveListeners(args: {
                     // intents are the on-enemy-repaired riders (Ruiner's Bomb debuff + Overload
                     // self-buff, Zosimos's charge removal, Amartya's Defense Shred) — none of them
                     // heal, so none can emit another reactive-heal-performed. The generic
-                    // MAX_INTENT_GENERATIONS backstop covers any future rider that could.
+                    // MAX_REACTION_CHAIN_DEPTH backstop covers any future rider that could.
                     bus.on('reactive-heal-performed', (e) =>
                         onEnemyRepair(
                             e.casterId,
@@ -2117,7 +2167,6 @@ export function registerReactiveListeners(args: {
                                     eventCtx: {
                                         ...intent.eventCtx,
                                         counterTargetId: targetId,
-                                        fromEnemyCleanseReaction: true,
                                     },
                                 });
                             }
@@ -2135,13 +2184,12 @@ export function registerReactiveListeners(args: {
                                 ...intent.eventCtx,
                                 counterTargetId: casterId,
                                 cleansedEnemyIds: targets,
-                                fromEnemyCleanseReaction: true,
                             },
                         });
                     };
                     bus.on('cleanse-performed', (e) => onEnemyCleanse(e.casterId, e.targets ?? []));
                     bus.on('reactive-cleanse-performed', (e) => {
-                        if (e.mode === 'reduce-duration' || e.viaEnemyCleanseReaction) return;
+                        if (e.mode === 'reduce-duration') return;
                         onEnemyCleanse(
                             e.casterId,
                             e.perTarget.map((t) => t.targetId)
@@ -2576,8 +2624,8 @@ export interface IntentExecContext {
      *  the call is a no-op. */
     flushConsequenceLogs?: () => void;
     /** Apply a full mitigated/crit counter walk from `ownerId` to `attackerId`.
-     *  `abilityId` keys the dedicated counter crit-gate. Reuses the engine's no-event
-     *  apply path (no attacked event → no re-counter).
+     *  `abilityId` keys the dedicated counter crit-gate. The hit raises an `attacked` marked
+     *  `fromCounter`, which wakes every "When directly damaged" reaction except a counter.
      *  Returns the mitigated/credited amount + crit flag so the caller can surface the proc in
      *  the combat log (reactive-damage-performed); void/0 when the counter was guarded (dead
      *  owner/attacker, self-hit, non-positive) or the delegate is absent (unit fixtures). */
@@ -4202,7 +4250,7 @@ function passesProcChanceGate(intent: Intent, ctx: IntentExecContext): boolean {
     // on every real cast, so it does not fall into this bucket. NOTE `on-attacked` /
     // `on-ally-attacked` are NOT in the 'x' bucket either — their listeners stamp the index off
     // `attacked.subAttackIndex`, which `emitAttacked` always populates.
-    const memoKey = `${gateKey}:${intent.eventCtx?.subAttackIndex ?? 'x'}`;
+    const memoKey = `${gateKey}:${attackKeyOf(intent.eventCtx)}`;
     const cached = memo?.get(memoKey);
     if (cached !== undefined) return cached;
     let gate = ctx.procChanceGates?.get(gateKey);
@@ -4376,8 +4424,8 @@ const REACTIVE_STAMPED_EVENT_TYPE_LIST = exhaustiveArrayOf<StampedEventType>()([
     // cleanse-performed). Emitted through ctx.bus during a reactive intent → stamped duringTurnOf
     // so they nest under the triggering turn. `-damage` has no combat subscriber; `-heal` has one
     // (on-enemy-repaired — a reactive repair is still an enemy repairing), which cannot chain
-    // because no on-enemy-repaired rider heals; `-cleanse` has one (on-enemy-cleansed), bounded by
-    // the `fromEnemyCleanseReaction` guard. See the events.ts notes before adding another
+    // because no on-enemy-repaired rider heals; `-cleanse` has one (on-enemy-cleansed), whose
+    // chains MAX_REACTION_CHAIN_DEPTH caps. See the events.ts notes before adding another
     // subscriber to any of the three.
     'reactive-damage-performed',
     'reactive-heal-performed',
@@ -4439,11 +4487,11 @@ function makeReactiveStampingBus(bus: CombatEventBus, duringTurnOf?: string): Co
     };
 }
 
-/** Emit the LOG-ONLY `reactive-damage-performed` event for a proc that actually dealt damage.
+/** Emit the `reactive-damage-performed` event for a proc that actually dealt damage.
  *  `ctx.bus` is the reactive stamping wrapper (when present) → the event is branded `duringTurnOf`
- *  so the combat log nests it under the triggering turn. NO combat listener subscribes to this
- *  type, so it can never chain. Inert when the proc was guarded (void / dealt <= 0) or no bus is
- *  wired (unit fixtures). */
+ *  so the combat log nests it under the triggering turn. Its one combat listener is
+ *  `on-ally-crit`, for a critting proc (ruling 53). Inert when the proc was guarded (void /
+ *  dealt <= 0) or no bus is wired (unit fixtures). */
 function emitReactiveDamageLog(
     ctx: IntentExecContext,
     ownerId: string,
@@ -4509,9 +4557,17 @@ const PER_HIT_REACTIVE_TRIGGERS: ReadonlySet<AbilityTrigger> = new Set<AbilityTr
  *  defined index (the caller's own sub-attack index, or — when the caller omits it — the per-hit
  *  loop index as a fallback), on every path, positional or not. It only matters for a hand-built
  *  fixture whose intent carries no `eventCtx` at all. */
+/** The attack identity an incoming-hit guard keys on: a counter's or proc's own hit id when the
+ *  triggering hit was one (`attacked.reactiveHitId`), else the cast's sub-attack index, else 'x'
+ *  (no attack identity — start/end of round, hand-built intents). */
+function attackKeyOf(eventCtx: Intent['eventCtx']): string | number {
+    if (eventCtx?.reactiveHitId !== undefined) return `r${eventCtx.reactiveHitId}`;
+    return eventCtx?.subAttackIndex ?? 'x';
+}
+
 function oncePerAttackGuardKey(intent: Intent): string | undefined {
     return intent.ability.target === 'self' && PER_HIT_REACTIVE_TRIGGERS.has(intent.ability.trigger)
-        ? `${intent.ownerId}:${intent.ability.id}:${intent.eventCtx?.subAttackIndex ?? 'x'}`
+        ? `${intent.ownerId}:${intent.ability.id}:${attackKeyOf(intent.eventCtx)}`
         : undefined;
 }
 
@@ -4651,6 +4707,21 @@ export const CHARGE_TARGET_KIND: Record<AbilityTarget, ChargeTargetKind> = {
     'enemy-most-buffs': selectorChargeKind('enemy-most-buffs'),
     'enemy-highest-attack': selectorChargeKind('enemy-highest-attack'),
     'enemy-highest-speed': selectorChargeKind('enemy-highest-speed'),
+};
+
+/** `Intent.eventSeq` bookkeeping: the number each emitted event object got, the next number to
+ *  hand out, and the event whose listeners are running right now. One table for both sides'
+ *  registrations, so the same event carries the same number on either side. */
+const eventSeqByEvent = new WeakMap<object, number>();
+let nextEventSeq = 1;
+let listeningEventSeq: number | undefined;
+const seqOfEvent = (e: object): number => {
+    let seq = eventSeqByEvent.get(e);
+    if (seq === undefined) {
+        seq = nextEventSeq++;
+        eventSeqByEvent.set(e, seq);
+    }
+    return seq;
 };
 
 /** The intent `executeIntent` is resolving right now; undefined between resolutions. The engine
@@ -5495,7 +5566,7 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
             // and feeds the debuff-inflicted listeners' dot-applied arms. Marked per trigger
             // exactly as the sibling `debuff` branch marks its debuff-applied: without the mark,
             // an owner's own reactive DoT (this landDotOn call) would re-wake the very reaction
-            // that queued it and loop until MAX_INTENT_GENERATIONS throws.
+            // that queued it and loop until MAX_REACTION_CHAIN_DEPTH cuts it off.
             ctx.bus.emit({
                 type: 'dot-applied',
                 sourceId: intent.ownerId,
@@ -6083,7 +6154,7 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // #434, on-own-repair-to-ally, which re-subscribes to this same event so a repair
         // performed from a LIVE TRIGGER also reaches Font of Power/Abundant Renewal. That
         // listener carries its own termination argument (self-exclusion guard on its own output +
-        // MAX_INTENT_GENERATIONS backstop) — chain-safety still holds, but it is argued there, not
+        // MAX_REACTION_CHAIN_DEPTH backstop) — chain-safety still holds, but it is argued there, not
         // here. Any FUTURE subscriber to this event must re-establish termination for itself the
         // same way; do not assume it from this comment. Stamped duringTurnOf via ctx.bus so it
         // nests under the triggering turn.
@@ -6238,8 +6309,8 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // Surface the reaction via reactive-cleanse-performed (NOT cleanse-performed, which drives
         // the owner's own on-own-cleanse listeners). buildCombatLog renders it, stamped
         // duringTurnOf via ctx.bus so it nests under the triggering turn, and the opposing
-        // side's on-enemy-cleansed reactions hear it — unless this cleanse was itself provoked by
-        // one (`fromEnemyCleanseReaction`). Only emitted when a debuff was actually removed (empty
+        // side's on-enemy-cleansed reactions hear it, a chained one included (ruling 66; the chain
+        // is capped by MAX_REACTION_CHAIN_DEPTH). Only emitted when a debuff was actually removed (empty
         // perTarget → silent, like the heal twin).
         if (cleansePerTarget.length > 0 && ctx.bus) {
             ctx.bus.emit({
@@ -6247,9 +6318,6 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 casterId: intent.ownerId,
                 round: ctx.round,
                 perTarget: cleansePerTarget,
-                ...(intent.eventCtx?.fromEnemyCleanseReaction
-                    ? { viaEnemyCleanseReaction: true }
-                    : {}),
             });
         }
         return;
@@ -6265,7 +6333,8 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
 
     if (cfg.type === 'counter') {
         // A live counter-attack — the owner hits its attacker back via the engine's full
-        // mitigated/crit walk (applyCounterAttack), which emits NO `attacked` event → no re-counter.
+        // mitigated/crit walk (applyCounterAttack). Its `attacked` carries `fromCounter`, which no
+        // counter reacts to, so counters never ping-pong (#163).
         //
         // GATE ORDERING (intentional DEVIATION from the `damage` branch's proc→once-per-round
         // first): the CHEAP, NON-CONSUMING boolean gates run FIRST (primary-target, shield-hit,
@@ -6305,7 +6374,7 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // share a group id, so they collapse here. Counters with no group id keep deduping on
         // their own ability id, so unrelated counters on one ship stay independent.
         const counterIdentity = cfg.counterGroupId ?? intent.ability.id;
-        const key = `${intent.ownerId}:${counterIdentity}:${intent.eventCtx?.subAttackIndex ?? 'x'}`;
+        const key = `${intent.ownerId}:${counterIdentity}:${attackKeyOf(intent.eventCtx)}`;
         if (ctx.counterFiredThisTurn?.has(key)) return;
         // Consuming gates LAST (see ordering note above).
         if (!passesProcChanceGate(intent, ctx)) return;
@@ -6355,9 +6424,9 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
             // this path's resolved target. Placed BEFORE the once-per-round key is consumed so a
             // blocked gate does not burn the round's charge.
             if (!perVictimOk(sourceId)) return;
-            const onceKey = `${intent.ownerId}:${intent.ability.id}:${sourceId}:${
-                intent.eventCtx?.subAttackIndex ?? 'x'
-            }`;
+            const onceKey = `${intent.ownerId}:${intent.ability.id}:${sourceId}:${attackKeyOf(
+                intent.eventCtx
+            )}`;
             if (ctx.counterFiredThisTurn?.has(onceKey)) return;
             ctx.counterFiredThisTurn?.add(onceKey);
             const hpOutcome = ctx.applyReactiveDamage?.(
@@ -6536,7 +6605,7 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 // with no attack identity at all (start-of-round / end-of-round triggers, the
                 // cast-scoped engine fallbacks, hand-built fixture intents with no eventCtx), where
                 // per-turn dedupe remains the correct reading.
-                const firedKey = `${intent.ownerId}:${intent.ability.id}:${victimId}:${intent.eventCtx?.subAttackIndex ?? 'x'}`;
+                const firedKey = `${intent.ownerId}:${intent.ability.id}:${victimId}:${attackKeyOf(intent.eventCtx)}`;
                 if (ctx.reactionFiredThisAttack?.has(firedKey)) continue;
                 ctx.reactionFiredThisAttack?.add(firedKey);
             }

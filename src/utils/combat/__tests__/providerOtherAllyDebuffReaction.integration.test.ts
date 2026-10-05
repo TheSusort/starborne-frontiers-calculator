@@ -771,7 +771,7 @@ describe('Provider (enemy-side) — team symmetry mirror', () => {
 });
 
 describe('Two Providers (chain-bound) — the reaction terminates without throwing', () => {
-    it('Curator lands ONE debuff → exactly 2 reactive hits total (one per Provider), no MAX_INTENT_GENERATIONS throw', () => {
+    it('Curator lands ONE debuff → exactly 2 reactive hits total (one per Provider), the chain does not run on', () => {
         const providerAAbilities = providerPassiveAbilities(2);
         const providerBAbilities = providerPassiveAbilities(2);
 

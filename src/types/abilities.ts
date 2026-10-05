@@ -1520,6 +1520,12 @@ export interface ShipSkills {
      *  Threaded onto CombatActor.chargeLossImmune by the engine adapter; enemy-sourced
      *  charge removal is a no-op against actors with this flag set. */
     chargeLossImmune?: boolean;
+    /** True when the ship's refit-active text says "This Unit's attacks always critically hit"
+     *  (Tormenter, Asphodel R2+). Read by the engine onto CombatActor.alwaysCrits: every attack
+     *  then rolls at a 100% crit rate, which no affinity disadvantage or Crit Rate Down lowers
+     *  (owner ruling 57). perShipRules' `applyGuaranteedCrit` tops the crit STAT up for the same
+     *  ships; `alwaysCritHundred.integration.test.ts` pins that the two agree. */
+    alwaysCrits?: boolean;
     /** True when the ship's skill text declares its attacks ignore Taunt and Provoke
      *  (Judge, Stalwart, Yuyan, Huanying, Valkyrie, Vanguard). Threaded onto
      *  CombatActor.ignoresForcedTargeting by the engine adapter and consumed by

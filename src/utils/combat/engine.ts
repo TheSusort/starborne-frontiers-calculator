@@ -158,7 +158,8 @@ import {
 } from './playerTurn';
 import {
     Intent,
-    MAX_INTENT_GENERATIONS,
+    MAX_REACTION_CHAIN_DEPTH,
+    reactionChainProbe,
     buildActorConditionContext,
     buildForcedTargetingStatus,
     countOwnersWithSelfBuff,
@@ -1003,6 +1004,7 @@ export function buildEnemyPlayerActorRuntime(
         doesntBreakStasis: e.doesntBreakStasis,
         stasisBreakExemptWhen: e.stasisBreakExemptWhen,
         chargeLossImmune: e.chargeLossImmune,
+        alwaysCrits: e.shipSkills?.alwaysCrits,
         affinity: e.affinity,
         preFight: e.preFight,
     });
@@ -2444,6 +2446,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         doesntBreakStasis: input.doesntBreakStasis,
         stasisBreakExemptWhen: input.stasisBreakExemptWhen,
         chargeLossImmune: input.chargeLossImmune,
+        alwaysCrits: input.shipSkills.alwaysCrits,
         affinity: input.affinity,
         preFight: input.preFight,
     });
@@ -2560,6 +2563,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             doesntBreakStasis: t.doesntBreakStasis,
             stasisBreakExemptWhen: t.stasisBreakExemptWhen,
             chargeLossImmune: t.chargeLossImmune,
+            alwaysCrits: t.walk?.shipSkills.alwaysCrits,
             // RAW affinity rides on the walk bundle (set by the adapter from TeamActorInput.affinity
             // — the SAME source as the walk's affinityDamageModifier). Legacy (no walk) → undefined.
             affinity: t.walk?.affinity,
@@ -3934,7 +3938,7 @@ export function runCombat(rawInput: CombatEngineInput): {
     //
     //  PATH A — during-turn deaths (on-destroyed self, on-ally-destroyed ally → Harvester).
     //    These fire from applyIncomingToTarget / the general death path, which run DURING an
-    //    actor's turn. They are followed by the per-turn drainIntentsFor(side) (drain point (b))
+    //    actor's turn. They are followed by the per-turn drainReactions (drain point (b))
     //    while the selection loop is still walking → the grant CAN bump the granter's pending
     //    count via processExtraActionGrants(granter, …), and the selection loop then re-picks the
     //    granter at its live speed-rank among the remaining actors (a same-round extra turn).
@@ -5391,7 +5395,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         //     not synchronous — the bomb detonates on a LATER round, and its detonation damage
         //     re-enters this proc through the `'detonation'` channel. So the cycle is
         //     leech → bomb → (next round) detonation → leech, bounded by the fight's round count,
-        //     by Ruiner's `oncePerRoundPerEnemy` cap on the bomb, and by MAX_INTENT_GENERATIONS.
+        //     by Ruiner's `oncePerRoundPerEnemy` cap on the bomb, and by MAX_REACTION_CHAIN_DEPTH.
         //  4. A reaction's own repair emits this event from the EXECUTOR, not from here, and that
         //     path's guard (an ability never observes its own output, keyed on `sourceAbilityId`)
         //     is untouched by this emit.
@@ -5718,43 +5722,39 @@ export function runCombat(rawInput: CombatEngineInput): {
         allPlayerActors.every((a) => a.destroyedRound !== undefined);
     let matchOver = false;
 
-    // §4.5 Deferred Stasis break marks, keyed by victim id. Lives ACROSS rounds on purpose: the
-    // mark is spent on the victim's own next turn, and that turn is in the NEXT round whenever the
-    // attacker acts after the victim in the turn order. Scoped per round, such a mark was dropped
-    // at the round boundary and the break simply never happened — a slow attacker was
-    // indistinguishable from one carrying `doesntBreakStasis`, measured across both Stasis(3) and
-    // Stasis(4).
-    //
-    // A mark is only ever set for a victim stasised at the moment of the hit, and is deleted when
-    // spent — on the victim's next BLOCKED turn, which is the only site that consumes one. A mark
-    // is therefore NOT guaranteed to be spent: if the victim's Stasis is cleansed or purged before
-    // that turn (Stasis is not in UNREMOVABLE_STATUSES), the victim's turn is unblocked, nothing
-    // consumes the mark, and it survives to shave a later Stasis. Round-scoping used to bound that
-    // to one round; it is now bounded only by the fight. Tracked in #535, together with the
-    // cross-ship re-apply case that shares the cause — the map is keyed by VICTIM, not by the
-    // Stasis instance the break was approved against.
-    const stasisBreakPending = new Map<string, true>();
-    // A pending mark is SETTLED the moment any fresh Stasis is applied to that victim, before the
-    // incoming application reaches the family contest — #535.
-    //
-    // In game the hit reduces the victim's Stasis as it lands, so a Stasis arriving afterwards is
-    // weighed against the ALREADY-REDUCED incumbent. This engine defers the reduction, so without
-    // this the contest weighs the unreduced one and the queued mark then shaves whatever survives —
-    // a fresh Stasis from a DIFFERENT ship, which the ruling says keeps its full duration.
-    //
-    // Resolving here rather than clearing the mark is what makes the arithmetic agree in all three
-    // shapes. Incumbent 2 + incoming 4: reduce to 1, challenger wins, 4. Incumbent 2 + incoming 2:
-    // reduce to 1, challenger now wins on duration, 2. Incumbent 4 + incoming 2: reduce to 3,
-    // challenger loses, 3 — the case a bare clear gets wrong, leaving 4.
-    //
-    // It also disarms a STRANDED mark: one whose Stasis was cleansed before the victim's next turn
-    // is never consumed (only a blocked turn consumes one), and would otherwise wait indefinitely
-    // to shave an unrelated later Stasis. Reducing an absent entry is a no-op, and the mark goes.
+    // §4.5 Stasis reductions owed by direct hits, keyed by victim id: one per hit that landed on
+    // the victim while it was stasised (owner rulings 40 and 67 — every hit lowers Stasis by one,
+    // whoever lands it, so two ships hitting a 2-turn Stasis before its holder's turn free it).
+    // A hit queues its reduction; `settleStasisHits` spends every queued one at the tail of the
+    // drain that follows the hit (`drainReactions`), so the reduction is in place before the next
+    // ship acts while the hit's own reactions still drain against the Stasis the hit landed on
+    // (stasis.test.ts (iii)). The reduction is therefore immediate at turn granularity: a victim
+    // whose Stasis reaches 0 this way takes its own turn later in the same round.
+    const stasisBreakPending = new Map<string, number>();
+    /** Mints `attacked.reactiveHitId` — one id per counter-attack / reactive proc hit. */
+    let reactiveHitSeq = 0;
+    /** Reduce `targetId`'s Stasis once per queued hit and clear the queue for it. */
+    const spendStasisHits = (targetId: string): void => {
+        const owed = stasisBreakPending.get(targetId);
+        if (owed === undefined) return;
+        stasisBreakPending.delete(targetId);
+        for (let i = 0; i < owed; i++) {
+            for (const name of STASIS_BUFFS) statusEngine.reduceTimedEnemyStatus(targetId, name);
+        }
+    };
+    /** Spend every queued Stasis reduction (see `stasisBreakPending`). */
+    const settleStasisHits = (): void => {
+        for (const targetId of [...stasisBreakPending.keys()]) spendStasisHits(targetId);
+    };
+    // A fresh Stasis applied to a victim that still has reductions queued is weighed against the
+    // ALREADY-REDUCED incumbent, as in game the hit reduced it on landing (#535). Spending them
+    // here, before the family contest, keeps the arithmetic right in all three shapes. Incumbent
+    // 2 + incoming 4: reduce to 1, challenger wins, 4. Incumbent 2 + incoming 2: reduce to 1,
+    // challenger now wins on duration, 2. Incumbent 4 + incoming 2: reduce to 3, challenger loses,
+    // 3. This is how a clause written AFTER a cast's damage meets the reduction its own hit owes.
     statusEngine.setBeforeTimedEnemyApplication((targetId, buffName) => {
         if (!isStasis(buffName)) return;
-        if (!stasisBreakPending.has(targetId)) return;
-        stasisBreakPending.delete(targetId);
-        for (const name of STASIS_BUFFS) statusEngine.reduceTimedEnemyStatus(targetId, name);
+        spendStasisHits(targetId);
     });
     /**
      * Queue the §4.5 Stasis break for every victim one cast's hit marked, except a victim on which
@@ -5762,13 +5762,16 @@ export function runCombat(rawInput: CombatEngineInput): {
      * inflicts Stasis, the standing Stasis is max(held − 1, new). A Stasis the cast already wrote
      * and that won its contest (written before the damage, onto a shorter or no Stasis) is the
      * "new" side and is never shortened by its own hit, so its mark is skipped. Every other mark
-     * stands: it shortens the held Stasis on the victim's next blocked turn, or — when the cast's
-     * own Stasis is written after the damage — at the apply seam above, which takes the turn off
-     * the held Stasis before the new one contests it. Asked per victim, one rule for the aimed
-     * victim and every covered one.
+     * stands: it shortens the held Stasis at the tail of the drain that follows the cast
+     * (`settleStasisHits`), or — when the cast's own Stasis is written after the damage — at the
+     * apply seam above, which takes the turn off the held Stasis before the new one contests it.
+     * Asked per victim, one rule for the aimed victim and every covered one.
      *
      * Reaches only cast-path writes (`castStasisStandsOn` is the cast's own record): a Stasis a
      * REACTIVE trigger lands on a victim of the same cast is not seen (#534).
+     *
+     * `markedVictims` lists a victim once per HIT that landed on it while stasised, so a victim
+     * struck twice owes two reductions.
      */
     const resolveStasisBreaks = (
         markedVictims: Iterable<string>,
@@ -5776,7 +5779,7 @@ export function runCombat(rawInput: CombatEngineInput): {
     ): void => {
         for (const victimId of markedVictims) {
             if (castStasisStandsOn(victimId)) continue;
-            stasisBreakPending.set(victimId, true);
+            stasisBreakPending.set(victimId, (stasisBreakPending.get(victimId) ?? 0) + 1);
         }
     };
 
@@ -6267,9 +6270,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                 /** True when THIS application is itself reflected thorns (Reflect gear set). The
                  *  reflection block skips when set → no ping-pong (a reflected hit never reflects). */
                 isReflected?: boolean;
-                /** True when THIS application is a counterattack (Stalwart). The reflect
-                 *  re-entry guard skips when set → a counter is never itself reflected (loop-safe). */
-                isCounter?: boolean;
+                /** True for a FLAT copy of an already-resolved burst (Demolisher's Bomb splash):
+                 *  Bomb damage, not a direct hit, so no Protection redirect and no Exposed spend. */
+                isSplashCopy?: boolean;
                 /** Protection transfer: true when THIS application is a redirected Protection
                  *  chunk. The transfer block skips when set → a redirected chunk's own
                  *  cascade was already precomputed, so it never re-triggers (loop-safe). */
@@ -6400,8 +6403,8 @@ export function runCombat(rawInput: CombatEngineInput): {
             // fraction (10%/stack) of this victim's direct hit. The redirected chunk keeps the
             // ORIGINAL target's affinity/outgoing (both baked into `damage`) and re-mitigates on
             // the PROTECTOR's own defense — realized by the mit-ratio inside protectionCascade.
-            // Guards mirror the reflect block: direct damage only, and never a redirected/
-            // reflected/counter application (loop-safe).
+            // Guards: direct damage only, and never a redirected/reflected application (loop-safe)
+            // or a Bomb splash copy. Counters and reactive procs are redirected (ruling 36).
             // !carriesBarrier: Barrier sits strictly in front of every incoming-effect mechanism
             // (matches the incoming-block step and the transform step) — an invulnerable target
             // has no incoming hit for allies to soak.
@@ -6420,7 +6423,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 !carriesBarrier &&
                 !cause.isProtectionTransfer &&
                 !cause.isReflected &&
-                !cause.isCounter &&
+                !cause.isSplashCopy &&
                 !wholeBattlefieldHit &&
                 damage > 0
             ) {
@@ -7183,13 +7186,10 @@ export function runCombat(rawInput: CombatEngineInput): {
             // The attacker.destroyedRound guard below prevents posthumous reflection TO an
             // already-dead attacker, but the WEARER dying on the same hit is intentional and
             // covered by test case (e).
-            // !cause?.isCounter is loop-safe: a counter application must not itself be reflected.
-            if (
-                !cause?.isReflected &&
-                !cause?.isCounter &&
-                hpDamage > 0 &&
-                cause?.byDirectDamage !== false
-            ) {
+            // A counter-attack or reactive damage proc reflects like any other direct hit (owner
+            // ruling 36; Nosorog reacts to them). Loop-safe: the reflected hit carries
+            // `isReflected` and never reflects, and this funnel emits no reaction events.
+            if (!cause?.isReflected && hpDamage > 0 && cause?.byDirectDamage !== false) {
                 // Direct slice of the net HP damage: exclude the bomb portion by the raw direct
                 // fraction of the post-block total. bombPortion 0 → directFraction 1 (full reflect);
                 // bombPortion === total → directFraction 0 → basis 0 → skipped below.
@@ -7212,15 +7212,11 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // one victim, which IS the primary). A FUTURE non-positional real-roster AoE path would
                 // have to pass isPrimaryTarget explicitly, or a covered victim would wrongly reflect.
                 //
-                // REACTIVE PATHS DO NOT OVER-FIRE: a Nosorog taking REACTIVE damage does NOT
-                // reflect, by construction — (a) counterattacks reach applyVictimDamage with
-                // isCounter:true, which the `!cause?.isCounter` guard above skips entirely; and (b) the
-                // reactive-damage executor (applyReactiveDamage) always reaches applyVictimDamage
-                // under that SAME isCounter:true flag (it requires a concrete victim id).
-                // Detonation/
-                // bomb reactive hits pass bombPortion===total → directFraction 0 → reflectBasis 0 (no
-                // reflect); DoT ticks pass byDirectDamage:false (guard above). So no reactive path
-                // leaves isPrimaryTarget undefined in a way that could wrongly reflect.
+                // REACTIVE PATHS: a counter-attack or reactive damage proc leaves isPrimaryTarget
+                // undefined, so a Nosorog it strikes reflects (a passive hit counts as a
+                // primary-target hit). Detonation/bomb reactive hits pass bombPortion===total →
+                // directFraction 0 → reflectBasis 0 (no reflect); DoT ticks pass
+                // byDirectDamage:false (guard above).
                 const reflectAbilities =
                     reflectBasis > 0
                         ? incomingAbilitiesOf(victim.id).filter(
@@ -7424,13 +7420,14 @@ export function runCombat(rawInput: CombatEngineInput): {
             //
             // If a secondary path ever starts reading `Exposed`, drop its flag from this guard in the
             // same commit — amplify and consume must stay in lockstep. A counter or reactive proc
-            // folds the rest of the incoming channel but not `Exposed` (`reactiveHitInputs`).
+            // reads `Exposed` (`reactiveHitInputs`) and spends it here; a Bomb splash copy does
+            // neither.
             if (
                 cause?.byDirectDamage === true &&
                 (cause.bombPortion ?? 0) === 0 &&
                 !cause.isProtectionTransfer &&
                 !cause.isReflected &&
-                !cause.isCounter &&
+                !cause.isSplashCopy &&
                 immediateDamage - transformedToDot > 0
             ) {
                 consumeExposed(statusEngine, victim.id);
@@ -7604,15 +7601,9 @@ export function runCombat(rawInput: CombatEngineInput): {
          * rate from `affinityModifiersWithOverrides` over both (the 75% disadvantage cap and the
          * Offensive/Defensive Affinity Overrides included).
          *
-         * What such a hit does NOT read, pending the ruling on whether a counter or a proc is
-         * "direct damage" (the same open question keeps Protection, reflect and shield
-         * penetration off them in `applyVictimDamage`):
-         *  - `Exposed` — `applyVictimDamage` does not spend it on an `isCounter` hit, and a stack
-         *    read but not spent would amplify every later hit too;
-         *  - Meatshield's defence substitution, on a COUNTER only (`substituteDefence`); a proc
-         *    takes it. Skipping `substitutedDefenceFor` also skips FrontLine's shielded defence
-         *    bonus on a counter's victim.
-         * It also does not read the victim's gear/kit incoming-reduction abilities
+         * A counter or proc is direct damage (ruling 36), so the profile is the cast's in full:
+         * `Exposed` (spent by `applyVictimDamage`) and Meatshield's defence substitution included.
+         * It does not read the victim's gear/kit incoming-reduction abilities
          * (`incomingReductionForHit`), which the cast path takes outside the profile.
          *
          * Scheduled (input-level) enemy debuffs come from the OWNER's most recent turn's LANDED set
@@ -7624,8 +7615,7 @@ export function runCombat(rawInput: CombatEngineInput): {
          */
         const reactiveHitInputs = (
             owner: CombatActor,
-            victim: CombatActor,
-            opts: { substituteDefence: boolean }
+            victim: CombatActor
         ): {
             ownerOutgoing: ReturnType<typeof effectiveOutgoingStatsOf>;
             profile: VictimDefenseProfile;
@@ -7635,25 +7625,72 @@ export function runCombat(rawInput: CombatEngineInput): {
             const ownerOutgoing = effectiveOutgoingStatsOf(statusEngine, selfBuffLookup, owner);
             const profile = victimDefenseProfileOf(victim, {
                 scheduledEnemyEffects: landedScheduledEnemyEffectsByActor.get(owner.id) ?? [],
-                includeExposed: false,
-                substituteDefence: opts.substituteDefence,
+                includeExposed: true,
+                substituteDefence: true,
             });
             const forceAffinityAdvantage = selfBuffNamesForOwners(statusEngine, [
                 owner.id,
             ]).includes('Offensive Affinity Override');
-            const critRate = affinityCappedCritRate(
-                ownerOutgoing.crit,
-                affinityModifiersWithOverrides(owner.affinity ?? 'antimatter', profile.affinity, {
-                    forceAdvantage: forceAffinityAdvantage,
-                    forceDisadvantage: profile.forceAffinityDisadvantage,
-                })
-            );
+            // An always-crit owner (owner ruling 57) rolls at 100% whatever lowers crit.
+            const critRate = owner.alwaysCrits
+                ? 1
+                : affinityCappedCritRate(
+                      ownerOutgoing.crit,
+                      affinityModifiersWithOverrides(
+                          owner.affinity ?? 'antimatter',
+                          profile.affinity,
+                          {
+                              forceAdvantage: forceAffinityAdvantage,
+                              forceDisadvantage: profile.forceAffinityDisadvantage,
+                          }
+                      )
+                  );
             return { ownerOutgoing, profile, forceAffinityAdvantage, critRate };
+        };
+
+        /**
+         * The direct-hit consequences a counter-attack or reactive proc shares with a cast hit
+         * (ruling 36), run after its funnel application:
+         *  - the Stasis reduction, for a victim stasised at impact (`stasisAtImpact`, read before
+         *    the funnel) whose hit was not nullified by Barrier;
+         *  - the `attacked` event, for every "When directly damaged" reaction — unless the hit was
+         *    fully transformed into a DoT, which is not a direct hit (the cast path's rule).
+         * `fromCounter` marks a counter's hit, which no counter answers (#163).
+         */
+        const landReactiveHit = (
+            owner: CombatActor,
+            victim: CombatActor,
+            raw: number,
+            didCrit: boolean,
+            outcome: AppliedVictimDamage,
+            stasisAtImpact: boolean,
+            fromCounter: boolean
+        ): void => {
+            if (stasisAtImpact && !outcome.barriered) resolveStasisBreaks([victim.id], () => false);
+            if ((outcome.transformedToDot ?? 0) > 0) return;
+            emitAttacked({
+                bus,
+                round: r,
+                targetId: victim.id,
+                attackerId: owner.id,
+                hitOutcomes: [didCrit],
+                isPrimaryTarget: true,
+                shieldWasHit:
+                    !outcome.barriered &&
+                    !outcome.converted &&
+                    outcome.shieldBefore > 0 &&
+                    outcome.hpDamage < raw,
+                damage: raw,
+                takenDamage: outcome.incomingBooked,
+                subAttackIndex: 0,
+                reactiveHitId: ++reactiveHitSeq,
+                fromCounter,
+            });
         };
 
         // Full mitigated/crit counter walk from the counter owner to the attacker. Handed to the
         // reactive executor as `ctx.applyCounterAttack`, which triggers.ts calls for the
-        // `counter` branch. Reuses applyVictimDamage (no attacked event → no re-counter).
+        // `counter` branch. A direct hit like any other (`landReactiveHit`).
         const applyCounterAttack = (
             ownerId: string,
             attackerId: string,
@@ -7668,12 +7705,9 @@ export function runCombat(rawInput: CombatEngineInput): {
             if (owner.destroyedRound !== undefined) return;
             if (attacker.destroyedRound !== undefined || attacker.id === owner.id) return;
 
-            // A counter mitigates on the attacker's own defence, never Meatshield's (see
-            // `reactiveHitInputs`).
             const { ownerOutgoing, profile, forceAffinityAdvantage, critRate } = reactiveHitInputs(
                 owner,
-                attacker,
-                { substituteDefence: false }
+                attacker
             );
 
             // Roll the OWNER's crit via the dedicated gate (one stream per counter ability per owner).
@@ -7730,22 +7764,34 @@ export function runCombat(rawInput: CombatEngineInput): {
             // non-optional: the `?? 0` below then covers only the (unreachable) case of the throw
             // that skips the assignment, not a silently absent field.
             let counterOutcome: AppliedVictimDamage | undefined;
+            const counterStasisAtImpact = attackBreaksStasis(owner) && isStasised(attacker.id);
             try {
                 counterOutcome = applyVictimDamage(raw, attacker, sink, {
                     killerId: owner.id,
                     byDirectDamage: true,
-                    isCounter: true,
                     // #358 ADDENDUM 2: the counter walk folds the ATTACKER's defence through
                     // `victimHitDamage`; `rawPreMit` is the same walk without it.
                     preMitigationDamage: rawPreMit,
-                    // Mirror Reflect (no shield penetration on the reactive hit). EffectiveStats has NO
-                    // shieldPenetration field; we deliberately pass 0.
-                    shieldPenetrationPct: 0,
+                    // The exact defence factor `raw` carries, for the Protection cascade.
+                    targetMitigation: victimDefenceMitigation(
+                        profile,
+                        ownerOutgoing.defensePenetration
+                    ),
+                    shieldPenetrationPct: attackerShieldPenOf(owner.id),
                     bombPortion: 0,
                 });
             } finally {
                 deferConsequenceLogs = wasDeferring;
             }
+            landReactiveHit(
+                owner,
+                attacker,
+                raw,
+                didCrit,
+                counterOutcome,
+                counterStasisAtImpact,
+                true
+            );
             // Surface on the attacker's incoming so it appears on the HP curve (mirror Reflect):
             // the intake the funnel RECORDED, so a portion the attacker's own incoming-block
             // converted into a self-DoT is booked by its ticks rather than twice. See the Reflect
@@ -7830,12 +7876,14 @@ export function runCombat(rawInput: CombatEngineInput): {
             // Only the ATTACK-basis arm of `basisStat` below consumes `ownerOutgoing.attack`; an
             // hp-basis or shield-basis proc is not attack-scaled, so an `Attack Down` must not
             // touch its basis, while `Out. Damage Down` still reduces the resulting damage.
-            // A proc mitigates on Meatshield's substitute defence (see `reactiveHitInputs`).
             const { ownerOutgoing, profile, forceAffinityAdvantage, critRate } = reactiveHitInputs(
                 owner,
-                victim,
-                { substituteDefence: true }
+                victim
             );
+            /** Demolisher's Bomb splash: a flat copy of a Bomb burst, not a direct hit. */
+            const splashCopy = opts?.flatBasis !== undefined;
+            /** The defence factor folded into `raw` (1 for a flat copy, which folds none). */
+            let rawMitigation = 1;
 
             let raw: number;
             /** #358 ADDENDUM 2: the pre-defence twin of `raw`. */
@@ -7869,10 +7917,11 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // guaranteed-miss draw would still consume a value from the shared seeded RNG stream
                 // and perturb every later gate's schedule (proc gates, debuff landing) for ships that
                 // can never crit anyway. Live-checked per call, so a mid-fight crit buff starts
-                // drawing from that point on.
+                // drawing from that point on. An always-crit owner rolls at a 100% rate whatever
+                // its crit stat (ruling 57), so it always draws.
                 didCrit =
                     !noCrit &&
-                    ownerOutgoing.crit > 0 &&
+                    (owner.alwaysCrits === true || ownerOutgoing.crit > 0) &&
                     rollRateGate(reactiveDamageCritGates, `${ownerId}:${abilityId}`, critRate);
 
                 // Vindicator on-resist: raw = owner effective max HP × hpBasisPct% (mitigated below the
@@ -7923,6 +7972,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                 );
                 raw = procParts.damage;
                 rawPreMit = procParts.preMitigation;
+                rawMitigation = opts?.ignoresDefense
+                    ? 1
+                    : victimDefenceMitigation(profile, ownerOutgoing.defensePenetration);
             }
             // Guard: swallows zero/negative procs (defensive — a 0-attack or 0-multiplier proc
             // credits nothing), matching the pre-fix zero-damage guard.
@@ -7937,9 +7989,10 @@ export function runCombat(rawInput: CombatEngineInput): {
             // A reactive proc REDUCES the resolved victim's real HP through the SAME
             // shared funnel counters use (applyVictimDamage) — surfacing on the victim's HP curve
             // (roundPerTargetDamage → damageTaken) and attributed to the owner (creditDealt →
-            // perTargetDealt → damageDealt). Mirrors applyCounterAttack EXACTLY (isCounter:true → a
-            // reactive hit is never itself reflected and never Protection-redirected; no shield
-            // penetration) and deliberately does NOT creditDamage: cumulativeDamage is the scalar
+            // perTargetDealt → damageDealt). Mirrors applyCounterAttack (Reflect, Protection,
+            // shield penetration and Exposed apply, ruling 36) — a
+            // Bomb splash copy excepted (`splashCopy`) — and deliberately does NOT creditDamage:
+            // cumulativeDamage is the scalar
             // aggregate channel, so folding the reactive into it would double-count exactly like
             // the per-victim DoT/detonation split documented at the round tail. The DPS calculator
             // reads the per-victim map instead (dpsSimulator.ts's focusDamageTotal), which this is
@@ -7958,19 +8011,35 @@ export function runCombat(rawInput: CombatEngineInput): {
             deferConsequenceLogs = true;
             // Annotated for the same reason as applyCounterAttack's `counterOutcome`.
             let procOutcome: AppliedVictimDamage | undefined;
+            const procStasisAtImpact =
+                !splashCopy && attackBreaksStasis(owner) && isStasised(victim.id);
             try {
                 procOutcome = applyVictimDamage(raw, victim, sink, {
                     killerId: ownerId,
                     byDirectDamage: true,
-                    isCounter: true,
+                    ...(splashCopy ? { isSplashCopy: true } : {}),
                     // #358 ADDENDUM 2: equals `raw` on the flat-basis branch (which folds no
                     // defence at all) and the pre-defence walk on the attack-basis branch.
                     preMitigationDamage: rawPreMit,
-                    shieldPenetrationPct: 0,
-                    bombPortion: 0,
+                    targetMitigation: rawMitigation,
+                    shieldPenetrationPct: splashCopy ? 0 : attackerShieldPenOf(ownerId),
+                    // A splash copy is Bomb damage through and through: full shield drain, no
+                    // reflect, no one-shot block spent.
+                    bombPortion: splashCopy ? raw : 0,
                 });
             } finally {
                 deferConsequenceLogs = wasDeferring;
+            }
+            if (!splashCopy) {
+                landReactiveHit(
+                    owner,
+                    victim,
+                    raw,
+                    didCrit,
+                    procOutcome,
+                    procStasisAtImpact,
+                    false
+                );
             }
             // The intake the funnel RECORDED, mirroring applyCounterAttack (this site is
             // documented as its exact mirror, so booking `raw` here would re-create the
@@ -8004,13 +8073,14 @@ export function runCombat(rawInput: CombatEngineInput): {
         //    `resolveStasisBreaks` skips the mark when the turn's `castStasisStandsOn` says so.
         //  - DoT ticks NEVER call this (they never enter runPlayerTurn's break hook path).
         //
-        // DEFERRED-BREAK DESIGN: the hook does NOT immediately remove Stasis. Instead it marks
-        // the victim id into a per-turn `stasisHitVictims` Set. Removal happens RIGHT AFTER the
-        // attacker's own `drainIntentsFor('player')`/`drainIntentsFor('enemy')` in the same
-        // turn-loop iteration. This satisfies two invariants:
+        // WHEN THE REDUCTION LANDS: the hook does not remove Stasis itself. It marks the victim
+        // into a per-turn `turnStasisHitVictims` set; the cast queues one reduction per marked
+        // hit (`resolveStasisBreaks`), and `drainReactions` spends them right after the drain that
+        // follows the cast. This satisfies two invariants:
         //  (i)  The on-attacked reactive's drainQueue check (Counter Shield suppression — test iii)
-        //       sees `isStasised(victim) = true` because drainIntentsFor runs BEFORE the removal.
-        //  (ii) The victim is freed BEFORE its own next turn, so it acts in the next round.
+        //       sees `isStasised(victim) = true` because the drain runs BEFORE the reduction.
+        //  (ii) The reduction is in place before the next ship acts, so a victim whose Stasis it
+        //       takes to 0 takes its own turn later this round (owner rulings 40 and 67).
         //
         // RE-APPLY CHECK: the standing Stasis after a hit that also inflicts Stasis is
         // max(held − 1, new) (owner ruling). `resolveStasisBreaks` skips a victim's mark only when
@@ -8021,7 +8091,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         // making it immune to the "same attacker later fires pure-damage hits" bug.
         //
         // EXEMPT ATTACKERS (§4.5): an acting attacker whose hits do not break Stasis never
-        // records a hit victim into `stasisHitVictims`. `attackBreaksStasis` answers that for both
+        // records a hit victim into `turnStasisHitVictims`. `attackBreaksStasis` answers that for both
         // exemption forms, and the two are wired differently on purpose:
         //  - STATIC (Akula/Tygr): the turn-loop cast sites compute `tgtWasStasised` behind
         //    `!actor.doesntBreakStasis`, so `onHitBreakStasis` is never wired at all.
@@ -8832,8 +8902,8 @@ export function runCombat(rawInput: CombatEngineInput): {
          *     ROLLS a `makeRateGate` draw on the victim's own `<id>:proc` sub-stream, which can
          *     also spend an `oncePerRound` block. Both are pinned in
          *     `passiveSlotDamageFootprint.integration.test.ts`.
-         *   • a `damage-reflection` ability — the instance sets neither `isReflected` nor
-         *     `isCounter`, so it PROVOKES thorns back at the attacker exactly as the firing hit
+         *   • a `damage-reflection` ability — the instance does not set `isReflected`, so it
+         *     PROVOKES thorns back at the attacker exactly as the firing hit
          *     does. (`isAnchor: false` below still exempts it from a `requirePrimaryTarget`
          *     reflect — Nosorog — since it is not the cast's primary-target hit.)
          * All of that is the intended reading of "a real damage instance"; it is recorded here so
@@ -10107,7 +10177,7 @@ export function runCombat(rawInput: CombatEngineInput): {
              * The anchor victim's at-impact Stasis marks, for the call site to resolve against the
              * cast's re-apply check. See `resolveAnchorStasisBreak`.
              */
-            anchorStasisVictims: Set<string>;
+            anchorStasisVictims: string[];
         } => {
             // Record EACH footprint victim's damage + shield-hit flag so the post-apply emit wakes
             // EVERY hit victim's on-attacked reactives (counters + self-repairs/defensive buffs),
@@ -10135,11 +10205,11 @@ export function runCombat(rawInput: CombatEngineInput): {
             // Per-footprint Stasis-break: collect EVERY covered footprint victim (≠ anchor) stasised
             // AT IMPACT (marked from `onVictimPreImpact`, per sub-attack × victim) so its Stasis is
             // broken, resolved below through `resolveStasisBreaks`.
-            const coveredStasisVictims = new Set<string>();
+            const coveredStasisVictims: string[] = [];
             // The anchor's marks, kept apart from the covered set only for WHEN they resolve: the
             // call site resolves them after this drive returns, the covered ones resolve here. Both
             // go through `resolveStasisBreaks`, so the same-cast re-inflict rule is one rule.
-            const anchorStasisVictims = new Set<string>();
+            const anchorStasisVictims: string[] = [];
             /** §4.5 marks APPROVED at impact but not yet committed, keyed `victimId:subAttackIndex`;
              *  the value is that hit's `isAnchor`. The gate (`attackBreaksStasis` + `isStasised`)
              *  must be read BEFORE the hit resolves, but whether the hit LANDED is only known
@@ -10193,7 +10263,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                     if (markIsAnchor !== undefined) {
                         stasisMarkByHit.delete(markKey);
                         if (!outcome.barriered) {
-                            (markIsAnchor ? anchorStasisVictims : coveredStasisVictims).add(
+                            (markIsAnchor ? anchorStasisVictims : coveredStasisVictims).push(
                                 victim.id
                             );
                         }
@@ -10298,10 +10368,10 @@ export function runCombat(rawInput: CombatEngineInput): {
                     );
                 },
             });
-            // Set the DEFERRED Stasis break for every covered victim this cast did not itself
-            // stasis. The gate already ran in `onVictimPreImpact`, the only thing that puts an id in
-            // this set, and every sub-attack has rolled its clauses by now. The victim's own skip
-            // branch consumes the mark next turn.
+            // Queue the Stasis reduction for every covered victim hit this cast did not itself
+            // stasis — one per landed hit. The gate already ran in `onVictimPreImpact`, the only
+            // thing that puts an id in this list, and every sub-attack has rolled its clauses by
+            // now. `drainReactions` spends it after this turn's drain.
             // Pure state, no events: hoisted ABOVE the emission block so the
             // interleaved event/attacked pairs below stay adjacent, with nothing between them.
             resolveStasisBreaks(coveredStasisVictims, sel.castStasisStandsOn);
@@ -10723,261 +10793,251 @@ export function runCombat(rawInput: CombatEngineInput): {
             }
         };
 
-        // Drain the intent queue FIFO. Listeners may have enqueued during the emission
-        // that triggered this drain; executed intents may emit events (chaining) that
-        // enqueue MORE — those form the next generation. A generation is the batch
-        // present when a drain pass starts; the loop processes one generation per pass
-        // and stops when the queue is empty. MAX_INTENT_GENERATIONS converts a
-        // pathological self-feeding loop into a thrown error rather than a hang.
-        // Side-parameterized: every field this builds that differs by side is read off `sideCtx`
-        // (see `ReactiveSideCtx` for the full set) — `recipientIds` arrives as executeIntent's
-        // `ctx.playerIds`. `drainIntentsFor('player')` and `drainIntentsFor('enemy')` each bind
-        // their own queue and their own sideCtx.
-        const drainQueue = (queue: Intent[], sideCtx: ReactiveSideCtx): void => {
-            let generation = 0;
-            while (queue.length > 0) {
-                if (++generation > MAX_INTENT_GENERATIONS) {
-                    throw new Error(
-                        `combat round ${r}: intent queue exceeded MAX_INTENT_GENERATIONS ` +
-                            `(${MAX_INTENT_GENERATIONS}) — a reactive trigger is self-amplifying without bound`
-                    );
-                }
-                // Snapshot this generation's batch; new enqueues during execution run next pass.
-                const batch = queue.splice(0, queue.length);
-                for (const intent of batch) {
-                    // §4.4 TURN-BLOCK reactive suppression: a turn-blocked unit's reactives are
-                    // FULLY locked out. Drop every queued intent whose OWNER is currently turn-blocked (Stasis OR
-                    // Disable) — on-attacked, on-ally-attacked, on-crit, on-enemy-destroyed, AND start-of-round
-                    // self-buffs (Chakara via round-started) all carry intent.ownerId, so this ONE filter covers
-                    // every reactive type for BOTH sides (drainIntentsFor('player') and drainIntentsFor('enemy') share this drainQueue).
-                    // Filtered at the DRAIN, before executeIntent. Listeners only ENQUEUE (pure), so dropping an
-                    // intent leaves NO partial state. Incoming effects (damage/heals/ally buffs/DoT ticks) are
-                    // UNTOUCHED — only the turn-blocked unit's OWN outgoing intents drop.
-                    // NOTE: Stasis-only sites (break-on-hit, damage-immunity) intentionally keep using isStasised
-                    // directly — Disable never breaks and does not grant immunity.
-                    //
-                    // TWO CARVE-OUTS, both owner rulings (2026-09-15), because what a turn-block
-                    // switches off is the ship's own PASSIVE SKILL:
-                    //  - EQUIPMENT. A gear-set bonus or implant effect is not the ship's passive
-                    //    skill and keeps firing. It shares the passive slot with the ship's
-                    //    refits, so the provenance rides the ability — read `Ability.source`.
-                    //  - THE OWNER'S OWN DEATH REACTION. Death releases it: a ship that dies
-                    //    stasised still resolves Martyrdom's killer-Disable / Salvation's repair.
-                    //    Same `fromOwnDeath` stamp that exempts them from executeIntent's
-                    //    dead-owner gate.
-                    if (
-                        isTurnBlocked(intent.ownerId) &&
-                        intent.ability.source !== 'equipment' &&
-                        !intent.eventCtx?.fromOwnDeath
-                    ) {
-                        continue;
-                    }
-                    executeIntent(intent, {
-                        round: r,
-                        statusEngine,
-                        bus,
-                        // Combat-log attribution: the actor whose turn is active when this
-                        // reactive intent drains. Set per turn (actingActorId); undefined for a
-                        // round-1 start-of-round reactive or a post-round death-drain reaction
-                        // (no turn active). The executor's stamping bus brands every reactive
-                        // emission with this so a later builder nests the reaction under the
-                        // triggering turn, not the reactor's own turn.
-                        duringTurnOf: actingActorId,
-                        reactionFiringId: ++reactionFiringSeq,
-                        corrosionEntries,
-                        infernoEntries,
-                        genericDoTEntries,
-                        pendingBombs,
-                        runtimes: sideCtx.runtimes,
-                        grantAllyCharges: sideCtx.grantAllyCharges,
-                        removeEnemyCharges: sideCtx.removeEnemyCharges,
-                        removeChargesFrom: sideCtx.removeChargesFrom,
-                        grantExtraAction,
-                        playerIds: sideCtx.recipientIds,
-                        // Drain `enemy-buff` gates read the union of the OWNER's opposing
-                        // side's self-buffs (names only).
-                        enemyAttackerIds: sideCtx.opposingIds,
-                        isActorAlive,
-                        selfShieldFullFor: isSelfShieldFull,
-                        // Name map for the live `ally-on-team` roster check. With no ship names
-                        // supplied the map is empty → buildDrainContext leaves allyTeamNames
-                        // undefined → assume-met fallback.
-                        nameByActorId: nameByActorId.size > 0 ? nameByActorId : undefined,
-                        lastTurnCtxByActor,
-                        // #396: the resolver `liveHealChannelPct` needs to shadow the live
-                        // enemy-applied heal half against the actor's own named statuses.
-                        selfNamedBuffsFor: (id) =>
-                            victimSelfBuffs(statusEngine, id, selfBuffLookup),
-                        reactiveDealtByOwner,
-                        enemyType,
-                        // Prophet (#591): side-agnostic — the same accumulator serves either
-                        // drain side, so no per-side threading through `sideCtx` is needed.
-                        addShieldPenBonus,
-                        // Bomb damagePerStack/affinity resolve per OWNER inside the executor
-                        // (lastTurnCtxByActor.get(intent.ownerId)) — there is no global
-                        // effectiveAttack/affinityMult on this ctx.
-                        recordResisted: (resisted) => {
-                            const lastTurn = focusTurns[focusTurns.length - 1];
-                            // After an attacker turn this round → append to its resisted list;
-                            // before any → stage into pendingResisted (drained into the next
-                            // attacker turn's head), mirroring the Task-2 team-resist staging.
-                            if (lastTurn) lastTurn.resistedEnemyDebuffs.push(resisted);
-                            else pendingResisted.push(resisted);
-                        },
-                        // Reactive direct damage (Grif/FrontLine/Judge/Chakara/Incinerator/
-                        // Rhodium) — full mitigated/crit walk, credited via the single credit
-                        // point (creditDamage, inside applyReactiveDamage) so leeches still see it.
-                        applyReactiveDamage,
-                        // Releases the consequence twins applyReactiveDamage buffered, called by
-                        // the executor right after the proc's own attack row is emitted.
-                        flushConsequenceLogs,
-                        applyCounterAttack,
-                        counterFiredThisTurn,
-                        reactionFiredThisAttack,
-                        // The SAME shared ctx the player turns use, so a reactive
-                        // heal/shield/cleanse credits the same per-round buckets and mutates the
-                        // same live target. `healTarget` is anchored in EVERY mode (#415), so
-                        // `healingCtx` is always built and the reactive heal/shield/cleanse
-                        // branches are LIVE in DPS mode too — pinned by
-                        // `dpsBattleShieldParity.test.ts`. What DPS mode omits is the healing
-                        // REPORT, gated on `healReportActive`.
-                        healing: healingCtx,
-                        // Combat-lifetime once-per-battle guard: a flagged reactive
-                        // repair (Yazid) fires at most once across the whole combat.
-                        oncePerCombatFired,
-                        // Combat-lifetime per-(owner, ability, source) event counter for
-                        // everyNthEvent gates (Zosimos "every second repair → remove charge").
-                        repairCountBySource,
-                        // Combat-lifetime proc-chance gates: equipment reactive procs
-                        // that carry a procChance fire at their stated rate via this accumulator.
-                        procChanceGates,
-                        preDecidedConversions,
-                        // Scoped proc verdict cache (Insidiousness: one roll per cast, plus one
-                        // per reaction firing that cast sets off).
-                        procDecisionThisSubAttack,
-                        // Live lowest-speed-ally gate. UNCONDITIONAL — with a lone attacker the set
-                        // is {attacker}, so it resolves true.
-                        isLowestSpeedAllyFor: sideCtx.isLowestSpeedAllyFor,
-                        // Live self-HP% for drain-time hp-threshold gates: each owner's own
-                        // current/max HP, both sides (`selfHpGateEveryOwner.integration.test.ts`).
-                        selfHpPctFor: sideCtx.selfHpPctFor,
-                        enemyWithMostBuffs: sideCtx.enemyWithMostBuffs,
-                        // Resolve any actor's RAW affinity (combat-wide map, both sides) so
-                        // the reactive 'apply'-debuff branch lands vs the ACTUAL target's affinity
-                        // (e.g. Martyrdom Disable onto the real killer) rather than the applier's
-                        // precomputed-vs-representative static disadvantage flag.
-                        affinityOf: (id) => allActorsById.get(id)?.affinity,
-                        // The OTHER half of the same per-target seam as `affinityOf` above. The
-                        // 'inflict' arm and the reactive DoT must NOT draw against the owner's
-                        // cached `liveDebuffLandingChance` — a chance the owner computed for ITS
-                        // OWN turn target. This resolves the roll the reactive path actually needs:
-                        // the owner's live effective hacking vs THIS victim's live effective
-                        // security.
-                        // Same combat-wide `allActorsById` source as affinityOf/actorById, so it is
-                        // team-symmetric for free (either id may be on either side).
-                        liveDebuffLandingChanceFor: (ownerId, victimId) =>
-                            reactiveLandingChanceFor(ownerId, victimId),
-                        // Resolve any actor (either side) by id — the convert-dot
-                        // executor uses this to find the ACTUAL victim of an ally's DoT
-                        // application (eventCtx.victimId) instead of the fixed enemy/
-                        // corrosionEntries closures above (side-biased to the player's single
-                        // opposing focus). Combat-wide map — no per-side sideCtx field needed.
-                        actorById: (id) => allActorsById.get(id),
-                        // Live effective attack, for a reactive bomb applied before its owner's
-                        // first turn of the run (no lastTurnCtx to snapshot). Same fold
-                        // `effectiveSpeedOf` uses, reading `.attack` instead.
-                        effectiveAttackFor: (id) => {
-                            const a = allActorsById.get(id);
-                            return a
-                                ? effectiveStatsOf(statusEngine, selfBuffLookup, a).attack
-                                : undefined;
-                        },
-                        // Same shared sink the cast-path forced detonation uses — a
-                        // reduce-duration shrink can drive a bomb to 0 on EITHER side's actor.
-                        forceDetonateBomb: (victim, sourceId, damage) =>
-                            forceDetonateBombOnVictim(victim, sink, sourceId, damage),
-                        // Side-agnostic ship-role lookup (the SAME
-                        // roleByActorId map Meatshield's defense-substitution and Graphite's
-                        // roleFilter already consume) — feeds the reactive `purge` branch's
-                        // per-victim `enemy-type` re-check (Zeolite: "When this Unit deals
-                        // damage to a defender"), team-symmetrically.
-                        roleOf: (id) => roleByActorId.get(id),
-                        // Live hacking/critDamage for `id` (either side), feeding
-                        // Belladonna's conversion-chance (hacking) and paired extend-chance
-                        // (critDamage) gates. Same statusEngine/selfBuffLookup every other
-                        // effectiveStatsOf call site in this scope uses (e.g. mostBuffsAmong).
-                        effectiveStatsFor: (id) => {
-                            const a = allActorsById.get(id);
-                            return a
-                                ? effectiveStatsOf(statusEngine, selfBuffLookup, a)
-                                : undefined;
-                        },
-                        // Doomsayer enemy-highest-attack resolver, the round's first
-                        // real activator id, and the shared once-per-round consume set. All
-                        // inert today — only consumed by the next task's executor branch.
-                        enemyWithHighestAttack: sideCtx.enemyWithHighestAttack,
-                        // Chakara's live highest-speed opposing-actor resolver.
-                        enemyWithHighestSpeed: sideCtx.enemyWithHighestSpeed,
-                        // Living opposing roster for an 'all-enemies' reactive
-                        // damage proc (Judge/Incinerator per-victim-conditional AoE).
-                        livingOpposingActorIds: sideCtx.livingOpposingActorIds,
-                        // Synthesized enemy debuff/DoT NAMES for a victim — the
-                        // EXACT synthesis buildTurnArgs uses (enemyDebuffNamesForTarget), so a
-                        // per-victim 'enemy-debuff' name-gate (Incinerator's "with Inferno") reads
-                        // the same names as an on-cast gate. Combat-wide (both sides) via
-                        // allActorsById, mirroring actorById/affinityOf. Empty for a missing id.
-                        enemyDebuffNamesFor: (id) => {
-                            const a = allActorsById.get(id);
-                            return a ? enemyDebuffNamesForTarget(a) : [];
-                        },
-                        // A victim's current effective max HP (the same
-                        // recipientMaxHp denominator every heal/HP-basis site uses) so the
-                        // per-victim hp-threshold gate (Judge's "<50% HP") reads a live HP%.
-                        recipientMaxHpFor: (id) => recipientMaxHp(id),
-                        firstActivatorId: sideCtx.firstActivatorId,
-                        lastStandingId: sideCtx.lastStandingId,
-                        oncePerRoundConsumed: sideCtx.oncePerRoundConsumed,
-                        perRoundFireCounts: sideCtx.perRoundFireCounts,
-                        // Live not-hit-this-round gate (Alacrity). hitThisRound is a single
-                        // combat-wide Set, so the SAME closure serves both sides (team-agnostic) —
-                        // no per-side sideCtx field needed (unlike isLowestSpeedAllyFor).
-                        wasHitThisRoundFor: (ownerId) => hitThisRound.has(ownerId),
-                        // Live per-actor own-turn counter (Chrono Reaver /
-                        // every-n-turns). allActorsById covers both sides in a single combat-wide
-                        // map — no per-side sideCtx field needed (mirrors wasHitThisRoundFor).
-                        turnsTakenFor: (ownerId) => allActorsById.get(ownerId)?.turnsTaken ?? 0,
-                        // Live per-actor count of enemies damaged by that actor's most
-                        // recent cast this round (Berserker's Marauder Rage, drained via
-                        // on-deal-damage). Combat-wide map — no per-side sideCtx field needed
-                        // (mirrors turnsTakenFor/wasHitThisRoundFor). Deliberately NO `?? 1`
-                        // default — an owner with no recorded footprint (no delegate call has ever
-                        // set one for it, e.g. before its first turn this combat) has an UNKNOWN
-                        // footprint, not "hit exactly one enemy". Returning `undefined` lets
-                        // buildDrainContext's absent-subject guard leave the gate unresolved
-                        // instead of answering a fabricated 1. Tygr's `gte 2` and Berserker's
-                        // `gte 3` are unaffected — a fabricated 1 already failed both comparators.
-                        enemiesHitThisCastFor: (ownerId) => enemiesHitThisCastByActor.get(ownerId),
-                        // Live adjacent-allies resolver (Fortifying Shroud). Sourced
-                        // per-side from sideCtx; positional neighbours, else all same-side allies.
-                        adjacentAllyIdsFor: sideCtx.adjacentAllyIdsFor,
-                        // OPPOSING-side counterpart (Demolisher bomb-splash's
-                        // 'adjacent-enemies' anchor resolution). See IntentExecContext.
-                        adjacentOpposingIdsFor: sideCtx.adjacentOpposingIdsFor,
-                        footprintAllyIdsFor: sideCtx.footprintAllyIdsFor,
-                        // The 'lowest-hp-ally' selector. NOT sourced from sideCtx — the
-                        // closure is already side-relative to the OWNER it is asked about, which is
-                        // the correct scoping for a drain whose intents can carry either side's
-                        // owner id, and it shares the cast path's single ranking.
-                        lowestHpAllyIdFor: lowestHpAllyIdForOwner,
-                        // #363: actor id → faction, for a reactive `factionFilter`'d ally scope
-                        // (read by `footprintFilteredRecipients` in triggers.ts). The same
-                        // side-agnostic map every other #363 site shares — no `sideCtx`/bySide
-                        // dispatch needed, exactly like the cast-path's `buildTurnArgs` spread
-                        // above.
-                        factionOf,
-                    });
-                }
+        /** Resolve one queued intent with its side's drain ctx: the turn-block and chain-cap
+         *  filters, then executeIntent. Shared by every drain. Side-parameterized: every field
+         *  this builds that differs by side is read off `sideCtx` (see `ReactiveSideCtx` for the
+         *  full set) — `recipientIds` arrives as executeIntent's `ctx.playerIds`. */
+        const runQueuedIntent = (intent: Intent, sideCtx: ReactiveSideCtx): void => {
+            // §4.4 TURN-BLOCK reactive suppression: a turn-blocked unit's reactives are
+            // FULLY locked out. Drop every queued intent whose OWNER is currently turn-blocked (Stasis OR
+            // Disable) — on-attacked, on-ally-attacked, on-crit, on-enemy-destroyed, AND start-of-round
+            // self-buffs (Chakara via round-started) all carry intent.ownerId, so this ONE filter covers
+            // every reactive type for BOTH sides (every drain resolves through this runner).
+            // Filtered at the DRAIN, before executeIntent. Listeners only ENQUEUE (pure), so dropping an
+            // intent leaves NO partial state. Incoming effects (damage/heals/ally buffs/DoT ticks) are
+            // UNTOUCHED — only the turn-blocked unit's OWN outgoing intents drop.
+            // NOTE: Stasis-only sites (break-on-hit, damage-immunity) intentionally keep using isStasised
+            // directly — Disable never breaks and does not grant immunity.
+            //
+            // TWO CARVE-OUTS, both owner rulings (2026-09-15), because what a turn-block
+            // switches off is the ship's own PASSIVE SKILL:
+            //  - EQUIPMENT. A gear-set bonus or implant effect is not the ship's passive
+            //    skill and keeps firing. It shares the passive slot with the ship's
+            //    refits, so the provenance rides the ability — read `Ability.source`.
+            //  - THE OWNER'S OWN DEATH REACTION. Death releases it: a ship that dies
+            //    stasised still resolves Martyrdom's killer-Disable / Salvation's repair.
+            //    Same `fromOwnDeath` stamp that exempts them from executeIntent's
+            //    dead-owner gate.
+            if (
+                isTurnBlocked(intent.ownerId) &&
+                intent.ability.source !== 'equipment' &&
+                !intent.eventCtx?.fromOwnDeath
+            ) {
+                return;
             }
+            // The runaway cap (ruling 66): a chain this deep is a loop, not play.
+            const depth = intent.chainDepth ?? 0;
+            if (depth > MAX_REACTION_CHAIN_DEPTH) {
+                reactionChainProbe.dropped++;
+                return;
+            }
+            if (depth > reactionChainProbe.maxDepth) reactionChainProbe.maxDepth = depth;
+            executeIntent(intent, {
+                round: r,
+                statusEngine,
+                bus,
+                // Combat-log attribution: the actor whose turn is active when this
+                // reactive intent drains. Set per turn (actingActorId); undefined for a
+                // round-1 start-of-round reactive or a post-round death-drain reaction
+                // (no turn active). The executor's stamping bus brands every reactive
+                // emission with this so a later builder nests the reaction under the
+                // triggering turn, not the reactor's own turn.
+                duringTurnOf: actingActorId,
+                reactionFiringId: ++reactionFiringSeq,
+                corrosionEntries,
+                infernoEntries,
+                genericDoTEntries,
+                pendingBombs,
+                runtimes: sideCtx.runtimes,
+                grantAllyCharges: sideCtx.grantAllyCharges,
+                removeEnemyCharges: sideCtx.removeEnemyCharges,
+                removeChargesFrom: sideCtx.removeChargesFrom,
+                grantExtraAction,
+                playerIds: sideCtx.recipientIds,
+                // Drain `enemy-buff` gates read the union of the OWNER's opposing
+                // side's self-buffs (names only).
+                enemyAttackerIds: sideCtx.opposingIds,
+                isActorAlive,
+                selfShieldFullFor: isSelfShieldFull,
+                // Name map for the live `ally-on-team` roster check. With no ship names
+                // supplied the map is empty → buildDrainContext leaves allyTeamNames
+                // undefined → assume-met fallback.
+                nameByActorId: nameByActorId.size > 0 ? nameByActorId : undefined,
+                lastTurnCtxByActor,
+                // #396: the resolver `liveHealChannelPct` needs to shadow the live
+                // enemy-applied heal half against the actor's own named statuses.
+                selfNamedBuffsFor: (id) => victimSelfBuffs(statusEngine, id, selfBuffLookup),
+                reactiveDealtByOwner,
+                enemyType,
+                // Prophet (#591): side-agnostic — the same accumulator serves either
+                // drain side, so no per-side threading through `sideCtx` is needed.
+                addShieldPenBonus,
+                // Bomb damagePerStack/affinity resolve per OWNER inside the executor
+                // (lastTurnCtxByActor.get(intent.ownerId)) — there is no global
+                // effectiveAttack/affinityMult on this ctx.
+                recordResisted: (resisted) => {
+                    const lastTurn = focusTurns[focusTurns.length - 1];
+                    // After an attacker turn this round → append to its resisted list;
+                    // before any → stage into pendingResisted (drained into the next
+                    // attacker turn's head), mirroring the Task-2 team-resist staging.
+                    if (lastTurn) lastTurn.resistedEnemyDebuffs.push(resisted);
+                    else pendingResisted.push(resisted);
+                },
+                // Reactive direct damage (Grif/FrontLine/Judge/Chakara/Incinerator/
+                // Rhodium) — full mitigated/crit walk, credited via the single credit
+                // point (creditDamage, inside applyReactiveDamage) so leeches still see it.
+                applyReactiveDamage,
+                // Releases the consequence twins applyReactiveDamage buffered, called by
+                // the executor right after the proc's own attack row is emitted.
+                flushConsequenceLogs,
+                applyCounterAttack,
+                counterFiredThisTurn,
+                reactionFiredThisAttack,
+                // The SAME shared ctx the player turns use, so a reactive
+                // heal/shield/cleanse credits the same per-round buckets and mutates the
+                // same live target. `healTarget` is anchored in EVERY mode (#415), so
+                // `healingCtx` is always built and the reactive heal/shield/cleanse
+                // branches are LIVE in DPS mode too — pinned by
+                // `dpsBattleShieldParity.test.ts`. What DPS mode omits is the healing
+                // REPORT, gated on `healReportActive`.
+                healing: healingCtx,
+                // Combat-lifetime once-per-battle guard: a flagged reactive
+                // repair (Yazid) fires at most once across the whole combat.
+                oncePerCombatFired,
+                // Combat-lifetime per-(owner, ability, source) event counter for
+                // everyNthEvent gates (Zosimos "every second repair → remove charge").
+                repairCountBySource,
+                // Combat-lifetime proc-chance gates: equipment reactive procs
+                // that carry a procChance fire at their stated rate via this accumulator.
+                procChanceGates,
+                preDecidedConversions,
+                // Scoped proc verdict cache (Insidiousness: one roll per cast, plus one
+                // per reaction firing that cast sets off).
+                procDecisionThisSubAttack,
+                // Live lowest-speed-ally gate. UNCONDITIONAL — with a lone attacker the set
+                // is {attacker}, so it resolves true.
+                isLowestSpeedAllyFor: sideCtx.isLowestSpeedAllyFor,
+                // Live self-HP% for drain-time hp-threshold gates: each owner's own
+                // current/max HP, both sides (`selfHpGateEveryOwner.integration.test.ts`).
+                selfHpPctFor: sideCtx.selfHpPctFor,
+                enemyWithMostBuffs: sideCtx.enemyWithMostBuffs,
+                // Resolve any actor's RAW affinity (combat-wide map, both sides) so
+                // the reactive 'apply'-debuff branch lands vs the ACTUAL target's affinity
+                // (e.g. Martyrdom Disable onto the real killer) rather than the applier's
+                // precomputed-vs-representative static disadvantage flag.
+                affinityOf: (id) => allActorsById.get(id)?.affinity,
+                // The OTHER half of the same per-target seam as `affinityOf` above. The
+                // 'inflict' arm and the reactive DoT must NOT draw against the owner's
+                // cached `liveDebuffLandingChance` — a chance the owner computed for ITS
+                // OWN turn target. This resolves the roll the reactive path actually needs:
+                // the owner's live effective hacking vs THIS victim's live effective
+                // security.
+                // Same combat-wide `allActorsById` source as affinityOf/actorById, so it is
+                // team-symmetric for free (either id may be on either side).
+                liveDebuffLandingChanceFor: (ownerId, victimId) =>
+                    reactiveLandingChanceFor(ownerId, victimId),
+                // Resolve any actor (either side) by id — the convert-dot
+                // executor uses this to find the ACTUAL victim of an ally's DoT
+                // application (eventCtx.victimId) instead of the fixed enemy/
+                // corrosionEntries closures above (side-biased to the player's single
+                // opposing focus). Combat-wide map — no per-side sideCtx field needed.
+                actorById: (id) => allActorsById.get(id),
+                // Live effective attack, for a reactive bomb applied before its owner's
+                // first turn of the run (no lastTurnCtx to snapshot). Same fold
+                // `effectiveSpeedOf` uses, reading `.attack` instead.
+                effectiveAttackFor: (id) => {
+                    const a = allActorsById.get(id);
+                    return a ? effectiveStatsOf(statusEngine, selfBuffLookup, a).attack : undefined;
+                },
+                // Same shared sink the cast-path forced detonation uses — a
+                // reduce-duration shrink can drive a bomb to 0 on EITHER side's actor.
+                forceDetonateBomb: (victim, sourceId, damage) =>
+                    forceDetonateBombOnVictim(victim, sink, sourceId, damage),
+                // Side-agnostic ship-role lookup (the SAME
+                // roleByActorId map Meatshield's defense-substitution and Graphite's
+                // roleFilter already consume) — feeds the reactive `purge` branch's
+                // per-victim `enemy-type` re-check (Zeolite: "When this Unit deals
+                // damage to a defender"), team-symmetrically.
+                roleOf: (id) => roleByActorId.get(id),
+                // Live hacking/critDamage for `id` (either side), feeding
+                // Belladonna's conversion-chance (hacking) and paired extend-chance
+                // (critDamage) gates. Same statusEngine/selfBuffLookup every other
+                // effectiveStatsOf call site in this scope uses (e.g. mostBuffsAmong).
+                effectiveStatsFor: (id) => {
+                    const a = allActorsById.get(id);
+                    return a ? effectiveStatsOf(statusEngine, selfBuffLookup, a) : undefined;
+                },
+                // Doomsayer enemy-highest-attack resolver, the round's first
+                // real activator id, and the shared once-per-round consume set. All
+                // inert today — only consumed by the next task's executor branch.
+                enemyWithHighestAttack: sideCtx.enemyWithHighestAttack,
+                // Chakara's live highest-speed opposing-actor resolver.
+                enemyWithHighestSpeed: sideCtx.enemyWithHighestSpeed,
+                // Living opposing roster for an 'all-enemies' reactive
+                // damage proc (Judge/Incinerator per-victim-conditional AoE).
+                livingOpposingActorIds: sideCtx.livingOpposingActorIds,
+                // Synthesized enemy debuff/DoT NAMES for a victim — the
+                // EXACT synthesis buildTurnArgs uses (enemyDebuffNamesForTarget), so a
+                // per-victim 'enemy-debuff' name-gate (Incinerator's "with Inferno") reads
+                // the same names as an on-cast gate. Combat-wide (both sides) via
+                // allActorsById, mirroring actorById/affinityOf. Empty for a missing id.
+                enemyDebuffNamesFor: (id) => {
+                    const a = allActorsById.get(id);
+                    return a ? enemyDebuffNamesForTarget(a) : [];
+                },
+                // A victim's current effective max HP (the same
+                // recipientMaxHp denominator every heal/HP-basis site uses) so the
+                // per-victim hp-threshold gate (Judge's "<50% HP") reads a live HP%.
+                recipientMaxHpFor: (id) => recipientMaxHp(id),
+                firstActivatorId: sideCtx.firstActivatorId,
+                lastStandingId: sideCtx.lastStandingId,
+                oncePerRoundConsumed: sideCtx.oncePerRoundConsumed,
+                perRoundFireCounts: sideCtx.perRoundFireCounts,
+                // Live not-hit-this-round gate (Alacrity). hitThisRound is a single
+                // combat-wide Set, so the SAME closure serves both sides (team-agnostic) —
+                // no per-side sideCtx field needed (unlike isLowestSpeedAllyFor).
+                wasHitThisRoundFor: (ownerId) => hitThisRound.has(ownerId),
+                // Live per-actor own-turn counter (Chrono Reaver /
+                // every-n-turns). allActorsById covers both sides in a single combat-wide
+                // map — no per-side sideCtx field needed (mirrors wasHitThisRoundFor).
+                turnsTakenFor: (ownerId) => allActorsById.get(ownerId)?.turnsTaken ?? 0,
+                // Live per-actor count of enemies damaged by that actor's most
+                // recent cast this round (Berserker's Marauder Rage, drained via
+                // on-deal-damage). Combat-wide map — no per-side sideCtx field needed
+                // (mirrors turnsTakenFor/wasHitThisRoundFor). Deliberately NO `?? 1`
+                // default — an owner with no recorded footprint (no delegate call has ever
+                // set one for it, e.g. before its first turn this combat) has an UNKNOWN
+                // footprint, not "hit exactly one enemy". Returning `undefined` lets
+                // buildDrainContext's absent-subject guard leave the gate unresolved
+                // instead of answering a fabricated 1. Tygr's `gte 2` and Berserker's
+                // `gte 3` are unaffected — a fabricated 1 already failed both comparators.
+                enemiesHitThisCastFor: (ownerId) => enemiesHitThisCastByActor.get(ownerId),
+                // Live adjacent-allies resolver (Fortifying Shroud). Sourced
+                // per-side from sideCtx; positional neighbours, else all same-side allies.
+                adjacentAllyIdsFor: sideCtx.adjacentAllyIdsFor,
+                // OPPOSING-side counterpart (Demolisher bomb-splash's
+                // 'adjacent-enemies' anchor resolution). See IntentExecContext.
+                adjacentOpposingIdsFor: sideCtx.adjacentOpposingIdsFor,
+                footprintAllyIdsFor: sideCtx.footprintAllyIdsFor,
+                // The 'lowest-hp-ally' selector. NOT sourced from sideCtx — the
+                // closure is already side-relative to the OWNER it is asked about, which is
+                // the correct scoping for a drain whose intents can carry either side's
+                // owner id, and it shares the cast path's single ranking.
+                lowestHpAllyIdFor: lowestHpAllyIdForOwner,
+                // #363: actor id → faction, for a reactive `factionFilter`'d ally scope
+                // (read by `footprintFilteredRecipients` in triggers.ts). The same
+                // side-agnostic map every other #363 site shares — no `sideCtx`/bySide
+                // dispatch needed, exactly like the cast-path's `buildTurnArgs` spread
+                // above.
+                factionOf,
+            });
+        };
+
+        // Run ONE detached batch of intents in order with one side's ctx — a phase owner's group
+        // (`drainInTurnOrder`) or the pre-cast grant batch. What they wake lands on the side
+        // queues, which `drainReactions` drains; MAX_REACTION_CHAIN_DEPTH bounds those chains.
+        const drainQueue = (batch: Intent[], sideCtx: ReactiveSideCtx): void => {
+            for (const intent of batch) runQueuedIntent(intent, sideCtx);
         };
 
         // Per-round state — reset each round (declared inside the round loop).
@@ -11060,8 +11120,8 @@ export function runCombat(rawInput: CombatEngineInput): {
 
         // A round's co-located Rhodium purge+damage pair BOTH target
         // 'enemy-most-buffs' and are drained TOGETHER off the SAME queue with ONE ctx instance
-        // (drainQueue drains every intent in the queue using the single ctx a drainIntentsFor
-        // call built). The purge's own buff removal can zero out the very count that identified
+        // (the end-of-round phase drains one owner's intents through drainQueue with one ctx,
+        // and drainReactions keeps one ctx per side for its whole drain). The purge's own buff removal can zero out the very count that identified
         // the target, so a naive LIVE re-resolution by whichever ability drains SECOND (fixed by
         // sentence position — purge precedes "and deals X% damage" — so purge always drains
         // first) would resolve to nobody even though the FIRST-draining ability already found
@@ -11163,20 +11223,72 @@ export function runCombat(rawInput: CombatEngineInput): {
             footprintAllyIdsFor: bySide('enemy').footprintAllyIdsFor,
             opposingIds: playerIds,
         });
-        // Side-parameterized drain — one closure for both sides. The queue-empty guard is an
-        // allocation saving, not a behaviour change: drainQueue's `while (queue.length > 0)`
-        // already no-ops on an empty queue, and playerDrainCtx()/enemyDrainCtx() build pure
-        // closures (no side effects), so skipping their construction changes nothing observable.
-        const drainIntentsFor = (side: Side): void => {
-            const queue = intentQueues[side];
-            if (queue.length === 0) return;
-            drainQueue(queue, side === 'player' ? playerDrainCtx() : enemyDrainCtx());
+        /**
+         * Drain BOTH sides' queues until both are empty (owner ruling 39), then spend the Stasis
+         * reductions the drained hits queued (`stasisBreakPending`).
+         *
+         * Order: the intents woken by the EARLIEST event (`Intent.eventSeq`) resolve first, owner
+         * by owner in turn order — `orderByTurnPriority`, re-ranked after each owner exactly like
+         * the round-boundary phases, so the player side wins only a cross-team speed tie. An
+         * owner's own intents keep their enqueue order. A reaction CAUSED by one of them answers
+         * a later event, so it resolves after every reaction to the event that caused it, still
+         * inside this drain: Cultivator cleanses → Grif's 75% and Cultivator's 4% repair in turn
+         * order → Cultivator's 8% repair answering Grif's hit.
+         *
+         * One drain ctx per side for the whole drain, built on first use (`onceByOwner`'s
+         * per-ctx memo relies on that).
+         */
+        const drainReactions = (): void => {
+            const ctxBySide: Partial<Record<Side, ReactiveSideCtx>> = {};
+            const ctxFor = (side: Side): ReactiveSideCtx =>
+                (ctxBySide[side] ??= side === 'player' ? playerDrainCtx() : enemyDrainCtx());
+            while (intentQueues.player.length > 0 || intentQueues.enemy.length > 0) {
+                let earliest = Infinity;
+                for (const side of ['player', 'enemy'] as const) {
+                    for (const intent of intentQueues[side]) {
+                        earliest = Math.min(earliest, intent.eventSeq ?? 0);
+                    }
+                }
+                const byOwner = new Map<string, { side: Side; intents: Intent[] }>();
+                for (const side of ['player', 'enemy'] as const) {
+                    const queue = intentQueues[side];
+                    for (let i = 0; i < queue.length;) {
+                        if ((queue[i].eventSeq ?? 0) !== earliest) {
+                            i++;
+                            continue;
+                        }
+                        const [intent] = queue.splice(i, 1);
+                        const group = byOwner.get(intent.ownerId);
+                        if (group) group.intents.push(intent);
+                        else byOwner.set(intent.ownerId, { side, intents: [intent] });
+                    }
+                }
+                while (byOwner.size > 0) {
+                    const [next] = orderByTurnPriority(
+                        [...byOwner.entries()].map(([ownerId, group]) => {
+                            const actor = allActorsById.get(ownerId);
+                            return {
+                                ownerId,
+                                group,
+                                side: group.side,
+                                speed: actor ? effectiveSpeedOf(actor) : 0,
+                                position: actor?.position,
+                            };
+                        })
+                    );
+                    byOwner.delete(next.ownerId);
+                    for (const intent of next.group.intents) {
+                        runQueuedIntent(intent, ctxFor(next.side));
+                    }
+                }
+            }
+            settleStasisHits();
         };
 
         // Start-of-turn GRANTS (buffs/shields/heals) must apply BEFORE the acting owner
         // casts, so a self-buff boosts the same turn it is granted (matching the game). Scoped to
         // the acting owner only. CHARGE intents are EXCLUDED — they keep their post-cast drain
-        // (see the drainIntentsFor('player')/drainIntentsFor('enemy') calls in the turn loop
+        // (see the drainReactions calls in the turn loop
         // below), on which the Cobalt charge ledger depends. Team-symmetric: drains both side
         // queues, so a ship on either side gets the same pre-cast ordering. Turn-block
         // suppression is inherited from drainQueue's isTurnBlocked filter — a stunned owner's
@@ -11252,8 +11364,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                     next.group.intents,
                     next.side === 'player' ? playerDrainCtx() : enemyDrainCtx()
                 );
-                drainIntentsFor('player');
-                drainIntentsFor('enemy');
+                drainReactions();
             }
         };
         const isStartOfRound = (i: Intent): boolean => i.ability.trigger === 'start-of-round';
@@ -11268,16 +11379,14 @@ export function runCombat(rawInput: CombatEngineInput): {
         const drainStartOfRound = (): void => {
             const startOfCombat = takeFromBothQueues(isStartOfCombat);
             const startOfRound = takeFromBothQueues(isStartOfRound);
-            drainIntentsFor('player');
-            drainIntentsFor('enemy');
+            drainReactions();
             drainInTurnOrder(startOfCombat);
             drainInTurnOrder(startOfRound);
         };
         /** The round tail, after `round-ended`. */
         const drainEndOfRound = (): void => {
             const endOfRound = takeFromBothQueues((i) => i.ability.trigger === 'end-of-round');
-            drainIntentsFor('player');
-            drainIntentsFor('enemy');
+            drainReactions();
             drainInTurnOrder(endOfRound);
         };
 
@@ -11306,7 +11415,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         // round-started: the canonical start-of-round trigger. Fires once per round, before any
         // turn-started of that round. In a multi-actor round turn-started fires once per actor, so
         // round-started is the reliable "start of round" signal. Emitted here (after the
-        // accumulator + drainIntentsFor are in scope) so its start-of-round intents execute BEFORE
+        // accumulator + drainReactions are in scope) so its start-of-round intents execute BEFORE
         // any turn; nothing between beginRound and here emits an event.
         // #341: the row's enemy-HP reading, captured HERE — before any turn of this round — so it
         // is the enemy HP% ENTERING the round, which is the semantics the field has always carried
@@ -11348,20 +11457,13 @@ export function runCombat(rawInput: CombatEngineInput): {
         bus.emit({ type: 'round-started', round: r });
         drainStartOfRound();
 
-        // §4.5 Stasis-break pending map. Constructed ONCE before the round loop and living for the
-        // whole fight — see its declaration for why a round-scoped map dropped the break entirely
-        // whenever the attacker acted after the victim.
-        // Keys: victimIds whose Stasis should be removed when their skip branch runs.
-        // Values: always true (present = break approved; absent = no break queued).
-        // An entry is added by the ATTACKER's turn block through `resolveStasisBreaks`, from two
-        // sources:
+        // §4.5 Stasis reductions (`stasisBreakPending`, declared before the round loop). An entry
+        // is added by the ATTACKER's turn block through `resolveStasisBreaks`, from two sources:
         //   - the anchor victim, via `resolveAnchorStasisBreak` below;
         //   - every covered footprint victim, inside `drivePositionalTurnApply`.
-        // Consumed inside each actor's own skip branch (focus / team / real-enemy): if the
-        // victim id is present, remove Stasis after the turn-skip logic. This ensures the
-        // victim STILL skips its current-round turn (invariant preserved), and is freed for
-        // its next turn (Stasis gone). The same-round drain guard (drainIntentsFor('player') / drainIntentsFor('enemy'))
-        // runs BEFORE the break resolution → on-attacked reactive sees isStasised=true (test iii).
+        // `drainReactions` spends every entry after the drain that follows the cast, so the hit's
+        // on-attacked reactions still see isStasised=true (test iii) and the victim, if its Stasis
+        // reached 0, acts later this round.
         // The re-apply check reads the ACTING attacker's own Stasis writes, so it answers "does
         // this cast's Stasis stand on this victim" and nothing else (`resolveStasisBreaks`). A Stasis
         // applied by a DIFFERENT ship after the mark is queued settles the mark at the apply seam
@@ -11376,7 +11478,7 @@ export function runCombat(rawInput: CombatEngineInput): {
          * and BEFORE the post-damage flush so a pending write meets the mark at the apply seam.
          */
         const resolveAnchorStasisBreak = (
-            anchorVictims: ReadonlySet<string>,
+            anchorVictims: Iterable<string>,
             castStasisStandsOn: (victimId: string) => boolean
         ): void => resolveStasisBreaks(anchorVictims, castStasisStandsOn);
         inTurnLoop = true;
@@ -11429,7 +11531,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // order, or a walked team ship that died) must NOT act when its turn comes up —
                 // no turn-started/turn-ended emit, no runPlayerTurn, no damage. A plain `continue`
                 // is correct: every per-iteration step below (turn-started emit, the kind-branch
-                // turn body, drainIntentsFor('player')/drainIntentsFor('enemy'), turn-ended) is THIS actor's own turn
+                // turn body, drainReactions, turn-ended) is THIS actor's own turn
                 // work, which a dead actor does none of. The pending decrement already happened in
                 // selectNext BEFORE the body runs, so the dead actor's pending is consumed
                 // and termination is preserved. Extra-action grants only fire from inside a live
@@ -11941,9 +12043,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // no opposing victim to resolve. The turn still RUNS (a repair/buff must
                             // land); only the victim-derived context is absent. Skipping here would
                             // permanently silence all 24 shipped ally-target support ships.
-                            // §4.5: inject break hook into runPlayerTurn. The hook marks stasisHitVictims
+                            // §4.5: inject break hook into runPlayerTurn. The hook marks turnStasisHitVictims
                             // only when the victim was stasised at hit time. The actual statusEngine
-                            // removal happens AFTER drainIntentsFor('player')/drainIntentsFor('enemy') (below).
+                            // reduction happens in drainReactions, after this turn's drain (below).
                             // §4.5 exemption: an attacker with the STATIC flag (Akula/Tygr) never
                             // wires the hook at all, so the victim is never recorded → no
                             // break-mark. A GATED attacker (Zenith) does wire it and is answered
@@ -12080,7 +12182,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                             let castDelivered: number | undefined;
                             // The drive's at-impact anchor marks. Undefined when no positional apply
                             // ran — see `resolveAnchorStasisBreak` for what stands in then.
-                            let driveAnchorStasis: ReadonlySet<string> | undefined;
+                            let driveAnchorStasis: readonly string[] | undefined;
                             if (positional) {
                                 // Opposing roster + victim wrapper come from the per-side bindings
                                 // (player→enemy here). pattern/target are non-null via the `positional` gate.
@@ -12263,17 +12365,6 @@ export function runCombat(rawInput: CombatEngineInput): {
                     } else {
                         // Stasised focus/attacker turn: skip the action body.
                         // §4.3 STASIS GATE.
-                        // §4.5 Deferred break: consume any pending Stasis break so this actor
-                        // acts on their NEXT scheduled turn. The break was pre-approved by a
-                        // direct hit in an earlier turn this round (stored in stasisBreakPending
-                        // after verifying the attacker did NOT re-inflict Stasis that same turn).
-                        // Consuming here (in the skip body) ensures the CURRENT skip still runs —
-                        // the victim misses this turn, then is free from the next round onward.
-                        if (stasisBreakPending.has(actor.id)) {
-                            stasisBreakPending.delete(actor.id);
-                            for (const name of STASIS_BUFFS)
-                                statusEngine.reduceTimedEnemyStatus(actor.id, name);
-                        }
                         // Synthesize a minimal no-action result so the post-round
                         // `focusTurns.length` guard does not throw (the focus actor
                         // was stasised — it did not act, but the round must still assemble).
@@ -12399,7 +12490,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 teamTurn.positionalScalars != null;
                             // Mirror of the focus site — see its note.
                             let teamCastDelivered: number | undefined;
-                            let teamDriveAnchorStasis: ReadonlySet<string> | undefined;
+                            let teamDriveAnchorStasis: readonly string[] | undefined;
                             if (teamPositional) {
                                 // Same direction as the focus site (player→enemy); keyed to THIS team
                                 // actor's position / parsed target / parsed pattern. Non-null via the gate.
@@ -12564,13 +12655,6 @@ export function runCombat(rawInput: CombatEngineInput): {
 
                             processExtraActionGrants(actor, teamTurn.extraActionGrants);
                         } // end dead-after-burst guard (!burstDestroyedActor)
-                    } else {
-                        // §4.5 Deferred break: consume any pending Stasis break (team skip).
-                        if (stasisBreakPending.has(actor.id)) {
-                            stasisBreakPending.delete(actor.id);
-                            for (const name of STASIS_BUFFS)
-                                statusEngine.reduceTimedEnemyStatus(actor.id, name);
-                        }
                     } // end stasis gate (walked-team branch)
                 } else if (actor.kind === 'enemy') {
                     // ====================================================================
@@ -12817,7 +12901,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // reordering of the enemy publish cannot silently reopen the gap on
                             // this side alone.
                             actingTurnCtx = { actorId: actor.id, ctx: enemyTurn.turnCtx };
-                            let enemyDriveAnchorStasis: ReadonlySet<string> | undefined;
+                            let enemyDriveAnchorStasis: readonly string[] | undefined;
                             // Total damage the enemy dealt to the bound target this turn. secondary/
                             // conditional are display sub-buckets ALREADY inside directDamage (do NOT
                             // re-add). detonationDamage is the player-turn detonate() portion (0 for a bare
@@ -13323,13 +13407,6 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 );
                             }
                         } // end dead-after-burst guard (!burstDestroyedActor)
-                    } else {
-                        // §4.5 Deferred break: consume any pending Stasis break (real-enemy skip).
-                        if (stasisBreakPending.has(actor.id)) {
-                            stasisBreakPending.delete(actor.id);
-                            for (const name of STASIS_BUFFS)
-                                statusEngine.reduceTimedEnemyStatus(actor.id, name);
-                        }
                     } // end stasis gate (real-enemy branch)
                 }
 
@@ -13338,8 +13415,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // status they apply obeys the same-turn decrement rule (the carrier's Post Turn
                 // below decrements it). A triggered effect therefore never boosts the hit that
                 // triggered it (the hit's damage was already computed in the turn body).
-                drainIntentsFor('player');
-                drainIntentsFor('enemy');
+                drainReactions();
 
                 // Post Turn (combat-system.md section 4): the status CARRIER decrements ALL its
                 // timed statuses by one turn — both its self-buff store and the debuff store of
@@ -13364,8 +13440,7 @@ export function runCombat(rawInput: CombatEngineInput): {
 
                 bus.emit({ type: 'turn-ended', actorId: actor.id, round: r });
                 // Drain intents enqueued by end-of-turn triggers before the next actor acts.
-                drainIntentsFor('player');
-                drainIntentsFor('enemy');
+                drainReactions();
 
                 // AFTER the turn ends (including its drains, so an on-death reactive
                 // that revives or kills still counts), check for a wipe. Breaking HERE — rather
@@ -13575,7 +13650,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         // of the round if a unit has Toxic Overflow and at least 1 stack of Corrosion, inflict
         // Corrosion I for 3 turns to all adjacent allies and remove Toxic Overflow." Runs BEFORE
         // the round-ended emit/drain below so each `corrosion-spread` event's enqueued reactions
-        // (Hemlock's self-heal, on-corrosion-spread) are flushed by the same drainIntentsFor calls.
+        // (Hemlock's self-heal, on-corrosion-spread) are flushed by the same drainReactions calls.
         // Team-symmetric: iterates every living actor. The holder's Toxic Overflow is
         // read out of the per-victim TIMED enemy-debuff store ONLY, via `holdsToxicOverflow` — see
         // the guard below for why that channel and not the broad name union; Corrosion lives on the

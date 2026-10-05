@@ -2,8 +2,8 @@
  * reInflictedStasisBreak.integration.test.ts — a Stasis the SAME cast re-inflicts suppresses that
  * cast's ANCHOR Stasis break, and the re-inflict is counted over EVERY sub-attack.
  *
- * THE RULE. A direct hit on a stasised anchor queues a §4.5 Stasis break, which shortens the
- * victim's Stasis by one turn when the victim's own skip branch runs. That break is DISCARDED when
+ * THE RULE. A direct hit on a stasised anchor shortens the victim's Stasis by one turn, before the
+ * victim's next turn (owner rulings 40 and 67). That break is DISCARDED when
  * the same cast re-inflicted Stasis on the victim: the fresh application wins and keeps its full
  * duration. Covered footprint victims follow the same per-victim rule
  * (`aoeStasisBreak.integration.test.ts`) — this file is about the anchor's sub-attack axis.
@@ -22,7 +22,7 @@
  * THE SEED. Landing is a hacking(150) vs security(100) roll — a coin flip — so the fixture pins
  * the RNG. `SEED` is chosen for one exact decision chain: round 1 lands Stasis; round 2 RESISTS on
  * sub-attack 0 and LANDS on sub-attack 1 (the re-inflict the break must yield to); round 3 resists
- * both (no re-inflict, so THAT round's break stands and frees the victim for round 4). The arm
+ * both (no re-inflict, so THAT round's breaks stand and free the victim in round 3). The arm
  * asserts the whole chain off the emitted events, so a fixture or RNG change that retargets the
  * seed fails loudly instead of quietly measuring something else.
  *
@@ -193,7 +193,7 @@ const run = (): Run => {
 };
 
 describe('a Stasis re-inflicted on a LATER sub-attack still suppresses the anchor break', () => {
-    it('keeps the fresh Stasis at full duration, so the victim acts in round 4', () => {
+    it('keeps the fresh Stasis at full duration, so the victim first acts in round 3', () => {
         const r = run();
 
         // The precondition, measured rather than assumed: round 2 resists the Stasis on sub-attack
@@ -210,11 +210,10 @@ describe('a Stasis re-inflicted on a LATER sub-attack still suppresses the ancho
         ]);
 
         // Round 2's cast hits a stasised anchor and re-inflicts Stasis(2) on its second sub-attack,
-        // so round 2's break is discarded and the fresh Stasis runs its full length. Round 3's cast
-        // lands nothing, so THAT round's break stands: the victim's Stasis clears at the end of
-        // round 3 and it acts in round 4 — and only round 4. Counting round 2's re-inflict before
-        // the drive has run misses the sub-attack-1 landing, shaves the fresh Stasis, and the
-        // victim also acts in round 3.
-        expect(r.acted).toEqual([4]);
+        // so round 2's breaks are discarded and the fresh Stasis runs its full length: the victim
+        // skips round 2 (Post-Turn 2 → 1). Round 3's cast lands nothing, so THAT round's hits
+        // stand and take the 1 left to 0 before the victim's turn: it acts in rounds 3 and 4.
+        // A shaved round-2 Stasis would free it in round 2.
+        expect(r.acted).toEqual([3, 4]);
     });
 });

@@ -75,13 +75,18 @@ const corrosionKit = (stacks: number, stasis = false): ShipSkills => ({
     ],
 });
 
-/** Snakeroot's real passive with an empty active, so he never casts. */
-const snakerootPassiveOnly = (): ShipSkills => ({
-    slots: [
-        { slot: 'active', abilities: [] },
-        ...realKit('Snakeroot').slots.filter((s) => s.slot === 'passive'),
-    ],
-});
+/** Snakeroot's real passive with an empty active, so he never casts. The kit-level flags
+ *  (`doesntBreakStasis`) come with it: the passive hit's Stasis exemption rides them. */
+const snakerootPassiveOnly = (): ShipSkills => {
+    const kit = realKit('Snakeroot');
+    return {
+        ...kit,
+        slots: [
+            { slot: 'active', abilities: [] },
+            ...kit.slots.filter((s) => s.slot === 'passive'),
+        ],
+    };
+};
 
 interface Seeder {
     stacks: number;

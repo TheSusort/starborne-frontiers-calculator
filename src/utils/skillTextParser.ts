@@ -3746,6 +3746,13 @@ export function parseStasisBreakExemption(
         : { conditions: [] };
 }
 
+/** True iff this skill text declares every attack of the unit is a critical hit (Tormenter,
+ *  Asphodel R2: "This Unit's attacks always critically hit"). */
+const ALWAYS_CRITS_RE = /\bthis unit['’]s attacks always critically hit\b/i;
+export function parseAlwaysCrits(text: string | null | undefined): boolean {
+    return !!text && ALWAYS_CRITS_RE.test(stripUnitTags(text));
+}
+
 /** True iff this skill text declares the unit is immune to charge loss effects (Lev). */
 const CHARGE_LOSS_IMMUNE_RE = /\bimmune to charge[- ]?loss\b/i;
 export function parseChargeLossImmune(text: string | null | undefined): boolean {

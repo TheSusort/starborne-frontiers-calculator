@@ -415,6 +415,9 @@ export interface CombatActor {
     /** When true, enemy-sourced charge removal is a no-op against this actor
      *  ("immune to charge loss effects"). Derived from ship skill text. */
     chargeLossImmune: boolean;
+    /** Every attack of this actor crits at a 100% rate, whatever its affinity matchup or crit
+     *  debuffs (ShipSkills.alwaysCrits). Absent → the ordinary capped crit rate. */
+    alwaysCrits?: boolean;
     /** Pre-fight combat-modifier baseline: squad-leader modifier
      *  channels accumulated BEFORE combat (additive pct points). Hidden, permanent,
      *  non-purgeable — deliberately NOT statuses (they would leak into logs/purge/cleanse).
@@ -435,6 +438,7 @@ export function createActor(
         stasisBreakExemptWhen?: Condition[];
         affinity?: AffinityName;
         chargeLossImmune?: boolean;
+        alwaysCrits?: boolean;
         preFight?: PreFightCombatModifiers;
     }
 ): CombatActor {

@@ -8,7 +8,7 @@
  *
  * The follow-up is ITSELF a debuff, so its own debuff-applied carries the reaction's id in
  * `debuffInflictedReactionChain` and the on-debuff-inflicted listener skips it for that reaction —
- * a precise self-chain guard (else the reaction would re-enter until MAX_INTENT_GENERATIONS
+ * a precise self-chain guard (else the reaction would re-enter until MAX_REACTION_CHAIN_DEPTH
  * throws), while debuffs from other reactive triggers (on-crit/on-attacked) chain like cast
  * inflictions.
  *
@@ -90,14 +90,14 @@ describe('Warden Out. Damage Down II — self-inflicted-debuff reactive (Ship-ki
         });
         // attackingEnemy hits Warden every round, arming her "when directly damaged" Corrosion I —
         // her only INFLICTED debuff (her active only APPLIES Provoke, see the test below).
-        // Completing at all proves no MAX_INTENT_GENERATIONS throw (the self-chain is guarded).
+        // The self-chain is guarded: see the reaction counts asserted below.
         const result = runCombat({
             ...makeInput(attackingEnemy({ stats: { hp: 10_000_000 } })),
             bus,
         });
         expect(result.rounds).toHaveLength(3);
-        // BOUNDED too — a runaway self-chain would be caught by the generation cap long before any
-        // sane count.
+        // BOUNDED too — a runaway self-chain would run to MAX_REACTION_CHAIN_DEPTH every round,
+        // far past this count.
         expect(outDd).toBeGreaterThan(0);
         expect(outDd).toBeLessThanOrEqual(3);
     });

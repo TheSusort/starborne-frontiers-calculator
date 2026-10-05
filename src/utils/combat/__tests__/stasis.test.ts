@@ -1351,7 +1351,7 @@ describe('B3 Task 1 — reactive suppression: (d) non-stasised focus — on-atta
 
 describe('B3 Task 2 — direct-damage break', () => {
     // (i) A direct firing hit breaks Stasis
-    it('(i) direct hit reduces Stasis by one turn (not full removal): victim resumes one round later than a full break would give', () => {
+    it('(i) direct hit reduces Stasis by one turn (not full removal), immediately: victim resumes in round 2', () => {
         idc = 0;
         /**
          * Setup:
@@ -1360,17 +1360,16 @@ describe('B3 Task 2 — direct-damage break', () => {
          *   - killer (speed=200, attack=10000): kills stasis-bot in round 1.
          *   - focus (speed=100, attack=5000): receives Stasis(3) in round 1.
          *     In round 2 a breaker-enemy (speed=150) fires a plain direct hit at focus.
-         *     This should break Stasis → focus acts in round 3 (not round 4/5).
+         *     This should break Stasis → focus acts in round 2 (not round 3/4).
          *   - breaker-enemy (speed=150): basicAttack targeting 'front' (the focus).
          *     Acts between killer and focus.
          *
-         * A direct hit REDUCES the Stasis turn count by one instead of clearing it, so:
-         *   R1: Stasis(3) applied; breaker hits → break decrement 3→2, then Post-Turn 2→1.
-         *   R2: breaker hits → break decrement 1→0 (expired); focus still skipped this round.
-         *   R3: focus is free → fires.
+         * A direct hit REDUCES the Stasis turn count by one, as it lands (owner ruling 40), so:
+         *   R1: Stasis(3) applied; breaker hits → 3→2; focus skips, Post-Turn 2→1.
+         *   R2: breaker hits → 1→0 (expired) before the focus's turn → focus fires.
          * Compared to an untouched Stasis(3) (skips R1/R2/R3, fires R4), the every-round breaking
-         * hits shave it to a round-3 resume — one round later than the OLD full-removal rule (which
-         * cleared Stasis on the first hit and resumed in round 2).
+         * hits shave it to a round-2 resume. A full removal on the first hit would resume in round 2
+         * too, so the Stasis(3)-not-cleared half is pinned by R1: the round-1 hit leaves 2 turns.
          *
          * numRounds:4. Use __testTapIsStasised to confirm Stasis is gone by the end of the run.
          */
@@ -1461,13 +1460,13 @@ describe('B3 Task 2 — direct-damage break', () => {
         expect(focusFiredRounds).not.toContain(1);
 
         // Turn order: stasis-bot(300) → killer(200) → breaker-enemy(150) → focus(100).
-        // Reduce-by-one (see the trace above): resumes round 3. Full removal would resume round 2;
-        // an untouched Stasis(3) would resume round 4. Pinned to round 3 — a loose "≤2" would pass
-        // under a full-removal regression, "≥4" under a no-break regression.
+        // Reduce-by-one, immediately (see the trace above): resumes round 2. An untouched
+        // Stasis(3) would resume round 4, and a reduction held until the victim's skipped turn
+        // would resume round 3.
         const firstFiredRound = focusFiredRounds.length > 0 ? Math.min(...focusFiredRounds) : 999;
-        expect(firstFiredRound).toBe(3);
+        expect(firstFiredRound).toBe(2);
 
-        // Post-run: Stasis should be gone (reduced to 0 by round 2, freed from round 3).
+        // Post-run: Stasis should be gone (reduced to 0 in round 2).
         expect(capturedIsStasised).toBeDefined();
         expect(capturedIsStasised!('attacker')).toBe(false);
     });
@@ -1708,8 +1707,8 @@ describe('B3 Task 2 — direct-damage break', () => {
          * numRounds=4.
          *
          * Without break: focus fires round 4 (after 3 skips).
-         * With reduce-by-one (breaker hits every round): R1 3→break2→post1; R2 1→break0 expired;
-         * focus fires round 3.
+         * With reduce-by-one (breaker hits every round, before the focus): R1 3→2→post1;
+         * R2 1→0 before the focus's turn → focus fires round 2.
          */
         const { events } = run({
             attack: 0,
@@ -1792,9 +1791,9 @@ describe('B3 Task 2 — direct-damage break', () => {
         expect(focusFiredRounds).not.toContain(1);
         // The breaker (a DIFFERENT attacker from the original applier) reduces Stasis each round.
         // Turn order: stasis-bot(300) → killer(200) → breaker-enemy(150) → focus(100).
-        // Reduce-by-one → focus fires round 3 (full removal would give round 2; no break, round 4).
+        // Reduce-by-one, immediately → focus fires round 2 (no break: round 4).
         const firstFiredRound = focusFiredRounds.length > 0 ? Math.min(...focusFiredRounds) : 999;
-        expect(firstFiredRound).toBe(3);
+        expect(firstFiredRound).toBe(2);
     });
 
     // (v) break regardless of minimal damage
@@ -1887,10 +1886,11 @@ describe('B3 Task 2 — direct-damage break', () => {
         // Stasis applied in round 1 (speed 300 > 200 > 100).
         expect(focusFiredRounds).not.toContain(1);
         // Turn order: stasis-bot(300) → killer(200) → tiny-attacker(150) → focus(100).
-        // The minimal-damage hit still reduces Stasis each round (reduce-by-one): R1 3→break2→post1;
-        // R2 1→break0 expired; focus fires round 3. Any direct hit reduces Stasis regardless of damage.
+        // The minimal-damage hit still reduces Stasis each round (reduce-by-one): R1 3→2→post1;
+        // R2 1→0 before the focus's turn; focus fires round 2. Any direct hit reduces Stasis
+        // regardless of damage.
         const firstFiredRound = focusFiredRounds.length > 0 ? Math.min(...focusFiredRounds) : 999;
-        expect(firstFiredRound).toBe(3);
+        expect(firstFiredRound).toBe(2);
 
         // Confirm attack was minimal but still connected (non-vacuous: the attacked event fired)
         const attacked = events.filter(
@@ -2392,13 +2392,13 @@ describe("B3 Task 3 — Akula don't-break", () => {
         }
     });
 
-    it('(control) same fixture WITHOUT doesntBreakStasis → Stasis IS reduced, focus fires round 3', () => {
+    it('(control) same fixture WITHOUT doesntBreakStasis → Stasis IS reduced, focus fires round 2', () => {
         idc = 0;
         /**
          * Identical to the activation test above EXCEPT doesntBreakStasis is NOT set on
          * akula-enemy. Without the flag the breaker behaves like any other attacker and reduces
-         * Stasis each round (reduce-by-one): R1 3→break2→post1; R2 1→break0 expired; focus fires
-         * round 3 (vs round 4 when the flag suppresses every break).
+         * Stasis each round (reduce-by-one): R1 3→2→post1; R2 1→0 before the focus's turn; focus
+         * fires round 2 (vs round 4 when the flag suppresses every break).
          */
         const { events } = run({
             attack: 0,
@@ -2479,9 +2479,9 @@ describe("B3 Task 3 — Akula don't-break", () => {
             .filter((e) => e.actorId === 'attacker')
             .map((e) => e.round);
 
-        // Without the flag: normal-enemy reduces Stasis each round → focus fires in round 3 (not 4).
-        expect(focusFiredRounds).not.toContain(1); // still stasised round 1 (break pending)
+        // Without the flag: normal-enemy reduces Stasis each round → focus fires in round 2 (not 4).
+        expect(focusFiredRounds).not.toContain(1); // round 1's hit leaves 2 of the 3 turns
         const firstFiredRound = focusFiredRounds.length > 0 ? Math.min(...focusFiredRounds) : 999;
-        expect(firstFiredRound).toBe(3); // reduce-by-one frees focus → fires round 3
+        expect(firstFiredRound).toBe(2); // reduce-by-one frees focus → fires round 2
     });
 });

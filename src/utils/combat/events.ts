@@ -109,7 +109,7 @@ export type CombatEvent =
            *  actors, since every actor's first sub-attack is also 0.
            *
            *  Exists so a reactive intent enqueued during sub-attack k can be gated at sub-attack
-           *  scope: intents from all N sub-attacks drain together at end of turn (drainIntentsFor),
+           *  scope: intents from all N sub-attacks drain together at end of turn (drainReactions),
            *  long after the engine's ambient `currentSubAttackIndex` has been cleared, so the
            *  identity has to travel on the event. */
           subAttackIndex?: number;
@@ -143,12 +143,12 @@ export type CombatEvent =
      *  II on the `dot-applied` twin). The `on-debuff-inflicted` listener skips an ability whose
      *  OWN id is in the chain, so a reaction whose follow-up is itself a debuff cannot
      *  re-trigger itself, directly or through another of the owner's reactions (an unbounded
-     *  chain would otherwise hit MAX_INTENT_GENERATIONS). Every OTHER on-debuff-inflicted
+     *  chain would otherwise run to MAX_REACTION_CHAIN_DEPTH). Every OTHER on-debuff-inflicted
      *  ability of the owner still sees the debuff: the Insidiousness implant reacts to Warden's
      *  reactive Out. Damage Down II as to a cast-inflicted one, and rolls for it separately
      *  from the cast (`Ability.procScope` `'per-cast'`). Each ability in a chain fires at most
      *  once, so chain LENGTH is bounded by the owner's count of such abilities;
-     *  MAX_INTENT_GENERATIONS bounds only the depth of a drain, not the number of firings.
+     *  MAX_REACTION_CHAIN_DEPTH bounds only the depth of a chain, not the number of firings.
      *  Debuffs from OTHER reactive triggers (on-crit/on-attacked) carry no chain, so the chain
      *  guard lets every on-debuff-inflicted ability see them.
      *  `viaAllyDebuffInflictedReaction`: the sibling brand for `on-ally-debuff-inflicted`
@@ -365,12 +365,11 @@ export type CombatEvent =
            *  Set only by the leech sites; a cast or reactive grant leaves it absent. */
           uncast?: true;
       } & ReactiveStamp)
-    /** LOG-ONLY: a drain-time REACTIVE damage proc resolved (applyReactiveDamage → creditDamage).
-     *  A reactive damage credits its total but emits NO `ability-performed` (chain guard — an
-     *  ability-performed would re-trigger on-crit/on-attacked/on-ally-crit listeners and loop).
-     *  This event exists SOLELY so buildCombatLog can surface the proc: NO combat listener
-     *  subscribes to it, so it can never chain. `sourceId` = the reacting owner; `targetId` = the
-     *  victim; `amount` = the mitigated/credited damage; `didCrit` when the proc crit. */
+    /** A drain-time REACTIVE damage proc or counter-attack resolved. It emits NO
+     *  `ability-performed`, which would re-trigger the on-crit / on-deal-damage cast riders.
+     *  buildCombatLog surfaces it, and `on-ally-crit` subscribes for a critting one ("When an ally
+     *  critically hits" counts passive damage — ruling 53). `sourceId` = the reacting owner;
+     *  `targetId` = the victim; `amount` = the mitigated/credited damage; `didCrit` when it crit. */
     | ({
           type: 'reactive-damage-performed';
           sourceId: string;
@@ -425,8 +424,7 @@ export type CombatEvent =
      *  The reactive cleanse credits `cleanseCount` but emits NO `cleanse-performed` (that event
      *  drives the owner's own on-own-cleanse listeners). buildCombatLog renders it, and the
      *  OPPOSING side's `on-enemy-cleansed` reactions (Pestilence, Larkspur, Grif …) hear a
-     *  remove-mode one — never a `mode: 'reduce-duration'` one, nor one flagged
-     *  `viaEnemyCleanseReaction` (the depth-1 chain guard). `casterId` = the reacting owner;
+     *  remove-mode one — never a `mode: 'reduce-duration'` one. `casterId` = the reacting owner;
      *  `perTarget` = per-recipient count of debuffs ACTUALLY removed (only recipients with >= 1
      *  removal are listed). */
     | ({
@@ -441,9 +439,6 @@ export type CombatEvent =
            *  how much — the log renders the two differently ("cleansed 2" vs "-1 turn on 2"). */
           mode?: 'reduce-duration';
           durationTurns?: number;
-          /** This cleanse was itself provoked by an `on-enemy-cleansed` reaction (the intent's
-           *  `fromEnemyCleanseReaction`), so it wakes no further one. */
-          viaEnemyCleanseReaction?: true;
       } & ReactiveStamp)
     /** ASSEMBLER-ONLY: one `Repair Over Time` tick restored HP to its holder (playerTurn's
      *  `tickHot`). NOT a repair event and NOT a log event — it exists for exactly one consumer,
@@ -989,6 +984,14 @@ export type CombatEvent =
            *  per-hit loop index when the caller supplies no sub-attack identity. Optional here
            *  only so hand-built fixture events can omit it. */
           subAttackIndex?: number;
+          /** Present on the `attacked` a counter-attack or reactive damage proc raises (every
+           *  non-DoT, non-Bomb hit is direct damage — ruling 36): a fresh id per such hit, so the
+           *  victim's once-per-attack guards treat each one as its own attack. Absent on a cast
+           *  hit. The combat log renders these hits from `reactive-damage-performed` instead. */
+          reactiveHitId?: number;
+          /** The hit is a counter-attack. A counter never wakes a counter (#163): the `counter`
+           *  reaction ignores an `attacked` carrying this. Every other reaction hears it. */
+          fromCounter?: true;
       };
 
 export type CombatEventType = CombatEvent['type'];
