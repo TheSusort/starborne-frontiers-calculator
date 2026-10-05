@@ -4229,7 +4229,9 @@ const DocumentationPage: React.FC = () => {
                                     <li>
                                         A fight lasts at most 30 rounds. If both teams still have a
                                         ship standing when the last round ends, the enemy wins, as a
-                                        timeout is a defeat in the game
+                                        timeout is a defeat in the game. The enemy also wins when
+                                        both teams lose their last ship in the same round, so every
+                                        fight has a winner
                                     </li>
                                     <li>
                                         Raise the run count to repeat the fight over that many

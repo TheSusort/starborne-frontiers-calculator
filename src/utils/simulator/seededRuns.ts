@@ -1,6 +1,7 @@
 import {
     simulateBattle,
     type BattleResult,
+    type BattleWinner,
     type BattleSimulationInput,
 } from '../calculators/battleSimulator';
 import { resetRateGateRng, setupKeyedRng } from '../calculators/rateAccumulator';
@@ -39,7 +40,7 @@ export interface ActorTotals {
 
 export interface SeedRunSummary {
     seed: number;
-    winner: 'player' | 'enemy' | 'draw';
+    winner: BattleWinner;
     lastRound: number;
     /** Keyed by engine actorId (`p:<shipId>:<i>` / `e:<shipId>:<i>`, player index 0 is FOCUS_ID). */
     perActor: Record<string, ActorTotals>;
@@ -52,7 +53,7 @@ export interface SeedSetAggregate {
      *  and consumers never need to name actors by raw actorId. */
     roster: BattleResult['roster'];
     runs: SeedRunSummary[];
-    wins: { player: number; enemy: number; draw: number };
+    wins: Record<BattleWinner, number>;
     meanRounds: number;
     medianRounds: number;
     perActorMean: Record<string, ActorTotals>;
@@ -108,7 +109,7 @@ export function aggregateRuns(
     baseSeed: number,
     count: number
 ): SeedSetAggregate {
-    const wins = { player: 0, enemy: 0, draw: 0 };
+    const wins: Record<BattleWinner, number> = { player: 0, enemy: 0 };
     for (const run of runs) wins[run.winner]++;
 
     const rounds = runs.map((r) => r.lastRound);

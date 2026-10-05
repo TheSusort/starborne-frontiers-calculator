@@ -51,10 +51,9 @@ describe('sim goldens (BattleResult snapshots)', () => {
 
     // SP-U U5: intent-guard for the death-path fixture (beyond the snapshot) — it MUST end in a
     // decisive player win on a real wipe strictly inside the window, with ≥1 ship destroyed.
-    it('deathPath terminates on a decisive wipe (not a draw)', () => {
+    it('deathPath terminates on a decisive wipe (not the round limit)', () => {
         const { rounds, outcome } = simulateBattle(deathPath());
         expect(outcome.winner).toBe('player');
-        expect(outcome.winner).not.toBe('draw');
         expect(outcome.lastRound).toBeLessThan(8);
         // At least one ship shows as not-alive (a death) somewhere in the trimmed rounds.
         const anyDeath = rounds.some((r) => r.ships.some((s) => s.alive === false));

@@ -17,7 +17,7 @@ vi.mock('../../utils/ship/combatStats', () => ({
 
 const fakeBattleResult: BattleResult = {
     rounds: [],
-    outcome: { winner: 'draw', lastRound: 0 },
+    outcome: { winner: 'enemy', lastRound: 0 },
     roster: [],
     combatLog: [],
 };
@@ -29,7 +29,7 @@ const fakeAggregate = (baseSeed = 0, count = 0): SeedSetAggregate => ({
     count,
     roster: [],
     runs: [],
-    wins: { player: 0, enemy: 0, draw: 0 },
+    wins: { player: 0, enemy: 0 },
     meanRounds: 0,
     medianRounds: 0,
     perActorMean: {},

@@ -16,6 +16,6 @@ describe('sim-golden fixtures run', () => {
         const r = simulateBattle(build());
         expect(r.roster.length).toBeGreaterThan(0);
         expect(r.rounds.length).toBeGreaterThan(0);
-        expect(['player', 'enemy', 'draw']).toContain(r.outcome.winner);
+        expect(['player', 'enemy']).toContain(r.outcome.winner);
     });
 });

@@ -9,7 +9,7 @@ const aggregate = (baseSeed: number, count: number): SeedSetAggregate => ({
     count,
     roster: [],
     runs: [],
-    wins: { player: 0, enemy: 0, draw: 0 },
+    wins: { player: 0, enemy: 0 },
     meanRounds: 0,
     medianRounds: 0,
     perActorMean: {},

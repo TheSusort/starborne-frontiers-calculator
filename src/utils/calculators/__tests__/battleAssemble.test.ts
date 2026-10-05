@@ -346,23 +346,22 @@ describe('assembleBattleResult — death + outcome + trim', () => {
         expect(result.rounds.map((r) => r.round)).toEqual([1, 2]);
     });
 
-    it('does not declare a spurious winner when one side is empty (empty enemy side)', () => {
-        // Only player actors present; enemy side empty. [].every(...) === true would
-        // mark the empty side as "wiped" at round 1 and award a bogus winner. The guard
-        // (members.length > 0) makes this fail safe to draw at numRounds instead.
+    it('refuses a roster with an empty side rather than declaring a winner (empty enemy side)', () => {
+        // Only player actors present; enemy side empty. [].every(...) === true would mark the
+        // empty side as "wiped" at round 1 and award a bogus winner; a fight with nobody on one
+        // side has no winner at all, so the assembler throws.
         const playerOnlyRoster: ReturnType<typeof roster> = [
             { actorId: 'attacker', side: 'player', name: 'Focus', position: 'M4', maxHp: 10000 },
             { actorId: 'player-team', side: 'player', name: 'Team', position: 'M3', maxHp: 10000 },
         ];
-        const result = assembleBattleResult({
-            events: [],
-            perRoundPerTarget: {},
-            roster: playerOnlyRoster,
-            numRounds: 3,
-        });
-        expect(result.outcome.winner).toBe('draw');
-        expect(result.outcome.lastRound).toBe(3);
-        expect(result.rounds.map((r) => r.round)).toEqual([1, 2, 3]);
+        expect(() =>
+            assembleBattleResult({
+                events: [],
+                perRoundPerTarget: {},
+                roster: playerOnlyRoster,
+                numRounds: 3,
+            })
+        ).toThrow(/both sides/);
     });
 
     it('returns an enemy win at numRounds when neither side fully wiped (the round limit is a defeat)', () => {

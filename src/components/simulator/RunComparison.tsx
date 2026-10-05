@@ -10,6 +10,7 @@ import {
     type PinnedBaseline,
 } from '../../utils/simulator/compareRuns';
 import type { SeedSetAggregate } from '../../utils/simulator/seededRuns';
+import type { BattleWinner } from '../../utils/calculators/battleSimulator';
 import {
     pairedDelta,
     pairedSeries,
@@ -35,7 +36,6 @@ const statLabel = (stat: string): string => STATS[stat as StatName]?.label ?? st
 const WINNER_LABEL: Record<DivergingSeed['baselineWinner'], string> = {
     player: 'You',
     enemy: 'Enemy',
-    draw: 'Draw',
 };
 
 /** A signed delta's colour: green when it favours the player side, red when it costs the player
@@ -167,7 +167,7 @@ const RunComparison: React.FC<Props> = ({
             ])
         );
 
-        const winDelta = (side: 'player' | 'enemy' | 'draw'): PairedDelta => {
+        const winDelta = (side: BattleWinner): PairedDelta => {
             const series = pairedSeries(baseline.aggregate, current, (run) =>
                 run.winner === side ? 1 : 0
             );
@@ -200,7 +200,6 @@ const RunComparison: React.FC<Props> = ({
             actorIds,
             playerWins: winDelta('player'),
             enemyWins: winDelta('enemy'),
-            drawWins: winDelta('draw'),
             rounds: roundsDelta,
             actors: Object.fromEntries(
                 actorIds.map((actorId) => [
@@ -230,14 +229,6 @@ const RunComparison: React.FC<Props> = ({
             decimals: 0,
             direction: 'lowerGood',
             delta: deltas.enemyWins,
-        },
-        {
-            metric: 'Draws',
-            baselineValue: baseline.aggregate.wins.draw,
-            currentValue: current.wins.draw,
-            decimals: 0,
-            direction: 'neutral',
-            delta: deltas.drawWins,
         },
         {
             metric: 'Mean rounds',

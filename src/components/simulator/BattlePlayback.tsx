@@ -22,7 +22,7 @@ interface BattlePlaybackProps {
 // eslint-disable-next-line react-refresh/only-export-components
 export const outcomeLabel = (result: BattleResult): string => {
     const { winner } = result.outcome;
-    return winner === 'player' ? 'Your team wins' : winner === 'enemy' ? 'Enemy wins' : 'Draw';
+    return winner === 'player' ? 'Your team wins' : 'Enemy wins';
 };
 
 /**
@@ -55,13 +55,7 @@ const BattlePlayback: React.FC<BattlePlaybackProps> = ({ result, round }) => {
                 title="Outcome"
                 value={outcomeLabel(result)}
                 subtitle={`Round ${result.outcome.lastRound}`}
-                color={
-                    result.outcome.winner === 'player'
-                        ? 'green'
-                        : result.outcome.winner === 'enemy'
-                          ? 'red'
-                          : 'yellow'
-                }
+                color={result.outcome.winner === 'player' ? 'green' : 'red'}
             />
 
             {curRound && round === undefined && (

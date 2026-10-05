@@ -2,7 +2,7 @@
  * The round limit is a defeat (owner ruling 61; docs/combat-system.md §1, "Round limit exceeded →
  * Defeat"): when the last round ends with both sides still holding a living ship, the enemy wins.
  * A wipe before the limit still decides the fight the ordinary way, and a same-round mutual wipe
- * stays a draw (not covered by the ruling).
+ * is also an enemy win. There is no draw.
  *
  * Real kits through `simulateBattle`, the Simulator page's path.
  */
@@ -104,19 +104,72 @@ describe('round limit: both sides alive at the last round → the enemy wins', (
     });
 });
 
-describe('round limit: outcomes the ruling does not cover', () => {
-    const roster = [
-        {
-            actorId: 'attacker',
-            side: 'player' as const,
-            name: 'P',
-            position: 'M4' as const,
-            maxHp: 1,
+describe('a same-round mutual wipe → the enemy wins', () => {
+    // The wearer of two Reflect pieces (10% reflected) is one-shot by a faster enemy; the bounce of
+    // the killing hit is enough to destroy that 1-HP-scale enemy too, inside the same turn.
+    const reflectWearer = (id: string, speed: number): BattlePlacement => ({
+        ...placement('Bedrock', id, 'M4', { attack: 1, hp: 10_000, speed }),
+        ship: {
+            ...placement('Bedrock', id, 'M4', { attack: 1, hp: 10_000, speed }).ship,
+            equipment: { weapon: `${id}-r0`, hull: `${id}-r1` },
         },
-        { actorId: 'e1', side: 'enemy' as const, name: 'E', position: 'M4' as const, maxHp: 1 },
-    ];
+    });
+    const reflectPieces = (id: string) =>
+        Object.fromEntries(
+            (['weapon', 'hull'] as const).map((slot, i) => [
+                `${id}-r${i}`,
+                {
+                    id: `${id}-r${i}`,
+                    slot,
+                    level: 16,
+                    stars: 6,
+                    rarity: 'legendary' as const,
+                    mainStat: null,
+                    subStats: [],
+                    setBonus: 'REFLECT',
+                },
+            ])
+        );
+    const mutual = (wearerSide: 'player' | 'enemy') => {
+        setupKeyedRng(1);
+        const wearer = reflectWearer('w', 100);
+        const killer = placement('Bedrock', 'k', 'M4', { attack: 1e9, hp: 100, speed: 200 });
+        const pieces = reflectPieces('w');
+        const result = simulateBattle(
+            {
+                playerTeam: [wearerSide === 'player' ? wearer : killer],
+                enemyTeam: [wearerSide === 'player' ? killer : wearer],
+                rounds: 5,
+            },
+            (id) => pieces[id]
+        );
+        const deaths = result.rounds[result.rounds.length - 1].ships.filter((s) => !s.alive);
+        return { outcome: result.outcome, deaths: deaths.length };
+    };
 
-    it('a same-round mutual wipe is still a draw', () => {
+    it('wearer on the player side: both ships die in round 1, the enemy wins', () => {
+        const { outcome, deaths } = mutual('player');
+        expect(deaths).toBe(2);
+        expect(outcome).toEqual({ winner: 'enemy', lastRound: 1 });
+    });
+
+    it('enemy-side twin (wearer on the enemy side): still the enemy wins', () => {
+        const { outcome, deaths } = mutual('enemy');
+        expect(deaths).toBe(2);
+        expect(outcome).toEqual({ winner: 'enemy', lastRound: 1 });
+    });
+
+    it('the assembler itself: both sides destroyed in the same round is an enemy win', () => {
+        const roster = [
+            {
+                actorId: 'attacker',
+                side: 'player' as const,
+                name: 'P',
+                position: 'M4' as const,
+                maxHp: 1,
+            },
+            { actorId: 'e1', side: 'enemy' as const, name: 'E', position: 'M4' as const, maxHp: 1 },
+        ];
         const result = assembleBattleResult({
             events: [
                 { type: 'ship-destroyed', actorId: 'attacker', round: 2 },
@@ -126,16 +179,19 @@ describe('round limit: outcomes the ruling does not cover', () => {
             roster,
             numRounds: 5,
         });
-        expect(result.outcome).toEqual({ winner: 'draw', lastRound: 2 });
+        expect(result.outcome).toEqual({ winner: 'enemy', lastRound: 2 });
     });
 
-    it('a roster with an empty side reaches the limit as a draw (nobody to win)', () => {
-        const result = assembleBattleResult({
-            events: [],
-            perRoundPerTarget: {},
-            roster: roster.filter((r) => r.side === 'player'),
-            numRounds: 3,
-        });
-        expect(result.outcome).toEqual({ winner: 'draw', lastRound: 3 });
+    it('a roster missing a side is refused rather than given a winner', () => {
+        expect(() =>
+            assembleBattleResult({
+                events: [],
+                perRoundPerTarget: {},
+                roster: [
+                    { actorId: 'attacker', side: 'player', name: 'P', position: 'M4', maxHp: 1 },
+                ],
+                numRounds: 3,
+            })
+        ).toThrow(/both sides/);
     });
 });
