@@ -3939,7 +3939,7 @@ export function runCombat(rawInput: CombatEngineInput): {
     //
     //  PATH A — during-turn deaths (on-destroyed self, on-ally-destroyed ally → Harvester).
     //    These fire from applyIncomingToTarget / the general death path, which run DURING an
-    //    actor's turn. They are followed by the per-turn drainIntentsFor(side) (drain point (b))
+    //    actor's turn. They are followed by the per-turn drainReactions (drain point (b))
     //    while the selection loop is still walking → the grant CAN bump the granter's pending
     //    count via processExtraActionGrants(granter, …), and the selection loop then re-picks the
     //    granter at its live speed-rank among the remaining actors (a same-round extra turn).
@@ -10804,16 +10804,251 @@ export function runCombat(rawInput: CombatEngineInput): {
             }
         };
 
-        // Drain the intent queue FIFO. Listeners may have enqueued during the emission
-        // that triggered this drain; executed intents may emit events (chaining) that
-        // enqueue MORE — those form the next generation. A generation is the batch
-        // present when a drain pass starts; the loop processes one generation per pass
-        // and stops when the queue is empty. MAX_INTENT_GENERATIONS converts a
-        // pathological self-feeding loop into a thrown error rather than a hang.
-        // Side-parameterized: every field this builds that differs by side is read off `sideCtx`
-        // (see `ReactiveSideCtx` for the full set) — `recipientIds` arrives as executeIntent's
-        // `ctx.playerIds`. `drainIntentsFor('player')` and `drainIntentsFor('enemy')` each bind
-        // their own queue and their own sideCtx.
+        /** Resolve one queued intent with its side's drain ctx: the turn-block and chain-cap
+         *  filters, then executeIntent. Shared by every drain. Side-parameterized: every field
+         *  this builds that differs by side is read off `sideCtx` (see `ReactiveSideCtx` for the
+         *  full set) — `recipientIds` arrives as executeIntent's `ctx.playerIds`. */
+        const runQueuedIntent = (intent: Intent, sideCtx: ReactiveSideCtx): void => {
+            // §4.4 TURN-BLOCK reactive suppression: a turn-blocked unit's reactives are
+            // FULLY locked out. Drop every queued intent whose OWNER is currently turn-blocked (Stasis OR
+            // Disable) — on-attacked, on-ally-attacked, on-crit, on-enemy-destroyed, AND start-of-round
+            // self-buffs (Chakara via round-started) all carry intent.ownerId, so this ONE filter covers
+            // every reactive type for BOTH sides (every drain resolves through this runner).
+            // Filtered at the DRAIN, before executeIntent. Listeners only ENQUEUE (pure), so dropping an
+            // intent leaves NO partial state. Incoming effects (damage/heals/ally buffs/DoT ticks) are
+            // UNTOUCHED — only the turn-blocked unit's OWN outgoing intents drop.
+            // NOTE: Stasis-only sites (break-on-hit, damage-immunity) intentionally keep using isStasised
+            // directly — Disable never breaks and does not grant immunity.
+            //
+            // TWO CARVE-OUTS, both owner rulings (2026-09-15), because what a turn-block
+            // switches off is the ship's own PASSIVE SKILL:
+            //  - EQUIPMENT. A gear-set bonus or implant effect is not the ship's passive
+            //    skill and keeps firing. It shares the passive slot with the ship's
+            //    refits, so the provenance rides the ability — read `Ability.source`.
+            //  - THE OWNER'S OWN DEATH REACTION. Death releases it: a ship that dies
+            //    stasised still resolves Martyrdom's killer-Disable / Salvation's repair.
+            //    Same `fromOwnDeath` stamp that exempts them from executeIntent's
+            //    dead-owner gate.
+            if (
+                isTurnBlocked(intent.ownerId) &&
+                intent.ability.source !== 'equipment' &&
+                !intent.eventCtx?.fromOwnDeath
+            ) {
+                return;
+            }
+            // The runaway cap (ruling 66): a chain this deep is a loop, not play.
+            const depth = intent.chainDepth ?? 0;
+            if (depth > MAX_REACTION_CHAIN_DEPTH) {
+                reactionChainProbe.dropped++;
+                return;
+            }
+            if (depth > reactionChainProbe.maxDepth) reactionChainProbe.maxDepth = depth;
+            executeIntent(intent, {
+                round: r,
+                statusEngine,
+                bus,
+                // Combat-log attribution: the actor whose turn is active when this
+                // reactive intent drains. Set per turn (actingActorId); undefined for a
+                // round-1 start-of-round reactive or a post-round death-drain reaction
+                // (no turn active). The executor's stamping bus brands every reactive
+                // emission with this so a later builder nests the reaction under the
+                // triggering turn, not the reactor's own turn.
+                duringTurnOf: actingActorId,
+                reactionFiringId: ++reactionFiringSeq,
+                corrosionEntries,
+                infernoEntries,
+                genericDoTEntries,
+                pendingBombs,
+                runtimes: sideCtx.runtimes,
+                grantAllyCharges: sideCtx.grantAllyCharges,
+                removeEnemyCharges: sideCtx.removeEnemyCharges,
+                removeChargesFrom: sideCtx.removeChargesFrom,
+                grantExtraAction,
+                playerIds: sideCtx.recipientIds,
+                // Drain `enemy-buff` gates read the union of the OWNER's opposing
+                // side's self-buffs (names only).
+                enemyAttackerIds: sideCtx.opposingIds,
+                isActorAlive,
+                selfShieldFullFor: isSelfShieldFull,
+                // Name map for the live `ally-on-team` roster check. With no ship names
+                // supplied the map is empty → buildDrainContext leaves allyTeamNames
+                // undefined → assume-met fallback.
+                nameByActorId: nameByActorId.size > 0 ? nameByActorId : undefined,
+                lastTurnCtxByActor,
+                // #396: the resolver `liveHealChannelPct` needs to shadow the live
+                // enemy-applied heal half against the actor's own named statuses.
+                selfNamedBuffsFor: (id) => victimSelfBuffs(statusEngine, id, selfBuffLookup),
+                reactiveDealtByOwner,
+                enemyType,
+                // Prophet (#591): side-agnostic — the same accumulator serves either
+                // drain side, so no per-side threading through `sideCtx` is needed.
+                addShieldPenBonus,
+                // Bomb damagePerStack/affinity resolve per OWNER inside the executor
+                // (lastTurnCtxByActor.get(intent.ownerId)) — there is no global
+                // effectiveAttack/affinityMult on this ctx.
+                recordResisted: (resisted) => {
+                    const lastTurn = focusTurns[focusTurns.length - 1];
+                    // After an attacker turn this round → append to its resisted list;
+                    // before any → stage into pendingResisted (drained into the next
+                    // attacker turn's head), mirroring the Task-2 team-resist staging.
+                    if (lastTurn) lastTurn.resistedEnemyDebuffs.push(resisted);
+                    else pendingResisted.push(resisted);
+                },
+                // Reactive direct damage (Grif/FrontLine/Judge/Chakara/Incinerator/
+                // Rhodium) — full mitigated/crit walk, credited via the single credit
+                // point (creditDamage, inside applyReactiveDamage) so leeches still see it.
+                applyReactiveDamage,
+                // Releases the consequence twins applyReactiveDamage buffered, called by
+                // the executor right after the proc's own attack row is emitted.
+                flushConsequenceLogs,
+                applyCounterAttack,
+                counterFiredThisTurn,
+                reactionFiredThisAttack,
+                // The SAME shared ctx the player turns use, so a reactive
+                // heal/shield/cleanse credits the same per-round buckets and mutates the
+                // same live target. `healTarget` is anchored in EVERY mode (#415), so
+                // `healingCtx` is always built and the reactive heal/shield/cleanse
+                // branches are LIVE in DPS mode too — pinned by
+                // `dpsBattleShieldParity.test.ts`. What DPS mode omits is the healing
+                // REPORT, gated on `healReportActive`.
+                healing: healingCtx,
+                // Combat-lifetime once-per-battle guard: a flagged reactive
+                // repair (Yazid) fires at most once across the whole combat.
+                oncePerCombatFired,
+                // Combat-lifetime per-(owner, ability, source) event counter for
+                // everyNthEvent gates (Zosimos "every second repair → remove charge").
+                repairCountBySource,
+                // Combat-lifetime proc-chance gates: equipment reactive procs
+                // that carry a procChance fire at their stated rate via this accumulator.
+                procChanceGates,
+                preDecidedConversions,
+                // Scoped proc verdict cache (Insidiousness: one roll per cast, plus one
+                // per reaction firing that cast sets off).
+                procDecisionThisSubAttack,
+                // Live lowest-speed-ally gate. UNCONDITIONAL — with a lone attacker the set
+                // is {attacker}, so it resolves true.
+                isLowestSpeedAllyFor: sideCtx.isLowestSpeedAllyFor,
+                // Live self-HP% for drain-time hp-threshold gates: each owner's own
+                // current/max HP, both sides (`selfHpGateEveryOwner.integration.test.ts`).
+                selfHpPctFor: sideCtx.selfHpPctFor,
+                enemyWithMostBuffs: sideCtx.enemyWithMostBuffs,
+                // Resolve any actor's RAW affinity (combat-wide map, both sides) so
+                // the reactive 'apply'-debuff branch lands vs the ACTUAL target's affinity
+                // (e.g. Martyrdom Disable onto the real killer) rather than the applier's
+                // precomputed-vs-representative static disadvantage flag.
+                affinityOf: (id) => allActorsById.get(id)?.affinity,
+                // The OTHER half of the same per-target seam as `affinityOf` above. The
+                // 'inflict' arm and the reactive DoT must NOT draw against the owner's
+                // cached `liveDebuffLandingChance` — a chance the owner computed for ITS
+                // OWN turn target. This resolves the roll the reactive path actually needs:
+                // the owner's live effective hacking vs THIS victim's live effective
+                // security.
+                // Same combat-wide `allActorsById` source as affinityOf/actorById, so it is
+                // team-symmetric for free (either id may be on either side).
+                liveDebuffLandingChanceFor: (ownerId, victimId) =>
+                    reactiveLandingChanceFor(ownerId, victimId),
+                // Resolve any actor (either side) by id — the convert-dot
+                // executor uses this to find the ACTUAL victim of an ally's DoT
+                // application (eventCtx.victimId) instead of the fixed enemy/
+                // corrosionEntries closures above (side-biased to the player's single
+                // opposing focus). Combat-wide map — no per-side sideCtx field needed.
+                actorById: (id) => allActorsById.get(id),
+                // Live effective attack, for a reactive bomb applied before its owner's
+                // first turn of the run (no lastTurnCtx to snapshot). Same fold
+                // `effectiveSpeedOf` uses, reading `.attack` instead.
+                effectiveAttackFor: (id) => {
+                    const a = allActorsById.get(id);
+                    return a ? effectiveStatsOf(statusEngine, selfBuffLookup, a).attack : undefined;
+                },
+                // Same shared sink the cast-path forced detonation uses — a
+                // reduce-duration shrink can drive a bomb to 0 on EITHER side's actor.
+                forceDetonateBomb: (victim, sourceId, damage) =>
+                    forceDetonateBombOnVictim(victim, sink, sourceId, damage),
+                // Side-agnostic ship-role lookup (the SAME
+                // roleByActorId map Meatshield's defense-substitution and Graphite's
+                // roleFilter already consume) — feeds the reactive `purge` branch's
+                // per-victim `enemy-type` re-check (Zeolite: "When this Unit deals
+                // damage to a defender"), team-symmetrically.
+                roleOf: (id) => roleByActorId.get(id),
+                // Live hacking/critDamage for `id` (either side), feeding
+                // Belladonna's conversion-chance (hacking) and paired extend-chance
+                // (critDamage) gates. Same statusEngine/selfBuffLookup every other
+                // effectiveStatsOf call site in this scope uses (e.g. mostBuffsAmong).
+                effectiveStatsFor: (id) => {
+                    const a = allActorsById.get(id);
+                    return a ? effectiveStatsOf(statusEngine, selfBuffLookup, a) : undefined;
+                },
+                // Doomsayer enemy-highest-attack resolver, the round's first
+                // real activator id, and the shared once-per-round consume set. All
+                // inert today — only consumed by the next task's executor branch.
+                enemyWithHighestAttack: sideCtx.enemyWithHighestAttack,
+                // Chakara's live highest-speed opposing-actor resolver.
+                enemyWithHighestSpeed: sideCtx.enemyWithHighestSpeed,
+                // Living opposing roster for an 'all-enemies' reactive
+                // damage proc (Judge/Incinerator per-victim-conditional AoE).
+                livingOpposingActorIds: sideCtx.livingOpposingActorIds,
+                // Synthesized enemy debuff/DoT NAMES for a victim — the
+                // EXACT synthesis buildTurnArgs uses (enemyDebuffNamesForTarget), so a
+                // per-victim 'enemy-debuff' name-gate (Incinerator's "with Inferno") reads
+                // the same names as an on-cast gate. Combat-wide (both sides) via
+                // allActorsById, mirroring actorById/affinityOf. Empty for a missing id.
+                enemyDebuffNamesFor: (id) => {
+                    const a = allActorsById.get(id);
+                    return a ? enemyDebuffNamesForTarget(a) : [];
+                },
+                // A victim's current effective max HP (the same
+                // recipientMaxHp denominator every heal/HP-basis site uses) so the
+                // per-victim hp-threshold gate (Judge's "<50% HP") reads a live HP%.
+                recipientMaxHpFor: (id) => recipientMaxHp(id),
+                firstActivatorId: sideCtx.firstActivatorId,
+                lastStandingId: sideCtx.lastStandingId,
+                oncePerRoundConsumed: sideCtx.oncePerRoundConsumed,
+                perRoundFireCounts: sideCtx.perRoundFireCounts,
+                // Live not-hit-this-round gate (Alacrity). hitThisRound is a single
+                // combat-wide Set, so the SAME closure serves both sides (team-agnostic) —
+                // no per-side sideCtx field needed (unlike isLowestSpeedAllyFor).
+                wasHitThisRoundFor: (ownerId) => hitThisRound.has(ownerId),
+                // Live per-actor own-turn counter (Chrono Reaver /
+                // every-n-turns). allActorsById covers both sides in a single combat-wide
+                // map — no per-side sideCtx field needed (mirrors wasHitThisRoundFor).
+                turnsTakenFor: (ownerId) => allActorsById.get(ownerId)?.turnsTaken ?? 0,
+                // Live per-actor count of enemies damaged by that actor's most
+                // recent cast this round (Berserker's Marauder Rage, drained via
+                // on-deal-damage). Combat-wide map — no per-side sideCtx field needed
+                // (mirrors turnsTakenFor/wasHitThisRoundFor). Deliberately NO `?? 1`
+                // default — an owner with no recorded footprint (no delegate call has ever
+                // set one for it, e.g. before its first turn this combat) has an UNKNOWN
+                // footprint, not "hit exactly one enemy". Returning `undefined` lets
+                // buildDrainContext's absent-subject guard leave the gate unresolved
+                // instead of answering a fabricated 1. Tygr's `gte 2` and Berserker's
+                // `gte 3` are unaffected — a fabricated 1 already failed both comparators.
+                enemiesHitThisCastFor: (ownerId) => enemiesHitThisCastByActor.get(ownerId),
+                // Live adjacent-allies resolver (Fortifying Shroud). Sourced
+                // per-side from sideCtx; positional neighbours, else all same-side allies.
+                adjacentAllyIdsFor: sideCtx.adjacentAllyIdsFor,
+                // OPPOSING-side counterpart (Demolisher bomb-splash's
+                // 'adjacent-enemies' anchor resolution). See IntentExecContext.
+                adjacentOpposingIdsFor: sideCtx.adjacentOpposingIdsFor,
+                footprintAllyIdsFor: sideCtx.footprintAllyIdsFor,
+                // The 'lowest-hp-ally' selector. NOT sourced from sideCtx — the
+                // closure is already side-relative to the OWNER it is asked about, which is
+                // the correct scoping for a drain whose intents can carry either side's
+                // owner id, and it shares the cast path's single ranking.
+                lowestHpAllyIdFor: lowestHpAllyIdForOwner,
+                // #363: actor id → faction, for a reactive `factionFilter`'d ally scope
+                // (read by `footprintFilteredRecipients` in triggers.ts). The same
+                // side-agnostic map every other #363 site shares — no `sideCtx`/bySide
+                // dispatch needed, exactly like the cast-path's `buildTurnArgs` spread
+                // above.
+                factionOf,
+            });
+        };
+
+        // Drain ONE batch of intents FIFO with one side's ctx — the phase drains' per-owner groups
+        // and the pre-cast grant drain. Executed intents may enqueue more into this same array;
+        // those form the next generation. MAX_INTENT_GENERATIONS converts a pathological
+        // self-feeding loop into a thrown error rather than a hang. Every other drain is
+        // `drainReactions`, which orders both sides' queues by event and turn order.
         const drainQueue = (queue: Intent[], sideCtx: ReactiveSideCtx): void => {
             let generation = 0;
             while (queue.length > 0) {
@@ -10825,246 +11060,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 }
                 // Snapshot this generation's batch; new enqueues during execution run next pass.
                 const batch = queue.splice(0, queue.length);
-                for (const intent of batch) {
-                    // §4.4 TURN-BLOCK reactive suppression: a turn-blocked unit's reactives are
-                    // FULLY locked out. Drop every queued intent whose OWNER is currently turn-blocked (Stasis OR
-                    // Disable) — on-attacked, on-ally-attacked, on-crit, on-enemy-destroyed, AND start-of-round
-                    // self-buffs (Chakara via round-started) all carry intent.ownerId, so this ONE filter covers
-                    // every reactive type for BOTH sides (drainIntentsFor('player') and drainIntentsFor('enemy') share this drainQueue).
-                    // Filtered at the DRAIN, before executeIntent. Listeners only ENQUEUE (pure), so dropping an
-                    // intent leaves NO partial state. Incoming effects (damage/heals/ally buffs/DoT ticks) are
-                    // UNTOUCHED — only the turn-blocked unit's OWN outgoing intents drop.
-                    // NOTE: Stasis-only sites (break-on-hit, damage-immunity) intentionally keep using isStasised
-                    // directly — Disable never breaks and does not grant immunity.
-                    //
-                    // TWO CARVE-OUTS, both owner rulings (2026-09-15), because what a turn-block
-                    // switches off is the ship's own PASSIVE SKILL:
-                    //  - EQUIPMENT. A gear-set bonus or implant effect is not the ship's passive
-                    //    skill and keeps firing. It shares the passive slot with the ship's
-                    //    refits, so the provenance rides the ability — read `Ability.source`.
-                    //  - THE OWNER'S OWN DEATH REACTION. Death releases it: a ship that dies
-                    //    stasised still resolves Martyrdom's killer-Disable / Salvation's repair.
-                    //    Same `fromOwnDeath` stamp that exempts them from executeIntent's
-                    //    dead-owner gate.
-                    if (
-                        isTurnBlocked(intent.ownerId) &&
-                        intent.ability.source !== 'equipment' &&
-                        !intent.eventCtx?.fromOwnDeath
-                    ) {
-                        continue;
-                    }
-                    // The runaway cap (ruling 66): a chain this deep is a loop, not play.
-                    const depth = intent.chainDepth ?? 0;
-                    if (depth > MAX_REACTION_CHAIN_DEPTH) {
-                        reactionChainProbe.dropped++;
-                        continue;
-                    }
-                    if (depth > reactionChainProbe.maxDepth) reactionChainProbe.maxDepth = depth;
-                    executeIntent(intent, {
-                        round: r,
-                        statusEngine,
-                        bus,
-                        // Combat-log attribution: the actor whose turn is active when this
-                        // reactive intent drains. Set per turn (actingActorId); undefined for a
-                        // round-1 start-of-round reactive or a post-round death-drain reaction
-                        // (no turn active). The executor's stamping bus brands every reactive
-                        // emission with this so a later builder nests the reaction under the
-                        // triggering turn, not the reactor's own turn.
-                        duringTurnOf: actingActorId,
-                        reactionFiringId: ++reactionFiringSeq,
-                        corrosionEntries,
-                        infernoEntries,
-                        genericDoTEntries,
-                        pendingBombs,
-                        runtimes: sideCtx.runtimes,
-                        grantAllyCharges: sideCtx.grantAllyCharges,
-                        removeEnemyCharges: sideCtx.removeEnemyCharges,
-                        removeChargesFrom: sideCtx.removeChargesFrom,
-                        grantExtraAction,
-                        playerIds: sideCtx.recipientIds,
-                        // Drain `enemy-buff` gates read the union of the OWNER's opposing
-                        // side's self-buffs (names only).
-                        enemyAttackerIds: sideCtx.opposingIds,
-                        isActorAlive,
-                        selfShieldFullFor: isSelfShieldFull,
-                        // Name map for the live `ally-on-team` roster check. With no ship names
-                        // supplied the map is empty → buildDrainContext leaves allyTeamNames
-                        // undefined → assume-met fallback.
-                        nameByActorId: nameByActorId.size > 0 ? nameByActorId : undefined,
-                        lastTurnCtxByActor,
-                        // #396: the resolver `liveHealChannelPct` needs to shadow the live
-                        // enemy-applied heal half against the actor's own named statuses.
-                        selfNamedBuffsFor: (id) =>
-                            victimSelfBuffs(statusEngine, id, selfBuffLookup),
-                        reactiveDealtByOwner,
-                        enemyType,
-                        // Prophet (#591): side-agnostic — the same accumulator serves either
-                        // drain side, so no per-side threading through `sideCtx` is needed.
-                        addShieldPenBonus,
-                        // Bomb damagePerStack/affinity resolve per OWNER inside the executor
-                        // (lastTurnCtxByActor.get(intent.ownerId)) — there is no global
-                        // effectiveAttack/affinityMult on this ctx.
-                        recordResisted: (resisted) => {
-                            const lastTurn = focusTurns[focusTurns.length - 1];
-                            // After an attacker turn this round → append to its resisted list;
-                            // before any → stage into pendingResisted (drained into the next
-                            // attacker turn's head), mirroring the Task-2 team-resist staging.
-                            if (lastTurn) lastTurn.resistedEnemyDebuffs.push(resisted);
-                            else pendingResisted.push(resisted);
-                        },
-                        // Reactive direct damage (Grif/FrontLine/Judge/Chakara/Incinerator/
-                        // Rhodium) — full mitigated/crit walk, credited via the single credit
-                        // point (creditDamage, inside applyReactiveDamage) so leeches still see it.
-                        applyReactiveDamage,
-                        // Releases the consequence twins applyReactiveDamage buffered, called by
-                        // the executor right after the proc's own attack row is emitted.
-                        flushConsequenceLogs,
-                        applyCounterAttack,
-                        counterFiredThisTurn,
-                        reactionFiredThisAttack,
-                        // The SAME shared ctx the player turns use, so a reactive
-                        // heal/shield/cleanse credits the same per-round buckets and mutates the
-                        // same live target. `healTarget` is anchored in EVERY mode (#415), so
-                        // `healingCtx` is always built and the reactive heal/shield/cleanse
-                        // branches are LIVE in DPS mode too — pinned by
-                        // `dpsBattleShieldParity.test.ts`. What DPS mode omits is the healing
-                        // REPORT, gated on `healReportActive`.
-                        healing: healingCtx,
-                        // Combat-lifetime once-per-battle guard: a flagged reactive
-                        // repair (Yazid) fires at most once across the whole combat.
-                        oncePerCombatFired,
-                        // Combat-lifetime per-(owner, ability, source) event counter for
-                        // everyNthEvent gates (Zosimos "every second repair → remove charge").
-                        repairCountBySource,
-                        // Combat-lifetime proc-chance gates: equipment reactive procs
-                        // that carry a procChance fire at their stated rate via this accumulator.
-                        procChanceGates,
-                        preDecidedConversions,
-                        // Scoped proc verdict cache (Insidiousness: one roll per cast, plus one
-                        // per reaction firing that cast sets off).
-                        procDecisionThisSubAttack,
-                        // Live lowest-speed-ally gate. UNCONDITIONAL — with a lone attacker the set
-                        // is {attacker}, so it resolves true.
-                        isLowestSpeedAllyFor: sideCtx.isLowestSpeedAllyFor,
-                        // Live self-HP% for drain-time hp-threshold gates: each owner's own
-                        // current/max HP, both sides (`selfHpGateEveryOwner.integration.test.ts`).
-                        selfHpPctFor: sideCtx.selfHpPctFor,
-                        enemyWithMostBuffs: sideCtx.enemyWithMostBuffs,
-                        // Resolve any actor's RAW affinity (combat-wide map, both sides) so
-                        // the reactive 'apply'-debuff branch lands vs the ACTUAL target's affinity
-                        // (e.g. Martyrdom Disable onto the real killer) rather than the applier's
-                        // precomputed-vs-representative static disadvantage flag.
-                        affinityOf: (id) => allActorsById.get(id)?.affinity,
-                        // The OTHER half of the same per-target seam as `affinityOf` above. The
-                        // 'inflict' arm and the reactive DoT must NOT draw against the owner's
-                        // cached `liveDebuffLandingChance` — a chance the owner computed for ITS
-                        // OWN turn target. This resolves the roll the reactive path actually needs:
-                        // the owner's live effective hacking vs THIS victim's live effective
-                        // security.
-                        // Same combat-wide `allActorsById` source as affinityOf/actorById, so it is
-                        // team-symmetric for free (either id may be on either side).
-                        liveDebuffLandingChanceFor: (ownerId, victimId) =>
-                            reactiveLandingChanceFor(ownerId, victimId),
-                        // Resolve any actor (either side) by id — the convert-dot
-                        // executor uses this to find the ACTUAL victim of an ally's DoT
-                        // application (eventCtx.victimId) instead of the fixed enemy/
-                        // corrosionEntries closures above (side-biased to the player's single
-                        // opposing focus). Combat-wide map — no per-side sideCtx field needed.
-                        actorById: (id) => allActorsById.get(id),
-                        // Live effective attack, for a reactive bomb applied before its owner's
-                        // first turn of the run (no lastTurnCtx to snapshot). Same fold
-                        // `effectiveSpeedOf` uses, reading `.attack` instead.
-                        effectiveAttackFor: (id) => {
-                            const a = allActorsById.get(id);
-                            return a
-                                ? effectiveStatsOf(statusEngine, selfBuffLookup, a).attack
-                                : undefined;
-                        },
-                        // Same shared sink the cast-path forced detonation uses — a
-                        // reduce-duration shrink can drive a bomb to 0 on EITHER side's actor.
-                        forceDetonateBomb: (victim, sourceId, damage) =>
-                            forceDetonateBombOnVictim(victim, sink, sourceId, damage),
-                        // Side-agnostic ship-role lookup (the SAME
-                        // roleByActorId map Meatshield's defense-substitution and Graphite's
-                        // roleFilter already consume) — feeds the reactive `purge` branch's
-                        // per-victim `enemy-type` re-check (Zeolite: "When this Unit deals
-                        // damage to a defender"), team-symmetrically.
-                        roleOf: (id) => roleByActorId.get(id),
-                        // Live hacking/critDamage for `id` (either side), feeding
-                        // Belladonna's conversion-chance (hacking) and paired extend-chance
-                        // (critDamage) gates. Same statusEngine/selfBuffLookup every other
-                        // effectiveStatsOf call site in this scope uses (e.g. mostBuffsAmong).
-                        effectiveStatsFor: (id) => {
-                            const a = allActorsById.get(id);
-                            return a
-                                ? effectiveStatsOf(statusEngine, selfBuffLookup, a)
-                                : undefined;
-                        },
-                        // Doomsayer enemy-highest-attack resolver, the round's first
-                        // real activator id, and the shared once-per-round consume set. All
-                        // inert today — only consumed by the next task's executor branch.
-                        enemyWithHighestAttack: sideCtx.enemyWithHighestAttack,
-                        // Chakara's live highest-speed opposing-actor resolver.
-                        enemyWithHighestSpeed: sideCtx.enemyWithHighestSpeed,
-                        // Living opposing roster for an 'all-enemies' reactive
-                        // damage proc (Judge/Incinerator per-victim-conditional AoE).
-                        livingOpposingActorIds: sideCtx.livingOpposingActorIds,
-                        // Synthesized enemy debuff/DoT NAMES for a victim — the
-                        // EXACT synthesis buildTurnArgs uses (enemyDebuffNamesForTarget), so a
-                        // per-victim 'enemy-debuff' name-gate (Incinerator's "with Inferno") reads
-                        // the same names as an on-cast gate. Combat-wide (both sides) via
-                        // allActorsById, mirroring actorById/affinityOf. Empty for a missing id.
-                        enemyDebuffNamesFor: (id) => {
-                            const a = allActorsById.get(id);
-                            return a ? enemyDebuffNamesForTarget(a) : [];
-                        },
-                        // A victim's current effective max HP (the same
-                        // recipientMaxHp denominator every heal/HP-basis site uses) so the
-                        // per-victim hp-threshold gate (Judge's "<50% HP") reads a live HP%.
-                        recipientMaxHpFor: (id) => recipientMaxHp(id),
-                        firstActivatorId: sideCtx.firstActivatorId,
-                        lastStandingId: sideCtx.lastStandingId,
-                        oncePerRoundConsumed: sideCtx.oncePerRoundConsumed,
-                        perRoundFireCounts: sideCtx.perRoundFireCounts,
-                        // Live not-hit-this-round gate (Alacrity). hitThisRound is a single
-                        // combat-wide Set, so the SAME closure serves both sides (team-agnostic) —
-                        // no per-side sideCtx field needed (unlike isLowestSpeedAllyFor).
-                        wasHitThisRoundFor: (ownerId) => hitThisRound.has(ownerId),
-                        // Live per-actor own-turn counter (Chrono Reaver /
-                        // every-n-turns). allActorsById covers both sides in a single combat-wide
-                        // map — no per-side sideCtx field needed (mirrors wasHitThisRoundFor).
-                        turnsTakenFor: (ownerId) => allActorsById.get(ownerId)?.turnsTaken ?? 0,
-                        // Live per-actor count of enemies damaged by that actor's most
-                        // recent cast this round (Berserker's Marauder Rage, drained via
-                        // on-deal-damage). Combat-wide map — no per-side sideCtx field needed
-                        // (mirrors turnsTakenFor/wasHitThisRoundFor). Deliberately NO `?? 1`
-                        // default — an owner with no recorded footprint (no delegate call has ever
-                        // set one for it, e.g. before its first turn this combat) has an UNKNOWN
-                        // footprint, not "hit exactly one enemy". Returning `undefined` lets
-                        // buildDrainContext's absent-subject guard leave the gate unresolved
-                        // instead of answering a fabricated 1. Tygr's `gte 2` and Berserker's
-                        // `gte 3` are unaffected — a fabricated 1 already failed both comparators.
-                        enemiesHitThisCastFor: (ownerId) => enemiesHitThisCastByActor.get(ownerId),
-                        // Live adjacent-allies resolver (Fortifying Shroud). Sourced
-                        // per-side from sideCtx; positional neighbours, else all same-side allies.
-                        adjacentAllyIdsFor: sideCtx.adjacentAllyIdsFor,
-                        // OPPOSING-side counterpart (Demolisher bomb-splash's
-                        // 'adjacent-enemies' anchor resolution). See IntentExecContext.
-                        adjacentOpposingIdsFor: sideCtx.adjacentOpposingIdsFor,
-                        footprintAllyIdsFor: sideCtx.footprintAllyIdsFor,
-                        // The 'lowest-hp-ally' selector. NOT sourced from sideCtx — the
-                        // closure is already side-relative to the OWNER it is asked about, which is
-                        // the correct scoping for a drain whose intents can carry either side's
-                        // owner id, and it shares the cast path's single ranking.
-                        lowestHpAllyIdFor: lowestHpAllyIdForOwner,
-                        // #363: actor id → faction, for a reactive `factionFilter`'d ally scope
-                        // (read by `footprintFilteredRecipients` in triggers.ts). The same
-                        // side-agnostic map every other #363 site shares — no `sideCtx`/bySide
-                        // dispatch needed, exactly like the cast-path's `buildTurnArgs` spread
-                        // above.
-                        factionOf,
-                    });
-                }
+                for (const intent of batch) runQueuedIntent(intent, sideCtx);
             }
         };
 
@@ -11148,8 +11144,8 @@ export function runCombat(rawInput: CombatEngineInput): {
 
         // A round's co-located Rhodium purge+damage pair BOTH target
         // 'enemy-most-buffs' and are drained TOGETHER off the SAME queue with ONE ctx instance
-        // (drainQueue drains every intent in the queue using the single ctx a drainIntentsFor
-        // call built). The purge's own buff removal can zero out the very count that identified
+        // (the end-of-round phase drains one owner's intents through drainQueue with one ctx,
+        // and drainReactions keeps one ctx per side for its whole drain). The purge's own buff removal can zero out the very count that identified
         // the target, so a naive LIVE re-resolution by whichever ability drains SECOND (fixed by
         // sentence position — purge precedes "and deals X% damage" — so purge always drains
         // first) would resolve to nobody even though the FIRST-draining ability already found
@@ -11251,27 +11247,72 @@ export function runCombat(rawInput: CombatEngineInput): {
             footprintAllyIdsFor: bySide('enemy').footprintAllyIdsFor,
             opposingIds: playerIds,
         });
-        // Side-parameterized drain — one closure for both sides. The queue-empty guard is an
-        // allocation saving, not a behaviour change: drainQueue's `while (queue.length > 0)`
-        // already no-ops on an empty queue, and playerDrainCtx()/enemyDrainCtx() build pure
-        // closures (no side effects), so skipping their construction changes nothing observable.
-        const drainIntentsFor = (side: Side): void => {
-            const queue = intentQueues[side];
-            if (queue.length === 0) return;
-            drainQueue(queue, side === 'player' ? playerDrainCtx() : enemyDrainCtx());
-        };
-        /** Drain both queues, then spend the Stasis reductions the drained hits (and the hit that
-         *  woke them) queued — see `stasisBreakPending`. */
+        /**
+         * Drain BOTH sides' queues until both are empty (owner ruling 39), then spend the Stasis
+         * reductions the drained hits queued (`stasisBreakPending`).
+         *
+         * Order: the intents woken by the EARLIEST event (`Intent.eventSeq`) resolve first, owner
+         * by owner in turn order — `orderByTurnPriority`, re-ranked after each owner exactly like
+         * the round-boundary phases, so the player side wins only a cross-team speed tie. An
+         * owner's own intents keep their enqueue order. A reaction CAUSED by one of them answers
+         * a later event, so it resolves after every reaction to the event that caused it, still
+         * inside this drain: Cultivator cleanses → Grif's 75% and Cultivator's 4% repair in turn
+         * order → Cultivator's 8% repair answering Grif's hit.
+         *
+         * One drain ctx per side for the whole drain, built on first use (`onceByOwner`'s
+         * per-ctx memo relies on that).
+         */
         const drainReactions = (): void => {
-            drainIntentsFor('player');
-            drainIntentsFor('enemy');
+            const ctxBySide: Partial<Record<Side, ReactiveSideCtx>> = {};
+            const ctxFor = (side: Side): ReactiveSideCtx =>
+                (ctxBySide[side] ??= side === 'player' ? playerDrainCtx() : enemyDrainCtx());
+            while (intentQueues.player.length > 0 || intentQueues.enemy.length > 0) {
+                let earliest = Infinity;
+                for (const side of ['player', 'enemy'] as const) {
+                    for (const intent of intentQueues[side]) {
+                        earliest = Math.min(earliest, intent.eventSeq ?? 0);
+                    }
+                }
+                const byOwner = new Map<string, { side: Side; intents: Intent[] }>();
+                for (const side of ['player', 'enemy'] as const) {
+                    const queue = intentQueues[side];
+                    for (let i = 0; i < queue.length;) {
+                        if ((queue[i].eventSeq ?? 0) !== earliest) {
+                            i++;
+                            continue;
+                        }
+                        const [intent] = queue.splice(i, 1);
+                        const group = byOwner.get(intent.ownerId);
+                        if (group) group.intents.push(intent);
+                        else byOwner.set(intent.ownerId, { side, intents: [intent] });
+                    }
+                }
+                while (byOwner.size > 0) {
+                    const [next] = orderByTurnPriority(
+                        [...byOwner.entries()].map(([ownerId, group]) => {
+                            const actor = allActorsById.get(ownerId);
+                            return {
+                                ownerId,
+                                group,
+                                side: group.side,
+                                speed: actor ? effectiveSpeedOf(actor) : 0,
+                                position: actor?.position,
+                            };
+                        })
+                    );
+                    byOwner.delete(next.ownerId);
+                    for (const intent of next.group.intents) {
+                        runQueuedIntent(intent, ctxFor(next.side));
+                    }
+                }
+            }
             settleStasisHits();
         };
 
         // Start-of-turn GRANTS (buffs/shields/heals) must apply BEFORE the acting owner
         // casts, so a self-buff boosts the same turn it is granted (matching the game). Scoped to
         // the acting owner only. CHARGE intents are EXCLUDED — they keep their post-cast drain
-        // (see the drainIntentsFor('player')/drainIntentsFor('enemy') calls in the turn loop
+        // (see the drainReactions calls in the turn loop
         // below), on which the Cobalt charge ledger depends. Team-symmetric: drains both side
         // queues, so a ship on either side gets the same pre-cast ordering. Turn-block
         // suppression is inherited from drainQueue's isTurnBlocked filter — a stunned owner's
@@ -11398,7 +11439,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         // round-started: the canonical start-of-round trigger. Fires once per round, before any
         // turn-started of that round. In a multi-actor round turn-started fires once per actor, so
         // round-started is the reliable "start of round" signal. Emitted here (after the
-        // accumulator + drainIntentsFor are in scope) so its start-of-round intents execute BEFORE
+        // accumulator + drainReactions are in scope) so its start-of-round intents execute BEFORE
         // any turn; nothing between beginRound and here emits an event.
         // #341: the row's enemy-HP reading, captured HERE — before any turn of this round — so it
         // is the enemy HP% ENTERING the round, which is the semantics the field has always carried
@@ -11514,7 +11555,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // order, or a walked team ship that died) must NOT act when its turn comes up —
                 // no turn-started/turn-ended emit, no runPlayerTurn, no damage. A plain `continue`
                 // is correct: every per-iteration step below (turn-started emit, the kind-branch
-                // turn body, drainIntentsFor('player')/drainIntentsFor('enemy'), turn-ended) is THIS actor's own turn
+                // turn body, drainReactions, turn-ended) is THIS actor's own turn
                 // work, which a dead actor does none of. The pending decrement already happened in
                 // selectNext BEFORE the body runs, so the dead actor's pending is consumed
                 // and termination is preserved. Extra-action grants only fire from inside a live
@@ -13633,7 +13674,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         // of the round if a unit has Toxic Overflow and at least 1 stack of Corrosion, inflict
         // Corrosion I for 3 turns to all adjacent allies and remove Toxic Overflow." Runs BEFORE
         // the round-ended emit/drain below so each `corrosion-spread` event's enqueued reactions
-        // (Hemlock's self-heal, on-corrosion-spread) are flushed by the same drainIntentsFor calls.
+        // (Hemlock's self-heal, on-corrosion-spread) are flushed by the same drainReactions calls.
         // Team-symmetric: iterates every living actor. The holder's Toxic Overflow is
         // read out of the per-victim TIMED enemy-debuff store ONLY, via `holdsToxicOverflow` — see
         // the guard below for why that channel and not the broad name union; Corrosion lives on the

@@ -194,6 +194,11 @@ export interface Intent {
      *  event, the resolving intent's depth + 1 for one woken while an intent resolved. Stamped by
      *  `registerReactiveListeners`' enqueue wrapper; absent reads as 0. */
     chainDepth?: number;
+    /** Which bus event woke this intent, as a run-wide increasing number: every listener of one
+     *  emitted event stamps the same value, and a later event a larger one. The engine's drain
+     *  resolves the intents of the earliest event first, owner by owner in turn order (ruling 39).
+     *  Absent reads as 0. */
+    eventSeq?: number;
     eventCtx?: {
         counterTargetId?: string;
         damagedAllyId?: string;
@@ -738,7 +743,7 @@ export function registerReactiveListeners(args: {
     maxHpOf?: (ownerId: string) => number;
 }): void {
     const {
-        bus,
+        bus: rawBus,
         perOwner,
         enqueue: enqueueRaw,
         isOpposing,
@@ -750,11 +755,25 @@ export function registerReactiveListeners(args: {
         footprintAllyIdsFor,
         maxHpOf,
     } = args;
+    // Every listener below records which event it is answering (`Intent.eventSeq`).
+    const bus: Pick<CombatEventBus, 'on'> = {
+        on: (type, listener) =>
+            rawBus.on(type, (e) => {
+                const outer = listeningEventSeq;
+                listeningEventSeq = seqOfEvent(e);
+                try {
+                    listener(e);
+                } finally {
+                    listeningEventSeq = outer;
+                }
+            }),
+    };
     // An intent woken while another resolves is one step deeper in its chain (`Intent.chainDepth`).
     const enqueue = (intent: Intent): void =>
         enqueueRaw({
             ...intent,
             chainDepth: resolvingIntent ? (resolvingIntent.chainDepth ?? 0) + 1 : 0,
+            eventSeq: listeningEventSeq ?? 0,
         });
     // Same-side ally, OWNER EXCLUDED — for a trigger whose skill text names "another/other
     // ally", or whose subject structurally cannot be the owner (a destroyed ship cannot take the
@@ -4695,6 +4714,21 @@ export const CHARGE_TARGET_KIND: Record<AbilityTarget, ChargeTargetKind> = {
     'enemy-most-buffs': selectorChargeKind('enemy-most-buffs'),
     'enemy-highest-attack': selectorChargeKind('enemy-highest-attack'),
     'enemy-highest-speed': selectorChargeKind('enemy-highest-speed'),
+};
+
+/** `Intent.eventSeq` bookkeeping: the number each emitted event object got, the next number to
+ *  hand out, and the event whose listeners are running right now. One table for both sides'
+ *  registrations, so the same event carries the same number on either side. */
+const eventSeqByEvent = new WeakMap<object, number>();
+let nextEventSeq = 1;
+let listeningEventSeq: number | undefined;
+const seqOfEvent = (e: object): number => {
+    let seq = eventSeqByEvent.get(e);
+    if (seq === undefined) {
+        seq = nextEventSeq++;
+        eventSeqByEvent.set(e, seq);
+    }
+    return seq;
 };
 
 /** The intent `executeIntent` is resolving right now; undefined between resolutions. The engine

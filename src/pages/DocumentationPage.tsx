@@ -3195,7 +3195,10 @@ const DocumentationPage: React.FC = () => {
                                         reaction can set off further reactions, on either team: an
                                         enemy cleanse wakes Grif, whose hit wakes Purifier&apos;s
                                         cleanse, which wakes Grif again. A chain that could run
-                                        forever stops after eight steps.
+                                        forever stops after eight steps. Reactions to the same event
+                                        resolve in turn order across both teams, fastest ship first,
+                                        and a reaction set off by another reaction resolves after
+                                        it, within the same turn.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Purges:</span> A purge on a
