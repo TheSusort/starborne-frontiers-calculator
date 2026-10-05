@@ -6270,10 +6270,6 @@ export function runCombat(rawInput: CombatEngineInput): {
                 /** True when THIS application is itself reflected thorns (Reflect gear set). The
                  *  reflection block skips when set → no ping-pong (a reflected hit never reflects). */
                 isReflected?: boolean;
-                /** True when THIS application is a counter-attack or a reactive damage proc. The
-                 *  reflect re-entry guard skips when set → such a hit is never itself reflected
-                 *  (loop-safe). Every other direct-hit consequence applies to it (ruling 36). */
-                isCounter?: boolean;
                 /** True for a FLAT copy of an already-resolved burst (Demolisher's Bomb splash):
                  *  Bomb damage, not a direct hit, so no Protection redirect and no Exposed spend. */
                 isSplashCopy?: boolean;
@@ -7190,13 +7186,10 @@ export function runCombat(rawInput: CombatEngineInput): {
             // The attacker.destroyedRound guard below prevents posthumous reflection TO an
             // already-dead attacker, but the WEARER dying on the same hit is intentional and
             // covered by test case (e).
-            // !cause?.isCounter is loop-safe: a counter application must not itself be reflected.
-            if (
-                !cause?.isReflected &&
-                !cause?.isCounter &&
-                hpDamage > 0 &&
-                cause?.byDirectDamage !== false
-            ) {
+            // A counter-attack or reactive damage proc reflects like any other direct hit (owner
+            // ruling 36; Nosorog reacts to them). Loop-safe: the reflected hit carries
+            // `isReflected` and never reflects, and this funnel emits no reaction events.
+            if (!cause?.isReflected && hpDamage > 0 && cause?.byDirectDamage !== false) {
                 // Direct slice of the net HP damage: exclude the bomb portion by the raw direct
                 // fraction of the post-block total. bombPortion 0 → directFraction 1 (full reflect);
                 // bombPortion === total → directFraction 0 → basis 0 → skipped below.
@@ -7219,15 +7212,11 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // one victim, which IS the primary). A FUTURE non-positional real-roster AoE path would
                 // have to pass isPrimaryTarget explicitly, or a covered victim would wrongly reflect.
                 //
-                // REACTIVE PATHS DO NOT OVER-FIRE: a Nosorog taking REACTIVE damage does NOT
-                // reflect, by construction — (a) counterattacks reach applyVictimDamage with
-                // isCounter:true, which the `!cause?.isCounter` guard above skips entirely; and (b) the
-                // reactive-damage executor (applyReactiveDamage) always reaches applyVictimDamage
-                // under that SAME isCounter:true flag (it requires a concrete victim id).
-                // Detonation/
-                // bomb reactive hits pass bombPortion===total → directFraction 0 → reflectBasis 0 (no
-                // reflect); DoT ticks pass byDirectDamage:false (guard above). So no reactive path
-                // leaves isPrimaryTarget undefined in a way that could wrongly reflect.
+                // REACTIVE PATHS: a counter-attack or reactive damage proc leaves isPrimaryTarget
+                // undefined, so a Nosorog it strikes reflects (a passive hit counts as a
+                // primary-target hit). Detonation/bomb reactive hits pass bombPortion===total →
+                // directFraction 0 → reflectBasis 0 (no reflect); DoT ticks pass
+                // byDirectDamage:false (guard above).
                 const reflectAbilities =
                     reflectBasis > 0
                         ? incomingAbilitiesOf(victim.id).filter(
@@ -7780,7 +7769,6 @@ export function runCombat(rawInput: CombatEngineInput): {
                 counterOutcome = applyVictimDamage(raw, attacker, sink, {
                     killerId: owner.id,
                     byDirectDamage: true,
-                    isCounter: true,
                     // #358 ADDENDUM 2: the counter walk folds the ATTACKER's defence through
                     // `victimHitDamage`; `rawPreMit` is the same walk without it.
                     preMitigationDamage: rawPreMit,
@@ -8000,8 +7988,8 @@ export function runCombat(rawInput: CombatEngineInput): {
             // A reactive proc REDUCES the resolved victim's real HP through the SAME
             // shared funnel counters use (applyVictimDamage) — surfacing on the victim's HP curve
             // (roundPerTargetDamage → damageTaken) and attributed to the owner (creditDealt →
-            // perTargetDealt → damageDealt). Mirrors applyCounterAttack (isCounter:true → never
-            // itself reflected; Protection, shield penetration and Exposed apply, ruling 36) — a
+            // perTargetDealt → damageDealt). Mirrors applyCounterAttack (Reflect, Protection,
+            // shield penetration and Exposed apply, ruling 36) — a
             // Bomb splash copy excepted (`splashCopy`) — and deliberately does NOT creditDamage:
             // cumulativeDamage is the scalar
             // aggregate channel, so folding the reactive into it would double-count exactly like
@@ -8028,7 +8016,6 @@ export function runCombat(rawInput: CombatEngineInput): {
                 procOutcome = applyVictimDamage(raw, victim, sink, {
                     killerId: ownerId,
                     byDirectDamage: true,
-                    isCounter: true,
                     ...(splashCopy ? { isSplashCopy: true } : {}),
                     // #358 ADDENDUM 2: equals `raw` on the flat-basis branch (which folds no
                     // defence at all) and the pre-defence walk on the attack-basis branch.
@@ -8912,8 +8899,8 @@ export function runCombat(rawInput: CombatEngineInput): {
          *     ROLLS a `makeRateGate` draw on the victim's own `<id>:proc` sub-stream, which can
          *     also spend an `oncePerRound` block. Both are pinned in
          *     `passiveSlotDamageFootprint.integration.test.ts`.
-         *   • a `damage-reflection` ability — the instance sets neither `isReflected` nor
-         *     `isCounter`, so it PROVOKES thorns back at the attacker exactly as the firing hit
+         *   • a `damage-reflection` ability — the instance does not set `isReflected`, so it
+         *     PROVOKES thorns back at the attacker exactly as the firing hit
          *     does. (`isAnchor: false` below still exempts it from a `requirePrimaryTarget`
          *     reflect — Nosorog — since it is not the cast's primary-target hit.)
          * All of that is the intended reading of "a real damage instance"; it is recorded here so
