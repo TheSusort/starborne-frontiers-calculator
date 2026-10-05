@@ -1994,16 +1994,20 @@ export function registerReactiveListeners(args: {
                 case 'on-enemy-dot-damage':
                     bus.on('dot-ticked', (e) => {
                         // Anemone: opposing-scoped reaction to an ENEMY-side actor taking a DoT
-                        // TICK (any dotType). Stamp victimId = the tick's real target — Anemone's
+                        // TICK (any dotType). One enqueue per STACK that ticked (owner ruling R45:
+                        // each DoT stack is its own damage-over-time effect, so 3 Corrosion stacks
+                        // and 1 Inferno are four repairs); `e.stacks` is the tick group's summed
+                        // ticking stacks. Stamp victimId = the tick's real target — Anemone's
                         // heal is SELF-target, so `reactiveRecipients` resolves it to
                         // [intent.ownerId] regardless (target==='self' branch never reads
                         // victimId); the stamp exists for parity with the sibling cases and for any
                         // future non-self consumer of this trigger.
                         if (isOpposing(e.targetId))
-                            enqueue({
-                                ...intent,
-                                eventCtx: { ...intent.eventCtx, victimId: e.targetId },
-                            });
+                            for (let i = 0; i < Math.max(0, e.stacks); i++)
+                                enqueue({
+                                    ...intent,
+                                    eventCtx: { ...intent.eventCtx, victimId: e.targetId },
+                                });
                     });
                     break;
                 case 'on-enemy-cleansed': {
