@@ -111,7 +111,6 @@ describe('divergingSeeds', () => {
             wins: {
                 player: runs.filter((r) => r.winner === 'player').length,
                 enemy: runs.filter((r) => r.winner === 'enemy').length,
-                draw: runs.filter((r) => r.winner === 'draw').length,
             },
             meanRounds: 0,
             medianRounds: 0,
@@ -123,7 +122,7 @@ describe('divergingSeeds', () => {
         const runs = aggregate([
             ['player', 6],
             ['enemy', 7],
-            ['draw', 12],
+            ['enemy', 30],
         ]);
         expect(
             divergingSeeds(
@@ -131,7 +130,7 @@ describe('divergingSeeds', () => {
                 aggregate([
                     ['player', 9],
                     ['enemy', 4],
-                    ['draw', 12],
+                    ['enemy', 30],
                 ])
             )
         ).toEqual([]);
@@ -141,12 +140,12 @@ describe('divergingSeeds', () => {
         const baseline = aggregate([
             ['player', 6],
             ['enemy', 7],
-            ['draw', 12],
+            ['enemy', 30],
         ]);
         const current = aggregate([
             ['player', 6],
             ['player', 9],
-            ['draw', 12],
+            ['enemy', 30],
         ]);
         expect(divergingSeeds(baseline, current)).toEqual([
             {
@@ -168,7 +167,7 @@ describe('divergingSeeds', () => {
         const current = aggregate([
             ['player', 6],
             ['player', 6],
-            ['draw', 6],
+            ['player', 6],
         ]);
         expect(divergingSeeds(baseline, current).map((row) => row.seed)).toEqual([
             BASE_SEED,

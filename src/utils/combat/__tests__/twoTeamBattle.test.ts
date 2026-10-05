@@ -785,9 +785,10 @@ describe('simulateBattle adapter — edge cases (Phase 5 PR 1, Task 4)', () => {
         expect(deadPlayers.length).toBeGreaterThan(0);
     });
 
-    it('outcome: two tanky low-damage squads that cannot kill each other within the cap → DRAW', () => {
+    it('outcome: two tanky low-damage squads that cannot kill each other within the cap → ENEMY WINS', () => {
         // Huge HP + 1 attack on every ship → no ship can be wiped in 3 rounds. The battle runs
-        // to the cap with no side wiped → draw at the final round, all 3 rounds present.
+        // to the cap with no side wiped → the round limit is a defeat, so the enemy wins at the
+        // final round, all 3 rounds present.
         const result = simulateBattle({
             playerTeam: [
                 placement(makeShip('p1', 'Player Front', FRONT), 'M4', 1, 1_000_000_000),
@@ -800,9 +801,9 @@ describe('simulateBattle adapter — edge cases (Phase 5 PR 1, Task 4)', () => {
             rounds: 3,
         });
 
-        expect(result.outcome.winner).toBe('draw');
+        expect(result.outcome.winner).toBe('enemy');
         expect(result.outcome.lastRound).toBe(3);
-        // The full (untrimmed) round window is present for a draw — no early termination.
+        // The full (untrimmed) round window is present at the limit — no early termination.
         expect(result.rounds).toHaveLength(3);
         expect(result.rounds.map((r) => r.round)).toEqual([1, 2, 3]);
     });

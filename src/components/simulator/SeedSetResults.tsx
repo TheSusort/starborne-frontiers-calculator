@@ -88,7 +88,6 @@ const SeedSetResults: React.FC<Props> = ({ aggregate, onOpenSeed }) => {
                     </span>
                 </span>
                 <span>Enemy wins: {aggregate.wins.enemy}</span>
-                <span>Draws: {aggregate.wins.draw}</span>
                 <span>
                     Mean rounds: <span>{aggregate.meanRounds.toFixed(1)}</span>
                 </span>

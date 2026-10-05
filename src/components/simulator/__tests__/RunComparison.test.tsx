@@ -45,7 +45,7 @@ const aggregate = (wins: number, rounds: number, dealt: number, spread = 0): See
         count: COUNT,
         roster,
         runs,
-        wins: { player: wins, enemy: COUNT - wins, draw: 0 },
+        wins: { player: wins, enemy: COUNT - wins },
         meanRounds: runs.reduce((a, r) => a + r.lastRound, 0) / COUNT,
         medianRounds: rounds,
         perActorMean: {
@@ -147,7 +147,7 @@ describe('RunComparison', () => {
                 count: seedCount,
                 roster,
                 runs,
-                wins: { player: wins, enemy: seedCount - wins, draw: 0 },
+                wins: { player: wins, enemy: seedCount - wins },
                 meanRounds: rounds,
                 medianRounds: rounds,
                 perActorMean: { focus: { damageDealt: dealt, damageTaken: 0, healingDone: 0 } },
@@ -223,7 +223,7 @@ describe('RunComparison noise verdict', () => {
             />
         );
         // Scoped to the Player wins row specifically: a page-wide search for the noise wording
-        // would also be satisfied by rows this fixture never touches (draws, mean rounds,
+        // would also be satisfied by rows this fixture never touches (mean rounds,
         // per-actor damage), so a partial revert of only this row would still pass.
         const row = screen.getByText('Player wins').closest('tr')!;
         expect(row).toHaveTextContent(/not distinguishable/);
@@ -255,18 +255,17 @@ describe('RunComparison noise verdict', () => {
     });
 
     it('renders an unchanged row as a plain signed zero, not noise wording', () => {
-        // Draws is 0 in both configurations for every fixture in this file (winner is always
-        // 'player' or 'enemy'): baseline and current agree on every paired seed, so this is the
-        // "nothing moved" case, not a difference too small to trust.
+        // Both configurations win the same 10 seeds: baseline and current agree on every paired
+        // seed, so this is the "nothing moved" case, not a difference too small to trust.
         render(
             <RunComparison
-                baseline={baseline}
-                current={current}
+                baseline={pinned(aggregate(10, 6, 1000, 0))}
+                current={aggregate(10, 6, 1400, 0)}
                 currentOverrides={currentOverrides}
                 onOpenDivergence={() => {}}
             />
         );
-        const row = screen.getByText('Draws').closest('tr')!;
+        const row = screen.getByText('Player wins').closest('tr')!;
         expect(row).toHaveTextContent('0.0');
         expect(row).not.toHaveTextContent(/not distinguishable/);
         const zero = within(row).getByText('0.0');
@@ -279,7 +278,7 @@ describe('RunComparison noise verdict', () => {
     const roundsAggregate = (lastRounds: number[]): SeedSetAggregate => {
         const runs: SeedRunSummary[] = lastRounds.map((lastRound, i) => ({
             seed: BASE_SEED + i,
-            winner: 'draw',
+            winner: 'enemy',
             lastRound,
             perActor: { focus: { damageDealt: 0, damageTaken: 0, healingDone: 0 } },
         }));
@@ -291,7 +290,7 @@ describe('RunComparison noise verdict', () => {
             count: lastRounds.length,
             roster,
             runs,
-            wins: { player: 0, enemy: 0, draw: lastRounds.length },
+            wins: { player: 0, enemy: lastRounds.length },
             meanRounds: lastRounds.reduce((a, b) => a + b, 0) / lastRounds.length,
             medianRounds: median,
             perActorMean: { focus: { damageDealt: 0, damageTaken: 0, healingDone: 0 } },

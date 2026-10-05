@@ -11,7 +11,7 @@ import type { CombatLogEntry } from '../../log/types';
 const fakeResult = (kindsByActor: Record<string, string[]>): BattleResult =>
     ({
         rounds: [],
-        outcome: { winner: 'draw', lastRound: 1 },
+        outcome: { winner: 'enemy', lastRound: 1 },
         roster: [],
         combatLog: [
             {

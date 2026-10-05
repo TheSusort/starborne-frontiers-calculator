@@ -58,8 +58,8 @@ const pairedDelta = ({ mean, se, n, distinguishable }: PairedDelta) => ({
 
 interface BattleOut {
     runs: number;
-    outcome: { player_wins: number; enemy_wins: number; draws: number; win_rate: number };
-    seeds: { seed: number; winner: 'player' | 'enemy' | 'draw'; rounds: number }[];
+    outcome: { player_wins: number; enemy_wins: number; win_rate: number };
+    seeds: { seed: number; winner: 'player' | 'enemy'; rounds: number }[];
     ships: {
         side: string;
         position: string;
@@ -89,8 +89,9 @@ describe('simulate_battle', () => {
         const out = (await call(simulateBattle, vsAtlas('s1'), ctx)) as BattleOut;
 
         expect(out.runs).toBe(20);
-        const { player_wins, enemy_wins, draws } = out.outcome;
-        expect(player_wins + enemy_wins + draws).toBe(20);
+        const { player_wins, enemy_wins } = out.outcome;
+        expect(player_wins + enemy_wins).toBe(20);
+        expect(out.outcome).not.toHaveProperty('draws');
         expect(out.ships.map((s) => [s.side, s.position, s.name])).toEqual([
             ['player', 'T1', 'Geared'],
             ['enemy', 'T1', 'Atlas'],
@@ -110,15 +111,14 @@ describe('simulate_battle', () => {
 
         expect(out.seeds.map((s) => s.seed)).toEqual([10, 11, 12, 13, 14]);
         for (const s of out.seeds) {
-            expect(['player', 'enemy', 'draw']).toContain(s.winner);
+            expect(['player', 'enemy']).toContain(s.winner);
             expect(s.rounds).toBeGreaterThan(0);
         }
-        const counted = { player: 0, enemy: 0, draw: 0 };
+        const counted = { player: 0, enemy: 0 };
         for (const s of out.seeds) counted[s.winner]++;
         expect(counted).toEqual({
             player: out.outcome.player_wins,
             enemy: out.outcome.enemy_wins,
-            draw: out.outcome.draws,
         });
     });
 
@@ -219,7 +219,6 @@ describe('simulate_battle', () => {
         expect(out.outcome).toEqual({
             player_wins: aggregate.wins.player,
             enemy_wins: aggregate.wins.enemy,
-            draws: aggregate.wins.draw,
             win_rate: aggregate.wins.player / aggregate.count,
             mean_rounds: aggregate.meanRounds,
             median_rounds: aggregate.medianRounds,
@@ -271,7 +270,7 @@ describe('battle_log', () => {
         const out = (await call(battleLog, vsAtlas('s1', { seed: 7 }), ctx)) as LogOut;
 
         expect(out.seed).toBe(7);
-        expect(['player', 'enemy', 'draw']).toContain(out.outcome.winner);
+        expect(['player', 'enemy']).toContain(out.outcome.winner);
         expect(out.outcome.rounds).toBeGreaterThan(0);
         expect(out.ships.map((s) => [s.side, s.position, s.name])).toEqual([
             ['player', 'T1', 'Geared'],

@@ -555,7 +555,7 @@ describe('a reactive hit reads only debuffs that LANDED', () => {
 
 describe("DPS mode: a counter reads the calculator's enemy debuffs only where they LANDED", () => {
     // The page's "enemy debuffs" picks are the player's, scheduled against the enemy side and
-    // rolled hacking-vs-security every round. Defense Down II here never lands at hacking 0 vs
+    // rolled hacking-vs-security every round on the player side's turns only. Defense Down II here never lands at hacking 0 vs
     // security 1000, and always lands at hacking 1000 vs security 0.
     const DD2 = [
         {
@@ -660,11 +660,11 @@ describe("DPS mode: a counter reads the calculator's enemy debuffs only where th
         expect(counter('lands', 1)).toBeCloseTo(counter('none', 1), 9);
     });
 
-    it("the enemy's counter ignores a pick its own roll failed and reads one it landed", () => {
+    it("the enemy's counter and cast never read the calculator's picks", () => {
         // Mirror: an enemy Stalwart is hit by the (faster) player and counters onto the player,
-        // who has 5000 defence. The enemy rolls the calculator's picks on ITS turns against the
-        // player (its hacking 0 fails, 1000 lands, vs the player's default security 100) and its
-        // own cast onto the player reads that decision; the counter must read the same one.
+        // who has 5000 defence. The picks are the PLAYER side's debuffs on the enemy: the enemy
+        // never rolls them against the player, so neither its cast nor its counter onto the
+        // player moves, whatever its hacking.
         const focus = { skills: damageKit(), speed: 200, defence: 5000 };
         const enemy = { skills: stalwartKit(), speed: 100, attack: 10_000 };
         const counter = (l: Landing, round: number) =>
@@ -680,13 +680,11 @@ describe("DPS mode: a counter reads the calculator's enemy debuffs only where th
                 (e) => e.attackerId === REAL_ENEMY_ID && e.targetId === 'attacker' && e.round === 1
             ).damage!;
 
-        // Instrument: the enemy's cast reads its own landing decision.
         expect(cast('fails')).toBeCloseTo(cast('none'), 9);
-        expect(cast('lands') / cast('none')).toBeCloseTo(DEFENSE_DOWN_II_RATIO, 9);
-
-        expect(counter('fails', 2)).toBeCloseTo(counter('none', 2), 9);
-        expect(counter('lands', 2) / counter('none', 2)).toBeCloseTo(DEFENSE_DOWN_II_RATIO, 9);
-        // Round 1's counter comes before the enemy's first turn: nothing rolled, nothing landed.
-        expect(counter('lands', 1)).toBeCloseTo(counter('none', 1), 9);
+        expect(cast('lands')).toBeCloseTo(cast('none'), 9);
+        for (const round of [1, 2]) {
+            expect(counter('fails', round)).toBeCloseTo(counter('none', round), 9);
+            expect(counter('lands', round)).toBeCloseTo(counter('none', round), 9);
+        }
     });
 });

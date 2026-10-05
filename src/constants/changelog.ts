@@ -73,6 +73,10 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat log: a hit's main target now shows the damage it actually took.",
     'Combat simulator: Exposed now lasts until hit or the round ends.',
     'Combat simulator: debuff extensions now skip enemies with affinity advantage over the caster.',
+    'Combat simulator: a fight reaching the round limit is now an enemy win.',
+    'Combat simulator: extra complete Shield, Leech, Reflect, Revenge and Hardened sets now stack.',
+    'DPS calculator: your enemy-debuff picks no longer land on your own ship.',
+    'Combat simulator: both teams wiped in the same round is now an enemy win.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

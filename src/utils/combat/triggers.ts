@@ -2691,6 +2691,10 @@ export function buildActorConditionContext(
         /** Active buff names on the enemy. Default [] (DPS-assumption). Populated by
          *  buildDrainContext. */
         enemyBuffNames?: string[];
+        /** The owner fights on the ENEMY side. Its count of debuffs it has landed then excludes
+         *  the side-wide scheduled bucket (the DPS calculator's picks), which only the player side
+         *  puts on the enemy. Default false. */
+        ownerIsEnemySide?: boolean;
         /** Active debuff names on self. Default [] (DPS-assumption). Populated by
          *  buildDrainContext. */
         selfDebuffNames?: string[];
@@ -2782,7 +2786,7 @@ export function buildActorConditionContext(
     }
     return buildRoundContext({
         selfBuffNames,
-        landedEnemyDebuffCount: snap.activeEnemyDebuffs.length,
+        landedEnemyDebuffCount: shared.ownerIsEnemySide ? 0 : snap.activeEnemyDebuffs.length,
         corrosionStacks: shared.corrosionStacks,
         infernoStacks: shared.infernoStacks,
         bombStacks: shared.bombStacks,
@@ -3062,6 +3066,7 @@ function buildDrainContext(ctx: IntentExecContext, ownerId: string) {
     // see buildActorConditionContext doc.)
     return buildActorConditionContext(ctx.statusEngine, ownerId, {
         includeAbilitySelfNames: true,
+        ownerIsEnemySide: ownerActor?.side === 'enemy',
         // Live DoT stack counts + per-family map (Belladonna's "3+ Acidic Decay" gate) at drain
         // time. `ctx.genericDoTEntries` is optional (test fixtures may omit it).
         ...dotReadings(ctx),

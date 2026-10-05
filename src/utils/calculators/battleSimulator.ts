@@ -246,10 +246,15 @@ export interface BattleRound {
     turnOrder: string[];
 }
 
+/** Which side won a fight. A fight always has a winner (see `assembleBattleResult`). */
+export type BattleWinner = 'player' | 'enemy';
+
 export interface BattleResult {
     /** Trimmed at termination (no rounds after outcome.lastRound). */
     rounds: BattleRound[];
-    outcome: { winner: 'player' | 'enemy' | 'draw'; lastRound: number };
+    /** There is no draw: a same-round mutual wipe and the round limit are both `enemy` wins.
+     *  See `assembleBattleResult`. */
+    outcome: { winner: BattleWinner; lastRound: number };
     roster: Array<{ actorId: string; side: 'player' | 'enemy'; name: string; position: Position }>;
     /**
      * Rich, hierarchical play-by-play folded from the raw CombatEvent stream by
@@ -380,10 +385,13 @@ type _AssertLogSupersetOfAssembled =
 const _checkLogSuperset: _AssertLogSupersetOfAssembled = true;
 
 /**
- * Precondition: expects BOTH sides of `roster` to be non-empty. The wipe checks guard
- * against empty sides (a side with zero members is never treated as "wiped"), so a
- * degenerate single-side roster fails safe to `draw` at numRounds rather than awarding
- * a spurious winner at round 1.
+ * Precondition: BOTH sides of `roster` are non-empty; a roster missing a side throws, since such
+ * a fight has nobody to win or lose (`simulateBattle` refuses an empty team before this runs).
+ *
+ * Outcome: the first round that wipes a side decides it. The player wins only by wiping the enemy
+ * while keeping a ship alive: both sides wiped in the same round, and reaching `numRounds` with
+ * both still alive, are ENEMY wins — a timeout is a defeat (docs/combat-system.md §1, "Round limit
+ * exceeded → Defeat"), and so is losing your whole team.
  */
 export function assembleBattleResult(args: {
     events: CombatEvent[];
@@ -470,7 +478,12 @@ export function assembleBattleResult(args: {
 
     const rounds: BattleRound[] = [];
     let lastRound = numRounds;
-    let winner: 'player' | 'enemy' | 'draw' = 'draw';
+    if (!roster.some((r) => r.side === 'player') || !roster.some((r) => r.side === 'enemy')) {
+        throw new Error('assembleBattleResult: the roster must field both sides');
+    }
+    // Overwritten only by a player wipe of the enemy below; standing at the loop's end means the
+    // round limit ran out with both sides alive, which the enemy wins.
+    let winner: BattleWinner = 'enemy';
 
     for (let round = 1; round <= numRounds; round++) {
         const roundEvents = events.filter((e) => 'round' in e && e.round === round);
@@ -696,9 +709,9 @@ export function assembleBattleResult(args: {
         rounds.push({ round, ships, turnOrder });
 
         // Termination: first round where ALL of one side's actors are destroyed.
-        // A side counts as wiped only if it has >=1 member AND all are destroyed —
-        // an empty side ([].every(...) === true) must NOT be treated as wiped, or a
-        // degenerate single-side roster would award a spurious winner at round 1.
+        // A side counts as wiped only if it has >=1 member AND all are destroyed
+        // ([].every(...) === true). Both sides are fielded (checked above), so this guard is
+        // belt-and-braces.
         const isWiped = (side: 'player' | 'enemy'): boolean => {
             const members = roster.filter((r) => r.side === side);
             return (
@@ -714,8 +727,8 @@ export function assembleBattleResult(args: {
 
         if (playerWiped || enemyWiped) {
             lastRound = round;
-            // If both wiped in the same round, treat as a draw.
-            winner = playerWiped && enemyWiped ? 'draw' : playerWiped ? 'enemy' : 'player';
+            // Both wiped in the same round: the player has no ship left, so the enemy wins.
+            winner = playerWiped ? 'enemy' : 'player';
             break;
         }
     }
@@ -767,7 +780,8 @@ export interface BattlePlacement {
 export interface BattleSimulationInput {
     playerTeam: BattlePlacement[];
     enemyTeam: BattlePlacement[];
-    /** Fixed round cap. Default 30. The result is trimmed at the first wipe. */
+    /** Fixed round cap. Default 30. The result is trimmed at the first wipe; reaching the cap
+     *  with both sides alive is an enemy win. */
     rounds?: number;
     /** Player-side squad leader (pre-fight faction aura). Absent → no pre-fight change. */
     playerSquadLeader?: SquadLeaderSelection;
@@ -1014,7 +1028,7 @@ export function simulateBattle(
     getGearPiece?: (id: string) => GearPiece | undefined
 ): BattleResult {
     // Validate inputs up front (trust boundary): empty teams or a bad round count
-    // would otherwise flow through and produce misleading draw/empty outcomes.
+    // would otherwise flow through and produce misleading or empty outcomes.
     if (input.playerTeam.length === 0) {
         throw new Error('simulateBattle: playerTeam is empty');
     }

@@ -23,7 +23,7 @@ const shipState = (actorId: string, side: 'player' | 'enemy', hpPct: number) => 
     activeDebuffs: [],
 });
 
-const battle = (rounds: number, winner: 'player' | 'enemy' | 'draw'): BattleResult =>
+const battle = (rounds: number, winner: BattleResult['outcome']['winner']): BattleResult =>
     ({
         rounds: Array.from({ length: rounds }, (_, i) => ({
             round: i + 1,
@@ -49,7 +49,7 @@ describe('DivergencePlayback', () => {
         onClose: vi.fn(),
     };
 
-    it('names the seed and reads correctly for every outcome, including a draw', () => {
+    it('names the seed and reads correctly for both outcomes', () => {
         render(<DivergencePlayback {...props} />);
         expect(screen.getByText(/Seed 507/)).toBeInTheDocument();
         // props: baseline is a 4-round enemy win, current a 7-round player win.
@@ -57,20 +57,6 @@ describe('DivergencePlayback', () => {
             screen.getByText(
                 'Baseline: Enemy wins in 4 rounds. Current: Your team wins in 7 rounds.'
             )
-        ).toBeInTheDocument();
-    });
-
-    it('reads correctly when one side is a draw', () => {
-        render(
-            <DivergencePlayback
-                seed={507}
-                baseline={battle(4, 'draw')}
-                current={battle(7, 'player')}
-                onClose={vi.fn()}
-            />
-        );
-        expect(
-            screen.getByText('Baseline: Draw in 4 rounds. Current: Your team wins in 7 rounds.')
         ).toBeInTheDocument();
     });
 

@@ -144,7 +144,7 @@ describe('runSeedSet', () => {
 
     it('win counts sum to the run count', () => {
         const agg = runSeedSet(input(), 500, 6);
-        expect(agg.wins.player + agg.wins.enemy + agg.wins.draw).toBe(6);
+        expect(agg.wins.player + agg.wins.enemy).toBe(6);
     });
 
     it('meanRounds is the mean of its own runs', () => {

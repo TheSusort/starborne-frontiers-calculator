@@ -17,7 +17,7 @@ const winSeries = (wins: number, n: number): number[] =>
 
 const run = (seed: number, lastRound: number): SeedRunSummary => ({
     seed,
-    winner: 'draw',
+    winner: 'enemy',
     lastRound,
     perActor: {},
 });
@@ -27,7 +27,7 @@ const aggregateWithRuns = (runs: SeedRunSummary[]): SeedSetAggregate => ({
     count: runs.length,
     roster: [],
     runs,
-    wins: { player: 0, enemy: 0, draw: runs.length },
+    wins: { player: 0, enemy: runs.length },
     meanRounds: 0,
     medianRounds: 0,
     perActorMean: {},
@@ -94,7 +94,7 @@ describe('pairedDelta', () => {
         expect(() => pairedDelta([1, 2], [1, 2, 3])).toThrow(/length/i);
     });
 
-    describe('the exact sign test on a binary (win/draw) series', () => {
+    describe('the exact sign test on a binary (win/loss) series', () => {
         it('calls five same-direction discordant pairs out of twenty a coin flip, not a result', () => {
             // Five 0->1 flips, the rest unchanged: the exact two-sided sign test on 5 non-zero,
             // all-same-direction differences is p = 2 * 0.5^5 = 0.0625, above the 0.05 cutoff —
@@ -130,7 +130,7 @@ describe('pairedDelta', () => {
 
     describe('routing is chosen by the caller, not sniffed from the values', () => {
         it('gives the continuous verdict for a same-direction {-1,0,1}-shaped series when no metric kind is passed', () => {
-            // Every seed moves by exactly one: the shape a win/draw row also produces, but this
+            // Every seed moves by exactly one: the shape a win/loss row also produces, but this
             // is called the way a rounds delta is (no third argument), so it stays on the t rule.
             // Zero spread means the `se === 0` shortcut fires: distinguishable whenever mean !== 0.
             const result = pairedDelta([0, 0, 0, 0], [1, 1, 1, 1]);

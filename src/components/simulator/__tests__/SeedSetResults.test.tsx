@@ -26,7 +26,7 @@ const aggregate: SeedSetAggregate = {
             perActor: { focus: { damageDealt: 600, damageTaken: 900, healingDone: 0 } },
         },
     ],
-    wins: { player: 1, enemy: 1, draw: 0 },
+    wins: { player: 1, enemy: 1 },
     meanRounds: 5,
     medianRounds: 6,
     perActorMean: { focus: { damageDealt: 800, damageTaken: 550, healingDone: 0 } },

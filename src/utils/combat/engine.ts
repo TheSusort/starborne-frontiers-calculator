@@ -701,6 +701,7 @@ function seedPassiveTimedStatuses(
 ): void {
     for (const rt of runtimes) {
         const seedCtx = buildActorConditionContext(statusEngine, rt.actor.id, {
+            ownerIsEnemySide: rt.actor.side === 'enemy',
             corrosionStacks: 0,
             infernoStacks: 0,
             bombStacks: 0,
@@ -7553,8 +7554,9 @@ export function runCombat(rawInput: CombatEngineInput): {
          * (`incomingReductionForHit`), which the cast path takes outside the profile.
          *
          * Scheduled (input-level) enemy debuffs come from the OWNER's most recent turn's LANDED set
-         * (`landedScheduledEnemyEffectsByActor`), on either side — the same gated list the owner's
-         * own cast read — never the raw `__enemy__` bucket, so one whose landing roll failed
+         * (`landedScheduledEnemyEffectsByActor`) — the same gated list the owner's own cast read,
+         * always empty for an enemy-side owner (see runPlayerTurn's snapshot read) — never the
+         * raw `__enemy__` bucket, so one whose landing roll failed
          * reaches nothing. Debuffs other actors' casts applied live in the victim's per-victim
          * store, which `victimDefenseProfileOf` reads for every hit.
          */

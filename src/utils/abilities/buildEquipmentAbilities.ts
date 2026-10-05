@@ -21,7 +21,7 @@
  * doesn't roll its own heal-crit; flagged as a modeling choice for reviewer confirmation.
  */
 
-import { getGearSet, GearSetName, isGearSetName } from '../../constants/gearSets';
+import { completeSetCount, GearSetName, isGearSetName } from '../../constants/gearSets';
 import { getImplantData } from '../../constants/implants';
 import { BUFFS } from '../../constants/buffs';
 import { parseBuffEffects, isStackable } from '../calculators/buffParser';
@@ -41,19 +41,28 @@ import { Ship } from '../../types/ship';
 // Gear-set ability registry (D-PR1: Leech; D-PR3: Hardened)
 // ---------------------------------------------------------------------------
 
+// Each builder receives the number of COMPLETE sets worn (`completeSetCount`, always >= 1) and
+// scales its effect by it: every complete set adds the set's effect again, so 6 pieces of a
+// 2-piece set are three times one set. A 4-piece set can only reach 1 in six slots.
 const GEAR_SET_ABILITIES: Partial<
-    Record<string, (count: number) => Omit<Ability, 'id'> | undefined>
+    Record<string, (sets: number) => Omit<Ability, 'id'> | undefined>
 > = {
-    LEECH: () => ({
+    LEECH: (sets) => ({
         type: 'heal',
         target: 'self',
         trigger: 'on-cast',
         conditions: [],
-        config: { type: 'heal', pct: 15, basis: 'damage-dealt', leechScope: 'all', noCrit: true },
+        config: {
+            type: 'heal',
+            pct: 15 * sets,
+            basis: 'damage-dealt',
+            leechScope: 'all',
+            noCrit: true,
+        },
         autoFilled: true,
     }),
-    // Hardened: reduce incoming direct-damage crits by 5% (crit-reduction family).
-    HARDENED: () => ({
+    // Hardened: reduce incoming direct-damage crits by 5% per set (crit-reduction family).
+    HARDENED: (sets) => ({
         type: 'incoming-reduction',
         target: 'self',
         trigger: 'on-cast',
@@ -62,7 +71,7 @@ const GEAR_SET_ABILITIES: Partial<
             type: 'incoming-reduction',
             scope: 'direct',
             condition: 'incoming-crit',
-            pct: 5,
+            pct: 5 * sets,
             critFamily: true,
         },
         autoFilled: true,
@@ -70,29 +79,26 @@ const GEAR_SET_ABILITIES: Partial<
     // Cloaking: at the start of combat (round 1, before any ship acts), gain Stealth
     // for 2 turns, once per battle. start-of-round + oncePerCombat is what the engine's
     // `drainStartOfRound` treats as start of COMBAT: it lands before any start-of-round
-    // effect on either side resolves.
+    // effect on either side resolves. One grant whatever the set count: a second or third
+    // complete Cloaking set adds nothing.
     CLOAKING: () =>
         mkNamedBuffGrant('Stealth', 'self', 'start-of-round', 2, { oncePerCombat: true }),
     // Decimation (2pc set): +10% DoT damage per complete set, max 3 sets (6 pieces) = +30%.
     // Standing passive → modeled as a dotDamage modifier that folds into dotMult via
     // effectiveDamageStatsOf.selfDotDamageModifier (engine + DPS calc both honor it).
-    DECIMATION: (count) => {
-        const minPieces = getGearSet('DECIMATION')?.minPieces ?? 2;
-        const sets = Math.floor(count / minPieces); // 1/2/3 at 2/4/6 pieces
-        return {
+    DECIMATION: (sets) => ({
+        type: 'modifier',
+        target: 'self',
+        trigger: 'on-cast',
+        conditions: [],
+        config: {
             type: 'modifier',
-            target: 'self',
-            trigger: 'on-cast',
-            conditions: [],
-            config: {
-                type: 'modifier',
-                channel: 'dotDamage',
-                value: sets * 10,
-                isMultiplicative: false,
-            },
-            autoFilled: true,
-        };
-    },
+            channel: 'dotDamage',
+            value: sets * 10,
+            isMultiplicative: false,
+        },
+        autoFilled: true,
+    }),
     // Burner (4pc set): applies Inferno 1 (tier 15) for 2 turns when the ship attacks.
     // `on-cast` is NOT a LIVE_TRIGGER — passive-slot on-cast DoTs are never applied by the
     // engine (the cast path only gathers DoTs from the FIRED skill, and the reactive executor
@@ -120,39 +126,40 @@ const GEAR_SET_ABILITIES: Partial<
         },
         autoFilled: true,
     }),
-    // Reflect (2pc set): reflect 10% of each direct hit back to the attacker (thorns).
+    // Reflect (2pc set): reflect 10% per set of each direct hit back to the attacker (thorns).
     // Victim-side passive — collected into incomingAbilitiesById by config.type; apply seam
     // wired in Task 5. Top-level type:'modifier' is a placeholder (the engine keys on
     // config.type:'damage-reflection', not the top-level type).
-    REFLECT: () => ({
+    REFLECT: (sets) => ({
         type: 'modifier',
         target: 'self',
         trigger: 'on-cast',
         conditions: [],
-        config: { type: 'damage-reflection', pct: 10 },
+        config: { type: 'damage-reflection', pct: 10 * sets },
         autoFilled: true,
     }),
     // Revenge (2pc set): "Increase damage by +25% * lost HP%". Missing-HP-scaled outgoing damage
-    // modifier: value 0 + scaling (perUnit 0.25 of missing HP %, cap +25pp). At full HP evaluates
-    // to 0 → inert in DPS mode (which always runs at full HP). At 0 HP → capped +25pp.
-    REVENGE: () => ({
+    // modifier: value 0 + scaling (perUnit 0.25 of missing HP % per set, cap +25pp per set). At
+    // full HP evaluates to 0 → inert in DPS mode (which always runs at full HP).
+    REVENGE: (sets) => ({
         type: 'modifier',
         target: 'self',
         trigger: 'on-cast',
         conditions: [{ subject: 'self-hp-missing-pct', derivable: true }],
-        scaling: { conditionIndex: 0, perUnit: 0.25, cap: 25 },
+        scaling: { conditionIndex: 0, perUnit: 0.25 * sets, cap: 25 * sets },
         config: { type: 'modifier', channel: 'outgoingDamage', value: 0, isMultiplicative: false },
         autoFilled: true,
     }),
-    // Shield gear set: "Generate 4% shield each turn" → start-of-turn self shield of 4% caster max HP.
+    // Shield gear set: "Generate 4% shield each turn" → start-of-turn self shield of 4% caster max HP
+    // per set.
     // start-of-turn is a LIVE trigger → partitions to the reactive path; lands via the per-recipient
     // routing fix (H2/H3 Task 0.1). basis 'hp' = caster max HP.
-    SHIELD: () => ({
+    SHIELD: (sets) => ({
         type: 'shield',
         target: 'self',
         trigger: 'start-of-turn',
         conditions: [],
-        config: { type: 'shield', pct: 4, basis: 'hp' },
+        config: { type: 'shield', pct: 4 * sets, basis: 'hp' },
         autoFilled: true,
     }),
     // Boost (4pc set): every buff the wearer APPLIES lasts +1 turn (caster-side). Modeled NOT
@@ -1193,13 +1200,13 @@ export function buildEquipmentAbilities(
     }
 
     for (const [setName, count] of Object.entries(setCounts)) {
-        const minPieces = getGearSet(setName)?.minPieces ?? 2;
-        if (count < minPieces) continue;
+        const sets = completeSetCount(setName, count);
+        if (sets === 0) continue;
 
         const builder = GEAR_SET_ABILITIES[setName];
         if (!builder) continue;
 
-        const partial = builder(count);
+        const partial = builder(sets);
         if (!partial) continue;
         abilities.push({ id: `equip-set-${setName}`, ...partial });
     }

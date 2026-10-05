@@ -4,7 +4,7 @@ exports[`sim goldens (BattleResult snapshots) > 2v2 1`] = `
 {
   "outcome": {
     "lastRound": 8,
-    "winner": "draw",
+    "winner": "enemy",
   },
   "roster": [
     {
@@ -769,7 +769,7 @@ exports[`sim goldens (BattleResult snapshots) > 3v3 1`] = `
 {
   "outcome": {
     "lastRound": 8,
-    "winner": "draw",
+    "winner": "enemy",
   },
   "roster": [
     {
@@ -1905,7 +1905,7 @@ exports[`sim goldens (BattleResult snapshots) > dps 1`] = `
 {
   "outcome": {
     "lastRound": 8,
-    "winner": "draw",
+    "winner": "enemy",
   },
   "roster": [
     {
@@ -2306,7 +2306,7 @@ exports[`sim goldens (BattleResult snapshots) > f1Reconciliation 1`] = `
 {
   "outcome": {
     "lastRound": 6,
-    "winner": "draw",
+    "winner": "enemy",
   },
   "roster": [
     {
@@ -2865,7 +2865,7 @@ exports[`sim goldens (BattleResult snapshots) > healCasting 1`] = `
 {
   "outcome": {
     "lastRound": 8,
-    "winner": "draw",
+    "winner": "enemy",
   },
   "roster": [
     {
@@ -3432,7 +3432,7 @@ exports[`sim goldens (BattleResult snapshots) > healModifierScaling 1`] = `
 {
   "outcome": {
     "lastRound": 6,
-    "winner": "draw",
+    "winner": "enemy",
   },
   "roster": [
     {
@@ -3991,7 +3991,7 @@ exports[`sim goldens (BattleResult snapshots) > healUnequalPerRecipient 1`] = `
 {
   "outcome": {
     "lastRound": 8,
-    "winner": "draw",
+    "winner": "enemy",
   },
   "roster": [
     {
@@ -4724,7 +4724,7 @@ exports[`sim goldens (BattleResult snapshots) > healing 1`] = `
 {
   "outcome": {
     "lastRound": 8,
-    "winner": "draw",
+    "winner": "enemy",
   },
   "roster": [
     {
@@ -5481,7 +5481,7 @@ exports[`sim goldens (BattleResult snapshots) > outgoingSuppression 1`] = `
 {
   "outcome": {
     "lastRound": 8,
-    "winner": "draw",
+    "winner": "enemy",
   },
   "roster": [
     {
@@ -6246,7 +6246,7 @@ exports[`sim goldens (BattleResult snapshots) > perVictimAffinityAoe 1`] = `
 {
   "outcome": {
     "lastRound": 4,
-    "winner": "draw",
+    "winner": "enemy",
   },
   "roster": [
     {
@@ -6631,7 +6631,7 @@ exports[`sim goldens (BattleResult snapshots) > reactiveDamagePositional 1`] = `
 {
   "outcome": {
     "lastRound": 8,
-    "winner": "draw",
+    "winner": "enemy",
   },
   "roster": [
     {

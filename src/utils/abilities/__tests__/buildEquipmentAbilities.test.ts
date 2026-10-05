@@ -954,3 +954,94 @@ describe('Chrono Reaver implant', () => {
         expect(buildForImplant('CHRONO_REAVER', 'rare')).toEqual([]);
     });
 });
+
+// ---------------------------------------------------------------------------
+// Complete sets stack (owner ruling 42): every complete set of a 2-piece effect set adds its
+// effect again, like Decimation and like the stat page. 5 pieces = 2 complete sets.
+// ---------------------------------------------------------------------------
+describe('complete gear sets stack', () => {
+    function shipWithSet(setKey: GearSetName, pieces: number) {
+        const equipment: Record<string, string> = {};
+        const map: Record<string, GearPiece> = {};
+        const slots = ['weapon', 'hull', 'generator', 'sensor', 'software', 'thrusters'] as const;
+        for (let i = 0; i < pieces; i++) {
+            const id = `${setKey}-${i}`;
+            equipment[slots[i]] = id;
+            map[id] = makePiece({ id, slot: slots[i], setBonus: setKey });
+        }
+        return buildEquipmentAbilities(makeShip({ equipment }), (id) => map[id]).find(
+            (a) => a.id === `equip-set-${setKey}`
+        );
+    }
+    const PIECES_TO_SETS = [
+        [2, 1],
+        [3, 1],
+        [4, 2],
+        [5, 2],
+        [6, 3],
+    ] as const;
+
+    it('Shield: 4% shield per complete set (6 pieces = 12%)', () => {
+        for (const [pieces, sets] of PIECES_TO_SETS) {
+            expect(shipWithSet('SHIELD', pieces)?.config).toEqual({
+                type: 'shield',
+                pct: 4 * sets,
+                basis: 'hp',
+            });
+        }
+    });
+
+    it('Leech: 15% of damage dealt per complete set (6 pieces = 45%)', () => {
+        for (const [pieces, sets] of PIECES_TO_SETS) {
+            expect(shipWithSet('LEECH', pieces)?.config).toMatchObject({
+                type: 'heal',
+                pct: 15 * sets,
+                basis: 'damage-dealt',
+            });
+        }
+    });
+
+    it('Reflect: 10% reflected per complete set (6 pieces = 30%)', () => {
+        for (const [pieces, sets] of PIECES_TO_SETS) {
+            expect(shipWithSet('REFLECT', pieces)?.config).toEqual({
+                type: 'damage-reflection',
+                pct: 10 * sets,
+            });
+        }
+    });
+
+    it('Hardened: 5% less crit damage taken per complete set (6 pieces = 15%)', () => {
+        for (const [pieces, sets] of PIECES_TO_SETS) {
+            expect(shipWithSet('HARDENED', pieces)?.config).toMatchObject({
+                type: 'incoming-reduction',
+                condition: 'incoming-crit',
+                pct: 5 * sets,
+                critFamily: true,
+            });
+        }
+    });
+
+    it('Revenge: +25% x lost HP% per complete set, capped at 25 per set (6 pieces = 75%)', () => {
+        for (const [pieces, sets] of PIECES_TO_SETS) {
+            expect(shipWithSet('REVENGE', pieces)?.scaling).toEqual({
+                conditionIndex: 0,
+                perUnit: 0.25 * sets,
+                cap: 25 * sets,
+            });
+        }
+    });
+
+    it('negative: one piece of any of them is no set at all', () => {
+        for (const setKey of ['SHIELD', 'LEECH', 'REFLECT', 'HARDENED', 'REVENGE'] as const) {
+            expect(shipWithSet(setKey, 1)).toBeUndefined();
+        }
+    });
+
+    it('4-piece sets (Burner, Boost) reach one complete set at most in six slots', () => {
+        expect(shipWithSet('BURNER', 6)?.config).toMatchObject({ stacks: 1, tier: 15 });
+        expect(shipWithSet('BOOST', 6)?.config).toEqual({
+            type: 'buff-duration-extension',
+            turns: 1,
+        });
+    });
+});

@@ -7,7 +7,7 @@ import {
 } from '../../types/stats';
 import { Refit } from '../../types/ship';
 import { GearPiece } from '../../types/gear';
-import { getGearSet } from '../../constants/gearSets';
+import { completeSetCount, getGearSet } from '../../constants/gearSets';
 import { EquipmentSlotName, ImplantSlotName } from '../../constants/gearTypes';
 import { getCalibratedMainStat, isCalibrationEligible } from '../gear/calibrationUtils';
 
@@ -141,7 +141,7 @@ export const calculateTotalStats = (
         const setCounts = countSetPieces();
 
         Object.entries(setCounts).forEach(([setType, count]) => {
-            const bonusCount = Math.floor(count / (getGearSet(setType)?.minPieces || 2));
+            const bonusCount = completeSetCount(setType, count);
             if (bonusCount === 0) return;
 
             const gearWithBonus = Object.values(equipment)
