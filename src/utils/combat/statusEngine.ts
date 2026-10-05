@@ -299,7 +299,7 @@ export interface StatusEngine {
     decrementEnemy(targetId?: string): { expired: string[] };
     /** Remove every REMOVABLE timed status carried by this id, across both the player-side
      *  self store (keyed by ownerId) and the enemy-side store (keyed by targetId). Preserves:
-     *  persistent-stacking entries (separate maps, never touched), entries flagged
+     *  persistent-stacking entries (separate maps this wipe never touches), entries flagged
      *  `turnsRemaining === 'permanent'`, and entries whose buffName ∈ UNREMOVABLE_STATUSES.
      *  Standing always-active/aura source lists are NOT touched — they re-derive each round
      *  from ship data, so a wipe of applied statuses is the model and auras re-apply next round.
@@ -742,6 +742,12 @@ interface PersistentStackState {
     stacks: number;
     maxStacks?: number;
     payload?: AbilityStatusPayload;
+    /** When each stack was gained, oldest first, on the store's application sequence
+     *  (`nextAppliedSeq`); the stacks of one application share one value. What a cleanse orders a
+     *  persistent DEBUFF's stacks by against every other debuff (owner ruling R44). A self-side
+     *  spend (`consumeSelfStatusStack`, Titanite) does not trim it, so on the self side it may run
+     *  longer than `stacks`; only the enemy side reads it. */
+    stackSeqs: number[];
 }
 
 /** Per-source timed buff/debuff sets used by `createStatusEngine` to route scheduled
@@ -1057,23 +1063,21 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
                 : getPersistentEnemy(ownerOrTargetId);
         const maxStacks = persistentCapFor(buffName);
         const existing = map.get(buffName);
+        const before = existing?.stacks ?? 0;
+        const after =
+            maxStacks !== undefined
+                ? Math.min(before + applicationStacks, maxStacks)
+                : before + applicationStacks;
+        // One seq for this application's stacks; a capped application that adds none stamps none.
+        const seq = after > before ? nextAppliedSeq() : 0;
+        const added = Array.from({ length: after - before }, () => seq);
         if (existing) {
-            existing.stacks =
-                maxStacks !== undefined
-                    ? Math.min(existing.stacks + applicationStacks, maxStacks)
-                    : existing.stacks + applicationStacks;
+            existing.stacks = after;
+            existing.stackSeqs.push(...added);
             if (payload) existing.payload = payload;
             return;
         }
-        map.set(buffName, {
-            buffName,
-            stacks:
-                maxStacks !== undefined
-                    ? Math.min(applicationStacks, maxStacks)
-                    : applicationStacks,
-            maxStacks,
-            payload,
-        });
+        map.set(buffName, { buffName, stacks: after, maxStacks, payload, stackSeqs: added });
     };
 
     // Ability-sourced aura statuses (recurring/passive): held with their (already
@@ -1560,8 +1564,8 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
      *  Reusable by a later phase's cleanse/purge. A status is unremovable when it is a
      *  persistent stack (the 'permanent' sentinel — those also live in separate maps that
      *  clearRemovable never visits, so this is a belt-and-braces guard) or its buffName is
-     *  named in UNREMOVABLE_STATUSES. Persistent-stacking debuffs are unremovable by
-     *  construction (separate maps); UNREMOVABLE_STATUSES names any ADDITIONAL effects. */
+     *  named in UNREMOVABLE_STATUSES. The persistent maps are a separate pool: a cleanse takes
+     *  persistent debuff stacks (`removeNewestFirst`), the Cheat-Death wipe does not. */
     const isUnremovable = (
         buffName: string,
         turnsRemaining: number | 'recurring' | 'permanent'
@@ -1569,7 +1573,8 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
 
     /** Remove every removable timed entry for `id` across the player-side self store
      *  (keyed by ownerId) and the enemy-side store (keyed by targetId). Persistent-stack
-     *  maps are not visited (unremovable by construction). Unknown id → lazy-empty maps →
+     *  maps are not visited — Defense Shred survives a Cheat Death even though a cleanse
+     *  takes its stacks (ruling R44 covers cleanse only). Unknown id → lazy-empty maps →
      *  no-op. Always/aura source lists are intentionally left intact (they re-derive each
      *  round from ship data). */
     const clearRemovable = (id: string): void => {
@@ -1759,8 +1764,9 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
      *  FIRST (highest `appliedSeq` removed first).
      *
      *  Side mapping:
-     *  - `'debuffs'` → the actor's per-victim enemy-side timed + accumulating stores (cleanse).
-     *  - `'buffs'`   → the actor's player-side self stores (purge).
+     *  - `'debuffs'` → the actor's per-victim enemy-side timed + accumulating stores, and its
+     *    persistent-stacking debuffs one STACK per candidate (cleanse; owner ruling R44).
+     *  - `'buffs'`   → the actor's player-side timed + accumulating self stores (purge).
      *
      *  Skips:
      *  - entries whose `buffName` is in `UNREMOVABLE_STATUSES`.
@@ -1768,8 +1774,9 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
      *    practice 'permanent'-sentinel entries live in the separate persistent maps, not here).
      *  - accumulating entries that are still inert (`stacks <= 0` or `appliedSeq` not yet stamped).
      *
-     *  NOT gathered (unremovable by construction):
-     *  - persistent-stacking maps (`persistentSelfMaps` / `persistentEnemyMaps`) — never visited.
+     *  NOT gathered:
+     *  - persistent-stacking BUFFS (`persistentSelfMaps`) — a purge takes the newest WHOLE buff
+     *    from the timed and accumulating stores only (owner ruling R38).
      *
      *  NOT in these maps (re-derive each round, no stored entry to remove):
      *  - always-active / aura statuses.
@@ -1811,6 +1818,27 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
                 // (accum entries have no duration; 0 is an inert placeholder — only the name gate applies)
                 if (isUnremovable(s.buffName, 0)) continue;
                 candidates.push({ seq: s.appliedSeq, remove: () => accumMap.delete(key) });
+            }
+        }
+        // A persistent-stacking DEBUFF offers one candidate per STACK (owner ruling R44: Defense
+        // Shred ×3, "cleanses 1 debuff" → 2), each dated by its own `stackSeqs` entry. Removing
+        // one drops the newest stack; the entry goes with its last stack.
+        const persistentMap =
+            namedToo && side === 'debuffs' ? persistentEnemyMaps.get(actorId) : undefined;
+        if (persistentMap) {
+            for (const [key, s] of persistentMap) {
+                if (UNREMOVABLE_STATUSES.has(s.buffName)) continue;
+                const seqs = s.stackSeqs.slice(-s.stacks);
+                for (let i = 0; i < s.stacks; i++) {
+                    candidates.push({
+                        seq: seqs[i] ?? 0,
+                        remove: () => {
+                            s.stacks -= 1;
+                            s.stackSeqs.splice(s.stackSeqs.indexOf(Math.max(...s.stackSeqs)), 1);
+                            if (s.stacks <= 0) persistentMap.delete(key);
+                        },
+                    });
+                }
             }
         }
         candidates.sort((a, b) => b.seq - a.seq);
