@@ -72,6 +72,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: Blast and Overload gained every turn now stack on extra actions.',
     "Combat simulator: each of Amartya's Defense Shred and Exposed stacks now rolls separately.",
     'Combat simulator: cleanses now remove Defense Shred, one stack per cleansed debuff.',
+    'Combat simulator: each stack of a buff now counts as one buff.',
     "Combat simulator: Cobalt's and Makoli's passives now check their own HP on either team.",
     "Combat simulator: Cobalt's charged bonus damage now requires him to be at full HP.",
     "Combat log: a hit's main target now shows the damage it actually took.",

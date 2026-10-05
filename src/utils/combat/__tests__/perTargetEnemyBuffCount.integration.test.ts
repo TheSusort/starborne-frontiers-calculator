@@ -1,6 +1,6 @@
 /**
- * "Buffs on the enemy" counts the DISTINCT buffs on the cast's bound target (owner rulings
- * 2026-10-03):
+ * "Buffs on the enemy" counts the buffs on the cast's bound target (owner rulings 2026-10-03),
+ * one per stack (R37, 2026-10-05):
  *
  *   - Rhodium active — "adds charges … equal to the number of buffs on the enemy": 4 buffs → +4,
  *     0 buffs → +0.
@@ -10,7 +10,7 @@
  *     action": the TARGET's own buffs, never a union across the enemy side.
  *   - "for each buff on the enemy" damage bonuses (Butcher charged +35% per buff) scale with the
  *     same count.
- *   - A buff with several stacks counts once.
+ *   - A buff with several stacks counts once per stack.
  *
  * Real parsed abilities (buildTraceShip on docs/ship-skills.csv). The buffs are neutral names with
  * no stat effects, granted by the holder's own active; every holder is faster than the caster, so
@@ -215,12 +215,12 @@ describe("Rhodium active — charges equal the target's buffs", () => {
         );
     });
 
-    it('a buff held at three stacks counts once → stacked + plain buff = two charges', () => {
+    it('each stack is a buff (R37) → a 3-stack buff + a plain one = four charges', () => {
         const target = buffedEnemy('target', 'M4', [
             stackedBuff('Stacked Buff', 3),
             selfBuff('Plain Buff'),
         ]);
-        expect(playerCaster('Rhodium', [target]).chargeGain).toBe(2);
+        expect(playerCaster('Rhodium', [target]).chargeGain).toBe(4);
     });
 
     it("another enemy's buffs do not count", () => {

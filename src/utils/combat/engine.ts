@@ -165,6 +165,7 @@ import {
     executeIntent,
     liveHealChannelPct,
     ownerDebuffNamesFor,
+    actorBuffCount,
     actorDebuffCount,
     partitionReactiveAbilities,
     provokerOf,
@@ -3433,7 +3434,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                     : {}),
                 enemyBuffNames: victimBuffNames,
                 ...(entry.ctx.enemyBuffCount !== undefined
-                    ? { enemyBuffCount: victimBuffNames.length }
+                    ? { enemyBuffCount: actorBuffCount(statusEngine, victim.id) }
                     : {}),
             };
             bonus += modifierTotalsFromAbilities(entry.abilities, victimCtx).dotDamage;
@@ -8178,6 +8179,9 @@ export function runCombat(rawInput: CombatEngineInput): {
         interface PreTurnVictimStatusSnapshot {
             enemyDebuffNames: string[];
             enemyBuffNames: string[];
+            /** Buffs on the victim, one per stack (`actorBuffCount`; `enemyBuffCount`'s
+             *  derivation). */
+            enemyBuffCount: number;
             enemyHpPct: number;
             /** Debuffs on the victim: its distinct per-target statuses plus its DoT stacks — the
              *  bound target's `enemyDebuffCount` derivation. */
@@ -8198,6 +8202,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                         {
                             enemyDebuffNames: enemyDebuffNamesForTarget(v),
                             enemyBuffNames: selfBuffNamesForOwners(statusEngine, [v.id]),
+                            enemyBuffCount: actorBuffCount(statusEngine, v.id),
                             enemyHpPct:
                                 v.stats.hp > 0
                                     ? Math.max(0, Math.min(100, (100 * v.currentHp) / v.stats.hp))
@@ -8239,7 +8244,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             ...primaryCtx,
             enemyBuffNames: snap.enemyBuffNames,
             ...(primaryCtx.enemyBuffCount !== undefined
-                ? { enemyBuffCount: snap.enemyBuffNames.length }
+                ? { enemyBuffCount: snap.enemyBuffCount }
                 : {}),
             ...(primaryCtx.enemyDebuffNames !== undefined
                 ? { enemyDebuffNames: snap.enemyDebuffNames }
@@ -9566,7 +9571,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                     buffNames: selfBuffNamesForOwners(statusEngine, [v.id]),
                     // WITHHELD under `mode: 'dps'` — see `liveCountsMeasurable`.
                     ...(liveCountsMeasurable
-                        ? { enemyBuffCount: selfBuffNamesForOwners(statusEngine, [v.id]).length }
+                        ? { enemyBuffCount: actorBuffCount(statusEngine, v.id) }
                         : {}),
                     // An actor with no role (the DPS calculator's synthesized enemy) carries none.
                     ...(roleClass ? { role: roleClass } : {}),
@@ -10916,8 +10921,9 @@ export function runCombat(rawInput: CombatEngineInput): {
         const perRoundFireCounts = new Map<string, number>();
 
         // Opposing actor with the most buffs (Rhodium's enemy-most-buffs purge). Buff count via
-        // selfBuffNamesForOwners (incl. unremovable — fine for SELECTION; removal still respects
-        // the unremovable set). Ties → first by roster order (deterministic for goldens).
+        // actorBuffCount — one per stack (R37) — incl. unremovable (fine for SELECTION; removal
+        // still respects the unremovable set). Ties → first by roster order (deterministic for
+        // goldens).
         // Returns undefined when no opposing actor carries ANY buff (the case that actually fires)
         // and for an empty roster; the executor NO-OPS on undefined. No live call site can hand it
         // an empty roster: both arguments (`enemyAttackerActors` / `allPlayerActors`) are fixed
@@ -10937,7 +10943,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             let best: string | undefined;
             let bestCount = -1;
             for (const a of roster) {
-                const n = selfBuffNamesForOwners(statusEngine, [a.id]).length;
+                const n = actorBuffCount(statusEngine, a.id);
                 if (n > bestCount) {
                     bestCount = n;
                     best = a.id;

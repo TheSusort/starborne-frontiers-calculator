@@ -67,6 +67,7 @@ import {
     cleanseDebuffs,
     pinApplierDefence,
     selfBuffNamesForOwners,
+    buffStackCount,
     selfBuffStacksForOwner,
     LIVE_TRIGGERS,
     ownerHoldsSelfBuff,
@@ -699,6 +700,7 @@ export interface RecipientGateReading {
  *  Total over `ConditionContext`: a new field fails `tsc` until it is classified here. */
 const CONDITION_CONTEXT_SUBJECT = {
     selfBuffNames: 'caster',
+    selfBuffCount: 'caster',
     selfDebuffNames: 'caster',
     selfDebuffCount: 'caster',
     enemyBuffNames: 'caster',
@@ -2743,9 +2745,13 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
 
     // "Already active" ability self statuses (window-persisting timed + accumulated)
     // are visible to the gate; auras are gated themselves, so they don't pre-seed names.
-    const priorAbilitySelfNames = statusEngine
-        .timedAbilityStatuses('self', actor.id)
-        .map((s) => s.active.buffName);
+    const priorAbilitySelf = statusEngine.timedAbilityStatuses('self', actor.id);
+    const priorAbilitySelfNames = priorAbilitySelf.map((s) => s.active.buffName);
+    /** The same buffs as the two name lists above, counted one per stack (R37). */
+    const priorSelfBuffCount = buffStackCount([
+        ...entry.activeSelfBuffs.filter((ab) => ab.stacks === undefined || ab.stacks > 0),
+        ...priorAbilitySelf,
+    ]);
 
     // (a) Pre-application gate context (before ability debuffs land). effectiveCritRate uses
     // the scheduled crit buff only (modifiers/ability buffs not yet folded), and NO roundCrit
@@ -2767,6 +2773,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // Live adjacency / kill counts (Panguan, Centurion, Judge) — see `liveCountCtx`.
         ...liveCountCtx,
         selfBuffNames: [...scheduledSelfBuffNames, ...priorAbilitySelfNames],
+        selfBuffCount: priorSelfBuffCount,
         landedEnemyDebuffCount: landedDebuffCountOn(targetGateReading),
         ...dotReadings(boundTargetDoTs),
         effectiveCritRate: cappedCrit(critBuffForGates),
@@ -3735,6 +3742,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // Live adjacency / kill counts (Panguan, Centurion, Judge) — see `liveCountCtx`.
         ...liveCountCtx,
         selfBuffNames: [...scheduledSelfBuffNames, ...priorAbilitySelfNames],
+        selfBuffCount: priorSelfBuffCount,
         landedEnemyDebuffCount: landedEnemyDebuffs.length,
         ...dotReadings(boundTargetDoTs),
         effectiveCritRate: cappedCrit(critBuffForGates),
@@ -3846,6 +3854,12 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     const activeSelfBuffNames = activeSelfBuffsForRound
         .filter((ab) => ab.stacks === undefined || ab.stacks > 0)
         .map((ab) => ab.buffName);
+    /** The same buffs, counted one per stack (R37) — the ability statuses carry their payloads,
+     *  whose declared stacks an unspent timed entry's `active` omits. */
+    const activeSelfBuffCount = buffStackCount([
+        ...entry.activeSelfBuffs.filter((ab) => ab.stacks === undefined || ab.stacks > 0),
+        ...selfAbilityStatuses,
+    ]);
 
     // Fold active passive modifiers (firing skill + passive slot) into the round's
     // buff totals so they affect damage exactly like an equivalent buff. Folded here,
@@ -3863,6 +3877,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // Live adjacency / kill counts (Panguan, Centurion, Judge) — see `liveCountCtx`.
         ...liveCountCtx,
         selfBuffNames: activeSelfBuffNames,
+        selfBuffCount: activeSelfBuffCount,
         landedEnemyDebuffCount: landedEnemyDebuffs.length,
         ...dotReadings(boundTargetDoTs),
         effectiveCritRate: cappedCrit(critBuffForGates),
@@ -4221,6 +4236,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // Live adjacency / kill counts (Panguan, Centurion, Judge) — see `liveCountCtx`.
         ...liveCountCtx,
         selfBuffNames: activeSelfBuffNames,
+        selfBuffCount: activeSelfBuffCount,
         landedEnemyDebuffCount: landedEnemyDebuffs.length,
         ...dotReadings(boundTargetDoTs),
         effectiveCritRate: effectiveCrit,

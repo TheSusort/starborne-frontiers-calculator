@@ -3035,6 +3035,17 @@ const DocumentationPage: React.FC = () => {
                                         and its Everliving Regeneration II.
                                     </p>
                                     <p className="text-theme-text mb-2">
+                                        <span className="text-primary">Buff counts:</span> Every
+                                        stack of a buff counts as one buff. Butcher&apos;s
+                                        &ldquo;35% for each buff on the enemy&rdquo; counts a
+                                        Centurion holding 4 stacks of Core Charge I as 4 buffs; the
+                                        same goes for Nuqtu&apos;s &ldquo;3 or more buffs&rdquo;,
+                                        Rhodium, Valiant, Sustainer and Thresh, and for &ldquo;the
+                                        enemy with the most buffs&rdquo;. A purge still removes the
+                                        newest whole buff, all its stacks at once. Works for both
+                                        teams.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
                                         <span className="text-primary">Debuff counts:</span> A
                                         condition that counts debuffs, on an enemy or on the ship
                                         itself (Sustainer&apos;s &ldquo;if this Unit has no

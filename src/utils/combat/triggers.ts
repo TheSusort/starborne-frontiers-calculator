@@ -2778,18 +2778,17 @@ export function buildActorConditionContext(
     }
 ) {
     const snap = statusEngine.snapshot(ownerId);
-    const selfBuffNames = snap.activeSelfBuffs
-        .filter((ab) => ab.stacks === undefined || ab.stacks > 0)
-        .map((ab) => ab.buffName);
-    if (shared.includeAbilitySelfNames) {
-        // Ability-sourced self statuses are payload-carrying → excluded from snapshot(); add their
-        // names so a caster's self-granted gate buffs are visible to its own aura/accum gate.
-        for (const s of statusEngine.timedAbilityStatuses('self', ownerId)) {
-            selfBuffNames.push(s.active.buffName);
-        }
-    }
+    const scheduled = snap.activeSelfBuffs.filter((ab) => ab.stacks === undefined || ab.stacks > 0);
+    const selfBuffNames = scheduled.map((ab) => ab.buffName);
+    // Ability-sourced self statuses are payload-carrying → excluded from snapshot(); add their
+    // names so a caster's self-granted gate buffs are visible to its own aura/accum gate.
+    const abilitySelf = shared.includeAbilitySelfNames
+        ? statusEngine.timedAbilityStatuses('self', ownerId)
+        : [];
+    for (const s of abilitySelf) selfBuffNames.push(s.active.buffName);
     return buildRoundContext({
         selfBuffNames,
+        selfBuffCount: buffStackCount([...scheduled, ...abilitySelf]),
         landedEnemyDebuffCount: shared.ownerIsEnemySide ? 0 : snap.activeEnemyDebuffs.length,
         corrosionStacks: shared.corrosionStacks,
         infernoStacks: shared.infernoStacks,
@@ -3294,6 +3293,43 @@ export function selfBuffStacksForOwner(
     // CLAMPED AT THE TOTAL, not per term: a delta more negative than the stores hold reads as 0
     // rather than dragging a sum negative and cancelling another owner's stacks downstream.
     return Math.max(0, total + statusEngine.selfBuffStackAdjustment(ownerId, buffName));
+}
+
+/** How many buffs a list of held buff entries is: one per STACK, not one per entry or name (owner
+ *  ruling R37, the buff-side mirror of R26 — Core Charge I ×4 is 4 buffs). An entry with a live
+ *  `active.stacks` counts that many (0 for a seeded-but-inert accumulating entry); otherwise an
+ *  ability status counts its payload's declared stacks and a scheduled entry counts 1. Every
+ *  buff COUNT ("for each buff on the enemy", "for each buff on itself", "3 or more buffs", "the
+ *  enemy with the most buffs") reads through this — or `actorBuffCount` for a stored actor;
+ *  presence and NAME reads stay on the deduped name lists. */
+export function buffStackCount(entries: readonly (ActiveBuff | ActiveAbilityStatus)[]): number {
+    let total = 0;
+    for (const e of entries) {
+        const active = 'active' in e ? e.active : e;
+        if (active.stacks !== undefined) total += Math.max(0, active.stacks);
+        else total += Math.max(1, ('payload' in e ? e.payload.stacks : undefined) ?? 1);
+    }
+    return total;
+}
+
+/** How many buffs `ownerId` carries right now (`buffStackCount`), across the SAME three sources as
+ *  {@link selfBuffNamesForOwners} plus the per-owner stack ledger a steal writes (a stolen
+ *  Protection stack is one buff fewer), each name clamped at 0. */
+export function actorBuffCount(statusEngine: StatusEngine, ownerId: string): number {
+    const byName = new Map<string, number>();
+    const add = (name: string, n: number): void => {
+        byName.set(name, (byName.get(name) ?? 0) + n);
+    };
+    for (const ab of statusEngine.snapshot(ownerId).activeSelfBuffs)
+        add(ab.buffName, buffStackCount([ab]));
+    for (const s of statusEngine.timedAbilityStatuses('self', ownerId))
+        add(s.active.buffName, buffStackCount([s]));
+    for (const s of statusEngine.activeAbilityStatuses('self', () => NEUTRAL_NAMES_CTX, ownerId))
+        add(s.active.buffName, buffStackCount([s]));
+    let total = 0;
+    for (const [name, n] of byName)
+        total += Math.max(0, n + statusEngine.selfBuffStackAdjustment(ownerId, name));
+    return total;
 }
 
 /** Enemy-debuff NAMES carried in the per-TARGET store keyed by `targetId` (an actor's
