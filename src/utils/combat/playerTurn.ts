@@ -51,6 +51,7 @@ import {
     CombatActor,
     DoTContainers,
     advanceChargeCadence,
+    dotStackCount,
 } from './state';
 import {
     ActiveBuff,
@@ -768,13 +769,19 @@ const readsStruckEnemy = (conditions: Ability['conditions']): boolean =>
     );
 /** A gate that counts an enemy's debuffs or DoT effects without naming one ("If an enemy has 3 or
  *  more debuffs", "3 or more damage over time effects") — what a cast's own earlier-written
- *  landings add to (owner ruling R29). A named count (Belladonna's "3 or more Acidic Decay") is
- *  not: no clause written before it inflicts that name. */
+ *  landings add to (owner ruling R29). A named DoT-family count (Belladonna's "3 or more Acidic
+ *  Decay") is read by `castConversionOverlay` instead (R76). */
 const readsCastCount = (conditions: Ability['conditions']): boolean =>
     conditions.some(
         (c) =>
             (c.subject === 'enemy-debuff' || c.subject === 'enemy-dot-count') &&
             c.buffName === undefined
+    );
+/** The named DoT families a gate counts ("3 or more Acidic Decay") — what a cast's own
+ *  earlier-written DoT adds to once converted as it lands (owner ruling R76). */
+const castCountedFamilies = (conditions: Ability['conditions']): string[] =>
+    conditions.flatMap((c) =>
+        c.subject === 'enemy-dot-count' && c.buffName !== undefined ? [c.buffName] : []
     );
 /** The payload kinds a firing slot's self gain takes besides a timed buff (which the timed-self
  *  loop gates): a shield, a repair, a cleanse, charges, an extra action, a self control (Taunt).
@@ -1060,6 +1067,11 @@ export interface PlayerTurnArgs {
      *  `adjacentAllyIds` above). Absent → both scopes degrade to their DPS/non-positional
      *  fallback (see the recipientIds computation). */
     adjacentEnemyIdsFor?: (anchorId: string) => string[];
+    /** Draws, at the landing, the DoT-conversion rolls (Belladonna) this caster's `dotType` DoT
+     *  on `victimId` sets off, and returns the families it converts into (owner ruling R76).
+     *  Read only by a same-cast count gate on a named DoT family (`castLandingsOverlay`). Absent
+     *  (unit fixtures) → no conversion is counted. */
+    decideSameCastConversions?: (victimId: string, dotType: DoTType) => string[];
     /** True when this run can MEASURE the live adjacency / kill counts below — false under
      *  `mode: 'dps'`, where the board and the opposing roster are synthetic and a live reading
      *  would be a permanent structural 0 rather than an observation. False (or absent) withholds
@@ -1895,6 +1907,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         buffHolderIdByPosition,
         adjacentAllyIds,
         adjacentEnemyIdsFor,
+        decideSameCastConversions,
         liveCountsMeasurable,
         enemyDestroyedCount: enemyDestroyedCountArg,
         selectorEnemyIdFor,
@@ -3135,6 +3148,67 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
      *    `timedEnemyBySlot` landed on it that it did not already carry — one more debuff. Left out
      *    where `c` already counts the cast's landed debuffs (`postDebuffGateCtx`).
      */
+    /** The DoTs of the clauses in `dotsBefore` that LAND on enemy `victimId` (their stacks cut to
+     *  the stacks that landed), from the cast's once-decided landing plan. */
+    const landedDotsBefore = (
+        victimId: string,
+        dotsBefore: readonly string[] | undefined
+    ): DoTApplicationConfig => {
+        if (!hasVictim || !dotsBefore || dotsBefore.length === 0 || !dotsKnownAhead) return [];
+        let landed: DoTApplicationConfig = [];
+        if (victimId === enemy.id) {
+            if (!targetImmuneToDebuffs) landed = planPrimaryDots(dotsKnownAhead).landed;
+        } else {
+            coveredDotsAhead ??= coveredDotsFor(firingSkill, dotsKnownAhead);
+            const v = opposingVictimById?.get(victimId);
+            const victimDots = coveredDotsAhead.get(victimId);
+            if (v && victimDots) landed = planCoveredDots(v, victimDots).landed;
+        }
+        return landed.filter((d) => dotsBefore.includes(d.id));
+    };
+    /**
+     * `c` with a named DoT family count (Belladonna's "If the enemy has 3 or more Acidic Decay")
+     * read as of THIS clause (owner ruling R76, the R47 shape): an earlier-written DoT clause's
+     * stacks that land on the enemy and are converted into the family as they land count. The
+     * conversion keeps its chance roll, drawn here at the landing (`decideSameCastConversions`)
+     * and spent by the reaction when it drains. A conversion retags every unconverted DoT of that
+     * type this caster holds on the enemy (the convert-dot executor), so those count too.
+     */
+    const castConversionOverlay = (
+        c: ConditionContext,
+        victimId: string,
+        families: readonly string[],
+        dotsBefore: readonly string[] | undefined
+    ): ConditionContext => {
+        const victim = victimId === enemy?.id ? enemy : opposingVictimById?.get(victimId);
+        if (!victim || !decideSameCastConversions) return c;
+        const added: Record<string, number> = {};
+        const landedByType = new Map<DoTType, number>();
+        for (const d of landedDotsBefore(victimId, dotsBefore))
+            landedByType.set(d.type, (landedByType.get(d.type) ?? 0) + d.stacks);
+        for (const [dotType, stacks] of landedByType) {
+            const converted = decideSameCastConversions(victimId, dotType).filter((f) =>
+                families.includes(f)
+            );
+            if (converted.length === 0) continue;
+            const pool =
+                dotType === 'corrosion'
+                    ? victim.corrosionEntries
+                    : dotType === 'inferno'
+                      ? victim.infernoEntries
+                      : dotType === 'generic'
+                        ? (victim.genericDoTEntries ?? [])
+                        : [];
+            const held = dotStackCount(
+                pool.filter((e) => e.sourceId === actor.id && e.family === undefined)
+            );
+            for (const f of new Set(converted)) added[f] = (added[f] ?? 0) + stacks + held;
+        }
+        if (Object.keys(added).length === 0) return c;
+        const counts = { ...(c.enemyDotFamilyCounts ?? {}) };
+        for (const [f, n] of Object.entries(added)) counts[f] = (counts[f] ?? 0) + n;
+        return { ...c, enemyDotFamilyCounts: counts };
+    };
     const castLandingsOverlay = (
         c: ConditionContext,
         victimId: string,
@@ -3142,20 +3216,15 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         dotsBefore: readonly string[] | undefined,
         namesBeforeIndex?: number
     ): ConditionContext => {
-        if (!hasVictim || !readsCastCount(conditions)) return c;
-        let dotStacks = 0;
-        if (dotsBefore && dotsBefore.length > 0 && dotsKnownAhead) {
-            let landed: DoTApplicationConfig = [];
-            if (victimId === enemy.id) {
-                if (!targetImmuneToDebuffs) landed = planPrimaryDots(dotsKnownAhead).landed;
-            } else {
-                coveredDotsAhead ??= coveredDotsFor(firingSkill, dotsKnownAhead);
-                const v = opposingVictimById?.get(victimId);
-                const victimDots = coveredDotsAhead.get(victimId);
-                if (v && victimDots) landed = planCoveredDots(v, victimDots).landed;
-            }
-            for (const d of landed) if (dotsBefore.includes(d.id)) dotStacks += d.stacks;
+        if (!hasVictim) return c;
+        const families = castCountedFamilies(conditions);
+        if (!readsCastCount(conditions)) {
+            return families.length > 0 && decideSameCastConversions
+                ? castConversionOverlay(c, victimId, families, dotsBefore)
+                : c;
         }
+        let dotStacks = 0;
+        for (const d of landedDotsBefore(victimId, dotsBefore)) dotStacks += d.stacks;
         let newNames = 0;
         if (namesBeforeIndex !== undefined) {
             const reading =

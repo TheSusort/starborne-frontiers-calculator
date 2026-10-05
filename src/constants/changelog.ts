@@ -90,6 +90,7 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator: Isha and Nayra's Affinity Overrides now last until purged.",
     "Combat simulator: APEX's charged Disable now counts shields from that cast's debuffs.",
     "Combat simulator: Snakeroot's passive is now a 120% hit per 4 DoT stacks.",
+    "Combat simulator: Belladonna's charged Stasis now counts that cast's converted Acidic Decay.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

@@ -567,6 +567,42 @@ const UNTIL_PURGED_GRANTS: ReadonlySet<string> = new Set([
     'Defensive Affinity Override',
 ]);
 
+/** Identity of ONE DoT-conversion roll (Belladonna): the converter's ability, the victim, the
+ *  applier whose DoT landed, and the DoT type. Shared by the cast path, which may draw the roll
+ *  at the landing (`preDecidedConversions`), and the convert-dot executor, which spends it. */
+export function dotConversionKey(
+    converterId: string,
+    abilityId: string,
+    victimId: string,
+    applierId: string,
+    dotType: string
+): string {
+    return `${converterId}:${abilityId}:${victimId}:${applierId}:${dotType}`;
+}
+
+/**
+ * Draw one DoT-conversion roll: the chance is `pctPerPoint`% per point of the CONVERTER's live
+ * stat (Belladonna: 1% per 10 Hacking), from the converter's own `${id}:convert` stream, gate
+ * kept combat-lifetime in `procChanceGates` under `${ownerId}:${abilityId}`.
+ */
+export function drawDotConversion(
+    ownerId: string,
+    abilityId: string,
+    cfg: Extract<Ability['config'], { type: 'convert-dot' }>,
+    ctx: Pick<IntentExecContext, 'procChanceGates' | 'effectiveStatsFor'>
+): boolean {
+    const hacking = ctx.effectiveStatsFor?.(ownerId)?.hacking ?? 0;
+    const convertRate = Math.min(1, (cfg.chanceFromStat.pctPerPoint * hacking) / 100);
+    const convertKey = `${ownerId}:${abilityId}`;
+    let convertGate = ctx.procChanceGates?.get(convertKey);
+    if (ctx.procChanceGates && !convertGate) {
+        // Keyed by owner + purpose — see passesProcChanceGate.
+        convertGate = makeRateGate(`${ownerId}:convert`);
+        ctx.procChanceGates.set(convertKey, convertGate);
+    }
+    return convertGate ? convertGate(convertRate) : convertRate >= 1;
+}
+
 function dotInflictions(e: { stacks: number }): number {
     return Math.max(0, e.stacks);
 }
@@ -2421,6 +2457,10 @@ export interface IntentExecContext {
      *  Keyed `${ownerId}:${abilityId}`; the RateGate fires with the proc's probability on
      *  each reactive draw of the same ability so the proc lands at its true frequency. */
     procChanceGates?: Map<string, RateGate>;
+    /** DoT-conversion rolls a cast already drew at its landing, keyed by `dotConversionKey` (owner
+     *  ruling R76: Belladonna's same-cast conversion counts for her Acidic Decay gate). The
+     *  convert-dot executor spends an entry instead of drawing. Absent → every roll is drawn. */
+    preDecidedConversions?: Map<string, boolean>;
     /** Live self-HP% per owner (0..100) for drain-time hp-threshold gates: each owner's own
      *  current/max HP, both sides. A caller that supplies no closure at all (unit contexts) falls
      *  back to 100 in buildDrainContext. */
@@ -5637,23 +5677,22 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // No victim resolver / id (unit-test ctx without actorById, or a listener that somehow
         // fired without a captured victim) → not-simulated follow-up, no-op.
         if (!allyId || !victim) return;
-        // Gate 1: conversion chance — 1% per 10 Hacking (pctPerPoint 0.1) of the OWNER's
-        // (Belladonna's) LIVE effective Hacking. Deterministic RateGate keyed by ability,
-        // mirroring passesProcChanceGate's `${ownerId}:${abilityId}` convention (reused here
-        // via ctx.procChanceGates so the accumulator persists combat-lifetime like every other
-        // proc gate).
-        const ownerStats = ctx.effectiveStatsFor?.(intent.ownerId);
-        const hacking = ownerStats?.hacking ?? 0;
-        const convertRate = Math.min(1, (cfg.chanceFromStat.pctPerPoint * hacking) / 100);
-        const convertKey = `${intent.ownerId}:${intent.ability.id}`;
-        let convertGate = ctx.procChanceGates?.get(convertKey);
-        if (ctx.procChanceGates && !convertGate) {
-            // Keyed by owner + purpose — see passesProcChanceGate above.
-            convertGate = makeRateGate(`${intent.ownerId}:convert`);
-            ctx.procChanceGates.set(convertKey, convertGate);
-        }
-        const converts = convertGate ? convertGate(convertRate) : convertRate >= 1;
+        // Gate 1: the conversion roll. A roll the caster's cast already drew at the landing, for
+        // a same-cast count gate (`preDecidedConversions`), is spent here instead of drawn again.
+        const decisionKey = dotConversionKey(
+            intent.ownerId,
+            intent.ability.id,
+            victim.id,
+            allyId,
+            cfg.fromDotType
+        );
+        const preDecided = ctx.preDecidedConversions?.get(decisionKey);
+        if (preDecided !== undefined) ctx.preDecidedConversions?.delete(decisionKey);
+        const converts =
+            preDecided ?? drawDotConversion(intent.ownerId, intent.ability.id, cfg, ctx);
         if (!converts) return;
+        const ownerStats = ctx.effectiveStatsFor?.(intent.ownerId);
+        const convertKey = `${intent.ownerId}:${intent.ability.id}`;
         // Retag the entries THIS ally just applied (not yet converted, same sourceId) — tier/
         // stacks/remainingRounds are left untouched ("of the same level"); only family +
         // unremovable change (family feeds enemyDotFamilyCounts and the charge gate; unremovable

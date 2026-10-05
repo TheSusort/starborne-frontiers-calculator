@@ -3099,6 +3099,10 @@ const DocumentationPage: React.FC = () => {
                                         shields arrive as each debuff lands, so her charged
                                         skill&apos;s &ldquo;If this Unit has an active shield&rdquo;
                                         Disable lands once an earlier debuff in it has landed.
+                                        Likewise Belladonna&apos;s charged Corrosion II, if her
+                                        passive converts it to Acidic Decay as it lands, counts
+                                        toward that skill&apos;s &ldquo;3 or more Acidic
+                                        Decay&rdquo; Stasis.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Team Ships:</span> Pick a

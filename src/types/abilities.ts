@@ -585,9 +585,8 @@ export type ConditionSubject =
     // bomb entry-array lengths, +acidicDecay once SP-E adds it). Bare (no buffName) = the sum of
     // ALL DoT entries, regardless of family (Anemone's charged "If the primary enemy has 3 or
     // more Damage over Time effects" — generic). With `buffName` set = ONE named family only
-    // (Belladonna's charged "If the enemy has 3 or more Acidic Decay" — runtime-inert until SP-E
-    // actually introduces the Acidic Decay DoT family; ConditionContext.enemyDotFamilyCounts
-    // defaults every family to 0 until then, so this gate never fires yet). DoT-ONLY — distinct
+    // (Belladonna's charged "If the enemy has 3 or more Acidic Decay" — the family her passive's
+    // conversion tags onto Corrosion entries; ConditionContext.enemyDotFamilyCounts). DoT-ONLY — distinct
     // from `enemy-debuff`, whose legacy count also folds in landed CONTROL/marker debuffs; this
     // subject must never be satisfied by e.g. a landed Stasis. Bare (no comparator) it reads the
     // raw count, so it can also serve as a SCALING source. Always derivable:true.
