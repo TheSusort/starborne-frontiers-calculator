@@ -424,8 +424,7 @@ export type CombatEvent =
      *  The reactive cleanse credits `cleanseCount` but emits NO `cleanse-performed` (that event
      *  drives the owner's own on-own-cleanse listeners). buildCombatLog renders it, and the
      *  OPPOSING side's `on-enemy-cleansed` reactions (Pestilence, Larkspur, Grif …) hear a
-     *  remove-mode one — never a `mode: 'reduce-duration'` one, nor one flagged
-     *  `viaEnemyCleanseReaction` (the depth-1 chain guard). `casterId` = the reacting owner;
+     *  remove-mode one — never a `mode: 'reduce-duration'` one. `casterId` = the reacting owner;
      *  `perTarget` = per-recipient count of debuffs ACTUALLY removed (only recipients with >= 1
      *  removal are listed). */
     | ({
@@ -440,9 +439,6 @@ export type CombatEvent =
            *  how much — the log renders the two differently ("cleansed 2" vs "-1 turn on 2"). */
           mode?: 'reduce-duration';
           durationTurns?: number;
-          /** This cleanse was itself provoked by an `on-enemy-cleansed` reaction (the intent's
-           *  `fromEnemyCleanseReaction`), so it wakes no further one. */
-          viaEnemyCleanseReaction?: true;
       } & ReactiveStamp)
     /** ASSEMBLER-ONLY: one `Repair Over Time` tick restored HP to its holder (playerTurn's
      *  `tickHot`). NOT a repair event and NOT a log event — it exists for exactly one consumer,

@@ -159,6 +159,8 @@ import {
 import {
     Intent,
     MAX_INTENT_GENERATIONS,
+    MAX_REACTION_CHAIN_DEPTH,
+    reactionChainProbe,
     buildActorConditionContext,
     buildForcedTargetingStatus,
     countOwnersWithSelfBuff,
@@ -10851,6 +10853,13 @@ export function runCombat(rawInput: CombatEngineInput): {
                     ) {
                         continue;
                     }
+                    // The runaway cap (ruling 66): a chain this deep is a loop, not play.
+                    const depth = intent.chainDepth ?? 0;
+                    if (depth > MAX_REACTION_CHAIN_DEPTH) {
+                        reactionChainProbe.dropped++;
+                        continue;
+                    }
+                    if (depth > reactionChainProbe.maxDepth) reactionChainProbe.maxDepth = depth;
                     executeIntent(intent, {
                         round: r,
                         statusEngine,

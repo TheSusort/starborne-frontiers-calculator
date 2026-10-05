@@ -93,8 +93,27 @@ export { LIVE_TRIGGERS };
 
 /** Safety backstop far above any real follow-up chain — not a tuned value. A
  *  drain that fans out more than this many generations is a pathological loop;
- *  the engine throws naming the constant rather than hanging. */
+ *  the engine throws naming the constant rather than hanging. Unreachable while
+ *  `MAX_REACTION_CHAIN_DEPTH` caps every chain below it: one generation of a drain
+ *  is one step of chain depth. */
 export const MAX_INTENT_GENERATIONS = 10;
+
+/**
+ * The runaway cap on a chain of reactions (owner ruling 66: chained reactions DO trigger, a cap
+ * stops only runaway loops). A reaction to a cast or a phase event has depth 0; a reaction to
+ * something a reaction did has its cause's depth + 1. An intent deeper than this is dropped.
+ * Real kits loop — Grif's hit wakes Purifier's on-damaged cleanse, which wakes Grif and
+ * Pestilence again — and each such chain otherwise ends only when a ship dies.
+ *
+ * Sized from a measurement, not a guess: `reactionChainCap.integration.test.ts` pins that the
+ * real-kit fingerprint battles never reach it and that the loop boards do and still complete.
+ * Kept below MAX_INTENT_GENERATIONS so a capped loop never reaches that throw.
+ */
+export const MAX_REACTION_CHAIN_DEPTH = 8;
+
+/** TEST-ONLY probe of reaction-chain depth, written by the engine's drain: the deepest chain
+ *  depth an executed intent had, and how many intents the cap dropped. Reset it before a run. */
+export const reactionChainProbe = { maxDepth: 0, dropped: 0 };
 
 /** Ability types the executor knows how to follow up (see executeIntent). These reactive
  *  types are routed through the trigger machinery; any other type carrying a live trigger
@@ -171,18 +190,14 @@ export interface Intent {
      *  the inflicting ally; Hayyan's on-ally-debuffed repair routes to the debuffed ally).
      *  `fromPurgeEvent`: depth-1 purge chain guard — a purge triggered by a
      *  purge-performed event does not re-emit purge-performed, preventing infinite chains. */
+    /** Reaction-chain depth (`MAX_REACTION_CHAIN_DEPTH`): 0 for a reaction to a cast or phase
+     *  event, the resolving intent's depth + 1 for one woken while an intent resolved. Stamped by
+     *  `registerReactiveListeners`' enqueue wrapper; absent reads as 0. */
+    chainDepth?: number;
     eventCtx?: {
         counterTargetId?: string;
         damagedAllyId?: string;
         fromPurgeEvent?: boolean;
-        /** Depth-1 enemy-cleanse chain guard, the cleanse twin of `fromPurgeEvent`: this intent
-         *  was born of an `on-enemy-cleansed` reaction, or provoked while one resolved. A reactive
-         *  cleanse resolved under it emits a `reactive-cleanse-performed` flagged
-         *  `viaEnemyCleanseReaction`, which wakes no `on-enemy-cleansed` listener — so
-         *  Pestilence's Corrosion landing on an enemy that cleanses whenever it is debuffed is
-         *  cleansed once more and the chain stops. Carried across owners by the enqueue wrapper
-         *  in `registerReactiveListeners` (`resolvingIntent`). */
-        fromEnemyCleanseReaction?: boolean;
         /** The sub-attack that raised the triggering event.
          *  Stamped by the OUTGOING listeners (`on-crit`, `on-deal-damage`) from
          *  `ability-performed.subAttackIndex`, AND by the INCOMING ones (`on-attacked`,
@@ -735,15 +750,12 @@ export function registerReactiveListeners(args: {
         footprintAllyIdsFor,
         maxHpOf,
     } = args;
-    // An intent provoked while an enemy-cleanse reaction resolves inherits its chain guard
-    // (`fromEnemyCleanseReaction`'s doc).
+    // An intent woken while another resolves is one step deeper in its chain (`Intent.chainDepth`).
     const enqueue = (intent: Intent): void =>
-        enqueueRaw(
-            resolvingIntent?.eventCtx?.fromEnemyCleanseReaction &&
-                !intent.eventCtx?.fromEnemyCleanseReaction
-                ? { ...intent, eventCtx: { ...intent.eventCtx, fromEnemyCleanseReaction: true } }
-                : intent
-        );
+        enqueueRaw({
+            ...intent,
+            chainDepth: resolvingIntent ? (resolvingIntent.chainDepth ?? 0) + 1 : 0,
+        });
     // Same-side ally, OWNER EXCLUDED — for a trigger whose skill text names "another/other
     // ally", or whose subject structurally cannot be the owner (a destroyed ship cannot take the
     // reaction it would grant itself). See the 2026-09-30 "an ally includes the caster" ruling in
@@ -2143,7 +2155,6 @@ export function registerReactiveListeners(args: {
                                     eventCtx: {
                                         ...intent.eventCtx,
                                         counterTargetId: targetId,
-                                        fromEnemyCleanseReaction: true,
                                     },
                                 });
                             }
@@ -2161,13 +2172,12 @@ export function registerReactiveListeners(args: {
                                 ...intent.eventCtx,
                                 counterTargetId: casterId,
                                 cleansedEnemyIds: targets,
-                                fromEnemyCleanseReaction: true,
                             },
                         });
                     };
                     bus.on('cleanse-performed', (e) => onEnemyCleanse(e.casterId, e.targets ?? []));
                     bus.on('reactive-cleanse-performed', (e) => {
-                        if (e.mode === 'reduce-duration' || e.viaEnemyCleanseReaction) return;
+                        if (e.mode === 'reduce-duration') return;
                         onEnemyCleanse(
                             e.casterId,
                             e.perTarget.map((t) => t.targetId)
@@ -4402,8 +4412,8 @@ const REACTIVE_STAMPED_EVENT_TYPE_LIST = exhaustiveArrayOf<StampedEventType>()([
     // cleanse-performed). Emitted through ctx.bus during a reactive intent → stamped duringTurnOf
     // so they nest under the triggering turn. `-damage` has no combat subscriber; `-heal` has one
     // (on-enemy-repaired — a reactive repair is still an enemy repairing), which cannot chain
-    // because no on-enemy-repaired rider heals; `-cleanse` has one (on-enemy-cleansed), bounded by
-    // the `fromEnemyCleanseReaction` guard. See the events.ts notes before adding another
+    // because no on-enemy-repaired rider heals; `-cleanse` has one (on-enemy-cleansed), whose
+    // chains MAX_REACTION_CHAIN_DEPTH caps. See the events.ts notes before adding another
     // subscriber to any of the three.
     'reactive-damage-performed',
     'reactive-heal-performed',
@@ -6272,8 +6282,8 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // Surface the reaction via reactive-cleanse-performed (NOT cleanse-performed, which drives
         // the owner's own on-own-cleanse listeners). buildCombatLog renders it, stamped
         // duringTurnOf via ctx.bus so it nests under the triggering turn, and the opposing
-        // side's on-enemy-cleansed reactions hear it — unless this cleanse was itself provoked by
-        // one (`fromEnemyCleanseReaction`). Only emitted when a debuff was actually removed (empty
+        // side's on-enemy-cleansed reactions hear it, a chained one included (ruling 66; the chain
+        // is capped by MAX_REACTION_CHAIN_DEPTH). Only emitted when a debuff was actually removed (empty
         // perTarget → silent, like the heal twin).
         if (cleansePerTarget.length > 0 && ctx.bus) {
             ctx.bus.emit({
@@ -6281,9 +6291,6 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 casterId: intent.ownerId,
                 round: ctx.round,
                 perTarget: cleansePerTarget,
-                ...(intent.eventCtx?.fromEnemyCleanseReaction
-                    ? { viaEnemyCleanseReaction: true }
-                    : {}),
             });
         }
         return;

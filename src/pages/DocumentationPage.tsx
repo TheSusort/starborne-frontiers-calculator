@@ -3191,6 +3191,13 @@ const DocumentationPage: React.FC = () => {
                                         explosions are not direct hits.
                                     </p>
                                     <p className="text-theme-text mb-2">
+                                        <span className="text-primary">Chained reactions:</span> A
+                                        reaction can set off further reactions, on either team: an
+                                        enemy cleanse wakes Grif, whose hit wakes Purifier&apos;s
+                                        cleanse, which wakes Grif again. A chain that could run
+                                        forever stops after eight steps.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
                                         <span className="text-primary">Purges:</span> A purge on a
                                         skill that hits several enemies strips buffs from every
                                         enemy it hits, not just the main target. Tithonus gains

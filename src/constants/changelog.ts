@@ -96,6 +96,8 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator: Sentinel, Hermes and Howler now react to allies' critting passive damage.",
     'Combat simulator: passive hits and counter-attacks now trigger "when directly damaged" passives.',
     'Combat simulator: passive hits and counter-attacks now get Protection, shield penetration and Exposed.',
+    'Combat simulator: a cleanse caused by a cleanse reaction now triggers reactions again.',
+    'Combat simulator: endless reaction loops, such as two opposing Nuqtus, no longer stall battles.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
