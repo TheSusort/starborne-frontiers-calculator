@@ -5721,43 +5721,37 @@ export function runCombat(rawInput: CombatEngineInput): {
         allPlayerActors.every((a) => a.destroyedRound !== undefined);
     let matchOver = false;
 
-    // §4.5 Deferred Stasis break marks, keyed by victim id. Lives ACROSS rounds on purpose: the
-    // mark is spent on the victim's own next turn, and that turn is in the NEXT round whenever the
-    // attacker acts after the victim in the turn order. Scoped per round, such a mark was dropped
-    // at the round boundary and the break simply never happened — a slow attacker was
-    // indistinguishable from one carrying `doesntBreakStasis`, measured across both Stasis(3) and
-    // Stasis(4).
-    //
-    // A mark is only ever set for a victim stasised at the moment of the hit, and is deleted when
-    // spent — on the victim's next BLOCKED turn, which is the only site that consumes one. A mark
-    // is therefore NOT guaranteed to be spent: if the victim's Stasis is cleansed or purged before
-    // that turn (Stasis is not in UNREMOVABLE_STATUSES), the victim's turn is unblocked, nothing
-    // consumes the mark, and it survives to shave a later Stasis. Round-scoping used to bound that
-    // to one round; it is now bounded only by the fight. Tracked in #535, together with the
-    // cross-ship re-apply case that shares the cause — the map is keyed by VICTIM, not by the
-    // Stasis instance the break was approved against.
-    const stasisBreakPending = new Map<string, true>();
-    // A pending mark is SETTLED the moment any fresh Stasis is applied to that victim, before the
-    // incoming application reaches the family contest — #535.
-    //
-    // In game the hit reduces the victim's Stasis as it lands, so a Stasis arriving afterwards is
-    // weighed against the ALREADY-REDUCED incumbent. This engine defers the reduction, so without
-    // this the contest weighs the unreduced one and the queued mark then shaves whatever survives —
-    // a fresh Stasis from a DIFFERENT ship, which the ruling says keeps its full duration.
-    //
-    // Resolving here rather than clearing the mark is what makes the arithmetic agree in all three
-    // shapes. Incumbent 2 + incoming 4: reduce to 1, challenger wins, 4. Incumbent 2 + incoming 2:
-    // reduce to 1, challenger now wins on duration, 2. Incumbent 4 + incoming 2: reduce to 3,
-    // challenger loses, 3 — the case a bare clear gets wrong, leaving 4.
-    //
-    // It also disarms a STRANDED mark: one whose Stasis was cleansed before the victim's next turn
-    // is never consumed (only a blocked turn consumes one), and would otherwise wait indefinitely
-    // to shave an unrelated later Stasis. Reducing an absent entry is a no-op, and the mark goes.
+    // §4.5 Stasis reductions owed by direct hits, keyed by victim id: one per hit that landed on
+    // the victim while it was stasised (owner rulings 40 and 67 — every hit lowers Stasis by one,
+    // whoever lands it, so two ships hitting a 2-turn Stasis before its holder's turn free it).
+    // A hit queues its reduction; `settleStasisHits` spends every queued one at the tail of the
+    // drain that follows the hit (`drainReactions`), so the reduction is in place before the next
+    // ship acts while the hit's own reactions still drain against the Stasis the hit landed on
+    // (stasis.test.ts (iii)). The reduction is therefore immediate at turn granularity: a victim
+    // whose Stasis reaches 0 this way takes its own turn later in the same round.
+    const stasisBreakPending = new Map<string, number>();
+    /** Reduce `targetId`'s Stasis once per queued hit and clear the queue for it. */
+    const spendStasisHits = (targetId: string): void => {
+        const owed = stasisBreakPending.get(targetId);
+        if (owed === undefined) return;
+        stasisBreakPending.delete(targetId);
+        for (let i = 0; i < owed; i++) {
+            for (const name of STASIS_BUFFS) statusEngine.reduceTimedEnemyStatus(targetId, name);
+        }
+    };
+    /** Spend every queued Stasis reduction (see `stasisBreakPending`). */
+    const settleStasisHits = (): void => {
+        for (const targetId of [...stasisBreakPending.keys()]) spendStasisHits(targetId);
+    };
+    // A fresh Stasis applied to a victim that still has reductions queued is weighed against the
+    // ALREADY-REDUCED incumbent, as in game the hit reduced it on landing (#535). Spending them
+    // here, before the family contest, keeps the arithmetic right in all three shapes. Incumbent
+    // 2 + incoming 4: reduce to 1, challenger wins, 4. Incumbent 2 + incoming 2: reduce to 1,
+    // challenger now wins on duration, 2. Incumbent 4 + incoming 2: reduce to 3, challenger loses,
+    // 3. This is how a clause written AFTER a cast's damage meets the reduction its own hit owes.
     statusEngine.setBeforeTimedEnemyApplication((targetId, buffName) => {
         if (!isStasis(buffName)) return;
-        if (!stasisBreakPending.has(targetId)) return;
-        stasisBreakPending.delete(targetId);
-        for (const name of STASIS_BUFFS) statusEngine.reduceTimedEnemyStatus(targetId, name);
+        spendStasisHits(targetId);
     });
     /**
      * Queue the §4.5 Stasis break for every victim one cast's hit marked, except a victim on which
@@ -5765,13 +5759,16 @@ export function runCombat(rawInput: CombatEngineInput): {
      * inflicts Stasis, the standing Stasis is max(held − 1, new). A Stasis the cast already wrote
      * and that won its contest (written before the damage, onto a shorter or no Stasis) is the
      * "new" side and is never shortened by its own hit, so its mark is skipped. Every other mark
-     * stands: it shortens the held Stasis on the victim's next blocked turn, or — when the cast's
-     * own Stasis is written after the damage — at the apply seam above, which takes the turn off
-     * the held Stasis before the new one contests it. Asked per victim, one rule for the aimed
-     * victim and every covered one.
+     * stands: it shortens the held Stasis at the tail of the drain that follows the cast
+     * (`settleStasisHits`), or — when the cast's own Stasis is written after the damage — at the
+     * apply seam above, which takes the turn off the held Stasis before the new one contests it.
+     * Asked per victim, one rule for the aimed victim and every covered one.
      *
      * Reaches only cast-path writes (`castStasisStandsOn` is the cast's own record): a Stasis a
      * REACTIVE trigger lands on a victim of the same cast is not seen (#534).
+     *
+     * `markedVictims` lists a victim once per HIT that landed on it while stasised, so a victim
+     * struck twice owes two reductions.
      */
     const resolveStasisBreaks = (
         markedVictims: Iterable<string>,
@@ -5779,7 +5776,7 @@ export function runCombat(rawInput: CombatEngineInput): {
     ): void => {
         for (const victimId of markedVictims) {
             if (castStasisStandsOn(victimId)) continue;
-            stasisBreakPending.set(victimId, true);
+            stasisBreakPending.set(victimId, (stasisBreakPending.get(victimId) ?? 0) + 1);
         }
     };
 
@@ -8014,13 +8011,14 @@ export function runCombat(rawInput: CombatEngineInput): {
         //    `resolveStasisBreaks` skips the mark when the turn's `castStasisStandsOn` says so.
         //  - DoT ticks NEVER call this (they never enter runPlayerTurn's break hook path).
         //
-        // DEFERRED-BREAK DESIGN: the hook does NOT immediately remove Stasis. Instead it marks
-        // the victim id into a per-turn `stasisHitVictims` Set. Removal happens RIGHT AFTER the
-        // attacker's own `drainIntentsFor('player')`/`drainIntentsFor('enemy')` in the same
-        // turn-loop iteration. This satisfies two invariants:
+        // WHEN THE REDUCTION LANDS: the hook does not remove Stasis itself. It marks the victim
+        // into a per-turn `turnStasisHitVictims` set; the cast queues one reduction per marked
+        // hit (`resolveStasisBreaks`), and `drainReactions` spends them right after the drain that
+        // follows the cast. This satisfies two invariants:
         //  (i)  The on-attacked reactive's drainQueue check (Counter Shield suppression — test iii)
-        //       sees `isStasised(victim) = true` because drainIntentsFor runs BEFORE the removal.
-        //  (ii) The victim is freed BEFORE its own next turn, so it acts in the next round.
+        //       sees `isStasised(victim) = true` because the drain runs BEFORE the reduction.
+        //  (ii) The reduction is in place before the next ship acts, so a victim whose Stasis it
+        //       takes to 0 takes its own turn later this round (owner rulings 40 and 67).
         //
         // RE-APPLY CHECK: the standing Stasis after a hit that also inflicts Stasis is
         // max(held − 1, new) (owner ruling). `resolveStasisBreaks` skips a victim's mark only when
@@ -8031,7 +8029,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         // making it immune to the "same attacker later fires pure-damage hits" bug.
         //
         // EXEMPT ATTACKERS (§4.5): an acting attacker whose hits do not break Stasis never
-        // records a hit victim into `stasisHitVictims`. `attackBreaksStasis` answers that for both
+        // records a hit victim into `turnStasisHitVictims`. `attackBreaksStasis` answers that for both
         // exemption forms, and the two are wired differently on purpose:
         //  - STATIC (Akula/Tygr): the turn-loop cast sites compute `tgtWasStasised` behind
         //    `!actor.doesntBreakStasis`, so `onHitBreakStasis` is never wired at all.
@@ -10117,7 +10115,7 @@ export function runCombat(rawInput: CombatEngineInput): {
              * The anchor victim's at-impact Stasis marks, for the call site to resolve against the
              * cast's re-apply check. See `resolveAnchorStasisBreak`.
              */
-            anchorStasisVictims: Set<string>;
+            anchorStasisVictims: string[];
         } => {
             // Record EACH footprint victim's damage + shield-hit flag so the post-apply emit wakes
             // EVERY hit victim's on-attacked reactives (counters + self-repairs/defensive buffs),
@@ -10145,11 +10143,11 @@ export function runCombat(rawInput: CombatEngineInput): {
             // Per-footprint Stasis-break: collect EVERY covered footprint victim (≠ anchor) stasised
             // AT IMPACT (marked from `onVictimPreImpact`, per sub-attack × victim) so its Stasis is
             // broken, resolved below through `resolveStasisBreaks`.
-            const coveredStasisVictims = new Set<string>();
+            const coveredStasisVictims: string[] = [];
             // The anchor's marks, kept apart from the covered set only for WHEN they resolve: the
             // call site resolves them after this drive returns, the covered ones resolve here. Both
             // go through `resolveStasisBreaks`, so the same-cast re-inflict rule is one rule.
-            const anchorStasisVictims = new Set<string>();
+            const anchorStasisVictims: string[] = [];
             /** §4.5 marks APPROVED at impact but not yet committed, keyed `victimId:subAttackIndex`;
              *  the value is that hit's `isAnchor`. The gate (`attackBreaksStasis` + `isStasised`)
              *  must be read BEFORE the hit resolves, but whether the hit LANDED is only known
@@ -10203,7 +10201,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                     if (markIsAnchor !== undefined) {
                         stasisMarkByHit.delete(markKey);
                         if (!outcome.barriered) {
-                            (markIsAnchor ? anchorStasisVictims : coveredStasisVictims).add(
+                            (markIsAnchor ? anchorStasisVictims : coveredStasisVictims).push(
                                 victim.id
                             );
                         }
@@ -10308,10 +10306,10 @@ export function runCombat(rawInput: CombatEngineInput): {
                     );
                 },
             });
-            // Set the DEFERRED Stasis break for every covered victim this cast did not itself
-            // stasis. The gate already ran in `onVictimPreImpact`, the only thing that puts an id in
-            // this set, and every sub-attack has rolled its clauses by now. The victim's own skip
-            // branch consumes the mark next turn.
+            // Queue the Stasis reduction for every covered victim hit this cast did not itself
+            // stasis — one per landed hit. The gate already ran in `onVictimPreImpact`, the only
+            // thing that puts an id in this list, and every sub-attack has rolled its clauses by
+            // now. `drainReactions` spends it after this turn's drain.
             // Pure state, no events: hoisted ABOVE the emission block so the
             // interleaved event/attacked pairs below stay adjacent, with nothing between them.
             resolveStasisBreaks(coveredStasisVictims, sel.castStasisStandsOn);
@@ -11182,6 +11180,13 @@ export function runCombat(rawInput: CombatEngineInput): {
             if (queue.length === 0) return;
             drainQueue(queue, side === 'player' ? playerDrainCtx() : enemyDrainCtx());
         };
+        /** Drain both queues, then spend the Stasis reductions the drained hits (and the hit that
+         *  woke them) queued — see `stasisBreakPending`. */
+        const drainReactions = (): void => {
+            drainIntentsFor('player');
+            drainIntentsFor('enemy');
+            settleStasisHits();
+        };
 
         // Start-of-turn GRANTS (buffs/shields/heals) must apply BEFORE the acting owner
         // casts, so a self-buff boosts the same turn it is granted (matching the game). Scoped to
@@ -11262,8 +11267,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                     next.group.intents,
                     next.side === 'player' ? playerDrainCtx() : enemyDrainCtx()
                 );
-                drainIntentsFor('player');
-                drainIntentsFor('enemy');
+                drainReactions();
             }
         };
         const isStartOfRound = (i: Intent): boolean => i.ability.trigger === 'start-of-round';
@@ -11278,16 +11282,14 @@ export function runCombat(rawInput: CombatEngineInput): {
         const drainStartOfRound = (): void => {
             const startOfCombat = takeFromBothQueues(isStartOfCombat);
             const startOfRound = takeFromBothQueues(isStartOfRound);
-            drainIntentsFor('player');
-            drainIntentsFor('enemy');
+            drainReactions();
             drainInTurnOrder(startOfCombat);
             drainInTurnOrder(startOfRound);
         };
         /** The round tail, after `round-ended`. */
         const drainEndOfRound = (): void => {
             const endOfRound = takeFromBothQueues((i) => i.ability.trigger === 'end-of-round');
-            drainIntentsFor('player');
-            drainIntentsFor('enemy');
+            drainReactions();
             drainInTurnOrder(endOfRound);
         };
 
@@ -11358,20 +11360,13 @@ export function runCombat(rawInput: CombatEngineInput): {
         bus.emit({ type: 'round-started', round: r });
         drainStartOfRound();
 
-        // §4.5 Stasis-break pending map. Constructed ONCE before the round loop and living for the
-        // whole fight — see its declaration for why a round-scoped map dropped the break entirely
-        // whenever the attacker acted after the victim.
-        // Keys: victimIds whose Stasis should be removed when their skip branch runs.
-        // Values: always true (present = break approved; absent = no break queued).
-        // An entry is added by the ATTACKER's turn block through `resolveStasisBreaks`, from two
-        // sources:
+        // §4.5 Stasis reductions (`stasisBreakPending`, declared before the round loop). An entry
+        // is added by the ATTACKER's turn block through `resolveStasisBreaks`, from two sources:
         //   - the anchor victim, via `resolveAnchorStasisBreak` below;
         //   - every covered footprint victim, inside `drivePositionalTurnApply`.
-        // Consumed inside each actor's own skip branch (focus / team / real-enemy): if the
-        // victim id is present, remove Stasis after the turn-skip logic. This ensures the
-        // victim STILL skips its current-round turn (invariant preserved), and is freed for
-        // its next turn (Stasis gone). The same-round drain guard (drainIntentsFor('player') / drainIntentsFor('enemy'))
-        // runs BEFORE the break resolution → on-attacked reactive sees isStasised=true (test iii).
+        // `drainReactions` spends every entry after the drain that follows the cast, so the hit's
+        // on-attacked reactions still see isStasised=true (test iii) and the victim, if its Stasis
+        // reached 0, acts later this round.
         // The re-apply check reads the ACTING attacker's own Stasis writes, so it answers "does
         // this cast's Stasis stand on this victim" and nothing else (`resolveStasisBreaks`). A Stasis
         // applied by a DIFFERENT ship after the mark is queued settles the mark at the apply seam
@@ -11386,7 +11381,7 @@ export function runCombat(rawInput: CombatEngineInput): {
          * and BEFORE the post-damage flush so a pending write meets the mark at the apply seam.
          */
         const resolveAnchorStasisBreak = (
-            anchorVictims: ReadonlySet<string>,
+            anchorVictims: Iterable<string>,
             castStasisStandsOn: (victimId: string) => boolean
         ): void => resolveStasisBreaks(anchorVictims, castStasisStandsOn);
         inTurnLoop = true;
@@ -11951,9 +11946,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // no opposing victim to resolve. The turn still RUNS (a repair/buff must
                             // land); only the victim-derived context is absent. Skipping here would
                             // permanently silence all 24 shipped ally-target support ships.
-                            // §4.5: inject break hook into runPlayerTurn. The hook marks stasisHitVictims
+                            // §4.5: inject break hook into runPlayerTurn. The hook marks turnStasisHitVictims
                             // only when the victim was stasised at hit time. The actual statusEngine
-                            // removal happens AFTER drainIntentsFor('player')/drainIntentsFor('enemy') (below).
+                            // reduction happens in drainReactions, after this turn's drain (below).
                             // §4.5 exemption: an attacker with the STATIC flag (Akula/Tygr) never
                             // wires the hook at all, so the victim is never recorded → no
                             // break-mark. A GATED attacker (Zenith) does wire it and is answered
@@ -12090,7 +12085,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                             let castDelivered: number | undefined;
                             // The drive's at-impact anchor marks. Undefined when no positional apply
                             // ran — see `resolveAnchorStasisBreak` for what stands in then.
-                            let driveAnchorStasis: ReadonlySet<string> | undefined;
+                            let driveAnchorStasis: readonly string[] | undefined;
                             if (positional) {
                                 // Opposing roster + victim wrapper come from the per-side bindings
                                 // (player→enemy here). pattern/target are non-null via the `positional` gate.
@@ -12273,17 +12268,6 @@ export function runCombat(rawInput: CombatEngineInput): {
                     } else {
                         // Stasised focus/attacker turn: skip the action body.
                         // §4.3 STASIS GATE.
-                        // §4.5 Deferred break: consume any pending Stasis break so this actor
-                        // acts on their NEXT scheduled turn. The break was pre-approved by a
-                        // direct hit in an earlier turn this round (stored in stasisBreakPending
-                        // after verifying the attacker did NOT re-inflict Stasis that same turn).
-                        // Consuming here (in the skip body) ensures the CURRENT skip still runs —
-                        // the victim misses this turn, then is free from the next round onward.
-                        if (stasisBreakPending.has(actor.id)) {
-                            stasisBreakPending.delete(actor.id);
-                            for (const name of STASIS_BUFFS)
-                                statusEngine.reduceTimedEnemyStatus(actor.id, name);
-                        }
                         // Synthesize a minimal no-action result so the post-round
                         // `focusTurns.length` guard does not throw (the focus actor
                         // was stasised — it did not act, but the round must still assemble).
@@ -12409,7 +12393,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 teamTurn.positionalScalars != null;
                             // Mirror of the focus site — see its note.
                             let teamCastDelivered: number | undefined;
-                            let teamDriveAnchorStasis: ReadonlySet<string> | undefined;
+                            let teamDriveAnchorStasis: readonly string[] | undefined;
                             if (teamPositional) {
                                 // Same direction as the focus site (player→enemy); keyed to THIS team
                                 // actor's position / parsed target / parsed pattern. Non-null via the gate.
@@ -12574,13 +12558,6 @@ export function runCombat(rawInput: CombatEngineInput): {
 
                             processExtraActionGrants(actor, teamTurn.extraActionGrants);
                         } // end dead-after-burst guard (!burstDestroyedActor)
-                    } else {
-                        // §4.5 Deferred break: consume any pending Stasis break (team skip).
-                        if (stasisBreakPending.has(actor.id)) {
-                            stasisBreakPending.delete(actor.id);
-                            for (const name of STASIS_BUFFS)
-                                statusEngine.reduceTimedEnemyStatus(actor.id, name);
-                        }
                     } // end stasis gate (walked-team branch)
                 } else if (actor.kind === 'enemy') {
                     // ====================================================================
@@ -12827,7 +12804,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // reordering of the enemy publish cannot silently reopen the gap on
                             // this side alone.
                             actingTurnCtx = { actorId: actor.id, ctx: enemyTurn.turnCtx };
-                            let enemyDriveAnchorStasis: ReadonlySet<string> | undefined;
+                            let enemyDriveAnchorStasis: readonly string[] | undefined;
                             // Total damage the enemy dealt to the bound target this turn. secondary/
                             // conditional are display sub-buckets ALREADY inside directDamage (do NOT
                             // re-add). detonationDamage is the player-turn detonate() portion (0 for a bare
@@ -13333,13 +13310,6 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 );
                             }
                         } // end dead-after-burst guard (!burstDestroyedActor)
-                    } else {
-                        // §4.5 Deferred break: consume any pending Stasis break (real-enemy skip).
-                        if (stasisBreakPending.has(actor.id)) {
-                            stasisBreakPending.delete(actor.id);
-                            for (const name of STASIS_BUFFS)
-                                statusEngine.reduceTimedEnemyStatus(actor.id, name);
-                        }
                     } // end stasis gate (real-enemy branch)
                 }
 
@@ -13348,8 +13318,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // status they apply obeys the same-turn decrement rule (the carrier's Post Turn
                 // below decrements it). A triggered effect therefore never boosts the hit that
                 // triggered it (the hit's damage was already computed in the turn body).
-                drainIntentsFor('player');
-                drainIntentsFor('enemy');
+                drainReactions();
 
                 // Post Turn (combat-system.md section 4): the status CARRIER decrements ALL its
                 // timed statuses by one turn — both its self-buff store and the debuff store of
@@ -13374,8 +13343,7 @@ export function runCombat(rawInput: CombatEngineInput): {
 
                 bus.emit({ type: 'turn-ended', actorId: actor.id, round: r });
                 // Drain intents enqueued by end-of-turn triggers before the next actor acts.
-                drainIntentsFor('player');
-                drainIntentsFor('enemy');
+                drainReactions();
 
                 // AFTER the turn ends (including its drains, so an on-death reactive
                 // that revives or kills still counts), check for a wipe. Breaking HERE — rather

@@ -92,6 +92,7 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator: Snakeroot's passive is now a 120% hit per 4 DoT stacks.",
     "Combat simulator: Belladonna's charged Stasis now counts that cast's converted Acidic Decay.",
     'Combat simulator: Tormenter and Asphodel now crit every attack, even at a disadvantage.',
+    'Combat simulator: each hit now shortens Stasis immediately, so stasised ships act sooner.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

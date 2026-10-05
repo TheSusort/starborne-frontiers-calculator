@@ -3166,6 +3166,15 @@ const DocumentationPage: React.FC = () => {
                                         only to the enemies she critted.
                                     </p>
                                     <p className="text-theme-text mb-2">
+                                        <span className="text-primary">Stasis:</span> Every direct
+                                        hit on a ship in Stasis takes one turn off it as it lands,
+                                        whoever lands it. Two hits before its turn free a ship from
+                                        a 2-turn Stasis, and it acts that same round. Damage over
+                                        time and Bombs do not shorten Stasis, and neither do ships
+                                        whose attacks &ldquo;do not reduce Stasis&rdquo;, such as
+                                        Akula.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
                                         <span className="text-primary">Purges:</span> A purge on a
                                         skill that hits several enemies strips buffs from every
                                         enemy it hits, not just the main target. Tithonus gains
