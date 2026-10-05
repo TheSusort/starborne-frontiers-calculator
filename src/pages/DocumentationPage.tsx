@@ -2896,7 +2896,10 @@ const DocumentationPage: React.FC = () => {
                                         Effects tied to one enemy&apos;s crit, such as
                                         Wisteria&apos;s Inferno, read that enemy&apos;s own crit.
                                         Asphodel adds one charge for each enemy her skill crits, so
-                                        an area hit that crits two enemies adds two.
+                                        an area hit that crits two enemies adds two. &quot;When an
+                                        ally critically hits&quot; (Sentinel, Hermes, Howler) also
+                                        counts an ally&apos;s critting passive damage, such as
+                                        Chakara&apos;s round-start hit or a counter-attack.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Stacking Reactions:</span> A

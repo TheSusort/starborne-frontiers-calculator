@@ -480,7 +480,8 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
  *    the ruling above: fires once per critting ability-performed — i.e. once per critting
  *    SUB-ATTACK, and ONCE for an AoE footprint however many victims it crit, never per (hit,
  *    victim) pair; every opposing actor is excluded (a walked enemy attacker emits
- *    ability-performed too, but its crit is never an ally crit).
+ *    ability-performed too, but its crit is never an ally crit). Also a same-side actor's critting
+ *    reactive-damage-performed (a passive proc or counter, ruling 53), once per critting hit.
  *  - start-of-round → round-started (global — every owner's start-of-round fires once per round)
  *  - end-of-round → round-ended (global — every owner's end-of-round fires once per round)
  *  - on-charged-cast → skill-fired where actorId === ownerId && slot === 'charged' (self-scoped;
@@ -1506,6 +1507,22 @@ export function registerReactiveListeners(args: {
                                 damagedAllyId: e.actorId,
                                 counterTargetId: critVictimIds[0],
                                 critVictimIds,
+                            },
+                        });
+                    });
+                    // An ally's PASSIVE damage crits count too (owner ruling 53): a critting
+                    // counter-attack or reactive proc — Nyxen's counter, Chakara's round-start hit —
+                    // wakes the same reaction, once per critting hit, routed to that hit's victim.
+                    // Sentinel's own proc cannot crit, so his reaction never re-wakes itself.
+                    bus.on('reactive-damage-performed', (e) => {
+                        if (isOpposing(e.sourceId) || e.didCrit !== true) return;
+                        enqueue({
+                            ...intent,
+                            eventCtx: {
+                                ...intent.eventCtx,
+                                damagedAllyId: e.sourceId,
+                                counterTargetId: e.targetId,
+                                critVictimIds: [e.targetId],
                             },
                         });
                     });
@@ -4439,11 +4456,11 @@ function makeReactiveStampingBus(bus: CombatEventBus, duringTurnOf?: string): Co
     };
 }
 
-/** Emit the LOG-ONLY `reactive-damage-performed` event for a proc that actually dealt damage.
+/** Emit the `reactive-damage-performed` event for a proc that actually dealt damage.
  *  `ctx.bus` is the reactive stamping wrapper (when present) → the event is branded `duringTurnOf`
- *  so the combat log nests it under the triggering turn. NO combat listener subscribes to this
- *  type, so it can never chain. Inert when the proc was guarded (void / dealt <= 0) or no bus is
- *  wired (unit fixtures). */
+ *  so the combat log nests it under the triggering turn. Its one combat listener is
+ *  `on-ally-crit`, for a critting proc (ruling 53). Inert when the proc was guarded (void /
+ *  dealt <= 0) or no bus is wired (unit fixtures). */
 function emitReactiveDamageLog(
     ctx: IntentExecContext,
     ownerId: string,

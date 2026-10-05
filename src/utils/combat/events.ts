@@ -365,12 +365,11 @@ export type CombatEvent =
            *  Set only by the leech sites; a cast or reactive grant leaves it absent. */
           uncast?: true;
       } & ReactiveStamp)
-    /** LOG-ONLY: a drain-time REACTIVE damage proc resolved (applyReactiveDamage → creditDamage).
-     *  A reactive damage credits its total but emits NO `ability-performed` (chain guard — an
-     *  ability-performed would re-trigger on-crit/on-attacked/on-ally-crit listeners and loop).
-     *  This event exists SOLELY so buildCombatLog can surface the proc: NO combat listener
-     *  subscribes to it, so it can never chain. `sourceId` = the reacting owner; `targetId` = the
-     *  victim; `amount` = the mitigated/credited damage; `didCrit` when the proc crit. */
+    /** A drain-time REACTIVE damage proc or counter-attack resolved. It emits NO
+     *  `ability-performed`, which would re-trigger the on-crit / on-deal-damage cast riders.
+     *  buildCombatLog surfaces it, and `on-ally-crit` subscribes for a critting one ("When an ally
+     *  critically hits" counts passive damage — ruling 53). `sourceId` = the reacting owner;
+     *  `targetId` = the victim; `amount` = the mitigated/credited damage; `didCrit` when it crit. */
     | ({
           type: 'reactive-damage-performed';
           sourceId: string;

@@ -93,6 +93,7 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator: Belladonna's charged Stasis now counts that cast's converted Acidic Decay.",
     'Combat simulator: Tormenter and Asphodel now crit every attack, even at a disadvantage.',
     'Combat simulator: each hit now shortens Stasis immediately, so stasised ships act sooner.',
+    "Combat simulator: Sentinel, Hermes and Howler now react to allies' critting passive damage.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
