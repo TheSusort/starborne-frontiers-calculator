@@ -5,6 +5,7 @@ import { conditionsMet, ConditionContext } from '../abilities/evaluateConditions
 import { isPersistentByName, persistentCapFor } from '../../constants/oneShotPersistentBuffs';
 import { UNREMOVABLE_STATUSES, STACK_STEALABLE_STATUSES } from './cheatDeathBuffs';
 import { isBuffProtection } from './buffProtectionBuffs';
+import { EXPOSED } from './exposedStatus';
 
 export interface ActiveBuff {
     buffName: string;
@@ -1508,6 +1509,9 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         const expired: string[] = [];
         if (map) {
             for (const [key, s] of map) {
+                // Exposed has no turn clock: it leaves when a direct hit spends it or when the
+                // engine clears it at the end of the round (see exposedStatus.ts).
+                if (s.buffName === EXPOSED) continue;
                 // Own-turn reprieve (Martyrdom Disable): an on-destroyed debuff that landed on this
                 // actor DURING its own turn is skipped once (flag flips false), so it first
                 // decrements at this actor's NEXT Post-Turn and runs its full window. Mirrors

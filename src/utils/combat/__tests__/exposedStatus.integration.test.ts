@@ -26,6 +26,7 @@
 import { describe, it, expect } from 'vitest';
 import { parsePattern, parseTarget } from '../../targetingParser';
 import { runCombat, type CombatEngineInput } from '../engine';
+import { createEventBus, type CombatEvent } from '../events';
 import type { Ability, ShipSkills } from '../../../types/abilities';
 
 const HITS = 2;
@@ -397,19 +398,18 @@ const counterAbility = (): Ability => ({
 });
 
 /**
- * Per-round damage dealt to the foe over two rounds. The player casts damage-then-Exposed (a
- * post-damage clause), and is SLOWER than the foe, so each round runs: foe attacks → player's
- * counter lands on the foe → player casts.
- *
- * The cast is two full sub-attacks, so round 1 already self-amplifies: attack 0 lands plain and
- * applies Exposed, attack 1 rides and spends that stack (then reapplies its own, left standing).
- * Round 2's first hit rides the Exposed round 1 left behind — unless a hit in between wrongly spent
- * it. Counter damage is a per-round constant, so comparing the round2−round1 DELTA against the
- * counter-free run cancels it out exactly.
+ * The damage a LATER player hit deals to the foe in the same round, after the counter had its
+ * chance to spend the foe's Exposed. One round, in speed order:
+ *   1. the player focus (fastest) lands a 1-hit cast, then its post-damage clause plants
+ *      `stacks` of Exposed on the foe — standing, unspent;
+ *   2. the foe attacks the focus, waking the focus's on-attacked counter (when `withCounter`),
+ *      which lands on the Exposed foe;
+ *   3. a second player ship (slowest) hits the foe — amplified by whatever Exposed is left.
+ * Exposed only lives until the end of the round, so all three steps sit inside one round.
  */
-function foeDamagePerRound(withCounter: boolean, stacks = 1): { r1: number; r2: number } {
+function laterHitOnFoe(withCounter: boolean, stacks = 1): number {
     const focusSlots: ShipSkills['slots'] = [
-        { slot: 'active', abilities: [twoHitAttack(), castStatus('Exposed', stacks)] },
+        { slot: 'active', abilities: [nHitAttack(1), castStatus('Exposed', stacks)] },
     ];
     if (withCounter) focusSlots.push({ slot: 'passive', abilities: [counterAbility()] });
 
@@ -420,7 +420,7 @@ function foeDamagePerRound(withCounter: boolean, stacks = 1): { r1: number; r2: 
         defensePenetration: 0,
         chargeCount: 0,
         shipSkills: { slots: focusSlots },
-        numRounds: 2,
+        numRounds: 1,
         selfBuffs: [],
         enemyDebuffs: [],
         selfDotModifier: 0,
@@ -432,82 +432,92 @@ function foeDamagePerRound(withCounter: boolean, stacks = 1): { r1: number; r2: 
         affinityCritPenalty: 0,
         defence: 0,
         hp: 1_000_000_000,
-        speed: 100, // slower than the foe → the foe attacks first, waking the counter
+        speed: 1_000, // fastest → plants Exposed before the foe attacks
         hacking: 100_000,
         healTargetId: 'attacker',
         mode: 'battle',
-        position: 'M1',
+        position: 'M2', // ahead of 'later' → the foe's attack, and so the counter, is the focus's
         target: parseTarget('front'),
         pattern: parsePattern('Pattern-Base'),
+        teamActors: [
+            {
+                id: 'later',
+                speed: 10, // slowest → hits after the counter
+                chargeCount: 0,
+                startCharged: false,
+                selfBuffs: [],
+                enemyDebuffs: [],
+                role: 'ATTACKER',
+                position: 'M1',
+                target: parseTarget('front'),
+                pattern: parsePattern('Pattern-Base'),
+                walk: {
+                    shipSkills: { slots: [{ slot: 'active', abilities: [nHitAttack(1)] }] },
+                    stats: {
+                        attack: 10_000,
+                        crit: 0,
+                        critDamage: 0,
+                        defensePenetration: 0,
+                        hacking: 0,
+                        defence: 0,
+                        hp: 1_000_000_000,
+                    },
+                    selfDotModifier: 0,
+                    defensePenetrationBuff: 0,
+                    affinityDamageModifier: 0,
+                    affinityCritCap: 100,
+                    affinityCritPenalty: 0,
+                    hasChargedSkill: false,
+                },
+            },
+        ],
         enemyAttackers: [
             {
                 id: 'foe',
-                stats: stats(1_000, 900),
+                stats: stats(1_000, 500),
                 chargeCount: 0,
                 startCharged: false,
                 position: 'M1',
                 target: parseTarget('front'),
                 pattern: parsePattern('Pattern-Base'),
-                shipSkills: { slots: [{ slot: 'active', abilities: [twoHitAttack()] }] },
+                shipSkills: { slots: [{ slot: 'active', abilities: [nHitAttack(1)] }] },
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
             } as any,
         ],
     };
 
-    const result = runCombat(input);
-    return {
-        r1: result.rounds[0]?.perTargetDamage?.['foe'] ?? 0,
-        r2: result.rounds[1]?.perTargetDamage?.['foe'] ?? 0,
+    const events: CombatEvent[] = [];
+    const bus = createEventBus();
+    const emit = bus.emit;
+    bus.emit = (e) => {
+        events.push(e);
+        emit(e);
     };
+    runCombat({ ...input, bus });
+    return events
+        .filter(
+            (e): e is Extract<CombatEvent, { type: 'attacked' }> =>
+                e.type === 'attacked' && e.attackerId === 'later' && e.targetId === 'foe'
+        )
+        .reduce((sum, e) => sum + (e.damage ?? 0), 0);
 }
 
-describe('Exposed is not spent by hit types that never amplified it', () => {
-    it("a counterattack leaves the victim's Exposed intact for the next real cast", () => {
-        const plain = foeDamagePerRound(false);
-        expect(plain.r1).toBeGreaterThan(0);
-        // Premise: round 2 IS amplified by the Exposed round 1 left standing.
-        //
-        // The ratio is 4/3, not the pre-PR8 1.5, because since PR8 (multi-hit full-walk epic) each
-        // of the cast's 2 hits is a full attack that lands its own post-damage Exposed:
-        //   round 1 = plain + doubled  (attack 0 lands it, attack 1 spends it) = 3 half-shares,
-        //   round 2 = doubled + doubled (attack 0 spends the one left standing and re-lands it,
-        //             attack 1 spends that)                                    = 4 half-shares.
-        // Still strictly greater than 1, which is all this premise needs to set up the invariant
-        // below — the ratio itself is pinned only to catch a silent change in the fixture's shape.
-        expect(plain.r2 / plain.r1).toBeCloseTo(4 / 3, 5);
+/** The later ship's hit with no Exposed anywhere: 10 000 attack into 0 defence. */
+const PLAIN_HIT = 10_000;
 
-        // With the counter in play the round-over-round GAIN must be identical: the counter lands on
-        // the Exposed holder first, but it is not an amplified hit, so it must not consume it.
-        const countered = foeDamagePerRound(true);
-        expect(countered.r2 - countered.r1).toBeCloseTo(plain.r2 - plain.r1, 5);
+describe('Exposed is not spent by hit types that never amplified it', () => {
+    it("a counterattack leaves the victim's Exposed intact for a later hit the same round", () => {
+        // Premise: without a counter, the later hit rides the one standing stack (+100%).
+        expect(laterHitOnFoe(false)).toBeCloseTo(PLAIN_HIT * 2, 5);
+        // The counter lands on the Exposed holder first, but it is not an amplified hit, so the
+        // later hit is amplified exactly the same.
+        expect(laterHitOnFoe(true)).toBeCloseTo(PLAIN_HIT * 2, 5);
     });
 
-    // The same exclusion where the applier lands TWO stacks — which is where "spends nothing" and
-    // "spends one" finally part company: at one stack a hit either consumes the whole status or
-    // leaves it whole, so the test above cannot tell a stack-spend from a no-op. Here it can, because
-    // a partially spent Exposed reads +100% rather than +200% and the totals say which.
-    //
-    // What survives a round is the TWO stacks the last hit's own clause re-landed: each hit spends
-    // one stack, then its post-damage clause re-applies Exposed at the same tier and duration, which
-    // refreshes the entry to its declared 2 stacks (statusEngine's `familyApplicationWins`: an
-    // equal-tier re-application refreshes). The counter's job is to leave those alone.
-    it('a counterattack spends none of the Exposed stacks a 2-stack applier leaves standing', () => {
-        const plain = foeDamagePerRound(false, 2);
-        expect(plain.r1).toBeGreaterThan(0);
-        // Premise: round 2 IS amplified by the stacks round 1 left standing.
-        //
-        // Since PR8 each of the cast's 2 hits is a full attack landing its own post-damage 2 stacks:
-        //   round 1 = plain + tripled  (attack 0 lands 2, attack 1 reads both at +100% each, spends
-        //             one, and its clause refreshes the entry to 2)          = 1 + 3 = 4 half-shares,
-        //   round 2 = tripled + tripled (each attack reads the 2 standing, spends one, re-lands 2)
-        //                                                                     = 3 + 3 = 6 half-shares.
-        expect(plain.r2 / plain.r1).toBeCloseTo(6 / 4, 5);
-
-        // With the counter in play the round-over-round GAIN must be identical. Had the counter spent
-        // one of round 1's leftover stacks, round 2's attack 0 would read one stack: 2 + 3 = 5
-        // half-shares, against the counter-free run's 6. The counter's own damage is a per-round
-        // constant, so the delta comparison cancels it exactly.
-        const countered = foeDamagePerRound(true, 2);
-        expect(countered.r2 - countered.r1).toBeCloseTo(plain.r2 - plain.r1, 5);
+    // Two stacks are where "spends nothing" and "spends one" part company: a counter that spent one
+    // would leave the later hit at +100% instead of +200%.
+    it('a counterattack spends none of a 2-stack Exposed', () => {
+        expect(laterHitOnFoe(false, 2)).toBeCloseTo(PLAIN_HIT * 3, 5);
+        expect(laterHitOnFoe(true, 2)).toBeCloseTo(PLAIN_HIT * 3, 5);
     });
 });

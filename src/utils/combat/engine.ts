@@ -177,7 +177,7 @@ import {
 } from './triggers';
 import { adjacentAllyIds } from './adjacency';
 import { allyHpFraction, lowestHpAllyRecipients, narrowByFaction } from './supportRecipients';
-import { consumeExposed, exposedIncomingPct } from './exposedStatus';
+import { consumeExposed, exposedIncomingPct, EXPOSED } from './exposedStatus';
 import {
     HIT_MITIGATION_DOT_ROUNDS,
     consumeHitMitigation,
@@ -13566,6 +13566,15 @@ export function runCombat(rawInput: CombatEngineInput): {
         // after the turn loop; it resolves in turn order (see `drainInTurnOrder`).
         bus.emit({ type: 'round-ended', round: r });
         drainEndOfRound();
+
+        // Exposed is "removed after taking direct damage or at the end of the round": whatever
+        // stacks no hit spent this round go now, after the round's last drain. The Post-Turn
+        // countdown skips it (statusEngine's decrementEnemy), so this is its only expiry.
+        for (const a of allActors) {
+            if (exposedIncomingPct(statusEngine, a.id) <= 0) continue;
+            statusEngine.removeTimedEnemyStatus(a.id, EXPOSED);
+            bus.emit({ type: 'buff-expired', actorId: a.id, round: r, buffName: EXPOSED });
+        }
 
         // LOG-ONLY per-actor status snapshot (see the events.ts doc). Emitted at the round TAIL —
         // after every turn, the round-ended reactives AND their drains — so it reports the statuses

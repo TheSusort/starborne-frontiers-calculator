@@ -14,6 +14,11 @@ import type { StatusEngine } from './statusEngine';
  *
  * Appliers in the corpus: Amartya's reactive "inflicts 2 stacks of Exposed on that defender"
  * (on-enemy-taunt-gained) and Nayra's charged skill.
+ *
+ * LIFETIME: a numeric timed entry whose duration nothing counts down — the Post-Turn decrement
+ * skips it, and the engine removes every remaining stack at the end of the round, after the
+ * round-ended drain. NOT `'recurring'`: the stack-spend helper skips recurring entries, so a
+ * recurring Exposed would amplify forever. Pinned by `exposedRoundLifetime.integration.test.ts`.
  */
 export const EXPOSED = 'Exposed';
 
