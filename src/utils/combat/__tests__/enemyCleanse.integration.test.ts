@@ -481,7 +481,7 @@ describe('Grif hits EACH enemy whose debuff is cleansed, not just the cleanser',
 // regardless of side — empirically confirmed this credits the ENEMY's OWN `perActor` bucket (NOT
 // suppressed the way E5's player-facing heal metric is for enemy heals). Distinguishing
 // observable: the player applies TWO distinct debuffs to the enemy each round ('Older','Newer').
-// count:1 (Warpstrike's newest-only shape) can only ever touch ONE of them; count:'all' (this
+// count:1 (Warpstrike's single random cut) can only ever touch ONE of them; count:'all' (this
 // PR's Heliodor/Pestilence shape) touches BOTH — proven on an ENEMY owner exactly as the
 // player-side unit tests (cleanseReactivePath.test.ts) proved it on a player owner.
 describe('PR11: enemy-side debuff-duration reduction (team symmetry — Heliodor shape)', () => {

@@ -3,6 +3,7 @@ import type { Position } from '../../types/encounters';
 import type { AffinityName } from '../../types/ship';
 import type { CombatEventBus } from './events';
 import type { PreFightCombatModifiers } from './preFight/types';
+import type { DurationCutCandidate } from './statusEngine';
 
 /** Per-actor damage contributions within one round (spec: per-actor accounting —
  *  the simulator-page seam). secondary/conditional are sub-buckets of direct
@@ -201,6 +202,57 @@ export function dotCleanseCandidates(
                             const at = entries.indexOf(e);
                             if (at >= 0) entries.splice(at, 1);
                         }
+                    },
+                });
+            }
+        }
+    }
+    return out;
+}
+
+/**
+ * The DoT half of a single random duration cut's pool (Warpstrike, owner ruling R35): one
+ * candidate per Corrosion, Inferno and generic STACK `holder` carries (R26 — each stack is one
+ * debuff), dated by its entry's `appliedSeq` (absent → 0). An `unremovable` entry (Acidic Decay)
+ * offers none; Bombs come from `bombDurationCutCandidates`.
+ *
+ * Cutting a stack of a multi-stack entry splits it off: the entry keeps its other stacks and
+ * duration, and a one-stack copy (same `appliedSeq`, applier and family) with the shortened
+ * duration is inserted after it. A stack cut to 0 is dropped without ticking, as
+ * `shortenDotDurations` drops an entry.
+ */
+export function dotDurationCutCandidates(holder: {
+    corrosionEntries: ActiveDoTStack[];
+    infernoEntries: ActiveDoTStack[];
+    genericDoTEntries: ActiveDoTStack[];
+}): DurationCutCandidate[] {
+    const out: DurationCutCandidate[] = [];
+    for (const entries of [
+        holder.corrosionEntries,
+        holder.infernoEntries,
+        holder.genericDoTEntries,
+    ]) {
+        for (const e of entries) {
+            if (e.unremovable) continue;
+            for (let s = 0; s < e.stacks; s++) {
+                out.push({
+                    seq: e.appliedSeq ?? 0,
+                    cut: (turns) => {
+                        const at = entries.indexOf(e);
+                        if (at < 0) return;
+                        if (e.stacks > 1) {
+                            e.stacks -= 1;
+                            const left = e.remainingRounds - turns;
+                            if (left > 0)
+                                entries.splice(at + 1, 0, {
+                                    ...e,
+                                    stacks: 1,
+                                    remainingRounds: left,
+                                });
+                            return;
+                        }
+                        e.remainingRounds -= turns;
+                        if (e.remainingRounds <= 0) entries.splice(at, 1);
                     },
                 });
             }

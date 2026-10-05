@@ -1,11 +1,12 @@
 import type { CombatEventBus } from './events';
-import type { CombatActor } from './state';
+import type { CombatActor, PendingBomb } from './state';
+import type { DurationCutCandidate } from './statusEngine';
 
 /**
  * Lingshe's charged skill: "reduces all Bomb on the enemy targets by 1 turn." Decrements EVERY
- * pending bomb on `victim` by `turns`; any bomb reaching <= 0 detonates IMMEDIATELY using the
- * EXACT `processBombs` burst formula (engine.ts) — stacks * damagePerStack * affinityMult *
- * (1 + detonationDamageModifier / 100) — crediting the bomb's ORIGINAL applier (`bomb.sourceId`,
+ * pending bomb on `victim` (or only the `only` one) by `turns`; any bomb reaching <= 0 detonates
+ * IMMEDIATELY using the EXACT `processBombs` burst formula (engine.ts) — stacks * damagePerStack *
+ * affinityMult * (1 + detonationDamageModifier / 100) — crediting the bomb's ORIGINAL applier (`bomb.sourceId`,
  * NOT this ability's caster) via a `bomb-detonated` bus emission (one event per detonating entry,
  * mirroring the enemy-turn `processBombs` shape) and, when `forceDetonateBomb` is supplied, the
  * SAME per-victim `applyVictimDamage` sink a natural detonation uses — so Barrier, Cheat-Death,
@@ -36,7 +37,10 @@ export function reduceBombsOnVictim(
     // event's `detonatorId` so Lingshe's on-self-bomb-detonated Stealth grant fires for a burst SHE
     // caused even on bombs another ship applied.
     detonatorId: string,
-    forceDetonateBomb?: (victim: CombatActor, sourceId: string, damage: number) => void
+    forceDetonateBomb?: (victim: CombatActor, sourceId: string, damage: number) => void,
+    // Shrink this one bomb only (a single random duration cut, `bombDurationCutCandidates`);
+    // absent → every bomb on the victim.
+    only?: PendingBomb
 ): number {
     // Bind the array reference ONCE, exactly as the sibling `processBombs` does with its
     // `args.pendingBombs` param. A forced detonation can kill the victim, and the engine's
@@ -47,9 +51,11 @@ export function reduceBombsOnVictim(
     // turn. `.splice` on this reference stays correct in the survive case (same object as the live
     // field) and is a harmless no-op on the detached snapshot in the death case.
     const bombs = victim.pendingBombs;
-    const shrunk = bombs.length;
+    let shrunk = 0;
     for (let i = bombs.length - 1; i >= 0; i--) {
         const bomb = bombs[i];
+        if (only !== undefined && bomb !== only) continue;
+        shrunk += 1;
         bomb.countdown -= turns;
         if (bomb.countdown > 0) continue;
         const burst =
@@ -76,4 +82,49 @@ export function reduceBombsOnVictim(
         bombs.splice(i, 1);
     }
     return shrunk;
+}
+
+/**
+ * The Bomb half of a single random duration cut's pool (Warpstrike, owner ruling R35): one
+ * candidate per Bomb STACK on `victim` (R26), dated by its `appliedSeq` (absent → 0). Cutting a
+ * stack of a multi-stack Bomb splits it off as a one-stack copy (same `appliedSeq` and applier)
+ * inserted after it, so the other stacks keep their countdown; the cut stack then goes through
+ * `reduceBombsOnVictim` alone, and detonates if driven to 0 (the 2026-07-31 user-verified rule).
+ */
+export function bombDurationCutCandidates(
+    victim: CombatActor,
+    round: number,
+    bus: CombatEventBus,
+    detonatorId: string,
+    forceDetonateBomb?: (victim: CombatActor, sourceId: string, damage: number) => void
+): DurationCutCandidate[] {
+    const bombs = victim.pendingBombs;
+    const out: DurationCutCandidate[] = [];
+    for (const bomb of bombs) {
+        for (let s = 0; s < bomb.stacks; s++) {
+            out.push({
+                seq: bomb.appliedSeq ?? 0,
+                cut: (turns) => {
+                    const at = bombs.indexOf(bomb);
+                    if (at < 0) return;
+                    let cutStack = bomb;
+                    if (bomb.stacks > 1) {
+                        bomb.stacks -= 1;
+                        cutStack = { ...bomb, stacks: 1 };
+                        bombs.splice(at + 1, 0, cutStack);
+                    }
+                    reduceBombsOnVictim(
+                        victim,
+                        turns,
+                        round,
+                        bus,
+                        detonatorId,
+                        forceDetonateBomb,
+                        cutStack
+                    );
+                },
+            });
+        }
+    }
+    return out;
 }

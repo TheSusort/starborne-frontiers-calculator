@@ -2713,9 +2713,8 @@ function abilitiesFromText(
 
     // Debuff-duration reduction — the inverse of extend-dot. Modeled as a
     // 'cleanse' ability with mode:'reduce-duration' + count:'all' (shrinks EVERY eligible
-    // debuff on the recipient by durationTurns, not just the newest — the Warpstrike implant's
-    // count:0/mode:'reduce-duration' shape stays newest-only and is unaffected by count:'all'
-    // being a new, distinct value). Two corpus shapes:
+    // debuff on the recipient by durationTurns — the Warpstrike implant's count:0 shape cuts one
+    // random debuff instead). Two corpus shapes:
     //  - Heliodor: a self-subject damage reaction ("When directly damaged, this Unit reduces
     //    the duration of all active Debuffs on itself/all allies …") → trigger 'on-attacked'.
     //    The unit being damaged is always itself (never the ally-subject shape) — only the

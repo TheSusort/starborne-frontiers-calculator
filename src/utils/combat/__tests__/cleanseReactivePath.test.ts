@@ -4,7 +4,12 @@ import { createEventBus, CombatEvent } from '../events';
 import { Ability, AbilityTarget, AbilityTrigger, ShipSkills } from '../../../types/abilities';
 import { executeIntent, Intent, IntentExecContext } from '../triggers';
 import { createStatusEngine, RegisteredAbilityStatus } from '../statusEngine';
-import { makeRateGate, setRateGateRng, resetRateGateRng } from '../../calculators/rateAccumulator';
+import {
+    makeRateGate,
+    setKeyedRng,
+    setRateGateRng,
+    resetRateGateRng,
+} from '../../calculators/rateAccumulator';
 import type { CombatActor } from '../state';
 
 type CleansePerformed = Extract<CombatEvent, { type: 'cleanse-performed' }>;
@@ -271,7 +276,7 @@ function seedDebuffs(se: ReturnType<typeof createStatusEngine>, count: number): 
 }
 
 /** Build a reactive reduce-duration Intent for the test owner. `count` defaults to 1 (the
- *  pre-PR11 newest-only shape, e.g. Warpstrike); pass 'all' for PR11's Heliodor/Pestilence
+ *  single random cut, Warpstrike); pass 'all' for PR11's Heliodor/Pestilence
  *  ALL-debuffs shape. `trigger` defaults to 'on-attacked' (Heliodor's shape); pass
  *  'on-debuff-inflicted' for Pestilence's shape. */
 function makeReduceDurationIntent(opts: {
@@ -302,31 +307,36 @@ function makeReduceDurationIntent(opts: {
 }
 
 describe('Task 4: reactive cleanse executor — reduce-duration mode', () => {
-    it('F. reduce-duration: newest debuff loses 1 turn; older debuff unchanged; credits cleanseCount:1', () => {
-        const se = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
-        se.beginRound(1);
-        // Seed two debuffs in sequence: Debuff-0 first (older, seq=1), Debuff-1 second (newer, seq=2).
-        se.applyTimedAbilityStatus(1, mkTimed('Debuff-0', 3), 'attacker', TARGET_ID);
-        se.applyTimedAbilityStatus(1, mkTimed('Debuff-1', 5), 'attacker', TARGET_ID);
+    // The pick draws from the keyed stream: a draw of 0 takes the head of the newest-first pool
+    // (Debuff-1), a draw near 1 its tail (Debuff-0).
+    it.each([
+        [0, { 'Debuff-0': 3, 'Debuff-1': 4 }],
+        [0.99, { 'Debuff-0': 2, 'Debuff-1': 5 }],
+    ])(
+        'F. reduce-duration: the keyed draw (%s) picks the ONE debuff that loses 1 turn; credits cleanseCount:1',
+        (draw, expected) => {
+            setKeyedRng(() => draw);
+            const se = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+            se.beginRound(1);
+            // Debuff-0 first (older), Debuff-1 second (newer).
+            se.applyTimedAbilityStatus(1, mkTimed('Debuff-0', 3), 'attacker', TARGET_ID);
+            se.applyTimedAbilityStatus(1, mkTimed('Debuff-1', 5), 'attacker', TARGET_ID);
 
-        const creditSpy = vi.fn();
-        const ctx = makeCtx({ statusEngine: se, creditSpy });
-        const intent = makeReduceDurationIntent({ durationTurns: 1 });
-        executeIntent(intent, ctx);
+            const creditSpy = vi.fn();
+            const ctx = makeCtx({ statusEngine: se, creditSpy });
+            const intent = makeReduceDurationIntent({ durationTurns: 1 });
+            executeIntent(intent, ctx);
 
-        // Credit should be called with cleanseCount = 1 (one debuff had its duration reduced).
-        expect(creditSpy).toHaveBeenCalledWith(OWNER_ID, 'cleanseCount', 1);
-
-        // Inspect remaining durations via timedAbilityStatuses('enemy', ownerId, targetId).
-        // TARGET_ID = OWNER_ID so both arguments are the same string.
-        const statuses = se.timedAbilityStatuses('enemy', OWNER_ID, TARGET_ID);
-        const byName = new Map(statuses.map((s) => [s.active.buffName, s.active.turnsRemaining]));
-
-        // Debuff-1 is the newest (higher appliedSeq) → its duration was reduced by 1 (5→4).
-        expect(byName.get('Debuff-1')).toBe(4);
-        // Debuff-0 is older → unchanged (still 3).
-        expect(byName.get('Debuff-0')).toBe(3);
-    });
+            expect(creditSpy).toHaveBeenCalledWith(OWNER_ID, 'cleanseCount', 1);
+            // TARGET_ID = OWNER_ID so both arguments are the same string.
+            const statuses = se.timedAbilityStatuses('enemy', OWNER_ID, TARGET_ID);
+            expect(
+                Object.fromEntries(
+                    statuses.map((s) => [s.active.buffName, s.active.turnsRemaining])
+                )
+            ).toEqual(expected);
+        }
+    );
 
     it('G. reduce-duration without healing ctx: still reduces debuff, no throw, no credit attempted', () => {
         const se = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
@@ -366,9 +376,8 @@ describe('Task 4: reactive cleanse executor — reduce-duration mode', () => {
 });
 
 // PR11 (epic PR11): reduce-duration mode with count:'all' — Heliodor/Pestilence's "reduces the
-// duration of all active Debuffs … by 1 turn". The defining behavioral difference from Task 4's
-// count:1 (newest-only) tests above is proven directly: with TWO debuffs present, count:1 only
-// ever touches the newest (Debuff-1, proven above), while count:'all' touches BOTH.
+// duration of all active Debuffs … by 1 turn". With TWO debuffs present, count:1 touches ONE
+// (proven above), while count:'all' touches BOTH.
 describe("PR11: reactive cleanse executor — reduce-duration mode, count:'all'", () => {
     it("I. count:'all': BOTH debuffs lose 1 turn (not just the newest); credits cleanseCount:2", () => {
         const se = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
@@ -442,7 +451,7 @@ describe("PR11: reactive cleanse executor — reduce-duration mode, count:'all'"
         expect(creditSpy).toHaveBeenCalledWith(OWNER_ID, 'cleanseCount', 0);
     });
 
-    it('M. count:1 (Warpstrike, unchanged) still reduces only the newest — byte-identical guard against PR11 regressing the pre-existing shape', () => {
+    it('M. count:1 (Warpstrike) cuts exactly ONE of the two debuffs by 1 turn', () => {
         const se = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
         se.beginRound(1);
         se.applyTimedAbilityStatus(1, mkTimed('Debuff-0', 3), 'attacker', TARGET_ID);
@@ -455,9 +464,11 @@ describe("PR11: reactive cleanse executor — reduce-duration mode, count:'all'"
 
         expect(creditSpy).toHaveBeenCalledWith(OWNER_ID, 'cleanseCount', 1);
         const statuses = se.timedAbilityStatuses('enemy', OWNER_ID, TARGET_ID);
-        const byName = new Map(statuses.map((s) => [s.active.buffName, s.active.turnsRemaining]));
-        expect(byName.get('Debuff-1')).toBe(4);
-        expect(byName.get('Debuff-0')).toBe(3);
+        const byName = new Map(
+            statuses.map((s) => [s.active.buffName, s.active.turnsRemaining as number])
+        );
+        const lost = [3 - byName.get('Debuff-0')!, 5 - byName.get('Debuff-1')!];
+        expect(lost.sort()).toEqual([0, 1]);
     });
 });
 

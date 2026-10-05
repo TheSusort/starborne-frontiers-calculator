@@ -20,7 +20,7 @@ import { PERSISTENT_STACKING_BUFFS } from '../../constants/persistentStackingBuf
 import { conditionsMet, groupConditions } from '../abilities/evaluateConditions';
 import { enemySelectorKind, type EnemySelectorKind } from '../abilities/abilityTargetSide';
 import { buildRoundContext, dotReadings } from '../abilities/roundContext';
-import { makeRateGate } from '../calculators/rateAccumulator';
+import { drawKeyed, makeRateGate } from '../calculators/rateAccumulator';
 import { computeAffinityModifiers } from '../calculators/affinityUtils';
 import {
     expandEnemyDebuffs,
@@ -56,7 +56,7 @@ import {
     narrowByRecipientFilter,
     allyHpFraction,
 } from './supportRecipients';
-import { reduceBombsOnVictim } from './bombCountdown';
+import { bombDurationCutCandidates, reduceBombsOnVictim } from './bombCountdown';
 import { liveGateConditions } from './abilityStatusGating';
 import { CombatEvent, CombatEventBus, CombatEventType, ShieldApplyAccumulator } from './events';
 import {
@@ -65,6 +65,7 @@ import {
     PendingBomb,
     carriedDotStacks,
     dotCleanseCandidates,
+    dotDurationCutCandidates,
     shortenDotDurations,
 } from './state';
 import {
@@ -5734,40 +5735,59 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
             // Falls back to ownerId when healing is absent (e.g. Warpstrike in non-healing sim).
             const fallback = ctx.healing?.targetId ?? intent.ownerId;
             const recipients = reactiveRecipients(intent, ctx, fallback);
-            // Count:'all' shrinks EVERY eligible debuff on each recipient (Heliodor/
-            // Pestilence's "reduces the duration of all active Debuffs … by 1 turn"), instead of
-            // Warpstrike's single newest-debuff shrink. Any other count value (today only the
-            // implicit default) shrinks the newest debuff only.
-            const reduceOne =
-                cfg.count === 'all'
-                    ? ctx.statusEngine.reduceAllDebuffsDuration
-                    : ctx.statusEngine.reduceNewestDebuffDuration;
             let affected = 0;
             const reducePerTarget: { targetId: string; count: number }[] = [];
             const durationTurns = cfg.durationTurns ?? 1;
             for (const rid of recipients) {
-                let n = reduceOne(rid, durationTurns);
-                // A Bomb IS a Debuff, so a duration shrink reaches it too — and a bomb driven to
-                // 0 turns EXPLODES (user-verified 2026-07-31: Heliodor's "-1 turn on all Debuffs"
-                // detonating the Bomb II Ruiner planted on it). PendingBomb.countdown lives in its
-                // own per-actor container, not the StatusEngine maps `reduceOne` walks, so it must
-                // be shrunk separately — via the SAME reduce-and-detonate helper Lingshe's
-                // bomb-countdown-reduce uses, so the burst credits the bomb's original applier and
-                // routes through the per-victim damage sink. `count:'all'` only: a newest-debuff-
-                // only shrink (Warpstrike) picks one status and must not also eat a bomb.
-                const bombVictim = cfg.count === 'all' ? ctx.actorById?.(rid) : undefined;
-                // DoTs are debuffs too (owner ruling 2026-10-04): every Corrosion, Inferno and
-                // generic entry loses the same turns, one cut to 0 expiring without a tick
-                // (`shortenDotDurations`). `count:'all'` only, like the Bomb shrink below.
-                if (bombVictim) n += shortenDotDurations(bombVictim, durationTurns);
-                if (bombVictim) {
-                    n += reduceBombsOnVictim(
-                        bombVictim,
+                // A recipient with no resolvable actor (a hand-built unit-test ctx) has no DoT or
+                // Bomb containers; only its named debuffs are reached.
+                const victim = ctx.actorById?.(rid);
+                let n: number;
+                if (cfg.count === 'all') {
+                    // Heliodor/Pestilence's "reduces the duration of all active Debuffs … by 1
+                    // turn": every named debuff, and — DoTs being debuffs (owner ruling
+                    // 2026-10-04) — every Corrosion, Inferno and generic entry, one cut to 0
+                    // expiring without a tick (`shortenDotDurations`).
+                    n = ctx.statusEngine.reduceAllDebuffsDuration(rid, durationTurns);
+                    if (victim) n += shortenDotDurations(victim, durationTurns);
+                    // A Bomb IS a Debuff, so the shrink reaches it too — and a bomb driven to 0
+                    // turns EXPLODES (user-verified 2026-07-31: Heliodor's "-1 turn on all
+                    // Debuffs" detonating the Bomb II Ruiner planted on it), via the SAME
+                    // reduce-and-detonate helper Lingshe's bomb-countdown-reduce uses, so the burst
+                    // credits the bomb's original applier and routes through the per-victim
+                    // damage sink.
+                    if (victim) {
+                        n += reduceBombsOnVictim(
+                            victim,
+                            durationTurns,
+                            ctx.round,
+                            ctx.bus,
+                            intent.ownerId,
+                            ctx.forceDetonateBomb
+                        );
+                    }
+                } else {
+                    // Warpstrike's "reduces a random active debuff's duration by 1 turn" (owner
+                    // ruling R35): ONE debuff, picked at random over the named debuffs and every
+                    // DoT and Bomb stack — see `reduceRandomDebuffDuration`. The pick draws from
+                    // its own keyed sub-stream, so it moves no other gate's draws.
+                    const stacks = victim
+                        ? [
+                              ...dotDurationCutCandidates(victim),
+                              ...bombDurationCutCandidates(
+                                  victim,
+                                  ctx.round,
+                                  ctx.bus,
+                                  intent.ownerId,
+                                  ctx.forceDetonateBomb
+                              ),
+                          ]
+                        : [];
+                    n = ctx.statusEngine.reduceRandomDebuffDuration(
+                        rid,
                         durationTurns,
-                        ctx.round,
-                        ctx.bus,
-                        intent.ownerId,
-                        ctx.forceDetonateBomb
+                        () => drawKeyed(`${rid}:debuff-duration-pick`),
+                        stacks
                     );
                 }
                 if (n > 0) reducePerTarget.push({ targetId: rid, count: n });
