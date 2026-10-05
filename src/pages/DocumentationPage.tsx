@@ -2913,11 +2913,11 @@ const DocumentationPage: React.FC = () => {
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Exposed:</span> Each stack
                                         adds 100% to the next direct hit the holder takes; a hit
-                                        reads every stack and spends one. Stacks no hit spends are
-                                        removed at the end of the round, not at the end of the
-                                        holder&apos;s turn, so Amartya&apos;s Exposed on a taunting
-                                        defender amplifies the hits that follow its taunt. Works for
-                                        both teams.
+                                        reads every stack and spends one. Stacks not consumed by a
+                                        hit are removed at the end of the round, not at the end of
+                                        the holder&apos;s turn, so Amartya&apos;s Exposed on a
+                                        taunting defender amplifies the hits that follow its taunt.
+                                        Works for both teams.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Own-HP Conditions:</span> A
