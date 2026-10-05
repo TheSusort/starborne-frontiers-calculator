@@ -17,6 +17,7 @@ import { csvAvailable } from '../../../../scripts/lib/shipSkillCsv';
 import { shipDataAvailable } from '../../../../scripts/lib/shipDataSnapshot';
 import { victimDefenceMitigation } from '../../combat/victimDamage';
 import type { SelectedGameBuff, TeamActorInput } from '../../../types/calculator';
+import type { Ability, ShipSkills } from '../../../types/abilities';
 
 const tap = vi.hoisted(() => ({ recorded: [] as CombatEvent[], buses: 0 }));
 vi.mock('../../combat/events', async (importOriginal) => {
@@ -68,6 +69,36 @@ const kit = (name: string) => {
     return buildShipAbilities(ship);
 };
 
+const withPassive = (skills: ShipSkills, passive?: Ability): ShipSkills =>
+    passive
+        ? {
+              ...skills,
+              slots: [
+                  ...skills.slots.filter((sl) => sl.slot !== 'passive'),
+                  {
+                      slot: 'passive',
+                      abilities: [
+                          ...(skills.slots.find((sl) => sl.slot === 'passive')?.abilities ?? []),
+                          passive,
+                      ],
+                  },
+              ],
+          }
+        : skills;
+
+/** "When directly damaged, if the opponent has at least 1 debuff, gain a 10% shield" — a
+ *  drain-time count gate on debuffs this ship's side has landed. */
+const shieldIfOpponentDebuffed = (): Ability => ({
+    id: 'probe-shield',
+    type: 'shield',
+    target: 'self',
+    trigger: 'on-attacked',
+    conditions: [
+        { subject: 'enemy-debuff', derivable: true, countComparator: 'gte', countThreshold: 1 },
+    ],
+    config: { type: 'shield', pct: 10, basis: 'hp' },
+});
+
 interface Board {
     /** The calculator's picks (on the focus) — the thing under test. */
     picks?: SelectedGameBuff[];
@@ -77,6 +108,9 @@ interface Board {
     enemySpeed: number;
     /** The enemy's real kit. */
     enemyKit: string;
+    /** An extra passive ability added to the enemy's / the focus's kit. */
+    enemyPassive?: Ability;
+    focusPassive?: Ability;
     /** Hacking on both sides: 1000 lands every roll against 0 security, 0 never does. */
     hacking: number;
 }
@@ -106,7 +140,7 @@ const runDps = (b: Board): CombatEvent[] => {
             hp: 1e12,
             speed: b.focusSpeed,
             rounds: 2,
-            shipSkills: damageKit(),
+            shipSkills: withPassive(damageKit(), b.focusPassive),
             enemyDefense: 5000,
             enemyHp: 1e12,
             hacking: b.hacking,
@@ -128,7 +162,7 @@ const runDps = (b: Board): CombatEvent[] => {
                     },
                     chargeCount: 0,
                     startCharged: false,
-                    shipSkills: kit(b.enemyKit),
+                    shipSkills: withPassive(kit(b.enemyKit), b.enemyPassive),
                 },
             ],
         })
@@ -221,6 +255,19 @@ describe.each([
         expect(snaps(REAL_ENEMY_ID).some((s) => s.debuffNames.includes('Defense Down II'))).toBe(
             true
         );
+    });
+
+    it("a pick never satisfies the enemy's own 'opponent debuffed' gate", () => {
+        const grants = (events: CombatEvent[], id: string) =>
+            rows(events, 'shield-applied', (e) => e.granterId === id).length;
+        const enemy = runDps(board({ picks: DD2, enemyPassive: shieldIfOpponentDebuffed() }));
+        expect(grants(enemy, REAL_ENEMY_ID)).toBe(0);
+        // Player-side twin: the focus's own gate does count the pick it put on the enemy.
+        const focus = runDps(board({ picks: DD2, focusPassive: shieldIfOpponentDebuffed() }));
+        expect(grants(focus, FOCUS)).toBeGreaterThan(0);
+        // Negative: with no pick, neither fires.
+        const none = runDps(board({ focusPassive: shieldIfOpponentDebuffed() }));
+        expect(grants(none, FOCUS)).toBe(0);
     });
 
     it("a pick never boosts the enemy's counter on the focus", () => {

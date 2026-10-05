@@ -3644,6 +3644,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         let c = foreignCtxMemo.get(casterId);
         if (!c) {
             c = buildActorConditionContext(statusEngine, casterId, {
+                // A foreign caster's aura sits on this actor's own side.
+                ownerIsEnemySide: actor.side === 'enemy',
                 ...dotReadings(boundTargetDoTs),
                 enemyType,
                 enemyHpPct,

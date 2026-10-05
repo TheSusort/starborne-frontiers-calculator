@@ -701,6 +701,7 @@ function seedPassiveTimedStatuses(
 ): void {
     for (const rt of runtimes) {
         const seedCtx = buildActorConditionContext(statusEngine, rt.actor.id, {
+            ownerIsEnemySide: rt.actor.side === 'enemy',
             corrosionStacks: 0,
             infernoStacks: 0,
             bombStacks: 0,
