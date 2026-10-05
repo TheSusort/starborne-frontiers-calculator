@@ -364,6 +364,7 @@ export const LOG_EVENT_TYPES = [
     'reactive-damage-performed',
     'reactive-heal-performed',
     'reactive-cleanse-performed',
+    'passive-slot-damage',
     // Task 6: log-only per-turn acting-actor stat snapshot (no listener subscribes).
     'stats-snapshot',
     // Log-only per-actor end-of-round status snapshot — authoritative source for the

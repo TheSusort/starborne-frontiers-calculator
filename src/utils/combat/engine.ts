@@ -177,7 +177,7 @@ import {
 } from './triggers';
 import { adjacentAllyIds } from './adjacency';
 import { allyHpFraction, lowestHpAllyRecipients, narrowByFaction } from './supportRecipients';
-import { consumeExposed, exposedIncomingPct } from './exposedStatus';
+import { consumeExposed, exposedIncomingPct, EXPOSED } from './exposedStatus';
 import {
     HIT_MITIGATION_DOT_ROUNDS,
     consumeHitMitigation,
@@ -1888,9 +1888,8 @@ interface ReactiveSideCtx {
     ) => void;
     /** Live self-HP% for a same-side drain owner (drain-time hp-threshold gates). Optional at the
      *  type level — absent/undefined → buildDrainContext defaults the gate to 100. runCombat
-     *  always supplies it from bySide(side).selfHpPctFor: player = heal-target HP (and #415
-     *  anchors `healTarget` to the focus in every mode, so it is defined in DPS runs too),
-     *  enemy = 100 for every owner. */
+     *  always supplies it from bySide(side).selfHpPctFor: each owner's own live HP, both
+     *  sides. */
     selfHpPctFor?: (ownerId: string) => number;
     /** Per-side most-buffs opposing-actor resolver (Rhodium). See IntentExecContext. */
     enemyWithMostBuffs?: (ownerId: string) => string | undefined;
@@ -3484,11 +3483,8 @@ export function runCombat(rawInput: CombatEngineInput): {
     // `actorsBySide(side)` is the primitive; built once into cached
     // playerSide/enemySide objects so each field is a stable reference.
     //
-    // Side asymmetries, deliberately: `lowestSpeedIds` keeps the `length === 0 → ∅` guard
-    // (inert for the player side, which always has the attacker); `selfHpPctFor` returns 100 for
-    // every ENEMY owner — there is no per-actor enemy self-HP% read. An enemy owner id can never
-    // equal `healTarget.id` (reservedActorIds forbids it), so the player arm's heal-target read
-    // cannot be reached from the enemy side.
+    // Side asymmetry, deliberately: `lowestSpeedIds` keeps the `length === 0 → ∅` guard
+    // (inert for the player side, which always has the attacker).
     type Side = CombatActor['side'];
 
     const actorsBySide = (side: Side): CombatActor[] =>
@@ -3539,11 +3535,9 @@ export function runCombat(rawInput: CombatEngineInput): {
          *  a side is empty only once every member is DEAD, never because the caller supplied no
          *  roster. Recomputed per gate eval (speed is dynamic). */
         lowestSpeedIds: () => Set<string>;
-        /** Live self-HP% for a same-side drain owner (hp-threshold gates). Player side reads the
-         *  heal target's live HP (every other id → 100); #415 anchors `healTarget` to the focus
-         *  in every mode, so it is defined in DPS mode too. Enemy side returns 100 for every
-         *  owner — there is no per-actor enemy HP read here. Consumed by triggers.ts's drain-time
-         *  `selfHpPct` gate. */
+        /** Live self-HP% of a same-side drain owner (hp-threshold gates): the owner's OWN
+         *  current/max HP, on either side. Consumed by triggers.ts's drain-time `selfHpPct`
+         *  gate. */
         selfHpPctFor?: (ownerId: string) => number;
         /** Same-side ids adjacent to `ownerId` on the board (living, owner excluded). Positional
          *  → board neighbours; non-positional (no positions wired) → all living same-side allies. */
@@ -3654,22 +3648,15 @@ export function runCombat(rawInput: CombatEngineInput): {
                 const min = Math.min(...speeds);
                 return new Set(actors.filter((_, i) => speeds[i] === min).map((a) => a.id));
             },
-            selfHpPctFor:
-                side === 'player'
-                    ? healTarget
-                        ? (ownerId: string): number => {
-                              if (ownerId !== healTarget.id) return 100;
-                              // Same denominator as the cast-path selfHpPct (baseHpFor) so the gate
-                              // flips at the same threshold at cast vs drain time.
-                              const maxHp = baseHpFor(healTarget.id);
-                              if (maxHp <= 0) return 100;
-                              return Math.max(
-                                  0,
-                                  Math.min(100, (healTarget.currentHp / maxHp) * 100)
-                              );
-                          }
-                        : undefined
-                    : (): number => 100,
+            // Every owner reads its OWN live HP, whichever slot and side it is on. Same
+            // denominator as the cast-path selfHpPct (baseHpFor) so the gate flips at the same
+            // threshold at cast vs drain time. An unresolvable owner or a zero max HP reads 100.
+            selfHpPctFor: (ownerId: string): number => {
+                const owner = allActorsById.get(ownerId);
+                const maxHp = baseHpFor(ownerId);
+                if (!owner || maxHp <= 0) return 100;
+                return Math.max(0, Math.min(100, (owner.currentHp / maxHp) * 100));
+            },
             adjacentAllyIdsFor: (ownerId: string): string[] => adjacentAllyIds(ownerId, actors),
             footprintAllyIdsFor: (ownerId: string): string[] | undefined => {
                 const owner = allActorsById.get(ownerId);
@@ -4823,24 +4810,31 @@ export function runCombat(rawInput: CombatEngineInput): {
             }
         }
     }
-    // Ships whose Protection is consumable (Lionheart R4: "all Protection is removed" after a
-    // redirect). Scanned once from both runtime maps, slot-agnostic, mirroring hasAnyProtectionGrant.
-    const clearProtectionOnRedirectIds = new Set<string>();
-    for (const rt of [...runtimesById.values(), ...enemyPlayerRuntimeByActorId.values()]) {
-        for (const slot of rt.castSkills.slots) {
-            if (
-                slot.abilities.some(
+    // Every ability each runtime carries, cast path AND reactive list. A Protection grant can sit
+    // on either: Lionheart's round-start grant rides a live trigger, so `partitionReactiveAbilities`
+    // moves it out of `castSkills`.
+    const protectionScanRuntimes = [
+        ...runtimesById.values(),
+        ...enemyPlayerRuntimeByActorId.values(),
+    ];
+    const allAbilitiesOf = (rt: PlayerActorRuntime): Ability[] => [
+        ...rt.castSkills.slots.flatMap((slot) => slot.abilities),
+        ...rt.reactiveAbilities.map((r) => r.ability),
+    ];
+    // Ships whose Protection is consumable (Lionheart: "all Protection is removed" after a
+    // redirect). Keyed on the ability CARRIER, so a stack another ship stole from him is not.
+    const clearProtectionOnRedirectIds = new Set<string>(
+        protectionScanRuntimes
+            .filter((rt) =>
+                allAbilitiesOf(rt).some(
                     (a) =>
                         a.config.type === 'buff' &&
                         a.config.buffName === 'Protection' &&
                         a.config.clearAllOnRedirect === true
                 )
-            ) {
-                clearProtectionOnRedirectIds.add(rt.actor.id);
-                break;
-            }
-        }
-    }
+            )
+            .map((rt) => rt.actor.id)
+    );
     // Board-level Protection gate: true iff ANY ability on the board grants Protection, OR any
     // actor carries a SCHEDULED Protection self-buff (SelectedGameBuff — the DPS/Healing
     // Calculator's manual "active buffs" input, e.g. protectionAccum in tests; independent of any
@@ -4848,22 +4842,16 @@ export function runCombat(rawInput: CombatEngineInput): {
     // t.selfBuffs)]`) already indexes every scheduled self-buff by name, so re-using it here is
     // the cheapest correct check for that source. A board-level boolean (not a per-actor carrier
     // Set) is deliberate — Protection can be stolen/transferred onto a ship that carries no grant
-    // of its own (deferred mechanic), and the boolean only asserts "Protection is possible here,"
-    // which is the gate protectorsFor needs. Scans ALL slots (not just passive, unlike
-    // defenseSubstitutionCarrierIds) because Lionheart's round-start grant and a future
-    // charge-slot steal are not passive-slot auras.
+    // of its own, and the boolean only asserts "Protection is possible here," which is the gate
+    // protectorsFor needs. Scans every slot and the reactive list, since a grant need not be a
+    // passive-slot aura.
     const hasAnyProtectionGrant =
         (selfBuffLookup.get('Protection')?.length ?? 0) > 0 ||
-        [...runtimesById.values(), ...enemyPlayerRuntimeByActorId.values()].some((rt) =>
-            rt.castSkills.slots.some((slot) =>
-                slot.abilities.some(
-                    (a) => a.config.type === 'buff' && a.config.buffName === 'Protection'
-                )
+        protectionScanRuntimes.some((rt) =>
+            allAbilitiesOf(rt).some(
+                (a) => a.config.type === 'buff' && a.config.buffName === 'Protection'
             )
         );
-    // NOTE: neither `hasAnyProtectionGrant` nor `clearProtectionOnRedirectIds` scans
-    // `reactiveAbilities` (partitioned out of `castSkills` above) — no ship grants Protection
-    // reactively today. If one is added, both gates need a matching branch over the reactive list.
     // Protection damage transfer (deferred mechanic, now consumed). A protector is any living
     // ally that holds >=1 Protection stack; it intercepts a fraction of its allies' direct
     // damage. Side-agnostic by construction (resolves allies via bySide), mirroring
@@ -6539,7 +6527,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                     // redirects a hit. The cascade was precomputed from pre-hit stacks, so THIS
                     // hit already redirected fully; clearing now only affects later hits this
                     // round. `removeSelfBuffByName` zeroes the accumulating stacks (Overload
-                    // precedent) → next round's beginRound re-accumulates to maxStacks (=10).
+                    // precedent) → his next round-start grant re-adds them, capped at 10.
                     // Gate on the protector's OWN chunk having actually redirected something —
                     // a faster protector upstream in the cascade can absorb the hit fully,
                     // leaving THIS protector's chunk at 0 even though it holds Protection stacks;
@@ -8919,6 +8907,13 @@ export function runCombat(rawInput: CombatEngineInput): {
                     );
                     const damage = damageParts.damage;
                     if (!(damage > 0)) continue;
+                    bus.emit({
+                        type: 'passive-slot-damage',
+                        attackerId: actor.id,
+                        targetId: victim.id,
+                        round: currentRound,
+                        damage,
+                    });
                     // `isAnchor: false` — this instance is not the cast's primary-target hit, so it
                     // must not satisfy a `requirePrimaryTarget` reflect gate (Nosorog).
                     // 4th arg: this instance is a SECOND positional damage path into the funnel, so
@@ -8994,8 +8989,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             // multi-hit cast. Deliberately NOT SubAttackOutcome.damage, which is the post-funnel
             // `incomingBooked` sum — a different number, and changing the basis and the
             // cardinality in one change would conflate two behaviour moves.
-            // The true delivered amount rides alongside as `deliveredDamage`; THIS field is
-            // the pre-funnel display basis buildCombatLog reads.
+            // The true delivered amount rides alongside as `deliveredDamage`.
             damage: number,
             didCrit: boolean,
             critHits: number,
@@ -10790,14 +10784,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                         // Live lowest-speed-ally gate. UNCONDITIONAL — with a lone attacker the set
                         // is {attacker}, so it resolves true.
                         isLowestSpeedAllyFor: sideCtx.isLowestSpeedAllyFor,
-                        // Live self-HP% for drain-time hp-threshold gates, sourced per-side from
-                        // sideCtx.selfHpPctFor. Player side: heal-target current/max HP (every
-                        // other id → 100). Enemy side: 100 for every owner — see the side-context
-                        // bundle's own note on that deliberate asymmetry. `healTarget` is anchored
-                        // in every mode (#415), so the player-side closure is always built and a
-                        // DPS drain-time hp-threshold gate reads the focus's REAL live HP rather
-                        // than a hardcoded 100 (both directions pinned by
-                        // `dpsFullEngineChannels.test.ts`'s drain-time gate pair).
+                        // Live self-HP% for drain-time hp-threshold gates: each owner's own
+                        // current/max HP, both sides (`selfHpGateEveryOwner.integration.test.ts`).
                         selfHpPctFor: sideCtx.selfHpPctFor,
                         enemyWithMostBuffs: sideCtx.enemyWithMostBuffs,
                         // Resolve any actor's RAW affinity (combat-wide map, both sides) so
@@ -13578,6 +13566,15 @@ export function runCombat(rawInput: CombatEngineInput): {
         // after the turn loop; it resolves in turn order (see `drainInTurnOrder`).
         bus.emit({ type: 'round-ended', round: r });
         drainEndOfRound();
+
+        // Exposed is "removed after taking direct damage or at the end of the round": whatever
+        // stacks no hit spent this round go now, after the round's last drain. The Post-Turn
+        // countdown skips it (statusEngine's decrementEnemy), so this is its only expiry.
+        for (const a of allActors) {
+            if (exposedIncomingPct(statusEngine, a.id) <= 0) continue;
+            statusEngine.removeTimedEnemyStatus(a.id, EXPOSED);
+            bus.emit({ type: 'buff-expired', actorId: a.id, round: r, buffName: EXPOSED });
+        }
 
         // LOG-ONLY per-actor status snapshot (see the events.ts doc). Emitted at the round TAIL —
         // after every turn, the round-ended reactives AND their drains — so it reports the statuses

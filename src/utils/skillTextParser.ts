@@ -417,7 +417,19 @@ export function parseSecondaryDamage(text: string | null | undefined): Secondary
     // additionally deals …" gate on THIS rider (Cobalt). sentencePrefix is exactly the clause
     // text preceding the secondary-damage tag within the same sentence, so this is naturally
     // scoped to the rider's own gate and can't pick up an unrelated earlier-sentence comparison.
-    const condition = statVsTargetConditionFromClause(sentencePrefix);
+    // "If this Unit is at full HP, it deals additional damage …" (Cobalt's charged) takes the
+    // same self full-HP gate `detectGrantConditions` gives "at full HP".
+    const condition: Condition | null =
+        statVsTargetConditionFromClause(sentencePrefix) ??
+        (AT_FULL_HP_RE.test(sentencePrefix)
+            ? {
+                  subject: 'hp-threshold',
+                  derivable: true,
+                  hpComparator: 'above',
+                  hpPercent: 99,
+                  hpSubject: 'self',
+              }
+            : null);
     return { stat, pct, ...(condition ? { condition } : {}) };
 }
 

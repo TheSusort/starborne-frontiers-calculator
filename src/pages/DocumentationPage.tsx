@@ -2894,6 +2894,41 @@ const DocumentationPage: React.FC = () => {
                                         an area hit that crits two enemies adds two.
                                     </p>
                                     <p className="text-theme-text mb-2">
+                                        <span className="text-primary">Stacking Reactions:</span> A
+                                        passive that grants recurring stacks of a buff each time
+                                        something happens, such as Nuqtu&apos;s Core Charge, adds
+                                        them every time and keeps them up to the buff&apos;s cap.
+                                        Nuqtu gains one stack of Core Charge I for every buff an
+                                        enemy gains, so four enemy buffs before his turn give +16%
+                                        damage, and the stacks carry into later rounds until he
+                                        holds 10. Works for both teams.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
+                                        <span className="text-primary">Debuff Extension:</span>{' '}
+                                        Skills that extend debuffs or damage-over-time effects (Lev,
+                                        Asphyxiator, Provider, Valerian, Wisteria) skip any enemy
+                                        with affinity advantage over the caster, the same rule
+                                        charge removal follows. Works for both teams.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
+                                        <span className="text-primary">Exposed:</span> Each stack
+                                        adds 100% to the next direct hit the holder takes; a hit
+                                        reads every stack and spends one. Stacks not consumed by a
+                                        hit are removed at the end of the round, not at the end of
+                                        the holder&apos;s turn, so Amartya&apos;s Exposed on a
+                                        taunting defender amplifies the hits that follow its taunt.
+                                        Works for both teams.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
+                                        <span className="text-primary">Own-HP Conditions:</span> A
+                                        passive that depends on the ship&apos;s own HP reads that
+                                        ship&apos;s live HP wherever it is placed, on either team:
+                                        Cobalt gains its charge and Out. Damage Up II only at full
+                                        HP (as does his charged skill&apos;s extra damage equal to
+                                        30% of his max HP), and Makoli repairs only when hit below
+                                        40% HP.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
                                         <span className="text-primary">Buff Steal:</span> Skills
                                         that &quot;steal a buff from the target&quot; (Pallas,
                                         Thresh, Tithonus) are now modeled as a dedicated Buff Steal
@@ -4441,6 +4476,13 @@ const DocumentationPage: React.FC = () => {
                                         shown rather than an even split.
                                     </li>
                                     <li>
+                                        <strong>Hit amounts match the target:</strong> An attack row
+                                        shows the damage each target was dealt after its own defense
+                                        and damage reductions, for the main target and every other
+                                        enemy hit alike. Extra damage a passive adds to the same
+                                        hit, such as Snakeroot&apos;s, is included in that row.
+                                    </li>
+                                    <li>
                                         <strong>Wasted repairs and shields are named:</strong> Heal
                                         and shield rows show what actually landed, and say how much
                                         went nowhere. A repair onto a full HP bar reads &quot;0
@@ -4644,8 +4686,9 @@ const DocumentationPage: React.FC = () => {
                                     <strong>Lionheart</strong> uses a once-per-round variant: it
                                     gains 10 stacks of Protection at the start of each round, and
                                     after it absorbs the first hit redirected from an ally, it loses
-                                    all Protection until the next round. More implant and gear-set
-                                    effects will be added in future updates.
+                                    all Protection until the next round. The stacks hold whether an
+                                    enemy moves before or after Lionheart, on either team. More
+                                    implant and gear-set effects will be added in future updates.
                                 </p>
                             </div>
                         </div>

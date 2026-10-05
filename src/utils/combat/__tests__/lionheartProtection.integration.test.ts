@@ -1,25 +1,30 @@
 /**
- * Lionheart Protection — clear-on-redirect ENGINE integration (Task 4, consumer of Task 1's
- * `hasAnyProtectionGrant` precompute + Task 3's `clearAllOnRedirect` buff-config field).
+ * Lionheart Protection — the REAL kit's round-start grant, redirect, and clear-on-redirect.
  *
- * Lionheart R4 grants itself 10 stacks of Protection at the top of every round (a real
- * ABILITY-SOURCED ACCUMULATING status: `type:'buff'`, `stackTrigger:'per-round'`,
- * `isStackable:true`, `maxStacks:10` — registered via `registerActorAbilityStatuses` into
- * `accumSelfMaps`, read via `selfBuffStacksForOwner`'s 3-source fold). At 10 stacks (100%
- * redirect fraction, 10%/stack), Lionheart intercepts the FIRST ally hit each round in full —
- * then, per its kit text ("all Protection is removed" after a redirect), the WHOLE pool is
- * cleared (not just decremented), so a SECOND hit the same round is NOT redirected. The next
- * round's `beginRound` top-of-round tick re-accumulates 0 -> min(0+10,10) = 10, so the redirect
- * resumes.
+ * Lionheart R2+ passive: "At the start of the round, this Unit gains 10 stacks of Protection.
+ * After taking damage redirected through Protection, all Protection is removed." The parser emits
+ * it as a `start-of-round` buff (`stacks: 10`, `maxStacks: 10`, `duration: 'recurring'`,
+ * `clearAllOnRedirect: true`), which makes it a REACTIVE ability. The reactive executor adds the
+ * 10 stacks to his accumulating store, capped at 10, so each round starts him at exactly 10
+ * (refresh-to-10). Nothing times them out: the only removal is the redirect, after which
+ * `removeSelfBuffByName` zeroes the pool until the next round start re-grants it.
  *
- * This mirrors protectionTransfer.integration.test.ts's "PRODUCTION PATH" aura-protector test,
- * but the protector's Protection is the real accumulating-ability shape (not the static aura
- * helper `protectionAuraPassive`), and TWO enemies fire at the SAME adjacent ally in round 1 so
- * both the redirect and its one-shot consumption are exercised within a single round.
+ * At 10 stacks (100% redirect fraction, 10%/stack) Lionheart intercepts the FIRST ally hit each
+ * round in full; a SECOND hit the same round is NOT redirected.
+ *
+ * Every fixture here reads the grant off the production parser (`buildTraceShip` +
+ * `buildShipAbilities` over `docs/ship-skills.csv`) — a hand-authored config is how this suite once
+ * stayed green while the real kit redirected nothing.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import { runCombat, CombatEngineInput, TeamActorEngineInput } from '../engine';
+import { selfBuffStacksForOwner } from '../triggers';
+import type { StatusEngine } from '../statusEngine';
 import type { Ability, ShipSkills } from '../../../types/abilities';
+import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
+import { buildShipAbilities } from '../../abilities/buildShipAbilities';
+import { buildTraceShip } from '../../../../scripts/lib/traceShipFactory';
+import { csvAvailable } from '../../../../scripts/lib/shipSkillCsv';
 
 type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 
@@ -29,6 +34,29 @@ const manualEnemy = (id: string, attack: number): EnemyAttacker => ({
     stats: { attack, crit: 0, critDamage: 0, speed: 50 },
     chargeCount: 0,
     startCharged: false,
+});
+
+/** An enemy that stands on a cell and never deals damage (attack 0, huge HP). */
+const idleEnemy = (id: string, position: EnemyAttacker['position']): EnemyAttacker => ({
+    id,
+    stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 1 },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    shipSkills: { slots: [] },
+});
+
+const front = (): ParsedTarget => ({ raw: 'front', side: 'enemy', selection: 'front' });
+const basePattern = (): ParsedPattern => ({ raw: 'base', shape: 'base', range: 0, modifiers: {} });
+
+/** A plain 100% single-target hit. */
+const plainHit = (id: string): Ability => ({
+    id,
+    type: 'damage',
+    target: 'enemy',
+    trigger: 'on-cast',
+    conditions: [],
+    config: { type: 'damage', multiplier: 100 },
 });
 
 /** A walked player team actor (a pure victim/protector stat block, role ATTACKER so it is a
@@ -72,7 +100,7 @@ const teamActor = (
 
 /** A passive slot that grants SELF `Protection` the AURA way (Meatshield-style: a static buff
  *  config, no duration, isStackable) — used as the "Other" fully-stacked, SLOWER protector in
- *  the chunk.total===0 guard test below. Distinct from `lionheartProtectionPassive`'s per-round
+ *  the chunk.total===0 guard test below. Distinct from `lionheartProtectionPassive`'s round-start
  *  accumulating shape; either shape reads through the same all-sources stack resolver. */
 const otherProtectionAuraPassive = (stacks: number): ShipSkills['slots'][number] => {
     const ability: Ability = {
@@ -92,30 +120,35 @@ const otherProtectionAuraPassive = (stacks: number): ShipSkills['slots'][number]
     return { slot: 'passive', abilities: [ability] };
 };
 
-/** Lionheart R4's round-start Protection grant, as the parser really emits it: a per-round
- *  ACCUMULATING buff (rate = stacks = 10, capped at maxStacks = 10) whose config carries
- *  `clearAllOnRedirect: true` — the field Task 3 threaded onto the buff-config type and this
- *  task's engine consumer (`clearProtectionOnRedirectIds`) scans for. */
-const lionheartProtectionPassive = (): ShipSkills['slots'][number] => {
-    const ability: Ability = {
-        id: 'lionheart-protection',
-        type: 'buff',
-        target: 'self',
-        trigger: 'on-cast',
-        conditions: [],
-        config: {
-            type: 'buff',
-            buffName: 'Protection',
-            parsedEffects: {},
-            stacks: 10,
-            isStackable: true,
-            maxStacks: 10,
-            stackTrigger: 'per-round',
-            clearAllOnRedirect: true,
-        },
-    };
-    return { slot: 'passive', abilities: [ability] };
+/** The reference data is gitignored, so its absence is a BROKEN WORKTREE, not a reason to pass. */
+const requireReferenceData = (): void => {
+    if (!csvAvailable()) {
+        throw new Error(
+            'docs/ship-skills.csv is missing — copy the gitignored reference data into this ' +
+                'worktree. These cases read the REAL Lionheart kit and cannot run without it.'
+        );
+    }
 };
+
+/** The real Lionheart's Protection grant, straight off the production parser. Only the Protection
+ *  ability is kept: his other passive clause (the start-of-combat HP gift to adjacent allies) would
+ *  only blur the incoming-damage reads below. */
+const realLionheartProtection = (): Ability => {
+    const ship = buildTraceShip('Lionheart');
+    if (!ship) throw new Error('Lionheart is missing from the reference data in this worktree');
+    const grants = buildShipAbilities(ship).slots.flatMap((slot) =>
+        slot.abilities.filter((a) => a.config.type === 'buff' && a.config.buffName === 'Protection')
+    );
+    if (grants.length !== 1) {
+        throw new Error(`expected exactly one real Protection grant, found ${grants.length}`);
+    }
+    return grants[0];
+};
+
+const lionheartProtectionPassive = (): ShipSkills['slots'][number] => ({
+    slot: 'passive',
+    abilities: [realLionheartProtection()],
+});
 
 const ENEMY_ATTACK = 1000;
 const LIONHEART_DEFENCE = 300;
@@ -162,33 +195,36 @@ const BASE_INPUT: CombatEngineInput = {
 };
 
 describe('Lionheart Protection — clear-on-redirect (integration)', () => {
+    beforeAll(requireReferenceData);
     it('redirects the FIRST ally-hit each round, then clears — the SECOND hit is NOT redirected; refresh-to-10 re-grants the redirect next round', () => {
         const res = runCombat(BASE_INPUT);
 
         const lionheartR1 = res.rounds[0]?.perActorIncoming?.['lionheart']?.incoming ?? 0;
         const allyR1 = res.rounds[0]?.perActorIncoming?.['ally-1']?.incoming ?? 0;
         const lionheartR2 = res.rounds[1]?.perActorIncoming?.['lionheart']?.incoming ?? 0;
+        const allyR2 = res.rounds[1]?.perActorIncoming?.['ally-1']?.incoming ?? 0;
 
         // Round 1, hit 1 (enemy-A): 10 stacks = 100% redirect fraction -> Lionheart takes the
         // WHOLE hit (re-mitigated on its own defence); the ally takes nothing from this hit.
         expect(lionheartR1).toBeGreaterThan(0);
         // Round 1, hit 2 (enemy-B): Protection was cleared after hit 1 -> NOT redirected -> the
-        // ally takes this hit directly. If the clear loop did not reach the ability-sourced
-        // accumulating Protection, this hit would ALSO redirect and allyR1 would be 0.
-        expect(allyR1).toBeGreaterThan(0);
-        // Round 2: beginRound's top-of-round tick re-accumulates 0 -> 10 (refresh-to-10) ->
-        // the redirect resumes on round 2's first hit.
+        // ally takes this hit directly, in FULL (it has no defence of its own). A partial pool
+        // left behind by the clear would shave this.
+        expect(allyR1).toBeCloseTo(ENEMY_ATTACK, 4);
+        // Round 2: the round-start grant re-adds 10 stacks (refresh-to-10) -> the redirect
+        // resumes on round 2's first hit, and again only the second hit reaches the ally.
         expect(lionheartR2).toBeGreaterThan(0);
+        expect(allyR2).toBeCloseTo(ENEMY_ATTACK, 4);
     });
 });
 
 // ───────────────────────────────────────────────────────────────────────────────────────
-// Finding 1 (final-review) — the clear-on-redirect loop must be gated on the protector's OWN
-// cascade chunk having actually redirected something (`chunk.total > 0`), not fired
-// unconditionally for every `clearProtectionOnRedirectIds` member present in `protectors`.
+// The clear-on-redirect loop is gated on the protector's OWN cascade chunk having actually
+// redirected something (`chunk.total > 0`), not fired unconditionally for every
+// `clearProtectionOnRedirectIds` member present in `protectors`.
 //
 // Reachable scenario: TWO protectors cover the same victim — Lionheart (FASTER, 10 stacks via
-// its per-round accumulating grant) and a second, SLOWER, fully-stacked (10 stacks, aura-granted)
+// his round-start grant) and a second, SLOWER, fully-stacked (10 stacks, aura-granted)
 // protector "other". `protectionCascade`'s cascade math (protectionTransfer.ts) computes each
 // protector's `kept` share as `(1 - nextFrac) * flow * mit`, where `nextFrac` is the fraction the
 // NEXT (slower) protector in the chain drains before the current protector's share is realized.
@@ -196,9 +232,8 @@ describe('Lionheart Protection — clear-on-redirect (integration)', () => {
 // `(1 - 1.0) * flow * mit = 0` — "other" fully drains whatever cascades through Lionheart before
 // Lionheart's cut is realized, even though Lionheart is the FASTER (first) protector in the chain
 // and genuinely holds 10 Protection stacks. This is the `chunk.total === 0` case the guard exists
-// for. Verified directly with `protectionCascade` inputs mirroring this exact setup (both
-// protectors at max stacks, mit=1): chunks = [{total: 0}, {total: 1000}] — confirming Lionheart's
-// own chunk is genuinely 0 while "other" absorbs the full redirected amount.
+// for: with both protectors at max stacks and mit=1, `protectionCascade` returns chunks
+// [{total: 0}, {total: 1000}].
 //
 // "other" is given deliberately low HP (500) so it DIES partway through absorbing its ~1000
 // chunk (10 sub-hits of ~100 each) — removing it from `protectorsFor` for the round's SECOND
@@ -207,7 +242,8 @@ describe('Lionheart Protection — clear-on-redirect (integration)', () => {
 // gone (other dead, Lionheart cleared) -> the ally eats the full second hit. With the guard, hit
 // 1 leaves Lionheart's Protection intact (its chunk was 0, so the clear never fires) -> by hit 2,
 // Lionheart is the sole living protector and still redirects it in full.
-describe('Lionheart Protection — clear-on-redirect guard: chunk.total === 0 must NOT clear (Finding 1)', () => {
+describe('Lionheart Protection — clear-on-redirect guard: chunk.total === 0 must NOT clear', () => {
+    beforeAll(requireReferenceData);
     const OTHER_DEFENCE = 0;
     const OTHER_HP = 500; // < the ~1000 total chunk "other" absorbs on hit 1 -> dies mid-hit-1.
 
@@ -252,12 +288,13 @@ describe('Lionheart Protection — clear-on-redirect guard: chunk.total === 0 mu
 // A buff steal records its stack movement as a signed per-owner delta (`adjustSelfBuffStacks`)
 // that `selfBuffStacksForOwner` folds in, because an accumulating/aura-granted count cannot be
 // mutated in place. That delta must be cleared wherever the buff it adjusts is cleared —
-// `removeSelfBuffByName`, which zeroes the accumulating entry precisely so `beginRound` can
-// re-accrue it. A delta that survives that reset becomes a permanent per-theft tax: Lionheart
+// `removeSelfBuffByName`, which zeroes the accumulating entry precisely so the next round-start
+// grant can re-accrue it. A delta that survives that reset becomes a permanent per-theft tax: Lionheart
 // re-grants his full 10 stacks at the top of round 2 but reads 9, so his redirect covers 90%
 // instead of 100% and the ally he is protecting eats the remaining tenth — forever, compounding
 // with every further theft.
 describe('Lionheart Protection — a stolen stack does not tax the next round-start re-grant', () => {
+    beforeAll(requireReferenceData);
     /** An enemy thief that fires Pallas's "steals 1 buff" ONCE, on its charged opener, and never
      *  again (its active slot is empty and the charge does not re-arm inside two rounds). Faster
      *  than the attacker below so the theft lands BEFORE the round-1 redirect clears Lionheart's
@@ -324,9 +361,168 @@ describe('Lionheart Protection — a stolen stack does not tax the next round-st
         // the hit and the ally took the remaining tenth. Without this the round-2 assertion could
         // pass because nothing was ever stolen.
         expect(allyR1).toBeGreaterThan(0);
-        // Round 2: the redirect cleared Lionheart's pool in round 1 and `beginRound` re-granted
+        // Round 2: the redirect cleared Lionheart's pool in round 1 and his round-start grant re-added
         // all 10, so the ally is covered in full again. With the delta surviving that reset he
         // reads 9 and the ally keeps taking the same tenth, round after round.
         expect(allyR2).toBeCloseTo(0, 4);
+    });
+});
+
+// ───────────────────────────────────────────────────────────────────────────────────────
+// The real kit, by speed order and by side. The grant lands at the START of the round, so it is
+// standing whether the attacker moves before or after Lionheart, and nothing times it out at the
+// end of his own turn.
+describe("Lionheart's real round-start Protection — both speed orders, both sides", () => {
+    beforeAll(requireReferenceData);
+
+    it('PRECONDITION: the parser emits the grant as a start-of-round, 10-stack, recurring buff', () => {
+        expect(realLionheartProtection()).toMatchObject({
+            trigger: 'start-of-round',
+            target: 'self',
+            config: {
+                type: 'buff',
+                buffName: 'Protection',
+                stacks: 10,
+                maxStacks: 10,
+                duration: 'recurring',
+                clearAllOnRedirect: true,
+            },
+        });
+    });
+
+    /** One enemy hits the undefended ally once a round; Lionheart's speed sets who moves first. */
+    const playerSide = (lionheartSpeed: number, numRounds = 1): CombatEngineInput => ({
+        ...BASE_INPUT,
+        numRounds,
+        teamActors: [
+            { ...teamActor('ally-1', 0), position: 'M4' },
+            {
+                ...teamActor(
+                    'lionheart',
+                    LIONHEART_DEFENCE,
+                    [lionheartProtectionPassive()],
+                    lionheartSpeed
+                ),
+                position: 'M2',
+            },
+        ],
+        enemyAttackers: [{ ...manualEnemy('enemy-A', ENEMY_ATTACK), position: 'M4' }],
+    });
+
+    const incoming = (res: ReturnType<typeof runCombat>, round: number, id: string): number =>
+        res.rounds[round]?.perActorIncoming?.[id]?.incoming ?? 0;
+
+    it('a SLOWER attacker (Lionheart moves first) is redirected in full — the stacks outlive his turn', () => {
+        const res = runCombat(playerSide(150));
+
+        expect(incoming(res, 0, 'ally-1')).toBeCloseTo(0, 4);
+        expect(incoming(res, 0, 'lionheart')).toBeGreaterThan(0);
+    });
+
+    it('a FASTER attacker (hits before Lionheart moves) is redirected in full — 10 stacks, not 1', () => {
+        const res = runCombat(playerSide(10));
+
+        expect(incoming(res, 0, 'ally-1')).toBeCloseTo(0, 4);
+        expect(incoming(res, 0, 'lionheart')).toBeGreaterThan(0);
+    });
+
+    /** Reads an actor's Protection at the END of the run through the aggregator `protectorsFor`
+     *  acts on. */
+    const endStacks = (input: CombatEngineInput, id: string): number => {
+        let engine: StatusEngine | undefined;
+        runCombat({
+            ...input,
+            __testTapStatusEngine: (e) => {
+                engine = e;
+            },
+        });
+        return selfBuffStacksForOwner(engine!, id, 'Protection');
+    };
+
+    it('with nothing to redirect, he holds exactly 10 across rounds (refresh-to-10, no timer)', () => {
+        const input = { ...playerSide(150, 3), enemyAttackers: [idleEnemy('idle', 'M4')] };
+        expect(endStacks(input, 'lionheart')).toBe(10);
+    });
+
+    it('a redirect removes ALL his stacks until the next round start', () => {
+        expect(endStacks(playerSide(150, 2), 'lionheart')).toBe(0);
+    });
+
+    // ── Enemy-side twin ────────────────────────────────────────────────────────────────
+    /** A second player hitter for the two-hits-a-round case. */
+    const playerHitter = (id: string): TeamActorEngineInput => {
+        const base = teamActor(id, 0);
+        return {
+            ...base,
+            position: 'M3',
+            target: front(),
+            pattern: basePattern(),
+            walk: {
+                ...base.walk!,
+                shipSkills: { slots: [{ slot: 'active', abilities: [plainHit(`${id}-hit`)] }] },
+                stats: { ...base.walk!.stats, attack: ENEMY_ATTACK },
+            },
+        };
+    };
+
+    /** An enemy Lionheart behind an undefended enemy front-liner; the player focus (and, with
+     *  `twoHitters`, a second player ship) hits that front-liner once a round each. */
+    const enemySide = (
+        lionheartSpeed: number,
+        focusSpeed: number,
+        numRounds = 1,
+        twoHitters = false
+    ): CombatEngineInput => {
+        const lionheart = idleEnemy('e-lionheart', 'M2');
+        return {
+            ...BASE_INPUT,
+            numRounds,
+            attack: ENEMY_ATTACK,
+            speed: focusSpeed,
+            shipSkills: { slots: [{ slot: 'active', abilities: [plainHit('focus-hit')] }] },
+            position: 'M4',
+            target: front(),
+            pattern: basePattern(),
+            healTargetId: 'attacker',
+            teamActors: twoHitters ? [playerHitter('p2')] : [],
+            enemyAttackers: [
+                idleEnemy('e-front', 'M4'),
+                {
+                    ...lionheart,
+                    stats: {
+                        ...lionheart.stats,
+                        defence: LIONHEART_DEFENCE,
+                        speed: lionheartSpeed,
+                    },
+                    shipSkills: { slots: [lionheartProtectionPassive()] },
+                },
+            ],
+        };
+    };
+
+    it('ENEMY twin: a slower player hitter is redirected onto the enemy Lionheart in full', () => {
+        const res = runCombat(enemySide(150, 50));
+
+        expect(incoming(res, 0, 'e-front')).toBeCloseTo(0, 4);
+        expect(incoming(res, 0, 'e-lionheart')).toBeGreaterThan(0);
+    });
+
+    it('ENEMY twin: a faster player hitter is redirected onto the enemy Lionheart in full', () => {
+        const res = runCombat(enemySide(10, 300));
+
+        expect(incoming(res, 0, 'e-front')).toBeCloseTo(0, 4);
+        expect(incoming(res, 0, 'e-lionheart')).toBeGreaterThan(0);
+    });
+
+    it('ENEMY twin: after a redirect his stacks are gone until the next round start', () => {
+        const input = enemySide(150, 50, 2, true);
+        const res = runCombat(input);
+
+        for (const round of [0, 1]) {
+            // The first player hit each round is redirected; the second lands in full.
+            expect(incoming(res, round, 'e-lionheart')).toBeGreaterThan(0);
+            expect(incoming(res, round, 'e-front')).toBeCloseTo(ENEMY_ATTACK, 4);
+        }
+        expect(endStacks(input, 'e-lionheart')).toBe(0);
     });
 });

@@ -1864,7 +1864,6 @@ exports[`kit fingerprints > Lionheart 1`] = `
   "plain": [
     "attack",
     "buff",
-    "buff-expired",
     "buff:active",
     "charge-changed",
     "control",
@@ -1875,7 +1874,6 @@ exports[`kit fingerprints > Lionheart 1`] = `
   "richEnemy": [
     "attack",
     "buff",
-    "buff-expired",
     "buff:active",
     "charge-changed",
     "control",
@@ -1886,7 +1884,6 @@ exports[`kit fingerprints > Lionheart 1`] = `
   "wounded": [
     "attack",
     "buff",
-    "buff-expired",
     "buff:active",
     "charge-changed",
     "control",

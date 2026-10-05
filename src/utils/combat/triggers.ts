@@ -17,6 +17,7 @@ import {
 } from '../../types/calculator';
 import type { AffinityName } from '../../types/ship';
 import { PERSISTENT_STACKING_BUFFS } from '../../constants/persistentStackingBuffs';
+import { isPersistentByName } from '../../constants/oneShotPersistentBuffs';
 import { conditionsMet, groupConditions } from '../abilities/evaluateConditions';
 import { enemySelectorKind, type EnemySelectorKind } from '../abilities/abilityTargetSide';
 import { buildRoundContext, dotReadings } from '../abilities/roundContext';
@@ -2368,11 +2369,9 @@ export interface IntentExecContext {
      *  Keyed `${ownerId}:${abilityId}`; the RateGate fires with the proc's probability on
      *  each reactive draw of the same ability so the proc lands at its true frequency. */
     procChanceGates?: Map<string, RateGate>;
-    /** Live self-HP% per owner (0..100) for drain-time hp-threshold gates. The engine closes over
-     *  the heal target's current/max HP; every OTHER owner reports 100. The player-side closure
-     *  exists in EVERY mode (#415), so a DPS drain-time gate reads the focus's real live HP; only
-     *  a caller that supplies no closure at all (unit contexts) falls back to 100 in
-     *  buildDrainContext. */
+    /** Live self-HP% per owner (0..100) for drain-time hp-threshold gates: each owner's own
+     *  current/max HP, both sides. A caller that supplies no closure at all (unit contexts) falls
+     *  back to 100 in buildDrainContext. */
     selfHpPctFor?: (ownerId: string) => number;
     /** Quixilver R2: owner's shield pool is at or above max HP. Optional — absent (every test
      *  fixture, DPS mode) → buildDrainContext leaves selfShieldFull false, so a drain gate on
@@ -3070,11 +3069,8 @@ function buildDrainContext(ctx: IntentExecContext, ownerId: string) {
         // NO fight-wide enemy-HP reading. Enemy-HP gates that CAN be re-checked per resolved
         // target already are (`perVictimOk`, see splitDrainGateConditions); the rest are honestly
         // unresolvable. Do not reintroduce a scalar here.
-        // Live self-HP% for drain-time hp-threshold gates. The engine closes over the heal
-        // target's current/max HP; every non-tank id reports 100. `healTarget` is anchored in every
-        // mode (#415), so the focus's own reactive hp-threshold gates read its real live HP and can
-        // open in a DPS run too (`dpsFullEngineChannels.test.ts` pins both directions). The
-        // `?? 100` fallback is for callers with no closure, not for DPS mode.
+        // Live self-HP% for drain-time hp-threshold gates: the engine reads each owner's own
+        // current/max HP, both sides. The `?? 100` fallback is for callers with no closure.
         selfHpPct: ctx.selfHpPctFor?.(ownerId) ?? 100,
         // Names only — never folded, no double-fold: the drain owner's `enemy-buff` gate
         // reads the UNION of its opposing side's self-buffs; its `self-debuff` gate reads its OWN
@@ -4811,6 +4807,13 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // expires it (a 1-turn default would silently cap a multi-hit Barrier at one turn).
         const duration =
             typeof cfg.duration === 'number' ? cfg.duration : cfg.hits !== undefined ? Infinity : 1;
+        // A `'recurring'` stacking grant (Nuqtu's Core Charge I, Lionheart's round-start
+        // Protection) is NOT duration-less: its stacks add up per trigger, capped, and are kept —
+        // they bank in the accumulating store instead of the 1-turn window above. Keyed on
+        // `'recurring'` alone; a buff with no duration at all (Isha/Nayra's Affinity Overrides)
+        // keeps the window. Persistent-by-name statuses keep their own door in
+        // `applyTimedAbilityStatus`.
+        const banksStacks = cfg.duration === 'recurring' && !isPersistentByName(cfg.buffName);
         // Recipients: an ally-damage reaction grant ('ally' target + eventCtx naming the
         // damaged ally — Graphite's "grants the ally Repair Over Time III") lands on EXACTLY
         // that ally; granting all playerIds would put the HoT on the whole team and inflate
@@ -4925,14 +4928,21 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
             ) {
                 continue;
             }
-            ctx.statusEngine.applyTimedAbilityStatus(ctx.round, status, rid);
+            if (banksStacks) {
+                ctx.statusEngine.addSelfAccumulatingStacks(rid, status.payload, cfg.stacks, {
+                    maxStacks: cfg.maxStacks ?? (cfg.isStackable ? undefined : cfg.stacks),
+                    casterId: intent.ownerId,
+                });
+            } else {
+                ctx.statusEngine.applyTimedAbilityStatus(ctx.round, status, rid);
+            }
             ctx.bus.emit({
                 type: 'buff-applied',
                 actorId: rid,
                 granterId: intent.ownerId,
                 round: ctx.round,
                 buffName: cfg.buffName,
-                duration,
+                duration: banksStacks ? 'recurring' : duration,
             });
         }
         // Co-granted buffs (Last Stand's Barrier + Block Debuff) — applied in the

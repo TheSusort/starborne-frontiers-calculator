@@ -66,6 +66,13 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: Overclock now applies Attack Down I and Speed Down I on expiry.',
     "Combat simulator: Vindicator's Magnetized Shielding now adds Defense equal to 10x Security.",
     "Combat simulator: Terran Guard now scales with the granting ship's Defense.",
+    "Combat simulator: Nuqtu's Core Charge I now stacks once per enemy buff gained.",
+    "Combat simulator: Lionheart's round-start Protection now redirects damage from his allies.",
+    "Combat simulator: Cobalt's and Makoli's passives now check their own HP on either team.",
+    "Combat simulator: Cobalt's charged bonus damage now requires him to be at full HP.",
+    "Combat log: a hit's main target now shows the damage it actually took.",
+    'Combat simulator: Exposed now lasts until hit or the round ends.',
+    'Combat simulator: debuff extensions now skip enemies with affinity advantage over the caster.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
