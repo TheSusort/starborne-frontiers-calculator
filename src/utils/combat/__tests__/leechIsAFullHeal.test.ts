@@ -70,7 +70,8 @@
  * NO RNG SEEDING, exactly as both source files: `crit: 0` removes the crit stream rather than
  * fixing it and `application: 'apply'` skips the landing roll, so both arms of every comparison
  * are deterministic without a keyed provider (which is keyed per `ownerId` and would hand the two
- * SIDE arms different draws).
+ * SIDE arms different draws). Section 9 is the one exception: Exuberance's proc is a roll, so it
+ * seeds each run and compares the SET of amounts seen, never one side's number against the other's.
  */
 import { describe, it, expect } from 'vitest';
 import { runCombat, type CombatEngineInput, type TeamActorEngineInput } from '../engine';
@@ -83,6 +84,10 @@ import type { StatusEngine } from '../statusEngine';
 import type { Position } from '../../../types/encounters';
 import type { PreFightCombatModifiers } from '../preFight/types';
 import { emptyPreFightModifiers } from '../preFight/types';
+import { buildEquipmentAbilities } from '../../abilities/buildEquipmentAbilities';
+import { setupKeyedRng } from '../../calculators/rateAccumulator';
+import type { Ship } from '../../../types/ship';
+import type { GearPiece } from '../../../types/gear';
 
 /** A control run plants an unmodelled status name carrying NO effects through the identical cast
  *  path, so every comparison isolates the `incomingHeal` payload and nothing else about the run —
@@ -1027,5 +1032,64 @@ describe('a leech emits a repair event (#447)', () => {
             // which is #444's ruling reaching this channel.
             expect(withReaction.buffedActorIds(BUFF)).toContain(VICTIM_ID);
         });
+    }
+});
+
+// ══ 9 — the leecher's own Exuberance rolls on its leech ══════════════════════════════════════
+//
+// Exuberance (legendary): "When repaired, there is a 30% chance to increase that repair by 15%."
+// The recipient-side twin of the incoming channel in sections 1-6, and covered by the same ruling
+// (a leech self-repair IS a repair). Both procs, both sides. The ability comes from the REAL
+// builder (`buildEquipmentAbilities` on a legendary EXUBERANCE piece), not a hand-built shape.
+//
+// The one section in this file that seeds the RNG: the implant's proc is a roll, so each side arm
+// is read as the SET of round-1 leech amounts over many seeds rather than as one number.
+
+describe("a leech is raised by the leecher's own Exuberance", () => {
+    const exuberance = buildEquipmentAbilities(
+        { implants: { implant_major: 'exu' } } as unknown as Ship,
+        (id) =>
+            id === 'exu'
+                ? ({ id, setBonus: 'EXUBERANCE', rarity: 'legendary' } as unknown as GearPiece)
+                : undefined
+    );
+    const SEEDS = 40;
+    const BOOSTED = Math.round(LEECH_RAW * 1.15);
+
+    const amountsSeen = (
+        victimSide: 'player' | 'enemy',
+        leechKind: 'dealt' | 'taken',
+        withExuberance: boolean
+    ): number[] => {
+        const seen = new Set<number>();
+        for (let seed = 1; seed <= SEEDS; seed++) {
+            setupKeyedRng(seed);
+            const run = runFixture({
+                victimSide,
+                leechKind,
+                enemyStatuses: leechKind === 'dealt' ? [{ name: CONTROL }] : [],
+                ...(withExuberance ? { victimExtraPassives: exuberance } : {}),
+            });
+            seen.add(Math.round(run.victimDirectHeal));
+        }
+        return [...seen].sort((a, b) => a - b);
+    };
+
+    it('the real builder yields one Exuberance ability (+15% at a 30% chance)', () => {
+        expect(exuberance).toHaveLength(1);
+        expect(exuberance[0].config).toMatchObject({
+            type: 'incoming-heal-amplification',
+            ampPct: 15,
+            procChance: 0.3,
+        });
+    });
+
+    for (const victimSide of SIDES) {
+        for (const leechKind of ['dealt', 'taken'] as const) {
+            it(`${victimSide}-side damage-${leechKind.toUpperCase()} leech: always ${LEECH_RAW} without it, ${LEECH_RAW} or ${BOOSTED} with it`, () => {
+                expect(amountsSeen(victimSide, leechKind, false)).toEqual([LEECH_RAW]);
+                expect(amountsSeen(victimSide, leechKind, true)).toEqual([LEECH_RAW, BOOSTED]);
+            });
+        }
     }
 });

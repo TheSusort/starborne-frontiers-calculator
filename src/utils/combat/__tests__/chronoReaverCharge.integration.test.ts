@@ -467,18 +467,15 @@ describe('Chrono Reaver — parity vs standalone chronoReaver calc', () => {
 
 // ─── 6. Stasis suppression (Charge Phase 2/3 Task 4) ─────────────────────────────────
 //
-// Full-fidelity decision (LOCKED): a unit that is turn-blocked (Stasis OR Disable) on a
-// periodic-proc turn banks NO periodic charge for that turn — matching the +1/turn baseline,
-// which is itself gated behind `!isTurnBlocked` (advanceChargeCadence). This is ALREADY
-// structural — NO new gating code is needed. The Chrono Reaver `end-of-turn` charge is a
-// REACTIVE intent carrying `intent.ownerId`; on a blocked owner's turn the §4.4 reactive-intent
-// drain filter (engine.ts ~3403: `if (isTurnBlocked(intent.ownerId)) continue;`) DROPS that
-// intent before `executeIntent` ever applies the charge. Listeners only enqueue (pure), so a
-// dropped intent leaves no partial state. Meanwhile `turnsTaken` stays MONOTONIC (bumped even on
-// skipped turns, engine.ts ~3742), so the cadence does not spuriously re-fire on the frozen value
-// — the periodic proc loses the skipped tick and resumes on the original residue (the next
-// even own-turn for a legendary, period-2 unit).
-describe('Chrono Reaver — stasis suppression (periodic proc dropped on turn-blocked turns)', () => {
+// A unit that is turn-blocked (Stasis OR Disable) banks NO +1/turn baseline on a skipped turn
+// (advanceChargeCadence is gated behind `!isTurnBlocked`). The Chrono Reaver `end-of-turn` charge
+// is a different source: an IMPLANT, and equipment keeps working while its holder is stasised or
+// disabled (owner ruling 2026-09-15). The §4.4 reactive-intent drain filter drops a blocked
+// owner's SHIP-PASSIVE intent but keeps one whose `ability.source` is `'equipment'`, so a blocked
+// proc turn still banks the proc. `turnsTaken` stays MONOTONIC (bumped even on skipped turns), so
+// the cadence never re-fires on a frozen value and stays on its original residue (every even
+// own-turn for a legendary, period-2 unit).
+describe('Chrono Reaver — stasis suppression (the turn baseline is lost, the implant proc is not)', () => {
     // A board-positioned, killable stasis bot: speed 300 → acts BEFORE the killer (200) and the
     // focus (100), so it lands Stasis(3) on the front player (the focus at M4) at the very head of
     // round 1. hp 1 → the killer destroys it the SAME round, so Stasis is applied EXACTLY ONCE and

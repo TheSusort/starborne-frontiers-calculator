@@ -114,8 +114,8 @@ export function conditionMet(cond: IncomingCondition, ctx: IncomingHitContext): 
     switch (cond) {
         case 'self-stealth':
             return ctx.victimStealthed;
-        case 'self-stasis':
-            return ctx.victimStasised;
+        case 'self-stasis-or-disable':
+            return ctx.victimTurnBlocked;
         case 'incoming-crit':
             return ctx.didCrit;
         case 'incoming-crit-by-stealthed':

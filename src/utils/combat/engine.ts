@@ -101,7 +101,7 @@ import { reflectedDamageParts } from './damageReflection';
 import { splashDamageForBomb } from './bombSplash';
 import { detonateContainers, type DetonationRecipe } from './detonation';
 import { outgoingAmplificationForHit } from './outgoingEffects';
-import { incomingHealAmpForRecipient } from './healAmplification';
+import { healAmplificationForCast, incomingHealAmpForRecipient } from './healAmplification';
 import { CHEAT_DEATH_BUFFS } from './cheatDeathBuffs';
 import { BARRIER_BUFFS } from './barrierBuffs';
 import { BARRIER_RECHARGING, holdsBarrierRecharging } from './barrierRecharging';
@@ -3413,8 +3413,9 @@ export function runCombat(rawInput: CombatEngineInput): {
     };
     const isStasised = (actorId: string): boolean => ownerDebuffNames(actorId).some(isStasis);
     const isDisabled = (actorId: string): boolean => ownerDebuffNames(actorId).some(isDisable);
-    /** Turn-blocked = cannot take its scheduled action this turn (Stasis OR Disable). Used by the
-     *  three turn-action gates AND the reactive drain filter (drainQueue). The Stasis-only break /
+    /** Turn-blocked = cannot take its scheduled action this turn (Stasis OR Disable). Read by the
+     *  turn-action gates, the reactive drain filter (drainQueue) and the incoming-hit ctx's
+     *  `victimTurnBlocked` (Nebula Nullifier's "Stasis or Disable"). The Stasis-only break /
      *  immunity sites intentionally keep using isStasised — Disable never breaks. */
     const isTurnBlocked = (actorId: string): boolean => isStasised(actorId) || isDisabled(actorId);
     // A passive-slot AURA or accumulating status from a SHIP skill stops contributing while its
@@ -4025,6 +4026,16 @@ export function runCombat(rawInput: CombatEngineInput): {
                       (abilityId, chance) =>
                           rollRateGate(procChanceGates, `${rid}:${abilityId}`, chance)
                   ),
+              casterHealAmpPct: (casterId, rid) => {
+                  const amps = healAmpAbilitiesOf(casterId);
+                  if (amps.length === 0) return 0;
+                  return healAmplificationForCast(
+                      amps,
+                      { targetHpPct: selfHpPctOf(rid), selfHpPct: selfHpPctOf(casterId) },
+                      (abilityId, chance) =>
+                          rollRateGate(procChanceGates, `${casterId}:${abilityId}`, chance)
+                  );
+              },
               // Foreign HoT applier max HP: lastTurnCtxByActor ONLY, NO base-stat
               // fallback (strict corrosion applier-ctx rule — undefined → the holder skips the tick).
               applierMaxHp: (id) => lastTurnCtxByActor.get(id)?.effectiveMaxHp,
@@ -4699,20 +4710,31 @@ export function runCombat(rawInput: CombatEngineInput): {
     // maps; empty for actors without the relevant equipment. Read via
     // `incomingHealAmpAbilitiesOf` at the heal-apply fold, which hands the list to
     // `incomingHealAmpForRecipient` (healAmplification.ts) per recipient.
+    //
+    // The same walk collects the CASTER-side twin (Nourishment / Vivacious Repair:
+    // `heal-amplification`), read via `healAmpAbilitiesOf` by the healing ctx's
+    // `casterHealAmpPct` for repairs that do not come from a cast.
     const incomingHealAmpAbilitiesById = new Map<string, Ability[]>();
+    const healAmpAbilitiesById = new Map<string, Ability[]>();
     for (const rt of [...runtimesById.values(), ...enemyPlayerRuntimeByActorId.values()]) {
-        if (incomingHealAmpAbilitiesById.has(rt.actor.id)) continue; // dedupe if an actor is in both maps
+        if (incomingHealAmpAbilitiesById.has(rt.actor.id) || healAmpAbilitiesById.has(rt.actor.id))
+            continue; // dedupe if an actor is in both maps
         const heals: Ability[] = [];
+        const amps: Ability[] = [];
         for (const slot of rt.castSkills.slots) {
             if (slot.slot !== 'passive') continue;
             for (const a of slot.abilities) {
                 if (a.config.type === 'incoming-heal-amplification') heals.push(a);
+                if (a.config.type === 'heal-amplification') amps.push(a);
             }
         }
         if (heals.length) incomingHealAmpAbilitiesById.set(rt.actor.id, heals);
+        if (amps.length) healAmpAbilitiesById.set(rt.actor.id, amps);
     }
     const incomingHealAmpAbilitiesOf = (id: string): Ability[] =>
         livePassiveEntries(id, incomingHealAmpAbilitiesById.get(id) ?? []);
+    const healAmpAbilitiesOf = (id: string): Ability[] =>
+        livePassiveEntries(id, healAmpAbilitiesById.get(id) ?? []);
 
     // Per-actor attacker-side outgoing-amplification abilities (Menace/Giant Slayer),
     // side-agnostic (a ship amplifies on either team). Built once from BOTH runtime maps; empty for
@@ -5190,8 +5212,14 @@ export function runCombat(rawInput: CombatEngineInput): {
                     // being ATTACKED and therefore never the actor on turn. Closing those needs a
                     // live self-side buff fold outside `runPlayerTurn`, which is a new engine seam,
                     // not a fold.
+                    //
+                    // THE RECIPIENT'S EXUBERANCE rolls here too, once per recipient per proc: it is
+                    // a recipient-side repair modifier, and a leech is a repair (heal ruling 4,
+                    // #447). `leechIsAFullHeal.test.ts` section 9 pins it on both procs.
                     const scaled =
-                        raw * incomingHealFactor(recipientIncomingHealPct(rid, actingSelfCtx(rid)));
+                        raw *
+                        incomingHealFactor(recipientIncomingHealPct(rid, actingSelfCtx(rid))) *
+                        (1 + (healingCtx.recipientIncomingHealAmpPct?.(rid) ?? 0) / 100);
                     // R10′ (#362): the gross `directHeal` credit moved BELOW the apply so a
                     // reversed repair suppresses it too. An UNRESOLVABLE recipient still credits
                     // gross (unchanged) — nothing was applied there, so nothing was reversed.
@@ -5432,7 +5460,11 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // — folding it in there would silently skip it for a victim with no runtime entry.
                 // Not a claim that the shield arm needed protecting: that arm never enters the
                 // chain above either, since it is `e.kind === 'heal' && rt`.
-                const scaled = raw * incomingHealFactor(recipientIncomingHealPct(victim.id));
+                // The victim's Exuberance rolls here as well, as in the sibling proc.
+                const scaled =
+                    raw *
+                    incomingHealFactor(recipientIncomingHealPct(victim.id)) *
+                    (1 + (healingCtx.recipientIncomingHealAmpPct?.(victim.id) ?? 0) / 100);
                 // R10′ (#362): every bucket, gross included, is booked BELOW the apply and only
                 // when the repair was not reversed. This site always applies (the victim is
                 // resolved), so there is no third case here.
@@ -6204,7 +6236,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                             didCrit: false,
                             attackerStealthed: false,
                             victimStealthed: isStealthed(victim.id),
-                            victimStasised: isStasised(victim.id),
+                            victimTurnBlocked: isTurnBlocked(victim.id),
                             hitIndexThisRound: idx,
                             attackerHasDot: attackerHasDot(cause?.killerId ?? ''),
                             victimHasBarrierRecharging: hasBarrierRecharging(victim.id),
@@ -6523,7 +6555,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                         didCrit: false,
                         attackerStealthed: isStealthed(attackerId),
                         victimStealthed: isStealthed(victim.id),
-                        victimStasised: isStasised(victim.id),
+                        victimTurnBlocked: isTurnBlocked(victim.id),
                         hitIndexThisRound: 0, // unused by this condition family
                         attackerHasDot: attackerHasDot(attackerId),
                         victimHasBarrierRecharging: hasBarrierRecharging(victim.id),
@@ -7119,7 +7151,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 didCrit: false,
                                 attackerStealthed: false,
                                 victimStealthed: false,
-                                victimStasised: false,
+                                victimTurnBlocked: false,
                                 hitIndexThisRound: 0,
                                 // The reflected hit's "attacker" is the reflector (victim, outer
                                 // scope) and its "victim" is `attacker` (receiving the bounce-back).
@@ -8481,7 +8513,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                             didCrit,
                             attackerStealthed: isStealthed(args.actingId),
                             victimStealthed: isStealthed(victim.id),
-                            victimStasised: isStasised(victim.id),
+                            victimTurnBlocked: isTurnBlocked(victim.id),
                             hitIndexThisRound: 0, // unused by reduction (only block reads it)
                             attackerHasDot: attackerHasDot(args.actingId),
                             victimHasBarrierRecharging: hasBarrierRecharging(victim.id),
@@ -11299,18 +11331,14 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // instead the cadence loses the skipped tick and resumes on the original residue
                 // (the next own-turn that satisfies `t % period === offset`).
                 //
-                // The every-n-turns periodic proc IS already fully suppressed on a turn-blocked turn
-                // — NO gating is needed HERE. A periodic charge (e.g. Chrono Reaver's `end-of-turn`
-                // charge) is a REACTIVE intent carrying intent.ownerId; on a blocked owner's turn the
-                // §4.4 reactive-intent drain filter
-                // (`if (isTurnBlocked(intent.ownerId)) continue;`) DROPS it before executeIntent
-                // applies the charge. So a
-                // stasised/disabled unit banks NO periodic charge, matching the +1/turn baseline.
-                // Golden: chronoReaverCharge.integration.test.ts ("stasis suppression"). NOTE: the
-                // suppression relies on the owner being STILL turn-blocked at the drain pass — for
-                // a 1-turn block the Post-Turn decrement can clear the block before the deferred
-                // end-of-turn intent drains, so that golden uses a ≥2-turn block spanning a proc
-                // turn.
+                // NO gating is needed HERE for an every-n-turns periodic proc: it is a REACTIVE
+                // intent carrying intent.ownerId, so the §4.4 reactive-intent drain filter decides
+                // it. That filter drops a turn-blocked owner's SHIP-PASSIVE intent but keeps an
+                // EQUIPMENT one (`intent.ability.source === 'equipment'`) — gear keeps working while
+                // its holder is stasised or disabled (owner ruling 2026-09-15). So a blocked
+                // Chrono Reaver turn still banks the implant's periodic charge, while the +1/turn
+                // baseline (advanceChargeCadence, gated behind !isTurnBlocked) banks nothing.
+                // Golden: chronoReaverCharge.integration.test.ts ("stasis suppression").
                 actor.turnsTaken += 1;
 
                 // Apply this actor's start-of-turn GRANTS before it acts (see
@@ -11427,7 +11455,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 didCrit: false,
                                 attackerStealthed: false,
                                 victimStealthed: isStealthed(healTarget.id),
-                                victimStasised: isStasised(healTarget.id),
+                                victimTurnBlocked: isTurnBlocked(healTarget.id),
                                 hitIndexThisRound: 0,
                                 dotType,
                                 // A DoT tick has no single attacker (aggregate of appliers) —
@@ -11592,7 +11620,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                     didCrit: false,
                                     attackerStealthed: false,
                                     victimStealthed: isStealthed(actor.id),
-                                    victimStasised: isStasised(actor.id),
+                                    victimTurnBlocked: isTurnBlocked(actor.id),
                                     hitIndexThisRound: 0,
                                     dotType,
                                     // See the sibling tank-path call above: no single attacker
@@ -12516,7 +12544,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                           didCrit: false,
                                           attackerStealthed: isStealthed(actor.id),
                                           victimStealthed: isStealthed(tgt.id),
-                                          victimStasised: isStasised(tgt.id),
+                                          victimTurnBlocked: isTurnBlocked(tgt.id),
                                           hitIndexThisRound: 0,
                                           attackerHasDot: attackerHasDot(actor.id),
                                           victimHasBarrierRecharging: hasBarrierRecharging(tgt.id),
@@ -12532,7 +12560,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                           didCrit: true,
                                           attackerStealthed: isStealthed(actor.id),
                                           victimStealthed: isStealthed(tgt.id),
-                                          victimStasised: isStasised(tgt.id),
+                                          victimTurnBlocked: isTurnBlocked(tgt.id),
                                           hitIndexThisRound: 0,
                                           attackerHasDot: attackerHasDot(actor.id),
                                           victimHasBarrierRecharging: hasBarrierRecharging(tgt.id),

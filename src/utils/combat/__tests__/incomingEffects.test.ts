@@ -11,7 +11,7 @@ const ctx = (over: Partial<IncomingHitContext> = {}): IncomingHitContext => ({
     didCrit: false,
     attackerStealthed: false,
     victimStealthed: false,
-    victimStasised: false,
+    victimTurnBlocked: false,
     hitIndexThisRound: 1,
     attackerHasDot: false,
     victimHasBarrierRecharging: false,
@@ -70,10 +70,13 @@ const block = (
 });
 
 describe('incomingReductionForHit', () => {
-    it('non-crit-family reductions add (Voidshade self-stealth + Nebula self-stasis)', () => {
-        const a = [reduction('self-stealth', 20, false), reduction('self-stasis', 35, false)];
+    it('non-crit-family reductions add (Voidshade self-stealth + Nebula self-stasis-or-disable)', () => {
+        const a = [
+            reduction('self-stealth', 20, false),
+            reduction('self-stasis-or-disable', 35, false),
+        ];
         expect(
-            incomingReductionForHit(a, ctx({ victimStealthed: true, victimStasised: true }))
+            incomingReductionForHit(a, ctx({ victimStealthed: true, victimTurnBlocked: true }))
         ).toBe(55);
     });
     it('self-stealth reduction inert when not stealthed', () => {

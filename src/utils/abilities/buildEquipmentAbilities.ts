@@ -537,9 +537,8 @@ function mkHealAmp(
 }
 
 // D-PR7: build a reactive named-buff grant (e.g. Battlecry's on-death "Inc. Damage Down II").
-// parsedEffects/stackability resolve from the canonical BUFFS entry. EMIT-ONLY for buffs whose
-// effect the engine does not yet fold (self-side incoming-damage buffs) — the status is applied
-// and logged but has no combat effect until that fold exists.
+// parsedEffects/stackability resolve from the canonical BUFFS entry, so the granted status has
+// whatever combat effect the engine folds for that name.
 // D-PR8: generalised with optional `opts` for conditions + procChance (Battlecry call is byte-identical).
 // D-PR16: `alsoGrantBuffNames` (Task 5) lets one ability co-grant extra named buffs ALONGSIDE
 // the primary in the SAME application (one proc roll → all of them; Last Stand's Barrier + Block
@@ -780,8 +779,9 @@ const IMPLANT_ABILITIES: Partial<Record<string, ImplantAbilityBuilder>> = {
     // D-PR3: incoming-reduction implants
     // Voidshade: reduce incoming direct damage by X% while stealthed.
     VOIDSHADE: (rarity) => mkReduction(VOIDSHADE_PCT[rarity], 'direct', 'self-stealth', false),
-    // Nebula Nullifier: reduce incoming direct damage by X% while in stasis.
-    NEBULA_NULLIFIER: (rarity) => mkReduction(NEBULA_PCT[rarity], 'direct', 'self-stasis', false),
+    // Nebula Nullifier: reduce incoming direct damage by X% while under Stasis or Disable.
+    NEBULA_NULLIFIER: (rarity) =>
+        mkReduction(NEBULA_PCT[rarity], 'direct', 'self-stasis-or-disable', false),
     // Hyperion Gaze: reduce incoming crits from stealthed attackers by X% (crit-reduction family).
     HYPERION_GAZE: (rarity) =>
         mkReduction(HYPERION_PCT[rarity], 'direct', 'incoming-crit-by-stealthed', true),
@@ -920,8 +920,9 @@ const IMPLANT_ABILITIES: Partial<Record<string, ImplantAbilityBuilder>> = {
     // No common rarity.
     NOURISHMENT: (rarity) => mkHealAmp(NOURISHMENT_AMP[rarity], 'target-hp-below-self'),
     // D-PR6: incoming-heal-amplification implants
-    // Exuberance: X% chance to increase incoming repair by Y%. No common rarity.
-    // Recipient-side fold is wired in a later task; this entry is inert until then.
+    // Exuberance: X% chance to increase incoming repair by Y%. No common rarity. Read through the
+    // healing ctx's `recipientIncomingHealAmpPct` by every repair channel: cast, HoT tick,
+    // reactive repair and leech.
     EXUBERANCE: (rarity) => {
         const amp = EXUBERANCE_AMP[rarity];
         const pc = EXUBERANCE_PROC[rarity];
@@ -959,9 +960,9 @@ const IMPLANT_ABILITIES: Partial<Record<string, ImplantAbilityBuilder>> = {
             autoFilled: true,
         };
     },
-    // Battlecry: "Upon death, grants all allies Inc. Damage Down II for N turns." EMIT-ONLY:
-    // self-side "Inc. Damage Down" is not folded into incoming damage yet (victimEnemyBuffs reads
-    // enemy-side only). The buff is applied + logged; lights up when self-side incoming folding lands.
+    // Battlecry: "Upon death, grants all allies Inc. Damage Down II for N turns." The granted buff
+    // reduces each ally's incoming direct damage through the engine's self-side incoming-damage
+    // fold (`toSelfIncomingDamageModifier`), like any other Inc. Damage Down.
     BATTLECRY: (rarity) =>
         mkNamedBuffGrant(
             'Inc. Damage Down II',

@@ -5726,7 +5726,8 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
             // An `overheal` basis is the CLIPPED EXCESS of a repair that had already been scaled
             // by its caster's channels — so folding them again here is a double-count, not a
             // fold: a +30% healer inflated the waste by 30%, and this line inflated the transfer
-            // by another 30%. The two CASTER-side factors are therefore skipped for that basis.
+            // by another 30%. The CASTER-side factors (`healModifier`, Out. Repair and the
+            // Nourishment / Vivacious amp below) are therefore skipped for that basis.
             //
             // Scoped by BASIS, not by target: the argument is about where the basis came from, so
             // it holds for any repair sized off an over-repair, not only the `lowest-hp-ally`
@@ -5746,6 +5747,12 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
                       (sizedFromAnOverRepair ? 1 : 1 + ownerOutgoing / 100) *
                       incomingHealFactor(incomingPctFor(rid))
                     : basisValue * (effectivePct / 100);
+            // Caster-side heal amplification (Nourishment / Vivacious Repair) — HEAL case ONLY.
+            // Neither implant's text limits it to skill casts, so a passive repair onto an ally is
+            // boosted exactly as the cast path's `healAmpPctFor` boosts a cast repair. Rolls the
+            // owner's proc gates ONCE per recipient; both HP%s are read live (see the ctx doc).
+            if (cfg.type === 'heal' && !sizedFromAnOverRepair)
+                raw *= 1 + (healing.casterHealAmpPct?.(intent.ownerId, rid) ?? 0) / 100;
             // Recipient-side incoming-heal amplification (Exuberance) — HEAL case ONLY (NOT
             // shields). Rolls the recipient's combat-lifetime gate ONCE per applied repair
             // (0 → no amplification).
