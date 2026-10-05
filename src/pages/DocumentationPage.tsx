@@ -2895,13 +2895,13 @@ const DocumentationPage: React.FC = () => {
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Stacking Reactions:</span> A
-                                        passive that gains stacks of a buff each time something
-                                        happens, with no duration written, adds them every time and
-                                        keeps them up to the buff&apos;s cap. Nuqtu gains one stack
-                                        of Core Charge I for every buff an enemy gains, so four
-                                        enemy buffs before his turn give +16% damage, and the stacks
-                                        carry into later rounds until he holds 10. Works for both
-                                        teams.
+                                        passive that grants recurring stacks of a buff each time
+                                        something happens, such as Nuqtu&apos;s Core Charge, adds
+                                        them every time and keeps them up to the buff&apos;s cap.
+                                        Nuqtu gains one stack of Core Charge I for every buff an
+                                        enemy gains, so four enemy buffs before his turn give +16%
+                                        damage, and the stacks carry into later rounds until he
+                                        holds 10. Works for both teams.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Debuff Extension:</span>{' '}
