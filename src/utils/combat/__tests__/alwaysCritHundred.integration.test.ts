@@ -17,6 +17,8 @@ import { buildTraceShip } from '../../../../scripts/lib/traceShipFactory';
 import { csvAvailable, loadShipSkillRecords } from '../../../../scripts/lib/shipSkillCsv';
 import { shipDataAvailable } from '../../../../scripts/lib/shipDataSnapshot';
 import { buildShipAbilities } from '../../abilities/buildShipAbilities';
+import { parseAlwaysCrits } from '../../skillTextParser';
+import { boardInput, NO_KIT, type BoardUnit, type Placement } from '../__testutils__/realKitBoard';
 import { applyGuaranteedCrit } from '../../ship/perShipRules';
 import { parsePattern, parseTarget } from '../../targetingParser';
 import type { ShipSkills } from '../../../types/abilities';
@@ -350,5 +352,110 @@ describe('DPS calculator', () => {
         // Negative: the same stats without the clause miss some.
         const plain = run(castKit('Asphodel', 0));
         expect(plain.some((r) => !r.didCrit)).toBe(true);
+    });
+});
+
+describe('the flag needs the unit itself as the subject', () => {
+    it('"This Unit\'s attacks" sets it; an enemy-subject phrase does not', () => {
+        expect(parseAlwaysCrits("This Unit's attacks always critically hit.")).toBe(true);
+        expect(parseAlwaysCrits('This Unit’s attacks always critically hit.')).toBe(true);
+        expect(parseAlwaysCrits('Enemy attacks always critically hit this Unit.')).toBe(false);
+        expect(parseAlwaysCrits("An ally's attacks always critically hit.")).toBe(false);
+    });
+});
+
+/**
+ * An always-crit owner's reactive damage proc crits at a 100% rate even with 0 crit. Board: the
+ * owner carries a Provider-shaped passive ("when another ally inflicts a debuff onto an enemy, deal
+ * 50% damage to that enemy", without the "cannot critically hit") and 0 crit; an ally inflicts a
+ * debuff on the lone enemy every turn. Every proc must crit; the same owner without the flag never
+ * does.
+ */
+describe("an always-crit owner's reactive proc crits at 0 crit", () => {
+    const procKit = (alwaysCrits: boolean): ShipSkills => ({
+        ...(alwaysCrits ? { alwaysCrits: true } : {}),
+        slots: [
+            { slot: 'active', abilities: [] },
+            {
+                slot: 'passive',
+                abilities: [
+                    {
+                        id: 'proc-hit',
+                        type: 'damage',
+                        target: 'enemy',
+                        trigger: 'on-other-ally-debuff-inflicted',
+                        conditions: [],
+                        config: { type: 'damage', multiplier: 50 },
+                    },
+                ],
+            },
+        ],
+    });
+    const debufferKit: ShipSkills = {
+        slots: [
+            {
+                slot: 'active',
+                abilities: [
+                    {
+                        id: 'seed-debuff',
+                        type: 'debuff',
+                        target: 'enemy',
+                        trigger: 'on-cast',
+                        conditions: [],
+                        config: {
+                            type: 'debuff',
+                            buffName: 'Attack Down II',
+                            parsedEffects: {},
+                            stacks: 1,
+                            isStackable: false,
+                            duration: 1,
+                            application: 'apply',
+                        },
+                    },
+                ],
+            },
+        ],
+    };
+    const procCrits = (placement: Placement, alwaysCrits: boolean) => {
+        const owner: BoardUnit = {
+            id: 'owner',
+            kit: procKit(alwaysCrits),
+            position: 'M3',
+            speed: 50,
+            attack: 1000,
+            crit: 0,
+        };
+        const debuffer: BoardUnit = {
+            id: 'debuffer',
+            kit: debufferKit,
+            position: 'M4',
+            speed: 100,
+            hacking: 1e6,
+        };
+        const enemy: BoardUnit = { id: 'foe', kit: NO_KIT, position: 'M4', speed: 1 };
+        const { input, id } = boardInput(placement, owner, [debuffer], [enemy], 4);
+        setupKeyedRng(57);
+        const bus = createEventBus();
+        const crits: boolean[] = [];
+        bus.on(
+            'reactive-damage-performed',
+            (e: Extract<CombatEvent, { type: 'reactive-damage-performed' }>) => {
+                if (e.sourceId === id(owner)) crits.push(e.didCrit === true);
+            }
+        );
+        runCombat({ ...input, bus });
+        return crits;
+    };
+
+    it.each<Placement>(['player', 'enemy'])('%s side: every proc crits', (placement) => {
+        const crits = procCrits(placement, true);
+        expect(crits.length).toBeGreaterThan(0);
+        expect(crits.every(Boolean)).toBe(true);
+    });
+
+    it.each<Placement>(['player', 'enemy'])('negative, %s side: no flag, no crit', (placement) => {
+        const crits = procCrits(placement, false);
+        expect(crits.length).toBeGreaterThan(0);
+        expect(crits.some(Boolean)).toBe(false);
     });
 });

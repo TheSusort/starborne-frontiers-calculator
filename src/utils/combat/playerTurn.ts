@@ -2799,7 +2799,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         selfBuffCount: priorSelfBuffCount,
         landedEnemyDebuffCount: landedDebuffCountOn(targetGateReading),
         ...dotReadings(boundTargetDoTs),
-        effectiveCritRate: cappedCrit(critBuffForGates),
+        effectiveCritRate: damageNoCrit ? 0 : cappedCrit(critBuffForGates),
         enemyType,
         enemyHpPct,
         // The DoT counts above are all 0 on a no-victim turn (see the `corrosionEntries
@@ -3864,7 +3864,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         selfBuffCount: priorSelfBuffCount,
         landedEnemyDebuffCount: namedDebuffCount(landedEnemyDebuffs),
         ...dotReadings(boundTargetDoTs),
-        effectiveCritRate: cappedCrit(critBuffForGates),
+        effectiveCritRate: damageNoCrit ? 0 : cappedCrit(critBuffForGates),
         enemyType,
         enemyHpPct,
         // See preDebuffGateCtx's matching note above — same `hasVictim` discriminator.
@@ -3999,7 +3999,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         selfBuffCount: activeSelfBuffCount,
         landedEnemyDebuffCount: namedDebuffCount(landedEnemyDebuffs),
         ...dotReadings(boundTargetDoTs),
-        effectiveCritRate: cappedCrit(critBuffForGates),
+        effectiveCritRate: damageNoCrit ? 0 : cappedCrit(critBuffForGates),
         enemyType,
         enemyHpPct,
         // See preDebuffGateCtx's matching note above — same `hasVictim` discriminator.

@@ -7917,10 +7917,11 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // guaranteed-miss draw would still consume a value from the shared seeded RNG stream
                 // and perturb every later gate's schedule (proc gates, debuff landing) for ships that
                 // can never crit anyway. Live-checked per call, so a mid-fight crit buff starts
-                // drawing from that point on.
+                // drawing from that point on. An always-crit owner rolls at a 100% rate whatever
+                // its crit stat (ruling 57), so it always draws.
                 didCrit =
                     !noCrit &&
-                    ownerOutgoing.crit > 0 &&
+                    (owner.alwaysCrits === true || ownerOutgoing.crit > 0) &&
                     rollRateGate(reactiveDamageCritGates, `${ownerId}:${abilityId}`, critRate);
 
                 // Vindicator on-resist: raw = owner effective max HP × hpBasisPct% (mitigated below the
@@ -8022,7 +8023,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                     preMitigationDamage: rawPreMit,
                     targetMitigation: rawMitigation,
                     shieldPenetrationPct: splashCopy ? 0 : attackerShieldPenOf(ownerId),
-                    bombPortion: 0,
+                    // A splash copy is Bomb damage through and through: full shield drain, no
+                    // reflect, no one-shot block spent.
+                    bombPortion: splashCopy ? raw : 0,
                 });
             } finally {
                 deferConsequenceLogs = wasDeferring;

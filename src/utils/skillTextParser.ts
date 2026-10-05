@@ -3748,7 +3748,7 @@ export function parseStasisBreakExemption(
 
 /** True iff this skill text declares every attack of the unit is a critical hit (Tormenter,
  *  Asphodel R2: "This Unit's attacks always critically hit"). */
-const ALWAYS_CRITS_RE = /\battacks always critically hit\b/i;
+const ALWAYS_CRITS_RE = /\bthis unit['’]s attacks always critically hit\b/i;
 export function parseAlwaysCrits(text: string | null | undefined): boolean {
     return !!text && ALWAYS_CRITS_RE.test(stripUnitTags(text));
 }
