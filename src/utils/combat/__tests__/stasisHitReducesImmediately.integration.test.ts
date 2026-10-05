@@ -289,3 +289,61 @@ describe.each(SIDES)(
         });
     }
 );
+
+// A passive damage proc is a direct hit too (ruling 36), so it lowers Stasis the same way: Chakara's
+// round-start "deals 60% damage to the enemy with the highest speed" lands on the stasised victim
+// at the start of round 2, taking Medved's Stasis from 1 to 0 before the victim's turn.
+const chakaraPassive = (): ShipSkills => {
+    const built = buildTraceShip('Chakara');
+    if (!built) throw new Error('Chakara missing from reference data');
+    const full = buildShipAbilities(built);
+    return { ...full, slots: full.slots.filter((s) => s.slot === 'passive') };
+};
+
+const playerProcBoard = (chakaraAttack: number): CombatEngineInput => {
+    const board = playerBoard({ applier: 'Medved', hitters: [], hitterSpeeds: [] });
+    const chakara = teamHitter('chakara', 'Bedrock', 'T4', 50);
+    return {
+        ...board,
+        teamActors: [
+            {
+                ...chakara,
+                walk: {
+                    ...chakara.walk!,
+                    shipSkills: chakaraPassive(),
+                    stats: { ...chakara.walk!.stats, attack: chakaraAttack },
+                },
+            },
+        ],
+    };
+};
+
+const enemyProcBoard = (chakaraAttack: number): CombatEngineInput => {
+    const board = enemyBoard({ applier: 'Medved', hitters: [], hitterSpeeds: [] });
+    const chakara = enemyShip('chakara', chakaraPassive(), 'T4', 50);
+    return {
+        ...board,
+        // The player focus must be the fastest player ship for Chakara's proc to find it.
+        speed: 200,
+        enemyAttackers: [
+            ...board.enemyAttackers,
+            { ...chakara, stats: { ...chakara.stats, attack: chakaraAttack } },
+        ],
+    };
+};
+
+describe.each([
+    { side: 'player', board: playerProcBoard, victim: 'victim' },
+    { side: 'enemy', board: enemyProcBoard, victim: 'attacker' },
+] as const)(
+    "Chakara's round-start proc lowers Stasis ($side side applier)",
+    ({ board, victim }) => {
+        it('the round-2 proc frees a 2-turn Stasis that would otherwise cost round 2', () => {
+            expect(read(board(100), victim).acted).toEqual([2, 3]);
+        });
+
+        it('control: a 0-attack Chakara lands no hit, so the victim skips rounds 1 and 2', () => {
+            expect(read(board(0), victim).acted).toEqual([3]);
+        });
+    }
+);

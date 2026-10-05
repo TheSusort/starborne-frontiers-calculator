@@ -371,21 +371,16 @@ describe('a scheduled always-active Exposed is inert', () => {
 });
 
 // =============================================================================
-// Secondary hit types must not SPEND Exposed (CodeRabbit, PR #289).
+// A counter-attack reads and spends Exposed like any direct hit (ruling 36).
 //
-// `applyVictimDamage` is the shared funnel, so the consumption sits where reflect, counter and
-// Protection-transfer sub-hits also pass through with `byDirectDamage: true`. None of those three
-// reads the per-victim incoming-damage channel Exposed rides:
-//   - reflect  — `reflectedDamageForHit` folds the attacker's incoming-REDUCTION only,
-//   - counter  — passes `incomingDamageModifierPct: 0` outright (documented approximation),
-//   - transfer — the chunk is computed off the ORIGINAL victim's cascade, then redirected.
-// Consuming there would cost the holder the status for a hit that was never amplified. The engine
-// already carried a guard of exactly this shape for Protection-transfer eligibility.
+// `applyVictimDamage` is the shared funnel; reflect and Protection-transfer sub-hits also pass
+// through it with `byDirectDamage: true` but read none of the incoming channel Exposed rides, so the
+// funnel does not spend it for them. A counter folds the victim's full profile, Exposed included,
+// and spends one stack.
 //
-// Driven through the counter leg (the cheapest of the three to fixture end-to-end): Exposed sits on
-// the ENEMY, and the PLAYER's on-attacked counter is what lands on it. The foe's attack is what
-// triggers that counter, so the counter necessarily precedes the player's own next cast — the hit
-// that must still be amplified.
+// Driven end to end: Exposed sits on the ENEMY, and the PLAYER's on-attacked counter is what lands
+// on it. The foe's attack is what triggers that counter, so the counter necessarily precedes the
+// player's later cast.
 // =============================================================================
 
 const counterAbility = (): Ability => ({
@@ -505,19 +500,18 @@ function laterHitOnFoe(withCounter: boolean, stacks = 1): number {
 /** The later ship's hit with no Exposed anywhere: 10 000 attack into 0 defence. */
 const PLAIN_HIT = 10_000;
 
-describe('Exposed is not spent by hit types that never amplified it', () => {
-    it("a counterattack leaves the victim's Exposed intact for a later hit the same round", () => {
+describe('a counter-attack is a direct hit for Exposed (ruling 36)', () => {
+    it("a counterattack spends the victim's one Exposed stack before a later hit the same round", () => {
         // Premise: without a counter, the later hit rides the one standing stack (+100%).
         expect(laterHitOnFoe(false)).toBeCloseTo(PLAIN_HIT * 2, 5);
-        // The counter lands on the Exposed holder first, but it is not an amplified hit, so the
-        // later hit is amplified exactly the same.
-        expect(laterHitOnFoe(true)).toBeCloseTo(PLAIN_HIT * 2, 5);
+        // The counter lands on the Exposed holder first, is amplified by the stack and spends it,
+        // so the later hit is plain.
+        expect(laterHitOnFoe(true)).toBeCloseTo(PLAIN_HIT, 5);
     });
 
-    // Two stacks are where "spends nothing" and "spends one" part company: a counter that spent one
-    // would leave the later hit at +100% instead of +200%.
-    it('a counterattack spends none of a 2-stack Exposed', () => {
+    // Two stacks: the counter reads both and spends ONE, leaving the later hit at +100%.
+    it('a counterattack spends one of a 2-stack Exposed', () => {
         expect(laterHitOnFoe(false, 2)).toBeCloseTo(PLAIN_HIT * 3, 5);
-        expect(laterHitOnFoe(true, 2)).toBeCloseTo(PLAIN_HIT * 3, 5);
+        expect(laterHitOnFoe(true, 2)).toBeCloseTo(PLAIN_HIT * 2, 5);
     });
 });

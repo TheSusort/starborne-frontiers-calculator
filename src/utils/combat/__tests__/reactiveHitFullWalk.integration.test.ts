@@ -78,6 +78,7 @@ interface Spec {
     defence?: number;
     crit?: number;
     security?: number;
+    shieldPenetration?: number;
     affinity?: AffinityName;
     ship?: Partial<Ship>;
 }
@@ -98,6 +99,9 @@ const placement = (s: Spec): BattlePlacement => {
             defence: s.defence ?? 0,
             hp: 1e12,
             speed: s.speed,
+            ...(s.shieldPenetration !== undefined
+                ? { shieldPenetration: s.shieldPenetration }
+                : {}),
         },
     };
 };
@@ -118,7 +122,9 @@ const run = (
     opponents: Spec[],
     side: Side,
     rounds: number,
-    rng?: number
+    rng?: number,
+    /** Seed a shield pool on these spec ids before round 1. */
+    shields?: Record<string, number>
 ): Run => {
     tap.recorded.length = 0;
     tap.buses = 0;
@@ -129,14 +135,25 @@ const run = (
     }
     const playerSpecs = side === 'player' ? subjects : opponents;
     const enemySpecs = side === 'player' ? opponents : subjects;
+    const ids = new Map<string, string>();
+    playerSpecs.forEach((s, i) => ids.set(s.id, i === 0 ? 'attacker' : `p:${s.id}:${i}`));
+    enemySpecs.forEach((s, i) => ids.set(s.id, `e:${s.id}:${i}`));
     simulateBattle({
         playerTeam: playerSpecs.map(placement),
         enemyTeam: enemySpecs.map(placement),
         rounds,
+        ...(shields
+            ? {
+                  __testTapActors: (actors) => {
+                      for (const a of actors) {
+                          for (const [specId, pool] of Object.entries(shields)) {
+                              if (a.id === ids.get(specId)) a.shieldPool = pool;
+                          }
+                      }
+                  },
+              }
+            : {}),
     });
-    const ids = new Map<string, string>();
-    playerSpecs.forEach((s, i) => ids.set(s.id, i === 0 ? 'attacker' : `p:${s.id}:${i}`));
-    enemySpecs.forEach((s, i) => ids.set(s.id, `e:${s.id}:${i}`));
     return {
         events: [...tap.recorded],
         idOf: (specId) => {
@@ -163,11 +180,13 @@ const reactiveHit = (r: Run, source: string, target: string, round: number): Rea
     return rows[0];
 };
 
-/** The ONE cast hit `attacker` landed on `target` in `round` — the instrument. */
+/** The ONE cast hit `attacker` landed on `target` in `round` — the instrument. A counter or proc
+ *  raises its own `attacked` too (ruling 36); those carry `reactiveHitId` and are not cast hits. */
 const castHit = (r: Run, attacker: string, target: string, round: number): AttackedRow => {
     const rows = r.events.filter(
         (e): e is AttackedRow =>
             e.type === 'attacked' &&
+            e.reactiveHitId === undefined &&
             e.attackerId === r.idOf(attacker) &&
             e.targetId === r.idOf(target) &&
             e.round === round
@@ -291,12 +310,11 @@ describe('a counter or reactive proc reads the victim profile the cast reads', (
         }
     );
 
-    it.each(SIDES)('Exposed neither amplifies a counter nor is spent by one (%s side)', (side) => {
+    it.each(SIDES)('Exposed amplifies a counter, which spends it (%s side)', (side) => {
         // A fast ally lands one stack of Exposed on Bedrock after its own (zero) hit, for two
         // turns so the stack outlives Bedrock's own turn end. Bedrock then hits Stalwart, who
-        // counters; Stalwart's own cast comes after. Whether a counter is "direct damage" for
-        // Exposed is an open question, so the counter neither reads the stack nor spends it,
-        // and Stalwart's cast is the hit that does both.
+        // counters; Stalwart's own cast comes after. A counter is direct damage (ruling 36): it
+        // reads the stack (+100%) and spends it, so Stalwart's later cast is not amplified.
         const exposer = (withExposed: boolean): Spec => ({
             id: 'Exposer',
             name: 'Bedrock',
@@ -312,14 +330,13 @@ describe('a counter or reactive proc reads the victim profile the cast reads', (
         const bare = run([stalwart(), exposer(false)], [bedrock()], side, 1);
         const exposed = run([stalwart(), exposer(true)], [bedrock()], side, 1);
 
-        // Instrument: the stack is still there for Stalwart's cast, which it doubles.
         expect(
-            castHit(exposed, 'Stalwart', 'Bag', 1).damage! /
-                castHit(bare, 'Stalwart', 'Bag', 1).damage!
+            reactiveHit(exposed, 'Stalwart', 'Bag', 1).amount /
+                reactiveHit(bare, 'Stalwart', 'Bag', 1).amount
         ).toBeCloseTo(2, 9);
-
-        expect(reactiveHit(exposed, 'Stalwart', 'Bag', 1).amount).toBeCloseTo(
-            reactiveHit(bare, 'Stalwart', 'Bag', 1).amount,
+        // The counter spent the one stack: the cast that follows is not amplified.
+        expect(castHit(exposed, 'Stalwart', 'Bag', 1).damage!).toBeCloseTo(
+            castHit(bare, 'Stalwart', 'Bag', 1).damage!,
             9
         );
     });
@@ -480,12 +497,11 @@ describe('Defensive Affinity Override on the victim of a counter or a covered hi
     );
 });
 
-describe('Meatshield defence substitution on reactive hits — unchanged pending the direct-damage ruling', () => {
-    it.each(SIDES)("reaches Chakara's proc but not Stalwart's counter (%s side)", (side) => {
+describe('Meatshield defence substitution on reactive hits', () => {
+    it.each(SIDES)("reaches Chakara's proc and Stalwart's counter alike (%s side)", (side) => {
         // A plain attacker-role enemy (Lev's role, a bare 90% hit) with a high-defence
-        // Meatshield beside it. Whether a counter is "direct damage" for Meatshield's "as if
-        // that ally had this Unit's defense" is an open owner question; until it is answered a
-        // counter keeps the victim's own defence and a proc takes Meatshield's.
+        // Meatshield beside it. A counter and a proc are both direct damage (ruling 36), so both
+        // land "as if that ally had this Unit's defense".
         const hitter: Spec = {
             id: 'Bag',
             name: 'Lev',
@@ -520,9 +536,8 @@ describe('Meatshield defence substitution on reactive hits — unchanged pending
         expect(reactiveHit(guarded, 'Chakara', 'Bag', 1).amount).toBeLessThan(
             reactiveHit(alone, 'Chakara', 'Bag', 1).amount / 2
         );
-        expect(reactiveHit(guarded, 'Stalwart', 'Bag', 1).amount).toBeCloseTo(
-            reactiveHit(alone, 'Stalwart', 'Bag', 1).amount,
-            9
+        expect(reactiveHit(guarded, 'Stalwart', 'Bag', 1).amount).toBeLessThan(
+            reactiveHit(alone, 'Stalwart', 'Bag', 1).amount / 2
         );
     });
 });
@@ -649,7 +664,11 @@ describe("DPS mode: a counter reads the calculator's enemy debuffs only where th
             one(
                 runDps(l, focus, enemy),
                 'attacked',
-                (e) => e.attackerId === 'attacker' && e.targetId === REAL_ENEMY_ID && e.round === 1
+                (e) =>
+                    e.reactiveHitId === undefined &&
+                    e.attackerId === 'attacker' &&
+                    e.targetId === REAL_ENEMY_ID &&
+                    e.round === 1
             ).damage!;
 
         // Instrument: his cast reads the landing decision.
@@ -679,7 +698,11 @@ describe("DPS mode: a counter reads the calculator's enemy debuffs only where th
             one(
                 runDps(l, focus, enemy),
                 'attacked',
-                (e) => e.attackerId === REAL_ENEMY_ID && e.targetId === 'attacker' && e.round === 1
+                (e) =>
+                    e.reactiveHitId === undefined &&
+                    e.attackerId === REAL_ENEMY_ID &&
+                    e.targetId === 'attacker' &&
+                    e.round === 1
             ).damage!;
 
         expect(cast('fails')).toBeCloseTo(cast('none'), 9);
@@ -688,5 +711,164 @@ describe("DPS mode: a counter reads the calculator's enemy debuffs only where th
             expect(counter('fails', round)).toBeCloseTo(counter('none', round), 9);
             expect(counter('lands', round)).toBeCloseTo(counter('none', round), 9);
         }
+    });
+});
+
+type BuffRow = Extract<CombatEvent, { type: 'buff-applied' }>;
+type HpRow = Extract<CombatEvent, { type: 'hp-changed' }>;
+
+/** Events of `round` that come before the round's first turn (the round-start phase). */
+const roundStartPhase = (r: Run, round: number): CombatEvent[] => {
+    const inRound = r.events.filter((e) => 'round' in e && e.round === round);
+    const firstTurn = inRound.findIndex((e) => e.type === 'turn-started');
+    return firstTurn < 0 ? inRound : inRound.slice(0, firstTurn);
+};
+const opalBuffs = (events: CombatEvent[], opalId: string): string[] =>
+    events
+        .filter((e): e is BuffRow => e.type === 'buff-applied' && e.actorId === opalId)
+        .map((e) => e.buffName);
+
+describe('a counter or a reactive proc is direct damage (ruling 36)', () => {
+    const opal = (over: Partial<Spec> = {}): Spec => ({
+        id: 'Opal',
+        name: 'Opal',
+        position: 'M4',
+        speed: 300,
+        attack: 100,
+        ...over,
+    });
+    const chakara: Spec = {
+        id: 'Chakara',
+        name: 'Chakara',
+        position: 'M4',
+        speed: 50,
+        attack: 10_000,
+    };
+
+    it.each(SIDES)(
+        "Chakara's round-start hit wakes Opal's 'When directly damaged' (%s side)",
+        (side) => {
+            const r = run([chakara], [opal()], side, 1);
+            const phase = roundStartPhase(r, 1);
+            // Instrument: the proc landed on Opal in the round-start phase.
+            expect(
+                phase.some(
+                    (e) => e.type === 'reactive-damage-performed' && e.targetId === r.idOf('Opal')
+                )
+            ).toBe(true);
+            expect(opalBuffs(phase, r.idOf('Opal'))).toContain('Defense Up II');
+        }
+    );
+
+    it.each(SIDES)(
+        'negative: a 0-attack Chakara lands no hit, so Opal does not react (%s side)',
+        (side) => {
+            const r = run([{ ...chakara, attack: 0 }], [opal()], side, 1);
+            expect(opalBuffs(roundStartPhase(r, 1), r.idOf('Opal'))).toEqual([]);
+        }
+    );
+
+    it.each(SIDES)(
+        "Stalwart's counter wakes the attacker's 'When directly damaged' (%s side)",
+        (side) => {
+            // Opal (fast) hits Stalwart; Stalwart counters; the counter is what damages Opal in
+            // round 1 — nothing else on the board hits her before her Defense Up II would show.
+            const r = run([stalwart({ speed: 10 })], [opal()], side, 1);
+            const counter = reactiveHit(r, 'Stalwart', 'Opal', 1);
+            expect(counter.amount).toBeGreaterThan(0);
+            // Read only Opal's own turn after the counter: Stalwart's cast later in the round
+            // also hits her.
+            const after = r.events.slice(r.events.indexOf(counter));
+            const nextTurn = after.findIndex((e) => e.type === 'turn-started');
+            const window = nextTurn < 0 ? after : after.slice(0, nextTurn);
+            expect(opalBuffs(window, r.idOf('Opal'))).toContain('Defense Up II');
+        }
+    );
+
+    it.each(SIDES)(
+        'reverse board: a Bedrock (no counter) in its place wakes nothing (%s side)',
+        (side) => {
+            const r = run([bedrock({ id: 'Stalwart', speed: 10, defence: 0 })], [opal()], side, 1);
+            const beforeBagTurn = r.events.filter(
+                (e) => 'round' in e && e.round === 1 && e.type !== 'turn-started'
+            );
+            // Opal is hit only by Bedrock's own cast (after her turn), never by a reaction in hers.
+            expect(
+                beforeBagTurn.some(
+                    (e) => e.type === 'reactive-damage-performed' && e.targetId === r.idOf('Opal')
+                )
+            ).toBe(false);
+        }
+    );
+
+    it.each(SIDES)('a counter never wakes a counter: Stalwart vs Stalwart (%s side)', (side) => {
+        const a = stalwart({ id: 'A', speed: 200 });
+        const b = stalwart({ id: 'B', speed: 100 });
+        const r = run([a], [b], side, 1);
+        const counters = r.events.filter(
+            (e) => e.type === 'reactive-damage-performed' && e.round === 1
+        );
+        // A hits B → B counters A (A does not counter back); B hits A → A counters B.
+        expect(
+            counters.map((e) => (e.type === 'reactive-damage-performed' ? e.sourceId : ''))
+        ).toEqual([r.idOf('B'), r.idOf('A')]);
+    });
+
+    it.each(SIDES)("Chakara's round-start hit wakes Stalwart's counter (%s side)", (side) => {
+        const r = run([chakara], [stalwart({ speed: 300 })], side, 1);
+        const phase = roundStartPhase(r, 1);
+        expect(
+            phase.some(
+                (e) =>
+                    e.type === 'reactive-damage-performed' &&
+                    e.sourceId === r.idOf('Stalwart') &&
+                    e.targetId === r.idOf('Chakara')
+            )
+        ).toBe(true);
+    });
+
+    it.each(SIDES)("a counter carries its owner's shield penetration (%s side)", (side) => {
+        // Bedrock hits Stalwart (20% shield penetration) and is countered while holding a shield
+        // far larger than the counter: 20% of the counter reaches Bedrock's HP.
+        const pen = run([stalwart({ shieldPenetration: 20 })], [bedrock()], side, 1, undefined, {
+            Bag: 1e12,
+        });
+        const noPen = run([stalwart()], [bedrock()], side, 1, undefined, { Bag: 1e12 });
+        const counter = reactiveHit(pen, 'Stalwart', 'Bag', 1);
+        const hpLoss = (r: Run): number =>
+            r.events
+                .filter(
+                    (e): e is HpRow =>
+                        e.type === 'hp-changed' && e.targetId === r.idOf('Bag') && e.round === 1
+                )
+                .reduce((sum, e) => sum + ((e.oldPct - e.newPct) / 100) * 1e12, 0);
+        expect(hpLoss(noPen)).toBe(0);
+        // Stalwart's own cast lands after the counter and also carries the pen; the counter is the
+        // first HP loss Bedrock takes.
+        const firstLoss = pen.events.find(
+            (e): e is HpRow => e.type === 'hp-changed' && e.targetId === pen.idOf('Bag')
+        );
+        expect(firstLoss).toBeDefined();
+        const lost = ((firstLoss!.oldPct - firstLoss!.newPct) / 100) * 1e12;
+        expect(lost / counter.amount).toBeCloseTo(0.2, 3);
+    });
+
+    it.each(SIDES)("a counter is redirected by Lionheart's Protection (%s side)", (side) => {
+        // Bedrock (Lionheart's ally) hits Stalwart and is countered. Lionheart holds 10 stacks of
+        // Protection from the round start, so part of the counter lands on him instead.
+        const lion: Spec = {
+            id: 'Lion',
+            name: 'Lionheart',
+            position: 'T4',
+            speed: 1,
+            defence: 5000,
+        };
+        const r = run([stalwart()], [bedrock(), lion], side, 1);
+        const counter = reactiveHit(r, 'Stalwart', 'Bag', 1);
+        const counterAt = r.events.indexOf(counter);
+        const lionHitBefore = r.events
+            .slice(0, counterAt)
+            .some((e) => e.type === 'hp-changed' && e.targetId === r.idOf('Lion'));
+        expect(lionHitBefore).toBe(true);
     });
 });

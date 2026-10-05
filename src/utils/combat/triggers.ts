@@ -196,6 +196,9 @@ export interface Intent {
          *  carry no sub-attack index. Insidiousness, that trigger's proc, rolls per SKILL CAST by
          *  rule (`procScope:'per-cast'`, keyed by `inflictionReaction` below), not per attack. */
         subAttackIndex?: number;
+        /** `attacked.reactiveHitId` of the triggering hit, stamped by `on-attacked` /
+         *  `on-ally-attacked`: a counter's or proc's hit is its own attack (`attackKeyOf`). */
+        reactiveHitId?: number;
         /** Stamped by the `on-debuff-inflicted` listener when the triggering infliction was
          *  landed by a REACTION (`e.reactive`) rather than by the owner's cast: `firingId` is that
          *  reaction firing's `reactionFiringId`, and `duringTurnOf` is the actor whose turn was
@@ -1643,6 +1646,8 @@ export function registerReactiveListeners(args: {
                         // absent → every hit. The intent is per-EVENT (not the shared const):
                         // eventCtx captures the attacker for "on that enemy" counter routing.
                         if (e.targetId !== ownerId) return;
+                        // A counter never wakes a counter (#163); it wakes every other reaction.
+                        if (e.fromCounter && ra.ability.config.type === 'counter') return;
                         const filter = ra.ability.triggerCritFilter;
                         if (filter === 'crit' && !e.didCrit) return;
                         if (filter === 'non-crit' && e.didCrit) return;
@@ -1673,6 +1678,7 @@ export function registerReactiveListeners(args: {
                                 // cardinality this trigger fans out at is unchanged (and correct:
                                 // incoming effects resolve per hit, R2).
                                 subAttackIndex: e.subAttackIndex,
+                                reactiveHitId: e.reactiveHitId,
                             },
                         });
                     });
@@ -1899,6 +1905,8 @@ export function registerReactiveListeners(args: {
                         // inflating numbers); an EMPTY filter array is treated as absent (any
                         // ally), not never-match.
                         if (isOpposing(e.targetId)) return;
+                        // A counter never wakes a counter (#163) — Centurion's ally branch.
+                        if (e.fromCounter && ra.ability.config.type === 'counter') return;
                         const filter = ra.ability.triggerCritFilter;
                         if (filter === 'crit' && !e.didCrit) return;
                         if (filter === 'non-crit' && e.didCrit) return;
@@ -1962,6 +1970,7 @@ export function registerReactiveListeners(args: {
                                 // See the on-attacked listener — read only by
                                 // `oncePerAttackGuardKey`.
                                 subAttackIndex: e.subAttackIndex,
+                                reactiveHitId: e.reactiveHitId,
                             },
                         });
                     });
@@ -2593,8 +2602,8 @@ export interface IntentExecContext {
      *  the call is a no-op. */
     flushConsequenceLogs?: () => void;
     /** Apply a full mitigated/crit counter walk from `ownerId` to `attackerId`.
-     *  `abilityId` keys the dedicated counter crit-gate. Reuses the engine's no-event
-     *  apply path (no attacked event → no re-counter).
+     *  `abilityId` keys the dedicated counter crit-gate. The hit raises an `attacked` marked
+     *  `fromCounter`, which wakes every "When directly damaged" reaction except a counter.
      *  Returns the mitigated/credited amount + crit flag so the caller can surface the proc in
      *  the combat log (reactive-damage-performed); void/0 when the counter was guarded (dead
      *  owner/attacker, self-hit, non-positive) or the delegate is absent (unit fixtures). */
@@ -4219,7 +4228,7 @@ function passesProcChanceGate(intent: Intent, ctx: IntentExecContext): boolean {
     // on every real cast, so it does not fall into this bucket. NOTE `on-attacked` /
     // `on-ally-attacked` are NOT in the 'x' bucket either — their listeners stamp the index off
     // `attacked.subAttackIndex`, which `emitAttacked` always populates.
-    const memoKey = `${gateKey}:${intent.eventCtx?.subAttackIndex ?? 'x'}`;
+    const memoKey = `${gateKey}:${attackKeyOf(intent.eventCtx)}`;
     const cached = memo?.get(memoKey);
     if (cached !== undefined) return cached;
     let gate = ctx.procChanceGates?.get(gateKey);
@@ -4526,9 +4535,17 @@ const PER_HIT_REACTIVE_TRIGGERS: ReadonlySet<AbilityTrigger> = new Set<AbilityTr
  *  defined index (the caller's own sub-attack index, or — when the caller omits it — the per-hit
  *  loop index as a fallback), on every path, positional or not. It only matters for a hand-built
  *  fixture whose intent carries no `eventCtx` at all. */
+/** The attack identity an incoming-hit guard keys on: a counter's or proc's own hit id when the
+ *  triggering hit was one (`attacked.reactiveHitId`), else the cast's sub-attack index, else 'x'
+ *  (no attack identity — start/end of round, hand-built intents). */
+function attackKeyOf(eventCtx: Intent['eventCtx']): string | number {
+    if (eventCtx?.reactiveHitId !== undefined) return `r${eventCtx.reactiveHitId}`;
+    return eventCtx?.subAttackIndex ?? 'x';
+}
+
 function oncePerAttackGuardKey(intent: Intent): string | undefined {
     return intent.ability.target === 'self' && PER_HIT_REACTIVE_TRIGGERS.has(intent.ability.trigger)
-        ? `${intent.ownerId}:${intent.ability.id}:${intent.eventCtx?.subAttackIndex ?? 'x'}`
+        ? `${intent.ownerId}:${intent.ability.id}:${attackKeyOf(intent.eventCtx)}`
         : undefined;
 }
 
@@ -6282,7 +6299,8 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
 
     if (cfg.type === 'counter') {
         // A live counter-attack — the owner hits its attacker back via the engine's full
-        // mitigated/crit walk (applyCounterAttack), which emits NO `attacked` event → no re-counter.
+        // mitigated/crit walk (applyCounterAttack). Its `attacked` carries `fromCounter`, which no
+        // counter reacts to, so counters never ping-pong (#163).
         //
         // GATE ORDERING (intentional DEVIATION from the `damage` branch's proc→once-per-round
         // first): the CHEAP, NON-CONSUMING boolean gates run FIRST (primary-target, shield-hit,
@@ -6322,7 +6340,7 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // share a group id, so they collapse here. Counters with no group id keep deduping on
         // their own ability id, so unrelated counters on one ship stay independent.
         const counterIdentity = cfg.counterGroupId ?? intent.ability.id;
-        const key = `${intent.ownerId}:${counterIdentity}:${intent.eventCtx?.subAttackIndex ?? 'x'}`;
+        const key = `${intent.ownerId}:${counterIdentity}:${attackKeyOf(intent.eventCtx)}`;
         if (ctx.counterFiredThisTurn?.has(key)) return;
         // Consuming gates LAST (see ordering note above).
         if (!passesProcChanceGate(intent, ctx)) return;
@@ -6372,9 +6390,9 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
             // this path's resolved target. Placed BEFORE the once-per-round key is consumed so a
             // blocked gate does not burn the round's charge.
             if (!perVictimOk(sourceId)) return;
-            const onceKey = `${intent.ownerId}:${intent.ability.id}:${sourceId}:${
-                intent.eventCtx?.subAttackIndex ?? 'x'
-            }`;
+            const onceKey = `${intent.ownerId}:${intent.ability.id}:${sourceId}:${attackKeyOf(
+                intent.eventCtx
+            )}`;
             if (ctx.counterFiredThisTurn?.has(onceKey)) return;
             ctx.counterFiredThisTurn?.add(onceKey);
             const hpOutcome = ctx.applyReactiveDamage?.(
@@ -6553,7 +6571,7 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 // with no attack identity at all (start-of-round / end-of-round triggers, the
                 // cast-scoped engine fallbacks, hand-built fixture intents with no eventCtx), where
                 // per-turn dedupe remains the correct reading.
-                const firedKey = `${intent.ownerId}:${intent.ability.id}:${victimId}:${intent.eventCtx?.subAttackIndex ?? 'x'}`;
+                const firedKey = `${intent.ownerId}:${intent.ability.id}:${victimId}:${attackKeyOf(intent.eventCtx)}`;
                 if (ctx.reactionFiredThisAttack?.has(firedKey)) continue;
                 ctx.reactionFiredThisAttack?.add(firedKey);
             }

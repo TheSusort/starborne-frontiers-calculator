@@ -566,6 +566,8 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
     },
 
     attacked: (e, ctx) => {
+        // A counter or proc's hit is logged by its own `reactive-damage-performed` row.
+        if (e.reactiveHitId !== undefined) return;
         if (!ctx.openAttackEntry) return;
         // Find-or-create the target for this victim (dedup by targetId).
         const existing = ctx.openAttackEntry.targets.find((t) => t.targetId === e.targetId);

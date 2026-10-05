@@ -3178,6 +3178,19 @@ const DocumentationPage: React.FC = () => {
                                         Akula.
                                     </p>
                                     <p className="text-theme-text mb-2">
+                                        <span className="text-primary">
+                                            Passive damage is direct damage:
+                                        </span>{' '}
+                                        A hit from a passive (Chakara&apos;s round-start hit, Grif,
+                                        Provider, Sentinel and the like) and a counter-attack are
+                                        direct hits like any skill hit. They wake &ldquo;when
+                                        directly damaged&rdquo; passives, shorten Stasis, are
+                                        redirected by Protection, use the attacker&apos;s shield
+                                        penetration and spend Exposed. A counter-attack never sets
+                                        off another counter-attack. Damage over time and Bomb
+                                        explosions are not direct hits.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
                                         <span className="text-primary">Purges:</span> A purge on a
                                         skill that hits several enemies strips buffs from every
                                         enemy it hits, not just the main target. Tithonus gains

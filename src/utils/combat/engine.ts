@@ -5730,6 +5730,8 @@ export function runCombat(rawInput: CombatEngineInput): {
     // (stasis.test.ts (iii)). The reduction is therefore immediate at turn granularity: a victim
     // whose Stasis reaches 0 this way takes its own turn later in the same round.
     const stasisBreakPending = new Map<string, number>();
+    /** Mints `attacked.reactiveHitId` — one id per counter-attack / reactive proc hit. */
+    let reactiveHitSeq = 0;
     /** Reduce `targetId`'s Stasis once per queued hit and clear the queue for it. */
     const spendStasisHits = (targetId: string): void => {
         const owed = stasisBreakPending.get(targetId);
@@ -6267,9 +6269,13 @@ export function runCombat(rawInput: CombatEngineInput): {
                 /** True when THIS application is itself reflected thorns (Reflect gear set). The
                  *  reflection block skips when set → no ping-pong (a reflected hit never reflects). */
                 isReflected?: boolean;
-                /** True when THIS application is a counterattack (Stalwart). The reflect
-                 *  re-entry guard skips when set → a counter is never itself reflected (loop-safe). */
+                /** True when THIS application is a counter-attack or a reactive damage proc. The
+                 *  reflect re-entry guard skips when set → such a hit is never itself reflected
+                 *  (loop-safe). Every other direct-hit consequence applies to it (ruling 36). */
                 isCounter?: boolean;
+                /** True for a FLAT copy of an already-resolved burst (Demolisher's Bomb splash):
+                 *  Bomb damage, not a direct hit, so no Protection redirect and no Exposed spend. */
+                isSplashCopy?: boolean;
                 /** Protection transfer: true when THIS application is a redirected Protection
                  *  chunk. The transfer block skips when set → a redirected chunk's own
                  *  cascade was already precomputed, so it never re-triggers (loop-safe). */
@@ -6400,8 +6406,8 @@ export function runCombat(rawInput: CombatEngineInput): {
             // fraction (10%/stack) of this victim's direct hit. The redirected chunk keeps the
             // ORIGINAL target's affinity/outgoing (both baked into `damage`) and re-mitigates on
             // the PROTECTOR's own defense — realized by the mit-ratio inside protectionCascade.
-            // Guards mirror the reflect block: direct damage only, and never a redirected/
-            // reflected/counter application (loop-safe).
+            // Guards: direct damage only, and never a redirected/reflected application (loop-safe)
+            // or a Bomb splash copy. Counters and reactive procs are redirected (ruling 36).
             // !carriesBarrier: Barrier sits strictly in front of every incoming-effect mechanism
             // (matches the incoming-block step and the transform step) — an invulnerable target
             // has no incoming hit for allies to soak.
@@ -6420,7 +6426,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 !carriesBarrier &&
                 !cause.isProtectionTransfer &&
                 !cause.isReflected &&
-                !cause.isCounter &&
+                !cause.isSplashCopy &&
                 !wholeBattlefieldHit &&
                 damage > 0
             ) {
@@ -7424,13 +7430,14 @@ export function runCombat(rawInput: CombatEngineInput): {
             //
             // If a secondary path ever starts reading `Exposed`, drop its flag from this guard in the
             // same commit — amplify and consume must stay in lockstep. A counter or reactive proc
-            // folds the rest of the incoming channel but not `Exposed` (`reactiveHitInputs`).
+            // reads `Exposed` (`reactiveHitInputs`) and spends it here; a Bomb splash copy does
+            // neither.
             if (
                 cause?.byDirectDamage === true &&
                 (cause.bombPortion ?? 0) === 0 &&
                 !cause.isProtectionTransfer &&
                 !cause.isReflected &&
-                !cause.isCounter &&
+                !cause.isSplashCopy &&
                 immediateDamage - transformedToDot > 0
             ) {
                 consumeExposed(statusEngine, victim.id);
@@ -7604,15 +7611,9 @@ export function runCombat(rawInput: CombatEngineInput): {
          * rate from `affinityModifiersWithOverrides` over both (the 75% disadvantage cap and the
          * Offensive/Defensive Affinity Overrides included).
          *
-         * What such a hit does NOT read, pending the ruling on whether a counter or a proc is
-         * "direct damage" (the same open question keeps Protection, reflect and shield
-         * penetration off them in `applyVictimDamage`):
-         *  - `Exposed` — `applyVictimDamage` does not spend it on an `isCounter` hit, and a stack
-         *    read but not spent would amplify every later hit too;
-         *  - Meatshield's defence substitution, on a COUNTER only (`substituteDefence`); a proc
-         *    takes it. Skipping `substitutedDefenceFor` also skips FrontLine's shielded defence
-         *    bonus on a counter's victim.
-         * It also does not read the victim's gear/kit incoming-reduction abilities
+         * A counter or proc is direct damage (ruling 36), so the profile is the cast's in full:
+         * `Exposed` (spent by `applyVictimDamage`) and Meatshield's defence substitution included.
+         * It does not read the victim's gear/kit incoming-reduction abilities
          * (`incomingReductionForHit`), which the cast path takes outside the profile.
          *
          * Scheduled (input-level) enemy debuffs come from the OWNER's most recent turn's LANDED set
@@ -7624,8 +7625,7 @@ export function runCombat(rawInput: CombatEngineInput): {
          */
         const reactiveHitInputs = (
             owner: CombatActor,
-            victim: CombatActor,
-            opts: { substituteDefence: boolean }
+            victim: CombatActor
         ): {
             ownerOutgoing: ReturnType<typeof effectiveOutgoingStatsOf>;
             profile: VictimDefenseProfile;
@@ -7635,8 +7635,8 @@ export function runCombat(rawInput: CombatEngineInput): {
             const ownerOutgoing = effectiveOutgoingStatsOf(statusEngine, selfBuffLookup, owner);
             const profile = victimDefenseProfileOf(victim, {
                 scheduledEnemyEffects: landedScheduledEnemyEffectsByActor.get(owner.id) ?? [],
-                includeExposed: false,
-                substituteDefence: opts.substituteDefence,
+                includeExposed: true,
+                substituteDefence: true,
             });
             const forceAffinityAdvantage = selfBuffNamesForOwners(statusEngine, [
                 owner.id,
@@ -7658,9 +7658,49 @@ export function runCombat(rawInput: CombatEngineInput): {
             return { ownerOutgoing, profile, forceAffinityAdvantage, critRate };
         };
 
+        /**
+         * The direct-hit consequences a counter-attack or reactive proc shares with a cast hit
+         * (ruling 36), run after its funnel application:
+         *  - the Stasis reduction, for a victim stasised at impact (`stasisAtImpact`, read before
+         *    the funnel) whose hit was not nullified by Barrier;
+         *  - the `attacked` event, for every "When directly damaged" reaction — unless the hit was
+         *    fully transformed into a DoT, which is not a direct hit (the cast path's rule).
+         * `fromCounter` marks a counter's hit, which no counter answers (#163).
+         */
+        const landReactiveHit = (
+            owner: CombatActor,
+            victim: CombatActor,
+            raw: number,
+            didCrit: boolean,
+            outcome: AppliedVictimDamage,
+            stasisAtImpact: boolean,
+            fromCounter: boolean
+        ): void => {
+            if (stasisAtImpact && !outcome.barriered) resolveStasisBreaks([victim.id], () => false);
+            if ((outcome.transformedToDot ?? 0) > 0) return;
+            emitAttacked({
+                bus,
+                round: r,
+                targetId: victim.id,
+                attackerId: owner.id,
+                hitOutcomes: [didCrit],
+                isPrimaryTarget: true,
+                shieldWasHit:
+                    !outcome.barriered &&
+                    !outcome.converted &&
+                    outcome.shieldBefore > 0 &&
+                    outcome.hpDamage < raw,
+                damage: raw,
+                takenDamage: outcome.incomingBooked,
+                subAttackIndex: 0,
+                reactiveHitId: ++reactiveHitSeq,
+                fromCounter,
+            });
+        };
+
         // Full mitigated/crit counter walk from the counter owner to the attacker. Handed to the
         // reactive executor as `ctx.applyCounterAttack`, which triggers.ts calls for the
-        // `counter` branch. Reuses applyVictimDamage (no attacked event → no re-counter).
+        // `counter` branch. A direct hit like any other (`landReactiveHit`).
         const applyCounterAttack = (
             ownerId: string,
             attackerId: string,
@@ -7675,12 +7715,9 @@ export function runCombat(rawInput: CombatEngineInput): {
             if (owner.destroyedRound !== undefined) return;
             if (attacker.destroyedRound !== undefined || attacker.id === owner.id) return;
 
-            // A counter mitigates on the attacker's own defence, never Meatshield's (see
-            // `reactiveHitInputs`).
             const { ownerOutgoing, profile, forceAffinityAdvantage, critRate } = reactiveHitInputs(
                 owner,
-                attacker,
-                { substituteDefence: false }
+                attacker
             );
 
             // Roll the OWNER's crit via the dedicated gate (one stream per counter ability per owner).
@@ -7737,6 +7774,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             // non-optional: the `?? 0` below then covers only the (unreachable) case of the throw
             // that skips the assignment, not a silently absent field.
             let counterOutcome: AppliedVictimDamage | undefined;
+            const counterStasisAtImpact = attackBreaksStasis(owner) && isStasised(attacker.id);
             try {
                 counterOutcome = applyVictimDamage(raw, attacker, sink, {
                     killerId: owner.id,
@@ -7745,14 +7783,26 @@ export function runCombat(rawInput: CombatEngineInput): {
                     // #358 ADDENDUM 2: the counter walk folds the ATTACKER's defence through
                     // `victimHitDamage`; `rawPreMit` is the same walk without it.
                     preMitigationDamage: rawPreMit,
-                    // Mirror Reflect (no shield penetration on the reactive hit). EffectiveStats has NO
-                    // shieldPenetration field; we deliberately pass 0.
-                    shieldPenetrationPct: 0,
+                    // The exact defence factor `raw` carries, for the Protection cascade.
+                    targetMitigation: victimDefenceMitigation(
+                        profile,
+                        ownerOutgoing.defensePenetration
+                    ),
+                    shieldPenetrationPct: attackerShieldPenOf(owner.id),
                     bombPortion: 0,
                 });
             } finally {
                 deferConsequenceLogs = wasDeferring;
             }
+            landReactiveHit(
+                owner,
+                attacker,
+                raw,
+                didCrit,
+                counterOutcome,
+                counterStasisAtImpact,
+                true
+            );
             // Surface on the attacker's incoming so it appears on the HP curve (mirror Reflect):
             // the intake the funnel RECORDED, so a portion the attacker's own incoming-block
             // converted into a self-DoT is booked by its ticks rather than twice. See the Reflect
@@ -7837,12 +7887,14 @@ export function runCombat(rawInput: CombatEngineInput): {
             // Only the ATTACK-basis arm of `basisStat` below consumes `ownerOutgoing.attack`; an
             // hp-basis or shield-basis proc is not attack-scaled, so an `Attack Down` must not
             // touch its basis, while `Out. Damage Down` still reduces the resulting damage.
-            // A proc mitigates on Meatshield's substitute defence (see `reactiveHitInputs`).
             const { ownerOutgoing, profile, forceAffinityAdvantage, critRate } = reactiveHitInputs(
                 owner,
-                victim,
-                { substituteDefence: true }
+                victim
             );
+            /** Demolisher's Bomb splash: a flat copy of a Bomb burst, not a direct hit. */
+            const splashCopy = opts?.flatBasis !== undefined;
+            /** The defence factor folded into `raw` (1 for a flat copy, which folds none). */
+            let rawMitigation = 1;
 
             let raw: number;
             /** #358 ADDENDUM 2: the pre-defence twin of `raw`. */
@@ -7930,6 +7982,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                 );
                 raw = procParts.damage;
                 rawPreMit = procParts.preMitigation;
+                rawMitigation = opts?.ignoresDefense
+                    ? 1
+                    : victimDefenceMitigation(profile, ownerOutgoing.defensePenetration);
             }
             // Guard: swallows zero/negative procs (defensive — a 0-attack or 0-multiplier proc
             // credits nothing), matching the pre-fix zero-damage guard.
@@ -7944,9 +7999,10 @@ export function runCombat(rawInput: CombatEngineInput): {
             // A reactive proc REDUCES the resolved victim's real HP through the SAME
             // shared funnel counters use (applyVictimDamage) — surfacing on the victim's HP curve
             // (roundPerTargetDamage → damageTaken) and attributed to the owner (creditDealt →
-            // perTargetDealt → damageDealt). Mirrors applyCounterAttack EXACTLY (isCounter:true → a
-            // reactive hit is never itself reflected and never Protection-redirected; no shield
-            // penetration) and deliberately does NOT creditDamage: cumulativeDamage is the scalar
+            // perTargetDealt → damageDealt). Mirrors applyCounterAttack (isCounter:true → never
+            // itself reflected; Protection, shield penetration and Exposed apply, ruling 36) — a
+            // Bomb splash copy excepted (`splashCopy`) — and deliberately does NOT creditDamage:
+            // cumulativeDamage is the scalar
             // aggregate channel, so folding the reactive into it would double-count exactly like
             // the per-victim DoT/detonation split documented at the round tail. The DPS calculator
             // reads the per-victim map instead (dpsSimulator.ts's focusDamageTotal), which this is
@@ -7965,19 +8021,34 @@ export function runCombat(rawInput: CombatEngineInput): {
             deferConsequenceLogs = true;
             // Annotated for the same reason as applyCounterAttack's `counterOutcome`.
             let procOutcome: AppliedVictimDamage | undefined;
+            const procStasisAtImpact =
+                !splashCopy && attackBreaksStasis(owner) && isStasised(victim.id);
             try {
                 procOutcome = applyVictimDamage(raw, victim, sink, {
                     killerId: ownerId,
                     byDirectDamage: true,
                     isCounter: true,
+                    ...(splashCopy ? { isSplashCopy: true } : {}),
                     // #358 ADDENDUM 2: equals `raw` on the flat-basis branch (which folds no
                     // defence at all) and the pre-defence walk on the attack-basis branch.
                     preMitigationDamage: rawPreMit,
-                    shieldPenetrationPct: 0,
+                    targetMitigation: rawMitigation,
+                    shieldPenetrationPct: splashCopy ? 0 : attackerShieldPenOf(ownerId),
                     bombPortion: 0,
                 });
             } finally {
                 deferConsequenceLogs = wasDeferring;
+            }
+            if (!splashCopy) {
+                landReactiveHit(
+                    owner,
+                    victim,
+                    raw,
+                    didCrit,
+                    procOutcome,
+                    procStasisAtImpact,
+                    false
+                );
             }
             // The intake the funnel RECORDED, mirroring applyCounterAttack (this site is
             // documented as its exact mirror, so booking `raw` here would re-create the

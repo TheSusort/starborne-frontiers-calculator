@@ -988,6 +988,14 @@ export type CombatEvent =
            *  per-hit loop index when the caller supplies no sub-attack identity. Optional here
            *  only so hand-built fixture events can omit it. */
           subAttackIndex?: number;
+          /** Present on the `attacked` a counter-attack or reactive damage proc raises (every
+           *  non-DoT, non-Bomb hit is direct damage — ruling 36): a fresh id per such hit, so the
+           *  victim's once-per-attack guards treat each one as its own attack. Absent on a cast
+           *  hit. The combat log renders these hits from `reactive-damage-performed` instead. */
+          reactiveHitId?: number;
+          /** The hit is a counter-attack. A counter never wakes a counter (#163): the `counter`
+           *  reaction ignores an `attacked` carrying this. Every other reaction hears it. */
+          fromCounter?: true;
       };
 
 export type CombatEventType = CombatEvent['type'];

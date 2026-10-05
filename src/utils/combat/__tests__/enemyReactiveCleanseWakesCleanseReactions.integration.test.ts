@@ -145,8 +145,11 @@ describe('Purifier’s on-damaged self-cleanse wakes them too; Heliodor’s dura
     });
     for (const side of ['player', 'enemy'] as const) {
         it(`${side}-side: Purifier is hit while holding Corrosion → each reaction once`, () => {
+            // Grif's reactive hit is direct damage (ruling 36): it wakes Purifier's on-damaged
+            // cleanse a second time, removing Pestilence's fresh Corrosion. That second cleanse
+            // was provoked by a cleanse reaction, so the chain guard keeps it from waking more.
             expect(run(teams('Purifier'), side, 'cleanser')).toEqual({
-                cleanses: 1,
+                cleanses: 2,
                 larkspurBuffs: 1,
                 pestilenceCorrosions: 1,
                 grifHits: 1,
