@@ -2986,6 +2986,12 @@ export function runCombat(rawInput: CombatEngineInput): {
     // `'antimatter'` matchup — so no observable value moves.
     // The other two fields read there (`ctx.dotMult`, `ctx.effectiveAttack`) are self-derived and fine.
     const lastTurnCtxByActor = new Map<string, PlayerRoundCtx>();
+    // Each actor's scheduled (input-level) enemy debuffs as its most recent turn LANDED them —
+    // `PlayerTurnResult.scheduledEnemyEffects`, the gated list its own cast's damage read. A hit the
+    // actor throws outside its turn (a counter, a reactive proc) reads this instead of the raw,
+    // ungated `__enemy__` bucket, so a debuff whose landing roll failed never reaches it. Absent
+    // until the actor's first turn: nothing has been rolled, so nothing has landed.
+    const landedScheduledEnemyEffectsByActor = new Map<string, SelectedGameBuff[]>();
     // Per-actor count of enemies DAMAGED by that actor's most recent cast this round,
     // for the `enemies-hit-this-cast` gate at REACTIVE drain time (Berserker's Marauder Rage,
     // drained via the on-deal-damage trigger — a passive-sourced timed self-buff can otherwise
@@ -7503,8 +7509,11 @@ export function runCombat(rawInput: CombatEngineInput): {
          * It also does not read the victim's gear/kit incoming-reduction abilities
          * (`incomingReductionForHit`), which the cast path takes outside the profile.
          *
-         * The scheduled (input-level) enemy-debuff bucket is the PLAYER's picks against the enemy
-         * side, so it is read raw for an enemy victim and never for a player one.
+         * Scheduled (input-level) enemy debuffs come from the OWNER's most recent turn's LANDED set
+         * (`landedScheduledEnemyEffectsByActor`), on either side — the same gated list the owner's
+         * own cast read — never the raw `__enemy__` bucket, so one whose landing roll failed
+         * reaches nothing. Debuffs other actors' casts applied live in the victim's per-victim
+         * store, which `victimDefenseProfileOf` reads for every hit.
          */
         const reactiveHitInputs = (
             owner: CombatActor,
@@ -7518,7 +7527,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         } => {
             const ownerOutgoing = effectiveOutgoingStatsOf(statusEngine, selfBuffLookup, owner);
             const profile = victimDefenseProfileOf(victim, {
-                scheduledEnemyEffects: victim.side === 'enemy' ? undefined : [],
+                scheduledEnemyEffects: landedScheduledEnemyEffectsByActor.get(owner.id) ?? [],
                 includeExposed: false,
                 substituteDefence: opts.substituteDefence,
             });
@@ -11864,6 +11873,10 @@ export function runCombat(rawInput: CombatEngineInput): {
                                       }
                                     : undefined,
                             });
+                            landedScheduledEnemyEffectsByActor.set(
+                                actor.id,
+                                turn.scheduledEnemyEffects
+                            );
                             // #367: publish this turn's ctx to the acting-turn override the moment
                             // it exists. `lastTurnCtxByActor.set(actor.id, turn.turnCtx)` sits
                             // further down, AFTER the positional apply that procs this actor's
@@ -12215,6 +12228,10 @@ export function runCombat(rawInput: CombatEngineInput): {
                                       }
                                     : undefined,
                             });
+                            landedScheduledEnemyEffectsByActor.set(
+                                actor.id,
+                                teamTurn.scheduledEnemyEffects
+                            );
                             // Mirror of the focus site's publish (see it for the ordering argument):
                             // this branch's `lastTurnCtxByActor.set` also sits below its positional
                             // apply.
@@ -12654,6 +12671,10 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 incomingReductionNonCritPct,
                                 incomingReductionCritFamilyPct,
                             });
+                            landedScheduledEnemyEffectsByActor.set(
+                                actor.id,
+                                enemyTurn.scheduledEnemyEffects
+                            );
                             // Set for SYMMETRY, and a no-op on this branch: unlike the two player
                             // branches, the enemy branch's `lastTurnCtxByActor.set` sits ABOVE its
                             // positional apply, so the map already holds this very object when the

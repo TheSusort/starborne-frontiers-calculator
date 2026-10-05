@@ -15,6 +15,13 @@
 import { describe, it, expect, beforeAll, afterEach, vi } from 'vitest';
 import type { CombatEvent } from '../events';
 import { simulateBattle, BattlePlacement } from '../../calculators/battleSimulator';
+import { simulateDPS } from '../../calculators/dpsSimulator';
+import {
+    damageKit,
+    realEnemyInput,
+    REAL_ENEMY_ID,
+} from '../../calculators/__testutils__/dpsRealEnemyFixture';
+import { buildShipAbilities } from '../../abilities/buildShipAbilities';
 import {
     setupKeyedRng,
     setKeyedRng,
@@ -70,6 +77,7 @@ interface Spec {
     attack?: number;
     defence?: number;
     crit?: number;
+    security?: number;
     affinity?: AffinityName;
     ship?: Partial<Ship>;
 }
@@ -86,7 +94,7 @@ const placement = (s: Spec): BattlePlacement => {
             critDamage: 100,
             defensePenetration: 0,
             hacking: 1000,
-            security: 0,
+            security: s.security ?? 0,
             defence: s.defence ?? 0,
             hp: 1e12,
             speed: s.speed,
@@ -514,5 +522,171 @@ describe('Meatshield defence substitution on reactive hits — unchanged pending
             reactiveHit(alone, 'Stalwart', 'Bag', 1).amount,
             9
         );
+    });
+});
+
+describe('a reactive hit reads only debuffs that LANDED', () => {
+    it.each(SIDES)(
+        "a resisted Defense Down II leaves Stalwart's counter alone; a landed one boosts it (%s side)",
+        (side) => {
+            // Nayra's Defense Down II on Bedrock lands at Bedrock security 0 and is resisted at
+            // security 5000 (her hacking is 1000).
+            const bare = run([stalwart()], [bedrock()], side, 1);
+            const landed = run([stalwart(), nayra()], [bedrock()], side, 1);
+            const resisted = run([stalwart(), nayra()], [bedrock({ security: 5000 })], side, 1);
+
+            // Instrument: Stalwart's own cast.
+            const castBare = castHit(bare, 'Stalwart', 'Bag', 1).damage!;
+            expect(castHit(resisted, 'Stalwart', 'Bag', 1).damage!).toBeCloseTo(castBare, 9);
+            expect(castHit(landed, 'Stalwart', 'Bag', 1).damage! / castBare).toBeCloseTo(
+                DEFENSE_DOWN_II_RATIO,
+                9
+            );
+
+            const counterBare = reactiveHit(bare, 'Stalwart', 'Bag', 1).amount;
+            expect(reactiveHit(resisted, 'Stalwart', 'Bag', 1).amount).toBeCloseTo(counterBare, 9);
+            expect(reactiveHit(landed, 'Stalwart', 'Bag', 1).amount / counterBare).toBeCloseTo(
+                DEFENSE_DOWN_II_RATIO,
+                9
+            );
+        }
+    );
+});
+
+describe("DPS mode: a counter reads the calculator's enemy debuffs only where they LANDED", () => {
+    // The page's "enemy debuffs" picks are the player's, scheduled against the enemy side and
+    // rolled hacking-vs-security every round. Defense Down II here never lands at hacking 0 vs
+    // security 1000, and always lands at hacking 1000 vs security 0.
+    const DD2 = [
+        {
+            id: 'dd2',
+            buffName: 'Defense Down II',
+            stacks: 1,
+            parsedEffects: { defense: -30 },
+            isStackable: false,
+            skillDuration: 'recurring' as const,
+        },
+    ];
+    type Landing = 'none' | 'fails' | 'lands';
+    const landingStats = (landing: Landing) =>
+        landing === 'lands' ? { hacking: 1000, security: 0 } : { hacking: 0, security: 1000 };
+
+    const runDps = (
+        landing: Landing,
+        focus: { skills: ReturnType<typeof buildShipAbilities>; speed: number; defence: number },
+        enemy: { skills?: ReturnType<typeof buildShipAbilities>; speed: number; attack: number }
+    ): CombatEvent[] => {
+        tap.recorded.length = 0;
+        tap.buses = 0;
+        setupKeyedRng(1);
+        const { hacking, security } = landingStats(landing);
+        simulateDPS(
+            realEnemyInput({
+                attack: 10_000,
+                crit: 0,
+                critDamage: 100,
+                defence: focus.defence,
+                hp: 1e12,
+                speed: focus.speed,
+                rounds: 2,
+                shipSkills: focus.skills,
+                enemyDefense: 5000,
+                enemyHp: 1e12,
+                hacking,
+                enemySecurity: security,
+                enemyDebuffs: landing === 'none' ? [] : DD2,
+                enemyAttackers: [
+                    {
+                        id: REAL_ENEMY_ID,
+                        stats: {
+                            attack: enemy.attack,
+                            crit: 0,
+                            critDamage: 100,
+                            speed: enemy.speed,
+                            defence: 5000,
+                            hp: 1e12,
+                            security,
+                            hacking: landing === 'lands' ? 1000 : 0,
+                        },
+                        chargeCount: 0,
+                        startCharged: false,
+                        ...(enemy.skills ? { shipSkills: enemy.skills } : {}),
+                    },
+                ],
+            })
+        );
+        return [...tap.recorded];
+    };
+    const one = <T extends CombatEvent['type']>(
+        events: CombatEvent[],
+        type: T,
+        pick: (e: Extract<CombatEvent, { type: T }>) => boolean
+    ): Extract<CombatEvent, { type: T }> => {
+        const rows = events.filter(
+            (e): e is Extract<CombatEvent, { type: T }> =>
+                e.type === type && pick(e as Extract<CombatEvent, { type: T }>)
+        );
+        expect(rows).toHaveLength(1);
+        return rows[0];
+    };
+    const stalwartKit = () => buildShipAbilities(buildTraceShip('Stalwart')!);
+
+    it("the player's counter ignores a Defense Down II that failed and reads one that landed", () => {
+        // The enemy (faster) hits Stalwart each round, who counters; his own cast follows. The
+        // picks are rolled on HIS turns, so the round-2 counter answers to his round-1 roll, and
+        // the round-1 counter comes before any roll at all.
+        const focus = { skills: stalwartKit(), speed: 100, defence: 0 };
+        const enemy = { speed: 200, attack: 100 };
+        const counter = (l: Landing, round: number) =>
+            one(
+                runDps(l, focus, enemy),
+                'reactive-damage-performed',
+                (e) => e.sourceId === 'attacker' && e.round === round
+            ).amount;
+        const cast = (l: Landing) =>
+            one(
+                runDps(l, focus, enemy),
+                'attacked',
+                (e) => e.attackerId === 'attacker' && e.targetId === REAL_ENEMY_ID && e.round === 1
+            ).damage!;
+
+        // Instrument: his cast reads the landing decision.
+        expect(cast('fails')).toBeCloseTo(cast('none'), 9);
+        expect(cast('lands') / cast('none')).toBeCloseTo(DEFENSE_DOWN_II_RATIO, 9);
+
+        expect(counter('fails', 2)).toBeCloseTo(counter('none', 2), 9);
+        expect(counter('lands', 2) / counter('none', 2)).toBeCloseTo(DEFENSE_DOWN_II_RATIO, 9);
+        // Nothing has been rolled before his first turn, so nothing has landed.
+        expect(counter('lands', 1)).toBeCloseTo(counter('none', 1), 9);
+    });
+
+    it("the enemy's counter ignores a pick its own roll failed and reads one it landed", () => {
+        // Mirror: an enemy Stalwart is hit by the (faster) player and counters onto the player,
+        // who has 5000 defence. The enemy rolls the calculator's picks on ITS turns against the
+        // player (its hacking 0 fails, 1000 lands, vs the player's default security 100) and its
+        // own cast onto the player reads that decision; the counter must read the same one.
+        const focus = { skills: damageKit(), speed: 200, defence: 5000 };
+        const enemy = { skills: stalwartKit(), speed: 100, attack: 10_000 };
+        const counter = (l: Landing, round: number) =>
+            one(
+                runDps(l, focus, enemy),
+                'reactive-damage-performed',
+                (e) => e.sourceId === REAL_ENEMY_ID && e.round === round
+            ).amount;
+        const cast = (l: Landing) =>
+            one(
+                runDps(l, focus, enemy),
+                'attacked',
+                (e) => e.attackerId === REAL_ENEMY_ID && e.targetId === 'attacker' && e.round === 1
+            ).damage!;
+
+        // Instrument: the enemy's cast reads its own landing decision.
+        expect(cast('fails')).toBeCloseTo(cast('none'), 9);
+        expect(cast('lands') / cast('none')).toBeCloseTo(DEFENSE_DOWN_II_RATIO, 9);
+
+        expect(counter('fails', 2)).toBeCloseTo(counter('none', 2), 9);
+        expect(counter('lands', 2) / counter('none', 2)).toBeCloseTo(DEFENSE_DOWN_II_RATIO, 9);
+        // Round 1's counter comes before the enemy's first turn: nothing rolled, nothing landed.
+        expect(counter('lands', 1)).toBeCloseTo(counter('none', 1), 9);
     });
 });
