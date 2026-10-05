@@ -2369,11 +2369,9 @@ export interface IntentExecContext {
      *  Keyed `${ownerId}:${abilityId}`; the RateGate fires with the proc's probability on
      *  each reactive draw of the same ability so the proc lands at its true frequency. */
     procChanceGates?: Map<string, RateGate>;
-    /** Live self-HP% per owner (0..100) for drain-time hp-threshold gates. The engine closes over
-     *  the heal target's current/max HP; every OTHER owner reports 100. The player-side closure
-     *  exists in EVERY mode (#415), so a DPS drain-time gate reads the focus's real live HP; only
-     *  a caller that supplies no closure at all (unit contexts) falls back to 100 in
-     *  buildDrainContext. */
+    /** Live self-HP% per owner (0..100) for drain-time hp-threshold gates: each owner's own
+     *  current/max HP, both sides. A caller that supplies no closure at all (unit contexts) falls
+     *  back to 100 in buildDrainContext. */
     selfHpPctFor?: (ownerId: string) => number;
     /** Quixilver R2: owner's shield pool is at or above max HP. Optional — absent (every test
      *  fixture, DPS mode) → buildDrainContext leaves selfShieldFull false, so a drain gate on
@@ -3071,11 +3069,8 @@ function buildDrainContext(ctx: IntentExecContext, ownerId: string) {
         // NO fight-wide enemy-HP reading. Enemy-HP gates that CAN be re-checked per resolved
         // target already are (`perVictimOk`, see splitDrainGateConditions); the rest are honestly
         // unresolvable. Do not reintroduce a scalar here.
-        // Live self-HP% for drain-time hp-threshold gates. The engine closes over the heal
-        // target's current/max HP; every non-tank id reports 100. `healTarget` is anchored in every
-        // mode (#415), so the focus's own reactive hp-threshold gates read its real live HP and can
-        // open in a DPS run too (`dpsFullEngineChannels.test.ts` pins both directions). The
-        // `?? 100` fallback is for callers with no closure, not for DPS mode.
+        // Live self-HP% for drain-time hp-threshold gates: the engine reads each owner's own
+        // current/max HP, both sides. The `?? 100` fallback is for callers with no closure.
         selfHpPct: ctx.selfHpPctFor?.(ownerId) ?? 100,
         // Names only — never folded, no double-fold: the drain owner's `enemy-buff` gate
         // reads the UNION of its opposing side's self-buffs; its `self-debuff` gate reads its OWN

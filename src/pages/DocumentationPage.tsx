@@ -2904,6 +2904,13 @@ const DocumentationPage: React.FC = () => {
                                         teams.
                                     </p>
                                     <p className="text-theme-text mb-2">
+                                        <span className="text-primary">Own-HP Conditions:</span> A
+                                        passive that depends on the ship&apos;s own HP reads that
+                                        ship&apos;s live HP wherever it is placed, on either team:
+                                        Cobalt gains its charge and Out. Damage Up II only at full
+                                        HP, and Makoli repairs only when hit below 40% HP.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
                                         <span className="text-primary">Buff Steal:</span> Skills
                                         that &quot;steal a buff from the target&quot; (Pallas,
                                         Thresh, Tithonus) are now modeled as a dedicated Buff Steal

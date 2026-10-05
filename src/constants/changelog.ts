@@ -68,6 +68,7 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator: Terran Guard now scales with the granting ship's Defense.",
     "Combat simulator: Nuqtu's Core Charge I now stacks once per enemy buff gained.",
     "Combat simulator: Lionheart's round-start Protection now redirects damage from his allies.",
+    "Combat simulator: Cobalt's and Makoli's passives now check their own HP on either team.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

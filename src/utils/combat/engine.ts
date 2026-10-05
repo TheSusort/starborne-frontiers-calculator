@@ -1888,9 +1888,8 @@ interface ReactiveSideCtx {
     ) => void;
     /** Live self-HP% for a same-side drain owner (drain-time hp-threshold gates). Optional at the
      *  type level — absent/undefined → buildDrainContext defaults the gate to 100. runCombat
-     *  always supplies it from bySide(side).selfHpPctFor: player = heal-target HP (and #415
-     *  anchors `healTarget` to the focus in every mode, so it is defined in DPS runs too),
-     *  enemy = 100 for every owner. */
+     *  always supplies it from bySide(side).selfHpPctFor: each owner's own live HP, both
+     *  sides. */
     selfHpPctFor?: (ownerId: string) => number;
     /** Per-side most-buffs opposing-actor resolver (Rhodium). See IntentExecContext. */
     enemyWithMostBuffs?: (ownerId: string) => string | undefined;
@@ -3484,11 +3483,8 @@ export function runCombat(rawInput: CombatEngineInput): {
     // `actorsBySide(side)` is the primitive; built once into cached
     // playerSide/enemySide objects so each field is a stable reference.
     //
-    // Side asymmetries, deliberately: `lowestSpeedIds` keeps the `length === 0 → ∅` guard
-    // (inert for the player side, which always has the attacker); `selfHpPctFor` returns 100 for
-    // every ENEMY owner — there is no per-actor enemy self-HP% read. An enemy owner id can never
-    // equal `healTarget.id` (reservedActorIds forbids it), so the player arm's heal-target read
-    // cannot be reached from the enemy side.
+    // Side asymmetry, deliberately: `lowestSpeedIds` keeps the `length === 0 → ∅` guard
+    // (inert for the player side, which always has the attacker).
     type Side = CombatActor['side'];
 
     const actorsBySide = (side: Side): CombatActor[] =>
@@ -3539,11 +3535,9 @@ export function runCombat(rawInput: CombatEngineInput): {
          *  a side is empty only once every member is DEAD, never because the caller supplied no
          *  roster. Recomputed per gate eval (speed is dynamic). */
         lowestSpeedIds: () => Set<string>;
-        /** Live self-HP% for a same-side drain owner (hp-threshold gates). Player side reads the
-         *  heal target's live HP (every other id → 100); #415 anchors `healTarget` to the focus
-         *  in every mode, so it is defined in DPS mode too. Enemy side returns 100 for every
-         *  owner — there is no per-actor enemy HP read here. Consumed by triggers.ts's drain-time
-         *  `selfHpPct` gate. */
+        /** Live self-HP% of a same-side drain owner (hp-threshold gates): the owner's OWN
+         *  current/max HP, on either side. Consumed by triggers.ts's drain-time `selfHpPct`
+         *  gate. */
         selfHpPctFor?: (ownerId: string) => number;
         /** Same-side ids adjacent to `ownerId` on the board (living, owner excluded). Positional
          *  → board neighbours; non-positional (no positions wired) → all living same-side allies. */
@@ -3654,22 +3648,15 @@ export function runCombat(rawInput: CombatEngineInput): {
                 const min = Math.min(...speeds);
                 return new Set(actors.filter((_, i) => speeds[i] === min).map((a) => a.id));
             },
-            selfHpPctFor:
-                side === 'player'
-                    ? healTarget
-                        ? (ownerId: string): number => {
-                              if (ownerId !== healTarget.id) return 100;
-                              // Same denominator as the cast-path selfHpPct (baseHpFor) so the gate
-                              // flips at the same threshold at cast vs drain time.
-                              const maxHp = baseHpFor(healTarget.id);
-                              if (maxHp <= 0) return 100;
-                              return Math.max(
-                                  0,
-                                  Math.min(100, (healTarget.currentHp / maxHp) * 100)
-                              );
-                          }
-                        : undefined
-                    : (): number => 100,
+            // Every owner reads its OWN live HP, whichever slot and side it is on. Same
+            // denominator as the cast-path selfHpPct (baseHpFor) so the gate flips at the same
+            // threshold at cast vs drain time. An unresolvable owner or a zero max HP reads 100.
+            selfHpPctFor: (ownerId: string): number => {
+                const owner = allActorsById.get(ownerId);
+                const maxHp = baseHpFor(ownerId);
+                if (!owner || maxHp <= 0) return 100;
+                return Math.max(0, Math.min(100, (owner.currentHp / maxHp) * 100));
+            },
             adjacentAllyIdsFor: (ownerId: string): string[] => adjacentAllyIds(ownerId, actors),
             footprintAllyIdsFor: (ownerId: string): string[] | undefined => {
                 const owner = allActorsById.get(ownerId);
@@ -10791,14 +10778,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                         // Live lowest-speed-ally gate. UNCONDITIONAL — with a lone attacker the set
                         // is {attacker}, so it resolves true.
                         isLowestSpeedAllyFor: sideCtx.isLowestSpeedAllyFor,
-                        // Live self-HP% for drain-time hp-threshold gates, sourced per-side from
-                        // sideCtx.selfHpPctFor. Player side: heal-target current/max HP (every
-                        // other id → 100). Enemy side: 100 for every owner — see the side-context
-                        // bundle's own note on that deliberate asymmetry. `healTarget` is anchored
-                        // in every mode (#415), so the player-side closure is always built and a
-                        // DPS drain-time hp-threshold gate reads the focus's REAL live HP rather
-                        // than a hardcoded 100 (both directions pinned by
-                        // `dpsFullEngineChannels.test.ts`'s drain-time gate pair).
+                        // Live self-HP% for drain-time hp-threshold gates: each owner's own
+                        // current/max HP, both sides (`selfHpGateEveryOwner.integration.test.ts`).
                         selfHpPctFor: sideCtx.selfHpPctFor,
                         enemyWithMostBuffs: sideCtx.enemyWithMostBuffs,
                         // Resolve any actor's RAW affinity (combat-wide map, both sides) so
