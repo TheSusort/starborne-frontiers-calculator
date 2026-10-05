@@ -17,6 +17,7 @@ import { createEventBus, type CombatEvent } from '../events';
 import { setupKeyedRng } from '../../calculators/rateAccumulator';
 import { csvAvailable } from '../../../../scripts/lib/shipSkillCsv';
 import { shipDataAvailable } from '../../../../scripts/lib/shipDataSnapshot';
+import { parsePattern } from '../../targetingParser';
 import {
     boardInput,
     NO_KIT,
@@ -83,6 +84,49 @@ const castOnce = (placement: Placement, kit: ShipSkills, enemySecurity: number):
     return out;
 };
 
+/** APEX casts her charged on a Line: the primary (M4, unbeatable security) and a covered enemy
+ *  behind it (M3, security 0). */
+const castOnLine = (
+    placement: Placement
+): Record<'primary' | 'covered', { landed: string[]; resisted: string[] }> => {
+    const apex: BoardUnit = {
+        id: 'apex',
+        kit: apexKit(true),
+        position: 'M4',
+        speed: 300,
+        attack: 1000,
+        hacking: 1e6,
+        hp: 100_000,
+        chargeCount: 3,
+        startCharged: true,
+        pattern: parsePattern('Pattern-Line-Range-1'),
+    };
+    const primary: BoardUnit = {
+        id: 'primary',
+        kit: NO_KIT,
+        position: 'M4',
+        speed: 1,
+        security: 1e9,
+    };
+    const covered: BoardUnit = { id: 'covered', kit: NO_KIT, position: 'M3', speed: 1 };
+    const { input, id } = boardInput(placement, apex, [], [primary, covered], 1);
+    const out = {
+        primary: { landed: [] as string[], resisted: [] as string[] },
+        covered: { landed: [] as string[], resisted: [] as string[] },
+    };
+    const which = (targetId: string) =>
+        targetId === id(primary) ? out.primary : targetId === id(covered) ? out.covered : undefined;
+    const bus = createEventBus();
+    bus.on('debuff-applied', (e: Extract<CombatEvent, { type: 'debuff-applied' }>) => {
+        which(e.targetId)?.landed.push(e.buffName);
+    });
+    bus.on('debuff-resisted', (e: Extract<CombatEvent, { type: 'debuff-resisted' }>) => {
+        which(e.targetId)?.resisted.push(e.buffName);
+    });
+    runCombat({ ...input, bus });
+    return out;
+};
+
 describe.each<Placement>(['player', 'enemy'])('APEX on the %s side', (placement) => {
     it('unshielded APEX: her two debuffs land, their shields arrive, Disable lands', () => {
         const o = castOnce(placement, apexKit(true), 0);
@@ -102,6 +146,17 @@ describe.each<Placement>(['player', 'enemy'])('APEX on the %s side', (placement)
         expect(o.landed).toEqual(['Attack Down II', 'Out. Damage Down II']);
         expect(o.resisted).not.toContain('Disable');
         expect(o.disableControls).toBe(0);
+    });
+
+    it('reverse board: the primary resists, a second struck enemy takes the debuffs — still shielded', () => {
+        // "when AN enemy gets inflicted": the shields come from the covered enemy's landings,
+        // so the Disable clause is attempted on the primary (which then resists it too).
+        const o = castOnLine(placement);
+        expect(o.primary.landed).toEqual([]);
+        expect(o.covered.landed).toEqual(
+            expect.arrayContaining(['Attack Down II', 'Out. Damage Down II'])
+        );
+        expect(o.primary.resisted).toEqual(['Attack Down II', 'Out. Damage Down II', 'Disable']);
     });
 
     it('negative: both debuffs resisted, no shield arrives, the Disable clause is skipped', () => {
