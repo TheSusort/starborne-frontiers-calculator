@@ -88,6 +88,17 @@ export function parseBuffEffects(name: string, description: string): ParsedBuffE
     return effects;
 }
 
+/**
+ * The holder-relative defence percentage a buff carries. An UNPINNED `defenceFlatPctOfCaster`
+ * (Terran Guard picked by hand in a calculator, where no applier exists to snapshot) falls back
+ * to N% of the holder's own defence; once a grant site pins it into `defenceFlat`, the flat value
+ * is the whole effect and this returns nothing for it.
+ */
+export function holderDefencePct(effects: ParsedBuffEffects): number | undefined {
+    if (effects.defense !== undefined) return effects.defense;
+    return effects.defenceFlat === undefined ? effects.defenceFlatPctOfCaster : undefined;
+}
+
 export function isStackable(description: string): { stackable: boolean; maxStacks?: number } {
     if (!/stackable/i.test(description)) {
         return { stackable: false };

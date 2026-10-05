@@ -155,8 +155,10 @@ export interface ParsedBuffEffects {
     /** CONCRETE frozen flat defence (absolute units), materialized at grant time from the
      *  applier's defence (`defenceFlatPctOfCaster`). Added after the percentage fold. */
     defenceFlat?: number;
-    /** SENTINEL — "Defense by N% of the applying unit's Defense" (Terran Guard). Inert in the
-     *  fold; the grant sites resolve it into `defenceFlat` from the applier's defence. */
+    /** SENTINEL — "Defense by N% of the applying unit's Defense" (Terran Guard). The grant sites
+     *  resolve it into `defenceFlat` from the applier's defence; left unresolved (a manual
+     *  calculator pick, no applier) it reads as N% of the holder's own defence
+     *  (`holderDefencePct`). */
     defenceFlatPctOfCaster?: number;
     /** Flat defence = this multiple of the HOLDER's live security (Magnetized Shielding, "10x
      *  Unit Security"). Resolved at every defence fold, so a Security Down moves it. */
