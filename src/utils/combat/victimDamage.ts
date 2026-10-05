@@ -1,6 +1,6 @@
 import { AffinityName } from '../../types/ship';
 import { calculateDamageReduction } from '../autogear/priorityScore';
-import { computeAffinityModifiers } from '../calculators/affinityUtils';
+import { affinityModifiersWithOverrides } from '../calculators/affinityUtils';
 
 /**
  * Pure per-victim hit-damage calculator.
@@ -47,14 +47,15 @@ export interface AttackerDamageScalars {
     outgoingDamageBuffPct: number;
     incomingDamageModifierPct: number;
     defensePenetrationPct: number;
-    /** Attacker affinity; matched against the victim's affinity via computeAffinityModifiers. */
+    /** Attacker affinity; matched against the victim's affinity via
+     *  `affinityModifiersWithOverrides`. */
     attackerAffinity: AffinityName;
     /**
      * Forced-affinity override (offensive). When true, this cast's outgoing hits are
      * forced to affinity ADVANTAGE (+25% damage) against EVERY victim, superseding the real
      * matchup — Wusheng's charged "deals 220% damage with affinity advantage" and the
      * Isha/Nayra 'Offensive Affinity Override' self-buff. Takes precedence over a victim's
-     * defensive override (mirrors playerTurn's `affinityModsVsVictim`). Undefined → real matchup.
+     * defensive override (precedence: `affinityModifiersWithOverrides`). Undefined → real matchup.
      */
     forceAffinityAdvantage?: boolean;
 }
@@ -128,8 +129,8 @@ export interface VictimDefenseProfile {
      * Forced-affinity override (defensive, victim-side). When true, THIS victim carries
      * an 'Defensive Affinity Override' buff (Isha/Nayra) that forces the incoming attacker to
      * affinity DISADVANTAGE (−25% damage) against this victim, superseding the real matchup.
-     * An attacker's `s.forceAffinityAdvantage` still wins over this (mirrors playerTurn's
-     * override precedence). Undefined → real matchup.
+     * An attacker's `s.forceAffinityAdvantage` still wins over this (precedence:
+     * `affinityModifiersWithOverrides`). Undefined → real matchup.
      */
     forceAffinityDisadvantage?: boolean;
 }
@@ -213,16 +214,11 @@ export function victimHitDamageParts(
     // so the engine's Protection cascade can divide by the SAME factor this applies.
     const defenceMitigation = victimDefenceMitigation(v, s.defensePenetrationPct);
 
-    // Per-VICTIM affinity (attacker vs this victim), matching computeAffinityModifiers.
-    // A forced-affinity override supersedes the real matchup — offensive advantage
-    // (attacker-fixed) wins over this victim's defensive disadvantage, both win over the real
-    // matchup. Mirrors playerTurn's `affinityModsVsVictim` precedence so the aggregate and
-    // positional paths agree. No override → real matchup.
-    const affinityDamageModifier = s.forceAffinityAdvantage
-        ? 25
-        : v.forceAffinityDisadvantage
-          ? -25
-          : computeAffinityModifiers(s.attackerAffinity, v.affinity).damageModifier;
+    // Per-VICTIM affinity (attacker vs this victim), forced-affinity overrides included.
+    const affinityDamageModifier = affinityModifiersWithOverrides(s.attackerAffinity, v.affinity, {
+        forceAdvantage: s.forceAffinityAdvantage,
+        forceDisadvantage: v.forceAffinityDisadvantage,
+    }).damageModifier;
     const affinityMult = 1 + affinityDamageModifier / 100;
 
     // Prefer the per-victim incoming-damage debuff when present; fall back to the

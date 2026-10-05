@@ -34,14 +34,53 @@ export function getAffinityMatchup(
  * apply — is not priced here; it is a matchup test at the call site (`getAffinityMatchup(...) !==
  * 'disadvantage'`). See `docs/combat-system.md` §8.
  */
+export interface AffinityModifiers {
+    damageModifier: number;
+    critCap: number;
+    critPenalty: number;
+}
+
+const ADVANTAGE_MODIFIERS: AffinityModifiers = { damageModifier: 25, critCap: 100, critPenalty: 0 };
+const DISADVANTAGE_MODIFIERS: AffinityModifiers = {
+    damageModifier: -25,
+    critCap: 75,
+    critPenalty: 25,
+};
+
 export function computeAffinityModifiers(
     attacker: AffinityName | undefined,
     enemy: AffinityName | undefined
-): { damageModifier: number; critCap: number; critPenalty: number } {
+): AffinityModifiers {
     const matchup = getAffinityMatchup(attacker, enemy);
-    if (matchup === 'advantage') return { damageModifier: 25, critCap: 100, critPenalty: 0 };
-    if (matchup === 'disadvantage') return { damageModifier: -25, critCap: 75, critPenalty: 25 };
+    if (matchup === 'advantage') return { ...ADVANTAGE_MODIFIERS };
+    if (matchup === 'disadvantage') return { ...DISADVANTAGE_MODIFIERS };
     return { damageModifier: 0, critCap: 100, critPenalty: 0 };
+}
+
+/**
+ * One hit's matchup modifiers once the two forced-affinity overrides are applied, in their
+ * precedence order: an attacker forced to ADVANTAGE (Wusheng's charged hit, the attacker's
+ * 'Offensive Affinity Override') beats a victim forcing its attacker to DISADVANTAGE (the victim's
+ * 'Defensive Affinity Override'), and either beats the real matchup. The one place that
+ * precedence is decided — the cast path, a covered AoE victim, a counter and a reactive proc all
+ * resolve through it.
+ */
+export function affinityModifiersWithOverrides(
+    attacker: AffinityName | undefined,
+    victim: AffinityName | undefined,
+    overrides: { forceAdvantage?: boolean; forceDisadvantage?: boolean }
+): AffinityModifiers {
+    if (overrides.forceAdvantage) return { ...ADVANTAGE_MODIFIERS };
+    if (overrides.forceDisadvantage) return { ...DISADVANTAGE_MODIFIERS };
+    return computeAffinityModifiers(attacker, victim);
+}
+
+/**
+ * The crit rate (0..1) a hit rolls with: the attacker's uncapped crit total less the matchup's
+ * penalty, clamped to [0, cap].
+ */
+export function affinityCappedCritRate(uncappedCrit: number, mods: AffinityModifiers): number {
+    return Math.min(mods.critCap, Math.max(0, uncappedCrit - mods.critPenalty)) / 100;
 }
 
 /**

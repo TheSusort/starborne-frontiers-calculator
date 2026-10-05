@@ -3673,10 +3673,17 @@ export function victimSelfBuffs(
     const timed = statusEngine
         .timedAbilityStatuses('self', victimId)
         .map((s) => payloadToSelectedBuff(s.payload));
-    const active = statusEngine
-        .activeAbilityStatuses('self', () => NEUTRAL_NAMES_CTX, victimId)
+    return [...scheduled, ...timed, ...selfAuraBuffs(statusEngine, victimId)];
+}
+
+/** An actor's OWN aura and accumulating self statuses (Centurion's Core Charge stacks, an
+ *  always-active passive buff), read at the NEUTRAL ctx — the third self channel, which the
+ *  status-mode `foldActorBuffTotals` leaves out. Shared by `victimSelfBuffs` and the opt-in
+ *  third layer of `foldActorBuffTotals`, so the two read one list. */
+export function selfAuraBuffs(statusEngine: StatusEngine, actorId: string): SelectedGameBuff[] {
+    return statusEngine
+        .activeAbilityStatuses('self', () => NEUTRAL_NAMES_CTX, actorId)
         .map((s) => payloadToSelectedBuff(s.payload));
-    return [...scheduled, ...timed, ...active];
 }
 
 /** The id of the actor that applied an active 'Provoke' debuff to `actorId`, or undefined

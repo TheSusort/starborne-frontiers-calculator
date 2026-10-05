@@ -183,6 +183,35 @@ describe('importPlayerData', () => {
     });
 
     // -----------------------------------------------------------------------
+    // Guaranteed crit: Tormenter's first passive (refit 0) and Asphodel's refit-2 passive both
+    // read "This Unit's attacks always critically hit".
+    // -----------------------------------------------------------------------
+    describe('guaranteed crit', () => {
+        const totalCrit = async (name: string, refit: number): Promise<number> => {
+            const result = await importPlayerData(
+                makeExportData({ Units: [makeUnit({ Name: name, Refit: refit })] })
+            );
+            const ship = result.data!.ships[0];
+            return (
+                ship.baseStats.crit +
+                ship.refits
+                    .flatMap((r) => r.stats)
+                    .filter((s) => s.name === 'crit')
+                    .reduce((sum, s) => sum + s.value, 0)
+            );
+        };
+
+        it.each([0, 1, 2])('an owned Tormenter at refit %i crits every hit', async (refit) => {
+            expect(await totalCrit('Tormenter', refit)).toBe(100);
+        });
+
+        it('an owned Asphodel below refit 2 keeps its own crit', async () => {
+            expect(await totalCrit('Asphodel', 1)).toBe(50);
+            expect(await totalCrit('Asphodel', 2)).toBe(100);
+        });
+    });
+
+    // -----------------------------------------------------------------------
     // Ship deduplication
     // -----------------------------------------------------------------------
     describe('ship deduplication', () => {

@@ -14,7 +14,7 @@ import {
     FOLD_SHADOW_CHANNELS,
     OUTGOING_CHANNELS,
 } from './buffTotals';
-import { victimOwnEnemyFamilies } from './triggers';
+import { selfAuraBuffs, victimOwnEnemyFamilies } from './triggers';
 
 // ---------------------------------------------------------------------------
 // This module exposes TWO effective-stat accessors with deliberately different
@@ -54,8 +54,9 @@ export interface EffectiveStats {
 }
 
 /**
- * The two SELF-sourced buff lists `foldActorBuffTotals` folds into its totals: the scheduled
- * self-buffs (expanded through `selfBuffLookup`) and the timed `'self'` ability statuses.
+ * The SELF-sourced buff lists `foldActorBuffTotals` folds into its totals: the scheduled
+ * self-buffs (expanded through `selfBuffLookup`), the timed `'self'` ability statuses and, only
+ * when `includeAuras` is set, the aura/accumulating `'self'` statuses (`selfAuraBuffs`).
  *
  * WHY IT IS ITS OWN FUNCTION. A cross-store shadowing consumer must compare an enemy-applied
  * family against THE VERY LIST the totals were built from — `shadowedDelta` subtracts the self
@@ -66,8 +67,13 @@ export interface EffectiveStats {
 function selfSourcedBuffs(
     statusEngine: StatusEngine,
     selfBuffLookup: Map<string, SelectedGameBuff[]>,
-    actorId: string
-): { scheduledSelfBuffs: SelectedGameBuff[]; timedEffects: SelectedGameBuff[] } {
+    actorId: string,
+    includeAuras = false
+): {
+    scheduledSelfBuffs: SelectedGameBuff[];
+    timedEffects: SelectedGameBuff[];
+    auraEffects: SelectedGameBuff[];
+} {
     const scheduledSelfBuffs = statusEngine.snapshot(actorId).activeSelfBuffs.flatMap((ab) => {
         const bufs = selfBuffLookup.get(ab.buffName) ?? [];
         return ab.stacks !== undefined
@@ -79,26 +85,36 @@ function selfSourcedBuffs(
     const timedEffects = statusEngine
         .timedAbilityStatuses('self', actorId)
         .map((s) => payloadToSelectedBuff(s.payload));
-    return { scheduledSelfBuffs, timedEffects };
+    const auraEffects = includeAuras ? selfAuraBuffs(statusEngine, actorId) : [];
+    return { scheduledSelfBuffs, timedEffects, auraEffects };
 }
+
+/** Every list `selfSourcedBuffs` returned, in one array — the self side a shadowing comparison
+ *  must be handed (see `foldActorBuffTotals`). */
+const allSelfSourced = (lists: ReturnType<typeof selfSourcedBuffs>): SelectedGameBuff[] => [
+    ...lists.scheduledSelfBuffs,
+    ...lists.timedEffects,
+    ...lists.auraEffects,
+];
 
 /**
  * Sum an actor's live self-buff totals from the same two sources foldSpeedBuffPct uses
  * (scheduled self-buffs + timed ability statuses, via `selfSourcedBuffs`). Generalizes
  * foldSpeedBuffPct to the full calculateBuffTotals shape.
+ *
+ * `includeAuras` adds the third self channel — aura and accumulating statuses at the NEUTRAL ctx
+ * (`selfAuraBuffs`). Only `effectiveOutgoingStatsOf` sets it: an attack thrown outside the turn
+ * loop has no cast to gate those statuses against, and the turn loop folds them itself.
  */
 export function foldActorBuffTotals(
     statusEngine: StatusEngine,
     selfBuffLookup: Map<string, SelectedGameBuff[]>,
-    actorId: string
+    actorId: string,
+    opts: { includeAuras?: boolean } = {}
 ): ReturnType<typeof calculateBuffTotals> {
-    const { scheduledSelfBuffs, timedEffects } = selfSourcedBuffs(
-        statusEngine,
-        selfBuffLookup,
-        actorId
-    );
-    const scheduled = calculateBuffTotals(toSimBuffs(scheduledSelfBuffs));
-    const timed = calculateBuffTotals(toSimBuffs(timedEffects));
+    const lists = selfSourcedBuffs(statusEngine, selfBuffLookup, actorId, opts.includeAuras);
+    const scheduled = calculateBuffTotals(toSimBuffs(lists.scheduledSelfBuffs));
+    const timed = calculateBuffTotals(toSimBuffs([...lists.timedEffects, ...lists.auraEffects]));
     // #398 — THIRD SOURCE: this actor's OWN per-victim ENEMY store, i.e. the debuffs the opposing
     // side applied TO it. Without it, `Crit Rate Down`, `Crit Power Down`, `Speed Down`,
     // `Hacking Down` and `Security Down` land in that store, display, tick down and change
@@ -124,7 +140,7 @@ export function foldActorBuffTotals(
     // `enemyAppliedStatChannels.test.ts`.
     const { delta: enemyDelta } = shadowedDelta(
         victimOwnEnemyFamilies(statusEngine, actorId, FOLD_SHADOW_CHANNELS),
-        [...scheduledSelfBuffs, ...timedEffects],
+        allSelfSourced(lists),
         FOLD_SHADOW_CHANNELS
     );
     // Field-by-field sum is intentional: explicit enumeration preserves type-safety over a generic key reduce.
@@ -165,7 +181,7 @@ export function effectiveStatsOf(
     };
 }
 
-/** What an attack THROWN OUTSIDE THE TURN LOOP needs on the two outgoing-damage channels. */
+/** What an attack THROWN OUTSIDE THE TURN LOOP needs from its owner. */
 export interface EffectiveOutgoingStats {
     /** Effective attack — base × (1 + attackBuff%) + attackFlat, with the shadowed enemy-applied
      *  `Attack Down` delta folded into the same additive percentage term the turn loop uses. */
@@ -174,11 +190,27 @@ export interface EffectiveOutgoingStats {
      *  the shadowed enemy-applied `Out. Damage Down` delta. Feeds `victimHitDamageParts`'
      *  `outgoingDamageBuffPct` directly. */
     outgoingDamageBuffPct: number;
+    /** base crit + critBuff (enemy `Crit Rate Down` shadowed in), UNCAPPED — the consumer applies
+     *  the affinity cap against its victim. */
+    crit: number;
+    /** base crit power + critDamageBuff (enemy `Crit Power Down` shadowed in). */
+    critDamage: number;
+    /** base defence penetration + every self-sourced penetration buff (Core Charge's +1% per
+     *  stack), i.e. the effective penetration a hit carries. */
+    defensePenetration: number;
 }
 
 /**
  * #395 — DAMAGE-mode outgoing stats for an attack thrown OUTSIDE the turn loop: a counter-attack
- * and a reactive proc (`applyCounterAttack` / `applyReactiveDamage` in engine.ts).
+ * and a reactive proc (`applyCounterAttack` / `applyReactiveDamage` in engine.ts). It is the ONE
+ * owner-side read those hits take — attack, outgoing channel, crit, crit power and penetration
+ * all come from the same three self lists.
+ *
+ * THREE self channels, not the status-mode two: scheduled, timed AND the aura/accumulating
+ * statuses (`selfAuraBuffs`), because the cast path folds all three (`abilitySelfEffects`) and a
+ * retaliation must carry what the owner's own cast carries — Centurion's Core Charge stacks are
+ * accumulating. The aura channel is read at the NEUTRAL ctx (a reactive hit has no cast to gate
+ * against), the same approximation `victimSelfBuffs` documents.
  *
  * WHY A THIRD ACCESSOR. Those two paths cannot use `effectiveDamageStatsOf`: that one wants
  * RESOLVED ingredients the turn loop owns (gated auras, the firing skill's modifier channel,
@@ -203,7 +235,7 @@ export interface EffectiveOutgoingStats {
  * of `effectiveDamageStatsOf` (see its `args.enemyAppliedFamilies` block); calling this there
  * would double-count. It is also NOT a general replacement for `effectiveStatsOf` — the ~20 other
  * engine readers of `.attack`/`.defence` are not throwing an attack and must keep the status-mode
- * fold. Two channels, two call sites, deliberately.
+ * fold. Two call sites, deliberately.
  *
  * Team-agnostic for free, for the same reason `foldActorBuffTotals` is: the per-victim enemy store
  * is keyed by the holder's id regardless of side, and both call sites run for a player or an enemy
@@ -215,24 +247,27 @@ export function effectiveOutgoingStatsOf(
     selfBuffLookup: Map<string, SelectedGameBuff[]>,
     actor: CombatActor
 ): EffectiveOutgoingStats {
-    const t = foldActorBuffTotals(statusEngine, selfBuffLookup, actor.id);
-    const { scheduledSelfBuffs, timedEffects } = selfSourcedBuffs(
-        statusEngine,
-        selfBuffLookup,
-        actor.id
+    const t = foldActorBuffTotals(statusEngine, selfBuffLookup, actor.id, { includeAuras: true });
+    const selfLists = allSelfSourced(
+        selfSourcedBuffs(statusEngine, selfBuffLookup, actor.id, true)
     );
     // The self list is EXACTLY what `foldActorBuffTotals` summed above, so `shadowedDelta`'s
     // subtraction can only ever remove a contribution the totals actually hold.
     const { attackPct, outgoingDamagePct } = shadowedOutgoingDelta(
         victimOwnEnemyFamilies(statusEngine, actor.id, OUTGOING_CHANNELS),
-        [...scheduledSelfBuffs, ...timedEffects]
+        selfLists
     );
+    const s = actor.stats;
     return {
         // Same shape as `effectiveStatsOf.attack`, with the delta added to the SAME additive
         // percentage term — mirroring the turn loop's `scheduledTotals.attackBuff += delta.attack`
         // rather than post-multiplying, which would compound instead of adding.
-        attack: actor.stats.attack * (1 + (t.attackBuff + attackPct) / 100) + t.attackFlatBuff,
+        attack: s.attack * (1 + (t.attackBuff + attackPct) / 100) + t.attackFlatBuff,
         outgoingDamageBuffPct: t.outgoingDamageBuff + outgoingDamagePct,
+        crit: s.crit + t.critBuff,
+        critDamage: s.critDamage + t.critDamageBuff,
+        defensePenetration:
+            s.defensePenetration + toDotAndPenModifiers(selfLists, []).defensePenetrationBuff,
     };
 }
 
