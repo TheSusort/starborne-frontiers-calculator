@@ -3092,7 +3092,10 @@ const DocumentationPage: React.FC = () => {
                                         more debuffs&rdquo; Stasis (Asphyxiator&apos;s and
                                         Anemone&apos;s gates likewise), and a resisted one does not.
                                         A passive reacting to the hit (Bayah) counts only the
-                                        debuffs from before the skill.
+                                        debuffs from before the skill. APEX&apos;s own passive
+                                        shields arrive as each debuff lands, so her charged
+                                        skill&apos;s &ldquo;If this Unit has an active shield&rdquo;
+                                        Disable lands once an earlier debuff in it has landed.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Team Ships:</span> Pick a

@@ -3188,13 +3188,44 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     ): ConditionContext =>
         status.sourceSlot !== action || status.perHit === true
             ? c
-            : castLandingsOverlay(
-                  c,
-                  victimId,
-                  status.conditions,
-                  status.afterDotClauseIds,
-                  timedEnemyBySlot.indexOf(status)
+            : castSelfShieldOverlay(
+                  castLandingsOverlay(
+                      c,
+                      victimId,
+                      status.conditions,
+                      status.afterDotClauseIds,
+                      timedEnemyBySlot.indexOf(status)
+                  ),
+                  status
               );
+    /** The caster's own unconditional "gains a shield … when an enemy gets inflicted with a debuff"
+     *  reactions (APEX's passive). */
+    const debuffLandingSelfShields = runtime.reactiveAbilities.filter(
+        ({ ability: a }) =>
+            a.type === 'shield' &&
+            a.config.type === 'shield' &&
+            a.config.pct > 0 &&
+            a.target === 'self' &&
+            a.trigger === 'on-enemy-debuff-inflicted' &&
+            a.conditions.length === 0 &&
+            a.procChance === undefined
+    );
+    /**
+     * `c` with the caster's shield answered as of THIS clause (owner ruling R47, written order):
+     * every debuff an earlier-written clause of this cast landed on any enemy has already given
+     * the caster her passive's shield, so "If this Unit has an active shield" reads true. APEX's
+     * charged: Attack Down II lands (3% shield), Out. Damage Down II lands (3%), then the Disable
+     * clause sees a shielded APEX. The shields themselves are granted when the reaction drains.
+     */
+    const castSelfShieldOverlay = (c: ConditionContext, status: TimedStatus): ConditionContext => {
+        if (c.selfShielded || debuffLandingSelfShields.length === 0) return c;
+        if (!status.conditions.some((cond) => cond.subject === 'self-shield')) return c;
+        const at = timedEnemyBySlot.indexOf(status);
+        for (const names of castLandedNamesById.values())
+            for (const landedAt of names.values())
+                if (landedAt < at) return { ...c, selfShielded: true };
+        return c;
+    };
 
     // §4.5 Direct-damage Stasis break. Fires AFTER scheduled debuffs (sourceFired)
     // but BEFORE the ability timed-debuff loop, so a Stasis re-application from THIS attack's
@@ -4410,7 +4441,15 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 const victimCtx = paired
                     ? statusGateOverlay(recipientGateCtx(victim), victim.id, paired)
                     : recipientGateCtx(victim);
-                if (conditionsMet(ctrl.conditions, withVictimHalf(ctx, victimCtx)))
+                // The caster half comes from `ctx`, so the caster's same-cast shield is re-read
+                // the way the status's gate read it (`castSelfShieldOverlay`).
+                const casterAndVictim = withVictimHalf(ctx, victimCtx);
+                if (
+                    conditionsMet(
+                        ctrl.conditions,
+                        paired ? castSelfShieldOverlay(casterAndVictim, paired) : casterAndVictim
+                    )
+                )
                     emitControl(effect, id);
             }
             continue;
