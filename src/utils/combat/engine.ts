@@ -158,7 +158,6 @@ import {
 } from './playerTurn';
 import {
     Intent,
-    MAX_INTENT_GENERATIONS,
     MAX_REACTION_CHAIN_DEPTH,
     reactionChainProbe,
     buildActorConditionContext,
@@ -5396,7 +5395,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         //     not synchronous — the bomb detonates on a LATER round, and its detonation damage
         //     re-enters this proc through the `'detonation'` channel. So the cycle is
         //     leech → bomb → (next round) detonation → leech, bounded by the fight's round count,
-        //     by Ruiner's `oncePerRoundPerEnemy` cap on the bomb, and by MAX_INTENT_GENERATIONS.
+        //     by Ruiner's `oncePerRoundPerEnemy` cap on the bomb, and by MAX_REACTION_CHAIN_DEPTH.
         //  4. A reaction's own repair emits this event from the EXECUTOR, not from here, and that
         //     path's guard (an ability never observes its own output, keyed on `sourceAbilityId`)
         //     is untouched by this emit.
@@ -11044,24 +11043,11 @@ export function runCombat(rawInput: CombatEngineInput): {
             });
         };
 
-        // Drain ONE batch of intents FIFO with one side's ctx — the phase drains' per-owner groups
-        // and the pre-cast grant drain. Executed intents may enqueue more into this same array;
-        // those form the next generation. MAX_INTENT_GENERATIONS converts a pathological
-        // self-feeding loop into a thrown error rather than a hang. Every other drain is
-        // `drainReactions`, which orders both sides' queues by event and turn order.
-        const drainQueue = (queue: Intent[], sideCtx: ReactiveSideCtx): void => {
-            let generation = 0;
-            while (queue.length > 0) {
-                if (++generation > MAX_INTENT_GENERATIONS) {
-                    throw new Error(
-                        `combat round ${r}: intent queue exceeded MAX_INTENT_GENERATIONS ` +
-                            `(${MAX_INTENT_GENERATIONS}) — a reactive trigger is self-amplifying without bound`
-                    );
-                }
-                // Snapshot this generation's batch; new enqueues during execution run next pass.
-                const batch = queue.splice(0, queue.length);
-                for (const intent of batch) runQueuedIntent(intent, sideCtx);
-            }
+        // Run ONE detached batch of intents in order with one side's ctx — a phase owner's group
+        // (`drainInTurnOrder`) or the pre-cast grant batch. What they wake lands on the side
+        // queues, which `drainReactions` drains; MAX_REACTION_CHAIN_DEPTH bounds those chains.
+        const drainQueue = (batch: Intent[], sideCtx: ReactiveSideCtx): void => {
+            for (const intent of batch) runQueuedIntent(intent, sideCtx);
         };
 
         // Per-round state — reset each round (declared inside the round loop).

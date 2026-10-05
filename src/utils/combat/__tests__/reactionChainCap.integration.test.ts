@@ -20,7 +20,7 @@ import { runSeededBattle } from '../../simulator/seededRuns';
 import { buildTraceShip } from '../../../../scripts/lib/traceShipFactory';
 import { csvAvailable } from '../../../../scripts/lib/shipSkillCsv';
 import { shipDataAvailable } from '../../../../scripts/lib/shipDataSnapshot';
-import { MAX_INTENT_GENERATIONS, MAX_REACTION_CHAIN_DEPTH, reactionChainProbe } from '../triggers';
+import { MAX_REACTION_CHAIN_DEPTH, reactionChainProbe } from '../triggers';
 import type { BattleSimulationInput } from '../../calculators/battleSimulator';
 
 beforeAll(() => {
@@ -74,11 +74,6 @@ const probe = (input: BattleSimulationInput, seed: number) => {
 };
 
 describe('the reaction-chain cap', () => {
-    it('sits below the generation backstop, so a capped loop never throws', () => {
-        // A drain runs one generation per chain step, plus one for the intents the cap drops.
-        expect(MAX_REACTION_CHAIN_DEPTH + 2).toBeLessThanOrEqual(MAX_INTENT_GENERATIONS);
-    });
-
     it('is never reached by the real-kit fingerprint battles', () => {
         const reached: string[] = [];
         for (const name of corpusNames()) {

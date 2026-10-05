@@ -91,13 +91,6 @@ import type { ActorTargetingStatus } from './positionalBinding';
  *  AbilityTrigger doc note). */
 export { LIVE_TRIGGERS };
 
-/** Safety backstop far above any real follow-up chain — not a tuned value. A
- *  drain that fans out more than this many generations is a pathological loop;
- *  the engine throws naming the constant rather than hanging. Unreachable while
- *  `MAX_REACTION_CHAIN_DEPTH` caps every chain below it: one generation of a drain
- *  is one step of chain depth. */
-export const MAX_INTENT_GENERATIONS = 10;
-
 /**
  * The runaway cap on a chain of reactions (owner ruling 66: chained reactions DO trigger, a cap
  * stops only runaway loops). A reaction to a cast or a phase event has depth 0; a reaction to
@@ -107,7 +100,7 @@ export const MAX_INTENT_GENERATIONS = 10;
  *
  * Sized from a measurement, not a guess: `reactionChainCap.integration.test.ts` pins that the
  * real-kit fingerprint battles never reach it and that the loop boards do and still complete.
- * Kept below MAX_INTENT_GENERATIONS so a capped loop never reaches that throw.
+ * A capped loop is cut off, not thrown: the fight goes on without the dropped reactions.
  */
 export const MAX_REACTION_CHAIN_DEPTH = 8;
 
@@ -1002,7 +995,7 @@ export function registerReactiveListeners(args: {
                         // `inDebuffInflictedReactionChain` breaks a self-chain: Warden's "when this
                         // Unit inflicts a Debuff → Out. Damage Down II" follow-up is ITSELF a debuff,
                         // and without the guard its own debuff-applied would re-enter this listener
-                        // every generation until MAX_INTENT_GENERATIONS throws. The guard skips only
+                        // every step until MAX_REACTION_CHAIN_DEPTH cuts it off. The guard skips only
                         // the abilities already in the infliction's reaction chain, so the owner's
                         // OTHER on-debuff-inflicted abilities still see a reactive infliction
                         // (Insidiousness on Warden's Out. Damage Down II), and debuffs from
@@ -1087,7 +1080,7 @@ export function registerReactiveListeners(args: {
                         // ally). `viaAllyDebuffInflictedReaction` + `sourceId === ownerId` breaks a
                         // SELF-chain: an on-ally-debuff-inflicted reaction whose own application is
                         // itself a qualifying infliction would otherwise re-enter this same listener
-                        // every generation until MAX_INTENT_GENERATIONS throws (the corrosionToAcidicDecay
+                        // every step until MAX_REACTION_CHAIN_DEPTH cuts it off (the corrosionToAcidicDecay
                         // Belladonna case chains fine — her convert-dot executor never emits a new
                         // debuff-applied/dot-applied, so it never reaches this guard at all). Does
                         // NOT bound a two-ship ping-pong (A's reaction waking B's, B's waking A's
@@ -1450,7 +1443,7 @@ export function registerReactiveListeners(args: {
                     //  3. The corpus has exactly one (Chimei's R2 redirect, #435), and the guard
                     //     below excludes an ability from its OWN output — which kills the only
                     //     cycle that exists, the length-1 self-loop.
-                    //  4. MAX_INTENT_GENERATIONS backstops any future second one.
+                    //  4. MAX_REACTION_CHAIN_DEPTH backstops any future second one.
                     //
                     // The guard is deliberately SELF-exclusion and not an emit suppression: owner
                     // ruling 2026-08-30 is that the redirect's own over-repair must still be
@@ -2123,7 +2116,7 @@ export function registerReactiveListeners(args: {
                     // intents are the on-enemy-repaired riders (Ruiner's Bomb debuff + Overload
                     // self-buff, Zosimos's charge removal, Amartya's Defense Shred) — none of them
                     // heal, so none can emit another reactive-heal-performed. The generic
-                    // MAX_INTENT_GENERATIONS backstop covers any future rider that could.
+                    // MAX_REACTION_CHAIN_DEPTH backstop covers any future rider that could.
                     bus.on('reactive-heal-performed', (e) =>
                         onEnemyRepair(
                             e.casterId,
@@ -5573,7 +5566,7 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
             // and feeds the debuff-inflicted listeners' dot-applied arms. Marked per trigger
             // exactly as the sibling `debuff` branch marks its debuff-applied: without the mark,
             // an owner's own reactive DoT (this landDotOn call) would re-wake the very reaction
-            // that queued it and loop until MAX_INTENT_GENERATIONS throws.
+            // that queued it and loop until MAX_REACTION_CHAIN_DEPTH cuts it off.
             ctx.bus.emit({
                 type: 'dot-applied',
                 sourceId: intent.ownerId,
@@ -6161,7 +6154,7 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // #434, on-own-repair-to-ally, which re-subscribes to this same event so a repair
         // performed from a LIVE TRIGGER also reaches Font of Power/Abundant Renewal. That
         // listener carries its own termination argument (self-exclusion guard on its own output +
-        // MAX_INTENT_GENERATIONS backstop) — chain-safety still holds, but it is argued there, not
+        // MAX_REACTION_CHAIN_DEPTH backstop) — chain-safety still holds, but it is argued there, not
         // here. Any FUTURE subscriber to this event must re-establish termination for itself the
         // same way; do not assume it from this comment. Stamped duringTurnOf via ctx.bus so it
         // nests under the triggering turn.

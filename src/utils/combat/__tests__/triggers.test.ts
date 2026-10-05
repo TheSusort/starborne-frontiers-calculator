@@ -3,7 +3,7 @@ import { setKeyedRng, resetRateGateRng } from '../../calculators/rateAccumulator
 import { runCombat, CombatEngineInput, TeamActorEngineInput } from '../engine';
 import { createEventBus, CombatEvent } from '../events';
 import {
-    MAX_INTENT_GENERATIONS,
+    MAX_REACTION_CHAIN_DEPTH,
     registerReactiveListeners,
     executeIntent,
     Intent,
@@ -825,7 +825,7 @@ describe('Phase 3 reactive triggers', () => {
     // its id into its own debuff-applied (`debuffInflictedReactionChain`) and the
     // on-debuff-inflicted listener skips it for that same ability, so the chain is BOUNDED (Def
     // Down applies from the cast-path Seed Down infliction, then does NOT feed itself). No throw. The generation-cap backstop still exists for genuinely
-    // pathological loops (see the separate 'exposes a finite MAX_INTENT_GENERATIONS backstop' test).
+    // pathological loops (see the separate 'exposes a finite MAX_REACTION_CHAIN_DEPTH backstop' test).
     // ----------------------------------------------------------------------
     it('scenario 11: a self-amplifying on-debuff-inflicted debuff is now BOUNDED (W7 self-chain guard), no throw', () => {
         const loopSkills = (): ShipSkills => ({
@@ -959,10 +959,10 @@ describe('Phase 3 reactive triggers', () => {
         }
     });
 
-    // Determinism corollary: the MAX_INTENT_GENERATIONS constant is a finite backstop.
-    it('exposes a finite MAX_INTENT_GENERATIONS backstop', () => {
-        expect(MAX_INTENT_GENERATIONS).toBeGreaterThan(0);
-        expect(Number.isFinite(MAX_INTENT_GENERATIONS)).toBe(true);
+    // Determinism corollary: the MAX_REACTION_CHAIN_DEPTH constant is a finite backstop.
+    it('exposes a finite MAX_REACTION_CHAIN_DEPTH backstop', () => {
+        expect(MAX_REACTION_CHAIN_DEPTH).toBeGreaterThan(0);
+        expect(Number.isFinite(MAX_REACTION_CHAIN_DEPTH)).toBe(true);
     });
 
     // ----------------------------------------------------------------------

@@ -15,7 +15,7 @@
  * which nothing subscribed to. So every repair that arrives as a REACTION was invisible to Ruiner.
  * Fixed by subscribing `on-enemy-repaired` to that event too; it cannot reopen the chain because
  * no on-enemy-repaired rider in the corpus heals (Bomb debuff, Overload self-buff, charge removal,
- * Defense Shred), and MAX_INTENT_GENERATIONS backstops any future one that does.
+ * Defense Shred), and MAX_REACTION_CHAIN_DEPTH backstops any future one that does.
  *
  * SECOND FINDING (same log): Heliodor's "When directly damaged, this Unit reduces the duration of
  * all active Debuffs on itself by 1 turn and repairs itself for 8%" showed the repair but never the
