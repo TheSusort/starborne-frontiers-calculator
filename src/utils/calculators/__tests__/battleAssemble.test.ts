@@ -365,7 +365,7 @@ describe('assembleBattleResult — death + outcome + trim', () => {
         expect(result.rounds.map((r) => r.round)).toEqual([1, 2, 3]);
     });
 
-    it('returns draw at numRounds when neither side fully wiped', () => {
+    it('returns an enemy win at numRounds when neither side fully wiped (the round limit is a defeat)', () => {
         const events: CombatEvent[] = [
             { type: 'ship-destroyed', actorId: 'enemy-front', round: 2 },
         ];
@@ -375,7 +375,7 @@ describe('assembleBattleResult — death + outcome + trim', () => {
             roster: roster(),
             numRounds: 3,
         });
-        expect(result.outcome.winner).toBe('draw');
+        expect(result.outcome.winner).toBe('enemy');
         expect(result.outcome.lastRound).toBe(3);
         expect(result.rounds.map((r) => r.round)).toEqual([1, 2, 3]);
     });

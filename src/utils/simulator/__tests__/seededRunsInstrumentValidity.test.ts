@@ -117,11 +117,11 @@ describe('simulator instrument validity (buildTeam -> runSeedSet)', () => {
         // still has room to move if the override were raised further.
         expect(variantDealt).toBeLessThan(PUNCHING_BAG_HP * 0.1);
 
-        // Win count is expected to saturate to all-draw by design (the enemy never dies inside
-        // the round cap and never kills the player back) — damage dealt is the instrument here,
-        // not the win tally.
-        expect(baseline.agg.wins.draw).toBe(SEED_COUNT);
-        expect(variant.agg.wins.draw).toBe(SEED_COUNT);
+        // Win count is expected to saturate by design (the enemy never dies inside the round cap
+        // and never kills the player back, so every seed reaches the round limit — an enemy win)
+        // — damage dealt is the instrument here, not the win tally.
+        expect(baseline.agg.wins.enemy).toBe(SEED_COUNT);
+        expect(variant.agg.wins.enemy).toBe(SEED_COUNT);
     });
 
     it('moves mean damage dealt down when attack is overridden down (both directions, not just up)', () => {

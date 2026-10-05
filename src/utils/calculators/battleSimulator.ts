@@ -249,6 +249,8 @@ export interface BattleRound {
 export interface BattleResult {
     /** Trimmed at termination (no rounds after outcome.lastRound). */
     rounds: BattleRound[];
+    /** `draw` only for a same-round mutual wipe (or a roster missing a side); the round limit
+     *  with both sides alive is `enemy`. See `assembleBattleResult`. */
     outcome: { winner: 'player' | 'enemy' | 'draw'; lastRound: number };
     roster: Array<{ actorId: string; side: 'player' | 'enemy'; name: string; position: Position }>;
     /**
@@ -384,6 +386,10 @@ const _checkLogSuperset: _AssertLogSupersetOfAssembled = true;
  * against empty sides (a side with zero members is never treated as "wiped"), so a
  * degenerate single-side roster fails safe to `draw` at numRounds rather than awarding
  * a spurious winner at round 1.
+ *
+ * Outcome: the first round that wipes a side decides it (both wiped in that round → `draw`).
+ * Reaching `numRounds` with both sides still alive is an ENEMY win — the round limit is a
+ * defeat (docs/combat-system.md §1, "Round limit exceeded → Defeat").
  */
 export function assembleBattleResult(args: {
     events: CombatEvent[];
@@ -470,7 +476,11 @@ export function assembleBattleResult(args: {
 
     const rounds: BattleRound[] = [];
     let lastRound = numRounds;
-    let winner: 'player' | 'enemy' | 'draw' = 'draw';
+    // Overwritten by the first wipe below; standing at the loop's end means the round limit ran
+    // out with both sides alive, which the enemy wins. An empty side has nobody to win or lose.
+    const bothSidesFielded =
+        roster.some((r) => r.side === 'player') && roster.some((r) => r.side === 'enemy');
+    let winner: 'player' | 'enemy' | 'draw' = bothSidesFielded ? 'enemy' : 'draw';
 
     for (let round = 1; round <= numRounds; round++) {
         const roundEvents = events.filter((e) => 'round' in e && e.round === round);
@@ -767,7 +777,8 @@ export interface BattlePlacement {
 export interface BattleSimulationInput {
     playerTeam: BattlePlacement[];
     enemyTeam: BattlePlacement[];
-    /** Fixed round cap. Default 30. The result is trimmed at the first wipe. */
+    /** Fixed round cap. Default 30. The result is trimmed at the first wipe; reaching the cap
+     *  with both sides alive is an enemy win. */
     rounds?: number;
     /** Player-side squad leader (pre-fight faction aura). Absent → no pre-fight change. */
     playerSquadLeader?: SquadLeaderSelection;

@@ -142,7 +142,7 @@ const simulateBattleInput = z
 export const simulateBattle: McpTool<z.output<typeof simulateBattleInput>> = {
     name: 'simulate_battle',
     description:
-        "Fight your ships against enemies in the planner's combat simulator, with gear, implants, refits and engineering applied as the Simulator page does. Enemies are your own ships or reference ships by name (level 60, r0 or fully refitted, no gear); your engineering applies to both sides. Returns win/loss counts, rounds, and each ship's mean damage dealt, taken and healing done, plus each individual fight's seed, winner and length — pick one from there to replay in full with battle_log." +
+        "Fight your ships against enemies in the planner's combat simulator, with gear, implants, refits and engineering applied as the Simulator page does. Enemies are your own ships or reference ships by name (level 60, r0 or fully refitted, no gear); your engineering applies to both sides. Returns win/loss counts (a fight still going at the round limit is an enemy win; a draw is both teams wiped in the same round), rounds, and each ship's mean damage dealt, taken and healing done, plus each individual fight's seed, winner and length — pick one from there to replay in full with battle_log." +
         CAVEATS,
     input: simulateBattleInput,
     run: async (board, ctx) => {

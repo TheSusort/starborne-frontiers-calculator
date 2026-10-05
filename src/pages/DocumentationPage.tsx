@@ -4224,6 +4224,11 @@ const DocumentationPage: React.FC = () => {
                                         &quot;New seed&quot; to get a fresh one
                                     </li>
                                     <li>
+                                        A fight lasts at most 30 rounds. If both teams still have a
+                                        ship standing when the last round ends, the enemy wins, as a
+                                        timeout is a defeat in the game
+                                    </li>
+                                    <li>
                                         Raise the run count to repeat the fight over that many
                                         consecutive seeds and see an aggregate — win split and
                                         average rounds and per-actor damage/healing — instead of a
