@@ -258,14 +258,13 @@ export type AbilityTrigger =
     // repaired allies a buff). Distinct from on-ally-critically-repaired (no crit filter).
     | 'on-own-repair-to-ally'
     // D-PR16 Firewall: fires when THIS unit receives a timed debuff (rides the existing
-    // `debuff-applied` event, self-scoped on targetId === ownerId). Does NOT fire for DoTs
-    // (separate `dot-applied` event) — matches "when debuffed".
+    // `debuff-applied` event, self-scoped on targetId === ownerId), or a DoT — once per stack
+    // landed (`dot-applied`).
     | 'on-debuffed'
     // Fires when a same-side ally receives a timed debuff (rides the existing
     // `debuff-applied` event, ally-scoped on targetId being any same-side actor — owner included,
     // see the 2026-09-30 "an ally includes the caster" ruling in triggers.ts's trigger doc block).
-    // The ally counterpart of `on-debuffed`. Does NOT fire for DoTs (dot-applied), matching
-    // on-debuffed's debuff-applied-only scoping.
+    // The ally counterpart of `on-debuffed`; a DoT fires it once per stack landed.
     | 'on-ally-debuffed'
     // Phase 3 PR-H: fires when THIS unit performs a cleanse that actually removes >= 1 debuff
     // (rides the existing `cleanse-performed` event, self-scoped on casterId === ownerId).
@@ -1015,6 +1014,10 @@ export type AbilityConfig =
            *  Shield"): proc only when the attack started with shield > 0 AND dealt HP
            *  damage (punched through the pool). Absent → unconditional (Malvex). */
           requiresHpDamage?: boolean;
+          /** 'damage-taken' only (Malvex "When directly damaged as a primary target"): proc only
+           *  on a hit where this actor is the attack's PRIMARY target, never on a covered hit of
+           *  an area pattern. Absent → any hit. */
+          requirePrimaryTarget?: boolean;
           /** "Once per battle" reactive repair (Yazid's on-cheat-death-activated 60%
            *  repair): the executor fires its consumption AT MOST ONCE per combat, tracked
            *  by a combat-lifetime Set keyed `${ownerId}:${abilityId}` in IntentExecContext.
@@ -1271,6 +1274,14 @@ export interface Ability {
      *  on critting hits, 'non-crit' only on non-critting hits. Absent → fires on any hit.
      *  Isha parses as a mutually exclusive pair (3% non-crit / 6% crit — "instead"). */
     triggerCritFilter?: 'crit' | 'non-crit';
+    /** on-attacked only: fire only when the owner is the hit's PRIMARY target, never on a covered
+     *  hit of an area pattern — "When this Unit is directly damaged as a primary target, … gains
+     *  Legion Discipline II" (Stalwart). Absent → any hit. */
+    triggerPrimaryTargetOnly?: boolean;
+    /** on-destroyed only: fire only when the owner died to DIRECT damage, never to a
+     *  damage-over-time tick — "Upon being destroyed by direct damage, … grants all allies
+     *  Everliving Regeneration II" (Paracelsus). Absent → the listener's per-type rule. */
+    triggerRequiresDirectDeath?: boolean;
     /** Landing-verb filter for the debuff-inflicted trigger family (on-debuff-inflicted,
      *  on-ally-debuff-inflicted, on-other-ally-debuff-inflicted, on-enemy-debuff-inflicted,
      *  on-ally-debuffed, on-debuffed):

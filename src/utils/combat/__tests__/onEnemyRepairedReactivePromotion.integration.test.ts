@@ -313,6 +313,9 @@ describe('Amartya Defense Shred — extracted ability shape (mutation guard)', (
         expect(shred.trigger).toBe('on-enemy-repaired');
         expect(shred.target).toBe('enemy');
         expect(shred.repairedRecipientTargeted).toBe(true);
+        expect(shred.conditions).toEqual([
+            { subject: 'enemy-type', derivable: true, requiredEnemyType: 'Defender' },
+        ]);
         // No frequency cap — "on that defender" fires every qualifying repair.
         expect(shred.oncePerRoundPerEnemy).toBeUndefined();
         expect(shred.oncePerRound).toBeUndefined();
@@ -344,6 +347,7 @@ describe('Amartya (player-side) — Defense Shred lands on the REPAIRED RECIPIEN
 
     const enemyDefender = (): EnemyAttacker => ({
         id: 'enemy-defender',
+        role: 'DEFENDER',
         stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000, speed: 500 },
         chargeCount: 0,
         startCharged: false,
@@ -400,6 +404,7 @@ describe('Amartya (player-side) — Defense Shred lands on the REPAIRED RECIPIEN
         // events via an extra action).
         const aoeHealer: EnemyAttacker = {
             id: 'enemy-aoe-healer',
+            role: 'DEFENDER',
             stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000, speed: 1000 },
             chargeCount: 0,
             startCharged: false,
@@ -407,6 +412,7 @@ describe('Amartya (player-side) — Defense Shred lands on the REPAIRED RECIPIEN
         };
         const def1: EnemyAttacker = {
             id: 'enemy-def-1',
+            role: 'DEFENDER',
             stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000, speed: 500 },
             chargeCount: 0,
             startCharged: false,
@@ -414,6 +420,7 @@ describe('Amartya (player-side) — Defense Shred lands on the REPAIRED RECIPIEN
         };
         const def2: EnemyAttacker = {
             id: 'enemy-def-2',
+            role: 'DEFENDER',
             stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000, speed: 400 },
             chargeCount: 0,
             startCharged: false,
@@ -439,7 +446,7 @@ describe('Amartya (player-side) — Defense Shred lands on the REPAIRED RECIPIEN
         // (repairer-only routing would touch neither — it would target just the caster).
         expect(shred.filter((d) => d.targetId === 'enemy-def-1')).toHaveLength(1);
         expect(shred.filter((d) => d.targetId === 'enemy-def-2')).toHaveLength(1);
-        // The caster self-repaired (all-allies includes self) → it too is a repaired defender and
+        // The caster self-repaired (all-allies includes self) and is a defender too → it
         // correctly receives one. Total = one per repaired recipient in the single event.
         expect(shred.filter((d) => d.targetId === 'enemy-aoe-healer')).toHaveLength(1);
         expect(shred).toHaveLength(3);
@@ -458,6 +465,7 @@ describe('Amartya (enemy-side) — team symmetry: an enemy Amartya reacts to a P
 
         const recipientAlly: TeamActor = {
             id: 'ally-recipient',
+            role: 'DEFENDER',
             speed: 50,
             chargeCount: 0,
             startCharged: false,

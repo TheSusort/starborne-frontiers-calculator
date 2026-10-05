@@ -90,6 +90,7 @@ import {
     parseHighestAttackEnemyTarget,
     detectRepairedThisRoundCondition,
     detectEnemyRepairedTrigger,
+    detectReactionEnemyRole,
     detectEnemyDotDamageTrigger,
     detectCorrosionSpreadTrigger,
     detectShieldStrippedTrigger,
@@ -2593,6 +2594,7 @@ function abilitiesFromText(
                         ? { leechScope: h.leechScope ?? 'all' }
                         : {}),
                     ...(h.requiresHpDamage ? { requiresHpDamage: true } : {}),
+                    ...(h.requirePrimaryTarget ? { requirePrimaryTarget: true } : {}),
                     ...(oncePerCombat ? { oncePerCombat: true } : {}),
                 },
                 autoFilled: true,
@@ -3798,6 +3800,7 @@ export function buildShipAbilities(rawShip: Ship): ShipSkills {
             if (reaction) {
                 ability.trigger = reaction.trigger;
                 if (reaction.critFilter) ability.triggerCritFilter = reaction.critFilter;
+                if (reaction.primaryTargetOnly) ability.triggerPrimaryTargetOnly = true;
                 // Ally-role words in the trigger phrase (Graphite "when an ally attacker
                 // or debuffer is directly damaged") → CATEGORY-semantic roleFilter; the
                 // engine's on-ally-attacked listener fires only when the damaged ally's
@@ -3873,6 +3876,33 @@ export function buildShipAbilities(rawShip: Ship): ShipSkills {
                         ability.repairedRecipientTargeted = true;
                     }
                 }
+            }
+        }
+        // "Upon being destroyed by direct damage, … grants all allies Everliving Regeneration II"
+        // (Paracelsus): the death must be a direct hit, like the sentence's damage half.
+        if (
+            ability.trigger === 'on-destroyed' &&
+            rowText &&
+            pos >= 0 &&
+            detectKilledByDirectDamageTrigger(rowText, pos)
+        ) {
+            ability.triggerRequiresDirectDeath = true;
+        }
+        // "When an enemy DEFENDER is directly repaired / gains Taunt, this Unit inflicts … on that
+        // defender" (Amartya): the role is a condition on the enemy the debuff lands on, judged per
+        // recipient by the reactive debuff executor (`victimRoleMatches` in triggers.ts).
+        if (
+            ability.type === 'debuff' &&
+            (ability.trigger === 'on-enemy-repaired' ||
+                ability.trigger === 'on-enemy-taunt-gained') &&
+            rowText
+        ) {
+            const role = detectReactionEnemyRole(rowText, buff.buffName, occurrence);
+            if (role) {
+                ability.conditions = [
+                    ...ability.conditions,
+                    { subject: 'enemy-type', derivable: true, requiredEnemyType: role },
+                ];
             }
         }
         // A still-on-cast, NON-STACKING buff whose OWN clause reads "At the start of combat, this

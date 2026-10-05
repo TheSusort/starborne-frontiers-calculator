@@ -1754,10 +1754,12 @@ function stripShieldPct(
 /**
  * Fans `reduceBombsOnVictim` over the firing skill's `bomb-countdown-reduce`
  * ability/abilities (all-enemies), across the AoE footprint (`aoeVictimIds` when present, else
- * the single anchor). Hacking-gated: reuses the SAME single-draw landing infra as every other
- * ability-timed 'inflict' enemy application in this file (`landsTimedEnemyApplicationLive`) — one
- * roll gates the whole cast, not a per-victim re-roll. Called BEFORE `applyNewDoTs` (mirrors
- * `extendDoTs`'s ordering) so a Bomb III this SAME cast inflicts is never itself reduced.
+ * the single anchor). Hacking-gated PER ENEMY ("This reduction effect requires hacking" — Lingshe):
+ * each recipient draws its own 'inflict' landing roll against its own security
+ * (`landsReductionOn`), so one well-defended enemy keeps its countdown while the rest lose a turn.
+ * A failed roll emits nothing (whether it counts as a resist is unruled). Called BEFORE
+ * `applyNewDoTs` (mirrors `extendDoTs`'s ordering) so a Bomb III this SAME cast inflicts is never
+ * itself reduced.
  */
 function reduceEnemyBombs(args: {
     gatedSkill: Skill | undefined;
@@ -1771,7 +1773,8 @@ function reduceEnemyBombs(args: {
     // The caster forcing these detonations (Lingshe) — becomes each burst's
     // `detonatorId`. See reduceBombsOnVictim.
     detonatorId: string;
-    landsTimedEnemyApplicationLive: (application?: 'inflict' | 'apply') => boolean;
+    /** One 'inflict' landing roll against `victim` — DRAWS, so call it once per recipient. */
+    landsReductionOn: (victim: CombatActor) => boolean;
     forceDetonateBomb?: (victim: CombatActor, sourceId: string, damage: number) => void;
     /** #407: the board-neighbour fan-out and the SELECTOR delegate, threaded so this loop resolves
      *  recipients by exactly the same rules as the debuff-clause path. */
@@ -1786,7 +1789,6 @@ function reduceEnemyBombs(args: {
     for (const ab of args.gatedSkill?.abilities ?? []) {
         if (ab.config.type !== 'bomb-countdown-reduce') continue;
         if (!conditionsMet(ab.conditions, args.ctx)) continue;
-        if (!args.landsTimedEnemyApplicationLive('inflict')) continue;
         // #407: was a bare `all-enemies`-or-anchor ternary with no selector arm at all, so a
         // `bomb-countdown-reduce` aimed at 'enemy-highest-attack' reduced the countdown on
         // whichever enemy the pattern anchored on. Now routed through the SAME resolver the
@@ -1816,6 +1818,7 @@ function reduceEnemyBombs(args: {
                 args.opposingVictimById?.get(vid) ??
                 (vid === args.anchor.id ? args.anchor : undefined);
             if (!victim) continue;
+            if (!args.landsReductionOn(victim)) continue;
             reduceBombsOnVictim(
                 victim,
                 ab.config.turns,
@@ -2705,7 +2708,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
      *  target's (see `RecipientGateReading.role`).
      *
      *  Built only when this cast has something to ask: a gated enemy status in the firing slot,
-     *  or a gated control (its per-recipient emission reads these too). A recipient with no
+     *  a self gain (firing or passive slot) whose gate reads the struck enemies, or a gated control (its per-recipient emission reads these too). A recipient with no
      *  context reads the bound target's — outside positional runs (no readings) the bound target
      *  is the only recipient, and inside one every living opposing actor has a reading. */
     const recipientGateCtxById = new Map<string, ConditionContext>();
@@ -2717,7 +2720,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             timedSelfBySlot.some(
                 (s) => ridesThisCast(s) && (s.perHit === true || readsStruckEnemy(s.conditions))
             ) ||
-            (firingSkill?.abilities ?? []).some(
+            [...(firingSkill?.abilities ?? []), ...(passiveSkill?.abilities ?? [])].some(
                 (a) => isAnyStruckSelfGain(a) || isEveryStruckSelfGain(a)
             ) ||
             controlAbilitiesFromSkill(firingSkill).some((c) => c.conditions.length > 0))
@@ -4245,28 +4248,31 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // round. Walked in text order with a same-cast DoT overlay (see applyAbilities).
     // A self gain asking about "the target" passes once if any struck enemy qualifies (R17, R23);
     // one comparing the owner against the struck enemies needs every one of them to pass (R24).
-    const { gatedSkill, ctxFor } = gateFiringAbilities(
-        firingSkill,
-        ctx,
-        (ability, gate, abilityCtx) => {
-            if (isAnyStruckSelfGain(ability)) {
-                // A count gate written after a DoT clause reads the stacks that clause LANDED on
-                // each struck enemy (`castLandingsOverlay`, R29 — Anemone's Taunt), in place of
-                // the payload gating's own count of every earlier stack.
-                const dotsBefore = dotClausesBefore(ability.id);
-                if (dotsBefore.length > 0 && readsCastCount(gate))
-                    return (
-                        anyStruckVictimCtx(gate, ctx, (c, vid) =>
-                            castLandingsOverlay(c, vid, gate, dotsBefore)
-                        ) ?? null
-                    );
-                return anyStruckVictimCtx(gate, abilityCtx) ?? null;
-            }
-            if (isEveryStruckSelfGain(ability))
-                return everyStruckVictimMeets(gate, abilityCtx) ? abilityCtx : null;
-            return undefined;
+    // The passive slot's on-cast self gains are judged the same way (Tygr's "After damaging an
+    // enemy affected by Stasis … gains one extra action").
+    const struckSelfGainGate = (
+        ability: Ability,
+        gate: Ability['conditions'],
+        abilityCtx: ConditionContext
+    ): ConditionContext | null | undefined => {
+        if (isAnyStruckSelfGain(ability)) {
+            // A count gate written after a DoT clause reads the stacks that clause LANDED on
+            // each struck enemy (`castLandingsOverlay`, R29 — Anemone's Taunt), in place of
+            // the payload gating's own count of every earlier stack.
+            const dotsBefore = dotClausesBefore(ability.id);
+            if (dotsBefore.length > 0 && readsCastCount(gate))
+                return (
+                    anyStruckVictimCtx(gate, ctx, (c, vid) =>
+                        castLandingsOverlay(c, vid, gate, dotsBefore)
+                    ) ?? null
+                );
+            return anyStruckVictimCtx(gate, abilityCtx) ?? null;
         }
-    );
+        if (isEveryStruckSelfGain(ability))
+            return everyStruckVictimMeets(gate, abilityCtx) ? abilityCtx : null;
+        return undefined;
+    };
+    const { gatedSkill, ctxFor } = gateFiringAbilities(firingSkill, ctx, struckSelfGainGate);
 
     // Control inflictions (Stasis, Provoke, Taunt, Concentrate Fire, Disable): emit `control-applied`
     // so reactions (on-stasis-applied) can fire. Each control effect's combat impact is modelled
@@ -4398,7 +4404,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // outcome and defense math like the firing hit; its own noCrit is respected.
     const { gatedSkill: gatedPassive, ctxFor: passiveCtxFor } = gateFiringAbilities(
         passiveSkill,
-        ctx
+        ctx,
+        struckSelfGainGate
     );
     const passiveHit = damageInputsFromSkill(gatedPassive);
     const passiveScalingBonus = passiveHit.scalingAbility
@@ -4823,7 +4830,13 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             round: r,
             bus,
             detonatorId: actor.id, // The countdown-reduce caster is the detonator.
-            landsTimedEnemyApplicationLive,
+            // The same per-victim / bound-target split the timed debuff loop uses: a positioned
+            // recipient rolls against its own security, a non-positional cast against the bound
+            // target's.
+            landsReductionOn: (victim) =>
+                positionalLanding && opposingVictimById?.has(victim.id)
+                    ? decideDebuffOnVictim('inflict', victim).landed
+                    : landsTimedEnemyApplicationLive('inflict'),
             forceDetonateBomb: args.forceDetonateBomb,
             adjacentEnemyIdsFor,
             positionalLanding,

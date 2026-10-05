@@ -3189,6 +3189,7 @@ export function detectDamageReactionTrigger(
           hpBelowPct?: number;
           roleFilter?: ShipRoleCategory[];
           allyStatusName?: string;
+          primaryTargetOnly?: true;
       }
     | undefined {
     const sentence = rawSentenceAround(text, pos);
@@ -3207,6 +3208,10 @@ export function detectDamageReactionTrigger(
     const statusM = allySubject ? DR_ALLY_STATUS_RE.exec(sentence) : null;
     const allyStatusName = statusM ? resolveBuffName(statusM[1]) : undefined;
     const trigger = allySubject ? ('on-ally-attacked' as const) : ('on-attacked' as const);
+    const primaryOnly =
+        !allySubject && PRIMARY_TARGET_RE.test(scrubbed)
+            ? { primaryTargetOnly: true as const }
+            : {};
     if (allySubject ? DR_ALLY_CRIT_HIT_RE.test(scrubbed) : DR_CRIT_HIT_RE.test(scrubbed)) {
         const hpM = allySubject ? null : DR_HP_BELOW_RE.exec(scrubbed);
         return {
@@ -3215,6 +3220,7 @@ export function detectDamageReactionTrigger(
             ...(hpM ? { hpBelowPct: parseInt(hpM[1], 10) } : {}),
             ...(roleFilter ? { roleFilter } : {}),
             ...(allyStatusName ? { allyStatusName } : {}),
+            ...primaryOnly,
         };
     }
     if (
@@ -3227,6 +3233,7 @@ export function detectDamageReactionTrigger(
             ...(hpM ? { hpBelowPct: parseInt(hpM[1], 10) } : {}),
             ...(roleFilter ? { roleFilter } : {}),
             ...(allyStatusName ? { allyStatusName } : {}),
+            ...primaryOnly,
         };
     }
     return undefined;
@@ -3341,6 +3348,26 @@ export function detectEnemyRepairedTrigger(
         return { trigger: 'on-enemy-repaired' };
     }
     return undefined;
+}
+
+const ENEMY_ROLE_SUBJECT_RE = /\bwhen\s+an?\s+enemy\s+(defender|attacker|debuffer|supporter)\b/i;
+
+/**
+ * The enemy role a reaction clause names as its subject — "When an enemy DEFENDER is directly
+ * repaired", "When an enemy DEFENDER gains Taunt" (Amartya) → 'Defender'. Read from `buffName`'s
+ * own clause, so a role named in another sentence of the row never leaks onto it. Undefined when
+ * the clause names no role.
+ */
+export function detectReactionEnemyRole(
+    skillText: string,
+    buffName: string,
+    occurrenceIndex = 0
+): EnemyBaseClass | undefined {
+    const m = ENEMY_ROLE_SUBJECT_RE.exec(
+        stripUnitTags(resolveBuffClause(skillText, buffName, occurrenceIndex))
+    );
+    if (!m) return undefined;
+    return (m[1].charAt(0).toUpperCase() + m[1].slice(1).toLowerCase()) as EnemyBaseClass;
 }
 
 // ship-kit W3 (Anemone, Task 6): "When an enemy takes damage from a Damage over Time effect,
@@ -4457,6 +4484,8 @@ export interface ParsedHealAbility {
     leechScope?: 'all' | 'detonation';
     /** Quixilver: damage-taken proc gated on shield punch-through. */
     requiresHpDamage?: boolean;
+    /** Malvex: damage-taken proc only "when directly damaged as a primary target". */
+    requirePrimaryTarget?: boolean;
     /** Present when the heal is a damage reaction ("when directly damaged", "when
      *  attacked", "when (critically) hit"). buildShipAbilities maps it to trigger
      *  'on-attacked' — or 'on-ally-attacked' when `allySubject` is set — plus
@@ -4670,6 +4699,9 @@ const HEAL_ADDITIONAL_RE =
 // gains shield equal to 15% of the damage dealt"), is also damage TAKEN: the incoming hit is the
 // only damage the sentence names.
 const SELF_DIRECTLY_DAMAGED_RE = /^\s*when\s+(?:this\s+unit\s+is\s+)?directly\s+damaged\b/i;
+/** "… directly damaged as a primary target" — the reaction needs the owner to be the hit's primary
+ *  target (Stalwart, Malvex, Nosorog). */
+const PRIMARY_TARGET_RE = /\bas\s+a\s+primary\s+target\b/i;
 function resolveLeechBasis(
     after: string,
     sentence: string
@@ -5021,6 +5053,9 @@ export function parseHealAbilities(text: string | null | undefined): ParsedHealA
                 explicitTarget,
                 ...(leechScope ? { leechScope } : {}),
                 ...(requiresHpDamage ? { requiresHpDamage } : {}),
+                ...(leechBasis === 'damage-taken' && PRIMARY_TARGET_RE.test(sentence)
+                    ? { requirePrimaryTarget: true }
+                    : {}),
                 ...(damageReaction ? { damageReaction } : {}),
                 ...(ownCleanseReaction ? { ownCleanseReaction } : {}),
                 ...(countScaling

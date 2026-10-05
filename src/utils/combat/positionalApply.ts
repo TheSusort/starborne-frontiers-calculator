@@ -231,7 +231,9 @@ export function applyPositionalDamage(args: {
     opposingLiving: CombatActor[];
     statusOf?: (id: string) => ActorTargetingStatus | undefined;
     acting?: PositionalActing;
-    defenseProfileOf: (v: CombatActor) => VictimDefenseProfile;
+    /** `didCrit` is this victim's own crit on the hit being read (a per-enemy crit bonus scales
+     *  off it — Crucialis). */
+    defenseProfileOf: (v: CombatActor, didCrit: boolean) => VictimDefenseProfile;
     /**
      * SUB-ATTACK INDEX. Every per-victim callback below
      * takes a trailing optional `subAttackIndex` — the 0-based index of the sub-attack currently
@@ -301,7 +303,9 @@ export function applyPositionalDamage(args: {
         damage: number,
         outcome: VictimDamageOutcome,
         didCrit: boolean,
-        subAttackIndex?: number
+        subAttackIndex: number,
+        /** True when this victim is the sub-attack's primary target (its anchor). */
+        isAnchor: boolean
     ) => void;
     /** Fires once per (sub-attack x victim), immediately BEFORE the victim takes the hit —
      *  so it observes the attacker's state as it stands AT IMPACT, before this hit's own
@@ -458,7 +462,7 @@ export function applyPositionalDamage(args: {
                 typeof reductionParts === 'number' ? 0 : reductionParts.attackerSidePct;
             // Read the profile ONCE and derive both the hit and the mitigation factor from it, so
             // the factor handed to `applyToVictim` is provably the one baked into `dmg`.
-            const defenseProfile = defenseProfileOf(victim);
+            const defenseProfile = defenseProfileOf(victim, didCrit);
             // ONE call, both figures. Calling `victimHitDamage` and a separate pre-mitigation
             // helper would repeat the whole assembly — the same profile read, the same affinity
             // resolve — on the hottest path in the engine, and would leave the two figures as
@@ -495,7 +499,7 @@ export function applyPositionalDamage(args: {
             // only test stubs of `applyToVictim`; the engine's own funnel always sets it.
             const booked = outcome.incomingBooked ?? dmg - (outcome.transformedToDot ?? 0);
             emitHit?.(victim, booked, didCrit, h);
-            onVictimResolved?.(victim, dmg, outcome, didCrit, h);
+            onVictimResolved?.(victim, dmg, outcome, didCrit, h, isAnchor);
             subDamage += booked;
             // The FULL amount this hit delivered. `booked` is the victim's own intake, which
             // excludes anything a Protection cascade diverted to protectors; the ruled basis counts

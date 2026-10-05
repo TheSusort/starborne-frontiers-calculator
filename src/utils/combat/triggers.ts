@@ -173,6 +173,14 @@ export interface Intent {
         counterTargetId?: string;
         damagedAllyId?: string;
         fromPurgeEvent?: boolean;
+        /** Depth-1 enemy-cleanse chain guard, the cleanse twin of `fromPurgeEvent`: this intent
+         *  was born of an `on-enemy-cleansed` reaction, or provoked while one resolved. A reactive
+         *  cleanse resolved under it emits a `reactive-cleanse-performed` flagged
+         *  `viaEnemyCleanseReaction`, which wakes no `on-enemy-cleansed` listener — so
+         *  Pestilence's Corrosion landing on an enemy that cleanses whenever it is debuffed is
+         *  cleansed once more and the chain stops. Carried across owners by the enqueue wrapper
+         *  in `registerReactiveListeners` (`resolvingIntent`). */
+        fromEnemyCleanseReaction?: boolean;
         /** The sub-attack that raised the triggering event.
          *  Stamped by the OUTGOING listeners (`on-crit`, `on-deal-damage`) from
          *  `ability-performed.subAttackIndex`, AND by the INCOMING ones (`on-attacked`,
@@ -657,7 +665,7 @@ export function registerReactiveListeners(args: {
     const {
         bus,
         perOwner,
-        enqueue,
+        enqueue: enqueueRaw,
         isOpposing,
         roleOf,
         adjacentAllyIdsFor,
@@ -666,6 +674,15 @@ export function registerReactiveListeners(args: {
         footprintAllyIdsFor,
         maxHpOf,
     } = args;
+    // An intent provoked while an enemy-cleanse reaction resolves inherits its chain guard
+    // (`fromEnemyCleanseReaction`'s doc).
+    const enqueue = (intent: Intent): void =>
+        enqueueRaw(
+            resolvingIntent?.eventCtx?.fromEnemyCleanseReaction &&
+                !intent.eventCtx?.fromEnemyCleanseReaction
+                ? { ...intent, eventCtx: { ...intent.eventCtx, fromEnemyCleanseReaction: true } }
+                : intent
+        );
     // Same-side ally, OWNER EXCLUDED — for a trigger whose skill text names "another/other
     // ally", or whose subject structurally cannot be the owner (a destroyed ship cannot take the
     // reaction it would grant itself). See the 2026-09-30 "an ally includes the caster" ruling in
@@ -1414,7 +1431,8 @@ export function registerReactiveListeners(args: {
                     // eventCtx so the reactive `damage` executor's `adjacent-enemies`
                     // branch can anchor its fan-out on the bombed enemy (NOT the owner)
                     // and scale the splash off the bomb's own payout rather than the owner's
-                    // attack. Both fields are existing eventCtx channels (on-attacked already
+                    // attack; the charge executor removes the charges from that same enemy.
+                    // Both fields are existing eventCtx channels (on-attacked already
                     // stamps them for the counter-routing / damage-taken-basis consumers) — this
                     // listener is just a second writer, gated by its own distinct event type.
                     bus.on('bomb-detonated', (e) => {
@@ -1503,6 +1521,10 @@ export function registerReactiveListeners(args: {
                         const filter = ra.ability.triggerCritFilter;
                         if (filter === 'crit' && !e.didCrit) return;
                         if (filter === 'non-crit' && e.didCrit) return;
+                        // "directly damaged as a primary target" (Stalwart's buff): a covered hit
+                        // of an area pattern does not count.
+                        if (ra.ability.triggerPrimaryTargetOnly && e.isPrimaryTarget !== true)
+                            return;
                         // What the owner actually TOOK from this hit — owner ruling 2026-09-03,
                         // the basis for BOTH consumers below. `?? e.damage` is the
                         // non-positional path, which stamps no funnel figure. Read
@@ -1531,14 +1553,13 @@ export function registerReactiveListeners(args: {
                     });
                     break;
                 case 'on-debuffed':
+                    // Self-scoped: fires when THIS owner receives a debuff — a timed debuff, or a
+                    // DoT once per stack landed (`dotInflictions`, R26/R28: every stack is a
+                    // debuff, and an incoming effect rolls once per occurrence, so Firewall's proc
+                    // is drawn per stack). Firewall's implant text ("when debuffed") names no verb,
+                    // so it carries no triggerApplicationFilter and both arms pass it
+                    // unconditionally (passesApplicationFilter's doc).
                     bus.on('debuff-applied', (e) => {
-                        // Self-scoped: fires when THIS owner receives a timed debuff. Mirrors
-                        // on-attacked's targetId === ownerId scoping. DoTs use dot-applied (not
-                        // this event) → Firewall does not fire on DoT application, by design.
-                        // Firewall's implant text ("when debuffed") names no verb, so it carries
-                        // no triggerApplicationFilter and this call always passes unconditionally
-                        // (passesApplicationFilter's doc) — unchanged from before this trigger
-                        // family's gate existed.
                         if (
                             e.targetId === ownerId &&
                             passesApplicationFilter(
@@ -1548,29 +1569,47 @@ export function registerReactiveListeners(args: {
                         )
                             enqueue(intent);
                     });
-                    break;
-                case 'on-ally-debuffed':
-                    bus.on('debuff-applied', (e) => {
-                        // Victim-scoped: a timed debuff landed on a same-side unit (Hayyan) —
-                        // owner included, see the ruling in the trigger doc block above. Route
-                        // the reactive repair to that unit via damagedAllyId. Excludes every
-                        // opposing actor and DoTs (dot-applied), matching on-debuffed's
-                        // debuff-applied-only scoping. Hayyan's own clause reads "inflicted"
-                        // (filter 'inflict' — passesApplicationFilter) so an enemy applying
-                        // Provoke to her ally gives her nothing; only an inflicted debuff repairs.
+                    bus.on('dot-applied', (e) => {
                         if (
-                            !isOpposing(e.targetId) &&
+                            e.targetId === ownerId &&
                             passesApplicationFilter(
                                 ra.ability.triggerApplicationFilter,
                                 e.application
                             )
                         )
+                            for (let i = 0; i < dotInflictions(e); i++) enqueue(intent);
+                    });
+                    break;
+                case 'on-ally-debuffed': {
+                    // Victim-scoped: a debuff landed on a same-side unit (Hayyan) — owner
+                    // included, see the ruling in the trigger doc block above. A timed debuff
+                    // fires once, a DoT once per stack landed (`dotInflictions`, R26/R28). Route
+                    // the reactive repair to that unit via damagedAllyId. Excludes every opposing
+                    // actor. Hayyan's own clause reads "inflicted" (filter 'inflict' —
+                    // passesApplicationFilter) so an enemy applying Provoke, or the Burner set's
+                    // applied Inferno, to her ally gives her nothing.
+                    const onAllyDebuffed = (
+                        e: { targetId: string; application?: 'inflict' | 'apply' },
+                        times: number
+                    ) => {
+                        if (
+                            isOpposing(e.targetId) ||
+                            !passesApplicationFilter(
+                                ra.ability.triggerApplicationFilter,
+                                e.application
+                            )
+                        )
+                            return;
+                        for (let i = 0; i < times; i++)
                             enqueue({
                                 ...intent,
                                 eventCtx: { ...intent.eventCtx, damagedAllyId: e.targetId },
                             });
-                    });
+                    };
+                    bus.on('debuff-applied', (e) => onAllyDebuffed(e, 1));
+                    bus.on('dot-applied', (e) => onAllyDebuffed(e, dotInflictions(e)));
                     break;
+                }
                 case 'on-ally-shield-destroyed':
                     bus.on('shield-destroyed', (e) => {
                         // Victim-scoped: a same-side unit's shield pool was fully depleted (AEGIS).
@@ -1811,6 +1850,9 @@ export function registerReactiveListeners(args: {
                         // self-destruct HEAL (and any other on-destroyed reaction) fires on ANY
                         // death, unchanged.
                         if (e.actorId !== ownerId) return;
+                        // "Upon being destroyed by direct damage" on any payload (Paracelsus's
+                        // Everliving Regeneration II grant): a DoT-tick death fires nothing.
+                        if (ra.ability.triggerRequiresDirectDeath && !e.byDirectDamage) return;
                         // fromOwnDeath: marks this as the owner's OWN death reaction so the
                         // dead-owner drain gate (executeIntent) lets it through even though the
                         // owner is now destroyed (Martyrdom's killer-Disable, Salvation's heal,
@@ -1940,11 +1982,14 @@ export function registerReactiveListeners(args: {
                             });
                     });
                     break;
-                case 'on-enemy-cleansed':
-                    bus.on('cleanse-performed', (e) => {
-                        // Opposing-scoped: any opposing-side actor's cleanse. For the player
-                        // call: enemy side. For the enemy call: player side.
-                        if (!isOpposing(e.casterId)) return;
+                case 'on-enemy-cleansed': {
+                    // Opposing-scoped: any opposing-side actor's cleanse — a cast one
+                    // (`cleanse-performed`) or one its passive performs (`reactive-cleanse-
+                    // performed`: Nuqtu's start-of-turn, Purifier's on-damaged, AEGIS, Hermes,
+                    // Howler). A duration cut (`mode: 'reduce-duration'` — Heliodor) removes
+                    // nothing and is not a cleanse.
+                    const onEnemyCleanse = (casterId: string, targets: string[]) => {
+                        if (!isOpposing(casterId)) return;
                         // Grif's damage reaction hits EACH cleansed enemy once per cast (owner
                         // ruling 2026-09-30): one enqueue per DISTINCT id in e.targets, routed via
                         // counterTargetId so the damage branch's single-victim resolution lands on
@@ -1954,10 +1999,14 @@ export function registerReactiveListeners(args: {
                         // abilities that both cleanse the same enemy) to one hit — one hit per
                         // cleansed enemy per cast, not per removed debuff.
                         if (ra.ability.config.type === 'damage') {
-                            for (const targetId of new Set(e.targets ?? [])) {
+                            for (const targetId of new Set(targets)) {
                                 enqueue({
                                     ...intent,
-                                    eventCtx: { ...intent.eventCtx, counterTargetId: targetId },
+                                    eventCtx: {
+                                        ...intent.eventCtx,
+                                        counterTargetId: targetId,
+                                        fromEnemyCleanseReaction: true,
+                                    },
                                 });
                             }
                             return;
@@ -1972,12 +2021,22 @@ export function registerReactiveListeners(args: {
                             ...intent,
                             eventCtx: {
                                 ...intent.eventCtx,
-                                counterTargetId: e.casterId,
-                                cleansedEnemyIds: e.targets,
+                                counterTargetId: casterId,
+                                cleansedEnemyIds: targets,
+                                fromEnemyCleanseReaction: true,
                             },
                         });
+                    };
+                    bus.on('cleanse-performed', (e) => onEnemyCleanse(e.casterId, e.targets ?? []));
+                    bus.on('reactive-cleanse-performed', (e) => {
+                        if (e.mode === 'reduce-duration' || e.viaEnemyCleanseReaction) return;
+                        onEnemyCleanse(
+                            e.casterId,
+                            e.perTarget.map((t) => t.targetId)
+                        );
                     });
                     break;
+                }
                 case 'on-enemy-buffed':
                     bus.on('buff-applied', (e) => {
                         // Opposing-scoped: any opposing-side actor RECEIVING a timed buff
@@ -2801,45 +2860,76 @@ function dispatchType(intent: Intent): Ability['config']['type'] {
  *  `enemyType`, so they would always block. */
 function splitDrainGateConditions(intent: Intent): DrainGateSplit {
     const split = splitDrainGateConditionsByShape(intent);
-    if (intent.ability.trigger !== 'on-deal-damage') return split;
+    if (!liftsEnemyRoleGate(intent)) return split;
     return {
         kept: split.kept.filter((c) => c.subject !== 'enemy-type'),
         perVictim: split.perVictim,
     };
 }
 
+/** Triggers whose reactive DEBUFF names its recipient by role ("When an enemy defender is
+ *  directly repaired / gains Taunt, … on that defender" — Amartya). The `enemy-type` condition is
+ *  lifted off the global gate and re-checked against each recipient in the debuff branch. */
+const RECIPIENT_ROLE_DEBUFF_TRIGGERS: ReadonlySet<Ability['trigger']> = new Set([
+    'on-enemy-repaired',
+    'on-enemy-taunt-gained',
+]);
+
+/** Whether `intent`'s `enemy-type` conditions are judged per struck/receiving ship rather than
+ *  globally: on-deal-damage (`dealtVictimRoleGateMet`), and a debuff on a
+ *  `RECIPIENT_ROLE_DEBUFF_TRIGGERS` trigger (the debuff branch's per-recipient check). */
+function liftsEnemyRoleGate(intent: Intent): boolean {
+    return (
+        intent.ability.trigger === 'on-deal-damage' ||
+        (dispatchType(intent) === 'debuff' &&
+            RECIPIENT_ROLE_DEBUFF_TRIGGERS.has(intent.ability.trigger))
+    );
+}
+
 /** True when an on-deal-damage reaction's `enemy-type` conditions hold for at least ONE ship its
  *  sub-attack struck (`eventCtx.dealtVictimIds`), judged by that ship's role via `ctx.roleOf`
  *  (owner ruling R21: Shashou's "after damaging a debuffer or supporter" fires once if any struck
- *  enemy has the role). The conditions combine as `conditionsMet` does (an `anyOf` run is one
- *  OR-group, every group must hold) and each victim is judged on its own. A victim with no role
- *  (the DPS calculator's synthesized enemy) reads the fight-wide `ctx.enemyType` instead — the
- *  configured class there, absent in battle — and with neither it never matches. No
+ *  enemy has the role). Each victim is judged on its own by `victimRoleMatches`. No
  *  `enemy-type` condition, or a trigger other than on-deal-damage → true. */
 function dealtVictimRoleGateMet(intent: Intent, ctx: IntentExecContext): boolean {
     if (intent.ability.trigger !== 'on-deal-damage') return true;
-    const roleConditions = intent.ability.conditions.filter(
-        (c) => c.subject === 'enemy-type' && c.requiredEnemyType !== undefined
-    );
+    const roleConditions = enemyRoleConditionsOf(intent.ability);
     if (roleConditions.length === 0) return true;
     const victims =
         intent.eventCtx?.dealtVictimIds ??
         (intent.eventCtx?.victimId !== undefined ? [intent.eventCtx.victimId] : []);
-    const groups = groupConditions(roleConditions);
-    return victims.some((victimId) => {
-        const role = ctx.roleOf?.(victimId);
-        return groups.every((group) =>
-            group.some((c) => {
-                const matches =
-                    role !== undefined
-                        ? matchesRoleCategory(role, [
-                              c.requiredEnemyType!.toUpperCase() as ShipRoleCategory,
-                          ])
-                        : ctx.enemyType === c.requiredEnemyType;
-                return c.negate ? !matches : matches;
-            })
-        );
-    });
+    return victims.some((victimId) => victimRoleMatches(roleConditions, victimId, ctx));
+}
+
+/** The ability's `enemy-type` conditions that name a role. */
+function enemyRoleConditionsOf(ability: Ability): Ability['conditions'] {
+    return ability.conditions.filter(
+        (c) => c.subject === 'enemy-type' && c.requiredEnemyType !== undefined
+    );
+}
+
+/** True when ONE opposing ship satisfies `roleConditions`, judged by its own role via
+ *  `ctx.roleOf`. The conditions combine as `conditionsMet` does (an `anyOf` run is one OR-group,
+ *  every group must hold). A ship with no role (the DPS calculator's synthesized enemy) reads the
+ *  fight-wide `ctx.enemyType` instead — the configured class there, absent in battle — and with
+ *  neither it never matches. Empty `roleConditions` → true. */
+function victimRoleMatches(
+    roleConditions: Ability['conditions'],
+    victimId: string,
+    ctx: IntentExecContext
+): boolean {
+    const role = ctx.roleOf?.(victimId);
+    return groupConditions(roleConditions).every((group) =>
+        group.some((c) => {
+            const matches =
+                role !== undefined
+                    ? matchesRoleCategory(role, [
+                          c.requiredEnemyType!.toUpperCase() as ShipRoleCategory,
+                      ])
+                    : ctx.enemyType === c.requiredEnemyType;
+            return c.negate ? !matches : matches;
+        })
+    );
 }
 
 function splitDrainGateConditionsByShape(intent: Intent): DrainGateSplit {
@@ -4063,13 +4153,14 @@ const REACTIVE_STAMPED_EVENT_TYPE_LIST = exhaustiveArrayOf<StampedEventType>()([
     // it under the triggering turn instead. On-turn charge emissions use the captured outer bus
     // (unstamped) → unchanged.
     'charge-changed',
-    // #2 log visibility: drain-time reactive damage/heal procs emit these LOG-ONLY events so the
-    // combat log can surface them (they deliberately emit no ability-performed/heal-performed —
-    // chain guard). Emitted through ctx.bus during a reactive intent → stamped duringTurnOf so
-    // they nest under the triggering turn. `-damage`/`-cleanse` have no combat subscriber at all;
-    // `-heal` has exactly one (on-enemy-repaired — a reactive repair is still an enemy repairing),
-    // which cannot chain because no on-enemy-repaired rider heals. See the events.ts note before
-    // adding another subscriber to any of the three.
+    // #2 log visibility: drain-time reactive damage/heal/cleanse procs emit these events so the
+    // combat log can surface them (they deliberately emit no ability-performed/heal-performed/
+    // cleanse-performed). Emitted through ctx.bus during a reactive intent → stamped duringTurnOf
+    // so they nest under the triggering turn. `-damage` has no combat subscriber; `-heal` has one
+    // (on-enemy-repaired — a reactive repair is still an enemy repairing), which cannot chain
+    // because no on-enemy-repaired rider heals; `-cleanse` has one (on-enemy-cleansed), bounded by
+    // the `fromEnemyCleanseReaction` guard. See the events.ts notes before adding another
+    // subscriber to any of the three.
     'reactive-damage-performed',
     'reactive-heal-performed',
     'reactive-cleanse-performed',
@@ -4278,7 +4369,9 @@ function resolveAoEReactiveDamageVictims(intent: Intent, ctx: IntentExecContext)
  *
  * The arms:
  *   - each SELECTOR target resolves to ONE opposing actor;
- *   - `enemy` / `all-enemies` bulk-remove from every opposing actor (`everyNthEvent` included);
+ *   - `enemy` / `all-enemies` remove from the enemy the triggering event names (the repairer on
+ *     `on-enemy-repaired`, the bombed enemy on `on-bomb-detonated`), else bulk-remove from every
+ *     opposing actor;
  *   - `lowest-hp-ally` bumps the one lowest-HP ally;
  *   - `ally` / `all-allies` bump every same-side actor;
  *   - everything else — `self`, `adjacent-allies`, and (deliberately) the enemy-adjacency targets
@@ -4342,7 +4435,22 @@ export const CHARGE_TARGET_KIND: Record<AbilityTarget, ChargeTargetKind> = {
     'enemy-highest-speed': selectorChargeKind('enemy-highest-speed'),
 };
 
+/** The intent `executeIntent` is resolving right now; undefined between resolutions. The engine
+ *  is synchronous, so every listener a resolution wakes enqueues while this is set. Read only by
+ *  `registerReactiveListeners`' enqueue wrapper. */
+let resolvingIntent: Intent | undefined;
+
 export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
+    const outer = resolvingIntent;
+    resolvingIntent = intent;
+    try {
+        resolveIntent(intent, rawCtx);
+    } finally {
+        resolvingIntent = outer;
+    }
+}
+
+function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
     // Brand every reactive-capable event this resolution emits with duringTurnOf/triggerActorId
     // (combat-log attribution). The wrapped bus is local to THIS call — on-turn emissions never
     // route through it, so non-reactive events stay unstamped; nested/re-entrant drains each
@@ -4514,19 +4622,34 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 return;
             }
             case 'enemy-bulk': {
-                // every-Nth-event gate (Zosimos "every second repair"): count per (owner, ability,
-                // repairer); only act on the Nth event. Requires a repairer id and the counter map.
-                if (intent.ability.everyNthEvent) {
+                // A repair-driven removal names the REPAIRER (Zosimos: "removes 1 charge from the
+                // enemy's charged skill for every repair they perform"), stamped as
+                // `eventCtx.repairerId` by the on-enemy-repaired listener — never the whole board.
+                if (intent.ability.trigger === 'on-enemy-repaired') {
                     const repairerId = intent.eventCtx?.repairerId;
-                    if (!repairerId || !ctx.repairCountBySource) return;
-                    const key = `${intent.ownerId}:${intent.ability.id}:${repairerId}`;
-                    const n = (ctx.repairCountBySource.get(key) ?? 0) + 1;
-                    ctx.repairCountBySource.set(key, n);
-                    if (n % intent.ability.everyNthEvent !== 0) return; // not the Nth repair yet
-                    ctx.removeChargesFrom(repairerId, cfg.amount, owner.attackerAffinity, ctx.bus); // "that enemy" only
+                    if (!repairerId) return;
+                    // every-Nth-event gate: count per (owner, ability, repairer); only act on
+                    // the Nth repair. Unset → every repair.
+                    if (intent.ability.everyNthEvent) {
+                        if (!ctx.repairCountBySource) return;
+                        const key = `${intent.ownerId}:${intent.ability.id}:${repairerId}`;
+                        const n = (ctx.repairCountBySource.get(key) ?? 0) + 1;
+                        ctx.repairCountBySource.set(key, n);
+                        if (n % intent.ability.everyNthEvent !== 0) return; // not the Nth repair yet
+                    }
+                    ctx.removeChargesFrom(repairerId, cfg.amount, owner.attackerAffinity, ctx.bus);
                     return;
                 }
-                // On-cast / bomb removal: "the enemy" = bulk all-opposing.
+                // A Bomb-driven removal names the enemy the Bomb exploded on (Demolisher: "When a
+                // Bomb explodes on an enemy, this Unit removes 2 charges from the enemy's charged
+                // skill"), stamped as `eventCtx.victimId` by the on-bomb-detonated listener.
+                if (intent.ability.trigger === 'on-bomb-detonated') {
+                    const bombedId = intent.eventCtx?.victimId;
+                    if (!bombedId) return;
+                    ctx.removeChargesFrom(bombedId, cfg.amount, owner.attackerAffinity, ctx.bus);
+                    return;
+                }
+                // Any other trigger: "the enemy" = bulk all-opposing.
                 // Selector enemy-targets ('enemy-most-buffs'/'enemy-highest-attack'/
                 // 'enemy-highest-speed') are matched ABOVE this arm — see the #399 block.
                 ctx.removeEnemyCharges(cfg.amount, owner.attackerAffinity, ctx.bus);
@@ -4891,10 +5014,16 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                       intent.eventCtx?.critVictimIds !== undefined
                     ? intent.eventCtx.critVictimIds
                     : [counterTargetId];
+        // The recipient's role, lifted off the global gate by `liftsEnemyRoleGate` (Amartya's
+        // "on that defender"), is asked of each recipient on its own.
+        const recipientRoleConditions = RECIPIENT_ROLE_DEBUFF_TRIGGERS.has(intent.ability.trigger)
+            ? enemyRoleConditionsOf(intent.ability)
+            : NO_CONDITIONS;
         for (const applicationTargetId of applicationTargetIds) {
             // A victimless infliction is a NO-OP — the rule the reactive damage
             // branch also states above its selector arms.
             if (applicationTargetId === undefined) continue;
+            if (!victimRoleMatches(recipientRoleConditions, applicationTargetId, ctx)) continue;
             // The enemy-oriented gate scrubbed from the global check is re-evaluated
             // against the target THIS application actually lands on — PER fanned-out target, so a
             // route that resolves several enemies (critVictimIds / adjacent-enemies /
@@ -5795,10 +5924,10 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
             }
             ctx.healing?.credit(intent.ownerId, 'cleanseCount', affected);
             // Log visibility for Heliodor's "reduces the duration of all active Debuffs … by 1
-            // turn": reuses the LOG-ONLY
-            // reactive-cleanse-performed (no combat listener subscribes → cannot chain), flagged
-            // `mode: 'reduce-duration'` so the renderer says "-N turn" rather than "cleansed N".
-            // Silent when nothing was shrunk (no debuffs present), matching the remove twin.
+            // turn": reuses reactive-cleanse-performed, flagged `mode: 'reduce-duration'` so the
+            // renderer says "-N turn" rather than "cleansed N" and the on-enemy-cleansed listener
+            // ignores it (a duration cut removes nothing). Silent when nothing was shrunk (no
+            // debuffs present), matching the remove twin.
             if (reducePerTarget.length > 0 && ctx.bus) {
                 ctx.bus.emit({
                     type: 'reactive-cleanse-performed',
@@ -5842,17 +5971,21 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         }
         // Credit the ACTUAL removed count, not the nominal cfg.count.
         ctx.healing.credit(intent.ownerId, 'cleanseCount', removed);
-        // #2 log visibility: surface the reaction via the LOG-ONLY reactive-cleanse-performed (NOT
-        // cleanse-performed — that drives on-enemy-cleansed/on-own-cleanse listeners and would
-        // chain). No combat listener subscribes to this type, so it can't chain; buildCombatLog
-        // renders it, stamped duringTurnOf via ctx.bus so it nests under the triggering turn. Only
-        // emitted when a debuff was actually removed (empty perTarget → silent, like the heal twin).
+        // Surface the reaction via reactive-cleanse-performed (NOT cleanse-performed, which drives
+        // the owner's own on-own-cleanse listeners). buildCombatLog renders it, stamped
+        // duringTurnOf via ctx.bus so it nests under the triggering turn, and the opposing
+        // side's on-enemy-cleansed reactions hear it — unless this cleanse was itself provoked by
+        // one (`fromEnemyCleanseReaction`). Only emitted when a debuff was actually removed (empty
+        // perTarget → silent, like the heal twin).
         if (cleansePerTarget.length > 0 && ctx.bus) {
             ctx.bus.emit({
                 type: 'reactive-cleanse-performed',
                 casterId: intent.ownerId,
                 round: ctx.round,
                 perTarget: cleansePerTarget,
+                ...(intent.eventCtx?.fromEnemyCleanseReaction
+                    ? { viaEnemyCleanseReaction: true }
+                    : {}),
             });
         }
         return;
@@ -6185,56 +6318,45 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
     }
 
     if (cfg.type === 'purge') {
-        // Single-target BY DESIGN (counter-attacker / killer / most-buffs routing): no
-        // 'all-enemies' reactive purge exists in the corpus and the firing skill's
-        // footprint (pattern + opposing roster) is not reachable at drain time.
-        // Remove buffs from the victim. Target = the routed attacker/killer (counterTargetId — set
-        // by on-attacked/on-destroyed, and by on-enemy-purged for Sefuba's chain victim-routing).
-        // statusEngine is in ctx scope — call it directly (mirrors cleanse). Emit
-        // purge-performed UNLESS this purge was itself triggered by a purge (depth-1 guard).
-        // Target: enemy-most-buffs (Rhodium) → the opposing actor with the most buffs;
-        // else the routed attacker/killer (counterTargetId — Iridium/Faust) else the REAL
-        // victim this event carries (eventCtx.victimId — the on-deal-damage purge,
-        // Zeolite: "When this Unit deals damage to a defender it purges 1 buff" — the
-        // owner's own damage target, mirrors the `dot`/`convert-dot` branches' victimId seam).
+        // Target: enemy-most-buffs (Rhodium) → the opposing actor with the most buffs; an
+        // on-deal-damage purge (Zeolite: "When this Unit deals damage to a defender it purges 1
+        // buff from that enemy") → EACH ship the sub-attack struck (AoE rulings 1–2), each judged
+        // on its own role; else the routed attacker/killer (counterTargetId — set by
+        // on-attacked/on-destroyed, and by on-enemy-purged for Sefuba's chain victim-routing).
         // Nothing resolved → NO-OP.
-        const targetId =
+        const targetIds: (string | undefined)[] =
             intent.ability.target === 'enemy-most-buffs'
-                ? ctx.enemyWithMostBuffs?.(intent.ownerId)
-                : (intent.eventCtx?.counterTargetId ?? intent.eventCtx?.victimId);
-        // Reachable: Rhodium's end-of-round purge in any round where no enemy carries a buff
-        // (`mostBuffsAmong` returns undefined there, `engine.ts`). Its `damage` half on the same
-        // trigger and target returns on undefined too, so both halves agree.
-        if (targetId === undefined) return;
-        // As in the debuff branch — re-check against the real routed target.
-        if (!perVictimOk(targetId)) return;
-        // Zeolite: `dealtVictimRoleGateMet` has already required SOME struck ship to hold the
-        // `enemy-type` role; this re-checks it against the ship the purge actually LANDS on, via
-        // `ctx.roleOf` (side-agnostic — roleByActorId is populated from BOTH TeamActorInput.role
-        // and EnemyActorInput.role). An unknown role never matches, mirroring matchesRoleCategory.
-        // Scoped to trigger==='on-deal-damage', where `splitDrainGateConditions` removes the
-        // condition from the global gate; on any other trigger it still gates globally, so
-        // re-evaluating it here would double-gate it against the wrong target.
-        const enemyTypeCond =
+                ? [ctx.enemyWithMostBuffs?.(intent.ownerId)]
+                : intent.ability.trigger === 'on-deal-damage'
+                  ? (intent.eventCtx?.dealtVictimIds ?? [intent.eventCtx?.victimId])
+                  : [intent.eventCtx?.counterTargetId ?? intent.eventCtx?.victimId];
+        // On on-deal-damage `splitDrainGateConditions` lifts the `enemy-type` condition off the
+        // global gate; it is re-checked here against each ship the purge lands on. On any other
+        // trigger it still gates globally, so it is not re-read here.
+        const roleConditions =
             intent.ability.trigger === 'on-deal-damage'
-                ? intent.ability.conditions.find((c) => c.subject === 'enemy-type')
-                : undefined;
-        if (enemyTypeCond?.requiredEnemyType) {
-            const matchesRole = matchesRoleCategory(ctx.roleOf?.(targetId), [
-                enemyTypeCond.requiredEnemyType.toUpperCase() as ShipRoleCategory,
-            ]);
-            const gateMet = enemyTypeCond.negate ? !matchesRole : matchesRole;
-            if (!gateMet) return;
-        }
-        const removed = ctx.statusEngine.purge(targetId, cfg.count);
-        if (removed > 0 && !intent.eventCtx?.fromPurgeEvent) {
-            ctx.bus.emit({
-                type: 'purge-performed',
-                casterId: intent.ownerId,
-                targetId,
-                count: removed,
-                round: ctx.round,
-            });
+                ? enemyRoleConditionsOf(intent.ability)
+                : NO_CONDITIONS;
+        for (const targetId of targetIds) {
+            // Reachable: Rhodium's end-of-round purge in any round where no enemy carries a buff
+            // (`mostBuffsAmong` returns undefined there, `engine.ts`). Its `damage` half on the
+            // same trigger and target returns on undefined too, so both halves agree.
+            if (targetId === undefined) continue;
+            // As in the debuff branch — re-check against the real routed target.
+            if (!perVictimOk(targetId)) continue;
+            if (!victimRoleMatches(roleConditions, targetId, ctx)) continue;
+            const removed = ctx.statusEngine.purge(targetId, cfg.count);
+            // Emit purge-performed UNLESS this purge was itself triggered by a purge (depth-1
+            // guard).
+            if (removed > 0 && !intent.eventCtx?.fromPurgeEvent) {
+                ctx.bus.emit({
+                    type: 'purge-performed',
+                    casterId: intent.ownerId,
+                    targetId,
+                    count: removed,
+                    round: ctx.round,
+                });
+            }
         }
         return;
     }

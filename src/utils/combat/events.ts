@@ -421,14 +421,15 @@ export type CombatEvent =
            *  order-dependent. */
           sourceAbilityId?: string;
       } & ReactiveStamp)
-    /** LOG-ONLY: a drain-time REACTIVE cleanse resolved (executeIntent cleanse branch — e.g.
-     *  AEGIS's on-ally-shield-destroyed "cleanses all debuffs", Cultivator's on-ally-crit cleanse).
-     *  The reactive cleanse credits `cleanseCount` but emits NO `cleanse-performed` (chain guard —
-     *  that event drives on-enemy-cleansed / on-own-cleanse listeners). This event exists SOLELY so
-     *  buildCombatLog can surface the reaction (without it the reactive cleanse is invisible in the
-     *  log): NO combat listener subscribes to it, so it can never chain. `casterId` = the reacting
-     *  owner; `perTarget` = per-recipient count of debuffs ACTUALLY removed (only recipients with
-     *  >= 1 removal are listed). */
+    /** A drain-time REACTIVE cleanse resolved (executeIntent cleanse branch — e.g. Nuqtu's
+     *  start-of-turn self-cleanse, AEGIS's on-ally-shield-destroyed "cleanses all debuffs").
+     *  The reactive cleanse credits `cleanseCount` but emits NO `cleanse-performed` (that event
+     *  drives the owner's own on-own-cleanse listeners). buildCombatLog renders it, and the
+     *  OPPOSING side's `on-enemy-cleansed` reactions (Pestilence, Larkspur, Grif …) hear a
+     *  remove-mode one — never a `mode: 'reduce-duration'` one, nor one flagged
+     *  `viaEnemyCleanseReaction` (the depth-1 chain guard). `casterId` = the reacting owner;
+     *  `perTarget` = per-recipient count of debuffs ACTUALLY removed (only recipients with >= 1
+     *  removal are listed). */
     | ({
           type: 'reactive-cleanse-performed';
           casterId: string;
@@ -441,6 +442,9 @@ export type CombatEvent =
            *  how much — the log renders the two differently ("cleansed 2" vs "-1 turn on 2"). */
           mode?: 'reduce-duration';
           durationTurns?: number;
+          /** This cleanse was itself provoked by an `on-enemy-cleansed` reaction (the intent's
+           *  `fromEnemyCleanseReaction`), so it wakes no further one. */
+          viaEnemyCleanseReaction?: true;
       } & ReactiveStamp)
     /** ASSEMBLER-ONLY: one `Repair Over Time` tick restored HP to its holder (playerTurn's
      *  `tickHot`). NOT a repair event and NOT a log event — it exists for exactly one consumer,

@@ -2960,24 +2960,29 @@ const DocumentationPage: React.FC = () => {
                                         has no ship. Role damage bonuses work the same way: an area
                                         hit from Gallant, IonScorp, Meiying, Zeolite or Lodolite
                                         deals its bonus only to the struck enemies of the named
-                                        role. A bonus that counts something on the enemy (its
-                                        debuffs, buffs or neighbours, as with Ravager, Lev or
-                                        Panguan) or checks its status (Wrecker&apos;s Inferno) is
-                                        worked out for each struck enemy from what it carried before
-                                        the hit. A passive that reacts to the ship&apos;s own hits
-                                        (Bayah&apos;s and Bizon&apos;s debuffs) is checked the same
-                                        way. A bonus the ship gains for itself when &ldquo;the
-                                        target&rdquo; qualifies (Malvex&apos;s shield,
-                                        Zosimos&apos;s and Nuqtu&apos;s charges, Anemone&apos;s
-                                        Taunt) is gained once if any struck enemy qualifies, and so
-                                        is a passive gain for hitting a debuffer or supporter
-                                        (Anjian, Rys, Sha Xing, Shashou), judged by each struck
-                                        enemy&apos;s own role (in the DPS calculator, the Enemy Type
-                                        selection: Debuffer or Supporter matches, Any / Unknown does
-                                        not). Selenite&apos;s charge for &ldquo;any target&rdquo;
-                                        with Stealth counts only the enemies her skill hits, and
-                                        Chakara&apos;s charge for &ldquo;all damaged enemies&rdquo;
-                                        being faster needs every enemy her skill hits to be faster.
+                                        role, and Zeolite&apos;s passive purges a buff from each
+                                        struck defender. Amartya&apos;s Defense Shred and Exposed
+                                        land only on a repaired or Taunt-gaining enemy that is
+                                        itself a defender. A bonus that counts something on the
+                                        enemy (its debuffs, buffs or neighbours, as with Ravager,
+                                        Lev or Panguan) or checks its status (Wrecker&apos;s
+                                        Inferno) is worked out for each struck enemy from what it
+                                        carried before the hit. A passive that reacts to the
+                                        ship&apos;s own hits (Bayah&apos;s and Bizon&apos;s debuffs)
+                                        is checked the same way. A bonus the ship gains for itself
+                                        when &ldquo;the target&rdquo; qualifies (Malvex&apos;s
+                                        shield, Zosimos&apos;s and Nuqtu&apos;s charges,
+                                        Anemone&apos;s Taunt, Tygr&apos;s extra action for hitting
+                                        an enemy in Stasis) is gained once if any struck enemy
+                                        qualifies, and so is a passive gain for hitting a debuffer
+                                        or supporter (Anjian, Rys, Sha Xing, Shashou), judged by
+                                        each struck enemy&apos;s own role (in the DPS calculator,
+                                        the Enemy Type selection: Debuffer or Supporter matches, Any
+                                        / Unknown does not). Selenite&apos;s charge for &ldquo;any
+                                        target&rdquo; with Stealth counts only the enemies her skill
+                                        hits, and Chakara&apos;s charge for &ldquo;all damaged
+                                        enemies&rdquo; being faster needs every enemy her skill hits
+                                        to be faster.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">On-kill passives:</span> A
@@ -2987,7 +2992,9 @@ const DocumentationPage: React.FC = () => {
                                         hit or its own Bomb, not a teammate&apos;s hit or a
                                         damage-over-time tick. One worded &ldquo;when an enemy is
                                         destroyed&rdquo; (Liberator, Sokol) reacts to any enemy
-                                        death.
+                                        death. Paracelsus&apos;s &ldquo;upon being destroyed by
+                                        direct damage&rdquo; needs a direct hit for both its damage
+                                        and its Everliving Regeneration II.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Debuff counts:</span> A
@@ -3002,7 +3009,8 @@ const DocumentationPage: React.FC = () => {
                                         and every stack that fails is its own resist. A reaction to
                                         a debuff being inflicted (APEX&apos;s shield,
                                         Oleander&apos;s charge, Provider&apos;s hit, Lingshe&apos;s
-                                        Stealth) fires once per stack that lands, within its own
+                                        Stealth, Hayyan&apos;s repair, the Firewall implant&apos;s
+                                        chance) fires once per stack that lands, within its own
                                         once-per-cast or once-per-round limits; reactions to a
                                         critical DoT (Crocus, Wisteria) and Belladonna&apos;s
                                         conversion still fire once per application. A cleanse
@@ -3014,14 +3022,18 @@ const DocumentationPage: React.FC = () => {
                                         Bombs or only damage-over-time effects, as written, newest
                                         first. Heliodor&apos;s and Pestilence&apos;s cut to the
                                         duration of all debuffs shortens Corrosion and Inferno too;
-                                        one cut to 0 turns ends without ticking again. A count
-                                        written after an infliction in the same skill includes what
-                                        that skill landed, enemy by enemy: Crocus&apos;s Corrosion
-                                        II counts toward her own &ldquo;3 or more debuffs&rdquo;
-                                        Stasis (Asphyxiator&apos;s and Anemone&apos;s gates
-                                        likewise), and a resisted one does not. A passive reacting
-                                        to the hit (Bayah) counts only the debuffs from before the
-                                        skill.
+                                        one cut to 0 turns ends without ticking again. Reactions to
+                                        an enemy cleansing a debuff (Pestilence, Larkspur, Grif,
+                                        Arum, Yarrow) also hear the cleanses an enemy&apos;s passive
+                                        performs (Nuqtu, Purifier, AEGIS, Hermes, Howler), but not a
+                                        duration cut; a cleanse that such a reaction provoked does
+                                        not trigger another one. A count written after an infliction
+                                        in the same skill includes what that skill landed, enemy by
+                                        enemy: Crocus&apos;s Corrosion II counts toward her own
+                                        &ldquo;3 or more debuffs&rdquo; Stasis (Asphyxiator&apos;s
+                                        and Anemone&apos;s gates likewise), and a resisted one does
+                                        not. A passive reacting to the hit (Bayah) counts only the
+                                        debuffs from before the skill.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Team Ships:</span> Pick a
@@ -3068,7 +3080,8 @@ const DocumentationPage: React.FC = () => {
                                         every enemy it hits &mdash; Stasis, Provoke, Disable and
                                         Concentrate Fire included &mdash; and its shield removal
                                         strips each of them, even where the text says &ldquo;the
-                                        primary target&rdquo;. Each enemy rolls its own resist.
+                                        primary target&rdquo;. Each enemy rolls its own resist,
+                                        including against Lingshe&apos;s Bomb countdown cut.
                                         Reactions follow suit: Hemlock gains a charge, Defiant a
                                         shield, Warden lands its extra debuff, once per enemy, and
                                         Laika gains a shield per enemy stripped. A Stasis the skill
@@ -3077,7 +3090,9 @@ const DocumentationPage: React.FC = () => {
                                         enemy hit gets its own stacks, and a Bomb uses the
                                         attacker&apos;s affinity against that enemy. Crits are per
                                         enemy too: Wisteria&apos;s crit Inferno and Valerian&apos;s
-                                        crit extension land only on the enemies the hit critted.
+                                        crit extension land only on the enemies the hit critted, and
+                                        Crucialis&apos;s extra damage on a critical hit is added
+                                        only to the enemies she critted.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Purges:</span> A purge on a
@@ -3091,7 +3106,9 @@ const DocumentationPage: React.FC = () => {
                                         <span className="text-primary">Charge removal:</span> A
                                         skill that removes charges from the enemy&apos;s charged
                                         skill (Opal, Provider, Sefuba) drains every enemy it hits
-                                        and no one outside its pattern.
+                                        and no one outside its pattern. Zosimos&apos;s passive
+                                        drains only the enemy that performed the repair, and
+                                        Demolisher&apos;s only the enemy its Bomb exploded on.
                                     </p>
                                     <p className="text-theme-text">
                                         <span className="text-primary">
@@ -4594,21 +4611,22 @@ const DocumentationPage: React.FC = () => {
                                     ship passives are now modeled too: <strong>Nosorog</strong>{' '}
                                     reflects a portion of the damage it takes back at an attacker
                                     that hits it as its primary target (not on splash or
-                                    area-of-effect hits), <strong>Chakara&apos;s</strong> charged
-                                    skill bypasses part of the enemy&apos;s Defense, and{' '}
-                                    <strong>Anemone</strong>, <strong>Panon</strong>,{' '}
-                                    <strong>Wusheng</strong>, and <strong>Tormenter</strong> each
-                                    take reduced damage under their own stated conditions.{' '}
-                                    <strong>Anemone</strong> and <strong>Wusheng</strong> take less
-                                    direct damage (from an attacking enemy afflicted with a
-                                    damage-over-time effect, and while Stealthed, respectively),{' '}
-                                    <strong>Panon</strong> reduces all incoming damage — direct and
-                                    damage-over-time — while she has Barrier Recharging, and{' '}
-                                    <strong>Tormenter&apos;s</strong> reduction (direct and
-                                    damage-over-time) grows the lower her HP falls.{' '}
-                                    <strong>Vindicator</strong> retaliates when it resists an enemy
-                                    debuff, dealing damage equal to 30% of its own max HP back to
-                                    the ship that attempted it. <strong>Protection</strong> (e.g.{' '}
+                                    area-of-effect hits; Stalwart&apos;s counter and Legion
+                                    Discipline II and Malvex&apos;s shield follow the same rule),{' '}
+                                    <strong>Chakara&apos;s</strong> charged skill bypasses part of
+                                    the enemy&apos;s Defense, and <strong>Anemone</strong>,{' '}
+                                    <strong>Panon</strong>, <strong>Wusheng</strong>, and{' '}
+                                    <strong>Tormenter</strong> each take reduced damage under their
+                                    own stated conditions. <strong>Anemone</strong> and{' '}
+                                    <strong>Wusheng</strong> take less direct damage (from an
+                                    attacking enemy afflicted with a damage-over-time effect, and
+                                    while Stealthed, respectively), <strong>Panon</strong> reduces
+                                    all incoming damage — direct and damage-over-time — while she
+                                    has Barrier Recharging, and <strong>Tormenter&apos;s</strong>{' '}
+                                    reduction (direct and damage-over-time) grows the lower her HP
+                                    falls. <strong>Vindicator</strong> retaliates when it resists an
+                                    enemy debuff, dealing damage equal to 30% of its own max HP back
+                                    to the ship that attempted it. <strong>Protection</strong> (e.g.{' '}
                                     <strong>Meatshield</strong>) now works as a damage transfer
                                     instead of a plain unremovable buff: each stack a living ally
                                     holds intercepts 10% of the direct damage another ally would

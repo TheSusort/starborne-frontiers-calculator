@@ -7,6 +7,18 @@ export const CURRENT_VERSION = '1.74.0';
 // bumped version whose entries are still unreleased shows users a what's-new dialog listing
 // nothing. Do it by hand only if that script cannot.
 export const UNRELEASED_CHANGES: string[] = [
+    "Combat simulator: Zosimos's passive now drains charges only from the repairing enemy.",
+    "Combat simulator: Demolisher's Bomb explosions now drain only the bombed enemy's charges.",
+    "Combat simulator: Zeolite's passive now purges a buff from every struck defender.",
+    "Combat simulator: Tygr's extra action now triggers when any struck enemy has Stasis.",
+    "Combat simulator: Amartya's passive debuffs now land only on enemy defenders.",
+    "Combat simulator: Stalwart's buff and Malvex's shield now need a primary-target hit.",
+    "Combat simulator: Lingshe's Bomb countdown cut now rolls hacking against each enemy.",
+    "Combat simulator: Crucialis's crit bonus damage now follows each struck enemy's own crit.",
+    'Combat simulator: Paracelsus no longer grants Everliving Regeneration II after a DoT death.',
+    'Combat simulator: Hayyan now repairs allies for each damage-over-time stack inflicted.',
+    'Combat simulator: the Firewall implant now rolls for each damage-over-time stack received.',
+    "Combat simulator: Pestilence, Larkspur and Grif now react to passive cleanses like Nuqtu's.",
     "Combat simulator: Bayah's and Bizon's passive debuffs now land on each qualifying enemy hit.",
     "Combat simulator: Bayah's and Sha Xing's passive buffs now trigger when hitting debuffed enemies.",
     "DPS calculator: Bayah's passive now fires each turn against a debuffed enemy.",

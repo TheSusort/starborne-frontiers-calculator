@@ -378,8 +378,8 @@ describe('enemy charge removal — direct post-event charges (on-cast, Opal-styl
 //
 // A player ship that applies a Bomb DoT (active slot) AND carries an on-bomb-detonated
 // enemy-targeted charge removal (amount 2). When the bomb detonates (bomb-detonated event,
-// actorId 'attacker'), the reactive executor routes the removal through removeEnemyCharges
-// (bulk all-opposing) → the holder's charges drop by 2.
+// actorId 'attacker'), the reactive executor removes 2 charges from the enemy the bomb exploded
+// on — here the only holder. Reach over several holders: reactiveChargeRemovalReach.
 
 describe('enemy charge removal — bomb-driven (Demolisher-style, on-bomb-detonated)', () => {
     const bombRemovalSkills = (): ShipSkills => ({
@@ -405,7 +405,7 @@ describe('enemy charge removal — bomb-driven (Demolisher-style, on-bomb-detona
         ],
     });
 
-    it('case 4: a bomb detonation drops the enemy holder’s charges by 2 (bulk all-opposing)', () => {
+    it('case 4: a bomb detonation drops the bombed holder’s charges by 2', () => {
         const input: CombatEngineInput = {
             ...buildInput(
                 // The under-test ability slot from buildInput is unused (we override shipSkills).
@@ -429,7 +429,7 @@ describe('enemy charge removal — bomb-driven (Demolisher-style, on-bomb-detona
 
         expect(detonations.length).toBe(1); // exactly one bomb detonation in the window
         expect(detonations[0].type === 'bomb-detonated' && detonations[0].actorId).toBe('attacker');
-        // Seeded 5; ONE detonation removes 2 (bulk all-opposing) → 3. The holder never re-banks
+        // Seeded 5; ONE detonation removes 2 from the bombed holder → 3. The holder never re-banks
         // (no charged-damage slot → hasChargedSkill false).
         expect(chargesOf(captured, 'e-holder')).toBe(3);
     });
