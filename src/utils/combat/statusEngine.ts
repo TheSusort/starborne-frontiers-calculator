@@ -802,6 +802,8 @@ function boardWideEnemyExtras<T extends { enemyScope?: 'all' }>(
 export function createStatusEngine(input: StatusEngineInput): StatusEngine {
     const { selfBuffs, enemyDebuffs } = input;
     const teamSources = input.teamSources ?? [];
+    // The player side's own ships: the focus ('attacker') and every team source.
+    const playerSideIds = new Set(['attacker', ...teamSources.map((s) => s.sourceId)]);
     // Default: every timed enemy application lands (no gate) — keeps statusEngine unit
     // tests simple. The engine supplies the real hacking/affinity decision.
     // Mutable so the engine can swap it per turn to the ACTING actor's live landing closure
@@ -1361,9 +1363,14 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
                       turnsRemaining: 'recurring' as const,
                   }))
                 : [];
-        const enemyAlwaysSnap = [...new Map(alwaysEnemy.map((b) => [b.buffName, b])).values()].map(
-            (b) => ({ buffName: b.buffName, turnsRemaining: 'recurring' as const })
-        );
+        // Side-wide scheduled enemy debuffs are the PLAYER side's picks, carried by every enemy
+        // target and by none of the player side's own ships.
+        const enemyAlwaysSnap = playerSideIds.has(enemyTargetId)
+            ? []
+            : [...new Map(alwaysEnemy.map((b) => [b.buffName, b])).values()].map((b) => ({
+                  buffName: b.buffName,
+                  turnsRemaining: 'recurring' as const,
+              }));
         // Accumulating buffs: include only when stacks > 0. Ability-sourced accumulating
         // statuses (payload-carrying) are excluded here — the engine collects them via
         // activeAbilityStatuses and appends them to the round lists after scheduled ones.

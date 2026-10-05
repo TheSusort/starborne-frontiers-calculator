@@ -75,6 +75,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: debuff extensions now skip enemies with affinity advantage over the caster.',
     'Combat simulator: a fight reaching the round limit is now an enemy win.',
     'Combat simulator: extra complete Shield, Leech, Reflect, Revenge and Hardened sets now stack.',
+    'DPS calculator: your enemy-debuff picks no longer land on your own ship.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

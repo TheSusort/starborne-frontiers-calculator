@@ -2573,7 +2573,13 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             emitDebuffApplied(actor.id, buffName, enemy.id, application);
         }
     }
-    const entry = statusEngine.snapshot(actor.id);
+    // The snapshot's `activeEnemyDebuffs` is the side-wide SCHEDULED bucket: the DPS calculator's
+    // "enemy debuffs" picks (focus and team), which only the PLAYER side puts on the enemy. An
+    // enemy-side actor's turn reads none of it — no fold into its hits, no landing roll against
+    // the player, no resist — so it also publishes an empty `scheduledEnemyEffects`, which its
+    // counters and procs read. Its own kit's debuffs ride the per-victim ability stores instead.
+    const ownSnapshot = statusEngine.snapshot(actor.id);
+    const entry = actor.side === 'enemy' ? { ...ownSnapshot, activeEnemyDebuffs: [] } : ownSnapshot;
 
     // Effective crit rate from a given crit-buff total, clamped by affinity.
     // Gate/context estimates use representative scalars. The actual

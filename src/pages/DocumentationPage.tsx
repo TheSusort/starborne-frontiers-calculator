@@ -2812,7 +2812,10 @@ const DocumentationPage: React.FC = () => {
                                         applied) or Incoming Direct Damage Up (multiplies all direct
                                         hits the enemy receives). Out. DoT and Inc. DoT modifiers
                                         from both sections are combined and applied as a single
-                                        multiplier on corrosion and inferno damage.
+                                        multiplier on corrosion and inferno damage. These are
+                                        debuffs your side puts on the enemy: the enemy never lands
+                                        them on your ship, and they never boost its attacks or
+                                        counter-attacks on you.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         Buffs and debuffs only apply during the rounds they are
