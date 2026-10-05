@@ -86,6 +86,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: each Defense Shred stack now counts as one debuff.',
     'Combat simulator: Cheat Death now wipes Defense Shred like any other debuff.',
     "Combat simulator: Repair Over Time now repairs from the holder's own max HP.",
+    "Combat simulator: Lionheart's Defense Up II now goes to himself and adjacent allies.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

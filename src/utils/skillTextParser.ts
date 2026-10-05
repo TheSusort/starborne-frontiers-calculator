@@ -6163,6 +6163,8 @@ const ALL_ALLIES_RE = /friendly|allies/i;
 const ADJACENT_ALLIES_RE = /\badjacent allies\b/i;
 // A grant whose receiver is explicitly the caster ("grants itself X").
 const SELF_RECEIVER_RE = /\bitself\b/i;
+// The clause deals damage itself ("deals 170% damage and grants …").
+const DEALS_DAMAGE_RE = /\bdeals?\s+\d+(?:\.\d+)?%\s+damage\b/i;
 // A status a ship only ever grants itself: a receiver-less grant of one routes to self, not to
 // all allies. Lower-case canonical names.
 const SELF_ONLY_GRANT_NAMES: ReadonlySet<string> = new Set(['taunt']);
@@ -6358,7 +6360,13 @@ function detectGrantScopes(
         // Taunt draws enemy fire to the ship carrying it, so a receiver-less "grants Taunt" is the
         // caster taking it, exactly like "gains Taunt".
         if (SELF_ONLY_GRANT_NAMES.has(buffName.toLowerCase())) return ['self'];
-        // Receiver-less grant → all players (the locked routing rule).
+        // A receiver-less grant in a clause that also deals damage goes to the caster and its
+        // adjacent allies: Lionheart's "deals 170% damage and grants Defense Up II" (owner rulings
+        // R60/R62). Such a skill's targeting pattern is its OFFENSIVE one, so there is no support
+        // pattern in the data for the engine to narrow an all-allies grant with.
+        if (DEALS_DAMAGE_RE.test(clause)) return SELF_AND_ADJACENT;
+        // Receiver-less grant → all players (the locked routing rule; the engine narrows it to
+        // the skill's support pattern).
         return ['all-allies'];
     }
 

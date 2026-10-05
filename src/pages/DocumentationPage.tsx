@@ -4457,7 +4457,10 @@ const DocumentationPage: React.FC = () => {
                                     the entire team. This applies to active and charged skill casts
                                     and to reactive passives (such as start-of-round charge grants).
                                     Text that says &quot;(All) allies&quot; means all allies{' '}
-                                    <em>in the pattern</em>, not every ship on your roster.
+                                    <em>in the pattern</em>, not every ship on your roster. A damage
+                                    skill that grants a buff without naming who gets it
+                                    (Lionheart&apos;s &quot;deals 170% damage and grants Defense Up
+                                    II&quot;) gives it to the ship itself and its adjacent allies.
                                 </p>
                                 <p className="text-theme-text mb-2">
                                     <span className="text-primary">

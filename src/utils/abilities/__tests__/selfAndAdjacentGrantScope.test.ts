@@ -77,3 +77,52 @@ describe('"itself and all adjacent allies" receiver — Tormenter', () => {
         expect(grants.map((a) => a.target)).toEqual(['adjacent-allies']);
     });
 });
+
+// Owner rulings R60/R62 (2026-10-05): Lionheart's active "deals 170% damage and grants Defense Up
+// II for 2 turns" names no recipient, and the game sends it to Lionheart and his adjacent allies.
+// A receiver-less grant in a clause that deals damage resolves to the same self + adjacent pair as
+// Tormenter's explicit receiver.
+describe('receiver-less grant in a damage clause — Lionheart', () => {
+    beforeAll(requireReferenceData);
+
+    it('Defense Up II goes to self and adjacent-allies, never all-allies', () => {
+        const abilities = buildShipAbilities(shipFromCsv('Lionheart'));
+        const grants = abilities.slots
+            .flatMap((s) => s.abilities)
+            .filter((a) => a.config.type === 'buff' && a.config.buffName === 'Defense Up II');
+        expect(grants.map((a) => a.target).sort()).toEqual(['adjacent-allies', 'self']);
+    });
+
+    it('negative: a receiver-less grant on a pure-support cast stays all-allies (Cultivator)', () => {
+        const abilities = buildShipAbilities(shipFromCsv('Cultivator'));
+        const grants = abilities.slots
+            .flatMap((s) => s.abilities)
+            .filter((a) => a.config.type === 'buff' && a.config.buffName === 'Defense Up III');
+        expect(grants.map((a) => a.target)).toEqual(['all-allies']);
+    });
+
+    it('tripwire: every self + adjacent-allies grant pair in the corpus', () => {
+        // A ship arriving here is a new receiver the engine now sends to self and neighbours —
+        // read its text before extending the list.
+        const pairs: string[] = [];
+        for (const rec of loadShipSkillRecords()) {
+            for (const slot of buildShipAbilities(shipFromCsv(rec.name)).slots) {
+                const byName = new Map<string, Set<string>>();
+                for (const a of slot.abilities) {
+                    if (a.config.type !== 'buff') continue;
+                    const set = byName.get(a.config.buffName) ?? new Set<string>();
+                    set.add(a.target);
+                    byName.set(a.config.buffName, set);
+                }
+                for (const [name, targets] of byName)
+                    if (targets.has('self') && targets.has('adjacent-allies'))
+                        pairs.push(`${rec.name}:${slot.slot}:${name}`);
+            }
+        }
+        expect(pairs.sort()).toEqual([
+            'Centurion:charged:Core Charge I',
+            'Lionheart:active:Defense Up II',
+            'Tormenter:active:Out. Damage Up I',
+        ]);
+    });
+});
