@@ -3885,7 +3885,16 @@ describe('detectDamageReactionTrigger', () => {
         ).toEqual({ trigger: 'on-attacked', primaryTargetOnly: true });
     });
 
-    it('Provider: "another ally" subject with a "cannont critically hit" rider → undefined', () => {
+    it('synthetic: "critically hit as a primary target" keeps the primary-target filter on the crit branch', () => {
+        expect(
+            at(
+                'When this Unit is critically hit as a primary target, it gains <unit-skill>Defense Up II</unit-skill> for 1 turn.',
+                'Defense Up II'
+            )
+        ).toEqual({ trigger: 'on-attacked', critFilter: 'crit', primaryTargetOnly: true });
+    });
+
+    it('Provider:"another ally" subject with a "cannont critically hit" rider → undefined', () => {
         // BOTH guards matter here: "when ANOTHER ally inflicts …" is an ally-subject
         // sentence, and the typo'd crit-suppression rider ("cannont critically hit")
         // must not read as a crit reaction.

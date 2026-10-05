@@ -3208,6 +3208,10 @@ export function detectDamageReactionTrigger(
     const statusM = allySubject ? DR_ALLY_STATUS_RE.exec(sentence) : null;
     const allyStatusName = statusM ? resolveBuffName(statusM[1]) : undefined;
     const trigger = allySubject ? ('on-ally-attacked' as const) : ('on-attacked' as const);
+    const primaryOnly =
+        !allySubject && PRIMARY_TARGET_RE.test(scrubbed)
+            ? { primaryTargetOnly: true as const }
+            : {};
     if (allySubject ? DR_ALLY_CRIT_HIT_RE.test(scrubbed) : DR_CRIT_HIT_RE.test(scrubbed)) {
         const hpM = allySubject ? null : DR_HP_BELOW_RE.exec(scrubbed);
         return {
@@ -3216,6 +3220,7 @@ export function detectDamageReactionTrigger(
             ...(hpM ? { hpBelowPct: parseInt(hpM[1], 10) } : {}),
             ...(roleFilter ? { roleFilter } : {}),
             ...(allyStatusName ? { allyStatusName } : {}),
+            ...primaryOnly,
         };
     }
     if (
@@ -3228,9 +3233,7 @@ export function detectDamageReactionTrigger(
             ...(hpM ? { hpBelowPct: parseInt(hpM[1], 10) } : {}),
             ...(roleFilter ? { roleFilter } : {}),
             ...(allyStatusName ? { allyStatusName } : {}),
-            ...(!allySubject && PRIMARY_TARGET_RE.test(scrubbed)
-                ? { primaryTargetOnly: true as const }
-                : {}),
+            ...primaryOnly,
         };
     }
     return undefined;
