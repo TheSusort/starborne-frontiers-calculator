@@ -72,6 +72,7 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator: Cobalt's charged bonus damage now requires him to be at full HP.",
     "Combat log: a hit's main target now shows the damage it actually took.",
     'Combat simulator: Exposed now lasts until hit or the round ends.',
+    'Combat simulator: debuff extensions now skip enemies with affinity advantage over the caster.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

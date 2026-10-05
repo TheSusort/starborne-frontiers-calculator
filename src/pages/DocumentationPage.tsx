@@ -2904,6 +2904,13 @@ const DocumentationPage: React.FC = () => {
                                         teams.
                                     </p>
                                     <p className="text-theme-text mb-2">
+                                        <span className="text-primary">Debuff Extension:</span>{' '}
+                                        Skills that extend debuffs or damage-over-time effects (Lev,
+                                        Asphyxiator, Provider, Valerian, Wisteria) skip any enemy
+                                        with affinity advantage over the caster, the same rule
+                                        charge removal follows. Works for both teams.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
                                         <span className="text-primary">Exposed:</span> Each stack
                                         adds 100% to the next direct hit the holder takes; a hit
                                         reads every stack and spends one. Stacks no hit spends are

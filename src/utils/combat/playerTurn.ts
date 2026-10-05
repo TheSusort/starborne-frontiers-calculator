@@ -41,6 +41,7 @@ import {
     affinityCappedCritRate,
     affinityModifiersWithOverrides,
     computeAffinityModifiers,
+    getAffinityMatchup,
 } from '../calculators/affinityUtils';
 import {
     ActiveDoTStack,
@@ -1294,6 +1295,8 @@ function extendDoTs(args: {
     adjacentEnemyIdsFor?: (anchorId: string) => string[];
     positionalLanding: boolean;
     selectorEnemyIdFor?: (kind: EnemySelectorKind) => string | undefined;
+    /** See `extensionImmune` in runPlayerTurn. */
+    isExtensionImmune: (vid: string | undefined) => boolean;
 }): void {
     for (const ab of args.abilities) {
         if (ab.config.type !== 'extend-dot') continue;
@@ -1314,6 +1317,7 @@ function extendDoTs(args: {
             selectorEnemyIdFor: args.selectorEnemyIdFor,
         });
         for (const vid of recipients) {
+            if (args.isExtensionImmune(vid)) continue;
             // `undefined` (the turn's own bound victim) and the primary's id both read the loose
             // containers; a no-victim turn's are a throwaway default, so that case lands on nobody.
             const primary = vid === undefined || vid === args.targetId;
@@ -1344,6 +1348,9 @@ function extendInflictedDoTs(args: {
     infernoEntries: ActiveDoTStack[];
     corrosionEntriesBefore: number;
     infernoEntriesBefore: number;
+    /** The victim holding these entries is immune to extension (`extensionImmune`). The gate
+     *  still draws, so the chance schedule does not depend on the victim's affinity. */
+    immune: boolean;
 }): void {
     for (const ab of args.abilities) {
         if (ab.config.type !== 'extend-dot') continue;
@@ -1353,6 +1360,7 @@ function extendInflictedDoTs(args: {
             const critPowerFactor = Math.min(1, args.effectiveCritDamage / 100);
             if (!args.extendChanceGate(critPowerFactor)) continue;
         }
+        if (args.immune) continue;
         for (let i = args.corrosionEntriesBefore; i < args.corrosionEntries.length; i++) {
             args.corrosionEntries[i].remainingRounds += ab.config.turns;
         }
@@ -1382,7 +1390,10 @@ function extendInflictedStatusDoTs(args: {
     infernoEntries: ActiveDoTStack[];
     corrosionEntriesBefore: number;
     infernoEntriesBefore: number;
+    /** The victim holding these entries is immune to extension (`extensionImmune`). */
+    immune: boolean;
 }): void {
+    if (args.immune) return;
     for (const ab of args.abilities) {
         if (ab.config.type !== 'extend-status') continue;
         if (ab.config.scope !== 'inflicted') continue;
@@ -4843,8 +4854,19 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         }
     }
 
+    // Glossary, Debuff Duration Extension: "Affinity Adv units are immune" — an enemy with affinity
+    // advantage over the caster keeps its durations. The same rule, on the same raw affinities, as
+    // Charge Manipulation's gate in the engine's `removeChargesFrom`. Every extension seam below
+    // (timed debuffs and DoTs, every-debuff and inflicted-only) asks this.
+    const extensionImmune = (vid: string | undefined): boolean => {
+        const victim =
+            vid === undefined || vid === enemy?.id ? enemy : opposingVictimById?.get(vid);
+        return getAffinityMatchup(attackerAff, victim?.affinity) === 'disadvantage';
+    };
+
     extendDoTs({
         abilities: [...(firingSkill?.abilities ?? []), ...(passiveSkill?.abilities ?? [])],
+        isExtensionImmune: extensionImmune,
         isFiringClause: (ab) => firingSkill?.abilities.includes(ab) ?? false,
         ctx,
         effectiveCritDamage,
@@ -5058,6 +5080,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 infernoEntries,
                 corrosionEntriesBefore,
                 infernoEntriesBefore,
+                immune: extensionImmune(undefined),
             });
             extendInflictedStatusDoTs({
                 abilities: [...(firingSkill?.abilities ?? []), ...(passiveSkill?.abilities ?? [])],
@@ -5066,6 +5089,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 infernoEntries,
                 corrosionEntriesBefore,
                 infernoEntriesBefore,
+                immune: extensionImmune(undefined),
             });
         }
 
@@ -5214,6 +5238,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             infernoEntries: victim.infernoEntries,
             corrosionEntriesBefore: splashCorrosionBefore,
             infernoEntriesBefore: splashInfernoBefore,
+            immune: extensionImmune(rid),
         });
         extendInflictedStatusDoTs({
             abilities: [...(firingSkill?.abilities ?? []), ...(passiveSkill?.abilities ?? [])],
@@ -5222,6 +5247,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             infernoEntries: victim.infernoEntries,
             corrosionEntriesBefore: splashCorrosionBefore,
             infernoEntriesBefore: splashInfernoBefore,
+            immune: extensionImmune(rid),
         });
     }
 
@@ -5617,7 +5643,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 positionalLanding,
                 firingClause: !fromPassive,
                 selectorEnemyIdFor,
-            }).map((id) => id ?? targetId);
+            })
+                .map((id) => id ?? targetId)
+                .filter((id) => !extensionImmune(id));
             // Asphyxiator: an INFLICTED-scope extension grows only what THIS cast landed on
             // each victim, so it passes that victim's own recorded name set as the filter and
             // leaves everything else standing alone. A victim the cast inflicted nothing on
