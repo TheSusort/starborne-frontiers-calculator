@@ -8907,6 +8907,13 @@ export function runCombat(rawInput: CombatEngineInput): {
                     );
                     const damage = damageParts.damage;
                     if (!(damage > 0)) continue;
+                    bus.emit({
+                        type: 'passive-slot-damage',
+                        attackerId: actor.id,
+                        targetId: victim.id,
+                        round: currentRound,
+                        damage,
+                    });
                     // `isAnchor: false` — this instance is not the cast's primary-target hit, so it
                     // must not satisfy a `requirePrimaryTarget` reflect gate (Nosorog).
                     // 4th arg: this instance is a SECOND positional damage path into the funnel, so
@@ -8982,8 +8989,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             // multi-hit cast. Deliberately NOT SubAttackOutcome.damage, which is the post-funnel
             // `incomingBooked` sum — a different number, and changing the basis and the
             // cardinality in one change would conflate two behaviour moves.
-            // The true delivered amount rides alongside as `deliveredDamage`; THIS field is
-            // the pre-funnel display basis buildCombatLog reads.
+            // The true delivered amount rides alongside as `deliveredDamage`.
             damage: number,
             didCrit: boolean,
             critHits: number,

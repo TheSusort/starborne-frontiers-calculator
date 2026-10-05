@@ -137,8 +137,7 @@ export interface SubAttackOutcome {
      * all, or count differently?) has NOT been verified in-game; today it is folded into the sum
      * unconditionally. A future PR may need to reverse this if that verification lands otherwise.
      *
-     * NOT the combat log's number: the log's primary-target amount reads `ability-performed.damage`
-     * (the cast's pre-funnel `directDamage`), which this field leaves untouched.
+     * NOT the combat log's number: the log's rows read each victim's `attacked.damage`.
      */
     deliveredDamage: number;
     /** Victims struck by this sub-attack, in footprint order. */

@@ -95,8 +95,7 @@ export type CombatEvent =
            *  effects (Bloodthirst).
            *
            *  A SEPARATE field from `damage` on purpose: `damage` is the cast's pre-funnel
-           *  `directDamage` and drives the combat log's primary-target amount (buildCombatLog's
-           *  `openAttackAbilityDamage`), so repurposing it would move every golden. Present only on
+           *  `directDamage`, a different number with its own consumers. Present only on
            *  the interleaved positional path — consumers MUST fall back to `damage` for the
            *  non-positional and DPS paths. */
           deliveredDamage?: number;
@@ -912,6 +911,18 @@ export type CombatEvent =
      *  the focus actor and the REAL enemy roster — the vestigial dummy also emits here, but it keys its
      *  debuffs under the `__enemy__` sentinel rather than its actor id, so its lists are always empty. */
     | {
+          /** LOG-ONLY. A cast's passive-slot damage instance (Snakeroot's "120% damage for every 4
+           *  stacks of damage over time") landing on one victim, right after the firing hit. It
+           *  emits no `attacked` — it is not a separate attack — so the combat log adds `damage`
+           *  to the open attack row's entry for `targetId`. `damage` is on the same basis as
+           *  `attacked.damage`: post-victim-defence, pre-funnel. No combat listener subscribes. */
+          type: 'passive-slot-damage';
+          attackerId: string;
+          targetId: string;
+          round: number;
+          damage: number;
+      }
+    | {
           type: 'status-snapshot';
           actorId: string;
           round: number;
@@ -937,8 +948,8 @@ export type CombatEvent =
           /** Direct damage this SUB-ATTACK dealt to this victim, AS THROWN — NOT the per-TURN
            *  aggregate, and NOT what the victim ended up taking. Pre-funnel: a Protection cascade
            *  may have moved a slice of it to a protector, an incoming-block proc may have shaved
-           *  one. Present only when a damage aggregate is in scope. The combat log's splash
-           *  `amount` reads this. Anything sized on what the victim TOOK reads `takenDamage`
+           *  one. Present only when a damage aggregate is in scope. The combat log's row
+           *  `amount` reads this, for the primary target and splash alike. Anything sized on what the victim TOOK reads `takenDamage`
            *  below. */
           damage?: number;
           /** What this victim actually TOOK from this sub-attack: the funnel's own recorded
@@ -952,8 +963,8 @@ export type CombatEvent =
            *  the taken-leech basis ruled in PR #464.
            *
            *  A SEPARATE field from `damage` for the same reason `ability-performed` carries
-           *  `deliveredDamage` beside its own `damage`: `damage` drives the log and moving it
-           *  would move every golden. Legitimately 0 (a fully redirected hit), so consumers must
+           *  `deliveredDamage` beside its own `damage`: `damage` has its own consumers, the
+           *  combat log among them. Legitimately 0 (a fully redirected hit), so consumers must
            *  test for `undefined`, never falsiness. Present only on the positional path — the
            *  non-positional emit has no funnel outcome in scope, so consumers fall back to
            *  `damage` there. */

@@ -4460,6 +4460,13 @@ const DocumentationPage: React.FC = () => {
                                         shown rather than an even split.
                                     </li>
                                     <li>
+                                        <strong>Hit amounts match the target:</strong> An attack row
+                                        shows the damage each target was dealt after its own defense
+                                        and damage reductions, for the main target and every other
+                                        enemy hit alike. Extra damage a passive adds to the same
+                                        hit, such as Snakeroot&apos;s, is included in that row.
+                                    </li>
+                                    <li>
                                         <strong>Wasted repairs and shields are named:</strong> Heal
                                         and shield rows show what actually landed, and say how much
                                         went nowhere. A repair onto a full HP bar reads &quot;0

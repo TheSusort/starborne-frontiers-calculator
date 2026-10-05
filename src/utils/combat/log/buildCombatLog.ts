@@ -93,8 +93,6 @@ interface BuildContext {
     beforeFirstTurn: boolean;
     /** The most-recently opened attack entry (ability-performed → attacked window). */
     openAttackEntry: CombatLogEntry | undefined;
-    /** The `damage` from the most-recent `ability-performed` (used for primary-target amount). */
-    openAttackAbilityDamage: number | undefined;
     /** The `targetId` from the most-recent `ability-performed` (used for miss synthesis). */
     openAttackAbilityTargetId: string | undefined;
     /** The `didHit` from the most-recent `ability-performed` (used for miss synthesis). */
@@ -143,6 +141,10 @@ interface BuildContext {
      * picked as the trigger for nesting another reaction.
      */
     reactiveEntries: WeakSet<CombatLogEntry>;
+    /** Targets a `passive-slot-damage` opened before the firing hit's own `attacked` arrived
+     *  (an enemy caster's emit order). That `attacked` adds its damage to the row instead of
+     *  being read as a repeat hit on the same victim. */
+    passiveOnlyTargets: WeakSet<CombatLogTarget>;
 
     /** Push a new round and set it as current. */
     openRound(round: number): void;
@@ -205,7 +207,6 @@ function createBuildContext(
         currentTurn: undefined,
         beforeFirstTurn: false,
         openAttackEntry: undefined,
-        openAttackAbilityDamage: undefined,
         openAttackAbilityTargetId: undefined,
         openAttackAbilityDidHit: undefined,
         hpPct: new Map(),
@@ -216,6 +217,7 @@ function createBuildContext(
         castSkillTag: undefined,
         currentStamp: undefined,
         reactiveEntries: new WeakSet<CombatLogEntry>(),
+        passiveOnlyTargets: new WeakSet<CombatLogTarget>(),
 
         openRound(round: number) {
             ctx.closeOpenAttack();
@@ -446,7 +448,6 @@ function createBuildContext(
         closeOpenAttack() {
             ctx.finalizeMissEntry();
             ctx.openAttackEntry = undefined;
-            ctx.openAttackAbilityDamage = undefined;
             ctx.openAttackAbilityTargetId = undefined;
             ctx.openAttackAbilityDidHit = undefined;
             // Clear pending skill at every turn/round boundary so it never bleeds.
@@ -560,7 +561,6 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
         };
         ctx.attachEntry(entry);
         ctx.openAttackEntry = entry;
-        ctx.openAttackAbilityDamage = e.damage;
         ctx.openAttackAbilityTargetId = e.targetId;
         ctx.openAttackAbilityDidHit = e.didHit;
     },
@@ -570,21 +570,39 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
         // Find-or-create the target for this victim (dedup by targetId).
         const existing = ctx.openAttackEntry.targets.find((t) => t.targetId === e.targetId);
         if (existing) {
+            // The firing hit landing after its own passive-slot instance was logged: add it.
+            if (ctx.passiveOnlyTargets.has(existing)) {
+                ctx.passiveOnlyTargets.delete(existing);
+                existing.amount = (existing.amount ?? 0) + (e.damage ?? 0);
+            }
             // Multi-hit on the same victim: OR-accumulate didCrit and shieldWasHit, leave amount unchanged.
             if (e.didCrit) existing.didCrit = true;
             if (e.shieldWasHit) existing.shieldWasHit = true;
             return;
         }
-        // New victim — determine amount based on primary vs. splash.
-        const isPrimary = e.isPrimaryTarget === true;
-        const amount = isPrimary ? ctx.openAttackAbilityDamage : e.damage;
+        // New victim — primary and splash alike show what this victim was dealt, after its own
+        // defence and incoming reductions (`attacked.damage`).
         const target: CombatLogTarget = {
             targetId: e.targetId,
-            amount,
+            amount: e.damage,
             didCrit: e.didCrit,
             shieldWasHit: e.shieldWasHit,
             didHit: true,
         };
+        ctx.openAttackEntry.targets.push(target);
+    },
+
+    'passive-slot-damage': (e, ctx) => {
+        // Part of the open attack's hit on this victim — add it to that victim's row rather than
+        // logging a second attack.
+        if (!ctx.openAttackEntry || ctx.openAttackEntry.actorId !== e.attackerId) return;
+        const existing = ctx.openAttackEntry.targets.find((t) => t.targetId === e.targetId);
+        if (existing) {
+            existing.amount = (existing.amount ?? 0) + e.damage;
+            return;
+        }
+        const target: CombatLogTarget = { targetId: e.targetId, amount: e.damage, didHit: true };
+        ctx.passiveOnlyTargets.add(target);
         ctx.openAttackEntry.targets.push(target);
     },
 
