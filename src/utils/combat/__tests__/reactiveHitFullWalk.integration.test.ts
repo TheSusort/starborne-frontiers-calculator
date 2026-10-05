@@ -259,7 +259,8 @@ describe('a counter or reactive proc reads the victim profile the cast reads', (
         (side) => {
             // Asphodel (fast) fires her charged skill in round 3, inflicting Inc. Damage Up II on
             // Bedrock before Bedrock strikes Stalwart. The control Asphodel's charged text is the
-            // same hit without the debuff.
+            // same hit without the debuff. Refit 0, whose rows lack "attacks always critically
+            // hit": a crit-every-cast Asphodel gains charges faster and fires before round 3.
             const asphodel = (withDebuff: boolean): Spec => ({
                 id: 'Asphodel',
                 name: 'Asphodel',
@@ -267,8 +268,9 @@ describe('a counter or reactive proc reads the victim profile the cast reads', (
                 speed: 300,
                 attack: 1,
                 ship: withDebuff
-                    ? {}
+                    ? { refits: [] }
                     : {
+                          refits: [],
                           chargeSkillText:
                               'This Unit deals <unit-damage>250% damage</unit-damage>.',
                       },

@@ -1003,6 +1003,7 @@ export function buildEnemyPlayerActorRuntime(
         doesntBreakStasis: e.doesntBreakStasis,
         stasisBreakExemptWhen: e.stasisBreakExemptWhen,
         chargeLossImmune: e.chargeLossImmune,
+        alwaysCrits: e.shipSkills?.alwaysCrits,
         affinity: e.affinity,
         preFight: e.preFight,
     });
@@ -2444,6 +2445,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         doesntBreakStasis: input.doesntBreakStasis,
         stasisBreakExemptWhen: input.stasisBreakExemptWhen,
         chargeLossImmune: input.chargeLossImmune,
+        alwaysCrits: input.shipSkills.alwaysCrits,
         affinity: input.affinity,
         preFight: input.preFight,
     });
@@ -2560,6 +2562,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             doesntBreakStasis: t.doesntBreakStasis,
             stasisBreakExemptWhen: t.stasisBreakExemptWhen,
             chargeLossImmune: t.chargeLossImmune,
+            alwaysCrits: t.walk?.shipSkills.alwaysCrits,
             // RAW affinity rides on the walk bundle (set by the adapter from TeamActorInput.affinity
             // — the SAME source as the walk's affinityDamageModifier). Legacy (no walk) → undefined.
             affinity: t.walk?.affinity,
@@ -7641,13 +7644,20 @@ export function runCombat(rawInput: CombatEngineInput): {
             const forceAffinityAdvantage = selfBuffNamesForOwners(statusEngine, [
                 owner.id,
             ]).includes('Offensive Affinity Override');
-            const critRate = affinityCappedCritRate(
-                ownerOutgoing.crit,
-                affinityModifiersWithOverrides(owner.affinity ?? 'antimatter', profile.affinity, {
-                    forceAdvantage: forceAffinityAdvantage,
-                    forceDisadvantage: profile.forceAffinityDisadvantage,
-                })
-            );
+            // An always-crit owner (owner ruling 57) rolls at 100% whatever lowers crit.
+            const critRate = owner.alwaysCrits
+                ? 1
+                : affinityCappedCritRate(
+                      ownerOutgoing.crit,
+                      affinityModifiersWithOverrides(
+                          owner.affinity ?? 'antimatter',
+                          profile.affinity,
+                          {
+                              forceAdvantage: forceAffinityAdvantage,
+                              forceDisadvantage: profile.forceAffinityDisadvantage,
+                          }
+                      )
+                  );
             return { ownerOutgoing, profile, forceAffinityAdvantage, critRate };
         };
 

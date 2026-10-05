@@ -2600,10 +2600,19 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // per-hit roll below uses realAffinityCappedCrit when deferAbilityPerformedToEngine.
     // Cap/penalty honour the forced-affinity override (effAffinity* equal the runtime
     // scalars when no override is active).
+    // "This Unit's attacks always critically hit" (`CombatActor.alwaysCrits`) pins every crit
+    // rate below at 100, past any affinity cap or crit debuff (owner ruling 57).
+    const alwaysCrits = actor.alwaysCrits === true;
     const cappedCrit = (critBuffTotal: number) =>
-        Math.min(effAffinityCritCap, Math.max(0, crit + critBuffTotal - effAffinityCritPenalty));
+        alwaysCrits
+            ? 100
+            : Math.min(
+                  effAffinityCritCap,
+                  Math.max(0, crit + critBuffTotal - effAffinityCritPenalty)
+              );
 
     const realAffinityCappedCrit = (critBuffTotal: number) => {
+        if (alwaysCrits) return 100;
         // The anchor's real matchup, overridden when this cast forces affinity.
         // With no victim there is no matchup, so this reads the neutral cap/penalty (see
         // affinityModsVsVictim). Inert on that path — no victim means no hit to roll a crit for.
@@ -4233,7 +4242,11 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         if (damageNoCrit) return false;
         // This victim's own matchup, overrides included: a covered victim holding a Defensive
         // Affinity Override caps this attacker's crit against it exactly as the anchor would.
-        return critGate(affinityCappedCritRate(uncappedCritTotal, affinityModsVsVictim(victim)));
+        return critGate(
+            alwaysCrits
+                ? 1
+                : affinityCappedCritRate(uncappedCritTotal, affinityModsVsVictim(victim))
+        );
     };
     /** Covered footprint enemies' sub-attack-0 crits, rolled early for the DoT block (see its
      *  `victimCritOf`). The engine's apply takes each one from here instead of rolling again. */

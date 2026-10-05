@@ -71,9 +71,9 @@ const realKit = (ship: string, slot: 'active' | 'charged'): ShipSkills => {
     return { slots: [{ slot, abilities: found.abilities }] };
 };
 
-/** Every slot of the ship's kit (active, charged, passive). */
-const fullKit = (ship: string): ShipSkills => {
-    const built = buildTraceShip(ship);
+/** Every slot of the ship's kit (active, charged, passive), at refit 4 unless named. */
+const fullKit = (ship: string, refitLevel: 0 | 2 | 4 = 4): ShipSkills => {
+    const built = buildTraceShip(ship, { refitLevel });
     if (!built) throw new Error(`${ship} missing from reference data`);
     return buildShipAbilities(built);
 };
@@ -387,9 +387,11 @@ describe("Asphodel's passive adds 1 charge per enemy her cast crits", () => {
     // "This Unit adds 1 charge to its charged skill after critically damaging an enemy" (owner
     // ruling 13, 2026-10-04): an area cast critting A and C adds 2. Charge count 4 so the cap
     // (her real count is 2) cannot hide a +2 or +3; round 1 is an active cast on every seed.
+    // Refit 0: the clause is her first passive, and her refit-2 "attacks always critically hit"
+    // would crit every enemy on every seed, leaving no cast that crits only some.
     const playerAsphodel = (): CombatEngineInput => ({
         ...playerCast('Asphodel', 'active'),
-        shipSkills: fullKit('Asphodel'),
+        shipSkills: fullKit('Asphodel', 0),
         chargeCount: 4,
         hasChargedSkill: true,
         startCharged: false,
@@ -400,7 +402,12 @@ describe("Asphodel's passive adds 1 charge per enemy her cast crits", () => {
         return {
             ...input,
             enemyAttackers: [
-                { ...caster, shipSkills: fullKit('Asphodel'), chargeCount: 4, startCharged: false },
+                {
+                    ...caster,
+                    shipSkills: fullKit('Asphodel', 0),
+                    chargeCount: 4,
+                    startCharged: false,
+                },
             ],
         };
     };
@@ -459,7 +466,7 @@ describe("Asphodel's passive adds 1 charge per enemy her cast crits", () => {
             enemyDebuffs: [],
             hacking: 0,
             enemySecurity: 0,
-            shipSkills: fullKit('Asphodel'),
+            shipSkills: fullKit('Asphodel', 0),
             bus,
         });
         const active = result.rounds.filter((r) => r.action === 'active');

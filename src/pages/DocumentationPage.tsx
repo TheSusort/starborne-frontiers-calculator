@@ -2718,9 +2718,11 @@ const DocumentationPage: React.FC = () => {
                                         five families landed and displayed correctly but changed
                                         nothing at all. So an enemy Speed Down really does push your
                                         ship later in the turn order, a Crit Rate Down really does
-                                        stop a ship critting, and Hacking/Security Down really do
-                                        move how often debuffs land. Where a ship carries its own
-                                        instance of the same debuff family, the{' '}
+                                        stop a ship critting (except a ship whose attacks always
+                                        critically hit, such as Tormenter, which crits every attack
+                                        even at an affinity disadvantage), and Hacking/Security Down
+                                        really do move how often debuffs land. Where a ship carries
+                                        its own instance of the same debuff family, the{' '}
                                         <span className="text-primary">stronger one wins</span> —
                                         the two never add together.
                                     </p>

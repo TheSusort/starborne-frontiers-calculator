@@ -107,6 +107,7 @@ import {
     parseForceAffinityAdvantage,
     parseStasisBreakExemption,
     parseChargeLossImmune,
+    parseAlwaysCrits,
     detectIgnoresForcedTargeting,
     detectIgnoresStealth,
     parseChargeRemoval,
@@ -4166,6 +4167,7 @@ export function buildShipAbilities(rawShip: Ship): ShipSkills {
     const stasisBreakExemptWhen = stasisExemptions.find((x) => x.conditions.length > 0)?.conditions;
 
     const chargeLossImmune = getShipSkillRows(ship).some((row) => parseChargeLossImmune(row.text));
+    const alwaysCrits = getShipSkillRows(ship).some((row) => parseAlwaysCrits(row.text));
 
     // Ship-kit correctness backlog: check ALL skill rows for the "ignores Taunt and Provoke"
     // clause (forced-targeting immunity), same refit-resolved row set as the flags above.
@@ -4181,6 +4183,7 @@ export function buildShipAbilities(rawShip: Ship): ShipSkills {
         ...(doesntBreakStasis ? { doesntBreakStasis: true } : {}),
         ...(!doesntBreakStasis && stasisBreakExemptWhen ? { stasisBreakExemptWhen } : {}),
         ...(chargeLossImmune ? { chargeLossImmune: true } : {}),
+        ...(alwaysCrits ? { alwaysCrits: true } : {}),
         ...(ignoresForcedTargeting ? { ignoresForcedTargeting: true } : {}),
         ...(ignoresStealth ? { ignoresStealth: true } : {}),
     };
