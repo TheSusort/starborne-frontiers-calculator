@@ -159,3 +159,69 @@ describe('#436 accumulating statuses — granter cadence and per-granter summing
         expect(stacksOf(eng, 'nuqtu', 'Core Charge I')).toBe(3);
     });
 });
+
+// Owner ruling R58 (2026-10-05): "gains 1 stack of Blast every turn" counts every ACTION, extra
+// actions included. A granter's first turn of the round is banked at round top (`beginRound`);
+// each LATER turn it begins in the same round banks one more (`beginTurn`).
+describe('R58 per-round shares — one stack per turn the granter takes', () => {
+    it("a granter's second turn in a round (an extra action) adds a stack", () => {
+        const eng = newEngine();
+        eng.registerAbilityStatuses([blast('sokol')], 'sokol');
+        eng.beginRound(1);
+        expect(stacksOf(eng, 'sokol', 'Blast')).toBe(1);
+        eng.beginTurn('sokol');
+        expect(stacksOf(eng, 'sokol', 'Blast')).toBe(1);
+        eng.beginTurn('sokol');
+        expect(stacksOf(eng, 'sokol', 'Blast')).toBe(2);
+        eng.beginRound(2);
+        expect(stacksOf(eng, 'sokol', 'Blast')).toBe(3);
+        eng.beginTurn('sokol');
+        expect(stacksOf(eng, 'sokol', 'Blast')).toBe(3);
+    });
+
+    it("another ship's extra action adds nothing to a share it did not grant", () => {
+        const eng = newEngine();
+        eng.registerAbilityStatuses([blast('sokol')], 'sokol');
+        eng.beginRound(1);
+        eng.beginTurn('sokol');
+        eng.beginTurn('ally');
+        eng.beginTurn('ally');
+        expect(stacksOf(eng, 'sokol', 'Blast')).toBe(1);
+    });
+
+    it("a share another ship granted rides the GRANTER's extra action, not the holder's", () => {
+        const eng = newEngine();
+        // Howler-style ally grant: the stack lives on Lev's store, granted by 'howler'.
+        eng.registerAbilityStatuses([blast('howler')], 'lev');
+        eng.beginRound(1);
+        eng.beginTurn('lev');
+        eng.beginTurn('lev');
+        expect(stacksOf(eng, 'lev', 'Blast')).toBe(1);
+        eng.beginTurn('howler');
+        eng.beginTurn('howler');
+        expect(stacksOf(eng, 'lev', 'Blast')).toBe(2);
+    });
+
+    it('a turn-blocked granter banks nothing on a later turn', () => {
+        const eng = newEngine();
+        eng.registerAbilityStatuses([blast('sokol')], 'sokol');
+        let blocked = false;
+        eng.setTurnBlockedReader((id) => blocked && id === 'sokol');
+        eng.beginRound(1);
+        eng.beginTurn('sokol');
+        blocked = true;
+        eng.beginTurn('sokol');
+        expect(stacksOf(eng, 'sokol', 'Blast')).toBe(1);
+    });
+
+    it('the extra-action stack stops at the cap', () => {
+        const eng = newEngine();
+        eng.registerAbilityStatuses([blast('sokol')], 'sokol');
+        for (const r of [1, 2, 3, 4]) {
+            eng.beginRound(r);
+            eng.beginTurn('sokol');
+            eng.beginTurn('sokol');
+        }
+        expect(stacksOf(eng, 'sokol', 'Blast')).toBe(4);
+    });
+});

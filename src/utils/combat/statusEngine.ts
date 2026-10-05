@@ -228,8 +228,8 @@ export interface DurationCutCandidate {
 
 export interface StatusEngine {
     /** Advance the round counter (strictly sequential, 1-based). Increments
-     *  per-round accumulating stacks. Call once at the top of each round, before
-     *  any turns. */
+     *  per-round accumulating stacks — each granter's FIRST turn of the round; `beginTurn` adds
+     *  its later ones. Call once at the top of each round, before any turns. */
     beginRound(round: number): void;
     /** Notification that a source actually fired a slot this round. 'attacker'
      *  covers the attacker's own cadence AND all legacy/merged scheduled buffs
@@ -285,7 +285,13 @@ export interface StatusEngine {
     /** Mark the start of an actor's turn. Sets the "active carrier" so self-side timed
      *  writes during this turn are flagged appliedThisTurn (own-turn reprieve). The id MUST
      *  match the self-store key for that actor: the focus actor uses 'attacker'; team actors
-     *  use their real id. Called at each turn-started. */
+     *  use their real id. Called at each turn-started, extra actions included.
+     *
+     *  A `'per-round'` accumulating share is gained once per TURN its granter takes ("gains 1
+     *  stack of Blast every turn" — owner ruling R58: every action is a turn, so Sokol's extra
+     *  action adds a stack). `beginRound` banks the round's first turn up front, so every
+     *  reader before the granter acts keeps seeing it; this call banks each LATER turn the same
+     *  granter takes in the same round. */
     beginTurn(actorId: string): void;
     /** Owner Post-Turn (enemy side): decrement ALL timed enemy statuses for the given
      *  `targetId` (defaults to the singular default enemy target).
@@ -1132,14 +1138,50 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
     // Self-side timed writes stamp appliedThisTurn when the carrier id matches this — the
     // own-turn reprieve. Undefined before the first beginTurn → no reprieve (safe default).
     let currentTurnActorId: string | undefined;
+    // Turns each actor has begun this round (cleared by beginRound) — what tells a granter's
+    // later turn from its first, which beginRound already banked.
+    const turnsBegunThisRound = new Map<string, number>();
     const beginTurn = (actorId: string): void => {
         currentTurnActorId = actorId;
+        const begun = (turnsBegunThisRound.get(actorId) ?? 0) + 1;
+        turnsBegunThisRound.set(actorId, begun);
+        if (begun < 2) return;
+        // A later turn this round (an extra action): bank the shares THIS granter owns.
+        for (const map of [...accumSelfMaps.values(), ...accumEnemyMaps.values()]) {
+            for (const state of map.values()) addAccumStacks(state, perRoundShare(state, actorId));
+        }
+    };
+
+    /** The stacks one round-cadence tick adds to `state`: the sum of its `'per-round'`
+     *  contributions — every granter's (#436: two granters of one buff on one owner both
+     *  accrue), or only `granterId`'s when given. A turn-blocked granter's SHIP passive banks
+     *  nothing further; stacks it already banked stay — they are standing state, the same line
+     *  that keeps a stasised ship's Barrier working. */
+    const perRoundShare = (state: AccumulatingState, granterId?: string): number => {
+        let amount = 0;
+        for (const c of state.contributions) {
+            if (c.trigger !== 'per-round') continue;
+            if (granterId !== undefined && c.granterId !== granterId) continue;
+            if (
+                c.sourceSlot !== undefined &&
+                shipPassiveSuppressed({
+                    sourceSlot: c.sourceSlot,
+                    source: c.source,
+                    casterId: c.granterId,
+                })
+            ) {
+                continue;
+            }
+            amount += c.rate;
+        }
+        return amount;
     };
 
     // beginRound: advance the round counter (strictly sequential) and apply the
-    // per-round accumulating increment. Per-round stacks tick once at round top,
-    // independent of any source firing. Called before any turns — preserving the
-    // old step()'s ordering of "per-round accum BEFORE timed upserts".
+    // per-round accumulating increment for each granter's first turn of the round, banked at
+    // round top independent of any source firing (`beginTurn` banks its later turns). Called
+    // before any turns — preserving the old step()'s ordering of "per-round accum BEFORE timed
+    // upserts".
     const beginRound = (r: number): void => {
         if (r !== lastRound + 1) {
             throw new Error(
@@ -1156,34 +1198,11 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         // (Decrement+expire moved out to decrementPlayer/decrementEnemy, called from each
         //  owner's Post Turn in the engine.)
 
+        turnsBegunThisRound.clear();
+        // The `per-active`/`per-charge` triggers need no turn-block gate: they accrue on the
+        // granter's own cast, which a blocked ship does not take.
         const incrementPerRound = (map: Map<string, AccumulatingState>) => {
-            for (const state of map.values()) {
-                // #436: sum EVERY granter's per-round share. Two granters of one buff on one
-                // owner both accrue — Howler's `ally`-scoped Blast landing on a Lev who also
-                // self-grants Blast reads 2 per round, capped at 4. Pre-#436 the second
-                // registration REPLACED the first, so only one share existed.
-                let amount = 0;
-                for (const c of state.contributions) {
-                    if (c.trigger !== 'per-round') continue;
-                    // A turn-blocked granter's SHIP passive banks nothing further. Stacks it
-                    // already banked stay — they are standing state, the same line that keeps a
-                    // stasised ship's Barrier working. The `per-active`/`per-charge` triggers need
-                    // no gate: they accrue on the granter's own cast, which a blocked ship
-                    // does not take.
-                    if (
-                        c.sourceSlot !== undefined &&
-                        shipPassiveSuppressed({
-                            sourceSlot: c.sourceSlot,
-                            source: c.source,
-                            casterId: c.granterId,
-                        })
-                    ) {
-                        continue;
-                    }
-                    amount += c.rate;
-                }
-                addAccumStacks(state, amount);
-            }
+            for (const state of map.values()) addAccumStacks(state, perRoundShare(state));
         };
         // Iterate EVERY owner's accum map so per-round stacks tick for all owners. Today only
         // 'attacker' is seeded from scheduled buffs — team-actor accumulating ability statuses

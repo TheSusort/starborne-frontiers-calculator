@@ -6718,7 +6718,8 @@ export function parseSkillEffects(
         }
 
         // Detect accumulating buffs: stacks gained per trigger with a recurring duration.
-        // passive sources → per-round; active/charge → per-active/per-charge.
+        // passive sources → per-round (one stack per turn the granter takes — `StackTrigger`);
+        // active/charge → per-active/per-charge.
         // SP-G G1b EXCEPTION: a start-of-combat "N stacks" grant (Meatshield) is a ONE-TIME
         // grant, not a per-turn accumulator — leave stackTrigger undefined so buildShipAbilities'
         // isAccumulatingBuff gate is false and the pre-combat relabel fires. The N-stack count and

@@ -3161,8 +3161,11 @@ const DocumentationPage: React.FC = () => {
                                         Ships with &quot;extra action&quot; passives (Nuqtu,
                                         Sustainer, Liberator, Tygr, Tormenter) take a full
                                         additional turn each round, re-entering the turn queue at
-                                        their Speed position. When an extra turn occurs, the round
-                                        tooltip shows a{' '}
+                                        their Speed position. An extra action is a turn, so a stack
+                                        gained &quot;every turn&quot; (Sokol&apos;s and Lev&apos;s
+                                        Blast, Butcher&apos;s Overload, Nemesis&apos;s Warding
+                                        Screen) is gained again on it. When an extra turn occurs,
+                                        the round tooltip shows a{' '}
                                         <span className="font-semibold">+N extra turn</span> line
                                         beneath the charge counter.
                                     </p>
