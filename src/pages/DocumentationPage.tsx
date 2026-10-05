@@ -2908,7 +2908,9 @@ const DocumentationPage: React.FC = () => {
                                         passive that depends on the ship&apos;s own HP reads that
                                         ship&apos;s live HP wherever it is placed, on either team:
                                         Cobalt gains its charge and Out. Damage Up II only at full
-                                        HP, and Makoli repairs only when hit below 40% HP.
+                                        HP (as does his charged skill&apos;s extra damage equal to
+                                        30% of his max HP), and Makoli repairs only when hit below
+                                        40% HP.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Buff Steal:</span> Skills

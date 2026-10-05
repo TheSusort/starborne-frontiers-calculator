@@ -69,6 +69,7 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator: Nuqtu's Core Charge I now stacks once per enemy buff gained.",
     "Combat simulator: Lionheart's round-start Protection now redirects damage from his allies.",
     "Combat simulator: Cobalt's and Makoli's passives now check their own HP on either team.",
+    "Combat simulator: Cobalt's charged bonus damage now requires him to be at full HP.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
