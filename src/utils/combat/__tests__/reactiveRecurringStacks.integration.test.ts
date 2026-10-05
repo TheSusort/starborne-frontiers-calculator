@@ -10,8 +10,9 @@
  * stacks, and they persist into later rounds until the cap.
  *
  * The fix is keyed on `duration === 'recurring'`, NOT on "has no numeric duration": the Isha/Nayra
- * Affinity Overrides carry no duration at all and keep their 1-turn window (an open owner
- * question), and Terran Bolster III, granted by the same trigger with `duration: 1`, still expires.
+ * Affinity Overrides carry no duration at all and take their own no-end window (owner ruling R51,
+ * `UNTIL_PURGED_GRANTS` in triggers.ts), not the accumulating store, and Terran Bolster III,
+ * granted by the same trigger with `duration: 1`, still expires.
  *
  * Every Nuqtu/Nayra kit here comes from the production parser over `docs/ship-skills.csv`.
  */
@@ -272,7 +273,7 @@ describe("Nuqtu's Core Charge I — one stack per enemy buff gain, kept, capped 
     }
 });
 
-describe('A duration-less reactive grant is NOT a recurring one — Nayra keeps her 1-turn window', () => {
+describe("A duration-less reactive grant is NOT a recurring one — Nayra's override has no end", () => {
     beforeAll(requireReferenceData);
 
     it("PRECONDITION: Nayra's real Defensive Affinity Override has no duration at all", () => {
@@ -283,7 +284,7 @@ describe('A duration-less reactive grant is NOT a recurring one — Nayra keeps 
         expect(grant?.config.type === 'buff' && grant.config.duration).toBeUndefined();
     });
 
-    it('her override is applied with a 1-turn window and expires at her own turn end, every round', () => {
+    it('her override is granted every round start and never expires (R51)', () => {
         const nayra: TeamActorEngineInput = {
             ...buffingAlly('nayra', 'M2'),
             walk: {
@@ -313,7 +314,7 @@ describe('A duration-less reactive grant is NOT a recurring one — Nayra keeps 
         );
 
         expect(applied).toHaveLength(3);
-        for (const e of applied) expect(e.type === 'buff-applied' && e.duration).toBe(1);
-        expect(expired).toHaveLength(3);
+        for (const e of applied) expect(e.type === 'buff-applied' && e.duration).toBe(Infinity);
+        expect(expired).toHaveLength(0);
     });
 });

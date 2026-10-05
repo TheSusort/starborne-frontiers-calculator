@@ -87,6 +87,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: Cheat Death now wipes Defense Shred like any other debuff.',
     "Combat simulator: Repair Over Time now repairs from the holder's own max HP.",
     "Combat simulator: Lionheart's Defense Up II now goes to himself and adjacent allies.",
+    "Combat simulator: Isha and Nayra's Affinity Overrides now last until purged.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

@@ -556,6 +556,17 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
  * enqueue this many times (a `debuff-applied` is one); a reaction's own once-per cap still applies
  * at execution.
  */
+/**
+ * Reactive grants with no written duration that last until purged (owner ruling R51): Isha and
+ * Nayra's round-start Affinity Overrides persist through every turn and are granted again at each
+ * round start. Their "removed after attacking / being attacked" buff text is overridden by the
+ * ruling. Every other duration-less reactive grant keeps the 1-turn window.
+ */
+const UNTIL_PURGED_GRANTS: ReadonlySet<string> = new Set([
+    'Offensive Affinity Override',
+    'Defensive Affinity Override',
+]);
+
 function dotInflictions(e: { stacks: number }): number {
     return Math.max(0, e.stacks);
 }
@@ -4878,16 +4889,21 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // Consume the once-per-attack slot now that the self-buff WILL apply.
         if (buffGuardKey) ctx.reactionFiredThisAttack?.add(buffGuardKey);
         // Reactive buffs bypass the aura-by-passive-slot classification — their own
-        // duration decides; a duration-less buff defaults to a 1-turn window. A HIT-COUNTED
-        // duration-less buff instead takes Infinity: its hit count, not a turn window, is what
-        // expires it (a 1-turn default would silently cap a multi-hit Barrier at one turn).
+        // duration decides; a duration-less buff defaults to a 1-turn window. Two duration-less
+        // kinds take Infinity instead (never ticks out, still purgeable):
+        //  - a HIT-COUNTED buff: its hit count, not a turn window, is what expires it (a 1-turn
+        //    default would silently cap a multi-hit Barrier at one turn);
+        //  - an `UNTIL_PURGED_GRANTS` name (Isha/Nayra's Affinity Overrides, owner ruling R51).
         const duration =
-            typeof cfg.duration === 'number' ? cfg.duration : cfg.hits !== undefined ? Infinity : 1;
+            typeof cfg.duration === 'number'
+                ? cfg.duration
+                : cfg.hits !== undefined || UNTIL_PURGED_GRANTS.has(cfg.buffName)
+                  ? Infinity
+                  : 1;
         // A `'recurring'` stacking grant (Nuqtu's Core Charge I, Lionheart's round-start
         // Protection) is NOT duration-less: its stacks add up per trigger, capped, and are kept —
         // they bank in the accumulating store instead of the 1-turn window above. Keyed on
-        // `'recurring'` alone; a buff with no duration at all (Isha/Nayra's Affinity Overrides)
-        // keeps the window. Persistent-by-name statuses keep their own door in
+        // `'recurring'` alone. Persistent-by-name statuses keep their own door in
         // `applyTimedAbilityStatus`.
         const banksStacks = cfg.duration === 'recurring' && !isPersistentByName(cfg.buffName);
         // Recipients: an ally-damage reaction grant ('ally' target + eventCtx naming the
