@@ -581,10 +581,11 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
             return;
         }
         // New victim — primary and splash alike show what this victim was dealt, after its own
-        // defence and incoming reductions (`attacked.damage`).
+        // defence and incoming reductions (`attacked.damage`). A primary hit with no figure (the
+        // engine's 0-damage cast fallback) reads 0.
         const target: CombatLogTarget = {
             targetId: e.targetId,
-            amount: e.damage,
+            amount: e.damage ?? (e.isPrimaryTarget === true ? 0 : undefined),
             didCrit: e.didCrit,
             shieldWasHit: e.shieldWasHit,
             didHit: true,

@@ -66,6 +66,38 @@ describe('buildCombatLog', () => {
         ]);
     });
 
+    it('a primary hit whose attacked event carries no damage figure logs 0, not a blank', () => {
+        // The engine's 0-damage cast fallback emits `attacked` with no `damage` field.
+        const events: CombatEvent[] = [
+            ev({ type: 'round-started', round: 1 }),
+            ev({ type: 'turn-started', actorId: 'A', round: 1 }),
+            ev({
+                type: 'ability-performed',
+                actorId: 'A',
+                targetId: 'B',
+                round: 1,
+                abilityType: 'damage',
+                damage: 0,
+                didCrit: false,
+                critHits: 0,
+                didHit: true,
+            }),
+            ev({
+                type: 'attacked',
+                attackerId: 'A',
+                targetId: 'B',
+                round: 1,
+                isPrimaryTarget: true,
+            }),
+            ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
+            ev({ type: 'round-ended', round: 1 }),
+        ];
+        const log = buildCombatLog(events, roster, initialCharge);
+        expect(log[0].turns[0].entries[0].targets).toEqual([
+            expect.objectContaining({ targetId: 'B', amount: 0 }),
+        ]);
+    });
+
     it('filters out turn-started events for actors not in roster', () => {
         const events: CombatEvent[] = [
             ev({ type: 'round-started', round: 1 }),
