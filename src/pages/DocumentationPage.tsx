@@ -3097,9 +3097,9 @@ const DocumentationPage: React.FC = () => {
                                         cleansing a debuff (Pestilence, Larkspur, Grif, Arum,
                                         Yarrow) also hear the cleanses an enemy&apos;s passive
                                         performs (Nuqtu, Purifier, AEGIS, Hermes, Howler), but not a
-                                        duration cut; a cleanse that such a reaction provoked does
-                                        not trigger another one. A count written after an infliction
-                                        in the same skill includes what that skill landed, enemy by
+                                        duration cut; a cleanse that such a reaction provoked
+                                        triggers them again. A count written after an infliction in
+                                        the same skill includes what that skill landed, enemy by
                                         enemy: Crocus&apos;s Corrosion II counts toward her own
                                         &ldquo;3 or more debuffs&rdquo; Stasis (Asphyxiator&apos;s
                                         and Anemone&apos;s gates likewise), and a resisted one does
