@@ -556,6 +556,53 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
  * enqueue this many times (a `debuff-applied` is one); a reaction's own once-per cap still applies
  * at execution.
  */
+/**
+ * Reactive grants with no written duration that last until purged (owner ruling R51): Isha and
+ * Nayra's round-start Affinity Overrides persist through every turn and are granted again at each
+ * round start. Their "removed after attacking / being attacked" buff text is overridden by the
+ * ruling. Every other duration-less reactive grant keeps the 1-turn window.
+ */
+const UNTIL_PURGED_GRANTS: ReadonlySet<string> = new Set([
+    'Offensive Affinity Override',
+    'Defensive Affinity Override',
+]);
+
+/** Identity of ONE DoT-conversion roll (Belladonna): the converter's ability, the victim, the
+ *  applier whose DoT landed, and the DoT type. Shared by the cast path, which may draw the roll
+ *  at the landing (`preDecidedConversions`), and the convert-dot executor, which spends it. */
+export function dotConversionKey(
+    converterId: string,
+    abilityId: string,
+    victimId: string,
+    applierId: string,
+    dotType: string
+): string {
+    return `${converterId}:${abilityId}:${victimId}:${applierId}:${dotType}`;
+}
+
+/**
+ * Draw one DoT-conversion roll: the chance is `pctPerPoint`% per point of the CONVERTER's live
+ * stat (Belladonna: 1% per 10 Hacking), from the converter's own `${id}:convert` stream, gate
+ * kept combat-lifetime in `procChanceGates` under `${ownerId}:${abilityId}`.
+ */
+export function drawDotConversion(
+    ownerId: string,
+    abilityId: string,
+    cfg: Extract<Ability['config'], { type: 'convert-dot' }>,
+    ctx: Pick<IntentExecContext, 'procChanceGates' | 'effectiveStatsFor'>
+): boolean {
+    const hacking = ctx.effectiveStatsFor?.(ownerId)?.hacking ?? 0;
+    const convertRate = Math.min(1, (cfg.chanceFromStat.pctPerPoint * hacking) / 100);
+    const convertKey = `${ownerId}:${abilityId}`;
+    let convertGate = ctx.procChanceGates?.get(convertKey);
+    if (ctx.procChanceGates && !convertGate) {
+        // Keyed by owner + purpose — see passesProcChanceGate.
+        convertGate = makeRateGate(`${ownerId}:convert`);
+        ctx.procChanceGates.set(convertKey, convertGate);
+    }
+    return convertGate ? convertGate(convertRate) : convertRate >= 1;
+}
+
 function dotInflictions(e: { stacks: number }): number {
     return Math.max(0, e.stacks);
 }
@@ -577,7 +624,7 @@ function dotInflictions(e: { stacks: number }): number {
  * `filter === undefined` (a clause with no "inflict"/"apply" verb of its own — Firewall's
  * "when debuffed") takes neither reading and passes unconditionally.
  */
-function passesApplicationFilter(
+export function passesApplicationFilter(
     filter: 'inflict' | 'apply' | undefined,
     application: 'inflict' | 'apply' | undefined
 ): boolean {
@@ -641,6 +688,10 @@ export function registerReactiveListeners(args: {
      *  more debuffs" gate reads on a cast. Side-agnostic. Read by the `on-enemy-debuff-inflicted` listener to stamp
      *  `debuffVictimDebuffCount`; absent (unit fixtures) → no stamp. */
     debuffCountOf?: (actorId: string) => number;
+    /** How many DoT stacks an actor carries right now (`carriedDotStacks`). Read by the
+     *  `on-enemy-dot-stacks-crossed` listener AFTER a landing; absent (unit fixtures) → that
+     *  trigger never fires. */
+    dotStackCountOf?: (actorId: string) => number;
     /** #363: living same-side ids on `ownerId`'s ACTIVE support-pattern footprint — the
      *  owner's own cell included whenever its pattern covers it (every non-`Not-Self` support
      *  pattern does), which is what lets an owner's OWN shield-destroyed still self-react.
@@ -676,6 +727,7 @@ export function registerReactiveListeners(args: {
         adjacentAllyIdsFor,
         statusNamesOf,
         debuffCountOf,
+        dotStackCountOf,
         footprintAllyIdsFor,
         maxHpOf,
     } = args;
@@ -1161,6 +1213,38 @@ export function registerReactiveListeners(args: {
                     };
                     bus.on('debuff-applied', (e) => onLanded(e, 1));
                     bus.on('dot-applied', (e) => onLanded(e, dotInflictions(e)));
+                    break;
+                }
+                case 'on-enemy-dot-stacks-crossed': {
+                    // VICTIM-scoped, inflictor-agnostic (Snakeroot, R43/R43b): read the enemy's
+                    // total DoT stacks right after `added` of them landed, and fire once for every
+                    // multiple of `everyDotStacks` the count passed on the way (3 → 9 at step 4 is
+                    // two). Each enemy is counted on its own. The landing emits run right after
+                    // their stacks are stored, so the live count already includes them.
+                    const step =
+                        ra.ability.config.type === 'damage'
+                            ? ra.ability.config.everyDotStacks
+                            : undefined;
+                    const onStacksAdded = (targetId: string, added: number): void => {
+                        if (!step || added <= 0 || !isOpposing(targetId)) return;
+                        const after = dotStackCountOf?.(targetId);
+                        if (after === undefined) return;
+                        const crossed =
+                            Math.floor(after / step) -
+                            Math.floor(Math.max(0, after - added) / step);
+                        for (let k = 0; k < crossed; k++)
+                            enqueue({
+                                ...intent,
+                                eventCtx: { ...intent.eventCtx, debuffVictimId: targetId },
+                            });
+                    };
+                    bus.on('dot-applied', (e) => onStacksAdded(e.targetId, e.stacks));
+                    // Toxic Overflow's end-of-round spread adds one Corrosion stack to each
+                    // affected ally of the holder, and announces it on this event, not
+                    // `dot-applied`.
+                    bus.on('corrosion-spread', (e) => {
+                        for (const id of e.affectedIds) onStacksAdded(id, 1);
+                    });
                     break;
                 }
                 case 'on-ally-crit-dot':
@@ -2373,6 +2457,10 @@ export interface IntentExecContext {
      *  Keyed `${ownerId}:${abilityId}`; the RateGate fires with the proc's probability on
      *  each reactive draw of the same ability so the proc lands at its true frequency. */
     procChanceGates?: Map<string, RateGate>;
+    /** DoT-conversion rolls a cast already drew at its landing, keyed by `dotConversionKey` (owner
+     *  ruling R76: Belladonna's same-cast conversion counts for her Acidic Decay gate). The
+     *  convert-dot executor spends an entry instead of drawing. Absent → every roll is drawn. */
+    preDecidedConversions?: Map<string, boolean>;
     /** Live self-HP% per owner (0..100) for drain-time hp-threshold gates: each owner's own
      *  current/max HP, both sides. A caller that supplies no closure at all (unit contexts) falls
      *  back to 100 in buildDrainContext. */
@@ -4878,16 +4966,21 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // Consume the once-per-attack slot now that the self-buff WILL apply.
         if (buffGuardKey) ctx.reactionFiredThisAttack?.add(buffGuardKey);
         // Reactive buffs bypass the aura-by-passive-slot classification — their own
-        // duration decides; a duration-less buff defaults to a 1-turn window. A HIT-COUNTED
-        // duration-less buff instead takes Infinity: its hit count, not a turn window, is what
-        // expires it (a 1-turn default would silently cap a multi-hit Barrier at one turn).
+        // duration decides; a duration-less buff defaults to a 1-turn window. Two duration-less
+        // kinds take Infinity instead (never ticks out, still purgeable):
+        //  - a HIT-COUNTED buff: its hit count, not a turn window, is what expires it (a 1-turn
+        //    default would silently cap a multi-hit Barrier at one turn);
+        //  - an `UNTIL_PURGED_GRANTS` name (Isha/Nayra's Affinity Overrides, owner ruling R51).
         const duration =
-            typeof cfg.duration === 'number' ? cfg.duration : cfg.hits !== undefined ? Infinity : 1;
+            typeof cfg.duration === 'number'
+                ? cfg.duration
+                : cfg.hits !== undefined || UNTIL_PURGED_GRANTS.has(cfg.buffName)
+                  ? Infinity
+                  : 1;
         // A `'recurring'` stacking grant (Nuqtu's Core Charge I, Lionheart's round-start
         // Protection) is NOT duration-less: its stacks add up per trigger, capped, and are kept —
         // they bank in the accumulating store instead of the 1-turn window above. Keyed on
-        // `'recurring'` alone; a buff with no duration at all (Isha/Nayra's Affinity Overrides)
-        // keeps the window. Persistent-by-name statuses keep their own door in
+        // `'recurring'` alone. Persistent-by-name statuses keep their own door in
         // `applyTimedAbilityStatus`.
         const banksStacks = cfg.duration === 'recurring' && !isPersistentByName(cfg.buffName);
         // Recipients: an ally-damage reaction grant ('ally' target + eventCtx naming the
@@ -5584,23 +5677,22 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // No victim resolver / id (unit-test ctx without actorById, or a listener that somehow
         // fired without a captured victim) → not-simulated follow-up, no-op.
         if (!allyId || !victim) return;
-        // Gate 1: conversion chance — 1% per 10 Hacking (pctPerPoint 0.1) of the OWNER's
-        // (Belladonna's) LIVE effective Hacking. Deterministic RateGate keyed by ability,
-        // mirroring passesProcChanceGate's `${ownerId}:${abilityId}` convention (reused here
-        // via ctx.procChanceGates so the accumulator persists combat-lifetime like every other
-        // proc gate).
-        const ownerStats = ctx.effectiveStatsFor?.(intent.ownerId);
-        const hacking = ownerStats?.hacking ?? 0;
-        const convertRate = Math.min(1, (cfg.chanceFromStat.pctPerPoint * hacking) / 100);
-        const convertKey = `${intent.ownerId}:${intent.ability.id}`;
-        let convertGate = ctx.procChanceGates?.get(convertKey);
-        if (ctx.procChanceGates && !convertGate) {
-            // Keyed by owner + purpose — see passesProcChanceGate above.
-            convertGate = makeRateGate(`${intent.ownerId}:convert`);
-            ctx.procChanceGates.set(convertKey, convertGate);
-        }
-        const converts = convertGate ? convertGate(convertRate) : convertRate >= 1;
+        // Gate 1: the conversion roll. A roll the caster's cast already drew at the landing, for
+        // a same-cast count gate (`preDecidedConversions`), is spent here instead of drawn again.
+        const decisionKey = dotConversionKey(
+            intent.ownerId,
+            intent.ability.id,
+            victim.id,
+            allyId,
+            cfg.fromDotType
+        );
+        const preDecided = ctx.preDecidedConversions?.get(decisionKey);
+        if (preDecided !== undefined) ctx.preDecidedConversions?.delete(decisionKey);
+        const converts =
+            preDecided ?? drawDotConversion(intent.ownerId, intent.ability.id, cfg, ctx);
         if (!converts) return;
+        const ownerStats = ctx.effectiveStatsFor?.(intent.ownerId);
+        const convertKey = `${intent.ownerId}:${intent.ability.id}`;
         // Retag the entries THIS ally just applied (not yet converted, same sourceId) — tier/
         // stacks/remainingRounds are left untouched ("of the same level"); only family +
         // unremovable change (family feeds enemyDotFamilyCounts and the charge gate; unremovable

@@ -348,7 +348,10 @@ describe('enemies that regain a buff when hit keep the chain going', () => {
     it('with his charged skill: the first charged cast steals every buff, purges none, and ends the chain', () => {
         const m = run(1e9, true);
         expect(m.turns).toBeLessThan(1 + MAX_CHAINED_EXTRA_ACTIONS_PER_ROUND);
-        expect(m.purgedPerTurn.slice(0, -1).every((n) => n === 5)).toBe(true);
+        // 5 regained buffs per active cast, plus Nayra's round-start Affinity Overrides on the
+        // casts that still find them: they last until purged (owner ruling R51), so the first
+        // two casts purge 6 and the third 5.
+        expect(m.purgedPerTurn).toEqual([6, 6, 5, 0]);
         expect(m.purgedPerTurn[m.purgedPerTurn.length - 1]).toBe(0);
     });
 

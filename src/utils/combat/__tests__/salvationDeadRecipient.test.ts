@@ -71,7 +71,6 @@ const makeHealing = (
         },
         recipientMaxHp: () => 1000,
         recipientIncomingHealPct: () => 0,
-        applierMaxHp: () => undefined,
         // Live target starts missing 500 HP → first 500 of raw is effective, rest overheals.
         applyHealToTarget: (raw, victim, repairSourceId) => {
             appliedTo.push(victim.id);

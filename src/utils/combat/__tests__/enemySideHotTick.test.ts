@@ -37,9 +37,8 @@
  *     BEFORE the holder acts. This is the positive fixture.
  *   - `applierSlot: 'passive'` → medic speed 100. The passive-slot grant is seeded onto every ally
  *     at combat start (`seedPassiveTimedStatuses`, round 1), so the holder carries the HoT on its
- *     round-1 turn while the applier still has NO turn ctx. That is the strict-applier-ctx
- *     fixture, and it is two-armed (1 round: skipped; 2 rounds: ticks once) so "no HP moved"
- *     cannot pass vacuously.
+ *     round-1 turn while the applier still has NO turn ctx. The tick reads the holder's own max
+ *     HP (R55), so it lands anyway (section 5).
  *
  * Sections 6, 7 and 8 need shapes `runFixture` cannot express and build their own inputs inline:
  * section 6 puts a SELF-applied HoT on a holder on EACH side at different percentages (cross-side
@@ -77,8 +76,11 @@ const HOLDER_MAX_HP = 100_000;
 const INERT_HP = 10_000_000;
 
 const HOT_PCT = 10;
-/** One tick = applierMaxHp × hotPct% × stacks(1) — arithmetic, not a golden. */
-const EXPECTED_TICK = (APPLIER_MAX_HP * HOT_PCT) / 100; // 10,000
+/** One tick = the HOLDER's max HP × hotPct% × stacks(1) (owner ruling R55) — arithmetic, not a
+ *  golden. The medic and the holder share a max HP, so the medic's own tick is the same figure. */
+const EXPECTED_TICK = (HOLDER_MAX_HP * HOT_PCT) / 100; // 10,000
+/** The inert focus's own tick on its fanned copy: its own (huge) max HP × hotPct%. */
+const FOCUS_TICK = (INERT_HP * HOT_PCT) / 100;
 const START = HOLDER_MAX_HP / 2; // 50,000 — 5 ticks of headroom before overheal
 
 type EnemyAttackerInput = NonNullable<CombatEngineInput['enemyAttackers']>[number];
@@ -307,7 +309,7 @@ describe('#369 — an enemy-side HoT holder ticks', () => {
     it('an enemy ship carrying Repair Over Time gains HP on its own turn', () => {
         const run = runFixture({ holderSide: 'enemy' });
         expect(run.holderHpAfter).toBeGreaterThan(START);
-        // Nominal, not merely directional: applierMaxHp × hotPct% × stacks.
+        // Nominal, not merely directional: holderMaxHp × hotPct% × stacks.
         expect(run.holderHpAfter - START).toBe(EXPECTED_TICK);
     });
 
@@ -363,15 +365,16 @@ describe('#369 — an off-anchor player holder ticks', () => {
         // SOURCE axis. The applier is the medic and the holder is a different actor, so this can
         // fail — with a self-applied HoT the two would coincide and it could not.
         // `target: 'ally'` fans to the medic's WHOLE side, so all THREE player actors hold a copy
-        // (focus, medic, holder) and each ticks once: three ticks of gross, all on the medic.
-        expect(round.perActor.get(MEDIC_ID)!.hotHeal).toBe(3 * EXPECTED_TICK);
+        // (focus, medic, holder) and each ticks once, each off its OWN max HP: three ticks of
+        // gross, all on the medic.
+        expect(round.perActor.get(MEDIC_ID)!.hotHeal).toBe(FOCUS_TICK + 2 * EXPECTED_TICK);
         // Neither of the other two holders has ANY source-axis entry — not merely a smaller share.
         expect(round.perActor.get(HOLDER_ID)).toBeUndefined();
         expect(round.perActor.get(FOCUS_ID)).toBeUndefined();
         // Consumption splits the three ticks apart: only the holder sits below max HP, so its tick
         // is the only consumed one and the focus's and the medic's own are pure overheal.
         expect(round.perActor.get(MEDIC_ID)!.effectiveHeal).toBe(EXPECTED_TICK);
-        expect(round.perActor.get(MEDIC_ID)!.overheal).toBe(2 * EXPECTED_TICK);
+        expect(round.perActor.get(MEDIC_ID)!.overheal).toBe(FOCUS_TICK + EXPECTED_TICK);
 
         // RECIPIENT axis, the counterpart: keyed by who the repair LANDED on, so the holder is
         // present here for exactly one tick and is credited its own consumption.
@@ -381,20 +384,19 @@ describe('#369 — an off-anchor player holder ticks', () => {
     });
 });
 
-// ══ 5: the strict applier-ctx rule survives the lift, on BOTH sides ═══════════════════════════
+// ══ 5: a holder ticks before its applier has acted, on BOTH sides ═════════════════════════════
 
-describe('#369 — a foreign applier with no turn ctx yet still skips the tick', () => {
+describe('a passive-slot HoT ticks in round 1, before its applier has acted', () => {
     for (const holderSide of ['player', 'enemy'] as const) {
-        it(`${holderSide}-side holder: skipped in round 1, ticks in round 2`, () => {
-            // Round 1: the passive-slot grant is already on the holder (combat-start seeding) but
-            // its applier acts LAST, so `applierMaxHp` is undefined → SKIP, with no base-stat
-            // fallback. The second arm is what makes that a measurement rather than a fixture that
-            // never had a HoT: by round 2 the applier has a turn ctx and the same holder ticks.
+        it(`${holderSide}-side holder: ticks in round 1 and again in round 2`, () => {
+            // The passive-slot grant is already on the holder (combat-start seeding) while its
+            // applier acts LAST. The tick reads the holder's own max HP (R55), so it needs nothing
+            // from the applier and lands in round 1.
             const oneRound = runFixture({ holderSide, applierSlot: 'passive', numRounds: 1 });
-            expect(oneRound.holderHpAfter).toBe(START);
+            expect(oneRound.holderHpAfter - START).toBe(EXPECTED_TICK);
 
             const twoRounds = runFixture({ holderSide, applierSlot: 'passive', numRounds: 2 });
-            expect(twoRounds.holderHpAfter - START).toBe(EXPECTED_TICK);
+            expect(twoRounds.holderHpAfter - START).toBe(2 * EXPECTED_TICK);
         });
     }
 });
@@ -418,9 +420,8 @@ describe('#369 — a foreign applier with no turn ctx yet still skips the tick',
 // Verified as an instrument, not assumed: handing the player holder the ENEMY percentage while
 // leaving the assertions alone turns the first expectation red (`expected 30000 to be 10000`).
 
-/** A SELF-targeted HoT. Self-applied deliberately: `applierId === actor.id` short-circuits
- *  `hotApplierMaxHp` to the holder's own effective HP, so neither holder needs a foreign applier
- *  to have banked a turn ctx and the two sides stay independent by construction. */
+/** A SELF-targeted HoT. Self-applied deliberately, so the two sides stay independent by
+ *  construction. */
 const selfHotBuff = (hotPct: number): Ability => ({
     id: `ab-self-hot-${hotPct}`,
     type: 'buff',

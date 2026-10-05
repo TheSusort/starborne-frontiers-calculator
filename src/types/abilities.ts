@@ -186,6 +186,11 @@ export type AbilityTrigger =
     // debuff": passive voice, no "this Unit"; owner ruling R16). Rides `debuff-applied` and
     // `dot-applied` keyed on the TARGET, unlike the three inflictor-scoped siblings above.
     | 'on-enemy-debuff-inflicted'
+    // An opposing actor's TOTAL DoT stack count, from any source, crosses a multiple of the
+    // damage config's `everyDotStacks` (Snakeroot's "120% damage for every 4 stacks of damage over
+    // time inflicted onto a single enemy" — owner rulings R43/R43b). One firing per multiple
+    // crossed, routed to that enemy.
+    | 'on-enemy-dot-stacks-crossed'
     | 'on-ally-crit-dot'
     // Wisteria: self-subject sibling of on-ally-crit-dot — THIS unit's OWN crit-cast DoT
     // infliction ("When this Unit inflicts Corrosion with a critical hit, it also inflicts
@@ -372,6 +377,8 @@ export const LIVE_TRIGGERS = new Set<AbilityTrigger>([
     'on-other-ally-debuff-inflicted',
     // R16 (APEX): any debuff landing on an opposing actor, whoever inflicted it.
     'on-enemy-debuff-inflicted',
+    // R43 (Snakeroot): an enemy's total DoT stacks crossing a multiple of `everyDotStacks`.
+    'on-enemy-dot-stacks-crossed',
     // Phase 3 PR-E: ally-scoped counterpart of on-debuffed.
     'on-ally-debuffed',
     // Phase 3 PR-H: self-scoped reaction to THIS unit's own cleanse actually removing a debuff.
@@ -578,13 +585,11 @@ export type ConditionSubject =
     // bomb entry-array lengths, +acidicDecay once SP-E adds it). Bare (no buffName) = the sum of
     // ALL DoT entries, regardless of family (Anemone's charged "If the primary enemy has 3 or
     // more Damage over Time effects" — generic). With `buffName` set = ONE named family only
-    // (Belladonna's charged "If the enemy has 3 or more Acidic Decay" — runtime-inert until SP-E
-    // actually introduces the Acidic Decay DoT family; ConditionContext.enemyDotFamilyCounts
-    // defaults every family to 0 until then, so this gate never fires yet). DoT-ONLY — distinct
+    // (Belladonna's charged "If the enemy has 3 or more Acidic Decay" — the family her passive's
+    // conversion tags onto Corrosion entries; ConditionContext.enemyDotFamilyCounts). DoT-ONLY — distinct
     // from `enemy-debuff`, whose legacy count also folds in landed CONTROL/marker debuffs; this
-    // subject must never be satisfied by e.g. a landed Stasis. Also a SCALING source (Snakeroot's
-    // "for every 4 stacks of damage over time" — reads the raw count, not just a gate). Always
-    // derivable:true.
+    // subject must never be satisfied by e.g. a landed Stasis. Bare (no comparator) it reads the
+    // raw count, so it can also serve as a SCALING source. Always derivable:true.
     | 'enemy-dot-count'
     // Ship-kit W8 Task 13 (Meiying): binary gate -- the enemy THIS on-enemy-destroyed reaction
     // just killed carried at least one debuff (of any kind) at the moment it died. Distinct from
@@ -794,6 +799,10 @@ export type AbilityConfig =
           multiplier: number;
           hits?: number;
           noCrit?: boolean;
+          /** The step of an `on-enemy-dot-stacks-crossed` trigger: the hit fires once for every
+           *  multiple of this many DoT stacks an enemy's total crosses (Snakeroot: 4 at refit 2+,
+           *  7 at refit 0). */
+          everyDotStacks?: number;
           /** Vindicator on-resist: when set, the REACTIVE damage executor computes the
            *  pre-mitigation raw from the owner's effective max HP × hpBasisPct (percent) instead
            *  of attack × multiplier. Reactive-damage path only (applyReactiveDamage); the on-cast

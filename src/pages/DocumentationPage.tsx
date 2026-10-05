@@ -3053,10 +3053,13 @@ const DocumentationPage: React.FC = () => {
                                         itself), counts every damage-over-time stack as a debuff:
                                         one &ldquo;2 stacks of Corrosion&rdquo; application is two
                                         debuffs. A count of damage-over-time effects (Anemone,
-                                        Snakeroot) counts each stack too. Each stack also rolls its
-                                        own landing: Snakeroot&apos;s 2 stacks can land 0, 1 or 2,
-                                        and every stack that fails is its own resist. The same goes
-                                        for Amartya&apos;s 2 stacks of Defense Shred or Exposed, and
+                                        Snakeroot) counts each stack too: Snakeroot&apos;s passive
+                                        is its own 120% hit on an enemy each time that enemy&apos;s
+                                        damage-over-time stacks, from any ship, reach another
+                                        multiple of 4. Each stack also rolls its own landing:
+                                        Snakeroot&apos;s 2 stacks can land 0, 1 or 2, and every
+                                        stack that fails is its own resist. The same goes for
+                                        Amartya&apos;s 2 stacks of Defense Shred or Exposed, and
                                         each of her stacks that lands counts as its own infliction.
                                         A reaction to a debuff being inflicted (APEX&apos;s shield,
                                         Oleander&apos;s charge, Provider&apos;s hit, Lingshe&apos;s
@@ -3092,7 +3095,14 @@ const DocumentationPage: React.FC = () => {
                                         more debuffs&rdquo; Stasis (Asphyxiator&apos;s and
                                         Anemone&apos;s gates likewise), and a resisted one does not.
                                         A passive reacting to the hit (Bayah) counts only the
-                                        debuffs from before the skill.
+                                        debuffs from before the skill. APEX&apos;s own passive
+                                        shields arrive as each debuff lands, so her charged
+                                        skill&apos;s &ldquo;If this Unit has an active shield&rdquo;
+                                        Disable lands once an earlier debuff in it has landed.
+                                        Likewise Belladonna&apos;s charged Corrosion II, if her
+                                        passive converts it to Acidic Decay as it lands, counts
+                                        toward that skill&apos;s &ldquo;3 or more Acidic
+                                        Decay&rdquo; Stasis.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Team Ships:</span> Pick a
@@ -3697,9 +3707,10 @@ const DocumentationPage: React.FC = () => {
                                         Shields build an absorption pool on the target (capped at
                                         its max HP) that soaks incoming damage before HP is touched,
                                         and does not expire. Repair Over Time effects tick at the
-                                        holder&apos;s turn for their per-stack amount. Crit heals
-                                        resolve on their own deterministic crit schedule, separate
-                                        from any damage crits.
+                                        holder&apos;s turn, repairing a percentage of the
+                                        holder&apos;s own max HP per stack. Crit heals resolve on
+                                        their own deterministic crit schedule, separate from any
+                                        damage crits.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Damage-Based Sustain:</span>{' '}
@@ -4456,7 +4467,10 @@ const DocumentationPage: React.FC = () => {
                                     the entire team. This applies to active and charged skill casts
                                     and to reactive passives (such as start-of-round charge grants).
                                     Text that says &quot;(All) allies&quot; means all allies{' '}
-                                    <em>in the pattern</em>, not every ship on your roster.
+                                    <em>in the pattern</em>, not every ship on your roster. A damage
+                                    skill that grants a buff without naming who gets it
+                                    (Lionheart&apos;s &quot;deals 170% damage and grants Defense Up
+                                    II&quot;) gives it to the ship itself and its adjacent allies.
                                 </p>
                                 <p className="text-theme-text mb-2">
                                     <span className="text-primary">
@@ -4513,8 +4527,8 @@ const DocumentationPage: React.FC = () => {
                                         <strong>Hit amounts match the target:</strong> An attack row
                                         shows the damage each target was dealt after its own defense
                                         and damage reductions, for the main target and every other
-                                        enemy hit alike. Extra damage a passive adds to the same
-                                        hit, such as Snakeroot&apos;s, is included in that row.
+                                        enemy hit alike. Extra damage a passive adds to the same hit
+                                        is included in that row.
                                     </li>
                                     <li>
                                         <strong>Wasted repairs and shields are named:</strong> Heal

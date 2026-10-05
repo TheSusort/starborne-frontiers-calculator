@@ -378,26 +378,18 @@ describe('SP-D — count-based gates', () => {
         'This Unit deals <unit-damage>120% damage</unit-damage> for every 4 stacks of damage over time inflicted on to a single enemy.';
 
     it(
-        'Snakeroot: "deals 120% damage for every 4 stacks of damage over time" is gated/scaled ' +
-            'on the enemy-dot-count entry count (SP-D, PR-D3 — closed)',
+        'Snakeroot: "deals 120% damage for every 4 stacks of damage over time" is a 120% hit ' +
+            'on each crossing of 4 stacks (owner rulings R43/R43b — closed)',
         () => {
             const abilities = abilitiesFor({ secondPassiveSkillText: SNAKEROOT_P2 }, 'passive');
-            // CLOSED: SP-D — attaches conditions+scaling directly to the same `type: 'damage'`
-            // ability (the parseConditionalDamage precedent, buildShipAbilities.ts), zeroing the
-            // base multiplier since the whole 120% IS the per-4-entries rate (0 entries → 0%
-            // damage) — see src/utils/abilities/__tests__/snakerootScaling.test.ts for the full
-            // build-output coverage (base-zeroing + perUnit=30 percentage-points-per-entry).
-            const scaled = abilities.find(
-                (a) =>
-                    (a.config.type === 'damage' ||
-                        a.config.type === 'modifier' ||
-                        a.config.type === 'additional-damage') &&
-                    a.scaling !== undefined
-            );
-            expect(scaled?.scaling).toBeDefined();
-            expect(scaled!.conditions[scaled!.scaling!.conditionIndex!].subject).toBe(
-                'enemy-dot-count'
-            );
+            // See snakerootScaling.test.ts for the parse and
+            // snakerootDotThresholdHit.integration.test.ts for the engine.
+            const hit = abilities.find((a) => a.trigger === 'on-enemy-dot-stacks-crossed');
+            expect(hit?.config).toMatchObject({
+                type: 'damage',
+                multiplier: 120,
+                everyDotStacks: 4,
+            });
         }
     );
 });

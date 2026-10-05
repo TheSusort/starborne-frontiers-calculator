@@ -322,11 +322,9 @@ export function evaluateCondition(cond: Condition, ctx: ConditionContext): numbe
         case 'buffs-purged-this-cast':
             return ctx.buffsPurgedThisCast;
         case 'enemy-dot-count':
-            // Named-family branch (Belladonna's "3+ Acidic Decay") is untouched by SP-4d: it is
-            // runtime-inert today (no DoT family exists in the game yet — `enemyDotFamilyCounts`
-            // reads every family as 0 regardless of victim), so there is no live no-victim
-            // fabrication to close here. The bare branch below is: `?? 0` would re-fabricate the
-            // exact absence `enemyDotCount`'s own doc says must propagate.
+            // Named-family branch (Belladonna's "3+ Acidic Decay"): an absent map reads 0. The bare
+            // branch below must not: `?? 0` would re-fabricate the exact absence
+            // `enemyDotCount`'s own doc says must propagate.
             if (cond.buffName) return ctx.enemyDotFamilyCounts?.[cond.buffName] ?? 0;
             return ctx.enemyDotCount;
         case 'killed-enemy-had-debuff':

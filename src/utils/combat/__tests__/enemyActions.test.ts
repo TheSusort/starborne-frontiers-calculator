@@ -311,7 +311,6 @@ describe('Phase 4c PR 4 Task 5a: event-only enemy heal/cleanse emission', () => 
             credit: (actorId, bucket, amount) => credits.push({ actorId, bucket, amount }),
             recipientMaxHp: () => 10000,
             recipientIncomingHealPct: () => 0,
-            applierMaxHp: () => 10000,
             applyHealToTarget: (raw) => {
                 applied.push(raw);
                 return { reversed: false, consumed: raw, overheal: 0 };
@@ -633,7 +632,6 @@ describe('#369: HoT ticking applies on both sides, and only credits behind healE
             credit: (actorId, bucket, amount) => credits.push({ actorId, bucket, amount }),
             recipientMaxHp: () => 10000,
             recipientIncomingHealPct: () => 0,
-            applierMaxHp: () => 10000,
             applyHealToTarget: (raw, victim) => {
                 applied.push(raw);
                 appliedTo.push(victim.id);

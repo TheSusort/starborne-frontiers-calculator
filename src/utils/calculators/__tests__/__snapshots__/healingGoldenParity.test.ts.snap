@@ -6880,13 +6880,13 @@ exports[`healingGoldenParity > role-filtered RoT grant LIVE (tank role ATTACKER 
       "hotHeal": 0,
       "incomingDamage": 1000,
       "incomingDamageRaw": 1000,
-      "overheal": 1500,
+      "overheal": 4000,
       "perRecipient": {
         "tank": {
           "directHeal": 0,
           "effectiveHealing": 1000,
-          "hotHeal": 2500,
-          "overheal": 1500,
+          "hotHeal": 5000,
+          "overheal": 4000,
         },
       },
       "perTargetDealt": {
@@ -6899,7 +6899,7 @@ exports[`healingGoldenParity > role-filtered RoT grant LIVE (tank role ATTACKER 
       "shieldAbsorbed": 0,
       "targetHpPct": 99,
       "targetShieldPool": 0,
-      "teamHealing": 2500,
+      "teamHealing": 5000,
       "totalRoundHealing": 0,
     },
     {
@@ -6924,13 +6924,13 @@ exports[`healingGoldenParity > role-filtered RoT grant LIVE (tank role ATTACKER 
       "hotHeal": 0,
       "incomingDamage": 1000,
       "incomingDamageRaw": 1000,
-      "overheal": 1500,
+      "overheal": 4000,
       "perRecipient": {
         "tank": {
           "directHeal": 0,
           "effectiveHealing": 1000,
-          "hotHeal": 2500,
-          "overheal": 1500,
+          "hotHeal": 5000,
+          "overheal": 4000,
         },
       },
       "perTargetDealt": {
@@ -6943,7 +6943,7 @@ exports[`healingGoldenParity > role-filtered RoT grant LIVE (tank role ATTACKER 
       "shieldAbsorbed": 0,
       "targetHpPct": 99,
       "targetShieldPool": 0,
-      "teamHealing": 2500,
+      "teamHealing": 5000,
       "totalRoundHealing": 0,
     },
     {
@@ -6968,13 +6968,13 @@ exports[`healingGoldenParity > role-filtered RoT grant LIVE (tank role ATTACKER 
       "hotHeal": 0,
       "incomingDamage": 1000,
       "incomingDamageRaw": 1000,
-      "overheal": 1500,
+      "overheal": 4000,
       "perRecipient": {
         "tank": {
           "directHeal": 0,
           "effectiveHealing": 1000,
-          "hotHeal": 2500,
-          "overheal": 1500,
+          "hotHeal": 5000,
+          "overheal": 4000,
         },
       },
       "perTargetDealt": {
@@ -6987,7 +6987,7 @@ exports[`healingGoldenParity > role-filtered RoT grant LIVE (tank role ATTACKER 
       "shieldAbsorbed": 0,
       "targetHpPct": 99,
       "targetShieldPool": 0,
-      "teamHealing": 2500,
+      "teamHealing": 5000,
       "totalRoundHealing": 0,
     },
   ],
@@ -6996,10 +6996,10 @@ exports[`healingGoldenParity > role-filtered RoT grant LIVE (tank role ATTACKER 
     "perRecipient": {
       "tank": {
         "totalEffectiveHealing": 3000,
-        "totalOverheal": 4500,
+        "totalOverheal": 12000,
       },
     },
-    "teamTotalHealing": 7500,
+    "teamTotalHealing": 15000,
     "totalBarrierAbsorbed": 0,
     "totalCleanses": 0,
     "totalDirectHeal": 0,
@@ -7007,7 +7007,7 @@ exports[`healingGoldenParity > role-filtered RoT grant LIVE (tank role ATTACKER 
     "totalHealing": 0,
     "totalHotHeal": 0,
     "totalIncomingDamage": 4000,
-    "totalOverheal": 4500,
+    "totalOverheal": 12000,
     "totalShield": 0,
     "totalShieldAbsorbed": 0,
   },

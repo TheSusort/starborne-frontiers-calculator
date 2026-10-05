@@ -45,13 +45,10 @@ export const HIT_MITIGATION_DOT_ROUNDS = 3;
  * rendering: there is no standing value for "blocks the next hit", which is the same reason the
  * status is name-keyed rather than a `parsedEffects` entry.
  *
- * The statuses that DO read the broad union split into two categories, and only one of them is a
- * precedent worth copying. Barrier and Stealth are genuinely STANDING, so the broad read is correct
- * for them. The Affinity Overrides are not: they are ONE-SHOT by game text ("removed after
- * attacking" / "removed after being attacked") yet have NO `removeSelfBuffByName` call anywhere in
- * `src` — the same defect this module fixes, still open, backlogged pending a game-rule decision
- * on what "removed after attacking" should mean for a manually selected one. So cite
- * Barrier/Stealth as the pattern; the Overrides are an instance of the bug, not of the design.
+ * The statuses that DO read the broad union are genuinely STANDING, so the broad read is correct
+ * for them: Barrier, Stealth, and the Affinity Overrides — which owner ruling R51 makes last until
+ * purged, whatever their "removed after attacking" buff text says (`UNTIL_PURGED_GRANTS` in
+ * triggers.ts).
  *
  * The one sub-channel deliberately dropped in the TIGHTENING direction: a SCHEDULED self-buff that
  * DOES carry a turn count is written into the same `selfMaps` this read walks, but with no

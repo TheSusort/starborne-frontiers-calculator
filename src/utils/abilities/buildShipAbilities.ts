@@ -1746,29 +1746,20 @@ function abilitiesFromText(
         }
     }
 
-    // SP-D (Task 4/PR-D3): "deals X% damage for every N stacks of damage over time inflicted
-    // on[to] a single enemy" (Snakeroot p1/p2) — an OPEN-ENDED per-DoT-stack SCALING multiplier.
-    // Unlike the enemy-effect BONUS above (a flat, capped add-on to a standing base), the WHOLE
-    // X% here IS the per-N-stacks rate, so the base multiplier this row's <unit-damage> tag
-    // parsed into `mult` must be zeroed and replaced entirely by the scaling bonus (0 tracked
-    // DoT stacks → 0% damage). Attaches a bare `enemy-dot-count` condition (Task 3) as the
-    // scaling source — bare so `evaluateCondition` returns the raw stack count, not a
-    // threshold-gated 0/1 (see docs/model-completeness-triage… SP-D). Only when no scaling was
-    // attached above (mirrors the other conditional-scaling attach points' precedence).
+    // "deals X% damage for every N stacks of damage over time inflicted on[to] a single enemy"
+    // (Snakeroot p1/p2) — a separate X% hit on that enemy each time its total DoT stack count,
+    // from any source, crosses a multiple of N (owner rulings R43/R43b). Rides the reactive
+    // `on-enemy-dot-stacks-crossed` trigger. It can crit: the text says nothing otherwise.
     if (
         out[0]?.ability.type === 'damage' &&
         out[0].ability.config.type === 'damage' &&
         !out[0].ability.scaling
     ) {
-        const dotScaling = parseDotEntryDamageScaling(text);
-        if (dotScaling) {
-            const idx = out[0].ability.conditions.length;
-            out[0].ability.conditions = [
-                ...out[0].ability.conditions,
-                { subject: 'enemy-dot-count', derivable: true },
-            ];
-            out[0].ability.config.multiplier = 0;
-            out[0].ability.scaling = { conditionIndex: idx, perUnit: dotScaling.perUnit };
+        const dotStep = parseDotEntryDamageScaling(text);
+        if (dotStep) {
+            out[0].ability.trigger = 'on-enemy-dot-stacks-crossed';
+            out[0].ability.config.multiplier = dotStep.pct;
+            out[0].ability.config.everyDotStacks = dotStep.everyDotStacks;
         }
     }
 

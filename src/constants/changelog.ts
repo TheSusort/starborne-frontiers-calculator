@@ -85,6 +85,12 @@ export const UNRELEASED_CHANGES: string[] = [
     'DPS calculator: Valiant, Sustainer and Thresh now count each stack of their buffs.',
     'Combat simulator: each Defense Shred stack now counts as one debuff.',
     'Combat simulator: Cheat Death now wipes Defense Shred like any other debuff.',
+    "Combat simulator: Repair Over Time now repairs from the holder's own max HP.",
+    "Combat simulator: Lionheart's Defense Up II now goes to himself and adjacent allies.",
+    "Combat simulator: Isha and Nayra's Affinity Overrides now last until purged.",
+    "Combat simulator: APEX's charged Disable now counts shields from that cast's debuffs.",
+    "Combat simulator: Snakeroot's passive is now a 120% hit per 4 DoT stacks.",
+    "Combat simulator: Belladonna's charged Stasis now counts that cast's converted Acidic Decay.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
