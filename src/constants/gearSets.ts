@@ -236,3 +236,10 @@ export const isGearSetName = (name: string): name is GearSetName =>
  *  return `undefined`, and a key shared by both tables (`AMBUSH`) returns the gear-set entry. */
 export const getGearSet = (name: string | null | undefined): GearSetBonus | undefined =>
     name && Object.hasOwn(GEAR_SETS, name) ? GEAR_SETS[name as keyof typeof GEAR_SETS] : undefined;
+
+/** How many COMPLETE sets `pieces` equipped pieces of `name` make: a set pays out once per whole
+ *  `minPieces` (2 when unset), so 6 pieces of a 2-piece set are 3 sets and 5 are 2. Every
+ *  complete set adds its bonus again — its stats on the stat page and in autogear, its effect in
+ *  the combat sim. */
+export const completeSetCount = (name: string, pieces: number): number =>
+    Math.floor(pieces / (getGearSet(name)?.minPieces ?? 2));

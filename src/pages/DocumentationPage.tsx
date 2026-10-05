@@ -4537,9 +4537,13 @@ const DocumentationPage: React.FC = () => {
                                 </h4>
                                 <p className="text-theme-text">
                                     Equipped implant and gear-set special effects are beginning to
-                                    apply in the simulator (and now in the DPS calculator too).
-                                    Currently supported: <strong>Leech</strong> gear set (heals the
-                                    ship for 15% of all damage it deals each turn) and the{' '}
+                                    apply in the simulator (and now in the DPS calculator too). Each
+                                    complete set adds its effect again, as on the stat page: six
+                                    Shield pieces are three sets and grant 12% a turn, and the same
+                                    goes for Leech, Reflect, Revenge, Hardened and Decimation (a
+                                    second Cloaking set adds nothing). Currently supported:{' '}
+                                    <strong>Leech</strong> gear set (heals the ship for 15% of all
+                                    damage it deals each turn, per set) and the{' '}
                                     <strong>Bloodthirst</strong> implant (on-crit heal for 12%, 17%,
                                     or 20% of damage dealt, depending on rarity). Chance-based procs
                                     such as Bloodthirst are modeled at their expected average
@@ -4591,7 +4595,7 @@ const DocumentationPage: React.FC = () => {
                                     Inferno and Corrosion ticks in both the combat simulator and the
                                     DPS calculator). Five shield sources are also modeled: the{' '}
                                     <strong>Shield</strong> gear set (grants the equipped ship a
-                                    shield each turn, 4% of its max HP),{' '}
+                                    shield each turn, 4% of its max HP per set),{' '}
                                     <strong>Adaptive Plating</strong> (grants the ship a shield from
                                     the damage it takes, once per round),{' '}
                                     <strong>Abundant Renewal</strong> (turns over-healing on an ally
@@ -4604,22 +4608,23 @@ const DocumentationPage: React.FC = () => {
                                     effects are also modeled: the <strong>Reflect</strong> gear set
                                     (reflects a portion of each incoming hit back at the attacker),
                                     the <strong>Revenge</strong> gear set (the wearer deals
-                                    increasing damage as its HP drops, up to +25% near death), and
-                                    the <strong>Smokescreen</strong> implant (a chance to gain
-                                    Stealth when directly hit), and the <strong>Boost</strong> gear
-                                    set (each timed buff the wearer applies — to itself or allies —
-                                    lasts one extra turn, modeled in both the combat and DPS
-                                    simulators). The <strong>Voidfire Catalyst</strong> implant is
-                                    also modeled: it increases detonation damage (bomb bursts,
-                                    Inferno detonations, and Corrosion detonations) and bomb splash
-                                    damage by a percentage based on rarity — its rare and legendary
-                                    variants amplify bomb splash damage only. Counterattacks are now
-                                    modeled too: one of your ships with a &quot;when directly
-                                    damaged&quot; passive (such as <strong>Stalwart</strong>)
-                                    retaliates against the attacker for a share of its own attack —
-                                    a full hit that can crit and kill. Different counterattackers
-                                    have their own triggers: <strong>Nyxen</strong> strikes back
-                                    only when its shield is the part that takes the hit, and{' '}
+                                    increasing damage as its HP drops, up to +25% per set near
+                                    death), and the <strong>Smokescreen</strong> implant (a chance
+                                    to gain Stealth when directly hit), and the{' '}
+                                    <strong>Boost</strong> gear set (each timed buff the wearer
+                                    applies — to itself or allies — lasts one extra turn, modeled in
+                                    both the combat and DPS simulators). The{' '}
+                                    <strong>Voidfire Catalyst</strong> implant is also modeled: it
+                                    increases detonation damage (bomb bursts, Inferno detonations,
+                                    and Corrosion detonations) and bomb splash damage by a
+                                    percentage based on rarity — its rare and legendary variants
+                                    amplify bomb splash damage only. Counterattacks are now modeled
+                                    too: one of your ships with a &quot;when directly damaged&quot;
+                                    passive (such as <strong>Stalwart</strong>) retaliates against
+                                    the attacker for a share of its own attack — a full hit that can
+                                    crit and kill. Different counterattackers have their own
+                                    triggers: <strong>Nyxen</strong> strikes back only when its
+                                    shield is the part that takes the hit, and{' '}
                                     <strong>Centurion</strong> retaliates when it or an adjacent
                                     ally is directly damaged. These reactions now fire for{' '}
                                     <strong>both teams</strong>: enemy ships react when you hit them

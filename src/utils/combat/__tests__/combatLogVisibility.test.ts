@@ -215,13 +215,14 @@ describe('combat-log visibility — start-of-turn shield grant placement', () =>
         const round1 = result.combatLog.find((r) => r.round === 1);
         if (!round1) throw new Error('fixture: no round 1 in the combat log');
 
-        // The SHIELD gear set grants 4% of max HP at start-of-turn — a separate, smaller grant
-        // than the shielder's 10%-max-HP active cast. Find it by amount.
+        // Four SHIELD pieces are two complete sets, granting 2 x 4% = 8% of max HP at
+        // start-of-turn — a separate, smaller grant than the shielder's 10%-max-HP active cast.
+        // Find it by amount.
         const setGrant = (entries: CombatLogEntry[]): CombatLogEntry[] =>
             collect(entries).filter(
                 (e) =>
                     e.kind === 'shield' &&
-                    e.targets.some((t) => t.amount !== undefined && Math.round(t.amount) === 4000)
+                    e.targets.some((t) => t.amount !== undefined && Math.round(t.amount) === 8000)
             );
 
         const inTurns = round1.turns.flatMap((t) => setGrant(t.entries));
@@ -229,7 +230,7 @@ describe('combat-log visibility — start-of-turn shield grant placement', () =>
 
         expect(
             inTurns.length + inEndOfRound.length,
-            'precondition: the SHIELD set must grant a 4%-max-HP pool'
+            'precondition: two SHIELD sets must grant an 8%-max-HP pool'
         ).toBeGreaterThan(0);
         expect(inEndOfRound).toHaveLength(0);
         expect(inTurns.length).toBeGreaterThan(0);
