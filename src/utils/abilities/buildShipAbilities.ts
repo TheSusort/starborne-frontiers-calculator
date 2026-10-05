@@ -140,6 +140,7 @@ import {
     detectGrantRecipientFilter,
     detectRecipientFilter,
     parseInsteadDamageReplacement,
+    isInsteadReplacedGrant,
     parseDefenseSubstitution,
     parseWhileShieldedFlatDefence,
     parseAllyDebuffResistShieldPenGain,
@@ -3561,6 +3562,11 @@ export function buildShipAbilities(rawShip: Ship): ShipSkills {
         if (conditions.length) {
             ability.conditions = conditions;
         }
+        // The base grant of a self-gated "instead" pair (Panon's Terran Guard II) is replaced when
+        // the instead branch fires, so it takes the base damage's not-Provoked, not-Taunted gate.
+        if (rowText && isInsteadReplacedGrant(rowText, buff.buffName, occurrence)) {
+            ability.conditions = [...ability.conditions, ...tauntProvokeAbsentConditions()];
+        }
         // #363 (Fuying): recipient FACTION scope on an ally-scoped grant ("grants Tianchen allies
         // Stealth"). Attached ONLY when the clause actually names one, so every other ship's
         // ability object stays byte-identical (verified corpus-wide: the detector fires on Fuying
@@ -3718,6 +3724,12 @@ export function buildShipAbilities(rawShip: Ship): ShipSkills {
                     !(
                         reactiveTrigger === 'on-other-ally-debuff-inflicted' &&
                         c.subject === 'ally-inflicts-debuff'
+                    ) &&
+                    // Pallas: same drop — the manual "after an ally is critically repaired"
+                    // condition comes from the clause the trigger was resolved from.
+                    !(
+                        reactiveTrigger === 'on-any-ally-critically-repaired' &&
+                        c.subject === 'ally-critically-repaired'
                     )
             );
             // The debuff-inflicted trigger family reads this clause's OWN landing verb

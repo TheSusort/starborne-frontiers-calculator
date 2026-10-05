@@ -2302,6 +2302,99 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         : positionalLanding
           ? landingAffinityMod < 0
           : affinityDisadvantage;
+    // Applies one passed timed self status to its recipients. The status lives on each recipient
+    // (decrements at the recipient's Post Turn; family + persistent rules run per recipient side
+    // because applyTimedAbilityStatus threads recipientId). buff-applied emits ONCE PER RECIPIENT
+    // with the recipient's actorId, with the granter riding alongside in `granterId`.
+    const applyTimedSelfStatus = (status: (typeof timedSelfBySlot)[number]): void => {
+        // recipients is set by the engine helper for every timed-by-slot status; default to
+        // [actor.id] (self routing) for any caller that omitted it (statusEngine fixtures).
+        // #363: the status's own recipient FACTION scope, copied off the source ability at
+        // registration. This is the CAST path for a faction-scoped grant (Fuying's "grants
+        // Tianchen allies Stealth" is a finite-duration buff → a timed-by-slot status), so the
+        // intersection has to happen HERE — the ability object is out of scope by now, which is
+        // why the filter rides the status rather than being read through `source`.
+        // Board-adjacency scope (`allyScope`), the sibling of `factionFilter` above and narrowed
+        // for the same reason: registration runs at actor construction, where nobody has moved or
+        // died, so an `adjacent-allies` grant is registered against the whole side and resolved to
+        // LIVING neighbours HERE, where `adjacentAllyIds` — the per-side resolver the engine
+        // threads onto TurnArgs — is in hand. Absent (every other target) → no narrowing.
+        // `adjacentAllyIds` itself excludes the caster, which is correct: "all adjacent allies"
+        // never includes the unit granting it. A ship whose text says BOTH (Tormenter's "to itself
+        // and all adjacent allies") carries a separate `self`-targeted ability for its own half.
+        // Undefined resolver (non-positional run) → no narrowing, matching `adjacentAllyIds`'s own
+        // whole-side fallback rather than silently dropping the grant.
+        const scopedRecipients =
+            status.allyScope === 'adjacent-allies' && adjacentAllyIds !== undefined
+                ? ((allowed) => (status.recipients ?? [actor.id]).filter((id) => allowed.has(id)))(
+                      new Set(adjacentAllyIds)
+                  )
+                : (status.recipients ?? [actor.id]);
+        // The status's recipient STATE filter (`recipientFilter` — Hermes's "if an ally has less
+        // than 40% HP, it grants that ally Cheat Death") is read per recipient, LIVE, right here:
+        // an ally-wide grant asks each recipient about its own HP, never the caster's target.
+        // TIMING CONTRACT: this loop runs BEFORE the cast's support pass, so the HP read is each
+        // recipient's HP before this cast's repair lands — even though Hermes's text writes the
+        // repair first. That is a deliberate exception to written clause order (user ruling
+        // 2026-10-02: an ally at 38% whom the repair lifts to 41.7% still gets Cheat Death).
+        // Pinned by hermesCheatDeathPerRecipient.integration.test.ts case (6), both sides.
+        // No role reader exists on the cast path, so a `notRole` axis excludes everyone here
+        // (`recipientFilterCarriers.test.ts` keeps that axis off cast-path abilities).
+        const stateFiltered = narrowByRecipientFilter(
+            supportRecipients('all-allies', scopedRecipients, undefined, status.factionFilter),
+            status.recipientFilter,
+            {
+                holdsStatus: (id, buffName) => ownerHoldsSelfBuff(statusEngine, id, buffName),
+                hpFractionOf: allyHpFractionOf,
+            }
+        );
+        for (const rid of stateFiltered) {
+            // Block Buff: a recipient carrying it cannot receive new buffs. Covers self-buffs,
+            // single-ally grants, and all-allies grants (each recipient guarded independently);
+            // covers BOTH sides (enemies run this same path). Silent skip — no buff-applied emit.
+            if (recipientCarriesBlockBuff(statusEngine, rid)) continue;
+            // Barrier Recharging: mirrors triggers.ts's reactive-path gate (same two arms — see
+            // that comment for why both exist). Malvex/Sansi/Panon's charge-slot "Barrier for 1
+            // hit" grants ride THIS loop (sourceSlot 'charge' is `action` here), so without this
+            // gate a live lockout was only ever enforced on the reactive path, not the cast path.
+            if (
+                (BARRIER_BUFFS.has(status.payload.buffName) ||
+                    status.payload.buffName === BARRIER_RECHARGING) &&
+                holdsBarrierRecharging(statusEngine, rid)
+            ) {
+                continue;
+            }
+            statusEngine.applyTimedAbilityStatus(r, status, rid);
+            bus.emit({
+                type: 'buff-applied',
+                actorId: rid,
+                granterId: status.casterId ?? actor.id,
+                round: r,
+                buffName: status.payload.buffName,
+                duration: status.duration,
+            });
+        }
+    };
+    /** Firing-slot self statuses landed ahead of the cast's landing rolls (written order): an
+     *  ungated hacking gain whose clause precedes an infliction (`beforeInflictClause` — Rys's
+     *  "gains Hacking Up III …, and inflicts Speed Down II"). The status loop below skips them. A
+     *  gated one waits for its gate context in that loop; a gain that cannot move the roll keeps
+     *  its place there too. */
+    const selfStatusesBeforeRolls = new Set<TimedStatus>();
+    if (hasVictim) {
+        for (const status of timedSelfBySlot) {
+            if (
+                status.sourceSlot === action &&
+                status.beforeInflictClause === true &&
+                status.afterDamageClause !== true &&
+                status.conditions.length === 0 &&
+                (status.payload.parsedEffects.hacking ?? 0) !== 0
+            ) {
+                applyTimedSelfStatus(status);
+                selfStatusesBeforeRolls.add(status);
+            }
+        }
+    }
     // The landing chance is hacking-vs-THIS-VICTIM's-security. With no victim there is no
     // security to beat and nothing that could receive a debuff, so the chance is 0 — NOT "vs a
     // defender with default security", which is what handing the ghost to this call computed.
@@ -3634,79 +3727,6 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // a firing-slot timed self-buff actually gates on.
         ...victimShieldGateCtx(enemy),
     });
-    // Applies one passed timed self status to its recipients. The status lives on each recipient
-    // (decrements at the recipient's Post Turn; family + persistent rules run per recipient side
-    // because applyTimedAbilityStatus threads recipientId). buff-applied emits ONCE PER RECIPIENT
-    // with the recipient's actorId, with the granter riding alongside in `granterId`.
-    const applyTimedSelfStatus = (status: (typeof timedSelfBySlot)[number]): void => {
-        // recipients is set by the engine helper for every timed-by-slot status; default to
-        // [actor.id] (self routing) for any caller that omitted it (statusEngine fixtures).
-        // #363: the status's own recipient FACTION scope, copied off the source ability at
-        // registration. This is the CAST path for a faction-scoped grant (Fuying's "grants
-        // Tianchen allies Stealth" is a finite-duration buff → a timed-by-slot status), so the
-        // intersection has to happen HERE — the ability object is out of scope by now, which is
-        // why the filter rides the status rather than being read through `source`.
-        // Board-adjacency scope (`allyScope`), the sibling of `factionFilter` above and narrowed
-        // for the same reason: registration runs at actor construction, where nobody has moved or
-        // died, so an `adjacent-allies` grant is registered against the whole side and resolved to
-        // LIVING neighbours HERE, where `adjacentAllyIds` — the per-side resolver the engine
-        // threads onto TurnArgs — is in hand. Absent (every other target) → no narrowing.
-        // `adjacentAllyIds` itself excludes the caster, which is correct: "all adjacent allies"
-        // never includes the unit granting it. A ship whose text says BOTH (Tormenter's "to itself
-        // and all adjacent allies") carries a separate `self`-targeted ability for its own half.
-        // Undefined resolver (non-positional run) → no narrowing, matching `adjacentAllyIds`'s own
-        // whole-side fallback rather than silently dropping the grant.
-        const scopedRecipients =
-            status.allyScope === 'adjacent-allies' && adjacentAllyIds !== undefined
-                ? ((allowed) => (status.recipients ?? [actor.id]).filter((id) => allowed.has(id)))(
-                      new Set(adjacentAllyIds)
-                  )
-                : (status.recipients ?? [actor.id]);
-        // The status's recipient STATE filter (`recipientFilter` — Hermes's "if an ally has less
-        // than 40% HP, it grants that ally Cheat Death") is read per recipient, LIVE, right here:
-        // an ally-wide grant asks each recipient about its own HP, never the caster's target.
-        // TIMING CONTRACT: this loop runs BEFORE the cast's support pass, so the HP read is each
-        // recipient's HP before this cast's repair lands — even though Hermes's text writes the
-        // repair first. That is a deliberate exception to written clause order (user ruling
-        // 2026-10-02: an ally at 38% whom the repair lifts to 41.7% still gets Cheat Death).
-        // Pinned by hermesCheatDeathPerRecipient.integration.test.ts case (6), both sides.
-        // No role reader exists on the cast path, so a `notRole` axis excludes everyone here
-        // (`recipientFilterCarriers.test.ts` keeps that axis off cast-path abilities).
-        const stateFiltered = narrowByRecipientFilter(
-            supportRecipients('all-allies', scopedRecipients, undefined, status.factionFilter),
-            status.recipientFilter,
-            {
-                holdsStatus: (id, buffName) => ownerHoldsSelfBuff(statusEngine, id, buffName),
-                hpFractionOf: allyHpFractionOf,
-            }
-        );
-        for (const rid of stateFiltered) {
-            // Block Buff: a recipient carrying it cannot receive new buffs. Covers self-buffs,
-            // single-ally grants, and all-allies grants (each recipient guarded independently);
-            // covers BOTH sides (enemies run this same path). Silent skip — no buff-applied emit.
-            if (recipientCarriesBlockBuff(statusEngine, rid)) continue;
-            // Barrier Recharging: mirrors triggers.ts's reactive-path gate (same two arms — see
-            // that comment for why both exist). Malvex/Sansi/Panon's charge-slot "Barrier for 1
-            // hit" grants ride THIS loop (sourceSlot 'charge' is `action` here), so without this
-            // gate a live lockout was only ever enforced on the reactive path, not the cast path.
-            if (
-                (BARRIER_BUFFS.has(status.payload.buffName) ||
-                    status.payload.buffName === BARRIER_RECHARGING) &&
-                holdsBarrierRecharging(statusEngine, rid)
-            ) {
-                continue;
-            }
-            statusEngine.applyTimedAbilityStatus(r, status, rid);
-            bus.emit({
-                type: 'buff-applied',
-                actorId: rid,
-                granterId: status.casterId ?? actor.id,
-                round: r,
-                buffName: status.payload.buffName,
-                duration: status.duration,
-            });
-        }
-    };
     // Self statuses that land at the end of this function, after every figure of this cast's
     // damage is fixed, in slot order:
     //  - a passed status whose clause follows the damage clause (`afterDamageClause`);
@@ -3719,7 +3739,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         critDecided: boolean;
     }[] = [];
     for (const status of timedSelfBySlot) {
-        if (!ridesThisCast(status)) continue;
+        if (!ridesThisCast(status) || selfStatusesBeforeRolls.has(status)) continue;
         if (status.perHit === true) {
             // A passive gain riding the cast's hits reads the struck enemies as they stood BEFORE
             // the cast (owner ruling R15), and lands after the damage (`afterDamageClause`).
@@ -3788,6 +3808,12 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // the buff totals. The PRE-modifier crit estimate (cappedCrit(critBuffForGates), layers
     // 1+2+3) is used only for the rare self-crit-gated modifier condition, avoiding a
     // self-referential gate.
+    /** The bound target's OWN buffs, for the damage gates asking about the enemy being hit ("+15%
+     *  to enemies with Stealth" — Lodolite; "additional damage to enemies affected by Taunt" —
+     *  Rikra), read by the modifier and payload contexts below. The side-wide union is what
+     *  `enemyBuffNamesArg` carries. Without a reading (a non-positional run) the one enemy's union
+     *  is its own. */
+    const boundTargetBuffNames = targetGateReading?.buffNames ?? enemyBuffNamesArg;
     const modifierCtx = buildRoundContext({
         // Live adjacency / kill counts (Panguan, Centurion, Judge) — see `liveCountCtx`.
         ...liveCountCtx,
@@ -3802,7 +3828,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         selfHpPct: selfHpPctArg,
         targetHpPct: targetHpPctArg,
         targetRepairedThisRound: targetRepairedThisRoundArg,
-        enemyBuffNames: enemyBuffNamesArg,
+        enemyBuffNames: boundTargetBuffNames,
         enemyBuffCount: enemyBuffCountArg,
         debuffedEnemyCount: debuffedEnemyCountArg,
         enemyDebuffNames: enemyDebuffNamesArg,
@@ -4169,7 +4195,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         selfHpPct: selfHpPctArg,
         targetHpPct: targetHpPctArg,
         targetRepairedThisRound: targetRepairedThisRoundArg,
-        enemyBuffNames: enemyBuffNamesArg,
+        enemyBuffNames: boundTargetBuffNames,
         enemyBuffCount: enemyBuffCountArg,
         debuffedEnemyCount: debuffedEnemyCountArg,
         // The bound target's pre-turn debuff names plus what this cast landed on it before its

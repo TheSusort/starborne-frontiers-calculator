@@ -422,6 +422,50 @@ export function parseSecondaryDamage(text: string | null | undefined): Secondary
 }
 
 /**
+ * Position of a SELF-gated "instead" in `text` — "If this Unit is affected by Provoke or Taunt, it
+ * instead …" (Panon) — or -1. The clause before "instead" must name this Unit and Provoke/Taunt and
+ * no target/enemy subject, so an enemy-conditional "instead" never matches.
+ */
+function selfGatedInsteadIdx(text: string): number {
+    const insteadIdx = text.search(/\binstead\b/i);
+    if (insteadIdx < 0) return -1;
+    const priorPeriod = text.lastIndexOf('.', insteadIdx);
+    const clause = stripUnitTags(text.slice(priorPeriod + 1, insteadIdx));
+    const selfGated =
+        /\bthis\s+unit\b[^.]*?\b(?:provoke[ds]?|taunt(?:ed)?)\b/i.test(clause) &&
+        !/\btarget\b|\benem(?:y|ies)\b/i.test(clause);
+    return selfGated ? insteadIdx : -1;
+}
+
+/**
+ * Whether the `occurrenceIndex`-th grant of `buffName` is the BASE branch of a self-gated "instead"
+ * pair: it is written before the "instead", and the "instead" branch grants the same buff family
+ * at another tier (Panon's active: "grants all allies Terran Guard II … If this Unit is affected by
+ * Provoke or Taunt, it instead grants all allies Terran Guard III"). "instead" replaces the base
+ * grant, so it carries the not-Provoked, not-Taunted gate the base damage carries.
+ */
+export function isInsteadReplacedGrant(
+    text: string | null | undefined,
+    buffName: string,
+    occurrenceIndex = 0
+): boolean {
+    if (!text || !buffName) return false;
+    const insteadIdx = selfGatedInsteadIdx(text);
+    if (insteadIdx < 0) return false;
+    let pos = -1;
+    for (let i = 0, from = 0; i <= occurrenceIndex; i++) {
+        const at = findBuffNamePos(text.slice(from), buffName);
+        if (at < 0) return false;
+        pos = from + at;
+        from = pos + buffName.length;
+    }
+    if (pos > insteadIdx) return false;
+    const family = (name: string) => name.replace(/\s+(?:I{1,3}|IV|V)$/, '').trim();
+    const replacement = [...text.slice(insteadIdx).matchAll(/<unit-skill>([^<]+)<\/unit-skill>/gi)];
+    return replacement.some((m) => m[1].trim() !== buffName && family(m[1]) === family(buffName));
+}
+
+/**
  * SP-F F1 — Panon's self-scoped "instead"-branch damage replacement: "… deals <unit-damage>80%
  * damage</unit-damage> with an additional Damage equal to <unit-damage>70%</unit-damage> of its
  * Defense. If this Unit is Provoked or Taunted, this Unit instead gains … and deals
@@ -439,14 +483,8 @@ export function parseInsteadDamageReplacement(
     text: string | null | undefined
 ): { mult: number; secondary: SecondaryDamage | null } | null {
     if (!text) return null;
-    const insteadIdx = text.search(/\binstead\b/i);
+    const insteadIdx = selfGatedInsteadIdx(text);
     if (insteadIdx < 0) return null;
-    const priorPeriod = text.lastIndexOf('.', insteadIdx);
-    const clause = stripUnitTags(text.slice(priorPeriod + 1, insteadIdx));
-    const selfGated =
-        /\bthis\s+unit\b[^.]*?\b(?:provoke[ds]?|taunt(?:ed)?)\b/i.test(clause) &&
-        !/\btarget\b|\benem(?:y|ies)\b/i.test(clause);
-    if (!selfGated) return null;
     const after = text.slice(insteadIdx);
     const mult = parseSkillDamage(after);
     if (!mult) return null;
@@ -1243,7 +1281,8 @@ export function detectGrantConditions(
     const low = clause.toLowerCase();
     // "when/on/upon applying|inflicting a debuff" is a trigger gate (the unit applies a debuff).
     const appliesDebuffGate = /\b(?:appl|inflict)\w*\s+a\s+debuff\b/i.test(low);
-    // "after an ally is critically repaired" — a team-dependent reactive trigger (manual).
+    // "after an ally is critically repaired" — the trigger phrase of on-any-ally-critically-repaired
+    // (detectReactiveTrigger), which buildShipAbilities drops this condition for.
     const allyCritRepairGate = /\ball(?:y|ies)\b[^.]*\bcritically\s+repaired\b/i.test(low);
     // "destroying an enemy WITH A DEBUFF" (Meiying) — the kill trigger's qualifier.
     // KILL_TRIGGER_RE resolves the TRIGGER (on-enemy-destroyed) elsewhere; this separately gates
@@ -1731,6 +1770,7 @@ export function detectReactiveTrigger(
     // Checked BEFORE the self-crit rule: matchesActiveSelfCrit would also match "critically hits"
     // here, but the ally subject makes this an ally-scoped trigger, not a self-crit.
     if (ALLY_CRIT_HIT_RE.test(clause)) return 'on-ally-crit';
+    if (ALLY_CRIT_REPAIRED_RE.test(clause)) return 'on-any-ally-critically-repaired';
     if (matchesActiveSelfCrit(clause)) return 'on-crit';
     // Berserker: "gains <Buff> for N turns when hitting 3 or more enemies" is a
     // reaction to THIS UNIT's own damage-dealing action (same family as the self-crit rule
@@ -2374,6 +2414,10 @@ const CRIT_REPAIR_RE = /when it critically repairs an ally/i;
 // ally-includes-self ruling excludes the owner) is read with the owner INCLUDED: there is no
 // owner-excluded trigger for plain crits.
 const ALLY_CRIT_HIT_RE = /when (?:an|another|that) ally (?:critically hits|crits)/i;
+// "after an ally is critically repaired" → on-any-ally-critically-repaired (Pallas). Passive voice
+// with no repairer, so any critting repair on the owner's side counts — unlike CRIT_REPAIR_RE's
+// "when it critically repairs", which is the owner's own repair.
+const ALLY_CRIT_REPAIRED_RE = /\ball(?:y|ies)\s+(?:is|are)\s+critically\s+repaired\b/i;
 
 /**
  * Returns 'on-ally-critically-repaired' when `anchorPos` (the ability's raw-text anchor position)

@@ -342,7 +342,19 @@ function registerActorAbilityStatuses(
         let sawDamageClause = false;
         /** The firing slot's DoT clauses written so far — see `afterDotClauseIds`. */
         const dotClauseIds: string[] = [];
-        for (const ability of slot.abilities) {
+        /** Index of the firing slot's last enemy infliction (a debuff or DoT on the enemy side) —
+         *  see `beforeInflictClause`. -1 when it inflicts nothing. */
+        const lastInflictIdx = isFiringSlot
+            ? slot.abilities.reduce(
+                  (last, a, i) =>
+                      (a.config.type === 'dot' || a.config.type === 'debuff') &&
+                      isEnemyTarget(a.target)
+                          ? i
+                          : last,
+                  -1
+              )
+            : -1;
+        for (const [abilityIdx, ability] of slot.abilities.entries()) {
             const cfg = ability.config;
             // A real damage-dealing clause. A 0-multiplier entry is a structural no-op (the
             // fixtures' "took a turn" placeholder) and orders nothing.
@@ -587,6 +599,12 @@ function registerActorAbilityStatuses(
                     // The same slot's DoT clauses written before this one — what its debuff-count
                     // gate reads as already inflicted (owner ruling R29, Crocus).
                     ...(dotClauseIds.length > 0 ? { afterDotClauseIds: [...dotClauseIds] } : {}),
+                    // A self/ally buff written before an enemy infliction of the same firing slot
+                    // is held when that infliction rolls (Rys's "gains Hacking Up III …, and
+                    // inflicts Speed Down II").
+                    ...(side === 'self' && abilityIdx < lastInflictIdx
+                        ? { beforeInflictClause: true as const }
+                        : {}),
                     // A passive status riding each hit of the owner's cast (see
                     // `isPassivePerHitStatus`) reacts to the damage, so it lands after it.
                     ...(isPassivePerHitStatus({

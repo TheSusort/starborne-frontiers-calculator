@@ -162,6 +162,12 @@ export type RegisteredAbilityStatus =
            *  LANDED on the enemy it asks about — `castLandingsOverlay` in playerTurn. Set by the
            *  engine's status-collection walk; absent → no DoT clause precedes it. */
           afterDotClauseIds?: string[];
+          /** A SELF-side status whose clause precedes an enemy infliction (a debuff or DoT
+           *  clause) in the same firing slot — written order: it is held when that infliction's
+           *  landing roll is drawn. playerTurn lands an ungated one that moves the roll (a hacking
+           *  gain) before the cast's landing chance is read. Set by the engine's
+           *  status-collection walk. Absent → no infliction follows it. */
+          beforeInflictClause?: true;
           /** A PASSIVE-slot status that rides each hit of its owner's cast rather than standing
            *  from combat start — `isPassivePerHitStatus` (abilityStatusGating.ts) decides which.
            *  playerTurn applies it on every active or charged cast: an enemy debuff on each struck
@@ -539,7 +545,8 @@ export function deriveFamilyKey(name: string): { familyKey: string; tier: number
  * each of them its own family key.
  *
  * EXPORTED because there must be exactly ONE such comparison. `familyApplicationWins` below
- * supplies DURATION as the tie-break (a fresh cast that outlasts the remaining window wins);
+ * supplies LIFETIME as the tie-break (a fresh cast that outlasts the held copy wins) and, being a
+ * store write rather than a fold, lets an exact tie refresh the held copy;
  * `buffTotals.outgoingFamiliesOf` supplies MAGNITUDE, because across the self/enemy store boundary
  * there is no shared duration axis to compare on — see its own note. #389's review found those two
  * had drifted into two different rules (magnitude-only vs tier-only); this is the shared one.
@@ -554,16 +561,35 @@ export function familyChallengerWins(
     return challengerTieBreak > incumbentTieBreak;
 }
 
-/** `familyChallengerWins` against a live `BuffState`, with the cast's DURATION as the tie-break.
- *  Note that same-source re-applications still refresh: after the post-turn decrement a 2-turn
- *  buff has 1 remaining, and 2 > 1 so the fresh 2-turn cast wins. */
+/** Whether an application of `tier` replaces the held same-family `existing` in the STORE.
+ *
+ *  A different tier: the higher one wins (`familyChallengerWins`). An EQUAL tier is a re-application,
+ *  which refreshes: the store keeps whichever copy lasts longer, and on a tie the fresh copy
+ *  replaces the held one (so its caster, payload and application order are the newest). A shorter
+ *  re-application never shortens the held copy.
+ *
+ *  "Lasts longer" counts the own-turn reprieve: a copy carrying `appliedThisTurn` survives one more
+ *  Post-Turn than its `turnsRemaining` says. So a 1-turn self buff re-gained on the carrier's next
+ *  own turn (reprieve pending) outlasts the held copy (turnsRemaining 1, reprieve spent) — without
+ *  that, the held copy expires at that turn's Post-Turn and the buff is missing until the turn
+ *  after (Wusheng's per-crit Stealth). `challengerReprieve` is the `appliedThisTurn` the caller is
+ *  about to write.
+ *
+ *  Equal turn lives (both Infinity included: a hit-counted grant has no turn window) fall to the
+ *  hit count, absent = unlimited. */
 function familyApplicationWins(
     existing: BuffState | undefined,
     tier: number,
-    duration: number
+    duration: number,
+    challengerReprieve: boolean,
+    hits?: number
 ): boolean {
     if (!existing) return true;
-    return familyChallengerWins(existing.tier, existing.turnsRemaining, tier, duration);
+    const challengerLife = duration + (challengerReprieve ? 1 : 0);
+    const incumbentLife = existing.turnsRemaining + (existing.appliedThisTurn ? 1 : 0);
+    if (existing.tier === tier && challengerLife === incumbentLife)
+        return (hits ?? Infinity) >= (existing.hitsRemaining ?? Infinity);
+    return familyChallengerWins(existing.tier, incumbentLife, tier, challengerLife);
 }
 
 /** #590 R1 (game-verified 2026-09-30): a weaker same-family debuff onto a target already holding
@@ -1167,13 +1193,14 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         const extension = side === 'self' && casterId ? buffDurationExtensionFor(casterId) : 0;
         const duration = buff.skillDuration + extension;
         const existing = map.get(familyKey);
-        if (!familyApplicationWins(existing, tier, duration)) return;
+        const appliedThisTurn = side === 'self' && currentTurnActorId === 'attacker';
+        if (!familyApplicationWins(existing, tier, duration, appliedThisTurn)) return;
         map.set(familyKey, {
             buffName: buff.buffName,
             turnsRemaining: duration,
             tier,
             appliedSeq: nextAppliedSeq(),
-            appliedThisTurn: side === 'self' && currentTurnActorId === 'attacker',
+            appliedThisTurn,
         });
     };
 
@@ -1901,7 +1928,17 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
             for (const st of stolen) {
                 const { familyKey, tier } = deriveFamilyKey(st.buffName);
                 const existing = recipientMap.get(familyKey);
-                if (!familyApplicationWins(existing, tier, st.turnsRemaining)) continue;
+                const appliedThisTurn = recipientId === currentTurnActorId;
+                if (
+                    !familyApplicationWins(
+                        existing,
+                        tier,
+                        st.turnsRemaining,
+                        appliedThisTurn,
+                        st.hitsRemaining
+                    )
+                )
+                    continue;
                 recipientMap.set(familyKey, {
                     buffName: st.buffName,
                     turnsRemaining: st.turnsRemaining,
@@ -1925,7 +1962,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
                     // it; adjacent-ally recipients are not the active actor → no reprieve, they
                     // decrement normally on their own turn (their duration was already preserved by
                     // the transfer).
-                    appliedThisTurn: recipientId === currentTurnActorId,
+                    appliedThisTurn,
                 });
             }
         }
@@ -2121,11 +2158,22 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
             beforeTimedEnemyApplication(enemyEffectiveId, status.payload.buffName);
         }
         const existing = map.get(familyKey);
+        // Own-turn reprieve. Self-side: any timed self-buff applied while its carrier is the
+        // active actor. Enemy-side: ONLY an opt-in reprieve status (on-destroyed Martyrdom
+        // Disable) landing on the actor whose turn is executing — so decrementEnemy skips the
+        // first same-turn tick, mirroring the self-side protection. All other enemy debuffs
+        // (no flag) stay falsy → decrement immediately.
+        const appliedThisTurn =
+            status.side === 'self'
+                ? selfEffectiveId === currentTurnActorId
+                : status.reprieveOnRecipientTurn === true &&
+                  enemyEffectiveId === currentTurnActorId;
         // A landed-but-family-blocked application is silently absorbed: the landing roll
         // was already consumed by the caller's gate (the family rule runs AFTER the landing
         // hook), so a blocked application is NOT recorded as resisted — the stronger/longer
         // buff simply persists and this entry never enters the timed-ability folding.
-        if (!familyApplicationWins(existing, tier, duration)) return false;
+        if (!familyApplicationWins(existing, tier, duration, appliedThisTurn, status.hits))
+            return false;
         // LIVE stack count for this entry (see BuffState.stacks). Re-application semantics
         // (owner ruling 2026-08-10):
         //  - a stackable status landing on a victim that still holds it ADDS the incoming stacks,
@@ -2155,16 +2203,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
             casterId: status.casterId,
             stacks: liveStacks,
             appliedSeq: nextAppliedSeq(),
-            // Own-turn reprieve. Self-side: any timed self-buff applied while its carrier is the
-            // active actor. Enemy-side: ONLY an opt-in reprieve status (on-destroyed Martyrdom
-            // Disable) landing on the actor whose turn is executing — so decrementEnemy skips the
-            // first same-turn tick, mirroring the self-side protection. All other enemy debuffs
-            // (no flag) stay falsy → decrement immediately.
-            appliedThisTurn:
-                status.side === 'self'
-                    ? selfEffectiveId === currentTurnActorId
-                    : status.reprieveOnRecipientTurn === true &&
-                      enemyEffectiveId === currentTurnActorId,
+            appliedThisTurn,
             // Hit-counted lifecycle. Stamped only when the registered status asks for it, so
             // every existing timed write leaves the field undefined and behaves as before.
             ...(status.hits !== undefined ? { hitsRemaining: status.hits } : {}),

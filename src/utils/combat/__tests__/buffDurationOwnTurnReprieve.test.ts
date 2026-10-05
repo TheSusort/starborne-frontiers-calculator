@@ -41,11 +41,18 @@ const ab = (partial: Partial<Ability> & Pick<Ability, 'type' | 'config'>): Abili
     ...partial,
 });
 
-/** Active-slot skill that deals damage AND applies an N-turn self-buff each turn. */
+/** A charged skill that deals damage AND applies an N-turn self-buff, beside a damage-only
+ *  active. Run with `ONE_SHOT_CHARGE` the charged skill fires on round 1 only, so the buff is
+ *  gained once and its expiry round is observable (a buff re-gained every turn is refreshed by
+ *  each re-gain and never expires). */
 const selfBuffSkills = (buffName: string, duration: number): ShipSkills => ({
     slots: [
         {
             slot: 'active',
+            abilities: [ab({ type: 'damage', config: { type: 'damage', multiplier: 100 } })],
+        },
+        {
+            slot: 'charged',
             abilities: [
                 ab({ type: 'damage', config: { type: 'damage', multiplier: 100 } }),
                 ab({
@@ -64,6 +71,8 @@ const selfBuffSkills = (buffName: string, duration: number): ShipSkills => ({
         },
     ],
 });
+/** Charged on round 1, never again within the run. */
+const ONE_SHOT_CHARGE = { chargeCount: 10, startCharged: true } as const;
 
 /** Active-slot damage-only skill so the turn always runs. */
 const damageSkills = (): ShipSkills => ({
@@ -133,7 +142,7 @@ const appliedOf = (events: CombatEvent[], buffName: string, actorId: string) =>
 
 describe('own-turn self-buff reprieve — focus actor', () => {
     /**
-     * The focus 'attacker' fires its active skill each round, applying a 1-turn 'Attack Up'
+     * The focus 'attacker' fires its charged skill on round 1, applying a 1-turn 'Attack Up'
      * to itself ON its own turn. With the reprieve wired in, that buff survives the round-1
      * Post Turn (reprieve) and first expires at the round-2 Post Turn -> active across the
      * carrier's round-1 AND round-2 turns.
@@ -142,6 +151,8 @@ describe('own-turn self-buff reprieve — focus actor', () => {
         const events = collect(
             dpsBase({
                 shipSkills: selfBuffSkills('Attack Up', 1),
+                ...ONE_SHOT_CHARGE,
+                hasChargedSkill: true,
                 numRounds: 4,
             })
         );
@@ -183,8 +194,7 @@ describe('own-turn self-buff reprieve — team (non-focus) actor, ability path',
     const t1 = (): TeamActorEngineInput => ({
         id: 't1',
         speed: 150, // faster than the focus (default 100) -> acts first; carrier = 't1' at its turn
-        chargeCount: 0,
-        startCharged: false,
+        ...ONE_SHOT_CHARGE,
         selfBuffs: [],
         enemyDebuffs: [],
         walk: {
@@ -203,7 +213,7 @@ describe('own-turn self-buff reprieve — team (non-focus) actor, ability path',
             affinityDamageModifier: 0,
             affinityCritCap: 100,
             affinityCritPenalty: 0,
-            hasChargedSkill: false,
+            hasChargedSkill: true,
         },
     });
 

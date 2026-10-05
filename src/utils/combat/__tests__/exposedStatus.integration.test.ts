@@ -487,34 +487,26 @@ describe('Exposed is not spent by hit types that never amplified it', () => {
     // leaves it whole, so the test above cannot tell a stack-spend from a no-op. Here it can, because
     // a partially spent Exposed reads +100% rather than +200% and the totals say which.
     //
-    // What survives a round is ONE stack, not two — the counter's job is to leave that one alone.
-    // Round 1's attack 1 spends one of the two, and its own post-damage clause cannot top the entry
-    // back up: `familyApplicationWins` only overwrites a same-tier family when the incoming duration
-    // EXCEEDS what is standing, and 5 is not > the 5 attack 0 just wrote, so the re-application is
-    // silently absorbed. (Round 2's attack 0 CAN re-land, because its spend takes the last stack and
-    // deletes the entry outright.) That gate long predates both this ruling and PR8 — see the
-    // same-family overwrite rule in statusEngine — so the carried-over single stack is the honest
-    // starting state for round 2, and it is what the counter must not touch.
-    it('a counterattack spends none of the Exposed stack a 2-stack applier leaves standing', () => {
+    // What survives a round is the TWO stacks the last hit's own clause re-landed: each hit spends
+    // one stack, then its post-damage clause re-applies Exposed at the same tier and duration, which
+    // refreshes the entry to its declared 2 stacks (statusEngine's `familyApplicationWins`: an
+    // equal-tier re-application refreshes). The counter's job is to leave those alone.
+    it('a counterattack spends none of the Exposed stacks a 2-stack applier leaves standing', () => {
         const plain = foeDamagePerRound(false, 2);
         expect(plain.r1).toBeGreaterThan(0);
-        // Premise: round 2 IS amplified by the stack round 1 left standing.
+        // Premise: round 2 IS amplified by the stacks round 1 left standing.
         //
-        // The ratio is 5/4, not the pre-PR8 2.5, because since PR8 each of the cast's 2 hits is a
-        // full attack landing its own post-damage 2 stacks:
-        //   round 1 = plain + tripled  (attack 0 lands 2, attack 1 reads both at +100% each and
-        //             spends one; its own clause is family-blocked)          = 1 + 3 = 4 half-shares,
-        //   round 2 = doubled + tripled (attack 0 reads the ONE stack left standing and spends it,
-        //             which empties the entry so its clause lands a fresh 2; attack 1 reads both
-        //             and spends one)                                       = 2 + 3 = 5 half-shares.
-        // Spending ALL stacks per hit would instead read +200% on all three amplified hits → 4 then
-        // 6, a ratio of 1.5, so this pin is what distinguishes the ruling from its predecessor.
-        expect(plain.r2 / plain.r1).toBeCloseTo(5 / 4, 5);
+        // Since PR8 each of the cast's 2 hits is a full attack landing its own post-damage 2 stacks:
+        //   round 1 = plain + tripled  (attack 0 lands 2, attack 1 reads both at +100% each, spends
+        //             one, and its clause refreshes the entry to 2)          = 1 + 3 = 4 half-shares,
+        //   round 2 = tripled + tripled (each attack reads the 2 standing, spends one, re-lands 2)
+        //                                                                     = 3 + 3 = 6 half-shares.
+        expect(plain.r2 / plain.r1).toBeCloseTo(6 / 4, 5);
 
         // With the counter in play the round-over-round GAIN must be identical. Had the counter spent
-        // round 1's leftover stack, round 2 would open plain: 1 + 3 = 4 half-shares, the same as
-        // round 1 → delta 0, against the counter-free run's delta of 1. The counter's own damage is a
-        // per-round constant, so the delta comparison cancels it exactly.
+        // one of round 1's leftover stacks, round 2's attack 0 would read one stack: 2 + 3 = 5
+        // half-shares, against the counter-free run's 6. The counter's own damage is a per-round
+        // constant, so the delta comparison cancels it exactly.
         const countered = foeDamagePerRound(true, 2);
         expect(countered.r2 - countered.r1).toBeCloseTo(plain.r2 - plain.r1, 5);
     });
