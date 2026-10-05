@@ -4055,9 +4055,6 @@ export function runCombat(rawInput: CombatEngineInput): {
                           rollRateGate(procChanceGates, `${casterId}:${abilityId}`, chance)
                   );
               },
-              // Foreign HoT applier max HP: lastTurnCtxByActor ONLY, NO base-stat
-              // fallback (strict corrosion applier-ctx rule — undefined → the holder skips the tick).
-              applierMaxHp: (id) => lastTurnCtxByActor.get(id)?.effectiveMaxHp,
               // `repairSourceId` (#362): the actor credited with this repair — the caster
               // for a cast repair, the applier for a HoT tick, the leeching actor for a leech.
               // Every call site is REQUIRED to supply it (the parameter is not optional, so

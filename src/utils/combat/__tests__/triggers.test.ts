@@ -3034,7 +3034,6 @@ describe('once-per-combat repair cap in executeIntent (Task 8)', () => {
             credit: () => {},
             recipientMaxHp: () => 1000,
             recipientIncomingHealPct: () => 0,
-            applierMaxHp: () => 1000,
             applyHealToTarget: (raw) => {
                 applied.push(raw);
                 return { reversed: false, consumed: raw, overheal: 0 };
@@ -3558,7 +3557,6 @@ describe('Phase 4c Task 6: live drain-time selfHpPct', () => {
             credit: () => {},
             recipientMaxHp: () => 1000,
             recipientIncomingHealPct: () => 0,
-            applierMaxHp: () => 1000,
             applyHealToTarget: (raw) => {
                 applied.push(raw);
                 return { reversed: false, consumed: raw, overheal: 0 };
@@ -3830,7 +3828,6 @@ describe('Phase 4c PR 2 Task 4: damagedAllyId recipient routing', () => {
             credit: (_actorId, bucket, amount) => credits.push({ bucket, amount }),
             recipientMaxHp: () => 1000,
             recipientIncomingHealPct: () => 0,
-            applierMaxHp: () => 1000,
             applyHealToTarget: (raw, victim, repairSourceId) => {
                 applied.push({ raw, id: victim?.id, sourceId: repairSourceId });
                 return { reversed: false, consumed: raw, overheal: 0 };

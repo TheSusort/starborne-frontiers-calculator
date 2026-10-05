@@ -3697,9 +3697,10 @@ const DocumentationPage: React.FC = () => {
                                         Shields build an absorption pool on the target (capped at
                                         its max HP) that soaks incoming damage before HP is touched,
                                         and does not expire. Repair Over Time effects tick at the
-                                        holder&apos;s turn for their per-stack amount. Crit heals
-                                        resolve on their own deterministic crit schedule, separate
-                                        from any damage crits.
+                                        holder&apos;s turn, repairing a percentage of the
+                                        holder&apos;s own max HP per stack. Crit heals resolve on
+                                        their own deterministic crit schedule, separate from any
+                                        damage crits.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Damage-Based Sustain:</span>{' '}

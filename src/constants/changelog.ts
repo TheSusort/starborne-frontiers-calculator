@@ -85,6 +85,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'DPS calculator: Valiant, Sustainer and Thresh now count each stack of their buffs.',
     'Combat simulator: each Defense Shred stack now counts as one debuff.',
     'Combat simulator: Cheat Death now wipes Defense Shred like any other debuff.',
+    "Combat simulator: Repair Over Time now repairs from the holder's own max HP.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

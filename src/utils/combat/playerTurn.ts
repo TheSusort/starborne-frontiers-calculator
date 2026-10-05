@@ -273,12 +273,6 @@ export interface HealingRuntimeCtx {
      *  path's `rollOutgoingProc` draws from. Read by the reactive heal executor (`triggers.ts`);
      *  the cast path folds the same abilities itself (`healAmpPctFor`). Absent → callers use 0. */
     casterHealAmpPct?: (casterId: string, rid: string) => number;
-    /** A FOREIGN HoT applier's effective max HP at tick time: reads
-     *  lastTurnCtxByActor ONLY — NO base-stat fallback (the strict corrosion applier-ctx
-     *  rule). Returns undefined when the applier has not acted this run yet, in which case
-     *  the holder SKIPS the tick entirely. (The acting holder's self-granted HoTs use the
-     *  local effectiveHp directly, never this accessor.) */
-    applierMaxHp: (actorId: string) => number | undefined;
     /** Target-routed heal: consumed = min(raw, maxHp − currentHp); dead target → all overheal.
      *  Mutates the victim's currentHp. Returns the split — OR `{ reversed: true }`, in which case
      *  the repair was turned into damage (#362) and the caller must credit NOTHING for it, gross
@@ -5943,7 +5937,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // ticks on its OWN cast turn (not only on subsequent turns). The healing goldens lock
         // this behaviour; do not change it without re-validating the in-game rule.
         // The HOLDER (this acting actor) heals each of its own turns for
-        // applierEffectiveMaxHp × hotPct% × stacks, attributed to the APPLIER's hotHeal
+        // holderEffectiveMaxHp × hotPct% × stacks, attributed to the APPLIER's hotHeal
         // bucket (mirrors DoT sourceId attribution). HoT heals NEVER crit and ignore
         // healModifier/outgoingHeal (they are the applier's standing effect, not a cast),
         // but DO get the HOLDER's incomingHeal amplification (dmgStats.totals.incomingHealBuff,
@@ -5952,11 +5946,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // (applyHealToTarget) is credited to the APPLIER's effectiveHeal/overheal — except on the
         // enemy side, which applies the HP and credits nothing (E5 §4.1).
         //
-        // Applier max HP at tick time:
-        //  - applier === this acting actor (self-granted HoT) → local effectiveHp.
-        //  - foreign applier → healing.applierMaxHp(applierId); undefined → SKIP the tick
-        //    (strict corrosion rule, NO base-stat fallback).
-        //  - scheduled HoT (no caster identity) → applier = the holder itself (local effectiveHp).
+        // The tick's basis is the HOLDER's own effective max HP (`effectiveHp`), whoever applied
+        // it — owner ruling R55, the game's tooltip "This Unit repairs 10% of its max HP every
+        // turn". The applier only decides attribution (`creditId`), never the amount.
         //
         // Sources are DISJOINT (no double-count): payload-carrying ability statuses
         // (selfAbilityStatuses = timed + active, payload.parsedEffects.hotPct × payload.stacks,
@@ -5967,22 +5959,15 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // but it keeps this site consistent with the other THREE rather than relying solely on that
         // guard if the surrounding code ever changes.
         const holderIncomingFactor = incomingHealFactor(dmgStats.totals.incomingHealBuff);
-        // Resolve the applier's effective max HP for a HoT tick; undefined → caller skips.
-        const hotApplierMaxHp = (applierId: string | undefined): number | undefined => {
-            if (applierId === undefined || applierId === actor.id) return effectiveHp;
-            return healing.applierMaxHp(applierId);
-        };
-        // Apply one HoT tick (raw = applierMaxHp × hotPct% × stacks × holderIncomingFactor) to the
+        // Apply one HoT tick (raw = holderMaxHp × hotPct% × stacks × holderIncomingFactor) to the
         // HOLDER, report the landed HP on `hot-ticked` (BOTH sides — that is the derived HP bar's
         // only view of a tick), then — player side only — credit it to the applier's hotHeal bucket
         // and route its consumption split to the applier's effectiveHeal/overheal.
         const tickHot = (applierId: string | undefined, hotPct: number, stacks: number): void => {
             if (hotPct <= 0 || stacks <= 0) return;
-            const maxHp = hotApplierMaxHp(applierId);
-            if (maxHp === undefined) return; // foreign applier with no ctx yet → skip the tick
             // Scheduled HoT (no caster) attributes to the holder; otherwise to the applier.
             const creditId = applierId ?? actor.id;
-            let raw = maxHp * (hotPct / 100) * stacks * holderIncomingFactor;
+            let raw = effectiveHp * (hotPct / 100) * stacks * holderIncomingFactor;
             // Recipient-side incoming-heal amplification (Exuberance) — the HoT recipient is
             // the holder (actor.id). Rolls its combat-lifetime gate ONCE per tick.
             raw *= 1 + (healing.recipientIncomingHealAmpPct?.(actor.id) ?? 0) / 100;
