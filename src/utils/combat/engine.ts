@@ -28,7 +28,11 @@ import type { ParsedTarget, ParsedPattern } from '../targetingParser';
 import { DEFAULT_BASE_PATTERN } from '../calculators/dpsEnemyPlacement';
 import { makeRateGate, rollRateGate } from '../calculators/rateAccumulator';
 import type { RoundData } from '../calculators/dpsSimulator';
-import { toSelfDefenseModifier, toSelfIncomingDamageModifier } from '../calculators/dpsBuffHelpers';
+import {
+    toSelfDefenseModifier,
+    toSelfIncomingDamageModifier,
+    toSimBuffs,
+} from '../calculators/dpsBuffHelpers';
 import {
     affinityCappedCritRate,
     affinityModifiersWithOverrides,
@@ -131,7 +135,14 @@ import { reversedRepairsOn } from './reversedRepairs';
 // incoming-repair channel shares ONE floored definition — read its doc for why a channel clamped
 // at some of its sites and not others is worse than one clamped nowhere. The two per-victim leech
 // procs below are its fifth and sixth call sites.
-import { incomingHealFactor, familiesOf, shadowedDelta, ShadowChannel } from './buffTotals';
+import {
+    calculateBuffTotals,
+    flatDefence,
+    incomingHealFactor,
+    familiesOf,
+    shadowedDelta,
+    ShadowChannel,
+} from './buffTotals';
 import { normalizeTeamActorsToWalked } from './teamActorWalk';
 import { normalizeCombatRoster } from './normalizeRoster';
 import { buildBuffDurationExtensionByOwner } from './buffDurationExtension';
@@ -8000,6 +8011,8 @@ export function runCombat(rawInput: CombatEngineInput): {
              *  (`selfIncoming + preFightIncoming`), split out so the pre-mitigation damage axis can
              *  strip them while keeping the attacker-applied amplification. */
             victimSideIncomingModifier: number;
+            /** Flat defence from the victim's own three self-buff channels (`flatDefence`). */
+            defenceFlat: number;
         } => {
             const victimDebuffs = victimEnemyBuffs(
                 statusEngine,
@@ -8076,6 +8089,15 @@ export function runCombat(rawInput: CombatEngineInput): {
             // raw stat MUTATION (`PreFightStatBlock.defence`), not a modifier channel — unlike the
             // incoming twin, which needs its `preFightIncoming` term for exactly that reason.
             const selfDefense = toSelfDefenseModifier(victimSelf);
+            // Flat defence (Terran Guard, Magnetized Shielding) from the same three-channel list;
+            // Magnetized Shielding's term reads the victim's LIVE security, Security Down included.
+            const victimActor = allActorsById.get(victimId);
+            const defenceFlat = victimActor
+                ? flatDefence(
+                      calculateBuffTotals(toSimBuffs(victimSelf)),
+                      effectiveStatsOf(statusEngine, selfBuffLookup, victimActor).security
+                  )
+                : 0;
             // The victim's pre-fight incomingDamage baseline (squad-leader "±N% incoming
             // direct damage") folds ADDITIVELY into the same per-victim channel the
             // self-buff term rides (consumed via defenseProfileOf → incomingDamageModifierPct).
@@ -8126,6 +8148,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // otherwise "damage absorbed" would strip a term the mixed total does not hold.
                 victimSideIncomingModifier:
                     selfIncoming - (shadow.ownSuppressed.incomingDamage ?? 0) + preFightIncoming,
+                defenceFlat,
             };
         };
         // TEST-ONLY: expose victimIncomingModifiers (enemy-debuff + friendly self-buff term) to
@@ -8358,6 +8381,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // Direction-agnostic — v.id keys the victim's own enemy-debuff AND self-buff
                 // stores regardless of side.
                 defenceModifierPct: m.enemyDefenseModifier,
+                defenceFlat: m.defenceFlat,
                 // Per-victim incoming-damage modifier; combines
                 // enemy-debuff (Out. Damage Up) AND victim's own self-buffs (Inc. Damage
                 // Down/Up). Attacker-sourced scalars (outgoing buff, pen) stay attacker-fixed.

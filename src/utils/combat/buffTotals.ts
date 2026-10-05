@@ -46,6 +46,12 @@ export function calculateBuffTotals(buffs: Buff[]) {
     const attackFlatBuff = buffs
         .filter((b) => b.stat === 'attackFlat')
         .reduce((sum, b) => sum + b.value, 0);
+    const defenceFlatBuff = buffs
+        .filter((b) => b.stat === 'defenceFlat')
+        .reduce((sum, b) => sum + b.value, 0);
+    const defencePerSecurityBuff = buffs
+        .filter((b) => b.stat === 'defencePerSecurity')
+        .reduce((sum, b) => sum + b.value, 0);
     return {
         attackBuff,
         critBuff,
@@ -59,7 +65,19 @@ export function calculateBuffTotals(buffs: Buff[]) {
         hackingBuff,
         securityBuff,
         attackFlatBuff,
+        defenceFlatBuff,
+        defencePerSecurityBuff,
     };
+}
+
+/** Flat defence (absolute units) on top of the percentage fold: the concrete `defenceFlat`
+ *  grants plus `defencePerSecurity` x the holder's live `security`. Every defence fold adds this
+ *  after `base x (1 + defence%)`, mirroring `attackFlat`. */
+export function flatDefence(
+    totals: { defenceFlatBuff: number; defencePerSecurityBuff: number },
+    security: number
+): number {
+    return totals.defenceFlatBuff + totals.defencePerSecurityBuff * security;
 }
 
 // Expand an active buff/debuff into its underlying SelectedGameBuff effects.

@@ -64,6 +64,8 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator: Protection no longer redirects Curator's whole-battlefield attacks.",
     "Combat simulator: Isha's Titanite Plating now loses a stack each time she's hit.",
     'Combat simulator: Overclock now leaves Attack Down I and Speed Down I when it ends.',
+    "Combat simulator: Vindicator's Magnetized Shielding now adds Defense equal to 10x Security.",
+    "Combat simulator: Terran Guard now scales with the granting ship's Defense.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

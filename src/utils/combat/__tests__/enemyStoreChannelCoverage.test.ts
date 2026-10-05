@@ -51,6 +51,12 @@ const DEAD_CHANNELS: Record<string, string> = {
         'A CONCRETE frozen flat-attack value, materialized at grant time from a caster snapshot. A grant, not a standing modifier, so there is nothing on the enemy side to fold.',
     attackFlatPctOfCaster:
         'A SENTINEL carrying no concrete value — inert in every fold until the reactive buff-grant site resolves it into `attackFlat`. Folding it anywhere, either store, would be a bug.',
+    defenceFlat:
+        "A CONCRETE frozen flat-defence value, materialized at grant time from the applier's defence (Terran Guard). A friendly grant; no enemy-applied status carries it.",
+    defenceFlatPctOfCaster:
+        'A SENTINEL carrying no concrete value — inert in every fold until a buff-grant site resolves it into `defenceFlat`. Folding it anywhere, either store, would be a bug.',
+    defencePerSecurity:
+        "Magnetized Shielding's self-granted flat defence (10x the holder's security). Only a self grant carries it; no enemy-applied status does.",
     dotDamage:
         "Read from the ATTACKER's own self/attacker list only, via toDotAndPenModifiers — no enemy-store meeting point exists (the #396 channel audit).",
     detonationDamage:
@@ -87,6 +93,9 @@ const ALL_CHANNELS: Record<keyof ParsedBuffEffects, true> = {
     security: true,
     attackFlat: true,
     attackFlatPctOfCaster: true,
+    defenceFlat: true,
+    defenceFlatPctOfCaster: true,
+    defencePerSecurity: true,
 };
 
 /** `defense` and `incomingDamage` meet on the per-VICTIM path in engine.ts's

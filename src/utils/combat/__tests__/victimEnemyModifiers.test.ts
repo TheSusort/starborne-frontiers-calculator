@@ -164,16 +164,19 @@ describe('B1 Task 3 — victimEnemyModifiers: scheduled channel is global, abili
             enemyDefenseModifier: -30,
             incomingDamageModifier: 0,
             victimSideIncomingModifier: 0,
+            defenceFlat: 0,
         });
         expect(captured!('front-enemy')).toEqual({
             enemyDefenseModifier: -30,
             incomingDamageModifier: 0,
             victimSideIncomingModifier: 0,
+            defenceFlat: 0,
         });
         expect(captured!('back-enemy')).toEqual({
             enemyDefenseModifier: -30,
             incomingDamageModifier: 0,
             victimSideIncomingModifier: 0,
+            defenceFlat: 0,
         });
     });
 
@@ -237,12 +240,14 @@ describe('B1 Task 3 — victimEnemyModifiers: scheduled channel is global, abili
             enemyDefenseModifier: -30,
             incomingDamageModifier: 0,
             victimSideIncomingModifier: 0,
+            defenceFlat: 0,
         });
         // back-id has no ability debuff applied → 0 (the debuff did NOT bleed across victims).
         expect(captured!('back-id')).toEqual({
             enemyDefenseModifier: 0,
             incomingDamageModifier: 0,
             victimSideIncomingModifier: 0,
+            defenceFlat: 0,
         });
     });
 });

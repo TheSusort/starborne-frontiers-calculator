@@ -70,6 +70,18 @@ export function toSimBuffs(selected: SelectedGameBuff[]): Buff[] {
                 stat: 'attackFlat',
                 value: parsedEffects.attackFlat * stacks,
             });
+        if (parsedEffects.defenceFlat !== undefined)
+            entries.push({
+                id: `${s.id}-defenceFlat`,
+                stat: 'defenceFlat',
+                value: parsedEffects.defenceFlat * stacks,
+            });
+        if (parsedEffects.defencePerSecurity !== undefined)
+            entries.push({
+                id: `${s.id}-defencePerSecurity`,
+                stat: 'defencePerSecurity',
+                value: parsedEffects.defencePerSecurity * stacks,
+            });
         return entries;
     });
 }

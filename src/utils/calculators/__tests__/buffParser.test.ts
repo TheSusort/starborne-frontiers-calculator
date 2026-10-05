@@ -309,6 +309,27 @@ describe('parseBuffEffects — flat-attack caster snapshot (D-PR10)', () => {
     });
 });
 
+describe('flat defence channels', () => {
+    const real = (name: string) => {
+        const buff = BUFFS.find((b) => b.name === name)!;
+        return parseBuffEffects(buff.name, buff.description);
+    };
+
+    it('Terran Guard is a share of the APPLIER’s defence, never a holder percentage', () => {
+        expect(real('Terran Guard I')).toEqual({ defenceFlatPctOfCaster: 5 });
+        expect(real('Terran Guard II')).toEqual({ defenceFlatPctOfCaster: 10 });
+        expect(real('Terran Guard III')).toEqual({ defenceFlatPctOfCaster: 15 });
+    });
+
+    it('Magnetized Shielding is 10x the holder’s security', () => {
+        expect(real('Magnetized Shielding')).toEqual({ defencePerSecurity: 10 });
+    });
+
+    it('a plain Defense Up stays a holder percentage', () => {
+        expect(real('Defense Up II')).toEqual({ defense: 30 });
+    });
+});
+
 describe('Out. Detonation Damage Up — outgoing detonation channel', () => {
     it('parses the real BUFFS entry into detonationDamage', () => {
         const buff = BUFFS.find((b) => b.name === 'Out. Detonation Damage Up III')!;

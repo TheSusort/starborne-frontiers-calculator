@@ -22,6 +22,7 @@ import { enemySelectorKind, type EnemySelectorKind } from '../abilities/abilityT
 import { buildRoundContext, dotReadings } from '../abilities/roundContext';
 import { drawKeyed, makeRateGate } from '../calculators/rateAccumulator';
 import { computeAffinityModifiers } from '../calculators/affinityUtils';
+import { toSelfDefenseModifier } from '../calculators/dpsBuffHelpers';
 import {
     expandEnemyDebuffs,
     incomingHealFactor,
@@ -3689,6 +3690,34 @@ export function selfAuraBuffs(statusEngine: StatusEngine, actorId: string): Sele
         .map((s) => payloadToSelectedBuff(s.payload));
 }
 
+/**
+ * The defence an "N% of the applying unit's Defense" grant (Terran Guard) snapshots from its
+ * applier: base x (1 + the applier's own percentage defence buffs, all three self channels). Flat
+ * defence is left out, so a re-cast never compounds on the applier's own previous grant.
+ */
+export function applierDefenceOf(
+    statusEngine: StatusEngine,
+    applier: CombatActor,
+    selfBuffLookup: Map<string, SelectedGameBuff[]>
+): number {
+    return (
+        applier.stats.defence *
+        (1 + toSelfDefenseModifier(victimSelfBuffs(statusEngine, applier.id, selfBuffLookup)) / 100)
+    );
+}
+
+/** Resolve a `defenceFlatPctOfCaster` sentinel into a concrete `defenceFlat` from the applier's
+ *  defence (`applierDefenceOf`). Effects without the sentinel come back unchanged. */
+export function pinApplierDefence(
+    effects: ParsedBuffEffects,
+    applierDefence: () => number
+): ParsedBuffEffects {
+    const pct = effects.defenceFlatPctOfCaster;
+    return pct === undefined
+        ? effects
+        : { ...effects, defenceFlat: applierDefence() * (pct / 100) };
+}
+
 /** The id of the actor that applied an active 'Provoke' debuff to `actorId`, or undefined
  *  if `actorId` carries no Provoke or the Provoke was applied without a caster identity.
  *  Provoke is a debuff ON the provoked attacker, so it lives in that actor's own enemy-side
@@ -4851,6 +4880,14 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 },
             };
         }
+        // Applier-defence snapshot (Terran Guard). This ctx carries no `selfBuffLookup`, so the
+        // applier's scheduled (manual) buffs are not read here; its timed and aura ones are.
+        buffCfg = {
+            ...buffCfg,
+            parsedEffects: pinApplierDefence(buffCfg.parsedEffects, () =>
+                applierDefenceOf(ctx.statusEngine, owner.actor, new Map())
+            ),
+        };
         // The status object is identical for every recipient — hoist it above the loop.
         // Only the applyTimedAbilityStatus recipientId argument varies per iteration.
         const status: Extract<RegisteredAbilityStatus, { kind: 'timed' }> = {
