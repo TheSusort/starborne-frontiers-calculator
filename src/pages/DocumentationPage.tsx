@@ -3053,10 +3053,13 @@ const DocumentationPage: React.FC = () => {
                                         itself), counts every damage-over-time stack as a debuff:
                                         one &ldquo;2 stacks of Corrosion&rdquo; application is two
                                         debuffs. A count of damage-over-time effects (Anemone,
-                                        Snakeroot) counts each stack too. Each stack also rolls its
-                                        own landing: Snakeroot&apos;s 2 stacks can land 0, 1 or 2,
-                                        and every stack that fails is its own resist. The same goes
-                                        for Amartya&apos;s 2 stacks of Defense Shred or Exposed, and
+                                        Snakeroot) counts each stack too: Snakeroot&apos;s passive
+                                        is its own 120% hit on an enemy each time that enemy&apos;s
+                                        damage-over-time stacks, from any ship, reach another
+                                        multiple of 4. Each stack also rolls its own landing:
+                                        Snakeroot&apos;s 2 stacks can land 0, 1 or 2, and every
+                                        stack that fails is its own resist. The same goes for
+                                        Amartya&apos;s 2 stacks of Defense Shred or Exposed, and
                                         each of her stacks that lands counts as its own infliction.
                                         A reaction to a debuff being inflicted (APEX&apos;s shield,
                                         Oleander&apos;s charge, Provider&apos;s hit, Lingshe&apos;s
@@ -4520,8 +4523,8 @@ const DocumentationPage: React.FC = () => {
                                         <strong>Hit amounts match the target:</strong> An attack row
                                         shows the damage each target was dealt after its own defense
                                         and damage reductions, for the main target and every other
-                                        enemy hit alike. Extra damage a passive adds to the same
-                                        hit, such as Snakeroot&apos;s, is included in that row.
+                                        enemy hit alike. Extra damage a passive adds to the same hit
+                                        is included in that row.
                                     </li>
                                     <li>
                                         <strong>Wasted repairs and shields are named:</strong> Heal

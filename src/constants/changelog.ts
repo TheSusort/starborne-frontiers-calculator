@@ -89,6 +89,7 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator: Lionheart's Defense Up II now goes to himself and adjacent allies.",
     "Combat simulator: Isha and Nayra's Affinity Overrides now last until purged.",
     "Combat simulator: APEX's charged Disable now counts shields from that cast's debuffs.",
+    "Combat simulator: Snakeroot's passive is now a 120% hit per 4 DoT stacks.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

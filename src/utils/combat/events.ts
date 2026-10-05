@@ -911,8 +911,8 @@ export type CombatEvent =
      *  the focus actor and the REAL enemy roster — the vestigial dummy also emits here, but it keys its
      *  debuffs under the `__enemy__` sentinel rather than its actor id, so its lists are always empty. */
     | {
-          /** LOG-ONLY. A cast's passive-slot damage instance (Snakeroot's "120% damage for every 4
-           *  stacks of damage over time") landing on one victim, right after the firing hit. It
+          /** LOG-ONLY. A cast's passive-slot damage instance (an on-cast `damage` ability on the
+           *  passive slot) landing on one victim, right after the firing hit. It
            *  emits no `attacked` — it is not a separate attack — so the combat log adds `damage`
            *  to the open attack row's entry for `targetId`. `damage` is on the same basis as
            *  `attacked.damage`: post-victim-defence, pre-funnel. No combat listener subscribes. */

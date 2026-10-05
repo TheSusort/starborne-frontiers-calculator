@@ -21,51 +21,36 @@ function abilityOfType(abilities: Ability[], type: string): Ability | undefined 
 const SNAKEROOT_P2 =
     'This Unit deals <unit-damage>120% damage</unit-damage> for every 4 stacks of damage over time inflicted on to a single enemy.';
 
-// Old-corpus wording of Snakeroot's p1 (synthetic; the catalogue text differs) — the R0
-// innate, same clause shape with a different rate (100% per 7 stacks).
+// Old-corpus wording of Snakeroot's p1 (synthetic) — the R0 innate, same clause shape with a
+// different rate (100% per 7 stacks).
 const SNAKEROOT_P1 =
     'This Unit deals <unit-damage>100% damage</unit-damage> for every 7 stacks of damage over time inflicted on to a single enemy.';
 
-describe('Snakeroot per-DoT-entry damage scaling (model-completeness SP-D, PR-D3)', () => {
-    it('"120% damage for every 4 stacks of DoT" → scaling on enemy-dot-count, base zeroed', () => {
+// Owner rulings R43/R43b (2026-10-05): a SEPARATE hit fired each time one enemy's total DoT
+// stack count crosses a multiple of N. The engine side is pinned in
+// combat/__tests__/snakerootDotThresholdHit.integration.test.ts.
+describe('Snakeroot "X% damage for every N stacks of damage over time" — a threshold hit', () => {
+    it('"120% damage for every 4 stacks" → a 120% hit on each crossing of 4', () => {
         const s = ship({ secondPassiveSkillText: SNAKEROOT_P2 });
-        const abilities = slot(buildShipAbilities(s).slots, 'passive')!.abilities;
-        const dmg = abilityOfType(abilities, 'damage')!;
-
-        // The whole 120% IS the per-4-entries rate — with 0 tracked DoT entries the ability
-        // deals 0% damage, so the base <unit-damage> multiplier must be zeroed, not kept flat.
-        expect(dmg.config).toMatchObject({ type: 'damage', multiplier: 0 });
-        expect(dmg.scaling).toBeDefined();
-        expect(dmg.conditions[dmg.scaling!.conditionIndex!]).toMatchObject({
-            subject: 'enemy-dot-count',
-            derivable: true,
-        });
-        // No countComparator/countThreshold on the scaling-source condition — bare, so
-        // evaluateCondition returns the RAW DoT-entry count (Task 3 precedent), not a 0/1 gate.
-        expect(dmg.conditions[dmg.scaling!.conditionIndex!].countComparator).toBeUndefined();
-
-        // 120% per 4 entries = 30 percentage points per entry. `enemy-dot-count` resolves to
-        // the raw INTEGER entry count (0, 1, 2, …) — the same percentage-point convention as
-        // the existing integer-count scaling precedents (Selenite's enemy-stealth-count
-        // perUnit=10, Crucialis's self-crit perUnit=75), NOT the 0..1-fraction convention
-        // reserved for the 0..100-scaled enemy-hp-pct/enemy-hp-missing-pct sources (Akula:
-        // perUnit = value/100). scaledBonus folds `count * perUnit` additively into the
-        // multiplier as percentage points (playerTurn.ts: `(effectiveMultiplier +
-        // conditionalBonusPct) / 100`), so at 4 entries this must total 120, not 1.2.
-        expect(dmg.scaling!.perUnit).toBeCloseTo(30);
-        expect(dmg.scaling!.cap).toBeUndefined();
+        const dmg = abilityOfType(
+            slot(buildShipAbilities(s).slots, 'passive')!.abilities,
+            'damage'
+        )!;
+        expect(dmg.trigger).toBe('on-enemy-dot-stacks-crossed');
+        expect(dmg.target).toBe('enemy');
+        expect(dmg.config).toEqual({ type: 'damage', multiplier: 120, everyDotStacks: 4 });
+        // No longer a per-stack scaling on the cast.
+        expect(dmg.scaling).toBeUndefined();
+        expect(dmg.conditions).toEqual([]);
     });
 
-    it('sibling first-passive phrasing (100% per 7 stacks) scales identically, different rate', () => {
+    it('sibling first-passive phrasing (100% per 7 stacks) parses the same shape, own rate', () => {
         const s = ship({ firstPassiveSkillText: SNAKEROOT_P1, refits: [] });
-        const abilities = slot(buildShipAbilities(s).slots, 'passive')!.abilities;
-        const dmg = abilityOfType(abilities, 'damage')!;
-
-        expect(dmg.config).toMatchObject({ type: 'damage', multiplier: 0 });
-        expect(dmg.conditions[dmg.scaling!.conditionIndex!]).toMatchObject({
-            subject: 'enemy-dot-count',
-            derivable: true,
-        });
-        expect(dmg.scaling!.perUnit).toBeCloseTo(100 / 7);
+        const dmg = abilityOfType(
+            slot(buildShipAbilities(s).slots, 'passive')!.abilities,
+            'damage'
+        )!;
+        expect(dmg.trigger).toBe('on-enemy-dot-stacks-crossed');
+        expect(dmg.config).toEqual({ type: 'damage', multiplier: 100, everyDotStacks: 7 });
     });
 });

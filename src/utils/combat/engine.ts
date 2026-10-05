@@ -4468,6 +4468,12 @@ export function runCombat(rawInput: CombatEngineInput): {
                 const a = allActorsById.get(actorId);
                 return a ? actorDebuffCount(statusEngine, a) : 0;
             },
+            // A landed enemy's DoT stack total, read right after the landing
+            // (`on-enemy-dot-stacks-crossed`). Combat-wide map, both side registrations.
+            dotStackCountOf: (actorId: string) => {
+                const a = allActorsById.get(actorId);
+                return a ? carriedDotStacks(a) : 0;
+            },
             // #363: the owner's ACTIVE support footprint, for the `patternScoped` reactive
             // family's affected-ally gate ("when an ally within the active pattern is directly
             // damaged / has their shield destroyed"). Threaded exactly like `adjacentAllyIdsFor`
