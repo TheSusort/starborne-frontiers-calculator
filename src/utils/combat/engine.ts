@@ -4498,7 +4498,7 @@ export function runCombat(rawInput: CombatEngineInput): {
     /**
      * Owner ruling R76 (Belladonna): a DoT conversion counts for a count gate written after the
      * DoT in the SAME cast, so the conversion roll is drawn at the landing rather than when the
-     * reaction drains. For each living converter on `casterId`'s side (its `convert-dot` on
+     * reaction drains. For each living, not turn-blocked converter on `casterId`'s side (its `convert-dot` on
      * `on-ally-debuff-inflicted`, the owner included, matching `dotType`), draw the roll the
      * landing's reaction would draw and park it in `preDecidedConversions` for the executor to
      * spend. A repeat ask for the same landing reads the parked roll. Returns the families
@@ -4520,6 +4520,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 const cfg = ability.config;
                 if (
                     cfg.type !== 'convert-dot' ||
+                    passiveSuppressedFor(ownerId, ability) ||
                     ability.trigger !== 'on-ally-debuff-inflicted' ||
                     cfg.fromDotType !== dotType ||
                     ability.conditions.length > 0

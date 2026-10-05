@@ -167,3 +167,40 @@ describe.each<Placement>(['player', 'enemy'])('APEX on the %s side', (placement)
         expect(o.disableControls).toBe(0);
     });
 });
+
+/** APEX's kit with her charged skill's two debuffs re-worded as "applies" — debuffs her passive's
+ *  "gets inflicted" shield does not see. */
+const apexAppliedDebuffsKit = (): ShipSkills => ({
+    slots: apexKit(true).slots.map((s) =>
+        s.slot !== 'charged'
+            ? s
+            : {
+                  ...s,
+                  abilities: s.abilities.map((a) =>
+                      a.config.type === 'debuff' && a.config.buffName !== 'Disable'
+                          ? { ...a, config: { ...a.config, application: 'apply' as const } }
+                          : a
+                  ),
+              }
+    ),
+});
+
+describe.each<Placement>(['player', 'enemy'])(
+    'APEX on the %s side, earlier debuffs applied rather than inflicted',
+    (placement) => {
+        it('her "inflicted" shield does not see them, so the Disable clause is skipped', () => {
+            const passive = apexKit(true).slots.find((s) => s.slot === 'passive');
+            expect(
+                passive?.abilities.some(
+                    (a) =>
+                        a.type === 'shield' &&
+                        a.trigger === 'on-enemy-debuff-inflicted' &&
+                        a.triggerApplicationFilter === 'inflict'
+                )
+            ).toBe(true);
+            const o = castOnce(placement, apexAppliedDebuffsKit(), 0);
+            expect(o.landed).toEqual(['Attack Down II', 'Out. Damage Down II']);
+            expect(o.disableControls).toBe(0);
+        });
+    }
+);

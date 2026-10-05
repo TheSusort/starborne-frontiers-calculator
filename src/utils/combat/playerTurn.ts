@@ -73,6 +73,7 @@ import {
     selfBuffStacksForOwner,
     LIVE_TRIGGERS,
     ownerHoldsSelfBuff,
+    passesApplicationFilter,
     TURN_SHADOW_CHANNELS,
     type ReactiveAbility,
 } from './triggers';
@@ -3281,8 +3282,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     );
     /**
      * `c` with the caster's shield answered as of THIS clause (owner ruling R47, written order):
-     * every debuff an earlier-written clause of this cast landed on any enemy has already given
-     * the caster her passive's shield, so "If this Unit has an active shield" reads true. APEX's
+     * every debuff an earlier-written clause of this cast landed on any enemy (and that the
+     * shield reaction's `triggerApplicationFilter` sees) has already given the caster her
+     * passive's shield, so "If this Unit has an active shield" reads true. APEX's
      * charged: Attack Down II lands (3% shield), Out. Damage Down II lands (3%), then the Disable
      * clause sees a shielded APEX. The shields themselves are granted when the reaction drains.
      */
@@ -3291,8 +3293,16 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         if (!status.conditions.some((cond) => cond.subject === 'self-shield')) return c;
         const at = timedEnemyBySlot.indexOf(status);
         for (const names of castLandedNamesById.values())
-            for (const landedAt of names.values())
-                if (landedAt < at) return { ...c, selfShielded: true };
+            for (const landedAt of names.values()) {
+                if (landedAt >= at) continue;
+                const application = timedEnemyBySlot[landedAt]?.payload.application;
+                if (
+                    debuffLandingSelfShields.some(({ ability }) =>
+                        passesApplicationFilter(ability.triggerApplicationFilter, application)
+                    )
+                )
+                    return { ...c, selfShielded: true };
+            }
         return c;
     };
 

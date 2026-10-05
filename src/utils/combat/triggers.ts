@@ -624,7 +624,7 @@ function dotInflictions(e: { stacks: number }): number {
  * `filter === undefined` (a clause with no "inflict"/"apply" verb of its own — Firewall's
  * "when debuffed") takes neither reading and passes unconditionally.
  */
-function passesApplicationFilter(
+export function passesApplicationFilter(
     filter: 'inflict' | 'apply' | undefined,
     application: 'inflict' | 'apply' | undefined
 ): boolean {

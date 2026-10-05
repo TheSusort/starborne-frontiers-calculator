@@ -143,3 +143,143 @@ describe.each<Placement>(['player', 'enemy'])('Belladonna on the %s side', (plac
         expect(r.corrosion).toBe(1);
     });
 });
+
+/**
+ * A converter that cannot act does not convert, so its conversion cannot count for a same-cast
+ * gate either. Board: Belladonna (100% conversion, hacking 1000) is the converter; an ally caster
+ * inflicts one Corrosion I on B, then "inflict Stasis if B has 1 or more Acidic Decay". B, faster
+ * than everyone, opens with Disable on Belladonna, or with nothing in the control.
+ */
+describe.each<Placement>(['player', 'enemy'])(
+    'a disabled Belladonna on the %s side converts nothing',
+    (placement) => {
+        const casterKit: ShipSkills = {
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        {
+                            id: 'cast-corrosion',
+                            type: 'dot',
+                            target: 'enemy',
+                            trigger: 'on-cast',
+                            conditions: [],
+                            config: {
+                                type: 'dot',
+                                dotType: 'corrosion',
+                                tier: 3,
+                                stacks: 1,
+                                duration: 3,
+                            },
+                        },
+                        {
+                            id: 'cast-stasis',
+                            type: 'debuff',
+                            target: 'enemy',
+                            trigger: 'on-cast',
+                            conditions: [
+                                {
+                                    subject: 'enemy-dot-count',
+                                    derivable: true,
+                                    countComparator: 'gte',
+                                    countThreshold: 1,
+                                    buffName: 'Acidic Decay',
+                                },
+                            ],
+                            config: {
+                                type: 'debuff',
+                                buffName: 'Stasis',
+                                parsedEffects: {},
+                                stacks: 1,
+                                isStackable: false,
+                                duration: 1,
+                                application: 'inflict',
+                            },
+                        },
+                    ],
+                },
+            ],
+        };
+        const disableKit: ShipSkills = {
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        {
+                            id: 'open-disable',
+                            type: 'debuff',
+                            target: 'enemy',
+                            trigger: 'on-cast',
+                            conditions: [],
+                            config: {
+                                type: 'debuff',
+                                buffName: 'Disable',
+                                parsedEffects: {},
+                                stacks: 1,
+                                isStackable: false,
+                                duration: 2,
+                                application: 'apply',
+                            },
+                        },
+                    ],
+                },
+            ],
+        };
+        const board = (bKit: ShipSkills) => {
+            const belladonna: BoardUnit = {
+                id: 'belladonna',
+                kit: realKit('Belladonna'),
+                position: 'M4',
+                speed: 50,
+                hacking: 1000,
+            };
+            const caster: BoardUnit = {
+                id: 'caster',
+                kit: casterKit,
+                position: 'M3',
+                speed: 100,
+                attack: 1000,
+                hacking: 1e6,
+            };
+            const b: BoardUnit = { id: 'b', kit: bKit, position: 'M4', speed: 500, hacking: 1e6 };
+            const { input, id } = boardInput(placement, belladonna, [caster], [b], 1);
+            setupKeyedRng(1);
+            const bus = createEventBus();
+            const landed: { on: string; name: string }[] = [];
+            bus.on('debuff-applied', (e: Extract<CombatEvent, { type: 'debuff-applied' }>) => {
+                landed.push({ on: e.targetId, name: e.buffName });
+            });
+            let victim: CombatActor | undefined;
+            runCombat({
+                ...input,
+                bus,
+                __testTapActors: (actors) => {
+                    victim = actors.find((x) => x.id === id(b));
+                },
+            });
+            const acidicDecay = (victim?.corrosionEntries ?? [])
+                .filter((e) => e.family === 'Acidic Decay')
+                .reduce((n, e) => n + e.stacks, 0);
+            return {
+                disabledBelladonna: landed.some(
+                    (l) => l.on === id(belladonna) && l.name === 'Disable'
+                ),
+                stasisOnB: landed.some((l) => l.on === id(b) && l.name === 'Stasis'),
+                acidicDecay,
+            };
+        };
+
+        it('control: Belladonna free → the Corrosion converts and the Stasis gate opens', () => {
+            const r = board(NO_KIT);
+            expect(r.acidicDecay).toBeGreaterThanOrEqual(1);
+            expect(r.stasisOnB).toBe(true);
+        });
+
+        it('Belladonna disabled → no conversion, and the Stasis gate stays shut', () => {
+            const r = board(disableKit);
+            expect(r.disabledBelladonna).toBe(true);
+            expect(r.acidicDecay).toBe(0);
+            expect(r.stasisOnB).toBe(false);
+        });
+    }
+);
