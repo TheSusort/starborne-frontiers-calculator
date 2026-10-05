@@ -2789,7 +2789,9 @@ export function buildActorConditionContext(
     return buildRoundContext({
         selfBuffNames,
         selfBuffCount: buffStackCount([...scheduled, ...abilitySelf]),
-        landedEnemyDebuffCount: shared.ownerIsEnemySide ? 0 : snap.activeEnemyDebuffs.length,
+        landedEnemyDebuffCount: shared.ownerIsEnemySide
+            ? 0
+            : namedDebuffCount(snap.activeEnemyDebuffs),
         corrosionStacks: shared.corrosionStacks,
         infernoStacks: shared.infernoStacks,
         bombStacks: shared.bombStacks,
@@ -3357,11 +3359,40 @@ export function ownerDebuffNamesFor(statusEngine: StatusEngine, targetId: string
     return [...names];
 }
 
-/** How many debuffs `actor` carries right now: its distinct named debuffs (`ownerDebuffNamesFor`)
- *  plus every DoT stack it carries (`carriedDotStacks`) — the same sum a cast's "N or more
- *  debuffs" gate reads for a struck enemy. */
+/** How many debuffs one landed named-debuff entry is: a persistent-stacking debuff (Defense Shred)
+ *  is one per STACK (owner ruling R73 — 3 stacks are 3 debuffs, matching the cleanse, which takes
+ *  one stack per cleansed debuff, R44); any other named debuff is one. */
+function namedDebuffEntryCount(e: ActiveBuff): number {
+    return PERSISTENT_STACKING_BUFFS.has(e.buffName) ? Math.max(0, e.stacks ?? 1) : 1;
+}
+
+/** How many debuffs a list of landed named-debuff entries is (`namedDebuffEntryCount` each). The
+ *  named half of every debuff COUNT; DoT stacks are the other half (`carriedDotStacks`). */
+export function namedDebuffCount(entries: readonly ActiveBuff[]): number {
+    return entries.reduce((n, e) => n + namedDebuffEntryCount(e), 0);
+}
+
+/** How many named debuffs `targetId` carries: its distinct named debuffs (`ownerDebuffNamesFor`),
+ *  a persistent-stacking one counted per stack (`namedDebuffEntryCount`). */
+export function ownerDebuffCount(statusEngine: StatusEngine, targetId: string): number {
+    const byName = new Map<string, number>(
+        ownerDebuffNamesFor(statusEngine, targetId).map((n) => [n, 1])
+    );
+    const persistent = [
+        ...statusEngine.snapshot(undefined, targetId).activeEnemyDebuffs,
+        ...statusEngine.timedAbilityStatuses('enemy', undefined, targetId).map((s) => s.active),
+    ].filter((e) => e.turnsRemaining === 'permanent' && byName.has(e.buffName));
+    for (const e of persistent) byName.set(e.buffName, namedDebuffEntryCount(e));
+    let total = 0;
+    for (const n of byName.values()) total += n;
+    return total;
+}
+
+/** How many debuffs `actor` carries right now: its named debuffs (`ownerDebuffCount`) plus every
+ *  DoT stack it carries (`carriedDotStacks`) — the same sum a cast's "N or more debuffs" gate
+ *  reads for a struck enemy. */
 export function actorDebuffCount(statusEngine: StatusEngine, actor: CombatActor): number {
-    return ownerDebuffNamesFor(statusEngine, actor.id).length + carriedDotStacks(actor);
+    return ownerDebuffCount(statusEngine, actor.id) + carriedDotStacks(actor);
 }
 
 /**

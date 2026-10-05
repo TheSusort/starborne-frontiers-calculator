@@ -298,8 +298,9 @@ export interface StatusEngine {
      *  Returns expired buff names so the engine can emit buff-expired. */
     decrementEnemy(targetId?: string): { expired: string[] };
     /** Remove every REMOVABLE timed status carried by this id, across both the player-side
-     *  self store (keyed by ownerId) and the enemy-side store (keyed by targetId). Preserves:
-     *  persistent-stacking entries (separate maps this wipe never touches), entries flagged
+     *  self store (keyed by ownerId) and the enemy-side store (keyed by targetId), plus the
+     *  removable persistent-stacking DEBUFFS it carries (Defense Shred — owner ruling R74).
+     *  Preserves: persistent-stacking self BUFFS, entries flagged
      *  `turnsRemaining === 'permanent'`, and entries whose buffName ∈ UNREMOVABLE_STATUSES.
      *  Standing always-active/aura source lists are NOT touched — they re-derive each round
      *  from ship data, so a wipe of applied statuses is the model and auras re-apply next round.
@@ -1564,19 +1565,20 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
      *  Reusable by a later phase's cleanse/purge. A status is unremovable when it is a
      *  persistent stack (the 'permanent' sentinel — those also live in separate maps that
      *  clearRemovable never visits, so this is a belt-and-braces guard) or its buffName is
-     *  named in UNREMOVABLE_STATUSES. The persistent maps are a separate pool: a cleanse takes
-     *  persistent debuff stacks (`removeNewestFirst`), the Cheat-Death wipe does not. */
+     *  named in UNREMOVABLE_STATUSES. The persistent maps are a separate pool, which the
+     *  cleanse (`removeNewestFirst`) and the Cheat-Death wipe (`clearRemovable`) visit for
+     *  debuffs only. */
     const isUnremovable = (
         buffName: string,
         turnsRemaining: number | 'recurring' | 'permanent'
     ): boolean => turnsRemaining === 'permanent' || UNREMOVABLE_STATUSES.has(buffName);
 
     /** Remove every removable timed entry for `id` across the player-side self store
-     *  (keyed by ownerId) and the enemy-side store (keyed by targetId). Persistent-stack
-     *  maps are not visited — Defense Shred survives a Cheat Death even though a cleanse
-     *  takes its stacks (ruling R44 covers cleanse only). Unknown id → lazy-empty maps →
-     *  no-op. Always/aura source lists are intentionally left intact (they re-derive each
-     *  round from ship data). */
+     *  (keyed by ownerId) and the enemy-side store (keyed by targetId), and every removable
+     *  persistent-stacking DEBUFF it carries, all stacks (owner ruling R74: Cheat Death wipes
+     *  Defense Shred like any other debuff). Persistent self BUFFS (Blast, Overload, Titanite
+     *  Plating) are not visited. Unknown id → lazy-empty maps → no-op. Always/aura source lists
+     *  are intentionally left intact (they re-derive each round from ship data). */
     const clearRemovable = (id: string): void => {
         const sweep = (map: Map<string, BuffState> | undefined): void => {
             if (!map) return;
@@ -1587,6 +1589,12 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         };
         sweep(selfMaps.get(id));
         sweep(enemyMaps.get(id));
+        const persistentDebuffs = persistentEnemyMaps.get(id);
+        if (persistentDebuffs) {
+            for (const [key, s] of persistentDebuffs) {
+                if (!UNREMOVABLE_STATUSES.has(s.buffName)) persistentDebuffs.delete(key);
+            }
+        }
     };
 
     /** Remove a SINGLE named timed enemy status from `targetId`'s per-actor enemy store (the

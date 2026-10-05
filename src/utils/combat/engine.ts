@@ -167,6 +167,7 @@ import {
     ownerDebuffNamesFor,
     actorBuffCount,
     actorDebuffCount,
+    ownerDebuffCount,
     partitionReactiveAbilities,
     provokerOf,
     registerReactiveListeners,
@@ -8207,8 +8208,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 v.stats.hp > 0
                                     ? Math.max(0, Math.min(100, (100 * v.currentHp) / v.stats.hp))
                                     : 100,
-                            enemyDebuffCount:
-                                new Set(ownerDebuffNamesFor(statusEngine, v.id)).size + dots,
+                            enemyDebuffCount: ownerDebuffCount(statusEngine, v.id) + dots,
                             enemyDotCount: dots,
                             enemyAdjacentCount: bySide(v.side).adjacentAllyIdsFor(v.id).length,
                         },
@@ -9568,6 +9568,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                     targetRepairedThisRound: repairedThisRound.has(v.id),
                     enemyDebuffNames: enemyDebuffNamesForTarget(v),
                     statusDebuffNames: ownerDebuffNamesFor(statusEngine, v.id),
+                    statusDebuffCount: ownerDebuffCount(statusEngine, v.id),
                     buffNames: selfBuffNamesForOwners(statusEngine, [v.id]),
                     // WITHHELD under `mode: 'dps'` — see `liveCountsMeasurable`.
                     ...(liveCountsMeasurable

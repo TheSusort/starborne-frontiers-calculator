@@ -3073,7 +3073,10 @@ const DocumentationPage: React.FC = () => {
                                         debuff or damage-over-time stack alike (stacks inflicted
                                         together share one time); Acidic Decay cannot be cleansed.
                                         Defense Shred is cleansed one stack at a time: 3 stacks,
-                                        &ldquo;cleanses 1 debuff&rdquo;, 2 stacks left. Nyxen&apos;s
+                                        &ldquo;cleanses 1 debuff&rdquo;, 2 stacks left. Each Defense
+                                        Shred stack also counts as one debuff (3 stacks meet
+                                        Crocus&apos;s &ldquo;3 or more debuffs&rdquo;), and Cheat
+                                        Death wipes all of them like any other debuff. Nyxen&apos;s
                                         cleanses take only Bombs or only damage-over-time effects,
                                         as written, newest first. Heliodor&apos;s and
                                         Pestilence&apos;s cut to the duration of all debuffs

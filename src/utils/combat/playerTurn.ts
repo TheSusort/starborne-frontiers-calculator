@@ -68,6 +68,7 @@ import {
     pinApplierDefence,
     selfBuffNamesForOwners,
     buffStackCount,
+    namedDebuffCount,
     selfBuffStacksForOwner,
     LIVE_TRIGGERS,
     ownerHoldsSelfBuff,
@@ -688,6 +689,9 @@ export interface RecipientGateReading {
     role?: EnemyBaseClass;
     /** Distinct non-DoT debuffs on the actor (its per-target status store). */
     statusDebuffNames: string[];
+    /** How many non-DoT debuffs those are, a Defense Shred counted per stack (`ownerDebuffCount`,
+     *  owner ruling R73). */
+    statusDebuffCount: number;
     /** The buffs the actor itself holds. A self gain asking whether a STRUCK enemy holds a named
      *  buff ("If any target has Stealth" — Selenite) reads these rather than the side-wide
      *  `enemyBuffNames` union (owner ruling R23). */
@@ -2767,8 +2771,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     const scheduledLandedNames = scheduledEnemy.landedEnemyDebuffs.map((b) => b.buffName);
     const landedDebuffCountOn = (reading: RecipientGateReading | undefined): number =>
         reading === undefined
-            ? scheduledEnemy.landedEnemyDebuffs.length
-            : new Set([...scheduledLandedNames, ...reading.statusDebuffNames]).size;
+            ? namedDebuffCount(scheduledEnemy.landedEnemyDebuffs)
+            : reading.statusDebuffCount +
+              new Set(scheduledLandedNames.filter((n) => !reading.statusDebuffNames.includes(n)))
+                  .size;
     const preDebuffGateInput: Parameters<typeof buildRoundContext>[0] = {
         // Live adjacency / kill counts (Panguan, Centurion, Judge) — see `liveCountCtx`.
         ...liveCountCtx,
@@ -3743,7 +3749,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         ...liveCountCtx,
         selfBuffNames: [...scheduledSelfBuffNames, ...priorAbilitySelfNames],
         selfBuffCount: priorSelfBuffCount,
-        landedEnemyDebuffCount: landedEnemyDebuffs.length,
+        landedEnemyDebuffCount: namedDebuffCount(landedEnemyDebuffs),
         ...dotReadings(boundTargetDoTs),
         effectiveCritRate: cappedCrit(critBuffForGates),
         enemyType,
@@ -3878,7 +3884,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         ...liveCountCtx,
         selfBuffNames: activeSelfBuffNames,
         selfBuffCount: activeSelfBuffCount,
-        landedEnemyDebuffCount: landedEnemyDebuffs.length,
+        landedEnemyDebuffCount: namedDebuffCount(landedEnemyDebuffs),
         ...dotReadings(boundTargetDoTs),
         effectiveCritRate: cappedCrit(critBuffForGates),
         enemyType,
@@ -4237,7 +4243,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         ...liveCountCtx,
         selfBuffNames: activeSelfBuffNames,
         selfBuffCount: activeSelfBuffCount,
-        landedEnemyDebuffCount: landedEnemyDebuffs.length,
+        landedEnemyDebuffCount: namedDebuffCount(landedEnemyDebuffs),
         ...dotReadings(boundTargetDoTs),
         effectiveCritRate: effectiveCrit,
         enemyType,

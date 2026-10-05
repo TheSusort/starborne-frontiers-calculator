@@ -74,6 +74,8 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: cleanses now remove Defense Shred, one stack per cleansed debuff.',
     'Combat simulator: each stack of a buff now counts as one buff.',
     'DPS calculator: Valiant, Sustainer and Thresh now count each stack of their buffs.',
+    'Combat simulator: each Defense Shred stack now counts as one debuff.',
+    'Combat simulator: Cheat Death now wipes Defense Shred like any other debuff.',
     "Combat simulator: Cobalt's and Makoli's passives now check their own HP on either team.",
     "Combat simulator: Cobalt's charged bonus damage now requires him to be at full HP.",
     "Combat log: a hit's main target now shows the damage it actually took.",

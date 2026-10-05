@@ -22,9 +22,9 @@ export const STACK_STEALABLE_STATUSES: ReadonlySet<string> = new Set<string>(['P
 
 /** Named statuses that survive a cleanse/purge/Cheat-Death wipe. The persistent-stacking
  *  statuses (Defense Shred/Blast/Overload/Titanite) live in a separate store with its own rules:
- *  a cleanse takes Defense Shred one stack per debuff (owner ruling R44), the Cheat-Death wipe and
- *  a purge never reach that store. This set names effects that are unremovable by name. Extend
- *  from game data as identified. */
+ *  a cleanse takes Defense Shred one stack per debuff (owner ruling R44) and a Cheat-Death wipe
+ *  takes all of it (R74); a purge never reaches that store. This set names effects that are
+ *  unremovable by name. Extend from game data as identified. */
 export const UNREMOVABLE_STATUSES: ReadonlySet<string> = new Set<string>([
     // Description-marked-unremovable effect (e.g. "Acidic Decay" states it in-game) — if it
     // lands in the StatusEngine it survives clearRemovable (and a Cheat Death wipe).
