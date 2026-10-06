@@ -3095,7 +3095,7 @@ const DocumentationPage: React.FC = () => {
                                         debuff: 3 Defense Shred stacks meet Crocus&apos;s &ldquo;3
                                         or more debuffs&rdquo;, and so do Amartya&apos;s 2 Exposed
                                         stacks plus Crocus&apos;s own Corrosion. Cheat Death wipes
-                                        all of them like any other debuff. Nyxen&apos;s cleanses
+                                        Defense Shred like any other debuff. Nyxen&apos;s cleanses
                                         take only Bombs or only damage-over-time effects, as
                                         written, newest first. Heliodor&apos;s and Pestilence&apos;s
                                         cut to the duration of all debuffs shortens Corrosion and
