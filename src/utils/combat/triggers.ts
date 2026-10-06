@@ -123,14 +123,16 @@ export function reactionKey(intent: Pick<Intent, 'ownerId' | 'ability' | 'source
 }
 
 /**
- * A safety net on a chain of reactions, never reached by the lineage rule above: a chain can
- * only grow while every firing in it is a different clause (`reactionKey`), so its depth is
- * bounded by the number of reactive clauses on the board. A reaction to a cast or a phase event has depth
- * 0; a reaction to something a reaction did has its cause's depth + 1. An intent deeper than this
- * is dropped, not thrown. `reactionChainCap.integration.test.ts` pins that the fingerprint
- * battles and the loop boards stay under it.
+ * A NON-GAME safety net on a chain of reactions. The game has no chain limit (owner ruling R91):
+ * the lineage rule above is what ends every loop, because a chain can only grow while every
+ * firing in it is a different clause (`reactionKey`), so its depth is bounded by the number of
+ * reactive clauses on the board. This constant exists only so an engine defect cannot hang a
+ * simulation, and sits far above any chain a real board produces. A reaction to a cast or a phase
+ * event has depth 0; a reaction to something a reaction did has its cause's depth + 1. An intent
+ * deeper than this is dropped, not thrown. `reactionChainCap.integration.test.ts` pins that the
+ * fingerprint battles and the loop boards stay well under it.
  */
-export const MAX_REACTION_CHAIN_DEPTH = 8;
+export const MAX_REACTION_CHAIN_DEPTH = 64;
 
 /** TEST-ONLY probe of reaction chains, written by the engine's drain and the enqueue wrapper: the
  *  deepest chain depth an executed intent had, how many intents the depth cap dropped, and how many

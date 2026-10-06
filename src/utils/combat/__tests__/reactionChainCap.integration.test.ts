@@ -1,8 +1,10 @@
 /**
  * Chained reactions trigger (owner ruling 66), and the lineage rule ends every chain: a passive
  * never fires on an event its own earlier firing caused (`reactionKey` in triggers.ts, owner
- * ruling 2026-10-06). `MAX_REACTION_CHAIN_DEPTH` is only a safety net behind it. This file pins
- * that no board reaches the net (measured 2026-10-06, keyed per clause — see `reactionKey`):
+ * ruling 2026-10-06). `MAX_REACTION_CHAIN_DEPTH` is only a safety net behind it, not a game rule
+ * (owner ruling R91): the game has no chain limit, so the net sits far above any real chain. This
+ * file pins that no board reaches the net (measured 2026-10-06, keyed per clause — see
+ * `reactionKey`):
  *   - the real-kit fingerprint battles: deepest chain 1;
  *   - a board of reacting real kits (Purifier, Opal and Stalwart against Hemlock, Wrecker and
  *     Ravager, each named ship in turn as the subject, on both sides): deepest chain 1;
@@ -24,7 +26,7 @@ import { runSeededBattle } from '../../simulator/seededRuns';
 import { buildTraceShip } from '../../../../scripts/lib/traceShipFactory';
 import { csvAvailable } from '../../../../scripts/lib/shipSkillCsv';
 import { shipDataAvailable } from '../../../../scripts/lib/shipDataSnapshot';
-import { reactionChainProbe } from '../triggers';
+import { MAX_REACTION_CHAIN_DEPTH, reactionChainProbe } from '../triggers';
 import type { BattleSimulationInput } from '../../calculators/battleSimulator';
 
 beforeAll(() => {
@@ -79,6 +81,10 @@ const probe = (input: BattleSimulationInput, seed: number) => {
 };
 
 describe('the reaction-chain safety net', () => {
+    it('is a backstop far above every measured chain, not a game rule (R91)', () => {
+        expect(MAX_REACTION_CHAIN_DEPTH).toBe(64);
+    });
+
     it('is never reached by the real-kit fingerprint battles', () => {
         const reached: string[] = [];
         for (const name of corpusNames()) {
