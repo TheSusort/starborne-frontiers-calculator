@@ -4777,10 +4777,11 @@ const DocumentationPage: React.FC = () => {
                                     ship passives are now modeled too: <strong>Nosorog</strong>{' '}
                                     reflects a portion of the damage it takes back at an attacker
                                     that hits it as its primary target, at most once per incoming
-                                    attack and its reactions (never a reflected hit, and not on
-                                    splash or area-of-effect hits; Stalwart&apos;s counter and
-                                    Legion Discipline II follow the same rule, and Malvex&apos;s
-                                    shield comes from skill hits only),{' '}
+                                    attack and its reactions (never a reflected hit, and not when it
+                                    is only splashed by an attack aimed at another ship — an
+                                    area-of-effect attack aimed at Nosorog himself still counts;
+                                    Stalwart&apos;s counter and Legion Discipline II follow the same
+                                    rule, and Malvex&apos;s shield comes from skill hits only),{' '}
                                     <strong>Chakara&apos;s</strong> charged skill bypasses part of
                                     the enemy&apos;s Defense, and <strong>Anemone</strong>,{' '}
                                     <strong>Panon</strong>, <strong>Wusheng</strong>, and{' '}
