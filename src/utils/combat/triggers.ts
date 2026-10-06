@@ -5083,6 +5083,7 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // buff grant is never gated. Mirrors the heal/shield + damage branches. Keys on
         // `${ownerId}:${ability.id}` via ctx.procChanceGates.
         if (!passesProcChanceGate(intent, ctx)) return;
+        if (!passesOncePerRootCastGate(intent, ctx)) return;
         // Consume the once-per-attack slot now that the self-buff WILL apply.
         if (buffGuardKey) ctx.reactionFiredThisAttack?.add(buffGuardKey);
         // Reactive buffs bypass the aura-by-passive-slot classification — their own

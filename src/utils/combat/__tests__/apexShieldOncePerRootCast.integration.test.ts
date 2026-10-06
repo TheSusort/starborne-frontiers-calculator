@@ -216,3 +216,71 @@ describe.each<Placement>(['player', 'enemy'])('APEX on the %s side', (placement)
         expect(providerTurn.shields).toBe(1);
     });
 });
+
+/**
+ * The cap rides `Ability.oncePerRootCast`, not the ability's kind: a buff on the same trigger
+ * obeys it too. No ship carries one today, so the ability is hand-added beside APEX's real kit.
+ */
+describe.each<Placement>(['player', 'enemy'])('a capped buff on the %s side', (placement) => {
+    it('one cast plus the reactions it wakes → the buff lands once', () => {
+        const base = kit('APEX', 0, ['active', 'passive']);
+        const withBuff: ShipSkills = {
+            ...base,
+            slots: [
+                ...base.slots,
+                {
+                    slot: 'passive',
+                    abilities: [
+                        {
+                            id: 'capped-buff',
+                            type: 'buff',
+                            target: 'self',
+                            trigger: 'on-enemy-debuff-inflicted',
+                            conditions: [],
+                            oncePerRootCast: true,
+                            config: {
+                                type: 'buff',
+                                buffName: 'Attack Up I',
+                                parsedEffects: {},
+                                stacks: 1,
+                                isStackable: true,
+                                duration: 2,
+                            },
+                        },
+                    ],
+                },
+            ],
+        };
+        const apex: BoardUnit = {
+            id: 'apex',
+            kit: withBuff,
+            position: 'M4',
+            speed: 300,
+            attack: 1000,
+            hacking: 1e6,
+            hp: 100_000,
+        };
+        const provider: BoardUnit = {
+            id: 'provider',
+            kit: kit('Provider', 4, ['active', 'passive']),
+            position: 'M3',
+            speed: 200,
+            attack: 1000,
+            hacking: 1e6,
+        };
+        const enemy: BoardUnit = { id: 'victim', kit: NO_KIT, position: 'M4', speed: 1 };
+        const { input, id } = boardInput(placement, apex, [provider], [enemy], 1);
+        const bus = createEventBus();
+        let grantsInApexTurn = 0;
+        let inApexTurn = false;
+        bus.on('turn-started', (e: Extract<CombatEvent, { type: 'turn-started' }>) => {
+            inApexTurn = e.actorId === id(apex);
+        });
+        bus.on('buff-applied', (e: Extract<CombatEvent, { type: 'buff-applied' }>) => {
+            if (inApexTurn && e.actorId === id(apex) && e.buffName === 'Attack Up I')
+                grantsInApexTurn += 1;
+        });
+        runCombat({ ...input, bus });
+        expect(grantsInApexTurn).toBe(1);
+    });
+});

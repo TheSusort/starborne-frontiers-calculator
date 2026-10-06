@@ -101,8 +101,8 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: endless reaction loops, such as two opposing Nuqtus, no longer stall battles.',
     'Combat simulator: reactions on both teams to one event now resolve in turn order.',
     "Combat simulator: a reaction to an enemy's reaction now resolves within the same turn.",
-    "Combat simulator: APEX's passive shield now triggers at most once per skill.",
-    "Combat simulator: APEX's Block Shield now triggers at most once per skill.",
+    "Combat simulator: APEX's passive shield now triggers at most once per skill cast.",
+    "Combat simulator: APEX's Block Shield now triggers at most once per skill cast.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
