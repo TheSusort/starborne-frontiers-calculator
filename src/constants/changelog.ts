@@ -10,6 +10,8 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator: Snakeroot's passive now fires on every 4th DoT stack inflicted.",
     "DPS calculator: Snakeroot's passive now fires on every 4th DoT stack inflicted.",
     'Combat simulator: each Exposed stack now counts as one debuff in debuff counts.',
+    'Combat simulator: primary-target passives now fire once per incoming attack and its reactions.',
+    'Combat simulator: Stalwart now counters back when another Stalwart counters him.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

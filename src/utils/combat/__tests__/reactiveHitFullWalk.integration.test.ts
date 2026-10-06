@@ -801,17 +801,18 @@ describe('a counter or a reactive proc is direct damage (ruling 36)', () => {
         }
     );
 
-    it.each(SIDES)('a counter never wakes a counter: Stalwart vs Stalwart (%s side)', (side) => {
+    it.each(SIDES)('Stalwart vs Stalwart: one counter back, no ping-pong (%s side)', (side) => {
         const a = stalwart({ id: 'A', speed: 200 });
         const b = stalwart({ id: 'B', speed: 100 });
         const r = run([a], [b], side, 1);
         const counters = r.events.filter(
             (e) => e.type === 'reactive-damage-performed' && e.round === 1
         );
-        // A hits B → B counters A (A does not counter back); B hits A → A counters B.
+        // Owner ruling R92: A hits B → B counters A → A counters back → B stops; then B's own
+        // turn: B hits A → A counters B → B counters back → A stops.
         expect(
             counters.map((e) => (e.type === 'reactive-damage-performed' ? e.sourceId : ''))
-        ).toEqual([r.idOf('B'), r.idOf('A')]);
+        ).toEqual([r.idOf('B'), r.idOf('A'), r.idOf('A'), r.idOf('B')]);
     });
 
     it.each(SIDES)("Chakara's round-start hit wakes Stalwart's counter (%s side)", (side) => {

@@ -836,8 +836,8 @@ export type AbilityConfig =
           /** raw percentage of the OWNER's effective attack, e.g. 30/70/100/200. */
           multiplier: number;
           hits?: number;
-          /** Stalwart: fire only when this unit was the directly-targeted (primary) victim,
-           *  not a splash/covered AoE victim. Gated on `attacked.isPrimaryTarget`. */
+          /** Stalwart: fire only on a primary-target hit — never a splash/covered AoE victim,
+           *  and at most once per incoming sub-attack's chain. Gated on `attacked.isPrimaryTarget`. */
           requirePrimaryTarget?: boolean;
           /** Nyxen (PR2): fire only when the hit reduced the shield pool. Plumbed in PR2. */
           requireShieldHit?: boolean;
@@ -1031,8 +1031,8 @@ export type AbilityConfig =
            *  damage (punched through the pool). Absent → unconditional (Malvex). */
           requiresHpDamage?: boolean;
           /** 'damage-taken' only (Malvex "When directly damaged as a primary target"): proc only
-           *  on a hit where this actor is the attack's PRIMARY target, never on a covered hit of
-           *  an area pattern. Absent → any hit. */
+           *  on a cast hit where this actor is the attack's PRIMARY target, never on a covered hit
+           *  of an area pattern. Absent → any hit. */
           requirePrimaryTarget?: boolean;
           /** "Once per battle" reactive repair (Yazid's on-cheat-death-activated 60%
            *  repair): the executor fires its consumption AT MOST ONCE per combat, tracked
@@ -1190,11 +1190,10 @@ export type AbilityConfig =
           type: 'damage-reflection';
           /** Percentage of incoming direct damage reflected back to the attacker (e.g. 10). */
           pct: number;
-          /** Epic PR12 (A) — Nosorog: "reflects 40% of the Damage taken back to the enemy when
-           *  directly damaged AS A PRIMARY TARGET." Mirrors counter's `requirePrimaryTarget`
-           *  (Stalwart): fires only when this hit's victim was the attacker's anchor/primary
-           *  target, not a splash/covered footprint victim. Absent → unconditional (Reflect
-           *  gear set, byte-identical). */
+          /** Nosorog: "reflects 40% of the Damage taken back to the enemy when directly damaged
+           *  AS A PRIMARY TARGET." Mirrors counter's `requirePrimaryTarget` (Stalwart): fires only
+           *  on a primary-target hit (applyVictimDamage's `cause.isPrimaryTarget`). Absent →
+           *  every direct hit (Reflect gear set). */
           requirePrimaryTarget?: boolean;
       }
     // Boost gear set: caster-side +1-turn extension on every buff the wearer applies.
@@ -1295,9 +1294,9 @@ export interface Ability {
      *  on critting hits, 'non-crit' only on non-critting hits. Absent → fires on any hit.
      *  Isha parses as a mutually exclusive pair (3% non-crit / 6% crit — "instead"). */
     triggerCritFilter?: 'crit' | 'non-crit';
-    /** on-attacked only: fire only when the owner is the hit's PRIMARY target, never on a covered
-     *  hit of an area pattern — "When this Unit is directly damaged as a primary target, … gains
-     *  Legion Discipline II" (Stalwart). Absent → any hit. */
+    /** on-attacked only: fire only on a primary-target hit (`attacked.isPrimaryTarget`) — "When
+     *  this Unit is directly damaged as a primary target, … gains Legion Discipline II"
+     *  (Stalwart). Absent → any hit. */
     triggerPrimaryTargetOnly?: boolean;
     /** on-destroyed only: fire only when the owner died to DIRECT damage, never to a
      *  damage-over-time tick — "Upon being destroyed by direct damage, … grants all allies
