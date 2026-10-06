@@ -3488,21 +3488,23 @@ export function selfBuffStacksForOwner(
     return Math.max(0, total + statusEngine.selfBuffStackAdjustment(ownerId, buffName));
 }
 
+/** How many stacks one held status entry is: a live `active.stacks` counts that many (0 for a
+ *  seeded-but-inert accumulating entry); otherwise an ability status counts its payload's declared
+ *  stacks and a scheduled entry counts 1. The one per-entry rule behind every buff COUNT
+ *  (`buffStackCount`) and every named-debuff COUNT (`namedDebuffCount`). */
+function statusEntryStackCount(e: ActiveBuff | ActiveAbilityStatus): number {
+    const active = 'active' in e ? e.active : e;
+    if (active.stacks !== undefined) return Math.max(0, active.stacks);
+    return Math.max(1, ('payload' in e ? e.payload.stacks : undefined) ?? 1);
+}
+
 /** How many buffs a list of held buff entries is: one per STACK, not one per entry or name (owner
- *  ruling R37, the buff-side mirror of R26 — Core Charge I ×4 is 4 buffs). An entry with a live
- *  `active.stacks` counts that many (0 for a seeded-but-inert accumulating entry); otherwise an
- *  ability status counts its payload's declared stacks and a scheduled entry counts 1. Every
- *  buff COUNT ("for each buff on the enemy", "for each buff on itself", "3 or more buffs", "the
- *  enemy with the most buffs") reads through this — or `actorBuffCount` for a stored actor;
- *  presence and NAME reads stay on the deduped name lists. */
+ *  ruling R37, the buff-side mirror of R26 — Core Charge I ×4 is 4 buffs), per
+ *  `statusEntryStackCount`. Every buff COUNT ("for each buff on the enemy", "for each buff on
+ *  itself", "3 or more buffs", "the enemy with the most buffs") reads through this — or
+ *  `actorBuffCount` for a stored actor; presence and NAME reads stay on the deduped name lists. */
 export function buffStackCount(entries: readonly (ActiveBuff | ActiveAbilityStatus)[]): number {
-    let total = 0;
-    for (const e of entries) {
-        const active = 'active' in e ? e.active : e;
-        if (active.stacks !== undefined) total += Math.max(0, active.stacks);
-        else total += Math.max(1, ('payload' in e ? e.payload.stacks : undefined) ?? 1);
-    }
-    return total;
+    return entries.reduce((n, e) => n + statusEntryStackCount(e), 0);
 }
 
 /** How many buffs `ownerId` carries right now (`buffStackCount`), across the SAME three sources as
@@ -3550,30 +3552,43 @@ export function ownerDebuffNamesFor(statusEngine: StatusEngine, targetId: string
     return [...names];
 }
 
-/** How many debuffs one landed named-debuff entry is: a persistent-stacking debuff (Defense Shred)
- *  is one per STACK (owner ruling R73 — 3 stacks are 3 debuffs, matching the cleanse, which takes
- *  one stack per cleansed debuff, R44); any other named debuff is one. */
-function namedDebuffEntryCount(e: ActiveBuff): number {
-    return PERSISTENT_STACKING_BUFFS.has(e.buffName) ? Math.max(0, e.stacks ?? 1) : 1;
+/** `s.active` with its stack count made explicit (`statusEntryStackCount`) when the entry holds
+ *  more than its one implicit stack — an unspent timed entry carries its declared count on the
+ *  payload only. For a list of plain `ActiveBuff`s that a debuff count later reads. */
+export function activeWithStacks(s: ActiveAbilityStatus): ActiveBuff {
+    const n = statusEntryStackCount(s);
+    return s.active.stacks === undefined && n === 1 ? s.active : { ...s.active, stacks: n };
 }
 
-/** How many debuffs a list of landed named-debuff entries is (`namedDebuffEntryCount` each). The
- *  named half of every debuff COUNT; DoT stacks are the other half (`carriedDotStacks`). */
-export function namedDebuffCount(entries: readonly ActiveBuff[]): number {
-    return entries.reduce((n, e) => n + namedDebuffEntryCount(e), 0);
+/** How many debuffs a list of landed named-debuff entries is: one per STACK (owner rulings R73,
+ *  R88 — a stackable debuff's stacks are separate debuffs: 3 Defense Shred stacks are 3, Amartya's
+ *  2 Exposed stacks are 2), per `statusEntryStackCount`. A debuff that overwrites rather than
+ *  stacks holds one stack. The named half of every debuff COUNT; DoT stacks are the other half
+ *  (`carriedDotStacks`). Pass the full ability status where one exists: an unspent timed entry
+ *  carries its stack count on the payload only. */
+export function namedDebuffCount(entries: readonly (ActiveBuff | ActiveAbilityStatus)[]): number {
+    return entries.reduce((n, e) => n + statusEntryStackCount(e), 0);
 }
 
-/** How many named debuffs `targetId` carries: its distinct named debuffs (`ownerDebuffNamesFor`),
- *  a persistent-stacking one counted per stack (`namedDebuffEntryCount`). */
+/** How many named debuffs `targetId` carries: each distinct named debuff (`ownerDebuffNamesFor`'s
+ *  three sources) counted per stack (`namedDebuffCount`). A name held in more than one source
+ *  counts its largest entry once. */
 export function ownerDebuffCount(statusEngine: StatusEngine, targetId: string): number {
-    const byName = new Map<string, number>(
-        ownerDebuffNamesFor(statusEngine, targetId).map((n) => [n, 1])
-    );
-    const persistent = [
-        ...statusEngine.snapshot(undefined, targetId).activeEnemyDebuffs,
-        ...statusEngine.timedAbilityStatuses('enemy', undefined, targetId).map((s) => s.active),
-    ].filter((e) => e.turnsRemaining === 'permanent' && byName.has(e.buffName));
-    for (const e of persistent) byName.set(e.buffName, namedDebuffEntryCount(e));
+    const byName = new Map<string, number>();
+    const add = (name: string, n: number): void => {
+        byName.set(name, Math.max(byName.get(name) ?? 0, n));
+    };
+    for (const ab of statusEngine.snapshot(undefined, targetId).activeEnemyDebuffs)
+        add(ab.buffName, namedDebuffCount([ab]));
+    for (const s of statusEngine.timedAbilityStatuses('enemy', undefined, targetId))
+        add(s.active.buffName, namedDebuffCount([s]));
+    for (const s of statusEngine.activeAbilityStatuses(
+        'enemy',
+        () => NEUTRAL_NAMES_CTX,
+        undefined,
+        targetId
+    ))
+        add(s.active.buffName, namedDebuffCount([s]));
     let total = 0;
     for (const n of byName.values()) total += n;
     return total;

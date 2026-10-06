@@ -8,6 +8,7 @@ export const CURRENT_VERSION = '1.75.0';
 // nothing. Do it by hand only if that script cannot.
 export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator: Snakeroot's passive now fires on every 4th DoT stack inflicted.",
+    'Combat simulator: each Exposed stack now counts as one debuff in debuff counts.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

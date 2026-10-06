@@ -21,7 +21,7 @@ import {
     type RegisteredAbilityStatus,
     type StatusEngine,
 } from '../statusEngine';
-import { ownerDebuffCount, ownerDebuffNamesFor } from '../triggers';
+import { namedDebuffCount, ownerDebuffCount, ownerDebuffNamesFor } from '../triggers';
 import { mirrorBoard, realSlots, ShipSpec, MirrorTeams } from './__fixtures__/mirrorBoard';
 
 beforeAll(() => {
@@ -84,6 +84,106 @@ describe("R73: Crocus's '3 or more debuffs' counts each Defense Shred stack", ()
         });
         it(`${side}-side: no Defense Shred, Corrosion II alone → no Stasis`, () => {
             expect(stasis({ caster: [crocus(10)], other: [x] }, side)).toEqual([]);
+        });
+    }
+});
+
+describe("R88: Crocus's '3 or more debuffs' counts each of Amartya's Exposed stacks", () => {
+    /** Gains Taunt on its own turn, before anyone else acts. */
+    const taunter: ShipSpec = {
+        id: 'x',
+        position: 'M4',
+        speed: 300,
+        role: 'DEFENDER',
+        skills: {
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        {
+                            id: 'x-taunt',
+                            type: 'buff',
+                            target: 'self',
+                            trigger: 'on-cast',
+                            conditions: [],
+                            config: {
+                                type: 'buff',
+                                buffName: 'Taunt',
+                                parsedEffects: {},
+                                stacks: 1,
+                                isStackable: false,
+                                duration: 2,
+                            },
+                        },
+                    ],
+                },
+            ],
+        },
+    };
+    /** Amartya R4's passive alone: "When an enemy defender gains Taunt, this Unit inflicts 2
+     *  stacks of Exposed on that defender". */
+    const amartya: ShipSpec = {
+        id: 'amartya',
+        position: 'M3',
+        speed: 1,
+        hacking: 1e6,
+        skills: {
+            slots: [{ slot: 'active', abilities: [] }, ...realSlots('Amartya', ['passive'])],
+        },
+    };
+    const crocus: ShipSpec = {
+        id: 'crocus',
+        position: 'M4',
+        speed: 10,
+        attack: 100,
+        hacking: 1e6,
+        chargeCount: 99,
+        skills: { slots: realSlots('Crocus', ['active']) },
+    };
+    /** Targets Crocus inflicted Stasis on in round 1, and how many Exposed stacks x held when
+     *  Crocus's turn started. */
+    const measure = (
+        teams: MirrorTeams,
+        side: 'player' | 'enemy'
+    ): { stasis: string[]; exposedAtCrocusTurn: number } => {
+        const { input, idOf } = mirrorBoard(teams, side);
+        const crocusId = idOf('crocus');
+        const xId = idOf('x');
+        let engine: StatusEngine | undefined;
+        let exposedAtCrocusTurn = 0;
+        const stasis: string[] = [];
+        const bus = createEventBus();
+        bus.on('turn-started', (e: Extract<CombatEvent, { type: 'turn-started' }>) => {
+            if (e.actorId !== crocusId || e.round !== 1) return;
+            exposedAtCrocusTurn =
+                engine
+                    ?.timedAbilityStatuses('enemy', undefined, xId)
+                    .filter((st) => st.active.buffName === 'Exposed')
+                    .reduce((n, st) => n + (st.payload.stacks ?? 1), 0) ?? 0;
+        });
+        bus.on('debuff-applied', (e: Extract<CombatEvent, { type: 'debuff-applied' }>) => {
+            if (e.sourceId === crocusId && e.buffName === 'Stasis' && e.round === 1)
+                stasis.push(e.targetId === xId ? 'x' : e.targetId);
+        });
+        runCombat({
+            ...input,
+            bus,
+            __testTapStatusEngine: (se) => {
+                engine = se;
+            },
+        });
+        return { stasis, exposedAtCrocusTurn };
+    };
+    for (const side of SIDES) {
+        it(`${side}-side: 2 Exposed stacks + Crocus's Corrosion II = 3 debuffs → Stasis`, () => {
+            const m = measure({ caster: [crocus, amartya], other: [taunter] }, side);
+            expect(m.exposedAtCrocusTurn).toBe(2);
+            expect(m.stasis).toEqual(['x']);
+        });
+        it(`${side}-side control: no Amartya, Corrosion II alone → no Stasis`, () => {
+            const m = measure({ caster: [crocus], other: [taunter] }, side);
+            expect(m.exposedAtCrocusTurn).toBe(0);
+            expect(m.stasis).toEqual([]);
         });
     }
 });
@@ -249,10 +349,21 @@ describe('R73: the named-debuff count primitive', () => {
         eng.cleanse('v', 1);
         expect(ownerDebuffCount(eng, 'v')).toBe(3);
     });
-    it('a non-persistent stacked debuff (Exposed ×2) still counts once', () => {
+    it('R88: a stackable non-persistent debuff counts per stack too (Exposed ×2 → 2)', () => {
         const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
         eng.beginRound(1);
         eng.applyTimedAbilityStatus(1, timed('Exposed', 2), undefined, 'v');
-        expect(ownerDebuffCount(eng, 'v')).toBe(1);
+        eng.applyTimedAbilityStatus(1, timed('Attack Down'), undefined, 'v');
+        expect(ownerDebuffNamesFor(eng, 'v')).toHaveLength(2);
+        expect(ownerDebuffCount(eng, 'v')).toBe(3);
+        // A hit spends one Exposed stack: the count follows the live stacks.
+        eng.consumeTimedEnemyStatusStack('v', 'Exposed');
+        expect(ownerDebuffCount(eng, 'v')).toBe(2);
+    });
+    it('namedDebuffCount reads a timed status’s declared stacks the same way', () => {
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        eng.beginRound(1);
+        eng.applyTimedAbilityStatus(1, timed('Exposed', 2), undefined, 'v');
+        expect(namedDebuffCount(eng.timedAbilityStatuses('enemy', undefined, 'v'))).toBe(2);
     });
 });
