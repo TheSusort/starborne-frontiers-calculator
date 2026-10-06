@@ -90,7 +90,8 @@ export const controlEffectLabel = (effect: ControlEffect): string => CONTROL_EFF
  *
  *  `subAttackIndex` is the hit within a multi-hit attack, when the caller knows it: an on-resist
  *  reaction keys per (resister, sub-attack), so two resists in one multi-hit turn stay two procs
- *  (see `debuff-resisted` in events.ts). */
+ *  (see `debuff-resisted` in events.ts). `reactionFiringId` is the resolving reaction firing's,
+ *  when a reaction made the attempt (`debuff-resisted.reactionFiringId`). */
 export function emitBlockDebuffResist(
     bus: CombatEventBus,
     sourceId: string,
@@ -98,7 +99,8 @@ export function emitBlockDebuffResist(
     round: number,
     buffName: string,
     viaLandingRoll: boolean,
-    subAttackIndex?: number
+    subAttackIndex?: number,
+    reactionFiringId?: number
 ): void {
     bus.emit({
         type: 'debuff-resisted',
@@ -108,5 +110,6 @@ export function emitBlockDebuffResist(
         buffName,
         ...(viaLandingRoll ? { viaLandingRoll: true as const } : {}),
         ...(subAttackIndex !== undefined ? { subAttackIndex } : {}),
+        ...(reactionFiringId !== undefined ? { reactionFiringId } : {}),
     });
 }

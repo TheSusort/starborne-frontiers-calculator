@@ -4,9 +4,11 @@
  * inflicted with a debuff. If that enemy has 3 or more debuffs on a debuff infliction, this Unit
  * inflicts Block Shield for 1 turn." The text is passive voice with no "this Unit", so an ally's
  * infliction counts as much as her own. Ally Hemlock's Corrosion on B → APEX gains 3%, and (B at
- * 3+, the triggering debuff counted) APEX inflicts Block Shield on B. One shield per debuff landed:
- * her 2-debuff AoE over 3 enemies gives 6. Block Shield is itself a debuff landing, so it earns one
- * more shield, and never re-triggers itself.
+ * 3+, the triggering debuff counted) APEX inflicts Block Shield on B. Both are capped per skill
+ * cast that set the landings off (`Ability.oncePerRootCast`): the shield once per cast (owner
+ * ruling 2026-10-05) — her 2-debuff AoE over 3 enemies gives ONE — and Block Shield once per
+ * enemy per cast (owner ruling 2026-10-06). Block Shield, itself a debuff landing of the same
+ * cast, earns no further shield and never re-triggers itself.
  *
  * Real parsed APEX passive (buildTraceShip, refit 4). Hand-built inflictors. Every landing roll
  * lands (hacking dwarfs every security); debuffs are seeded as Corrosion entries.
@@ -303,9 +305,9 @@ describe("an ALLY's infliction wakes APEX's passive", () => {
         });
     });
 
-    it('player: X at 2, ally lands its 3rd debuff → Block Shield on X, and its landing earns a 2nd shield', () => {
+    it('player: X at 2, ally lands its 3rd debuff → Block Shield on X, no 2nd shield for the same cast', () => {
         expect(measure(playerAllyBoard(debuffInflictor()), 'apex', { 'enemy-x': 2 })).toEqual({
-            shields: 2,
+            shields: 1,
             blockShield: ['enemy-x'],
         });
     });
@@ -319,14 +321,14 @@ describe("an ALLY's infliction wakes APEX's passive", () => {
 
     it("player: an ally's Corrosion counts as a debuff infliction — X at 2 → Block Shield", () => {
         expect(measure(playerAllyBoard(corrosionInflictor()), 'apex', { 'enemy-x': 2 })).toEqual({
-            shields: 2,
+            shields: 1,
             blockShield: ['enemy-x'],
         });
     });
 
     it('enemy-side: the player focus at 2, enemy ally lands its 3rd debuff → Block Shield on it', () => {
         expect(measure(enemyAllyBoard(debuffInflictor()), 'e-apex', { attacker: 2 })).toEqual({
-            shields: 2,
+            shields: 1,
             blockShield: ['attacker'],
         });
     });
@@ -339,7 +341,7 @@ describe("an ALLY's infliction wakes APEX's passive", () => {
     });
 });
 
-describe("APEX's own AoE: one shield per debuff landed", () => {
+describe("APEX's own AoE: one shield, and at most one Block Shield per enemy, for the cast", () => {
     /** Player APEX (real active + passive) on Circle from M4: strikes M4 (A), M3 (B), T4 (C). */
     const board = (): CombatEngineInput =>
         base({
@@ -358,43 +360,40 @@ describe("APEX's own AoE: one shield per debuff landed", () => {
             ],
         });
 
-    it('2 debuffs on each of 3 clean enemies → 6 shields, no Block Shield', () => {
-        expect(measure(board(), 'attacker', {})).toEqual({ shields: 6, blockShield: [] });
+    it('2 debuffs on each of 3 clean enemies → one shield, no Block Shield', () => {
+        expect(measure(board(), 'attacker', {})).toEqual({ shields: 1, blockShield: [] });
     });
 
-    it('B at 1: its 2nd new debuff takes it to 3 → one Block Shield on B, 7 shields', () => {
+    it('B at 1: its 2nd new debuff takes it to 3 → one Block Shield on B, one shield', () => {
         expect(measure(board(), 'attacker', { 'enemy-b': 1 })).toEqual({
-            shields: 7,
+            shields: 1,
             blockShield: ['enemy-b'],
         });
     });
 
-    it('all three at 2: both new debuffs qualify on each — bounded, no runaway chain', () => {
+    it('all three at 2: both new debuffs qualify on each — one Block Shield on each enemy', () => {
         const m = measure(board(), 'attacker', { 'enemy-a': 2, 'enemy-b': 2, 'enemy-c': 2 });
-        expect(m.blockShield).toEqual([
-            'enemy-a',
-            'enemy-a',
-            'enemy-b',
-            'enemy-b',
-            'enemy-c',
-            'enemy-c',
-        ]);
-        expect(m.shields).toBe(12);
+        expect(m.blockShield).toEqual(['enemy-a', 'enemy-b', 'enemy-c']);
+        expect(m.shields).toBe(1);
     });
 });
 
-describe('DPS calculator: one shield per debuff landed on the one enemy', () => {
-    it("APEX's shields equal the debuffs that land on her enemy", () => {
+describe('DPS calculator: one shield per cast that lands a debuff on the one enemy', () => {
+    it("APEX's shields equal her casts that land a debuff", () => {
         const built = buildTraceShip('APEX');
         if (!built) throw new Error('APEX missing');
         const bus = createEventBus();
         let shields = 0;
         let landed = 0;
+        // APEX is the only caster and casts once per round, so a round is one cast.
+        const roundsWithALanding = new Set<number>();
         bus.on('shield-applied', (e: Extract<CombatEvent, { type: 'shield-applied' }>) => {
             if (e.granterId === 'attacker' && !e.uncast) shields++;
         });
         bus.on('debuff-applied', (e: Extract<CombatEvent, { type: 'debuff-applied' }>) => {
-            if (e.targetId !== 'attacker') landed++;
+            if (e.targetId === 'attacker') return;
+            landed++;
+            roundsWithALanding.add(e.round);
         });
         simulateDPS({
             attack: 15000,
@@ -414,7 +413,9 @@ describe('DPS calculator: one shield per debuff landed on the one enemy', () => 
             shipSkills: buildShipAbilities(built),
             bus,
         });
-        expect(landed).toBeGreaterThan(0);
-        expect(shields).toBe(landed);
+        // Instrument: more debuffs landed than casts, so a per-debuff shield would read higher.
+        expect(landed).toBeGreaterThan(roundsWithALanding.size);
+        expect(roundsWithALanding.size).toBe(3);
+        expect(shields).toBe(roundsWithALanding.size);
     });
 });

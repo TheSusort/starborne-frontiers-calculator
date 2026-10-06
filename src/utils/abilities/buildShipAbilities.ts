@@ -1665,6 +1665,8 @@ function abilitiesFromText(
                     target: 'enemy',
                     trigger: 'on-enemy-debuff-resisted',
                     conditions: [],
+                    // Once per (root cast, resisting enemy) — see `Ability.oncePerRootCast`.
+                    oncePerRootCast: 'per-victim',
                     config: {
                         type: 'damage',
                         multiplier: 0,
@@ -2560,6 +2562,11 @@ function abilitiesFromText(
                           const verb = debuffTriggerVerb(healSentence);
                           return verb ? { triggerApplicationFilter: verb } : {};
                       })()
+                    : {}),
+                // APEX's shield: once per root cast, however many enemies it debuffed
+                // (see `Ability.oncePerRootCast`).
+                ...(reactiveTrigger === 'on-enemy-debuff-inflicted'
+                    ? { oncePerRootCast: 'cast' as const }
                     : {}),
                 conditions: healConditions,
                 // Recipient STATE filter ("all allies with Stealth repairs 10% …" — Chimei R2).
@@ -3739,6 +3746,9 @@ export function buildShipAbilities(rawShip: Ship): ShipSkills {
                 const verb = detectDebuffInflictionVerb(rowText, buff.buffName, occurrence);
                 if (verb) ability.triggerApplicationFilter = verb;
             }
+            // APEX's Block Shield: once per (root cast, enemy) (see `Ability.oncePerRootCast`).
+            if (reactiveTrigger === 'on-enemy-debuff-inflicted')
+                ability.oncePerRootCast = 'per-victim';
             // "When this Unit inflicts a Bomb" (Lingshe) reacts to that family landing only
             // (Ability.triggerStatusFilter's doc), read from the same clause as the trigger.
             if (rowText && reactiveTrigger === 'on-debuff-inflicted') {

@@ -3291,11 +3291,11 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     );
     /**
      * `c` with the caster's shield answered as of THIS clause (owner ruling R47, written order):
-     * every debuff an earlier-written clause of this cast landed on any enemy (and that the
-     * shield reaction's `triggerApplicationFilter` sees) has already given the caster her
-     * passive's shield, so "If this Unit has an active shield" reads true. APEX's
-     * charged: Attack Down II lands (3% shield), Out. Damage Down II lands (3%), then the Disable
-     * clause sees a shielded APEX. The shields themselves are granted when the reaction drains.
+     * once an earlier-written clause of this cast has landed a debuff on any enemy (one the
+     * shield reaction's `triggerApplicationFilter` sees), the caster has her passive's shield, so
+     * "If this Unit has an active shield" reads true. APEX's charged: Attack Down II lands (her
+     * 3% shield, once for the whole cast — `Ability.oncePerRootCast`), then the Disable clause
+     * sees a shielded APEX. The shield itself is granted when the reaction drains.
      */
     const castSelfShieldOverlay = (c: ConditionContext, status: TimedStatus): ConditionContext => {
         if (c.selfShielded || debuffLandingSelfShields.length === 0) return c;

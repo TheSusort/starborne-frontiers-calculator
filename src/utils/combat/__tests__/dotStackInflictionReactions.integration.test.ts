@@ -1,10 +1,12 @@
 /**
  * A reaction to a debuff being inflicted fires once per DoT STACK inflicted (owner ruling R28,
- * 2026-10-04). Snakeroot's one "inflicts 2 stacks of Corrosion I" on B is two inflictions: APEX's
- * "gains a shield equal to 3% … when an enemy gets inflicted with a debuff" gives TWO shields,
+ * 2026-10-04). Snakeroot's one "inflicts 2 stacks of Corrosion I" on B is two inflictions:
  * Oleander's "When an ally inflicts a debuff, adds 1 charge" gives two charges, Provider's "When
  * another ally inflicts a debuff, deals 50% damage" hits twice. Only the stacks that LANDED count
- * (each stack rolls its own landing, R30). A reaction's own once-per caps still hold.
+ * (each stack rolls its own landing, R30). A reaction's own once-per caps still hold: APEX's
+ * "gains a shield equal to 3% … when an enemy gets inflicted with a debuff" fires once for the
+ * whole cast (`Ability.oncePerRootCast`), and so does her Block Shield, which still reads B's
+ * debuff count as of each stack.
  *
  * Snakeroot's application is ONE DoT entry holding 2 stacks, so a reaction counted per event and
  * one counted per stack give different answers. Real parsed kits (buildTraceShip on
@@ -279,10 +281,10 @@ const wisteria = (): ShipSkills => kit('Wisteria', ['active']);
 
 for (const side of [PLAYER, ENEMY]) {
     describe(`${side.tag}: APEX — "when an enemy gets inflicted with a debuff"`, () => {
-        it('one 2-stack Corrosion → two 3% shields', () => {
+        it('one 2-stack Corrosion → one 3% shield: both stacks are one cast', () => {
             const m = measure(side, snakeroot(), passiveOnly('APEX'));
             expect(m.landedStacks).toBe(2);
-            expect(m.reactorShields).toBe(2);
+            expect(m.reactorShields).toBe(1);
         });
         it('negative: one 1-stack Corrosion → one shield', () => {
             const m = measure(side, wisteria(), passiveOnly('APEX'));
@@ -294,15 +296,16 @@ for (const side of [PLAYER, ENEMY]) {
             expect(m.landedStacks).toBe(0);
             expect(m.reactorShields).toBe(0);
         });
-        // Block Shield's own landing is a debuff inflicted on an enemy too, so it adds a shield.
-        it('Block Shield: B at 1 debuff — only the stack that brings B to 3 counts, once', () => {
+        // Block Shield's own landing is a debuff inflicted on an enemy too, but it belongs to the
+        // same cast, so it adds no shield.
+        it('Block Shield: B at 1 debuff — the stack that brings B to 3 inflicts it', () => {
             const m = measure(side, snakeroot(), passiveOnly('APEX'), { victimCorrosion: [1] });
             expect(m.reactorDebuffs['Block Shield']).toBe(1);
-            expect(m.reactorShields).toBe(3);
+            expect(m.reactorShields).toBe(1);
         });
-        it('Block Shield: B at 2 debuffs — both stacks bring B to 3 or more', () => {
+        it('Block Shield: B at 2 debuffs — both stacks qualify, once for the cast', () => {
             const m = measure(side, snakeroot(), passiveOnly('APEX'), { victimCorrosion: [2] });
-            expect(m.reactorDebuffs['Block Shield']).toBe(2);
+            expect(m.reactorDebuffs['Block Shield']).toBe(1);
         });
         it('Block Shield: B at 0 debuffs — the 2 stacks reach 2, never 3', () => {
             const m = measure(side, snakeroot(), passiveOnly('APEX'));

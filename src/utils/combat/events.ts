@@ -234,6 +234,9 @@ export type CombatEvent =
            *  sub-attack" — the same `?? 'x'` contract the sibling counter guard uses — and must
            *  NOT substitute 0 when comparing across DIFFERENT actors. */
           subAttackIndex?: number;
+          /** The `debuff-applied` sibling's `reactionFiringId`: set when a reaction made the
+           *  resisted attempt, absent for a cast's own. */
+          reactionFiringId?: number;
       } & ReactiveStamp)
     /** `sourceId` identifies the inflicting actor. */
     | ({
