@@ -5395,7 +5395,8 @@ export function runCombat(rawInput: CombatEngineInput): {
         //     not synchronous — the bomb detonates on a LATER round, and its detonation damage
         //     re-enters this proc through the `'detonation'` channel. So the cycle is
         //     leech → bomb → (next round) detonation → leech, bounded by the fight's round count,
-        //     by Ruiner's `oncePerRoundPerEnemy` cap on the bomb, and by MAX_REACTION_CHAIN_DEPTH.
+        //     by Ruiner's `oncePerRoundPerEnemy` cap on the bomb, and by the lineage rule
+        //     (`reactionKey` in triggers.ts).
         //  4. A reaction's own repair emits this event from the EXECUTOR, not from here, and that
         //     path's guard (an ability never observes its own output, keyed on `sourceAbilityId`)
         //     is untouched by this emit.
@@ -10825,7 +10826,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             ) {
                 return;
             }
-            // The runaway cap (ruling 66): a chain this deep is a loop, not play.
+            // The depth safety net behind the lineage rule (`MAX_REACTION_CHAIN_DEPTH`'s doc).
             const depth = intent.chainDepth ?? 0;
             if (depth > MAX_REACTION_CHAIN_DEPTH) {
                 reactionChainProbe.dropped++;
@@ -11035,7 +11036,7 @@ export function runCombat(rawInput: CombatEngineInput): {
 
         // Run ONE detached batch of intents in order with one side's ctx — a phase owner's group
         // (`drainInTurnOrder`) or the pre-cast grant batch. What they wake lands on the side
-        // queues, which `drainReactions` drains; MAX_REACTION_CHAIN_DEPTH bounds those chains.
+        // queues, which `drainReactions` drains; the lineage rule (`reactionKey`) ends those chains.
         const drainQueue = (batch: Intent[], sideCtx: ReactiveSideCtx): void => {
             for (const intent of batch) runQueuedIntent(intent, sideCtx);
         };

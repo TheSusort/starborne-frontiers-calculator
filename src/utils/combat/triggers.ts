@@ -92,21 +92,50 @@ import type { ActorTargetingStatus } from './positionalBinding';
 export { LIVE_TRIGGERS };
 
 /**
- * The runaway cap on a chain of reactions (owner ruling 66: chained reactions DO trigger, a cap
- * stops only runaway loops). A reaction to a cast or a phase event has depth 0; a reaction to
- * something a reaction did has its cause's depth + 1. An intent deeper than this is dropped.
- * Real kits loop — Grif's hit wakes Purifier's on-damaged cleanse, which wakes Grif and
- * Pestilence again — and each such chain otherwise ends only when a ship dies.
+ * The lineage rule (owner ruling, measured in game 2026-10-06): a passive never fires on an event
+ * that its OWN earlier firing caused, directly or through other reactions, and it still fires once
+ * for each separate event (siblings are not capped). APEX hits an enemy Purifier holding Bombs and
+ * lands two debuffs → Purifier's on-damaged passive cleanses them → Grif ("When an enemy cleanses
+ * a debuff") hits Purifier → Purifier's passive does NOT cleanse again. On Purifier's own turn his
+ * active cleanses → Grif hits him → his passive cleanses: a new chain, rooted in his cast, with his
+ * passive not yet in it. Different passives in one chain still wake each other (ruling 66): AEGIS
+ * cleansing after Grif's hit wakes Pestilence.
  *
- * Sized from a measurement, not a guess: `reactionChainCap.integration.test.ts` pins that the
- * real-kit fingerprint battles never reach it and that the loop boards do and still complete.
- * A capped loop is cut off, not thrown: the fight goes on without the dropped reactions.
+ * Every intent carries its `reactionAncestry` — the `reactionKey`s of the firings that caused it —
+ * stamped by `registerReactiveListeners`' enqueue wrapper, which also drops an intent whose own key
+ * is already in it. An event emitted after the resolving intent has returned (a post-round death
+ * drain, the Stasis settlement after a drain) starts a fresh lineage, as it starts a fresh
+ * `chainDepth`.
+ *
+ * The key is the CLAUSE, not the parsed ability: one sentence the parser splits into several
+ * abilities is one passive firing. For a ship's own skill text, every ability in one slot answering
+ * the same trigger is one clause, `owner:ship:<slot>:<trigger>` — Provider's damage and Crit Rate
+ * Down II are one, and so are Nuqtu's Terran Bolster III and Core Charge I grants. Two clauses on
+ * different triggers are different keys, so one can wake the other: Warden's on-hit Corrosion I
+ * wakes her own "when this Unit inflicts a debuff" Out. Damage Down II (user + Solid Clouds dev,
+ * 2026-10-02, quoted in `Ability.procScope`'s doc). Each gear-set bonus or implant keys on its own
+ * effect, `owner:equipment:<equipmentEffectId>`; two copies of one implant are two effects.
+ */
+export function reactionKey(intent: Pick<Intent, 'ownerId' | 'ability' | 'sourceSlot'>): string {
+    return intent.ability.source === 'equipment'
+        ? `${intent.ownerId}:equipment:${intent.ability.equipmentEffectId ?? intent.ability.id}`
+        : `${intent.ownerId}:ship:${intent.sourceSlot}:${intent.ability.trigger}`;
+}
+
+/**
+ * A safety net on a chain of reactions, never reached by the lineage rule above: a chain can
+ * only grow while every firing in it is a different clause (`reactionKey`), so its depth is
+ * bounded by the number of reactive clauses on the board. A reaction to a cast or a phase event has depth
+ * 0; a reaction to something a reaction did has its cause's depth + 1. An intent deeper than this
+ * is dropped, not thrown. `reactionChainCap.integration.test.ts` pins that the fingerprint
+ * battles and the loop boards stay under it.
  */
 export const MAX_REACTION_CHAIN_DEPTH = 8;
 
-/** TEST-ONLY probe of reaction-chain depth, written by the engine's drain: the deepest chain
- *  depth an executed intent had, and how many intents the cap dropped. Reset it before a run. */
-export const reactionChainProbe = { maxDepth: 0, dropped: 0 };
+/** TEST-ONLY probe of reaction chains, written by the engine's drain and the enqueue wrapper: the
+ *  deepest chain depth an executed intent had, how many intents the depth cap dropped, and how many
+ *  the lineage rule dropped. Reset it before a run. */
+export const reactionChainProbe = { maxDepth: 0, dropped: 0, lineageDropped: 0 };
 
 /** Ability types the executor knows how to follow up (see executeIntent). These reactive
  *  types are routed through the trigger machinery; any other type carrying a live trigger
@@ -182,11 +211,19 @@ export interface Intent {
      *  for debuff-event reactions (Oleander's on-ally-debuff-inflicted RoT grant routes to
      *  the inflicting ally; Hayyan's on-ally-debuffed repair routes to the debuffed ally).
      *  `fromPurgeEvent`: depth-1 purge chain guard — a purge triggered by a
-     *  purge-performed event does not re-emit purge-performed, preventing infinite chains. */
+     *  purge-performed event does not re-emit purge-performed, so no listener on any ship hears
+     *  it. Stricter than the lineage rule (`reactionKey`), which would let a DIFFERENT passive
+     *  answer it; kept pending a ruling. */
     /** Reaction-chain depth (`MAX_REACTION_CHAIN_DEPTH`): 0 for a reaction to a cast or phase
      *  event, the resolving intent's depth + 1 for one woken while an intent resolved. Stamped by
      *  `registerReactiveListeners`' enqueue wrapper; absent reads as 0. */
     chainDepth?: number;
+    /** The `reactionKey`s of the reactive firings that caused this intent, oldest first: empty for
+     *  a reaction to a cast, phase or tick event; the resolving intent's ancestry plus its own key
+     *  for one woken while an intent resolved. Stamped by `registerReactiveListeners`' enqueue
+     *  wrapper, which drops an intent whose own key is already here (the lineage rule — see
+     *  `reactionKey`). Absent reads as empty. */
+    reactionAncestry?: readonly string[];
     /** Which bus event woke this intent, as a run-wide increasing number: every listener of one
      *  emitted event stamps the same value, and a later event a larger one. The engine's drain
      *  resolves the intents of the earliest event first, owner by owner in turn order (ruling 39).
@@ -467,10 +504,8 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
  *  - on-other-ally-debuff-inflicted → debuff-applied OR dot-applied where the source is a
  *    same-side ally EXCLUDING the owner (`isSameSideAlly`) — Provider's "another ally" text, see
  *    the ruling above. Stamps eventCtx.debuffVictimId with the debuff's own victim so a damage
- *    clause and a debuff clause riding this trigger both land on "that enemy". Bounded
- *    source-agnostically via `viaOtherAllyDebuffInflictedReaction` (see events.ts's doc on that
- *    flag) rather than the same-owner check on-ally-debuff-inflicted uses, because this trigger's
- *    owner exclusion makes the loop risk cross-owner, not self.
+ *    clause and a debuff clause riding this trigger both land on "that enemy". Two ships on this
+ *    trigger answering each other are ended by the lineage rule (`reactionKey`).
  *  - on-enemy-debuff-inflicted → debuff-applied OR dot-applied whose TARGET is opposing, any
  *    inflictor (APEX — R16). Stamps debuffVictimId plus that enemy's debuff count at the landing
  *    (debuffVictimDebuffCount), and the inflictor + reaction stamp `rootCastKey` reads; shares
@@ -769,13 +804,24 @@ export function registerReactiveListeners(args: {
                 }
             }),
     };
-    // An intent woken while another resolves is one step deeper in its chain (`Intent.chainDepth`).
-    const enqueue = (intent: Intent): void =>
+    // An intent woken while another resolves is one step deeper in its chain (`Intent.chainDepth`)
+    // and inherits its lineage (`Intent.reactionAncestry`); a passive already in that lineage
+    // does not fire (`reactionKey`).
+    const enqueue = (intent: Intent): void => {
+        const reactionAncestry = resolvingIntent
+            ? [...(resolvingIntent.reactionAncestry ?? []), reactionKey(resolvingIntent)]
+            : [];
+        if (reactionAncestry.includes(reactionKey(intent))) {
+            reactionChainProbe.lineageDropped++;
+            return;
+        }
         enqueueRaw({
             ...intent,
             chainDepth: resolvingIntent ? (resolvingIntent.chainDepth ?? 0) + 1 : 0,
+            reactionAncestry,
             eventSeq: listeningEventSeq ?? 0,
         });
+    };
     // Same-side ally, OWNER EXCLUDED — for a trigger whose skill text names "another/other
     // ally", or whose subject structurally cannot be the owner (a destroyed ship cannot take the
     // reaction it would grant itself). See the 2026-09-30 "an ally includes the caster" ruling in
@@ -1001,9 +1047,10 @@ export function registerReactiveListeners(args: {
                 case 'on-debuff-inflicted':
                     bus.on('debuff-applied', (e) => {
                         // `inDebuffInflictedReactionChain` breaks a self-chain: Warden's "when this
-                        // Unit inflicts a Debuff → Out. Damage Down II" follow-up is ITSELF a debuff,
-                        // and without the guard its own debuff-applied would re-enter this listener
-                        // every step until MAX_REACTION_CHAIN_DEPTH cuts it off. The guard skips only
+                        // Unit inflicts a Debuff → Out. Damage Down II" follow-up is ITSELF a debuff
+                        // and must not re-wake this listener. It is a special case of the lineage
+                        // rule (`reactionKey`), which the enqueue wrapper also applies; it stays
+                        // for listener-level fixtures. The guard skips only
                         // the abilities already in the infliction's reaction chain, so the owner's
                         // OTHER on-debuff-inflicted abilities still see a reactive infliction
                         // (Insidiousness on Warden's Out. Damage Down II), and debuffs from
@@ -1087,12 +1134,14 @@ export function registerReactiveListeners(args: {
                         // Every opposing actor is still excluded (an opposing actor is never an
                         // ally). `viaAllyDebuffInflictedReaction` + `sourceId === ownerId` breaks a
                         // SELF-chain: an on-ally-debuff-inflicted reaction whose own application is
-                        // itself a qualifying infliction would otherwise re-enter this same listener
-                        // every step until MAX_REACTION_CHAIN_DEPTH cuts it off (the corrosionToAcidicDecay
+                        // itself a qualifying infliction must not re-enter this listener. Keyed per
+                        // (owner, trigger), so it also silences the owner's OTHER abilities on this
+                        // trigger — stricter than the lineage rule (`reactionKey`), which covers the
+                        // self-chain on its own; kept pending a ruling (the corrosionToAcidicDecay
                         // Belladonna case chains fine — her convert-dot executor never emits a new
-                        // debuff-applied/dot-applied, so it never reaches this guard at all). Does
-                        // NOT bound a two-ship ping-pong (A's reaction waking B's, B's waking A's
-                        // back) — that guard would have to ignore the brand regardless of source.
+                        // debuff-applied/dot-applied, so it never reaches this guard at all). A
+                        // two-ship ping-pong (A's reaction waking B's, B's waking A's back) is ended
+                        // by the lineage rule.
                         // Oleander's own clause reads "inflicts" (filter 'inflict' —
                         // passesApplicationFilter) so an ally's applied Concentrate Fire gives her
                         // nothing; only an ally's inflicted debuff charges her Charged Skill.
@@ -1149,25 +1198,15 @@ export function registerReactiveListeners(args: {
                     // identical fallback, so a damage clause and a debuff clause riding this same
                     // trigger both land on the enemy the ally's debuff actually hit.
                     //
-                    // `viaOtherAllyDebuffInflictedReaction` bounds the chain SOURCE-AGNOSTICALLY,
-                    // unlike on-ally-debuff-inflicted's self-chain guard: that guard only needs to
-                    // skip the OWNER's own output, because an owner-excluded trigger's `sourceId`
-                    // can never equal `ownerId` in the first place (isSameSideAlly excludes it
-                    // structurally). The unbounded risk here is CROSS-owner: two ships on this
-                    // trigger would otherwise wake each other's reaction forever (A's reaction
-                    // lands a debuff → wakes B → B's reaction lands a debuff → wakes A → …).
-                    // Ignoring any event carrying this brand, regardless of who emitted it, cuts
-                    // that ping-pong at generation 1 — each ship still reacts exactly once to the
-                    // original, non-reactive infliction (proven by a two-Provider integration
-                    // test), and no OTHER reactive family's debuff output is affected (the brand
-                    // is set only at this trigger's own emission sites).
+                    // Two Providers answer each other under the lineage rule (`reactionKey`, owner
+                    // ruling 2026-10-06): A's skill inflicts → B answers → A answers B's debuff
+                    // (A's passive is not yet in that chain) → B, already in it, stops.
                     bus.on('debuff-applied', (e) => {
                         // Provider's own clause reads "inflicts" (filter 'inflict') — an ally's
                         // applied Provoke does not wake this listener; passesApplicationFilter's
                         // doc covers the undefined-filter and undefined-`e.application` defaults.
                         if (
                             isSameSideAlly(e.sourceId, ownerId) &&
-                            !e.viaOtherAllyDebuffInflictedReaction &&
                             passesApplicationFilter(
                                 ra.ability.triggerApplicationFilter,
                                 e.application
@@ -1185,7 +1224,6 @@ export function registerReactiveListeners(args: {
                         // doc).
                         if (
                             isSameSideAlly(e.sourceId, ownerId) &&
-                            !e.viaOtherAllyDebuffInflictedReaction &&
                             passesApplicationFilter(
                                 ra.ability.triggerApplicationFilter,
                                 e.application
@@ -1207,8 +1245,8 @@ export function registerReactiveListeners(args: {
                     // count as of THAT landing — the k-th of a DoT's n stacks reads the count less
                     // the n−1−k stacks after it, so "3 or more debuffs" fires on the stack that
                     // brings the enemy to 3, not on all of them. The self-chain guard is
-                    // `on-debuff-inflicted`'s: a reaction never re-wakes itself off its own landing
-                    // (Block Shield landing never wakes Block Shield), while the owner's OTHER
+                    // `on-debuff-inflicted`'s, a special case of the lineage rule (`reactionKey`):
+                    // Block Shield landing never wakes Block Shield, while the owner's OTHER
                     // reactions on this trigger still see it. The inflictor and the reaction stamp
                     // ride along so `Ability.oncePerRootCast` can name the cast that set it off.
                     const onLanded = (
@@ -1458,7 +1496,8 @@ export function registerReactiveListeners(args: {
                     //  3. The corpus has exactly one (Chimei's R2 redirect, #435), and the guard
                     //     below excludes an ability from its OWN output — which kills the only
                     //     cycle that exists, the length-1 self-loop.
-                    //  4. MAX_REACTION_CHAIN_DEPTH backstops any future second one.
+                    //  4. The lineage rule (`reactionKey`) ends any future second one; the guard
+                    //     below is its special case for this listener.
                     //
                     // The guard is deliberately SELF-exclusion and not an emit suppression: owner
                     // ruling 2026-08-30 is that the redirect's own over-repair must still be
@@ -2134,8 +2173,8 @@ export function registerReactiveListeners(args: {
                     // must not reopen the loop the chain guard closed. It cannot: the enqueued
                     // intents are the on-enemy-repaired riders (Ruiner's Bomb debuff + Overload
                     // self-buff, Zosimos's charge removal, Amartya's Defense Shred) — none of them
-                    // heal, so none can emit another reactive-heal-performed. The generic
-                    // MAX_REACTION_CHAIN_DEPTH backstop covers any future rider that could.
+                    // heal, so none can emit another reactive-heal-performed. The lineage rule
+                    // (`reactionKey`) ends any future rider that could.
                     bus.on('reactive-heal-performed', (e) =>
                         onEnemyRepair(
                             e.casterId,
@@ -4487,7 +4526,7 @@ const REACTIVE_STAMPED_EVENT_TYPE_LIST = exhaustiveArrayOf<StampedEventType>()([
     // so they nest under the triggering turn. `-damage` has no combat subscriber; `-heal` has one
     // (on-enemy-repaired — a reactive repair is still an enemy repairing), which cannot chain
     // because no on-enemy-repaired rider heals; `-cleanse` has one (on-enemy-cleansed), whose
-    // chains MAX_REACTION_CHAIN_DEPTH caps. See the events.ts notes before adding another
+    // chains the lineage rule ends (`reactionKey`). See the events.ts notes before adding another
     // subscriber to any of the three.
     'reactive-damage-performed',
     'reactive-heal-performed',
@@ -5503,9 +5542,6 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
                     ...(intent.ability.trigger === 'on-ally-debuff-inflicted'
                         ? { viaAllyDebuffInflictedReaction: true as const }
                         : {}),
-                    ...(intent.ability.trigger === 'on-other-ally-debuff-inflicted'
-                        ? { viaOtherAllyDebuffInflictedReaction: true as const }
-                        : {}),
                 });
             }
             for (let i = 0; i < resists; i++) {
@@ -5632,7 +5668,8 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
             // and feeds the debuff-inflicted listeners' dot-applied arms. Marked per trigger
             // exactly as the sibling `debuff` branch marks its debuff-applied: without the mark,
             // an owner's own reactive DoT (this landDotOn call) would re-wake the very reaction
-            // that queued it and loop until MAX_REACTION_CHAIN_DEPTH cuts it off.
+            // that queued it, for listener-level fixtures that bypass the lineage rule
+            // (`reactionKey`), which ends that loop in a real run.
             ctx.bus.emit({
                 type: 'dot-applied',
                 sourceId: intent.ownerId,
@@ -5647,9 +5684,6 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 ...reactionFiringStamp(ctx),
                 ...(intent.ability.trigger === 'on-ally-debuff-inflicted'
                     ? { viaAllyDebuffInflictedReaction: true as const }
-                    : {}),
-                ...(intent.ability.trigger === 'on-other-ally-debuff-inflicted'
-                    ? { viaOtherAllyDebuffInflictedReaction: true as const }
                     : {}),
             });
         };
@@ -6225,8 +6259,8 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // combat subscribers: on-enemy-repaired, whose riders never heal → no chain; and, since
         // #434, on-own-repair-to-ally, which re-subscribes to this same event so a repair
         // performed from a LIVE TRIGGER also reaches Font of Power/Abundant Renewal. That
-        // listener carries its own termination argument (self-exclusion guard on its own output +
-        // MAX_REACTION_CHAIN_DEPTH backstop) — chain-safety still holds, but it is argued there, not
+        // listener carries its own termination argument (self-exclusion guard on its own output,
+        // a special case of the lineage rule `reactionKey`) — chain-safety still holds, but it is argued there, not
         // here. Any FUTURE subscriber to this event must re-establish termination for itself the
         // same way; do not assume it from this comment. Stamped duringTurnOf via ctx.bus so it
         // nests under the triggering turn.
@@ -6381,8 +6415,8 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // Surface the reaction via reactive-cleanse-performed (NOT cleanse-performed, which drives
         // the owner's own on-own-cleanse listeners). buildCombatLog renders it, stamped
         // duringTurnOf via ctx.bus so it nests under the triggering turn, and the opposing
-        // side's on-enemy-cleansed reactions hear it, a chained one included (ruling 66; the chain
-        // is capped by MAX_REACTION_CHAIN_DEPTH). Only emitted when a debuff was actually removed (empty
+        // side's on-enemy-cleansed reactions hear it, a chained one included (ruling 66; the
+        // lineage rule `reactionKey` ends the chain). Only emitted when a debuff was actually removed (empty
         // perTarget → silent, like the heal twin).
         if (cleansePerTarget.length > 0 && ctx.bus) {
             ctx.bus.emit({

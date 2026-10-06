@@ -142,13 +142,13 @@ export type CombatEvent =
      *  was applied BY such an ability (Warden's Out. Damage Down II, Ripper's catalogue Inferno
      *  II on the `dot-applied` twin). The `on-debuff-inflicted` listener skips an ability whose
      *  OWN id is in the chain, so a reaction whose follow-up is itself a debuff cannot
-     *  re-trigger itself, directly or through another of the owner's reactions (an unbounded
-     *  chain would otherwise run to MAX_REACTION_CHAIN_DEPTH). Every OTHER on-debuff-inflicted
+     *  re-trigger itself, directly or through another of the owner's reactions — a special case
+     *  of the lineage rule (`reactionKey` in triggers.ts), which the enqueue wrapper applies to
+     *  every trigger; this brand stays for listener-level fixtures. Every OTHER on-debuff-inflicted
      *  ability of the owner still sees the debuff: the Insidiousness implant reacts to Warden's
      *  reactive Out. Damage Down II as to a cast-inflicted one, and rolls for it separately
      *  from the cast (`Ability.procScope` `'per-cast'`). Each ability in a chain fires at most
-     *  once, so chain LENGTH is bounded by the owner's count of such abilities;
-     *  MAX_REACTION_CHAIN_DEPTH bounds only the depth of a chain, not the number of firings.
+     *  once, so chain LENGTH is bounded by the owner's count of such abilities.
      *  Debuffs from OTHER reactive triggers (on-crit/on-attacked) carry no chain, so the chain
      *  guard lets every on-debuff-inflicted ability see them.
      *  `viaAllyDebuffInflictedReaction`: the sibling brand for `on-ally-debuff-inflicted`
@@ -164,15 +164,8 @@ export type CombatEvent =
      *  filtered by this flag — see that listener's guard for the scope this leaves open. The brand
      *  bounds only the owner's own `on-ally-debuff-inflicted` output: a ship carrying BOTH an
      *  `on-debuff-inflicted` and an `on-ally-debuff-inflicted` debuff-emitting reaction is bounded
-     *  by neither brand against the other's chain — no corpus ship has that shape.
-     *  `viaOtherAllyDebuffInflictedReaction`: the brand for `on-other-ally-debuff-inflicted`
-     *  reactions (Provider's "another ally" — owner-EXCLUDED, unlike the two fields above). That
-     *  listener ignores this brand SOURCE-AGNOSTICALLY (any event carrying it, regardless of
-     *  `sourceId`) rather than only when `sourceId === ownerId`: an owner-excluded trigger's
-     *  `sourceId` can never equal `ownerId` (the same-side-ally guard excludes the owner
-     *  structurally), so the loop risk is CROSS-owner — two ships on this trigger would otherwise
-     *  wake each other's reaction forever. Ignoring the brand unconditionally cuts that ping-pong
-     *  at generation 1; each ship still reacts once to the original, non-reactive infliction. */
+     *  by neither brand against the other's chain — the lineage rule (`reactionKey`) still ends it.
+     *  Keyed per (owner, trigger), this brand is stricter than that rule; kept pending a ruling. */
     | ({
           type: 'debuff-applied';
           sourceId: string;
@@ -198,7 +191,6 @@ export type CombatEvent =
            *  (Insidiousness) gives each firing its own roll. */
           reactionFiringId?: number;
           viaAllyDebuffInflictedReaction?: true;
-          viaOtherAllyDebuffInflictedReaction?: true;
       } & ReactiveStamp)
     | ({
           type: 'debuff-resisted';
@@ -273,9 +265,6 @@ export type CombatEvent =
            *  so the `on-ally-debuff-inflicted` listener's `dot-applied` arm can skip its own
            *  reaction's output the same way the `debuff-applied` arm does. */
           viaAllyDebuffInflictedReaction?: true;
-          /** The `debuff-applied` sibling's `on-other-ally-debuff-inflicted` brand — see that
-           *  field's doc. */
-          viaOtherAllyDebuffInflictedReaction?: true;
       } & ReactiveStamp)
     /** A heal/shield cast resolved (healing mode only). `targets` lists recipient actor
      *  ids in application order; `amount` is the summed RAW amount across recipients.
@@ -529,7 +518,8 @@ export type CombatEvent =
      *  caster-scoped `on-enemy-cleansed`); `count` = the number actually removed.
      *  Suppressed when 0 removed and when the triggering intent carried
      *  `eventCtx.fromPurgeEvent` (depth-1 chain guard — a purge triggered by a purge
-     *  does not re-emit). `on-enemy-purged` filters `casterId === ownerId`;
+     *  does not re-emit; stricter than the lineage rule `reactionKey`, see that field's doc).
+     *  `on-enemy-purged` filters `casterId === ownerId`;
      *  `on-ally-purged` filters `!isOpposing(targetId)` — same-side, owner included (the
      *  2026-09-30 "an ally includes the caster" ruling — see triggers.ts's trigger doc block). */
     | ({

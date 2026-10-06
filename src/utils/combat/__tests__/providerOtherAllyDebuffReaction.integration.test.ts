@@ -293,7 +293,7 @@ describe('on-other-ally-debuff-inflicted — listener wiring', () => {
         expect(enqueued).toHaveLength(1);
     });
 
-    it('chain-bound — a debuff-applied event branded viaOtherAllyDebuffInflictedReaction is ignored regardless of source', () => {
+    it("another Provider's reactive debuff wakes this one — the lineage rule, not the listener, ends the chain", () => {
         const handBus = makeHandBus();
         const enqueuedA = registerOwner(handBus, 'provider-a');
         const enqueuedB = registerOwner(handBus, 'provider-b');
@@ -309,19 +309,18 @@ describe('on-other-ally-debuff-inflicted — listener wiring', () => {
         expect(enqueuedA).toHaveLength(1);
         expect(enqueuedB).toHaveLength(1);
 
-        // Provider A's OWN reaction lands Crit Rate Down II, branded. Without the brand this
-        // would wake Provider B a SECOND time (and B's own branded follow-up would wake A back —
-        // an unbounded ping-pong). With the brand, neither reacts again.
+        // Provider A's reaction lands Crit Rate Down II: an infliction by another ally, so B's
+        // listener answers it; A's own listener never sees its own debuff ("another ally"). The
+        // engine's enqueue wrapper (`reactionKey`) is what stops B's answer from waking B again.
         handBus.emit({
             type: 'debuff-applied',
             sourceId: 'provider-a',
             targetId: 'e1',
             round: 1,
             buffName: 'Crit Rate Down II',
-            viaOtherAllyDebuffInflictedReaction: true,
         });
         expect(enqueuedA).toHaveLength(1);
-        expect(enqueuedB).toHaveLength(1);
+        expect(enqueuedB).toHaveLength(2);
     });
 });
 
@@ -770,8 +769,8 @@ describe('Provider (enemy-side) — team symmetry mirror', () => {
     });
 });
 
-describe('Two Providers (chain-bound) — the reaction terminates without throwing', () => {
-    it('Curator lands ONE debuff → exactly 2 reactive hits total (one per Provider), the chain does not run on', () => {
+describe('Two Providers answer each other once, then stop (the lineage rule)', () => {
+    it('Curator lands ONE debuff → 4 reactive hits: each Provider answers Curator and the other', () => {
         const providerAAbilities = providerPassiveAbilities(2);
         const providerBAbilities = providerPassiveAbilities(2);
 
@@ -789,7 +788,7 @@ describe('Two Providers (chain-bound) — the reaction terminates without throwi
                     crit: 0,
                     critDamage: 0,
                     defensePenetration: 0,
-                    hacking: 0,
+                    hacking: 1e6,
                     defence: 0,
                     hp: 10_000,
                 },
@@ -836,7 +835,7 @@ describe('Two Providers (chain-bound) — the reaction terminates without throwi
             },
         };
 
-        const { reactiveDamage } = collectReactiveDamage({
+        const { reactiveDamage, debuffsApplied } = collectReactiveDamage({
             enemyAttackers: bareEnemy({ stats: { security: 0, hp: 500_000 } }),
             attack: 100,
             crit: 0,
@@ -858,13 +857,21 @@ describe('Two Providers (chain-bound) — the reaction terminates without throwi
             affinityCritPenalty: 0,
             defence: 0,
             hp: 1_000_000_000,
+            hacking: 1e6,
             speed: 89,
             teamActors: [providerTeamActor('provider-b', providerBAbilities), curator],
         });
 
+        // Curator's Attack Down III wakes both Providers (2 hits, 2 Crit Rate Down II). Each
+        // Crit Rate Down II is another ally's infliction, so the OTHER Provider answers it (2 more
+        // hits): his passive is not yet in that chain. That answer's Crit Rate Down II would wake
+        // the first Provider again, whose passive IS in the chain, so it stops there.
         const hits = reactiveDamage.filter(
             (e) => e.sourceId === 'attacker' || e.sourceId === 'provider-b'
         );
-        expect(hits).toHaveLength(2);
+        expect(hits.filter((e) => e.sourceId === 'attacker')).toHaveLength(2);
+        expect(hits.filter((e) => e.sourceId === 'provider-b')).toHaveLength(2);
+        // Instrument: every Provider debuff landed, so a missing answer is not a resist.
+        expect(debuffsApplied.filter((e) => e.buffName === 'Crit Rate Down II').length).toBe(4);
     });
 });
