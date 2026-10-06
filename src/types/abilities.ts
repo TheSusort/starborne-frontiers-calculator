@@ -186,10 +186,10 @@ export type AbilityTrigger =
     // debuff": passive voice, no "this Unit"; owner ruling R16). Rides `debuff-applied` and
     // `dot-applied` keyed on the TARGET, unlike the three inflictor-scoped siblings above.
     | 'on-enemy-debuff-inflicted'
-    // An opposing actor's TOTAL DoT stack count, from any source, crosses a multiple of the
-    // damage config's `everyDotStacks` (Snakeroot's "120% damage for every 4 stacks of damage over
-    // time inflicted onto a single enemy" — owner rulings R43/R43b). One firing per multiple
-    // crossed, routed to that enemy.
+    // The DoT stacks INFLICTED on one opposing actor this combat, from any source, pass a multiple
+    // of the damage config's `everyDotStacks` (Snakeroot's "120% damage for every 4 stacks of
+    // damage over time inflicted onto a single enemy" — owner rulings R43/R43b/R90). A cumulative
+    // count, not the live stack total. One firing per multiple passed, routed to that enemy.
     | 'on-enemy-dot-stacks-crossed'
     | 'on-ally-crit-dot'
     // Wisteria: self-subject sibling of on-ally-crit-dot — THIS unit's OWN crit-cast DoT
@@ -377,7 +377,7 @@ export const LIVE_TRIGGERS = new Set<AbilityTrigger>([
     'on-other-ally-debuff-inflicted',
     // R16 (APEX): any debuff landing on an opposing actor, whoever inflicted it.
     'on-enemy-debuff-inflicted',
-    // R43 (Snakeroot): an enemy's total DoT stacks crossing a multiple of `everyDotStacks`.
+    // R43/R90 (Snakeroot): the DoT stacks inflicted on an enemy passing a multiple of `everyDotStacks`.
     'on-enemy-dot-stacks-crossed',
     // Phase 3 PR-E: ally-scoped counterpart of on-debuffed.
     'on-ally-debuffed',
@@ -800,7 +800,7 @@ export type AbilityConfig =
           hits?: number;
           noCrit?: boolean;
           /** The step of an `on-enemy-dot-stacks-crossed` trigger: the hit fires once for every
-           *  multiple of this many DoT stacks an enemy's total crosses (Snakeroot: 4 at refit 2+,
+           *  multiple of this many DoT stacks inflicted on an enemy (Snakeroot: 4 at refit 2+,
            *  7 at refit 0). */
           everyDotStacks?: number;
           /** Vindicator on-resist: when set, the REACTIVE damage executor computes the

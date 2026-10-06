@@ -26,8 +26,8 @@ const SNAKEROOT_P2 =
 const SNAKEROOT_P1 =
     'This Unit deals <unit-damage>100% damage</unit-damage> for every 7 stacks of damage over time inflicted on to a single enemy.';
 
-// Owner rulings R43/R43b (2026-10-05): a SEPARATE hit fired each time one enemy's total DoT
-// stack count crosses a multiple of N. The engine side is pinned in
+// Owner rulings R43/R43b/R90: a SEPARATE hit fired each time the DoT stacks inflicted on one
+// enemy pass a multiple of N. The engine side is pinned in
 // combat/__tests__/snakerootDotThresholdHit.integration.test.ts.
 describe('Snakeroot "X% damage for every N stacks of damage over time" — a threshold hit', () => {
     it('"120% damage for every 4 stacks" → a 120% hit on each crossing of 4', () => {

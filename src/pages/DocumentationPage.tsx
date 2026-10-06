@@ -3059,17 +3059,18 @@ const DocumentationPage: React.FC = () => {
                                         one &ldquo;2 stacks of Corrosion&rdquo; application is two
                                         debuffs. A count of damage-over-time effects (Anemone,
                                         Snakeroot) counts each stack too: Snakeroot&apos;s passive
-                                        is its own 120% hit on an enemy each time that enemy&apos;s
-                                        damage-over-time stacks, from any ship, reach another
-                                        multiple of 4. Each stack also rolls its own landing:
-                                        Snakeroot&apos;s 2 stacks can land 0, 1 or 2, and every
-                                        stack that fails is its own resist. The same goes for
-                                        Amartya&apos;s 2 stacks of Defense Shred or Exposed, and
-                                        each of her stacks that lands counts as its own infliction.
-                                        A reaction to a debuff being inflicted (Oleander&apos;s
-                                        charge, Provider&apos;s hit, Lingshe&apos;s Stealth,
-                                        Hayyan&apos;s repair, the Firewall implant&apos;s chance)
-                                        fires once per stack that lands, within its own
+                                        is its own 120% hit on an enemy for every 4th
+                                        damage-over-time stack inflicted on that enemy during the
+                                        fight, from any ship. Stacks that expire or are cleansed
+                                        still count, and resisted stacks do not. Each stack also
+                                        rolls its own landing: Snakeroot&apos;s 2 stacks can land 0,
+                                        1 or 2, and every stack that fails is its own resist. The
+                                        same goes for Amartya&apos;s 2 stacks of Defense Shred or
+                                        Exposed, and each of her stacks that lands counts as its own
+                                        infliction. A reaction to a debuff being inflicted
+                                        (Oleander&apos;s charge, Provider&apos;s hit, Lingshe&apos;s
+                                        Stealth, Hayyan&apos;s repair, the Firewall implant&apos;s
+                                        chance) fires once per stack that lands, within its own
                                         once-per-cast or once-per-round limits. APEX&apos;s 3%
                                         shield fires at most once per skill cast, whoever cast it:
                                         her active landing two debuffs, plus the debuffs Provider

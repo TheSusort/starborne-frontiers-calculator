@@ -750,10 +750,6 @@ export function registerReactiveListeners(args: {
      *  more debuffs" gate reads on a cast. Side-agnostic. Read by the `on-enemy-debuff-inflicted` listener to stamp
      *  `debuffVictimDebuffCount`; absent (unit fixtures) → no stamp. */
     debuffCountOf?: (actorId: string) => number;
-    /** How many DoT stacks an actor carries right now (`carriedDotStacks`). Read by the
-     *  `on-enemy-dot-stacks-crossed` listener AFTER a landing; absent (unit fixtures) → that
-     *  trigger never fires. */
-    dotStackCountOf?: (actorId: string) => number;
     /** #363: living same-side ids on `ownerId`'s ACTIVE support-pattern footprint — the
      *  owner's own cell included whenever its pattern covers it (every non-`Not-Self` support
      *  pattern does), which is what lets an owner's OWN shield-destroyed still self-react.
@@ -789,7 +785,6 @@ export function registerReactiveListeners(args: {
         adjacentAllyIdsFor,
         statusNamesOf,
         debuffCountOf,
-        dotStackCountOf,
         footprintAllyIdsFor,
         maxHpOf,
     } = args;
@@ -1299,22 +1294,22 @@ export function registerReactiveListeners(args: {
                     break;
                 }
                 case 'on-enemy-dot-stacks-crossed': {
-                    // VICTIM-scoped, inflictor-agnostic (Snakeroot, R43/R43b): read the enemy's
-                    // total DoT stacks right after `added` of them landed, and fire once for every
-                    // multiple of `everyDotStacks` the count passed on the way (3 → 9 at step 4 is
-                    // two). Each enemy is counted on its own. The landing emits run right after
-                    // their stacks are stored, so the live count already includes them.
+                    // VICTIM-scoped, inflictor-agnostic (Snakeroot, R43/R43b/R90): count the DoT
+                    // stacks INFLICTED on each enemy this combat and fire once for every multiple
+                    // of `everyDotStacks` a landing passes (3 → 9 at step 4 is two). The count is
+                    // cumulative — expiry and cleanse never lower it — and only landed stacks reach
+                    // it: a resisted stack emits no landing event. Each enemy is counted on its own.
                     const step =
                         ra.ability.config.type === 'damage'
                             ? ra.ability.config.everyDotStacks
                             : undefined;
+                    const inflictedSoFar = new Map<string, number>();
                     const onStacksAdded = (targetId: string, added: number): void => {
                         if (!step || added <= 0 || !isOpposing(targetId)) return;
-                        const after = dotStackCountOf?.(targetId);
-                        if (after === undefined) return;
-                        const crossed =
-                            Math.floor(after / step) -
-                            Math.floor(Math.max(0, after - added) / step);
+                        const before = inflictedSoFar.get(targetId) ?? 0;
+                        const after = before + added;
+                        inflictedSoFar.set(targetId, after);
+                        const crossed = Math.floor(after / step) - Math.floor(before / step);
                         for (let k = 0; k < crossed; k++)
                             enqueue({
                                 ...intent,

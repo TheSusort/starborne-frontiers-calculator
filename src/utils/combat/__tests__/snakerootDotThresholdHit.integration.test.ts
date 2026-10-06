@@ -1,9 +1,11 @@
 /**
  * Snakeroot's passive (refit 2+): "This Unit deals 120% damage for every 4 stacks of damage over
  * time inflicted onto a single enemy. This attack does not reduce Stasis." Owner rulings R43/R43b
- * (2026-10-05): a SEPARATE 120% hit, fired each time one enemy's TOTAL DoT stack count crosses a
- * multiple of 4. Stacks from any source count (an ally's 4th stack fires it), each enemy is
- * counted on its own, and one hit fires per multiple crossed (3 → 9 crosses 4 and 8: two hits).
+ * (2026-10-05) and R90 (2026-10-06): a SEPARATE 120% hit, fired each time the number of DoT stacks
+ * INFLICTED on one enemy this combat passes a multiple of 4. The count is cumulative — expiry and
+ * cleanse never lower it, so it is not the enemy's live stack total. Stacks from any source count
+ * (an ally's 4th stack fires it), each enemy is counted on its own, and one hit fires per multiple
+ * passed (3 → 9 passes 4 and 8: two hits).
  *
  * Board: Snakeroot and the "seeder" allies stand on one side, enemies A (front, M4) and B (M3)
  * on the other. Seeders act first, each inflicting a fixed number of Corrosion I stacks; their
@@ -28,6 +30,7 @@ import {
 } from '../__testutils__/realKitBoard';
 import type { ShipSkills } from '../../../types/abilities';
 import type { Position } from '../../../types/encounters';
+import { carriedDotStacks, type CombatActor } from '../state';
 
 beforeAll(() => {
     if (!csvAvailable() || !shipDataAvailable())
@@ -35,9 +38,9 @@ beforeAll(() => {
 });
 beforeEach(() => setupKeyedRng(43));
 
-/** A seeder's active: `stacks` stacks of Corrosion I (3 turns), after a 2-turn Stasis when
- *  `stasis` is set. */
-const corrosionKit = (stacks: number, stasis = false): ShipSkills => ({
+/** A seeder's active: `stacks` stacks of Corrosion I (`duration` turns, default 3), after a 2-turn
+ *  Stasis when `stasis` is set. */
+const corrosionKit = (stacks: number, stasis = false, duration = 3): ShipSkills => ({
     slots: [
         {
             slot: 'active',
@@ -68,7 +71,7 @@ const corrosionKit = (stacks: number, stasis = false): ShipSkills => ({
                     target: 'enemy',
                     trigger: 'on-cast',
                     conditions: [],
-                    config: { type: 'dot', dotType: 'corrosion', tier: 3, stacks, duration: 3 },
+                    config: { type: 'dot', dotType: 'corrosion', tier: 3, stacks, duration },
                 },
             ],
         },
@@ -94,6 +97,8 @@ interface Seeder {
     line?: boolean;
     /** Inflict a 2-turn Stasis before the stacks. */
     stasis?: boolean;
+    /** The Corrosion's duration in turns (default 3). */
+    duration?: number;
 }
 
 const SEEDER_CELLS: Position[] = ['M4', 'T4', 'B4'];
@@ -102,8 +107,19 @@ const SEEDER_CELLS: Position[] = ['M4', 'T4', 'B4'];
 const run = (
     placement: Placement,
     seeders: Seeder[],
-    snakeroot: Partial<BoardUnit> = {}
-): { procs: Record<string, number>; amounts: number[]; aDebuffsAtRoundEnd: string[] } => {
+    snakeroot: Partial<BoardUnit> = {},
+    numRounds = 1
+): {
+    procs: Record<string, number>;
+    amounts: number[];
+    aDebuffsAtRoundEnd: string[];
+    /** A's procs per round. */
+    aProcsByRound: number[];
+    /** A's LIVE DoT stack total right after each landing on it. */
+    aLiveAfterLanding: number[];
+    /** On A, in order: `L<n>` for a landing of n stacks, `H` for one of Snakeroot's hits. */
+    aTimeline: string[];
+} => {
     const snake: BoardUnit = {
         id: 'snakeroot',
         kit: snakerootPassiveOnly(),
@@ -116,7 +132,7 @@ const run = (
     };
     const allies: BoardUnit[] = seeders.map((s, i) => ({
         id: `seeder-${i}`,
-        kit: corrosionKit(s.stacks, s.stasis),
+        kit: corrosionKit(s.stacks, s.stasis, s.duration),
         position: SEEDER_CELLS[i],
         speed: 300 - i * 10,
         attack: 1000,
@@ -125,13 +141,23 @@ const run = (
     }));
     const a: BoardUnit = { id: 'a', kit: NO_KIT, position: 'M4', speed: 1 };
     const b: BoardUnit = { id: 'b', kit: NO_KIT, position: 'M3', speed: 1 };
-    const { input, id } = boardInput(placement, snake, allies, [a, b], 1);
+    const { input, id } = boardInput(placement, snake, allies, [a, b], numRounds);
     const snakeId = id(snake);
     const unitOf = new Map([a, b].map((u) => [id(u), u.id]));
     const bus = createEventBus();
     const procs: Record<string, number> = {};
     const amounts: number[] = [];
     let aDebuffsAtRoundEnd: string[] = [];
+    const aProcsByRound: number[] = Array.from({ length: numRounds }, () => 0);
+    const aLiveAfterLanding: number[] = [];
+    const aTimeline: string[] = [];
+    let actors: CombatActor[] = [];
+    bus.on('dot-applied', (e: Extract<CombatEvent, { type: 'dot-applied' }>) => {
+        if (e.targetId !== id(a)) return;
+        aTimeline.push(`L${e.stacks}`);
+        const actor = actors.find((x) => x.id === id(a));
+        if (actor) aLiveAfterLanding.push(carriedDotStacks(actor));
+    });
     bus.on('status-snapshot', (e: Extract<CombatEvent, { type: 'status-snapshot' }>) => {
         if (e.actorId === id(a)) aDebuffsAtRoundEnd = e.debuffNames;
     });
@@ -141,11 +167,21 @@ const run = (
             if (e.sourceId !== snakeId) return;
             const unit = unitOf.get(e.targetId) ?? e.targetId;
             procs[unit] = (procs[unit] ?? 0) + 1;
+            if (unit === 'a') {
+                aProcsByRound[e.round - 1]++;
+                aTimeline.push('H');
+            }
             amounts.push(Math.round(e.amount));
         }
     );
-    runCombat({ ...input, bus });
-    return { procs, amounts, aDebuffsAtRoundEnd };
+    runCombat({
+        ...input,
+        bus,
+        __testTapActors: (all: CombatActor[]) => {
+            actors = all;
+        },
+    });
+    return { procs, amounts, aDebuffsAtRoundEnd, aProcsByRound, aLiveAfterLanding, aTimeline };
 };
 
 describe.each<Placement>(['player', 'enemy'])('Snakeroot on the %s side', (placement) => {
@@ -194,5 +230,34 @@ describe.each<Placement>(['player', 'enemy'])('Snakeroot on the %s side', (place
             a: 2,
             b: 1,
         });
+    });
+
+    // R90: the count is the stacks INFLICTED this combat, not the live total. Each case is built so
+    // the live-total reading gives a different answer, and asserts the live totals it relies on.
+    it('1-turn stacks of 3 each round: the live total never reaches 4, the inflicted count passes 4 and 8', () => {
+        const r = run(placement, [{ stacks: 3, duration: 1 }], {}, 3);
+        // The stacks expire between rounds, so every landing reads 3 live.
+        expect(r.aLiveAfterLanding).toEqual([3, 3, 3]);
+        // Inflicted 3 → 6 → 9: rounds 2 and 3 each pass a multiple of 4.
+        expect(r.aProcsByRound).toEqual([0, 1, 1]);
+    });
+
+    it('expiring stacks re-landing re-cross 4 live, but that landing brings the inflicted count only to 7', () => {
+        // Seeder 0 lands 3 one-turn stacks each round, then seeder 1 lands 1 long stack.
+        const r = run(
+            placement,
+            [
+                { stacks: 3, duration: 1 },
+                { stacks: 1, duration: 9 },
+            ],
+            {},
+            2
+        );
+        // Live: round 1 0 → 3 → 4; round 2 the 3 expired, the long stack stays: 1 → 4 → 5. Round 2's
+        // 3-stack landing re-crosses 4 on the live total.
+        expect(r.aLiveAfterLanding).toEqual([3, 4, 4, 5]);
+        // Inflicted: 3, 4 | 7, 8. The hits follow the landings that pass 4 and 8 — not round 2's
+        // 3-stack landing.
+        expect(r.aTimeline).toEqual(['L3', 'L1', 'H', 'L3', 'L1', 'H']);
     });
 });
