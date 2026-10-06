@@ -70,6 +70,7 @@ import {
     selfBuffNamesForOwners,
     buffStackCount,
     namedDebuffCount,
+    activeWithStacks,
     selfBuffStacksForOwner,
     LIVE_TRIGGERS,
     ownerHoldsSelfBuff,
@@ -685,8 +686,8 @@ export interface RecipientGateReading {
     role?: EnemyBaseClass;
     /** Distinct non-DoT debuffs on the actor (its per-target status store). */
     statusDebuffNames: string[];
-    /** How many non-DoT debuffs those are, a Defense Shred counted per stack (`ownerDebuffCount`,
-     *  owner ruling R73). */
+    /** How many non-DoT debuffs those are, a stackable debuff counted per stack
+     *  (`ownerDebuffCount`). */
     statusDebuffCount: number;
     /** The buffs the actor itself holds. A self gain asking whether a STRUCK enemy holds a named
      *  buff ("If any target has Stealth" — Selenite) reads these rather than the side-wide
@@ -3533,8 +3534,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                         const at = landedEnemyDebuffs.findIndex(
                             (b) => b.buffName === live.active.buffName
                         );
-                        if (at >= 0) landedEnemyDebuffs[at] = live.active;
-                        else landedEnemyDebuffs.push(live.active);
+                        if (at >= 0) landedEnemyDebuffs[at] = activeWithStacks(live);
+                        else landedEnemyDebuffs.push(activeWithStacks(live));
                     }
                 };
                 const pair: DeferredEnemyApplication = {
@@ -3820,7 +3821,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // movement. MEASURED at zero over the whole suite — see the full note above `scheduledEnemy`,
     // which carries the probe result for both folds. Do not fence it here.
     for (const s of timedAbilityEnemy) {
-        landedAbilityEnemy.push(s.active);
+        landedAbilityEnemy.push(activeWithStacks(s));
         abilityEnemyEffects.push(payloadToSelectedBuff(s.payload));
     }
     // Aura/accumulating ability statuses: per-round landing re-roll. No debuff-applied
@@ -3841,7 +3842,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 emitDebuffResisted(s.payload.buffName, enemy.id, !isApply);
                 continue;
             }
-            landedAbilityEnemy.push(s.active);
+            landedAbilityEnemy.push(activeWithStacks(s));
             abilityEnemyEffects.push(sb);
         }
     }

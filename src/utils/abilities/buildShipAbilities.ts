@@ -1750,8 +1750,8 @@ function abilitiesFromText(
     }
 
     // "deals X% damage for every N stacks of damage over time inflicted on[to] a single enemy"
-    // (Snakeroot p1/p2) — a separate X% hit on that enemy each time its total DoT stack count,
-    // from any source, crosses a multiple of N (owner rulings R43/R43b). Rides the reactive
+    // (Snakeroot p1/p2) — a separate X% hit on that enemy each time the DoT stacks inflicted on it
+    // this combat, from any source, pass a multiple of N (owner rulings R43/R43b/R90). Rides the reactive
     // `on-enemy-dot-stacks-crossed` trigger. It can crit: the text says nothing otherwise.
     if (
         out[0]?.ability.type === 'damage' &&

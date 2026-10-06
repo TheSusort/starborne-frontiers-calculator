@@ -123,14 +123,16 @@ export function reactionKey(intent: Pick<Intent, 'ownerId' | 'ability' | 'source
 }
 
 /**
- * A safety net on a chain of reactions, never reached by the lineage rule above: a chain can
- * only grow while every firing in it is a different clause (`reactionKey`), so its depth is
- * bounded by the number of reactive clauses on the board. A reaction to a cast or a phase event has depth
- * 0; a reaction to something a reaction did has its cause's depth + 1. An intent deeper than this
- * is dropped, not thrown. `reactionChainCap.integration.test.ts` pins that the fingerprint
- * battles and the loop boards stay under it.
+ * A NON-GAME safety net on a chain of reactions. The game has no chain limit (owner ruling R91):
+ * the lineage rule above is what ends every loop, because a chain can only grow while every
+ * firing in it is a different clause (`reactionKey`), so its depth is bounded by the number of
+ * reactive clauses on the board. This constant exists only so an engine defect cannot hang a
+ * simulation, and sits far above any chain a real board produces. A reaction to a cast or a phase
+ * event has depth 0; a reaction to something a reaction did has its cause's depth + 1. An intent
+ * deeper than this is dropped, not thrown. `reactionChainCap.integration.test.ts` pins that the
+ * fingerprint battles and the loop boards stay well under it.
  */
-export const MAX_REACTION_CHAIN_DEPTH = 8;
+export const MAX_REACTION_CHAIN_DEPTH = 64;
 
 /** TEST-ONLY probe of reaction chains, written by the engine's drain and the enqueue wrapper: the
  *  deepest chain depth an executed intent had, how many intents the depth cap dropped, and how many
@@ -748,10 +750,6 @@ export function registerReactiveListeners(args: {
      *  more debuffs" gate reads on a cast. Side-agnostic. Read by the `on-enemy-debuff-inflicted` listener to stamp
      *  `debuffVictimDebuffCount`; absent (unit fixtures) → no stamp. */
     debuffCountOf?: (actorId: string) => number;
-    /** How many DoT stacks an actor carries right now (`carriedDotStacks`). Read by the
-     *  `on-enemy-dot-stacks-crossed` listener AFTER a landing; absent (unit fixtures) → that
-     *  trigger never fires. */
-    dotStackCountOf?: (actorId: string) => number;
     /** #363: living same-side ids on `ownerId`'s ACTIVE support-pattern footprint — the
      *  owner's own cell included whenever its pattern covers it (every non-`Not-Self` support
      *  pattern does), which is what lets an owner's OWN shield-destroyed still self-react.
@@ -787,7 +785,6 @@ export function registerReactiveListeners(args: {
         adjacentAllyIdsFor,
         statusNamesOf,
         debuffCountOf,
-        dotStackCountOf,
         footprintAllyIdsFor,
         maxHpOf,
     } = args;
@@ -1297,22 +1294,22 @@ export function registerReactiveListeners(args: {
                     break;
                 }
                 case 'on-enemy-dot-stacks-crossed': {
-                    // VICTIM-scoped, inflictor-agnostic (Snakeroot, R43/R43b): read the enemy's
-                    // total DoT stacks right after `added` of them landed, and fire once for every
-                    // multiple of `everyDotStacks` the count passed on the way (3 → 9 at step 4 is
-                    // two). Each enemy is counted on its own. The landing emits run right after
-                    // their stacks are stored, so the live count already includes them.
+                    // VICTIM-scoped, inflictor-agnostic (Snakeroot, R43/R43b/R90): count the DoT
+                    // stacks INFLICTED on each enemy this combat and fire once for every multiple
+                    // of `everyDotStacks` a landing passes (3 → 9 at step 4 is two). The count is
+                    // cumulative — expiry and cleanse never lower it — and only landed stacks reach
+                    // it: a resisted stack emits no landing event. Each enemy is counted on its own.
                     const step =
                         ra.ability.config.type === 'damage'
                             ? ra.ability.config.everyDotStacks
                             : undefined;
+                    const inflictedSoFar = new Map<string, number>();
                     const onStacksAdded = (targetId: string, added: number): void => {
                         if (!step || added <= 0 || !isOpposing(targetId)) return;
-                        const after = dotStackCountOf?.(targetId);
-                        if (after === undefined) return;
-                        const crossed =
-                            Math.floor(after / step) -
-                            Math.floor(Math.max(0, after - added) / step);
+                        const before = inflictedSoFar.get(targetId) ?? 0;
+                        const after = before + added;
+                        inflictedSoFar.set(targetId, after);
+                        const crossed = Math.floor(after / step) - Math.floor(before / step);
                         for (let k = 0; k < crossed; k++)
                             enqueue({
                                 ...intent,
@@ -3491,21 +3488,23 @@ export function selfBuffStacksForOwner(
     return Math.max(0, total + statusEngine.selfBuffStackAdjustment(ownerId, buffName));
 }
 
+/** How many stacks one held status entry is: a live `active.stacks` counts that many (0 for a
+ *  seeded-but-inert accumulating entry); otherwise an ability status counts its payload's declared
+ *  stacks and a scheduled entry counts 1. The one per-entry rule behind every buff COUNT
+ *  (`buffStackCount`) and every named-debuff COUNT (`namedDebuffCount`). */
+function statusEntryStackCount(e: ActiveBuff | ActiveAbilityStatus): number {
+    const active = 'active' in e ? e.active : e;
+    if (active.stacks !== undefined) return Math.max(0, active.stacks);
+    return Math.max(1, ('payload' in e ? e.payload.stacks : undefined) ?? 1);
+}
+
 /** How many buffs a list of held buff entries is: one per STACK, not one per entry or name (owner
- *  ruling R37, the buff-side mirror of R26 — Core Charge I ×4 is 4 buffs). An entry with a live
- *  `active.stacks` counts that many (0 for a seeded-but-inert accumulating entry); otherwise an
- *  ability status counts its payload's declared stacks and a scheduled entry counts 1. Every
- *  buff COUNT ("for each buff on the enemy", "for each buff on itself", "3 or more buffs", "the
- *  enemy with the most buffs") reads through this — or `actorBuffCount` for a stored actor;
- *  presence and NAME reads stay on the deduped name lists. */
+ *  ruling R37, the buff-side mirror of R26 — Core Charge I ×4 is 4 buffs), per
+ *  `statusEntryStackCount`. Every buff COUNT ("for each buff on the enemy", "for each buff on
+ *  itself", "3 or more buffs", "the enemy with the most buffs") reads through this — or
+ *  `actorBuffCount` for a stored actor; presence and NAME reads stay on the deduped name lists. */
 export function buffStackCount(entries: readonly (ActiveBuff | ActiveAbilityStatus)[]): number {
-    let total = 0;
-    for (const e of entries) {
-        const active = 'active' in e ? e.active : e;
-        if (active.stacks !== undefined) total += Math.max(0, active.stacks);
-        else total += Math.max(1, ('payload' in e ? e.payload.stacks : undefined) ?? 1);
-    }
-    return total;
+    return entries.reduce((n, e) => n + statusEntryStackCount(e), 0);
 }
 
 /** How many buffs `ownerId` carries right now (`buffStackCount`), across the SAME three sources as
@@ -3553,30 +3552,43 @@ export function ownerDebuffNamesFor(statusEngine: StatusEngine, targetId: string
     return [...names];
 }
 
-/** How many debuffs one landed named-debuff entry is: a persistent-stacking debuff (Defense Shred)
- *  is one per STACK (owner ruling R73 — 3 stacks are 3 debuffs, matching the cleanse, which takes
- *  one stack per cleansed debuff, R44); any other named debuff is one. */
-function namedDebuffEntryCount(e: ActiveBuff): number {
-    return PERSISTENT_STACKING_BUFFS.has(e.buffName) ? Math.max(0, e.stacks ?? 1) : 1;
+/** `s.active` with its stack count made explicit (`statusEntryStackCount`) when the entry holds
+ *  more than its one implicit stack — an unspent timed entry carries its declared count on the
+ *  payload only. For a list of plain `ActiveBuff`s that a debuff count later reads. */
+export function activeWithStacks(s: ActiveAbilityStatus): ActiveBuff {
+    const n = statusEntryStackCount(s);
+    return s.active.stacks === undefined && n === 1 ? s.active : { ...s.active, stacks: n };
 }
 
-/** How many debuffs a list of landed named-debuff entries is (`namedDebuffEntryCount` each). The
- *  named half of every debuff COUNT; DoT stacks are the other half (`carriedDotStacks`). */
-export function namedDebuffCount(entries: readonly ActiveBuff[]): number {
-    return entries.reduce((n, e) => n + namedDebuffEntryCount(e), 0);
+/** How many debuffs a list of landed named-debuff entries is: one per STACK (owner rulings R73,
+ *  R88 — a stackable debuff's stacks are separate debuffs: 3 Defense Shred stacks are 3, Amartya's
+ *  2 Exposed stacks are 2), per `statusEntryStackCount`. A debuff that overwrites rather than
+ *  stacks holds one stack. The named half of every debuff COUNT; DoT stacks are the other half
+ *  (`carriedDotStacks`). Pass the full ability status where one exists: an unspent timed entry
+ *  carries its stack count on the payload only. */
+export function namedDebuffCount(entries: readonly (ActiveBuff | ActiveAbilityStatus)[]): number {
+    return entries.reduce((n, e) => n + statusEntryStackCount(e), 0);
 }
 
-/** How many named debuffs `targetId` carries: its distinct named debuffs (`ownerDebuffNamesFor`),
- *  a persistent-stacking one counted per stack (`namedDebuffEntryCount`). */
+/** How many named debuffs `targetId` carries: each distinct named debuff (`ownerDebuffNamesFor`'s
+ *  three sources) counted per stack (`namedDebuffCount`). A name held in more than one source
+ *  counts its largest entry once. */
 export function ownerDebuffCount(statusEngine: StatusEngine, targetId: string): number {
-    const byName = new Map<string, number>(
-        ownerDebuffNamesFor(statusEngine, targetId).map((n) => [n, 1])
-    );
-    const persistent = [
-        ...statusEngine.snapshot(undefined, targetId).activeEnemyDebuffs,
-        ...statusEngine.timedAbilityStatuses('enemy', undefined, targetId).map((s) => s.active),
-    ].filter((e) => e.turnsRemaining === 'permanent' && byName.has(e.buffName));
-    for (const e of persistent) byName.set(e.buffName, namedDebuffEntryCount(e));
+    const byName = new Map<string, number>();
+    const add = (name: string, n: number): void => {
+        byName.set(name, Math.max(byName.get(name) ?? 0, n));
+    };
+    for (const ab of statusEngine.snapshot(undefined, targetId).activeEnemyDebuffs)
+        add(ab.buffName, namedDebuffCount([ab]));
+    for (const s of statusEngine.timedAbilityStatuses('enemy', undefined, targetId))
+        add(s.active.buffName, namedDebuffCount([s]));
+    for (const s of statusEngine.activeAbilityStatuses(
+        'enemy',
+        () => NEUTRAL_NAMES_CTX,
+        undefined,
+        targetId
+    ))
+        add(s.active.buffName, namedDebuffCount([s]));
     let total = 0;
     for (const n of byName.values()) total += n;
     return total;
