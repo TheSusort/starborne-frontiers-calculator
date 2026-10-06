@@ -103,18 +103,29 @@ export { LIVE_TRIGGERS };
  *
  * Every intent carries its `reactionAncestry` — the `reactionKey`s of the firings that caused it —
  * stamped by `registerReactiveListeners`' enqueue wrapper, which also drops an intent whose own key
- * is already in it. Keyed per (owner, ability): whether the game scopes it per ship instead is
- * unconfirmed. An event emitted after the resolving intent has returned (a post-round death drain,
- * the Stasis settlement after a drain) starts a fresh lineage, as it starts a fresh `chainDepth`.
+ * is already in it. An event emitted after the resolving intent has returned (a post-round death
+ * drain, the Stasis settlement after a drain) starts a fresh lineage, as it starts a fresh
+ * `chainDepth`.
+ *
+ * The key is the CLAUSE, not the parsed ability: one sentence the parser splits into several
+ * abilities is one passive firing. For a ship's own skill text, every ability in one slot answering
+ * the same trigger is one clause, `owner:ship:<slot>:<trigger>` — Provider's damage and Crit Rate
+ * Down II are one, and so are Nuqtu's Terran Bolster III and Core Charge I grants. Two clauses on
+ * different triggers are different keys, so one can wake the other: Warden's on-hit Corrosion I
+ * wakes her own "when this Unit inflicts a debuff" Out. Damage Down II (user + Solid Clouds dev,
+ * 2026-10-02, quoted in `Ability.procScope`'s doc). Each gear-set bonus or implant keys on its own
+ * effect, `owner:equipment:<equipmentEffectId>`; two copies of one implant are two effects.
  */
-export function reactionKey(intent: Pick<Intent, 'ownerId' | 'ability'>): string {
-    return `${intent.ownerId}:${intent.ability.id}`;
+export function reactionKey(intent: Pick<Intent, 'ownerId' | 'ability' | 'sourceSlot'>): string {
+    return intent.ability.source === 'equipment'
+        ? `${intent.ownerId}:equipment:${intent.ability.equipmentEffectId ?? intent.ability.id}`
+        : `${intent.ownerId}:ship:${intent.sourceSlot}:${intent.ability.trigger}`;
 }
 
 /**
  * A safety net on a chain of reactions, never reached by the lineage rule above: a chain can
- * only grow while every firing in it is a different (owner, ability), so its depth is bounded by
- * the number of reactive abilities on the board. A reaction to a cast or a phase event has depth
+ * only grow while every firing in it is a different clause (`reactionKey`), so its depth is
+ * bounded by the number of reactive clauses on the board. A reaction to a cast or a phase event has depth
  * 0; a reaction to something a reaction did has its cause's depth + 1. An intent deeper than this
  * is dropped, not thrown. `reactionChainCap.integration.test.ts` pins that the fingerprint
  * battles and the loop boards stay under it.
@@ -493,10 +504,8 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
  *  - on-other-ally-debuff-inflicted → debuff-applied OR dot-applied where the source is a
  *    same-side ally EXCLUDING the owner (`isSameSideAlly`) — Provider's "another ally" text, see
  *    the ruling above. Stamps eventCtx.debuffVictimId with the debuff's own victim so a damage
- *    clause and a debuff clause riding this trigger both land on "that enemy". Bounded
- *    source-agnostically via `viaOtherAllyDebuffInflictedReaction` (see events.ts's doc on that
- *    flag) rather than the same-owner check on-ally-debuff-inflicted uses, because this trigger's
- *    owner exclusion makes the loop risk cross-owner, not self.
+ *    clause and a debuff clause riding this trigger both land on "that enemy". Two ships on this
+ *    trigger answering each other are ended by the lineage rule (`reactionKey`).
  *  - on-enemy-debuff-inflicted → debuff-applied OR dot-applied whose TARGET is opposing, any
  *    inflictor (APEX — R16). Stamps debuffVictimId plus that enemy's debuff count at the landing
  *    (debuffVictimDebuffCount), and the inflictor + reaction stamp `rootCastKey` reads; shares
@@ -1189,27 +1198,15 @@ export function registerReactiveListeners(args: {
                     // identical fallback, so a damage clause and a debuff clause riding this same
                     // trigger both land on the enemy the ally's debuff actually hit.
                     //
-                    // Stricter than the lineage rule (`reactionKey`), which would let a SECOND
-                    // Provider answer the first one's reaction once; kept pending a ruling.
-                    // `viaOtherAllyDebuffInflictedReaction` bounds the chain SOURCE-AGNOSTICALLY,
-                    // unlike on-ally-debuff-inflicted's self-chain guard: that guard only needs to
-                    // skip the OWNER's own output, because an owner-excluded trigger's `sourceId`
-                    // can never equal `ownerId` in the first place (isSameSideAlly excludes it
-                    // structurally). The unbounded risk here is CROSS-owner: two ships on this
-                    // trigger would otherwise wake each other's reaction forever (A's reaction
-                    // lands a debuff → wakes B → B's reaction lands a debuff → wakes A → …).
-                    // Ignoring any event carrying this brand, regardless of who emitted it, cuts
-                    // that ping-pong at generation 1 — each ship still reacts exactly once to the
-                    // original, non-reactive infliction (proven by a two-Provider integration
-                    // test), and no OTHER reactive family's debuff output is affected (the brand
-                    // is set only at this trigger's own emission sites).
+                    // Two Providers answer each other under the lineage rule (`reactionKey`, owner
+                    // ruling 2026-10-06): A's skill inflicts → B answers → A answers B's debuff
+                    // (A's passive is not yet in that chain) → B, already in it, stops.
                     bus.on('debuff-applied', (e) => {
                         // Provider's own clause reads "inflicts" (filter 'inflict') — an ally's
                         // applied Provoke does not wake this listener; passesApplicationFilter's
                         // doc covers the undefined-filter and undefined-`e.application` defaults.
                         if (
                             isSameSideAlly(e.sourceId, ownerId) &&
-                            !e.viaOtherAllyDebuffInflictedReaction &&
                             passesApplicationFilter(
                                 ra.ability.triggerApplicationFilter,
                                 e.application
@@ -1227,7 +1224,6 @@ export function registerReactiveListeners(args: {
                         // doc).
                         if (
                             isSameSideAlly(e.sourceId, ownerId) &&
-                            !e.viaOtherAllyDebuffInflictedReaction &&
                             passesApplicationFilter(
                                 ra.ability.triggerApplicationFilter,
                                 e.application
@@ -5546,9 +5542,6 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
                     ...(intent.ability.trigger === 'on-ally-debuff-inflicted'
                         ? { viaAllyDebuffInflictedReaction: true as const }
                         : {}),
-                    ...(intent.ability.trigger === 'on-other-ally-debuff-inflicted'
-                        ? { viaOtherAllyDebuffInflictedReaction: true as const }
-                        : {}),
                 });
             }
             for (let i = 0; i < resists; i++) {
@@ -5691,9 +5684,6 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 ...reactionFiringStamp(ctx),
                 ...(intent.ability.trigger === 'on-ally-debuff-inflicted'
                     ? { viaAllyDebuffInflictedReaction: true as const }
-                    : {}),
-                ...(intent.ability.trigger === 'on-other-ally-debuff-inflicted'
-                    ? { viaOtherAllyDebuffInflictedReaction: true as const }
                     : {}),
             });
         };

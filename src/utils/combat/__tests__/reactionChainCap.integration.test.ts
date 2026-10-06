@@ -2,14 +2,14 @@
  * Chained reactions trigger (owner ruling 66), and the lineage rule ends every chain: a passive
  * never fires on an event its own earlier firing caused (`reactionKey` in triggers.ts, owner
  * ruling 2026-10-06). `MAX_REACTION_CHAIN_DEPTH` is only a safety net behind it. This file pins
- * that no board reaches the net (measured 2026-10-06):
+ * that no board reaches the net (measured 2026-10-06, keyed per clause — see `reactionKey`):
  *   - the real-kit fingerprint battles: deepest chain 1;
  *   - a board of reacting real kits (Purifier, Opal and Stalwart against Hemlock, Wrecker and
  *     Ravager, each named ship in turn as the subject, on both sides): deepest chain 1;
  *   - Nuqtu with Grif/Pestilence/Larkspur against Purifier, AEGIS, Nuqtu and Hermes, where the two
- *     opposing Nuqtus answer each other's buff gains: deepest chain 5, each side;
+ *     opposing Nuqtus answer each other's buff gains: deepest chain 3, each side;
  *   - APEX with Provider/Opal/Shepherd against Provider/Opal/Shepherd/Warden, where every debuff
- *     wakes Provider's hit-and-debuff and APEX's Block Shield: deepest chain 5, each side.
+ *     wakes Provider's hit-and-debuff and APEX's Block Shield: deepest chain 4, each side.
  * The two loop boards also report lineage drops, so the rule — not a quiet board — is what ends
  * their chains.
  */
@@ -119,7 +119,7 @@ describe('the reaction-chain safety net', () => {
                 1
             );
             expect(p.lineageDropped).toBeGreaterThan(0);
-            expect(p.maxDepth).toBe(5);
+            expect(p.maxDepth).toBe(3);
             expect(p.dropped).toBe(0);
         },
         60_000
@@ -138,7 +138,7 @@ describe('the reaction-chain safety net', () => {
                 1
             );
             expect(p.lineageDropped).toBeGreaterThan(0);
-            expect(p.maxDepth).toBe(5);
+            expect(p.maxDepth).toBe(4);
             expect(p.dropped).toBe(0);
         },
         60_000

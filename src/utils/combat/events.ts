@@ -165,17 +165,7 @@ export type CombatEvent =
      *  bounds only the owner's own `on-ally-debuff-inflicted` output: a ship carrying BOTH an
      *  `on-debuff-inflicted` and an `on-ally-debuff-inflicted` debuff-emitting reaction is bounded
      *  by neither brand against the other's chain — the lineage rule (`reactionKey`) still ends it.
-     *  Keyed per (owner, trigger), this brand is stricter than that rule; kept pending a ruling.
-     *  `viaOtherAllyDebuffInflictedReaction`: the brand for `on-other-ally-debuff-inflicted`
-     *  reactions (Provider's "another ally" — owner-EXCLUDED, unlike the two fields above). That
-     *  listener ignores this brand SOURCE-AGNOSTICALLY (any event carrying it, regardless of
-     *  `sourceId`) rather than only when `sourceId === ownerId`: an owner-excluded trigger's
-     *  `sourceId` can never equal `ownerId` (the same-side-ally guard excludes the owner
-     *  structurally), so the loop risk is CROSS-owner — two ships on this trigger would otherwise
-     *  wake each other's reaction forever. Ignoring the brand unconditionally cuts that ping-pong
-     *  at generation 1; each ship still reacts once to the original, non-reactive infliction.
-     *  Stricter than the lineage rule (`reactionKey` in triggers.ts), under which a SECOND Provider
-     *  would answer the first one's reaction once; kept pending a ruling. */
+     *  Keyed per (owner, trigger), this brand is stricter than that rule; kept pending a ruling. */
     | ({
           type: 'debuff-applied';
           sourceId: string;
@@ -201,7 +191,6 @@ export type CombatEvent =
            *  (Insidiousness) gives each firing its own roll. */
           reactionFiringId?: number;
           viaAllyDebuffInflictedReaction?: true;
-          viaOtherAllyDebuffInflictedReaction?: true;
       } & ReactiveStamp)
     | ({
           type: 'debuff-resisted';
@@ -276,9 +265,6 @@ export type CombatEvent =
            *  so the `on-ally-debuff-inflicted` listener's `dot-applied` arm can skip its own
            *  reaction's output the same way the `debuff-applied` arm does. */
           viaAllyDebuffInflictedReaction?: true;
-          /** The `debuff-applied` sibling's `on-other-ally-debuff-inflicted` brand — see that
-           *  field's doc. */
-          viaOtherAllyDebuffInflictedReaction?: true;
       } & ReactiveStamp)
     /** A heal/shield cast resolved (healing mode only). `targets` lists recipient actor
      *  ids in application order; `amount` is the summed RAW amount across recipients.

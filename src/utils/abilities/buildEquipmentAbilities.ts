@@ -1208,7 +1208,11 @@ export function buildEquipmentAbilities(
 
         const partial = builder(sets);
         if (!partial) continue;
-        abilities.push({ id: `equip-set-${setName}`, ...partial });
+        abilities.push({
+            id: `equip-set-${setName}`,
+            equipmentEffectId: `set-${setName}`,
+            ...partial,
+        });
     }
 
     // ------------------------------------------------------------------
@@ -1237,6 +1241,7 @@ export function buildEquipmentAbilities(
                 partials.forEach((partial, i) => {
                     abilities.push({
                         ...partial,
+                        equipmentEffectId: `implant-${implantName}-${gearId}`,
                         // For single-ability implants, preserve the original id byte-exactly
                         // (suffix the unique gear-piece id so two copies of the same implant
                         // get distinct ability ids — the proc-rate gate keys on

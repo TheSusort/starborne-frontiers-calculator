@@ -250,9 +250,10 @@ describe('Insidiousness — rolls on a reactively inflicted debuff (player side)
         ).toEqual([['reaction-a'], ['reaction-a'], ['reaction-a']]);
     });
 
-    it('two such reactions on one carrier each fire once per chain: bounded, no throw', () => {
-        // reaction-a's Chain Down wakes reaction-b (and vice versa); each skips an infliction
-        // already carrying its own id, so the chain stops after both have fired once.
+    it('two such reactions in one slot are one clause: each fires once per cast, bounded', () => {
+        // Both ride `on-debuff-inflicted` in the passive slot, so the lineage rule keys them as
+        // one clause (`reactionKey`): Seed Down wakes each once, and neither's output wakes the
+        // other.
         const events = run(
             BASE({
                 shipSkills: kit([
@@ -264,12 +265,12 @@ describe('Insidiousness — rolls on a reactively inflicted debuff (player side)
         );
         const perRound = (name: string) =>
             events.filter((e) => e.type === 'debuff-applied' && e.buffName === name).length;
-        // Per cast: Seed Down wakes a and b once each; a's output wakes b, b's output wakes a.
-        expect(perRound(CHAIN)).toBe(6);
-        expect(perRound('Echo Down')).toBe(6);
+        // Per cast (3 rounds): Seed Down wakes a and b once each.
+        expect(perRound(CHAIN)).toBe(3);
+        expect(perRound('Echo Down')).toBe(3);
     });
 
-    it('two such reactions: each of the four reaction firings per cast is a roll of its own', () => {
+    it('two such reactions: each of the two reaction firings per cast is a roll of its own', () => {
         const draws = scriptProcs('attacker', []);
         const events = run(
             BASE({
@@ -280,12 +281,12 @@ describe('Insidiousness — rolls on a reactively inflicted debuff (player side)
                 ]),
             })
         );
-        // Every roll fails: per cast, the cast's own roll plus four reaction firings.
-        expect(draws()).toBe(15);
+        // Every roll fails: per cast, the cast's own roll plus two reaction firings.
+        expect(draws()).toBe(9);
         expect(procHits(events, 'attacker', 'strong')).toEqual([]);
 
         // Positive on the same board: the cast's roll fails and the FIRST reaction firing's roll
-        // passes, so `strong` is hit once per cast and the cap stops the other three draws.
+        // passes, so `strong` is hit once per cast and the cap stops the other draw.
         const draws2 = scriptProcs('attacker', CAST_FAILS_REACTION_PASSES);
         const events2 = run(
             BASE({

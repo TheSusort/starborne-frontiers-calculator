@@ -1286,6 +1286,11 @@ export interface Ability {
      *  so the slot alone cannot tell the two apart. Every suppression site reads this field.
      *  `equipmentAbilityProvenance.test.ts` pins both directions over the real corpus. */
     source?: 'equipment';
+    /** The one gear-set bonus or implant an equipment ability came from (`source: 'equipment'`),
+     *  shared by every ability that one effect builds — Warpstrike's two halves carry one. The
+     *  lineage rule keys an equipment effect on it (`reactionKey` in triggers.ts). Absent on a
+     *  ship's own skill. */
+    equipmentEffectId?: string;
     /** Hit filter for attacked-family reactive triggers (on-attacked): 'crit' fires only
      *  on critting hits, 'non-crit' only on non-critting hits. Absent → fires on any hit.
      *  Isha parses as a mutually exclusive pair (3% non-crit / 6% crit — "instead"). */
