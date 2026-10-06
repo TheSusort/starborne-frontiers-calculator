@@ -104,6 +104,7 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator: APEX's passive shield now triggers at most once per skill cast.",
     "Combat simulator: APEX's Block Shield now triggers at most once per enemy per skill cast.",
     "Combat simulator: Xcellence's resist strike now hits each resisting enemy once per skill cast.",
+    'Combat simulator: a passive no longer reacts to effects its own reaction set off.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

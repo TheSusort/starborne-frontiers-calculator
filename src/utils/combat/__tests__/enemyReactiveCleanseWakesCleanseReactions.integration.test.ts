@@ -6,10 +6,12 @@
  * Debuffs") removes nothing and is not a cleanse.
  *
  * Chained cleanses trigger too (owner ruling 66): a cleanse that a cleanse reaction provoked wakes
- * the reactions again, and only the runaway cap (`MAX_REACTION_CHAIN_DEPTH`) ends such a loop. The
- * loop board pairs Pestilence (re-inflicts Corrosion on the cleanser) with an enemy that cleanses
- * itself whenever it is debuffed: cleanse → Corrosion → cleanse → … alternates down the chain, a
- * cleanse at every even depth and Pestilence's Corrosion at every odd one, until the cap.
+ * the reactions again — but a passive never fires on an event its own earlier firing caused (the
+ * lineage rule, owner ruling 2026-10-06; `reactionKey` in triggers.ts). So the cleanser's passive
+ * cleanses once per chain: the reactions it wakes cannot wake it again. The loop board pairs
+ * Pestilence (re-inflicts Corrosion on the cleanser) with an enemy that cleanses itself whenever it
+ * is debuffed: a cast debuff → cleanse → Larkspur and Pestilence answer → Pestilence's Corrosion
+ * lands, and the cleanser's passive, already in that chain, stays silent.
  *
  * Real parsed passives (buildTraceShip, refit 4) except the loop board's self-cleanser and the
  * hand-built applier/hitter. Mounted on both sides.
@@ -17,7 +19,7 @@
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { runCombat } from '../engine';
 import { createEventBus } from '../events';
-import { MAX_REACTION_CHAIN_DEPTH, reactionChainProbe } from '../triggers';
+import { reactionChainProbe } from '../triggers';
 import { setupKeyedRng } from '../../calculators/rateAccumulator';
 import { csvAvailable } from '../../../../scripts/lib/shipSkillCsv';
 import { shipDataAvailable } from '../../../../scripts/lib/shipDataSnapshot';
@@ -146,20 +148,21 @@ describe('Purifier’s on-damaged self-cleanse wakes them too; Heliodor’s dura
         other: [{ id: 'cleanser', position: 'M4', speed: 1, skills: passiveOnly(ship) }],
     });
     for (const side of ['player', 'enemy'] as const) {
-        it(`${side}-side: Purifier is hit while holding Corrosion → the chain runs to the cap`, () => {
-            // Grif's reactive hit is direct damage (ruling 36), so it wakes Purifier's on-damaged
-            // cleanse again, which removes Pestilence's fresh Corrosion and wakes all three again
-            // (ruling 66). Cleanses sit at the even chain depths 0, 2, …, the reactions at the odd
-            // ones, and the cap ends the loop.
+        it(`${side}-side: Purifier is hit while holding Corrosion → one cleanse, each reacts once`, () => {
+            // The hit wakes Purifier's on-damaged cleanse (1), which removes the Corrosion and
+            // wakes Larkspur, Pestilence and Grif once each (1, 1, 1). Grif's reactive hit is
+            // direct damage (ruling 36), but Purifier's passive is already in that chain, so it
+            // does not cleanse Pestilence's fresh Corrosion: the chain ends there (Fight 6).
             reactionChainProbe.dropped = 0;
-            const reactions = MAX_REACTION_CHAIN_DEPTH / 2;
+            reactionChainProbe.lineageDropped = 0;
             expect(run(teams('Purifier'), side, 'cleanser')).toEqual({
-                cleanses: reactions + 1,
-                larkspurBuffs: reactions,
-                pestilenceCorrosions: reactions,
-                grifHits: reactions,
+                cleanses: 1,
+                larkspurBuffs: 1,
+                pestilenceCorrosions: 1,
+                grifHits: 1,
             });
-            expect(reactionChainProbe.dropped).toBeGreaterThan(0);
+            expect(reactionChainProbe.lineageDropped).toBeGreaterThan(0);
+            expect(reactionChainProbe.dropped).toBe(0);
         });
         it(`${side}-side: Heliodor is hit while holding Corrosion → its duration cut wakes nothing`, () => {
             expect(run(teams('Heliodor'), side, 'cleanser')).toEqual({
@@ -172,7 +175,7 @@ describe('Purifier’s on-damaged self-cleanse wakes them too; Heliodor’s dura
     }
 });
 
-describe('a cleanse provoked by a cleanse reaction wakes the reactions again, up to the cap', () => {
+describe('a cleanse reaction cannot wake the cleanse that set it off', () => {
     /** Cleanses one debuff from itself every time it is debuffed (a DoT stack included). */
     const selfCleanser: ShipSkills = {
         slots: [
@@ -209,16 +212,21 @@ describe('a cleanse provoked by a cleanse reaction wakes the reactions again, up
         numRounds: ROUNDS,
     };
     for (const side of ['player', 'enemy'] as const) {
-        it(`${side}-side: each round's cleanse/Corrosion loop runs to the cap and stops`, () => {
+        it(`${side}-side: each round, one cleanse and one answer from each reactor`, () => {
+            // Each round: the applier's Attack Down II wakes the cleanser (1 cleanse), which wakes
+            // Larkspur and Pestilence once each (1 buff, 1 Corrosion). Pestilence's Corrosion is a
+            // debuff on the cleanser, but the cleanser's passive is already in that chain, so it
+            // stays. Three rounds, three of each.
             reactionChainProbe.dropped = 0;
-            const perRound = MAX_REACTION_CHAIN_DEPTH / 2;
+            reactionChainProbe.lineageDropped = 0;
             expect(run(teams, side)).toEqual({
-                cleanses: (perRound + 1) * ROUNDS,
-                larkspurBuffs: perRound * ROUNDS,
-                pestilenceCorrosions: perRound * ROUNDS,
+                cleanses: ROUNDS,
+                larkspurBuffs: ROUNDS,
+                pestilenceCorrosions: ROUNDS,
                 grifHits: 0,
             });
-            expect(reactionChainProbe.dropped).toBeGreaterThan(0);
+            expect(reactionChainProbe.lineageDropped).toBeGreaterThan(0);
+            expect(reactionChainProbe.dropped).toBe(0);
         });
     }
 });

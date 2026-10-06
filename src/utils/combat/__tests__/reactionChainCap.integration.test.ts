@@ -1,17 +1,17 @@
 /**
- * Chained reactions trigger (owner ruling 66); only a hard cap stops a runaway loop.
- * `MAX_REACTION_CHAIN_DEPTH` is that cap. This file pins how it was sized (measured 2026-10-05):
- *   - the real-kit fingerprint battles never reach it: their deepest chain is 1;
+ * Chained reactions trigger (owner ruling 66), and the lineage rule ends every chain: a passive
+ * never fires on an event its own earlier firing caused (`reactionKey` in triggers.ts, owner
+ * ruling 2026-10-06). `MAX_REACTION_CHAIN_DEPTH` is only a safety net behind it. This file pins
+ * that no board reaches the net (measured 2026-10-06):
+ *   - the real-kit fingerprint battles: deepest chain 1;
  *   - a board of reacting real kits (Purifier, Opal and Stalwart against Hemlock, Wrecker and
- *     Ravager, each named ship in turn as the subject, on both sides) settles by depth 3;
- *   - a loop board reaches it and still finishes: Nuqtu with Grif/Pestilence/Larkspur against
- *     Purifier, AEGIS, Nuqtu and Hermes, where the two opposing Nuqtus answer each other's buff
- *     gains, doubling at every step (Purifier never has a debuff to cleanse there, so Grif does
- *     not loop);
+ *     Ravager, each named ship in turn as the subject, on both sides): deepest chain 1;
+ *   - Nuqtu with Grif/Pestilence/Larkspur against Purifier, AEGIS, Nuqtu and Hermes, where the two
+ *     opposing Nuqtus answer each other's buff gains: deepest chain 5, each side;
  *   - APEX with Provider/Opal/Shepherd against Provider/Opal/Shepherd/Warden, where every debuff
- *     wakes Provider's hit-and-debuff and APEX's Block Shield, settles by depth 6 without
- *     reaching it: Block Shield fires at most once per enemy per root cast
- *     (`Ability.oncePerRootCast`).
+ *     wakes Provider's hit-and-debuff and APEX's Block Shield: deepest chain 5, each side.
+ * The two loop boards also report lineage drops, so the rule — not a quiet board — is what ends
+ * their chains.
  */
 import { describe, it, expect, beforeAll } from 'vitest';
 import {
@@ -24,7 +24,7 @@ import { runSeededBattle } from '../../simulator/seededRuns';
 import { buildTraceShip } from '../../../../scripts/lib/traceShipFactory';
 import { csvAvailable } from '../../../../scripts/lib/shipSkillCsv';
 import { shipDataAvailable } from '../../../../scripts/lib/shipDataSnapshot';
-import { MAX_REACTION_CHAIN_DEPTH, reactionChainProbe } from '../triggers';
+import { reactionChainProbe } from '../triggers';
 import type { BattleSimulationInput } from '../../calculators/battleSimulator';
 
 beforeAll(() => {
@@ -73,11 +73,12 @@ const board = (
 const probe = (input: BattleSimulationInput, seed: number) => {
     reactionChainProbe.maxDepth = 0;
     reactionChainProbe.dropped = 0;
+    reactionChainProbe.lineageDropped = 0;
     runSeededBattle(input, seed);
     return { ...reactionChainProbe };
 };
 
-describe('the reaction-chain cap', () => {
+describe('the reaction-chain safety net', () => {
     it('is never reached by the real-kit fingerprint battles', () => {
         const reached: string[] = [];
         for (const name of corpusNames()) {
@@ -90,7 +91,7 @@ describe('the reaction-chain cap', () => {
         expect(reached).toEqual([]);
     }, 120_000);
 
-    it('is never reached on a board of reacting real kits; chains settle by depth 3', () => {
+    it('is never reached on a board of reacting real kits; chains settle by depth 1', () => {
         const allies = ['Hemlock', 'Wrecker', 'Ravager'];
         const enemies = ['Purifier', 'Bedrock', 'Opal', 'Stalwart'];
         const subjects = ['Chakara', 'Judge', 'Grif', 'Incinerator', 'Provider', 'Sentinel'];
@@ -102,12 +103,11 @@ describe('the reaction-chain cap', () => {
                 deepest = Math.max(deepest, p.maxDepth);
             }
         }
-        expect(deepest).toBeGreaterThan(0);
-        expect(deepest).toBeLessThanOrEqual(3);
+        expect(deepest).toBe(1);
     }, 120_000);
 
     it.each([false, true])(
-        'stops the cleanse loop: Grif, Pestilence, Larkspur and Nuqtu against Purifier, AEGIS, Nuqtu, Hermes (mirror=%s)',
+        'the Nuqtu loop board ends on the lineage rule: Grif, Pestilence, Larkspur and Nuqtu against Purifier, AEGIS, Nuqtu, Hermes (mirror=%s)',
         (mirror) => {
             const p = probe(
                 board(
@@ -118,14 +118,15 @@ describe('the reaction-chain cap', () => {
                 ),
                 1
             );
-            expect(p.maxDepth).toBe(MAX_REACTION_CHAIN_DEPTH);
-            expect(p.dropped).toBeGreaterThan(0);
+            expect(p.lineageDropped).toBeGreaterThan(0);
+            expect(p.maxDepth).toBe(5);
+            expect(p.dropped).toBe(0);
         },
         60_000
     );
 
     it.each([false, true])(
-        'the debuff board settles under the cap: APEX, Provider, Opal and Shepherd against Provider, Opal, Shepherd, Warden (mirror=%s)',
+        'the APEX debuff board ends on the lineage rule: APEX, Provider, Opal and Shepherd against Provider, Opal, Shepherd, Warden (mirror=%s)',
         (mirror) => {
             const p = probe(
                 board(
@@ -136,9 +137,8 @@ describe('the reaction-chain cap', () => {
                 ),
                 1
             );
-            // Instrument: chains really form here, several reactions deep.
-            expect(p.maxDepth).toBeGreaterThan(1);
-            expect(p.maxDepth).toBeLessThanOrEqual(6);
+            expect(p.lineageDropped).toBeGreaterThan(0);
+            expect(p.maxDepth).toBe(5);
             expect(p.dropped).toBe(0);
         },
         60_000

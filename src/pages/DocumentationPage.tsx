@@ -3199,13 +3199,18 @@ const DocumentationPage: React.FC = () => {
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Chained reactions:</span> A
-                                        reaction can set off further reactions, on either team: an
-                                        enemy cleanse wakes Grif, whose hit wakes Purifier&apos;s
-                                        cleanse, which wakes Grif again. A chain that could run
-                                        forever stops after eight steps. Reactions to the same event
-                                        resolve in turn order across both teams, fastest ship first,
-                                        and a reaction set off by another reaction resolves after
-                                        it, within the same turn.
+                                        reaction can set off further reactions, on either team, but
+                                        a passive never reacts to something its own earlier reaction
+                                        set off. Hit an enemy Purifier and his passive cleanses 2
+                                        debuffs; that wakes Grif, whose hit does not make
+                                        Purifier&apos;s passive cleanse again. On Purifier&apos;s
+                                        own turn his skill cleanses, Grif hits him, and his passive
+                                        does cleanse, because that chain started with his skill. A
+                                        passive still reacts once to each separate event: Provider
+                                        hits twice when APEX lands two debuffs. Reactions to the
+                                        same event resolve in turn order across both teams, fastest
+                                        ship first, and a reaction set off by another reaction
+                                        resolves after it, within the same turn.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Purges:</span> A purge on a
