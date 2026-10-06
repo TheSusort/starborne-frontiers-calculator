@@ -3,14 +3,15 @@
  *
  * A ship carrying a `counter` reactive ability (trigger `on-attacked`) hits its attacker back for
  * `owner.attack × multiplier/100`, mitigated by the attacker's defence/affinity. The counter:
- *   - is mitigated/crit-walked through the engine's `applyCounterAttack` (no `attacked` event → no
- *     re-counter — a counter-of-a-counter never fires);
+ *   - is mitigated/crit-walked through the engine's `applyCounterAttack`; its `attacked` carries
+ *     `fromCounter`, which a plain counter like this one does not answer (`counterAnswersCounters`);
  *   - collapses the per-hit `attacked` events of ONE SUB-ATTACK to a SINGLE counter, while each
  *     sub-attack of a `hits: N` cast counters on its own (the guard key carries the triggering
  *     event's `subAttackIndex` since the multi-hit epic's PR6; before that it was keyed on the
  *     turn alone and a 3-hit cast drew ONE counter);
- *   - obeys the `requirePrimaryTarget` gate (the live emit always sets isPrimaryTarget:true, so the
- *     false-case is asserted at the executor gate level; the true-case is asserted end-to-end).
+ *   - obeys the `requirePrimaryTarget` gate (the false-case is asserted at the executor gate level
+ *     here and end-to-end in primaryTargetOncePerSubAttack.integration.test.ts; the true-case is
+ *     asserted end-to-end).
  *
  * END-TO-END harness: driven through `runCombat` in healing mode (mirrors
  * reactiveExtraAction.test.ts) — the player FOCUS is the heal target ('attacker') and carries the
@@ -216,16 +217,16 @@ describe('G PR1 — counter executor branch (end-to-end via runCombat)', () => {
         expect(totalPerTargetDamage(result, 'foe')).toBeGreaterThan(0);
     });
 
-    // (c-true) PRIMARY-TARGET gate fires on a normal primary hit (the live emit sets
-    // isPrimaryTarget:true). The counter still lands.
+    // (c-true) PRIMARY-TARGET gate fires on a normal primary hit (the cast's hit on its anchor).
+    // The counter still lands.
     it('(c) requirePrimaryTarget:true → the counter DOES fire on a normal primary hit', () => {
         const result = runCombat(counterBase(counterSkills(50, { requirePrimaryTarget: true })));
         expect(totalPerTargetDamage(result, 'foe')).toBeGreaterThan(0);
     });
 
-    // (d) NO RE-COUNTER: the enemy also carries a counter ability. The player's counter hits the
-    // enemy WITHOUT emitting an `attacked` event, so the enemy's own counter never fires → the
-    // player owner ('attacker') takes ZERO counter-of-counter damage.
+    // (d) NO RE-COUNTER: the enemy also carries a plain counter ability. The player's counter hit
+    // carries `fromCounter`, which a plain counter does not answer → the player owner ('attacker')
+    // takes ZERO counter-of-counter damage.
     it("(d) the counter hit does not itself trigger the attacked ship's counter (no re-counter)", () => {
         idCounter = 0;
         // Enemy carries BOTH a basic 100% active (to attack the focus) AND a counter passive.
@@ -266,8 +267,8 @@ describe('G PR1 — counter executor branch (end-to-end via runCombat)', () => {
         // The player's counter DID fire (the enemy took counter damage)...
         expect(totalPerTargetDamage(result, 'foe')).toBeGreaterThan(0);
         expect(reactiveHitsOn(withEnemyCounter, 'foe')).toBeGreaterThan(0);
-        // ...but the enemy's counter NEVER fired in response — the counter walk emits no `attacked`
-        // event, so no reactive hit is ever credited BACK to the player owner. Read off the
+        // ...but the enemy's counter NEVER fired in response, so no reactive hit is ever credited
+        // BACK to the player owner. Read off the
         // reactive channel, because `perTargetDamage['attacker']` now also carries the enemy's
         // ordinary positional cast (see `reactiveHitsOn`).
         expect(reactiveHitsOn(withEnemyCounter, 'attacker')).toBe(0);

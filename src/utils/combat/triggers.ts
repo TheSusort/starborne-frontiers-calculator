@@ -226,6 +226,12 @@ export interface Intent {
      *  wrapper, which drops an intent whose own key is already here (the lineage rule — see
      *  `reactionKey`). Absent reads as empty. */
     reactionAncestry?: readonly string[];
+    /** The incoming sub-attack whose reaction chain this intent belongs to (`setHitRoot`): the
+     *  cast sub-attack that set the chain off, or the first hit a root-less reaction landed (a
+     *  round-start proc). Stamped by `registerReactiveListeners`' enqueue wrapper from the root in
+     *  scope; absent for a reaction to a phase event that has not hit anyone. Read through
+     *  `claimHitRoot` when this intent's resolution lands a hit. */
+    hitRoot?: string;
     /** Which bus event woke this intent, as a run-wide increasing number: every listener of one
      *  emitted event stamps the same value, and a later event a larger one. The engine's drain
      *  resolves the intents of the earliest event first, owner by owner in turn order (ruling 39).
@@ -287,9 +293,8 @@ export interface Intent {
         /** The triggering hit's crit outcome (on-attacked -> attacked.didCrit), read by the
          *  reactive cleanse executor to pick `critCount` over `count` (Reactive Ward). */
         didCrit?: boolean;
-        /** True when the owner was the primary (directly-targeted) victim of the
-         *  triggering attack (on-attacked -> attacked.isPrimaryTarget). Stalwart's counter
-         *  gates on this so splash/covered victims do not counter. */
+        /** The triggering hit was a primary-target hit on the owner (on-attacked ->
+         *  attacked.isPrimaryTarget, see its doc). Stalwart's counter gates on this. */
         isPrimaryTarget?: boolean;
         /** True when the triggering hit reduced the owner's SHIELD pool (absorbed > 0).
          *  Sourced at the `attacked` emit and copied here by the on-attacked listener. Nyxen's
@@ -721,6 +726,16 @@ function passesSourceSlotFilter(
     return sourceSlot !== undefined && (filter as readonly SkillSlot[]).includes(sourceSlot);
 }
 
+/**
+ * Whether a counter-attack's hit wakes `ability`. Every reaction other than a counter hears it. A
+ * counter does only when it is a "directly damaged as a primary target" one: in game (owner ruling
+ * R92), Stalwart A hits Stalwart B → B counters → A counters back → B does not counter again. Other
+ * counters (Centurion, Nyxen) never answer a counter (#163) — unruled for them.
+ */
+function counterAnswersCounters(ability: Ability): boolean {
+    return ability.config.type !== 'counter' || ability.config.requirePrimaryTarget === true;
+}
+
 export function registerReactiveListeners(args: {
     bus: CombatEventBus;
     perOwner: { ownerId: string; reactiveAbilities: ReactiveAbility[] }[];
@@ -817,6 +832,7 @@ export function registerReactiveListeners(args: {
             chainDepth: resolvingIntent ? (resolvingIntent.chainDepth ?? 0) + 1 : 0,
             reactionAncestry,
             eventSeq: listeningEventSeq ?? 0,
+            ...(currentHitRoot !== undefined ? { hitRoot: currentHitRoot } : {}),
         });
     };
     // Same-side ally, OWNER EXCLUDED — for a trigger whose skill text names "another/other
@@ -1721,8 +1737,7 @@ export function registerReactiveListeners(args: {
                         // absent → every hit. The intent is per-EVENT (not the shared const):
                         // eventCtx captures the attacker for "on that enemy" counter routing.
                         if (e.targetId !== ownerId) return;
-                        // A counter never wakes a counter (#163); it wakes every other reaction.
-                        if (e.fromCounter && ra.ability.config.type === 'counter') return;
+                        if (e.fromCounter && !counterAnswersCounters(ra.ability)) return;
                         const filter = ra.ability.triggerCritFilter;
                         if (filter === 'crit' && !e.didCrit) return;
                         if (filter === 'non-crit' && e.didCrit) return;
@@ -1984,8 +1999,7 @@ export function registerReactiveListeners(args: {
                         // inflating numbers); an EMPTY filter array is treated as absent (any
                         // ally), not never-match.
                         if (isOpposing(e.targetId)) return;
-                        // A counter never wakes a counter (#163) — Centurion's ally branch.
-                        if (e.fromCounter && ra.ability.config.type === 'counter') return;
+                        if (e.fromCounter && !counterAnswersCounters(ra.ability)) return;
                         const filter = ra.ability.triggerCritFilter;
                         if (filter === 'crit' && !e.didCrit) return;
                         if (filter === 'non-crit' && e.didCrit) return;
@@ -2680,7 +2694,7 @@ export interface IntentExecContext {
     flushConsequenceLogs?: () => void;
     /** Apply a full mitigated/crit counter walk from `ownerId` to `attackerId`.
      *  `abilityId` keys the dedicated counter crit-gate. The hit raises an `attacked` marked
-     *  `fromCounter`, which wakes every "When directly damaged" reaction except a counter.
+     *  `fromCounter` (see `counterAnswersCounters` for which counters answer it).
      *  Returns the mitigated/credited amount + crit flag so the caller can surface the proc in
      *  the combat log (reactive-damage-performed); void/0 when the counter was guarded (dead
      *  owner/attacker, self-hit, non-positive) or the delegate is absent (unit fixtures). */
@@ -4842,13 +4856,46 @@ const seqOfEvent = (e: object): number => {
  *  `registerReactiveListeners`' enqueue wrapper. */
 let resolvingIntent: Intent | undefined;
 
+/**
+ * The incoming sub-attack whose reaction chain is resolving right now (owner ruling R92, in game
+ * 2026-10-06): a "when directly damaged as a primary target" trigger fires at most once per
+ * victim per sub-attack, counting every reaction that sub-attack sets off. Ripper crits Stalwart →
+ * Stalwart counters Ripper and Sentinel's on-crit hit strikes Stalwart → no second counter, because
+ * the counter and Sentinel's hit belong to Ripper's one sub-attack even though neither caused the
+ * other (so the lineage rule, `reactionKey`, cannot see it).
+ *
+ * The engine sets it for each cast sub-attack (`setHitRoot`); every intent enqueued while it is set
+ * carries it (`Intent.hitRoot`), and `executeIntent` restores it while that intent resolves, so a
+ * reaction's hit and everything that hit wakes stay in the same chain. A reaction with no root
+ * (round start, end of round) roots the chain at its own first hit (`claimHitRoot`).
+ */
+let currentHitRoot: string | undefined;
+
+/** Engine-side: the root for the cast sub-attack now resolving, or undefined outside a turn. */
+export function setHitRoot(root: string | undefined): void {
+    currentHitRoot = root;
+}
+
+/** The root a reactive hit landing now belongs to — see `currentHitRoot`. With none in scope the
+ *  hit roots its own chain: `mint()` names it, and the resolving intent keeps it for the rest of
+ *  its resolution. */
+export function claimHitRoot(mint: () => string): string {
+    if (currentHitRoot !== undefined) return currentHitRoot;
+    const root = mint();
+    if (resolvingIntent) currentHitRoot = root;
+    return root;
+}
+
 export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
     const outer = resolvingIntent;
+    const outerRoot = currentHitRoot;
     resolvingIntent = intent;
+    currentHitRoot = intent.hitRoot;
     try {
         resolveIntent(intent, rawCtx);
     } finally {
         resolvingIntent = outer;
+        currentHitRoot = outerRoot;
     }
 }
 
@@ -6451,8 +6498,8 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
 
     if (cfg.type === 'counter') {
         // A live counter-attack — the owner hits its attacker back via the engine's full
-        // mitigated/crit walk (applyCounterAttack). Its `attacked` carries `fromCounter`, which no
-        // counter reacts to, so counters never ping-pong (#163).
+        // mitigated/crit walk (applyCounterAttack). Its `attacked` carries `fromCounter`; which
+        // counters answer it is `counterAnswersCounters`.
         //
         // GATE ORDERING (intentional DEVIATION from the `damage` branch's proc→once-per-round
         // first): the CHEAP, NON-CONSUMING boolean gates run FIRST (primary-target, shield-hit,

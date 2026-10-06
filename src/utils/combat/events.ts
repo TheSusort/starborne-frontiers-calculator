@@ -957,10 +957,11 @@ export type CombatEvent =
            *  non-positional emit has no funnel outcome in scope, so consumers fall back to
            *  `damage` there. */
           takenDamage?: number;
-          /** True when the victim was the directly-targeted (primary) target of the
-           *  attack, false/absent for splash/covered AoE victims. The non-positional emit only
-           *  ever sees the focus victim, so it is always true there; `emitPerVictimAttacked`
-           *  sets it false for covered cells. Stalwart's counter gates on this. */
+          /** True when this hit is a PRIMARY-TARGET hit (owner ruling R92): a cast's hit on its
+           *  anchor, or a counter's / proc's hit that is the first aimed hit on this victim in
+           *  its sub-attack's reaction chain (engine.ts `primaryHitsSpent`). False/absent for
+           *  splash/covered AoE victims and for a later hit in the same chain. Every "directly
+           *  damaged as a primary target" trigger gates on this. */
           isPrimaryTarget?: boolean;
           /** True when this hit actually reduced the victim's shield pool
            *  (absorbed > 0). Sourced from the shield-first drain at the emit
@@ -982,8 +983,8 @@ export type CombatEvent =
            *  victim's once-per-attack guards treat each one as its own attack. Absent on a cast
            *  hit. The combat log renders these hits from `reactive-damage-performed` instead. */
           reactiveHitId?: number;
-          /** The hit is a counter-attack. A counter never wakes a counter (#163): the `counter`
-           *  reaction ignores an `attacked` carrying this. Every other reaction hears it. */
+          /** The hit is a counter-attack. Every reaction hears it except a counter that
+           *  `counterAnswersCounters` (triggers.ts) excludes. */
           fromCounter?: true;
       };
 

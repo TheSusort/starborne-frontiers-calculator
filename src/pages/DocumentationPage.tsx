@@ -3196,9 +3196,27 @@ const DocumentationPage: React.FC = () => {
                                         direct hits like any skill hit. They wake &ldquo;when
                                         directly damaged&rdquo; passives, shorten Stasis, are
                                         redirected by Protection, use the attacker&apos;s shield
-                                        penetration and spend Exposed. A counter-attack never sets
-                                        off another counter-attack. Damage over time and Bomb
-                                        explosions are not direct hits.
+                                        penetration and spend Exposed. A counter-attack sets off
+                                        another counter-attack only when that one is a
+                                        &ldquo;primary target&rdquo; counter like Stalwart&apos;s.
+                                        Damage over time and Bomb explosions are not direct hits.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
+                                        <span className="text-primary">
+                                            &ldquo;As a primary target&rdquo; reactions:
+                                        </span>{' '}
+                                        A &ldquo;when directly damaged as a primary target&rdquo;
+                                        passive (Stalwart, Nosorog, Malvex) fires at most once per
+                                        incoming attack, counting every reaction that attack sets
+                                        off. The first aimed hit uses it up &mdash; the attack
+                                        itself, a counter-attack, or a passive hit such as
+                                        Sentinel&apos;s or Provider&apos;s. An area attack&apos;s
+                                        hit on a ship it was not aimed at does not count. Each
+                                        attack of a multi-attack skill (Enforcer) brings its own.
+                                        Ripper crits Stalwart, Stalwart counters Ripper, and
+                                        Sentinel&apos;s follow-up hit draws no second counter. Plain
+                                        &ldquo;when directly damaged&rdquo; passives (Isha, Opal)
+                                        fire on every hit.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Chained reactions:</span> A
@@ -4758,10 +4776,11 @@ const DocumentationPage: React.FC = () => {
                                     repairs — not just the primary target, on both teams. A few more
                                     ship passives are now modeled too: <strong>Nosorog</strong>{' '}
                                     reflects a portion of the damage it takes back at an attacker
-                                    that hits it as its primary target, counter-attacks and passive
-                                    hits included (never a reflected hit, and not on splash or
-                                    area-of-effect hits; Stalwart&apos;s counter and Legion
-                                    Discipline II and Malvex&apos;s shield follow the same rule),{' '}
+                                    that hits it as its primary target, at most once per incoming
+                                    attack and its reactions (never a reflected hit, and not on
+                                    splash or area-of-effect hits; Stalwart&apos;s counter and
+                                    Legion Discipline II follow the same rule, and Malvex&apos;s
+                                    shield comes from skill hits only),{' '}
                                     <strong>Chakara&apos;s</strong> charged skill bypasses part of
                                     the enemy&apos;s Defense, and <strong>Anemone</strong>,{' '}
                                     <strong>Panon</strong>, <strong>Wusheng</strong>, and{' '}

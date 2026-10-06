@@ -174,6 +174,8 @@ import {
     partitionReactiveAbilities,
     provokerOf,
     registerReactiveListeners,
+    claimHitRoot,
+    setHitRoot,
     selfBuffNamesForOwners,
     selfBuffStacksForOwner,
     victimEnemyBuffs,
@@ -5728,6 +5730,34 @@ export function runCombat(rawInput: CombatEngineInput): {
     const stasisBreakPending = new Map<string, number>();
     /** Mints `attacked.reactiveHitId` — one id per counter-attack / reactive proc hit. */
     let reactiveHitSeq = 0;
+    /**
+     * Owner ruling R92 (in game 2026-10-06): a victim is a PRIMARY TARGET at most once per incoming
+     * sub-attack, counting the whole reaction chain that sub-attack sets off (`setHitRoot` in
+     * triggers.ts names the chain). Any aimed hit spends it — the cast's hit on its anchor, a
+     * counter, a proc; a covered hit of an area pattern neither counts nor spends. The FIRST aimed
+     * hit on a victim in a chain is the primary-target hit; Stalwart's counter and buff and
+     * Nosorog's reflect read that one answer. Malvex's shield is a damage-taken leech, which only
+     * cast hits proc (`procLeechesForVictim`), so it reads the cast's `isAnchor`. Keys are
+     * `victimId|root`; roots are unique for the whole run.
+     */
+    const primaryHitsSpent = new Set<string>();
+    /** Spends `victimId`'s primary-target allowance in chain `root`; true when it was unspent. */
+    const spendPrimaryHit = (victimId: string, root: string): boolean => {
+        const key = `${victimId}|${root}`;
+        if (primaryHitsSpent.has(key)) return false;
+        primaryHitsSpent.add(key);
+        return true;
+    };
+    /** The acting turn's cast identity — the prefix of its sub-attacks' chain roots. */
+    let castRootBase: string | undefined;
+    let castRootSeq = 0;
+    /** Chain root of the acting turn's sub-attack `subAttackIndex`. */
+    const castHitRoot = (subAttackIndex: number): string =>
+        `${castRootBase ?? 'cast:none'}:${subAttackIndex}`;
+    /** Names the chain of a reactive hit that has no root in scope (a round-start proc). */
+    let mintedHitRootSeq = 0;
+    const mintHitRoot = (): string => `hit:${++mintedHitRootSeq}`;
+    setHitRoot(undefined);
     /** Reduce `targetId`'s Stasis once per queued hit and clear the queue for it. */
     const spendStasisHits = (targetId: string): void => {
         const owed = stasisBreakPending.get(targetId);
@@ -6294,10 +6324,11 @@ export function runCombat(rawInput: CombatEngineInput): {
                  *  Never reconstructed by dividing by `targetMitigation` — that is lossy and
                  *  undefined at a factor of 0. */
                 preMitigationDamage?: number;
-                /** True when this victim IS the attacker's resolved anchor/primary
-                 *  target (Nosorog's `requirePrimaryTarget` reflect gate). Undefined/true for every
-                 *  non-positional (inherently single-target) call site; explicitly false only for
-                 *  a covered/splash footprint victim. */
+                /** This hit is a primary-target hit (Nosorog's `requirePrimaryTarget` reflect
+                 *  gate): a cast's hit on its anchor, or a counter's / proc's hit that was the
+                 *  first aimed hit on this victim in its chain (`primaryHitsSpent`). False for a
+                 *  covered footprint victim and for a later hit in the chain. Undefined reads as
+                 *  true — the non-positional cast sites, which bind one victim. */
                 isPrimaryTarget?: boolean;
             }
             // AppliedVictimDamage, not VictimDamageOutcome: this funnel always sets
@@ -7182,8 +7213,9 @@ export function runCombat(rawInput: CombatEngineInput): {
             // already-dead attacker, but the WEARER dying on the same hit is intentional and
             // covered by test case (e).
             // A counter-attack or reactive damage proc reflects like any other direct hit (owner
-            // ruling 36; Nosorog reacts to them). Loop-safe: the reflected hit carries
-            // `isReflected` and never reflects, and this funnel emits no reaction events.
+            // ruling 36), subject to Nosorog's primary-target gate below. Loop-safe: the reflected
+            // hit carries `isReflected` and never reflects, and this funnel emits no reaction
+            // events.
             if (!cause?.isReflected && hpDamage > 0 && cause?.byDirectDamage !== false) {
                 // Direct slice of the net HP damage: exclude the bomb portion by the raw direct
                 // fraction of the post-block total. bombPortion 0 → directFraction 1 (full reflect);
@@ -7193,11 +7225,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                 const directFraction =
                     totalRaw > 0 ? Math.max(0, (totalRaw - bombPortion) / totalRaw) : 0;
                 const reflectBasis = hpDamage * directFraction;
-                // A requirePrimaryTarget reflect ability (Nosorog) only fires when
-                // this victim was the attacker's anchor — excluded for a covered/splash footprint
-                // victim (cause.isPrimaryTarget === false). Undefined/true (every non-positional
-                // call site, and every requirePrimaryTarget-less ability e.g. Reflect gear set)
-                // keeps it included.
+                // A requirePrimaryTarget reflect ability (Nosorog) fires only on a primary-target
+                // hit (`cause.isPrimaryTarget`, see its doc). An ability without it (the Reflect
+                // gear set) reflects every direct hit.
                 //
                 // LATENT SAFETY: the `undefined → treated as primary` default is correct
                 // ONLY because every real-roster AoE path today is POSITIONAL — applyPositionalDamage
@@ -7207,11 +7237,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // one victim, which IS the primary). A FUTURE non-positional real-roster AoE path would
                 // have to pass isPrimaryTarget explicitly, or a covered victim would wrongly reflect.
                 //
-                // REACTIVE PATHS: a counter-attack or reactive damage proc leaves isPrimaryTarget
-                // undefined, so a Nosorog it strikes reflects (a passive hit counts as a
-                // primary-target hit). Detonation/bomb reactive hits pass bombPortion===total →
-                // directFraction 0 → reflectBasis 0 (no reflect); DoT ticks pass
-                // byDirectDamage:false (guard above).
+                // Counters and procs pass the answer `aimReactiveHit` gave. Detonation/bomb
+                // reactive hits pass bombPortion===total → directFraction 0 → reflectBasis 0 (no
+                // reflect); DoT ticks pass byDirectDamage:false (guard above).
                 const reflectAbilities =
                     reflectBasis > 0
                         ? incomingAbilitiesOf(victim.id).filter(
@@ -7644,13 +7672,22 @@ export function runCombat(rawInput: CombatEngineInput): {
         };
 
         /**
+         * A counter's or proc's hit is aimed at `victimId`, so it is a primary-target hit when it is
+         * the first aimed hit on that victim in its chain (`spendPrimaryHit`). Called once per hit,
+         * before the funnel, so the inline reflect and the `attacked` event read the same answer.
+         */
+        const aimReactiveHit = (victimId: string): boolean =>
+            spendPrimaryHit(victimId, claimHitRoot(mintHitRoot));
+
+        /**
          * The direct-hit consequences a counter-attack or reactive proc shares with a cast hit
          * (ruling 36), run after its funnel application:
          *  - the Stasis reduction, for a victim stasised at impact (`stasisAtImpact`, read before
          *    the funnel) whose hit was not nullified by Barrier;
          *  - the `attacked` event, for every "When directly damaged" reaction — unless the hit was
          *    fully transformed into a DoT, which is not a direct hit (the cast path's rule).
-         * `fromCounter` marks a counter's hit, which no counter answers (#163).
+         * `fromCounter` marks a counter's hit (`counterAnswersCounters` in triggers.ts).
+         * `isPrimaryTarget` is the answer `aimReactiveHit` gave before the funnel.
          */
         const landReactiveHit = (
             owner: CombatActor,
@@ -7659,7 +7696,8 @@ export function runCombat(rawInput: CombatEngineInput): {
             didCrit: boolean,
             outcome: AppliedVictimDamage,
             stasisAtImpact: boolean,
-            fromCounter: boolean
+            fromCounter: boolean,
+            isPrimaryTarget: boolean
         ): void => {
             if (stasisAtImpact && !outcome.barriered) resolveStasisBreaks([victim.id], () => false);
             if ((outcome.transformedToDot ?? 0) > 0) return;
@@ -7669,7 +7707,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 targetId: victim.id,
                 attackerId: owner.id,
                 hitOutcomes: [didCrit],
-                isPrimaryTarget: true,
+                isPrimaryTarget,
                 shieldWasHit:
                     !outcome.barriered &&
                     !outcome.converted &&
@@ -7760,10 +7798,12 @@ export function runCombat(rawInput: CombatEngineInput): {
             // that skips the assignment, not a silently absent field.
             let counterOutcome: AppliedVictimDamage | undefined;
             const counterStasisAtImpact = attackBreaksStasis(owner) && isStasised(attacker.id);
+            const counterIsPrimary = aimReactiveHit(attacker.id);
             try {
                 counterOutcome = applyVictimDamage(raw, attacker, sink, {
                     killerId: owner.id,
                     byDirectDamage: true,
+                    isPrimaryTarget: counterIsPrimary,
                     // #358 ADDENDUM 2: the counter walk folds the ATTACKER's defence through
                     // `victimHitDamage`; `rawPreMit` is the same walk without it.
                     preMitigationDamage: rawPreMit,
@@ -7785,7 +7825,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                 didCrit,
                 counterOutcome,
                 counterStasisAtImpact,
-                true
+                true,
+                counterIsPrimary
             );
             // Surface on the attacker's incoming so it appears on the HP curve (mirror Reflect):
             // the intake the funnel RECORDED, so a portion the attacker's own incoming-block
@@ -8008,10 +8049,13 @@ export function runCombat(rawInput: CombatEngineInput): {
             let procOutcome: AppliedVictimDamage | undefined;
             const procStasisAtImpact =
                 !splashCopy && attackBreaksStasis(owner) && isStasised(victim.id);
+            // A Bomb splash copy is not a direct hit, so it is aimed at no one.
+            const procIsPrimary = !splashCopy && aimReactiveHit(victim.id);
             try {
                 procOutcome = applyVictimDamage(raw, victim, sink, {
                     killerId: ownerId,
                     byDirectDamage: true,
+                    isPrimaryTarget: procIsPrimary,
                     ...(splashCopy ? { isSplashCopy: true } : {}),
                     // #358 ADDENDUM 2: equals `raw` on the flat-basis branch (which folds no
                     // defence at all) and the pre-defence walk on the attack-basis branch.
@@ -8033,7 +8077,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                     didCrit,
                     procOutcome,
                     procStasisAtImpact,
-                    false
+                    false,
+                    procIsPrimary
                 );
             }
             // The intake the funnel RECORDED, mirroring applyCounterAttack (this site is
@@ -10243,6 +10288,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // rate against this attacker (`PlayerTurnResult.rollVictimCrit`).
                 rollVictimCrit: sel.rollVictimCrit,
                 onVictimResolved: (victim, damage, outcome, didCrit, subAttackIndex, isAnchor) => {
+                    // The cast's hit on its anchor is the first aimed hit in that sub-attack's
+                    // chain, so it spends the anchor's primary-target allowance there.
+                    if (isAnchor) spendPrimaryHit(victim.id, castHitRoot(subAttackIndex ?? 0));
                     // Injected per-site leech direction (Note A): standing (player→enemy) vs taken
                     // (enemy→player, which also captures the focus victim's shield-hit flag).
                     onVictimResolved(victim, damage, outcome, didCrit, isAnchor);
@@ -10325,6 +10373,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                     stasisMarkByHit.set(`${victim.id}:${subAttackIndex}`, isAnchor);
                 },
                 onSubAttackStart: (sub) => {
+                    setHitRoot(castHitRoot(sub.index));
                     // Clauses written BEFORE the damage clause apply ahead of this sub-attack's
                     // damage — the locked intra-cast order, now per sub-attack. Sub-attack 0's
                     // before-damage clauses already applied inline at cast time.
@@ -10383,13 +10432,20 @@ export function runCombat(rawInput: CombatEngineInput): {
             //
             // Built as a step list rather than emitted inline so the enemy site can run the first
             // step here and the remainder after its own tail (see `deferEmission`).
-            const steps: { isEvent: boolean; run: () => void }[] = [];
+            // `idx` names the sub-attack a step belongs to: running it puts that sub-attack's chain
+            // root in scope (`setHitRoot`), so the reactions its events wake join its chain.
+            const steps: { isEvent: boolean; idx?: number; run: () => void }[] = [];
+            const runStep = (step: (typeof steps)[number]): void => {
+                if (step.idx !== undefined) setHitRoot(castHitRoot(step.idx));
+                step.run();
+            };
             /** Push sub-attack `idx`'s buffered debuff events, after that index's `attacked`. */
             const pushDebuffSteps = (idx: number): void => {
                 const emitters = debuffEmittersBySubAttack.get(idx);
                 if (!emitters || emitters.length === 0) return;
                 steps.push({
                     isEvent: false,
+                    idx,
                     run: () => {
                         // #413: hand each emitter the index of the bucket it was filed under. This
                         // is the only place that identity still exists — the pairs were built
@@ -10469,6 +10525,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                         if (victims && victims.size > 0) {
                             steps.push({
                                 isEvent: false,
+                                idx,
                                 run: () => emitAttackedForSubAttack(victims, idx),
                             });
                         }
@@ -10491,6 +10548,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                         if (sub && emittingIndices.has(idx)) {
                             steps.push({
                                 isEvent: true,
+                                idx,
                                 run: () =>
                                     emitDeferredAbilityPerformed(
                                         dap,
@@ -10518,6 +10576,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                         if (victims && victims.size > 0) {
                             steps.push({
                                 isEvent: false,
+                                idx,
                                 run: () => emitAttackedForSubAttack(victims, idx),
                             });
                         }
@@ -10539,6 +10598,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                     if (victims && victims.size > 0) {
                         steps.push({
                             isEvent: false,
+                            idx,
                             run: () => emitAttackedForSubAttack(victims, idx),
                         });
                     }
@@ -10559,13 +10619,13 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // list, which keeps relative order intact at the cost of the historical position of
                 // the first event — the strictly safer trade.
                 const hoistFirst = steps.length > 0 && steps[0].isEvent;
-                if (hoistFirst) steps[0].run();
+                if (hoistFirst) runStep(steps[0]);
                 const rest = hoistFirst ? steps.slice(1) : steps;
                 emitDeferred = () => {
-                    for (const step of rest) step.run();
+                    for (const step of rest) runStep(step);
                 };
             } else {
-                for (const step of steps) step.run();
+                for (const step of steps) runStep(step);
             }
             // Per-victim skill-triggered detonation. Each victim HIT by this cast that is STILL ALIVE
             // detonates its OWN containers (no role-scale — full stored stacks). Bombs = full shield
@@ -11558,6 +11618,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // is the one intake that runs in this same turn yet passes byDirectDamage:false,
                 // so it never uses this value as a killer.
                 actingActorId = actor.id;
+                // This turn's cast opens a new reaction chain per sub-attack (`castHitRoot`).
+                castRootBase = `cast:${++castRootSeq}`;
+                setHitRoot(castHitRoot(0));
                 // #367: this actor's turn ctx does not exist until its `runPlayerTurn`
                 // returns, so clear the override HERE (one site — this assignment is shared by all
                 // three turn branches) rather than leaving the previous actor's ctx paired with the
@@ -13329,6 +13392,10 @@ export function runCombat(rawInput: CombatEngineInput): {
                                           !converted &&
                                           shieldBefore > 0 &&
                                           hpDamage < damage;
+                                    // Each hit is a sub-attack aimed at the one bound victim.
+                                    hitOutcomes.forEach((_, i) =>
+                                        spendPrimaryHit(tgt.id, castHitRoot(i))
+                                    );
                                     emitAttacked({
                                         bus,
                                         round: r,
@@ -13411,6 +13478,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // below decrements it). A triggered effect therefore never boosts the hit that
                 // triggered it (the hit's damage was already computed in the turn body).
                 drainReactions();
+                // The cast's reaction chains are closed; end-of-turn reactions start their own.
+                setHitRoot(undefined);
 
                 // Post Turn (combat-system.md section 4): the status CARRIER decrements ALL its
                 // timed statuses by one turn — both its self-buff store and the debuff store of
@@ -13463,6 +13532,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             // reactive emissions would stamp duringTurnOf with the round's last acting actor and
             // buildCombatLog would nest them under that actor's turn instead of the endOfRound group.
             actingActorId = undefined;
+            setHitRoot(undefined);
             // Cleared with it (see `actingTurnCtx`). Behaviourally a no-op at this point — the last
             // actor's ctx is already in `lastTurnCtxByActor`, and it is the SAME object — but the two
             // are kept in lockstep so no future reader has to know that.
