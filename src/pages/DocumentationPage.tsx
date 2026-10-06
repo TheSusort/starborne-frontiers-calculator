@@ -3071,47 +3071,50 @@ const DocumentationPage: React.FC = () => {
                                         Hayyan&apos;s repair, the Firewall implant&apos;s chance)
                                         fires once per stack that lands, within its own
                                         once-per-cast or once-per-round limits. APEX&apos;s 3%
-                                        shield and her Block Shield each fire at most once per skill
-                                        cast, whoever cast it: her active landing two debuffs, plus
-                                        the debuffs Provider answers them with, gives one shield; an
-                                        enemy&apos;s attack that wakes Warden&apos;s debuffs gives
-                                        one more. Reactions to a critical DoT (Crocus, Wisteria) and
-                                        Belladonna&apos;s conversion still fire once per
-                                        application. Anemone&apos;s repair when an enemy takes
-                                        damage-over-time damage fires once per stack that ticks: 3
-                                        Corrosion stacks and 1 Inferno give four repairs. A cleanse
-                                        removes stacks the same way: &ldquo;cleanses 1 debuff&rdquo;
-                                        on 2 Corrosion stacks leaves 1. The most recently inflicted
-                                        debuff goes first, named debuff or damage-over-time stack
-                                        alike (stacks inflicted together share one time); Acidic
-                                        Decay cannot be cleansed. Defense Shred is cleansed one
-                                        stack at a time: 3 stacks, &ldquo;cleanses 1 debuff&rdquo;,
-                                        2 stacks left. Each Defense Shred stack also counts as one
-                                        debuff (3 stacks meet Crocus&apos;s &ldquo;3 or more
-                                        debuffs&rdquo;), and Cheat Death wipes all of them like any
-                                        other debuff. Nyxen&apos;s cleanses take only Bombs or only
-                                        damage-over-time effects, as written, newest first.
-                                        Heliodor&apos;s and Pestilence&apos;s cut to the duration of
-                                        all debuffs shortens Corrosion and Inferno too; one cut to 0
-                                        turns ends without ticking again. Reactions to an enemy
-                                        cleansing a debuff (Pestilence, Larkspur, Grif, Arum,
-                                        Yarrow) also hear the cleanses an enemy&apos;s passive
-                                        performs (Nuqtu, Purifier, AEGIS, Hermes, Howler), but not a
-                                        duration cut; a cleanse that such a reaction provoked
-                                        triggers them again. A count written after an infliction in
-                                        the same skill includes what that skill landed, enemy by
-                                        enemy: Crocus&apos;s Corrosion II counts toward her own
-                                        &ldquo;3 or more debuffs&rdquo; Stasis (Asphyxiator&apos;s
-                                        and Anemone&apos;s gates likewise), and a resisted one does
-                                        not. A passive reacting to the hit (Bayah) counts only the
-                                        debuffs from before the skill. APEX&apos;s passive shield
-                                        arrives as the skill&apos;s first debuff lands, so her
-                                        charged skill&apos;s &ldquo;If this Unit has an active
-                                        shield&rdquo; Disable lands once an earlier debuff in it has
-                                        landed. Likewise Belladonna&apos;s charged Corrosion II, if
-                                        her passive converts it to Acidic Decay as it lands, counts
-                                        toward that skill&apos;s &ldquo;3 or more Acidic
-                                        Decay&rdquo; Stasis.
+                                        shield fires at most once per skill cast, whoever cast it:
+                                        her active landing two debuffs, plus the debuffs Provider
+                                        answers them with, gives one shield; an enemy&apos;s attack
+                                        that wakes Warden&apos;s debuffs gives one more. Her Block
+                                        Shield, and Xcellence&apos;s strike when an enemy resists a
+                                        debuff, fire at most once per enemy per skill cast: Curator
+                                        hitting three enemies who each resist both its debuffs gives
+                                        one Xcellence strike on each. Reactions to a critical DoT
+                                        (Crocus, Wisteria) and Belladonna&apos;s conversion still
+                                        fire once per application. Anemone&apos;s repair when an
+                                        enemy takes damage-over-time damage fires once per stack
+                                        that ticks: 3 Corrosion stacks and 1 Inferno give four
+                                        repairs. A cleanse removes stacks the same way:
+                                        &ldquo;cleanses 1 debuff&rdquo; on 2 Corrosion stacks leaves
+                                        1. The most recently inflicted debuff goes first, named
+                                        debuff or damage-over-time stack alike (stacks inflicted
+                                        together share one time); Acidic Decay cannot be cleansed.
+                                        Defense Shred is cleansed one stack at a time: 3 stacks,
+                                        &ldquo;cleanses 1 debuff&rdquo;, 2 stacks left. Each Defense
+                                        Shred stack also counts as one debuff (3 stacks meet
+                                        Crocus&apos;s &ldquo;3 or more debuffs&rdquo;), and Cheat
+                                        Death wipes all of them like any other debuff. Nyxen&apos;s
+                                        cleanses take only Bombs or only damage-over-time effects,
+                                        as written, newest first. Heliodor&apos;s and
+                                        Pestilence&apos;s cut to the duration of all debuffs
+                                        shortens Corrosion and Inferno too; one cut to 0 turns ends
+                                        without ticking again. Reactions to an enemy cleansing a
+                                        debuff (Pestilence, Larkspur, Grif, Arum, Yarrow) also hear
+                                        the cleanses an enemy&apos;s passive performs (Nuqtu,
+                                        Purifier, AEGIS, Hermes, Howler), but not a duration cut; a
+                                        cleanse that such a reaction provoked triggers them again. A
+                                        count written after an infliction in the same skill includes
+                                        what that skill landed, enemy by enemy: Crocus&apos;s
+                                        Corrosion II counts toward her own &ldquo;3 or more
+                                        debuffs&rdquo; Stasis (Asphyxiator&apos;s and Anemone&apos;s
+                                        gates likewise), and a resisted one does not. A passive
+                                        reacting to the hit (Bayah) counts only the debuffs from
+                                        before the skill. APEX&apos;s passive shield arrives as the
+                                        skill&apos;s first debuff lands, so her charged skill&apos;s
+                                        &ldquo;If this Unit has an active shield&rdquo; Disable
+                                        lands once an earlier debuff in it has landed. Likewise
+                                        Belladonna&apos;s charged Corrosion II, if her passive
+                                        converts it to Acidic Decay as it lands, counts toward that
+                                        skill&apos;s &ldquo;3 or more Acidic Decay&rdquo; Stasis.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Team Ships:</span> Pick a

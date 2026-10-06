@@ -218,10 +218,12 @@ export interface Intent {
          *  actor whose turn was active when it fired — the caster of the skill that set the
          *  reaction off (the owner itself, or e.g. the enemy whose attack woke an on-attacked
          *  reaction). Undefined `duringTurnOf`: no turn was active (round start / end of round).
-         *  Absent for a cast's own inflictions. Read by `rootCastKey`. */
+         *  Absent for a cast's own inflictions. Also stamped by `on-enemy-debuff-resisted` from
+         *  the resisted infliction. Read by `rootCastKey`. */
         inflictionReaction?: { firingId?: number; duringTurnOf?: string };
-        /** The actor whose application landed the triggering debuff/DoT (`debuff-applied` /
-         *  `dot-applied` `sourceId`), stamped by the `on-enemy-debuff-inflicted` listener. When
+        /** The actor whose application landed (or, for `on-enemy-debuff-resisted`, was resisted
+         *  as) the triggering debuff/DoT — the event's `sourceId`. Stamped by the
+         *  `on-enemy-debuff-inflicted` and `on-enemy-debuff-resisted` listeners. When
          *  no `inflictionReaction` is stamped the infliction is that actor's own cast, so
          *  `rootCastKey` keys the cast on it. */
         inflictorId?: string;
@@ -1899,6 +1901,10 @@ export function registerReactiveListeners(args: {
                             eventCtx: {
                                 ...intent.eventCtx,
                                 counterTargetId: e.targetId,
+                                // The cast the resisted infliction belongs to, for
+                                // `Ability.oncePerRootCast` (`rootCastKey`).
+                                ...(e.sourceId !== undefined ? { inflictorId: e.sourceId } : {}),
+                                ...inflictionReactionCtx(e),
                                 // Carries the attack identity to the drain, which runs once per
                                 // turn and cannot ask the engine which sub-attack it is in. Absent
                                 // on the non-positional path (its debuff loop resolves the whole
@@ -4214,20 +4220,27 @@ function perCastProcKeys(intent: Intent, ctx: IntentExecContext): { roll: string
 }
 
 /** Once-per-root-cast gate backing `Ability.oncePerRootCast` (see that field's doc). Returns false
- *  when this (owner, ability) already fired under the root cast of the triggering infliction
- *  (`rootCastKey`); otherwise marks it consumed and returns true. Call it where the reaction is
- *  known to fire — after every condition the branch checks — so a skipped fire never spends the
- *  slot. The mark lives in the per-round `oncePerRoundConsumed` set: a cast never spans a round,
- *  and a reaction firing id is unique for the whole run. Pass-through when the ability carries no
- *  `oncePerRootCast`. */
-function passesOncePerRootCastGate(intent: Intent, ctx: IntentExecContext): boolean {
-    if (!intent.ability.oncePerRootCast) return true;
+ *  when this (owner, ability) — and, for `'per-victim'`, this `victimId` — already fired under the
+ *  root cast of the triggering event (`rootCastKey`); otherwise marks it consumed and returns
+ *  true. Call it where the reaction is known to fire — after every condition the branch checks —
+ *  so a skipped fire never spends the slot. The mark lives in the per-round `oncePerRoundConsumed`
+ *  set: a cast never spans a round, and a reaction firing id is unique for the whole run.
+ *  Pass-through when the ability carries no `oncePerRootCast`. */
+function passesOncePerRootCastGate(
+    intent: Intent,
+    ctx: IntentExecContext,
+    victimId: string | undefined
+): boolean {
+    const scope = intent.ability.oncePerRootCast;
+    if (scope === undefined) return true;
     const root = rootCastKey(
         ctx,
         intent.eventCtx?.inflictorId ?? intent.ownerId,
         intent.eventCtx?.inflictionReaction
     );
-    const key = `${intent.ownerId}:${intent.ability.id}:root-${root}`;
+    const key =
+        `${intent.ownerId}:${intent.ability.id}:root-${root}` +
+        (scope === 'per-victim' ? `:${victimId ?? ''}` : '');
     if (ctx.oncePerRoundConsumed?.has(key)) return false;
     ctx.oncePerRoundConsumed?.add(key);
     return true;
@@ -5083,7 +5096,7 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // buff grant is never gated. Mirrors the heal/shield + damage branches. Keys on
         // `${ownerId}:${ability.id}` via ctx.procChanceGates.
         if (!passesProcChanceGate(intent, ctx)) return;
-        if (!passesOncePerRootCastGate(intent, ctx)) return;
+        if (!passesOncePerRootCastGate(intent, ctx, intent.eventCtx?.debuffVictimId)) return;
         // Consume the once-per-attack slot now that the self-buff WILL apply.
         if (buffGuardKey) ctx.reactionFiredThisAttack?.add(buffGuardKey);
         // Reactive buffs bypass the aura-by-passive-slot classification — their own
@@ -5417,7 +5430,7 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 )
             )
                 continue;
-            if (!passesOncePerRootCastGate(intent, ctx)) continue;
+            if (!passesOncePerRootCastGate(intent, ctx, debuffTargetId)) continue;
             // Block Debuff: a target carrying Block Debuff auto-resists the whole application —
             // one resist, no landing roll drawn (the same rule the DoT branch keeps per DoT).
             const blockedByImmunity = targetCarriesBlockDebuff(ctx.statusEngine, debuffTargetId);
@@ -5509,6 +5522,7 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
                     // sourceId = the inflictor so an on-debuff-resisted reaction (Vindicator)
                     // can route retaliation back at it.
                     sourceId: intent.ownerId,
+                    ...reactionFiringStamp(ctx),
                     ...(drewLandingRoll ? { viaLandingRoll: true as const } : {}),
                     // The RESOLVED target the debuff was aimed at (enemy-highest-attack /
                     // counter-infliction route) — so the combat log names the ship that resisted
@@ -5653,7 +5667,8 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 ctx.round,
                 dotResistLabel(cfg.dotType, cfg.tier),
                 cfg.application !== 'apply',
-                intent.eventCtx?.subAttackIndex
+                intent.eventCtx?.subAttackIndex,
+                ctx.reactionFiringId
             );
 
         /** How many of the DoT's stacks land on `victimId`: one landing check per stack (owner
@@ -5715,7 +5730,9 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
                         victimId,
                         ctx.round,
                         dotResistLabel(cfg.dotType, cfg.tier),
-                        false
+                        false,
+                        undefined,
+                        ctx.reactionFiringId
                     );
                     continue;
                 }
@@ -5765,7 +5782,9 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 victimId,
                 ctx.round,
                 dotResistLabel(cfg.dotType, cfg.tier),
-                false
+                false,
+                undefined,
+                ctx.reactionFiringId
             );
             return;
         }
@@ -5872,7 +5891,7 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
         }
         if (!passesProcChanceGate(intent, ctx)) return;
         if (!passesOncePerRoundGate(intent, ctx)) return;
-        if (!passesOncePerRootCastGate(intent, ctx)) return;
+        if (!passesOncePerRootCastGate(intent, ctx, intent.eventCtx?.debuffVictimId)) return;
         // Sansi: numeric per-round cap ("limited to 3 times per Round"). Checked
         // AFTER the proc/once-per-round gates so a blocked fire never burns a charge; a
         // no-maxPerRound heal passes through.
@@ -6454,10 +6473,12 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // REQUIRES a routed retaliation target (counterTargetId) and has no fallback — you cannot
         // retaliate against no-one.
         //
-        // FREQUENCY: one proc per retaliation target, PER ATTACK — the locked family ruling for
+        // FREQUENCY: one proc per retaliation target, PER ATTACK — the family ruling for
         // on-resist reactions (user, 2026-08-28): multiple debuffs resisted by the same enemy in
         // ONE attack collapse to one proc, each DIFFERENT enemy resisting in that attack procs on
-        // its own, and a debuffer resisted on two SEPARATE attacks in one turn procs twice.
+        // its own, and a debuffer resisted on two SEPARATE attacks in one turn procs twice. An
+        // ability carrying `oncePerRootCast` is capped further (Xcellence: once per root cast per
+        // resister, owner ruling 2026-10-06).
         //
         // The guard is `counterFiredThisTurn` (cleared at every actor turn-start) keyed with the
         // triggering event's `subAttackIndex`, exactly like the sibling counter guard above — the
@@ -6477,6 +6498,7 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
             // this path's resolved target. Placed BEFORE the once-per-round key is consumed so a
             // blocked gate does not burn the round's charge.
             if (!perVictimOk(sourceId)) return;
+            if (!passesOncePerRootCastGate(intent, ctx, sourceId)) return;
             const onceKey = `${intent.ownerId}:${intent.ability.id}:${sourceId}:${attackKeyOf(
                 intent.eventCtx
             )}`;

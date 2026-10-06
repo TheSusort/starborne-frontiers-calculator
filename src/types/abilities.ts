@@ -1351,16 +1351,23 @@ export interface Ability {
     /** Once per ROOT cast: the reaction fires at most once per SKILL CAST that set the triggering
      *  event off, whoever cast it — the same cast identity `procScope:'per-cast'` caps on
      *  (Insidiousness). Unlike `oncePerCast`, which counts only the OWNER's own casts, the cast
-     *  here belongs to whichever ship's skill woke the chain: APEX's 3% shield off her own active's
-     *  two debuffs, plus the two Crit Rate Down II Provider's passive answers them with, is ONE
-     *  fire; Provider's own active landing two more on his turn is ONE more; an enemy hitting
-     *  Warden, whose reaction debuffs the enemy, is that enemy's cast and ONE more (owner ruling,
-     *  measured in game 2026-10-05). An extra action is a cast of its own. The slot is spent
-     *  only when the reaction actually fires — after its conditions pass (APEX's Block Shield
-     *  "if that enemy has 3 or more debuffs" fails on a cast's first two debuffs without spending
-     *  it), whatever its own landing roll then does. Enforced executor-side by
+     *  here belongs to whichever ship's skill woke the chain. An extra action is a cast of its own.
+     *  - `'cast'`: once per root cast, however many enemies it reached. APEX's 3% shield off her
+     *    own active's two debuffs, plus the two Crit Rate Down II Provider's passive answers them
+     *    with, is ONE fire; Provider's own active landing two more on his turn is ONE more; an
+     *    enemy hitting Warden, whose reaction debuffs the enemy, is that enemy's cast and ONE more
+     *    (owner ruling, measured in game 2026-10-05).
+     *  - `'per-victim'`: once per (root cast, enemy the reaction is about). Xcellence's "When an
+     *    enemy resists a debuff infliction, … deals damage equal to 115% of this Unit's current
+     *    shield": Curator's area active resisted twice by each of three enemies hits each of them
+     *    ONCE, and Provider's single-target active resisted twice hits once (owner ruling,
+     *    measured in game 2026-10-06). APEX's Block Shield is one per enemy the cast brings to 3 or
+     *    more debuffs.
+     *  The slot is spent only when the reaction actually fires — after its conditions pass (APEX's
+     *  Block Shield "if that enemy has 3 or more debuffs" fails on a cast's first two debuffs
+     *  without spending it), whatever its own landing roll then does. Enforced executor-side by
      *  `passesOncePerRootCastGate` in triggers.ts. Absent → no cap. */
-    oncePerRootCast?: boolean;
+    oncePerRootCast?: 'cast' | 'per-victim';
     /** Ally-role filter for on-ally-attacked (Graphite "when an ally attacker or
      *  debuffer is directly damaged"): the reaction fires only when the DAMAGED
      *  ally's ship role matches one of these categories (prefix match over

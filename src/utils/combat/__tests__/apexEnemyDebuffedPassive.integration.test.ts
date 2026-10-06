@@ -4,10 +4,11 @@
  * inflicted with a debuff. If that enemy has 3 or more debuffs on a debuff infliction, this Unit
  * inflicts Block Shield for 1 turn." The text is passive voice with no "this Unit", so an ally's
  * infliction counts as much as her own. Ally Hemlock's Corrosion on B → APEX gains 3%, and (B at
- * 3+, the triggering debuff counted) APEX inflicts Block Shield on B. Each fires at most once per
- * skill cast that set the landings off (`Ability.oncePerRootCast`, owner ruling 2026-10-05): her
- * 2-debuff AoE over 3 enemies gives ONE shield, and Block Shield — itself a debuff landing of the
- * same cast — earns no further shield and never re-triggers itself.
+ * 3+, the triggering debuff counted) APEX inflicts Block Shield on B. Both are capped per skill
+ * cast that set the landings off (`Ability.oncePerRootCast`): the shield once per cast (owner
+ * ruling 2026-10-05) — her 2-debuff AoE over 3 enemies gives ONE — and Block Shield once per
+ * enemy per cast (owner ruling 2026-10-06). Block Shield, itself a debuff landing of the same
+ * cast, earns no further shield and never re-triggers itself.
  *
  * Real parsed APEX passive (buildTraceShip, refit 4). Hand-built inflictors. Every landing roll
  * lands (hacking dwarfs every security); debuffs are seeded as Corrosion entries.
@@ -340,7 +341,7 @@ describe("an ALLY's infliction wakes APEX's passive", () => {
     });
 });
 
-describe("APEX's own AoE: one shield and at most one Block Shield for the cast", () => {
+describe("APEX's own AoE: one shield, and at most one Block Shield per enemy, for the cast", () => {
     /** Player APEX (real active + passive) on Circle from M4: strikes M4 (A), M3 (B), T4 (C). */
     const board = (): CombatEngineInput =>
         base({
@@ -370,10 +371,9 @@ describe("APEX's own AoE: one shield and at most one Block Shield for the cast",
         });
     });
 
-    it('all three at 2: every new debuff qualifies — still one Block Shield for the cast', () => {
+    it('all three at 2: both new debuffs qualify on each — one Block Shield on each enemy', () => {
         const m = measure(board(), 'attacker', { 'enemy-a': 2, 'enemy-b': 2, 'enemy-c': 2 });
-        // The first qualifying landing of the cast takes it.
-        expect(m.blockShield).toEqual(['enemy-a']);
+        expect(m.blockShield).toEqual(['enemy-a', 'enemy-b', 'enemy-c']);
         expect(m.shields).toBe(1);
     });
 });

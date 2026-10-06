@@ -237,7 +237,7 @@ describe.each<Placement>(['player', 'enemy'])('a capped buff on the %s side', (p
                             target: 'self',
                             trigger: 'on-enemy-debuff-inflicted',
                             conditions: [],
-                            oncePerRootCast: true,
+                            oncePerRootCast: 'cast',
                             config: {
                                 type: 'buff',
                                 buffName: 'Attack Up I',

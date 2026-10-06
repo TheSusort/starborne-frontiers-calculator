@@ -102,7 +102,8 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: reactions on both teams to one event now resolve in turn order.',
     "Combat simulator: a reaction to an enemy's reaction now resolves within the same turn.",
     "Combat simulator: APEX's passive shield now triggers at most once per skill cast.",
-    "Combat simulator: APEX's Block Shield now triggers at most once per skill cast.",
+    "Combat simulator: APEX's Block Shield now triggers at most once per enemy per skill cast.",
+    "Combat simulator: Xcellence's resist strike now hits each resisting enemy once per skill cast.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
