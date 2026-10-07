@@ -4382,8 +4382,9 @@ function reactionFiringKey(reaction: { firingId?: number }): string {
  *    waking an on-attacked Corrosion I, which wakes an Out. Damage Down II, is that enemy's one
  *    cast.
  *  - An infliction a reaction landed with no turn active (round start / end of round): that
- *    reaction firing stands as its own cast. UNCONFIRMED — the rule covers only inflictions a
- *    skill cast sets off. */
+ *    reaction firing stands as its own cast, e.g. Toxic Overflow's end-of-round spread (engine.ts
+ *    `toxicSpreaders` loop). UNCONFIRMED — the rule covers only inflictions a skill cast sets
+ *    off. */
 function rootCastKey(
     ctx: IntentExecContext,
     inflictorId: string,

@@ -9110,7 +9110,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                         creditDealt(actor.id, victim.id, booked);
                         // A passive-slot instance is direct damage on its victim, so an Echoing
                         // Burst there gathers it — with no `castStartSeq`, so an instance in the
-                        // turn that applied the Echoing Burst IS gathered (no ship has both).
+                        // turn that applied the Echoing Burst IS gathered.
                         gatherDirectHitIntoAccumulators(victim, booked);
                     }
                     // The ruled "damage dealt" basis: booked intake PLUS anything a
