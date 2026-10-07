@@ -71,6 +71,7 @@ import {
     ActorDamage,
     ActorHealing,
     CombatActor,
+    PendingAccumulator,
     PendingBomb,
     createActor,
     selectNextBySpeed,
@@ -82,9 +83,10 @@ import {
     dotStackCount,
     carriedDotStacks,
     carriedDebuffEntries,
-    burstContainerWiped,
     accumulatorBurstDamage,
+    gatherIntoAccumulator,
 } from './state';
+import { walkTimedBurstsInApplicationOrder } from './bombCountdown';
 import {
     ActiveBuff,
     AbilityStatusPayload,
@@ -1219,35 +1221,30 @@ function expireStacks(entries: ActiveDoTStack[]): void {
     }
 }
 
-// Step 6: Process bombs — their burst is detonation damage (same category as Step 2.95).
-// `emitBombDetonated` is called once per burst (per detonating bomb entry) so
-// reactive triggers can observe each burst's actorId, round, stacks, and damage.
-// Per-actor attribution: each burst uses the APPLIER's affinityMult (snapshotted at
-// application) and is credited to that applier's detonation channel via `creditDetonation`.
-// `actorIdFor` supplies the bomb-detonated event's actorId (the applier).
-// The walk stops once a burst's Cheat Death wipes the holder's Bombs (`burstContainerWiped`).
+// Step 6: one Bomb's step at its holder's turn start — its burst is detonation damage (same
+// category as Step 2.95). The countdown drops by 1; at <= 0 it bursts: `emitBombDetonated` once
+// per burst so reactive triggers observe its actorId, round, stacks and damage, then
+// `creditDetonation`. Per-actor attribution: the burst uses the APPLIER's affinityMult
+// (snapshotted at application) and is credited to that applier.
 function processBombs(args: {
-    /** The bursting holder; its live `pendingBombs` is the container walked. */
-    holder: CombatActor;
+    bomb: PendingBomb;
+    /** The container the walk bound; a burst splices the Bomb out of it. */
+    bombs: PendingBomb[];
     emitBombDetonated?: (actorId: string, stacks: number, damage: number) => void;
     creditDetonation: (sourceId: string, damage: number) => void;
 }): void {
-    const bombs = args.holder.pendingBombs;
-    for (let i = bombs.length - 1; i >= 0; i--) {
-        if (burstContainerWiped(args.holder, bombs, args.holder.pendingBombs)) break;
-        bombs[i].countdown -= 1;
-        if (bombs[i].countdown <= 0) {
-            const bomb = bombs[i];
-            const burstDamage =
-                bomb.stacks *
-                bomb.damagePerStack *
-                bomb.affinityMult *
-                (1 + bomb.detonationDamageModifier / 100);
-            args.emitBombDetonated?.(bomb.sourceId, bomb.stacks, burstDamage);
-            args.creditDetonation(bomb.sourceId, burstDamage);
-            bombs.splice(i, 1);
-        }
-    }
+    const { bomb, bombs } = args;
+    bomb.countdown -= 1;
+    if (bomb.countdown > 0) return;
+    const burstDamage =
+        bomb.stacks *
+        bomb.damagePerStack *
+        bomb.affinityMult *
+        (1 + bomb.detonationDamageModifier / 100);
+    args.emitBombDetonated?.(bomb.sourceId, bomb.stacks, burstDamage);
+    args.creditDetonation(bomb.sourceId, burstDamage);
+    const at = bombs.indexOf(bomb);
+    if (at >= 0) bombs.splice(at, 1);
 }
 
 /** The footprint of an `all-enemies` ability — every occupied cell of the opposing
@@ -1261,48 +1258,42 @@ const ALL_ENEMIES_PATTERN: ParsedPattern = {
     modifiers: {},
 };
 
-// Step 6b: Echoing Burst accumulators gather this round's direct damage, then detonate
-// for pct% of the accumulated total on expiry (game-categorised as detonation damage).
-// directDamage already includes affinity, so no extra affinity multiplier is applied.
-// Per-actor attribution: the accumulation INPUT is the summed direct damage of the
-// ACCUMULATING SIDE this round (spec: Echoing Burst gathers all its side's direct); the OUTPUT
-// burst is credited to the accumulator's applier via `creditDetonation`.
+// Step 6b: one Echoing Burst accumulator's step at its holder's turn start: it gathers the round's
+// direct damage (`gatherIntoAccumulator`), its duration drops by 1, and at <= 0 it bursts for pct%
+// of the accumulated total (game-categorised as detonation damage). directDamage already includes
+// affinity, so no extra affinity multiplier is applied. Per-actor attribution: the accumulation
+// INPUT is the summed direct damage of the ACCUMULATING SIDE this round (spec: Echoing Burst
+// gathers all its side's direct); the OUTPUT burst is credited to the accumulator's applier via
+// `creditDetonation`.
 //
-// The input is supplied by `directDealtBy(<that side's roster>)`, which reads BOTH the
-// scalar credit channel and its positional twin — a positional run never writes the scalar
-// `roundDamage` map, so a scalar-only sum would drain every accumulator for exactly 0.
+// The input is supplied by `directDealtBy(<that side's roster>)`, which reads BOTH the scalar
+// credit channel and its positional twin — a positional run never writes the scalar `roundDamage`
+// map, so a scalar-only sum would drain every accumulator for exactly 0.
 //
-// #345: `emitAccumulatorDetonated` is called once per burst, so an APPLIER-scoped reaction can
-// observe it — the sibling of `processBombs`' `emitBombDetonated`, which this function went
-// without. Valkyrie's "when an Echoing Burst explodes on an enemy … repair 5% of damage dealt"
-// rode the Bomb event instead, which meant it fired on any teammate's Bomb and never once on her
-// own burst. Emitted BEFORE `creditDetonation` (the same order `processBombs` uses); the reaction
-// it enqueues drains later regardless.
-//
-// The walk stops once a burst's Cheat Death wipes the holder's accumulators
-// (`burstContainerWiped`).
+// #345: `emitAccumulatorDetonated` is called once per burst, so an APPLIER-scoped reaction
+// (Valkyrie's "when an Echoing Burst explodes on an enemy … repair 5% of damage dealt") observes
+// her own burst. Emitted BEFORE `creditDetonation`, as for a Bomb; the reaction it enqueues drains
+// later.
 function processAccumulators(args: {
-    /** The bursting holder; its live `pendingAccumulators` is the container walked. */
-    holder: CombatActor;
+    acc: PendingAccumulator;
+    /** The container the walk bound; a burst splices the accumulator out of it. */
+    accs: PendingAccumulator[];
+    round: number;
     /** Direct damage the ACCUMULATING side (the side that applied these accumulators — i.e. the
      *  bursting actor's OPPOSING roster) has dealt so far this round. */
     gatheredDirect: number;
     emitAccumulatorDetonated?: (actorId: string, damage: number) => void;
     creditDetonation: (sourceId: string, damage: number) => void;
 }): void {
-    const accs = args.holder.pendingAccumulators;
-    for (let i = accs.length - 1; i >= 0; i--) {
-        if (burstContainerWiped(args.holder, accs, args.holder.pendingAccumulators)) break;
-        const acc = accs[i];
-        acc.accumulated += args.gatheredDirect;
-        acc.roundsRemaining -= 1;
-        if (acc.roundsRemaining <= 0) {
-            const damage = accumulatorBurstDamage(acc);
-            args.emitAccumulatorDetonated?.(acc.sourceId, damage);
-            args.creditDetonation(acc.sourceId, damage);
-            accs.splice(i, 1);
-        }
-    }
+    const { acc, accs } = args;
+    gatherIntoAccumulator(acc, args.gatheredDirect, args.round);
+    acc.roundsRemaining -= 1;
+    if (acc.roundsRemaining > 0) return;
+    const damage = accumulatorBurstDamage(acc);
+    args.emitAccumulatorDetonated?.(acc.sourceId, damage);
+    args.creditDetonation(acc.sourceId, damage);
+    const at = accs.indexOf(acc);
+    if (at >= 0) accs.splice(at, 1);
 }
 
 // Steps 4 & 5: Tick corrosion (scales with enemy HP, capped at 5000 dmg per 1%) and
@@ -9557,112 +9548,119 @@ export function runCombat(rawInput: CombatEngineInput): {
                 actor.pendingBombs.length > 0 || actor.pendingAccumulators.length > 0;
             if (!hasTimedContainers || !isPositional(actor.position, opposingRoster)) return;
 
-            processBombs({
-                holder: actor,
-                emitBombDetonated: (actorId, stacks, damage) =>
-                    bus.emit({
-                        type: 'bomb-detonated',
-                        actorId,
-                        victimId: actor.id,
-                        round: r,
-                        stacks,
-                        damage,
-                    }),
-                creditDetonation: (sourceId, damage) => {
-                    const outcome = applyVictimDamage(damage, actor, sink, {
-                        killerId: sourceId,
-                        byDirectDamage: true,
-                        bombPortion: damage, // full shield drain, no pen
-                        shieldPenetrationPct: 0,
-                    });
-                    // #355 B1: book what the funnel RECORDED — see `detonationDelivered`.
-                    const delivered = detonationDelivered(outcome);
-                    roundPerTargetDamage.set(
-                        actor.id,
-                        (roundPerTargetDamage.get(actor.id) ?? 0) + outcome.incomingBooked
-                    );
-                    // The bomb's applier (sourceId) bursting on the bursting actor's own turn.
-                    creditDealt(sourceId, actor.id, outcome.incomingBooked);
-                    perActorDetonation.set(
-                        sourceId,
-                        (perActorDetonation.get(sourceId) ?? 0) + delivered
-                    );
-                    // The burst channel pays the applier's standing damage-dealt leech.
-                    // `'detonation'` is the channel, so a `leechScope:'detonation'` leech pays
-                    // HERE and only here, and an `'all'` one pays here too.
-                    //
-                    // Deliberately NOT `procLeechesForVictim`: that fires the victim's TAKEN leech
-                    // as well, and a burst does not proc one (owner ruling, spec §2.2 — Malvex
-                    // reads "directly damaged as a primary target"). Standing direction only.
-                    //
-                    // #355 B1: paid on the DELIVERED amount. "% of damage dealt" is the final
-                    // on-screen number — a Protection redirect counts (the damage landed, on the
-                    // protector) and a DoT transform does not (it has not been dealt yet; it books
-                    // per tick). `detonationDelivered` is exactly that basis.
-                    procStandingLeechesPerVictim(sourceId, delivered, 'detonation');
-                },
-            });
-
             // Accumulator gather input. The accumulators a POSITIONED actor carries
             // were seeded by the OPPOSING side's casts, so the side whose direct damage they
             // gather is exactly `opposingRoster` — which makes this ONE expression correct for
             // BOTH sites, with no side branch: the enemy site passes `allPlayerActors` and the
             // player/team sites pass `enemyAttackerActors`.
-            //
-            // This replaces a bare sum over the scalar `roundDamage` map, whose comment asserted
-            // it was "CORRECT for the enemy site" and an "INERT placeholder" for the player side.
-            // Neither half held any more: the scalar map goes structurally empty the moment a cast
-            // resolves positionally (its direct credit is suppressed — see `creditPositionalDirect`),
-            // so the "correct" side gathered 0, and the player side was inert only because nothing
-            // fed it, not because the sum was unreachable.
             const gatheredDirect = directDealtBy(opposingRoster);
-            processAccumulators({
-                holder: actor,
-                gatheredDirect,
-                // #345: `actorId` is the accumulator's APPLIER (whose Echoing Burst this is) and
-                // `victimId` the holder it burst on — the same actorId/victimId split the sibling
-                // `bomb-detonated` emit above uses. Inside the shared `applyPositionedTimedBurst`,
-                // so both sides emit it: a player Valkyrie's burst on an enemy and an enemy
-                // Valkyrie's burst on a player ship announce themselves identically.
-                emitAccumulatorDetonated: (actorId, damage) =>
-                    bus.emit({
-                        type: 'accumulator-detonated',
-                        actorId,
-                        victimId: actor.id,
-                        round: r,
-                        damage,
+            // Bombs and accumulators that expire in this step detonate in order of application,
+            // and a Cheat Death the first of them triggers wipes the rest
+            // (`walkTimedBurstsInApplicationOrder`, owner ruling R115).
+            walkTimedBurstsInApplicationOrder(actor, {
+                bomb: (bomb, bombs) =>
+                    processBombs({
+                        bomb,
+                        bombs,
+                        emitBombDetonated: (actorId, stacks, damage) =>
+                            bus.emit({
+                                type: 'bomb-detonated',
+                                actorId,
+                                victimId: actor.id,
+                                round: r,
+                                stacks,
+                                damage,
+                            }),
+                        creditDetonation: (sourceId, damage) => {
+                            const outcome = applyVictimDamage(damage, actor, sink, {
+                                killerId: sourceId,
+                                byDirectDamage: true,
+                                bombPortion: damage, // full shield drain, no pen
+                                shieldPenetrationPct: 0,
+                            });
+                            // #355 B1: book what the funnel RECORDED — see `detonationDelivered`.
+                            const delivered = detonationDelivered(outcome);
+                            roundPerTargetDamage.set(
+                                actor.id,
+                                (roundPerTargetDamage.get(actor.id) ?? 0) + outcome.incomingBooked
+                            );
+                            // The bomb's applier (sourceId) bursting on the bursting actor's own
+                            // turn.
+                            creditDealt(sourceId, actor.id, outcome.incomingBooked);
+                            perActorDetonation.set(
+                                sourceId,
+                                (perActorDetonation.get(sourceId) ?? 0) + delivered
+                            );
+                            // The burst channel pays the applier's standing damage-dealt leech.
+                            // `'detonation'` is the channel, so a `leechScope:'detonation'` leech
+                            // pays HERE and only here, and an `'all'` one pays here too.
+                            //
+                            // Deliberately NOT `procLeechesForVictim`: that fires the victim's
+                            // TAKEN leech as well, and a burst does not proc one (owner ruling,
+                            // spec §2.2 — Malvex reads "directly damaged as a primary target").
+                            // Standing direction only.
+                            //
+                            // #355 B1: paid on the DELIVERED amount. "% of damage dealt" is the
+                            // final on-screen number — a Protection redirect counts (the damage
+                            // landed, on the protector) and a DoT transform does not (it has not
+                            // been dealt yet; it books per tick). `detonationDelivered` is exactly
+                            // that basis.
+                            procStandingLeechesPerVictim(sourceId, delivered, 'detonation');
+                        },
                     }),
-                creditDetonation: (sourceId, damage) => {
-                    const outcome = applyVictimDamage(damage, actor, sink, {
-                        killerId: sourceId,
-                        byDirectDamage: true,
-                        bombPortion: damage, // full shield drain, no pen (bomb-style)
-                        shieldPenetrationPct: 0,
-                    });
-                    // #355 B1: book what the funnel RECORDED — see `detonationDelivered`.
-                    const delivered = detonationDelivered(outcome);
-                    roundPerTargetDamage.set(
-                        actor.id,
-                        (roundPerTargetDamage.get(actor.id) ?? 0) + outcome.incomingBooked
-                    );
-                    // The accumulator's applier (sourceId).
-                    creditDealt(sourceId, actor.id, outcome.incomingBooked);
-                    perActorDetonation.set(
-                        sourceId,
-                        (perActorDetonation.get(sourceId) ?? 0) + delivered
-                    );
-                    // The burst channel pays the applier's standing damage-dealt leech.
-                    // `'detonation'` is the channel, so a `leechScope:'detonation'` leech pays
-                    // HERE and only here, and an `'all'` one pays here too.
-                    //
-                    // Deliberately NOT `procLeechesForVictim`: that fires the victim's TAKEN leech
-                    // as well, and a burst does not proc one (owner ruling, spec §2.2 — Malvex
-                    // reads "directly damaged as a primary target"). Standing direction only.
-                    //
-                    // #355 B1: paid on the DELIVERED amount, same basis as the sibling bomb burst
-                    // above — a Protection redirect counts, a DoT transform does not.
-                    procStandingLeechesPerVictim(sourceId, delivered, 'detonation');
-                },
+                accumulator: (acc, accs) =>
+                    processAccumulators({
+                        acc,
+                        accs,
+                        round: r,
+                        gatheredDirect,
+                        // #345: `actorId` is the accumulator's APPLIER (whose Echoing Burst this
+                        // is) and `victimId` the holder it burst on — the same actorId/victimId
+                        // split the sibling `bomb-detonated` emit above uses. Inside the shared
+                        // `applyPositionedTimedBurst`, so both sides emit it: a player Valkyrie's
+                        // burst on an enemy and an enemy Valkyrie's burst on a player ship announce
+                        // themselves identically.
+                        emitAccumulatorDetonated: (actorId, damage) =>
+                            bus.emit({
+                                type: 'accumulator-detonated',
+                                actorId,
+                                victimId: actor.id,
+                                round: r,
+                                damage,
+                            }),
+                        creditDetonation: (sourceId, damage) => {
+                            const outcome = applyVictimDamage(damage, actor, sink, {
+                                killerId: sourceId,
+                                byDirectDamage: true,
+                                bombPortion: damage, // full shield drain, no pen (bomb-style)
+                                shieldPenetrationPct: 0,
+                            });
+                            // #355 B1: book what the funnel RECORDED — see `detonationDelivered`.
+                            const delivered = detonationDelivered(outcome);
+                            roundPerTargetDamage.set(
+                                actor.id,
+                                (roundPerTargetDamage.get(actor.id) ?? 0) + outcome.incomingBooked
+                            );
+                            // The accumulator's applier (sourceId).
+                            creditDealt(sourceId, actor.id, outcome.incomingBooked);
+                            perActorDetonation.set(
+                                sourceId,
+                                (perActorDetonation.get(sourceId) ?? 0) + delivered
+                            );
+                            // The burst channel pays the applier's standing damage-dealt leech.
+                            // `'detonation'` is the channel, so a `leechScope:'detonation'` leech
+                            // pays HERE and only here, and an `'all'` one pays here too.
+                            //
+                            // Deliberately NOT `procLeechesForVictim`: that fires the victim's
+                            // TAKEN leech as well, and a burst does not proc one (owner ruling,
+                            // spec §2.2 — Malvex reads "directly damaged as a primary target").
+                            // Standing direction only.
+                            //
+                            // #355 B1: paid on the DELIVERED amount, same basis as the sibling bomb
+                            // burst above — a Protection redirect counts, a DoT transform does not.
+                            procStandingLeechesPerVictim(sourceId, delivered, 'detonation');
+                        },
+                    }),
             });
         };
 
@@ -11082,6 +11080,10 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // reduce-duration shrink can drive a bomb to 0 on EITHER side's actor.
                 forceDetonateBomb: (victim, sourceId, damage) =>
                     forceDetonateBombOnVictim(victim, sink, sourceId, damage),
+                // The same gather input a natural Echoing Burst expiry reads, for the victim's
+                // opposing side — team-symmetric through `turnBindings`.
+                accumulatorGatherFor: (victim) =>
+                    directDealtBy(turnBindings(victim.side).opposingRoster),
                 // Side-agnostic ship-role lookup (the SAME
                 // roleByActorId map Meatshield's defense-substitution and Graphite's
                 // roleFilter already consume) — feeds the reactive `purge` branch's
@@ -12132,8 +12134,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                         // PER-POSITIONED-PLAYER TIMED BURST: enemy-seeded bombs/accumulators on the
                         // focus attacker burst against its OWN HP at its turn-start, via the sink.
                         // Mirror of the enemy site's own burst; a no-op when the actor carries no
-                        // timed entries. Canonical turn-start order is
-                        // tickDoTs → processBombs → processAccumulators.
+                        // timed entries. Canonical turn-start order is tickDoTs, then the Bombs
+                        // and accumulators together in order of application.
                         applyPositionedTimedBurst(actor, sink, enemyAttackerActors);
 
                         // Dead-after-burst guard: a lethal self-burst stamps

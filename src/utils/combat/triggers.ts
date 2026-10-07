@@ -61,8 +61,7 @@ import {
 import {
     accumulatorDurationCutCandidates,
     bombDurationCutCandidates,
-    reduceAccumulatorsOnVictim,
-    reduceBombsOnVictim,
+    shortenTimedBurstsOnVictim,
 } from './bombCountdown';
 import { liveGateConditions } from './abilityStatusGating';
 import { CombatEvent, CombatEventBus, CombatEventType, ShieldApplyAccumulator } from './events';
@@ -2884,9 +2883,14 @@ export interface IntentExecContext {
      *  never the actor that forced the burst. Consumed by the `reduce-duration` branch, which
      *  shrinks `PendingBomb.countdown` and `PendingAccumulator.roundsRemaining` alongside the
      *  statusEngine debuffs (both are debuffs; one driven to 0 bursts — owner ruling R113).
-     *  Absent (unit-test ctxs) → `reduceBombsOnVictim` / `reduceAccumulatorsOnVictim` fall back to
-     *  a bare shield-then-HP debit. */
+     *  Absent (unit-test ctxs) → the Bomb / Echoing Burst cut helpers (bombCountdown.ts) fall
+     *  back to a bare shield-then-HP debit. */
     forceDetonateBomb?: (victim: CombatActor, sourceId: string, damage: number) => void;
+    /** The direct damage the side opposing `victim` has dealt so far this round — what an Echoing
+     *  Burst on `victim` gathers (the engine's `directDealtBy`). An Echoing Burst a duration cut
+     *  drives to 0 folds it in before it bursts (owner ruling R115, `gatherIntoAccumulator`).
+     *  Absent (unit-test ctxs) → the cut bursts what is already gathered. */
+    accumulatorGatherFor?: (victim: CombatActor) => number;
     /** Resolve ANY actor's ship role (Ship.type) by id, either side — the SAME `roleByActorId` map
      *  (side-agnostic by key) Meatshield's defense-substitution and Graphite's `roleFilter`
      *  reaction-time check already consume. Used by the reactive `purge` branch to re-check an
@@ -6528,6 +6532,11 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
             let affected = 0;
             const reducePerTarget: { targetId: string; count: number }[] = [];
             const durationTurns = cfg.durationTurns ?? 1;
+            // What an Echoing Burst cut to 0 on `victim` folds in before it bursts.
+            const gatherNowFor = (victim: CombatActor): (() => number) | undefined => {
+                const read = ctx.accumulatorGatherFor;
+                return read ? () => read(victim) : undefined;
+            };
             for (const rid of recipients) {
                 // A recipient with no resolvable actor (a hand-built unit-test ctx) has no DoT or
                 // Bomb containers; only its named debuffs are reached.
@@ -6538,31 +6547,20 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
                     // turn": every named debuff and every DoT entry (`shortenDotDurations`).
                     n = ctx.statusEngine.reduceAllDebuffsDuration(rid, durationTurns);
                     if (victim) n += shortenDotDurations(victim, durationTurns);
-                    // An Echoing Burst is a debuff too, and one driven to 0 bursts there and then
-                    // (owner ruling R113), through the same per-victim sink as the Bomb below.
+                    // A Bomb and an Echoing Burst are debuffs too (user-verified 2026-07-31:
+                    // Heliodor's cut detonating the Bomb II Ruiner planted on it; owner ruling
+                    // R113 for Echoing Burst). One driven to 0 detonates through the per-victim
+                    // sink, credited to its applier; those driven to 0 together go off in order of
+                    // application (owner ruling R115) — `shortenTimedBurstsOnVictim`.
                     if (victim) {
-                        n += reduceAccumulatorsOnVictim(
-                            victim,
-                            durationTurns,
-                            ctx.round,
-                            ctx.bus,
-                            ctx.forceDetonateBomb
-                        );
-                    }
-                    // A Bomb IS a Debuff, so the shrink reaches it too — and a bomb driven to 0
-                    // turns EXPLODES (user-verified 2026-07-31: Heliodor's "-1 turn on all
-                    // Debuffs" detonating the Bomb II Ruiner planted on it), via the SAME
-                    // reduce-and-detonate helper Lingshe's bomb-countdown-reduce uses, so the burst
-                    // credits the bomb's original applier and routes through the per-victim
-                    // damage sink.
-                    if (victim) {
-                        n += reduceBombsOnVictim(
+                        n += shortenTimedBurstsOnVictim(
                             victim,
                             durationTurns,
                             ctx.round,
                             ctx.bus,
                             intent.ownerId,
-                            ctx.forceDetonateBomb
+                            ctx.forceDetonateBomb,
+                            gatherNowFor(victim)
                         );
                     }
                 } else {
@@ -6579,7 +6577,8 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
                                   victim,
                                   ctx.round,
                                   ctx.bus,
-                                  ctx.forceDetonateBomb
+                                  ctx.forceDetonateBomb,
+                                  gatherNowFor(victim)
                               ),
                               ...bombDurationCutCandidates(
                                   victim,

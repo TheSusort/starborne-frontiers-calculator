@@ -8,7 +8,9 @@
  *    "cleanses 2 Bomb") takes it; a damage-over-time-typed one ("cleanses 2 damage over time
  *    debuffs") does not;
  *  - a duration cut on "all active debuffs" (Heliodor) that brings it to 0 bursts it there and
- *    then, paying what it has gathered (R113);
+ *    then (R113), paying everything gathered up to that moment (R115);
+ *  - Bombs and Echoing Bursts that go off together — one cut, or one turn-start expiry — detonate
+ *    in order of application, and a Cheat Death the first one triggers wipes the rest (R115);
  *  - Cheat Death wipes Bombs and Echoing Burst along with the other DoTs; an unremovable Acidic
  *    Decay survives.
  *
@@ -336,16 +338,22 @@ describe("Heliodor's 'reduces the duration of all active debuffs' bursts a 1-rou
         /** What round 1 booked as detonation damage dealt by the Echoing Burst's applier. */
         applierCredit: number | undefined;
     }
-    const measure = (side: 'player' | 'enemy', skills: ShipSkills): Measured => {
+    const measure = (
+        side: 'player' | 'enemy',
+        skills: ShipSkills,
+        opts: { roundsRemaining?: number; others?: ShipSpec[]; ally?: ShipSpec } = {}
+    ): Measured => {
         const bursts: Burst[] = [];
         let hpLostAtCut = -1;
         let holderTurnStarted = false;
         let hpBefore = 0;
         const result = runBoard(
-            { caster: [heliodor(skills), ally], other: [hitter] },
+            { caster: [heliodor(skills), opts.ally ?? ally], other: opts.others ?? [hitter] },
             side,
             (byId, idOf) => {
-                byId('ally').pendingAccumulators.push(accumulator(idOf('hitter'), 1));
+                byId('ally').pendingAccumulators.push(
+                    accumulator(idOf('hitter'), opts.roundsRemaining ?? 1)
+                );
                 hpBefore = byId('ally').currentHp;
             },
             (bus, byId, idOf) => {
@@ -376,26 +384,89 @@ describe("Heliodor's 'reduces the duration of all active debuffs' bursts a 1-rou
         const applierCredit = result.rounds[0].perActorDetonation?.[idOfHitter(side)];
         return { bursts, hpLostAtCut, applierCredit };
     };
+    /** One HIT from the 100-attack hitter on the 0-defence Heliodor. */
+    const HIT_DAMAGE = 100;
     for (const side of SIDES) {
         it(`${side}-side: control — no passive, the Echoing Burst bursts on the ally's turn`, () => {
+            // The ally's turn gathers the hitter's round-1 hit, then the accumulator expires.
             const { bursts, hpLostAtCut } = measure(side, NO_SKILLS);
-            expect(bursts.map((b) => [b.round, b.beforeHolderTurn])).toEqual([[1, false]]);
+            expect(bursts).toEqual([
+                { round: 1, damage: 50_000 + HIT_DAMAGE, beforeHolderTurn: false },
+            ]);
             expect(hpLostAtCut).toBe(-1);
         });
         it(`${side}-side: Heliodor is hit → the ally's Echoing Burst is cut to 0 and bursts at once`, () => {
-            // The seeded accumulator holds 50,000 at 100%: the cut bursts it for exactly that,
-            // before the ally's own turn would have gathered the round's damage into it. The
-            // damage is booked to the Echoing Burst's applier (the hitter), not the cutter.
+            // The cut bursts everything gathered up to that moment (owner ruling R115): the
+            // seeded 50,000 plus the hit that set off the cut, although the ally's own turn — the
+            // natural gather — has not come yet. It bursts once, and the damage is booked to the
+            // Echoing Burst's applier (the hitter), not the cutter.
             expect(measure(side, passive())).toEqual({
-                bursts: [{ round: 1, damage: 50_000, beforeHolderTurn: true }],
-                hpLostAtCut: 50_000,
-                applierCredit: 50_000,
+                bursts: [{ round: 1, damage: 50_000 + HIT_DAMAGE, beforeHolderTurn: true }],
+                hpLostAtCut: 50_000 + HIT_DAMAGE,
+                applierCredit: 50_000 + HIT_DAMAGE,
             });
+        });
+        it(`${side}-side: a cut after the ally's turn gathered folds in only the damage since`, () => {
+            // A fast hitter hits Heliodor (cut 3 → 2), the ally's turn gathers that hit (2 → 1),
+            // then the slow hitter hits Heliodor (cut 1 → 0): the burst is 50,000 plus both hits,
+            // the first one counted once.
+            const early: ShipSpec = { ...hitter, id: 'early', position: 'M3', speed: 300 };
+            const midAlly: ShipSpec = { ...ally, speed: 150 };
+            expect(
+                measure(side, passive(), {
+                    roundsRemaining: 3,
+                    others: [hitter, early],
+                    ally: midAlly,
+                }).bursts
+            ).toEqual([{ round: 1, damage: 50_000 + 2 * HIT_DAMAGE, beforeHolderTurn: false }]);
         });
     }
 });
 
-describe('a duration cut that bursts a lethal Echoing Burst under Cheat Death wipes the Bomb', () => {
+/** Which entry is applied first, as its `appliedSeq`. */
+type Order = 'bomb-first' | 'burst-first';
+const seqs = (order: Order): { bomb: number; burst: number } =>
+    order === 'bomb-first' ? { bomb: 1, burst: 2 } : { bomb: 2, burst: 1 };
+/** The holder's Bomb / Echoing Burst detonations and Cheat Death, in the order they happened. */
+type HolderEvent = 'bomb' | 'burst' | 'cheat-death';
+const recordHolderEvents = (
+    bus: ReturnType<typeof createEventBus>,
+    holderId: () => string,
+    into: HolderEvent[]
+): void => {
+    bus.on(
+        'cheat-death-activated',
+        (e: Extract<CombatEvent, { type: 'cheat-death-activated' }>) => {
+            if (e.actorId === holderId()) into.push('cheat-death');
+        }
+    );
+    bus.on(
+        'accumulator-detonated',
+        (e: Extract<CombatEvent, { type: 'accumulator-detonated' }>) => {
+            if (e.victimId === holderId()) into.push('burst');
+        }
+    );
+    bus.on('bomb-detonated', (e: Extract<CombatEvent, { type: 'bomb-detonated' }>) => {
+        if (e.victimId === holderId()) into.push('bomb');
+    });
+};
+const hayyanSpec: ShipSpec = {
+    id: 'hayyan',
+    position: 'M2',
+    speed: 300,
+    chargeCount: 4,
+    startCharged: true,
+    skills: { slots: realSlots('Hayyan', ['active', 'charged']) },
+};
+/** A Bomb that kills a 40,000-HP holder on its own. */
+const lethalBomb = (sourceId: string, appliedSeq: number): PendingBomb => ({
+    ...bomb(sourceId),
+    countdown: 1,
+    damagePerStack: 60_000,
+    appliedSeq,
+});
+
+describe('a Bomb and an Echoing Burst one duration cut drives to 0 go off in order of application', () => {
     const heliodor: ShipSpec = {
         id: 'heliodor',
         position: 'M4',
@@ -405,69 +476,50 @@ describe('a duration cut that bursts a lethal Echoing Burst under Cheat Death wi
             slots: [{ slot: 'active', abilities: [] }, ...realSlots('Heliodor', ['passive'])],
         },
     };
-    const hayyan: ShipSpec = {
-        id: 'hayyan',
-        position: 'M2',
-        speed: 300,
-        chargeCount: 4,
-        startCharged: true,
-        skills: { slots: realSlots('Hayyan', ['active', 'charged']) },
-    };
     const holder: ShipSpec = { id: 'holder', position: 'M3', speed: 1, hp: 40_000 };
     const hitter: ShipSpec = { id: 'hitter', position: 'M4', speed: 100, attack: 100, skills: HIT };
     interface Measured {
-        cheatDeath: boolean;
-        bursts: number;
-        bombDetonations: number;
+        events: HolderEvent[];
         hpAtCut: number;
         aliveAtCut: boolean;
         bombsAtCut: number;
+        burstsHeldAtCut: number;
     }
     const measure = (
         side: 'player' | 'enemy',
+        order: Order,
         withCheatDeath: boolean,
         holderHp = holder.hp
     ): Measured => {
         const out: Measured = {
-            cheatDeath: false,
-            bursts: 0,
-            bombDetonations: 0,
+            events: [],
             hpAtCut: -1,
             aliveAtCut: false,
             bombsAtCut: -1,
+            burstsHeldAtCut: -1,
         };
         runBoard(
             {
                 caster: [
                     heliodor,
                     { ...holder, hp: holderHp },
-                    ...(withCheatDeath ? [hayyan] : []),
+                    ...(withCheatDeath ? [hayyanSpec] : []),
                 ],
                 other: [hitter],
             },
             side,
             (byId, idOf) => {
                 const h = byId('holder');
-                // Both containers sit one round from expiry, so the all-debuff cut reaches both.
-                h.pendingBombs.push({ ...bomb(idOf('hitter')), countdown: 1 });
-                h.pendingAccumulators.push(accumulator(idOf('hitter'), 1));
+                const seq = seqs(order);
+                // Both sit one round from expiry, so the all-debuff cut drives both to 0.
+                h.pendingBombs.push(lethalBomb(idOf('hitter'), seq.bomb));
+                h.pendingAccumulators.push({
+                    ...accumulator(idOf('hitter'), 1),
+                    appliedSeq: seq.burst,
+                });
             },
             (bus, byId, idOf) => {
-                bus.on(
-                    'cheat-death-activated',
-                    (e: Extract<CombatEvent, { type: 'cheat-death-activated' }>) => {
-                        if (e.actorId === idOf('holder')) out.cheatDeath = true;
-                    }
-                );
-                bus.on(
-                    'accumulator-detonated',
-                    (e: Extract<CombatEvent, { type: 'accumulator-detonated' }>) => {
-                        if (e.victimId === idOf('holder')) out.bursts += 1;
-                    }
-                );
-                bus.on('bomb-detonated', (e: Extract<CombatEvent, { type: 'bomb-detonated' }>) => {
-                    if (e.victimId === idOf('holder')) out.bombDetonations += 1;
-                });
+                recordHolderEvents(bus, () => idOf('holder'), out.events);
                 bus.on(
                     'reactive-cleanse-performed',
                     (e: Extract<CombatEvent, { type: 'reactive-cleanse-performed' }>) => {
@@ -477,6 +529,7 @@ describe('a duration cut that bursts a lethal Echoing Burst under Cheat Death wi
                         out.hpAtCut = h.currentHp;
                         out.aliveAtCut = h.destroyedRound === undefined;
                         out.bombsAtCut = h.pendingBombs.length;
+                        out.burstsHeldAtCut = h.pendingAccumulators.length;
                     }
                 );
             }
@@ -484,27 +537,121 @@ describe('a duration cut that bursts a lethal Echoing Burst under Cheat Death wi
         return out;
     };
     for (const side of SIDES) {
-        it(`${side}-side: Cheat Death leaves the holder at 1 HP, the burst pays, the Bomb never detonates`, () => {
-            expect(measure(side, true)).toEqual({
-                cheatDeath: true,
-                bursts: 1,
-                bombDetonations: 0,
+        it(`${side}-side: Bomb applied first → it detonates, Cheat Death wipes the Echoing Burst`, () => {
+            expect(measure(side, 'bomb-first', true)).toEqual({
+                events: ['bomb', 'cheat-death'],
                 hpAtCut: 1,
                 aliveAtCut: true,
                 bombsAtCut: 0,
+                burstsHeldAtCut: 0,
+            });
+        });
+        it(`${side}-side: Echoing Burst applied first → it bursts, Cheat Death wipes the Bomb`, () => {
+            expect(measure(side, 'burst-first', true)).toEqual({
+                events: ['burst', 'cheat-death'],
+                hpAtCut: 1,
+                aliveAtCut: true,
+                bombsAtCut: 0,
+                burstsHeldAtCut: 0,
             });
         });
         it(`${side}-side control: without Cheat Death the same cut kills the holder`, () => {
-            const m = measure(side, false);
-            expect(m.cheatDeath).toBe(false);
+            const m = measure(side, 'bomb-first', false);
+            expect(m.events).not.toContain('cheat-death');
             expect(m.aliveAtCut).toBe(false);
         });
-        it(`${side}-side control: a survivable burst leaves the cut Bomb to detonate`, () => {
-            // Same board with HP to spare: the Bomb the cut brought to 0 does detonate, so its
-            // absence under Cheat Death is the wipe, not a Bomb that could never go off.
-            const m = measure(side, false, 1e9);
-            expect(m.bursts).toBe(1);
-            expect(m.bombDetonations).toBe(1);
+        for (const order of ['bomb-first', 'burst-first'] as const) {
+            it(`${side}-side control (${order}): a survivable pair both go off, in that order`, () => {
+                // HP to spare: both the cut drove to 0 detonate, so a missing one under Cheat
+                // Death is the wipe, not an entry that could never go off.
+                expect(measure(side, order, false, 1e9).events).toEqual(
+                    order === 'bomb-first' ? ['bomb', 'burst'] : ['burst', 'bomb']
+                );
+            });
+        }
+    }
+});
+
+describe('Bombs and Echoing Bursts expiring at the same turn start go off in order of application', () => {
+    const anchor: ShipSpec = { id: 'anchor', position: 'M4', speed: 200, hp: 1e9 };
+    const holder: ShipSpec = { id: 'holder', position: 'M3', speed: 1, hp: 40_000 };
+    const hitter: ShipSpec = { id: 'hitter', position: 'M4', speed: 100, attack: 100, skills: HIT };
+    const measure = (
+        side: 'player' | 'enemy',
+        seed: (h: CombatActor, applier: string) => void,
+        opts: { withCheatDeath?: boolean; holderHp?: number } = {}
+    ): { events: HolderEvent[]; bombDamages: number[] } => {
+        const events: HolderEvent[] = [];
+        const bombDamages: number[] = [];
+        runBoard(
+            {
+                caster: [
+                    anchor,
+                    { ...holder, hp: opts.holderHp ?? 1e9 },
+                    ...(opts.withCheatDeath ? [hayyanSpec] : []),
+                ],
+                other: [hitter],
+            },
+            side,
+            (byId, idOf) => seed(byId('holder'), idOf('hitter')),
+            (bus, _byId, idOf) => {
+                recordHolderEvents(bus, () => idOf('holder'), events);
+                bus.on('bomb-detonated', (e: Extract<CombatEvent, { type: 'bomb-detonated' }>) => {
+                    if (e.victimId === idOf('holder')) bombDamages.push(e.damage);
+                });
+            }
+        );
+        return { events, bombDamages };
+    };
+    const seedPair =
+        (order: Order, lethal: boolean) =>
+        (h: CombatActor, applier: string): void => {
+            const seq = seqs(order);
+            h.pendingBombs.push(
+                lethal
+                    ? lethalBomb(applier, seq.bomb)
+                    : { ...bomb(applier), countdown: 1, appliedSeq: seq.bomb }
+            );
+            h.pendingAccumulators.push({ ...accumulator(applier, 1), appliedSeq: seq.burst });
+        };
+    for (const side of SIDES) {
+        it(`${side}-side: Bomb applied first → the Bomb, then the Echoing Burst`, () => {
+            expect(measure(side, seedPair('bomb-first', false)).events).toEqual(['bomb', 'burst']);
+        });
+        it(`${side}-side: Echoing Burst applied first → the Echoing Burst, then the Bomb`, () => {
+            expect(measure(side, seedPair('burst-first', false)).events).toEqual(['burst', 'bomb']);
+        });
+        it(`${side}-side: under Cheat Death the first applied goes off and wipes the other`, () => {
+            const opts = { withCheatDeath: true, holderHp: 40_000 };
+            expect(measure(side, seedPair('bomb-first', true), opts).events).toEqual([
+                'bomb',
+                'cheat-death',
+            ]);
+            expect(measure(side, seedPair('burst-first', true), opts).events).toEqual([
+                'burst',
+                'cheat-death',
+            ]);
+        });
+        it(`${side}-side: two Bombs expiring together detonate oldest first`, () => {
+            // The 1,000 Bomb is applied first and sits first in the container; the 2,000 one is
+            // applied second. Then the reverse container order, same application order.
+            const one = (applier: string): PendingBomb => ({
+                ...bomb(applier),
+                countdown: 1,
+                appliedSeq: 1,
+            });
+            const two = (applier: string): PendingBomb => ({
+                ...bomb(applier),
+                countdown: 1,
+                damagePerStack: 2000,
+                appliedSeq: 2,
+            });
+            expect(
+                measure(side, (h, a) => h.pendingBombs.push(one(a), two(a))).bombDamages
+            ).toEqual([1000, 2000]);
+            expect(
+                measure(side, (h, a) => h.pendingBombs.push(two(a), one(a))).bombDamages
+            ).toEqual([1000, 2000]);
         });
     }
 });

@@ -3,10 +3,11 @@
  * a Bomb cut to 0 does — Warpstrike's single random cut (`accumulatorDurationCutCandidates`) and
  * Heliodor's / Pestilence's "all active debuffs" shorten (`reduceAccumulatorsOnVictim`). The burst
  * pays `accumulated × pct/100` (`accumulatorBurstDamage`, the formula the natural expiry uses),
- * credited to the accumulator's applier.
+ * credited to the accumulator's applier. Owner ruling R115: what it pays includes everything
+ * gathered up to the cut (`gatherIntoAccumulator`), never the same damage twice.
  */
 import { describe, expect, it } from 'vitest';
-import { createActor, CombatActor, PendingAccumulator } from '../state';
+import { createActor, CombatActor, PendingAccumulator, gatherIntoAccumulator } from '../state';
 import { createEventBus, CombatEvent } from '../events';
 import { accumulatorDurationCutCandidates, reduceAccumulatorsOnVictim } from '../bombCountdown';
 
@@ -100,5 +101,33 @@ describe('accumulatorDurationCutCandidates (single random cut)', () => {
         cands[0].cut(1);
         expect(v.pendingAccumulators).toEqual([]);
         expect(events.map((e) => e.damage)).toEqual([500]);
+    });
+});
+
+describe('gatherIntoAccumulator (R115)', () => {
+    it('a second gather in the same round adds only what came in since the first', () => {
+        const a = acc({ accumulated: 0 });
+        gatherIntoAccumulator(a, 100, 1);
+        gatherIntoAccumulator(a, 300, 1);
+        expect(a.accumulated).toBe(300);
+        gatherIntoAccumulator(a, 300, 1);
+        expect(a.accumulated).toBe(300);
+        // A new round's reading starts from 0 again.
+        gatherIntoAccumulator(a, 50, 2);
+        expect(a.accumulated).toBe(350);
+    });
+
+    it('a cut to 0 folds in the damage gathered since the last gather before it bursts', () => {
+        const v = holder();
+        const a = acc({ accumulated: 0, roundsRemaining: 2 });
+        gatherIntoAccumulator(a, 100, 3); // the holder's turn start gathered 100
+        v.pendingAccumulators.push(a);
+        const { bus, events } = listen();
+        reduceAccumulatorsOnVictim(v, 1, 3, bus, undefined, () => 400);
+        expect(events).toEqual([]); // 2 → 1: no burst, no fold-in
+        expect(a.accumulated).toBe(100);
+        reduceAccumulatorsOnVictim(v, 1, 3, bus, undefined, () => 700);
+        // 700 round-to-date, 100 of it already gathered: 700 total at 50%.
+        expect(events.map((e) => e.damage)).toEqual([350]);
     });
 });

@@ -433,6 +433,10 @@ export interface PendingAccumulator {
     sourceId: string;
     /** When this accumulator was applied — see `ActiveDoTStack.appliedSeq`. */
     appliedSeq?: number;
+    /** The round of this accumulator's latest gather and the round-to-date direct damage it had
+     *  read then (`gatherIntoAccumulator`). Absent → it has not gathered yet. */
+    gatheredRound?: number;
+    gatheredRoundToDate?: number;
 }
 
 /** What an Echoing Burst pays when it bursts: `pct`% of what it has gathered. The one formula
@@ -440,6 +444,25 @@ export interface PendingAccumulator {
  *  (`reduceAccumulatorsOnVictim`). */
 export function accumulatorBurstDamage(acc: PendingAccumulator): number {
     return acc.accumulated * (acc.pct / 100);
+}
+
+/**
+ * Folds the accumulating side's direct damage into `acc`. `roundToDate` is that side's direct
+ * damage so far in `round` (both credit channels — the engine's `directDealtBy`). Adds only what
+ * an earlier gather in the same round has not already added, then records the reading, so the
+ * gather at the holder's turn start and the gather at a cut to 0 (owner ruling R115: the cut
+ * bursts everything gathered up to that moment) never count the same damage twice.
+ */
+export function gatherIntoAccumulator(
+    acc: PendingAccumulator,
+    roundToDate: number,
+    round: number
+): void {
+    const already = acc.gatheredRound === round ? (acc.gatheredRoundToDate ?? 0) : 0;
+    const fresh = roundToDate - already;
+    if (fresh > 0) acc.accumulated += fresh;
+    acc.gatheredRound = round;
+    acc.gatheredRoundToDate = Math.max(roundToDate, already);
 }
 
 export interface ActorStats {
