@@ -18,6 +18,7 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator: Provider's ally-debuff hit fires once per enemy per skill.",
     'Combat simulator: Reflect set now reflects only hits aimed at its wearer.',
     "Combat simulator: Sefuba's purge repair now heals 12% per buff, matching the game.",
+    'Combat simulator: purges and buff steals now fail at an affinity disadvantage.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

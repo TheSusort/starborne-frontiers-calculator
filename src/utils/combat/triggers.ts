@@ -22,7 +22,7 @@ import { conditionsMet, groupConditions } from '../abilities/evaluateConditions'
 import { enemySelectorKind, type EnemySelectorKind } from '../abilities/abilityTargetSide';
 import { buildRoundContext, dotReadings } from '../abilities/roundContext';
 import { drawKeyed, makeRateGate } from '../calculators/rateAccumulator';
-import { computeAffinityModifiers } from '../calculators/affinityUtils';
+import { computeAffinityModifiers, getAffinityMatchup } from '../calculators/affinityUtils';
 import { toSelfDefenseModifier } from '../calculators/dpsBuffHelpers';
 import {
     expandEnemyDebuffs,
@@ -6882,7 +6882,16 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
             // As in the debuff branch — re-check against the real routed target.
             if (!perVictimOk(targetId)) continue;
             if (!victimRoleMatches(roleConditions, targetId, ctx)) continue;
-            removals.push({ targetId, removed: ctx.statusEngine.purge(targetId, cfg.count) });
+            // A purge lands like an 'apply' debuff: nothing at an affinity disadvantage.
+            const disadvantaged =
+                getAffinityMatchup(
+                    ctx.actorById?.(intent.ownerId)?.affinity,
+                    ctx.affinityOf?.(targetId)
+                ) === 'disadvantage';
+            removals.push({
+                targetId,
+                removed: disadvantaged ? 0 : ctx.statusEngine.purge(targetId, cfg.count),
+            });
         }
         // Emit purge-performed UNLESS this purge was itself triggered by a purge (depth-1
         // guard). Every victim is purged first, so each event carries the wave's total.
