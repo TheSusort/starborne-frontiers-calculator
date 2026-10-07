@@ -1788,6 +1788,8 @@ function abilitiesFromText(
         out[0].ability.trigger = 'on-other-ally-debuff-inflicted';
         const verb = parseOtherAllyInflictsDebuffVerb(text);
         if (verb) out[0].ability.triggerApplicationFilter = verb;
+        // Once per (root cast, debuffed enemy) — see `Ability.oncePerRootCast`.
+        out[0].ability.oncePerRootCast = 'per-victim';
     }
 
     // "deals N% damage to enemies (with|afflicted with) <effect>" — gate the damage on the enemy
@@ -3757,7 +3759,10 @@ export function buildShipAbilities(rawShip: Ship): ShipSkills {
                 if (verb) ability.triggerApplicationFilter = verb;
             }
             // APEX's Block Shield: once per (root cast, enemy) (see `Ability.oncePerRootCast`).
-            if (reactiveTrigger === 'on-enemy-debuff-inflicted')
+            if (
+                reactiveTrigger === 'on-enemy-debuff-inflicted' ||
+                reactiveTrigger === 'on-other-ally-debuff-inflicted'
+            )
                 ability.oncePerRootCast = 'per-victim';
             // "When this Unit inflicts a Bomb" (Lingshe) reacts to that family landing only
             // (Ability.triggerStatusFilter's doc), read from the same clause as the trigger.

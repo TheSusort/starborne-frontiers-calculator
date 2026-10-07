@@ -1,9 +1,10 @@
 /**
  * A reaction to a debuff being inflicted fires once per DoT STACK inflicted (owner ruling R28,
- * 2026-10-04). Snakeroot's one "inflicts 2 stacks of Corrosion I" on B is two inflictions:
- * Provider's "When another ally inflicts a debuff, deals 50% damage" hits twice. Only the stacks that LANDED count
- * (each stack rolls its own landing, R30). A reaction's own once-per caps still hold: Oleander's
- * "adds 1 charge" is one per cast, so a 2-stack Corrosion charges her once; APEX's
+ * 2026-10-04). Snakeroot's one "inflicts 2 stacks of Corrosion I" on B is two inflictions.
+ * Only the stacks that LANDED count (each stack rolls its own landing, R30). A reaction's own
+ * once-per caps still hold: Oleander's "adds 1 charge" is one per cast, so a 2-stack Corrosion
+ * charges her once, and Provider's "When another ally inflicts a debuff, deals 50% damage" is one
+ * per (cast, enemy), so it hits once; APEX's
  * "gains a shield equal to 3% … when an enemy gets inflicted with a debuff" fires once for the
  * whole cast (`Ability.oncePerRootCast`), and so does her Block Shield, which still reads B's
  * debuff count as of each stack.
@@ -340,10 +341,10 @@ for (const side of [PLAYER, ENEMY]) {
     });
 
     describe(`${side.tag}: Provider — "When another ally inflicts a debuff, deals 50% damage"`, () => {
-        it('one 2-stack Corrosion → two hits and two Crit Rate Down II', () => {
+        it('one 2-stack Corrosion → one hit and one Crit Rate Down II (once per cast and enemy)', () => {
             const m = measure(side, snakeroot(), passiveOnly('Provider'));
-            expect(m.reactorHits).toBe(2);
-            expect(m.reactorDebuffs['Crit Rate Down II']).toBe(2);
+            expect(m.reactorHits).toBe(1);
+            expect(m.reactorDebuffs['Crit Rate Down II']).toBe(1);
         });
         it('negative: one 1-stack Corrosion → one hit', () => {
             const m = measure(side, wisteria(), passiveOnly('Provider'));

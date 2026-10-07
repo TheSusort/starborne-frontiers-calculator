@@ -15,6 +15,7 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator: Hayyan's debuff repair fires once per ally per enemy skill.",
     'Combat simulator: Oleander gains one charge per ally skill, not per debuff.',
     'Combat simulator: Sefuba now repairs once per purge, before her extra purge.',
+    "Combat simulator: Provider's ally-debuff hit fires once per enemy per skill.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

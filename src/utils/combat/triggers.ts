@@ -1236,7 +1236,12 @@ export function registerReactiveListeners(args: {
                         )
                             enqueue({
                                 ...intent,
-                                eventCtx: { ...intent.eventCtx, debuffVictimId: e.targetId },
+                                eventCtx: {
+                                    ...intent.eventCtx,
+                                    debuffVictimId: e.targetId,
+                                    inflictorId: e.sourceId,
+                                    ...inflictionReactionCtx(e),
+                                },
                             });
                     });
                     bus.on('dot-applied', (e) => {
@@ -1254,7 +1259,12 @@ export function registerReactiveListeners(args: {
                             for (let i = 0; i < dotInflictions(e); i++)
                                 enqueue({
                                     ...intent,
-                                    eventCtx: { ...intent.eventCtx, debuffVictimId: e.targetId },
+                                    eventCtx: {
+                                        ...intent.eventCtx,
+                                        debuffVictimId: e.targetId,
+                                        inflictorId: e.sourceId,
+                                        ...inflictionReactionCtx(e),
+                                    },
                                 });
                     });
                     break;
@@ -6771,6 +6781,7 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 : undefined;
         for (const victimId of victimIds) {
             if (victimId === undefined) continue;
+            if (!passesOncePerRootCastGate(intent, ctx, victimId)) continue;
             // procScope:'per-cast' (Insidiousness): ONE hit per victim per ROLL. The trigger fires
             // once per debuff APPLICATION, so a cast inflicting two debuffs on one enemy (Curator's
             // Attack Down III + Crit Power Down III) would otherwise hit that enemy twice under its

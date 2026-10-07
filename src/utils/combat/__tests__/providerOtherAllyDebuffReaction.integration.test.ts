@@ -2,7 +2,7 @@
  * #590 — Provider: "20% Shield Penetration. When another ally inflicts a debuff onto an enemy,
  * this unit deals 50% damage to that enemy that cannot critically hit [and inflict Crit Rate
  * Down II for 1 turn (R2+)]." The reaction:
- *  - fires PER DEBUFF LANDED (two debuffs from one cast = two hits);
+ *  - fires once per (skill cast, debuffed enemy) (two debuffs from one cast = one hit);
  *  - hits EACH victim of an AoE debuff on several enemies;
  *  - counts an ally's landed DoT as a debuff;
  *  - counts a debuff an ally lands from a REACTION, not only its own cast;
@@ -386,13 +386,13 @@ describe('Provider (player-side) — real kit, security 0 guarantees every ally 
         speed: 90, // slower than Curator (130): Curator's debuffs land before Provider's turn
     });
 
-    it('Curator lands 2 debuffs in one cast → Provider hits that enemy TWICE, never critting', () => {
+    it('Curator lands 2 debuffs in one cast → Provider hits that enemy ONCE, never critting', () => {
         const { reactiveDamage } = collectReactiveDamage({
             ...BASE(),
             teamActors: [curatorAlly(['Attack Down III', 'Crit Power Down III'])],
         });
         const providerHits = reactiveDamage.filter((e) => e.sourceId === 'attacker');
-        expect(providerHits).toHaveLength(2);
+        expect(providerHits).toHaveLength(1);
         for (const hit of providerHits) {
             expect(hit.didCrit).toBeFalsy();
         }
@@ -411,14 +411,14 @@ describe('Provider (player-side) — real kit, security 0 guarantees every ally 
         expect(debuffsResisted.some((e) => e.buffName === 'Defense Down II')).toBe(false);
     });
 
-    it('a same-tier re-land is a real re-application every cast — 3 casts land 2 debuffs each = 6 Provider hits (#590 R2)', () => {
+    it('a same-tier re-land is a real re-application every cast — 3 casts land 2 debuffs each = 3 Provider hits, one per cast (#590 R2)', () => {
         const { reactiveDamage, debuffsApplied } = collectReactiveDamage({
             ...BASE(),
             numRounds: 3,
             teamActors: [curatorAlly(['Attack Down III', 'Crit Power Down III'])],
         });
         const providerHits = reactiveDamage.filter((e) => e.sourceId === 'attacker');
-        expect(providerHits).toHaveLength(6);
+        expect(providerHits).toHaveLength(3);
         expect(
             debuffsApplied.filter(
                 (e) => e.sourceId === 'curator' && e.buffName === 'Attack Down III'
@@ -770,7 +770,7 @@ describe('Provider (enemy-side) — team symmetry mirror', () => {
 });
 
 describe('Two Providers answer each other once, then stop (the lineage rule)', () => {
-    it('Curator lands ONE debuff → 4 reactive hits: each Provider answers Curator and the other', () => {
+    it('Curator lands ONE debuff → 2 reactive hits: each Provider answers Curator once, and neither answers the other in the same cast', () => {
         const providerAAbilities = providerPassiveAbilities(2);
         const providerBAbilities = providerPassiveAbilities(2);
 
@@ -862,16 +862,15 @@ describe('Two Providers answer each other once, then stop (the lineage rule)', (
             teamActors: [providerTeamActor('provider-b', providerBAbilities), curator],
         });
 
-        // Curator's Attack Down III wakes both Providers (2 hits, 2 Crit Rate Down II). Each
-        // Crit Rate Down II is another ally's infliction, so the OTHER Provider answers it (2 more
-        // hits): his passive is not yet in that chain. That answer's Crit Rate Down II would wake
-        // the first Provider again, whose passive IS in the chain, so it stops there.
+        // Curator's Attack Down III wakes both Providers (1 hit and 1 Crit Rate Down II each).
+        // Each Crit Rate Down II is another ally's infliction onto the same enemy inside Curator's
+        // one cast, so the once-per-(cast, enemy) cap answers it with nothing further.
         const hits = reactiveDamage.filter(
             (e) => e.sourceId === 'attacker' || e.sourceId === 'provider-b'
         );
-        expect(hits.filter((e) => e.sourceId === 'attacker')).toHaveLength(2);
-        expect(hits.filter((e) => e.sourceId === 'provider-b')).toHaveLength(2);
+        expect(hits.filter((e) => e.sourceId === 'attacker')).toHaveLength(1);
+        expect(hits.filter((e) => e.sourceId === 'provider-b')).toHaveLength(1);
         // Instrument: every Provider debuff landed, so a missing answer is not a resist.
-        expect(debuffsApplied.filter((e) => e.buffName === 'Crit Rate Down II').length).toBe(4);
+        expect(debuffsApplied.filter((e) => e.buffName === 'Crit Rate Down II').length).toBe(2);
     });
 });

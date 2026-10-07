@@ -179,8 +179,8 @@ describe.each(SIDES)('Stalwart (attackers on the %s side)', (placement) => {
             [frontFiller, stalwartAt('M3')],
             'stalwart'
         );
-        // Several Provider hits (one per debuff landed), only the first is a primary-target hit.
-        expect(obs.hits.filter((h) => h === 'provider>stalwart').length).toBeGreaterThan(1);
+        // Provider hits once per (cast, debuffed enemy); that one hit is a primary-target hit.
+        expect(obs.hits.filter((h) => h === 'provider>stalwart')).toHaveLength(1);
         expect(obs.counters).toEqual(['stalwart>provider']);
     });
 
