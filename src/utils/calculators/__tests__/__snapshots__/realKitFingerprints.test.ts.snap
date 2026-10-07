@@ -502,7 +502,6 @@ exports[`kit fingerprints > Chakara 1`] = `
     "attack",
     "attack:active",
     "charge-changed",
-    "purge",
     "purge:charged",
   ],
   "wounded": [
@@ -615,13 +614,11 @@ exports[`kit fingerprints > Cobalt 1`] = `
     "charge-changed",
   ],
   "statusRich": [
-    "attack",
     "attack:active",
+    "attack:charged",
     "buff",
     "buff-expired",
     "charge-changed",
-    "purge:active",
-    "purge:charged",
   ],
   "wounded": [
     "attack:active",
@@ -2481,7 +2478,6 @@ exports[`kit fingerprints > Obsidian 1`] = `
     "buff",
     "buff-expired",
     "charge-changed",
-    "purge",
     "purge:active",
   ],
   "wounded": [
@@ -3251,10 +3247,10 @@ exports[`kit fingerprints > Sefuba 1`] = `
   ],
   "statusRich": [
     "attack",
+    "attack:active",
     "attack:charged",
     "charge-changed",
     "heal",
-    "purge",
     "purge:active",
   ],
   "wounded": [
