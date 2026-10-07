@@ -1,0 +1,362 @@
+/**
+ * Owner ruling R109: DoTs, Bombs and Echoing Burst accumulators are debuffs in every sense, so
+ * every debuff-duration extension reaches them — Lev's crit "all hit enemies have their debuffs
+ * extended", Provider's "all damage over time debuffs are extended", and the inflicted-scope
+ * extensions (Valerian, Asphyxiator) over what the cast just applied. Unremovable Acidic Decay is
+ * extended too: unremovable is not frozen.
+ *
+ * Harness: one direct `runPlayerTurn` cast with hand-built runtimes (the `extendStatusCastPath`
+ * shape). The turn's loose DoT containers are the bound victim's OWN arrays, exactly as the
+ * engine passes them, so every assertion reads the victim actor.
+ */
+import { beforeEach, describe, expect, it } from 'vitest';
+import { runPlayerTurn, PlayerActorRuntime, PlayerTurnArgs, RateGate } from '../playerTurn';
+import { createActor, CombatActor, ActiveDoTStack } from '../state';
+import { createStatusEngine, StatusEngine, RegisteredAbilityStatus } from '../statusEngine';
+import { createEventBus } from '../events';
+import { makeRateGate, setupKeyedRng } from '../../calculators/rateAccumulator';
+import { Ability, ShipSkills } from '../../../types/abilities';
+import { AffinityName } from '../../../types/ship';
+
+const ATTACKER_AFFINITY: AffinityName = 'thermal';
+
+const baseStats = () => ({
+    attack: 5000,
+    crit: 0,
+    critDamage: 0,
+    defensePenetration: 0,
+    shieldPenetration: 0,
+    defence: 0,
+    hp: 20_000,
+    speed: 100,
+});
+
+function makeRuntime(
+    actorId: string,
+    skills: ShipSkills,
+    opts: { side?: 'player' | 'enemy'; chargedCritGate?: RateGate } = {}
+): PlayerActorRuntime {
+    const { side = 'player', chargedCritGate = () => false } = opts;
+    const actor = createActor({
+        id: actorId,
+        side,
+        kind: 'attacker',
+        stats: baseStats(),
+        chargeCount: 1,
+        startCharged: true,
+    });
+    return {
+        actor,
+        focus: true,
+        castSkills: skills,
+        reactiveAbilities: [],
+        timedSelfBySlot: [],
+        timedEnemyBySlot: [],
+        hasChargedSkill: true,
+        attack: 5000,
+        crit: 0,
+        critDamage: 0,
+        defensePenetration: 0,
+        defence: 0,
+        hp: 20_000,
+        healModifier: 0,
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        affinityDisadvantage: false,
+        attackerAffinity: ATTACKER_AFFINITY,
+        activeCritGate: () => false,
+        chargedCritGate,
+        activeHealCritGate: () => false,
+        chargedHealCritGate: () => false,
+        debuffLandingGate: makeRateGate(),
+        extendChanceGate: makeRateGate(),
+        landsTimedEnemyApplication: () => true,
+        selfBuffLookup: new Map(),
+        enemyDebuffLookup: new Map(),
+    };
+}
+
+const dot = (over: Partial<ActiveDoTStack> = {}): ActiveDoTStack => ({
+    stacks: 1,
+    tier: 1,
+    remainingRounds: 1,
+    sourceId: 'earlier-caster',
+    ...over,
+});
+
+/** A victim carrying one of each debuff kind, every duration seeded at a known value. */
+function makeLoadedVictim(
+    id: string,
+    side: 'player' | 'enemy',
+    statusEngine: StatusEngine,
+    affinity?: AffinityName
+): CombatActor {
+    const v = createActor({
+        id,
+        side,
+        kind: 'enemy',
+        stats: { ...baseStats(), attack: 0, hp: 1_000_000 },
+    });
+    if (affinity) v.affinity = affinity;
+    v.corrosionEntries.push(dot({ stacks: 2 }));
+    v.infernoEntries.push(dot());
+    v.genericDoTEntries.push(
+        dot({ remainingRounds: 2, family: 'Acidic Decay', unremovable: true })
+    );
+    v.pendingBombs.push({
+        countdown: 1,
+        damagePerStack: 10,
+        stacks: 1,
+        tier: 1,
+        sourceId: 'earlier-caster',
+        affinityMult: 1,
+        detonationDamageModifier: 0,
+        splashModifier: 0,
+    });
+    v.pendingAccumulators.push({
+        roundsRemaining: 1,
+        pct: 50,
+        accumulated: 0,
+        sourceId: 'earlier-caster',
+    });
+    const defenseDown: Extract<RegisteredAbilityStatus, { kind: 'timed' }> = {
+        kind: 'timed',
+        side: 'enemy',
+        sourceSlot: 'active',
+        conditions: [],
+        duration: 1,
+        payload: { buffName: 'Defense Down II', stacks: 1, parsedEffects: { defense: -10 } },
+    };
+    statusEngine.applyTimedAbilityStatus(1, defenseDown, undefined, id);
+    return v;
+}
+
+function makeArgs(
+    runtime: PlayerActorRuntime,
+    victim: CombatActor,
+    statusEngine: StatusEngine
+): PlayerTurnArgs {
+    return {
+        runtime,
+        enemy: victim,
+        statusEngine,
+        corrosionEntries: victim.corrosionEntries,
+        infernoEntries: victim.infernoEntries,
+        genericDoTEntries: victim.genericDoTEntries,
+        pendingBombs: victim.pendingBombs,
+        pendingAccumulators: victim.pendingAccumulators,
+        enemyDefense: 0,
+        enemyHp: victim.currentHp,
+        enemyType: undefined,
+        bus: createEventBus(),
+        round: 1,
+        targetId: victim.id,
+        aoeVictimIds: [victim.id],
+        opposingVictimById: new Map([[victim.id, victim]]),
+    };
+}
+
+const durations = (statusEngine: StatusEngine, v: CombatActor) => ({
+    defenseDown: statusEngine
+        .timedAbilityStatuses('enemy', undefined, v.id)
+        .find((s) => s.payload.buffName === 'Defense Down II')?.active.turnsRemaining,
+    corrosion: v.corrosionEntries[0]?.remainingRounds,
+    inferno: v.infernoEntries[0]?.remainingRounds,
+    acidicDecay: v.genericDoTEntries[0]?.remainingRounds,
+    bomb: v.pendingBombs[0]?.countdown,
+    accumulator: v.pendingAccumulators[0]?.roundsRemaining,
+});
+
+const UNMOVED = {
+    defenseDown: 1,
+    corrosion: 1,
+    inferno: 1,
+    acidicDecay: 2,
+    bomb: 1,
+    accumulator: 1,
+};
+const EXTENDED_BY_ONE = {
+    defenseDown: 2,
+    corrosion: 2,
+    inferno: 2,
+    acidicDecay: 3,
+    bomb: 2,
+    accumulator: 2,
+};
+
+const levSkills = (): ShipSkills => ({
+    slots: [
+        {
+            slot: 'charged',
+            abilities: [
+                {
+                    id: 'lev-extend',
+                    type: 'extend-status',
+                    target: 'all-enemies',
+                    trigger: 'on-cast',
+                    conditions: [{ subject: 'self-crit', derivable: true }],
+                    config: { type: 'extend-status', statusKind: 'debuff', turns: 1 },
+                },
+            ],
+        },
+    ],
+});
+
+function castLev(opts: {
+    casterSide: 'player' | 'enemy';
+    crit: boolean;
+    victimAffinity?: AffinityName;
+}) {
+    const victimSide = opts.casterSide === 'player' ? 'enemy' : 'player';
+    const runtime = makeRuntime('lev', levSkills(), {
+        side: opts.casterSide,
+        chargedCritGate: () => opts.crit,
+    });
+    const statusEngine = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+    statusEngine.beginRound(1);
+    const victim = makeLoadedVictim('victim', victimSide, statusEngine, opts.victimAffinity);
+    runPlayerTurn(makeArgs(runtime, victim, statusEngine));
+    return durations(statusEngine, victim);
+}
+
+beforeEach(() => setupKeyedRng(109));
+
+describe("R109: Lev's crit debuff extension reaches every DoT, Bomb and accumulator", () => {
+    it('a crit extends the timed debuff, Corrosion, Inferno, Acidic Decay, Bomb and Echoing Burst', () => {
+        expect(castLev({ casterSide: 'player', crit: true })).toEqual(EXTENDED_BY_ONE);
+    });
+
+    it('no crit: nothing moves', () => {
+        expect(castLev({ casterSide: 'player', crit: false })).toEqual(UNMOVED);
+    });
+
+    it('an enemy with affinity advantage over Lev keeps every duration', () => {
+        // Thermal Lev is at affinity disadvantage against an electric enemy.
+        expect(castLev({ casterSide: 'player', crit: true, victimAffinity: 'electric' })).toEqual(
+            UNMOVED
+        );
+    });
+
+    it('is team-symmetric: an enemy-side Lev extends a player ship the same way', () => {
+        expect(castLev({ casterSide: 'enemy', crit: true })).toEqual(EXTENDED_BY_ONE);
+    });
+});
+
+describe("R109: Provider's DoT extension reaches generic DoTs and Bombs", () => {
+    const providerExtend: Ability = {
+        id: 'provider-extend-dot',
+        type: 'extend-dot',
+        target: 'all-enemies',
+        trigger: 'on-cast',
+        conditions: [],
+        config: { type: 'extend-dot', turns: 1, scope: 'active' },
+    };
+
+    it('"all damage over time debuffs are extended by 1 turn" grows the generic DoT and the Bomb', () => {
+        const runtime = makeRuntime('provider', {
+            slots: [{ slot: 'charged', abilities: [providerExtend] }],
+        });
+        const statusEngine = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        statusEngine.beginRound(1);
+        const victim = makeLoadedVictim('victim', 'enemy', statusEngine);
+        runPlayerTurn(makeArgs(runtime, victim, statusEngine));
+        const after = durations(statusEngine, victim);
+        expect(after.acidicDecay).toBe(3);
+        expect(after.bomb).toBe(2);
+        expect(after.accumulator).toBe(2);
+        expect(after.corrosion).toBe(2);
+        expect(after.inferno).toBe(2);
+    });
+});
+
+describe("R109: Lev's extension reaches a covered enemy's DoTs, not only the aimed one's", () => {
+    it('both struck enemies have their Bomb and Acidic Decay extended on a crit', () => {
+        const runtime = makeRuntime('lev', levSkills(), { chargedCritGate: () => true });
+        const statusEngine = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        statusEngine.beginRound(1);
+        const aimed = makeLoadedVictim('aimed', 'enemy', statusEngine);
+        const covered = makeLoadedVictim('covered', 'enemy', statusEngine);
+        runPlayerTurn({
+            ...makeArgs(runtime, aimed, statusEngine),
+            aoeVictimIds: [aimed.id, covered.id],
+            opposingVictimById: new Map([
+                [aimed.id, aimed],
+                [covered.id, covered],
+            ]),
+        });
+        expect(durations(statusEngine, aimed)).toEqual(EXTENDED_BY_ONE);
+        expect(durations(statusEngine, covered)).toEqual(EXTENDED_BY_ONE);
+    });
+});
+
+/**
+ * Inflicted scope: the cast applies a Bomb (countdown 2) and an Echoing Burst (2 rounds) on top of
+ * the victim's standing load. The extension grows only what this cast applied.
+ */
+describe('R109: inflicted-scope extensions reach the Bomb and Echoing Burst the cast applied', () => {
+    const bombClause: Ability = {
+        id: 'cast-bomb',
+        type: 'dot',
+        target: 'enemy',
+        trigger: 'on-cast',
+        conditions: [],
+        config: { type: 'dot', dotType: 'bomb', tier: 100, stacks: 1, duration: 2 },
+    };
+    const echoClause: Ability = {
+        id: 'cast-echo',
+        type: 'accumulate-detonate',
+        target: 'enemy',
+        trigger: 'on-cast',
+        conditions: [],
+        config: { type: 'accumulate-detonate', turns: 2, pct: 50 },
+    };
+    const valerianExtend: Ability = {
+        id: 'valerian-extend',
+        type: 'extend-dot',
+        target: 'enemy',
+        trigger: 'on-cast',
+        conditions: [],
+        config: { type: 'extend-dot', turns: 1, scope: 'inflicted' },
+    };
+    const asphyxiatorExtend: Ability = {
+        id: 'asphyxiator-extend',
+        type: 'extend-status',
+        target: 'all-enemies',
+        trigger: 'on-cast',
+        conditions: [{ subject: 'self-crit', derivable: true }],
+        config: { type: 'extend-status', statusKind: 'debuff', turns: 1, scope: 'inflicted' },
+    };
+
+    const castWith = (extend: Ability) => {
+        const runtime = makeRuntime(
+            'caster',
+            { slots: [{ slot: 'charged', abilities: [bombClause, echoClause, extend] }] },
+            { chargedCritGate: () => true }
+        );
+        const statusEngine = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        statusEngine.beginRound(1);
+        const victim = makeLoadedVictim('victim', 'enemy', statusEngine);
+        runPlayerTurn(makeArgs(runtime, victim, statusEngine));
+        return victim;
+    };
+
+    for (const [name, extend] of [
+        ['Valerian extend-dot', valerianExtend],
+        ['Asphyxiator extend-status', asphyxiatorExtend],
+    ] as const) {
+        it(`${name}: the fresh Bomb and Echoing Burst grow, the standing ones do not`, () => {
+            const v = castWith(extend);
+            // Instrument: the cast landed its Bomb and its Echoing Burst.
+            expect(v.pendingBombs).toHaveLength(2);
+            expect(v.pendingAccumulators).toHaveLength(2);
+            expect(v.pendingBombs.map((b) => b.countdown)).toEqual([1, 3]);
+            expect(v.pendingAccumulators.map((a) => a.roundsRemaining)).toEqual([1, 3]);
+            // The standing DoTs are not this cast's.
+            expect(v.genericDoTEntries[0].remainingRounds).toBe(2);
+            expect(v.corrosionEntries[0].remainingRounds).toBe(1);
+        });
+    }
+});

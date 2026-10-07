@@ -257,10 +257,10 @@ for (const side of ['player', 'enemy'] as const) {
                 const immune = victimDurations(board(side, name, 'thermal'));
 
                 // Instrument: against a neutral enemy the extension really moved the durations.
-                // extend-dot reaches the DoT only; extend-status reaches the timed debuff, and its
-                // inflicted-scope form the cast's DoT as well. (The every-debuff extend-status
-                // reaches only the status engine's timed debuffs, so its DoT stays put here.)
-                const dotMoves = extendsDots || inflictedScope(name);
+                // extend-dot reaches the DoT only; extend-status reaches the timed debuff and the
+                // DoT both (owner ruling R109: a DoT is a debuff), every-debuff and inflicted-scope
+                // alike.
+                const dotMoves = extendsDots || extendsDebuffs;
                 expect(neutral.dot).toBe(control.dot + (dotMoves ? 1 : 0));
                 expect(neutral.debuff).toBe(control.debuff + (extendsDebuffs ? 1 : 0));
 

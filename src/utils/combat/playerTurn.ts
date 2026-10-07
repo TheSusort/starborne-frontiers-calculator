@@ -50,8 +50,10 @@ import {
     PendingBomb,
     CombatActor,
     DoTContainers,
+    DebuffEntryHolder,
     advanceChargeCadence,
     dotStackCount,
+    extendDebuffEntries,
 } from './state';
 import {
     ActiveBuff,
@@ -1270,9 +1272,10 @@ function foldTimedEnemyDebuffs(args: {
 }
 
 /**
- * Step 2.9: grows the ticking DoTs (Corrosion/Inferno) already standing on the enemies an
- * active-scope `extend-dot` ability targets. Bombs are excluded (delaying a one-shot detonation
- * adds nothing); 'inflicted'-scope extensions are `extendInflictedDoTs`' job.
+ * Step 2.9: grows every DoT, Bomb and Echoing Burst accumulator already standing on the enemies an
+ * active-scope `extend-dot` ability targets (owner ruling R109: all of them are debuffs, so
+ * Provider's "all damage over time debuffs are extended" reaches each — `extendDebuffEntries`).
+ * 'inflicted'-scope extensions are `extendInflictedDoTs`' job.
  *
  * Recipients follow the ability's `target` through `resolveDebuffRecipientIds`, the resolver every
  * direct enemy clause uses: 'all-enemies' — and 'enemy' on a firing-slot clause — fan over the
@@ -1280,8 +1283,7 @@ function foldTimedEnemyDebuffs(args: {
  * passive-slot 'enemy' is the primary alone, and a non-positional cast with no footprint falls
  * back to the primary. A POSITIONAL cast with no footprint reaches
  * nobody with an 'all-enemies' extension — the debuff resolver's answer, unlike the on-cast purge
- * loop's primary fallback. The primary's containers are the loose
- * `corrosionEntries`/`infernoEntries`; every other recipient's come off `opposingVictimById`.
+ * loop's primary fallback. Each recipient's containers come from `debuffHolderFor`.
  *
  * Runs BEFORE `applyNewDoTs`, so a DoT this same cast inflicts is never extended.
  * KNOWN GAP: that departs from the locked written-order rule — a DoT whose clause is written
@@ -1301,11 +1303,11 @@ function extendDoTs(args: {
     ctx: ConditionContext;
     effectiveCritDamage: number;
     extendChanceGate: (rate: number) => boolean;
-    corrosionEntries: ActiveDoTStack[];
-    infernoEntries: ActiveDoTStack[];
+    /** Where recipient `vid` keeps its DoTs, Bombs and accumulators (see runPlayerTurn's
+     *  `debuffHolderFor`). */
+    debuffHolderFor: (vid: string | undefined) => DebuffEntryHolder | undefined;
     targetId: string | undefined;
     aoeVictimIds: string[] | undefined;
-    opposingVictimById: Map<string, CombatActor> | undefined;
     adjacentEnemyIdsFor?: (anchorId: string) => string[];
     positionalLanding: boolean;
     selectorEnemyIdFor?: (kind: EnemySelectorKind) => string | undefined;
@@ -1332,36 +1334,67 @@ function extendDoTs(args: {
         });
         for (const vid of recipients) {
             if (args.isExtensionImmune(vid)) continue;
-            // `undefined` (the turn's own bound victim) and the primary's id both read the loose
-            // containers; a no-victim turn's are a throwaway default, so that case lands on nobody.
-            const primary = vid === undefined || vid === args.targetId;
-            const victim = primary ? undefined : args.opposingVictimById?.get(vid);
-            if (!primary && !victim) continue;
-            for (const e of victim?.corrosionEntries ?? args.corrosionEntries)
-                e.remainingRounds += turns;
-            for (const e of victim?.infernoEntries ?? args.infernoEntries)
-                e.remainingRounds += turns;
+            // A no-victim turn's loose containers are a throwaway default, so that case lands on
+            // nobody.
+            const holder = args.debuffHolderFor(vid);
+            if (!holder) continue;
+            extendDebuffEntries(holder, turns);
         }
     }
 }
 
-// Step 3a: Extend INFLICTED-scope DoTs — runs AFTER applyNewDoTs, extending ONLY the
-// Corrosion/Inferno entries THIS cast just appended (Valerian's "extends the duration the newly
-// inflicted Corrosion by 1 turn"). `*EntriesBefore` are the container lengths captured
-// before applyNewDoTs, so the slice from that index onward is exactly what landed this cast.
-// Bombs are excluded (matching extendDoTs). Gating is identical to extendDoTs: ability
-// conditions vs ctx (binary roundCrit), then extendChanceGate(critPowerFactor) for a
-// chanceFromCritPower extension. If the landing roll failed, applyNewDoTs was skipped and
-// the slice is empty — a natural no-op.
+/** How many entries each of a holder's debuff containers held at one moment — the slice bound an
+ *  inflicted-scope extension reads to find what a cast appended after it. */
+interface DebuffEntryLengths {
+    corrosion: number;
+    inferno: number;
+    generic: number;
+    bombs: number;
+    accumulators: number;
+}
+
+const debuffEntryLengths = (h: DebuffEntryHolder): DebuffEntryLengths => ({
+    corrosion: h.corrosionEntries.length,
+    inferno: h.infernoEntries.length,
+    generic: h.genericDoTEntries.length,
+    bombs: h.pendingBombs.length,
+    accumulators: h.pendingAccumulators.length,
+});
+
+/** Extends only the entries `holder` gained since `before` was captured. The slices share their
+ *  entry objects with the live containers, so `extendDebuffEntries` mutates the real entries. */
+const extendDebuffEntriesSince = (
+    holder: DebuffEntryHolder,
+    before: DebuffEntryLengths,
+    turns: number
+): void => {
+    extendDebuffEntries(
+        {
+            corrosionEntries: holder.corrosionEntries.slice(before.corrosion),
+            infernoEntries: holder.infernoEntries.slice(before.inferno),
+            genericDoTEntries: holder.genericDoTEntries.slice(before.generic),
+            pendingBombs: holder.pendingBombs.slice(before.bombs),
+            pendingAccumulators: holder.pendingAccumulators.slice(before.accumulators),
+        },
+        turns
+    );
+};
+
+// Step 3a: Extend INFLICTED-scope DoTs — runs AFTER applyNewDoTs and applyAccumulators, extending
+// ONLY the DoTs, Bombs and Echoing Burst accumulators THIS cast just appended (Valerian's "extends
+// the duration the newly inflicted Corrosion by 1 turn"; owner ruling R109 makes every one of
+// them a debuff). `before` holds the container lengths captured before the cast's applications,
+// so the slice from those indices onward is exactly what landed this cast; an unremovable entry
+// in it is extended too. Gating is identical to extendDoTs: ability conditions vs ctx (binary
+// roundCrit), then extendChanceGate(critPowerFactor) for a chanceFromCritPower extension. If the
+// landing roll failed, nothing was appended and the slice is empty — a natural no-op.
 function extendInflictedDoTs(args: {
     abilities: Ability[];
     ctx: ConditionContext;
     effectiveCritDamage: number;
     extendChanceGate: (rate: number) => boolean;
-    corrosionEntries: ActiveDoTStack[];
-    infernoEntries: ActiveDoTStack[];
-    corrosionEntriesBefore: number;
-    infernoEntriesBefore: number;
+    holder: DebuffEntryHolder;
+    before: DebuffEntryLengths;
     /** The victim holding these entries is immune to extension (`extensionImmune`). The gate
      *  still draws, so the chance schedule does not depend on the victim's affinity. */
     immune: boolean;
@@ -1375,12 +1408,7 @@ function extendInflictedDoTs(args: {
             if (!args.extendChanceGate(critPowerFactor)) continue;
         }
         if (args.immune) continue;
-        for (let i = args.corrosionEntriesBefore; i < args.corrosionEntries.length; i++) {
-            args.corrosionEntries[i].remainingRounds += ab.config.turns;
-        }
-        for (let i = args.infernoEntriesBefore; i < args.infernoEntries.length; i++) {
-            args.infernoEntries[i].remainingRounds += ab.config.turns;
-        }
+        extendDebuffEntriesSince(args.holder, args.before, ab.config.turns);
     }
 }
 
@@ -1388,10 +1416,10 @@ function extendInflictedDoTs(args: {
  * The DoT half of an inflicted-scope `extend-status` (Asphyxiator). Owner ruling 2026-09-02: a
  * crit extends every debuff the cast inflicted, and the game counts a DoT as one of them — so the
  * Inferno the cast just applied grows alongside the timed Defense Down its sibling clause landed.
+ * Bombs and Echoing Burst accumulators the cast applied grow too (owner ruling R109).
  *
- * Same slice discipline as `extendInflictedDoTs`: `*EntriesBefore` are the container lengths from
- * before this cast appended, so only the entries from that index onward are this cast's. Bombs are
- * excluded, matching both DoT-extension helpers — delaying a one-shot detonation adds nothing.
+ * Same slice discipline as `extendInflictedDoTs`: `before` holds the container lengths from
+ * before this cast appended, so only the entries from those indices onward are this cast's.
  *
  * Deliberately gate-free, unlike its `extend-dot` sibling: this clause carries no crit-power
  * chance, so it draws nothing from `extendChanceGate`. Called once for the primary and once per
@@ -1400,10 +1428,8 @@ function extendInflictedDoTs(args: {
 function extendInflictedStatusDoTs(args: {
     abilities: Ability[];
     ctx: ConditionContext;
-    corrosionEntries: ActiveDoTStack[];
-    infernoEntries: ActiveDoTStack[];
-    corrosionEntriesBefore: number;
-    infernoEntriesBefore: number;
+    holder: DebuffEntryHolder;
+    before: DebuffEntryLengths;
     /** The victim holding these entries is immune to extension (`extensionImmune`). */
     immune: boolean;
 }): void {
@@ -1413,12 +1439,7 @@ function extendInflictedStatusDoTs(args: {
         if (ab.config.scope !== 'inflicted') continue;
         if (ab.config.statusKind !== 'debuff') continue;
         if (!conditionsMet(ab.conditions, args.ctx)) continue;
-        for (let i = args.corrosionEntriesBefore; i < args.corrosionEntries.length; i++) {
-            args.corrosionEntries[i].remainingRounds += ab.config.turns;
-        }
-        for (let i = args.infernoEntriesBefore; i < args.infernoEntries.length; i++) {
-            args.infernoEntries[i].remainingRounds += ab.config.turns;
-        }
+        extendDebuffEntriesSince(args.holder, args.before, ab.config.turns);
     }
 }
 
@@ -5021,6 +5042,21 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         return getAffinityMatchup(attackerAff, victim?.affinity) === 'disadvantage';
     };
 
+    /** The bound victim's DoT, Bomb and accumulator containers — the loose ones this turn was
+     *  handed. Every other struck enemy's come off `opposingVictimById`. */
+    const primaryHolder: DebuffEntryHolder = {
+        corrosionEntries,
+        infernoEntries,
+        genericDoTEntries,
+        pendingBombs,
+        pendingAccumulators,
+    };
+    /** Where an extension that reaches enemy `vid` finds its DoTs, Bombs and accumulators: the
+     *  primary (or the no-id bound victim) reads the loose containers, any other id its own actor.
+     *  `undefined` when the id names no known victim. */
+    const debuffHolderFor = (vid: string | undefined): DebuffEntryHolder | undefined =>
+        vid === undefined || vid === targetId ? primaryHolder : opposingVictimById?.get(vid);
+
     extendDoTs({
         abilities: [...(firingSkill?.abilities ?? []), ...(passiveSkill?.abilities ?? [])],
         isExtensionImmune: extensionImmune,
@@ -5028,11 +5064,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         ctx,
         effectiveCritDamage,
         extendChanceGate,
-        corrosionEntries,
-        infernoEntries,
+        debuffHolderFor,
         targetId,
         aoeVictimIds,
-        opposingVictimById,
         adjacentEnemyIdsFor,
         positionalLanding,
         selectorEnemyIdFor,
@@ -5188,10 +5222,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // on-resist reaction counting resisted debuffs counts each. Already decided when a count
         // gate written after a DoT clause asked for it.
         const { castRoll, landed: landedPrimaryDots } = planPrimaryDots(dotsConfig);
-        // Capture pre-application lengths so 'inflicted'-scope extensions touch only
-        // the entries this cast adds below (the slice from these indices onward).
-        const corrosionEntriesBefore = corrosionEntries.length;
-        const infernoEntriesBefore = infernoEntries.length;
+        // Capture every container's pre-application length so 'inflicted'-scope extensions
+        // touch only the DoTs, Bombs and accumulators this cast adds below.
+        const primaryBefore = debuffEntryLengths(primaryHolder);
         // Over the DoTs rolled against the primary only: one aimed at its neighbours, or inert,
         // was never resisted here.
         dotsLanded = !dotsConfig.some(rollsOnPrimary) || landedPrimaryDots.length > 0;
@@ -5222,8 +5255,14 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 }),
         });
 
-        // Step 3a: 'inflicted'-scope extensions grow ONLY this cast's new DoTs
-        // (Valerian). Sourced from the same firing+passive ability set as Step 2.9.
+        // Accumulators ride the cast's shared round roll, not the per-stack DoT rolls. Applied
+        // before the inflicted-scope extensions below so those reach them.
+        if (castRoll) {
+            applyAccumulators({ gatedSkill, pendingAccumulators, sourceId: actor.id });
+        }
+
+        // Step 3a: 'inflicted'-scope extensions grow ONLY this cast's new DoTs, Bombs and
+        // accumulators (Valerian). Sourced from the same firing+passive ability set as Step 2.9.
         // Skipped when the cast's first roll failed and no later stack landed either: nothing was
         // appended, and skipping keeps the deterministic extendChanceGate schedule free of
         // phantom draws.
@@ -5233,26 +5272,17 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 ctx,
                 effectiveCritDamage,
                 extendChanceGate,
-                corrosionEntries,
-                infernoEntries,
-                corrosionEntriesBefore,
-                infernoEntriesBefore,
+                holder: primaryHolder,
+                before: primaryBefore,
                 immune: extensionImmune(undefined),
             });
             extendInflictedStatusDoTs({
                 abilities: [...(firingSkill?.abilities ?? []), ...(passiveSkill?.abilities ?? [])],
                 ctx,
-                corrosionEntries,
-                infernoEntries,
-                corrosionEntriesBefore,
-                infernoEntriesBefore,
+                holder: primaryHolder,
+                before: primaryBefore,
                 immune: extensionImmune(undefined),
             });
-        }
-
-        // Accumulators ride the cast's shared round roll, not the per-stack DoT rolls.
-        if (castRoll) {
-            applyAccumulators({ gatedSkill, pendingAccumulators, sourceId: actor.id });
         }
     }
 
@@ -5353,9 +5383,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         const landedVictimDots = plan.landed;
         if (!plan.firstLanded && landedVictimDots.length === 0) continue;
         // Per-VICTIM slice bounds, captured immediately before this victim's apply — the
-        // primary's `*EntriesBefore` describe a different container entirely.
-        const splashCorrosionBefore = victim.corrosionEntries.length;
-        const splashInfernoBefore = victim.infernoEntries.length;
+        // primary's `primaryBefore` describes different containers entirely.
+        const victimBefore = debuffEntryLengths(victim);
         const victimCrit = victimCritOf(rid);
         const victimCtx: ConditionContext = { ...ctx, roundCrit: victimCrit };
         applyNewDoTs({
@@ -5391,19 +5420,15 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             ctx: victimCtx,
             effectiveCritDamage,
             extendChanceGate,
-            corrosionEntries: victim.corrosionEntries,
-            infernoEntries: victim.infernoEntries,
-            corrosionEntriesBefore: splashCorrosionBefore,
-            infernoEntriesBefore: splashInfernoBefore,
+            holder: victim,
+            before: victimBefore,
             immune: extensionImmune(rid),
         });
         extendInflictedStatusDoTs({
             abilities: [...(firingSkill?.abilities ?? []), ...(passiveSkill?.abilities ?? [])],
             ctx: victimCtx,
-            corrosionEntries: victim.corrosionEntries,
-            infernoEntries: victim.infernoEntries,
-            corrosionEntriesBefore: splashCorrosionBefore,
-            infernoEntriesBefore: splashInfernoBefore,
+            holder: victim,
+            before: victimBefore,
             immune: extensionImmune(rid),
         });
     }
@@ -5752,8 +5777,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
 
     // On-cast extend-status (Lev charged all-enemies debuff-extend gated on self-crit; Fuying
     // charged named Stealth buff-extend; Asphyxiator passive inflicted-scope debuff-extend).
-    // Ripper's buff-extend rides on-debuff-inflicted and runs in triggers.ts, not here. Pure
-    // StatusEngine duration mutation — side-symmetric (mirrors the purge/steal/shield-strip
+    // Ripper's buff-extend rides on-debuff-inflicted and runs in triggers.ts, not here. A
+    // StatusEngine duration mutation plus, for an every-debuff extension, the victims' DoTs,
+    // Bombs and accumulators — side-symmetric (mirrors the purge/steal/shield-strip
     // blocks above: runs identically for player AND enemy casters, OUTSIDE the healing gate).
     // Sourced from BOTH the firing slot (gatedSkill: Lev, Fuying) AND the always-active
     // passive slot (gatedPassive: Asphyxiator) — mirroring the healAbilities combine
@@ -5819,6 +5845,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             // leaves everything else standing alone. A victim the cast inflicted nothing on
             // gets an empty set, which extends nothing — the right answer, and the reason the
             // filter is `?? EMPTY` rather than `undefined` (undefined means extend-everything).
+            // Lev: an every-debuff extension also grows each recipient's DoTs, Bombs and Echoing
+            // Burst accumulators (owner ruling R109: they are debuffs in every sense). The
+            // inflicted-scope form reaches the cast's own DoT-side entries through
+            // `extendInflictedStatusDoTs` instead.
             const inflictedScope = ab.config.scope === 'inflicted';
             for (const vid of recipients) {
                 statusEngine.extendAllDebuffsDuration(
@@ -5828,6 +5858,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                         ? (inflictedDebuffNamesByVictim.get(vid) ?? NO_INFLICTED_NAMES)
                         : undefined
                 );
+                if (!inflictedScope) {
+                    const holder = debuffHolderFor(vid);
+                    if (holder) extendDebuffEntries(holder, turns);
+                }
             }
             // A clause that follows this cast's damage lands LATER — the engine flushes
             // `deferredEnemyApplications` once the damage has resolved, which is after this

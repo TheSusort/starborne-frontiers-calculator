@@ -16,8 +16,9 @@ export type AbilityType =
     | 'extend-dot'
     // Generic extend-status (Ripper/Lev) — grows every eligible timed
     // buff or debuff by N turns (StatusEngine selfMaps/enemyMaps), the clean inverse of
-    // the shipped duration-reduce ('cleanse' mode:'reduce-duration'). Distinct from
-    // 'extend-dot', which operates on the separate DoT tick-stack store, not these maps.
+    // the shipped duration-reduce ('cleanse' mode:'reduce-duration'). A debuff extension also
+    // grows the victim's DoTs, Bombs and Echoing Burst accumulators (owner ruling R109), which
+    // live outside these maps; 'extend-dot' reaches those containers alone.
     | 'extend-status'
     | 'detonate-dot'
     | 'accumulate-detonate'
@@ -935,9 +936,9 @@ export type AbilityConfig =
     // here since there is only one landing behavior for this ability (unlike 'debuff', which
     // supports both 'inflict' and 'apply').
     | { type: 'bomb-countdown-reduce'; turns: number }
-    // `scope`: 'active'/undefined extends ALL standing DoT entries (Provider's
-    // "all damage over time debuffs are extended"; default + back-compat for stored
-    // configs). 'inflicted' extends ONLY the DoT entries this cast just applied
+    // `scope`: 'active'/undefined extends ALL standing DoT entries, Bombs and Echoing Burst
+    // accumulators (Provider's "all damage over time debuffs are extended"; default +
+    // back-compat for stored configs). 'inflicted' extends ONLY the ones this cast just applied
     // (Valerian's "the newly inflicted Corrosion by 1 turn").
     | {
           type: 'extend-dot';
@@ -947,8 +948,9 @@ export type AbilityConfig =
       }
     // Generic extend-status (Ripper/Lev) — extends every eligible timed
     // buff ('buff') or debuff ('debuff') on the StatusEngine selfMaps/enemyMaps store by
-    // `turns`. See src/utils/combat/statusEngine.ts extendAllBuffsDuration/
-    // extendAllDebuffsDuration.
+    // `turns` (statusEngine.ts extendAllBuffsDuration/extendAllDebuffsDuration). A 'debuff'
+    // extension also extends the victim's DoTs, Bombs and Echoing Burst accumulators
+    // (`extendDebuffEntries` in combat/state.ts) — owner ruling R109.
     | {
           type: 'extend-status';
           statusKind: 'buff' | 'debuff';
@@ -961,8 +963,8 @@ export type AbilityConfig =
            *  ("the newly inflicted debuff is extended by 1 turn") — a status already standing
            *  from an earlier round is left alone. Absent → extend every eligible standing
            *  status, which is what Ripper/Lev do. Same axis as `extend-dot`'s `scope`,
-           *  and an inflicted-scope debuff extension covers the cast's DoT applications too:
-           *  the game counts a DoT as one of the debuffs it inflicted. */
+           *  and an inflicted-scope debuff extension covers the cast's DoT, Bomb and Echoing
+           *  Burst applications too: the game counts each as one of the debuffs it inflicted. */
           scope?: 'active' | 'inflicted';
       }
     | { type: 'detonate-dot'; dotType: DoTType; powerPct: number }
