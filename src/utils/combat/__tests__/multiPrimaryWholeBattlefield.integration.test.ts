@@ -1,6 +1,6 @@
 /**
- * Owner ruling R110: an attack can have SEVERAL primary targets. A skill whose firing pattern is the
- * whole battlefield (`Pattern-All` — Curator's active, "deals 60% damage to all enemies") makes
+ * Owner ruling R110: an attack can have SEVERAL primary targets. A skill whose firing pattern is
+ * the whole battlefield (`Pattern-All` — Curator's active, "deals 60% damage to all enemies") makes
  * EVERY enemy it strikes a primary target, so every "when directly damaged as a primary target"
  * reaction fires for each: Stalwart counters, Malvex gains his shield, Nosorog and a Reflect-set
  * wearer reflect. It is a property of the pattern, never of the ship's name. Each victim still

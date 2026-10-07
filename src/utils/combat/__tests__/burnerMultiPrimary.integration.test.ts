@@ -108,11 +108,17 @@ const wearer = (
     ...targeting,
 });
 
-const foe = (id: string, position: BoardUnit['position'], affinity?: AffinityName): BoardUnit => ({
+const foe = (
+    id: string,
+    position: BoardUnit['position'],
+    affinity?: AffinityName,
+    hp?: number
+): BoardUnit => ({
     id,
     kit: NO_KIT,
     position,
     speed: 1,
+    ...(hp !== undefined ? { hp } : {}),
     ...(affinity ? { affinity } : {}),
 });
 
@@ -197,5 +203,18 @@ describe.each(SIDES)('regression: one primary keeps one Inferno target (%s side)
         );
         expect(obs.struck).toEqual(['covered', 'front']);
         expect(obs.inferno).toEqual({ front: 1 });
+    });
+
+    it('Enforcer kills the front enemy on attack 1 → the later attacks’ Inferno lands on the re-aimed enemy', () => {
+        const obs = infernoByVictim(
+            placement,
+            wearer('Enforcer', {
+                target: parseTarget('front'),
+                pattern: parsePattern('Pattern-Base'),
+            }),
+            [foe('front', 'M4', undefined, 1), foe('next', 'T4')]
+        );
+        expect(obs.front ?? 0).toBeLessThanOrEqual(1);
+        expect(obs.next).toBe(2);
     });
 });

@@ -1397,9 +1397,10 @@ const extendDebuffEntriesSince = (
 // Step 3a: Extend INFLICTED-scope DoTs — runs AFTER applyNewDoTs and applyAccumulators, extending
 // ONLY the DoTs, Bombs and Echoing Burst accumulators THIS cast just appended (owner ruling R109
 // makes every one of them a debuff). An extension naming a family (`dotType` — Valerian's and
-// Wisteria's "the newly inflicted Corrosion") reaches that family's fresh entries alone. `before` holds the container lengths captured before the cast's applications,
-// so the slice from those indices onward is exactly what landed this cast; an unremovable entry
-// in it is extended too. Gating is identical to extendDoTs: ability conditions vs ctx (binary
+// Wisteria's "the newly inflicted Corrosion") reaches that family's fresh entries alone.
+// `before` holds the container lengths captured before the cast's applications, so the slice
+// from those indices onward is exactly what landed this cast; an unremovable entry in it is
+// extended too. Gating is identical to extendDoTs: ability conditions vs ctx (binary
 // roundCrit), then extendChanceGate(critPowerFactor) for a chanceFromCritPower extension. If the
 // landing roll failed, nothing was appended and the slice is empty — a natural no-op.
 function extendInflictedDoTs(args: {
@@ -5875,7 +5876,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             // Lev: an every-debuff extension also grows each recipient's DoTs, Bombs and Echoing
             // Burst accumulators (owner ruling R109: they are debuffs in every sense). The
             // inflicted-scope form reaches the cast's own DoT-side entries through
-            // `extendInflictedStatusDoTs` instead.
+            // `extendInflictedStatusDoTs` instead. The every-debuff form extends what the holder
+            // carries when it runs, entries this cast already applied included (no current kit
+            // with this clause applies one).
             const inflictedScope = ab.config.scope === 'inflicted';
             for (const vid of recipients) {
                 statusEngine.extendAllDebuffsDuration(

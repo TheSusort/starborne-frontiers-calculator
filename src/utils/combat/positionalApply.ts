@@ -395,8 +395,8 @@ export function applyPositionalDamage(args: {
      *
      * `victimIds` is this sub-attack's footprint in hit order — the anchor plus every covered
      * cell — and is the set the engine re-rolls the landing against. `primaryVictimIds` is the
-     * subset that are primary targets (see {@link SubAttackOutcome.primaryVictimIds}). Overkill retargeting is correct for
-     * free: the anchor is re-resolved against the live roster at the top of every iteration, so a
+     * subset that are primary targets (see {@link SubAttackOutcome.primaryVictimIds}). Overkill
+     * retargeting is correct for free: the anchor is re-resolved against the live roster at the top of every iteration, so a
      * victim killed on an earlier sub-attack simply is not here.
      */
     onSubAttackStart?: (sub: SubAttackBoundary) => void;

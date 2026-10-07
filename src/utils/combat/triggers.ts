@@ -3714,8 +3714,9 @@ export function actorDebuffCount(statusEngine: StatusEngine, actor: CombatActor)
  * stack it carries (owner ruling R27) and each Echoing Burst accumulator (`dotCleanseCandidates`),
  * taken NEWEST APPLIED FIRST across both kinds (owner ruling 2026-10-04: Attack Down and 2
  * Corrosion stacks, "cleanses 1 debuff" → whichever was inflicted last goes). A typed cleanse
- * (`debuffType`, Nyxen's "cleanses 2 Bomb" / "2 damage over time debuffs") filters to DoT stacks
- * of that kind, then takes the newest. `actor` absent (a hand-built ctx without an actor
+ * (`debuffType`, Nyxen's "cleanses 2 Bomb" / "2 damage over time debuffs") skips the named
+ * debuffs: `'bomb'` draws on Bomb stacks only, `'dot'` on every DoT stack, Bomb and Echoing
+ * Burst accumulator, then takes the newest. `actor` absent (a hand-built ctx without an actor
  * reader) → named debuffs only. Returns how many were removed.
  */
 export function cleanseDebuffs(
@@ -5964,8 +5965,15 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
             intent.eventCtx.primaryVictimIds.length > 0
                 ? intent.eventCtx.primaryVictimIds
                 : [routedVictimId];
+        // A cast-scoped rider fires once for the whole recipient set; only the per-victim scope
+        // is spent per recipient inside the loop.
+        if (intent.ability.oncePerCast === 'cast' && !passesOncePerCastGate(intent, ctx)) return;
         for (const recipientId of recipientIds) {
-            if (!passesOncePerCastGate(intent, ctx, recipientId)) continue;
+            if (
+                intent.ability.oncePerCast === 'per-victim' &&
+                !passesOncePerCastGate(intent, ctx, recipientId)
+            )
+                continue;
             const victim = ctx.actorById?.(recipientId);
             // A unit-test ctx without an `actorById` delegate cannot resolve the object but still
             // knows the id — keep using it rather than inventing a target.

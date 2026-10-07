@@ -3000,7 +3000,8 @@ export function runCombat(rawInput: CombatEngineInput): {
     // an unresolvable id is the only surviving route, and a DoT that lands here is stranded — it
     // never ticks and never expires.
     //
-    // There is deliberately NO side-wide `pendingAccumulators` counterpart: nothing would read it.
+    // There is deliberately NO side-wide `pendingAccumulators` container: an accumulator lives on
+    // its holder, and `dotReadings` reads the holder's own list when it has one.
     const corrosionEntries: ActiveDoTStack[] = [];
     const infernoEntries: ActiveDoTStack[] = [];
     const genericDoTEntries: ActiveDoTStack[] = [];
@@ -9134,8 +9135,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                         round: currentRound,
                         damage,
                     });
-                    // `isPrimary: false` — this instance is not the cast's primary-target hit, so it
-                    // must not satisfy a `requirePrimaryTarget` reflect gate (Nosorog).
+                    // `isPrimary: false` — this instance is not the cast's primary-target hit,
+                    // so it must not satisfy a `requirePrimaryTarget` reflect gate (Nosorog).
                     // 4th arg: this instance is a SECOND positional damage path into the funnel, so
                     // it owes the Protection cascade the same mitigation factor the firing hit
                     // hands down. Omitting it left this path on the fallback re-derivation — the
@@ -10352,8 +10353,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                     _isAnchor,
                     isPrimary
                 ) => {
-                    // The cast's hit on a primary target is the first aimed hit on it in that
-                    // sub-attack's chain, so it spends that victim's primary-target allowance there.
+                    // The cast's hit on a primary target is the first aimed hit on it in
+                    // that sub-attack's chain, so it spends that victim's primary-target
+                    // allowance there.
                     if (isPrimary) spendPrimaryHit(victim.id, castHitRoot(subAttackIndex ?? 0));
                     // Injected per-site leech direction (Note A): standing (player→enemy) vs taken
                     // (enemy→player, which also captures the focus victim's shield-hit flag).

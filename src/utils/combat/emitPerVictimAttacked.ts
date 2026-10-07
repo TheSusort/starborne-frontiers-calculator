@@ -6,8 +6,8 @@ import { emitAttacked } from './emitAttacked';
  * per hit per footprint victim, each carrying that victim's OWN damage /
  * shieldWasHit / hitOutcomes, with `isPrimaryTarget` set on each victim in
  * `primaryIds` — the sub-attack's primary targets (`SubAttackOutcome.primaryVictimIds`: its
- * anchor, or every victim of a whole-battlefield attack). Delegates to `emitAttacked` per victim so the per-event
- * conditional-spread shape stays identical to the legacy focus-only emit.
+ * anchor, or every victim of a whole-battlefield attack). Delegates to `emitAttacked` per victim
+ * so the per-event conditional-spread shape stays identical to the legacy focus-only emit.
  * Direction-agnostic (caller supplies attacker/victim ids).
  *
  * The engine calls this once per SUB-ATTACK, so

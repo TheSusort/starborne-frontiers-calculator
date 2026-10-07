@@ -3099,31 +3099,33 @@ const DocumentationPage: React.FC = () => {
                                         Defense Shred like any other debuff. Every DoT stack, Bomb
                                         and Echoing Burst is a debuff too: debuff extensions,
                                         cleanses, duration cuts, debuff counts and Cheat Death all
-                                        treat them that way, and a Bomb or Echoing Burst removed by
-                                        a cleanse, a cut or Cheat Death never detonates.
-                                        Nyxen&apos;s cleanses take only Bombs or only
-                                        damage-over-time effects, as written, newest first.
-                                        Heliodor&apos;s and Pestilence&apos;s cut to the duration of
-                                        all debuffs shortens Corrosion and Inferno too; one cut to 0
-                                        turns ends without ticking again. Reactions to an enemy
-                                        cleansing a debuff (Pestilence, Larkspur, Grif, Arum,
-                                        Yarrow) also hear the cleanses an enemy&apos;s passive
-                                        performs (Nuqtu, Purifier, AEGIS, Hermes, Howler), but not a
-                                        duration cut; a cleanse that such a reaction provoked
-                                        triggers them again. A count written after an infliction in
-                                        the same skill includes what that skill landed, enemy by
-                                        enemy: Crocus&apos;s Corrosion II counts toward her own
-                                        &ldquo;3 or more debuffs&rdquo; Stasis (Asphyxiator&apos;s
-                                        and Anemone&apos;s gates likewise), and a resisted one does
-                                        not. A passive reacting to the hit (Bayah) counts only the
-                                        debuffs from before the skill. APEX&apos;s passive shield
-                                        arrives as the skill&apos;s first debuff lands, so her
-                                        charged skill&apos;s &ldquo;If this Unit has an active
-                                        shield&rdquo; Disable lands once an earlier debuff in it has
-                                        landed. Likewise Belladonna&apos;s charged Corrosion II, if
-                                        her passive converts it to Acidic Decay as it lands, counts
-                                        toward that skill&apos;s &ldquo;3 or more Acidic
-                                        Decay&rdquo; Stasis.
+                                        treat them that way. A Bomb removed by a cleanse or Cheat
+                                        Death never detonates, but a Bomb whose countdown a duration
+                                        cut drives to 0 does. An Echoing Burst removed by a cleanse,
+                                        a cut to 0 or Cheat Death never bursts. Nyxen&apos;s
+                                        cleanses take only Bombs or only damage-over-time effects,
+                                        as written, newest first. Heliodor&apos;s and
+                                        Pestilence&apos;s cut to the duration of all debuffs
+                                        shortens every damage-over-time effect and Echoing Burst
+                                        too; one cut to 0 turns ends without ticking again.
+                                        Reactions to an enemy cleansing a debuff (Pestilence,
+                                        Larkspur, Grif, Arum, Yarrow) also hear the cleanses an
+                                        enemy&apos;s passive performs (Nuqtu, Purifier, AEGIS,
+                                        Hermes, Howler), but not a duration cut; a cleanse that such
+                                        a reaction provoked triggers them again. A count written
+                                        after an infliction in the same skill includes what that
+                                        skill landed, enemy by enemy: Crocus&apos;s Corrosion II
+                                        counts toward her own &ldquo;3 or more debuffs&rdquo; Stasis
+                                        (Asphyxiator&apos;s and Anemone&apos;s gates likewise), and
+                                        a resisted one does not. A passive reacting to the hit
+                                        (Bayah) counts only the debuffs from before the skill.
+                                        APEX&apos;s passive shield arrives as the skill&apos;s first
+                                        debuff lands, so her charged skill&apos;s &ldquo;If this
+                                        Unit has an active shield&rdquo; Disable lands once an
+                                        earlier debuff in it has landed. Likewise Belladonna&apos;s
+                                        charged Corrosion II, if her passive converts it to Acidic
+                                        Decay as it lands, counts toward that skill&apos;s &ldquo;3
+                                        or more Acidic Decay&rdquo; Stasis.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Team Ships:</span> Pick a
@@ -4712,7 +4714,7 @@ const DocumentationPage: React.FC = () => {
                                     charge for the skipped turn). Two damage-over-time gear sets are
                                     also modeled: <strong>Burner</strong> (applies Inferno for 2
                                     turns on every primary target when the ship attacks, so a
-                                    whole-battlefield attack such as Curator&apos;s active inflicts
+                                    whole-battlefield attack such as Curator&apos;s active applies
                                     it on every enemy; an applied Inferno lands without a hacking
                                     roll, failing only when the ship is at an affinity disadvantage
                                     against the target) and <strong>Decimation</strong> (+10% DoT
