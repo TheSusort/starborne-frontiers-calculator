@@ -2378,16 +2378,36 @@ export function registerReactiveListeners(args: {
                     });
                     break;
                 }
-                case 'on-enemy-buffed':
+                case 'on-enemy-buffed': {
+                    // A skill cast that grants buffs is ONE trigger however many recipients or
+                    // buffs it grants: the grants a granter's own turn raises (not reactive ones)
+                    // share that turn. Every other gain — a reaction's, or one outside any turn —
+                    // is its own trigger.
+                    let turnSeq = 0;
+                    let turnActor: string | undefined;
+                    let lastCastSeq = -1;
+                    bus.on('turn-started', (e) => {
+                        turnSeq++;
+                        turnActor = e.actorId;
+                    });
+                    bus.on('turn-ended', () => {
+                        turnActor = undefined;
+                    });
                     bus.on('buff-applied', (e) => {
                         // Opposing-scoped: any opposing-side actor RECEIVING a timed buff
                         // (e.actorId is the recipient — events.ts). For the player call: an
                         // enemy attacker gaining a self-buff. For the enemy call: a player actor
                         // gaining one. Nuqtu's self-cleanse + Terran Bolster III are both
-                        // self-target — no eventCtx capture needed. One enqueue per application.
-                        if (isOpposing(e.actorId)) enqueue(intent);
+                        // self-target — no eventCtx capture needed.
+                        if (!isOpposing(e.actorId)) return;
+                        if (e.reactive !== true && turnActor === (e.granterId ?? e.actorId)) {
+                            if (lastCastSeq === turnSeq) return;
+                            lastCastSeq = turnSeq;
+                        }
+                        enqueue(intent);
                     });
                     break;
+                }
                 case 'on-enemy-taunt-gained':
                     bus.on('buff-applied', (e) => {
                         // Opposing-scoped AND buff-name-filtered mirror

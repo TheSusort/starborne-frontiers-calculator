@@ -60,7 +60,8 @@ const plainHit = (id: string): Ability => ({
     config: { type: 'damage', multiplier: 100 },
 });
 
-/** Two self-buffs on the active: every cast is two "gains a buff" events for an opposing Nuqtu. */
+/** Two self-buffs on the active: every cast is two "gains a buff" events for an opposing Nuqtu,
+ *  which count as one trigger. */
 const twoSelfBuffs = (prefix: string): Ability[] =>
     (['Attack Up', 'Hacking Up'] as const).map((buffName, i) => ({
         id: `${prefix}-buff-${i}`,
@@ -85,7 +86,7 @@ const nuqtuSlots = (): ShipSkills['slots'] => [
     { slot: 'passive', abilities: realPassive('Nuqtu') },
 ];
 
-/** A fast, harmless ship that gains two buffs every turn. */
+/** A fast, harmless ship that casts a two-buff self grant every turn. */
 const buffingEnemy = (id: string, position: Position): EnemyAttacker => ({
     id,
     stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: HUGE_HP, speed: 300 },
@@ -227,7 +228,7 @@ const run = (input: CombatEngineInput, hitterId: string): Run => {
     return { hits, events, engine: engine! };
 };
 
-describe("Nuqtu's Core Charge I — one stack per enemy buff gain, kept, capped at 10", () => {
+describe("Nuqtu's Core Charge I — one stack per enemy buffing cast, kept, capped at 10", () => {
     beforeAll(requireReferenceData);
 
     it('PRECONDITION: the real grant is on-enemy-buffed, 1 stack, max 10, recurring', () => {
@@ -250,14 +251,14 @@ describe("Nuqtu's Core Charge I — one stack per enemy buff gain, kept, capped 
         ['PLAYER Nuqtu', () => playerNuqtu(), 'attacker'],
         ['ENEMY Nuqtu', () => enemyNuqtu(), 'e-nuqtu'],
     ] as const) {
-        it(`${label}: 4 gains a round → 4, 8, then the 10-stack cap (+4% each)`, () => {
+        it(`${label}: 2 buffing casts a round → 2, 4, 6 stacks (+4% each)`, () => {
             const { hits, engine } = run(input(), nuqtuId);
 
             expect(hits).toHaveLength(3);
-            expect(hits[0]).toBeCloseTo(ATTACK * 1.16, 6);
-            expect(hits[1]).toBeCloseTo(ATTACK * 1.32, 6);
-            expect(hits[2]).toBeCloseTo(ATTACK * 1.4, 6);
-            expect(selfBuffStacksForOwner(engine, nuqtuId, 'Core Charge I')).toBe(10);
+            expect(hits[0]).toBeCloseTo(ATTACK * 1.08, 6);
+            expect(hits[1]).toBeCloseTo(ATTACK * 1.16, 6);
+            expect(hits[2]).toBeCloseTo(ATTACK * 1.24, 6);
+            expect(selfBuffStacksForOwner(engine, nuqtuId, 'Core Charge I')).toBe(6);
         });
 
         it(`${label}: Core Charge I never expires, Terran Bolster III (1 turn) still does`, () => {
@@ -316,5 +317,86 @@ describe("A duration-less reactive grant is NOT a recurring one — Nayra's over
         expect(applied).toHaveLength(3);
         for (const e of applied) expect(e.type === 'buff-applied' && e.duration).toBe(Infinity);
         expect(expired).toHaveLength(0);
+    });
+});
+
+// Owner ruling R121: Nuqtu gains ONE Core Charge per enemy skill cast that grants buffs, however
+// many allies or buffs that cast grants.
+describe("Nuqtu's Core Charge I — one stack per enemy buffing SKILL CAST (R121)", () => {
+    beforeAll(requireReferenceData);
+
+    /** A cast granting Attack Up II + Defense Up II to every ally. */
+    const teamBuffs = (prefix: string): Ability[] =>
+        (['Attack Up II', 'Defense Up II'] as const).map((buffName, i) => ({
+            id: `${prefix}-team-${i}`,
+            type: 'buff',
+            target: 'all-allies',
+            trigger: 'on-cast',
+            conditions: [],
+            config: {
+                type: 'buff',
+                buffName,
+                parsedEffects: {},
+                stacks: 1,
+                isStackable: false,
+                duration: 2,
+            },
+        }));
+
+    const enemyShip = (id: string, position: Position, abilities: Ability[]): EnemyAttacker => ({
+        ...buffingEnemy(id, position),
+        shipSkills: { slots: [{ slot: 'active', abilities }] },
+    });
+
+    const playerNuqtuVs = (enemies: EnemyAttacker[]): CombatEngineInput => ({
+        ...playerNuqtu(),
+        numRounds: 1,
+        enemyAttackers: enemies,
+    });
+
+    const stacksAfter = (input: CombatEngineInput): number => {
+        const { engine } = run(input, 'attacker');
+        return selfBuffStacksForOwner(engine, 'attacker', 'Core Charge I');
+    };
+
+    it('CONTROL: no enemy buffs anything, no stack', () => {
+        expect(stacksAfter(playerNuqtuVs([enemyShip('e-a', 'M4', [plainHit('a')])]))).toBe(0);
+    });
+
+    it('one cast granting 2 buffs to 3 allies is ONE stack', () => {
+        // e-a casts first (speed 300); e-b and e-c are its inert allies who receive both buffs.
+        const caster = enemyShip('e-a', 'M4', teamBuffs('e-a'));
+        const inert = (id: string, position: Position): EnemyAttacker => ({
+            ...enemyShip(id, position, []),
+            stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: HUGE_HP, speed: 5 },
+        });
+        expect(stacksAfter(playerNuqtuVs([caster, inert('e-b', 'M3'), inert('e-c', 'M2')]))).toBe(
+            1
+        );
+    });
+
+    it('two separate buffing casts are TWO stacks', () => {
+        const a = enemyShip('e-a', 'M4', teamBuffs('e-a'));
+        const b = enemyShip('e-b', 'M3', teamBuffs('e-b'));
+        expect(stacksAfter(playerNuqtuVs([a, b]))).toBe(2);
+    });
+
+    it('mirror: an ENEMY Nuqtu reads a player ship casting a team buff as ONE stack', () => {
+        const input: CombatEngineInput = {
+            ...enemyNuqtu(),
+            numRounds: 1,
+            shipSkills: { slots: [{ slot: 'active', abilities: teamBuffs('focus') }] },
+            teamActors: [buffingAlly('p-b', 'M3'), { ...buffingAlly('p-c', 'M2'), speed: 5 }].map(
+                (t) => ({
+                    ...t,
+                    walk: {
+                        ...t.walk!,
+                        shipSkills: { slots: [{ slot: 'active', abilities: [] }] },
+                    },
+                })
+            ),
+        };
+        const { engine } = run(input, 'e-nuqtu');
+        expect(selfBuffStacksForOwner(engine, 'e-nuqtu', 'Core Charge I')).toBe(1);
     });
 });
