@@ -370,6 +370,27 @@ export function dotEntriesOf(holder: DebuffEntryHolder, family?: DoTType): Debuf
 }
 
 /**
+ * `holder` seen by a debuff clause that names one debuff ("extends Stasis by 1 turn"): only the
+ * entries carrying that name. A DoT entry's name is its `family` tag when it has one (Belladonna's
+ * "Acidic Decay"), else its container's base name — "Corrosion", "Inferno" or "Damage over Time",
+ * the names `enemyDebuffNamesForTarget` in engine.ts reports. Every Bomb answers to "Bomb" and
+ * every Echoing Burst accumulator to "Echoing Burst". Any other name (a timed status, a tiered
+ * name such as "Corrosion II") yields an all-empty view. The views share their entry objects with
+ * the live containers, so `extendDebuffEntries` mutates the real entries.
+ */
+export function debuffEntriesNamed(holder: DebuffEntryHolder, name: string): DebuffEntryHolder {
+    const named = (entries: ActiveDoTStack[], base: string) =>
+        entries.filter((e) => (e.family ?? base) === name);
+    return {
+        corrosionEntries: named(holder.corrosionEntries, 'Corrosion'),
+        infernoEntries: named(holder.infernoEntries, 'Inferno'),
+        genericDoTEntries: named(holder.genericDoTEntries, 'Damage over Time'),
+        pendingBombs: name === 'Bomb' ? holder.pendingBombs : [],
+        pendingAccumulators: name === 'Echoing Burst' ? holder.pendingAccumulators : [],
+    };
+}
+
+/**
  * Extends every DoT entry, Bomb countdown and Echoing Burst accumulator `holder` carries by
  * `turns` (owner ruling R109: all of them are debuffs in every sense, so "debuffs extended by N
  * turns" reaches each). A damage-over-time extension passes `dotEntriesOf(holder)`, which leaves

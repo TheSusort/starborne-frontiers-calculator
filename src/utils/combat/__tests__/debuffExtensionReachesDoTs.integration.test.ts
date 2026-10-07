@@ -190,7 +190,7 @@ const EXTENDED_BY_ONE = {
     accumulator: 2,
 };
 
-const levSkills = (): ShipSkills => ({
+const levSkills = (buffName?: string): ShipSkills => ({
     slots: [
         {
             slot: 'charged',
@@ -201,7 +201,12 @@ const levSkills = (): ShipSkills => ({
                     target: 'all-enemies',
                     trigger: 'on-cast',
                     conditions: [{ subject: 'self-crit', derivable: true }],
-                    config: { type: 'extend-status', statusKind: 'debuff', turns: 1 },
+                    config: {
+                        type: 'extend-status',
+                        statusKind: 'debuff',
+                        turns: 1,
+                        ...(buffName !== undefined ? { buffName } : {}),
+                    },
                 },
             ],
         },
@@ -212,9 +217,10 @@ function castLev(opts: {
     casterSide: 'player' | 'enemy';
     crit: boolean;
     victimAffinity?: AffinityName;
+    buffName?: string;
 }) {
     const victimSide = opts.casterSide === 'player' ? 'enemy' : 'player';
-    const runtime = makeRuntime('lev', levSkills(), {
+    const runtime = makeRuntime('lev', levSkills(opts.buffName), {
         side: opts.casterSide,
         chargedCritGate: () => opts.crit,
     });
@@ -246,6 +252,34 @@ describe("R109: Lev's crit debuff extension reaches every DoT, Bomb and accumula
     it('is team-symmetric: an enemy-side Lev extends a player ship the same way', () => {
         expect(castLev({ casterSide: 'enemy', crit: true })).toEqual(EXTENDED_BY_ONE);
     });
+});
+
+/**
+ * A named debuff extension grows only the debuffs carrying that name: a timed status by its name,
+ * a DoT entry by its family ("Corrosion", "Inferno", "Acidic Decay"), every Bomb by "Bomb" and
+ * every Echoing Burst accumulator by "Echoing Burst". A name the victim does not carry moves
+ * nothing.
+ */
+describe('a named debuff extension grows only the debuffs of that name', () => {
+    const cases: [string, Partial<typeof UNMOVED>][] = [
+        ['Defense Down II', { defenseDown: 2 }],
+        ['Corrosion', { corrosion: 2 }],
+        ['Acidic Decay', { acidicDecay: 3 }],
+        ['Inferno', { inferno: 2 }],
+        ['Bomb', { bomb: 2 }],
+        ['Echoing Burst', { accumulator: 2 }],
+        ['Stasis', {}],
+    ];
+    for (const casterSide of ['player', 'enemy'] as const) {
+        for (const [buffName, grown] of cases) {
+            it(`${casterSide}-side caster, named "${buffName}"`, () => {
+                expect(castLev({ casterSide, crit: true, buffName })).toEqual({
+                    ...UNMOVED,
+                    ...grown,
+                });
+            });
+        }
+    }
 });
 
 describe("R112: Provider's DoT extension reaches every DoT but no Bomb or Echoing Burst", () => {
@@ -347,6 +381,18 @@ describe('R109/R112: inflicted-scope extensions over what the cast applied', () 
         config: { type: 'extend-status', statusKind: 'debuff', turns: 1, scope: 'inflicted' },
     };
 
+    const namedBombExtend: Ability = {
+        ...asphyxiatorExtend,
+        id: 'named-bomb-extend',
+        config: {
+            type: 'extend-status',
+            statusKind: 'debuff',
+            turns: 1,
+            scope: 'inflicted',
+            buffName: 'Bomb',
+        },
+    };
+
     const castWith = (extend: Ability, casterSide: 'player' | 'enemy') => {
         const runtime = makeRuntime(
             'caster',
@@ -385,6 +431,14 @@ describe('R109/R112: inflicted-scope extensions over what the cast applied', () 
             expect(v.corrosionEntries[2].remainingRounds).toBe(3);
             expect(v.pendingBombs.map((b) => b.countdown)).toEqual([1, 3]);
             expect(v.pendingAccumulators.map((a) => a.roundsRemaining)).toEqual([1, 3]);
+        });
+
+        it(`${side}-side inflicted extend-status named "Bomb": only the fresh Bomb grows`, () => {
+            const v = castWith(namedBombExtend, side);
+            freshLanded(v);
+            expect(v.corrosionEntries[2].remainingRounds).toBe(2);
+            expect(v.pendingBombs.map((b) => b.countdown)).toEqual([1, 3]);
+            expect(v.pendingAccumulators.map((a) => a.roundsRemaining)).toEqual([1, 2]);
         });
 
         it(`${side}-side family-less inflicted extend-dot: the fresh Corrosion grows; the fresh Bomb and Echoing Burst do not`, () => {

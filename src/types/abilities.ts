@@ -961,7 +961,8 @@ export type AbilityConfig =
           turns: number;
           /** #363 (Fuying): restrict the extension to statuses with this exact name
            *  ("extends Stealth by 1 turn"). Absent → extend EVERY eligible timed status of
-           *  `statusKind`, which is what Ripper/Lev do. */
+           *  `statusKind`, which is what Ripper/Lev do. On a 'debuff' extension the name also
+           *  picks which DoT, Bomb and Echoing Burst entries grow (`debuffEntriesNamed`). */
           buffName?: string;
           /** Asphyxiator: 'inflicted' extends ONLY the statuses THIS cast just applied
            *  ("the newly inflicted debuff is extended by 1 turn") — a status already standing

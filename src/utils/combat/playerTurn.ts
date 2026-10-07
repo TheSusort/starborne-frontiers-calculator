@@ -53,6 +53,7 @@ import {
     DebuffEntryHolder,
     advanceChargeCadence,
     extendDebuffEntries,
+    debuffEntriesNamed,
     dotEntriesOf,
 } from './state';
 import {
@@ -1367,23 +1368,23 @@ const debuffEntryLengths = (h: DebuffEntryHolder): DebuffEntryLengths => ({
     accumulators: h.pendingAccumulators.length,
 });
 
-/** Extends only the entries `holder` gained since `before` was captured. The slices share their
- *  entry objects with the live containers, so `extendDebuffEntries` mutates the real entries. */
+/** Extends only the entries `holder` gained since `before` was captured — of those, only the
+ *  ones named `name` when it is given (`debuffEntriesNamed`). The slices share their entry objects
+ *  with the live containers, so `extendDebuffEntries` mutates the real entries. */
 const extendDebuffEntriesSince = (
     holder: DebuffEntryHolder,
     before: DebuffEntryLengths,
-    turns: number
+    turns: number,
+    name?: string
 ): void => {
-    extendDebuffEntries(
-        {
-            corrosionEntries: holder.corrosionEntries.slice(before.corrosion),
-            infernoEntries: holder.infernoEntries.slice(before.inferno),
-            genericDoTEntries: holder.genericDoTEntries.slice(before.generic),
-            pendingBombs: holder.pendingBombs.slice(before.bombs),
-            pendingAccumulators: holder.pendingAccumulators.slice(before.accumulators),
-        },
-        turns
-    );
+    const fresh: DebuffEntryHolder = {
+        corrosionEntries: holder.corrosionEntries.slice(before.corrosion),
+        infernoEntries: holder.infernoEntries.slice(before.inferno),
+        genericDoTEntries: holder.genericDoTEntries.slice(before.generic),
+        pendingBombs: holder.pendingBombs.slice(before.bombs),
+        pendingAccumulators: holder.pendingAccumulators.slice(before.accumulators),
+    };
+    extendDebuffEntries(name === undefined ? fresh : debuffEntriesNamed(fresh, name), turns);
 };
 
 // Step 3a: Extend INFLICTED-scope DoTs — runs AFTER applyNewDoTs and applyAccumulators, extending
@@ -1451,7 +1452,7 @@ function extendInflictedStatusDoTs(args: {
         if (ab.config.scope !== 'inflicted') continue;
         if (ab.config.statusKind !== 'debuff') continue;
         if (!conditionsMet(ab.conditions, args.ctx)) continue;
-        extendDebuffEntriesSince(args.holder, args.before, ab.config.turns);
+        extendDebuffEntriesSince(args.holder, args.before, ab.config.turns, ab.config.buffName);
     }
 }
 
@@ -5840,8 +5841,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             continue;
         }
         const { statusKind, turns } = ab.config;
-        // #363 (Fuying): a NAMED extension ("extends Stealth by 1 turn") restricts the buff
-        // branch below to that exact status name. Absent → extend-everything.
+        // #363 (Fuying): a NAMED extension ("extends Stealth by 1 turn") restricts either branch
+        // to statuses of that exact name. Absent → extend-everything.
         const namedBuff = ab.config.type === 'extend-status' ? ab.config.buffName : undefined;
         if (statusKind === 'debuff') {
             // Lev: fans over the cast's hit-enemy footprint (aoeVictimIds) for an 'all-enemies'
@@ -5874,18 +5875,34 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             // `extendInflictedStatusDoTs` instead. The every-debuff form extends what the holder
             // carries when it runs, entries this cast already applied included (no current kit
             // with this clause applies one).
+            // A named extension narrows both the store sweep and the entry containers to that
+            // name (`debuffEntriesNamed`).
             const inflictedScope = ab.config.scope === 'inflicted';
+            const onlyNamed = (names: ReadonlySet<string>): ReadonlySet<string> =>
+                namedBuff === undefined
+                    ? names
+                    : names.has(namedBuff)
+                      ? new Set([namedBuff])
+                      : NO_INFLICTED_NAMES;
             for (const vid of recipients) {
                 statusEngine.extendAllDebuffsDuration(
                     vid,
                     turns,
                     inflictedScope
-                        ? (inflictedDebuffNamesByVictim.get(vid) ?? NO_INFLICTED_NAMES)
-                        : undefined
+                        ? onlyNamed(inflictedDebuffNamesByVictim.get(vid) ?? NO_INFLICTED_NAMES)
+                        : namedBuff !== undefined
+                          ? new Set([namedBuff])
+                          : undefined
                 );
                 if (!inflictedScope) {
                     const holder = debuffHolderFor(vid);
-                    if (holder) extendDebuffEntries(holder, turns);
+                    if (holder)
+                        extendDebuffEntries(
+                            namedBuff === undefined
+                                ? holder
+                                : debuffEntriesNamed(holder, namedBuff),
+                            turns
+                        );
                 }
             }
             // A clause that follows this cast's damage lands LATER — the engine flushes
@@ -5906,6 +5923,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 for (const pending of deferredEnemyApplications) {
                     const { victimId, buffName } = pending;
                     if (victimId === undefined || buffName === undefined) continue;
+                    if (namedBuff !== undefined && buffName !== namedBuff) continue;
                     if (!recipients.includes(victimId)) continue;
                     const write = pending.applyState;
                     pending.applyState = () => {
