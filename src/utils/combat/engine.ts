@@ -53,7 +53,7 @@ import {
     type EnemySelectorKind,
 } from '../abilities/abilityTargetSide';
 import { TITANITE_PLATING } from '../../constants/persistentStackingBuffs';
-import { targetCarriesBlockDebuff } from './debuffImmunity';
+import { dotResistLabel, emitBlockDebuffResist, targetCarriesBlockDebuff } from './debuffImmunity';
 import {
     createOverclockHangoverTracker,
     isOverclock,
@@ -199,7 +199,7 @@ import {
 } from './hitMitigation';
 import { holdsShieldConverter, consumeShieldConverter } from './shieldConverter';
 import { holdsRoguesLiberty } from './rogueLiberty';
-import { holdsToxicOverflow } from './toxicOverflowStatus';
+import { holdsToxicOverflow, toxicOverflowApplierOf } from './toxicOverflowStatus';
 import { supportFootprintAllyIds } from './supportFootprint';
 import type { PreFightCombatModifiers } from './preFight/types';
 import { protectionCascade } from './protectionTransfer';
@@ -13712,9 +13712,12 @@ export function runCombat(rawInput: CombatEngineInput): {
 
         // Toxic Overflow end-of-round Corrosion spread. Game rule (constants/buffs.ts): "At the end
         // of the round if a unit has Toxic Overflow and at least 1 stack of Corrosion, inflict
-        // Corrosion I for 3 turns to all adjacent allies and remove Toxic Overflow." Runs BEFORE
-        // the round-ended emit/drain below so each `corrosion-spread` event's enqueued reactions
-        // (Hemlock's self-heal, on-corrosion-spread) are flushed by the same drainReactions calls.
+        // Corrosion I for 3 turns to all adjacent allies and remove Toxic Overflow." Each spread
+        // Corrosion is an infliction by the ship that applied the Toxic Overflow (owner ruling):
+        // its own landing roll, Block Debuff respected, and a `dot-applied` every infliction
+        // reaction hears. Runs BEFORE the round-ended emit/drain below so the reactions the
+        // landings and each `corrosion-spread` event enqueue (Hemlock's self-heal,
+        // on-corrosion-spread) are flushed by the same drainReactions calls.
         // Team-symmetric: iterates every living actor. The holder's Toxic Overflow is
         // read out of the per-victim TIMED enemy-debuff store ONLY, via `holdsToxicOverflow` — see
         // the guard below for why that channel and not the broad name union; Corrosion lives on the
@@ -13750,22 +13753,57 @@ export function runCombat(rawInput: CombatEngineInput): {
             toxicSpreaders.push(holder);
         }
         for (const holder of toxicSpreaders) {
-            const affectedIds = bySide(
+            const adjacentIds = bySide(
                 isEnemySide(holder.id) ? 'enemy' : 'player'
             ).adjacentAllyIdsFor(holder.id);
+            // The Toxic Overflow's applier inflicts the spread (the holder, for a status carrying
+            // no caster).
+            const applierId = toxicOverflowApplierOf(statusEngine, holder.id) ?? holder.id;
+            const applier = allRuntimesById.get(applierId);
+            const resistLabel = dotResistLabel('corrosion', SPREAD_CORROSION_TIER);
+            // The adjacent allies the spread LANDED on — what Hemlock's "per enemy affected"
+            // repair counts.
+            const affectedIds: string[] = [];
             // Inflict Corrosion I (SPREAD_CORROSION_TIER, SPREAD_CORROSION_DURATION turns) on each
-            // adjacent ally. Attributed to the holder (a live, resolvable applier so the tick is
-            // counted — see tickDoTs's corrosion applier-ctx rule). New independent stack (DoTs of
-            // the same family stack), mirroring applyNewDoTs's corrosion entry shape.
-            for (const allyId of affectedIds) {
+            // adjacent ally, as any inflicted DoT lands: a Block Debuff holder auto-resists with no
+            // roll; otherwise the applier's hacking rolls against the recipient's security. A
+            // landed stack is a new independent entry (DoTs of the same family stack), mirroring
+            // applyNewDoTs's corrosion entry shape.
+            for (const allyId of adjacentIds) {
                 const ally = allActorsById.get(allyId);
                 if (!ally) continue;
+                if (targetCarriesBlockDebuff(statusEngine, allyId)) {
+                    emitBlockDebuffResist(bus, applierId, allyId, r, resistLabel, false);
+                    continue;
+                }
+                const lands =
+                    applier?.landsTimedEnemyApplication(
+                        undefined,
+                        ally.affinity,
+                        reactiveLandingChanceFor(applierId, allyId)
+                    ) ?? true;
+                if (!lands) {
+                    emitBlockDebuffResist(bus, applierId, allyId, r, resistLabel, true);
+                    continue;
+                }
+                const appliedSeq = statusEngine.nextAppliedSeq();
                 ally.corrosionEntries.push({
                     stacks: 1,
                     tier: SPREAD_CORROSION_TIER,
                     remainingRounds: SPREAD_CORROSION_DURATION,
-                    sourceId: holder.id,
-                    appliedSeq: statusEngine.nextAppliedSeq(),
+                    sourceId: applierId,
+                    appliedSeq,
+                });
+                affectedIds.push(allyId);
+                bus.emit({
+                    type: 'dot-applied',
+                    sourceId: applierId,
+                    targetId: allyId,
+                    round: r,
+                    dotType: 'corrosion',
+                    stacks: 1,
+                    tier: SPREAD_CORROSION_TIER,
+                    appliedSeq,
                 });
             }
             // Remove Toxic Overflow from the holder (targeted single-family removal — preserves any

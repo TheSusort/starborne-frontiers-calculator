@@ -691,11 +691,12 @@ export type CombatEvent =
       } & ReactiveStamp)
     /** Corrosion SPREAD (Hemlock) at the end of a round. The
      *  engine's end-of-round Toxic Overflow mechanic (engine.ts) emits this for each unit that held
-     *  Toxic Overflow AND ≥1 stack of Corrosion: it inflicted Corrosion I (3 turns) on that unit's
-     *  adjacent allies and removed its Toxic Overflow. `sourceId` = the unit that held Toxic
-     *  Overflow (the spread origin); `affectedIds` = the adjacent allies that RECEIVED Corrosion I
-     *  (possibly empty if the holder had no living adjacent allies). Team-symmetric — emitted for
-     *  holders on either side. Hemlock's `on-corrosion-spread` self-heal (triggers.ts) rides it,
+     *  Toxic Overflow AND ≥1 stack of Corrosion, after inflicting Corrosion I (3 turns) on that
+     *  unit's adjacent allies — each a real infliction by the Toxic Overflow's applier, with its own
+     *  landing roll and `dot-applied` — and removing its Toxic Overflow. `sourceId` = the unit that
+     *  held Toxic Overflow (the spread origin); `affectedIds` = the adjacent allies the Corrosion I
+     *  LANDED on (possibly empty: none adjacent, or every one resisted). Team-symmetric — emitted
+     *  for holders on either side. Hemlock's `on-corrosion-spread` self-heal (triggers.ts) rides it,
      *  scaling by `affectedIds.length` ("per enemy affected"), scoped to spreads whose `sourceId`
      *  opposes the reactor. */
     | ({

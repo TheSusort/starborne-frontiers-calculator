@@ -1400,15 +1400,10 @@ export function registerReactiveListeners(args: {
                             });
                     };
                     // A Bomb is not a damage-over-time effect (owner ruling R112): its stacks
-                    // never count.
+                    // never count. A Toxic Overflow spread's Corrosion lands through
+                    // `dot-applied` too, so its `corrosion-spread` announcement adds nothing.
                     bus.on('dot-applied', (e) => {
                         if (e.dotType !== 'bomb') onStacksAdded(e.targetId, e.stacks);
-                    });
-                    // Toxic Overflow's end-of-round spread adds one Corrosion stack to each
-                    // affected ally of the holder, and announces it on this event, not
-                    // `dot-applied`.
-                    bus.on('corrosion-spread', (e) => {
-                        for (const id of e.affectedIds) onStacksAdded(id, 1);
                     });
                     break;
                 }

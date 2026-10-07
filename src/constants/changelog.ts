@@ -41,6 +41,8 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator: Echoing Burst no longer gathers Demolisher's Bomb splash damage.",
     'Combat simulator: Belladonna now converts each new Corrosion stack with its own roll.',
     'Combat simulator: Belladonna no longer converts Corrosion an enemy already held.',
+    "Combat simulator: Hemlock's Toxic Overflow spread now lands as an inflicted Corrosion.",
+    "Combat simulator: Hemlock's spread repair now counts only enemies the Corrosion landed on.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

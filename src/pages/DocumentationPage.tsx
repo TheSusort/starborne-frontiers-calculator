@@ -3087,6 +3087,10 @@ const DocumentationPage: React.FC = () => {
                                         Belladonna rolls her conversion once per new Corrosion stack
                                         and converts only that stack: Corrosion the enemy already
                                         holds is never converted by a later infliction.
+                                        Hemlock&apos;s Toxic Overflow spread inflicts its Corrosion
+                                        I as Hemlock: each neighbour rolls its own resist, every
+                                        reaction to an inflicted debuff or Corrosion hears a landed
+                                        one, and her repair counts only the enemies it landed on.
                                         Anemone&apos;s repair when an enemy takes damage-over-time
                                         damage fires once per stack that ticks: 3 Corrosion stacks
                                         and 1 Inferno give four repairs. A cleanse removes stacks

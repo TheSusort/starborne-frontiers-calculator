@@ -32,3 +32,15 @@ export function holdsToxicOverflow(statusEngine: StatusEngine, victimId: string)
         .timedAbilityStatuses('enemy', undefined, victimId)
         .some((s) => s.active.buffName === TOXIC_OVERFLOW);
 }
+
+/** The ship that applied the Toxic Overflow `victimId` holds (its timed status's `casterId`) — the
+ *  inflicter of every Corrosion its spread lands. Undefined when it holds none, or when the status
+ *  carries no caster (a hand-seeded fixture). Reads the same channel as `holdsToxicOverflow`. */
+export function toxicOverflowApplierOf(
+    statusEngine: StatusEngine,
+    victimId: string
+): string | undefined {
+    return statusEngine
+        .timedAbilityStatuses('enemy', undefined, victimId)
+        .find((s) => s.active.buffName === TOXIC_OVERFLOW)?.casterId;
+}
