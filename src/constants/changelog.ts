@@ -1,54 +1,23 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '1.75.0';
+export const CURRENT_VERSION = '1.75.1';
 
 // Accumulates between releases. `npm run release` folds these into a new ChangelogEntry at the
 // top of CHANGELOG, bumps CURRENT_VERSION and empties this array — all three together, because a
 // bumped version whose entries are still unreleased shows users a what's-new dialog listing
 // nothing. Do it by hand only if that script cannot.
-export const UNRELEASED_CHANGES: string[] = [
-    "Combat simulator: Lev's debuff extension now also lengthens DoTs, Bombs and Echoing Burst.",
-    "Combat simulator: Provider's DoT extension now also lengthens Acidic Decay and converted DoTs.",
-    'Combat simulator: Echoing Burst is now a Bomb-type debuff for counts and cleanses.',
-    'Combat simulator: Echoing Burst cut to 0 turns now bursts everything gathered so far.',
-    'Combat simulator: Bombs and Echoing Burst now detonate in the order applied.',
-    'Combat simulator: Echoing Burst now gathers only direct hits on its own target.',
-    'Combat simulator: Echoing Burst no longer gathers damage dealt to other enemies.',
-    'Combat simulator: Bombs detonated by a lethal skill now splash neighbouring ships.',
-    'Combat simulator: Bombs no longer count as damage-over-time effects or Snakeroot stacks.',
-    "Combat simulator: Nyxen's damage-over-time cleanse no longer removes Bombs or Echoing Burst.",
-    "Combat simulator: Crocus no longer reacts to an ally's critical Bomb.",
-    'Combat simulator: Cheat Death now also clears Bombs and Echoing Burst.',
-    "Combat simulator: Curator's active now hits every enemy as a primary target.",
-    'Combat simulator: Burner set on Curator now applies Inferno to every enemy.',
-    'Combat simulator: Stalwart now counters attacks re-aimed at him after a kill.',
-    "Combat simulator: passive repairs like Hayyan's and Salvation's can now crit.",
-    "Combat simulator: Snakeroot's passive now fires on every 4th DoT stack inflicted.",
-    "DPS calculator: Snakeroot's passive now fires on every 4th DoT stack inflicted.",
-    'Combat simulator: each Exposed stack now counts as one debuff in debuff counts.',
-    'Combat simulator: primary-target passives now fire once per incoming attack and its reactions.',
-    'Combat simulator: Stalwart now counters back when another Stalwart counters him.',
-    "Combat simulator: Hayyan's debuff repair fires once per ally per enemy skill.",
-    'Combat simulator: Oleander gains one charge per ally skill, not per debuff.',
-    'Combat simulator: Sefuba now repairs once per purge, before her extra purge.',
-    "Combat simulator: Provider's ally-debuff hit fires once per enemy per skill.",
-    'Combat simulator: Reflect set now reflects only hits aimed at its wearer.',
-    "Combat simulator: Sefuba's purge repair now heals 12% per buff, matching the game.",
-    'Combat simulator: purges and buff steals now fail at an affinity disadvantage.',
-    "Combat simulator: Wisteria's crit passive now fires only on Corrosion.",
-    "Combat simulator: Valkyrie's Echoing Burst no longer gathers her own applying hit.",
-    "DPS calculator: Valkyrie's Echoing Burst no longer gathers her own applying hit.",
-    "Combat simulator: Echoing Burst no longer gathers Demolisher's Bomb splash damage.",
-    'Combat simulator: Echoing Burst now gathers counter-attack hits on its ship.',
-    'Combat simulator: Belladonna now converts each new Corrosion stack with its own roll.',
-    'Combat simulator: Belladonna no longer converts Corrosion an enemy already held.',
-    "Combat simulator: Hemlock's Toxic Overflow spread now lands as an inflicted Corrosion.",
-    "Combat simulator: Hemlock's spread repair now counts only enemies the Corrosion landed on.",
-    'Combat simulator: Hemlock gains one charge per skill or spread, not per debuff.',
-    'Combat simulator: Toxic Overflow spreads in the same round now count as one event.',
-];
+export const UNRELEASED_CHANGES: string[] = [];
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.75.1',
+        date: '2026-10-07',
+        changes: [
+            '37 combat simulator fixes.',
+            "DPS calculator: Snakeroot's passive now fires on every 4th DoT stack inflicted.",
+            "DPS calculator: Valkyrie's Echoing Burst no longer gathers her own applying hit.",
+        ],
+    },
     {
         version: '1.75.0',
         date: '2026-10-06',
