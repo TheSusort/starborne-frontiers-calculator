@@ -4,8 +4,9 @@ import { emitAttacked } from './emitAttacked';
 /**
  * Emits per-victim `attacked` events for ONE attack's AoE footprint: one event
  * per hit per footprint victim, each carrying that victim's OWN damage /
- * shieldWasHit / hitOutcomes, with `isPrimaryTarget` set only on the selected
- * target. Delegates to `emitAttacked` per victim so the per-event
+ * shieldWasHit / hitOutcomes, with `isPrimaryTarget` set on each victim in
+ * `primaryIds` — the sub-attack's primary targets (`SubAttackOutcome.primaryVictimIds`: its
+ * anchor, or every victim of a whole-battlefield attack). Delegates to `emitAttacked` per victim so the per-event
  * conditional-spread shape stays identical to the legacy focus-only emit.
  * Direction-agnostic (caller supplies attacker/victim ids).
  *
@@ -21,7 +22,8 @@ export function emitPerVictimAttacked(args: {
     bus: CombatEventBus;
     round: number;
     attackerId: string;
-    primaryId: string;
+    /** The sub-attack's primary targets. */
+    primaryIds: ReadonlySet<string>;
     victims: Map<
         string,
         { damage: number; takenDamage?: number; shieldWasHit: boolean; hitOutcomes: boolean[] }
@@ -36,7 +38,7 @@ export function emitPerVictimAttacked(args: {
             targetId: victimId,
             attackerId: args.attackerId,
             hitOutcomes: sig.hitOutcomes,
-            isPrimaryTarget: victimId === args.primaryId,
+            isPrimaryTarget: args.primaryIds.has(victimId),
             shieldWasHit: sig.shieldWasHit,
             damage: sig.damage,
             ...(sig.takenDamage !== undefined ? { takenDamage: sig.takenDamage } : {}),

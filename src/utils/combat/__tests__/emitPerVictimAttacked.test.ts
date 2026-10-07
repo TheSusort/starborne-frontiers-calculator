@@ -21,7 +21,7 @@ describe('emitPerVictimAttacked', () => {
             bus,
             round: 2,
             attackerId: 'A',
-            primaryId: 'P',
+            primaryIds: new Set(['P']),
             victims,
         });
         const calls = emit.mock.calls.map((c) => c[0] as AttackedEvent);
@@ -52,7 +52,7 @@ describe('emitPerVictimAttacked', () => {
             bus,
             round: 1,
             attackerId: 'A',
-            primaryId: 'P',
+            primaryIds: new Set(['P']),
             victims: new Map([['P', { damage: 50, shieldWasHit: false, hitOutcomes: [false] }]]),
         });
         const calls = emit.mock.calls;
@@ -84,7 +84,7 @@ describe('emitPerVictimAttacked', () => {
             bus,
             round: 3,
             attackerId: 'A',
-            primaryId: 'P',
+            primaryIds: new Set(['P']),
             victims,
         });
         const calls = emit.mock.calls.map((c) => c[0] as AttackedEvent);

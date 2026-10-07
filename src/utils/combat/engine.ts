@@ -100,6 +100,8 @@ import {
 import {
     applyPositionalDamage,
     footprintVictims,
+    isWholeBattlefieldPattern,
+    type SubAttackBoundary,
     type VictimDamageOutcome,
     type AppliedVictimDamage,
     type SubAttackOutcome,
@@ -5489,7 +5491,8 @@ export function runCombat(rawInput: CombatEngineInput): {
         victim: CombatActor,
         damageTaken: number,
         outcome: VictimDamageOutcome,
-        isAnchor: boolean
+        /** The victim is a primary target of the hit — see `TakenLeech.requirePrimaryTarget`. */
+        isPrimary: boolean
     ): void => {
         if (!healingCtx || damageTaken <= 0) return;
         // Barrier carve-out (per victim): a fully-blocked hit deals no damage taken.
@@ -5517,7 +5520,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             if (e.requiresHpDamage && !(outcome.shieldBefore > 0 && outcome.hpDamage > 0)) {
                 continue;
             }
-            if (e.requirePrimaryTarget && !isAnchor) continue;
+            if (e.requirePrimaryTarget && !isPrimary) continue;
             let raw = damageTaken * (e.pct / 100);
             let didCrit = false;
             if (e.kind === 'heal' && rt) {
@@ -5685,8 +5688,8 @@ export function runCombat(rawInput: CombatEngineInput): {
         victim: CombatActor,
         damage: number,
         outcome: VictimDamageOutcome,
-        /** The victim is the hit's primary target — see `TakenLeech.requirePrimaryTarget`. */
-        isAnchor: boolean
+        /** The victim is a primary target of the hit — see `TakenLeech.requirePrimaryTarget`. */
+        isPrimary: boolean
     ): void => {
         // ⚠️ NEITHER DIRECTION LEECHES OFF `damage`. That is the hit as THROWN — the seam hands it
         // down pre-cascade, pre-block, pre-transform — and both bases are funnel figures:
@@ -5715,7 +5718,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             booked + (outcome.protectionRedirected ?? 0),
             'direct'
         );
-        procTakenLeechesPerVictim(victim, booked, outcome, isAnchor);
+        procTakenLeechesPerVictim(victim, booked, outcome, isPrimary);
     };
 
     // The id of the actor whose turn is CURRENTLY executing. Set once at the top of
@@ -5770,10 +5773,12 @@ export function runCombat(rawInput: CombatEngineInput): {
      * Owner ruling R92 (in game 2026-10-06): a victim is a PRIMARY TARGET at most once per incoming
      * sub-attack, counting the whole reaction chain that sub-attack sets off (`setHitRoot` in
      * triggers.ts names the chain). Any aimed hit spends it — the cast's hit on its anchor, a
-     * counter, a proc; a covered hit of an area pattern neither counts nor spends. The FIRST aimed
+     * counter, a proc; a covered hit of an area pattern neither counts nor spends. A cast's hit is
+     * aimed at each of its sub-attack's primary targets (`SubAttackOutcome.primaryVictimIds` — the
+     * anchor, or every victim of a whole-battlefield attack, owner ruling R110). The FIRST aimed
      * hit on a victim in a chain is the primary-target hit; Stalwart's counter and buff and
      * Nosorog's reflect read that one answer. Malvex's shield is a damage-taken leech, which only
-     * cast hits proc (`procLeechesForVictim`), so it reads the cast's `isAnchor`. Keys are
+     * cast hits proc (`procLeechesForVictim`), so it reads the cast's `isPrimary`. Keys are
      * `victimId|root`; roots are unique for the whole run.
      */
     const primaryHitsSpent = new Set<string>();
@@ -6225,8 +6230,9 @@ export function runCombat(rawInput: CombatEngineInput): {
         let currentSubAttackIndex: number | undefined;
         /**
          * True while the funnel is applying a cast whose pattern is the whole battlefield
-         * (`Pattern-All`, Curator). Protection skips such a hit — its game text: "Damage is not
-         * redirected for skills that target the entire battlefield." Set beside
+         * (`isWholeBattlefieldPattern` — `Pattern-All`, Curator). Protection skips such a hit —
+         * its game text: "Damage is not redirected for skills that target the entire
+         * battlefield." Set beside
          * `currentSubAttackIndex` by `drivePositionalApply`'s `applyToVictim` wrapper, so a
          * filtered-set passive hit ("all enemies with Inferno") never sets it.
          */
@@ -6361,9 +6367,11 @@ export function runCombat(rawInput: CombatEngineInput): {
                  *  undefined at a factor of 0. */
                 preMitigationDamage?: number;
                 /** This hit is a primary-target hit (Nosorog's `requirePrimaryTarget` reflect
-                 *  gate): a cast's hit on its anchor, or a counter's / proc's hit that was the
-                 *  first aimed hit on this victim in its chain (`primaryHitsSpent`). False for a
-                 *  covered footprint victim and for a later hit in the chain. Undefined reads as
+                 *  gate): a cast's hit on one of its sub-attack's primary targets
+                 *  (`SubAttackOutcome.primaryVictimIds` — the anchor, or every victim of a
+                 *  whole-battlefield attack), or a counter's / proc's hit that was the first aimed
+                 *  hit on this victim in its chain (`primaryHitsSpent`). False for a covered
+                 *  footprint victim and for a later hit in the chain. Undefined reads as
                  *  true — the non-positional cast sites, which bind one victim. */
                 isPrimaryTarget?: boolean;
             }
@@ -7267,7 +7275,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 //
                 // LATENT SAFETY: the `undefined → treated as primary` default is correct
                 // ONLY because every real-roster AoE path today is POSITIONAL — applyPositionalDamage
-                // threads isAnchor → applyIncomingToTarget/applyOutgoingToEnemy → isPrimaryTarget, so
+                // threads isPrimary → applyIncomingToTarget/applyOutgoingToEnemy → isPrimaryTarget, so
                 // a covered victim always gets an explicit `false`. The remaining undefined callers are
                 // all inherently SINGLE-target (the legacy non-positional applyIncomingToTarget binds
                 // one victim, which IS the primary). A FUTURE non-positional real-roster AoE path would
@@ -8650,7 +8658,9 @@ export function runCombat(rawInput: CombatEngineInput): {
             applyToVictim: (
                 victim: CombatActor,
                 damage: number,
-                isAnchor?: boolean,
+                /** The victim is a primary target of the sub-attack — forwarded into
+                 *  `cause.isPrimaryTarget`. */
+                isPrimary?: boolean,
                 /** The defence mitigation factor already folded into `damage` for this
                  *  victim — forwarded into `cause.targetMitigation` so the Protection cascade
                  *  divides by the factor that was applied instead of re-deriving one. */
@@ -8673,7 +8683,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                 outcome: VictimDamageOutcome,
                 didCrit: boolean,
                 subAttackIndex: number,
-                isAnchor: boolean
+                isAnchor: boolean,
+                isPrimary: boolean
             ) => void;
             // Repeated here for the same reason as `onVictimResolved`'s trailing param: this
             // engine-side wrapper declares its OWN args type, so applyPositionalDamage's
@@ -8682,7 +8693,8 @@ export function runCombat(rawInput: CombatEngineInput): {
             onVictimPreImpact?: (
                 victim: CombatActor,
                 isAnchor: boolean,
-                subAttackIndex: number
+                subAttackIndex: number,
+                isPrimary: boolean
             ) => void;
             // Per-victim crit resolver (per-victim crit). The anchor victim reuses hitCrits[h];
             // each COVERED footprint victim rolls the attacker's crit gate at ITS OWN affinity-
@@ -8707,16 +8719,8 @@ export function runCombat(rawInput: CombatEngineInput): {
             // this engine-side wrapper declares its OWN args type, so a hook that exists on
             // applyPositionalDamage is un-typeable by an engine caller until it is repeated here.
             // Unsupplied by a caller → no boundary work.
-            onSubAttackStart?: (sub: {
-                index: number;
-                anchorId: string;
-                victimIds: string[];
-            }) => void;
-            onSubAttackEnd?: (sub: {
-                index: number;
-                anchorId: string;
-                victimIds: string[];
-            }) => void;
+            onSubAttackStart?: (sub: SubAttackBoundary) => void;
+            onSubAttackEnd?: (sub: SubAttackBoundary) => void;
         }): {
             anyCrit: boolean;
             critPairs: number;
@@ -8780,20 +8784,21 @@ export function runCombat(rawInput: CombatEngineInput): {
                     applyToVictim: (
                         victim,
                         damage,
-                        isAnchor,
+                        _isAnchor,
                         subAttackIndex,
                         targetMitigation,
-                        preMitigation
+                        preMitigation,
+                        isPrimary
                     ) => {
                         const prevSubAttack = currentSubAttackIndex;
                         const prevWholeBattlefield = wholeBattlefieldHit;
                         currentSubAttackIndex = subAttackIndex;
-                        wholeBattlefieldHit = args.pattern.shape === 'all';
+                        wholeBattlefieldHit = isWholeBattlefieldPattern(args.pattern);
                         try {
                             return args.applyToVictim(
                                 victim,
                                 damage,
-                                isAnchor,
+                                isPrimary,
                                 targetMitigation,
                                 preMitigation
                             );
@@ -8982,7 +8987,7 @@ export function runCombat(rawInput: CombatEngineInput): {
          *     `passiveSlotDamageFootprint.integration.test.ts`.
          *   • a `damage-reflection` ability — the instance does not set `isReflected`, so it
          *     PROVOKES thorns back at the attacker exactly as the firing hit
-         *     does. (`isAnchor: false` below still exempts it from a `requirePrimaryTarget`
+         *     does. (`isPrimary: false` below still exempts it from a `requirePrimaryTarget`
          *     reflect — Nosorog — since it is not the cast's primary-target hit.)
          * All of that is the intended reading of "a real damage instance"; it is recorded here so
          * a later change plans around the real footprint rather than a convenient fiction.
@@ -9129,7 +9134,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                         round: currentRound,
                         damage,
                     });
-                    // `isAnchor: false` — this instance is not the cast's primary-target hit, so it
+                    // `isPrimary: false` — this instance is not the cast's primary-target hit, so it
                     // must not satisfy a `requirePrimaryTarget` reflect gate (Nosorog).
                     // 4th arg: this instance is a SECOND positional damage path into the funnel, so
                     // it owes the Protection cascade the same mitigation factor the firing hit
@@ -9320,14 +9325,15 @@ export function runCombat(rawInput: CombatEngineInput): {
             // Matches drivePositionalApply's applyToVictim param type exactly. Returns the
             // resolved VictimDamageOutcome (both impls wrap applyOutgoingToEnemy /
             // applyIncomingToTarget, which surface it). The third
-            // param forwards drivePositionalApply's isAnchor through to applyVictimDamage's
-            // cause.isPrimaryTarget (Nosorog's reflect gate). The fourth param forwards the
-            // defence mitigation factor the positional loop already applied, so the Protection
-            // cascade can divide by it rather than re-deriving one (see `cause.targetMitigation`).
+            // param forwards drivePositionalApply's isPrimary through to applyVictimDamage's
+            // cause.isPrimaryTarget (the `requirePrimaryTarget` reflect gate). The fourth param
+            // forwards the defence mitigation factor the positional loop already applied, so the
+            // Protection cascade can divide by it rather than re-deriving one (see
+            // `cause.targetMitigation`).
             applyToVictim: (
                 victim: CombatActor,
                 damage: number,
-                isAnchor?: boolean,
+                isPrimary?: boolean,
                 targetMitigation?: number,
                 /** #358 ADDENDUM 2 — the pre-defence twin of `damage`. */
                 preMitigation?: number
@@ -9344,8 +9350,8 @@ export function runCombat(rawInput: CombatEngineInput): {
             stealthedEnemyCount: playerStealthedEnemyCount,
             shieldedAllyCount: playerShieldedAllyCount,
             healEventOnly: false,
-            applyToVictim: (victim, damage, isAnchor, targetMitigation, preMitigation) =>
-                applyOutgoingToEnemy(damage, victim, isAnchor, targetMitigation, preMitigation),
+            applyToVictim: (victim, damage, isPrimary, targetMitigation, preMitigation) =>
+                applyOutgoingToEnemy(damage, victim, isPrimary, targetMitigation, preMitigation),
         };
         const enemyTurnBindings: TurnBindings = {
             opposingRoster: allPlayerActors,
@@ -9369,7 +9375,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             // bySide('enemy').grantAllyCharges (resolved in buildTurnArgs by side), NEVER the player
             // team. Likewise applyToVictim routes the firing hit as INCOMING damage to the struck
             // player actor (applyIncomingToTarget), not as a player damage row.
-            applyToVictim: (victim, damage, isAnchor, targetMitigation, preMitigation) =>
+            applyToVictim: (victim, damage, isPrimary, targetMitigation, preMitigation) =>
                 applyIncomingToTarget(
                     damage,
                     victim,
@@ -9381,7 +9387,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                         targetMitigation,
                         preMitigationDamage: preMitigation,
                     },
-                    isAnchor
+                    isPrimary
                 ),
         };
         const turnBindings = (side: Side): TurnBindings =>
@@ -10219,7 +10225,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                 damage: number,
                 outcome: VictimDamageOutcome,
                 didCrit: boolean,
-                isAnchor: boolean
+                /** The victim is a primary target of its sub-attack. */
+                isPrimary: boolean
             ) => void,
             /**
              * Emits ONE sub-attack's `attacked` events. Invoked once per sub-attack that produced
@@ -10229,10 +10236,15 @@ export function runCombat(rawInput: CombatEngineInput): {
              * The bucket's index is passed too, so it can be stamped onto each `attacked`
              * event. A victim-side once-per-attack rider guard needs it to reset between the
              * attacker's consecutive attacks instead of collapsing all N into one.
+             *
+             * `primaryIds` is THAT sub-attack's primary-target set
+             * (`SubAttackOutcome.primaryVictimIds`), re-resolved per sub-attack — not the cast's
+             * turn-start target, which a kill on an earlier sub-attack can retire.
              */
             emitAttackedForSubAttack: (
                 victims: Map<string, PositionalVictimSignal>,
-                subAttackIndex: number
+                subAttackIndex: number,
+                primaryIds: ReadonlySet<string>
             ) => void,
             /**
              * The enemy site emits its `attacked` AFTER the helper returns, from its own inline
@@ -10325,13 +10337,21 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // Per-victim crit: each covered footprint victim rolls at ITS own affinity-capped
                 // rate against this attacker (`PlayerTurnResult.rollVictimCrit`).
                 rollVictimCrit: sel.rollVictimCrit,
-                onVictimResolved: (victim, damage, outcome, didCrit, subAttackIndex, isAnchor) => {
-                    // The cast's hit on its anchor is the first aimed hit in that sub-attack's
-                    // chain, so it spends the anchor's primary-target allowance there.
-                    if (isAnchor) spendPrimaryHit(victim.id, castHitRoot(subAttackIndex ?? 0));
+                onVictimResolved: (
+                    victim,
+                    damage,
+                    outcome,
+                    didCrit,
+                    subAttackIndex,
+                    _isAnchor,
+                    isPrimary
+                ) => {
+                    // The cast's hit on a primary target is the first aimed hit on it in that
+                    // sub-attack's chain, so it spends that victim's primary-target allowance there.
+                    if (isPrimary) spendPrimaryHit(victim.id, castHitRoot(subAttackIndex ?? 0));
                     // Injected per-site leech direction (Note A): standing (player→enemy) vs taken
                     // (enemy→player, which also captures the focus victim's shield-hit flag).
-                    onVictimResolved(victim, damage, outcome, didCrit, isAnchor);
+                    onVictimResolved(victim, damage, outcome, didCrit, isPrimary);
                     // §4.5 commit point for the mark `onVictimPreImpact` approved for this hit.
                     // ONLY A HIT THAT LANDED REDUCES STASIS (owner ruling 2026-09-15): a hit
                     // nullified by Barrier never reached the victim, so it reduces nothing. A hit
@@ -10494,6 +10514,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                 });
             };
             const signalledIndices = [...attackedSignals.keys()].sort((a, b) => a - b);
+            /** Sub-attack `idx`'s primary-target set, for its `attacked` events. */
+            const primaryIdsOf = (idx: number): ReadonlySet<string> =>
+                new Set(critAgg.subAttacks[idx]?.primaryVictimIds ?? []);
             // The indices that owe an emission step in the two loops that would otherwise walk
             // `attacked` signals ALONE — the nothing-landed fallback and the inline-emitted `else`.
             // A sub-attack can hold buffered debuff events with NO signals: the boundary hooks fire
@@ -10564,7 +10587,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                             steps.push({
                                 isEvent: false,
                                 idx,
-                                run: () => emitAttackedForSubAttack(victims, idx),
+                                run: () =>
+                                    emitAttackedForSubAttack(victims, idx, primaryIdsOf(idx)),
                             });
                         }
                         pushDebuffSteps(idx);
@@ -10615,7 +10639,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                             steps.push({
                                 isEvent: false,
                                 idx,
-                                run: () => emitAttackedForSubAttack(victims, idx),
+                                run: () =>
+                                    emitAttackedForSubAttack(victims, idx, primaryIdsOf(idx)),
                             });
                         }
                         // This sub-attack's own debuff events, after its `attacked`.
@@ -10637,7 +10662,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                         steps.push({
                             isEvent: false,
                             idx,
-                            run: () => emitAttackedForSubAttack(victims, idx),
+                            run: () => emitAttackedForSubAttack(victims, idx, primaryIdsOf(idx)),
                         });
                     }
                     pushDebuffSteps(idx);
@@ -12332,24 +12357,24 @@ export function runCombat(rawInput: CombatEngineInput): {
                                         castStasisStandsOn: turn.castStasisStandsOn,
                                         scheduledEnemyEffects: turn.scheduledEnemyEffects,
                                     },
-                                    (victim, damage, outcome, _didCrit, isAnchor) =>
+                                    (victim, damage, outcome, _didCrit, isPrimary) =>
                                         procLeechesForVictim(
                                             actor.id,
                                             victim,
                                             damage,
                                             outcome,
-                                            isAnchor
+                                            isPrimary
                                         ),
                                     // ONE sub-attack's victims per call, emitted right
                                     // after that sub-attack's own `ability-performed`. The index is
                                     // stamped onto each event.
-                                    (victims, subAttackIndex) => {
+                                    (victims, subAttackIndex, primaryIds) => {
                                         if (victims.size > 0) {
                                             emitPerVictimAttacked({
                                                 bus,
                                                 round: r,
                                                 attackerId: actor.id,
-                                                primaryId: tgt.id,
+                                                primaryIds,
                                                 victims,
                                                 subAttackIndex,
                                             });
@@ -12637,22 +12662,22 @@ export function runCombat(rawInput: CombatEngineInput): {
                                         castStasisStandsOn: teamTurn.castStasisStandsOn,
                                         scheduledEnemyEffects: teamTurn.scheduledEnemyEffects,
                                     },
-                                    (victim, damage, outcome, _didCrit, isAnchor) =>
+                                    (victim, damage, outcome, _didCrit, isPrimary) =>
                                         procLeechesForVictim(
                                             actor.id,
                                             victim,
                                             damage,
                                             outcome,
-                                            isAnchor
+                                            isPrimary
                                         ),
                                     // Mirror of the focus site's per-sub-attack emit.
-                                    (victims, subAttackIndex) => {
+                                    (victims, subAttackIndex, primaryIds) => {
                                         if (victims.size > 0) {
                                             emitPerVictimAttacked({
                                                 bus,
                                                 round: r,
                                                 attackerId: actor.id,
-                                                primaryId: tgt.id,
+                                                primaryIds,
                                                 victims,
                                                 subAttackIndex,
                                             });
@@ -13305,13 +13330,13 @@ export function runCombat(rawInput: CombatEngineInput): {
                                             // scheduled debuffs on the player side by the same draw.
                                             scheduledEnemyEffects: enemyScheduledEnemyEffects,
                                         },
-                                        (victim, dmg, outcome, _didCrit, isAnchor) => {
+                                        (victim, dmg, outcome, _didCrit, isPrimary) => {
                                             procLeechesForVictim(
                                                 actor.id,
                                                 victim,
                                                 dmg,
                                                 outcome,
-                                                isAnchor
+                                                isPrimary
                                             );
                                             if (victim.id === tgt.id) {
                                                 positionalShieldCaptured = true;
@@ -13326,13 +13351,13 @@ export function runCombat(rawInput: CombatEngineInput): {
                                         // ONE sub-attack's victims per call. The enemy DEFERS the
                                         // whole fan-out to its inline tail, so these calls run from
                                         // `emitDeferred` below, not here.
-                                        (victims, subAttackIndex) => {
+                                        (victims, subAttackIndex, primaryIds) => {
                                             if (victims.size > 0) {
                                                 emitPerVictimAttacked({
                                                     bus,
                                                     round: r,
                                                     attackerId: actor.id,
-                                                    primaryId: tgt.id,
+                                                    primaryIds,
                                                     victims,
                                                     subAttackIndex,
                                                 });
@@ -13421,12 +13446,10 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 // locals below.
                                 if (enemyPositional) {
                                     // Per-victim emit. One `attacked` per footprint player
-                                    // victim hit by this enemy cast (isPrimaryTarget only on the anchor,
-                                    // tgt.id) → EVERY covered player's on-attacked reactives wake (enemy
-                                    // counters land back on it / Second Wind etc.), not just the anchor.
-                                    // The gate broadens from "anchor was hit" to "any victim was hit": if
-                                    // the anchor whiffs but a covered victim is hit, emission fires for the
-                                    // covered victim and no isPrimaryTarget event fires that turn — correct.
+                                    // victim hit by this enemy cast (isPrimaryTarget on each of
+                                    // the sub-attack's `primaryVictimIds`) → EVERY struck player's
+                                    // on-attacked reactives wake (counters land back on the enemy
+                                    // / Second Wind etc.), not just the anchor's.
                                     // DEFERRED here (not inside the shared helper) because the enemy
                                     // emits at its inline tail. `enemyEmitDeferred` is the
                                     // remainder of the interleaved sequence the helper handed back:
