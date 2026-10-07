@@ -6077,10 +6077,11 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 e.stacks > 0 &&
                 (seq === undefined || e.appliedSeq === seq)
         );
-        if (!landed) return;
         // Gate 1: the conversion roll, one per stack landed. A roll the caster's cast already
         // drew at the landing, for a same-cast count gate (`preDecidedConversions`, one queued
-        // roll per stack), is spent here instead of drawn again.
+        // roll per stack), is spent here instead of drawn again. The queued roll belongs to THIS
+        // stack, so it is spent before the landed-entry check: a stack whose entry is gone discards
+        // its roll rather than leaving it for the next stack.
         const decisionKey = dotConversionKey(
             intent.ownerId,
             intent.ability.id,
@@ -6091,6 +6092,7 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
         const queued = ctx.preDecidedConversions?.get(decisionKey);
         const preDecided = queued?.shift();
         if (queued && queued.length === 0) ctx.preDecidedConversions?.delete(decisionKey);
+        if (!landed) return;
         const converts =
             preDecided ?? drawDotConversion(intent.ownerId, intent.ability.id, cfg, ctx);
         if (!converts) return;
