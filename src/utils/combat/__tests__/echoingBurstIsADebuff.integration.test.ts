@@ -1051,3 +1051,113 @@ describe("an Echoing Burst does not gather Demolisher's Bomb splash", () => {
         });
     }
 });
+
+describe("an Echoing Burst gathers a counter-attack's hit on its holder (owner ruling)", () => {
+    // Stalwart: "When this Unit is directly damaged as a primary target, it deals 70% damage to
+    // the enemy". The hitter holds the Echoing Burst and is countered by Stalwart.
+    const stalwart: ShipSpec = {
+        id: 'stalwart',
+        position: 'M4',
+        speed: 1,
+        attack: 1000,
+        hp: 1e9,
+        skills: {
+            slots: [{ slot: 'active', abilities: [] }, ...realSlots('Stalwart', ['passive'])],
+        },
+    };
+    const hitter: ShipSpec = {
+        id: 'hitter',
+        position: 'M4',
+        speed: 100,
+        attack: 100,
+        hp: 1e9,
+        skills: HIT,
+    };
+    const measure = (side: 'player' | 'enemy') => {
+        const out = { counter: 0, gathered: -1 };
+        const result = runBoard(
+            { caster: [stalwart], other: [hitter], numRounds: 1 },
+            side,
+            (byId, idOf) =>
+                byId('hitter').pendingAccumulators.push({
+                    ...accumulator(idOf('stalwart'), 5),
+                    accumulated: 0,
+                }),
+            (bus, byId) =>
+                bus.on('round-ended', (e: Extract<CombatEvent, { type: 'round-ended' }>) => {
+                    if (e.round === 1)
+                        out.gathered = byId('hitter').pendingAccumulators[0]?.accumulated ?? -1;
+                })
+        );
+        const { idOf } = mirrorBoard({ caster: [stalwart], other: [hitter] }, side);
+        out.counter = result.rounds[0].perTargetDealt?.[idOf('stalwart')]?.[idOf('hitter')] ?? 0;
+        return out;
+    };
+    for (const side of SIDES) {
+        it(`${side}-side: the counter's hit is gathered`, () => {
+            const m = measure(side);
+            // Non-vacuity: Stalwart really countered the holder.
+            expect(m.counter).toBeGreaterThan(0);
+            expect(m.gathered).toBeCloseTo(m.counter, 6);
+        });
+    }
+});
+
+describe('a slice Protection redirects feeds neither Echoing Burst (owner ruling)', () => {
+    // Lionheart starts the round with 10 Protection stacks (a 100% redirect of the first hit on an
+    // ally) and takes the hitter's whole hit on his neighbour. Both hold an Echoing Burst.
+    const lionheart: ShipSpec = {
+        id: 'lionheart',
+        position: 'M3',
+        speed: 1,
+        hp: 1e9,
+        skills: {
+            slots: [{ slot: 'active', abilities: [] }, ...realSlots('Lionheart', ['passive'])],
+        },
+    };
+    const victim: ShipSpec = { id: 'victim', position: 'M4', speed: 1, hp: 1e9 };
+    const hitter: ShipSpec = {
+        id: 'hitter',
+        position: 'M4',
+        speed: 100,
+        attack: 1000,
+        skills: HIT,
+    };
+    const measure = (side: 'player' | 'enemy') => {
+        const out = { onVictim: 0, onLionheart: 0, victimGathered: -1, lionheartGathered: -1 };
+        const teams = { caster: [hitter], other: [victim, lionheart], numRounds: 1 };
+        const result = runBoard(
+            teams,
+            side,
+            (byId, idOf) => {
+                for (const s of ['victim', 'lionheart'])
+                    byId(s).pendingAccumulators.push({
+                        ...accumulator(idOf('hitter'), 5),
+                        accumulated: 0,
+                    });
+            },
+            (bus, byId) =>
+                bus.on('round-ended', (e: Extract<CombatEvent, { type: 'round-ended' }>) => {
+                    if (e.round !== 1) return;
+                    out.victimGathered = byId('victim').pendingAccumulators[0]?.accumulated ?? -1;
+                    out.lionheartGathered =
+                        byId('lionheart').pendingAccumulators[0]?.accumulated ?? -1;
+                })
+        );
+        const { idOf } = mirrorBoard(teams, side);
+        const incoming = result.rounds[0].perActorIncoming ?? {};
+        out.onVictim = incoming[idOf('victim')]?.incoming ?? 0;
+        out.onLionheart = incoming[idOf('lionheart')]?.incoming ?? 0;
+        return out;
+    };
+    for (const side of SIDES) {
+        it(`${side}-side: the redirected hit is gathered by neither ship`, () => {
+            const m = measure(side);
+            // Non-vacuity: the hit really moved to Lionheart.
+            expect(m.onLionheart).toBeGreaterThan(0);
+            expect(m.onVictim).toBe(0);
+            expect(m.victimGathered).toBe(0);
+            expect(m.lionheartGathered).toBe(0);
+        });
+    }
+});

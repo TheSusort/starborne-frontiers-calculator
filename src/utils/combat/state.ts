@@ -445,10 +445,12 @@ export function accumulatorBurstDamage(acc: PendingAccumulator): number {
 /**
  * Adds one direct hit that landed on `holder` to every Echoing Burst accumulator it carries
  * ("Accumulates direct damage dealt"). `amount` is the intake the damage funnel recorded for the
- * holder (`incomingBooked`), so a slice a Protection cascade moved to a protector is not counted on
- * the holder. Each hit is added as it lands, so an accumulator holds exactly the direct damage the
- * holder took between its application and its burst — whether that burst is its natural expiry or
- * a duration cut to 0 — and damage to any other ship never counts.
+ * holder (`incomingBooked`). A slice a Protection cascade redirects counts for neither Echoing
+ * Burst (owner ruling): not the holder's, whose booked intake excludes it, and not the protector's,
+ * which no gather site is handed (`echoingBurstIsADebuff.integration.test.ts` pins both). Each hit
+ * is added as it lands, so an accumulator holds exactly the direct damage the holder took between
+ * its application and its burst — whether that burst is its natural expiry or a duration cut to 0
+ * — and damage to any other ship never counts. A counter-attack's hit on the holder counts.
  *
  * `castStartSeq` marks a hit of a skill's damage clause: the status store's application sequence
  * (`StatusEngine.lastAppliedSeq`) as that skill began. The skill's own debuffs are written after

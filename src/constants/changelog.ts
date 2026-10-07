@@ -39,6 +39,7 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator: Valkyrie's Echoing Burst no longer gathers her own applying hit.",
     "DPS calculator: Valkyrie's Echoing Burst no longer gathers her own applying hit.",
     "Combat simulator: Echoing Burst no longer gathers Demolisher's Bomb splash damage.",
+    'Combat simulator: Echoing Burst now gathers counter-attack hits on its ship.',
     'Combat simulator: Belladonna now converts each new Corrosion stack with its own roll.',
     'Combat simulator: Belladonna no longer converts Corrosion an enemy already held.',
     "Combat simulator: Hemlock's Toxic Overflow spread now lands as an inflicted Corrosion.",

@@ -7824,6 +7824,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // The counter-OWNER is the source-attacker of this counter hit. Moves in
                 // lockstep with the write above (perTargetDealt mirrors every increment).
                 creditDealt(owner.id, attacker.id, counterBooked);
+                // A counter-attack's hit is direct damage on the ship it lands on, so an Echoing
+                // Burst there gathers it (owner ruling).
+                gatherDirectHitIntoAccumulators(attacker, counterBooked);
             }
             // `dealt` stays the FULL counter, converted or not: it feeds only the log row
             // (triggers.ts emitReactiveDamageLog) and the reactive dealt-amount slot, and the main

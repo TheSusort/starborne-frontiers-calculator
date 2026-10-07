@@ -3128,14 +3128,16 @@ const DocumentationPage: React.FC = () => {
                                         bursts; damage to other enemies never counts.
                                         Valkyrie&apos;s own hit that applies it lands first and is
                                         not gathered, and neither is Demolisher&apos;s Bomb splash.
-                                        Bombs and Echoing Bursts that go off together, from one cut
-                                        or expiring on the same turn, detonate in the order they
-                                        were applied; if the first triggers Cheat Death, the rest
-                                        are wiped and never detonate. If the first destroys the ship
-                                        instead, the rest still detonate, and every Bomb on a
-                                        destroyed ship splashes its neighbours once, including Bombs
-                                        a skill detonated in the lethal blow. Reactions to an enemy
-                                        cleansing a debuff (Pestilence, Larkspur, Grif, Arum,
+                                        A counter-attack&apos;s hit on its ship is gathered; a hit
+                                        Protection redirects counts for neither the ship nor its
+                                        protector. Bombs and Echoing Bursts that go off together,
+                                        from one cut or expiring on the same turn, detonate in the
+                                        order they were applied; if the first triggers Cheat Death,
+                                        the rest are wiped and never detonate. If the first destroys
+                                        the ship instead, the rest still detonate, and every Bomb on
+                                        a destroyed ship splashes its neighbours once, including
+                                        Bombs a skill detonated in the lethal blow. Reactions to an
+                                        enemy cleansing a debuff (Pestilence, Larkspur, Grif, Arum,
                                         Yarrow) also hear the cleanses an enemy&apos;s passive
                                         performs (Nuqtu, Purifier, AEGIS, Hermes, Howler), but not a
                                         duration cut; a cleanse that such a reaction provoked
