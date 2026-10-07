@@ -1275,7 +1275,8 @@ function foldTimedEnemyDebuffs(args: {
  * Step 2.9: grows every DoT, Bomb and Echoing Burst accumulator already standing on the enemies an
  * active-scope `extend-dot` ability targets (owner ruling R109: all of them are debuffs, so
  * Provider's "all damage over time debuffs are extended" reaches each — `extendDebuffEntries`).
- * 'inflicted'-scope extensions are `extendInflictedDoTs`' job.
+ * 'inflicted'-scope extensions are `extendInflictedDoTs`' job. An extension naming a DoT family
+ * (`dotType`) reaches that family alone (`onlyFamily`).
  *
  * Recipients follow the ability's `target` through `resolveDebuffRecipientIds`, the resolver every
  * direct enemy clause uses: 'all-enemies' — and 'enemy' on a firing-slot clause — fan over the
