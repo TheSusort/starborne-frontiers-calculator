@@ -399,8 +399,8 @@ export type CombatEvent =
            *  so an `overheal`-basis reaction can scale off a REACTIVE repair (#434). Absent
            *  outside healing mode, where `applyHealToTarget` never runs. */
           perTarget: { targetId: string; amount: number; overheal?: number; didCrit?: boolean }[];
-          /** 1 when the repair crit (one draw per repair), absent otherwise — mirrors
-           *  `heal-performed.critHits`, which the crit-repair listeners read. */
+          /** >= 1 when a repair in this event crit (one draw per repair), absent otherwise —
+           *  mirrors `heal-performed.critHits`, which the crit-repair listeners read. */
           critHits?: number;
           /** `Ability.id` of the intent that produced this repair. The re-entrancy key for the
            *  on-own-repair-to-ally guard (#434): a listener ignores an event its OWN ability
