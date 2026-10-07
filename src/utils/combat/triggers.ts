@@ -3661,8 +3661,8 @@ export function activeWithStacks(s: ActiveAbilityStatus): ActiveBuff {
  *  R88 — a stackable debuff's stacks are separate debuffs: 3 Defense Shred stacks are 3, Amartya's
  *  2 Exposed stacks are 2), per `statusEntryStackCount`. A debuff that overwrites rather than
  *  stacks holds one stack. The named half of every debuff COUNT; DoT stacks and Echoing Burst
- *  accumulators are the other half (`carriedDebuffEntries`). Pass the full ability status where one exists: an unspent timed entry
- *  carries its stack count on the payload only. */
+ *  accumulators are the other half (`carriedDebuffEntries`). Pass the full ability status where
+ *  one exists: an unspent timed entry carries its stack count on the payload only. */
 export function namedDebuffCount(entries: readonly (ActiveBuff | ActiveAbilityStatus)[]): number {
     return entries.reduce((n, e) => n + statusEntryStackCount(e), 0);
 }
@@ -3701,9 +3701,9 @@ export function actorDebuffCount(statusEngine: StatusEngine, actor: CombatActor)
 /**
  * Cleanses up to `count` debuffs from `actorId` — the one removal both cleanse executors (cast and
  * reactive) call. The pool is every debuff `actorDebuffCount` counts: its named debuffs, each DoT
- * stack it carries (owner ruling R27) and each Echoing Burst accumulator (`dotCleanseCandidates`), taken NEWEST APPLIED FIRST
- * across both kinds (owner ruling 2026-10-04: Attack Down and 2 Corrosion stacks, "cleanses 1
- * debuff" → whichever was inflicted last goes). A typed cleanse (`debuffType`, Nyxen's "cleanses
+ * stack it carries (owner ruling R27) and each Echoing Burst accumulator (`dotCleanseCandidates`),
+ * taken NEWEST APPLIED FIRST across both kinds (owner ruling 2026-10-04: Attack Down and 2
+ * Corrosion stacks, "cleanses 1 debuff" → whichever was inflicted last goes). A typed cleanse (`debuffType`, Nyxen's "cleanses
  * 2 Bomb" / "2 damage over time debuffs") filters to DoT stacks of that kind, then takes the
  * newest. `actor` absent (a hand-built ctx without an actor reader) → named debuffs only. Returns
  * how many were removed.
@@ -6505,10 +6505,10 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
                     }
                 } else {
                     // Warpstrike's "reduces a random active debuff's duration by 1 turn" (owner
-                    // ruling R35): ONE debuff, picked at random over the named debuffs, every DoT and
-                    // Bomb stack and every Echoing Burst accumulator — see
-                    // `reduceRandomDebuffDuration`. The pick draws from
-                    // its own keyed sub-stream, so it moves no other gate's draws.
+                    // ruling R35): ONE debuff, picked at random over the named debuffs, every DoT
+                    // and Bomb stack and every Echoing Burst accumulator — see
+                    // `reduceRandomDebuffDuration`. The pick draws from its own keyed sub-stream,
+                    // so it moves no other gate's draws.
                     const stacks = victim
                         ? [
                               ...dotDurationCutCandidates(victim),

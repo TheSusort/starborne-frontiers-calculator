@@ -168,6 +168,19 @@ export function carriedDebuffEntries(holder: DoTContainers): number {
     return carriedDotStacks(holder) + (holder.pendingAccumulators?.length ?? 0);
 }
 
+/** Whether a burst loop walking `iterating` must stop: the holder is alive and its live container
+ *  `live` is no longer that array. Cheat Death (`resolveLethalHp`) wipes a surviving holder's Bombs
+ *  and Echoing Burst accumulators by reassigning the containers, and a wiped entry never detonates
+ *  (owner rulings R74, R109). A holder the burst KILLED also has its Bombs reassigned (the engine's
+ *  bomb-splash-on-death); that walk goes on, so every countdown-0 Bomb on a corpse still bursts. */
+export function burstContainerWiped(
+    holder: { readonly currentHp: number },
+    iterating: readonly unknown[],
+    live: readonly unknown[]
+): boolean {
+    return live !== iterating && holder.currentHp > 0;
+}
+
 /**
  * The DoT half of a cleanse's pool: one candidate per DoT STACK `holder` carries (owner ruling
  * R27 — each stack is one debuff, so "cleanses 1 debuff" on 2 Corrosion stacks leaves 1), each

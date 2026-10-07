@@ -71,7 +71,6 @@ import {
     ActorDamage,
     ActorHealing,
     CombatActor,
-    PendingAccumulator,
     PendingBomb,
     createActor,
     selectNextBySpeed,
@@ -83,6 +82,7 @@ import {
     dotStackCount,
     carriedDotStacks,
     carriedDebuffEntries,
+    burstContainerWiped,
 } from './state';
 import {
     ActiveBuff,
@@ -1222,15 +1222,19 @@ function expireStacks(entries: ActiveDoTStack[]): void {
 // Per-actor attribution: each burst uses the APPLIER's affinityMult (snapshotted at
 // application) and is credited to that applier's detonation channel via `creditDetonation`.
 // `actorIdFor` supplies the bomb-detonated event's actorId (the applier).
+// The walk stops once a burst's Cheat Death wipes the holder's Bombs (`burstContainerWiped`).
 function processBombs(args: {
-    pendingBombs: PendingBomb[];
+    /** The bursting holder; its live `pendingBombs` is the container walked. */
+    holder: CombatActor;
     emitBombDetonated?: (actorId: string, stacks: number, damage: number) => void;
     creditDetonation: (sourceId: string, damage: number) => void;
 }): void {
-    for (let i = args.pendingBombs.length - 1; i >= 0; i--) {
-        args.pendingBombs[i].countdown -= 1;
-        if (args.pendingBombs[i].countdown <= 0) {
-            const bomb = args.pendingBombs[i];
+    const bombs = args.holder.pendingBombs;
+    for (let i = bombs.length - 1; i >= 0; i--) {
+        if (burstContainerWiped(args.holder, bombs, args.holder.pendingBombs)) break;
+        bombs[i].countdown -= 1;
+        if (bombs[i].countdown <= 0) {
+            const bomb = bombs[i];
             const burstDamage =
                 bomb.stacks *
                 bomb.damagePerStack *
@@ -1238,7 +1242,7 @@ function processBombs(args: {
                 (1 + bomb.detonationDamageModifier / 100);
             args.emitBombDetonated?.(bomb.sourceId, bomb.stacks, burstDamage);
             args.creditDetonation(bomb.sourceId, burstDamage);
-            args.pendingBombs.splice(i, 1);
+            bombs.splice(i, 1);
         }
     }
 }
@@ -1271,23 +1275,29 @@ const ALL_ENEMIES_PATTERN: ParsedPattern = {
 // rode the Bomb event instead, which meant it fired on any teammate's Bomb and never once on her
 // own burst. Emitted BEFORE `creditDetonation` (the same order `processBombs` uses); the reaction
 // it enqueues drains later regardless.
+//
+// The walk stops once a burst's Cheat Death wipes the holder's accumulators
+// (`burstContainerWiped`).
 function processAccumulators(args: {
-    pendingAccumulators: PendingAccumulator[];
+    /** The bursting holder; its live `pendingAccumulators` is the container walked. */
+    holder: CombatActor;
     /** Direct damage the ACCUMULATING side (the side that applied these accumulators — i.e. the
      *  bursting actor's OPPOSING roster) has dealt so far this round. */
     gatheredDirect: number;
     emitAccumulatorDetonated?: (actorId: string, damage: number) => void;
     creditDetonation: (sourceId: string, damage: number) => void;
 }): void {
-    for (let i = args.pendingAccumulators.length - 1; i >= 0; i--) {
-        const acc = args.pendingAccumulators[i];
+    const accs = args.holder.pendingAccumulators;
+    for (let i = accs.length - 1; i >= 0; i--) {
+        if (burstContainerWiped(args.holder, accs, args.holder.pendingAccumulators)) break;
+        const acc = accs[i];
         acc.accumulated += args.gatheredDirect;
         acc.roundsRemaining -= 1;
         if (acc.roundsRemaining <= 0) {
             const damage = acc.accumulated * (acc.pct / 100);
             args.emitAccumulatorDetonated?.(acc.sourceId, damage);
             args.creditDetonation(acc.sourceId, damage);
-            args.pendingAccumulators.splice(i, 1);
+            accs.splice(i, 1);
         }
     }
 }
@@ -9533,7 +9543,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             if (!hasTimedContainers || !isPositional(actor.position, opposingRoster)) return;
 
             processBombs({
-                pendingBombs: actor.pendingBombs,
+                holder: actor,
                 emitBombDetonated: (actorId, stacks, damage) =>
                     bus.emit({
                         type: 'bomb-detonated',
@@ -9592,7 +9602,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             // fed it, not because the sum was unreachable.
             const gatheredDirect = directDealtBy(opposingRoster);
             processAccumulators({
-                pendingAccumulators: actor.pendingAccumulators,
+                holder: actor,
                 gatheredDirect,
                 // #345: `actorId` is the accumulator's APPLIER (whose Echoing Burst this is) and
                 // `victimId` the holder it burst on — the same actorId/victimId split the sibling

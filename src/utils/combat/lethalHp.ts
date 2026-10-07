@@ -68,14 +68,13 @@ export function resolveLethalHp(
         opts.statusEngine.clearRemovable(targetId);
         // Actor-state debuffs — DoT stacks, Bombs and Echoing Burst accumulators — are NOT
         // StatusEngine entries, so clearRemovable doesn't touch them; they are debuffs all the
-        // same (owner ruling R109), so they are wiped here: the survivor takes no further tick,
+        // same (owner ruling R109), so they are wiped here: the survivor takes no further
         // detonation or burst from them. Filter the DoT arrays, don't clear them — an
         // `unremovable` stack (Acidic Decay) survives this wipe and keeps ticking. Every container
-        // is REASSIGNED, never emptied in place: this runs inside the burst loops
-        // (`processBombs`, `processAccumulators`, `reduceBombsOnVictim`) when the holder's own
-        // burst is the lethal blow, and those loops walk the array they were handed by index —
-        // emptying it under them would read past its end (echoingBurstIsADebuff's mid-burst
-        // cases).
+        // is REASSIGNED, never emptied in place. This runs inside the burst loops (`processBombs`,
+        // `processAccumulators`, `reduceBombsOnVictim`) when the holder's own burst is the lethal
+        // blow; they walk the array they were handed, and the reassignment is the signal they
+        // read (`burstContainerWiped`) to stop, so a wiped Bomb or accumulator never detonates.
         victim.corrosionEntries = victim.corrosionEntries.filter((e) => e.unremovable);
         victim.infernoEntries = victim.infernoEntries.filter((e) => e.unremovable);
         victim.genericDoTEntries = victim.genericDoTEntries.filter((e) => e.unremovable);

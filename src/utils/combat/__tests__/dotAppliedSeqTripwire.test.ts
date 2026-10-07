@@ -1,8 +1,8 @@
 /**
  * Tripwire: every place the engine creates a DoT entry, a pending Bomb or an Echoing Burst
  * accumulator stamps `appliedSeq` from `StatusEngine.nextAppliedSeq`. Cleanse and duration cuts
- * order them against named debuffs by that stamp (newest first, owner ruling 2026-10-04); an unstamped entry would read as older
- * than every named debuff and be cleansed last, silently.
+ * order them against named debuffs by that stamp (newest first, owner ruling 2026-10-04); an
+ * unstamped entry would read as older than every named debuff and be cleansed last, silently.
  *
  * Static, over the non-test sources under `src/utils`. What it covers:
  *  - `.push({ … })` of an object literal onto a container NAMED `corrosionEntries`,

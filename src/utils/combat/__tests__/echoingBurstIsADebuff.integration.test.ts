@@ -360,17 +360,28 @@ describe('Cheat Death wipes Bombs and Echoing Burst; Acidic Decay survives', () 
         });
     }
 
-    // The holder's own burst is the lethal blow: Cheat Death fires while the burst loop is still
-    // walking the holder's Bombs / accumulators, and the wipe must not break that walk.
+    // The holder's own burst is the lethal blow. Cheat Death fires on the first burst and wipes
+    // the holder's Bombs / accumulators while the burst loop is still walking them; the wiped
+    // second entry must not detonate, so the holder survives the turn at 1 HP.
     describe('a lethal burst of the holder’s own Bomb or Echoing Burst triggers it mid-burst', () => {
         const planter: ShipSpec = { id: 'planter', position: 'M4', speed: 100, hp: 1e9 };
         interface Burst {
             cheatDeath: boolean;
+            detonations: number;
+            hpAfterTurn: number;
+            alive: boolean;
             bombs: number;
             accumulators: number;
         }
         const measureBurst = (side: 'player' | 'enemy', kind: 'bomb' | 'accumulator'): Burst => {
-            const out: Burst = { cheatDeath: false, bombs: -1, accumulators: -1 };
+            const out: Burst = {
+                cheatDeath: false,
+                detonations: 0,
+                hpAfterTurn: -1,
+                alive: false,
+                bombs: -1,
+                accumulators: -1,
+            };
             runBoard(
                 { caster: [planter], other: [x, hayyan] },
                 side,
@@ -398,10 +409,25 @@ describe('Cheat Death wipes Bombs and Echoing Burst; Acidic Decay survives', () 
                             if (e.actorId === idOf('x')) out.cheatDeath = true;
                         }
                     );
-                    bus.on('round-ended', (e: Extract<CombatEvent, { type: 'round-ended' }>) => {
-                        if (e.round !== 1) return;
-                        out.bombs = byId('x').pendingBombs.length;
-                        out.accumulators = byId('x').pendingAccumulators.length;
+                    bus.on(
+                        'bomb-detonated',
+                        (e: Extract<CombatEvent, { type: 'bomb-detonated' }>) => {
+                            if (e.victimId === idOf('x')) out.detonations += 1;
+                        }
+                    );
+                    bus.on(
+                        'accumulator-detonated',
+                        (e: Extract<CombatEvent, { type: 'accumulator-detonated' }>) => {
+                            if (e.victimId === idOf('x')) out.detonations += 1;
+                        }
+                    );
+                    bus.on('turn-ended', (e: Extract<CombatEvent, { type: 'turn-ended' }>) => {
+                        if (e.actorId !== idOf('x') || e.round !== 1) return;
+                        const h = byId('x');
+                        out.hpAfterTurn = h.currentHp;
+                        out.alive = h.destroyedRound === undefined;
+                        out.bombs = h.pendingBombs.length;
+                        out.accumulators = h.pendingAccumulators.length;
                     });
                 }
             );
@@ -409,9 +435,12 @@ describe('Cheat Death wipes Bombs and Echoing Burst; Acidic Decay survives', () 
         };
         for (const side of SIDES) {
             for (const kind of ['bomb', 'accumulator'] as const) {
-                it(`${side}-side: two lethal ${kind}s → Cheat Death, the run completes, none left`, () => {
+                it(`${side}-side: two lethal ${kind}s → Cheat Death on the first, the wiped second never detonates, 1 HP`, () => {
                     expect(measureBurst(side, kind)).toEqual({
                         cheatDeath: true,
+                        detonations: 1,
+                        hpAfterTurn: 1,
+                        alive: true,
                         bombs: 0,
                         accumulators: 0,
                     });

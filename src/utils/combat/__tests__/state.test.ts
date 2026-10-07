@@ -530,7 +530,8 @@ describe('Echoing Burst accumulators are debuffs in the DoT-container helpers (R
 
     it('an all-debuffs shorten reaches it, counts it once, and drops it at 0', () => {
         const h = holder();
-        // Corrosion's 2 stacks + the accumulator; Acidic Decay is unremovable, Bombs are cut elsewhere.
+        // Corrosion's 2 stacks + the accumulator; Acidic Decay is unremovable, Bombs are cut
+        // elsewhere.
         expect(shortenDotDurations(h, 2)).toBe(2 + 1);
         expect(h.pendingAccumulators).toEqual([]);
         expect(h.pendingBombs[0].countdown).toBe(3);
