@@ -94,7 +94,7 @@ const runBoard = (
         idOf: (specId: string) => string,
         engine: () => StatusEngine | undefined
     ) => void
-): void => {
+): ReturnType<typeof runCombat> => {
     const { input, idOf } = mirrorBoard(teams, side);
     const bus = createEventBus();
     let engine: StatusEngine | undefined;
@@ -105,7 +105,7 @@ const runBoard = (
         return a;
     };
     listen(bus, byId, idOf, () => engine);
-    runCombat({
+    return runCombat({
         ...input,
         bus,
         __testTapStatusEngine: (se) => {
@@ -317,6 +317,8 @@ describe("Heliodor's 'reduces the duration of all active debuffs' bursts a 1-rou
     });
     const ally: ShipSpec = { id: 'ally', position: 'M3', speed: 1, hp: 1e9 };
     const hitter: ShipSpec = { id: 'hitter', position: 'M4', speed: 100, attack: 100, skills: HIT };
+    const idOfHitter = (side: 'player' | 'enemy'): string =>
+        mirrorBoard({ caster: [heliodor(NO_SKILLS), ally], other: [hitter] }, side).idOf('hitter');
     const passive = (): ShipSkills => ({
         slots: [{ slot: 'active', abilities: [] }, ...realSlots('Heliodor', ['passive'])],
     });
@@ -331,13 +333,15 @@ describe("Heliodor's 'reduces the duration of all active debuffs' bursts a 1-rou
         /** HP the holder had lost when Heliodor's duration cut finished — read before her
          *  passive's repair half lands (-1: no cut reached the holder). */
         hpLostAtCut: number;
+        /** What round 1 booked as detonation damage dealt by the Echoing Burst's applier. */
+        applierCredit: number | undefined;
     }
     const measure = (side: 'player' | 'enemy', skills: ShipSkills): Measured => {
         const bursts: Burst[] = [];
         let hpLostAtCut = -1;
         let holderTurnStarted = false;
         let hpBefore = 0;
-        runBoard(
+        const result = runBoard(
             { caster: [heliodor(skills), ally], other: [hitter] },
             side,
             (byId, idOf) => {
@@ -369,7 +373,8 @@ describe("Heliodor's 'reduces the duration of all active debuffs' bursts a 1-rou
                 );
             }
         );
-        return { bursts, hpLostAtCut };
+        const applierCredit = result.rounds[0].perActorDetonation?.[idOfHitter(side)];
+        return { bursts, hpLostAtCut, applierCredit };
     };
     for (const side of SIDES) {
         it(`${side}-side: control — no passive, the Echoing Burst bursts on the ally's turn`, () => {
@@ -379,11 +384,127 @@ describe("Heliodor's 'reduces the duration of all active debuffs' bursts a 1-rou
         });
         it(`${side}-side: Heliodor is hit → the ally's Echoing Burst is cut to 0 and bursts at once`, () => {
             // The seeded accumulator holds 50,000 at 100%: the cut bursts it for exactly that,
-            // before the ally's own turn would have gathered the round's damage into it.
+            // before the ally's own turn would have gathered the round's damage into it. The
+            // damage is booked to the Echoing Burst's applier (the hitter), not the cutter.
             expect(measure(side, passive())).toEqual({
                 bursts: [{ round: 1, damage: 50_000, beforeHolderTurn: true }],
                 hpLostAtCut: 50_000,
+                applierCredit: 50_000,
             });
+        });
+    }
+});
+
+describe('a duration cut that bursts a lethal Echoing Burst under Cheat Death wipes the Bomb', () => {
+    const heliodor: ShipSpec = {
+        id: 'heliodor',
+        position: 'M4',
+        speed: 200,
+        hp: 1e9,
+        skills: {
+            slots: [{ slot: 'active', abilities: [] }, ...realSlots('Heliodor', ['passive'])],
+        },
+    };
+    const hayyan: ShipSpec = {
+        id: 'hayyan',
+        position: 'M2',
+        speed: 300,
+        chargeCount: 4,
+        startCharged: true,
+        skills: { slots: realSlots('Hayyan', ['active', 'charged']) },
+    };
+    const holder: ShipSpec = { id: 'holder', position: 'M3', speed: 1, hp: 40_000 };
+    const hitter: ShipSpec = { id: 'hitter', position: 'M4', speed: 100, attack: 100, skills: HIT };
+    interface Measured {
+        cheatDeath: boolean;
+        bursts: number;
+        bombDetonations: number;
+        hpAtCut: number;
+        aliveAtCut: boolean;
+        bombsAtCut: number;
+    }
+    const measure = (
+        side: 'player' | 'enemy',
+        withCheatDeath: boolean,
+        holderHp = holder.hp
+    ): Measured => {
+        const out: Measured = {
+            cheatDeath: false,
+            bursts: 0,
+            bombDetonations: 0,
+            hpAtCut: -1,
+            aliveAtCut: false,
+            bombsAtCut: -1,
+        };
+        runBoard(
+            {
+                caster: [
+                    heliodor,
+                    { ...holder, hp: holderHp },
+                    ...(withCheatDeath ? [hayyan] : []),
+                ],
+                other: [hitter],
+            },
+            side,
+            (byId, idOf) => {
+                const h = byId('holder');
+                // Both containers sit one round from expiry, so the all-debuff cut reaches both.
+                h.pendingBombs.push({ ...bomb(idOf('hitter')), countdown: 1 });
+                h.pendingAccumulators.push(accumulator(idOf('hitter'), 1));
+            },
+            (bus, byId, idOf) => {
+                bus.on(
+                    'cheat-death-activated',
+                    (e: Extract<CombatEvent, { type: 'cheat-death-activated' }>) => {
+                        if (e.actorId === idOf('holder')) out.cheatDeath = true;
+                    }
+                );
+                bus.on(
+                    'accumulator-detonated',
+                    (e: Extract<CombatEvent, { type: 'accumulator-detonated' }>) => {
+                        if (e.victimId === idOf('holder')) out.bursts += 1;
+                    }
+                );
+                bus.on('bomb-detonated', (e: Extract<CombatEvent, { type: 'bomb-detonated' }>) => {
+                    if (e.victimId === idOf('holder')) out.bombDetonations += 1;
+                });
+                bus.on(
+                    'reactive-cleanse-performed',
+                    (e: Extract<CombatEvent, { type: 'reactive-cleanse-performed' }>) => {
+                        if (e.mode !== 'reduce-duration' || out.hpAtCut >= 0) return;
+                        if (!e.perTarget.some((t) => t.targetId === idOf('holder'))) return;
+                        const h = byId('holder');
+                        out.hpAtCut = h.currentHp;
+                        out.aliveAtCut = h.destroyedRound === undefined;
+                        out.bombsAtCut = h.pendingBombs.length;
+                    }
+                );
+            }
+        );
+        return out;
+    };
+    for (const side of SIDES) {
+        it(`${side}-side: Cheat Death leaves the holder at 1 HP, the burst pays, the Bomb never detonates`, () => {
+            expect(measure(side, true)).toEqual({
+                cheatDeath: true,
+                bursts: 1,
+                bombDetonations: 0,
+                hpAtCut: 1,
+                aliveAtCut: true,
+                bombsAtCut: 0,
+            });
+        });
+        it(`${side}-side control: without Cheat Death the same cut kills the holder`, () => {
+            const m = measure(side, false);
+            expect(m.cheatDeath).toBe(false);
+            expect(m.aliveAtCut).toBe(false);
+        });
+        it(`${side}-side control: a survivable burst leaves the cut Bomb to detonate`, () => {
+            // Same board with HP to spare: the Bomb the cut brought to 0 does detonate, so its
+            // absence under Cheat Death is the wipe, not a Bomb that could never go off.
+            const m = measure(side, false, 1e9);
+            expect(m.bursts).toBe(1);
+            expect(m.bombDetonations).toBe(1);
         });
     }
 });

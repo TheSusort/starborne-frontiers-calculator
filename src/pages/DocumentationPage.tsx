@@ -3100,14 +3100,15 @@ const DocumentationPage: React.FC = () => {
                                         Defense Shred like any other debuff. Every DoT stack, Bomb
                                         and Echoing Burst is a debuff too: debuff extensions such as
                                         Lev&apos;s, cleanses, duration cuts, debuff counts and Cheat
-                                        Death all treat them that way. A Bomb or Echoing Burst is
-                                        not a damage-over-time effect, so Provider&apos;s extension
-                                        of damage-over-time debuffs leaves them alone and Crocus
-                                        never answers an ally&apos;s critical Bomb; an Echoing Burst
-                                        is a Bomb-type debuff. A Bomb or Echoing Burst removed by a
-                                        cleanse or Cheat Death never detonates, but one whose
-                                        duration a cut drives to 0 detonates at once. Nyxen&apos;s
-                                        Bomb cleanse takes Bombs and Echoing Burst; her
+                                        Death all treat them that way, except that Nyxen&apos;s
+                                        damage-over-time cleanse skips them. A Bomb or Echoing Burst
+                                        is not a damage-over-time effect, so Provider&apos;s
+                                        extension of damage-over-time debuffs leaves them alone and
+                                        Crocus never answers an ally&apos;s critical Bomb; an
+                                        Echoing Burst is a Bomb-type debuff. A Bomb or Echoing Burst
+                                        removed by a cleanse or Cheat Death never detonates, but one
+                                        whose duration a cut drives to 0 detonates at once.
+                                        Nyxen&apos;s Bomb cleanse takes Bombs and Echoing Burst; her
                                         damage-over-time cleanse takes only Corrosion, Inferno and
                                         other DoTs, never a Bomb or Echoing Burst; both take the
                                         newest first. Heliodor&apos;s and Pestilence&apos;s cut to

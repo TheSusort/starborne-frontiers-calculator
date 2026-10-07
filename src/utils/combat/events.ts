@@ -624,7 +624,8 @@ export type CombatEvent =
           damage: number;
       }
     /** #345: an accumulate-then-detonate container (`PendingAccumulator` — Echoing Burst, the
-     *  only such effect in the corpus) reached the end of its countdown and burst on its holder.
+     *  only such effect in the corpus) burst on its holder: its countdown ended, or a duration
+     *  cut drove it to 0.
      *  ONE event per detonating entry, emitted from `processAccumulators` beside the burst's
      *  `creditDetonation`, mirroring `processBombs`/`emitBombDetonated` — and from
      *  `reduceAccumulatorsOnVictim` when a duration cut drives one to 0 (owner ruling R113).
