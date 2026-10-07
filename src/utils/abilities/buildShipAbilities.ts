@@ -1990,6 +1990,7 @@ function abilitiesFromText(
                     turns: critExtend.turns,
                     chanceFromCritPower: true,
                     scope: critExtend.scope,
+                    ...(critExtend.dotType ? { dotType: critExtend.dotType } : {}),
                 },
                 autoFilled: true,
             },

@@ -1334,14 +1334,27 @@ function extendDoTs(args: {
         });
         for (const vid of recipients) {
             if (args.isExtensionImmune(vid)) continue;
-            // A no-victim turn's loose containers are a throwaway default, so that case lands on
-            // nobody.
             const holder = args.debuffHolderFor(vid);
+            // An id naming no known victim is skipped; a no-victim turn's loose containers are a
+            // throwaway default.
             if (!holder) continue;
-            extendDebuffEntries(holder, turns);
+            extendDebuffEntries(onlyFamily(holder, ab.config.dotType), turns);
         }
     }
 }
+
+/** `holder` narrowed to the one DoT family an `extend-dot` names (Wisteria's "the newly inflicted
+ *  Corrosion"): every other container is replaced by an empty one. No family → `holder` itself. */
+const onlyFamily = (holder: DebuffEntryHolder, family: DoTType | undefined): DebuffEntryHolder =>
+    family === undefined
+        ? holder
+        : {
+              corrosionEntries: family === 'corrosion' ? holder.corrosionEntries : [],
+              infernoEntries: family === 'inferno' ? holder.infernoEntries : [],
+              genericDoTEntries: family === 'generic' ? holder.genericDoTEntries : [],
+              pendingBombs: family === 'bomb' ? holder.pendingBombs : [],
+              pendingAccumulators: [],
+          };
 
 /** How many entries each of a holder's debuff containers held at one moment — the slice bound an
  *  inflicted-scope extension reads to find what a cast appended after it. */
@@ -1381,9 +1394,9 @@ const extendDebuffEntriesSince = (
 };
 
 // Step 3a: Extend INFLICTED-scope DoTs — runs AFTER applyNewDoTs and applyAccumulators, extending
-// ONLY the DoTs, Bombs and Echoing Burst accumulators THIS cast just appended (Valerian's "extends
-// the duration the newly inflicted Corrosion by 1 turn"; owner ruling R109 makes every one of
-// them a debuff). `before` holds the container lengths captured before the cast's applications,
+// ONLY the DoTs, Bombs and Echoing Burst accumulators THIS cast just appended (owner ruling R109
+// makes every one of them a debuff). An extension naming a family (`dotType` — Valerian's and
+// Wisteria's "the newly inflicted Corrosion") reaches that family's fresh entries alone. `before` holds the container lengths captured before the cast's applications,
 // so the slice from those indices onward is exactly what landed this cast; an unremovable entry
 // in it is extended too. Gating is identical to extendDoTs: ability conditions vs ctx (binary
 // roundCrit), then extendChanceGate(critPowerFactor) for a chanceFromCritPower extension. If the
@@ -1408,7 +1421,11 @@ function extendInflictedDoTs(args: {
             if (!args.extendChanceGate(critPowerFactor)) continue;
         }
         if (args.immune) continue;
-        extendDebuffEntriesSince(args.holder, args.before, ab.config.turns);
+        extendDebuffEntriesSince(
+            onlyFamily(args.holder, ab.config.dotType),
+            args.before,
+            ab.config.turns
+        );
     }
 }
 

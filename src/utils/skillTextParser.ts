@@ -2170,9 +2170,12 @@ const CRIT_POWER_EXTEND_RE =
  * Parses a crit-power-chance DoT extension: the turns and the gating condition. Returns null when
  * absent. The extension fires with probability min(1, critPower/100), gated by the condition.
  */
-export function parseCritPowerExtend(
-    text: string | null | undefined
-): { turns: number; condition: Condition; scope: 'active' | 'inflicted' } | null {
+export function parseCritPowerExtend(text: string | null | undefined): {
+    turns: number;
+    condition: Condition;
+    scope: 'active' | 'inflicted';
+    dotType?: DoTType;
+} | null {
     if (!text) return null;
     const plain = stripUnitTags(text);
     const m = CRIT_POWER_EXTEND_RE.exec(plain);
@@ -2183,7 +2186,11 @@ export function parseCritPowerExtend(
     // "extends the newly inflicted <DoT>" → only THIS cast's freshly inflicted DoT grows
     // (Valerian/Wisteria/Belladonna), not every standing entry.
     const scope: 'active' | 'inflicted' = /newly\s+inflicted/i.test(plain) ? 'inflicted' : 'active';
-    return { turns: parseInt(m[1], 10), condition, scope };
+    // "the newly inflicted Corrosion" names one DoT family; the extension reaches that family
+    // alone. A family outside DoTType (Belladonna's Acidic Decay) leaves it unset.
+    const family = /newly\s+inflicted\s+(corrosion|inferno)\b/i.exec(plain)?.[1].toLowerCase() as
+        DoTType | undefined;
+    return { turns: parseInt(m[1], 10), condition, scope, ...(family ? { dotType: family } : {}) };
 }
 
 // "this Unit converts the Corrosion into Acidic Decay of the same level, with the chance scaling

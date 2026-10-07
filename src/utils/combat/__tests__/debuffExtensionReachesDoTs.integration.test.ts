@@ -16,7 +16,9 @@ import { createStatusEngine, StatusEngine, RegisteredAbilityStatus } from '../st
 import { createEventBus } from '../events';
 import { makeRateGate, setupKeyedRng } from '../../calculators/rateAccumulator';
 import { Ability, ShipSkills } from '../../../types/abilities';
-import { AffinityName } from '../../../types/ship';
+import { AffinityName, Ship } from '../../../types/ship';
+import { buildShipAbilities } from '../../abilities/buildShipAbilities';
+import { csvAvailable, loadShipSkillRecords } from '../../../../scripts/lib/shipSkillCsv';
 
 const ATTACKER_AFFINITY: AffinityName = 'thermal';
 
@@ -255,7 +257,7 @@ describe("R109: Provider's DoT extension reaches generic DoTs and Bombs", () => 
         config: { type: 'extend-dot', turns: 1, scope: 'active' },
     };
 
-    it('"all damage over time debuffs are extended by 1 turn" grows the generic DoT and the Bomb', () => {
+    it('"all damage over time debuffs are extended by 1 turn" grows every DoT, Bomb and Echoing Burst container', () => {
         const runtime = makeRuntime('provider', {
             slots: [{ slot: 'charged', abilities: [providerExtend] }],
         });
@@ -313,8 +315,8 @@ describe('R109: inflicted-scope extensions reach the Bomb and Echoing Burst the 
         conditions: [],
         config: { type: 'accumulate-detonate', turns: 2, pct: 50 },
     };
-    const valerianExtend: Ability = {
-        id: 'valerian-extend',
+    const familylessExtend: Ability = {
+        id: 'familyless-extend',
         type: 'extend-dot',
         target: 'enemy',
         trigger: 'on-cast',
@@ -344,7 +346,7 @@ describe('R109: inflicted-scope extensions reach the Bomb and Echoing Burst the 
     };
 
     for (const [name, extend] of [
-        ['Valerian extend-dot', valerianExtend],
+        ['family-less inflicted extend-dot', familylessExtend],
         ['Asphyxiator extend-status', asphyxiatorExtend],
     ] as const) {
         it(`${name}: the fresh Bomb and Echoing Burst grow, the standing ones do not`, () => {
@@ -360,3 +362,75 @@ describe('R109: inflicted-scope extensions reach the Bomb and Echoing Burst the 
         });
     }
 });
+
+/** A full-refit Ship carrying a docs/ship-skills.csv record's texts. */
+function shipFromCsv(name: string): Ship {
+    const rec = loadShipSkillRecords().find((r) => r.name.toUpperCase() === name.toUpperCase());
+    if (!rec) throw new Error(`docs/ship-skills.csv: no record for "${name}"`);
+    return {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ...({} as any),
+        refits: [{}, {}, {}, {}],
+        activeSkillText: rec.active,
+        chargeSkillText: rec.charge,
+        chargeSkillCharge: rec.chargeCharge,
+        firstPassiveSkillText: rec.passives[0],
+        secondPassiveSkillText: rec.passives[1],
+        thirdPassiveSkillText: rec.passives[2],
+    } as Ship;
+}
+
+/**
+ * Wisteria: "extends the newly inflicted Corrosion by 1 turn with the extension chance equal to
+ * this Unit's crit power." The text names Corrosion, so a crit cast that lands Corrosion AND
+ * Inferno II extends the Corrosion alone. The extend-dot is the one the parser builds from her
+ * refit-active passive.
+ */
+describe.skipIf(!csvAvailable())(
+    "Wisteria's crit extension grows only the Corrosion it just inflicted",
+    () => {
+        it('a crit landing Corrosion and Inferno II, extension roll passing: Corrosion +1, Inferno II stays 2', () => {
+            const parsed = buildShipAbilities(shipFromCsv('Wisteria'))
+                .slots.flatMap((s) => s.abilities)
+                .find((a) => a.config.type === 'extend-dot');
+            if (!parsed) throw new Error('Wisteria has no parsed extend-dot');
+            const corrosion: Ability = {
+                id: 'w-corrosion',
+                type: 'dot',
+                target: 'enemy',
+                trigger: 'on-cast',
+                conditions: [],
+                config: { type: 'dot', dotType: 'corrosion', tier: 6, stacks: 1, duration: 3 },
+            };
+            const inferno: Ability = {
+                id: 'w-inferno',
+                type: 'dot',
+                target: 'enemy',
+                trigger: 'on-cast',
+                conditions: [],
+                config: { type: 'dot', dotType: 'inferno', tier: 30, stacks: 1, duration: 2 },
+            };
+            const runtime = makeRuntime(
+                'wisteria',
+                { slots: [{ slot: 'charged', abilities: [corrosion, inferno, parsed] }] },
+                { chargedCritGate: () => true }
+            );
+            runtime.critDamage = 100;
+            runtime.extendChanceGate = () => true;
+            const statusEngine = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+            statusEngine.beginRound(1);
+            const victim = createActor({
+                id: 'victim',
+                side: 'enemy',
+                kind: 'enemy',
+                stats: { ...baseStats(), attack: 0, hp: 1_000_000 },
+            });
+            runPlayerTurn(makeArgs(runtime, victim, statusEngine));
+            // Instrument: both DoTs landed this cast.
+            expect(victim.corrosionEntries).toHaveLength(1);
+            expect(victim.infernoEntries).toHaveLength(1);
+            expect(victim.corrosionEntries[0].remainingRounds).toBe(4);
+            expect(victim.infernoEntries[0].remainingRounds).toBe(2);
+        });
+    }
+);

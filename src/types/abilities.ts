@@ -939,12 +939,15 @@ export type AbilityConfig =
     // `scope`: 'active'/undefined extends ALL standing DoT entries, Bombs and Echoing Burst
     // accumulators (Provider's "all damage over time debuffs are extended"; default +
     // back-compat for stored configs). 'inflicted' extends ONLY the ones this cast just applied
-    // (Valerian's "the newly inflicted Corrosion by 1 turn").
+    // (Valerian's "the newly inflicted Corrosion by 1 turn"). `dotType` narrows the extension to
+    // the one DoT family the text names (Valerian/Wisteria: 'corrosion'); absent → every entry
+    // in scope.
     | {
           type: 'extend-dot';
           turns: number;
           chanceFromCritPower?: boolean;
           scope?: 'active' | 'inflicted';
+          dotType?: DoTType;
       }
     // Generic extend-status (Ripper/Lev) — extends every eligible timed
     // buff ('buff') or debuff ('debuff') on the StatusEngine selfMaps/enemyMaps store by
