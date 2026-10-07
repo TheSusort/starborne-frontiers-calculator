@@ -7269,9 +7269,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                 const directFraction =
                     totalRaw > 0 ? Math.max(0, (totalRaw - bombPortion) / totalRaw) : 0;
                 const reflectBasis = hpDamage * directFraction;
-                // A requirePrimaryTarget reflect ability (Nosorog) fires only on a primary-target
-                // hit (`cause.isPrimaryTarget`, see its doc). An ability without it (the Reflect
-                // gear set) reflects every direct hit.
+                // A requirePrimaryTarget reflect ability fires only on a primary-target hit
+                // (`cause.isPrimaryTarget`, see its doc). Nosorog and the Reflect gear set both
+                // carry `requirePrimaryTarget`; an ability without it reflects every direct hit.
                 //
                 // LATENT SAFETY: the `undefined → treated as primary` default is correct
                 // ONLY because every real-roster AoE path today is POSITIONAL — applyPositionalDamage
@@ -9227,7 +9227,10 @@ export function runCombat(rawInput: CombatEngineInput): {
             deliveredDamage?: number,
             // Every victim this sub-attack struck. Omitted on the single-event paths, whose
             // consumers fall back to `[targetId]`.
-            victimIds?: string[]
+            victimIds?: string[],
+            // This sub-attack's primary targets (`SubAttackOutcome.primaryVictimIds`). Omitted on
+            // the single-event paths, whose consumers fall back to `[targetId]`.
+            primaryVictimIds?: string[]
         ) => {
             bus.emit({
                 type: 'ability-performed',
@@ -9245,6 +9248,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                 ...(subAttack !== undefined ? { subAttackIndex: subAttack } : {}),
                 ...(deliveredDamage !== undefined ? { deliveredDamage } : {}),
                 ...(victimIds !== undefined && victimIds.length > 0 ? { victimIds } : {}),
+                ...(primaryVictimIds !== undefined && primaryVictimIds.length > 0
+                    ? { primaryVictimIds }
+                    : {}),
                 didHit: true,
             });
             // The attack entry now exists — drain the reflect rows THIS sub-attack
@@ -10624,7 +10630,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                                         sub.critVictimIds,
                                         idx,
                                         sub.deliveredDamage,
-                                        sub.victimIds
+                                        sub.victimIds,
+                                        sub.primaryVictimIds
                                     ),
                             });
                         }

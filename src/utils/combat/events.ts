@@ -89,6 +89,10 @@ export type CombatEvent =
            *  `victimIds`). Present only on the POSITIONAL deferred emit; consumers fall back to
            *  `[targetId]` when absent, where `targetId` is the only victim. */
           victimIds?: string[];
+          /** This sub-attack's primary targets (positionalApply's `SubAttackOutcome.primaryVictimIds`:
+           *  every victim of a whole-battlefield pattern, else the anchor). Present only on the
+           *  POSITIONAL deferred emit and only when non-empty; consumers fall back to `[targetId]`. */
+          primaryVictimIds?: string[];
           /** What this sub-attack actually DELIVERED — post-crit, post-amplification,
            *  post-victim-defence, INCLUDING damage a Protection cascade diverted to protectors and
            *  EXCLUDING damage deferred into a DoT. The locked basis for damage-proportional outgoing

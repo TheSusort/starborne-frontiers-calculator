@@ -11,6 +11,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: Echoing Burst now counts, cleanses and shortens like any other debuff.',
     'Combat simulator: Cheat Death now also clears Bombs and Echoing Burst.',
     "Combat simulator: Curator's active now hits every enemy as a primary target.",
+    'Combat simulator: Burner set on Curator now applies Inferno to every enemy.',
     'Combat simulator: Stalwart now counters attacks re-aimed at him after a kill.',
     "Combat simulator: passive repairs like Hayyan's and Salvation's can now crit.",
     "Combat simulator: Snakeroot's passive now fires on every 4th DoT stack inflicted.",

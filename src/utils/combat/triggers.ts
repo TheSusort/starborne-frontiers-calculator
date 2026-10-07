@@ -333,6 +333,11 @@ export interface Intent {
          *  `dealtVictimRoleGateMet`: "after damaging a Debuffer or Supporter" asks whether ANY ship
          *  the attack hit has that role. Never empty when present. */
         dealtVictimIds?: string[];
+        /** The primary targets of the owner's damaging sub-attack (ability-performed
+         *  .primaryVictimIds, else its lone `targetId`), stamped by the on-deal-damage listener. A
+         *  reactive DoT rider (Burner's Inferno) lands on EACH of these, each with its own landing
+         *  check. Never empty when present. */
+        primaryVictimIds?: string[];
         /** The clipped overheal carried from an own-repair-to-ally event, summed across EVERY
          *  recipient of the triggering repair — THE CASTER INCLUDED. Read by an `overheal`-basis
          *  reactive heal/shield to scale off the wasted amount rather than the owner's max HP.
@@ -1039,9 +1044,10 @@ export function registerReactiveListeners(args: {
                         // Warpstrike (duration-reduction), Zeolite (purge). Pinned by
                         // onDealDamageDeliveredBasis.integration.test.ts.
                         if ((e.deliveredDamage ?? e.damage ?? 0) <= 0) return;
-                        // Capture the owner's own attack target so a reactive DoT rider (Burner's
-                        // on-deal-damage Inferno) lands on the enemy actually hit — the real
-                        // positional victim — instead of the ctx-level fallback, which is a NO-OP.
+                        // Capture the owner's own attack target, and the sub-attack's primary
+                        // targets, so a reactive DoT rider (Burner's on-deal-damage Inferno) lands
+                        // on every primary target actually hit — the real positional victims —
+                        // instead of the ctx-level fallback, which is a NO-OP.
                         // A roster-less run is not constructible (the normalization boundary refuses
                         // an absent/empty roster), so a DPS run routes the rider to the real victim.
                         // Non-DoT riders (Warpstrike duration-reduction) ignore victimId, so this is
@@ -1054,6 +1060,10 @@ export function registerReactiveListeners(args: {
                                 dealtVictimIds:
                                     e.victimIds && e.victimIds.length > 0
                                         ? e.victimIds
+                                        : [e.targetId],
+                                primaryVictimIds:
+                                    e.primaryVictimIds && e.primaryVictimIds.length > 0
+                                        ? e.primaryVictimIds
                                         : [e.targetId],
                                 // See the on-crit listener above.
                                 subAttackIndex: e.subAttackIndex,
@@ -5936,45 +5946,60 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // infliction landed on under that field only (Ripper's "it also inflicts Inferno II" lands
         // on the enemy his debuff just hit) — the same counterTargetId-then-debuffVictimId order
         // the sibling `debuff` branch reads.
+        //
+        // An `on-deal-damage` rider (Burner's Inferno) instead lands on EVERY primary target of
+        // the sub-attack that dealt the damage (`eventCtx.primaryVictimIds`, owner ruling R110):
+        // the anchor alone for a single-target or ordinary area attack, every struck enemy for a
+        // whole-battlefield pattern. Each recipient goes through the full per-victim landing below
+        // (once-per-cast gate, Block Debuff, its own landing check).
         const routedVictimId =
             intent.eventCtx?.victimId ??
             intent.eventCtx?.counterTargetId ??
             intent.eventCtx?.debuffVictimId;
         // Victimless → NO-OP, so no container push and NO `dot-applied`.
         if (routedVictimId === undefined) return;
-        if (!passesOncePerCastGate(intent, ctx, routedVictimId)) return;
-        const victim = ctx.actorById?.(routedVictimId);
-        // A unit-test ctx without an `actorById` delegate cannot resolve the object but still
-        // knows the id — keep using it rather than inventing a target.
-        const victimId = victim?.id ?? routedVictimId;
-        // Block Debuff: an immune target auto-resists this reactive DoT — block
-        // it AND emit a resist event. Placed AFTER the inert-DoT guard above so a
-        // zero-stack/tier DoT doesn't surface a spurious resist.
-        if (targetCarriesBlockDebuff(ctx.statusEngine, victimId)) {
-            // #413: block path — no landing gate drawn, so no on-resist proc.
-            emitBlockDebuffResist(
-                ctx.bus,
-                intent.ownerId,
-                victimId,
-                ctx.round,
-                dotResistLabel(cfg.dotType, cfg.tier),
-                false,
-                undefined,
-                ctx.reactionFiringId
-            );
-            return;
+        const recipientIds =
+            intent.ability.trigger === 'on-deal-damage' &&
+            intent.eventCtx?.primaryVictimIds &&
+            intent.eventCtx.primaryVictimIds.length > 0
+                ? intent.eventCtx.primaryVictimIds
+                : [routedVictimId];
+        for (const recipientId of recipientIds) {
+            if (!passesOncePerCastGate(intent, ctx, recipientId)) continue;
+            const victim = ctx.actorById?.(recipientId);
+            // A unit-test ctx without an `actorById` delegate cannot resolve the object but still
+            // knows the id — keep using it rather than inventing a target.
+            const victimId = victim?.id ?? recipientId;
+            // Block Debuff: an immune target auto-resists this reactive DoT — block
+            // it AND emit a resist event. Placed AFTER the inert-DoT guard above so a
+            // zero-stack/tier DoT doesn't surface a spurious resist.
+            if (targetCarriesBlockDebuff(ctx.statusEngine, victimId)) {
+                // #413: block path — no landing gate drawn, so no on-resist proc.
+                emitBlockDebuffResist(
+                    ctx.bus,
+                    intent.ownerId,
+                    victimId,
+                    ctx.round,
+                    dotResistLabel(cfg.dotType, cfg.tier),
+                    false,
+                    undefined,
+                    ctx.reactionFiringId
+                );
+                continue;
+            }
+            // Lands through the SAME path as a timed debuff (`owner.landsTimedEnemyApplication`,
+            // the sibling `debuff` branch's gate), keyed on the DoT's own verb (owner ruling,
+            // 2026-10-01):
+            //  - 'apply' (the Burner gear set's "Applies Inferno") — the affinity check against
+            //    THIS victim only, no hacking-vs-security roll and no draw;
+            //  - anything else — one draw per stack of the OWNER's landing gate at THIS victim's
+            //    hacking-vs-security chance (a team ship's DoT lands at ITS rate), not the owner's
+            //    cached turn-target chance: a reactive DoT lands on the enemy the triggering
+            //    event carries. An undefined chance (unit ctxs, a read before the owner's first
+            //    turn) falls back to the owner's cached chance, then 1, inside the gate.
+            const landed = landedStacksOn(victimId);
+            if (landed > 0) landDotOn(victim, victimId, landed);
         }
-        // Lands through the SAME path as a timed debuff (`owner.landsTimedEnemyApplication`, the
-        // sibling `debuff` branch's gate), keyed on the DoT's own verb (owner ruling, 2026-10-01):
-        //  - 'apply' (the Burner gear set's "Applies Inferno") — the affinity check against THIS
-        //    victim only, no hacking-vs-security roll and no draw;
-        //  - anything else — one draw per stack of the OWNER's landing gate at THIS victim's
-        //    hacking-vs-security chance (a team ship's DoT lands at ITS rate), not the owner's
-        //    cached turn-target chance: a reactive DoT lands on the enemy the triggering event
-        //    carries. An undefined chance (unit ctxs, a read before the owner's first turn) falls
-        //    back to the owner's cached chance, then 1, inside the gate.
-        const landed = landedStacksOn(victimId);
-        if (landed > 0) landDotOn(victim, victimId, landed);
         return;
     }
 
