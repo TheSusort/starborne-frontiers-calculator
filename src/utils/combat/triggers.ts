@@ -2379,25 +2379,24 @@ export function registerReactiveListeners(args: {
                     bus.on('purge-performed', (e) => {
                         // Self-scoped on the caster: THIS owner purged an enemy (Sefuba).
                         // Route counterTargetId = e.targetId so Sefuba's chain "purges 1 extra
-                        // buff" re-purges the SAME victim (victim-routing).
-                        // fromPurgeEvent guards the chain purge from re-emitting → depth-1.
-                        // purgedBuffCount carries THIS purge's removed count to a "for each buff
-                        // removed" repair. The chain purge emits no purge-performed, so its
-                        // buff never adds to that repair.
-                        // KNOWN GAP: whether the game counts the chained "1 extra buff" toward
-                        // Sefuba's "for each buff removed" is unconfirmed, pending an in-game
-                        // test. The model counts the triggering purge only; pinned in
-                        // sefubaRepairPerBuffPurged.integration.test.ts case (4).
-                        if (e.casterId === ownerId)
-                            enqueue({
-                                ...intent,
-                                eventCtx: {
-                                    ...intent.eventCtx,
-                                    counterTargetId: e.targetId,
-                                    fromPurgeEvent: true,
-                                    purgedBuffCount: e.count,
-                                },
-                            });
+                        // buff" re-purges the SAME victim (victim-routing); it fires once per
+                        // victim. fromPurgeEvent guards the chain purge from re-emitting → depth-1,
+                        // so the extra buff adds nothing to the repair and wakes nothing.
+                        // A repair is wave-wide: ONE per purge cast, on the wave's lead event,
+                        // scaled by every buff the wave removed (`purge-performed.waveTotal`)
+                        // — "for each buff removed" counts the triggering purges only.
+                        if (e.casterId !== ownerId) return;
+                        const isRepair = ra.ability.config.type === 'heal';
+                        if (isRepair && e.waveLead === false) return;
+                        enqueue({
+                            ...intent,
+                            eventCtx: {
+                                ...intent.eventCtx,
+                                counterTargetId: e.targetId,
+                                fromPurgeEvent: true,
+                                purgedBuffCount: isRepair ? (e.waveTotal ?? e.count) : e.count,
+                            },
+                        });
                     });
                     break;
                 case 'on-ally-purged':
@@ -6863,6 +6862,7 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
             intent.ability.trigger === 'on-deal-damage'
                 ? enemyRoleConditionsOf(intent.ability)
                 : NO_CONDITIONS;
+        const removals: { targetId: string; removed: number }[] = [];
         for (const targetId of targetIds) {
             // Reachable: Rhodium's end-of-round purge in any round where no enemy carries a buff
             // (`mostBuffsAmong` returns undefined there, `engine.ts`). Its `damage` half on the
@@ -6871,17 +6871,25 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
             // As in the debuff branch — re-check against the real routed target.
             if (!perVictimOk(targetId)) continue;
             if (!victimRoleMatches(roleConditions, targetId, ctx)) continue;
-            const removed = ctx.statusEngine.purge(targetId, cfg.count);
-            // Emit purge-performed UNLESS this purge was itself triggered by a purge (depth-1
-            // guard).
-            if (removed > 0 && !intent.eventCtx?.fromPurgeEvent) {
+            removals.push({ targetId, removed: ctx.statusEngine.purge(targetId, cfg.count) });
+        }
+        // Emit purge-performed UNLESS this purge was itself triggered by a purge (depth-1
+        // guard). Every victim is purged first, so each event carries the wave's total.
+        if (!intent.eventCtx?.fromPurgeEvent) {
+            const waveTotal = removals.reduce((sum, x) => sum + x.removed, 0);
+            let waveLead = true;
+            for (const { targetId, removed } of removals) {
+                if (removed <= 0) continue;
                 ctx.bus.emit({
                     type: 'purge-performed',
                     casterId: intent.ownerId,
                     targetId,
                     count: removed,
                     round: ctx.round,
+                    waveTotal,
+                    waveLead,
                 });
+                waveLead = false;
             }
         }
         return;

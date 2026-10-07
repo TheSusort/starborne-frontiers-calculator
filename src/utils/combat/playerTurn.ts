@@ -5642,9 +5642,16 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                     ab.config.countScaling,
                     effectiveCritDamage
                 );
-                for (const vid of recipients) {
-                    const removed = statusEngine.purge(vid, purgeCount);
-                    buffsPurgedThisCast += removed;
+                // Every victim is purged before any purge-performed is emitted, so each event
+                // carries the whole wave's total (`purge-performed.waveTotal`).
+                const removals = recipients.map((vid) => ({
+                    vid,
+                    removed: statusEngine.purge(vid, purgeCount),
+                }));
+                const waveTotal = removals.reduce((sum, x) => sum + x.removed, 0);
+                buffsPurgedThisCast += waveTotal;
+                let waveLead = true;
+                for (const { vid, removed } of removals) {
                     if (removed > 0) {
                         bus.emit({
                             type: 'purge-performed',
@@ -5652,7 +5659,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                             targetId: vid,
                             count: removed,
                             round: r,
+                            waveTotal,
+                            waveLead,
                         });
+                        waveLead = false;
                         // I6: Lodolite legendary refit — "When this Unit Purges a buff from an
                         // enemy, it removes 100% of the enemy's shield." Gated on the parsed
                         // ability config (stripsShield), never a hardcoded ship name — see

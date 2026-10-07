@@ -14,6 +14,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: Stalwart now counters back when another Stalwart counters him.',
     "Combat simulator: Hayyan's debuff repair fires once per ally per enemy skill.",
     'Combat simulator: Oleander gains one charge per ally skill, not per debuff.',
+    'Combat simulator: Sefuba now repairs once per purge, before her extra purge.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
