@@ -3703,10 +3703,10 @@ export function actorDebuffCount(statusEngine: StatusEngine, actor: CombatActor)
  * reactive) call. The pool is every debuff `actorDebuffCount` counts: its named debuffs, each DoT
  * stack it carries (owner ruling R27) and each Echoing Burst accumulator (`dotCleanseCandidates`),
  * taken NEWEST APPLIED FIRST across both kinds (owner ruling 2026-10-04: Attack Down and 2
- * Corrosion stacks, "cleanses 1 debuff" → whichever was inflicted last goes). A typed cleanse (`debuffType`, Nyxen's "cleanses
- * 2 Bomb" / "2 damage over time debuffs") filters to DoT stacks of that kind, then takes the
- * newest. `actor` absent (a hand-built ctx without an actor reader) → named debuffs only. Returns
- * how many were removed.
+ * Corrosion stacks, "cleanses 1 debuff" → whichever was inflicted last goes). A typed cleanse
+ * (`debuffType`, Nyxen's "cleanses 2 Bomb" / "2 damage over time debuffs") filters to DoT stacks
+ * of that kind, then takes the newest. `actor` absent (a hand-built ctx without an actor
+ * reader) → named debuffs only. Returns how many were removed.
  */
 export function cleanseDebuffs(
     statusEngine: StatusEngine,
