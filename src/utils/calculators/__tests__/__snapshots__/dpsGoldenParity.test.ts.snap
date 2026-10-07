@@ -5699,7 +5699,7 @@ exports[`dpsGoldenParity > extend-dot passive with crit-power chance 1`] = `
     },
     {
       "action": "active",
-      "activeBombCount": 1,
+      "activeBombCount": 2,
       "activeCorrosionStacks": 4,
       "activeDoTStates": [
         {
@@ -5713,6 +5713,12 @@ exports[`dpsGoldenParity > extend-dot passive with crit-power chance 1`] = `
           "ticksRemaining": 2,
           "tier": 5,
           "type": "corrosion",
+        },
+        {
+          "stacks": 1,
+          "ticksRemaining": 1,
+          "tier": 120,
+          "type": "bomb",
         },
         {
           "stacks": 1,
@@ -5743,40 +5749,37 @@ exports[`dpsGoldenParity > extend-dot passive with crit-power chance 1`] = `
       "chargeCount": 3,
       "charges": 2,
       "corrosionDamage": 80000,
-      "cumulativeDamage": 167642,
-      "detonationDamage": 18000,
+      "cumulativeDamage": 149642,
+      "detonationDamage": 0,
       "didCrit": true,
       "directDamage": 14821,
       "dotsLanded": true,
       "enemyHpPct": 86,
       "infernoDamage": 0,
-      "perActorDetonation": {
-        "attacker": 18000,
-      },
       "perActorIncoming": {
         "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
-          "incoming": 112820.90291761764,
-          "incomingRaw": 143000,
+          "incoming": 94820.90291761764,
+          "incomingRaw": 125000,
           "shieldAbsorbed": 0,
         },
       },
       "perTargetDamage": {
-        "enemy-1": 112820.90291761764,
+        "enemy-1": 94820.90291761764,
       },
       "perTargetDealt": {
         "attacker": {
-          "enemy-1": 112820.90291761764,
+          "enemy-1": 94820.90291761764,
         },
       },
       "resistedEnemyDebuffs": [],
       "round": 2,
-      "totalRoundDamage": 112821,
+      "totalRoundDamage": 94821,
     },
     {
       "action": "active",
-      "activeBombCount": 1,
+      "activeBombCount": 3,
       "activeCorrosionStacks": 6,
       "activeDoTStates": [
         {
@@ -5796,6 +5799,18 @@ exports[`dpsGoldenParity > extend-dot passive with crit-power chance 1`] = `
           "ticksRemaining": 2,
           "tier": 5,
           "type": "corrosion",
+        },
+        {
+          "stacks": 1,
+          "ticksRemaining": 1,
+          "tier": 120,
+          "type": "bomb",
+        },
+        {
+          "stacks": 1,
+          "ticksRemaining": 1,
+          "tier": 120,
+          "type": "bomb",
         },
         {
           "stacks": 1,
@@ -5826,36 +5841,33 @@ exports[`dpsGoldenParity > extend-dot passive with crit-power chance 1`] = `
       "chargeCount": 3,
       "charges": 3,
       "corrosionDamage": 120000,
-      "cumulativeDamage": 311570,
-      "detonationDamage": 18000,
+      "cumulativeDamage": 275570,
+      "detonationDamage": 0,
       "didCrit": false,
       "directDamage": 5928,
       "dotsLanded": true,
-      "enemyHpPct": 58,
+      "enemyHpPct": 63,
       "infernoDamage": 0,
-      "perActorDetonation": {
-        "attacker": 18000,
-      },
       "perActorIncoming": {
         "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
-          "incoming": 143928.36116704706,
-          "incomingRaw": 156000,
+          "incoming": 125928.36116704706,
+          "incomingRaw": 138000,
           "shieldAbsorbed": 0,
         },
       },
       "perTargetDamage": {
-        "enemy-1": 143928.36116704706,
+        "enemy-1": 125928.36116704706,
       },
       "perTargetDealt": {
         "attacker": {
-          "enemy-1": 143928.36116704706,
+          "enemy-1": 125928.36116704706,
         },
       },
       "resistedEnemyDebuffs": [],
       "round": 3,
-      "totalRoundDamage": 143928,
+      "totalRoundDamage": 125928,
     },
     {
       "action": "charged",
@@ -5877,12 +5889,12 @@ exports[`dpsGoldenParity > extend-dot passive with crit-power chance 1`] = `
       "chargeCount": 3,
       "charges": 0,
       "corrosionDamage": 120000,
-      "cumulativeDamage": 469752,
+      "cumulativeDamage": 433752,
       "detonationDamage": 0,
       "didCrit": true,
       "directDamage": 34582,
       "dotsLanded": true,
-      "enemyHpPct": 22,
+      "enemyHpPct": 31,
       "infernoDamage": 3600,
       "perActorIncoming": {
         "enemy-1": {
@@ -5907,14 +5919,14 @@ exports[`dpsGoldenParity > extend-dot passive with crit-power chance 1`] = `
     },
   ],
   "summary": {
-    "avgDamagePerRound": 117438,
+    "avgDamagePerRound": 108438,
     "finalHpPct": 0,
     "roundsToKill": 4,
     "survived": false,
     "totalConditionalDamage": 0,
     "totalCorrosionDamage": 360000,
-    "totalDamage": 469752,
-    "totalDetonationDamage": 36000,
+    "totalDamage": 433752,
+    "totalDetonationDamage": 0,
     "totalDirectDamage": 70152,
     "totalInfernoDamage": 3600,
     "totalSecondaryDamage": 0,
