@@ -2550,8 +2550,13 @@ function abilitiesFromText(
                 // Hayyan: ALLY_DEBUFFED_RE only ever matches its own literal "debuff is inflicted
                 // on an ally" wording, so on-ally-debuffed is unconditionally an inflict here (no
                 // "applied" counterpart exists for this detector to miss).
+                // Hayyan's repair is once per (skill cast, debuffed ally) — see
+                // `Ability.oncePerRootCast`.
                 ...(reactiveTrigger === 'on-ally-debuffed'
-                    ? { triggerApplicationFilter: 'inflict' as const }
+                    ? {
+                          triggerApplicationFilter: 'inflict' as const,
+                          oncePerRootCast: 'per-victim' as const,
+                      }
                     : {}),
                 // APEX: the shield's own sentence carries the trigger clause, so its verb is the
                 // filter — "gets inflicted with a debuff" → 'inflict'. A clause naming no verb

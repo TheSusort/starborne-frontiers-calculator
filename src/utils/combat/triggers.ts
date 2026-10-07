@@ -1810,7 +1810,14 @@ export function registerReactiveListeners(args: {
                     // passesApplicationFilter) so an enemy applying Provoke, or the Burner set's
                     // applied Inferno, to her ally gives her nothing.
                     const onAllyDebuffed = (
-                        e: { targetId: string; application?: 'inflict' | 'apply' },
+                        e: {
+                            sourceId: string;
+                            targetId: string;
+                            application?: 'inflict' | 'apply';
+                            reactive?: true;
+                            duringTurnOf?: string;
+                            reactionFiringId?: number;
+                        },
                         times: number
                     ) => {
                         if (
@@ -1824,7 +1831,15 @@ export function registerReactiveListeners(args: {
                         for (let i = 0; i < times; i++)
                             enqueue({
                                 ...intent,
-                                eventCtx: { ...intent.eventCtx, damagedAllyId: e.targetId },
+                                eventCtx: {
+                                    ...intent.eventCtx,
+                                    damagedAllyId: e.targetId,
+                                    // The debuffed ally is the victim and the inflictor's cast the
+                                    // root, for `Ability.oncePerRootCast`.
+                                    debuffVictimId: e.targetId,
+                                    inflictorId: e.sourceId,
+                                    ...inflictionReactionCtx(e),
+                                },
                             });
                     };
                     bus.on('debuff-applied', (e) => onAllyDebuffed(e, 1));

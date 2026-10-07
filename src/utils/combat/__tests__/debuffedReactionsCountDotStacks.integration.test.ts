@@ -1,11 +1,11 @@
 /**
  * "When a debuff is inflicted on an ally" (Hayyan) and "When debuffed" (the Firewall implant) also
- * hear damage-over-time landings, once per landed STACK: every DoT stack is a separate debuff
- * (rulings 26/28), and an incoming effect rolls once per occurrence, so Firewall's proc chance is
- * drawn per stack.
- *  - Hayyan: Snakeroot's "2 stacks of Corrosion" on her ally → two 6% repairs. Her clause says
- *    "inflicted", so an APPLIED DoT (the Burner set's Inferno) repairs nothing, as an applied
- *    debuff never did.
+ * hear damage-over-time landings: every DoT stack is a separate debuff (rulings 26/28), and an
+ * incoming effect rolls once per occurrence, so Firewall's proc chance is drawn per stack.
+ *  - Hayyan: Snakeroot's "2 stacks of Corrosion" on her ally → ONE 6% repair, because her repair
+ *    is once per (skill cast, debuffed ally) however many debuffs the cast landed on that ally
+ *    (`oncePerRootCast: 'per-victim'`). Her clause says "inflicted", so an APPLIED DoT (the
+ *    Burner set's Inferno) repairs nothing, as an applied debuff never did.
  *  - Firewall: no verb in its text, so inflicted and applied DoTs both count.
  *
  * Real parsed kits (buildTraceShip, refit 4): Hayyan's passive, Snakeroot's active; Firewall via
@@ -112,7 +112,7 @@ const inflicter = (kind: Inflicter): ShipSpec => ({
     skills: inflicterSkills(kind),
 });
 
-describe("Hayyan: 'When a debuff is inflicted on an ally' repairs once per DoT stack", () => {
+describe("Hayyan: 'When a debuff is inflicted on an ally' repairs once per cast, DoT stacks included", () => {
     beforeEach(() => setupKeyedRng(7));
     const hayyan = (position: ShipSpec['position']): ShipSpec => ({
         id: 'hayyan',
@@ -148,11 +148,11 @@ describe("Hayyan: 'When a debuff is inflicted on an ally' repairs once per DoT s
         return count;
     };
     for (const side of ['player', 'enemy'] as const) {
-        it(`${side}-side: Snakeroot's 2 Corrosion stacks on her ally → 2 repairs`, () => {
-            expect(repairs('snakeroot', 'ally', side)).toBe(2);
+        it(`${side}-side: Snakeroot's 2 Corrosion stacks on her ally → 1 repair`, () => {
+            expect(repairs('snakeroot', 'ally', side)).toBe(1);
         });
-        it(`${side}-side reverse board: Snakeroot's stacks on Hayyan herself → 2 repairs`, () => {
-            expect(repairs('snakeroot', 'hayyan', side)).toBe(2);
+        it(`${side}-side reverse board: Snakeroot's stacks on Hayyan herself → 1 repair`, () => {
+            expect(repairs('snakeroot', 'hayyan', side)).toBe(1);
         });
         it(`${side}-side: a named debuff → 1 repair (unchanged)`, () => {
             expect(repairs('named', 'ally', side)).toBe(1);

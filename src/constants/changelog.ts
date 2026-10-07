@@ -12,6 +12,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: each Exposed stack now counts as one debuff in debuff counts.',
     'Combat simulator: primary-target passives now fire once per incoming attack and its reactions.',
     'Combat simulator: Stalwart now counters back when another Stalwart counters him.',
+    "Combat simulator: Hayyan's debuff repair fires once per ally per enemy skill.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
