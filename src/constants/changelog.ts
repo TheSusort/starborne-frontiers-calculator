@@ -13,6 +13,13 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: each Exposed stack now counts as one debuff in debuff counts.',
     'Combat simulator: primary-target passives now fire once per incoming attack and its reactions.',
     'Combat simulator: Stalwart now counters back when another Stalwart counters him.',
+    "Combat simulator: Hayyan's debuff repair fires once per ally per enemy skill.",
+    'Combat simulator: Oleander gains one charge per ally skill, not per debuff.',
+    'Combat simulator: Sefuba now repairs once per purge, before her extra purge.',
+    "Combat simulator: Provider's ally-debuff hit fires once per enemy per skill.",
+    'Combat simulator: Reflect set now reflects only hits aimed at its wearer.',
+    "Combat simulator: Sefuba's purge repair now heals 12% per buff, matching the game.",
+    'Combat simulator: purges and buff steals now fail at an affinity disadvantage.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

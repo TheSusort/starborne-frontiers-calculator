@@ -1788,6 +1788,8 @@ function abilitiesFromText(
         out[0].ability.trigger = 'on-other-ally-debuff-inflicted';
         const verb = parseOtherAllyInflictsDebuffVerb(text);
         if (verb) out[0].ability.triggerApplicationFilter = verb;
+        // Once per (root cast, debuffed enemy) — see `Ability.oncePerRootCast`.
+        out[0].ability.oncePerRootCast = 'per-victim';
     }
 
     // "deals N% damage to enemies (with|afflicted with) <effect>" — gate the damage on the enemy
@@ -2550,8 +2552,13 @@ function abilitiesFromText(
                 // Hayyan: ALLY_DEBUFFED_RE only ever matches its own literal "debuff is inflicted
                 // on an ally" wording, so on-ally-debuffed is unconditionally an inflict here (no
                 // "applied" counterpart exists for this detector to miss).
+                // Hayyan's repair is once per (skill cast, debuffed ally) — see
+                // `Ability.oncePerRootCast`.
                 ...(reactiveTrigger === 'on-ally-debuffed'
-                    ? { triggerApplicationFilter: 'inflict' as const }
+                    ? {
+                          triggerApplicationFilter: 'inflict' as const,
+                          oncePerRootCast: 'per-victim' as const,
+                      }
                     : {}),
                 // APEX: the shield's own sentence carries the trigger clause, so its verb is the
                 // filter — "gets inflicted with a debuff" → 'inflict'. A clause naming no verb
@@ -2894,6 +2901,11 @@ function abilitiesFromText(
                 trigger: reactiveTrigger ?? 'on-cast',
                 ...(charge.applicationVerb
                     ? { triggerApplicationFilter: charge.applicationVerb }
+                    : {}),
+                // Oleander's charge is one per skill cast an ally lands a debuff with (see
+                // `Ability.oncePerRootCast`).
+                ...(reactiveTrigger === 'on-ally-debuff-inflicted'
+                    ? { oncePerRootCast: 'cast' as const }
                     : {}),
                 conditions,
                 config: { type: 'charge', amount: charge.amount },
@@ -3441,6 +3453,20 @@ function applyEnemyScopePins(shipName: string, bySlot: Map<SkillSlot, Positioned
     }
 }
 
+/** Sefuba's per-buff purge repair as measured in game: 12% of max HP per buff the triggering
+ *  purge removed, on both passive tiers. The skill text's 8% is wrong. */
+export const SEFUBA_PURGE_REPAIR_PCT = 12;
+
+/** Pins every Sefuba `on-enemy-purged` repair to `SEFUBA_PURGE_REPAIR_PCT`. */
+function applyPurgeRepairPin(shipName: string, bySlot: Map<SkillSlot, PositionedAbility[]>) {
+    if (shipName !== 'Sefuba') return;
+    for (const { ability } of bySlot.get('passive') ?? []) {
+        if (ability.config.type !== 'heal' || ability.trigger !== 'on-enemy-purged') continue;
+        ability.config.pct = SEFUBA_PURGE_REPAIR_PCT;
+        if (ability.scaling) ability.scaling.perUnit = SEFUBA_PURGE_REPAIR_PCT;
+    }
+}
+
 export function buildShipAbilities(rawShip: Ship): ShipSkills {
     counter = 0;
     // Every pass below reads status names off the text by position (canonicaliseStatusNames).
@@ -3747,7 +3773,10 @@ export function buildShipAbilities(rawShip: Ship): ShipSkills {
                 if (verb) ability.triggerApplicationFilter = verb;
             }
             // APEX's Block Shield: once per (root cast, enemy) (see `Ability.oncePerRootCast`).
-            if (reactiveTrigger === 'on-enemy-debuff-inflicted')
+            if (
+                reactiveTrigger === 'on-enemy-debuff-inflicted' ||
+                reactiveTrigger === 'on-other-ally-debuff-inflicted'
+            )
                 ability.oncePerRootCast = 'per-victim';
             // "When this Unit inflicts a Bomb" (Lingshe) reacts to that family landing only
             // (Ability.triggerStatusFilter's doc), read from the same clause as the trigger.
@@ -4097,6 +4126,7 @@ export function buildShipAbilities(rawShip: Ship): ShipSkills {
     }
 
     applyEnemyScopePins(ship.name, bySlot);
+    applyPurgeRepairPin(ship.name, bySlot);
 
     // Control-twin gating parity (epic PR2): a `type:'control'` ability is emitted
     // ADDITIVELY alongside the named debuff/buff that actually performs the status

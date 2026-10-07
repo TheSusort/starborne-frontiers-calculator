@@ -22,7 +22,7 @@ import { conditionsMet, groupConditions } from '../abilities/evaluateConditions'
 import { enemySelectorKind, type EnemySelectorKind } from '../abilities/abilityTargetSide';
 import { buildRoundContext, dotReadings } from '../abilities/roundContext';
 import { drawKeyed, makeRateGate } from '../calculators/rateAccumulator';
-import { computeAffinityModifiers } from '../calculators/affinityUtils';
+import { computeAffinityModifiers, getAffinityMatchup } from '../calculators/affinityUtils';
 import { toSelfDefenseModifier } from '../calculators/dpsBuffHelpers';
 import {
     expandEnemyDebuffs,
@@ -391,7 +391,7 @@ export interface Intent {
         spreadAffectedIds?: string[];
         /** Sefuba: the number of buffs the triggering purge removed (purge-performed.count),
          *  stamped by the on-enemy-purged listener. Read by the reactive heal executor's
-         *  `purged-buff-count` scaling ("repairs 8% … for each buff removed"). */
+         *  `purged-buff-count` scaling (a repair "for each buff removed"). */
         purgedBuffCount?: number;
         /** The ACTUAL victim id (dot-applied.targetId) of the ally's DoT
          *  application, captured by the on-ally-debuff-inflicted dot-applied listener. Read by
@@ -1195,7 +1195,14 @@ export function registerReactiveListeners(args: {
                         )
                             enqueue({
                                 ...intent,
-                                eventCtx: { ...intent.eventCtx, damagedAllyId: e.sourceId },
+                                eventCtx: {
+                                    ...intent.eventCtx,
+                                    damagedAllyId: e.sourceId,
+                                    // The inflicting ally's cast is the root, for
+                                    // `Ability.oncePerRootCast`.
+                                    inflictorId: e.sourceId,
+                                    ...inflictionReactionCtx(e),
+                                },
                             });
                     });
                     bus.on('dot-applied', (e) => {
@@ -1220,6 +1227,8 @@ export function registerReactiveListeners(args: {
                                     eventCtx: {
                                         ...intent.eventCtx,
                                         damagedAllyId: e.sourceId,
+                                        inflictorId: e.sourceId,
+                                        ...inflictionReactionCtx(e),
                                         // Belladonna's convert-dot executor needs the
                                         // actual victim + DoT type of THIS application.
                                         victimId: e.targetId,
@@ -1254,7 +1263,12 @@ export function registerReactiveListeners(args: {
                         )
                             enqueue({
                                 ...intent,
-                                eventCtx: { ...intent.eventCtx, debuffVictimId: e.targetId },
+                                eventCtx: {
+                                    ...intent.eventCtx,
+                                    debuffVictimId: e.targetId,
+                                    inflictorId: e.sourceId,
+                                    ...inflictionReactionCtx(e),
+                                },
                             });
                     });
                     bus.on('dot-applied', (e) => {
@@ -1272,7 +1286,12 @@ export function registerReactiveListeners(args: {
                             for (let i = 0; i < dotInflictions(e); i++)
                                 enqueue({
                                     ...intent,
-                                    eventCtx: { ...intent.eventCtx, debuffVictimId: e.targetId },
+                                    eventCtx: {
+                                        ...intent.eventCtx,
+                                        debuffVictimId: e.targetId,
+                                        inflictorId: e.sourceId,
+                                        ...inflictionReactionCtx(e),
+                                    },
                                 });
                     });
                     break;
@@ -1853,7 +1872,14 @@ export function registerReactiveListeners(args: {
                     // passesApplicationFilter) so an enemy applying Provoke, or the Burner set's
                     // applied Inferno, to her ally gives her nothing.
                     const onAllyDebuffed = (
-                        e: { targetId: string; application?: 'inflict' | 'apply' },
+                        e: {
+                            sourceId: string;
+                            targetId: string;
+                            application?: 'inflict' | 'apply';
+                            reactive?: true;
+                            duringTurnOf?: string;
+                            reactionFiringId?: number;
+                        },
                         times: number
                     ) => {
                         if (
@@ -1867,7 +1893,15 @@ export function registerReactiveListeners(args: {
                         for (let i = 0; i < times; i++)
                             enqueue({
                                 ...intent,
-                                eventCtx: { ...intent.eventCtx, damagedAllyId: e.targetId },
+                                eventCtx: {
+                                    ...intent.eventCtx,
+                                    damagedAllyId: e.targetId,
+                                    // The debuffed ally is the victim and the inflictor's cast the
+                                    // root, for `Ability.oncePerRootCast`.
+                                    debuffVictimId: e.targetId,
+                                    inflictorId: e.sourceId,
+                                    ...inflictionReactionCtx(e),
+                                },
                             });
                     };
                     bus.on('debuff-applied', (e) => onAllyDebuffed(e, 1));
@@ -2398,25 +2432,24 @@ export function registerReactiveListeners(args: {
                     bus.on('purge-performed', (e) => {
                         // Self-scoped on the caster: THIS owner purged an enemy (Sefuba).
                         // Route counterTargetId = e.targetId so Sefuba's chain "purges 1 extra
-                        // buff" re-purges the SAME victim (victim-routing).
-                        // fromPurgeEvent guards the chain purge from re-emitting → depth-1.
-                        // purgedBuffCount carries THIS purge's removed count to a "for each buff
-                        // removed" repair. The chain purge emits no purge-performed, so its
-                        // buff never adds to that repair.
-                        // KNOWN GAP: whether the game counts the chained "1 extra buff" toward
-                        // Sefuba's "for each buff removed" is unconfirmed, pending an in-game
-                        // test. The model counts the triggering purge only; pinned in
-                        // sefubaRepairPerBuffPurged.integration.test.ts case (4).
-                        if (e.casterId === ownerId)
-                            enqueue({
-                                ...intent,
-                                eventCtx: {
-                                    ...intent.eventCtx,
-                                    counterTargetId: e.targetId,
-                                    fromPurgeEvent: true,
-                                    purgedBuffCount: e.count,
-                                },
-                            });
+                        // buff" re-purges the SAME victim (victim-routing); it fires once per
+                        // victim. fromPurgeEvent guards the chain purge from re-emitting → depth-1,
+                        // so the extra buff adds nothing to the repair and wakes nothing.
+                        // A repair is wave-wide: ONE per purge cast, on the wave's lead event,
+                        // scaled by every buff the wave removed (`purge-performed.waveTotal`)
+                        // — "for each buff removed" counts the triggering purges only.
+                        if (e.casterId !== ownerId) return;
+                        const isRepair = ra.ability.config.type === 'heal';
+                        if (isRepair && e.waveLead === false) return;
+                        enqueue({
+                            ...intent,
+                            eventCtx: {
+                                ...intent.eventCtx,
+                                counterTargetId: e.targetId,
+                                fromPurgeEvent: true,
+                                purgedBuffCount: isRepair ? (e.waveTotal ?? e.count) : e.count,
+                            },
+                        });
                     });
                     break;
                 case 'on-ally-purged':
@@ -5077,6 +5110,7 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // charges, and every on-ally-crit rider — see PER_HIT_REACTIVE_TRIGGERS).
         const chargeGuardKey = oncePerAttackGuardKey(intent);
         if (chargeGuardKey && ctx.reactionFiredThisAttack?.has(chargeGuardKey)) return;
+        if (!passesOncePerRootCastGate(intent, ctx, intent.eventCtx?.debuffVictimId)) return;
         // Dispatch by the total `CHARGE_TARGET_KIND` lookup (declared above `executeIntent`) —
         // see that Record's doc comment for why, and for what each arm below does (#399).
         const chargeKind = CHARGE_TARGET_KIND[intent.ability.target];
@@ -6048,7 +6082,7 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // count = the number of adjacent allies the Corrosion spread landed Corrosion I on
         // (eventCtx.spreadAffectedIds, stamped by the on-corrosion-spread listener from the real
         // affected-actor ids), so a positional multi-ally spread heals proportionally.
-        // Sefuba: "repairs 8% … for each buff removed" — count = the triggering purge's
+        // Sefuba: a repair "for each buff removed" — count = the triggering purge's
         // removed count (eventCtx.purgedBuffCount, stamped by the on-enemy-purged listener).
         const eventCountMultiplier =
             intent.ability.scaling?.countSource === 'repaired-enemy-count'
@@ -6822,6 +6856,7 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 : undefined;
         for (const victimId of victimIds) {
             if (victimId === undefined) continue;
+            if (!passesOncePerRootCastGate(intent, ctx, victimId)) continue;
             // procScope:'per-cast' (Insidiousness): ONE hit per victim per ROLL. The trigger fires
             // once per debuff APPLICATION, so a cast inflicting two debuffs on one enemy (Curator's
             // Attack Down III + Crit Power Down III) would otherwise hit that enemy twice under its
@@ -6913,6 +6948,7 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
             intent.ability.trigger === 'on-deal-damage'
                 ? enemyRoleConditionsOf(intent.ability)
                 : NO_CONDITIONS;
+        const removals: { targetId: string; removed: number }[] = [];
         for (const targetId of targetIds) {
             // Reachable: Rhodium's end-of-round purge in any round where no enemy carries a buff
             // (`mostBuffsAmong` returns undefined there, `engine.ts`). Its `damage` half on the
@@ -6921,17 +6957,34 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
             // As in the debuff branch — re-check against the real routed target.
             if (!perVictimOk(targetId)) continue;
             if (!victimRoleMatches(roleConditions, targetId, ctx)) continue;
-            const removed = ctx.statusEngine.purge(targetId, cfg.count);
-            // Emit purge-performed UNLESS this purge was itself triggered by a purge (depth-1
-            // guard).
-            if (removed > 0 && !intent.eventCtx?.fromPurgeEvent) {
+            // A purge lands like an 'apply' debuff: nothing at an affinity disadvantage.
+            const disadvantaged =
+                getAffinityMatchup(
+                    ctx.actorById?.(intent.ownerId)?.affinity,
+                    ctx.affinityOf?.(targetId)
+                ) === 'disadvantage';
+            removals.push({
+                targetId,
+                removed: disadvantaged ? 0 : ctx.statusEngine.purge(targetId, cfg.count),
+            });
+        }
+        // Emit purge-performed UNLESS this purge was itself triggered by a purge (depth-1
+        // guard). Every victim is purged first, so each event carries the wave's total.
+        if (!intent.eventCtx?.fromPurgeEvent) {
+            const waveTotal = removals.reduce((sum, x) => sum + x.removed, 0);
+            let waveLead = true;
+            for (const { targetId, removed } of removals) {
+                if (removed <= 0) continue;
                 ctx.bus.emit({
                     type: 'purge-performed',
                     casterId: intent.ownerId,
                     targetId,
                     count: removed,
                     round: ctx.round,
+                    waveTotal,
+                    waveLead,
                 });
+                waveLead = false;
             }
         }
         return;
