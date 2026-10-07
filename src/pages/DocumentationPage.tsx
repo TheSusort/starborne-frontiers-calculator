@@ -3102,9 +3102,10 @@ const DocumentationPage: React.FC = () => {
                                         Lev&apos;s, cleanses, duration cuts, debuff counts and Cheat
                                         Death all treat them that way. A Bomb or Echoing Burst is
                                         not a damage-over-time effect, so Provider&apos;s extension
-                                        of damage-over-time debuffs leaves them alone; an Echoing
-                                        Burst is a Bomb-type debuff. A Bomb or Echoing Burst removed
-                                        by a cleanse or Cheat Death never detonates, but one whose
+                                        of damage-over-time debuffs leaves them alone and Crocus
+                                        never answers an ally&apos;s critical Bomb; an Echoing Burst
+                                        is a Bomb-type debuff. A Bomb or Echoing Burst removed by a
+                                        cleanse or Cheat Death never detonates, but one whose
                                         duration a cut drives to 0 detonates at once. Nyxen&apos;s
                                         Bomb cleanse takes Bombs and Echoing Burst; her
                                         damage-over-time cleanse takes only Corrosion, Inferno and

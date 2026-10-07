@@ -531,7 +531,8 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
  *    included, see the ruling above; the ally counterpart of on-debuffed (Hayyan). Does NOT
  *    subscribe to dot-applied, matching on-debuffed's scoping.
  *  - on-ally-crit-dot → dot-applied with viaCrit from any OTHER same-side actor (opposing sources
- *    excluded, own casts excluded) — carved out of the ruling above, see there.
+ *    excluded, own casts excluded) — carved out of the ruling above, see there. A Bomb landing
+ *    never fires it: a Bomb is not a damage-over-time effect.
  *  - on-ally-critically-repaired → the OWNER's OWN heal-performed (casterId === ownerId) with
  *    >= 1 critting draw (Hermes). The recipient may be the owner itself — owner ruling
  *    2026-08-31, #446. One enqueue per qualifying cast.
@@ -1411,7 +1412,13 @@ export function registerReactiveListeners(args: {
                     bus.on('dot-applied', (e) => {
                         // Owner-excluded (Crocus's "another ally") — see the trigger doc block's
                         // on-ally-crit-dot entry. One enqueue per qualifying infliction EVENT.
-                        if (e.viaCrit && isSameSideAlly(e.sourceId, ownerId)) {
+                        // A Bomb is not a damage-over-time effect, so a critical Bomb never fires
+                        // it.
+                        if (
+                            e.viaCrit &&
+                            e.dotType !== 'bomb' &&
+                            isSameSideAlly(e.sourceId, ownerId)
+                        ) {
                             enqueue({
                                 ...intent,
                                 eventCtx: {

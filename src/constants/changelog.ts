@@ -13,6 +13,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: Echoing Burst cut to 0 turns now bursts immediately.',
     'Combat simulator: Bombs no longer count as damage-over-time effects or Snakeroot stacks.',
     "Combat simulator: Nyxen's damage-over-time cleanse no longer removes Bombs or Echoing Burst.",
+    "Combat simulator: Crocus no longer reacts to an ally's critical Bomb.",
     'Combat simulator: Cheat Death now also clears Bombs and Echoing Burst.',
     "Combat simulator: Curator's active now hits every enemy as a primary target.",
     'Combat simulator: Burner set on Curator now applies Inferno to every enemy.',
