@@ -1,9 +1,9 @@
 /**
  * A reaction to a debuff being inflicted fires once per DoT STACK inflicted (owner ruling R28,
  * 2026-10-04). Snakeroot's one "inflicts 2 stacks of Corrosion I" on B is two inflictions:
- * Oleander's "When an ally inflicts a debuff, adds 1 charge" gives two charges, Provider's "When
- * another ally inflicts a debuff, deals 50% damage" hits twice. Only the stacks that LANDED count
- * (each stack rolls its own landing, R30). A reaction's own once-per caps still hold: APEX's
+ * Provider's "When another ally inflicts a debuff, deals 50% damage" hits twice. Only the stacks that LANDED count
+ * (each stack rolls its own landing, R30). A reaction's own once-per caps still hold: Oleander's
+ * "adds 1 charge" is one per cast, so a 2-stack Corrosion charges her once; APEX's
  * "gains a shield equal to 3% … when an enemy gets inflicted with a debuff" fires once for the
  * whole cast (`Ability.oncePerRootCast`), and so does her Block Shield, which still reads B's
  * debuff count as of each stack.
@@ -314,9 +314,9 @@ for (const side of [PLAYER, ENEMY]) {
     });
 
     describe(`${side.tag}: Oleander — "When an ally inflicts a debuff, adds 1 charge"`, () => {
-        it('one 2-stack Corrosion → two charges; the once-per-ally Repair Over Time stays once', () => {
+        it('one 2-stack Corrosion → one charge (once per cast); the once-per-ally Repair Over Time stays once', () => {
             const m = measure(side, snakeroot(), passiveOnly('Oleander'));
-            expect(m.reactorCharges).toBe(2);
+            expect(m.reactorCharges).toBe(1);
             expect(m.reactorBuffs['Repair Over Time II']).toBe(1);
         });
         it('negative: one 1-stack Corrosion → one charge', () => {

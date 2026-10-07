@@ -1168,7 +1168,14 @@ export function registerReactiveListeners(args: {
                         )
                             enqueue({
                                 ...intent,
-                                eventCtx: { ...intent.eventCtx, damagedAllyId: e.sourceId },
+                                eventCtx: {
+                                    ...intent.eventCtx,
+                                    damagedAllyId: e.sourceId,
+                                    // The inflicting ally's cast is the root, for
+                                    // `Ability.oncePerRootCast`.
+                                    inflictorId: e.sourceId,
+                                    ...inflictionReactionCtx(e),
+                                },
                             });
                     });
                     bus.on('dot-applied', (e) => {
@@ -1193,6 +1200,8 @@ export function registerReactiveListeners(args: {
                                     eventCtx: {
                                         ...intent.eventCtx,
                                         damagedAllyId: e.sourceId,
+                                        inflictorId: e.sourceId,
+                                        ...inflictionReactionCtx(e),
                                         // Belladonna's convert-dot executor needs the
                                         // actual victim + DoT type of THIS application.
                                         victimId: e.targetId,
@@ -5043,6 +5052,7 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // charges, and every on-ally-crit rider — see PER_HIT_REACTIVE_TRIGGERS).
         const chargeGuardKey = oncePerAttackGuardKey(intent);
         if (chargeGuardKey && ctx.reactionFiredThisAttack?.has(chargeGuardKey)) return;
+        if (!passesOncePerRootCastGate(intent, ctx, intent.eventCtx?.debuffVictimId)) return;
         // Dispatch by the total `CHARGE_TARGET_KIND` lookup (declared above `executeIntent`) —
         // see that Record's doc comment for why, and for what each arm below does (#399).
         const chargeKind = CHARGE_TARGET_KIND[intent.ability.target];

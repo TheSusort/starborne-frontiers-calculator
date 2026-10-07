@@ -1368,7 +1368,8 @@ export interface Ability {
      *    measured in game 2026-10-06). APEX's Block Shield is one per enemy the cast brings to 3 or
      *    more debuffs. Hayyan's "When a debuff is inflicted on an ally, … repairs the ally" is one
      *    repair per (cast, debuffed ally): Curator's two debuffs on Lev repair Lev once (owner
-     *    ruling, measured in game 2026-10-07).
+     *    ruling, measured in game 2026-10-07). Oleander's "adds 1 charge" off an ally's debuff is
+     *    `'cast'`: an ally Curator's two debuffs on each of three enemies charge her once.
      *  The slot is spent only when the reaction actually fires — after its conditions pass (APEX's
      *  Block Shield "if that enemy has 3 or more debuffs" fails on a cast's first two debuffs
      *  without spending it), whatever its own landing roll then does. Enforced executor-side by

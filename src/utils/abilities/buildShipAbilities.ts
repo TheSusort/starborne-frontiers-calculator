@@ -2900,6 +2900,11 @@ function abilitiesFromText(
                 ...(charge.applicationVerb
                     ? { triggerApplicationFilter: charge.applicationVerb }
                     : {}),
+                // Oleander's charge is one per skill cast an ally lands a debuff with (see
+                // `Ability.oncePerRootCast`).
+                ...(reactiveTrigger === 'on-ally-debuff-inflicted'
+                    ? { oncePerRootCast: 'cast' as const }
+                    : {}),
                 conditions,
                 config: { type: 'charge', amount: charge.amount },
                 autoFilled: true,

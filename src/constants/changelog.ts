@@ -13,6 +13,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: primary-target passives now fire once per incoming attack and its reactions.',
     'Combat simulator: Stalwart now counters back when another Stalwart counters him.',
     "Combat simulator: Hayyan's debuff repair fires once per ally per enemy skill.",
+    'Combat simulator: Oleander gains one charge per ally skill, not per debuff.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
