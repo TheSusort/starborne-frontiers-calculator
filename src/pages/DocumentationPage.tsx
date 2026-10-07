@@ -3115,29 +3115,34 @@ const DocumentationPage: React.FC = () => {
                                         the duration of all debuffs shortens every DoT, Bomb and
                                         Echoing Burst too; a DoT cut to 0 turns ends without ticking
                                         again, and an Echoing Burst cut to 0 bursts everything it
-                                        has gathered up to the cut, including this round&apos;s
-                                        damage. Bombs and Echoing Bursts that go off together, from
-                                        one cut or expiring on the same turn, detonate in the order
-                                        they were applied; if the first triggers Cheat Death, the
-                                        rest are wiped and never detonate. Reactions to an enemy
-                                        cleansing a debuff (Pestilence, Larkspur, Grif, Arum,
-                                        Yarrow) also hear the cleanses an enemy&apos;s passive
-                                        performs (Nuqtu, Purifier, AEGIS, Hermes, Howler), but not a
-                                        duration cut; a cleanse that such a reaction provoked
-                                        triggers them again. A count written after an infliction in
-                                        the same skill includes what that skill landed, enemy by
-                                        enemy: Crocus&apos;s Corrosion II counts toward her own
-                                        &ldquo;3 or more debuffs&rdquo; Stasis (Asphyxiator&apos;s
-                                        and Anemone&apos;s gates likewise), and a resisted one does
-                                        not. A passive reacting to the hit (Bayah) counts only the
-                                        debuffs from before the skill. APEX&apos;s passive shield
-                                        arrives as the skill&apos;s first debuff lands, so her
-                                        charged skill&apos;s &ldquo;If this Unit has an active
-                                        shield&rdquo; Disable lands once an earlier debuff in it has
-                                        landed. Likewise Belladonna&apos;s charged Corrosion II, if
-                                        her passive converts it to Acidic Decay as it lands, counts
-                                        toward that skill&apos;s &ldquo;3 or more Acidic
-                                        Decay&rdquo; Stasis.
+                                        has gathered up to the cut. An Echoing Burst gathers only
+                                        the direct damage dealt to the ship it is on, from the
+                                        moment it is applied until it bursts; damage to other
+                                        enemies never counts. Bombs and Echoing Bursts that go off
+                                        together, from one cut or expiring on the same turn,
+                                        detonate in the order they were applied; if the first
+                                        triggers Cheat Death, the rest are wiped and never detonate.
+                                        If the first destroys the ship instead, the rest still
+                                        detonate, and every Bomb on a destroyed ship splashes its
+                                        neighbours once, including Bombs a skill detonated in the
+                                        lethal blow. Reactions to an enemy cleansing a debuff
+                                        (Pestilence, Larkspur, Grif, Arum, Yarrow) also hear the
+                                        cleanses an enemy&apos;s passive performs (Nuqtu, Purifier,
+                                        AEGIS, Hermes, Howler), but not a duration cut; a cleanse
+                                        that such a reaction provoked triggers them again. A count
+                                        written after an infliction in the same skill includes what
+                                        that skill landed, enemy by enemy: Crocus&apos;s Corrosion
+                                        II counts toward her own &ldquo;3 or more debuffs&rdquo;
+                                        Stasis (Asphyxiator&apos;s and Anemone&apos;s gates
+                                        likewise), and a resisted one does not. A passive reacting
+                                        to the hit (Bayah) counts only the debuffs from before the
+                                        skill. APEX&apos;s passive shield arrives as the
+                                        skill&apos;s first debuff lands, so her charged skill&apos;s
+                                        &ldquo;If this Unit has an active shield&rdquo; Disable
+                                        lands once an earlier debuff in it has landed. Likewise
+                                        Belladonna&apos;s charged Corrosion II, if her passive
+                                        converts it to Acidic Decay as it lands, counts toward that
+                                        skill&apos;s &ldquo;3 or more Acidic Decay&rdquo; Stasis.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Team Ships:</span> Pick a

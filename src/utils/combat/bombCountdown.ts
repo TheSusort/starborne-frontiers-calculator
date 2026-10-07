@@ -1,5 +1,5 @@
 import type { CombatEventBus } from './events';
-import { accumulatorBurstDamage, burstContainerWiped, gatherIntoAccumulator } from './state';
+import { accumulatorBurstDamage, bombBurstDamage, burstContainerWiped } from './state';
 import type { CombatActor, PendingAccumulator, PendingBomb } from './state';
 import type { DurationCutCandidate } from './statusEngine';
 
@@ -7,16 +7,16 @@ import type { DurationCutCandidate } from './statusEngine';
  * Walks `holder`'s Bombs and Echoing Burst accumulators in ORDER OF APPLICATION — ascending
  * `appliedSeq` (absent → 0), Bombs before accumulators on an equal seq, each container in array
  * order — handing each entry to its container's step (a container with no step is not walked).
- * Bombs and Echoing Bursts that go off in the same step detonate in that order (owner ruling
- * R115): the natural expiry at the holder's turn start, Heliodor's / Pestilence's cut of every
- * debuff, Lingshe's cut of every Bomb.
+ * Bombs and Echoing Bursts that go off in the same step detonate in that order (R115).
  *
  * The containers are bound ONCE, before the walk. A step that bursts an entry splices it from the
  * bound array. A burst can reassign the live containers in two ways, and `burstContainerWiped`
  * tells them apart: the burst KILLS the holder (bomb-splash-on-death reassigns `pendingBombs` to
  * `[]`), and the walk goes on over the bound snapshot so every due entry still detonates; or the
  * burst triggers Cheat Death (the holder lives at 1 HP with both containers reassigned), and the
- * walk stops, so a wiped entry never detonates.
+ * walk stops, so a wiped entry never detonates. A killed holder's Bombs still in the bound array
+ * have already splashed at its death, so each one that is due detonates on it once and does not
+ * splash again.
  */
 export function walkTimedBurstsInApplicationOrder(
     holder: CombatActor,
@@ -47,7 +47,7 @@ export function walkTimedBurstsInApplicationOrder(
 }
 
 /** Removes `entry` from `container` if it is still there. */
-function spliceOut<T>(container: T[], entry: T): void {
+export function spliceOut<T>(container: T[], entry: T): void {
     const at = container.indexOf(entry);
     if (at >= 0) container.splice(at, 1);
 }
@@ -68,11 +68,7 @@ function cutBomb(
 ): void {
     bomb.countdown -= turns;
     if (bomb.countdown > 0) return;
-    const burst =
-        bomb.stacks *
-        bomb.damagePerStack *
-        bomb.affinityMult *
-        (1 + bomb.detonationDamageModifier / 100);
+    const burst = bombBurstDamage(bomb);
     bus.emit({
         type: 'bomb-detonated',
         actorId: bomb.sourceId,
@@ -103,12 +99,10 @@ function cutAccumulator(
     turns: number,
     round: number,
     bus: CombatEventBus,
-    forceDetonate?: (victim: CombatActor, sourceId: string, damage: number) => void,
-    gatherNow?: () => number
+    forceDetonate?: (victim: CombatActor, sourceId: string, damage: number) => void
 ): void {
     acc.roundsRemaining -= turns;
     if (acc.roundsRemaining > 0) return;
-    if (gatherNow) gatherIntoAccumulator(acc, gatherNow(), round);
     const damage = accumulatorBurstDamage(acc);
     bus.emit({
         type: 'accumulator-detonated',
@@ -130,8 +124,8 @@ function cutAccumulator(
 /**
  * Lingshe's charged skill: "reduces all Bomb on the enemy targets by 1 turn." Decrements EVERY
  * pending bomb on `victim` (or only the `only` one) by `turns`; any bomb reaching <= 0 detonates
- * IMMEDIATELY using the EXACT `processBombs` burst formula (engine.ts) — stacks * damagePerStack *
- * affinityMult * (1 + detonationDamageModifier / 100) — crediting the bomb's ORIGINAL applier (`bomb.sourceId`,
+ * IMMEDIATELY for `bombBurstDamage`, the same payout as its natural expiry — crediting the bomb's
+ * ORIGINAL applier (`bomb.sourceId`,
  * NOT this ability's caster) via a `bomb-detonated` bus emission (one event per detonating entry,
  * mirroring the enemy-turn `processBombs` shape) and, when `forceDetonateBomb` is supplied, the
  * SAME per-victim `applyVictimDamage` sink a natural detonation uses — so Barrier, Cheat-Death,
@@ -142,8 +136,7 @@ function cutAccumulator(
  * unconditionally and consume the WHOLE container regardless of countdown.
  *
  * A Bomb is a Debuff, so a generic duration cut reaches it too, and one driven to 0 turns explodes
- * exactly like Lingshe's forced reduction (the per-Bomb step `cutBomb` is shared with
- * `shortenTimedBurstsOnVictim` and Warpstrike's `bombDurationCutCandidates`). Bombs driven to 0
+ * exactly like Lingshe's forced reduction (the per-Bomb step `cutBomb`). Bombs driven to 0
  * together detonate in order of application. Returns the number of bombs it shrank so the caller
  * can fold them into its "-N turn on X debuffs" tally.
  *
@@ -227,12 +220,11 @@ export function bombDurationCutCandidates(
  * The Echoing Burst twin of `reduceBombsOnVictim`, for a duration cut that reaches an Echoing
  * Burst: takes `turns` off each accumulator on `victim` (or only the `only` one). One driven to 0
  * BURSTS there and then, as its natural expiry does (owner ruling R113), paying
- * `accumulatorBurstDamage` on everything gathered up to the cut (owner ruling R115): `gatherNow`
- * reports the accumulating side's round-to-date direct damage, and `gatherIntoAccumulator` folds
- * in the part this round's earlier gather (the holder's turn start) has not already added. The
- * burst is announced as an `accumulator-detonated` with the applier as `actorId` and lands through
+ * `accumulatorBurstDamage` on everything gathered up to the cut — every direct hit the holder
+ * took since the accumulator was applied (`gatherDirectHitIntoAccumulators`). The burst is
+ * announced as an `accumulator-detonated` with the applier as `actorId` and lands through
  * `forceDetonate`, the engine's per-victim detonation sink credited to that applier. Absent (no
- * engine scope), a bare shield-then-HP debit and no fold-in. Several driven to 0 together burst in
+ * engine scope), a bare shield-then-HP debit. Several driven to 0 together burst in
  * order of application, and a Cheat Death one of them triggers stops the rest
  * (`walkTimedBurstsInApplicationOrder`). Returns the accumulators shortened; a non-positive /
  * non-finite `turns` → 0.
@@ -243,7 +235,6 @@ export function reduceAccumulatorsOnVictim(
     round: number,
     bus: CombatEventBus,
     forceDetonate?: (victim: CombatActor, sourceId: string, damage: number) => void,
-    gatherNow?: () => number,
     // Shrink this one accumulator only (`accumulatorDurationCutCandidates`); absent → all.
     only?: PendingAccumulator
 ): number {
@@ -254,7 +245,7 @@ export function reduceAccumulatorsOnVictim(
         accumulator: (acc, accs) => {
             if (only !== undefined && acc !== only) return;
             shrunk += 1;
-            cutAccumulator(victim, accs, acc, delta, round, bus, forceDetonate, gatherNow);
+            cutAccumulator(victim, accs, acc, delta, round, bus, forceDetonate);
         },
     });
     return shrunk;
@@ -274,8 +265,7 @@ export function shortenTimedBurstsOnVictim(
     round: number,
     bus: CombatEventBus,
     detonatorId: string,
-    forceDetonate?: (victim: CombatActor, sourceId: string, damage: number) => void,
-    gatherNow?: () => number
+    forceDetonate?: (victim: CombatActor, sourceId: string, damage: number) => void
 ): number {
     const delta = Number.isFinite(turns) ? Math.trunc(turns) : 0;
     if (delta <= 0) return 0;
@@ -287,7 +277,7 @@ export function shortenTimedBurstsOnVictim(
         },
         accumulator: (acc, accs) => {
             shrunk += 1;
-            cutAccumulator(victim, accs, acc, delta, round, bus, forceDetonate, gatherNow);
+            cutAccumulator(victim, accs, acc, delta, round, bus, forceDetonate);
         },
     });
     return shrunk;
@@ -303,13 +293,12 @@ export function accumulatorDurationCutCandidates(
     victim: CombatActor,
     round: number,
     bus: CombatEventBus,
-    forceDetonate?: (victim: CombatActor, sourceId: string, damage: number) => void,
-    gatherNow?: () => number
+    forceDetonate?: (victim: CombatActor, sourceId: string, damage: number) => void
 ): DurationCutCandidate[] {
     return victim.pendingAccumulators.map((acc) => ({
         seq: acc.appliedSeq ?? 0,
         cut: (turns) => {
-            reduceAccumulatorsOnVictim(victim, turns, round, bus, forceDetonate, gatherNow, acc);
+            reduceAccumulatorsOnVictim(victim, turns, round, bus, forceDetonate, acc);
         },
     }));
 }

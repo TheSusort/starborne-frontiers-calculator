@@ -12,6 +12,8 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: Echoing Burst is now a Bomb-type debuff for counts and cleanses.',
     'Combat simulator: Echoing Burst cut to 0 turns now bursts everything gathered so far.',
     'Combat simulator: Bombs and Echoing Burst now detonate in the order applied.',
+    'Combat simulator: Echoing Burst now gathers only damage dealt to its target.',
+    'Combat simulator: Bombs detonated by a lethal skill now splash neighbouring ships.',
     'Combat simulator: Bombs no longer count as damage-over-time effects or Snakeroot stacks.',
     "Combat simulator: Nyxen's damage-over-time cleanse no longer removes Bombs or Echoing Burst.",
     "Combat simulator: Crocus no longer reacts to an ally's critical Bomb.",

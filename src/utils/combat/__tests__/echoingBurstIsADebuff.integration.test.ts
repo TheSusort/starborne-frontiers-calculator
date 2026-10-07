@@ -7,6 +7,8 @@
  *  - a cleanse removes it, and the stored damage is lost — no burst. A Bomb-typed cleanse (Nyxen's
  *    "cleanses 2 Bomb") takes it; a damage-over-time-typed one ("cleanses 2 damage over time
  *    debuffs") does not;
+ *  - it gathers only the direct damage dealt to the ship it is on, from its application until it
+ *    bursts;
  *  - a duration cut on "all active debuffs" (Heliodor) that brings it to 0 bursts it there and
  *    then (R113), paying everything gathered up to that moment (R115);
  *  - Bombs and Echoing Bursts that go off together — one cut, or one turn-start expiry — detonate
@@ -338,22 +340,16 @@ describe("Heliodor's 'reduces the duration of all active debuffs' bursts a 1-rou
         /** What round 1 booked as detonation damage dealt by the Echoing Burst's applier. */
         applierCredit: number | undefined;
     }
-    const measure = (
-        side: 'player' | 'enemy',
-        skills: ShipSkills,
-        opts: { roundsRemaining?: number; others?: ShipSpec[]; ally?: ShipSpec } = {}
-    ): Measured => {
+    const measure = (side: 'player' | 'enemy', skills: ShipSkills): Measured => {
         const bursts: Burst[] = [];
         let hpLostAtCut = -1;
         let holderTurnStarted = false;
         let hpBefore = 0;
         const result = runBoard(
-            { caster: [heliodor(skills), opts.ally ?? ally], other: opts.others ?? [hitter] },
+            { caster: [heliodor(skills), ally], other: [hitter] },
             side,
             (byId, idOf) => {
-                byId('ally').pendingAccumulators.push(
-                    accumulator(idOf('hitter'), opts.roundsRemaining ?? 1)
-                );
+                byId('ally').pendingAccumulators.push(accumulator(idOf('hitter'), 1));
                 hpBefore = byId('ally').currentHp;
             },
             (bus, byId, idOf) => {
@@ -384,41 +380,23 @@ describe("Heliodor's 'reduces the duration of all active debuffs' bursts a 1-rou
         const applierCredit = result.rounds[0].perActorDetonation?.[idOfHitter(side)];
         return { bursts, hpLostAtCut, applierCredit };
     };
-    /** One HIT from the 100-attack hitter on the 0-defence Heliodor. */
-    const HIT_DAMAGE = 100;
     for (const side of SIDES) {
         it(`${side}-side: control — no passive, the Echoing Burst bursts on the ally's turn`, () => {
-            // The ally's turn gathers the hitter's round-1 hit, then the accumulator expires.
+            // The hitter hit Heliodor, not the ally, so the burst pays only the seeded 50,000.
             const { bursts, hpLostAtCut } = measure(side, NO_SKILLS);
-            expect(bursts).toEqual([
-                { round: 1, damage: 50_000 + HIT_DAMAGE, beforeHolderTurn: false },
-            ]);
+            expect(bursts).toEqual([{ round: 1, damage: 50_000, beforeHolderTurn: false }]);
             expect(hpLostAtCut).toBe(-1);
         });
         it(`${side}-side: Heliodor is hit → the ally's Echoing Burst is cut to 0 and bursts at once`, () => {
-            // The cut bursts everything gathered up to that moment (owner ruling R115): the
-            // seeded 50,000 plus the hit that set off the cut, although the ally's own turn — the
-            // natural gather — has not come yet. It bursts once, and the damage is booked to the
-            // Echoing Burst's applier (the hitter), not the cutter.
+            // The cut bursts everything the ally gathered up to that moment: the seeded 50,000.
+            // The hit that set off the cut landed on Heliodor, so it is not part of it. It bursts
+            // once, and the damage is booked to the Echoing Burst's applier (the hitter), not the
+            // cutter.
             expect(measure(side, passive())).toEqual({
-                bursts: [{ round: 1, damage: 50_000 + HIT_DAMAGE, beforeHolderTurn: true }],
-                hpLostAtCut: 50_000 + HIT_DAMAGE,
-                applierCredit: 50_000 + HIT_DAMAGE,
+                bursts: [{ round: 1, damage: 50_000, beforeHolderTurn: true }],
+                hpLostAtCut: 50_000,
+                applierCredit: 50_000,
             });
-        });
-        it(`${side}-side: a cut after the ally's turn gathered folds in only the damage since`, () => {
-            // A fast hitter hits Heliodor (cut 3 → 2), the ally's turn gathers that hit (2 → 1),
-            // then the slow hitter hits Heliodor (cut 1 → 0): the burst is 50,000 plus both hits,
-            // the first one counted once.
-            const early: ShipSpec = { ...hitter, id: 'early', position: 'M3', speed: 300 };
-            const midAlly: ShipSpec = { ...ally, speed: 150 };
-            expect(
-                measure(side, passive(), {
-                    roundsRemaining: 3,
-                    others: [hitter, early],
-                    ally: midAlly,
-                }).bursts
-            ).toEqual([{ round: 1, damage: 50_000 + 2 * HIT_DAMAGE, beforeHolderTurn: false }]);
         });
     }
 });
@@ -827,4 +805,199 @@ describe('Cheat Death wipes Bombs and Echoing Burst; Acidic Decay survives', () 
             }
         }
     });
+});
+
+describe('an Echoing Burst gathers only the direct damage dealt to the ship it is on', () => {
+    // Tooltip: "Accumulates direct damage dealt and deals 100% of the damage upon expiration".
+    // The holder sits at M3 behind a front ship at M4; a 'back' hitter reaches only the holder and
+    // a 'front' hitter only the front ship.
+    const front: ShipSpec = { id: 'front', position: 'M4', speed: 1, hp: 1e9 };
+    const holder: ShipSpec = { id: 'holder', position: 'M3', speed: 1, hp: 1e9 };
+    const hitter = (id: string, target: 'front' | 'back', attack: number, speed: number) =>
+        ({
+            id,
+            position: target === 'front' ? 'M4' : 'M3',
+            speed,
+            attack,
+            target,
+            skills: HIT,
+        }) as ShipSpec;
+    const seeded = (sourceId: string, roundsRemaining: number): PendingAccumulator => ({
+        roundsRemaining,
+        pct: 100,
+        accumulated: 0,
+        sourceId,
+    });
+    interface Measured {
+        bursts: { round: number; damage: number }[];
+        dealt: Record<string, Record<string, number>>[];
+    }
+    const measure = (
+        side: 'player' | 'enemy',
+        teams: MirrorTeams,
+        seed: (byId: (s: string) => CombatActor, idOf: (s: string) => string) => void
+    ): Measured => {
+        const bursts: Measured['bursts'] = [];
+        const result = runBoard(teams, side, seed, (bus, _byId, idOf) => {
+            bus.on(
+                'accumulator-detonated',
+                (e: Extract<CombatEvent, { type: 'accumulator-detonated' }>) => {
+                    if (e.victimId === idOf('holder')) {
+                        bursts.push({ round: e.round, damage: e.damage });
+                    }
+                }
+            );
+        });
+        return {
+            bursts,
+            dealt: result.rounds.map((r) => r.perTargetDealt ?? {}),
+        };
+    };
+    for (const side of SIDES) {
+        it(`${side}-side: damage to another enemy never counts`, () => {
+            // 1,000 lands on the front ship, 100 on the holder; the burst pays the 100 alone.
+            const m = measure(
+                side,
+                {
+                    caster: [front, holder],
+                    other: [hitter('hf', 'front', 1000, 100), hitter('hb', 'back', 100, 90)],
+                },
+                (byId, idOf) => byId('holder').pendingAccumulators.push(seeded(idOf('hf'), 1))
+            );
+            const { idOf } = mirrorBoard(
+                { caster: [front, holder], other: [hitter('hf', 'front', 1000, 100)] },
+                side
+            );
+            // Anti-vacuity: each hitter reached only its own ship.
+            expect(m.dealt[0][idOf('hf')]?.[idOf('front')]).toBe(1000);
+            expect(m.dealt[0][idOf('hb')]?.[idOf('holder')]).toBe(100);
+            expect(m.dealt[0][idOf('hb')]?.[idOf('front')]).toBeUndefined();
+            expect(m.bursts).toEqual([{ round: 1, damage: 100 }]);
+        });
+        it(`${side}-side: a hit after the holder's turn counts at its natural expiry`, () => {
+            // The holder acts first each round: round 1 its turn takes the duration 2 → 1, then
+            // the hitter lands 100 on it; round 2 its turn bursts that 100.
+            const m = measure(
+                side,
+                {
+                    caster: [{ ...holder, speed: 150 }],
+                    other: [hitter('hb', 'back', 100, 100)],
+                    numRounds: 2,
+                },
+                (byId, idOf) => byId('holder').pendingAccumulators.push(seeded(idOf('hb'), 2))
+            );
+            expect(m.bursts).toEqual([{ round: 2, damage: 100 }]);
+        });
+    }
+});
+
+describe('an Echoing Burst a cut drives to 0 pays the same holder-only gather as its expiry', () => {
+    // Heliodor (front) cuts every ally's debuffs when she is directly damaged. Round 1: the holder
+    // acts first (2 → 1), the back hitter lands 100 on the holder, then the front hitter hits
+    // Heliodor, and her cut takes the holder's Echoing Burst to 0.
+    const heliodor = (skills: ShipSkills): ShipSpec => ({
+        id: 'heliodor',
+        position: 'M4',
+        speed: 1,
+        hp: 1e9,
+        skills,
+    });
+    const holder: ShipSpec = { id: 'holder', position: 'M3', speed: 150, hp: 1e9 };
+    const others: ShipSpec[] = [
+        { id: 'hb', position: 'M3', speed: 100, attack: 100, target: 'back', skills: HIT },
+        { id: 'hf', position: 'M4', speed: 50, attack: 100, target: 'front', skills: HIT },
+    ];
+    const passive = (): ShipSkills => ({
+        slots: [{ slot: 'active', abilities: [] }, ...realSlots('Heliodor', ['passive'])],
+    });
+    const bursts = (side: 'player' | 'enemy', skills: ShipSkills): number[][] => {
+        const out: number[][] = [];
+        runBoard(
+            { caster: [heliodor(skills), holder], other: others, numRounds: 2 },
+            side,
+            (byId, idOf) =>
+                byId('holder').pendingAccumulators.push({
+                    roundsRemaining: 2,
+                    pct: 100,
+                    accumulated: 0,
+                    sourceId: idOf('hb'),
+                }),
+            (bus, _byId, idOf) =>
+                bus.on(
+                    'accumulator-detonated',
+                    (e: Extract<CombatEvent, { type: 'accumulator-detonated' }>) => {
+                        if (e.victimId === idOf('holder')) out.push([e.round, e.damage]);
+                    }
+                )
+        );
+        return out;
+    };
+    for (const side of SIDES) {
+        it(`${side}-side: the cut pays the hit on the holder after its turn, not the hit on Heliodor`, () => {
+            expect(bursts(side, passive())).toEqual([[1, 100]]);
+        });
+        it(`${side}-side control: without the cut it bursts at round 2 for the same 100`, () => {
+            expect(bursts(side, NO_SKILLS)).toEqual([[2, 100]]);
+        });
+    }
+});
+
+describe("damage dealt before Valkyrie's Echoing Burst lands never counts", () => {
+    // An early hitter lands 100 on the holder; then Valkyrie (0 attack, so her own hits add
+    // nothing) inflicts Echoing Burst for 2 turns with her charged skill. Round 2: the early
+    // hitter hits again, then the holder's turn bursts what it gathered since the application.
+    const holder: ShipSpec = { id: 'holder', position: 'M4', speed: 1, hp: 1e9 };
+    const early: ShipSpec = { id: 'early', position: 'M3', speed: 300, attack: 100, skills: HIT };
+    const valkyrie = (attack: number): ShipSpec => ({
+        id: 'valkyrie',
+        position: 'M4',
+        speed: 200,
+        attack,
+        hacking: 1e6,
+        chargeCount: 2,
+        startCharged: true,
+        skills: { slots: realSlots('Valkyrie', ['active', 'charged']) },
+    });
+    const measure = (side: 'player' | 'enemy', others: ShipSpec[]) => {
+        const bursts: { round: number; damage: number; actorId: string }[] = [];
+        const result = runBoard(
+            { caster: [holder], other: others, numRounds: 2 },
+            side,
+            () => undefined,
+            (bus, _byId, idOf) =>
+                bus.on(
+                    'accumulator-detonated',
+                    (e: Extract<CombatEvent, { type: 'accumulator-detonated' }>) => {
+                        if (e.victimId === idOf('holder')) {
+                            bursts.push({ round: e.round, damage: e.damage, actorId: e.actorId });
+                        }
+                    }
+                )
+        );
+        const { idOf } = mirrorBoard({ caster: [holder], other: others }, side);
+        const dealtOn = (round: number, by: string): number =>
+            result.rounds[round].perTargetDealt?.[idOf(by)]?.[idOf('holder')] ?? 0;
+        return { bursts, dealtOn, idOf };
+    };
+    for (const side of SIDES) {
+        it(`${side}-side: the early round-1 hit is left out; the round-2 hit is gathered`, () => {
+            const m = measure(side, [early, valkyrie(0)]);
+            expect(m.dealtOn(0, 'early')).toBe(100);
+            const round2 = m.dealtOn(1, 'early');
+            expect(round2).toBeGreaterThan(0);
+            expect(m.bursts).toEqual([{ round: 2, damage: round2, actorId: m.idOf('valkyrie') }]);
+        });
+        it(`${side}-side: Valkyrie's own applying hit is gathered — the Echoing Burst lands before the cast's damage`, () => {
+            // 1,000 attack: her charged hit (240%) applies it in round 1, her active (200%, with
+            // Inc. Damage Up II on the holder) lands in round 2, then the holder's turn bursts.
+            const m = measure(side, [valkyrie(1000)]);
+            const round1 = m.dealtOn(0, 'valkyrie');
+            expect(round1).toBe(2400);
+            expect(m.bursts).toHaveLength(1);
+            // Round 2's dealt holds her hit plus the burst itself.
+            const round2Hit = m.dealtOn(1, 'valkyrie') - m.bursts[0].damage;
+            expect(round2Hit).toBe(2600);
+            expect(m.bursts[0].damage).toBe(round1 + round2Hit);
+        });
+    }
 });

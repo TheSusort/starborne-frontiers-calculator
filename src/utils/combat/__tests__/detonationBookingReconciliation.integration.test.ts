@@ -487,8 +487,8 @@ describe('skill-triggered per-victim detonation booking (applyPerVictimDetonatio
 // ───────────────────────────────────────────────────────────────────────────────────────
 
 const ACC_POOL = 10_000;
-const ACC_PCT = 10; // burst = (accumulated + gatheredDirect) × pct/100 = 1000, since the focus
-// deals no damage and `gatheredDirect` reads the OPPOSING (enemy) side, which is inert here.
+const ACC_PCT = 10; // burst = (accumulated + direct hits on the holder) × pct/100 = 1000, since
+// nobody deals the holder direct damage here.
 
 const timedAccumulator = (): PendingAccumulator => ({
     accumulated: ACC_POOL,

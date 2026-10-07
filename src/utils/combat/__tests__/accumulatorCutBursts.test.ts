@@ -3,11 +3,16 @@
  * a Bomb cut to 0 does — Warpstrike's single random cut (`accumulatorDurationCutCandidates`) and
  * Heliodor's / Pestilence's "all active debuffs" shorten (`reduceAccumulatorsOnVictim`). The burst
  * pays `accumulated × pct/100` (`accumulatorBurstDamage`, the formula the natural expiry uses),
- * credited to the accumulator's applier. Owner ruling R115: what it pays includes everything
- * gathered up to the cut (`gatherIntoAccumulator`), never the same damage twice.
+ * credited to the accumulator's applier. What it pays is every direct hit the holder took since
+ * the accumulator was applied (`gatherDirectHitIntoAccumulators`), the same as its natural expiry.
  */
 import { describe, expect, it } from 'vitest';
-import { createActor, CombatActor, PendingAccumulator, gatherIntoAccumulator } from '../state';
+import {
+    createActor,
+    CombatActor,
+    PendingAccumulator,
+    gatherDirectHitIntoAccumulators,
+} from '../state';
 import { createEventBus, CombatEvent } from '../events';
 import { accumulatorDurationCutCandidates, reduceAccumulatorsOnVictim } from '../bombCountdown';
 
@@ -104,30 +109,30 @@ describe('accumulatorDurationCutCandidates (single random cut)', () => {
     });
 });
 
-describe('gatherIntoAccumulator (R115)', () => {
-    it('a second gather in the same round adds only what came in since the first', () => {
-        const a = acc({ accumulated: 0 });
-        gatherIntoAccumulator(a, 100, 1);
-        gatherIntoAccumulator(a, 300, 1);
-        expect(a.accumulated).toBe(300);
-        gatherIntoAccumulator(a, 300, 1);
-        expect(a.accumulated).toBe(300);
-        // A new round's reading starts from 0 again.
-        gatherIntoAccumulator(a, 50, 2);
-        expect(a.accumulated).toBe(350);
+describe('gatherDirectHitIntoAccumulators', () => {
+    it('adds a hit on the holder to every accumulator it carries; nothing else', () => {
+        const v = holder();
+        const first = acc({ accumulated: 0 });
+        const second = acc({ accumulated: 40 });
+        v.pendingAccumulators.push(first, second);
+        gatherDirectHitIntoAccumulators(v, 100);
+        gatherDirectHitIntoAccumulators(v, 0);
+        gatherDirectHitIntoAccumulators(v, -5);
+        expect([first.accumulated, second.accumulated]).toEqual([100, 140]);
     });
 
-    it('a cut to 0 folds in the damage gathered since the last gather before it bursts', () => {
+    it('a cut to 0 bursts what the hits since application added, as the expiry would', () => {
         const v = holder();
         const a = acc({ accumulated: 0, roundsRemaining: 2 });
-        gatherIntoAccumulator(a, 100, 3); // the holder's turn start gathered 100
+        gatherDirectHitIntoAccumulators(v, 300); // before application: never counts
         v.pendingAccumulators.push(a);
+        gatherDirectHitIntoAccumulators(v, 100);
         const { bus, events } = listen();
-        reduceAccumulatorsOnVictim(v, 1, 3, bus, undefined, () => 400);
-        expect(events).toEqual([]); // 2 → 1: no burst, no fold-in
-        expect(a.accumulated).toBe(100);
-        reduceAccumulatorsOnVictim(v, 1, 3, bus, undefined, () => 700);
-        // 700 round-to-date, 100 of it already gathered: 700 total at 50%.
+        reduceAccumulatorsOnVictim(v, 1, 3, bus);
+        expect(events).toEqual([]);
+        gatherDirectHitIntoAccumulators(v, 600);
+        reduceAccumulatorsOnVictim(v, 1, 3, bus);
+        // 100 + 600 gathered, at 50%.
         expect(events.map((e) => e.damage)).toEqual([350]);
     });
 });

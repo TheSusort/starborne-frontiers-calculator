@@ -2886,11 +2886,6 @@ export interface IntentExecContext {
      *  Absent (unit-test ctxs) → the Bomb / Echoing Burst cut helpers (bombCountdown.ts) fall
      *  back to a bare shield-then-HP debit. */
     forceDetonateBomb?: (victim: CombatActor, sourceId: string, damage: number) => void;
-    /** The direct damage the side opposing `victim` has dealt so far this round — what an Echoing
-     *  Burst on `victim` gathers (the engine's `directDealtBy`). An Echoing Burst a duration cut
-     *  drives to 0 folds it in before it bursts (owner ruling R115, `gatherIntoAccumulator`).
-     *  Absent (unit-test ctxs) → the cut bursts what is already gathered. */
-    accumulatorGatherFor?: (victim: CombatActor) => number;
     /** Resolve ANY actor's ship role (Ship.type) by id, either side — the SAME `roleByActorId` map
      *  (side-agnostic by key) Meatshield's defense-substitution and Graphite's `roleFilter`
      *  reaction-time check already consume. Used by the reactive `purge` branch to re-check an
@@ -6532,11 +6527,6 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
             let affected = 0;
             const reducePerTarget: { targetId: string; count: number }[] = [];
             const durationTurns = cfg.durationTurns ?? 1;
-            // What an Echoing Burst cut to 0 on `victim` folds in before it bursts.
-            const gatherNowFor = (victim: CombatActor): (() => number) | undefined => {
-                const read = ctx.accumulatorGatherFor;
-                return read ? () => read(victim) : undefined;
-            };
             for (const rid of recipients) {
                 // A recipient with no resolvable actor (a hand-built unit-test ctx) has no DoT or
                 // Bomb containers; only its named debuffs are reached.
@@ -6559,8 +6549,7 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
                             ctx.round,
                             ctx.bus,
                             intent.ownerId,
-                            ctx.forceDetonateBomb,
-                            gatherNowFor(victim)
+                            ctx.forceDetonateBomb
                         );
                     }
                 } else {
@@ -6577,8 +6566,7 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
                                   victim,
                                   ctx.round,
                                   ctx.bus,
-                                  ctx.forceDetonateBomb,
-                                  gatherNowFor(victim)
+                                  ctx.forceDetonateBomb
                               ),
                               ...bombDurationCutCandidates(
                                   victim,

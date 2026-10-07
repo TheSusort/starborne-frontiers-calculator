@@ -422,21 +422,17 @@ export interface PendingBomb {
     appliedSeq?: number;
 }
 
-// Echoing Burst-style debuff: gathers the direct damage dealt to the enemy each round it
-// is active, then detonates for `pct`% of the accumulated total when it expires.
+// Echoing Burst: gathers the direct damage dealt to the ship it is on from the moment it is
+// applied (`gatherDirectHitIntoAccumulators`), then bursts for `pct`% of the total when it expires.
 export interface PendingAccumulator {
     roundsRemaining: number;
     pct: number;
     accumulated: number;
-    /** The applier (per-actor attribution); the burst lands in this actor's
-     *  detonation channel. The accumulation INPUT gathers all players' direct damage. */
+    /** The applier (per-actor attribution); the burst lands in this actor's detonation channel.
+     *  The gather counts every direct hit on the holder, whoever dealt it. */
     sourceId: string;
     /** When this accumulator was applied — see `ActiveDoTStack.appliedSeq`. */
     appliedSeq?: number;
-    /** The round of this accumulator's latest gather and the round-to-date direct damage it had
-     *  read then (`gatherIntoAccumulator`). Absent → it has not gathered yet. */
-    gatheredRound?: number;
-    gatheredRoundToDate?: number;
 }
 
 /** What an Echoing Burst pays when it bursts: `pct`% of what it has gathered. The one formula
@@ -447,22 +443,31 @@ export function accumulatorBurstDamage(acc: PendingAccumulator): number {
 }
 
 /**
- * Folds the accumulating side's direct damage into `acc`. `roundToDate` is that side's direct
- * damage so far in `round` (both credit channels — the engine's `directDealtBy`). Adds only what
- * an earlier gather in the same round has not already added, then records the reading, so the
- * gather at the holder's turn start and the gather at a cut to 0 (owner ruling R115: the cut
- * bursts everything gathered up to that moment) never count the same damage twice.
+ * Adds one direct hit that landed on `holder` to every Echoing Burst accumulator it carries
+ * ("Accumulates direct damage dealt"). `amount` is the intake the damage funnel recorded for the
+ * holder (`incomingBooked`), so a slice a Protection cascade moved to a protector is not counted on
+ * the holder. Each hit is added as it lands, so an accumulator holds exactly the direct damage the
+ * holder took between its application and its burst — whether that burst is its natural expiry or
+ * a duration cut to 0 — and damage to any other ship never counts.
  */
-export function gatherIntoAccumulator(
-    acc: PendingAccumulator,
-    roundToDate: number,
-    round: number
+export function gatherDirectHitIntoAccumulators(
+    holder: { readonly pendingAccumulators: readonly PendingAccumulator[] },
+    amount: number
 ): void {
-    const already = acc.gatheredRound === round ? (acc.gatheredRoundToDate ?? 0) : 0;
-    const fresh = roundToDate - already;
-    if (fresh > 0) acc.accumulated += fresh;
-    acc.gatheredRound = round;
-    acc.gatheredRoundToDate = Math.max(roundToDate, already);
+    if (!(amount > 0)) return;
+    for (const acc of holder.pendingAccumulators) acc.accumulated += amount;
+}
+
+/** What a Bomb pays when it detonates on its own: stacks × damage per stack × the applier's
+ *  affinity and detonation-damage modifier, snapshotted at application. The one formula for its
+ *  natural expiry (`processBombs`) and a cut to 0 (`reduceBombsOnVictim`). */
+export function bombBurstDamage(bomb: PendingBomb): number {
+    return (
+        bomb.stacks *
+        bomb.damagePerStack *
+        bomb.affinityMult *
+        (1 + bomb.detonationDamageModifier / 100)
+    );
 }
 
 export interface ActorStats {
