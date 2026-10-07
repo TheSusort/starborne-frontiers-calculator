@@ -8,6 +8,8 @@ export const CURRENT_VERSION = '1.75.0';
 // nothing. Do it by hand only if that script cannot.
 export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: debuff extensions now also lengthen DoTs, Bombs and Echoing Burst.',
+    'Combat simulator: Echoing Burst now counts, cleanses and shortens like any other debuff.',
+    'Combat simulator: Cheat Death now also clears Bombs and Echoing Burst.',
     "Combat simulator: passive repairs like Hayyan's and Salvation's can now crit.",
     "Combat simulator: Snakeroot's passive now fires on every 4th DoT stack inflicted.",
     "DPS calculator: Snakeroot's passive now fires on every 4th DoT stack inflicted.",

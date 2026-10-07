@@ -1,13 +1,13 @@
 /**
- * Tripwire: every place the engine creates a DoT entry or a pending Bomb stamps `appliedSeq` from
- * `StatusEngine.nextAppliedSeq`. Cleanse and duration cuts order DoT stacks against named debuffs
- * by that stamp (newest first, owner ruling 2026-10-04); an unstamped entry would read as older
+ * Tripwire: every place the engine creates a DoT entry, a pending Bomb or an Echoing Burst
+ * accumulator stamps `appliedSeq` from `StatusEngine.nextAppliedSeq`. Cleanse and duration cuts
+ * order them against named debuffs by that stamp (newest first, owner ruling 2026-10-04); an unstamped entry would read as older
  * than every named debuff and be cleansed last, silently.
  *
  * Static, over the non-test sources under `src/utils`. What it covers:
  *  - `.push({ … })` of an object literal onto a container NAMED `corrosionEntries`,
- *    `infernoEntries`, `genericDoTEntries` or `pendingBombs` (directly or as `(a ?? b).push`): the
- *    literal must carry `appliedSeq`;
+ *    `infernoEntries`, `genericDoTEntries`, `pendingBombs` or `pendingAccumulators` (directly or as
+ *    `(a ?? b).push`): the literal must carry `appliedSeq`;
  *  - `.push(` or `.unshift(` of anything else onto those names (a variable, a spread): must be on
  *    `NON_LITERAL_ALLOWLIST`, with the reason its entries are already stamped.
  * What it does NOT see: a container reached through another name (an alias such as
@@ -20,7 +20,8 @@ import { join, relative } from 'path';
 import { describe, it, expect } from 'vitest';
 
 const UTILS_DIR = join(__dirname, '..', '..');
-const CONTAINER = '(corrosionEntries|infernoEntries|genericDoTEntries|pendingBombs)\\)?';
+const CONTAINER =
+    '(corrosionEntries|infernoEntries|genericDoTEntries|pendingBombs|pendingAccumulators)\\)?';
 const LITERAL_PUSH = new RegExp(`${CONTAINER}\\.push\\(\\{`, 'g');
 const OTHER_PUSH = new RegExp(`${CONTAINER}\\.(push|unshift)\\((?!\\{)`, 'g');
 

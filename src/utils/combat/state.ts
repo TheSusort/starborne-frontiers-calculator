@@ -138,17 +138,19 @@ export function dotStackCount(entries: readonly { stacks: number }[]): number {
     return entries.reduce((sum, e) => sum + e.stacks, 0);
 }
 
-/** A unit's four DoT containers. `genericDoTEntries` is optional for the hand-built reaction
- *  contexts that carry none. */
+/** A unit's four DoT containers, plus its Echoing Burst accumulators. `genericDoTEntries` and
+ *  `pendingAccumulators` are optional for the hand-built reaction contexts that carry none. */
 export interface DoTContainers {
     corrosionEntries: readonly ActiveDoTStack[];
     infernoEntries: readonly ActiveDoTStack[];
     pendingBombs: readonly PendingBomb[];
     genericDoTEntries?: readonly ActiveDoTStack[];
+    pendingAccumulators?: readonly PendingAccumulator[];
 }
 
-/** Every DoT stack a unit carries across its four containers — the DoT half of its debuff count
- *  and the whole of its damage-over-time-effect count (`dotStackCount`). */
+/** Every DoT stack a unit carries across its four containers — the whole of its
+ *  damage-over-time-effect count (`dotStackCount`). Its debuff count adds its Echoing Burst
+ *  accumulators on top (`carriedDebuffEntries`). */
 export function carriedDotStacks(holder: DoTContainers): number {
     return (
         dotStackCount(holder.corrosionEntries) +
@@ -156,6 +158,14 @@ export function carriedDotStacks(holder: DoTContainers): number {
         dotStackCount(holder.pendingBombs) +
         dotStackCount(holder.genericDoTEntries ?? [])
     );
+}
+
+/** Every debuff a unit carries outside the status store: each DoT stack (`carriedDotStacks`) plus
+ *  one per Echoing Burst accumulator (owner ruling R109: an accumulator is a debuff in every
+ *  sense). The non-named half of every debuff COUNT; an accumulator is not a damage-over-time
+ *  effect, so `enemy-dot-count` readings stay on `carriedDotStacks`. */
+export function carriedDebuffEntries(holder: DoTContainers): number {
+    return carriedDotStacks(holder) + (holder.pendingAccumulators?.length ?? 0);
 }
 
 /**
@@ -166,17 +176,15 @@ export function carriedDotStacks(holder: DoTContainers): number {
  * decrements its entry's `stacks` and splices the entry out at 0, in place, so every holder of a
  * reference sees it. An `unremovable` entry (Acidic Decay) offers none.
  *
+ * Each Echoing Burst accumulator is one candidate too (owner ruling R109); removing it splices it
+ * out, so its gathered damage never bursts.
+ *
  * `debuffType` narrows the pool (Nyxen's typed cleanse): `'bomb'` offers Bomb stacks only;
- * `'dot'` and an untyped cleanse offer every DoT, Bombs included. Within one `appliedSeq` the
- * newer entry (the array's tail) comes first.
+ * `'dot'` and an untyped cleanse offer every DoT, Bombs and accumulators included. Within one
+ * `appliedSeq` the newer entry (the array's tail) comes first.
  */
 export function dotCleanseCandidates(
-    holder: {
-        corrosionEntries: ActiveDoTStack[];
-        infernoEntries: ActiveDoTStack[];
-        genericDoTEntries: ActiveDoTStack[];
-        pendingBombs: PendingBomb[];
-    },
+    holder: DebuffEntryHolder,
     debuffType?: 'bomb' | 'dot'
 ): { seq: number; remove: () => void }[] {
     const containers: { stacks: number; unremovable?: boolean; appliedSeq?: number }[][] =
@@ -207,6 +215,19 @@ export function dotCleanseCandidates(
             }
         }
     }
+    if (debuffType !== 'bomb') {
+        const accs = holder.pendingAccumulators;
+        for (let i = accs.length - 1; i >= 0; i--) {
+            const a = accs[i];
+            out.push({
+                seq: a.appliedSeq ?? 0,
+                remove: () => {
+                    const at = accs.indexOf(a);
+                    if (at >= 0) accs.splice(at, 1);
+                },
+            });
+        }
+    }
     return out;
 }
 
@@ -214,18 +235,17 @@ export function dotCleanseCandidates(
  * The DoT half of a single random duration cut's pool (Warpstrike, owner ruling R35): one
  * candidate per Corrosion, Inferno and generic STACK `holder` carries (R26 — each stack is one
  * debuff), dated by its entry's `appliedSeq` (absent → 0). An `unremovable` entry (Acidic Decay)
- * offers none; Bombs come from `bombDurationCutCandidates`.
+ * offers none; Bombs come from `bombDurationCutCandidates`. Each Echoing Burst accumulator is one
+ * candidate (owner ruling R109); one cut to 0 is spliced out without bursting.
  *
  * Cutting a stack of a multi-stack entry splits it off: the entry keeps its other stacks and
  * duration, and a one-stack copy (same `appliedSeq`, applier and family) with the shortened
  * duration is inserted after it. A stack cut to 0 is dropped without ticking, as
  * `shortenDotDurations` drops an entry.
  */
-export function dotDurationCutCandidates(holder: {
-    corrosionEntries: ActiveDoTStack[];
-    infernoEntries: ActiveDoTStack[];
-    genericDoTEntries: ActiveDoTStack[];
-}): DurationCutCandidate[] {
+export function dotDurationCutCandidates(
+    holder: Omit<DebuffEntryHolder, 'pendingBombs'>
+): DurationCutCandidate[] {
     const out: DurationCutCandidate[] = [];
     for (const entries of [
         holder.corrosionEntries,
@@ -258,23 +278,33 @@ export function dotDurationCutCandidates(holder: {
             }
         }
     }
+    const accs = holder.pendingAccumulators;
+    for (const a of accs) {
+        out.push({
+            seq: a.appliedSeq ?? 0,
+            cut: (turns) => {
+                const at = accs.indexOf(a);
+                if (at < 0) return;
+                a.roundsRemaining -= turns;
+                if (a.roundsRemaining <= 0) accs.splice(at, 1);
+            },
+        });
+    }
     return out;
 }
 
 /**
  * The DoT half of a duration cut on "all active debuffs" (Heliodor, Pestilence — owner ruling
  * 2026-10-04: DoTs are debuffs): takes `turns` off every Corrosion, Inferno and generic entry
- * `holder` carries. An entry cut to 0 is spliced out in place, as its own expiry does after a tick
- * (`expireStacks`) — so it does not tick again. An `unremovable` entry (Acidic Decay) is left
- * alone. Bombs are not touched here: a Bomb's countdown is a detonation timer. Returns the number
- * of DoT stacks shortened (each stack one debuff). A non-positive / non-finite `turns` → 0.
+ * `holder` carries, and every Echoing Burst accumulator (owner ruling R109). An entry cut to 0 is
+ * spliced out in place, as its own expiry does after a tick (`expireStacks`) — so it does not tick
+ * again; an accumulator cut to 0 is spliced out without bursting. An `unremovable` entry (Acidic
+ * Decay) is left alone. Bombs are not touched here: their cut is `reduceBombsOnVictim`, which
+ * detonates one driven to 0. Returns the debuffs shortened (one per DoT stack, one per
+ * accumulator). A non-positive / non-finite `turns` → 0.
  */
 export function shortenDotDurations(
-    holder: {
-        corrosionEntries: ActiveDoTStack[];
-        infernoEntries: ActiveDoTStack[];
-        genericDoTEntries: ActiveDoTStack[];
-    },
+    holder: Omit<DebuffEntryHolder, 'pendingBombs'>,
     turns: number
 ): number {
     const delta = Number.isFinite(turns) ? Math.trunc(turns) : 0;
@@ -292,6 +322,12 @@ export function shortenDotDurations(
             shortened += e.stacks;
             if (e.remainingRounds <= 0) entries.splice(i, 1);
         }
+    }
+    const accs = holder.pendingAccumulators;
+    for (let i = accs.length - 1; i >= 0; i--) {
+        accs[i].roundsRemaining -= delta;
+        shortened += 1;
+        if (accs[i].roundsRemaining <= 0) accs.splice(i, 1);
     }
     return shortened;
 }

@@ -1788,6 +1788,8 @@ function applyAccumulators(args: {
     gatedSkill: Skill | undefined;
     pendingAccumulators: PendingAccumulator[];
     sourceId: string;
+    /** Stamps each new accumulator's `appliedSeq` (`StatusEngine.nextAppliedSeq`). */
+    nextAppliedSeq: () => number;
 }): void {
     for (const acc of accumulatorsFromSkill(args.gatedSkill)) {
         args.pendingAccumulators.push({
@@ -1795,6 +1797,7 @@ function applyAccumulators(args: {
             pct: acc.pct,
             accumulated: 0,
             sourceId: args.sourceId,
+            appliedSeq: args.nextAppliedSeq(),
         });
     }
 }
@@ -1979,6 +1982,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         infernoEntries,
         pendingBombs,
         genericDoTEntries,
+        pendingAccumulators,
     };
     // The bound target's role class for every `enemy-type` gate and role-scaled bonus asked of
     // this turn ("if the target is a defender", "when attacking a supporter") — the struck enemy's
@@ -5276,7 +5280,12 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // Accumulators ride the cast's shared round roll, not the per-stack DoT rolls. Applied
         // before the inflicted-scope extensions below so those reach them.
         if (castRoll) {
-            applyAccumulators({ gatedSkill, pendingAccumulators, sourceId: actor.id });
+            applyAccumulators({
+                gatedSkill,
+                pendingAccumulators,
+                sourceId: actor.id,
+                nextAppliedSeq: statusEngine.nextAppliedSeq,
+            });
         }
 
         // Step 3a: 'inflicted'-scope extensions grow ONLY this cast's new DoTs, Bombs and

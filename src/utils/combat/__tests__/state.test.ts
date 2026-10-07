@@ -7,6 +7,11 @@ import {
     orderByTurnPriority,
     positionTurnRank,
     advanceChargeCadence,
+    carriedDebuffEntries,
+    carriedDotStacks,
+    dotCleanseCandidates,
+    dotDurationCutCandidates,
+    shortenDotDurations,
     ActorStats,
     CombatActor,
     TURN_METER_THRESHOLD,
@@ -457,5 +462,78 @@ describe('orderByTurnPriority', () => {
         ];
         orderByTurnPriority(input);
         expect(input.map((o) => o.name)).toEqual(['Attacker', 'Grif']);
+    });
+});
+
+describe('Echoing Burst accumulators are debuffs in the DoT-container helpers (R109)', () => {
+    const holder = () => ({
+        corrosionEntries: [
+            { stacks: 2, tier: 1, remainingRounds: 3, sourceId: 's', appliedSeq: 1 },
+        ],
+        infernoEntries: [],
+        genericDoTEntries: [
+            {
+                stacks: 1,
+                tier: 1,
+                remainingRounds: 3,
+                sourceId: 's',
+                family: 'Acidic Decay',
+                unremovable: true,
+            },
+        ],
+        pendingBombs: [
+            {
+                countdown: 3,
+                damagePerStack: 10,
+                stacks: 1,
+                tier: 1,
+                sourceId: 's',
+                affinityMult: 1,
+                detonationDamageModifier: 0,
+                splashModifier: 0,
+                appliedSeq: 2,
+            },
+        ],
+        pendingAccumulators: [
+            { roundsRemaining: 2, pct: 50, accumulated: 900, sourceId: 's', appliedSeq: 3 },
+        ],
+    });
+
+    it('counts one debuff per accumulator, but not as a damage-over-time effect', () => {
+        const h = holder();
+        expect(carriedDotStacks(h)).toBe(2 + 1 + 1);
+        expect(carriedDebuffEntries(h)).toBe(2 + 1 + 1 + 1);
+    });
+
+    it('a cleanse offers the accumulator newest-first and removes it outright', () => {
+        const h = holder();
+        const pool = dotCleanseCandidates(h).sort((a, b) => b.seq - a.seq);
+        expect(pool[0].seq).toBe(3);
+        pool[0].remove();
+        expect(h.pendingAccumulators).toEqual([]);
+    });
+
+    it("a 'dot' cleanse offers it; a 'bomb' cleanse does not", () => {
+        expect(dotCleanseCandidates(holder(), 'dot').some((c) => c.seq === 3)).toBe(true);
+        expect(dotCleanseCandidates(holder(), 'bomb').map((c) => c.seq)).toEqual([2]);
+    });
+
+    it('a single random cut offers it; a cut to 0 splices it out', () => {
+        const h = holder();
+        const acc = dotDurationCutCandidates(h).find((c) => c.seq === 3);
+        expect(acc).toBeDefined();
+        acc?.cut(1);
+        expect(h.pendingAccumulators[0].roundsRemaining).toBe(1);
+        acc?.cut(1);
+        expect(h.pendingAccumulators).toEqual([]);
+    });
+
+    it('an all-debuffs shorten reaches it, counts it once, and drops it at 0', () => {
+        const h = holder();
+        // Corrosion's 2 stacks + the accumulator; Acidic Decay is unremovable, Bombs are cut elsewhere.
+        expect(shortenDotDurations(h, 2)).toBe(2 + 1);
+        expect(h.pendingAccumulators).toEqual([]);
+        expect(h.pendingBombs[0].countdown).toBe(3);
+        expect(h.genericDoTEntries[0].remainingRounds).toBe(3);
     });
 });

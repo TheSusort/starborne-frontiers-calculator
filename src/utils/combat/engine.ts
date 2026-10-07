@@ -82,6 +82,7 @@ import {
     emptyActorHealing,
     dotStackCount,
     carriedDotStacks,
+    carriedDebuffEntries,
 } from './state';
 import {
     ActiveBuff,
@@ -3406,6 +3407,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         // Generic DoTs have no single named type — synthesize a base "Damage over Time"
         // buff-name so an `enemy-debuff` name-gate can still see them.
         ...(target.genericDoTEntries.length > 0 ? ['Damage over Time'] : []),
+        ...(target.pendingAccumulators.length > 0 ? ['Echoing Burst'] : []),
     ];
     // Per-VICTIM, per-TICK resolution of an applier's dotMult.
     // Reads `ctx.victimGatedDotDamage` (set by runPlayerTurn ONLY when the applier's cast
@@ -8378,8 +8380,9 @@ export function runCombat(rawInput: CombatEngineInput): {
              *  derivation). */
             enemyBuffCount: number;
             enemyHpPct: number;
-            /** Debuffs on the victim: its distinct per-target statuses plus its DoT stacks — the
-             *  bound target's `enemyDebuffCount` derivation. */
+            /** Debuffs on the victim: its named debuffs plus its DoT stacks and Echoing Burst
+             *  accumulators (`carriedDebuffEntries`) — the bound target's `enemyDebuffCount`
+             *  derivation. */
             enemyDebuffCount: number;
             /** DoT stacks on the victim (`carriedDotStacks`; `enemyDotCount`'s derivation). */
             enemyDotCount: number;
@@ -8402,7 +8405,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 v.stats.hp > 0
                                     ? Math.max(0, Math.min(100, (100 * v.currentHp) / v.stats.hp))
                                     : 100,
-                            enemyDebuffCount: ownerDebuffCount(statusEngine, v.id) + dots,
+                            enemyDebuffCount:
+                                ownerDebuffCount(statusEngine, v.id) + carriedDebuffEntries(v),
                             enemyDotCount: dots,
                             enemyAdjacentCount: bySide(v.side).adjacentAllyIdsFor(v.id).length,
                         },
