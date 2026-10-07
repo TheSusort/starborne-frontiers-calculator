@@ -634,6 +634,33 @@ const UNTIL_PURGED_GRANTS: ReadonlySet<string> = new Set([
     'Defensive Affinity Override',
 ]);
 
+/**
+ * Draw the crit for ONE reactive repair and return its multiplier (1 when it does not crit).
+ *
+ * A repair fired from a reactive/passive trigger crits on its HEALER's crit rate and crit power,
+ * exactly like a cast repair (Hayyan's "repairs the ally for 6%" and Salvation's purge repair both
+ * crit in game). The draw comes from the healer's own `${ownerId}:reactive-heal-crit` stream —
+ * separate from its damage-crit and cast-heal-crit streams, so adding it shifts no other draw —
+ * kept combat-lifetime in `procChanceGates`. One draw per repair, shared by every recipient, as a
+ * cast repair does. The caller decides WHICH repairs are eligible (see the executor's heal branch).
+ */
+export function rollReactiveHealCrit(
+    ownerId: string,
+    ctx: Pick<IntentExecContext, 'procChanceGates' | 'healCritStatsFor'>
+): { didCrit: boolean; multiplier: number } {
+    const stats = ctx.healCritStatsFor?.(ownerId);
+    if (!stats || !ctx.procChanceGates) return { didCrit: false, multiplier: 1 };
+    const rate = stats.alwaysCrits ? 1 : Math.min(1, Math.max(0, stats.crit / 100));
+    const key = `${ownerId}:reactive-heal-crit`;
+    let gate = ctx.procChanceGates.get(key);
+    if (!gate) {
+        gate = makeRateGate(key);
+        ctx.procChanceGates.set(key, gate);
+    }
+    const didCrit = gate(rate);
+    return { didCrit, multiplier: didCrit ? 1 + stats.critDamage / 100 : 1 };
+}
+
 /** Identity of ONE DoT-conversion roll (Belladonna): the converter's ability, the victim, the
  *  applier whose DoT landed, and the DoT type. Shared by the cast path, which may draw the roll
  *  at the landing (`preDecidedConversions`), and the convert-dot executor, which spends it. */
@@ -1400,6 +1427,12 @@ export function registerReactiveListeners(args: {
                     });
                     break;
                 case 'on-ally-critically-repaired':
+                    // A reactive repair that crit (`reactive-heal-performed.critHits`) is a crit
+                    // repair for this listener too; a reaction that repairs and crits is ended by
+                    // the lineage rule (`reactionKey`), not here.
+                    bus.on('reactive-heal-performed', (e) => {
+                        if (e.casterId === ownerId && (e.critHits ?? 0) >= 1) enqueue(intent);
+                    });
                     bus.on('heal-performed', (e) => {
                         // The OWNER's own crit repair (Hermes: "when it critically repairs an
                         // ally"): own cast and >= 1 critting draw. One enqueue per qualifying
@@ -1416,13 +1449,23 @@ export function registerReactiveListeners(args: {
                     });
                     break;
                 case 'on-any-ally-critically-repaired':
+                    // A reactive repair's crit counts too (`reactive-heal-performed.perTarget`
+                    // carries `didCrit` on every recipient of a crit repair); the lineage rule
+                    // (`reactionKey`) ends a crit-repair reaction that itself repairs and crits.
+                    bus.on('reactive-heal-performed', (e) => {
+                        if (
+                            e.perTarget.some(
+                                (pt) => pt.didCrit === true && !isOpposing(pt.targetId)
+                            )
+                        ) {
+                            enqueue(intent);
+                        }
+                    });
                     bus.on('heal-performed', (e) => {
                         // Pallas: "after an ally is critically repaired" — any caster's repair that
                         // crit on a ship of the owner's side, the owner included. Keyed on the
                         // RECIPIENT's side: an opposing healer's crit lands on its own side and
-                        // never qualifies. One enqueue per qualifying cast. Only cast repairs
-                        // roll a crit (a reactive repair draws none), so `heal-performed` is the
-                        // whole source.
+                        // never qualifies. One enqueue per qualifying cast.
                         const critOnOwnSide = e.perTarget
                             ? e.perTarget.some(
                                   (pt) => pt.didCrit === true && !isOpposing(pt.targetId)
@@ -2835,6 +2878,13 @@ export interface IntentExecContext {
      *  crit-power extend chance (critDamage). Optional — absent in unit-test ctxs that don't
      *  exercise convert-dot. */
     effectiveStatsFor?: (actorId: string) => { hacking: number; critDamage: number } | undefined;
+    /** Live crit rate / crit power for `actorId`, either side, folded the way an attack thrown
+     *  outside the turn loop reads its owner (`effectiveOutgoingStatsOf`), plus the always-crit
+     *  flag. Feeds the reactive-repair crit draw (`rollReactiveHealCrit`). Absent → a reactive
+     *  repair never crits (unit-test ctxs that do not exercise heal crits). */
+    healCritStatsFor?: (
+        actorId: string
+    ) => { crit: number; critDamage: number; alwaysCrits: boolean } | undefined;
     /** Id of the round's first real (non-Stasis/Disable-skipped) activator. */
     firstActivatorId?: string;
     /** Id of the sole living actor on the drain owner's side (recomputed each drain),
@@ -4492,9 +4542,8 @@ function passesOncePerCastGate(intent: Intent, ctx: IntentExecContext, victimId?
  *    (chainable). Bombs need effectiveAttack; skipped with a note when undefined.
  *  - heal/shield → gated on a healing ctx (ctx.healing), which #415 makes present in
  *    EVERY engine mode (DPS included) rather than healing mode only: credit the owner's bucket
- *    + route the consumption/pool to the target. Reactive heals NEVER crit (no draw at
- *    drain time — deterministic, documented approximation) and use a SIMPLIFIED fold
- *    (heal: healModifier only; shield: basis×pct). DELIBERATELY emits NO heal-performed
+ *    + route the consumption/pool to the target. A reactive heal crits on its owner's crit
+ *    rate and crit power (`rollReactiveHealCrit`; shields never crit). DELIBERATELY emits NO heal-performed
  *    (a reactive heal must not re-trigger heal listeners — chain guard). Absent (standalone
  *    unit contexts) → silent skip.
  *  - cleanse → same ctx.healing gate, same #415 correction: credit cleanseCount.
@@ -6049,13 +6098,12 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
             eventCountMultiplier !== undefined
                 ? intent.ability.scaling!.perUnit * eventCountMultiplier
                 : cfg.pct;
-        // Reactive heals NEVER crit (no draw at drain time — deterministic, documented
-        // approximation) and use the OWNER's last-turn ctx stats; before the owner's first
-        // turn, fall back to runtime base stats. The heal fold otherwise MIRRORS the cast
+        // The heal fold uses the OWNER's last-turn ctx stats; before the owner's first
+        // turn, fall back to runtime base stats. It MIRRORS the cast
         // path: owner healModifier × owner outgoingHeal × recipient incomingHeal — so a
         // reactive repair (e.g. Yazid's Cheat-Death 60%) scales with the recipient's Incoming
-        // Repair (Everliving Regeneration) just like a cast repair. The ONLY deliberate
-        // simplification vs the cast path is the no-crit approximation above. Shield stays
+        // Repair (Everliving Regeneration) just like a cast repair, and crits on the owner's crit
+        // rate and crit power (`rollReactiveHealCrit`). Shield stays
         // basis×pct (shields aren't repairs — no heal-modifier channels). The owner's standing
         // heal buffs are not re-derived at drain time (the last-turn ctx values are used).
         // If the cast-path fold in playerTurn.ts (heal block) changes, revisit this mirror.
@@ -6194,8 +6242,27 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
         const shieldAcc = new ShieldApplyAccumulator();
         // #2 log visibility: accumulate the reactive HEAL's per-recipient raw repair so we can emit
         // ONE reactive-heal-performed after the loop (the executor emits no heal-performed).
-        const healPerTarget: { targetId: string; amount: number; overheal?: number }[] = [];
+        const healPerTarget: {
+            targetId: string;
+            amount: number;
+            overheal?: number;
+            didCrit?: boolean;
+        }[] = [];
         let healSum = 0;
+        // The repair's crit, drawn ONCE for every recipient (`rollReactiveHealCrit`). A repair
+        // sized off damage dealt/taken or off an over-repair is not a fresh repair roll: its basis
+        // is a figure an earlier hit/repair already settled (a crit hit's on-screen number; an
+        // over-repair that "doesn't scale a second time"), so those bases never draw.
+        const healCanCrit =
+            cfg.type === 'heal' &&
+            !cfg.noCrit &&
+            cfg.basis !== 'damage-dealt' &&
+            cfg.basis !== 'damage-taken' &&
+            cfg.basis !== 'overheal' &&
+            recipients.length > 0;
+        const healCrit = healCanCrit
+            ? rollReactiveHealCrit(intent.ownerId, ctx)
+            : { didCrit: false, multiplier: 1 };
         for (const rid of recipients) {
             // Skip DEAD recipients from the gross credit: an `all-allies` ON-DESTROYED heal
             // (Salvation) fires when its OWN caster is destroyed, but `recipients =
@@ -6255,6 +6322,7 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
                       (sizedFromAnOverRepair ? 1 : 1 + ownerOutgoing / 100) *
                       incomingHealFactor(incomingPctFor(rid))
                     : basisValue * (effectivePct / 100);
+            if (cfg.type === 'heal' && healCrit.didCrit) raw *= healCrit.multiplier;
             // Caster-side heal amplification (Nourishment / Vivacious Repair) — HEAL case ONLY.
             // Neither implant's text limits it to skill casts, so a passive repair onto an ally is
             // boosted exactly as the cast path's `healAmpPctFor` boosts a cast repair. Rolls the
@@ -6270,9 +6338,15 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 // #434: hold the entry so the clipped excess can be attached once
                 // applyHealToTarget has run below — `applied` does not exist yet at push time,
                 // and the emit needs the pair together.
-                const healEntry: { targetId: string; amount: number; overheal?: number } = {
+                const healEntry: {
+                    targetId: string;
+                    amount: number;
+                    overheal?: number;
+                    didCrit?: boolean;
+                } = {
                     targetId: rid,
                     amount: raw,
+                    ...(healCrit.didCrit ? { didCrit: true } : {}),
                 };
                 healPerTarget.push(healEntry);
                 healSum += raw;
@@ -6324,8 +6398,8 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
             }
         }
         // Deliberately NO heal-performed emission from the executor (a reactive heal must
-        // not re-trigger heal listeners — chain guard; mirrors the drain-time no-crit-outcome
-        // conventions). heal/shield therefore never chain.
+        // not re-trigger the cast-repair listeners — chain guard). Its observers subscribe to
+        // `reactive-heal-performed` instead.
         //
         // Shield IS the one exception — we DO emit shield-applied here (ONE per reactive
         // shield, keyed on the owner, listing every RESOLVED recipient). This is intentional, NOT
@@ -6382,6 +6456,7 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 round: ctx.round,
                 amount: healSum,
                 perTarget: healPerTarget,
+                ...(healCrit.didCrit ? { critHits: 1 } : {}),
                 sourceAbilityId: intent.ability.id,
             });
         }

@@ -112,6 +112,8 @@ const ATTACK = 20_000;
 /** Both leech flavours repair 50% of that, so the un-modified leech is exactly 10,000. */
 const LEECH_PCT = 50;
 const LEECH_RAW = (ATTACK * LEECH_PCT) / 100;
+/** The leecher's crit power in the critting-leech tests. */
+const LEECH_CRIT_POWER = 50;
 
 type EnemyAttackerInput = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 
@@ -139,25 +141,31 @@ const castStatus = (buffName: string, parsedEffects: ParsedBuffEffects = {}): Ab
 
 /** A standing damage-DEALT leech ("repair X% of damage dealt"), passive slot, self — the shape the
  *  ruling is about. Procs through the engine's `procStandingLeechesPerVictim`. */
-const standingLeech = (pct: number): Ability => ({
+const standingLeech = (pct: number, canCrit = false): Ability => ({
     id: 'ab-standing-leech',
     type: 'heal',
     target: 'self',
     trigger: 'on-cast',
     conditions: [],
-    config: { type: 'heal', pct, basis: 'damage-dealt', leechScope: 'all', noCrit: true },
+    config: {
+        type: 'heal',
+        pct,
+        basis: 'damage-dealt',
+        leechScope: 'all',
+        ...(canCrit ? {} : { noCrit: true }),
+    },
 });
 
 /** A damage-TAKEN leech ("when damaged, repair X% of the damage"), passive slot, self. The engine's
  *  attack block owns it, so the trigger is `on-cast`, not `on-attacked`. Procs through
  *  `procTakenLeechesPerVictim`. */
-const takenLeech = (pct: number): Ability => ({
+const takenLeech = (pct: number, canCrit = false): Ability => ({
     id: 'ab-taken-leech',
     type: 'heal',
     target: 'self',
     trigger: 'on-cast',
     conditions: [],
-    config: { type: 'heal', pct, basis: 'damage-taken', noCrit: true },
+    config: { type: 'heal', pct, basis: 'damage-taken', ...(canCrit ? {} : { noCrit: true }) },
 });
 
 /** A SELF-side `Inc. Repair Up` the leecher grants ITSELF. The STATUS is the corpus's (Meatshield's
@@ -242,6 +250,9 @@ interface RoleShape {
     speed: number;
     hp: number;
     attack?: number;
+    /** Crit rate / crit power; 0 unless a test is about a critting leech. */
+    crit?: number;
+    critDamage?: number;
     slots?: ShipSkills['slots'];
     preFight?: PreFightCombatModifiers;
 }
@@ -261,8 +272,8 @@ const walkedAlly = (args: RoleShape): TeamActorEngineInput => ({
         shipSkills: { slots: args.slots ?? [] },
         stats: {
             attack: args.attack ?? 0,
-            crit: 0,
-            critDamage: 0,
+            crit: args.crit ?? 0,
+            critDamage: args.critDamage ?? 0,
             defensePenetration: 0,
             hacking: 100_000,
             defence: 0,
@@ -281,8 +292,8 @@ const enemyShip = (args: RoleShape): EnemyAttackerInput => ({
     id: args.id,
     stats: {
         attack: args.attack ?? 0,
-        crit: 0,
-        critDamage: 0,
+        crit: args.crit ?? 0,
+        critDamage: args.critDamage ?? 0,
         defence: 0,
         hp: args.hp,
         speed: args.speed,
@@ -319,6 +330,9 @@ interface FixtureOpts {
     /** §8: extra passive-slot abilities on the LEECHER — an on-repair reaction, to prove the leech
      *  is visible to one. Appended after the leech itself. */
     victimExtraPassives?: Ability[];
+    /** The leecher's crit rate. Set, it also drops the leech's `noCrit`, as on a ship-kit leech
+     *  (Magnolia, Valerian); 100 makes every leech repair crit. */
+    victimCrit?: number;
 }
 
 interface FixtureRun {
@@ -380,7 +394,9 @@ function runFixture(opts: FixtureOpts): FixtureRun {
 
     const grant = opts.victimSelfGrant;
     const victimPassives: Ability[] = [
-        opts.leechKind === 'dealt' ? standingLeech(LEECH_PCT) : takenLeech(LEECH_PCT),
+        opts.leechKind === 'dealt'
+            ? standingLeech(LEECH_PCT, opts.victimCrit !== undefined)
+            : takenLeech(LEECH_PCT, opts.victimCrit !== undefined),
         ...(grant
             ? [
                   selfGrant(
@@ -404,6 +420,9 @@ function runFixture(opts: FixtureOpts): FixtureRun {
                 ? [activeSlot([basicAttack()]), passiveSlot(victimPassives)]
                 : [passiveSlot(victimPassives)],
         ...(opts.victimPreFight ? { preFight: opts.victimPreFight } : {}),
+        ...(opts.victimCrit !== undefined
+            ? { crit: opts.victimCrit, critDamage: LEECH_CRIT_POWER }
+            : {}),
     };
 
     let victim: CombatActor | undefined;
@@ -1031,6 +1050,55 @@ describe('a leech emits a repair event (#447)', () => {
             // …and it lands on the LEECHER itself — a self-heal proccing an on-repair reaction,
             // which is #444's ruling reaching this channel.
             expect(withReaction.buffedActorIds(BUFF)).toContain(VICTIM_ID);
+        });
+
+        for (const leechKind of ['dealt', 'taken'] as const) {
+            it(`${victimSide}-side damage-${leechKind.toUpperCase()} leech: a crit repair carries its crit on the event`, () => {
+                const crit = runFixture({
+                    victimSide,
+                    leechKind,
+                    enemyStatuses: [],
+                    victimCrit: 100,
+                });
+                const plain = runFixture({ victimSide, leechKind, enemyStatuses: [] });
+
+                const critOwn = crit.repairEvents.filter((e) => e.casterId === VICTIM_ID);
+                const plainOwn = plain.repairEvents.filter((e) => e.casterId === VICTIM_ID);
+                expect(critOwn).toHaveLength(1);
+                expect(plainOwn).toHaveLength(1);
+                expect(critOwn[0].critHits).toBe(1);
+                expect(critOwn[0].perTarget).toEqual([
+                    expect.objectContaining({ targetId: VICTIM_ID, didCrit: true }),
+                ]);
+                expect(plainOwn[0].critHits).toBeUndefined();
+                expect(plainOwn[0].perTarget[0].didCrit).toBeUndefined();
+            });
+        }
+
+        it(`${victimSide}-side leecher: a critting leech procs an on-crit-repair reaction`, () => {
+            const BUFF = 'Crit Leech Witness';
+            const onCritRepair: Ability = {
+                ...onRepairBuff(BUFF),
+                id: 'ab-on-crit-repair-buff',
+                target: 'self',
+                trigger: 'on-ally-critically-repaired',
+            };
+            const crit = runFixture({
+                victimSide,
+                leechKind: 'dealt',
+                enemyStatuses: [],
+                victimExtraPassives: [onCritRepair],
+                victimCrit: 100,
+            });
+            const plain = runFixture({
+                victimSide,
+                leechKind: 'dealt',
+                enemyStatuses: [],
+                victimExtraPassives: [onCritRepair],
+            });
+
+            expect(plain.buffedActorIds(BUFF)).toEqual([]);
+            expect(crit.buffedActorIds(BUFF)).toContain(VICTIM_ID);
         });
     }
 });

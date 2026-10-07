@@ -5113,6 +5113,12 @@ export function runCombat(rawInput: CombatEngineInput): {
     //   - the passive-slot damage instance does not either, since its victim is not its primary
     //     target (owner ruling 2026-08-18, spec §2.2) — see `stagePassiveSlotHit`'s
     //     `KNOWN GAPS (a)` block.
+    // A leech repair event's crit count: one per recipient whose repair crit, the field the
+    // crit-repair listeners read on `reactive-heal-performed`.
+    const leechCritHits = (perTarget: readonly { didCrit?: boolean }[]) => {
+        const critHits = perTarget.filter((pt) => pt.didCrit === true).length;
+        return critHits > 0 ? { critHits } : {};
+    };
     const procStandingLeechesPerVictim = (
         sourceId: string,
         amount: number,
@@ -5131,7 +5137,12 @@ export function runCombat(rawInput: CombatEngineInput): {
         // set because the emit is proc-call scoped while `sourceAbilityId` is per entry: it is
         // stamped only when one entry produced everything in this emit, which is every shipped
         // case (no hull carries two standing leeches) and is honest when one ever does.
-        const healPerTarget: { targetId: string; amount: number; overheal?: number }[] = [];
+        const healPerTarget: {
+            targetId: string;
+            amount: number;
+            overheal?: number;
+            didCrit?: boolean;
+        }[] = [];
         const healAbilityIds = new Set<string>();
         let healSum = 0;
         for (const e of entries) {
@@ -5142,6 +5153,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             // silently default and re-create the bug.
             if (e.scope === 'detonation' && channel !== 'detonation') continue;
             let raw = amount * (e.pct / 100);
+            let didCrit = false;
             if (e.kind === 'heal') {
                 raw *= 1 + owner.healModifier / 100;
                 // #447 — THE LEECHER'S OUTGOING-REPAIR CHANNEL. Owner ruling 2026-08-31: a leech
@@ -5159,6 +5171,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // One heal-crit draw PER VICTIM (this proc runs per footprint victim).
                 if (!e.noCrit && owner.activeHealCritGate(owner.crit / 100)) {
                     raw *= 1 + owner.critDamage / 100;
+                    didCrit = true;
                 }
             }
             // Recipient routing is SIDE-RELATIVE: "allies" means the owner's own side.
@@ -5339,6 +5352,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                             targetId: rid,
                             amount: scaled,
                             ...(applied.overheal > 0 ? { overheal: applied.overheal } : {}),
+                            ...(didCrit ? { didCrit: true } : {}),
                         });
                         healAbilityIds.add(e.abilityId);
                         healSum += scaled;
@@ -5403,6 +5417,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 round: currentRound,
                 amount: healSum,
                 perTarget: healPerTarget,
+                ...leechCritHits(healPerTarget),
                 ...(healAbilityIds.size === 1 ? { sourceAbilityId: [...healAbilityIds][0] } : {}),
             });
         }
@@ -5477,7 +5492,12 @@ export function runCombat(rawInput: CombatEngineInput): {
         // below (no ship repairs off damage TAKEN, measured 2026-08-23) and wired anyway, for the
         // reason #424 wired its own dead arm: one silent sibling is the hand-copied-divergence
         // shape that produced this whole class.
-        const healPerTarget: { targetId: string; amount: number; overheal?: number }[] = [];
+        const healPerTarget: {
+            targetId: string;
+            amount: number;
+            overheal?: number;
+            didCrit?: boolean;
+        }[] = [];
         const healAbilityIds = new Set<string>();
         let healSum = 0;
         for (const e of entries) {
@@ -5487,6 +5507,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             }
             if (e.requirePrimaryTarget && !isAnchor) continue;
             let raw = damageTaken * (e.pct / 100);
+            let didCrit = false;
             if (e.kind === 'heal' && rt) {
                 raw *= 1 + rt.healModifier / 100;
                 // #447 — the outgoing-repair channel of the ship performing this repair, the
@@ -5503,6 +5524,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // One heal-crit draw PER VICTIM (this proc runs per footprint victim).
                 if (!e.noCrit && rt.activeHealCritGate(rt.crit / 100)) {
                     raw *= 1 + rt.critDamage / 100;
+                    didCrit = true;
                 }
             }
             if (e.kind === 'heal') {
@@ -5573,6 +5595,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                         targetId: victim.id,
                         amount: scaled,
                         ...(applied.overheal > 0 ? { overheal: applied.overheal } : {}),
+                        ...(didCrit ? { didCrit: true } : {}),
                     });
                     healAbilityIds.add(e.abilityId);
                     healSum += scaled;
@@ -5604,6 +5627,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 round: currentRound,
                 amount: healSum,
                 perTarget: healPerTarget,
+                ...leechCritHits(healPerTarget),
                 ...(healAbilityIds.size === 1 ? { sourceAbilityId: [...healAbilityIds][0] } : {}),
             });
         }
@@ -11021,6 +11045,18 @@ export function runCombat(rawInput: CombatEngineInput): {
                 effectiveStatsFor: (id) => {
                     const a = allActorsById.get(id);
                     return a ? effectiveStatsOf(statusEngine, selfBuffLookup, a) : undefined;
+                },
+                // Live crit rate / crit power for a reactive repair's crit draw — the same
+                // fold a counter-attack reads for its owner (`effectiveOutgoingStatsOf`).
+                healCritStatsFor: (id) => {
+                    const a = allActorsById.get(id);
+                    if (!a) return undefined;
+                    const o = effectiveOutgoingStatsOf(statusEngine, selfBuffLookup, a);
+                    return {
+                        crit: o.crit,
+                        critDamage: o.critDamage,
+                        alwaysCrits: a.alwaysCrits === true,
+                    };
                 },
                 // Doomsayer enemy-highest-attack resolver, the round's first
                 // real activator id, and the shared once-per-round consume set. All
