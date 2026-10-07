@@ -449,13 +449,23 @@ export function accumulatorBurstDamage(acc: PendingAccumulator): number {
  * the holder. Each hit is added as it lands, so an accumulator holds exactly the direct damage the
  * holder took between its application and its burst — whether that burst is its natural expiry or
  * a duration cut to 0 — and damage to any other ship never counts.
+ *
+ * `castStartSeq` marks a hit of a skill's damage clause: the status store's application sequence
+ * (`StatusEngine.lastAppliedSeq`) as that skill began. The skill's own debuffs are written after
+ * its damage (Valkyrie: "deals 240% damage, inflicts … Echoing Burst"), and clauses resolve in
+ * written order, so an accumulator stamped after that mark — applied by the same skill — does not
+ * gather the hit even though the engine places it on the board first.
  */
 export function gatherDirectHitIntoAccumulators(
     holder: { readonly pendingAccumulators: readonly PendingAccumulator[] },
-    amount: number
+    amount: number,
+    castStartSeq?: number
 ): void {
     if (!(amount > 0)) return;
-    for (const acc of holder.pendingAccumulators) acc.accumulated += amount;
+    for (const acc of holder.pendingAccumulators) {
+        if (castStartSeq !== undefined && (acc.appliedSeq ?? 0) > castStartSeq) continue;
+        acc.accumulated += amount;
+    }
 }
 
 /** What a Bomb pays when it detonates on its own: stacks × damage per stack × the applier's

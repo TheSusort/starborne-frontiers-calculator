@@ -702,8 +702,9 @@ describe('simulateDPS', () => {
             expect(dd).toBeGreaterThan(0);
             // Round 1: the accumulator is freshly applied — nothing detonates yet.
             expect(result.rounds[0].detonationDamage).toBe(0);
-            // Round 2: the round-1 accumulator expires, bursting 2 turns of gathered direct damage.
-            expect(result.rounds[1].detonationDamage).toBeCloseTo(2 * dd, 5);
+            // Round 2: the round-1 accumulator expires, bursting the round-2 direct damage it
+            // gathered. The round-1 hit that applied it is written before it and is not gathered.
+            expect(result.rounds[1].detonationDamage).toBeCloseTo(dd, 5);
         });
 
         it('scales the burst by the detonation percentage', () => {
@@ -714,8 +715,8 @@ describe('simulateDPS', () => {
                 rounds: 3,
             });
             const dd = result.rounds[0].directDamage;
-            // 50% of 2 gathered turns = 1× a single round's direct damage.
-            expect(result.rounds[1].detonationDamage).toBeCloseTo(dd, 5);
+            // 50% of the one gathered turn (round 2's hit) = half a round's direct damage.
+            expect(result.rounds[1].detonationDamage).toBeCloseTo(dd / 2, 5);
         });
     });
 

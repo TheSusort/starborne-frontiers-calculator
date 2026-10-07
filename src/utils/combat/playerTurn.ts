@@ -1773,8 +1773,9 @@ function applyNewDoTs(args: {
 
 // Step 3b: Apply Echoing Burst-style accumulators inflicted by this round's skill
 // (gated by the same landing roll as inflicted debuffs). Each gathers every direct hit its holder
-// takes from here on (`gatherDirectHitIntoAccumulators`), this cast's own damage included: the
-// cast's damage lands on the board after this step.
+// takes after it (`gatherDirectHitIntoAccumulators`). The skill's damage is written before its
+// debuffs, so this cast's own damage, which the engine lands on the board after this step, is not
+// gathered (`castStartSeq`).
 function applyAccumulators(args: {
     gatedSkill: Skill | undefined;
     pendingAccumulators: PendingAccumulator[];

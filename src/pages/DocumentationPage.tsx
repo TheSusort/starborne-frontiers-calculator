@@ -3119,8 +3119,10 @@ const DocumentationPage: React.FC = () => {
                                         has gathered up to the cut. An Echoing Burst gathers only
                                         the direct damage dealt to the ship it is on, from the
                                         moment it is applied until it bursts; damage to other
-                                        enemies never counts. Bombs and Echoing Bursts that go off
-                                        together, from one cut or expiring on the same turn,
+                                        enemies never counts. Valkyrie&apos;s own hit that applies
+                                        it lands first and is not gathered, and neither is
+                                        Demolisher&apos;s Bomb splash. Bombs and Echoing Bursts that
+                                        go off together, from one cut or expiring on the same turn,
                                         detonate in the order they were applied; if the first
                                         triggers Cheat Death, the rest are wiped and never detonate.
                                         If the first destroys the ship instead, the rest still

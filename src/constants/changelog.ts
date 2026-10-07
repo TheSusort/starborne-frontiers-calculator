@@ -12,7 +12,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: Echoing Burst is now a Bomb-type debuff for counts and cleanses.',
     'Combat simulator: Echoing Burst cut to 0 turns now bursts everything gathered so far.',
     'Combat simulator: Bombs and Echoing Burst now detonate in the order applied.',
-    'Combat simulator: Echoing Burst now gathers every hit on its target until it bursts.',
+    'Combat simulator: Echoing Burst now gathers only direct hits on its own target.',
     'Combat simulator: Echoing Burst no longer gathers damage dealt to other enemies.',
     'Combat simulator: Bombs detonated by a lethal skill now splash neighbouring ships.',
     'Combat simulator: Bombs no longer count as damage-over-time effects or Snakeroot stacks.',
@@ -36,6 +36,9 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator: Sefuba's purge repair now heals 12% per buff, matching the game.",
     'Combat simulator: purges and buff steals now fail at an affinity disadvantage.',
     "Combat simulator: Wisteria's crit passive now fires only on Corrosion.",
+    "Combat simulator: Valkyrie's Echoing Burst no longer gathers her own applying hit.",
+    "DPS calculator: Valkyrie's Echoing Burst no longer gathers her own applying hit.",
+    "Combat simulator: Echoing Burst no longer gathers Demolisher's Bomb splash damage.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

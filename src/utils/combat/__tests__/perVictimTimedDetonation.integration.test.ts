@@ -77,7 +77,7 @@ const lineRange1Pattern = (): ParsedPattern => ({
 type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 
 // A positioned, zero-offense, finite-HP enemy victim. speed 1 → it takes a turn each round (so its
-// OWN-turn timed burst can fire). attack 0 → it contributes 0 direct (keeps allPlayersDirect clean).
+// OWN-turn timed burst can fire). attack 0 → it deals no direct damage to anyone.
 const enemyAt = (id: string, position: Position, hp: number): EnemyAttacker => ({
     id,
     stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp, speed: 1 },

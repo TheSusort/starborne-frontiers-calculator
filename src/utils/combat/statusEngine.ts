@@ -363,6 +363,9 @@ export interface StatusEngine {
      *  a DoT entry when it is applied (`ActiveDoTStack.appliedSeq`), so newest-first cleanse and
      *  duration orders compare DoT stacks with named statuses. Each call advances it. */
     nextAppliedSeq(): number;
+    /** The last number `nextAppliedSeq` handed out (0 before the first), without advancing it:
+     *  everything stamped later carries a larger number. */
+    lastAppliedSeq(): number;
     /** Reduce the duration of ONE debuff on `actorId` by `turns`, picked at RANDOM (owner ruling
      *  R35, Warpstrike's "reduces a random active debuff's duration by 1 turn"). The pool is every
      *  removable timed debuff in the actor's per-victim enemy store plus `extra` — its DoT and Bomb
@@ -2510,6 +2513,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
     return {
         beginRound,
         nextAppliedSeq,
+        lastAppliedSeq: () => appliedSeqCounter,
         sourceFired,
         setLandsTimedEnemyApplication,
         setTurnBlockedReader,

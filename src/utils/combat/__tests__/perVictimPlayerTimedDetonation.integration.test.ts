@@ -19,14 +19,10 @@
  * Crit 0 keeps every credited value an exact integer.
  *
  * --- The accumulator caveat (read before case 2) ---
- * `processAccumulators` does, per run: `acc.accumulated += allPlayersDirect; acc.roundsRemaining
- * -= 1;` and on `roundsRemaining <= 0` bursts `acc.accumulated * (acc.pct/100)`. The closure's
- * `allPlayersDirect` = `[...roundDamage.values()].reduce((s,d)=>s+d.direct,0)` — the round-global
- * sum of all players' DIRECT damage credited so far this round. In POSITIONAL mode the focus
- * attacker's direct credit is SUPPRESSED (`engine.ts` — the `if (!positional)` guard skips
- * `creditDamage(actor.id,'direct',…)`; the firing hit lands per-victim via `roundPerTargetDamage`
- * instead), and the enemy victims have attack 0. So `allPlayersDirect` is 0 → a positional player
- * accumulator's `accumulated` grows by 0 → it bursts for exactly its PRE-SEEDED
+ * An accumulator gathers only the direct hits that land on its own holder, as each lands
+ * (`gatherDirectHitIntoAccumulators`), and on `roundsRemaining <= 0` bursts
+ * `acc.accumulated * (acc.pct/100)`. The holders here are player ships and the enemies have
+ * attack 0, so nothing hits a holder before its burst → it bursts for exactly its PRE-SEEDED
  * `accumulated * pct/100`. We exploit that for clean integers (mirrors the PR2 enemy case).
  */
 import { describe, it, expect } from 'vitest';
@@ -78,7 +74,7 @@ const lineRange1Pattern = (): ParsedPattern => ({
 type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 
 // A positioned, zero-offense, finite-HP enemy victim. speed 1 → it takes a turn each round. attack 0
-// → it contributes 0 direct (keeps allPlayersDirect clean). Present so the PLAYER actors are
+// → it lands no direct hit on an accumulator's holder. Present so the PLAYER actors are
 // positional against it (isPositional(playerActor.position, enemyAttackerActors) is true).
 const enemyAt = (id: string, position: Position, hp: number): EnemyAttacker => ({
     id,
@@ -108,8 +104,8 @@ const timedBomb = (
 });
 
 // A pre-seeded accumulator. On the run that drops roundsRemaining to <= 0 it bursts for
-// (accumulated + Σ allPlayersDirect over its active runs) × pct/100. In positional mode
-// allPlayersDirect is 0 (see header caveat) → burst = accumulated × pct/100.
+// (accumulated + every direct hit its holder took meanwhile) × pct/100. Nothing hits a holder
+// here (see header caveat) → burst = accumulated × pct/100.
 const accumulator = (
     accumulated: number,
     pct: number,
@@ -276,9 +272,9 @@ describe('per-positioned-player timed detonation (PR-B B2, enemy → player)', (
         idc = 0;
         // The focus 'attacker' carries a pre-loaded accumulator: accumulated 5000, pct 50,
         // roundsRemaining 1. On its FIRST own turn (round 1) the burst fires at turn-start, BEFORE
-        // the focus's firing hit. In positional mode the focus's direct credit is suppressed and the
-        // enemy victims have attack 0, so allPlayersDirect = 0 at that moment → accumulated += 0 →
-        // 5000, roundsRemaining → 0 → BURST = 5000 × 50/100 = 2500. Lands on the focus's OWN HP.
+        // the focus's firing hit. The enemy victims have attack 0, so nothing has hit the focus →
+        // accumulated stays 5000, roundsRemaining → 0 → BURST = 5000 × 50/100 = 2500. Lands on the
+        // focus's OWN HP.
         const { result } = collect(
             POSITIONAL_BASE({
                 __testTapActors: (actors: CombatActor[]) => {

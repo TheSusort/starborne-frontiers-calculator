@@ -8072,8 +8072,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                 );
                 creditDealt(ownerId, victim.id, procBooked);
                 // A reactive hit is direct damage on its victim, so an Echoing Burst there
-                // gathers it.
-                gatherDirectHitIntoAccumulators(victim, procBooked);
+                // gathers it. A Bomb splash copy is Bomb damage, not a direct hit: not gathered.
+                if (!splashCopy) gatherDirectHitIntoAccumulators(victim, procBooked);
             }
             // `dealt` stays the full proc — log/dealt-slot only, as in applyCounterAttack.
             return { dealt: raw, didCrit };
@@ -8566,6 +8566,11 @@ export function runCombat(rawInput: CombatEngineInput): {
         // this driver returns (see drivePositionalTurnApply's interleaved emission block).
         // Per-HIT event fidelity below the sub-attack — one event per (hit, victim) pair — remains
         // a documented follow-up.
+        //
+        // The status store's application sequence as the acting ship's current skill began
+        // (`buildTurnArgs`), handed to its firing hits' Echoing Burst gather
+        // (`gatherDirectHitIntoAccumulators`'s `castStartSeq`).
+        let castStartSeq: number | undefined;
         const drivePositionalApply = (args: {
             scalars: AttackerDamageScalars;
             // hitCrits is co-populated with positionalScalars (both are set iff a damage
@@ -8756,8 +8761,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                         // covered) this hit landed on.
                         creditDealt(args.actingId, victim.id, damage);
                         // A firing hit is direct damage on this victim, so an Echoing Burst on it
-                        // gathers it — on every cast site, both sides.
-                        gatherDirectHitIntoAccumulators(victim, damage);
+                        // gathers it — on every cast site, both sides — unless this same skill
+                        // applied that Echoing Burst (its damage is written first).
+                        gatherDirectHitIntoAccumulators(victim, damage, castStartSeq);
                     },
                     // E2: forward the per-direction leech hook (unsupplied by all current callers).
                     onVictimResolved: args.onVictimResolved,
@@ -9660,6 +9666,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         // The selfHpPct denom is runtimeFor(actor).hp (equal to baseHpFor(id) by
         // construction). The per-kind bookkeeping TAILS after each call stay inline.
         const buildTurnArgs = (a: CombatActor, tgt: CombatActor | undefined) => {
+            castStartSeq = statusEngine.lastAppliedSeq();
             const tb = turnBindings(a.side);
             const rt = runtimeFor(a);
             const maxHp = rt.hp; // unified denom (baseHpFor(id) === runtimeFor(id).hp)

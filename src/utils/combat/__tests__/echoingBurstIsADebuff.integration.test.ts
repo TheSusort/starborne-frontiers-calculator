@@ -942,7 +942,7 @@ describe('an Echoing Burst a cut drives to 0 pays the same holder-only gather as
     }
 });
 
-describe("damage dealt before Valkyrie's Echoing Burst lands never counts", () => {
+describe("damage dealt before Valkyrie's Echoing Burst lands never counts, her applying hit included", () => {
     // An early hitter lands 100 on the holder; then Valkyrie (0 attack, so her own hits add
     // nothing) inflicts Echoing Burst for 2 turns with her charged skill. Round 2: the early
     // hitter hits again, then the holder's turn bursts what it gathered since the application.
@@ -987,17 +987,67 @@ describe("damage dealt before Valkyrie's Echoing Burst lands never counts", () =
             expect(round2).toBeGreaterThan(0);
             expect(m.bursts).toEqual([{ round: 2, damage: round2, actorId: m.idOf('valkyrie') }]);
         });
-        it(`${side}-side: Valkyrie's own applying hit is gathered — the Echoing Burst lands before the cast's damage`, () => {
-            // 1,000 attack: her charged hit (240%) applies it in round 1, her active (200%, with
-            // Inc. Damage Up II on the holder) lands in round 2, then the holder's turn bursts.
+        it(`${side}-side: Valkyrie's own applying hit is not gathered; her later hit is`, () => {
+            // "deals 240% damage, inflicts Inc. Damage Up II and Echoing Burst for 2 turns": the
+            // clauses resolve in written order, so the damage lands before the Echoing Burst
+            // exists. 1,000 attack: her charged hit (240%) applies it in round 1, her active
+            // (200%, with Inc. Damage Up II on the holder) lands in round 2, then the holder's
+            // turn bursts.
             const m = measure(side, [valkyrie(1000)]);
             const round1 = m.dealtOn(0, 'valkyrie');
+            // Inc. Damage Up II, written after the damage too, does not raise the applying hit.
             expect(round1).toBe(2400);
             expect(m.bursts).toHaveLength(1);
             // Round 2's dealt holds her hit plus the burst itself.
             const round2Hit = m.dealtOn(1, 'valkyrie') - m.bursts[0].damage;
             expect(round2Hit).toBe(2600);
-            expect(m.bursts[0].damage).toBe(round1 + round2Hit);
+            expect(m.bursts[0].damage).toBe(round2Hit);
+        });
+    }
+});
+
+describe("an Echoing Burst does not gather Demolisher's Bomb splash", () => {
+    // "When a Bomb explodes on an enemy, … deals 100% of the Bomb damage to all adjacent
+    // enemies": a copy of the Bomb's damage, not a direct hit. The Bomb bursts on its holder at
+    // M4; the Echoing Burst sits on the neighbour at M3, which takes the splash.
+    const demolisher: ShipSpec = {
+        id: 'demolisher',
+        position: 'M4',
+        speed: 100,
+        attack: 1000,
+        skills: { slots: realSlots('Demolisher', ['passive']) },
+    };
+    const bombed: ShipSpec = { id: 'bombed', position: 'M4', speed: 2, hp: 1e9 };
+    const neighbour: ShipSpec = { id: 'neighbour', position: 'M3', speed: 1, hp: 1e9 };
+    const measure = (side: 'player' | 'enemy') => {
+        const out = { splash: 0, gathered: -1 };
+        const result = runBoard(
+            { caster: [demolisher], other: [bombed, neighbour], numRounds: 1 },
+            side,
+            (byId, idOf) => {
+                byId('bombed').pendingBombs.push({ ...bomb(idOf('demolisher')), countdown: 1 });
+                byId('neighbour').pendingAccumulators.push({
+                    ...accumulator(idOf('demolisher'), 5),
+                    accumulated: 0,
+                });
+            },
+            (bus, byId) =>
+                bus.on('round-ended', (e: Extract<CombatEvent, { type: 'round-ended' }>) => {
+                    if (e.round === 1)
+                        out.gathered = byId('neighbour').pendingAccumulators[0]?.accumulated ?? -1;
+                })
+        );
+        const { idOf } = mirrorBoard({ caster: [demolisher], other: [bombed, neighbour] }, side);
+        out.splash =
+            result.rounds[0].perTargetDealt?.[idOf('demolisher')]?.[idOf('neighbour')] ?? 0;
+        return out;
+    };
+    for (const side of SIDES) {
+        it(`${side}-side: the splash lands on the holder and is not gathered`, () => {
+            const m = measure(side);
+            // Non-vacuity: the splash really hit the Echoing Burst's holder.
+            expect(m.splash).toBeGreaterThan(0);
+            expect(m.gathered).toBe(0);
         });
     }
 });
