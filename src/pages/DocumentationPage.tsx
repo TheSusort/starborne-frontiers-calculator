@@ -3059,8 +3059,9 @@ const DocumentationPage: React.FC = () => {
                                         itself), counts every damage-over-time stack as a debuff:
                                         one &ldquo;2 stacks of Corrosion&rdquo; application is two
                                         debuffs. A count of damage-over-time effects (Anemone,
-                                        Snakeroot) counts each stack too: Snakeroot&apos;s passive
-                                        is its own 120% hit on an enemy for every 4th
+                                        Snakeroot) counts each stack too, but never a Bomb, which is
+                                        a debuff and not a damage-over-time effect. Snakeroot&apos;s
+                                        passive is its own 120% hit on an enemy for every 4th
                                         damage-over-time stack inflicted on that enemy during the
                                         fight, from any ship. Stacks that expire or are cleansed
                                         still count, and resisted stacks do not. Each stack also
@@ -3097,18 +3098,21 @@ const DocumentationPage: React.FC = () => {
                                         or more debuffs&rdquo;, and so do Amartya&apos;s 2 Exposed
                                         stacks plus Crocus&apos;s own Corrosion. Cheat Death wipes
                                         Defense Shred like any other debuff. Every DoT stack, Bomb
-                                        and Echoing Burst is a debuff too: debuff extensions,
-                                        cleanses, duration cuts, debuff counts and Cheat Death all
-                                        treat them that way. A Bomb removed by a cleanse or Cheat
-                                        Death never detonates, but a Bomb whose countdown a duration
-                                        cut drives to 0 does. An Echoing Burst removed by a cleanse,
-                                        a cut to 0 or Cheat Death never bursts. Nyxen&apos;s
-                                        cleanses take only Bombs or only damage-over-time effects,
-                                        as written, newest first. Heliodor&apos;s and
-                                        Pestilence&apos;s cut to the duration of all debuffs
-                                        shortens every damage-over-time effect and Echoing Burst
-                                        too; one cut to 0 turns ends without ticking again.
-                                        Reactions to an enemy cleansing a debuff (Pestilence,
+                                        and Echoing Burst is a debuff too: debuff extensions such as
+                                        Lev&apos;s, cleanses, duration cuts, debuff counts and Cheat
+                                        Death all treat them that way. A Bomb or Echoing Burst is
+                                        not a damage-over-time effect, so Provider&apos;s extension
+                                        of damage-over-time debuffs leaves them alone; an Echoing
+                                        Burst is a Bomb-type debuff. A Bomb or Echoing Burst removed
+                                        by a cleanse or Cheat Death never detonates, but one whose
+                                        duration a cut drives to 0 detonates at once. Nyxen&apos;s
+                                        Bomb cleanse takes Bombs and Echoing Burst; her
+                                        damage-over-time cleanse takes only Corrosion, Inferno and
+                                        other DoTs, never a Bomb or Echoing Burst; both take the
+                                        newest first. Heliodor&apos;s and Pestilence&apos;s cut to
+                                        the duration of all debuffs shortens every DoT, Bomb and
+                                        Echoing Burst too; a DoT cut to 0 turns ends without ticking
+                                        again. Reactions to an enemy cleansing a debuff (Pestilence,
                                         Larkspur, Grif, Arum, Yarrow) also hear the cleanses an
                                         enemy&apos;s passive performs (Nuqtu, Purifier, AEGIS,
                                         Hermes, Howler), but not a duration cut; a cleanse that such
@@ -3178,7 +3182,7 @@ const DocumentationPage: React.FC = () => {
                                         shield, Warden lands its extra debuff, once per enemy, and
                                         Laika gains a shield per enemy stripped. A Stasis the skill
                                         lands is not shortened by that same hit. Damage over time
-                                        (Corrosion, Inferno, Bombs) spreads the same way: every
+                                        (Corrosion, Inferno) and Bombs spread the same way: every
                                         enemy hit gets its own stacks, and a Bomb uses the
                                         attacker&apos;s affinity against that enemy. Crits are per
                                         enemy too: Wisteria&apos;s crit Inferno and Valerian&apos;s
@@ -4527,8 +4531,8 @@ const DocumentationPage: React.FC = () => {
                                     <li>
                                         Pin a ship to open a per-round detail card with its full
                                         breakdown for that round, including its active buffs and
-                                        debuffs — Damage over Time effects (Corrosion, Inferno,
-                                        Bomb, and converted-damage DoTs) are listed among the
+                                        debuffs — Damage over Time effects (Corrosion, Inferno, and
+                                        converted-damage DoTs) and Bombs are listed among the
                                         debuffs
                                     </li>
                                     <li>

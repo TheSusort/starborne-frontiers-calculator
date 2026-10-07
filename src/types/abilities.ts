@@ -936,12 +936,13 @@ export type AbilityConfig =
     // here since there is only one landing behavior for this ability (unlike 'debuff', which
     // supports both 'inflict' and 'apply').
     | { type: 'bomb-countdown-reduce'; turns: number }
-    // `scope`: 'active'/undefined extends ALL standing DoT entries, Bombs and Echoing Burst
-    // accumulators (Provider's "all damage over time debuffs are extended"; default +
-    // back-compat for stored configs). 'inflicted' extends ONLY the ones this cast just applied
-    // (Valerian's "the newly inflicted Corrosion by 1 turn"). `dotType` narrows the extension to
-    // the one DoT family the text names (Valerian/Wisteria: 'corrosion'); absent → every entry
-    // in scope.
+    // `scope`: 'active'/undefined extends ALL standing Corrosion, Inferno and generic DoT entries
+    // (Provider's "all damage over time debuffs are extended"; default + back-compat for stored
+    // configs). 'inflicted' extends ONLY the ones this cast just applied (Valerian's "the newly
+    // inflicted Corrosion by 1 turn"). A Bomb or Echoing Burst is not a damage-over-time effect
+    // and is never extended here (`dotEntriesOf` in combat/state.ts — owner ruling R112).
+    // `dotType` narrows the extension to the one DoT family the text names (Valerian/Wisteria:
+    // 'corrosion'); absent → every DoT entry in scope.
     | {
           type: 'extend-dot';
           turns: number;

@@ -626,7 +626,8 @@ export type CombatEvent =
     /** #345: an accumulate-then-detonate container (`PendingAccumulator` — Echoing Burst, the
      *  only such effect in the corpus) reached the end of its countdown and burst on its holder.
      *  ONE event per detonating entry, emitted from `processAccumulators` beside the burst's
-     *  `creditDetonation`, mirroring `processBombs`/`emitBombDetonated`.
+     *  `creditDetonation`, mirroring `processBombs`/`emitBombDetonated` — and from
+     *  `reduceAccumulatorsOnVictim` when a duration cut drives one to 0 (owner ruling R113).
      *
      *  Deliberately NOT a widening of `bomb-detonated`. An Echoing Burst is not a Bomb DoT (see
      *  `audit/classes.ts`), and both of that event's listeners are Bomb-specific by their own
@@ -639,7 +640,7 @@ export type CombatEvent =
      *  Echoing Burst this is — the field the APPLIER-scoped `on-own-echoing-burst-detonated`
      *  listener keys off. `victimId` = the actor it detonated ON (the holder, which is who takes
      *  the damage). `damage` = the realized payout, `accumulated × pct/100`. There is no
-     *  `detonatorId` counterpart: a timed expiry is nobody's action.
+     *  `detonatorId` counterpart: no listener asks who forced an Echoing Burst to burst.
      *
      *  ⚠️ The emit carries no effect NAME (`PendingAccumulator` stores none), so if a second
      *  accumulate-detonate effect is ever modelled, an owner's `on-own-echoing-burst-detonated`

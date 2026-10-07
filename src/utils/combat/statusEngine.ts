@@ -366,7 +366,8 @@ export interface StatusEngine {
     /** Reduce the duration of ONE debuff on `actorId` by `turns`, picked at RANDOM (owner ruling
      *  R35, Warpstrike's "reduces a random active debuff's duration by 1 turn"). The pool is every
      *  removable timed debuff in the actor's per-victim enemy store plus `extra` — its DoT and Bomb
-     *  stacks, one candidate per stack (`dotDurationCutCandidates`, `bombDurationCutCandidates`).
+     *  stacks, one candidate per stack, and its Echoing Bursts (`dotDurationCutCandidates`,
+     *  `accumulatorDurationCutCandidates`, `bombDurationCutCandidates`).
      *  'recurring'/'permanent' and UNREMOVABLE_STATUSES are skipped (consistent with cleanse); a
      *  named debuff reduced to <= 0 is removed (expired). The pool is ordered newest-applied first
      *  and `draw` (uniform in [0, 1)) indexes it; a one-candidate pool takes no draw. Returns 1 if

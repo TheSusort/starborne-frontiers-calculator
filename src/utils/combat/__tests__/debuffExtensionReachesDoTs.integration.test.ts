@@ -1,9 +1,11 @@
 /**
- * Owner ruling R109: DoTs, Bombs and Echoing Burst accumulators are debuffs in every sense, so
- * every debuff-duration extension reaches them — Lev's crit "all hit enemies have their debuffs
- * extended", Provider's "all damage over time debuffs are extended", and the inflicted-scope
- * extensions (Valerian, Asphyxiator) over what the cast just applied. Unremovable Acidic Decay is
- * extended too: unremovable is not frozen.
+ * Owner rulings R109 and R112: DoTs, Bombs and Echoing Burst accumulators are debuffs in every
+ * sense, so every DEBUFF-duration extension reaches all three — Lev's crit "all hit enemies have
+ * their debuffs extended" and Asphyxiator's inflicted-scope extension over what the cast just
+ * applied. A Bomb or Echoing Burst is not a damage-over-time effect, so a DoT-duration extension
+ * (Provider's "all damage over time debuffs are extended", an inflicted-scope `extend-dot`)
+ * reaches Corrosion, Inferno and generic DoTs alone. Unremovable Acidic Decay is extended too:
+ * unremovable is not frozen.
  *
  * Harness: one direct `runPlayerTurn` cast with hand-built runtimes (the `extendStatusCastPath`
  * shape). The turn's loose DoT containers are the bound victim's OWN arrays, exactly as the
@@ -247,7 +249,7 @@ describe("R109: Lev's crit debuff extension reaches every DoT, Bomb and accumula
     });
 });
 
-describe("R109: Provider's DoT extension reaches generic DoTs and Bombs", () => {
+describe("R112: Provider's DoT extension reaches every DoT but no Bomb or Echoing Burst", () => {
     const providerExtend: Ability = {
         id: 'provider-extend-dot',
         type: 'extend-dot',
@@ -257,21 +259,26 @@ describe("R109: Provider's DoT extension reaches generic DoTs and Bombs", () => 
         config: { type: 'extend-dot', turns: 1, scope: 'active' },
     };
 
-    it('"all damage over time debuffs are extended by 1 turn" grows every DoT, Bomb and Echoing Burst container', () => {
-        const runtime = makeRuntime('provider', {
-            slots: [{ slot: 'charged', abilities: [providerExtend] }],
+    for (const casterSide of ['player', 'enemy'] as const) {
+        it(`${casterSide}-side: "all damage over time debuffs are extended by 1 turn" grows Corrosion, Inferno and Acidic Decay; the Bomb and Echoing Burst keep theirs`, () => {
+            const runtime = makeRuntime(
+                'provider',
+                { slots: [{ slot: 'charged', abilities: [providerExtend] }] },
+                { side: casterSide }
+            );
+            const statusEngine = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+            statusEngine.beginRound(1);
+            const victimSide = casterSide === 'player' ? 'enemy' : 'player';
+            const victim = makeLoadedVictim('victim', victimSide, statusEngine);
+            runPlayerTurn(makeArgs(runtime, victim, statusEngine));
+            expect(durations(statusEngine, victim)).toEqual({
+                ...UNMOVED,
+                corrosion: 2,
+                inferno: 2,
+                acidicDecay: 3,
+            });
         });
-        const statusEngine = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
-        statusEngine.beginRound(1);
-        const victim = makeLoadedVictim('victim', 'enemy', statusEngine);
-        runPlayerTurn(makeArgs(runtime, victim, statusEngine));
-        const after = durations(statusEngine, victim);
-        expect(after.acidicDecay).toBe(3);
-        expect(after.bomb).toBe(2);
-        expect(after.accumulator).toBe(2);
-        expect(after.corrosion).toBe(2);
-        expect(after.inferno).toBe(2);
-    });
+    }
 });
 
 describe("R109: Lev's extension reaches a covered enemy's DoTs, not only the aimed one's", () => {
@@ -295,10 +302,19 @@ describe("R109: Lev's extension reaches a covered enemy's DoTs, not only the aim
 });
 
 /**
- * Inflicted scope: the cast applies a Bomb (countdown 2) and an Echoing Burst (2 rounds) on top of
- * the victim's standing load. The extension grows only what this cast applied.
+ * Inflicted scope: the cast applies a Corrosion (2 turns), a Bomb (countdown 2) and an Echoing
+ * Burst (2 rounds) on top of the victim's standing load. Each extension grows only what this cast
+ * applied: Asphyxiator's debuff extension grows all three, a DoT extension the Corrosion alone.
  */
-describe('R109: inflicted-scope extensions reach the Bomb and Echoing Burst the cast applied', () => {
+describe('R109/R112: inflicted-scope extensions over what the cast applied', () => {
+    const corrosionClause: Ability = {
+        id: 'cast-corrosion',
+        type: 'dot',
+        target: 'enemy',
+        trigger: 'on-cast',
+        conditions: [],
+        config: { type: 'dot', dotType: 'corrosion', tier: 6, stacks: 1, duration: 2 },
+    };
     const bombClause: Ability = {
         id: 'cast-bomb',
         type: 'dot',
@@ -335,7 +351,14 @@ describe('R109: inflicted-scope extensions reach the Bomb and Echoing Burst the 
     const castWith = (extend: Ability) => {
         const runtime = makeRuntime(
             'caster',
-            { slots: [{ slot: 'charged', abilities: [bombClause, echoClause, extend] }] },
+            {
+                slots: [
+                    {
+                        slot: 'charged',
+                        abilities: [corrosionClause, bombClause, echoClause, extend],
+                    },
+                ],
+            },
             { chargedCritGate: () => true }
         );
         const statusEngine = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
@@ -345,22 +368,31 @@ describe('R109: inflicted-scope extensions reach the Bomb and Echoing Burst the 
         return victim;
     };
 
-    for (const [name, extend] of [
-        ['family-less inflicted extend-dot', familylessExtend],
-        ['Asphyxiator extend-status', asphyxiatorExtend],
-    ] as const) {
-        it(`${name}: the fresh Bomb and Echoing Burst grow, the standing ones do not`, () => {
-            const v = castWith(extend);
-            // Instrument: the cast landed its Bomb and its Echoing Burst.
-            expect(v.pendingBombs).toHaveLength(2);
-            expect(v.pendingAccumulators).toHaveLength(2);
-            expect(v.pendingBombs.map((b) => b.countdown)).toEqual([1, 3]);
-            expect(v.pendingAccumulators.map((a) => a.roundsRemaining)).toEqual([1, 3]);
-            // The standing DoTs are not this cast's.
-            expect(v.genericDoTEntries[0].remainingRounds).toBe(2);
-            expect(v.corrosionEntries[0].remainingRounds).toBe(1);
-        });
-    }
+    const freshLanded = (v: CombatActor) => {
+        // Instrument: the cast landed its Corrosion, Bomb and Echoing Burst.
+        expect(v.corrosionEntries).toHaveLength(2);
+        expect(v.pendingBombs).toHaveLength(2);
+        expect(v.pendingAccumulators).toHaveLength(2);
+        // The standing DoTs are not this cast's.
+        expect(v.genericDoTEntries[0].remainingRounds).toBe(2);
+        expect(v.corrosionEntries[0].remainingRounds).toBe(1);
+    };
+
+    it('Asphyxiator extend-status: the fresh Corrosion, Bomb and Echoing Burst grow, the standing ones do not', () => {
+        const v = castWith(asphyxiatorExtend);
+        freshLanded(v);
+        expect(v.corrosionEntries[1].remainingRounds).toBe(3);
+        expect(v.pendingBombs.map((b) => b.countdown)).toEqual([1, 3]);
+        expect(v.pendingAccumulators.map((a) => a.roundsRemaining)).toEqual([1, 3]);
+    });
+
+    it('family-less inflicted extend-dot: the fresh Corrosion grows; the fresh Bomb and Echoing Burst do not', () => {
+        const v = castWith(familylessExtend);
+        freshLanded(v);
+        expect(v.corrosionEntries[1].remainingRounds).toBe(3);
+        expect(v.pendingBombs.map((b) => b.countdown)).toEqual([1, 2]);
+        expect(v.pendingAccumulators.map((a) => a.roundsRemaining)).toEqual([1, 2]);
+    });
 });
 
 /** A full-refit Ship carrying a docs/ship-skills.csv record's texts. */

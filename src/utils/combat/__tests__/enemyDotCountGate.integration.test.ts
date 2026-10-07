@@ -1,7 +1,8 @@
 /**
  * SP-D engine population — Anemone's charged-skill Taunt gate ("If the primary enemy has 3
  * or more Damage over Time effects, this Unit gains Taunt for 1 turn"), live-derived from the
- * actual per-target DoT entry counts (corrosion + inferno + bomb).
+ * actual per-target DoT entry counts (corrosion + inferno + generic). A Bomb is a debuff but not
+ * a damage-over-time effect (owner ruling R112), so it is not counted.
  *
  * Uses Anemone's REAL production-parsed charged-slot abilities (built via `buildShipAbilities`
  * on her charge_skill_text, in old-corpus wording) so the `enemy-dot-count` condition
@@ -113,6 +114,10 @@ describe('enemy-dot-count engine gate — Anemone charged-skill Taunt (player si
         expect(tauntGranted(['corrosion', 'inferno', 'bomb'])).toBe(true);
     });
 
+    it('a Bomb is not a DoT effect: Inferno + Bomb + her Corrosion III = 2 → Taunt is NOT granted', () => {
+        expect(tauntGranted(['inferno', 'bomb'])).toBe(false);
+    });
+
     it('target carries 2 pre-existing DoT entries + her own Corrosion III → Taunt IS granted', () => {
         expect(tauntGranted(['corrosion', 'inferno'])).toBe(true);
     });
@@ -184,6 +189,10 @@ describe('enemy-dot-count engine gate — Anemone charged-skill Taunt (enemy sid
 
     it('an ENEMY Anemone whose target carries 3 pre-existing DoT entries IS granted Taunt', () => {
         expect(enemyTauntGranted(['corrosion', 'inferno', 'bomb'])).toBe(true);
+    });
+
+    it('an ENEMY Anemone whose target carries Inferno + Bomb (+ her Corrosion III) is NOT granted Taunt', () => {
+        expect(enemyTauntGranted(['inferno', 'bomb'])).toBe(false);
     });
 
     it('an ENEMY Anemone whose target carries 2 pre-existing DoT entries + her Corrosion III IS granted Taunt', () => {

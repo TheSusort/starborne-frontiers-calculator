@@ -499,9 +499,10 @@ describe('Echoing Burst accumulators are debuffs in the DoT-container helpers (R
         ],
     });
 
-    it('counts one debuff per accumulator, but not as a damage-over-time effect', () => {
+    it('counts one debuff per accumulator and Bomb stack, neither a damage-over-time effect', () => {
         const h = holder();
-        expect(carriedDotStacks(h)).toBe(2 + 1 + 1);
+        // Corrosion 2 + Acidic Decay 1; the Bomb and the accumulator are not DoT effects (R112).
+        expect(carriedDotStacks(h)).toBe(2 + 1);
         expect(carriedDebuffEntries(h)).toBe(2 + 1 + 1 + 1);
     });
 
@@ -513,27 +514,26 @@ describe('Echoing Burst accumulators are debuffs in the DoT-container helpers (R
         expect(h.pendingAccumulators).toEqual([]);
     });
 
-    it("a 'dot' cleanse offers it; a 'bomb' cleanse does not", () => {
-        expect(dotCleanseCandidates(holder(), 'dot').some((c) => c.seq === 3)).toBe(true);
-        expect(dotCleanseCandidates(holder(), 'bomb').map((c) => c.seq)).toEqual([2]);
+    it("a 'bomb' cleanse offers it next to the Bomb; a 'dot' cleanse offers neither (R112)", () => {
+        expect(
+            dotCleanseCandidates(holder(), 'bomb')
+                .map((c) => c.seq)
+                .sort()
+        ).toEqual([2, 3]);
+        // Corrosion's 2 stacks only: neither the Bomb (seq 2) nor the accumulator (seq 3).
+        expect(dotCleanseCandidates(holder(), 'dot').map((c) => c.seq)).toEqual([1, 1]);
     });
 
-    it('a single random cut offers it; a cut to 0 splices it out', () => {
-        const h = holder();
-        const acc = dotDurationCutCandidates(h).find((c) => c.seq === 3);
-        expect(acc).toBeDefined();
-        acc?.cut(1);
-        expect(h.pendingAccumulators[0].roundsRemaining).toBe(1);
-        acc?.cut(1);
-        expect(h.pendingAccumulators).toEqual([]);
+    it('the DoT half of a single random cut offers no accumulator (R112)', () => {
+        expect(dotDurationCutCandidates(holder()).map((c) => c.seq)).toEqual([1, 1]);
     });
 
-    it('an all-debuffs shorten reaches it, counts it once, and drops it at 0', () => {
+    it('the DoT half of an all-debuffs shorten leaves accumulators to their own cut (R112)', () => {
         const h = holder();
-        // Corrosion's 2 stacks + the accumulator; Acidic Decay is unremovable, Bombs are cut
-        // elsewhere.
-        expect(shortenDotDurations(h, 2)).toBe(2 + 1);
-        expect(h.pendingAccumulators).toEqual([]);
+        // Corrosion's 2 stacks; Acidic Decay is unremovable; Bombs and accumulators are cut by
+        // their own detonating helpers.
+        expect(shortenDotDurations(h, 2)).toBe(2);
+        expect(h.pendingAccumulators[0].roundsRemaining).toBe(2);
         expect(h.pendingBombs[0].countdown).toBe(3);
         expect(h.genericDoTEntries[0].remainingRounds).toBe(3);
     });

@@ -1,19 +1,22 @@
 /**
- * Echoing Burst accumulators and Bombs are debuffs in every sense (owner ruling R109):
+ * Echoing Burst accumulators and Bombs are debuffs in every sense (owner ruling R109), and an
+ * Echoing Burst is a debuff of the Bomb type, not a damage-over-time effect (R112):
  *
  *  - an Echoing Burst a ship holds is ONE debuff in its debuff count — Lev's "additional 15% for
  *    each debuff on the enemy" counts it next to a Defense Down II;
- *  - a cleanse removes it, and the stored damage is lost — no burst;
- *  - a duration cut on "all active debuffs" (Heliodor) that brings it to 0 removes it without a
- *    burst;
+ *  - a cleanse removes it, and the stored damage is lost — no burst. A Bomb-typed cleanse (Nyxen's
+ *    "cleanses 2 Bomb") takes it; a damage-over-time-typed one ("cleanses 2 damage over time
+ *    debuffs") does not;
+ *  - a duration cut on "all active debuffs" (Heliodor) that brings it to 0 bursts it there and
+ *    then, paying what it has gathered (R113);
  *  - Cheat Death wipes Bombs and Echoing Burst along with the other DoTs; an unremovable Acidic
  *    Decay survives.
  *
  * The accumulator, Bomb and Acidic Decay are seeded onto the holder before anyone acts. The
  * holder is the slowest ship, so its own turn — where a held accumulator bursts — comes after the
- * cleanse / cut. Each "no burst" case is paired with a control board that shows the burst firing.
- * Real parsed kits (buildTraceShip on docs/ship-skills.csv, refit 4). Every case runs with the
- * caster team on both sides.
+ * cleanse / cut, unless the holder is the cleanser itself. Each case is paired with a control
+ * board. Real parsed kits (buildTraceShip on docs/ship-skills.csv, refit 4). Every case runs with
+ * the caster team on both sides.
  */
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { runCombat } from '../engine';
@@ -244,7 +247,67 @@ describe('a cleanse of 1 debuff removes an Echoing Burst without a burst', () =>
     }
 });
 
-describe("Heliodor's 'reduces the duration of all active debuffs' removes a 1-round Echoing Burst", () => {
+describe("Nyxen's typed cleanse: 'cleanses 2 Bomb' takes a Bomb and an Echoing Burst, 'cleanses 2 damage over time debuffs' neither", () => {
+    // Nyxen holds one Bomb and one Echoing Burst and acts first; her cleanse is self-targeted.
+    // The charged skill's "damage over time debuffs" cleanse is mounted on the active slot so it
+    // fires on turn 1.
+    const nyxen = (skills: ShipSkills): ShipSpec => ({
+        id: 'nyxen',
+        position: 'M4',
+        speed: 300,
+        hp: 1e9,
+        skills,
+    });
+    const valk: ShipSpec = { id: 'valk', position: 'M4', speed: 100, hp: 1e9 };
+    const asActive = (slots: ReturnType<typeof realSlots>) =>
+        slots.map((sl) => ({ ...sl, slot: 'active' as const }));
+    interface Measured {
+        bursts: number[];
+        held: number;
+        bombs: number;
+    }
+    const measure = (side: 'player' | 'enemy', skills: ShipSkills): Measured => {
+        const out: Measured = { bursts: [], held: -1, bombs: -1 };
+        runBoard(
+            { caster: [nyxen(skills)], other: [valk] },
+            side,
+            (byId, idOf) => {
+                byId('nyxen').pendingAccumulators.push(accumulator(idOf('valk'), 2));
+                byId('nyxen').pendingBombs.push(bomb(idOf('valk')));
+            },
+            (bus, byId, idOf) => {
+                burstsOn(bus, idOf, 'nyxen', out.bursts);
+                bus.on('turn-ended', (e: Extract<CombatEvent, { type: 'turn-ended' }>) => {
+                    if (e.actorId !== idOf('nyxen') || e.round !== 1) return;
+                    out.held = byId('nyxen').pendingAccumulators.length;
+                    out.bombs = byId('nyxen').pendingBombs.length;
+                });
+            }
+        );
+        return out;
+    };
+    for (const side of SIDES) {
+        it(`${side}-side: control — no cleanse, the Echoing Burst is still held after her turn`, () => {
+            expect(measure(side, NO_SKILLS)).toEqual({ bursts: [], held: 1, bombs: 1 });
+        });
+        it(`${side}-side: "cleanses 2 Bomb" removes the Bomb and the Echoing Burst`, () => {
+            expect(measure(side, { slots: realSlots('Nyxen', ['active']) })).toEqual({
+                bursts: [],
+                held: 0,
+                bombs: 0,
+            });
+        });
+        it(`${side}-side: "cleanses 2 damage over time debuffs" leaves the Bomb and the Echoing Burst`, () => {
+            expect(measure(side, { slots: asActive(realSlots('Nyxen', ['charged'])) })).toEqual({
+                bursts: [],
+                held: 1,
+                bombs: 1,
+            });
+        });
+    }
+});
+
+describe("Heliodor's 'reduces the duration of all active debuffs' bursts a 1-round Echoing Burst", () => {
     const heliodor = (skills: ShipSkills): ShipSpec => ({
         id: 'heliodor',
         position: 'M4',
@@ -257,22 +320,70 @@ describe("Heliodor's 'reduces the duration of all active debuffs' removes a 1-ro
     const passive = (): ShipSkills => ({
         slots: [{ slot: 'active', abilities: [] }, ...realSlots('Heliodor', ['passive'])],
     });
-    const measure = (side: 'player' | 'enemy', skills: ShipSkills): number[] => {
-        const bursts: number[] = [];
+    interface Burst {
+        round: number;
+        damage: number;
+        /** The burst came before the holder's own round-1 turn started. */
+        beforeHolderTurn: boolean;
+    }
+    interface Measured {
+        bursts: Burst[];
+        /** HP the holder had lost when Heliodor's duration cut finished — read before her
+         *  passive's repair half lands (-1: no cut reached the holder). */
+        hpLostAtCut: number;
+    }
+    const measure = (side: 'player' | 'enemy', skills: ShipSkills): Measured => {
+        const bursts: Burst[] = [];
+        let hpLostAtCut = -1;
+        let holderTurnStarted = false;
+        let hpBefore = 0;
         runBoard(
             { caster: [heliodor(skills), ally], other: [hitter] },
             side,
-            (byId, idOf) => byId('ally').pendingAccumulators.push(accumulator(idOf('hitter'), 1)),
-            (bus, _byId, idOf) => burstsOn(bus, idOf, 'ally', bursts)
+            (byId, idOf) => {
+                byId('ally').pendingAccumulators.push(accumulator(idOf('hitter'), 1));
+                hpBefore = byId('ally').currentHp;
+            },
+            (bus, byId, idOf) => {
+                bus.on('turn-started', (e: Extract<CombatEvent, { type: 'turn-started' }>) => {
+                    if (e.actorId === idOf('ally') && e.round === 1) holderTurnStarted = true;
+                });
+                bus.on(
+                    'reactive-cleanse-performed',
+                    (e: Extract<CombatEvent, { type: 'reactive-cleanse-performed' }>) => {
+                        if (e.mode !== 'reduce-duration' || hpLostAtCut >= 0) return;
+                        if (!e.perTarget.some((t) => t.targetId === idOf('ally'))) return;
+                        hpLostAtCut = hpBefore - byId('ally').currentHp;
+                    }
+                );
+                bus.on(
+                    'accumulator-detonated',
+                    (e: Extract<CombatEvent, { type: 'accumulator-detonated' }>) => {
+                        if (e.victimId !== idOf('ally')) return;
+                        bursts.push({
+                            round: e.round,
+                            damage: e.damage,
+                            beforeHolderTurn: !holderTurnStarted,
+                        });
+                    }
+                );
+            }
         );
-        return bursts;
+        return { bursts, hpLostAtCut };
     };
     for (const side of SIDES) {
         it(`${side}-side: control — no passive, the Echoing Burst bursts on the ally's turn`, () => {
-            expect(measure(side, NO_SKILLS)).toEqual([1]);
+            const { bursts, hpLostAtCut } = measure(side, NO_SKILLS);
+            expect(bursts.map((b) => [b.round, b.beforeHolderTurn])).toEqual([[1, false]]);
+            expect(hpLostAtCut).toBe(-1);
         });
-        it(`${side}-side: Heliodor is hit → the ally's Echoing Burst is cut to 0, no burst`, () => {
-            expect(measure(side, passive())).toEqual([]);
+        it(`${side}-side: Heliodor is hit → the ally's Echoing Burst is cut to 0 and bursts at once`, () => {
+            // The seeded accumulator holds 50,000 at 100%: the cut bursts it for exactly that,
+            // before the ally's own turn would have gathered the round's damage into it.
+            expect(measure(side, passive())).toEqual({
+                bursts: [{ round: 1, damage: 50_000, beforeHolderTurn: true }],
+                hpLostAtCut: 50_000,
+            });
         });
     }
 });

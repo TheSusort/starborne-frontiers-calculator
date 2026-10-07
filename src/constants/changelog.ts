@@ -7,8 +7,12 @@ export const CURRENT_VERSION = '1.75.0';
 // bumped version whose entries are still unreleased shows users a what's-new dialog listing
 // nothing. Do it by hand only if that script cannot.
 export const UNRELEASED_CHANGES: string[] = [
-    'Combat simulator: debuff extensions now also lengthen DoTs, Bombs and Echoing Burst.',
-    'Combat simulator: Echoing Burst now counts, cleanses and shortens like any other debuff.',
+    "Combat simulator: Lev's debuff extension now also lengthens DoTs, Bombs and Echoing Burst.",
+    "Combat simulator: Provider's DoT extension now also lengthens Acidic Decay and converted DoTs.",
+    'Combat simulator: Echoing Burst is now a Bomb-type debuff for counts and cleanses.',
+    'Combat simulator: Echoing Burst cut to 0 turns now bursts immediately.',
+    'Combat simulator: Bombs no longer count as damage-over-time effects or Snakeroot stacks.',
+    "Combat simulator: Nyxen's damage-over-time cleanse no longer removes Bombs or Echoing Burst.",
     'Combat simulator: Cheat Death now also clears Bombs and Echoing Burst.',
     "Combat simulator: Curator's active now hits every enemy as a primary target.",
     'Combat simulator: Burner set on Curator now applies Inferno to every enemy.',

@@ -1,6 +1,6 @@
 import type { CombatEventBus } from './events';
-import { burstContainerWiped } from './state';
-import type { CombatActor, PendingBomb } from './state';
+import { accumulatorBurstDamage, burstContainerWiped } from './state';
+import type { CombatActor, PendingAccumulator, PendingBomb } from './state';
 import type { DurationCutCandidate } from './statusEngine';
 
 /**
@@ -130,4 +130,76 @@ export function bombDurationCutCandidates(
         }
     }
     return out;
+}
+
+/**
+ * The Echoing Burst twin of `reduceBombsOnVictim`, for the duration cuts that reach every debuff
+ * (Heliodor's / Pestilence's "reduces the duration of all active Debuffs"): takes `turns` off each
+ * accumulator on `victim` (or only the `only` one). One driven to 0 BURSTS there and then, as its
+ * natural expiry does (owner ruling R113): it pays `accumulatorBurstDamage` — what it has gathered
+ * so far, since a cut is not the holder's turn start that gathers the round's damage — announced
+ * as an `accumulator-detonated` with the applier as `actorId`, and lands through
+ * `forceDetonate`, the engine's per-victim detonation sink credited to that applier. Absent (no
+ * engine scope), a bare shield-then-HP debit. The walk stops once a burst's Cheat Death wipes
+ * the container (`burstContainerWiped`). Returns the accumulators shortened; a non-positive /
+ * non-finite `turns` → 0.
+ */
+export function reduceAccumulatorsOnVictim(
+    victim: CombatActor,
+    turns: number,
+    round: number,
+    bus: CombatEventBus,
+    forceDetonate?: (victim: CombatActor, sourceId: string, damage: number) => void,
+    // Shrink this one accumulator only (`accumulatorDurationCutCandidates`); absent → all.
+    only?: PendingAccumulator
+): number {
+    const delta = Number.isFinite(turns) ? Math.trunc(turns) : 0;
+    if (delta <= 0) return 0;
+    const accs = victim.pendingAccumulators;
+    let shrunk = 0;
+    for (let i = accs.length - 1; i >= 0; i--) {
+        if (burstContainerWiped(victim, accs, victim.pendingAccumulators)) break;
+        const acc = accs[i];
+        if (only !== undefined && acc !== only) continue;
+        shrunk += 1;
+        acc.roundsRemaining -= delta;
+        if (acc.roundsRemaining > 0) continue;
+        const damage = accumulatorBurstDamage(acc);
+        bus.emit({
+            type: 'accumulator-detonated',
+            actorId: acc.sourceId,
+            victimId: victim.id,
+            round,
+            damage,
+        });
+        if (forceDetonate) {
+            forceDetonate(victim, acc.sourceId, damage);
+        } else {
+            const shieldDrain = Math.min(victim.shieldPool, damage);
+            victim.shieldPool -= shieldDrain;
+            victim.currentHp = Math.max(0, victim.currentHp - (damage - shieldDrain));
+        }
+        accs.splice(i, 1);
+    }
+    return shrunk;
+}
+
+/**
+ * The Echoing Burst part of a single random duration cut's pool (Warpstrike, owner ruling R35):
+ * one candidate per accumulator on `victim`, dated by its `appliedSeq` (absent → 0). The cut goes
+ * through `reduceAccumulatorsOnVictim` for that accumulator alone, so one driven to 0 bursts
+ * (owner ruling R113).
+ */
+export function accumulatorDurationCutCandidates(
+    victim: CombatActor,
+    round: number,
+    bus: CombatEventBus,
+    forceDetonate?: (victim: CombatActor, sourceId: string, damage: number) => void
+): DurationCutCandidate[] {
+    return victim.pendingAccumulators.map((acc) => ({
+        seq: acc.appliedSeq ?? 0,
+        cut: (turns) => {
+            reduceAccumulatorsOnVictim(victim, turns, round, bus, forceDetonate, acc);
+        },
+    }));
 }

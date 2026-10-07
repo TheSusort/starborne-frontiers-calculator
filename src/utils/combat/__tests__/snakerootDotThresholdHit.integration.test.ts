@@ -38,9 +38,9 @@ beforeAll(() => {
 });
 beforeEach(() => setupKeyedRng(43));
 
-/** A seeder's active: `stacks` stacks of Corrosion I (`duration` turns, default 3), after a 2-turn
- *  Stasis when `stasis` is set. */
-const corrosionKit = (stacks: number, stasis = false, duration = 3): ShipSkills => ({
+/** A seeder's active: `stacks` stacks of Corrosion I (or Bomb, when `bomb` is set; `duration`
+ *  turns, default 3), after a 2-turn Stasis when `stasis` is set. */
+const corrosionKit = (stacks: number, stasis = false, duration = 3, bomb = false): ShipSkills => ({
     slots: [
         {
             slot: 'active',
@@ -71,7 +71,13 @@ const corrosionKit = (stacks: number, stasis = false, duration = 3): ShipSkills 
                     target: 'enemy',
                     trigger: 'on-cast',
                     conditions: [],
-                    config: { type: 'dot', dotType: 'corrosion', tier: 3, stacks, duration },
+                    config: {
+                        type: 'dot',
+                        dotType: bomb ? 'bomb' : 'corrosion',
+                        tier: 3,
+                        stacks,
+                        duration,
+                    },
                 },
             ],
         },
@@ -99,6 +105,8 @@ interface Seeder {
     stasis?: boolean;
     /** The Corrosion's duration in turns (default 3). */
     duration?: number;
+    /** Inflict Bomb stacks instead of Corrosion. */
+    bomb?: boolean;
 }
 
 const SEEDER_CELLS: Position[] = ['M4', 'T4', 'B4'];
@@ -132,7 +140,7 @@ const run = (
     };
     const allies: BoardUnit[] = seeders.map((s, i) => ({
         id: `seeder-${i}`,
-        kit: corrosionKit(s.stacks, s.stasis, s.duration),
+        kit: corrosionKit(s.stacks, s.stasis, s.duration, s.bomb),
         position: SEEDER_CELLS[i],
         speed: 300 - i * 10,
         attack: 1000,
@@ -194,6 +202,20 @@ describe.each<Placement>(['player', 'enemy'])('Snakeroot on the %s side', (place
 
     it('negative: 3 stacks cross nothing — no hit', () => {
         expect(run(placement, [{ stacks: 3 }]).procs).toEqual({});
+    });
+
+    it('a Bomb is not a damage-over-time effect: 4 Bomb stacks fire no hit', () => {
+        const r = run(placement, [{ stacks: 4, bomb: true }]);
+        // Instrument: the Bomb stacks landed on A.
+        expect(r.aTimeline).toEqual(['L4']);
+        expect(r.procs).toEqual({});
+    });
+
+    it('2 Corrosion then 2 Bomb stacks cross nothing; 2 more Corrosion cross 4', () => {
+        expect(run(placement, [{ stacks: 2 }, { stacks: 2, bomb: true }]).procs).toEqual({});
+        expect(
+            run(placement, [{ stacks: 2 }, { stacks: 2, bomb: true }, { stacks: 2 }]).procs
+        ).toEqual({ a: 1 });
     });
 
     it('3 → 9 crosses 4 and 8: two hits (R43b)', () => {

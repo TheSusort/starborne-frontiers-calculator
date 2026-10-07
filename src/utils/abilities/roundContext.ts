@@ -162,7 +162,7 @@ export function buildRoundContext(state: {
      *  ConditionContext.enemyDotFamilyCounts' own fallback. */
     enemyDotFamilyCounts?: Record<string, number>;
     /** Generic (Voron/Orel absolute-per-tick) DoT stacks — `dotReadings`. Default 0. Folded into
-     *  the bare `enemyDotCount` sum alongside corrosion/inferno/bomb. */
+     *  the bare `enemyDotCount` sum alongside corrosion/inferno. */
     genericStacks?: number;
     /** Echoing Burst accumulators on the unit asked about — `dotReadings`. Default 0. Each is one
      *  debuff in `enemyDebuffCount` (owner ruling R109); not a damage-over-time effect, so not in
@@ -211,15 +211,19 @@ export function buildRoundContext(state: {
     noOpposingVictim?: boolean;
 }): ConditionContext {
     const hasVictim = !state.noOpposingVictim;
-    const dotStacks =
-        state.corrosionStacks + state.infernoStacks + state.bombStacks + (state.genericStacks ?? 0);
+    // A Bomb is a debuff but not a damage-over-time effect (owner ruling R112): its stacks count
+    // in `enemyDebuffCount`, never in `enemyDotCount`.
+    const dotStacks = state.corrosionStacks + state.infernoStacks + (state.genericStacks ?? 0);
     return {
         selfBuffNames: state.selfBuffNames,
         ...(state.selfBuffCount !== undefined ? { selfBuffCount: state.selfBuffCount } : {}),
         // SP-4d: absent (not a fabricated 0) when this round has no opposing victim — see
         // `noOpposingVictim`'s doc above for why the sum alone can't distinguish the two.
         enemyDebuffCount: hasVictim
-            ? state.landedEnemyDebuffCount + dotStacks + (state.accumulatorCount ?? 0)
+            ? state.landedEnemyDebuffCount +
+              dotStacks +
+              state.bombStacks +
+              (state.accumulatorCount ?? 0)
             : undefined,
         effectiveCritRate: state.effectiveCritRate,
         enemyType: state.enemyType,
@@ -251,7 +255,8 @@ export function buildRoundContext(state: {
         selfCritPower: state.selfCritPower ?? 0,
         selfSpeed: state.selfSpeed ?? 0,
         selfCurrentHp: state.selfCurrentHp ?? 0,
-        // SP-D — DoT-ONLY subtotal, the SAME stacks already folded into enemyDebuffCount above.
+        // SP-D — DoT-ONLY subtotal, the SAME stacks already folded into enemyDebuffCount above
+        // (Bombs and Echoing Burst excluded).
         // Deliberately excludes landedEnemyDebuffCount (control/marker debuffs) — that is the
         // whole DoT-ONLY point of this subject vs `enemy-debuff`.
         // SP-4d: absent (not a fabricated 0) when there is no opposing victim — same reasoning as

@@ -83,6 +83,7 @@ import {
     carriedDotStacks,
     carriedDebuffEntries,
     burstContainerWiped,
+    accumulatorBurstDamage,
 } from './state';
 import {
     ActiveBuff,
@@ -1296,7 +1297,7 @@ function processAccumulators(args: {
         acc.accumulated += args.gatheredDirect;
         acc.roundsRemaining -= 1;
         if (acc.roundsRemaining <= 0) {
-            const damage = acc.accumulated * (acc.pct / 100);
+            const damage = accumulatorBurstDamage(acc);
             args.emitAccumulatorDetonated?.(acc.sourceId, damage);
             args.creditDetonation(acc.sourceId, damage);
             accs.splice(i, 1);
@@ -9494,8 +9495,9 @@ export function runCombat(rawInput: CombatEngineInput): {
             }
         };
 
-        // Routes a FORCED bomb detonation (a caster's
-        // countdown-reduce ability driving an existing PendingBomb to <=0, e.g. Lingshe) through
+        // Routes a FORCED detonation (a caster's countdown-reduce ability driving an existing
+        // PendingBomb to <=0, e.g. Lingshe; a duration cut driving a Bomb or an Echoing Burst
+        // accumulator to 0, e.g. Heliodor or Warpstrike — owner ruling R113) through
         // the SAME per-victim `applyVictimDamage` sink a natural countdown-0 burst uses
         // (processBombs' `creditDetonation` — see `applyPositionedTimedBurst` above). This is the
         // ONLY correct way to preserve Barrier full-damage-immunity, the Cheat-Death intercept,

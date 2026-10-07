@@ -58,7 +58,12 @@ import {
     narrowByRecipientFilter,
     allyHpFraction,
 } from './supportRecipients';
-import { bombDurationCutCandidates, reduceBombsOnVictim } from './bombCountdown';
+import {
+    accumulatorDurationCutCandidates,
+    bombDurationCutCandidates,
+    reduceAccumulatorsOnVictim,
+    reduceBombsOnVictim,
+} from './bombCountdown';
 import { liveGateConditions } from './abilityStatusGating';
 import { CombatEvent, CombatEventBus, CombatEventType, ShieldApplyAccumulator } from './events';
 import {
@@ -1366,11 +1371,12 @@ export function registerReactiveListeners(args: {
                     break;
                 }
                 case 'on-enemy-dot-stacks-crossed': {
-                    // VICTIM-scoped, inflictor-agnostic (Snakeroot, R43/R43b/R90): count the DoT
-                    // stacks INFLICTED on each enemy this combat and fire once for every multiple
-                    // of `everyDotStacks` a landing passes (3 → 9 at step 4 is two). The count is
-                    // cumulative — expiry and cleanse never lower it — and only landed stacks reach
-                    // it: a resisted stack emits no landing event. Each enemy is counted on its own.
+                    // VICTIM-scoped, inflictor-agnostic (Snakeroot, R43/R43b/R90/R112): count the
+                    // DoT stacks INFLICTED on each enemy this combat and fire once for every
+                    // multiple of `everyDotStacks` a landing passes (3 → 9 at step 4 is two). The
+                    // count is cumulative — expiry and cleanse never lower it — and only landed
+                    // stacks reach it: a resisted stack emits no landing event. Each enemy is
+                    // counted on its own.
                     const step =
                         ra.ability.config.type === 'damage'
                             ? ra.ability.config.everyDotStacks
@@ -1388,7 +1394,11 @@ export function registerReactiveListeners(args: {
                                 eventCtx: { ...intent.eventCtx, debuffVictimId: targetId },
                             });
                     };
-                    bus.on('dot-applied', (e) => onStacksAdded(e.targetId, e.stacks));
+                    // A Bomb is not a damage-over-time effect (owner ruling R112): its stacks
+                    // never count.
+                    bus.on('dot-applied', (e) => {
+                        if (e.dotType !== 'bomb') onStacksAdded(e.targetId, e.stacks);
+                    });
                     // Toxic Overflow's end-of-round spread adds one Corrosion stack to each
                     // affected ally of the holder, and announces it on this event, not
                     // `dot-applied`.
@@ -2860,13 +2870,15 @@ export interface IntentExecContext {
      *  Mirrors `affinityOf`'s allActorsById source. Optional — absent in unit-test ctxs
      *  that don't exercise convert-dot. */
     actorById?: (actorId: string) => CombatActor | undefined;
-    /** Apply a forced bomb burst against `victim` through the engine's per-victim
-     *  `applyVictimDamage` sink — the same funnel a natural countdown-0 detonation uses, so
+    /** Apply a forced Bomb or Echoing Burst burst against `victim` through the engine's
+     *  per-victim `applyVictimDamage` sink — the same funnel a natural detonation uses, so
      *  Barrier immunity, the Cheat-Death intercept, `recordDestroyed`/`ship-destroyed` and
-     *  incoming-block/Lifeline all apply. `sourceId` is the bomb's ORIGINAL applier (attribution),
+     *  incoming-block/Lifeline all apply. `sourceId` is the ORIGINAL applier (attribution),
      *  never the actor that forced the burst. Consumed by the `reduce-duration` branch, which
-     *  shrinks `PendingBomb.countdown` alongside the statusEngine debuffs (a Bomb is a Debuff).
-     *  Absent (unit-test ctxs) → `reduceBombsOnVictim` falls back to a bare shield-then-HP debit. */
+     *  shrinks `PendingBomb.countdown` and `PendingAccumulator.roundsRemaining` alongside the
+     *  statusEngine debuffs (both are debuffs; one driven to 0 bursts — owner ruling R113).
+     *  Absent (unit-test ctxs) → `reduceBombsOnVictim` / `reduceAccumulatorsOnVictim` fall back to
+     *  a bare shield-then-HP debit. */
     forceDetonateBomb?: (victim: CombatActor, sourceId: string, damage: number) => void;
     /** Resolve ANY actor's ship role (Ship.type) by id, either side — the SAME `roleByActorId` map
      *  (side-agnostic by key) Meatshield's defense-substitution and Graphite's `roleFilter`
@@ -3063,7 +3075,7 @@ export function buildActorConditionContext(
          *  only at the one-time combat-start seed (see seedPassiveTimedStatuses). */
         enemiesHitThisCast?: number;
         /** Generic DoT stacks at drain time (`dotReadings`). Default 0 (no generic DoT tracked
-         *  by this caller). Folded into `enemyDotCount` alongside corrosion/inferno/bomb. */
+         *  by this caller). Folded into `enemyDotCount` alongside corrosion/inferno. */
         genericStacks?: number;
         /** Live per-family DoT stack counts (Belladonna's "3+ Acidic Decay" gate) at
          *  drain time. Default undefined — every family reads 0 via
@@ -3715,9 +3727,9 @@ export function actorDebuffCount(statusEngine: StatusEngine, actor: CombatActor)
  * taken NEWEST APPLIED FIRST across both kinds (owner ruling 2026-10-04: Attack Down and 2
  * Corrosion stacks, "cleanses 1 debuff" → whichever was inflicted last goes). A typed cleanse
  * (`debuffType`, Nyxen's "cleanses 2 Bomb" / "2 damage over time debuffs") skips the named
- * debuffs: `'bomb'` draws on Bomb stacks only, `'dot'` on every DoT stack, Bomb and Echoing
- * Burst accumulator, then takes the newest. `actor` absent (a hand-built ctx without an actor
- * reader) → named debuffs only. Returns how many were removed.
+ * debuffs: `'bomb'` draws on Bomb stacks and Echoing Burst accumulators, `'dot'` on Corrosion,
+ * Inferno and generic DoT stacks only (owner ruling R112), then takes the newest. `actor` absent
+ * (a hand-built ctx without an actor reader) → named debuffs only. Returns how many were removed.
  */
 export function cleanseDebuffs(
     statusEngine: StatusEngine,
@@ -6516,10 +6528,20 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 let n: number;
                 if (cfg.count === 'all') {
                     // Heliodor/Pestilence's "reduces the duration of all active Debuffs … by 1
-                    // turn": every named debuff, and every DoT entry and Echoing Burst accumulator
-                    // (`shortenDotDurations`).
+                    // turn": every named debuff and every DoT entry (`shortenDotDurations`).
                     n = ctx.statusEngine.reduceAllDebuffsDuration(rid, durationTurns);
                     if (victim) n += shortenDotDurations(victim, durationTurns);
+                    // An Echoing Burst is a debuff too, and one driven to 0 bursts there and then
+                    // (owner ruling R113), through the same per-victim sink as the Bomb below.
+                    if (victim) {
+                        n += reduceAccumulatorsOnVictim(
+                            victim,
+                            durationTurns,
+                            ctx.round,
+                            ctx.bus,
+                            ctx.forceDetonateBomb
+                        );
+                    }
                     // A Bomb IS a Debuff, so the shrink reaches it too — and a bomb driven to 0
                     // turns EXPLODES (user-verified 2026-07-31: Heliodor's "-1 turn on all
                     // Debuffs" detonating the Bomb II Ruiner planted on it), via the SAME
@@ -6540,11 +6562,18 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
                     // Warpstrike's "reduces a random active debuff's duration by 1 turn" (owner
                     // ruling R35): ONE debuff, picked at random over the named debuffs, every DoT
                     // and Bomb stack and every Echoing Burst accumulator — see
-                    // `reduceRandomDebuffDuration`. The pick draws from its own keyed sub-stream,
-                    // so it moves no other gate's draws.
+                    // `reduceRandomDebuffDuration`. A Bomb or Echoing Burst cut to 0 detonates
+                    // (owner ruling R113). The pick draws from its own keyed sub-stream, so it
+                    // moves no other gate's draws.
                     const stacks = victim
                         ? [
                               ...dotDurationCutCandidates(victim),
+                              ...accumulatorDurationCutCandidates(
+                                  victim,
+                                  ctx.round,
+                                  ctx.bus,
+                                  ctx.forceDetonateBomb
+                              ),
                               ...bombDurationCutCandidates(
                                   victim,
                                   ctx.round,

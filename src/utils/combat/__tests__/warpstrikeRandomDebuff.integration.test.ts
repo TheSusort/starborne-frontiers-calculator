@@ -5,7 +5,7 @@
  * and DoT stacks alike (Corrosion, Inferno, generic, Bombs), each stack one candidate (R26).
  * Unremovable debuffs (Acidic Decay) are never picked. A picked stack of a multi-stack entry is
  * split off with its shortened duration; a DoT or named status cut to 0 expires without ticking,
- * a Bomb cut to 0 detonates, and an Echoing Burst cut to 0 is removed without bursting (R109).
+ * and a Bomb or Echoing Burst cut to 0 detonates there and then (R113).
  *
  * A plain hitter wears a real legendary Warpstrike (built by the equipment registry) and hits once
  * in a one-round fight. Its debuffs are seeded on it before its turn; every reading is compared
@@ -181,6 +181,7 @@ interface After {
     accumulators: { roundsRemaining: number }[];
     /** Rounds in which an Echoing Burst burst on the wearer. */
     bursts: number[];
+    burstDamage: number[];
 }
 
 const timed = (
@@ -232,6 +233,7 @@ const run = (side: Side, withImplant: boolean, seed: Seed, numRounds = 1): After
         infernoTicks: 0,
         accumulators: [],
         bursts: [],
+        burstDamage: [],
     };
     let engine: StatusEngine | undefined;
     let wearer: CombatActor | undefined;
@@ -255,7 +257,9 @@ const run = (side: Side, withImplant: boolean, seed: Seed, numRounds = 1): After
     bus.on(
         'accumulator-detonated',
         (e: Extract<CombatEvent, { type: 'accumulator-detonated' }>) => {
-            if (e.victimId === w) out.bursts.push(e.round);
+            if (e.victimId !== w) return;
+            out.bursts.push(e.round);
+            out.burstDamage.push(e.damage);
         }
     );
     runCombat({
@@ -399,15 +403,16 @@ for (const [tag, side] of SIDES) {
             expect(cut.forcedDetonations).toBe(1);
         });
 
-        it('an Echoing Burst cut from 1 round left to 0 is removed and never bursts', () => {
+        it('an Echoing Burst cut from 1 round left to 0 bursts at the cut (R113)', () => {
             // Seeded at 2: the wearer's round-1 turn start takes it to 1, the cut to 0. Without
-            // the cut it bursts at the wearer's round-2 turn start.
+            // the cut it bursts at the wearer's round-2 turn start. The cut's burst pays what the
+            // accumulator has gathered, `accumulated × pct/100`.
             const seed: Seed = {
                 accumulators: [
                     {
                         roundsRemaining: 2,
-                        pct: 100,
-                        accumulated: 1,
+                        pct: 50,
+                        accumulated: 40,
                         sourceId: 'seed',
                         appliedSeq: 0,
                     },
@@ -416,7 +421,8 @@ for (const [tag, side] of SIDES) {
             const control = run(side, false, seed, 2);
             const cut = run(side, true, seed, 2);
             expect(control.bursts).toEqual([2]);
-            expect(cut.bursts).toEqual([]);
+            expect(cut.bursts).toEqual([1]);
+            expect(cut.burstDamage).toEqual([20]);
             expect(cut.accumulators).toEqual([]);
             expect(cut.cuts).toBeGreaterThanOrEqual(1);
         });

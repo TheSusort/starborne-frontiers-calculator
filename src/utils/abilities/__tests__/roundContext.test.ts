@@ -3,7 +3,7 @@ import { buildRoundContext } from '../roundContext';
 import { buildActorConditionContext } from '../../combat/triggers';
 
 describe('buildRoundContext', () => {
-    it('sums enemyDebuffCount from landed + corrosion + inferno + bomb stack counts', () => {
+    it('sums enemyDebuffCount from landed + corrosion + inferno + bomb stack counts; a Bomb is not a DoT effect', () => {
         const ctx = buildRoundContext({
             selfBuffNames: [],
             landedEnemyDebuffCount: 2,
@@ -13,6 +13,7 @@ describe('buildRoundContext', () => {
             effectiveCritRate: 50,
         });
         expect(ctx.enemyDebuffCount).toBe(4);
+        expect(ctx.enemyDotCount).toBe(1);
     });
 
     it('passes through selfBuffNames, effectiveCritRate, and enemyType', () => {
@@ -272,7 +273,8 @@ describe('buildActorConditionContext – condition-context plumbing', () => {
             genericStacks: 2,
             enemyDotFamilyCounts: { 'Acidic Decay': 2 },
         });
-        expect(ctx.enemyDotCount).toBe(5);
+        // The Bomb stack is not a damage-over-time effect (owner ruling R112).
+        expect(ctx.enemyDotCount).toBe(4);
         expect(ctx.enemyDotFamilyCounts).toEqual({ 'Acidic Decay': 2 });
     });
 
@@ -283,7 +285,7 @@ describe('buildActorConditionContext – condition-context plumbing', () => {
             infernoStacks: 1,
             bombStacks: 1,
         });
-        expect(ctx.enemyDotCount).toBe(3);
+        expect(ctx.enemyDotCount).toBe(2);
         expect(ctx.enemyDotFamilyCounts).toBeUndefined();
     });
 });
