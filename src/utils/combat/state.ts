@@ -296,6 +296,48 @@ export function shortenDotDurations(
     return shortened;
 }
 
+/** Every container a holder keeps debuff-like entries in outside the status engine. A
+ *  `CombatActor` satisfies it. */
+export interface DebuffEntryHolder {
+    corrosionEntries: ActiveDoTStack[];
+    infernoEntries: ActiveDoTStack[];
+    genericDoTEntries: ActiveDoTStack[];
+    pendingBombs: PendingBomb[];
+    pendingAccumulators: PendingAccumulator[];
+}
+
+/**
+ * Extends every DoT entry, Bomb countdown and Echoing Burst accumulator `holder` carries by
+ * `turns` (owner ruling R109: all of them are debuffs in every sense, so "debuffs extended by N
+ * turns" reaches each). `unremovable` entries (Acidic Decay) ARE extended: unremovable means
+ * not cleansable or cuttable, not frozen. Returns the debuffs affected, one per stack (an
+ * accumulator is one). A non-positive / non-finite `turns` returns 0 and changes nothing.
+ */
+export function extendDebuffEntries(holder: DebuffEntryHolder, turns: number): number {
+    const delta = Number.isFinite(turns) ? Math.trunc(turns) : 0;
+    if (delta <= 0) return 0;
+    let n = 0;
+    for (const entries of [
+        holder.corrosionEntries,
+        holder.infernoEntries,
+        holder.genericDoTEntries,
+    ]) {
+        for (const e of entries) {
+            e.remainingRounds += delta;
+            n += e.stacks;
+        }
+    }
+    for (const b of holder.pendingBombs) {
+        b.countdown += delta;
+        n += b.stacks;
+    }
+    for (const a of holder.pendingAccumulators) {
+        a.roundsRemaining += delta;
+        n += 1;
+    }
+    return n;
+}
+
 export interface PendingBomb {
     countdown: number;
     damagePerStack: number;
@@ -325,6 +367,8 @@ export interface PendingAccumulator {
     /** The applier (per-actor attribution); the burst lands in this actor's
      *  detonation channel. The accumulation INPUT gathers all players' direct damage. */
     sourceId: string;
+    /** When this accumulator was applied — see `ActiveDoTStack.appliedSeq`. */
+    appliedSeq?: number;
 }
 
 export interface ActorStats {
