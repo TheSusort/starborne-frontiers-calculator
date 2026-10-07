@@ -391,7 +391,7 @@ export interface Intent {
         spreadAffectedIds?: string[];
         /** Sefuba: the number of buffs the triggering purge removed (purge-performed.count),
          *  stamped by the on-enemy-purged listener. Read by the reactive heal executor's
-         *  `purged-buff-count` scaling ("repairs 8% … for each buff removed"). */
+         *  `purged-buff-count` scaling (a repair "for each buff removed"). */
         purgedBuffCount?: number;
         /** The ACTUAL victim id (dot-applied.targetId) of the ally's DoT
          *  application, captured by the on-ally-debuff-inflicted dot-applied listener. Read by
@@ -6033,7 +6033,7 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // count = the number of adjacent allies the Corrosion spread landed Corrosion I on
         // (eventCtx.spreadAffectedIds, stamped by the on-corrosion-spread listener from the real
         // affected-actor ids), so a positional multi-ally spread heals proportionally.
-        // Sefuba: "repairs 8% … for each buff removed" — count = the triggering purge's
+        // Sefuba: a repair "for each buff removed" — count = the triggering purge's
         // removed count (eventCtx.purgedBuffCount, stamped by the on-enemy-purged listener).
         const eventCountMultiplier =
             intent.ability.scaling?.countSource === 'repaired-enemy-count'

@@ -531,7 +531,7 @@ export type CombatEvent =
           /** The purge wave this event belongs to: one purge ability's removals across every enemy
            *  it struck, emitted together once all of them resolved. `waveTotal` is the buffs the
            *  whole wave removed; `waveLead` marks the wave's first event. A wave-wide reaction
-           *  (Sefuba's one repair per cast, 8% per buff removed) fires on the lead and reads the
+           *  (Sefuba's one repair per cast, 12% per buff removed) fires on the lead and reads the
            *  total; a victim-scoped one (Salvation, Sefuba's extra purge) fires on every event.
            *  Absent (hand-built emits) → a wave of this event alone. */
           waveTotal?: number;
