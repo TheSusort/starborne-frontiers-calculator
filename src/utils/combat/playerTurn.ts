@@ -5012,8 +5012,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
 
     // Glossary, Debuff Duration Extension: "Affinity Adv units are immune" — an enemy with affinity
     // advantage over the caster keeps its durations. The same rule, on the same raw affinities, as
-    // Charge Manipulation's gate in the engine's `removeChargesFrom`. Every extension seam below
-    // (timed debuffs and DoTs, every-debuff and inflicted-only) asks this.
+    // Charge Manipulation's gate in the engine's `removeChargesFrom`, and the one a purge or a buff
+    // steal lands by (no roll, nothing at an affinity disadvantage). Every extension seam below
+    // (timed debuffs and DoTs, every-debuff and inflicted-only), the purge and the steals ask this.
     const extensionImmune = (vid: string | undefined): boolean => {
         const victim =
             vid === undefined || vid === enemy?.id ? enemy : opposingVictimById?.get(vid);
@@ -5465,7 +5466,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                         selfBuffStacksForOwner(statusEngine, targetId, buffName) > 0
                             ? targetId
                             : buffHolderIdByPosition?.(buffName);
-                    if (sourceId !== undefined) {
+                    if (sourceId !== undefined && !extensionImmune(sourceId)) {
                         const availableAtSource = selfBuffStacksForOwner(
                             statusEngine,
                             sourceId,
@@ -5533,6 +5534,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 selectorEnemyIdFor,
             }).map((id) => id ?? targetId);
             for (const sourceId of sources) {
+                if (extensionImmune(sourceId)) continue;
                 // How many stacks of each STACK-STEALABLE status the source holds right now.
                 // Computed HERE and passed in, rather than inside statusEngine.steal: the count
                 // has to aggregate all four status stores AND evaluate aura conditions against a
@@ -5642,9 +5644,16 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                     ab.config.countScaling,
                     effectiveCritDamage
                 );
-                for (const vid of recipients) {
-                    const removed = statusEngine.purge(vid, purgeCount);
-                    buffsPurgedThisCast += removed;
+                // Every victim is purged before any purge-performed is emitted, so each event
+                // carries the whole wave's total (`purge-performed.waveTotal`).
+                const removals = recipients.map((vid) => ({
+                    vid,
+                    removed: extensionImmune(vid) ? 0 : statusEngine.purge(vid, purgeCount),
+                }));
+                const waveTotal = removals.reduce((sum, x) => sum + x.removed, 0);
+                buffsPurgedThisCast += waveTotal;
+                let waveLead = true;
+                for (const { vid, removed } of removals) {
                     if (removed > 0) {
                         bus.emit({
                             type: 'purge-performed',
@@ -5652,7 +5661,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                             targetId: vid,
                             count: removed,
                             round: r,
+                            waveTotal,
+                            waveLead,
                         });
+                        waveLead = false;
                         // I6: Lodolite legendary refit — "When this Unit Purges a buff from an
                         // enemy, it removes 100% of the enemy's shield." Gated on the parsed
                         // ability config (stripsShield), never a hardcoded ship name — see

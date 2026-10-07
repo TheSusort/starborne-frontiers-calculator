@@ -14,6 +14,7 @@
 import type { CombatEngineInput } from '../engine';
 import type { ShipSkills } from '../../../types/abilities';
 import type { Position } from '../../../types/encounters';
+import type { AffinityName } from '../../../types/ship';
 import {
     parsePattern,
     parseTarget,
@@ -40,6 +41,8 @@ export interface BoardUnit {
     critDamage?: number;
     chargeCount?: number;
     startCharged?: boolean;
+    /** Omitted → no affinity (always neutral). */
+    affinity?: AffinityName;
     pattern?: ParsedPattern;
     target?: ParsedTarget;
 }
@@ -115,6 +118,7 @@ export function boardInput(
         security: focus.security ?? 0,
         speed: focus.speed,
         mode: 'battle',
+        affinity: focus.affinity,
         position: focus.position,
         target: target(focus),
         pattern: pattern(focus),
@@ -127,6 +131,7 @@ export function boardInput(
             selfBuffs: [],
             enemyDebuffs: [],
             position: u.position,
+            affinity: u.affinity,
             target: target(u),
             pattern: pattern(u),
             walk: {
@@ -147,6 +152,7 @@ export function boardInput(
                 affinityCritCap: 100,
                 affinityCritPenalty: 0,
                 hasChargedSkill: u.kit.slots.some((s) => s.slot === 'charged'),
+                affinity: u.affinity,
             },
         })),
         enemyAttackers: enemies.map((u) => ({
@@ -165,6 +171,7 @@ export function boardInput(
             chargeCount: u.chargeCount ?? 0,
             startCharged: u.startCharged ?? false,
             position: u.position,
+            affinity: u.affinity,
             target: target(u),
             pattern: pattern(u),
             shipSkills: u.kit,

@@ -229,7 +229,7 @@ describe('Sefuba passive — repair per buff removed (player side)', () => {
         expect(hpPct(actors, 'attacker')).toBeCloseTo(50, 5);
     });
 
-    // Pins the current model for the KNOWN GAP at the on-enemy-purged listener (triggers.ts).
+    // In game the extra buff does not count toward "for each buff removed".
     it('(4) R2: the chained extra purge removes a third buff but the repair stays 16%', () => {
         const r2Purge2 = sefubaKit(SEFUBA_ACTIVE_PURGE_2, SEFUBA_R2_CATALOGUE);
         // The chain fires: 4 buffs − 2 (her purge) − 1 (the extra) = 1 left; R0 leaves 2.

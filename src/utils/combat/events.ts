@@ -528,6 +528,14 @@ export type CombatEvent =
           targetId: string;
           count: number;
           round: number;
+          /** The purge wave this event belongs to: one purge ability's removals across every enemy
+           *  it struck, emitted together once all of them resolved. `waveTotal` is the buffs the
+           *  whole wave removed; `waveLead` marks the wave's first event. A wave-wide reaction
+           *  (Sefuba's one repair per cast, 12% per buff removed) fires on the lead and reads the
+           *  total; a victim-scoped one (Salvation, Sefuba's extra purge) fires on every event.
+           *  Absent (hand-built emits) → a wave of this event alone. */
+          waveTotal?: number;
+          waveLead?: boolean;
       } & ReactiveStamp)
     /** A buff STEAL moved something. Sibling of `purge-performed`, and like it, SUPPRESSED when
      *  nothing actually moved (an empty return from `statusEngine.steal` / `stealStacks` opens no

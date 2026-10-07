@@ -8,7 +8,7 @@
  *    deals 75% damage") hits him → his passive does NOT cleanse again. On his own turn his active
  *    cleanses 1 → Grif hits him → his passive cleanses 2: a new chain rooted in his cast.
  *  - Fight 1: Provider ("When another ally inflicts a debuff onto an enemy, deals 50% damage")
- *    hits twice off APEX's one active landing two debuffs — two separate events.
+ *    hits once off APEX's one active landing two debuffs — one hit per (cast, debuffed enemy).
  *  - Two Providers: A's skill inflicts → B answers → A answers B's debuff → B cannot answer again.
  *  - Two opposing Nuqtus stop answering each other's buff gains.
  *
@@ -174,7 +174,7 @@ describe.each<Placement>(['player', 'enemy'])('subject on the %s side', (placeme
         expect(reactionChainProbe.dropped).toBe(0);
     });
 
-    it("Fight 1: Provider answers each of APEX's two debuffs — siblings both fire", () => {
+    it("Fight 1: Provider answers APEX's two debuffs on one enemy with one hit", () => {
         const apex: BoardUnit = {
             id: 'apex',
             kit: kit('APEX', 0, ['active']),
@@ -194,7 +194,7 @@ describe.each<Placement>(['player', 'enemy'])('subject on the %s side', (placeme
         const enemy: BoardUnit = { id: 'victim', kit: NO_KIT, position: 'M4', speed: 1 };
         const { input, id } = boardInput(placement, apex, [provider], [enemy], 1);
         const turns = runTurns(input);
-        expect(turnOf(turns, id(apex)).hits).toEqual({ [id(provider)]: 2 });
+        expect(turnOf(turns, id(apex)).hits).toEqual({ [id(provider)]: 1 });
     });
 
     it("two Providers: A's skill → B answers → A answers B → stop", () => {
@@ -217,12 +217,13 @@ describe.each<Placement>(['player', 'enemy'])('subject on the %s side', (placeme
         const enemy: BoardUnit = { id: 'victim', kit: NO_KIT, position: 'M4', speed: 1 };
         const { input, id } = boardInput(placement, providerA, [providerB], [enemy], 1);
         const turns = runTurns(input);
-        // A's active lands Hacking Down II and Security Down I: B answers each (2 hits, 2 Crit
-        // Rate Down II); A answers each of B's (2 hits) — A's passive is not in those chains —
-        // and A's Crit Rate Down II would wake B, already in them, so the chain stops.
+        // A's active lands Hacking Down II and Security Down I: B answers with one hit (once per
+        // cast and enemy); A answers B's Crit Rate Down II with one hit — A's passive is not in
+        // that chain — and A's own Crit Rate Down II would wake B, already in it, so the chain
+        // stops.
         expect(turnOf(turns, id(providerA)).hits).toEqual({
-            [id(providerA)]: 2,
-            [id(providerB)]: 2,
+            [id(providerA)]: 1,
+            [id(providerB)]: 1,
         });
         expect(reactionChainProbe.lineageDropped).toBeGreaterThan(0);
     });

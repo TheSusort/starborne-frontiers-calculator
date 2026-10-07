@@ -597,6 +597,10 @@ describe('statusRich scenario', () => {
      *                  (un-geared) placement, NOT a kit defect — and NOT a general blind spot
      *                  either: 33 corpus ships have base critDamage >= 50, so `per: 50` scaling is
      *                  alive in this suite for most of them.
+     *  - COBALT      — single-target purges, and a purge lands nothing at an affinity disadvantage
+     *                  (owner ruling, 2026-10-07). Cobalt is thermal; the enemy filler his skills
+     *                  aim at in this arm is electric Bedrock, which holds the advantage. The purge
+     *                  rail itself stays covered by every non-disadvantaged purger in the arm.
      *  - NYXEN       — both her cleanses are TYPED ("cleanses 2 Bomb", "cleanses 2 damage over
      *                  time debuffs"), so they remove Bomb / DoT stacks only. The statusRich fillers
      *                  inflict named debuffs, never a DoT, so her clause has nothing to take.
@@ -613,7 +617,7 @@ describe('statusRich scenario', () => {
         'pins the ships whose clause is still silent, each for a known reason',
         { timeout: 20_000 },
         () => {
-            const STILL_SILENT = ['Amartya', 'Faust', 'Meatshield', 'Nayra', 'Nyxen'];
+            const STILL_SILENT = ['Amartya', 'Cobalt', 'Faust', 'Meatshield', 'Nayra', 'Nyxen'];
             const silent = statusRichNames()
                 .filter((name) => {
                     const tokens = tokensFor(name, 'statusRich');

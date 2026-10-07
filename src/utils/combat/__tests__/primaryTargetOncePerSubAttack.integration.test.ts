@@ -6,7 +6,8 @@
  * neither counts nor uses it. Each sub-attack of a multi-hit skill brings its own allowance.
  * Plain "when directly damaged" triggers (Isha's repair) fire on every hit.
  *
- * Carriers: Stalwart (counter + Legion Discipline II), Nosorog (reflect), Malvex (shield).
+ * Carriers: Stalwart (counter + Legion Discipline II), Nosorog and the Reflect gear set (reflect),
+ * Malvex (shield). Incinerator's end-of-round hit is a primary-target hit.
  *
  * Real parsed kits (refit 4), every board run with the carrier on the player side and on the
  * enemy side.
@@ -27,6 +28,10 @@ import {
 } from '../__testutils__/realKitBoard';
 import { parsePattern } from '../../targetingParser';
 import type { ShipSkills } from '../../../types/abilities';
+import type { Ship } from '../../../types/ship';
+import type { GearPiece } from '../../../types/gear';
+import { buildShipAbilitiesWithEquipment } from '../../abilities/buildShipAbilitiesWithEquipment';
+import { getGearSet } from '../../../constants/gearSets';
 
 beforeAll(() => {
     if (!csvAvailable() || !shipDataAvailable())
@@ -179,8 +184,8 @@ describe.each(SIDES)('Stalwart (attackers on the %s side)', (placement) => {
             [frontFiller, stalwartAt('M3')],
             'stalwart'
         );
-        // Several Provider hits (one per debuff landed), only the first is a primary-target hit.
-        expect(obs.hits.filter((h) => h === 'provider>stalwart').length).toBeGreaterThan(1);
+        // Provider hits once per (cast, debuffed enemy); that one hit is a primary-target hit.
+        expect(obs.hits.filter((h) => h === 'provider>stalwart')).toHaveLength(1);
         expect(obs.counters).toEqual(['stalwart>provider']);
     });
 
@@ -251,6 +256,124 @@ describe.each(SIDES)('Nosorog (attackers on the %s side)', (placement) => {
         );
         expect(obs.reflected.ripper ?? 0).toBe(0);
         expect(obs.reflected.sentinel ?? 0).toBeGreaterThan(0);
+    });
+});
+
+const incinerator = (opts: { passive?: boolean; aoe?: boolean } = {}): BoardUnit => ({
+    id: 'incinerator',
+    kit: {
+        slots: realKit('Incinerator').slots.filter(
+            (s) => s.slot === 'active' || (opts.passive !== false && s.slot === 'passive')
+        ),
+    },
+    position: 'M4',
+    speed: 300,
+    attack: 10_000,
+    crit: 0,
+    hacking: 10_000,
+    ...(opts.aoe ? { pattern: parsePattern('Pattern-Cone-Range-1') } : {}),
+});
+
+describe.each(SIDES)(
+    'Incinerator’s end-of-round hit is a primary-target hit (attackers on the %s side)',
+    (placement) => {
+        const stalwart = (): BoardUnit => ({
+            id: 'stalwart',
+            kit: passiveOnly('Stalwart'),
+            position: 'M4',
+            speed: 1,
+            attack: 10_000,
+        });
+
+        it('Stalwart counters both her active and her end-of-round hit', () => {
+            const { obs } = run(placement, incinerator(), [], [stalwart()], 'stalwart');
+            expect(obs.counters).toEqual(['stalwart>incinerator', 'stalwart>incinerator']);
+        });
+
+        it('without her passive only the active is countered', () => {
+            const { obs } = run(
+                placement,
+                incinerator({ passive: false }),
+                [],
+                [stalwart()],
+                'stalwart'
+            );
+            expect(obs.counters).toEqual(['stalwart>incinerator']);
+        });
+    }
+);
+
+describe.each(SIDES)('Reflect gear set (attackers on the %s side)', (placement) => {
+    /** A wearer of the real Reflect set, its passive built through the equipment registry. */
+    const reflectWearerAt = (position: BoardUnit['position']): BoardUnit => {
+        const slots = ['weapon', 'hull', 'generator', 'sensor'] as const;
+        const pieces: GearPiece[] = slots
+            .slice(0, getGearSet('REFLECT')?.minPieces ?? 2)
+            .map((slot, i) => ({
+                id: `reflect-${i}`,
+                slot,
+                level: 16,
+                stars: 6,
+                rarity: 'legendary',
+                mainStat: null,
+                subStats: [],
+                setBonus: 'REFLECT',
+            }));
+        const ship = {
+            id: 'wearer-ship',
+            name: 'Wearer',
+            rarity: 'legendary',
+            faction: 'AURELIAN_SOVEREIGNTY',
+            type: 'DEFENDER',
+            baseStats: {},
+            equipment: Object.fromEntries(pieces.map((p) => [p.slot, p.id])),
+            implants: {},
+            refits: [],
+        } as unknown as Ship;
+        const built = buildShipAbilitiesWithEquipment(ship, (id) =>
+            pieces.find((p) => p.id === id)
+        );
+        const passive = built.slots.find((s) => s.slot === 'passive');
+        if (!passive?.abilities.some((a) => a.config.type === 'damage-reflection'))
+            throw new Error('Reflect set did not build a damage-reflection passive');
+        return {
+            id: 'wearer',
+            kit: { slots: [{ slot: 'active', abilities: [] }, passive] },
+            position,
+            speed: 1,
+            attack: 10_000,
+        };
+    };
+
+    it('Ripper crits the wearer as primary → ONE reflect, onto Ripper, not onto Sentinel’s tap', () => {
+        const { obs } = run(placement, ripper(), [sentinel], [reflectWearerAt('M4')], 'wearer');
+        expect(obs.reflected.ripper ?? 0).toBeGreaterThan(0);
+        expect(obs.reflected.sentinel ?? 0).toBe(0);
+    });
+
+    it('an area hit covers the wearer as a non-primary victim → no reflect onto Ripper', () => {
+        const { obs } = run(
+            placement,
+            ripper({ aoe: true }),
+            [sentinel],
+            [frontFiller, reflectWearerAt('M3')],
+            'wearer'
+        );
+        expect(obs.reflected.ripper ?? 0).toBe(0);
+        expect(obs.reflected.sentinel ?? 0).toBeGreaterThan(0);
+    });
+
+    it('Incinerator: her active covering the wearer reflects nothing; her end-of-round hit does', () => {
+        const board = (passive: boolean) =>
+            run(
+                placement,
+                incinerator({ aoe: true, passive }),
+                [],
+                [frontFiller, reflectWearerAt('M3')],
+                'wearer'
+            ).obs;
+        expect(board(false).reflected.incinerator ?? 0).toBe(0);
+        expect(board(true).reflected.incinerator ?? 0).toBeGreaterThan(0);
     });
 });
 
