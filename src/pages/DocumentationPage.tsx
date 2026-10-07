@@ -3091,70 +3091,71 @@ const DocumentationPage: React.FC = () => {
                                         I as Hemlock: each neighbour rolls its own resist, every
                                         reaction to an inflicted debuff or Corrosion hears a landed
                                         one, and her repair counts only the enemies it landed on.
-                                        Anemone&apos;s repair when an enemy takes damage-over-time
-                                        damage fires once per stack that ticks: 3 Corrosion stacks
-                                        and 1 Inferno give four repairs. A cleanse removes stacks
-                                        the same way: &ldquo;cleanses 1 debuff&rdquo; on 2 Corrosion
-                                        stacks leaves 1. The most recently inflicted debuff goes
-                                        first, named debuff or damage-over-time stack alike (stacks
-                                        inflicted together share one time); Acidic Decay cannot be
-                                        cleansed. Defense Shred is cleansed one stack at a time: 3
-                                        stacks, &ldquo;cleanses 1 debuff&rdquo;, 2 stacks left. Each
-                                        stack of a debuff that stacks rather than refreshing counts
-                                        as one debuff: 3 Defense Shred stacks meet Crocus&apos;s
-                                        &ldquo;3 or more debuffs&rdquo;, and so do Amartya&apos;s 2
-                                        Exposed stacks plus Crocus&apos;s own Corrosion. Cheat Death
-                                        wipes Defense Shred like any other debuff. Every DoT stack,
-                                        Bomb and Echoing Burst is a debuff too: debuff extensions
-                                        such as Lev&apos;s, cleanses, duration cuts, debuff counts
-                                        and Cheat Death all treat them that way, except that
-                                        Nyxen&apos;s damage-over-time cleanse skips them. A Bomb or
-                                        Echoing Burst is not a damage-over-time effect, so
-                                        Provider&apos;s extension of damage-over-time debuffs leaves
-                                        them alone and Crocus never answers an ally&apos;s critical
-                                        Bomb; an Echoing Burst is a Bomb-type debuff. A Bomb or
-                                        Echoing Burst removed by a cleanse or Cheat Death never
-                                        detonates, but one whose duration a cut drives to 0
-                                        detonates at once. Nyxen&apos;s Bomb cleanse takes Bombs and
-                                        Echoing Burst; her damage-over-time cleanse takes only
-                                        Corrosion, Inferno and other DoTs, never a Bomb or Echoing
-                                        Burst; both take the newest first. Heliodor&apos;s and
-                                        Pestilence&apos;s cut to the duration of all debuffs
-                                        shortens every DoT, Bomb and Echoing Burst too; a DoT cut to
-                                        0 turns ends without ticking again, and an Echoing Burst cut
-                                        to 0 bursts everything it has gathered up to the cut. An
-                                        Echoing Burst gathers only the direct damage dealt to the
-                                        ship it is on, from the moment it is applied until it
-                                        bursts; damage to other enemies never counts.
-                                        Valkyrie&apos;s own hit that applies it lands first and is
-                                        not gathered, and neither is Demolisher&apos;s Bomb splash.
-                                        A counter-attack&apos;s hit on its ship is gathered; a hit
-                                        Protection redirects counts for neither the ship nor its
-                                        protector. Bombs and Echoing Bursts that go off together,
-                                        from one cut or expiring on the same turn, detonate in the
-                                        order they were applied; if the first triggers Cheat Death,
-                                        the rest are wiped and never detonate. If the first destroys
-                                        the ship instead, the rest still detonate, and every Bomb on
-                                        a destroyed ship splashes its neighbours once, including
-                                        Bombs a skill detonated in the lethal blow. Reactions to an
-                                        enemy cleansing a debuff (Pestilence, Larkspur, Grif, Arum,
-                                        Yarrow) also hear the cleanses an enemy&apos;s passive
-                                        performs (Nuqtu, Purifier, AEGIS, Hermes, Howler), but not a
-                                        duration cut; a cleanse that such a reaction provoked
-                                        triggers them again. A count written after an infliction in
-                                        the same skill includes what that skill landed, enemy by
-                                        enemy: Crocus&apos;s Corrosion II counts toward her own
-                                        &ldquo;3 or more debuffs&rdquo; Stasis (Asphyxiator&apos;s
-                                        and Anemone&apos;s gates likewise), and a resisted one does
-                                        not. A passive reacting to the hit (Bayah) counts only the
-                                        debuffs from before the skill. APEX&apos;s passive shield
-                                        arrives as the skill&apos;s first debuff lands, so her
-                                        charged skill&apos;s &ldquo;If this Unit has an active
-                                        shield&rdquo; Disable lands once an earlier debuff in it has
-                                        landed. Likewise Belladonna&apos;s charged Corrosion II, if
-                                        her passive converts it to Acidic Decay as it lands, counts
-                                        toward that skill&apos;s &ldquo;3 or more Acidic
-                                        Decay&rdquo; Stasis.
+                                        Each spread that lands gives Hemlock one charge, however
+                                        many neighbours it reaches. Anemone&apos;s repair when an
+                                        enemy takes damage-over-time damage fires once per stack
+                                        that ticks: 3 Corrosion stacks and 1 Inferno give four
+                                        repairs. A cleanse removes stacks the same way:
+                                        &ldquo;cleanses 1 debuff&rdquo; on 2 Corrosion stacks leaves
+                                        1. The most recently inflicted debuff goes first, named
+                                        debuff or damage-over-time stack alike (stacks inflicted
+                                        together share one time); Acidic Decay cannot be cleansed.
+                                        Defense Shred is cleansed one stack at a time: 3 stacks,
+                                        &ldquo;cleanses 1 debuff&rdquo;, 2 stacks left. Each stack
+                                        of a debuff that stacks rather than refreshing counts as one
+                                        debuff: 3 Defense Shred stacks meet Crocus&apos;s &ldquo;3
+                                        or more debuffs&rdquo;, and so do Amartya&apos;s 2 Exposed
+                                        stacks plus Crocus&apos;s own Corrosion. Cheat Death wipes
+                                        Defense Shred like any other debuff. Every DoT stack, Bomb
+                                        and Echoing Burst is a debuff too: debuff extensions such as
+                                        Lev&apos;s, cleanses, duration cuts, debuff counts and Cheat
+                                        Death all treat them that way, except that Nyxen&apos;s
+                                        damage-over-time cleanse skips them. A Bomb or Echoing Burst
+                                        is not a damage-over-time effect, so Provider&apos;s
+                                        extension of damage-over-time debuffs leaves them alone and
+                                        Crocus never answers an ally&apos;s critical Bomb; an
+                                        Echoing Burst is a Bomb-type debuff. A Bomb or Echoing Burst
+                                        removed by a cleanse or Cheat Death never detonates, but one
+                                        whose duration a cut drives to 0 detonates at once.
+                                        Nyxen&apos;s Bomb cleanse takes Bombs and Echoing Burst; her
+                                        damage-over-time cleanse takes only Corrosion, Inferno and
+                                        other DoTs, never a Bomb or Echoing Burst; both take the
+                                        newest first. Heliodor&apos;s and Pestilence&apos;s cut to
+                                        the duration of all debuffs shortens every DoT, Bomb and
+                                        Echoing Burst too; a DoT cut to 0 turns ends without ticking
+                                        again, and an Echoing Burst cut to 0 bursts everything it
+                                        has gathered up to the cut. An Echoing Burst gathers only
+                                        the direct damage dealt to the ship it is on, from the
+                                        moment it is applied until it bursts; damage to other
+                                        enemies never counts. Valkyrie&apos;s own hit that applies
+                                        it lands first and is not gathered, and neither is
+                                        Demolisher&apos;s Bomb splash. A counter-attack&apos;s hit
+                                        on its ship is gathered; a hit Protection redirects counts
+                                        for neither the ship nor its protector. Bombs and Echoing
+                                        Bursts that go off together, from one cut or expiring on the
+                                        same turn, detonate in the order they were applied; if the
+                                        first triggers Cheat Death, the rest are wiped and never
+                                        detonate. If the first destroys the ship instead, the rest
+                                        still detonate, and every Bomb on a destroyed ship splashes
+                                        its neighbours once, including Bombs a skill detonated in
+                                        the lethal blow. Reactions to an enemy cleansing a debuff
+                                        (Pestilence, Larkspur, Grif, Arum, Yarrow) also hear the
+                                        cleanses an enemy&apos;s passive performs (Nuqtu, Purifier,
+                                        AEGIS, Hermes, Howler), but not a duration cut; a cleanse
+                                        that such a reaction provoked triggers them again. A count
+                                        written after an infliction in the same skill includes what
+                                        that skill landed, enemy by enemy: Crocus&apos;s Corrosion
+                                        II counts toward her own &ldquo;3 or more debuffs&rdquo;
+                                        Stasis (Asphyxiator&apos;s and Anemone&apos;s gates
+                                        likewise), and a resisted one does not. A passive reacting
+                                        to the hit (Bayah) counts only the debuffs from before the
+                                        skill. APEX&apos;s passive shield arrives as the
+                                        skill&apos;s first debuff lands, so her charged skill&apos;s
+                                        &ldquo;If this Unit has an active shield&rdquo; Disable
+                                        lands once an earlier debuff in it has landed. Likewise
+                                        Belladonna&apos;s charged Corrosion II, if her passive
+                                        converts it to Acidic Decay as it lands, counts toward that
+                                        skill&apos;s &ldquo;3 or more Acidic Decay&rdquo; Stasis.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Team Ships:</span> Pick a
@@ -3203,12 +3204,13 @@ const DocumentationPage: React.FC = () => {
                                         strips each of them, even where the text says &ldquo;the
                                         primary target&rdquo;. Each enemy rolls its own resist,
                                         including against Lingshe&apos;s Bomb countdown cut.
-                                        Reactions follow suit: Hemlock gains a charge, Defiant a
-                                        shield, Warden lands its extra debuff, once per enemy, and
-                                        Laika gains a shield per enemy stripped. A Stasis the skill
-                                        lands is not shortened by that same hit. Damage over time
-                                        (Corrosion, Inferno) and Bombs spread the same way: every
-                                        enemy hit gets its own stacks, and a Bomb uses the
+                                        Reactions follow suit: Defiant gains a shield and Warden
+                                        lands its extra debuff once per enemy, and Laika gains a
+                                        shield per enemy stripped; Hemlock gains one charge per
+                                        skill cast however many enemies it debuffs. A Stasis the
+                                        skill lands is not shortened by that same hit. Damage over
+                                        time (Corrosion, Inferno) and Bombs spread the same way:
+                                        every enemy hit gets its own stacks, and a Bomb uses the
                                         attacker&apos;s affinity against that enemy. Crits are per
                                         enemy too: Wisteria&apos;s crit Inferno and Valerian&apos;s
                                         crit extension land only on the enemies the hit critted, and

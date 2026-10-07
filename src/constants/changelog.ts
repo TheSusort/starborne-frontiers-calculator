@@ -44,6 +44,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: Belladonna no longer converts Corrosion an enemy already held.',
     "Combat simulator: Hemlock's Toxic Overflow spread now lands as an inflicted Corrosion.",
     "Combat simulator: Hemlock's spread repair now counts only enemies the Corrosion landed on.",
+    'Combat simulator: Hemlock gains one charge per skill or spread, not per debuff.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

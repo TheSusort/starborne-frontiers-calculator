@@ -2,7 +2,8 @@
  * A DoT a pattern skill inflicts reaches EVERY enemy the skill strikes (owner ruling 2026-10-03:
  * "All skills with an aoe pattern have all their effects on any enemy within the pattern"). Each
  * struck enemy rolls its own landing, holds its own stacks, and a Bomb snapshots the caster's
- * affinity against THAT enemy. Reactions to an inflicted DoT fire once per enemy it lands on.
+ * affinity against THAT enemy. Reactions to an inflicted DoT fire once per enemy it lands on,
+ * except Hemlock's charge: one per cast (owner ruling 2026-10-07).
  *
  * Real parsed kits (buildTraceShip on docs/ship-skills.csv, refit 4). The caster fires
  * Pattern-Cone-Range-1 anchored on M4, which strikes M4 (A), M3 (B) and T3 (C); M2 (OUT) stands
@@ -419,15 +420,17 @@ describe("Valerian's crit-power extension is rolled for each struck enemy's Corr
 });
 
 describe('reactions to an inflicted DoT fire once per enemy it lands on', () => {
-    it('player Hemlock active on Cone → Corrosion II on A, B and C → +3 charges', () => {
+    // Hemlock's charge is one per cast, however many enemies it lands on (owner ruling
+    // 2026-10-07); the Corrosion still lands on all three.
+    it('player Hemlock active on Cone → Corrosion II on A, B and C → +1 charge', () => {
         const m = measure(playerCasting('Hemlock', 'active', cone()), 'attacker');
-        expect(m.chargeGained).toBe(3);
+        expect(m.chargeGained).toBe(1);
         expect(m.dots['corrosion']).toEqual(['enemy-a', 'enemy-b', 'enemy-c']);
     });
 
-    it('enemy-side Hemlock active on Cone → +3 charges', () => {
+    it('enemy-side Hemlock active on Cone → +1 charge', () => {
         const m = measure(enemyCasting('Hemlock', 'active', cone()), 'enemy-caster');
-        expect(m.chargeGained).toBe(3);
+        expect(m.chargeGained).toBe(1);
         expect(m.dots['corrosion']).toEqual(['ally-b', 'ally-c', 'attacker']);
     });
 

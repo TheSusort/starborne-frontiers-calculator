@@ -1,8 +1,9 @@
 /**
  * Reactions to what an area skill does fire once per enemy it does it to (owner rulings
- * 2026-10-03): Hemlock's charge per debuff inflicted, Defiant's shield per Stasis inflicted,
- * Laika's shield per shield removed, Warden's follow-up debuff per inflicted debuff, Xcellence's
- * damage per resisting enemy. "Applies" (Provoke) is not "inflicts" (#593), on every enemy.
+ * 2026-10-03): Defiant's shield per Stasis inflicted, Laika's shield per shield removed, Warden's
+ * follow-up debuff per inflicted debuff, Xcellence's damage per resisting enemy. Hemlock's charge
+ * is the exception: one per skill cast however many enemies it debuffs (owner ruling 2026-10-07).
+ * "Applies" (Provoke) is not "inflicts" (#593), on every enemy.
  *
  * Real parsed kits (refit 4). The caster fires Pattern-Circle-Range-1 anchored on M4, striking
  * M4 (A), M3 (B) and T4 (C); M2 (OUT) stands outside it. Caster hacking dwarfs every security
@@ -233,17 +234,17 @@ beforeEach(() => {
     setupKeyedRng(5);
 });
 
-describe('Hemlock: one charge per enemy his debuff lands on', () => {
-    it('player Hemlock charged on Circle → Toxic Overflow on A, B and C → +3 charges', () => {
+describe('Hemlock: one charge per cast, however many enemies his debuff lands on', () => {
+    it('player Hemlock charged on Circle → Toxic Overflow on A, B and C → +1 charge', () => {
         const m = measure(playerCasting(kit('Hemlock', 'charged')), 'attacker');
         expect(m.debuffs['Toxic Overflow']).toEqual(['enemy-a', 'enemy-b', 'enemy-c']);
-        expect(m.chargeGained).toBe(3);
+        expect(m.chargeGained).toBe(1);
     });
 
-    it('enemy-side Hemlock charged on Circle → +3 charges', () => {
+    it('enemy-side Hemlock charged on Circle → +1 charge', () => {
         const m = measure(enemyCasting(kit('Hemlock', 'charged')), 'enemy-caster');
         expect(m.debuffs['Toxic Overflow']).toEqual(['ally-b', 'ally-c', 'attacker']);
-        expect(m.chargeGained).toBe(3);
+        expect(m.chargeGained).toBe(1);
     });
 });
 

@@ -4158,9 +4158,10 @@ export function parseChargeGain(text: string | null | undefined): ChargeGain | n
     const amount = raw === 'a' || raw === 'an' ? 1 : parseInt(raw, 10);
     if (!amount || isNaN(amount)) return null;
 
-    // Inflict-driven charge gains fire per debuff infliction (+amount each event), not per
-    // standing debuff. Ally-inflicts ("when an ally inflicts a debuff", Oleander) is checked
-    // FIRST since its text also matches the self-inflict phrasing; then the self-inflict form
+    // Inflict-driven charge gains react to the infliction event, not to a standing debuff count;
+    // buildShipAbilities caps each at one per root cast (`Ability.oncePerRootCast`).
+    // Ally-inflicts ("when an ally inflicts a debuff", Oleander) is checked FIRST since its text
+    // also matches the self-inflict phrasing; then the self-inflict form
     // ("after it inflicts a debuff", Hemlock). Both emit 'always' + a reactive trigger so the
     // engine listens for the event rather than scaling by an enemy-debuff count.
     // Enemy-repair reactive (Zosimos): a self charge gain that fires per ENEMY repair. Checked

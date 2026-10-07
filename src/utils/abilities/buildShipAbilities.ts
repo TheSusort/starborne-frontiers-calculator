@@ -2907,9 +2907,10 @@ function abilitiesFromText(
                 ...(charge.applicationVerb
                     ? { triggerApplicationFilter: charge.applicationVerb }
                     : {}),
-                // Oleander's charge is one per skill cast an ally lands a debuff with (see
-                // `Ability.oncePerRootCast`).
-                ...(reactiveTrigger === 'on-ally-debuff-inflicted'
+                // Oleander's charge (an ally's debuff) and Hemlock's (her own) are one per skill
+                // cast or spread that lands a debuff (see `Ability.oncePerRootCast`).
+                ...(reactiveTrigger === 'on-ally-debuff-inflicted' ||
+                reactiveTrigger === 'on-debuff-inflicted'
                     ? { oncePerRootCast: 'cast' as const }
                     : {}),
                 conditions,

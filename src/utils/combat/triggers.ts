@@ -4383,8 +4383,8 @@ function reactionFiringKey(reaction: { firingId?: number }): string {
  *    cast.
  *  - An infliction a reaction landed with no turn active (round start / end of round): that
  *    reaction firing stands as its own cast, e.g. Toxic Overflow's end-of-round spread (engine.ts
- *    `toxicSpreaders` loop). UNCONFIRMED — the rule covers only inflictions a skill cast sets
- *    off. */
+ *    `toxicSpreaders` loop). Confirmed for Hemlock's charge (owner ruling 2026-10-07: one per
+ *    spread); two spreads in one round each standing alone is untested in game. */
 function rootCastKey(
     ctx: IntentExecContext,
     inflictorId: string,
