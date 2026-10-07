@@ -1,4 +1,5 @@
 import type { DoTType } from '../../types/calculator';
+import { bombBurstDamage } from './state';
 import type { ActiveDoTStack, PendingBomb } from './state';
 
 // Pure per-victim detonation math, lifted verbatim from playerTurn.ts detonate().
@@ -116,16 +117,7 @@ export function detonateContainers(
         } else if (det.dotType === 'bomb') {
             const bombs = consumeDetonatable(c.pendingBombs, recipe.detonatable);
             bombStacks += bombs.reduce((sum, b) => sum + b.stacks, 0);
-            bomb +=
-                bombs.reduce(
-                    (sum, b) =>
-                        sum +
-                        b.stacks *
-                            b.damagePerStack *
-                            b.affinityMult *
-                            (1 + b.detonationDamageModifier / 100),
-                    0
-                ) * pct;
+            bomb += bombs.reduce((sum, b) => sum + bombBurstDamage(b), 0) * pct;
         }
     }
 
