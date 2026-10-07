@@ -3117,7 +3117,10 @@ export function buildActorConditionContext(
     for (const s of abilitySelf) selfBuffNames.push(s.active.buffName);
     return buildRoundContext({
         selfBuffNames,
-        selfBuffCount: buffStackCount([...scheduled, ...abilitySelf]),
+        selfBuffCount: buffStackCountWithLedger(statusEngine, ownerId, [
+            ...scheduled,
+            ...abilitySelf,
+        ]),
         landedEnemyDebuffCount: shared.ownerIsEnemySide
             ? 0
             : namedDebuffCount(snap.activeEnemyDebuffs),
@@ -3646,24 +3649,35 @@ export function buffStackCount(entries: readonly (ActiveBuff | ActiveAbilityStat
     return entries.reduce((n, e) => n + statusEntryStackCount(e), 0);
 }
 
-/** How many buffs `ownerId` carries right now (`buffStackCount`), across the SAME three sources as
- *  {@link selfBuffNamesForOwners} plus the per-owner stack ledger a steal writes (a stolen
- *  Protection stack is one buff fewer), each name clamped at 0. */
-export function actorBuffCount(statusEngine: StatusEngine, ownerId: string): number {
+/** `buffStackCount` of `entries` held by `ownerId`, with the per-owner stack ledger folded in per
+ *  NAME and clamped at 0: a stolen Protection stack is one buff fewer on the victim and one buff
+ *  more on a thief, including a thief with no entry of that name in `entries`. The one rule behind
+ *  every owner-keyed buff COUNT (`actorBuffCount`, the `selfBuffCount` subject). */
+export function buffStackCountWithLedger(
+    statusEngine: StatusEngine,
+    ownerId: string,
+    entries: readonly (ActiveBuff | ActiveAbilityStatus)[]
+): number {
     const byName = new Map<string, number>();
     const add = (name: string, n: number): void => {
         byName.set(name, (byName.get(name) ?? 0) + n);
     };
-    for (const ab of statusEngine.snapshot(ownerId).activeSelfBuffs)
-        add(ab.buffName, buffStackCount([ab]));
-    for (const s of statusEngine.timedAbilityStatuses('self', ownerId))
-        add(s.active.buffName, buffStackCount([s]));
-    for (const s of statusEngine.activeAbilityStatuses('self', () => NEUTRAL_NAMES_CTX, ownerId))
-        add(s.active.buffName, buffStackCount([s]));
+    for (const e of entries) add(('active' in e ? e.active : e).buffName, buffStackCount([e]));
+    for (const name of statusEngine.selfBuffStackAdjustmentNames(ownerId)) add(name, 0);
     let total = 0;
     for (const [name, n] of byName)
         total += Math.max(0, n + statusEngine.selfBuffStackAdjustment(ownerId, name));
     return total;
+}
+
+/** How many buffs `ownerId` carries right now (`buffStackCountWithLedger`), across the SAME three
+ *  sources as {@link selfBuffNamesForOwners}. */
+export function actorBuffCount(statusEngine: StatusEngine, ownerId: string): number {
+    return buffStackCountWithLedger(statusEngine, ownerId, [
+        ...statusEngine.snapshot(ownerId).activeSelfBuffs,
+        ...statusEngine.timedAbilityStatuses('self', ownerId),
+        ...statusEngine.activeAbilityStatuses('self', () => NEUTRAL_NAMES_CTX, ownerId),
+    ]);
 }
 
 /** Enemy-debuff NAMES carried in the per-TARGET store keyed by `targetId` (an actor's

@@ -472,6 +472,9 @@ export interface StatusEngine {
     /** The accumulated delta written by {@link adjustSelfBuffStacks}. 0 for an unknown owner or an
      *  untouched name. Signed — callers clamp the TOTAL, not this term. */
     selfBuffStackAdjustment(ownerId: string, buffName: string): number;
+    /** Every buff name `ownerId` has a ledger entry for, including names that hold no store entry
+     *  at all (a thief's acquired stack). Lets a buff COUNT see a stack no store reports. */
+    selfBuffStackAdjustmentNames(ownerId: string): string[];
     /** Add `amount` stacks of a self-side status to `ownerId`'s ACCUMULATING store, clamped to
      *  the entry's cap — the door for a stacking grant with no turn timer that arrives from an
      *  EVENT rather than a cadence (a reactive `duration: 'recurring'` buff: Nuqtu's "gains 1
@@ -1680,6 +1683,9 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
     };
     const selfBuffStackAdjustment = (ownerId: string, buffName: string): number =>
         stackAdjustments.get(ownerId)?.get(buffName) ?? 0;
+    const selfBuffStackAdjustmentNames = (ownerId: string): string[] => [
+        ...(stackAdjustments.get(ownerId)?.keys() ?? []),
+    ];
 
     const addSelfAccumulatingStacks = (
         ownerId: string,
@@ -2539,6 +2545,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         stealStacks,
         adjustSelfBuffStacks,
         selfBuffStackAdjustment,
+        selfBuffStackAdjustmentNames,
         addSelfAccumulatingStacks,
         registerAbilityStatuses,
         applyTimedAbilityStatus,
