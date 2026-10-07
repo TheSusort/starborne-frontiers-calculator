@@ -662,7 +662,7 @@ describe('Cheat Death wipes Bombs and Echoing Burst; Acidic Decay survives', () 
         const read = (h: CombatActor): void => {
             out.bombs = h.pendingBombs.length;
             out.accumulators = h.pendingAccumulators.length;
-            out.acidic = h.genericDoTEntries.filter((e) => e.family === 'Acidic Decay').length;
+            out.acidic = h.corrosionEntries.filter((e) => e.family === 'Acidic Decay').length;
         };
         runBoard(
             { caster: [killer(attack)], other: [x, hayyan] },
@@ -672,12 +672,12 @@ describe('Cheat Death wipes Bombs and Echoing Burst; Acidic Decay survives', () 
                 const src = idOf('killer');
                 h.pendingBombs.push(bomb(src));
                 h.pendingAccumulators.push(accumulator(src, 5));
-                h.genericDoTEntries.push({
+                // Acidic Decay is a Corrosion entry re-tagged by Belladonna's conversion.
+                h.corrosionEntries.push({
                     stacks: 1,
                     tier: 1,
                     remainingRounds: 5,
                     sourceId: src,
-                    perTickAmount: 1,
                     family: 'Acidic Decay',
                     unremovable: true,
                 });

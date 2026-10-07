@@ -115,18 +115,18 @@ describe('generic DoT', () => {
     // (engine.ts) and the `dotFamilyCounts` family-count derivation (roundContext.ts) — see
     // enemyDotFamilyCounts.test.ts / enemyDotFamilyCounts.integration.test.ts for those. This
     // locks the plain field shape on a generic entry itself, matching the parallel corrosion/
-    // inferno coverage.
-    it('a generic DoT stack can carry family + unremovable (Acidic Decay shape)', () => {
+    // inferno coverage. (Acidic Decay is not a generic entry: it is a re-tagged Corrosion one.)
+    it('a generic DoT stack can carry family + unremovable', () => {
         const stack: ActiveDoTStack = {
             stacks: 1,
             tier: 0,
             remainingRounds: 3,
             sourceId: 'v',
             perTickAmount: 300,
-            family: 'Acidic Decay',
+            family: 'Named Generic',
             unremovable: true,
         };
-        expect(stack.family).toBe('Acidic Decay');
+        expect(stack.family).toBe('Named Generic');
         expect(stack.unremovable).toBe(true);
     });
 

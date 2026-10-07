@@ -107,9 +107,8 @@ function makeLoadedVictim(
     if (affinity) v.affinity = affinity;
     v.corrosionEntries.push(dot({ stacks: 2 }));
     v.infernoEntries.push(dot());
-    v.genericDoTEntries.push(
-        dot({ remainingRounds: 2, family: 'Acidic Decay', unremovable: true })
-    );
+    // Acidic Decay is a Corrosion entry re-tagged by Belladonna's conversion.
+    v.corrosionEntries.push(dot({ remainingRounds: 2, family: 'Acidic Decay', unremovable: true }));
     v.pendingBombs.push({
         countdown: 1,
         damagePerStack: 10,
@@ -169,7 +168,7 @@ const durations = (statusEngine: StatusEngine, v: CombatActor) => ({
         .find((s) => s.payload.buffName === 'Defense Down II')?.active.turnsRemaining,
     corrosion: v.corrosionEntries[0]?.remainingRounds,
     inferno: v.infernoEntries[0]?.remainingRounds,
-    acidicDecay: v.genericDoTEntries[0]?.remainingRounds,
+    acidicDecay: v.corrosionEntries.find((e) => e.family === 'Acidic Decay')?.remainingRounds,
     bomb: v.pendingBombs[0]?.countdown,
     accumulator: v.pendingAccumulators[0]?.roundsRemaining,
 });
@@ -371,11 +370,11 @@ describe('R109/R112: inflicted-scope extensions over what the cast applied', () 
 
     const freshLanded = (v: CombatActor) => {
         // Instrument: the cast landed its Corrosion, Bomb and Echoing Burst.
-        expect(v.corrosionEntries).toHaveLength(2);
+        expect(v.corrosionEntries).toHaveLength(3);
         expect(v.pendingBombs).toHaveLength(2);
         expect(v.pendingAccumulators).toHaveLength(2);
         // The standing DoTs are not this cast's.
-        expect(v.genericDoTEntries[0].remainingRounds).toBe(2);
+        expect(v.corrosionEntries[1].remainingRounds).toBe(2);
         expect(v.corrosionEntries[0].remainingRounds).toBe(1);
     };
 
@@ -383,7 +382,7 @@ describe('R109/R112: inflicted-scope extensions over what the cast applied', () 
         it(`${side}-side Asphyxiator extend-status: the fresh Corrosion, Bomb and Echoing Burst grow, the standing ones do not`, () => {
             const v = castWith(asphyxiatorExtend, side);
             freshLanded(v);
-            expect(v.corrosionEntries[1].remainingRounds).toBe(3);
+            expect(v.corrosionEntries[2].remainingRounds).toBe(3);
             expect(v.pendingBombs.map((b) => b.countdown)).toEqual([1, 3]);
             expect(v.pendingAccumulators.map((a) => a.roundsRemaining)).toEqual([1, 3]);
         });
@@ -391,7 +390,7 @@ describe('R109/R112: inflicted-scope extensions over what the cast applied', () 
         it(`${side}-side family-less inflicted extend-dot: the fresh Corrosion grows; the fresh Bomb and Echoing Burst do not`, () => {
             const v = castWith(familylessExtend, side);
             freshLanded(v);
-            expect(v.corrosionEntries[1].remainingRounds).toBe(3);
+            expect(v.corrosionEntries[2].remainingRounds).toBe(3);
             expect(v.pendingBombs.map((b) => b.countdown)).toEqual([1, 2]);
             expect(v.pendingAccumulators.map((a) => a.roundsRemaining)).toEqual([1, 2]);
         });

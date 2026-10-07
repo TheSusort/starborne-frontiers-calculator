@@ -32,11 +32,11 @@ describe('dotFamilyCounts', () => {
             stack({ family: 'Acidic Decay', unremovable: true }),
         ];
         const inferno = [stack({ family: 'Molten Core' })];
-        const generic = [stack({ family: 'Acidic Decay', unremovable: true, perTickAmount: 300 })];
+        const generic = [stack({ family: 'Molten Core', perTickAmount: 300 })];
 
         expect(dotFamilyCounts(corrosion, inferno, generic)).toEqual({
-            'Acidic Decay': 3,
-            'Molten Core': 1,
+            'Acidic Decay': 2,
+            'Molten Core': 2,
         });
     });
 

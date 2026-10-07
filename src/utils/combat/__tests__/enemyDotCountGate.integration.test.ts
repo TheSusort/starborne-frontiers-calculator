@@ -205,10 +205,11 @@ describe('enemy-dot-count engine gate — Anemone charged-skill Taunt (enemy sid
 });
 
 // ---------------------------------------------------------------------------
-// Belladonna's named-family gate stays RUNTIME-INERT until SP-E introduces the Acidic Decay DoT
-// family: enemyDotFamilyCounts['Acidic Decay'] is always 0 today, so the Stasis inflict never
-// lands even when the generic DoT count (corrosion+inferno+bomb) is high. Build-output coverage
-// (the condition is actually EMITTED) lives in enemyDotCount.test.ts / modelCompletenessTriage.
+// Belladonna's named-family gate counts Acidic Decay only: Acidic Decay exists only where her
+// conversion passive re-tagged a Corrosion stack, and this fixture carries no such passive, so
+// enemyDotFamilyCounts['Acidic Decay'] stays 0 and the Stasis inflict never lands even when the
+// plain DoT count (corrosion+inferno+bomb) is high. Build-output coverage (the condition is
+// actually EMITTED) lives in enemyDotCount.test.ts / modelCompletenessTriage.
 // ---------------------------------------------------------------------------
 const BELLADONNA_CHARGE =
     'This Unit deals <unit-damage>180% damage</unit-damage> and inflicts <unit-skill>Corrosion II</unit-skill> for 2 turns.<br />If the enemy has 3 or more <unit-skill>Acidic Decay</unit-skill>, inflict <unit-skill>Stasis</unit-skill> for 1 turn.';
@@ -237,8 +238,8 @@ const belladonnaShipSkills = (seedDots: SeedDotType[]): ShipSkills => ({
     ],
 });
 
-describe('enemy-dot-count engine gate — Belladonna charged-skill Stasis (runtime-inert until SP-E)', () => {
-    it('even with 3 pre-existing generic DoT entries, Stasis does NOT land (Acidic Decay family count is 0 today)', () => {
+describe('enemy-dot-count engine gate — Belladonna charged-skill Stasis reads Acidic Decay only', () => {
+    it('3 pre-existing plain DoT entries and no conversion passive: no Acidic Decay, so no Stasis', () => {
         idc = 0;
         const result = runCombat({
             // A real opponent for the seeded DoTs to accrue on. Inert and huge-HP so the
@@ -271,7 +272,7 @@ describe('enemy-dot-count engine gate — Belladonna charged-skill Stasis (runti
         expect(result.rounds[1].action).toBe('charged');
 
         const round2Names = result.rounds[1].activeEnemyDebuffs.map((d) => d.buffName);
-        // SP-E enables this once the Acidic Decay DoT family actually exists.
+        // Plain Corrosion, Inferno and Bomb stacks are not Acidic Decay.
         expect(round2Names).not.toContain('Stasis');
     });
 });

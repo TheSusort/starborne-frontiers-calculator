@@ -469,9 +469,7 @@ describe('Echoing Burst accumulators are debuffs in the DoT-container helpers (R
     const holder = () => ({
         corrosionEntries: [
             { stacks: 2, tier: 1, remainingRounds: 3, sourceId: 's', appliedSeq: 1 },
-        ],
-        infernoEntries: [],
-        genericDoTEntries: [
+            // Acidic Decay is a Corrosion entry re-tagged by Belladonna's conversion.
             {
                 stacks: 1,
                 tier: 1,
@@ -481,6 +479,8 @@ describe('Echoing Burst accumulators are debuffs in the DoT-container helpers (R
                 unremovable: true,
             },
         ],
+        infernoEntries: [],
+        genericDoTEntries: [],
         pendingBombs: [
             {
                 countdown: 3,
@@ -535,6 +535,6 @@ describe('Echoing Burst accumulators are debuffs in the DoT-container helpers (R
         expect(shortenDotDurations(h, 2)).toBe(2);
         expect(h.pendingAccumulators[0].roundsRemaining).toBe(2);
         expect(h.pendingBombs[0].countdown).toBe(3);
-        expect(h.genericDoTEntries[0].remainingRounds).toBe(3);
+        expect(h.corrosionEntries[1].remainingRounds).toBe(3);
     });
 });
