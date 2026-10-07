@@ -11,7 +11,7 @@
  * shape). The turn's loose DoT containers are the bound victim's OWN arrays, exactly as the
  * engine passes them, so every assertion reads the victim actor.
  */
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { runPlayerTurn, PlayerActorRuntime, PlayerTurnArgs, RateGate } from '../playerTurn';
 import { createActor, CombatActor, ActiveDoTStack } from '../state';
 import { createStatusEngine, StatusEngine, RegisteredAbilityStatus } from '../statusEngine';
@@ -420,51 +420,55 @@ function shipFromCsv(name: string): Ship {
  * Inferno II extends the Corrosion alone. The extend-dot is the one the parser builds from her
  * refit-active passive.
  */
-describe.skipIf(!csvAvailable())(
-    "Wisteria's crit extension grows only the Corrosion it just inflicted",
-    () => {
-        it('a crit landing Corrosion and Inferno II, extension roll passing: Corrosion +1, Inferno II stays 2', () => {
-            const parsed = buildShipAbilities(shipFromCsv('Wisteria'))
-                .slots.flatMap((s) => s.abilities)
-                .find((a) => a.config.type === 'extend-dot');
-            if (!parsed) throw new Error('Wisteria has no parsed extend-dot');
-            const corrosion: Ability = {
-                id: 'w-corrosion',
-                type: 'dot',
-                target: 'enemy',
-                trigger: 'on-cast',
-                conditions: [],
-                config: { type: 'dot', dotType: 'corrosion', tier: 6, stacks: 1, duration: 3 },
-            };
-            const inferno: Ability = {
-                id: 'w-inferno',
-                type: 'dot',
-                target: 'enemy',
-                trigger: 'on-cast',
-                conditions: [],
-                config: { type: 'dot', dotType: 'inferno', tier: 30, stacks: 1, duration: 2 },
-            };
-            const runtime = makeRuntime(
-                'wisteria',
-                { slots: [{ slot: 'charged', abilities: [corrosion, inferno, parsed] }] },
-                { chargedCritGate: () => true }
+describe("Wisteria's crit extension grows only the Corrosion it just inflicted", () => {
+    beforeAll(() => {
+        if (!csvAvailable()) {
+            throw new Error(
+                'This suite requires docs/ship-skills.csv (gitignored reference data) — copy it in before running'
             );
-            runtime.critDamage = 100;
-            runtime.extendChanceGate = () => true;
-            const statusEngine = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
-            statusEngine.beginRound(1);
-            const victim = createActor({
-                id: 'victim',
-                side: 'enemy',
-                kind: 'enemy',
-                stats: { ...baseStats(), attack: 0, hp: 1_000_000 },
-            });
-            runPlayerTurn(makeArgs(runtime, victim, statusEngine));
-            // Instrument: both DoTs landed this cast.
-            expect(victim.corrosionEntries).toHaveLength(1);
-            expect(victim.infernoEntries).toHaveLength(1);
-            expect(victim.corrosionEntries[0].remainingRounds).toBe(4);
-            expect(victim.infernoEntries[0].remainingRounds).toBe(2);
+        }
+    });
+    it('a crit landing Corrosion and Inferno II, extension roll passing: Corrosion +1, Inferno II stays 2', () => {
+        const parsed = buildShipAbilities(shipFromCsv('Wisteria'))
+            .slots.flatMap((s) => s.abilities)
+            .find((a) => a.config.type === 'extend-dot');
+        if (!parsed) throw new Error('Wisteria has no parsed extend-dot');
+        const corrosion: Ability = {
+            id: 'w-corrosion',
+            type: 'dot',
+            target: 'enemy',
+            trigger: 'on-cast',
+            conditions: [],
+            config: { type: 'dot', dotType: 'corrosion', tier: 6, stacks: 1, duration: 3 },
+        };
+        const inferno: Ability = {
+            id: 'w-inferno',
+            type: 'dot',
+            target: 'enemy',
+            trigger: 'on-cast',
+            conditions: [],
+            config: { type: 'dot', dotType: 'inferno', tier: 30, stacks: 1, duration: 2 },
+        };
+        const runtime = makeRuntime(
+            'wisteria',
+            { slots: [{ slot: 'charged', abilities: [corrosion, inferno, parsed] }] },
+            { chargedCritGate: () => true }
+        );
+        runtime.critDamage = 100;
+        runtime.extendChanceGate = () => true;
+        const statusEngine = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        statusEngine.beginRound(1);
+        const victim = createActor({
+            id: 'victim',
+            side: 'enemy',
+            kind: 'enemy',
+            stats: { ...baseStats(), attack: 0, hp: 1_000_000 },
         });
-    }
-);
+        runPlayerTurn(makeArgs(runtime, victim, statusEngine));
+        // Instrument: both DoTs landed this cast.
+        expect(victim.corrosionEntries).toHaveLength(1);
+        expect(victim.infernoEntries).toHaveLength(1);
+        expect(victim.corrosionEntries[0].remainingRounds).toBe(4);
+        expect(victim.infernoEntries[0].remainingRounds).toBe(2);
+    });
+});
