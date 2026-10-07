@@ -294,7 +294,7 @@ describe("Sefuba's extra purge reaches every enemy her pattern purge reaches", (
         );
     });
 
-    it('A, B and C holding two buffs each → one repair of 8% per buff removed, and each loses its second buff to the extra purge', () => {
+    it('A, B and C holding two buffs each → one repair of 12% per buff removed, and each loses its second buff to the extra purge', () => {
         const { purged, buffsLeft, actors } = measure(
             base({
                 attack: 1000,
@@ -306,11 +306,11 @@ describe("Sefuba's extra purge reaches every enemy her pattern purge reaches", (
             ENEMY_IDS,
             { attacker: 0.5 }
         );
-        // Her active removes one buff from each enemy it strikes; the passive then repairs 8% per
+        // Her active removes one buff from each enemy it strikes; the passive then repairs 12% per
         // buff the whole purge removed (once) and purges one more buff from each of those enemies.
         expect(purged).toEqual({ 'enemy-a': 1, 'enemy-b': 1, 'enemy-c': 1 });
         expect(buffsLeft).toEqual({ 'enemy-a': 0, 'enemy-b': 0, 'enemy-c': 0, 'enemy-out': 2 });
         const sefuba = actors.get('attacker')!;
-        expect((100 * sefuba.currentHp) / sefuba.stats.hp).toBeCloseTo(50 + 3 * 8, 5);
+        expect((100 * sefuba.currentHp) / sefuba.stats.hp).toBeCloseTo(50 + 3 * 12, 5);
     });
 });

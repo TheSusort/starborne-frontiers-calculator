@@ -3453,6 +3453,27 @@ function applyEnemyScopePins(shipName: string, bySlot: Map<SkillSlot, Positioned
     }
 }
 
+/** Sefuba's per-buff purge repair as measured in game: 12% of max HP per buff the triggering
+ *  purge removed. The skill text's 8% is wrong. */
+export const SEFUBA_PURGE_REPAIR_PCT = 12;
+
+/** Pins Sefuba's `on-enemy-purged` repair to `SEFUBA_PURGE_REPAIR_PCT` on the refit whose passive
+ *  also carries the extra purge (the passive slot holds an `on-enemy-purged` purge). The earlier
+ *  refit, which has no extra purge, keeps its text value. */
+function applyPurgeRepairPin(shipName: string, bySlot: Map<SkillSlot, PositionedAbility[]>) {
+    if (shipName !== 'Sefuba') return;
+    const passive = bySlot.get('passive') ?? [];
+    const hasExtraPurge = passive.some(
+        ({ ability }) => ability.type === 'purge' && ability.trigger === 'on-enemy-purged'
+    );
+    if (!hasExtraPurge) return;
+    for (const { ability } of passive) {
+        if (ability.config.type !== 'heal' || ability.trigger !== 'on-enemy-purged') continue;
+        ability.config.pct = SEFUBA_PURGE_REPAIR_PCT;
+        if (ability.scaling) ability.scaling.perUnit = SEFUBA_PURGE_REPAIR_PCT;
+    }
+}
+
 export function buildShipAbilities(rawShip: Ship): ShipSkills {
     counter = 0;
     // Every pass below reads status names off the text by position (canonicaliseStatusNames).
@@ -4112,6 +4133,7 @@ export function buildShipAbilities(rawShip: Ship): ShipSkills {
     }
 
     applyEnemyScopePins(ship.name, bySlot);
+    applyPurgeRepairPin(ship.name, bySlot);
 
     // Control-twin gating parity (epic PR2): a `type:'control'` ability is emitted
     // ADDITIVELY alongside the named debuff/buff that actually performs the status

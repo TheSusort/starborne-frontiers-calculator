@@ -4,7 +4,8 @@
  * three enemies purged one buff from EACH, then repaired her ONCE, then the extra purge removed one
  * more buff from each of the three.
  *
- * Model: one repair per purge cast, 8% of the buffs the cast's purges removed across every struck
+ * In game her repair is 12% per buff, not the text's 8%.
+ * Model: one repair per purge cast, 12% of the buffs the cast's purges removed across every struck
  * enemy, resolved after the first purge wave and before the extra purges. The extra purges add
  * nothing to the repair and wake nothing (no Sefuba repair, no Salvation repair).
  * Salvation's "When a buff is purged from an ally, repairs that ally 5%" still repairs each victim
@@ -126,13 +127,13 @@ const run = (placement: Placement, opponents: BoardUnit[], rounds = 1) => {
 };
 
 describe.each<Placement>(['player', 'enemy'])('Sefuba on the %s side', (placement) => {
-    it('three struck enemies: one purge each, then ONE repair of 8% per buff removed', () => {
+    it('three struck enemies: one purge each, then ONE repair of 12% per buff removed', () => {
         const opponents = victims([4, 4, 4]);
         const { purges, repairs, hpPct, carrier } = run(placement, opponents);
         // Instrument: the first wave really purged one buff from each of the three.
         expect(purges.map((p) => p.count)).toEqual([1, 1, 1]);
         expect(repairs).toHaveLength(1);
-        expect(hpPct(carrier)).toBeCloseTo(50 + 24, 5);
+        expect(hpPct(carrier)).toBeCloseTo(50 + 36, 5);
     });
 
     it('the extra purge then removes one more buff from each of the three', () => {
@@ -143,18 +144,18 @@ describe.each<Placement>(['player', 'enemy'])('Sefuba on the %s side', (placemen
 
     it('the extra purges do not add to the repair', () => {
         // Positive control on this board: the extra purges really fire (above), and the repair
-        // is still 8% x 2 buffs removed by the first wave when only two enemies hold buffs.
+        // is still 12% x 2 buffs removed by the first wave when only two enemies hold buffs.
         const opponents = victims([4, 4, 0]);
         const { purges, repairs, hpPct, carrier } = run(placement, opponents);
         expect(purges.map((p) => p.count)).toEqual([1, 1]);
         expect(repairs).toHaveLength(1);
-        expect(hpPct(carrier)).toBeCloseTo(50 + 16, 5);
+        expect(hpPct(carrier)).toBeCloseTo(50 + 24, 5);
     });
 
-    it('one struck enemy: one repair of 8% (unchanged)', () => {
+    it('one struck enemy: one repair of 12%', () => {
         const { repairs, hpPct, carrier } = run(placement, victims([4]));
         expect(repairs).toHaveLength(1);
-        expect(hpPct(carrier)).toBeCloseTo(58, 5);
+        expect(hpPct(carrier)).toBeCloseTo(62, 5);
     });
 
     it('no struck enemy holds a buff: nothing purged, no repair', () => {
