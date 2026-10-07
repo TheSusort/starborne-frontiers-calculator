@@ -192,8 +192,9 @@ export type CombatEvent =
           debuffInflictedReactionChain?: readonly string[];
           /** Set on every debuff a REACTION lands (any trigger): the id of that one reaction
            *  firing, shared by everything the firing lands and distinct from every other firing in
-           *  the combat. Absent on a cast's own inflictions. `procScope:'per-cast'`
-           *  (Insidiousness) gives each firing its own roll. */
+           *  the combat. One round's Toxic Overflow spreads share one id (`rootCastKey`). Absent
+           *  on a cast's own inflictions. `procScope:'per-cast'` (Insidiousness) gives each firing
+           *  its own roll. */
           reactionFiringId?: number;
           viaAllyDebuffInflictedReaction?: true;
       } & ReactiveStamp)

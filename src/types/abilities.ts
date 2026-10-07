@@ -1369,8 +1369,9 @@ export interface Ability {
      *    enemy hitting Warden, whose reaction debuffs the enemy, is that enemy's cast and ONE more
      *    (owner ruling, measured in game 2026-10-05). Hemlock's "adds 1 charge … after it
      *    inflicts a debuff" is one charge per activation: her skill cast, however many debuffs
-     *    and stacks it lands, and each Toxic Overflow spread (its own root cast — `rootCastKey`),
-     *    however many neighbours it lands on (owner ruling, measured in game 2026-10-07).
+     *    and stacks it lands, and one round's Toxic Overflow spreads together (one root cast —
+     *    `rootCastKey`), however many holders spread and neighbours they land on (owner ruling,
+     *    measured in game 2026-10-07).
      *  - `'per-victim'`: once per (root cast, enemy the reaction is about). Xcellence's "When an
      *    enemy resists a debuff infliction, … deals damage equal to 115% of this Unit's current
      *    shield": Curator's area active resisted twice by each of three enemies hits each of them

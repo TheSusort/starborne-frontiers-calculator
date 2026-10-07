@@ -13756,6 +13756,9 @@ export function runCombat(rawInput: CombatEngineInput): {
             if (dotStackCount(holder.corrosionEntries) < 1) continue;
             toxicSpreaders.push(holder);
         }
+        // Every spread of this pass carries ONE reaction firing id: together they are one root
+        // cast (`rootCastKey`, triggers.ts).
+        const spreadFiringId = toxicSpreaders.length > 0 ? ++reactionFiringSeq : 0;
         for (const holder of toxicSpreaders) {
             const adjacentIds = bySide(
                 isEnemySide(holder.id) ? 'enemy' : 'player'
@@ -13765,11 +13768,6 @@ export function runCombat(rawInput: CombatEngineInput): {
             const applierId = toxicOverflowApplierOf(statusEngine, holder.id) ?? holder.id;
             const applier = allRuntimesById.get(applierId);
             const resistLabel = dotResistLabel('corrosion', SPREAD_CORROSION_TIER);
-            // Each holder's spread is a root cast of its own: its landings and rolled resists carry
-            // a reaction stamp with no `duringTurnOf`, so `rootCastKey` (triggers.ts) keys them on
-            // this firing id, never on the applier's skill cast earlier in the round — a
-            // once-per-root-cast reaction that cast spent still hears the spread.
-            const spreadFiringId = ++reactionFiringSeq;
             // The adjacent allies the spread LANDED on — what Hemlock's "per enemy affected"
             // repair counts.
             const affectedIds: string[] = [];

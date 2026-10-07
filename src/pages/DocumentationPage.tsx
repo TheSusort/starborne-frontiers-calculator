@@ -3091,33 +3091,35 @@ const DocumentationPage: React.FC = () => {
                                         I as Hemlock: each neighbour rolls its own resist, every
                                         reaction to an inflicted debuff or Corrosion hears a landed
                                         one, and her repair counts only the enemies it landed on.
-                                        Each spread that lands gives Hemlock one charge, however
-                                        many neighbours it reaches. Anemone&apos;s repair when an
-                                        enemy takes damage-over-time damage fires once per stack
-                                        that ticks: 3 Corrosion stacks and 1 Inferno give four
-                                        repairs. A cleanse removes stacks the same way:
-                                        &ldquo;cleanses 1 debuff&rdquo; on 2 Corrosion stacks leaves
-                                        1. The most recently inflicted debuff goes first, named
-                                        debuff or damage-over-time stack alike (stacks inflicted
-                                        together share one time); Acidic Decay cannot be cleansed.
-                                        Defense Shred is cleansed one stack at a time: 3 stacks,
-                                        &ldquo;cleanses 1 debuff&rdquo;, 2 stacks left. Each stack
-                                        of a debuff that stacks rather than refreshing counts as one
-                                        debuff: 3 Defense Shred stacks meet Crocus&apos;s &ldquo;3
-                                        or more debuffs&rdquo;, and so do Amartya&apos;s 2 Exposed
-                                        stacks plus Crocus&apos;s own Corrosion. Cheat Death wipes
-                                        Defense Shred like any other debuff. Every DoT stack, Bomb
-                                        and Echoing Burst is a debuff too: debuff extensions such as
-                                        Lev&apos;s, cleanses, duration cuts, debuff counts and Cheat
-                                        Death all treat them that way, except that Nyxen&apos;s
-                                        damage-over-time cleanse skips them. A Bomb or Echoing Burst
-                                        is not a damage-over-time effect, so Provider&apos;s
-                                        extension of damage-over-time debuffs leaves them alone and
-                                        Crocus never answers an ally&apos;s critical Bomb; an
-                                        Echoing Burst is a Bomb-type debuff. A Bomb or Echoing Burst
-                                        removed by a cleanse or Cheat Death never detonates, but one
-                                        whose duration a cut drives to 0 detonates at once.
-                                        Nyxen&apos;s Bomb cleanse takes Bombs and Echoing Burst; her
+                                        The spreads that land at one round&apos;s end count as one
+                                        event: Hemlock and Oleander gain one charge for them
+                                        together, however many enemies spread or neighbours they
+                                        reach. Anemone&apos;s repair when an enemy takes
+                                        damage-over-time damage fires once per stack that ticks: 3
+                                        Corrosion stacks and 1 Inferno give four repairs. A cleanse
+                                        removes stacks the same way: &ldquo;cleanses 1 debuff&rdquo;
+                                        on 2 Corrosion stacks leaves 1. The most recently inflicted
+                                        debuff goes first, named debuff or damage-over-time stack
+                                        alike (stacks inflicted together share one time); Acidic
+                                        Decay cannot be cleansed. Defense Shred is cleansed one
+                                        stack at a time: 3 stacks, &ldquo;cleanses 1 debuff&rdquo;,
+                                        2 stacks left. Each stack of a debuff that stacks rather
+                                        than refreshing counts as one debuff: 3 Defense Shred stacks
+                                        meet Crocus&apos;s &ldquo;3 or more debuffs&rdquo;, and so
+                                        do Amartya&apos;s 2 Exposed stacks plus Crocus&apos;s own
+                                        Corrosion. Cheat Death wipes Defense Shred like any other
+                                        debuff. Every DoT stack, Bomb and Echoing Burst is a debuff
+                                        too: debuff extensions such as Lev&apos;s, cleanses,
+                                        duration cuts, debuff counts and Cheat Death all treat them
+                                        that way, except that Nyxen&apos;s damage-over-time cleanse
+                                        skips them. A Bomb or Echoing Burst is not a
+                                        damage-over-time effect, so Provider&apos;s extension of
+                                        damage-over-time debuffs leaves them alone and Crocus never
+                                        answers an ally&apos;s critical Bomb; an Echoing Burst is a
+                                        Bomb-type debuff. A Bomb or Echoing Burst removed by a
+                                        cleanse or Cheat Death never detonates, but one whose
+                                        duration a cut drives to 0 detonates at once. Nyxen&apos;s
+                                        Bomb cleanse takes Bombs and Echoing Burst; her
                                         damage-over-time cleanse takes only Corrosion, Inferno and
                                         other DoTs, never a Bomb or Echoing Burst; both take the
                                         newest first. Heliodor&apos;s and Pestilence&apos;s cut to

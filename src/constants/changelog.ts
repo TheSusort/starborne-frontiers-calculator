@@ -45,6 +45,7 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator: Hemlock's Toxic Overflow spread now lands as an inflicted Corrosion.",
     "Combat simulator: Hemlock's spread repair now counts only enemies the Corrosion landed on.",
     'Combat simulator: Hemlock gains one charge per skill or spread, not per debuff.',
+    'Combat simulator: Toxic Overflow spreads in the same round now count as one event.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

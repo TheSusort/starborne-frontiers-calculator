@@ -4382,9 +4382,11 @@ function reactionFiringKey(reaction: { firingId?: number }): string {
  *    waking an on-attacked Corrosion I, which wakes an Out. Damage Down II, is that enemy's one
  *    cast.
  *  - An infliction a reaction landed with no turn active (round start / end of round): that
- *    reaction firing stands as its own cast, e.g. Toxic Overflow's end-of-round spread (engine.ts
- *    `toxicSpreaders` loop). Confirmed for Hemlock's charge (owner ruling 2026-10-07: one per
- *    spread); two spreads in one round each standing alone is untested in game. */
+ *    reaction firing stands as its own cast. Every Toxic Overflow spread of one round's
+ *    end-of-round pass shares ONE firing id (engine.ts `toxicSpreaders` loop), so the round's
+ *    spreads together are one cast, apart from the skill cast that applied the Toxic Overflow:
+ *    two holders spreading at the same round end charge Hemlock and Oleander +1 each, not +2
+ *    (owner ruling, measured in game 2026-10-07). */
 function rootCastKey(
     ctx: IntentExecContext,
     inflictorId: string,
