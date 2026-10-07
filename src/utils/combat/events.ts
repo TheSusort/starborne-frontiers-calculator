@@ -256,6 +256,10 @@ export type CombatEvent =
           /** The applying cast had >= 1 critting hit (per-hit crits). Present only when
            *  true. Executor-applied dots omit it (drain-time has no crit outcome). */
           viaCrit?: boolean;
+          /** The landed entry's `ActiveDoTStack.appliedSeq` — which entry this landing put on
+           *  the board, so a reaction to it (Belladonna's conversion) touches that entry only.
+           *  Always set by the engine; optional so hand-crafted test emits may omit it. */
+          appliedSeq?: number;
           /** The inflicting ability's slot — see the `debuff-applied` sibling's `sourceSlot`. */
           sourceSlot?: SkillSlot;
           /** The `debuff-applied` sibling's `on-debuff-inflicted` reaction chain — see that

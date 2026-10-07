@@ -52,7 +52,6 @@ import {
     DoTContainers,
     DebuffEntryHolder,
     advanceChargeCadence,
-    dotStackCount,
     extendDebuffEntries,
     dotEntriesOf,
 } from './state';
@@ -1072,11 +1071,16 @@ export interface PlayerTurnArgs {
      *  `adjacentAllyIds` above). Absent → both scopes degrade to their DPS/non-positional
      *  fallback (see the recipientIds computation). */
     adjacentEnemyIdsFor?: (anchorId: string) => string[];
-    /** Draws, at the landing, the DoT-conversion rolls (Belladonna) this caster's `dotType` DoT
-     *  on `victimId` sets off, and returns the families it converts into (owner ruling R76).
+    /** Draws, at the landing, the DoT-conversion rolls (Belladonna) the `stacks` stacks of this
+     *  caster's `dotType` DoT landing on `victimId` set off — one per stack — and returns, per
+     *  converter, the family it converts into and how many stacks convert (owner ruling R76).
      *  Read only by a same-cast count gate on a named DoT family (`castLandingsOverlay`). Absent
      *  (unit fixtures) → no conversion is counted. */
-    decideSameCastConversions?: (victimId: string, dotType: DoTType) => string[];
+    decideSameCastConversions?: (
+        victimId: string,
+        dotType: DoTType,
+        stacks: number
+    ) => { family: string; converted: number }[];
     /** True when this run can MEASURE the live adjacency / kill counts below — false under
      *  `mode: 'dps'`, where the board and the opposing roster are synthetic and a live reading
      *  would be a permanent structural 0 rather than an observation. False (or absent) withholds
@@ -1721,30 +1725,32 @@ function applyNewDoTs(args: {
      *  DoT is dealt by its applier, so an entry made here needs no `dealtCreditId`. */
     genericDoTEntries: ActiveDoTStack[];
     pendingBombs: PendingBomb[];
-    emitDotApplied: (dotType: DoTType, stacks: number, tier: number) => void;
+    /** `appliedSeq` is the pushed entry's (`ActiveDoTStack.appliedSeq`). */
+    emitDotApplied: (dotType: DoTType, stacks: number, tier: number, appliedSeq: number) => void;
     /** Stamps each new entry's `appliedSeq` (`StatusEngine.nextAppliedSeq`). */
     nextAppliedSeq: () => number;
 }): void {
     for (const dot of args.dotsConfig) {
         if (!isLiveDot(dot)) continue;
+        const appliedSeq = args.nextAppliedSeq();
         if (dot.type === 'corrosion') {
             args.corrosionEntries.push({
                 stacks: dot.stacks,
                 tier: dot.tier,
                 remainingRounds: dot.duration,
                 sourceId: args.sourceId,
-                appliedSeq: args.nextAppliedSeq(),
+                appliedSeq,
             });
-            args.emitDotApplied('corrosion', dot.stacks, dot.tier);
+            args.emitDotApplied('corrosion', dot.stacks, dot.tier, appliedSeq);
         } else if (dot.type === 'inferno') {
             args.infernoEntries.push({
                 stacks: dot.stacks,
                 tier: dot.tier,
                 remainingRounds: dot.duration,
                 sourceId: args.sourceId,
-                appliedSeq: args.nextAppliedSeq(),
+                appliedSeq,
             });
-            args.emitDotApplied('inferno', dot.stacks, dot.tier);
+            args.emitDotApplied('inferno', dot.stacks, dot.tier, appliedSeq);
         } else if (dot.type === 'bomb') {
             args.pendingBombs.push({
                 countdown: Math.max(1, dot.duration),
@@ -1755,18 +1761,18 @@ function applyNewDoTs(args: {
                 affinityMult: args.affinityMult,
                 detonationDamageModifier: args.detonationDamageModifier,
                 splashModifier: args.splashModifier,
-                appliedSeq: args.nextAppliedSeq(),
+                appliedSeq,
             });
-            args.emitDotApplied('bomb', dot.stacks, dot.tier);
+            args.emitDotApplied('bomb', dot.stacks, dot.tier, appliedSeq);
         } else if (dot.type === 'generic') {
             args.genericDoTEntries.push({
                 stacks: dot.stacks,
                 tier: dot.tier,
                 remainingRounds: dot.duration,
                 sourceId: args.sourceId,
-                appliedSeq: args.nextAppliedSeq(),
+                appliedSeq,
             });
-            args.emitDotApplied('generic', dot.stacks, dot.tier);
+            args.emitDotApplied('generic', dot.stacks, dot.tier, appliedSeq);
         }
     }
 }
@@ -3215,10 +3221,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     /**
      * `c` with a named DoT family count (Belladonna's "If the enemy has 3 or more Acidic Decay")
      * read as of THIS clause (owner ruling R76, the R47 shape): an earlier-written DoT clause's
-     * stacks that land on the enemy and are converted into the family as they land count. The
-     * conversion keeps its chance roll, drawn here at the landing (`decideSameCastConversions`)
-     * and spent by the reaction when it drains. A conversion retags every unconverted DoT of that
-     * type this caster holds on the enemy (the convert-dot executor), so those count too.
+     * stacks that land on the enemy and are converted into the family as they land count. Each
+     * stack keeps its own chance roll, drawn here at the landing (`decideSameCastConversions`)
+     * and spent by its reaction when it drains. A conversion takes only the new stack, so DoTs the
+     * enemy already held never count here unless already converted.
      */
     const castConversionOverlay = (
         c: ConditionContext,
@@ -3233,22 +3239,13 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         for (const d of landedDotsBefore(victimId, dotsBefore))
             landedByType.set(d.type, (landedByType.get(d.type) ?? 0) + d.stacks);
         for (const [dotType, stacks] of landedByType) {
-            const converted = decideSameCastConversions(victimId, dotType).filter((f) =>
-                families.includes(f)
-            );
-            if (converted.length === 0) continue;
-            const pool =
-                dotType === 'corrosion'
-                    ? victim.corrosionEntries
-                    : dotType === 'inferno'
-                      ? victim.infernoEntries
-                      : dotType === 'generic'
-                        ? (victim.genericDoTEntries ?? [])
-                        : [];
-            const held = dotStackCount(
-                pool.filter((e) => e.sourceId === actor.id && e.family === undefined)
-            );
-            for (const f of new Set(converted)) added[f] = (added[f] ?? 0) + stacks + held;
+            for (const { family, converted } of decideSameCastConversions(
+                victimId,
+                dotType,
+                stacks
+            )) {
+                if (families.includes(family)) added[family] = (added[family] ?? 0) + converted;
+            }
         }
         if (Object.keys(added).length === 0) return c;
         const counts = { ...(c.enemyDotFamilyCounts ?? {}) };
@@ -5260,7 +5257,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             genericDoTEntries,
             pendingBombs,
             nextAppliedSeq: statusEngine.nextAppliedSeq,
-            emitDotApplied: (dotType, stacks, tier) =>
+            emitDotApplied: (dotType, stacks, tier, appliedSeq) =>
                 bus.emit({
                     type: 'dot-applied',
                     sourceId: actor.id,
@@ -5269,6 +5266,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                     dotType,
                     stacks,
                     tier,
+                    appliedSeq,
                     ...(critHits > 0 ? { viaCrit: true } : {}),
                     sourceSlot: action,
                 }),
@@ -5423,7 +5421,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             genericDoTEntries: victim.genericDoTEntries,
             pendingBombs: victim.pendingBombs,
             nextAppliedSeq: statusEngine.nextAppliedSeq,
-            emitDotApplied: (dotType, stacks, tier) =>
+            emitDotApplied: (dotType, stacks, tier, appliedSeq) =>
                 bus.emit({
                     type: 'dot-applied',
                     sourceId: actor.id,
@@ -5432,6 +5430,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                     dotType,
                     stacks,
                     tier,
+                    appliedSeq,
                     ...(victimCrit ? { viaCrit: true } : {}),
                     sourceSlot: action,
                 }),

@@ -3894,10 +3894,11 @@ export function runCombat(rawInput: CombatEngineInput): {
     // `${ownerId}:${abilityId}`; each gate is a RateGate that fires with the ability's
     // procChance probability on each draw (random, like the crit/landing gates).
     const procChanceGates = new Map<string, RateGate>();
-    // DoT-conversion rolls a cast drew at its landing for a same-cast count gate (R76), spent by
-    // the convert-dot executor (`IntentExecContext.preDecidedConversions`). Cleared at each actor
-    // turn-start, after that cast's reactions have drained.
-    const preDecidedConversions = new Map<string, boolean>();
+    // DoT-conversion rolls a cast drew at its landing for a same-cast count gate (R76), one per
+    // landed stack, spent in order by the convert-dot executor
+    // (`IntentExecContext.preDecidedConversions`). Cleared at each actor turn-start, after that
+    // cast's reactions have drained.
+    const preDecidedConversions = new Map<string, boolean[]>();
     // Verdict cache for scoped proc abilities: procScope:'per-attack' keys it per sub-attack,
     // procScope:'per-cast' (Insidiousness) per roll and per cap — see each gate in triggers.ts.
     // Cleared at each actor turn-start beside reactionFiredThisAttack so a later turn rolls afresh.
@@ -4488,19 +4489,21 @@ export function runCombat(rawInput: CombatEngineInput): {
 
     /**
      * Owner ruling R76 (Belladonna): a DoT conversion counts for a count gate written after the
-     * DoT in the SAME cast, so the conversion roll is drawn at the landing rather than when the
-     * reaction drains. For each living, not turn-blocked converter on `casterId`'s side (its `convert-dot` on
-     * `on-ally-debuff-inflicted`, the owner included, matching `dotType`), draw the roll the
-     * landing's reaction would draw and park it in `preDecidedConversions` for the executor to
-     * spend. A repeat ask for the same landing reads the parked roll. Returns the families
-     * converted into.
+     * DoT in the SAME cast, so the conversion rolls are drawn at the landing rather than when the
+     * reaction drains. For each living, not turn-blocked converter on `casterId`'s side (its
+     * `convert-dot` on `on-ally-debuff-inflicted`, the owner included, matching `dotType`), draw
+     * the roll each of the `stacks` landed stacks' reaction would draw — one per stack — and park
+     * them in `preDecidedConversions` for the executor to spend in order. A repeat ask reads the
+     * parked rolls and draws only the stacks not yet parked. Returns, per converter, the family
+     * converted into and how many of the stacks convert.
      */
     const decideSameCastConversions = (
         casterId: string,
         victimId: string,
-        dotType: DoTType
-    ): string[] => {
-        const families: string[] = [];
+        dotType: DoTType,
+        stacks: number
+    ): { family: string; converted: number }[] => {
+        const out: { family: string; converted: number }[] = [];
         for (const { ownerId, reactiveAbilities: owned } of [
             ...reactivePerOwner,
             ...enemyReactivePerOwner,
@@ -4518,23 +4521,26 @@ export function runCombat(rawInput: CombatEngineInput): {
                 )
                     continue;
                 const key = dotConversionKey(ownerId, ability.id, victimId, casterId, dotType);
-                let converts = preDecidedConversions.get(key);
-                if (converts === undefined) {
-                    converts = drawDotConversion(ownerId, ability.id, cfg, {
-                        procChanceGates,
-                        effectiveStatsFor: (id) => {
-                            const actor = allActorsById.get(id);
-                            return actor
-                                ? effectiveStatsOf(statusEngine, selfBuffLookup, actor)
-                                : undefined;
-                        },
-                    });
-                    preDecidedConversions.set(key, converts);
+                const rolls = preDecidedConversions.get(key) ?? [];
+                while (rolls.length < stacks) {
+                    rolls.push(
+                        drawDotConversion(ownerId, ability.id, cfg, {
+                            procChanceGates,
+                            effectiveStatsFor: (id) => {
+                                const actor = allActorsById.get(id);
+                                return actor
+                                    ? effectiveStatsOf(statusEngine, selfBuffLookup, actor)
+                                    : undefined;
+                            },
+                        })
+                    );
                 }
-                if (converts) families.push(cfg.buffName);
+                preDecidedConversions.set(key, rolls);
+                const converted = rolls.slice(0, stacks).filter(Boolean).length;
+                if (converted > 0) out.push({ family: cfg.buffName, converted });
             }
         }
-        return families;
+        return out;
     };
 
     // Owner-routed executor context: the executor resolves an intent's owner runtime
@@ -9812,11 +9818,11 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // bySide(a.side) (identical for player and enemy casters). Consumed only by a
                 // buff-steal ability whose config carries grantAdjacentAllies.
                 adjacentAllyIds: bySide(a.side).adjacentAllyIdsFor(a.id),
-                // R76: draw, at the landing, the conversion rolls this caster's DoT of `dotType`
-                // on `victimId` sets off (Belladonna), for a same-cast count gate. Returns the
-                // families it converted into.
-                decideSameCastConversions: (victimId: string, dotType: DoTType): string[] =>
-                    decideSameCastConversions(a.id, victimId, dotType),
+                // R76: draw, at the landing, the conversion rolls the `stacks` stacks of this
+                // caster's DoT of `dotType` on `victimId` set off (Belladonna), for a same-cast
+                // count gate.
+                decideSameCastConversions: (victimId: string, dotType: DoTType, stacks: number) =>
+                    decideSameCastConversions(a.id, victimId, dotType, stacks),
                 // Whether the two ADJACENCY counts derived in runPlayerTurn (from
                 // `adjacentAllyIds` / `adjacentEnemyIdsFor` above) are a measurement on this run.
                 // Same mode gate, same reason, as `enemyDestroyedCount` below.

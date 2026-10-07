@@ -441,6 +441,9 @@ export interface Intent {
          *  alongside victimId. The convert-dot executor gates on this === cfg.fromDotType so an
          *  ally's Inferno (or any other DoT) never converts under a Corrosion-only ability. */
         dotType?: DoTType;
+        /** The landed entry's `appliedSeq` (dot-applied.appliedSeq), captured alongside
+         *  victimId: the convert-dot executor converts a stack of THAT entry only. */
+        dotAppliedSeq?: number;
     };
 }
 
@@ -1224,8 +1227,8 @@ export function registerReactiveListeners(args: {
                         // Team DoT applications emit dot-applied with the team sourceId — an ally
                         // DoT infliction triggers this listener exactly as an ally debuff does. Same
                         // self-chain guard as the debuff-applied arm above. One enqueue per stack
-                        // landed (`dotInflictions`), except Belladonna's `convert-dot`, which
-                        // converts THE application's entry — one chance per application.
+                        // landed (`dotInflictions`) — Belladonna's `convert-dot` included: each new
+                        // stack takes its own conversion roll.
                         if (
                             !isOpposing(e.sourceId) &&
                             !(e.sourceId === ownerId && e.viaAllyDebuffInflictedReaction) &&
@@ -1234,9 +1237,7 @@ export function registerReactiveListeners(args: {
                                 e.application
                             )
                         ) {
-                            const times =
-                                ra.ability.config.type === 'convert-dot' ? 1 : dotInflictions(e);
-                            for (let i = 0; i < times; i++)
+                            for (let i = 0; i < dotInflictions(e); i++)
                                 enqueue({
                                     ...intent,
                                     eventCtx: {
@@ -1245,9 +1246,13 @@ export function registerReactiveListeners(args: {
                                         inflictorId: e.sourceId,
                                         ...inflictionReactionCtx(e),
                                         // Belladonna's convert-dot executor needs the
-                                        // actual victim + DoT type of THIS application.
+                                        // actual victim, DoT type and entry of THIS
+                                        // application.
                                         victimId: e.targetId,
                                         dotType: e.dotType,
+                                        ...(e.appliedSeq !== undefined
+                                            ? { dotAppliedSeq: e.appliedSeq }
+                                            : {}),
                                     },
                                 });
                         }
@@ -2686,9 +2691,10 @@ export interface IntentExecContext {
      *  each reactive draw of the same ability so the proc lands at its true frequency. */
     procChanceGates?: Map<string, RateGate>;
     /** DoT-conversion rolls a cast already drew at its landing, keyed by `dotConversionKey` (owner
-     *  ruling R76: Belladonna's same-cast conversion counts for her Acidic Decay gate). The
-     *  convert-dot executor spends an entry instead of drawing. Absent → every roll is drawn. */
-    preDecidedConversions?: Map<string, boolean>;
+     *  ruling R76: Belladonna's same-cast conversion counts for her Acidic Decay gate): one roll
+     *  per landed stack, in landing order. The convert-dot executor spends the first instead of
+     *  drawing. Absent → every roll is drawn. */
+    preDecidedConversions?: Map<string, boolean[]>;
     /** Live self-HP% per owner (0..100) for drain-time hp-threshold gates: each owner's own
      *  current/max HP, both sides. A caller that supplies no closure at all (unit contexts) falls
      *  back to 100 in buildDrainContext. */
@@ -5787,13 +5793,15 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
             victimId: string,
             stacks: number
         ): void => {
+            // The pushed entry's `appliedSeq`, carried on the landing event.
+            let appliedSeq: number | undefined;
             if (cfg.dotType === 'corrosion') {
                 (victim?.corrosionEntries ?? ctx.corrosionEntries).push({
                     stacks,
                     tier: cfg.tier,
                     remainingRounds: cfg.duration,
                     sourceId: intent.ownerId,
-                    appliedSeq: ctx.statusEngine.nextAppliedSeq(),
+                    appliedSeq: (appliedSeq = ctx.statusEngine.nextAppliedSeq()),
                 });
             } else if (cfg.dotType === 'inferno') {
                 (victim?.infernoEntries ?? ctx.infernoEntries).push({
@@ -5801,7 +5809,7 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
                     tier: cfg.tier,
                     remainingRounds: cfg.duration,
                     sourceId: intent.ownerId,
-                    appliedSeq: ctx.statusEngine.nextAppliedSeq(),
+                    appliedSeq: (appliedSeq = ctx.statusEngine.nextAppliedSeq()),
                 });
             } else if (cfg.dotType === 'bomb') {
                 // A bomb SNAPSHOTS the owner's effective attack + affinity at application (unlike
@@ -5841,7 +5849,7 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
                     detonationDamageModifier: 0,
                     // Same approximation: reactive ctx does not carry the live splash modifier.
                     splashModifier: 0,
-                    appliedSeq: ctx.statusEngine.nextAppliedSeq(),
+                    appliedSeq: (appliedSeq = ctx.statusEngine.nextAppliedSeq()),
                 });
             }
             // Discrete infliction event — sourceId = the owner so the application is chainable
@@ -5858,6 +5866,7 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 dotType: cfg.dotType,
                 stacks,
                 tier: cfg.tier,
+                ...(appliedSeq !== undefined ? { appliedSeq } : {}),
                 ...(cfg.application !== undefined ? { application: cfg.application } : {}),
                 sourceSlot: intent.sourceSlot,
                 ...debuffInflictedReactionChainStamp(intent),
@@ -6055,8 +6064,28 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // No victim resolver / id (unit-test ctx without actorById, or a listener that somehow
         // fired without a captured victim) → not-simulated follow-up, no-op.
         if (!allyId || !victim) return;
-        // Gate 1: the conversion roll. A roll the caster's cast already drew at the landing, for
-        // a same-cast count gate (`preDecidedConversions`), is spent here instead of drawn again.
+        // The landed entry this stack belongs to: the one the landing event names
+        // (`dotAppliedSeq`), still holding an unconverted stack. Without that stamp (a
+        // hand-built event), the newest unconverted entry from this ally. Corrosion the victim
+        // held before this landing is never converted by it.
+        const pool: ActiveDoTStack[] =
+            cfg.fromDotType === 'corrosion'
+                ? victim.corrosionEntries
+                : cfg.fromDotType === 'inferno'
+                  ? victim.infernoEntries
+                  : victim.genericDoTEntries;
+        const seq = intent.eventCtx?.dotAppliedSeq;
+        const landed = pool.findLast(
+            (e) =>
+                e.sourceId === allyId &&
+                e.family === undefined &&
+                e.stacks > 0 &&
+                (seq === undefined || e.appliedSeq === seq)
+        );
+        if (!landed) return;
+        // Gate 1: the conversion roll, one per stack landed. A roll the caster's cast already
+        // drew at the landing, for a same-cast count gate (`preDecidedConversions`, one queued
+        // roll per stack), is spent here instead of drawn again.
         const decisionKey = dotConversionKey(
             intent.ownerId,
             intent.ability.id,
@@ -6064,29 +6093,28 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
             allyId,
             cfg.fromDotType
         );
-        const preDecided = ctx.preDecidedConversions?.get(decisionKey);
-        if (preDecided !== undefined) ctx.preDecidedConversions?.delete(decisionKey);
+        const queued = ctx.preDecidedConversions?.get(decisionKey);
+        const preDecided = queued?.shift();
+        if (queued && queued.length === 0) ctx.preDecidedConversions?.delete(decisionKey);
         const converts =
             preDecided ?? drawDotConversion(intent.ownerId, intent.ability.id, cfg, ctx);
         if (!converts) return;
         const ownerStats = ctx.effectiveStatsFor?.(intent.ownerId);
         const convertKey = `${intent.ownerId}:${intent.ability.id}`;
-        // Retag the entries THIS ally just applied (not yet converted, same sourceId) — tier/
-        // stacks/remainingRounds are left untouched ("of the same level"); only family +
-        // unremovable change (family feeds enemyDotFamilyCounts and the charge gate; unremovable
-        // survives Cheat-Death + DoT cleanse).
-        const pool: ActiveDoTStack[] =
-            cfg.fromDotType === 'corrosion'
-                ? victim.corrosionEntries
-                : cfg.fromDotType === 'inferno'
-                  ? victim.infernoEntries
-                  : victim.genericDoTEntries;
-        const converted = pool.filter((e) => e.sourceId === allyId && e.family === undefined);
-        if (!converted.length) return;
-        for (const e of converted) {
-            e.family = cfg.buffName;
-            e.unremovable = true;
+        // Retag ONE stack of that entry — tier/remainingRounds/appliedSeq untouched ("of the same
+        // level"); only family + unremovable change (family feeds enemyDotFamilyCounts and the
+        // charge gate; unremovable survives Cheat-Death + DoT cleanse). A multi-stack entry
+        // splits: the converted stack becomes its own one-stack entry beside it.
+        let converted: ActiveDoTStack;
+        if (landed.stacks === 1) {
+            converted = landed;
+        } else {
+            landed.stacks -= 1;
+            converted = { ...landed, stacks: 1 };
+            pool.splice(pool.indexOf(landed) + 1, 0, converted);
         }
+        converted.family = cfg.buffName;
+        converted.unremovable = true;
         // Gate 2: the paired crit-power-chance duration extension (folded from
         // parseCritPowerExtend — the standalone extend-dot for this row is suppressed in
         // buildShipAbilities to avoid double-applying it). A SEPARATE keyed gate so its own
@@ -6101,9 +6129,7 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 ctx.procChanceGates.set(extendKey, extendGate);
             }
             const extends_ = extendGate ? extendGate(critPowerFactor) : critPowerFactor >= 1;
-            if (extends_) {
-                for (const e of converted) e.remainingRounds += cfg.extendTurns;
-            }
+            if (extends_) converted.remainingRounds += cfg.extendTurns;
         }
         return;
     }
