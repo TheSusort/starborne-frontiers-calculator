@@ -3095,29 +3095,34 @@ const DocumentationPage: React.FC = () => {
                                         debuff: 3 Defense Shred stacks meet Crocus&apos;s &ldquo;3
                                         or more debuffs&rdquo;, and so do Amartya&apos;s 2 Exposed
                                         stacks plus Crocus&apos;s own Corrosion. Cheat Death wipes
-                                        Defense Shred like any other debuff. Nyxen&apos;s cleanses
-                                        take only Bombs or only damage-over-time effects, as
-                                        written, newest first. Heliodor&apos;s and Pestilence&apos;s
-                                        cut to the duration of all debuffs shortens Corrosion and
-                                        Inferno too; one cut to 0 turns ends without ticking again.
-                                        Reactions to an enemy cleansing a debuff (Pestilence,
-                                        Larkspur, Grif, Arum, Yarrow) also hear the cleanses an
-                                        enemy&apos;s passive performs (Nuqtu, Purifier, AEGIS,
-                                        Hermes, Howler), but not a duration cut; a cleanse that such
-                                        a reaction provoked triggers them again. A count written
-                                        after an infliction in the same skill includes what that
-                                        skill landed, enemy by enemy: Crocus&apos;s Corrosion II
-                                        counts toward her own &ldquo;3 or more debuffs&rdquo; Stasis
-                                        (Asphyxiator&apos;s and Anemone&apos;s gates likewise), and
-                                        a resisted one does not. A passive reacting to the hit
-                                        (Bayah) counts only the debuffs from before the skill.
-                                        APEX&apos;s passive shield arrives as the skill&apos;s first
-                                        debuff lands, so her charged skill&apos;s &ldquo;If this
-                                        Unit has an active shield&rdquo; Disable lands once an
-                                        earlier debuff in it has landed. Likewise Belladonna&apos;s
-                                        charged Corrosion II, if her passive converts it to Acidic
-                                        Decay as it lands, counts toward that skill&apos;s &ldquo;3
-                                        or more Acidic Decay&rdquo; Stasis.
+                                        Defense Shred like any other debuff. Every DoT stack, Bomb
+                                        and Echoing Burst is a debuff too: debuff extensions,
+                                        cleanses, duration cuts, debuff counts and Cheat Death all
+                                        treat them that way, and a Bomb or Echoing Burst removed by
+                                        a cleanse, a cut or Cheat Death never detonates.
+                                        Nyxen&apos;s cleanses take only Bombs or only
+                                        damage-over-time effects, as written, newest first.
+                                        Heliodor&apos;s and Pestilence&apos;s cut to the duration of
+                                        all debuffs shortens Corrosion and Inferno too; one cut to 0
+                                        turns ends without ticking again. Reactions to an enemy
+                                        cleansing a debuff (Pestilence, Larkspur, Grif, Arum,
+                                        Yarrow) also hear the cleanses an enemy&apos;s passive
+                                        performs (Nuqtu, Purifier, AEGIS, Hermes, Howler), but not a
+                                        duration cut; a cleanse that such a reaction provoked
+                                        triggers them again. A count written after an infliction in
+                                        the same skill includes what that skill landed, enemy by
+                                        enemy: Crocus&apos;s Corrosion II counts toward her own
+                                        &ldquo;3 or more debuffs&rdquo; Stasis (Asphyxiator&apos;s
+                                        and Anemone&apos;s gates likewise), and a resisted one does
+                                        not. A passive reacting to the hit (Bayah) counts only the
+                                        debuffs from before the skill. APEX&apos;s passive shield
+                                        arrives as the skill&apos;s first debuff lands, so her
+                                        charged skill&apos;s &ldquo;If this Unit has an active
+                                        shield&rdquo; Disable lands once an earlier debuff in it has
+                                        landed. Likewise Belladonna&apos;s charged Corrosion II, if
+                                        her passive converts it to Acidic Decay as it lands, counts
+                                        toward that skill&apos;s &ldquo;3 or more Acidic
+                                        Decay&rdquo; Stasis.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Team Ships:</span> Pick a
