@@ -2170,9 +2170,12 @@ const CRIT_POWER_EXTEND_RE =
  * Parses a crit-power-chance DoT extension: the turns and the gating condition. Returns null when
  * absent. The extension fires with probability min(1, critPower/100), gated by the condition.
  */
-export function parseCritPowerExtend(
-    text: string | null | undefined
-): { turns: number; condition: Condition; scope: 'active' | 'inflicted' } | null {
+export function parseCritPowerExtend(text: string | null | undefined): {
+    turns: number;
+    condition: Condition;
+    scope: 'active' | 'inflicted';
+    dotType?: DoTType;
+} | null {
     if (!text) return null;
     const plain = stripUnitTags(text);
     const m = CRIT_POWER_EXTEND_RE.exec(plain);
@@ -2183,7 +2186,11 @@ export function parseCritPowerExtend(
     // "extends the newly inflicted <DoT>" → only THIS cast's freshly inflicted DoT grows
     // (Valerian/Wisteria/Belladonna), not every standing entry.
     const scope: 'active' | 'inflicted' = /newly\s+inflicted/i.test(plain) ? 'inflicted' : 'active';
-    return { turns: parseInt(m[1], 10), condition, scope };
+    // "the newly inflicted Corrosion" names one DoT family; the extension reaches that family
+    // alone. A family outside DoTType (Belladonna's Acidic Decay) leaves it unset.
+    const family = /newly\s+inflicted\s+(corrosion|inferno)\b/i.exec(plain)?.[1].toLowerCase() as
+        DoTType | undefined;
+    return { turns: parseInt(m[1], 10), condition, scope, ...(family ? { dotType: family } : {}) };
 }
 
 // "this Unit converts the Corrosion into Acidic Decay of the same level, with the chance scaling
@@ -2297,6 +2304,22 @@ export function parseSelfCritDotEffect(
     const m = SELF_CRIT_DOT_EFFECT_RE.exec(plain);
     if (!m) return undefined;
     return { buffName: m[1].trim(), turns: parseInt(m[2], 10) };
+}
+
+const SELF_CRIT_DOT_FAMILY_RE =
+    /\bwhen\s+this\s+unit\s+inflicts\s+(?:an?\s+)?(bomb|corrosion|inferno)\s+with\s+a\s+critical\s+hit\b/i;
+
+/**
+ * The DoT family a SELF_CRIT_DOT_RE trigger clause names ("When this Unit inflicts Corrosion with
+ * a critical hit" → 'Corrosion'), capitalised as `dotFamilyLabel` writes it, for the reaction's
+ * `Ability.triggerStatusFilter`. Undefined when the clause names no single DoT family.
+ */
+export function parseSelfCritDotFamily(text: string | null | undefined): string | undefined {
+    if (!text || !parseSelfCritDot(text)) return undefined;
+    const m = SELF_CRIT_DOT_FAMILY_RE.exec(stripUnitTags(text));
+    if (!m) return undefined;
+    const family = m[1].toLowerCase();
+    return family.charAt(0).toUpperCase() + family.slice(1);
 }
 
 // SELF-subject "When this Unit inflicts a debuff with its active or charged skills" (Ripper) →
@@ -4135,9 +4158,10 @@ export function parseChargeGain(text: string | null | undefined): ChargeGain | n
     const amount = raw === 'a' || raw === 'an' ? 1 : parseInt(raw, 10);
     if (!amount || isNaN(amount)) return null;
 
-    // Inflict-driven charge gains fire per debuff infliction (+amount each event), not per
-    // standing debuff. Ally-inflicts ("when an ally inflicts a debuff", Oleander) is checked
-    // FIRST since its text also matches the self-inflict phrasing; then the self-inflict form
+    // Inflict-driven charge gains react to the infliction event, not to a standing debuff count;
+    // buildShipAbilities caps each at one per root cast (`Ability.oncePerRootCast`).
+    // Ally-inflicts ("when an ally inflicts a debuff", Oleander) is checked FIRST since its text
+    // also matches the self-inflict phrasing; then the self-inflict form
     // ("after it inflicts a debuff", Hemlock). Both emit 'always' + a reactive trigger so the
     // engine listens for the event rather than scaling by an enemy-debuff count.
     // Enemy-repair reactive (Zosimos): a self charge gain that fires per ENEMY repair. Checked

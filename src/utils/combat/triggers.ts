@@ -58,14 +58,18 @@ import {
     narrowByRecipientFilter,
     allyHpFraction,
 } from './supportRecipients';
-import { bombDurationCutCandidates, reduceBombsOnVictim } from './bombCountdown';
+import {
+    accumulatorDurationCutCandidates,
+    bombDurationCutCandidates,
+    shortenTimedBurstsOnVictim,
+} from './bombCountdown';
 import { liveGateConditions } from './abilityStatusGating';
 import { CombatEvent, CombatEventBus, CombatEventType, ShieldApplyAccumulator } from './events';
 import {
     CombatActor,
     ActiveDoTStack,
     PendingBomb,
-    carriedDotStacks,
+    carriedDebuffEntries,
     dotCleanseCandidates,
     dotDurationCutCandidates,
     shortenDotDurations,
@@ -333,6 +337,11 @@ export interface Intent {
          *  `dealtVictimRoleGateMet`: "after damaging a Debuffer or Supporter" asks whether ANY ship
          *  the attack hit has that role. Never empty when present. */
         dealtVictimIds?: string[];
+        /** The primary targets of the owner's damaging sub-attack (ability-performed
+         *  .primaryVictimIds, else its lone `targetId`), stamped by the on-deal-damage listener. A
+         *  reactive DoT rider (Burner's Inferno) lands on EACH of these, each with its own landing
+         *  check. Never empty when present. */
+        primaryVictimIds?: string[];
         /** The clipped overheal carried from an own-repair-to-ally event, summed across EVERY
          *  recipient of the triggering repair — THE CASTER INCLUDED. Read by an `overheal`-basis
          *  reactive heal/shield to scale off the wasted amount rather than the owner's max HP.
@@ -432,6 +441,9 @@ export interface Intent {
          *  alongside victimId. The convert-dot executor gates on this === cfg.fromDotType so an
          *  ally's Inferno (or any other DoT) never converts under a Corrosion-only ability. */
         dotType?: DoTType;
+        /** The landed entry's `appliedSeq` (dot-applied.appliedSeq), captured alongside
+         *  victimId: the convert-dot executor converts a stack of THAT entry only. */
+        dotAppliedSeq?: number;
     };
 }
 
@@ -521,7 +533,8 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
  *    included, see the ruling above; the ally counterpart of on-debuffed (Hayyan). Does NOT
  *    subscribe to dot-applied, matching on-debuffed's scoping.
  *  - on-ally-crit-dot → dot-applied with viaCrit from any OTHER same-side actor (opposing sources
- *    excluded, own casts excluded) — carved out of the ruling above, see there.
+ *    excluded, own casts excluded) — carved out of the ruling above, see there. A Bomb landing
+ *    never fires it: a Bomb is not a damage-over-time effect.
  *  - on-ally-critically-repaired → the OWNER's OWN heal-performed (casterId === ownerId) with
  *    >= 1 critting draw (Hermes). The recipient may be the owner itself — owner ruling
  *    2026-08-31, #446. One enqueue per qualifying cast.
@@ -1039,9 +1052,10 @@ export function registerReactiveListeners(args: {
                         // Warpstrike (duration-reduction), Zeolite (purge). Pinned by
                         // onDealDamageDeliveredBasis.integration.test.ts.
                         if ((e.deliveredDamage ?? e.damage ?? 0) <= 0) return;
-                        // Capture the owner's own attack target so a reactive DoT rider (Burner's
-                        // on-deal-damage Inferno) lands on the enemy actually hit — the real
-                        // positional victim — instead of the ctx-level fallback, which is a NO-OP.
+                        // Capture the owner's own attack target, and the sub-attack's primary
+                        // targets, so a reactive DoT rider (Burner's on-deal-damage Inferno) lands
+                        // on every primary target actually hit — the real positional victims —
+                        // instead of the ctx-level fallback, which is a NO-OP.
                         // A roster-less run is not constructible (the normalization boundary refuses
                         // an absent/empty roster), so a DPS run routes the rider to the real victim.
                         // Non-DoT riders (Warpstrike duration-reduction) ignore victimId, so this is
@@ -1054,6 +1068,10 @@ export function registerReactiveListeners(args: {
                                 dealtVictimIds:
                                     e.victimIds && e.victimIds.length > 0
                                         ? e.victimIds
+                                        : [e.targetId],
+                                primaryVictimIds:
+                                    e.primaryVictimIds && e.primaryVictimIds.length > 0
+                                        ? e.primaryVictimIds
                                         : [e.targetId],
                                 // See the on-crit listener above.
                                 subAttackIndex: e.subAttackIndex,
@@ -1209,8 +1227,8 @@ export function registerReactiveListeners(args: {
                         // Team DoT applications emit dot-applied with the team sourceId — an ally
                         // DoT infliction triggers this listener exactly as an ally debuff does. Same
                         // self-chain guard as the debuff-applied arm above. One enqueue per stack
-                        // landed (`dotInflictions`), except Belladonna's `convert-dot`, which
-                        // converts THE application's entry — one chance per application.
+                        // landed (`dotInflictions`) — Belladonna's `convert-dot` included: each new
+                        // stack takes its own conversion roll.
                         if (
                             !isOpposing(e.sourceId) &&
                             !(e.sourceId === ownerId && e.viaAllyDebuffInflictedReaction) &&
@@ -1219,9 +1237,7 @@ export function registerReactiveListeners(args: {
                                 e.application
                             )
                         ) {
-                            const times =
-                                ra.ability.config.type === 'convert-dot' ? 1 : dotInflictions(e);
-                            for (let i = 0; i < times; i++)
+                            for (let i = 0; i < dotInflictions(e); i++)
                                 enqueue({
                                     ...intent,
                                     eventCtx: {
@@ -1230,9 +1246,13 @@ export function registerReactiveListeners(args: {
                                         inflictorId: e.sourceId,
                                         ...inflictionReactionCtx(e),
                                         // Belladonna's convert-dot executor needs the
-                                        // actual victim + DoT type of THIS application.
+                                        // actual victim, DoT type and entry of THIS
+                                        // application.
                                         victimId: e.targetId,
                                         dotType: e.dotType,
+                                        ...(e.appliedSeq !== undefined
+                                            ? { dotAppliedSeq: e.appliedSeq }
+                                            : {}),
                                     },
                                 });
                         }
@@ -1356,11 +1376,12 @@ export function registerReactiveListeners(args: {
                     break;
                 }
                 case 'on-enemy-dot-stacks-crossed': {
-                    // VICTIM-scoped, inflictor-agnostic (Snakeroot, R43/R43b/R90): count the DoT
-                    // stacks INFLICTED on each enemy this combat and fire once for every multiple
-                    // of `everyDotStacks` a landing passes (3 → 9 at step 4 is two). The count is
-                    // cumulative — expiry and cleanse never lower it — and only landed stacks reach
-                    // it: a resisted stack emits no landing event. Each enemy is counted on its own.
+                    // VICTIM-scoped, inflictor-agnostic (Snakeroot, R43/R43b/R90/R112): count the
+                    // DoT stacks INFLICTED on each enemy this combat and fire once for every
+                    // multiple of `everyDotStacks` a landing passes (3 → 9 at step 4 is two). The
+                    // count is cumulative — expiry and cleanse never lower it — and only landed
+                    // stacks reach it: a resisted stack emits no landing event. Each enemy is
+                    // counted on its own.
                     const step =
                         ra.ability.config.type === 'damage'
                             ? ra.ability.config.everyDotStacks
@@ -1378,12 +1399,11 @@ export function registerReactiveListeners(args: {
                                 eventCtx: { ...intent.eventCtx, debuffVictimId: targetId },
                             });
                     };
-                    bus.on('dot-applied', (e) => onStacksAdded(e.targetId, e.stacks));
-                    // Toxic Overflow's end-of-round spread adds one Corrosion stack to each
-                    // affected ally of the holder, and announces it on this event, not
-                    // `dot-applied`.
-                    bus.on('corrosion-spread', (e) => {
-                        for (const id of e.affectedIds) onStacksAdded(id, 1);
+                    // A Bomb is not a damage-over-time effect (owner ruling R112): its stacks
+                    // never count. A Toxic Overflow spread's Corrosion lands through
+                    // `dot-applied` too, so its `corrosion-spread` announcement adds nothing.
+                    bus.on('dot-applied', (e) => {
+                        if (e.dotType !== 'bomb') onStacksAdded(e.targetId, e.stacks);
                     });
                     break;
                 }
@@ -1391,7 +1411,13 @@ export function registerReactiveListeners(args: {
                     bus.on('dot-applied', (e) => {
                         // Owner-excluded (Crocus's "another ally") — see the trigger doc block's
                         // on-ally-crit-dot entry. One enqueue per qualifying infliction EVENT.
-                        if (e.viaCrit && isSameSideAlly(e.sourceId, ownerId)) {
+                        // A Bomb is not a damage-over-time effect, so a critical Bomb never fires
+                        // it.
+                        if (
+                            e.viaCrit &&
+                            e.dotType !== 'bomb' &&
+                            isSameSideAlly(e.sourceId, ownerId)
+                        ) {
                             enqueue({
                                 ...intent,
                                 eventCtx: {
@@ -1409,9 +1435,18 @@ export function registerReactiveListeners(args: {
                 case 'on-self-crit-dot':
                     bus.on('dot-applied', (e) => {
                         // Wisteria: self-subject sibling of on-ally-crit-dot above — THIS unit's
-                        // OWN crit-cast DoT infliction (sourceId === ownerId), not an ally's.
-                        // One enqueue per qualifying infliction event.
-                        if (e.viaCrit && e.sourceId === ownerId) {
+                        // OWN crit-cast DoT infliction (sourceId === ownerId), not an ally's, of
+                        // the family its clause names (`triggerStatusFilter`: "inflicts Corrosion
+                        // with a critical hit" → Corrosion only). One enqueue per qualifying
+                        // infliction event.
+                        if (
+                            e.viaCrit &&
+                            e.sourceId === ownerId &&
+                            passesStatusFilter(
+                                ra.ability.triggerStatusFilter,
+                                dotFamilyLabel(e.dotType)
+                            )
+                        ) {
                             enqueue({
                                 ...intent,
                                 eventCtx: {
@@ -2651,9 +2686,10 @@ export interface IntentExecContext {
      *  each reactive draw of the same ability so the proc lands at its true frequency. */
     procChanceGates?: Map<string, RateGate>;
     /** DoT-conversion rolls a cast already drew at its landing, keyed by `dotConversionKey` (owner
-     *  ruling R76: Belladonna's same-cast conversion counts for her Acidic Decay gate). The
-     *  convert-dot executor spends an entry instead of drawing. Absent → every roll is drawn. */
-    preDecidedConversions?: Map<string, boolean>;
+     *  ruling R76: Belladonna's same-cast conversion counts for her Acidic Decay gate): one roll
+     *  per landed stack, in landing order. The convert-dot executor spends the first instead of
+     *  drawing. Absent → every roll is drawn. */
+    preDecidedConversions?: Map<string, boolean[]>;
     /** Live self-HP% per owner (0..100) for drain-time hp-threshold gates: each owner's own
      *  current/max HP, both sides. A caller that supplies no closure at all (unit contexts) falls
      *  back to 100 in buildDrainContext. */
@@ -2850,13 +2886,15 @@ export interface IntentExecContext {
      *  Mirrors `affinityOf`'s allActorsById source. Optional — absent in unit-test ctxs
      *  that don't exercise convert-dot. */
     actorById?: (actorId: string) => CombatActor | undefined;
-    /** Apply a forced bomb burst against `victim` through the engine's per-victim
-     *  `applyVictimDamage` sink — the same funnel a natural countdown-0 detonation uses, so
+    /** Apply a forced Bomb or Echoing Burst burst against `victim` through the engine's
+     *  per-victim `applyVictimDamage` sink — the same funnel a natural detonation uses, so
      *  Barrier immunity, the Cheat-Death intercept, `recordDestroyed`/`ship-destroyed` and
-     *  incoming-block/Lifeline all apply. `sourceId` is the bomb's ORIGINAL applier (attribution),
+     *  incoming-block/Lifeline all apply. `sourceId` is the ORIGINAL applier (attribution),
      *  never the actor that forced the burst. Consumed by the `reduce-duration` branch, which
-     *  shrinks `PendingBomb.countdown` alongside the statusEngine debuffs (a Bomb is a Debuff).
-     *  Absent (unit-test ctxs) → `reduceBombsOnVictim` falls back to a bare shield-then-HP debit. */
+     *  shrinks `PendingBomb.countdown` and `PendingAccumulator.roundsRemaining` alongside the
+     *  statusEngine debuffs (both are debuffs; one driven to 0 bursts — owner ruling R113).
+     *  Absent (unit-test ctxs) → the Bomb / Echoing Burst cut helpers (bombCountdown.ts) fall
+     *  back to a bare shield-then-HP debit. */
     forceDetonateBomb?: (victim: CombatActor, sourceId: string, damage: number) => void;
     /** Resolve ANY actor's ship role (Ship.type) by id, either side — the SAME `roleByActorId` map
      *  (side-agnostic by key) Meatshield's defense-substitution and Graphite's `roleFilter`
@@ -3053,8 +3091,11 @@ export function buildActorConditionContext(
          *  only at the one-time combat-start seed (see seedPassiveTimedStatuses). */
         enemiesHitThisCast?: number;
         /** Generic DoT stacks at drain time (`dotReadings`). Default 0 (no generic DoT tracked
-         *  by this caller). Folded into `enemyDotCount` alongside corrosion/inferno/bomb. */
+         *  by this caller). Folded into `enemyDotCount` alongside corrosion/inferno. */
         genericStacks?: number;
+        /** Echoing Burst accumulators on the unit asked about (`dotReadings`). Default 0. Each
+         *  is one debuff in `enemyDebuffCount` (owner ruling R109), never in `enemyDotCount`. */
+        accumulatorCount?: number;
         /** Live per-family DoT stack counts (Belladonna's "3+ Acidic Decay" gate) at
          *  drain time. Default undefined — every family reads 0 via
          *  ConditionContext.enemyDotFamilyCounts' own fallback. */
@@ -3084,6 +3125,7 @@ export function buildActorConditionContext(
         infernoStacks: shared.infernoStacks,
         bombStacks: shared.bombStacks,
         genericStacks: shared.genericStacks,
+        accumulatorCount: shared.accumulatorCount,
         enemyDotFamilyCounts: shared.enemyDotFamilyCounts,
         effectiveCritRate: shared.effectiveCritRate ?? 0,
         enemyType: shared.enemyType,
@@ -3660,9 +3702,9 @@ export function activeWithStacks(s: ActiveAbilityStatus): ActiveBuff {
 /** How many debuffs a list of landed named-debuff entries is: one per STACK (owner rulings R73,
  *  R88 — a stackable debuff's stacks are separate debuffs: 3 Defense Shred stacks are 3, Amartya's
  *  2 Exposed stacks are 2), per `statusEntryStackCount`. A debuff that overwrites rather than
- *  stacks holds one stack. The named half of every debuff COUNT; DoT stacks are the other half
- *  (`carriedDotStacks`). Pass the full ability status where one exists: an unspent timed entry
- *  carries its stack count on the payload only. */
+ *  stacks holds one stack. The named half of every debuff COUNT; DoT stacks and Echoing Burst
+ *  accumulators are the other half (`carriedDebuffEntries`). Pass the full ability status where
+ *  one exists: an unspent timed entry carries its stack count on the payload only. */
 export function namedDebuffCount(entries: readonly (ActiveBuff | ActiveAbilityStatus)[]): number {
     return entries.reduce((n, e) => n + statusEntryStackCount(e), 0);
 }
@@ -3692,21 +3734,22 @@ export function ownerDebuffCount(statusEngine: StatusEngine, targetId: string): 
 }
 
 /** How many debuffs `actor` carries right now: its named debuffs (`ownerDebuffCount`) plus every
- *  DoT stack it carries (`carriedDotStacks`) — the same sum a cast's "N or more debuffs" gate
- *  reads for a struck enemy. */
+ *  DoT stack and Echoing Burst accumulator it carries (`carriedDebuffEntries`) — the same sum a
+ *  cast's "N or more debuffs" gate reads for a struck enemy. */
 export function actorDebuffCount(statusEngine: StatusEngine, actor: CombatActor): number {
-    return ownerDebuffCount(statusEngine, actor.id) + carriedDotStacks(actor);
+    return ownerDebuffCount(statusEngine, actor.id) + carriedDebuffEntries(actor);
 }
 
 /**
  * Cleanses up to `count` debuffs from `actorId` — the one removal both cleanse executors (cast and
- * reactive) call. The pool is every debuff `actorDebuffCount` counts: its named debuffs and each
- * DoT stack it carries (`dotCleanseCandidates`, owner ruling R27), taken NEWEST APPLIED FIRST
- * across both kinds (owner ruling 2026-10-04: Attack Down and 2 Corrosion stacks, "cleanses 1
- * debuff" → whichever was inflicted last goes). A typed cleanse (`debuffType`, Nyxen's "cleanses
- * 2 Bomb" / "2 damage over time debuffs") filters to DoT stacks of that kind, then takes the
- * newest. `actor` absent (a hand-built ctx without an actor reader) → named debuffs only. Returns
- * how many were removed.
+ * reactive) call. The pool is every debuff `actorDebuffCount` counts: its named debuffs, each DoT
+ * stack it carries (owner ruling R27) and each Echoing Burst accumulator (`dotCleanseCandidates`),
+ * taken NEWEST APPLIED FIRST across both kinds (owner ruling 2026-10-04: Attack Down and 2
+ * Corrosion stacks, "cleanses 1 debuff" → whichever was inflicted last goes). A typed cleanse
+ * (`debuffType`, Nyxen's "cleanses 2 Bomb" / "2 damage over time debuffs") skips the named
+ * debuffs: `'bomb'` draws on Bomb stacks and Echoing Burst accumulators, `'dot'` on Corrosion,
+ * Inferno and generic DoT stacks only (owner ruling R112), then takes the newest. `actor` absent
+ * (a hand-built ctx without an actor reader) → named debuffs only. Returns how many were removed.
  */
 export function cleanseDebuffs(
     statusEngine: StatusEngine,
@@ -4343,8 +4386,11 @@ function reactionFiringKey(reaction: { firingId?: number }): string {
  *    waking an on-attacked Corrosion I, which wakes an Out. Damage Down II, is that enemy's one
  *    cast.
  *  - An infliction a reaction landed with no turn active (round start / end of round): that
- *    reaction firing stands as its own cast. UNCONFIRMED — the rule covers only inflictions a
- *    skill cast sets off. */
+ *    reaction firing stands as its own cast. Every Toxic Overflow spread of one round's
+ *    end-of-round pass shares ONE firing id (engine.ts `toxicSpreaders` loop), so the round's
+ *    spreads together are one cast, apart from the skill cast that applied the Toxic Overflow:
+ *    two holders spreading at the same round end charge Hemlock and Oleander +1 each, not +2
+ *    (owner ruling, measured in game 2026-10-07). */
 function rootCastKey(
     ctx: IntentExecContext,
     inflictorId: string,
@@ -5749,13 +5795,15 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
             victimId: string,
             stacks: number
         ): void => {
+            // The pushed entry's `appliedSeq`, carried on the landing event.
+            let appliedSeq: number | undefined;
             if (cfg.dotType === 'corrosion') {
                 (victim?.corrosionEntries ?? ctx.corrosionEntries).push({
                     stacks,
                     tier: cfg.tier,
                     remainingRounds: cfg.duration,
                     sourceId: intent.ownerId,
-                    appliedSeq: ctx.statusEngine.nextAppliedSeq(),
+                    appliedSeq: (appliedSeq = ctx.statusEngine.nextAppliedSeq()),
                 });
             } else if (cfg.dotType === 'inferno') {
                 (victim?.infernoEntries ?? ctx.infernoEntries).push({
@@ -5763,7 +5811,7 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
                     tier: cfg.tier,
                     remainingRounds: cfg.duration,
                     sourceId: intent.ownerId,
-                    appliedSeq: ctx.statusEngine.nextAppliedSeq(),
+                    appliedSeq: (appliedSeq = ctx.statusEngine.nextAppliedSeq()),
                 });
             } else if (cfg.dotType === 'bomb') {
                 // A bomb SNAPSHOTS the owner's effective attack + affinity at application (unlike
@@ -5803,7 +5851,7 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
                     detonationDamageModifier: 0,
                     // Same approximation: reactive ctx does not carry the live splash modifier.
                     splashModifier: 0,
-                    appliedSeq: ctx.statusEngine.nextAppliedSeq(),
+                    appliedSeq: (appliedSeq = ctx.statusEngine.nextAppliedSeq()),
                 });
             }
             // Discrete infliction event — sourceId = the owner so the application is chainable
@@ -5820,6 +5868,7 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 dotType: cfg.dotType,
                 stacks,
                 tier: cfg.tier,
+                ...(appliedSeq !== undefined ? { appliedSeq } : {}),
                 ...(cfg.application !== undefined ? { application: cfg.application } : {}),
                 sourceSlot: intent.sourceSlot,
                 ...debuffInflictedReactionChainStamp(intent),
@@ -5936,45 +5985,67 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // infliction landed on under that field only (Ripper's "it also inflicts Inferno II" lands
         // on the enemy his debuff just hit) — the same counterTargetId-then-debuffVictimId order
         // the sibling `debuff` branch reads.
+        //
+        // An `on-deal-damage` rider (Burner's Inferno) instead lands on EVERY primary target of
+        // the sub-attack that dealt the damage (`eventCtx.primaryVictimIds`, owner ruling R110):
+        // the anchor alone for a single-target or ordinary area attack, every struck enemy for a
+        // whole-battlefield pattern. Each recipient goes through the full per-victim landing below
+        // (once-per-cast gate, Block Debuff, its own landing check).
         const routedVictimId =
             intent.eventCtx?.victimId ??
             intent.eventCtx?.counterTargetId ??
             intent.eventCtx?.debuffVictimId;
         // Victimless → NO-OP, so no container push and NO `dot-applied`.
         if (routedVictimId === undefined) return;
-        if (!passesOncePerCastGate(intent, ctx, routedVictimId)) return;
-        const victim = ctx.actorById?.(routedVictimId);
-        // A unit-test ctx without an `actorById` delegate cannot resolve the object but still
-        // knows the id — keep using it rather than inventing a target.
-        const victimId = victim?.id ?? routedVictimId;
-        // Block Debuff: an immune target auto-resists this reactive DoT — block
-        // it AND emit a resist event. Placed AFTER the inert-DoT guard above so a
-        // zero-stack/tier DoT doesn't surface a spurious resist.
-        if (targetCarriesBlockDebuff(ctx.statusEngine, victimId)) {
-            // #413: block path — no landing gate drawn, so no on-resist proc.
-            emitBlockDebuffResist(
-                ctx.bus,
-                intent.ownerId,
-                victimId,
-                ctx.round,
-                dotResistLabel(cfg.dotType, cfg.tier),
-                false,
-                undefined,
-                ctx.reactionFiringId
-            );
-            return;
+        const recipientIds =
+            intent.ability.trigger === 'on-deal-damage' &&
+            intent.eventCtx?.primaryVictimIds &&
+            intent.eventCtx.primaryVictimIds.length > 0
+                ? intent.eventCtx.primaryVictimIds
+                : [routedVictimId];
+        // A cast-scoped rider fires once for the whole recipient set; only the per-victim scope
+        // is spent per recipient inside the loop.
+        if (intent.ability.oncePerCast === 'cast' && !passesOncePerCastGate(intent, ctx)) return;
+        for (const recipientId of recipientIds) {
+            if (
+                intent.ability.oncePerCast === 'per-victim' &&
+                !passesOncePerCastGate(intent, ctx, recipientId)
+            )
+                continue;
+            const victim = ctx.actorById?.(recipientId);
+            // A unit-test ctx without an `actorById` delegate cannot resolve the object but still
+            // knows the id — keep using it rather than inventing a target.
+            const victimId = victim?.id ?? recipientId;
+            // Block Debuff: an immune target auto-resists this reactive DoT — block
+            // it AND emit a resist event. Placed AFTER the inert-DoT guard above so a
+            // zero-stack/tier DoT doesn't surface a spurious resist.
+            if (targetCarriesBlockDebuff(ctx.statusEngine, victimId)) {
+                // #413: block path — no landing gate drawn, so no on-resist proc.
+                emitBlockDebuffResist(
+                    ctx.bus,
+                    intent.ownerId,
+                    victimId,
+                    ctx.round,
+                    dotResistLabel(cfg.dotType, cfg.tier),
+                    false,
+                    undefined,
+                    ctx.reactionFiringId
+                );
+                continue;
+            }
+            // Lands through the SAME path as a timed debuff (`owner.landsTimedEnemyApplication`,
+            // the sibling `debuff` branch's gate), keyed on the DoT's own verb (owner ruling,
+            // 2026-10-01):
+            //  - 'apply' (the Burner gear set's "Applies Inferno") — the affinity check against
+            //    THIS victim only, no hacking-vs-security roll and no draw;
+            //  - anything else — one draw per stack of the OWNER's landing gate at THIS victim's
+            //    hacking-vs-security chance (a team ship's DoT lands at ITS rate), not the owner's
+            //    cached turn-target chance: a reactive DoT lands on the enemy the triggering
+            //    event carries. An undefined chance (unit ctxs, a read before the owner's first
+            //    turn) falls back to the owner's cached chance, then 1, inside the gate.
+            const landed = landedStacksOn(victimId);
+            if (landed > 0) landDotOn(victim, victimId, landed);
         }
-        // Lands through the SAME path as a timed debuff (`owner.landsTimedEnemyApplication`, the
-        // sibling `debuff` branch's gate), keyed on the DoT's own verb (owner ruling, 2026-10-01):
-        //  - 'apply' (the Burner gear set's "Applies Inferno") — the affinity check against THIS
-        //    victim only, no hacking-vs-security roll and no draw;
-        //  - anything else — one draw per stack of the OWNER's landing gate at THIS victim's
-        //    hacking-vs-security chance (a team ship's DoT lands at ITS rate), not the owner's
-        //    cached turn-target chance: a reactive DoT lands on the enemy the triggering event
-        //    carries. An undefined chance (unit ctxs, a read before the owner's first turn) falls
-        //    back to the owner's cached chance, then 1, inside the gate.
-        const landed = landedStacksOn(victimId);
-        if (landed > 0) landDotOn(victim, victimId, landed);
         return;
     }
 
@@ -5995,8 +6066,29 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // No victim resolver / id (unit-test ctx without actorById, or a listener that somehow
         // fired without a captured victim) → not-simulated follow-up, no-op.
         if (!allyId || !victim) return;
-        // Gate 1: the conversion roll. A roll the caster's cast already drew at the landing, for
-        // a same-cast count gate (`preDecidedConversions`), is spent here instead of drawn again.
+        // The landed entry this stack belongs to: the one the landing event names
+        // (`dotAppliedSeq`), still holding an unconverted stack. Without that stamp (a
+        // hand-built event), the newest unconverted entry from this ally. Corrosion the victim
+        // held before this landing is never converted by it.
+        const pool: ActiveDoTStack[] =
+            cfg.fromDotType === 'corrosion'
+                ? victim.corrosionEntries
+                : cfg.fromDotType === 'inferno'
+                  ? victim.infernoEntries
+                  : victim.genericDoTEntries;
+        const seq = intent.eventCtx?.dotAppliedSeq;
+        const landed = pool.findLast(
+            (e) =>
+                e.sourceId === allyId &&
+                e.family === undefined &&
+                e.stacks > 0 &&
+                (seq === undefined || e.appliedSeq === seq)
+        );
+        // Gate 1: the conversion roll, one per stack landed. A roll the caster's cast already
+        // drew at the landing, for a same-cast count gate (`preDecidedConversions`, one queued
+        // roll per stack), is spent here instead of drawn again. The queued roll belongs to THIS
+        // stack, so it is spent before the landed-entry check: a stack whose entry is gone discards
+        // its roll rather than leaving it for the next stack.
         const decisionKey = dotConversionKey(
             intent.ownerId,
             intent.ability.id,
@@ -6004,29 +6096,29 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
             allyId,
             cfg.fromDotType
         );
-        const preDecided = ctx.preDecidedConversions?.get(decisionKey);
-        if (preDecided !== undefined) ctx.preDecidedConversions?.delete(decisionKey);
+        const queued = ctx.preDecidedConversions?.get(decisionKey);
+        const preDecided = queued?.shift();
+        if (queued && queued.length === 0) ctx.preDecidedConversions?.delete(decisionKey);
+        if (!landed) return;
         const converts =
             preDecided ?? drawDotConversion(intent.ownerId, intent.ability.id, cfg, ctx);
         if (!converts) return;
         const ownerStats = ctx.effectiveStatsFor?.(intent.ownerId);
         const convertKey = `${intent.ownerId}:${intent.ability.id}`;
-        // Retag the entries THIS ally just applied (not yet converted, same sourceId) — tier/
-        // stacks/remainingRounds are left untouched ("of the same level"); only family +
-        // unremovable change (family feeds enemyDotFamilyCounts and the charge gate; unremovable
-        // survives Cheat-Death + DoT cleanse).
-        const pool: ActiveDoTStack[] =
-            cfg.fromDotType === 'corrosion'
-                ? victim.corrosionEntries
-                : cfg.fromDotType === 'inferno'
-                  ? victim.infernoEntries
-                  : victim.genericDoTEntries;
-        const converted = pool.filter((e) => e.sourceId === allyId && e.family === undefined);
-        if (!converted.length) return;
-        for (const e of converted) {
-            e.family = cfg.buffName;
-            e.unremovable = true;
+        // Retag ONE stack of that entry — tier/remainingRounds/appliedSeq untouched ("of the same
+        // level"); only family + unremovable change (family feeds enemyDotFamilyCounts and the
+        // charge gate; unremovable survives Cheat-Death + DoT cleanse). A multi-stack entry
+        // splits: the converted stack becomes its own one-stack entry beside it.
+        let converted: ActiveDoTStack;
+        if (landed.stacks === 1) {
+            converted = landed;
+        } else {
+            landed.stacks -= 1;
+            converted = { ...landed, stacks: 1 };
+            pool.splice(pool.indexOf(landed) + 1, 0, converted);
         }
+        converted.family = cfg.buffName;
+        converted.unremovable = true;
         // Gate 2: the paired crit-power-chance duration extension (folded from
         // parseCritPowerExtend — the standalone extend-dot for this row is suppressed in
         // buildShipAbilities to avoid double-applying it). A SEPARATE keyed gate so its own
@@ -6041,9 +6133,7 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 ctx.procChanceGates.set(extendKey, extendGate);
             }
             const extends_ = extendGate ? extendGate(critPowerFactor) : critPowerFactor >= 1;
-            if (extends_) {
-                for (const e of converted) e.remainingRounds += cfg.extendTurns;
-            }
+            if (extends_) converted.remainingRounds += cfg.extendTurns;
         }
         return;
     }
@@ -6483,19 +6573,16 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 let n: number;
                 if (cfg.count === 'all') {
                     // Heliodor/Pestilence's "reduces the duration of all active Debuffs … by 1
-                    // turn": every named debuff, and — DoTs being debuffs (owner ruling
-                    // 2026-10-04) — every Corrosion, Inferno and generic entry, one cut to 0
-                    // expiring without a tick (`shortenDotDurations`).
+                    // turn": every named debuff and every DoT entry (`shortenDotDurations`).
                     n = ctx.statusEngine.reduceAllDebuffsDuration(rid, durationTurns);
                     if (victim) n += shortenDotDurations(victim, durationTurns);
-                    // A Bomb IS a Debuff, so the shrink reaches it too — and a bomb driven to 0
-                    // turns EXPLODES (user-verified 2026-07-31: Heliodor's "-1 turn on all
-                    // Debuffs" detonating the Bomb II Ruiner planted on it), via the SAME
-                    // reduce-and-detonate helper Lingshe's bomb-countdown-reduce uses, so the burst
-                    // credits the bomb's original applier and routes through the per-victim
-                    // damage sink.
+                    // A Bomb and an Echoing Burst are debuffs too (user-verified 2026-07-31:
+                    // Heliodor's cut detonating the Bomb II Ruiner planted on it; owner ruling
+                    // R113 for Echoing Burst). One driven to 0 detonates through the per-victim
+                    // sink, credited to its applier; those driven to 0 together go off in order of
+                    // application (owner ruling R115) — `shortenTimedBurstsOnVictim`.
                     if (victim) {
-                        n += reduceBombsOnVictim(
+                        n += shortenTimedBurstsOnVictim(
                             victim,
                             durationTurns,
                             ctx.round,
@@ -6506,12 +6593,20 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
                     }
                 } else {
                     // Warpstrike's "reduces a random active debuff's duration by 1 turn" (owner
-                    // ruling R35): ONE debuff, picked at random over the named debuffs and every
-                    // DoT and Bomb stack — see `reduceRandomDebuffDuration`. The pick draws from
-                    // its own keyed sub-stream, so it moves no other gate's draws.
+                    // ruling R35): ONE debuff, picked at random over the named debuffs, every DoT
+                    // and Bomb stack and every Echoing Burst accumulator — see
+                    // `reduceRandomDebuffDuration`. A Bomb or Echoing Burst cut to 0 detonates
+                    // (owner ruling R113). The pick draws from its own keyed sub-stream, so it
+                    // moves no other gate's draws.
                     const stacks = victim
                         ? [
                               ...dotDurationCutCandidates(victim),
+                              ...accumulatorDurationCutCandidates(
+                                  victim,
+                                  ctx.round,
+                                  ctx.bus,
+                                  ctx.forceDetonateBomb
+                              ),
                               ...bombDurationCutCandidates(
                                   victim,
                                   ctx.round,

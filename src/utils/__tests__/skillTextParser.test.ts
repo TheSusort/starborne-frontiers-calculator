@@ -1442,6 +1442,19 @@ describe('parseCritPowerExtend', () => {
             turns: 1,
             condition: { subject: 'self-crit', derivable: true },
             scope: 'inflicted',
+            dotType: 'corrosion',
+        });
+    });
+
+    it('parses Wisteria self-crit extension naming Corrosion (not the Inferno II it also inflicts)', () => {
+        // Wisteria's refit-active passive text (docs/ship-skills.csv).
+        const text =
+            "When this Unit inflicts <unit-skill>Corrosion</unit-skill> with a critical hit, it also inflicts <unit-skill>Inferno II</unit-skill> for 2 turns and <unit-skill>extends the newly inflicted</unit-skill> <unit-skill>Corrosion</unit-skill> by 1 turn with the extension chance equal to this Unit's crit power.";
+        expect(parseCritPowerExtend(text)).toEqual({
+            turns: 1,
+            condition: { subject: 'self-crit', derivable: true },
+            scope: 'inflicted',
+            dotType: 'corrosion',
         });
     });
 

@@ -16,8 +16,9 @@ export type AbilityType =
     | 'extend-dot'
     // Generic extend-status (Ripper/Lev) — grows every eligible timed
     // buff or debuff by N turns (StatusEngine selfMaps/enemyMaps), the clean inverse of
-    // the shipped duration-reduce ('cleanse' mode:'reduce-duration'). Distinct from
-    // 'extend-dot', which operates on the separate DoT tick-stack store, not these maps.
+    // the shipped duration-reduce ('cleanse' mode:'reduce-duration'). A debuff extension also
+    // grows the victim's DoTs, Bombs and Echoing Burst accumulators (owner ruling R109), which
+    // live outside these maps; 'extend-dot' reaches those containers alone.
     | 'extend-status'
     | 'detonate-dot'
     | 'accumulate-detonate'
@@ -935,34 +936,40 @@ export type AbilityConfig =
     // here since there is only one landing behavior for this ability (unlike 'debuff', which
     // supports both 'inflict' and 'apply').
     | { type: 'bomb-countdown-reduce'; turns: number }
-    // `scope`: 'active'/undefined extends ALL standing DoT entries (Provider's
-    // "all damage over time debuffs are extended"; default + back-compat for stored
-    // configs). 'inflicted' extends ONLY the DoT entries this cast just applied
-    // (Valerian's "the newly inflicted Corrosion by 1 turn").
+    // `scope`: 'active'/undefined extends ALL standing Corrosion, Inferno and generic DoT entries
+    // (Provider's "all damage over time debuffs are extended"; default + back-compat for stored
+    // configs). 'inflicted' extends ONLY the ones this cast just applied (Valerian's "the newly
+    // inflicted Corrosion by 1 turn"). A Bomb or Echoing Burst is not a damage-over-time effect
+    // and is never extended here (`dotEntriesOf` in combat/state.ts — owner ruling R112).
+    // `dotType` narrows the extension to the one DoT family the text names (Valerian/Wisteria:
+    // 'corrosion'); absent → every DoT entry in scope.
     | {
           type: 'extend-dot';
           turns: number;
           chanceFromCritPower?: boolean;
           scope?: 'active' | 'inflicted';
+          dotType?: DoTType;
       }
     // Generic extend-status (Ripper/Lev) — extends every eligible timed
     // buff ('buff') or debuff ('debuff') on the StatusEngine selfMaps/enemyMaps store by
-    // `turns`. See src/utils/combat/statusEngine.ts extendAllBuffsDuration/
-    // extendAllDebuffsDuration.
+    // `turns` (statusEngine.ts extendAllBuffsDuration/extendAllDebuffsDuration). A 'debuff'
+    // extension also extends the victim's DoTs, Bombs and Echoing Burst accumulators
+    // (`extendDebuffEntries` in combat/state.ts) — owner ruling R109.
     | {
           type: 'extend-status';
           statusKind: 'buff' | 'debuff';
           turns: number;
           /** #363 (Fuying): restrict the extension to statuses with this exact name
            *  ("extends Stealth by 1 turn"). Absent → extend EVERY eligible timed status of
-           *  `statusKind`, which is what Ripper/Lev do. */
+           *  `statusKind`, which is what Ripper/Lev do. On a 'debuff' extension the name also
+           *  picks which DoT, Bomb and Echoing Burst entries grow (`debuffEntriesNamed`). */
           buffName?: string;
           /** Asphyxiator: 'inflicted' extends ONLY the statuses THIS cast just applied
            *  ("the newly inflicted debuff is extended by 1 turn") — a status already standing
            *  from an earlier round is left alone. Absent → extend every eligible standing
            *  status, which is what Ripper/Lev do. Same axis as `extend-dot`'s `scope`,
-           *  and an inflicted-scope debuff extension covers the cast's DoT applications too:
-           *  the game counts a DoT as one of the debuffs it inflicted. */
+           *  and an inflicted-scope debuff extension covers the cast's DoT, Bomb and Echoing
+           *  Burst applications too: the game counts each as one of the debuffs it inflicted. */
           scope?: 'active' | 'inflicted';
       }
     | { type: 'detonate-dot'; dotType: DoTType; powerPct: number }
@@ -1313,9 +1320,10 @@ export interface Ability {
      *  hand-set exception: 'inflict' by user ruling (2026-10-02). What each event counts as —
      *  `passesApplicationFilter`'s doc in triggers.ts. */
     triggerApplicationFilter?: 'inflict' | 'apply';
-    /** Status-FAMILY filter for `on-debuff-inflicted`: the reaction fires only when the landed
-     *  status belongs to this family — Lingshe's "When this Unit inflicts a Bomb it gains
-     *  Stealth" sets `'Bomb'`, so a Defense Down she lands wakes nothing. Matched by family, not
+    /** Status-FAMILY filter for `on-debuff-inflicted` and `on-self-crit-dot`: the reaction fires
+     *  only when the landed status belongs to this family — Lingshe's "When this Unit inflicts a
+     *  Bomb it gains Stealth" sets `'Bomb'`, so a Defense Down she lands wakes nothing; Wisteria's
+     *  "When this Unit inflicts Corrosion with a critical hit" sets `'Corrosion'`. Matched by family, not
      *  exact name ("a Bomb" means any Bomb tier), unlike `requireDamagedAllyStatus`, which names a
      *  status an ally HOLDS. A `dot-applied` compares its tierless DoT family label
      *  (`dotFamilyLabel`: 'Bomb', 'Corrosion', 'Inferno'). A `debuff-applied` compares
@@ -1360,7 +1368,11 @@ export interface Ability {
      *    own active's two debuffs, plus the two Crit Rate Down II Provider's passive answers them
      *    with, is ONE fire; Provider's own active landing two more on his turn is ONE more; an
      *    enemy hitting Warden, whose reaction debuffs the enemy, is that enemy's cast and ONE more
-     *    (owner ruling, measured in game 2026-10-05).
+     *    (owner ruling, measured in game 2026-10-05). Hemlock's "adds 1 charge … after it
+     *    inflicts a debuff" is one charge per activation: her skill cast, however many debuffs
+     *    and stacks it lands, and one round's Toxic Overflow spreads together (one root cast —
+     *    `rootCastKey`), however many holders spread and neighbours they land on (owner ruling,
+     *    measured in game 2026-10-07).
      *  - `'per-victim'`: once per (root cast, enemy the reaction is about). Xcellence's "When an
      *    enemy resists a debuff infliction, … deals damage equal to 115% of this Unit's current
      *    shield": Curator's area active resisted twice by each of three enemies hits each of them

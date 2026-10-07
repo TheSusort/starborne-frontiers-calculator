@@ -337,7 +337,7 @@ const punchingBag = (speed: number): BattlePlacement => ({
 
 /** Every `heal` log target in the whole battle, walking `reactions` too (a reactive repair hangs
  *  off the entry that triggered it, not off the turn's top-level list). */
-function battleHealTargets(arm: 'legacy' | 'selector'): { targetId: string; amount: number }[] {
+function battleHealTargets(arm: 'legacy' | 'selector'): { targetId: string; gross: number }[] {
     setupKeyedRng(4242);
     const stats = { hp: 200_000, attack: 20_000, hacking: 2_000 };
     const result = simulateBattle({
@@ -356,12 +356,12 @@ function battleHealTargets(arm: 'legacy' | 'selector'): { targetId: string; amou
         enemyTeam: [punchingBag(120), punchingBag(110)],
         rounds: 12,
     });
-    const out: { targetId: string; amount: number }[] = [];
+    const out: { targetId: string; gross: number }[] = [];
     const walk = (entries: CombatLogEntry[]): void => {
         for (const e of entries) {
             if (e.kind === 'heal')
                 for (const t of e.targets)
-                    out.push({ targetId: t.targetId, amount: t.amount ?? 0 });
+                    out.push({ targetId: t.targetId, gross: (t.amount ?? 0) + (t.overheal ?? 0) });
             walk(e.reactions);
         }
     };
@@ -402,9 +402,10 @@ describe("SP-4e: Valkyrie's detonation repair moves off herself onto the worst-H
         // repair. Four bursts × the two halves of the dual repair (#345 re-sourced these from
         // Demolisher's Bombs, which used to pay 11 pairs).
         expect(legacy.length).toBe(8);
-        // A re-route, not a new or lost repair: same number of heal payouts, same amounts.
+        // A re-route, not a new or lost repair: same number of heal payouts, same gross amounts.
+        // Gross (landed + overheal), because what lands depends on the recipient's missing HP.
         expect(selector.length).toBe(legacy.length);
-        const amounts = (rows: { amount: number }[]) => rows.map((r) => r.amount).sort();
+        const amounts = (rows: { gross: number }[]) => rows.map((r) => r.gross).sort();
         expect(amounts(selector)).toEqual(amounts(legacy));
 
         // LEGACY: `reactiveRecipients` resolved a plain `'ally'` to the caster, so BOTH halves of

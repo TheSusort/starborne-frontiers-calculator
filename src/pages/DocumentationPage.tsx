@@ -2874,7 +2874,8 @@ const DocumentationPage: React.FC = () => {
                                         &quot;inflicts a debuff&quot; reacts only to inflicted
                                         debuffs, and one that says &quot;applying a debuff&quot;
                                         only to applied ones, such as Provoke, Concentrate Fire or
-                                        the Burner set&apos;s Inferno.
+                                        the Burner set&apos;s Inferno (applied to every primary
+                                        target of the attack).
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Clause Order:</span> A
@@ -3058,8 +3059,9 @@ const DocumentationPage: React.FC = () => {
                                         itself), counts every damage-over-time stack as a debuff:
                                         one &ldquo;2 stacks of Corrosion&rdquo; application is two
                                         debuffs. A count of damage-over-time effects (Anemone,
-                                        Snakeroot) counts each stack too: Snakeroot&apos;s passive
-                                        is its own 120% hit on an enemy for every 4th
+                                        Snakeroot) counts each stack too, but never a Bomb, which is
+                                        a debuff and not a damage-over-time effect. Snakeroot&apos;s
+                                        passive is its own 120% hit on an enemy for every 4th
                                         damage-over-time stack inflicted on that enemy during the
                                         fight, from any ship. Stacks that expire or are cleansed
                                         still count, and resisted stacks do not. Each stack also
@@ -3080,44 +3082,82 @@ const DocumentationPage: React.FC = () => {
                                         debuff, fire at most once per enemy per skill cast: Curator
                                         hitting three enemies who each resist both its debuffs gives
                                         one Xcellence strike on each. Reactions to a critical DoT
-                                        (Crocus, Wisteria) and Belladonna&apos;s conversion still
-                                        fire once per application. Anemone&apos;s repair when an
-                                        enemy takes damage-over-time damage fires once per stack
-                                        that ticks: 3 Corrosion stacks and 1 Inferno give four
-                                        repairs. A cleanse removes stacks the same way:
-                                        &ldquo;cleanses 1 debuff&rdquo; on 2 Corrosion stacks leaves
-                                        1. The most recently inflicted debuff goes first, named
-                                        debuff or damage-over-time stack alike (stacks inflicted
-                                        together share one time); Acidic Decay cannot be cleansed.
-                                        Defense Shred is cleansed one stack at a time: 3 stacks,
-                                        &ldquo;cleanses 1 debuff&rdquo;, 2 stacks left. Each stack
-                                        of a debuff that stacks rather than refreshing counts as one
-                                        debuff: 3 Defense Shred stacks meet Crocus&apos;s &ldquo;3
-                                        or more debuffs&rdquo;, and so do Amartya&apos;s 2 Exposed
-                                        stacks plus Crocus&apos;s own Corrosion. Cheat Death wipes
-                                        Defense Shred like any other debuff. Nyxen&apos;s cleanses
-                                        take only Bombs or only damage-over-time effects, as
-                                        written, newest first. Heliodor&apos;s and Pestilence&apos;s
-                                        cut to the duration of all debuffs shortens Corrosion and
-                                        Inferno too; one cut to 0 turns ends without ticking again.
-                                        Reactions to an enemy cleansing a debuff (Pestilence,
-                                        Larkspur, Grif, Arum, Yarrow) also hear the cleanses an
-                                        enemy&apos;s passive performs (Nuqtu, Purifier, AEGIS,
-                                        Hermes, Howler), but not a duration cut; a cleanse that such
-                                        a reaction provoked triggers them again. A count written
-                                        after an infliction in the same skill includes what that
-                                        skill landed, enemy by enemy: Crocus&apos;s Corrosion II
-                                        counts toward her own &ldquo;3 or more debuffs&rdquo; Stasis
-                                        (Asphyxiator&apos;s and Anemone&apos;s gates likewise), and
-                                        a resisted one does not. A passive reacting to the hit
-                                        (Bayah) counts only the debuffs from before the skill.
-                                        APEX&apos;s passive shield arrives as the skill&apos;s first
-                                        debuff lands, so her charged skill&apos;s &ldquo;If this
-                                        Unit has an active shield&rdquo; Disable lands once an
-                                        earlier debuff in it has landed. Likewise Belladonna&apos;s
-                                        charged Corrosion II, if her passive converts it to Acidic
-                                        Decay as it lands, counts toward that skill&apos;s &ldquo;3
-                                        or more Acidic Decay&rdquo; Stasis.
+                                        (Crocus, Wisteria) still fire once per application;
+                                        Wisteria&apos;s answers a critical Corrosion only.
+                                        Belladonna rolls her conversion once per new Corrosion stack
+                                        and converts only that stack: Corrosion the enemy already
+                                        holds is never converted by a later infliction.
+                                        Hemlock&apos;s Toxic Overflow spread inflicts its Corrosion
+                                        I as Hemlock: each neighbour rolls its own resist, every
+                                        reaction to an inflicted debuff or Corrosion hears a landed
+                                        one, and her repair counts only the enemies it landed on.
+                                        The spreads that land at one round&apos;s end count as one
+                                        event: Hemlock and Oleander gain one charge for them
+                                        together, however many enemies spread or neighbours they
+                                        reach. Anemone&apos;s repair when an enemy takes
+                                        damage-over-time damage fires once per stack that ticks: 3
+                                        Corrosion stacks and 1 Inferno give four repairs. A cleanse
+                                        removes stacks the same way: &ldquo;cleanses 1 debuff&rdquo;
+                                        on 2 Corrosion stacks leaves 1. The most recently inflicted
+                                        debuff goes first, named debuff or damage-over-time stack
+                                        alike (stacks inflicted together share one time); Acidic
+                                        Decay cannot be cleansed. Defense Shred is cleansed one
+                                        stack at a time: 3 stacks, &ldquo;cleanses 1 debuff&rdquo;,
+                                        2 stacks left. Each stack of a debuff that stacks rather
+                                        than refreshing counts as one debuff: 3 Defense Shred stacks
+                                        meet Crocus&apos;s &ldquo;3 or more debuffs&rdquo;, and so
+                                        do Amartya&apos;s 2 Exposed stacks plus Crocus&apos;s own
+                                        Corrosion. Cheat Death wipes Defense Shred like any other
+                                        debuff. Every DoT stack, Bomb and Echoing Burst is a debuff
+                                        too: debuff extensions such as Lev&apos;s, cleanses,
+                                        duration cuts, debuff counts and Cheat Death all treat them
+                                        that way, except that Nyxen&apos;s damage-over-time cleanse
+                                        skips them. A Bomb or Echoing Burst is not a
+                                        damage-over-time effect, so Provider&apos;s extension of
+                                        damage-over-time debuffs leaves them alone and Crocus never
+                                        answers an ally&apos;s critical Bomb; an Echoing Burst is a
+                                        Bomb-type debuff. A Bomb or Echoing Burst removed by a
+                                        cleanse or Cheat Death never detonates, but one whose
+                                        duration a cut drives to 0 detonates at once. Nyxen&apos;s
+                                        Bomb cleanse takes Bombs and Echoing Burst; her
+                                        damage-over-time cleanse takes only Corrosion, Inferno and
+                                        other DoTs, never a Bomb or Echoing Burst; both take the
+                                        newest first. Heliodor&apos;s and Pestilence&apos;s cut to
+                                        the duration of all debuffs shortens every DoT, Bomb and
+                                        Echoing Burst too; a DoT cut to 0 turns ends without ticking
+                                        again, and an Echoing Burst cut to 0 bursts everything it
+                                        has gathered up to the cut. An Echoing Burst gathers only
+                                        the direct damage dealt to the ship it is on, from the
+                                        moment it is applied until it bursts; damage to other
+                                        enemies never counts. Valkyrie&apos;s own hit that applies
+                                        it lands first and is not gathered, and neither is
+                                        Demolisher&apos;s Bomb splash. A counter-attack&apos;s hit
+                                        on its ship is gathered; a hit Protection redirects counts
+                                        for neither the ship nor its protector. Bombs and Echoing
+                                        Bursts that go off together, from one cut or expiring on the
+                                        same turn, detonate in the order they were applied; if the
+                                        first triggers Cheat Death, the rest are wiped and never
+                                        detonate. If the first destroys the ship instead, the rest
+                                        still detonate, and every Bomb on a destroyed ship splashes
+                                        its neighbours once, including Bombs a skill detonated in
+                                        the lethal blow. Reactions to an enemy cleansing a debuff
+                                        (Pestilence, Larkspur, Grif, Arum, Yarrow) also hear the
+                                        cleanses an enemy&apos;s passive performs (Nuqtu, Purifier,
+                                        AEGIS, Hermes, Howler), but not a duration cut; a cleanse
+                                        that such a reaction provoked triggers them again. A count
+                                        written after an infliction in the same skill includes what
+                                        that skill landed, enemy by enemy: Crocus&apos;s Corrosion
+                                        II counts toward her own &ldquo;3 or more debuffs&rdquo;
+                                        Stasis (Asphyxiator&apos;s and Anemone&apos;s gates
+                                        likewise), and a resisted one does not. A passive reacting
+                                        to the hit (Bayah) counts only the debuffs from before the
+                                        skill. APEX&apos;s passive shield arrives as the
+                                        skill&apos;s first debuff lands, so her charged skill&apos;s
+                                        &ldquo;If this Unit has an active shield&rdquo; Disable
+                                        lands once an earlier debuff in it has landed. Likewise
+                                        Belladonna&apos;s charged Corrosion II, if her passive
+                                        converts it to Acidic Decay as it lands, counts toward that
+                                        skill&apos;s &ldquo;3 or more Acidic Decay&rdquo; Stasis.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Team Ships:</span> Pick a
@@ -3166,12 +3206,13 @@ const DocumentationPage: React.FC = () => {
                                         strips each of them, even where the text says &ldquo;the
                                         primary target&rdquo;. Each enemy rolls its own resist,
                                         including against Lingshe&apos;s Bomb countdown cut.
-                                        Reactions follow suit: Hemlock gains a charge, Defiant a
-                                        shield, Warden lands its extra debuff, once per enemy, and
-                                        Laika gains a shield per enemy stripped. A Stasis the skill
-                                        lands is not shortened by that same hit. Damage over time
-                                        (Corrosion, Inferno, Bombs) spreads the same way: every
-                                        enemy hit gets its own stacks, and a Bomb uses the
+                                        Reactions follow suit: Defiant gains a shield and Warden
+                                        lands its extra debuff once per enemy, and Laika gains a
+                                        shield per enemy stripped; Hemlock gains one charge per
+                                        skill cast however many enemies it debuffs. A Stasis the
+                                        skill lands is not shortened by that same hit. Damage over
+                                        time (Corrosion, Inferno) and Bombs spread the same way:
+                                        every enemy hit gets its own stacks, and a Bomb uses the
                                         attacker&apos;s affinity against that enemy. Crits are per
                                         enemy too: Wisteria&apos;s crit Inferno and Valerian&apos;s
                                         crit extension land only on the enemies the hit critted, and
@@ -3211,12 +3252,16 @@ const DocumentationPage: React.FC = () => {
                                         off. The first aimed hit uses it up &mdash; the attack
                                         itself, a counter-attack, or a passive hit such as
                                         Sentinel&apos;s or Provider&apos;s. An area attack&apos;s
-                                        hit on a ship it was not aimed at does not count. Each
-                                        attack of a multi-attack skill (Enforcer) brings its own.
-                                        Ripper crits Stalwart, Stalwart counters Ripper, and
-                                        Sentinel&apos;s follow-up hit draws no second counter. Plain
-                                        &ldquo;when directly damaged&rdquo; passives (Isha, Opal)
-                                        fire on every hit.
+                                        hit on a ship it was not aimed at does not count, but an
+                                        attack that hits the whole enemy side (Curator&apos;s
+                                        active) has every enemy it strikes as a primary target, so
+                                        each of them reacts once. Each attack of a multi-attack
+                                        skill (Enforcer) brings its own, and each hit&apos;s primary
+                                        target is the enemy it is actually aimed at, even after a
+                                        kill re-aims it. Ripper crits Stalwart, Stalwart counters
+                                        Ripper, and Sentinel&apos;s follow-up hit draws no second
+                                        counter. Plain &ldquo;when directly damaged&rdquo; passives
+                                        (Isha, Opal) fire on every hit.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Chained reactions:</span> A
@@ -4515,8 +4560,8 @@ const DocumentationPage: React.FC = () => {
                                     <li>
                                         Pin a ship to open a per-round detail card with its full
                                         breakdown for that round, including its active buffs and
-                                        debuffs — Damage over Time effects (Corrosion, Inferno,
-                                        Bomb, and converted-damage DoTs) are listed among the
+                                        debuffs — Damage over Time effects (Corrosion, Inferno, and
+                                        converted-damage DoTs) and Bombs are listed among the
                                         debuffs
                                     </li>
                                     <li>
@@ -4701,12 +4746,14 @@ const DocumentationPage: React.FC = () => {
                                     in Stasis or Disabled still gets this bonus, but not its usual
                                     charge for the skipped turn). Two damage-over-time gear sets are
                                     also modeled: <strong>Burner</strong> (applies Inferno for 2
-                                    turns when the ship attacks; an applied Inferno lands without a
-                                    hacking roll, failing only when the ship is at an affinity
-                                    disadvantage against the target) and <strong>Decimation</strong>{' '}
-                                    (+10% DoT damage per equipped set, up to +30%, boosting your
-                                    Inferno and Corrosion ticks in both the combat simulator and the
-                                    DPS calculator). Five shield sources are also modeled: the{' '}
+                                    turns on every primary target when the ship attacks, so a
+                                    whole-battlefield attack such as Curator&apos;s active applies
+                                    it on every enemy; an applied Inferno lands without a hacking
+                                    roll, failing only when the ship is at an affinity disadvantage
+                                    against the target) and <strong>Decimation</strong> (+10% DoT
+                                    damage per equipped set, up to +30%, boosting your Inferno and
+                                    Corrosion ticks in both the combat simulator and the DPS
+                                    calculator). Five shield sources are also modeled: the{' '}
                                     <strong>Shield</strong> gear set (grants the equipped ship a
                                     shield each turn, 4% of its max HP per set),{' '}
                                     <strong>Adaptive Plating</strong> (grants the ship a shield from

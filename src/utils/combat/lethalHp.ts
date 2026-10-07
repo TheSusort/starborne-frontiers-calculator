@@ -66,15 +66,20 @@ export function resolveLethalHp(
             opts.cheatDeathConsumedRound.set(targetId, opts.round);
         }
         opts.statusEngine.clearRemovable(targetId);
-        // Actor-state DoT stacks (Corrosion/Inferno/generic) are NOT StatusEngine entries, so
-        // clearRemovable doesn't touch them — wipe them here so the survivor takes no further
-        // ticks. These are the SAME arrays the turn-start DoT-tick intake reads
-        // (corrosionEntries/infernoEntries/genericDoTEntries). Filter, don't clear — an
-        // `unremovable` stack (Acidic Decay) survives this wipe and keeps ticking. Bombs
-        // (Blast, treated as persistent here) and accumulators are intentionally left untouched.
+        // Actor-state debuffs — DoT stacks, Bombs and Echoing Burst accumulators — are NOT
+        // StatusEngine entries, so clearRemovable doesn't touch them; they are debuffs all the
+        // same (owner ruling R109), so they are wiped here: the survivor takes no further
+        // detonation or burst from them. Filter the DoT arrays, don't clear them — an
+        // `unremovable` stack (Acidic Decay) survives this wipe and keeps ticking. Every container
+        // is REASSIGNED, never emptied in place. This runs inside the burst walk
+        // (`walkTimedBurstsInApplicationOrder`, bombCountdown.ts) when the holder's own burst is
+        // the lethal blow; it walks the arrays it bound, and the reassignment is the signal it
+        // reads (`burstContainerWiped`) to stop, so a wiped Bomb or accumulator never detonates.
         victim.corrosionEntries = victim.corrosionEntries.filter((e) => e.unremovable);
         victim.infernoEntries = victim.infernoEntries.filter((e) => e.unremovable);
         victim.genericDoTEntries = victim.genericDoTEntries.filter((e) => e.unremovable);
+        victim.pendingBombs = [];
+        victim.pendingAccumulators = [];
         // Real event INLINE for its combat listener (Yazid on-cheat-death-activated), so the
         // listener fires at this point in the sequence. The LOG-ONLY twin carries the nesting.
         opts.bus.emit({ type: 'cheat-death-activated', actorId: targetId, round: opts.round });

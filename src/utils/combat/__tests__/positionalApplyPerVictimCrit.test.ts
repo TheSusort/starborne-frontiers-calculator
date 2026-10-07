@@ -184,6 +184,7 @@ describe('applyPositionalDamage — rollVictimCrit callback (per-victim crit sea
                     damage: expect.any(Number),
                     deliveredDamage: expect.any(Number),
                     victimIds: ['origin', 'covered'],
+                    primaryVictimIds: ['origin'],
                     critVictimIds: ['covered'],
                 },
             ],
@@ -228,6 +229,7 @@ describe('applyPositionalDamage — rollVictimCrit callback (per-victim crit sea
                     damage: expect.any(Number),
                     deliveredDamage: expect.any(Number),
                     victimIds: ['origin', 'covered'],
+                    primaryVictimIds: ['origin'],
                     critVictimIds: [],
                 },
             ],
@@ -326,6 +328,7 @@ describe('applyPositionalDamage — rollVictimCrit callback (per-victim crit sea
                     damage: expect.any(Number),
                     deliveredDamage: expect.any(Number),
                     victimIds: ['origin', 'covered'],
+                    primaryVictimIds: ['origin'],
                     // Per-SUB-ATTACK crit slice: each sub-attack crit both victims, so Σ of the
                     // two lengths (2 + 2) reproduces the cast-wide critPairs of 4 exactly. This is
                     // the number PR2 puts on each sub-attack's own `ability-performed` as
@@ -339,6 +342,7 @@ describe('applyPositionalDamage — rollVictimCrit callback (per-victim crit sea
                     damage: expect.any(Number),
                     deliveredDamage: expect.any(Number),
                     victimIds: ['origin', 'covered'],
+                    primaryVictimIds: ['origin'],
                     critVictimIds: ['origin', 'covered'],
                 },
             ],

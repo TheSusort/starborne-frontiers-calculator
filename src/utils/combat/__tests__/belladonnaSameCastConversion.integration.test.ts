@@ -8,12 +8,11 @@
  * per 10 Hacking." The conversion happens as the Corrosion lands, before the Stasis clause reads
  * the count, and keeps its chance roll.
  *
- * Board: a seeder ally inflicts 2 Corrosion I stacks on B (one application, one conversion roll),
- * then Belladonna casts her charged on B (one Corrosion II stack, one more roll). Belladonna's
- * hacking is 500, so each roll is a 50% draw from her own `${id}:convert` stream. The seed is
- * chosen by reading that stream directly (`makeKeyedRng`), so each case names the two draws it
- * relies on: the seeding roll succeeds (B at 2 Acidic Decay), and the cast's roll succeeds or
- * fails.
+ * Board: a seeder ally inflicts 2 Corrosion I stacks on B (one conversion roll per stack), then
+ * Belladonna casts her charged on B (one Corrosion II stack, one more roll). Belladonna's hacking
+ * is 500, so each roll is a 50% draw from her own `${id}:convert` stream. The seed is chosen by
+ * reading that stream directly (`makeKeyedRng`), so each case names the draws it relies on: both
+ * seeding rolls succeed (B at 2 Acidic Decay), and the cast's roll succeeds or fails.
  *
  * Run with Belladonna on the player side and on the enemy side.
  */
@@ -83,8 +82,8 @@ const units = () => {
 };
 
 /**
- * The first seed whose convert stream for `belladonnaId` gives the wanted outcomes: the seeding
- * roll succeeds, the cast's roll is `castConverts`, and a THIRD draw would say the opposite — so
+ * The first seed whose convert stream for `belladonnaId` gives the wanted outcomes: both seeding
+ * rolls succeed, the cast's roll is `castConverts`, and the NEXT draw would say the opposite — so
  * a cast whose conversion drew twice (once for the gate, again when the reaction drains) ends with
  * a family count that disagrees with its Stasis.
  */
@@ -92,10 +91,10 @@ const seedFor = (belladonnaId: string, castConverts: boolean): number => {
     for (let seed = 1; seed < 10_000; seed++) {
         const draw = makeKeyedRng(seed);
         const key = `${belladonnaId}:convert`;
-        const seeding = draw(key) < RATE;
+        const seeding = draw(key) < RATE && draw(key) < RATE;
         const cast = draw(key) < RATE;
-        const third = draw(key) < RATE;
-        if (seeding && cast === castConverts && third !== castConverts) return seed;
+        const next = draw(key) < RATE;
+        if (seeding && cast === castConverts && next !== castConverts) return seed;
     }
     throw new Error('no seed found');
 };

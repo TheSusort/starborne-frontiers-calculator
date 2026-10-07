@@ -143,6 +143,13 @@ export interface SubAttackOutcome {
     /** Victims struck by this sub-attack, in footprint order. */
     victimIds: string[];
     /**
+     * The victims that are this sub-attack's PRIMARY TARGETS, in footprint order (owner ruling
+     * R110: an attack can have several). The anchor alone for every pattern except a whole-
+     * battlefield one ({@link isWholeBattlefieldPattern}), where every victim struck is primary.
+     * Empty on a whiff. Every "as a primary target" reaction reads this set, never `isAnchor`.
+     */
+    primaryVictimIds: string[];
+    /**
      * The victims THIS sub-attack critically hit, in footprint order.
      *
      * The per-sub-attack slice of the cast-wide `critVictimIds`/`critPairs` pair: a victim appears
@@ -152,6 +159,24 @@ export interface SubAttackOutcome {
      * so `on-crit` counts one attack's crits rather than the whole cast's.
      */
     critVictimIds: string[];
+}
+
+/**
+ * True for a firing pattern that strikes the whole opposing battlefield (`Pattern-All`, Curator's
+ * active). Such an attack has no single primary target: owner ruling R110 makes EVERY enemy it
+ * strikes a primary target, and Protection does not redirect it. An ally-side `Support-All` pattern
+ * is not an attack on the battlefield and does not qualify.
+ */
+export function isWholeBattlefieldPattern(pattern: ParsedPattern): boolean {
+    return pattern.shape === 'all' && !pattern.modifiers.support;
+}
+
+/** The payload of `applyPositionalDamage`'s sub-attack boundary hooks. */
+export interface SubAttackBoundary {
+    index: number;
+    anchorId: string;
+    victimIds: string[];
+    primaryVictimIds: string[];
 }
 
 /** Per-cell damage scale keyed off the resolved CellRole. */
@@ -244,10 +269,10 @@ export function applyPositionalDamage(args: {
     /**
      * Engine wrapper — decrements the victim's currentHp (the engine passes applyOutgoingToEnemy)
      * and returns the resolved {@link VictimDamageOutcome} (shield-before / HP-damage / barriered).
-     * The third param is `isAnchor` — true when this victim IS the attacker's
-     * resolved anchor/primary target, false for a covered/splash footprint victim (Nosorog's
-     * "reflects damage taken … as a PRIMARY TARGET" requirePrimaryTarget gate). Optional so
-     * a caller that omits it keeps compiling unchanged (JS simply drops the extra arg).
+     * The third param is `isAnchor` — true when this victim IS the sub-attack's resolved anchor.
+     * The trailing `isPrimary` says whether this victim is a PRIMARY TARGET of the sub-attack
+     * (see {@link SubAttackOutcome.primaryVictimIds}) — what Nosorog's "reflects damage taken … as
+     * a PRIMARY TARGET" gate reads. Both optional so a stub caller keeps compiling.
      */
     applyToVictim: (
         victim: CombatActor,
@@ -270,7 +295,9 @@ export function applyPositionalDamage(args: {
          * the victim's RAW intake so "damage absorbed" counts damage thrown, not damage that got
          * through. Trailing and optional so existing stub callers compile unchanged.
          */
-        preMitigation?: number
+        preMitigation?: number,
+        /** This victim is a primary target of the sub-attack (`primaryVictimIds`). */
+        isPrimary?: boolean
     ) => VictimDamageOutcome;
     emitHit?: (
         victim: CombatActor,
@@ -303,15 +330,23 @@ export function applyPositionalDamage(args: {
         outcome: VictimDamageOutcome,
         didCrit: boolean,
         subAttackIndex: number,
-        /** True when this victim is the sub-attack's primary target (its anchor). */
-        isAnchor: boolean
+        /** True when this victim is the sub-attack's anchor. */
+        isAnchor: boolean,
+        /** True when this victim is a primary target of the sub-attack (`primaryVictimIds`). */
+        isPrimary: boolean
     ) => void;
     /** Fires once per (sub-attack x victim), immediately BEFORE the victim takes the hit —
      *  so it observes the attacker's state as it stands AT IMPACT, before this hit's own
      *  consequences (reflect thorns resolve inline inside `applyToVictim`). A gate that must
      *  not be un-answered by damage the hit itself caused reads here, not in
      *  `onVictimResolved`. */
-    onVictimPreImpact?: (victim: CombatActor, isAnchor: boolean, subAttackIndex: number) => void;
+    onVictimPreImpact?: (
+        victim: CombatActor,
+        isAnchor: boolean,
+        subAttackIndex: number,
+        /** True when this victim is a primary target of the sub-attack (`primaryVictimIds`). */
+        isPrimary: boolean
+    ) => void;
     /**
      * OPTIONAL per-sub-hit incoming %-reduction hook. Invoked per footprint victim with
      * that victim's per-hit crit outcome; the returned percentage points are folded additively
@@ -359,12 +394,13 @@ export function applyPositionalDamage(args: {
      * `defenseProfileOf` read. Both optional: an unsupplied hook is simply not called.
      *
      * `victimIds` is this sub-attack's footprint in hit order — the anchor plus every covered
-     * cell — and is the set the engine re-rolls the landing against. Overkill retargeting is correct for
-     * free: the anchor is re-resolved against the live roster at the top of every iteration, so a
+     * cell — and is the set the engine re-rolls the landing against. `primaryVictimIds` is the
+     * subset that are primary targets (see {@link SubAttackOutcome.primaryVictimIds}). Overkill
+     * retargeting is correct for free: the anchor is re-resolved against the live roster at the top of every iteration, so a
      * victim killed on an earlier sub-attack simply is not here.
      */
-    onSubAttackStart?: (sub: { index: number; anchorId: string; victimIds: string[] }) => void;
-    onSubAttackEnd?: (sub: { index: number; anchorId: string; victimIds: string[] }) => void;
+    onSubAttackStart?: (sub: SubAttackBoundary) => void;
+    onSubAttackEnd?: (sub: SubAttackBoundary) => void;
 }): {
     anyCrit: boolean;
     critPairs: number;
@@ -398,6 +434,8 @@ export function applyPositionalDamage(args: {
     // lists it once — "deals X to that enemy" is per ENEMY, not per critting (hit, victim) pair.
     const critVictims = new Set<string>();
     const subAttacks: SubAttackOutcome[] = [];
+    // One answer per cast: the firing pattern decides whether every victim is a primary target.
+    const wholeBattlefield = isWholeBattlefieldPattern(pattern);
 
     // Canonical hit count: derive the loop count from `scalars.hits` (the single source of
     // truth that victimHitDamage also reads), avoiding silent under/over-application from a
@@ -422,6 +460,7 @@ export function applyPositionalDamage(args: {
                 damage: 0,
                 deliveredDamage: 0,
                 victimIds: [],
+                primaryVictimIds: [],
                 critVictimIds: [],
             });
             continue;
@@ -436,14 +475,20 @@ export function applyPositionalDamage(args: {
 
         const footprint = footprintVictims(pattern, anchorActor.position, opposingLiving);
         const subVictimIdsForHooks = footprint.map((f) => f.victim.id);
+        const primaryVictimIds = wholeBattlefield
+            ? subVictimIdsForHooks
+            : subVictimIdsForHooks.filter((id) => id === anchorActor.id);
         onSubAttackStart?.({
             index: h,
             anchorId: anchorActor.id,
             victimIds: subVictimIdsForHooks,
+            primaryVictimIds,
         });
         for (const { victim, roleScale } of footprint) {
             // Anchor reuses the pre-rolled hitCrits[h]; covered victims resolve via callback.
             const isAnchor = victim.id === anchorActor.id;
+            // `isAnchor` drives crit reuse; `isPrimary` is what "as a primary target" reads.
+            const isPrimary = isAnchor || wholeBattlefield;
             const didCrit = isAnchor ? anchorCrit : (rollVictimCrit?.(victim, h) ?? anchorCrit);
             if (didCrit) {
                 anyCrit = true;
@@ -477,14 +522,15 @@ export function applyPositionalDamage(args: {
             const ampPct = outgoingAmplificationFor?.(victim, didCrit, h) ?? 0;
             const dmg = ampPct !== 0 ? dmgBase * (1 + ampPct / 100) : dmgBase;
             const rawDmg = ampPct !== 0 ? rawBase * (1 + ampPct / 100) : rawBase;
-            onVictimPreImpact?.(victim, isAnchor, h);
+            onVictimPreImpact?.(victim, isAnchor, h, isPrimary);
             const outcome = applyToVictim(
                 victim,
                 dmg,
                 isAnchor,
                 h,
                 victimDefenceMitigation(defenseProfile, scalars.defensePenetrationPct),
-                rawDmg
+                rawDmg,
+                isPrimary
             );
             // Credit the victim the intake the funnel actually RECORDED for it, not the hit we
             // computed. The two differ whenever the funnel altered the hit before recording it: a
@@ -498,7 +544,7 @@ export function applyPositionalDamage(args: {
             // only test stubs of `applyToVictim`; the engine's own funnel always sets it.
             const booked = outcome.incomingBooked ?? dmg - (outcome.transformedToDot ?? 0);
             emitHit?.(victim, booked, didCrit, h);
-            onVictimResolved?.(victim, dmg, outcome, didCrit, h, isAnchor);
+            onVictimResolved?.(victim, dmg, outcome, didCrit, h, isAnchor, isPrimary);
             subDamage += booked;
             // The FULL amount this hit delivered. `booked` is the victim's own intake, which
             // excludes anything a Protection cascade diverted to protectors; the ruled basis counts
@@ -512,6 +558,7 @@ export function applyPositionalDamage(args: {
             index: h,
             anchorId: anchorActor.id,
             victimIds: subVictimIdsForHooks,
+            primaryVictimIds,
         });
 
         subAttacks.push({
@@ -521,6 +568,7 @@ export function applyPositionalDamage(args: {
             damage: subDamage,
             deliveredDamage: subDelivered,
             victimIds: subVictimIds,
+            primaryVictimIds,
             critVictimIds: subCritVictimIds,
         });
     }

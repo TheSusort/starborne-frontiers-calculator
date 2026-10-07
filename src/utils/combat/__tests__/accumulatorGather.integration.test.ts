@@ -1,20 +1,14 @@
 /**
- * SP-4b-2 D1 — the accumulate-detonate (Echoing Burst) gather on a POSITIONAL run.
+ * The accumulate-detonate (Echoing Burst) gather on a POSITIONAL run.
  *
- * `processAccumulators` grows each pending accumulator by "the direct damage the ACCUMULATING
- * side dealt this round" and bursts `accumulated × pct/100` on expiry. That input used to be a
- * bare sum over the scalar `roundDamage` map — a map a positional cast never writes, because its
- * direct credit is deliberately suppressed in favour of the per-victim apply. So on every
- * positional run the gather was 0 by construction and the whole Echoing Burst gear-set family
- * detonated for nothing, for every user.
- *
- * Measured @841e1bc0 (pre-positional) vs HEAD on the `teamWalk` Echoing Burst fixture:
- * burst 60000 (with a damaging team ship) / 30000 (without) → 0 / 0.
+ * Each direct hit that lands on a holder is added to its accumulators as it lands
+ * (`gatherDirectHitIntoAccumulators`), and `processAccumulators` bursts `accumulated × pct/100` on
+ * expiry. Damage to any other ship never counts (`echoingBurstIsADebuff.integration`).
  *
  * These tests pin the three properties a bare `> 0` assertion cannot:
  *   • the burst SCALES with the gathered damage (two runs, different gather, proportional burst);
- *   • the gather is SIDE-SCOPED and works from the player side too (the enemy-side mirror);
- *   • the two credit channels do not DOUBLE-COUNT (a positional cast contributes exactly once).
+ *   • the gather works on a player holder too, counting the enemy's hits on it (the mirror);
+ *   • a positional cast contributes to the gather exactly once.
  *
  * Crit 0 everywhere → every value is an exact integer and no RNG is drawn.
  */
@@ -60,7 +54,7 @@ const enemyAt = (
     shipSkills,
 });
 
-/** An identical-to-the-focus walked team ship: same attack, so it doubles the side's direct. */
+/** An identical-to-the-focus walked team ship: same attack, so it doubles the holder's intake. */
 const TEAM_STATS = {
     attack: 1000,
     crit: 0,
@@ -114,16 +108,16 @@ const BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => 
 
 describe('SP-4b-2 D1 — accumulate-detonate gathers real direct damage on a positional run', () => {
     // The gather is the ONLY variable between the two runs below: same accumulator, same focus,
-    // same enemy. Run B adds a walked team actor whose own positional cast doubles the side's
-    // direct output, so a burst that truly scales with the gather must double too. A single
-    // `> 0` assertion would pass on a constant; a RATIO cannot.
+    // same enemy. Run B adds a walked team actor whose own positional cast doubles the direct
+    // damage the holder takes, so a burst that truly scales with the gather must double too.
+    // A single `> 0` assertion would pass on a constant; a RATIO cannot.
     it('the burst scales with the gathered direct damage (player side)', () => {
         const run = (withTeam: boolean) =>
             runCombat(
                 BASE({
                     __testTapActors: (actors: CombatActor[]) => {
                         // Seeded on the ENEMY (the accumulate-detonate victim), gathering the
-                        // PLAYER side's direct — the normal Echoing Burst direction.
+                        // PLAYER hits on it — the normal Echoing Burst direction.
                         actors
                             .find((a) => a.id === 'enemy-front')
                             ?.pendingAccumulators.push(accumulator(0, 100, 1, 'attacker'));
@@ -162,7 +156,7 @@ describe('SP-4b-2 D1 — accumulate-detonate gathers real direct damage on a pos
 
         // Focus alone: 1000 attack × 100% = 1000 direct, gathered once, pct 100 → burst 1000.
         expect(solo.rounds[0].perActorDetonation?.['attacker']).toBe(1000);
-        // Focus + an identical team ship: the side dealt 2000 this round → burst 2000.
+        // Focus + an identical team ship: the holder took 2000 this round → burst 2000.
         expect(withTeam.rounds[0].perActorDetonation?.['attacker']).toBe(2000);
         // The RATIO is the point: the burst tracks the gather, it is not a constant.
         expect(withTeam.rounds[0].perActorDetonation!['attacker']).toBe(
@@ -170,15 +164,13 @@ describe('SP-4b-2 D1 — accumulate-detonate gathers real direct damage on a pos
         );
     });
 
-    // Team symmetry (LOCKED): the same gather has to work when the accumulating side is the
-    // ENEMY side and the accumulator sits on a PLAYER actor. Before D1 this direction was
-    // documented in the engine as "an INERT placeholder — the symmetric all-enemies-direct sum is
-    // not exposed", which was true only because nothing ever fed it.
-    it('the enemy-side mirror gathers the ENEMY side direct damage, not the player side', () => {
+    // Team symmetry (LOCKED): the same gather has to work when the accumulator was applied by the
+    // ENEMY side and sits on a PLAYER actor.
+    it('the enemy-side mirror gathers the enemy hits on the player holder, not the player hits', () => {
         const result = runCombat(
             BASE({
                 // The focus deals a LARGE hit; the enemy deals a small one. If the gather read the
-                // wrong side, the burst would be 5000 rather than 700 — the sides are deliberately
+                // wrong ship, the burst would be 5000 rather than 700 — the two are deliberately
                 // far apart so a mix-up cannot hide inside a rounding tolerance.
                 attack: 5000,
                 speed: 1, // the enemy (speed 50) acts FIRST, so its direct is already credited
@@ -187,7 +179,7 @@ describe('SP-4b-2 D1 — accumulate-detonate gathers real direct damage on a pos
                 ],
                 __testTapActors: (actors: CombatActor[]) => {
                     // Seeded on the PLAYER focus: it bursts on the focus's OWN turn, gathering the
-                    // damage its OPPOSING (enemy) roster has dealt this round.
+                    // enemy's hit on it.
                     actors
                         .find((a) => a.id === 'attacker')
                         ?.pendingAccumulators.push(accumulator(0, 100, 1, 'enemy-front'));
@@ -197,14 +189,13 @@ describe('SP-4b-2 D1 — accumulate-detonate gathers real direct damage on a pos
 
         // 700 attack × 100% = 700 enemy direct, gathered once, pct 100 → burst 700 on the focus.
         expect(result.rounds[0].perActorDetonation?.['enemy-front']).toBe(700);
-        // …and NOT the focus's own 5000 — proof the sum is scoped to the accumulating side.
+        // …and NOT the focus's own 5000 — proof the gather reads the holder's own intake.
         expect(result.rounds[0].perActorDetonation?.['enemy-front']).not.toBe(5000);
     });
 
-    // No double-count. The scalar credit and its positional twin sit in the two branches of ONE
-    // `if (positional)`, so a cast can only reach one of them. Measured here as an exact equality
-    // rather than an inequality: with pct 100 and one gathering round the burst IS the round's
-    // direct damage — 2× would mean both channels fired for the same cast.
+    // No double-count. Measured as an exact equality rather than an inequality: with pct 100 and
+    // one gathering round the burst IS the hit on the holder — 2× would mean the cast was
+    // gathered twice.
     it('a positional cast contributes to the gather EXACTLY once', () => {
         const result = runCombat(
             BASE({

@@ -363,10 +363,14 @@ export interface StatusEngine {
      *  a DoT entry when it is applied (`ActiveDoTStack.appliedSeq`), so newest-first cleanse and
      *  duration orders compare DoT stacks with named statuses. Each call advances it. */
     nextAppliedSeq(): number;
+    /** The last number `nextAppliedSeq` handed out (0 before the first), without advancing it:
+     *  everything stamped later carries a larger number. */
+    lastAppliedSeq(): number;
     /** Reduce the duration of ONE debuff on `actorId` by `turns`, picked at RANDOM (owner ruling
      *  R35, Warpstrike's "reduces a random active debuff's duration by 1 turn"). The pool is every
      *  removable timed debuff in the actor's per-victim enemy store plus `extra` — its DoT and Bomb
-     *  stacks, one candidate per stack (`dotDurationCutCandidates`, `bombDurationCutCandidates`).
+     *  stacks, one candidate per stack, and its Echoing Bursts (`dotDurationCutCandidates`,
+     *  `accumulatorDurationCutCandidates`, `bombDurationCutCandidates`).
      *  'recurring'/'permanent' and UNREMOVABLE_STATUSES are skipped (consistent with cleanse); a
      *  named debuff reduced to <= 0 is removed (expired). The pool is ordered newest-applied first
      *  and `draw` (uniform in [0, 1)) indexes it; a one-candidate pool takes no draw. Returns 1 if
@@ -388,7 +392,11 @@ export interface StatusEngine {
      *  (numeric turnsRemaining only, skips isUnremovable(name, turnsRemaining)) and the same
      *  non-positive/non-finite `turns` rejection, but NEVER expires an entry — extending only
      *  grows `turnsRemaining`, so there is no deletion pass. Returns the number of debuffs
-     *  affected. Unknown id → 0. */
+     *  affected. Unknown id → 0.
+     *
+     *  This is the status-store half of a debuff extension only. The victim's DoTs, Bombs and
+     *  Echoing Burst accumulators are debuffs too (owner ruling R109) but live on the actor, so
+     *  the caller extends them with `extendDebuffEntries` (combat/state.ts). */
     extendAllDebuffsDuration(
         actorId: string,
         turns: number,
@@ -1939,7 +1947,12 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
      *  INFLICTED-scope case (Asphyxiator), where the caller has recorded what its own cast just
      *  applied to this victim and everything else standing must be left alone. Absent → extend
      *  every eligible debuff (Lev). An EMPTY set therefore extends nothing,
-     *  which is the correct reading of "extend what I inflicted" when nothing landed. */
+     *  which is the correct reading of "extend what I inflicted" when nothing landed.
+     *
+     *  Status-store half only: the victim's DoTs, Bombs and Echoing Burst accumulators (owner
+     *  ruling R109: debuffs too, unremovable Acidic Decay included) are extended by the caller
+     *  through `extendDebuffEntries` (combat/state.ts). The `isUnremovable` skip here reaches no
+     *  enemy-side debuff today: every unremovable named status lands self-side or never lands. */
     const extendAllDebuffsDuration = (
         actorId: string,
         turns: number,
@@ -2500,6 +2513,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
     return {
         beginRound,
         nextAppliedSeq,
+        lastAppliedSeq: () => appliedSeqCounter,
         sourceFired,
         setLandsTimedEnemyApplication,
         setTurnBlockedReader,

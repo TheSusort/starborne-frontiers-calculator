@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { parsePattern, parseTarget } from '../../targetingParser';
-import { applyPositionalDamage } from '../positionalApply';
+import { applyPositionalDamage, isWholeBattlefieldPattern } from '../positionalApply';
 import type { AttackerDamageScalars, VictimDefenseProfile } from '../victimDamage';
 import type { CombatActor } from '../state';
 
@@ -150,6 +150,7 @@ describe('applyPositionalDamage — SubAttackOutcome', () => {
             damage: 0,
             deliveredDamage: 0,
             victimIds: [],
+            primaryVictimIds: [],
             critVictimIds: [],
         });
     });
@@ -458,5 +459,50 @@ describe('applyPositionalDamage — deliveredDamage (PR7)', () => {
 
         expect(result.subAttacks[0].whiffed).toBe(true);
         expect(result.subAttacks[0].deliveredDamage).toBe(0);
+    });
+});
+
+describe('applyPositionalDamage — primary targets (owner ruling R110)', () => {
+    const run = (patternRaw: string) => {
+        const seen: { id: string; isAnchor: boolean; isPrimary: boolean }[] = [];
+        const applyArgs: (boolean | undefined)[] = [];
+        const result = applyPositionalDamage({
+            hitCrits: [false],
+            scalars: scalars(1),
+            pattern: parsePattern(patternRaw),
+            actorPosition: 'M2',
+            target: parseTarget('front'),
+            opposingLiving: [actor('front', 'M4'), actor('beside', 'M3'), actor('far', 'B1')],
+            defenseProfileOf: profile,
+            applyToVictim: (v, d, _isAnchor, _h, _m, _raw, isPrimary) => {
+                applyArgs.push(isPrimary);
+                return bookingApply(v, d);
+            },
+            onVictimResolved: (v, _d, _o, _c, _h, isAnchor, isPrimary) =>
+                seen.push({ id: v.id, isAnchor, isPrimary }),
+        });
+        return { sub: result.subAttacks[0], seen, applyArgs };
+    };
+
+    it('a whole-battlefield pattern makes every victim primary; the anchor stays the anchor', () => {
+        const { sub, seen, applyArgs } = run('Pattern-All');
+        expect(sub.victimIds).toHaveLength(3);
+        expect(sub.primaryVictimIds).toEqual(sub.victimIds);
+        expect(seen.filter((s) => s.isAnchor).map((s) => s.id)).toEqual(['front']);
+        expect(seen.every((s) => s.isPrimary)).toBe(true);
+        expect(applyArgs).toEqual([true, true, true]);
+    });
+
+    it('a Cone keeps one primary target: the anchor', () => {
+        const { sub, seen } = run('Pattern-Cone-Range-1');
+        expect(sub.victimIds.length).toBeGreaterThan(1);
+        expect(sub.primaryVictimIds).toEqual(['front']);
+        expect(seen.filter((s) => s.isPrimary).map((s) => s.id)).toEqual(['front']);
+    });
+
+    it('isWholeBattlefieldPattern: Pattern-All yes; Support-All and a Cone no', () => {
+        expect(isWholeBattlefieldPattern(parsePattern('Pattern-All'))).toBe(true);
+        expect(isWholeBattlefieldPattern(parsePattern('Patern-Support-All'))).toBe(false);
+        expect(isWholeBattlefieldPattern(parsePattern('Pattern-Cone-Range-1'))).toBe(false);
     });
 });

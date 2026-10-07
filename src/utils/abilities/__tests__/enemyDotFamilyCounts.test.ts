@@ -32,11 +32,11 @@ describe('dotFamilyCounts', () => {
             stack({ family: 'Acidic Decay', unremovable: true }),
         ];
         const inferno = [stack({ family: 'Molten Core' })];
-        const generic = [stack({ family: 'Acidic Decay', unremovable: true, perTickAmount: 300 })];
+        const generic = [stack({ family: 'Molten Core', perTickAmount: 300 })];
 
         expect(dotFamilyCounts(corrosion, inferno, generic)).toEqual({
-            'Acidic Decay': 3,
-            'Molten Core': 1,
+            'Acidic Decay': 2,
+            'Molten Core': 2,
         });
     });
 
@@ -80,7 +80,7 @@ describe('enemyDotFamilyCounts / genericStacks via buildRoundContext', () => {
         expect(ctx.enemyDotFamilyCounts).toBeUndefined();
     });
 
-    it('genericStacks folds into the bare enemyDotCount sum alongside corrosion/inferno/bomb', () => {
+    it('genericStacks folds into the bare enemyDotCount sum alongside corrosion/inferno; a Bomb does not (R112)', () => {
         const ctx = buildRoundContext({
             ...base,
             corrosionStacks: 1,
@@ -88,7 +88,7 @@ describe('enemyDotFamilyCounts / genericStacks via buildRoundContext', () => {
             bombStacks: 1,
             genericStacks: 2,
         });
-        expect(ctx.enemyDotCount).toBe(5);
+        expect(ctx.enemyDotCount).toBe(4);
     });
 
     it('omitting genericStacks defaults it to 0 (byte-identical for every existing DPS caller)', () => {
@@ -98,6 +98,6 @@ describe('enemyDotFamilyCounts / genericStacks via buildRoundContext', () => {
             infernoStacks: 1,
             bombStacks: 1,
         });
-        expect(ctx.enemyDotCount).toBe(3);
+        expect(ctx.enemyDotCount).toBe(2);
     });
 });

@@ -29,6 +29,7 @@ import { runCombat, CombatEngineInput } from '../engine';
 import { createActor, PendingBomb, CombatActor } from '../state';
 import { createStatusEngine } from '../statusEngine';
 import { createEventBus, CombatEvent } from '../events';
+import { reduceBombsOnVictim } from '../bombCountdown';
 import { makeRateGate } from '../../calculators/rateAccumulator';
 import { Ability, ShipSkills } from '../../../types/abilities';
 import { AffinityName } from '../../../types/ship';
@@ -570,4 +571,98 @@ describe('Lingshe forced detonation — REAL engine sink (Critical finding regre
             countdown: 1,
         });
     });
+});
+
+// A forced detonation that triggers Cheat Death wipes the holder's Bombs (lethalHp.ts reassigns
+// `pendingBombs` while the holder lives at 1 HP): the wiped second Bomb never detonates. A
+// detonation that KILLS the holder reassigns the container too (bomb-splash-on-death), and there
+// every countdown-0 Bomb still detonates.
+describe('reduceBombsOnVictim stops at a wiped container, keeps walking a dead holder’s', () => {
+    const lethal = (sourceId: string): PendingBomb => ({
+        countdown: 1,
+        damagePerStack: 1e6,
+        stacks: 1,
+        tier: 100,
+        sourceId,
+        affinityMult: 1,
+        detonationDamageModifier: 0,
+        splashModifier: 0,
+    });
+    const run = (afterFirstBurst: (victim: CombatActor) => void): number => {
+        const victim = makeEnemy('enemy-x', [lethal('a'), lethal('b')]);
+        const bus = createEventBus();
+        let detonated = 0;
+        bus.on('bomb-detonated', () => {
+            detonated += 1;
+        });
+        let calls = 0;
+        reduceBombsOnVictim(victim, 1, 1, bus, 'lingshe', (v) => {
+            calls += 1;
+            if (calls === 1) afterFirstBurst(v);
+        });
+        return detonated;
+    };
+    it('Cheat Death on the first burst (holder alive at 1 HP, Bombs reassigned) → one detonation', () => {
+        expect(
+            run((v) => {
+                v.currentHp = 1;
+                v.pendingBombs = [];
+            })
+        ).toBe(1);
+    });
+    it('control: the first burst kills the holder (Bombs reassigned by the splash) → both detonate', () => {
+        expect(
+            run((v) => {
+                v.currentHp = 0;
+                v.pendingBombs = [];
+            })
+        ).toBe(2);
+    });
+});
+
+describe('reduceBombsOnVictim: Bombs driven to 0 together detonate oldest first', () => {
+    const bombOf = (damagePerStack: number, appliedSeq: number): PendingBomb => ({
+        countdown: 1,
+        damagePerStack,
+        stacks: 1,
+        tier: 100,
+        sourceId: 'planter',
+        affinityMult: 1,
+        detonationDamageModifier: 0,
+        splashModifier: 0,
+        appliedSeq,
+    });
+    const run = (containerOrder: 'oldest-first' | 'newest-first'): number[] => {
+        const victim = createActor({
+            id: 'x',
+            side: 'enemy',
+            kind: 'enemy',
+            stats: {
+                attack: 0,
+                crit: 0,
+                critDamage: 0,
+                defensePenetration: 0,
+                shieldPenetration: 0,
+                defence: 0,
+                hp: 1e9,
+                speed: 1,
+            },
+        });
+        const pair = [bombOf(1000, 1), bombOf(2000, 2)];
+        if (containerOrder === 'newest-first') pair.reverse();
+        victim.pendingBombs.push(...pair);
+        const bus = createEventBus();
+        const damages: number[] = [];
+        bus.on('bomb-detonated', (e: Extract<CombatEvent, { type: 'bomb-detonated' }>) =>
+            damages.push(e.damage)
+        );
+        expect(reduceBombsOnVictim(victim, 1, 1, bus, 'lingshe')).toBe(2);
+        expect(victim.pendingBombs).toEqual([]);
+        return damages;
+    };
+    for (const order of ['oldest-first', 'newest-first'] as const) {
+        it(`${order} in the container → the older Bomb detonates first`, () => {
+            expect(run(order)).toEqual([1000, 2000]);
+        });
+    }
 });

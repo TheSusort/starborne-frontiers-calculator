@@ -20,13 +20,15 @@ export function dotFamilyCounts(
 }
 
 /** The DoT readings {@link buildRoundContext} takes, read off ONE unit's DoT containers — the
- *  unit whose debuffs the context's `enemy-debuff` / `enemy-dot-count` subjects ask about. Each is a
- *  count of stacks (`dotStackCount`). */
+ *  unit whose debuffs the context's `enemy-debuff` / `enemy-dot-count` subjects ask about. Each DoT
+ *  reading is a count of stacks (`dotStackCount`); `accumulatorCount` is one per Echoing Burst
+ *  accumulator. */
 export function dotReadings(holder: DoTContainers): {
     corrosionStacks: number;
     infernoStacks: number;
     bombStacks: number;
     genericStacks: number;
+    accumulatorCount: number;
     enemyDotFamilyCounts: Record<string, number>;
 } {
     const generic = holder.genericDoTEntries ?? [];
@@ -35,6 +37,7 @@ export function dotReadings(holder: DoTContainers): {
         infernoStacks: dotStackCount(holder.infernoEntries),
         bombStacks: dotStackCount(holder.pendingBombs),
         genericStacks: dotStackCount(generic),
+        accumulatorCount: holder.pendingAccumulators?.length ?? 0,
         enemyDotFamilyCounts: dotFamilyCounts(
             holder.corrosionEntries,
             holder.infernoEntries,
@@ -46,7 +49,8 @@ export function dotReadings(holder: DoTContainers): {
 /**
  * Assemble a {@link ConditionContext} from per-round DPS-sim state.
  *
- * `enemyDebuffCount` adds the DoT stack counts (see `dotReadings`) to the landed named debuffs.
+ * `enemyDebuffCount` adds the DoT stack counts and the Echoing Burst accumulators (see
+ * `dotReadings`) to the landed named debuffs.
  * The remaining fields are DPS-assumption defaults: self HP is fixed at 100 (the sim
  * never takes damage); enemy HP is caller-derived (`enemyHpPct`, passed through as-is with
  * no default — SP-4d: absent means no enemy/victim reading exists this round);
@@ -158,8 +162,12 @@ export function buildRoundContext(state: {
      *  ConditionContext.enemyDotFamilyCounts' own fallback. */
     enemyDotFamilyCounts?: Record<string, number>;
     /** Generic (Voron/Orel absolute-per-tick) DoT stacks — `dotReadings`. Default 0. Folded into
-     *  the bare `enemyDotCount` sum alongside corrosion/inferno/bomb. */
+     *  the bare `enemyDotCount` sum alongside corrosion/inferno. */
     genericStacks?: number;
+    /** Echoing Burst accumulators on the unit asked about — `dotReadings`. Default 0. Each is one
+     *  debuff in `enemyDebuffCount` (owner ruling R109); not a damage-over-time effect, so not in
+     *  `enemyDotCount`. */
+    accumulatorCount?: number;
     /** SP-F F4 — living same-team ally ship names for `ally-on-team` (team-sim only). SENTINEL:
      *  leave undefined (do NOT pass []) to keep the manual assume-met fallback (single-ship DPS).
      *  Only the live combat engine's drain context supplies a real array. */
@@ -203,14 +211,20 @@ export function buildRoundContext(state: {
     noOpposingVictim?: boolean;
 }): ConditionContext {
     const hasVictim = !state.noOpposingVictim;
-    const dotStacks =
-        state.corrosionStacks + state.infernoStacks + state.bombStacks + (state.genericStacks ?? 0);
+    // A Bomb is a debuff but not a damage-over-time effect (owner ruling R112): its stacks count
+    // in `enemyDebuffCount`, never in `enemyDotCount`.
+    const dotStacks = state.corrosionStacks + state.infernoStacks + (state.genericStacks ?? 0);
     return {
         selfBuffNames: state.selfBuffNames,
         ...(state.selfBuffCount !== undefined ? { selfBuffCount: state.selfBuffCount } : {}),
         // SP-4d: absent (not a fabricated 0) when this round has no opposing victim — see
         // `noOpposingVictim`'s doc above for why the sum alone can't distinguish the two.
-        enemyDebuffCount: hasVictim ? state.landedEnemyDebuffCount + dotStacks : undefined,
+        enemyDebuffCount: hasVictim
+            ? state.landedEnemyDebuffCount +
+              dotStacks +
+              state.bombStacks +
+              (state.accumulatorCount ?? 0)
+            : undefined,
         effectiveCritRate: state.effectiveCritRate,
         enemyType: state.enemyType,
         // DPS-assumption defaults (overridable for live-engine population)
@@ -241,7 +255,8 @@ export function buildRoundContext(state: {
         selfCritPower: state.selfCritPower ?? 0,
         selfSpeed: state.selfSpeed ?? 0,
         selfCurrentHp: state.selfCurrentHp ?? 0,
-        // SP-D — DoT-ONLY subtotal, the SAME stacks already folded into enemyDebuffCount above.
+        // SP-D — DoT-ONLY subtotal, the SAME stacks already folded into enemyDebuffCount above
+        // (Bombs and Echoing Burst excluded).
         // Deliberately excludes landedEnemyDebuffCount (control/marker debuffs) — that is the
         // whole DoT-ONLY point of this subject vs `enemy-debuff`.
         // SP-4d: absent (not a fabricated 0) when there is no opposing victim — same reasoning as

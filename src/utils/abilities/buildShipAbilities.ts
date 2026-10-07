@@ -61,6 +61,7 @@ import {
     parseAllyCritDot,
     detectAllyCritDotTrigger,
     parseSelfCritDotEffect,
+    parseSelfCritDotFamily,
     detectSelfCritDotTrigger,
     detectInflictSourceSlotFilter,
     parseSlotReactionDotEffect,
@@ -1990,6 +1991,7 @@ function abilitiesFromText(
                     turns: critExtend.turns,
                     chanceFromCritPower: true,
                     scope: critExtend.scope,
+                    ...(critExtend.dotType ? { dotType: critExtend.dotType } : {}),
                 },
                 autoFilled: true,
             },
@@ -2047,12 +2049,15 @@ function abilitiesFromText(
                 selfCritDotPos >= 0 ? selfCritDotPos : 0
             );
             if (selfCritDotTrigger) {
+                // "inflicts Corrosion with a critical hit" answers that family only.
+                const selfCritDotFamily = parseSelfCritDotFamily(text);
                 out.push({
                     ability: {
                         id: nextId(),
                         type: 'dot',
                         target: 'enemy',
                         trigger: selfCritDotTrigger, // 'on-self-crit-dot'
+                        ...(selfCritDotFamily ? { triggerStatusFilter: selfCritDotFamily } : {}),
                         conditions: [],
                         config: {
                             type: 'dot',
@@ -2902,9 +2907,10 @@ function abilitiesFromText(
                 ...(charge.applicationVerb
                     ? { triggerApplicationFilter: charge.applicationVerb }
                     : {}),
-                // Oleander's charge is one per skill cast an ally lands a debuff with (see
-                // `Ability.oncePerRootCast`).
-                ...(reactiveTrigger === 'on-ally-debuff-inflicted'
+                // Oleander's charge (an ally's debuff) and Hemlock's (her own) are one per skill
+                // cast or spread that lands a debuff (see `Ability.oncePerRootCast`).
+                ...(reactiveTrigger === 'on-ally-debuff-inflicted' ||
+                reactiveTrigger === 'on-debuff-inflicted'
                     ? { oncePerRootCast: 'cast' as const }
                     : {}),
                 conditions,

@@ -89,6 +89,11 @@ export type CombatEvent =
            *  `victimIds`). Present only on the POSITIONAL deferred emit; consumers fall back to
            *  `[targetId]` when absent, where `targetId` is the only victim. */
           victimIds?: string[];
+          /** This sub-attack's primary targets (positionalApply's
+           *  `SubAttackOutcome.primaryVictimIds`: every victim of a whole-battlefield pattern,
+           *  else the anchor). Present only on the POSITIONAL deferred emit and only when
+           *  non-empty; consumers fall back to `[targetId]`. */
+          primaryVictimIds?: string[];
           /** What this sub-attack actually DELIVERED — post-crit, post-amplification,
            *  post-victim-defence, INCLUDING damage a Protection cascade diverted to protectors and
            *  EXCLUDING damage deferred into a DoT. The locked basis for damage-proportional outgoing
@@ -187,8 +192,9 @@ export type CombatEvent =
           debuffInflictedReactionChain?: readonly string[];
           /** Set on every debuff a REACTION lands (any trigger): the id of that one reaction
            *  firing, shared by everything the firing lands and distinct from every other firing in
-           *  the combat. Absent on a cast's own inflictions. `procScope:'per-cast'`
-           *  (Insidiousness) gives each firing its own roll. */
+           *  the combat. One round's Toxic Overflow spreads share one id (`rootCastKey`). Absent
+           *  on a cast's own inflictions. `procScope:'per-cast'` (Insidiousness) gives each firing
+           *  its own roll. */
           reactionFiringId?: number;
           viaAllyDebuffInflictedReaction?: true;
       } & ReactiveStamp)
@@ -251,6 +257,10 @@ export type CombatEvent =
           /** The applying cast had >= 1 critting hit (per-hit crits). Present only when
            *  true. Executor-applied dots omit it (drain-time has no crit outcome). */
           viaCrit?: boolean;
+          /** The landed entry's `ActiveDoTStack.appliedSeq` — which entry this landing put on
+           *  the board, so a reaction to it (Belladonna's conversion) touches that entry only.
+           *  Always set by the engine; optional so hand-crafted test emits may omit it. */
+          appliedSeq?: number;
           /** The inflicting ability's slot — see the `debuff-applied` sibling's `sourceSlot`. */
           sourceSlot?: SkillSlot;
           /** The `debuff-applied` sibling's `on-debuff-inflicted` reaction chain — see that
@@ -619,9 +629,11 @@ export type CombatEvent =
           damage: number;
       }
     /** #345: an accumulate-then-detonate container (`PendingAccumulator` — Echoing Burst, the
-     *  only such effect in the corpus) reached the end of its countdown and burst on its holder.
+     *  only such effect in the corpus) burst on its holder: its countdown ended, or a duration
+     *  cut drove it to 0.
      *  ONE event per detonating entry, emitted from `processAccumulators` beside the burst's
-     *  `creditDetonation`, mirroring `processBombs`/`emitBombDetonated`.
+     *  `creditDetonation`, mirroring `processBombs`/`emitBombDetonated` — and from
+     *  `reduceAccumulatorsOnVictim` when a duration cut drives one to 0 (owner ruling R113).
      *
      *  Deliberately NOT a widening of `bomb-detonated`. An Echoing Burst is not a Bomb DoT (see
      *  `audit/classes.ts`), and both of that event's listeners are Bomb-specific by their own
@@ -634,7 +646,7 @@ export type CombatEvent =
      *  Echoing Burst this is — the field the APPLIER-scoped `on-own-echoing-burst-detonated`
      *  listener keys off. `victimId` = the actor it detonated ON (the holder, which is who takes
      *  the damage). `damage` = the realized payout, `accumulated × pct/100`. There is no
-     *  `detonatorId` counterpart: a timed expiry is nobody's action.
+     *  `detonatorId` counterpart: no listener asks who forced an Echoing Burst to burst.
      *
      *  ⚠️ The emit carries no effect NAME (`PendingAccumulator` stores none), so if a second
      *  accumulate-detonate effect is ever modelled, an owner's `on-own-echoing-burst-detonated`
@@ -680,11 +692,12 @@ export type CombatEvent =
       } & ReactiveStamp)
     /** Corrosion SPREAD (Hemlock) at the end of a round. The
      *  engine's end-of-round Toxic Overflow mechanic (engine.ts) emits this for each unit that held
-     *  Toxic Overflow AND ≥1 stack of Corrosion: it inflicted Corrosion I (3 turns) on that unit's
-     *  adjacent allies and removed its Toxic Overflow. `sourceId` = the unit that held Toxic
-     *  Overflow (the spread origin); `affectedIds` = the adjacent allies that RECEIVED Corrosion I
-     *  (possibly empty if the holder had no living adjacent allies). Team-symmetric — emitted for
-     *  holders on either side. Hemlock's `on-corrosion-spread` self-heal (triggers.ts) rides it,
+     *  Toxic Overflow AND ≥1 stack of Corrosion, after inflicting Corrosion I (3 turns) on that
+     *  unit's adjacent allies — each a real infliction by the Toxic Overflow's applier, with its own
+     *  landing roll and `dot-applied` — and removing its Toxic Overflow. `sourceId` = the unit that
+     *  held Toxic Overflow (the spread origin); `affectedIds` = the adjacent allies the Corrosion I
+     *  LANDED on (possibly empty: none adjacent, or every one resisted). Team-symmetric — emitted
+     *  for holders on either side. Hemlock's `on-corrosion-spread` self-heal (triggers.ts) rides it,
      *  scaling by `affectedIds.length` ("per enemy affected"), scoped to spreads whose `sourceId`
      *  opposes the reactor. */
     | ({

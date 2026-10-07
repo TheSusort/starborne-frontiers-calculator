@@ -381,6 +381,7 @@ describe('buildShipAbilities', () => {
             turns: 1,
             chanceFromCritPower: true,
             scope: 'inflicted',
+            dotType: 'corrosion',
         });
         expect(ext.conditions).toEqual([{ subject: 'self-crit', derivable: true }]);
     });

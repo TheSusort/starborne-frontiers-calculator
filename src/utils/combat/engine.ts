@@ -53,7 +53,7 @@ import {
     type EnemySelectorKind,
 } from '../abilities/abilityTargetSide';
 import { TITANITE_PLATING } from '../../constants/persistentStackingBuffs';
-import { targetCarriesBlockDebuff } from './debuffImmunity';
+import { dotResistLabel, targetCarriesBlockDebuff } from './debuffImmunity';
 import {
     createOverclockHangoverTracker,
     isOverclock,
@@ -82,7 +82,12 @@ import {
     emptyActorHealing,
     dotStackCount,
     carriedDotStacks,
+    carriedDebuffEntries,
+    accumulatorBurstDamage,
+    bombBurstDamage,
+    gatherDirectHitIntoAccumulators,
 } from './state';
+import { spliceOut, walkTimedBurstsInApplicationOrder } from './bombCountdown';
 import {
     ActiveBuff,
     AbilityStatusPayload,
@@ -99,6 +104,8 @@ import {
 import {
     applyPositionalDamage,
     footprintVictims,
+    isWholeBattlefieldPattern,
+    type SubAttackBoundary,
     type VictimDamageOutcome,
     type AppliedVictimDamage,
     type SubAttackOutcome,
@@ -192,7 +199,7 @@ import {
 } from './hitMitigation';
 import { holdsShieldConverter, consumeShieldConverter } from './shieldConverter';
 import { holdsRoguesLiberty } from './rogueLiberty';
-import { holdsToxicOverflow } from './toxicOverflowStatus';
+import { holdsToxicOverflow, toxicOverflowApplierOf } from './toxicOverflowStatus';
 import { supportFootprintAllyIds } from './supportFootprint';
 import type { PreFightCombatModifiers } from './preFight/types';
 import { protectionCascade } from './protectionTransfer';
@@ -1215,31 +1222,25 @@ function expireStacks(entries: ActiveDoTStack[]): void {
     }
 }
 
-// Step 6: Process bombs — their burst is detonation damage (same category as Step 2.95).
-// `emitBombDetonated` is called once per burst (per detonating bomb entry) so
-// reactive triggers can observe each burst's actorId, round, stacks, and damage.
-// Per-actor attribution: each burst uses the APPLIER's affinityMult (snapshotted at
-// application) and is credited to that applier's detonation channel via `creditDetonation`.
-// `actorIdFor` supplies the bomb-detonated event's actorId (the applier).
+// Step 6: one Bomb's step at its holder's turn start — its burst is detonation damage (same
+// category as Step 2.95). The countdown drops by 1; at <= 0 it bursts: `emitBombDetonated` once
+// per burst so reactive triggers observe its actorId, round, stacks and damage, then
+// `creditDetonation`. Per-actor attribution: the burst uses the APPLIER's affinityMult
+// (snapshotted at application) and is credited to that applier.
 function processBombs(args: {
-    pendingBombs: PendingBomb[];
+    bomb: PendingBomb;
+    /** The container the walk bound; a burst splices the Bomb out of it. */
+    bombs: PendingBomb[];
     emitBombDetonated?: (actorId: string, stacks: number, damage: number) => void;
     creditDetonation: (sourceId: string, damage: number) => void;
 }): void {
-    for (let i = args.pendingBombs.length - 1; i >= 0; i--) {
-        args.pendingBombs[i].countdown -= 1;
-        if (args.pendingBombs[i].countdown <= 0) {
-            const bomb = args.pendingBombs[i];
-            const burstDamage =
-                bomb.stacks *
-                bomb.damagePerStack *
-                bomb.affinityMult *
-                (1 + bomb.detonationDamageModifier / 100);
-            args.emitBombDetonated?.(bomb.sourceId, bomb.stacks, burstDamage);
-            args.creditDetonation(bomb.sourceId, burstDamage);
-            args.pendingBombs.splice(i, 1);
-        }
-    }
+    const { bomb, bombs } = args;
+    bomb.countdown -= 1;
+    if (bomb.countdown > 0) return;
+    const burstDamage = bombBurstDamage(bomb);
+    args.emitBombDetonated?.(bomb.sourceId, bomb.stacks, burstDamage);
+    args.creditDetonation(bomb.sourceId, burstDamage);
+    spliceOut(bombs, bomb);
 }
 
 /** The footprint of an `all-enemies` ability — every occupied cell of the opposing
@@ -1253,42 +1254,30 @@ const ALL_ENEMIES_PATTERN: ParsedPattern = {
     modifiers: {},
 };
 
-// Step 6b: Echoing Burst accumulators gather this round's direct damage, then detonate
-// for pct% of the accumulated total on expiry (game-categorised as detonation damage).
-// directDamage already includes affinity, so no extra affinity multiplier is applied.
-// Per-actor attribution: the accumulation INPUT is the summed direct damage of the
-// ACCUMULATING SIDE this round (spec: Echoing Burst gathers all its side's direct); the OUTPUT
-// burst is credited to the accumulator's applier via `creditDetonation`.
+// Step 6b: one Echoing Burst accumulator's step at its holder's turn start: its duration drops by
+// 1, and at <= 0 it bursts for pct% of what it gathered (game-categorised as detonation damage).
+// The gather happens as each direct hit lands on the holder (`gatherDirectHitIntoAccumulators`),
+// and that damage already includes affinity, so no extra affinity multiplier is applied. The burst
+// is credited to the accumulator's applier via `creditDetonation`.
 //
-// The input is supplied by `directDealtBy(<that side's roster>)`, which reads BOTH the
-// scalar credit channel and its positional twin — a positional run never writes the scalar
-// `roundDamage` map, so a scalar-only sum would drain every accumulator for exactly 0.
-//
-// #345: `emitAccumulatorDetonated` is called once per burst, so an APPLIER-scoped reaction can
-// observe it — the sibling of `processBombs`' `emitBombDetonated`, which this function went
-// without. Valkyrie's "when an Echoing Burst explodes on an enemy … repair 5% of damage dealt"
-// rode the Bomb event instead, which meant it fired on any teammate's Bomb and never once on her
-// own burst. Emitted BEFORE `creditDetonation` (the same order `processBombs` uses); the reaction
-// it enqueues drains later regardless.
+// #345: `emitAccumulatorDetonated` is called once per burst, so an APPLIER-scoped reaction
+// (Valkyrie's "when an Echoing Burst explodes on an enemy … repair 5% of damage dealt") observes
+// her own burst. Emitted BEFORE `creditDetonation`, as for a Bomb; the reaction it enqueues drains
+// later.
 function processAccumulators(args: {
-    pendingAccumulators: PendingAccumulator[];
-    /** Direct damage the ACCUMULATING side (the side that applied these accumulators — i.e. the
-     *  bursting actor's OPPOSING roster) has dealt so far this round. */
-    gatheredDirect: number;
+    acc: PendingAccumulator;
+    /** The container the walk bound; a burst splices the accumulator out of it. */
+    accs: PendingAccumulator[];
     emitAccumulatorDetonated?: (actorId: string, damage: number) => void;
     creditDetonation: (sourceId: string, damage: number) => void;
 }): void {
-    for (let i = args.pendingAccumulators.length - 1; i >= 0; i--) {
-        const acc = args.pendingAccumulators[i];
-        acc.accumulated += args.gatheredDirect;
-        acc.roundsRemaining -= 1;
-        if (acc.roundsRemaining <= 0) {
-            const damage = acc.accumulated * (acc.pct / 100);
-            args.emitAccumulatorDetonated?.(acc.sourceId, damage);
-            args.creditDetonation(acc.sourceId, damage);
-            args.pendingAccumulators.splice(i, 1);
-        }
-    }
+    const { acc, accs } = args;
+    acc.roundsRemaining -= 1;
+    if (acc.roundsRemaining > 0) return;
+    const damage = accumulatorBurstDamage(acc);
+    args.emitAccumulatorDetonated?.(acc.sourceId, damage);
+    args.creditDetonation(acc.sourceId, damage);
+    spliceOut(accs, acc);
 }
 
 // Steps 4 & 5: Tick corrosion (scales with enemy HP, capped at 5000 dmg per 1%) and
@@ -2987,7 +2976,8 @@ export function runCombat(rawInput: CombatEngineInput): {
     // an unresolvable id is the only surviving route, and a DoT that lands here is stranded — it
     // never ticks and never expires.
     //
-    // There is deliberately NO side-wide `pendingAccumulators` counterpart: nothing would read it.
+    // There is deliberately NO side-wide `pendingAccumulators` container: an accumulator lives on
+    // its holder, and `dotReadings` reads the holder's own list when it has one.
     const corrosionEntries: ActiveDoTStack[] = [];
     const infernoEntries: ActiveDoTStack[] = [];
     const genericDoTEntries: ActiveDoTStack[] = [];
@@ -3406,6 +3396,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         // Generic DoTs have no single named type — synthesize a base "Damage over Time"
         // buff-name so an `enemy-debuff` name-gate can still see them.
         ...(target.genericDoTEntries.length > 0 ? ['Damage over Time'] : []),
+        ...(target.pendingAccumulators.length > 0 ? ['Echoing Burst'] : []),
     ];
     // Per-VICTIM, per-TICK resolution of an applier's dotMult.
     // Reads `ctx.victimGatedDotDamage` (set by runPlayerTurn ONLY when the applier's cast
@@ -3903,10 +3894,11 @@ export function runCombat(rawInput: CombatEngineInput): {
     // `${ownerId}:${abilityId}`; each gate is a RateGate that fires with the ability's
     // procChance probability on each draw (random, like the crit/landing gates).
     const procChanceGates = new Map<string, RateGate>();
-    // DoT-conversion rolls a cast drew at its landing for a same-cast count gate (R76), spent by
-    // the convert-dot executor (`IntentExecContext.preDecidedConversions`). Cleared at each actor
-    // turn-start, after that cast's reactions have drained.
-    const preDecidedConversions = new Map<string, boolean>();
+    // DoT-conversion rolls a cast drew at its landing for a same-cast count gate (R76), one per
+    // landed stack, spent in order by the convert-dot executor
+    // (`IntentExecContext.preDecidedConversions`). Cleared at each actor turn-start, after that
+    // cast's reactions have drained.
+    const preDecidedConversions = new Map<string, boolean[]>();
     // Verdict cache for scoped proc abilities: procScope:'per-attack' keys it per sub-attack,
     // procScope:'per-cast' (Insidiousness) per roll and per cap — see each gate in triggers.ts.
     // Cleared at each actor turn-start beside reactionFiredThisAttack so a later turn rolls afresh.
@@ -4497,19 +4489,21 @@ export function runCombat(rawInput: CombatEngineInput): {
 
     /**
      * Owner ruling R76 (Belladonna): a DoT conversion counts for a count gate written after the
-     * DoT in the SAME cast, so the conversion roll is drawn at the landing rather than when the
-     * reaction drains. For each living, not turn-blocked converter on `casterId`'s side (its `convert-dot` on
-     * `on-ally-debuff-inflicted`, the owner included, matching `dotType`), draw the roll the
-     * landing's reaction would draw and park it in `preDecidedConversions` for the executor to
-     * spend. A repeat ask for the same landing reads the parked roll. Returns the families
-     * converted into.
+     * DoT in the SAME cast, so the conversion rolls are drawn at the landing rather than when the
+     * reaction drains. For each living, not turn-blocked converter on `casterId`'s side (its
+     * `convert-dot` on `on-ally-debuff-inflicted`, the owner included, matching `dotType`), draw
+     * the roll each of the `stacks` landed stacks' reaction would draw — one per stack — and park
+     * them in `preDecidedConversions` for the executor to spend in order. A repeat ask reads the
+     * parked rolls and draws only the stacks not yet parked. Returns, per converter, the family
+     * converted into and how many of the stacks convert.
      */
     const decideSameCastConversions = (
         casterId: string,
         victimId: string,
-        dotType: DoTType
-    ): string[] => {
-        const families: string[] = [];
+        dotType: DoTType,
+        stacks: number
+    ): { family: string; converted: number }[] => {
+        const out: { family: string; converted: number }[] = [];
         for (const { ownerId, reactiveAbilities: owned } of [
             ...reactivePerOwner,
             ...enemyReactivePerOwner,
@@ -4527,23 +4521,26 @@ export function runCombat(rawInput: CombatEngineInput): {
                 )
                     continue;
                 const key = dotConversionKey(ownerId, ability.id, victimId, casterId, dotType);
-                let converts = preDecidedConversions.get(key);
-                if (converts === undefined) {
-                    converts = drawDotConversion(ownerId, ability.id, cfg, {
-                        procChanceGates,
-                        effectiveStatsFor: (id) => {
-                            const actor = allActorsById.get(id);
-                            return actor
-                                ? effectiveStatsOf(statusEngine, selfBuffLookup, actor)
-                                : undefined;
-                        },
-                    });
-                    preDecidedConversions.set(key, converts);
+                const rolls = preDecidedConversions.get(key) ?? [];
+                while (rolls.length < stacks) {
+                    rolls.push(
+                        drawDotConversion(ownerId, ability.id, cfg, {
+                            procChanceGates,
+                            effectiveStatsFor: (id) => {
+                                const actor = allActorsById.get(id);
+                                return actor
+                                    ? effectiveStatsOf(statusEngine, selfBuffLookup, actor)
+                                    : undefined;
+                            },
+                        })
+                    );
                 }
-                if (converts) families.push(cfg.buffName);
+                preDecidedConversions.set(key, rolls);
+                const converted = rolls.slice(0, stacks).filter(Boolean).length;
+                if (converted > 0) out.push({ family: cfg.buffName, converted });
             }
         }
-        return families;
+        return out;
     };
 
     // Owner-routed executor context: the executor resolves an intent's owner runtime
@@ -5477,7 +5474,8 @@ export function runCombat(rawInput: CombatEngineInput): {
         victim: CombatActor,
         damageTaken: number,
         outcome: VictimDamageOutcome,
-        isAnchor: boolean
+        /** The victim is a primary target of the hit — see `TakenLeech.requirePrimaryTarget`. */
+        isPrimary: boolean
     ): void => {
         if (!healingCtx || damageTaken <= 0) return;
         // Barrier carve-out (per victim): a fully-blocked hit deals no damage taken.
@@ -5505,7 +5503,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             if (e.requiresHpDamage && !(outcome.shieldBefore > 0 && outcome.hpDamage > 0)) {
                 continue;
             }
-            if (e.requirePrimaryTarget && !isAnchor) continue;
+            if (e.requirePrimaryTarget && !isPrimary) continue;
             let raw = damageTaken * (e.pct / 100);
             let didCrit = false;
             if (e.kind === 'heal' && rt) {
@@ -5673,8 +5671,8 @@ export function runCombat(rawInput: CombatEngineInput): {
         victim: CombatActor,
         damage: number,
         outcome: VictimDamageOutcome,
-        /** The victim is the hit's primary target — see `TakenLeech.requirePrimaryTarget`. */
-        isAnchor: boolean
+        /** The victim is a primary target of the hit — see `TakenLeech.requirePrimaryTarget`. */
+        isPrimary: boolean
     ): void => {
         // ⚠️ NEITHER DIRECTION LEECHES OFF `damage`. That is the hit as THROWN — the seam hands it
         // down pre-cascade, pre-block, pre-transform — and both bases are funnel figures:
@@ -5703,7 +5701,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             booked + (outcome.protectionRedirected ?? 0),
             'direct'
         );
-        procTakenLeechesPerVictim(victim, booked, outcome, isAnchor);
+        procTakenLeechesPerVictim(victim, booked, outcome, isPrimary);
     };
 
     // The id of the actor whose turn is CURRENTLY executing. Set once at the top of
@@ -5758,10 +5756,12 @@ export function runCombat(rawInput: CombatEngineInput): {
      * Owner ruling R92 (in game 2026-10-06): a victim is a PRIMARY TARGET at most once per incoming
      * sub-attack, counting the whole reaction chain that sub-attack sets off (`setHitRoot` in
      * triggers.ts names the chain). Any aimed hit spends it — the cast's hit on its anchor, a
-     * counter, a proc; a covered hit of an area pattern neither counts nor spends. The FIRST aimed
+     * counter, a proc; a covered hit of an area pattern neither counts nor spends. A cast's hit is
+     * aimed at each of its sub-attack's primary targets (`SubAttackOutcome.primaryVictimIds` — the
+     * anchor, or every victim of a whole-battlefield attack, owner ruling R110). The FIRST aimed
      * hit on a victim in a chain is the primary-target hit; Stalwart's counter and buff and
      * Nosorog's reflect read that one answer. Malvex's shield is a damage-taken leech, which only
-     * cast hits proc (`procLeechesForVictim`), so it reads the cast's `isAnchor`. Keys are
+     * cast hits proc (`procLeechesForVictim`), so it reads the cast's `isPrimary`. Keys are
      * `victimId|root`; roots are unique for the whole run.
      */
     const primaryHitsSpent = new Set<string>();
@@ -6053,50 +6053,6 @@ export function runCombat(rawInput: CombatEngineInput): {
             dmg(sourceId)[channel] += amount;
             input.__testTapCreditDamage?.(sourceId, channel, amount);
         };
-        // ── The DIRECT channel's positional twin ─────────────────────────────────────────
-        // Per-round, per-attacker direct damage that landed through the POSITIONAL apply, i.e.
-        // the exact mirror of the `creditDamage(id, 'direct', …)` writes the positional branches
-        // SUPPRESS. Every such write sits in an `if (!positional)`
-        // / `else` pair with its twin below, so the two channels are MUTUALLY EXCLUSIVE per
-        // contribution by construction: nothing can reach both. (The enemy cast site has no
-        // scalar direct write at all — `roundDamage` is a player-credit map — so its twin is the
-        // enemy side's only direct channel, and it too can only fire on the positional branch.)
-        //
-        // Why it exists at all: `processAccumulators` (Echoing Burst) gathers "the direct damage
-        // the accumulating side dealt this round", and on a positional run the scalar bucket is
-        // structurally empty, so without this twin the burst would detonate for 0 for every
-        // user. This is the honest gather input; it is NOT a second
-        // accounting channel — `cumulativeDamage`, `perTargetDealt` and the row totals are all
-        // untouched by it.
-        const roundPositionalDirect = new Map<string, number>();
-        const creditPositionalDirect = (sourceId: string, amount: number): void => {
-            if (!(amount > 0)) return;
-            roundPositionalDirect.set(
-                sourceId,
-                (roundPositionalDirect.get(sourceId) ?? 0) + amount
-            );
-        };
-        /**
-         * Round-to-date DIRECT damage dealt by an EXPLICIT roster, summing BOTH channels.
-         *
-         * The id list is explicit rather than "everything that is not the other side" on purpose:
-         * an inversion is only safe on the player-credit-only scalar map, and this also reads the
-         * positional tally, which — like `perTargetDealt`, whose problem `actorsDamagePerRound`
-         * in dpsMetricFromDealt.ts solved the same way — is keyed by attacker across BOTH sides.
-         * Inverting there would fold the opposing side's output into this side's aggregate.
-         *
-         * Called at a specific MOMENT in the round (the bursting actor's turn), and both maps are
-         * round-scoped, so it reports exactly what that side had dealt so far — the same instant
-         * semantics the scalar expression it replaces had.
-         */
-        const directDealtBy = (roster: readonly CombatActor[]): number =>
-            roster.reduce(
-                (sum, a) =>
-                    sum +
-                    (roundDamage.get(a.id)?.direct ?? 0) +
-                    (roundPositionalDirect.get(a.id) ?? 0),
-                0
-            );
         // Healing mode: rebind the per-round healing map (so `credit` writes into THIS round)
         // and snapshot the target's HP%/shield at the ROUND TOP — before any turn. Raw floats;
         // the adapter owns any rounding. No-op in DPS mode (currentRoundHealing stays unread).
@@ -6213,8 +6169,9 @@ export function runCombat(rawInput: CombatEngineInput): {
         let currentSubAttackIndex: number | undefined;
         /**
          * True while the funnel is applying a cast whose pattern is the whole battlefield
-         * (`Pattern-All`, Curator). Protection skips such a hit — its game text: "Damage is not
-         * redirected for skills that target the entire battlefield." Set beside
+         * (`isWholeBattlefieldPattern` — `Pattern-All`, Curator). Protection skips such a hit —
+         * its game text: "Damage is not redirected for skills that target the entire
+         * battlefield." Set beside
          * `currentSubAttackIndex` by `drivePositionalApply`'s `applyToVictim` wrapper, so a
          * filtered-set passive hit ("all enemies with Inferno") never sets it.
          */
@@ -6349,9 +6306,11 @@ export function runCombat(rawInput: CombatEngineInput): {
                  *  undefined at a factor of 0. */
                 preMitigationDamage?: number;
                 /** This hit is a primary-target hit (Nosorog's `requirePrimaryTarget` reflect
-                 *  gate): a cast's hit on its anchor, or a counter's / proc's hit that was the
-                 *  first aimed hit on this victim in its chain (`primaryHitsSpent`). False for a
-                 *  covered footprint victim and for a later hit in the chain. Undefined reads as
+                 *  gate): a cast's hit on one of its sub-attack's primary targets
+                 *  (`SubAttackOutcome.primaryVictimIds` — the anchor, or every victim of a
+                 *  whole-battlefield attack), or a counter's / proc's hit that was the first aimed
+                 *  hit on this victim in its chain (`primaryHitsSpent`). False for a covered
+                 *  footprint victim and for a later hit in the chain. Undefined reads as
                  *  true — the non-positional cast sites, which bind one victim. */
                 isPrimaryTarget?: boolean;
             }
@@ -7249,13 +7208,13 @@ export function runCombat(rawInput: CombatEngineInput): {
                 const directFraction =
                     totalRaw > 0 ? Math.max(0, (totalRaw - bombPortion) / totalRaw) : 0;
                 const reflectBasis = hpDamage * directFraction;
-                // A requirePrimaryTarget reflect ability (Nosorog) fires only on a primary-target
-                // hit (`cause.isPrimaryTarget`, see its doc). An ability without it (the Reflect
-                // gear set) reflects every direct hit.
+                // A requirePrimaryTarget reflect ability fires only on a primary-target hit
+                // (`cause.isPrimaryTarget`, see its doc). Nosorog and the Reflect gear set both
+                // carry `requirePrimaryTarget`; an ability without it reflects every direct hit.
                 //
                 // LATENT SAFETY: the `undefined → treated as primary` default is correct
                 // ONLY because every real-roster AoE path today is POSITIONAL — applyPositionalDamage
-                // threads isAnchor → applyIncomingToTarget/applyOutgoingToEnemy → isPrimaryTarget, so
+                // threads isPrimary → applyIncomingToTarget/applyOutgoingToEnemy → isPrimaryTarget, so
                 // a covered victim always gets an explicit `false`. The remaining undefined callers are
                 // all inherently SINGLE-target (the legacy non-positional applyIncomingToTarget binds
                 // one victim, which IS the primary). A FUTURE non-positional real-roster AoE path would
@@ -7865,6 +7824,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // The counter-OWNER is the source-attacker of this counter hit. Moves in
                 // lockstep with the write above (perTargetDealt mirrors every increment).
                 creditDealt(owner.id, attacker.id, counterBooked);
+                // A counter-attack's hit is direct damage on the ship it lands on, so an Echoing
+                // Burst there gathers it (owner ruling).
+                gatherDirectHitIntoAccumulators(attacker, counterBooked);
             }
             // `dealt` stays the FULL counter, converted or not: it feeds only the log row
             // (triggers.ts emitReactiveDamageLog) and the reactive dealt-amount slot, and the main
@@ -8118,12 +8080,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                     (roundPerTargetDamage.get(victim.id) ?? 0) + procBooked
                 );
                 creditDealt(ownerId, victim.id, procBooked);
-                // The twin of this function's own `creditDamage(ownerId,
-                // 'direct', raw)` below — the third and last suppressed direct write. Same
-                // if/else, so a proc lands in exactly one channel. A reactive hit IS direct
-                // damage its owner dealt, and it counted toward the Echoing Burst gather
-                // before the corpus turned positional; without this it would silently stop.
-                creditPositionalDirect(ownerId, procBooked);
+                // A reactive hit is direct damage on its victim, so an Echoing Burst there
+                // gathers it. A Bomb splash copy is Bomb damage, not a direct hit: not gathered.
+                if (!splashCopy) gatherDirectHitIntoAccumulators(victim, procBooked);
             }
             // `dealt` stays the full proc — log/dealt-slot only, as in applyCounterAttack.
             return { dealt: raw, didCrit };
@@ -8378,8 +8337,9 @@ export function runCombat(rawInput: CombatEngineInput): {
              *  derivation). */
             enemyBuffCount: number;
             enemyHpPct: number;
-            /** Debuffs on the victim: its distinct per-target statuses plus its DoT stacks — the
-             *  bound target's `enemyDebuffCount` derivation. */
+            /** Debuffs on the victim: its named debuffs plus its DoT stacks and Echoing Burst
+             *  accumulators (`carriedDebuffEntries`) — the bound target's `enemyDebuffCount`
+             *  derivation. */
             enemyDebuffCount: number;
             /** DoT stacks on the victim (`carriedDotStacks`; `enemyDotCount`'s derivation). */
             enemyDotCount: number;
@@ -8402,7 +8362,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 v.stats.hp > 0
                                     ? Math.max(0, Math.min(100, (100 * v.currentHp) / v.stats.hp))
                                     : 100,
-                            enemyDebuffCount: ownerDebuffCount(statusEngine, v.id) + dots,
+                            enemyDebuffCount:
+                                ownerDebuffCount(statusEngine, v.id) + carriedDebuffEntries(v),
                             enemyDotCount: dots,
                             enemyAdjacentCount: bySide(v.side).adjacentAllyIdsFor(v.id).length,
                         },
@@ -8614,6 +8575,11 @@ export function runCombat(rawInput: CombatEngineInput): {
         // this driver returns (see drivePositionalTurnApply's interleaved emission block).
         // Per-HIT event fidelity below the sub-attack — one event per (hit, victim) pair — remains
         // a documented follow-up.
+        //
+        // The status store's application sequence as the acting ship's current skill began
+        // (`buildTurnArgs`), handed to its firing hits' Echoing Burst gather
+        // (`gatherDirectHitIntoAccumulators`'s `castStartSeq`).
+        let castStartSeq: number | undefined;
         const drivePositionalApply = (args: {
             scalars: AttackerDamageScalars;
             // hitCrits is co-populated with positionalScalars (both are set iff a damage
@@ -8636,7 +8602,9 @@ export function runCombat(rawInput: CombatEngineInput): {
             applyToVictim: (
                 victim: CombatActor,
                 damage: number,
-                isAnchor?: boolean,
+                /** The victim is a primary target of the sub-attack — forwarded into
+                 *  `cause.isPrimaryTarget`. */
+                isPrimary?: boolean,
                 /** The defence mitigation factor already folded into `damage` for this
                  *  victim — forwarded into `cause.targetMitigation` so the Protection cascade
                  *  divides by the factor that was applied instead of re-deriving one. */
@@ -8659,7 +8627,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                 outcome: VictimDamageOutcome,
                 didCrit: boolean,
                 subAttackIndex: number,
-                isAnchor: boolean
+                isAnchor: boolean,
+                isPrimary: boolean
             ) => void;
             // Repeated here for the same reason as `onVictimResolved`'s trailing param: this
             // engine-side wrapper declares its OWN args type, so applyPositionalDamage's
@@ -8668,7 +8637,8 @@ export function runCombat(rawInput: CombatEngineInput): {
             onVictimPreImpact?: (
                 victim: CombatActor,
                 isAnchor: boolean,
-                subAttackIndex: number
+                subAttackIndex: number,
+                isPrimary: boolean
             ) => void;
             // Per-victim crit resolver (per-victim crit). The anchor victim reuses hitCrits[h];
             // each COVERED footprint victim rolls the attacker's crit gate at ITS OWN affinity-
@@ -8693,16 +8663,8 @@ export function runCombat(rawInput: CombatEngineInput): {
             // this engine-side wrapper declares its OWN args type, so a hook that exists on
             // applyPositionalDamage is un-typeable by an engine caller until it is repeated here.
             // Unsupplied by a caller → no boundary work.
-            onSubAttackStart?: (sub: {
-                index: number;
-                anchorId: string;
-                victimIds: string[];
-            }) => void;
-            onSubAttackEnd?: (sub: {
-                index: number;
-                anchorId: string;
-                victimIds: string[];
-            }) => void;
+            onSubAttackStart?: (sub: SubAttackBoundary) => void;
+            onSubAttackEnd?: (sub: SubAttackBoundary) => void;
         }): {
             anyCrit: boolean;
             critPairs: number;
@@ -8766,20 +8728,21 @@ export function runCombat(rawInput: CombatEngineInput): {
                     applyToVictim: (
                         victim,
                         damage,
-                        isAnchor,
+                        _isAnchor,
                         subAttackIndex,
                         targetMitigation,
-                        preMitigation
+                        preMitigation,
+                        isPrimary
                     ) => {
                         const prevSubAttack = currentSubAttackIndex;
                         const prevWholeBattlefield = wholeBattlefieldHit;
                         currentSubAttackIndex = subAttackIndex;
-                        wholeBattlefieldHit = args.pattern.shape === 'all';
+                        wholeBattlefieldHit = isWholeBattlefieldPattern(args.pattern);
                         try {
                             return args.applyToVictim(
                                 victim,
                                 damage,
-                                isAnchor,
+                                isPrimary,
                                 targetMitigation,
                                 preMitigation
                             );
@@ -8806,6 +8769,10 @@ export function runCombat(rawInput: CombatEngineInput): {
                         // caller) is the firing attacker for every footprint victim (anchor AND
                         // covered) this hit landed on.
                         creditDealt(args.actingId, victim.id, damage);
+                        // A firing hit is direct damage on this victim, so an Echoing Burst on it
+                        // gathers it — on every cast site, both sides — unless this same skill
+                        // applied that Echoing Burst (its damage is written first).
+                        gatherDirectHitIntoAccumulators(victim, damage, castStartSeq);
                     },
                     // E2: forward the per-direction leech hook (unsupplied by all current callers).
                     onVictimResolved: args.onVictimResolved,
@@ -8968,7 +8935,7 @@ export function runCombat(rawInput: CombatEngineInput): {
          *     `passiveSlotDamageFootprint.integration.test.ts`.
          *   • a `damage-reflection` ability — the instance does not set `isReflected`, so it
          *     PROVOKES thorns back at the attacker exactly as the firing hit
-         *     does. (`isAnchor: false` below still exempts it from a `requirePrimaryTarget`
+         *     does. (`isPrimary: false` below still exempts it from a `requirePrimaryTarget`
          *     reflect — Nosorog — since it is not the cast's primary-target hit.)
          * All of that is the intended reading of "a real damage instance"; it is recorded here so
          * a later change plans around the real footprint rather than a convenient fiction.
@@ -9094,7 +9061,6 @@ export function runCombat(rawInput: CombatEngineInput): {
             );
             if (victims.length === 0) return undefined;
             return () => {
-                let delivered = 0;
                 for (const { victim, roleScale } of victims) {
                     // Read the profile ONCE and derive both the hit and the mitigation factor from
                     // it, exactly as the firing hit's positional loop does — so the factor handed
@@ -9115,8 +9081,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                         round: currentRound,
                         damage,
                     });
-                    // `isAnchor: false` — this instance is not the cast's primary-target hit, so it
-                    // must not satisfy a `requirePrimaryTarget` reflect gate (Nosorog).
+                    // `isPrimary: false` — this instance is not the cast's primary-target hit,
+                    // so it must not satisfy a `requirePrimaryTarget` reflect gate (Nosorog).
                     // 4th arg: this instance is a SECOND positional damage path into the funnel, so
                     // it owes the Protection cascade the same mitigation factor the firing hit
                     // hands down. Omitting it left this path on the fallback re-derivation — the
@@ -9142,6 +9108,10 @@ export function runCombat(rawInput: CombatEngineInput): {
                             (roundPerTargetDamage.get(victim.id) ?? 0) + booked
                         );
                         creditDealt(actor.id, victim.id, booked);
+                        // A passive-slot instance is direct damage on its victim, so an Echoing
+                        // Burst there gathers it — with no `castStartSeq`, so an instance in the
+                        // turn that applied the Echoing Burst IS gathered.
+                        gatherDirectHitIntoAccumulators(victim, booked);
                     }
                     // The ruled "damage dealt" basis: booked intake PLUS anything a
                     // Protection cascade diverted to protectors.
@@ -9151,22 +9121,15 @@ export function runCombat(rawInput: CombatEngineInput): {
                     // intake (it passes `byDirectDamage: true` through `tb.applyToVictim`), so an
                     // `'all'`-scoped leech pays and a `'detonation'`-scoped one does not.
                     //
-                    // BASIS: `victimDelivered`, the same figure the accumulate-detonate gather
-                    // below books — NOT the pre-funnel `damage`. Both sites moved together: this
-                    // one stayed on the pre-funnel number only to match the firing-hit seam, and
-                    // that seam now translates through the funnel too (see the basis block in
-                    // `procLeechesForVictim`). Leaving this one behind would recreate exactly the
-                    // hand-copied divergence that deferral was avoiding.
+                    // BASIS: `victimDelivered`, the funnel figure the firing-hit seam pays on too
+                    // (see the basis block in `procLeechesForVictim`) — NOT the pre-funnel
+                    // `damage`.
                     //
                     // Standing direction only, never `procLeechesForVictim`: the victim is not this
                     // instance's primary target, so its damage-taken leech does not proc (owner
                     // ruling, spec §2.2).
                     procStandingLeechesPerVictim(actor.id, victimDelivered, 'direct');
-                    delivered += victimDelivered;
                 }
-                // A passive-slot instance is DIRECT damage this actor dealt, so it
-                // joins the accumulate-detonate gather exactly like the firing hit does.
-                creditPositionalDirect(actor.id, delivered);
             };
         };
 
@@ -9208,7 +9171,10 @@ export function runCombat(rawInput: CombatEngineInput): {
             deliveredDamage?: number,
             // Every victim this sub-attack struck. Omitted on the single-event paths, whose
             // consumers fall back to `[targetId]`.
-            victimIds?: string[]
+            victimIds?: string[],
+            // This sub-attack's primary targets (`SubAttackOutcome.primaryVictimIds`). Omitted on
+            // the single-event paths, whose consumers fall back to `[targetId]`.
+            primaryVictimIds?: string[]
         ) => {
             bus.emit({
                 type: 'ability-performed',
@@ -9226,6 +9192,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                 ...(subAttack !== undefined ? { subAttackIndex: subAttack } : {}),
                 ...(deliveredDamage !== undefined ? { deliveredDamage } : {}),
                 ...(victimIds !== undefined && victimIds.length > 0 ? { victimIds } : {}),
+                ...(primaryVictimIds !== undefined && primaryVictimIds.length > 0
+                    ? { primaryVictimIds }
+                    : {}),
                 didHit: true,
             });
             // The attack entry now exists — drain the reflect rows THIS sub-attack
@@ -9306,14 +9275,15 @@ export function runCombat(rawInput: CombatEngineInput): {
             // Matches drivePositionalApply's applyToVictim param type exactly. Returns the
             // resolved VictimDamageOutcome (both impls wrap applyOutgoingToEnemy /
             // applyIncomingToTarget, which surface it). The third
-            // param forwards drivePositionalApply's isAnchor through to applyVictimDamage's
-            // cause.isPrimaryTarget (Nosorog's reflect gate). The fourth param forwards the
-            // defence mitigation factor the positional loop already applied, so the Protection
-            // cascade can divide by it rather than re-deriving one (see `cause.targetMitigation`).
+            // param forwards drivePositionalApply's isPrimary through to applyVictimDamage's
+            // cause.isPrimaryTarget (the `requirePrimaryTarget` reflect gate). The fourth param
+            // forwards the defence mitigation factor the positional loop already applied, so the
+            // Protection cascade can divide by it rather than re-deriving one (see
+            // `cause.targetMitigation`).
             applyToVictim: (
                 victim: CombatActor,
                 damage: number,
-                isAnchor?: boolean,
+                isPrimary?: boolean,
                 targetMitigation?: number,
                 /** #358 ADDENDUM 2 — the pre-defence twin of `damage`. */
                 preMitigation?: number
@@ -9330,8 +9300,8 @@ export function runCombat(rawInput: CombatEngineInput): {
             stealthedEnemyCount: playerStealthedEnemyCount,
             shieldedAllyCount: playerShieldedAllyCount,
             healEventOnly: false,
-            applyToVictim: (victim, damage, isAnchor, targetMitigation, preMitigation) =>
-                applyOutgoingToEnemy(damage, victim, isAnchor, targetMitigation, preMitigation),
+            applyToVictim: (victim, damage, isPrimary, targetMitigation, preMitigation) =>
+                applyOutgoingToEnemy(damage, victim, isPrimary, targetMitigation, preMitigation),
         };
         const enemyTurnBindings: TurnBindings = {
             opposingRoster: allPlayerActors,
@@ -9355,7 +9325,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             // bySide('enemy').grantAllyCharges (resolved in buildTurnArgs by side), NEVER the player
             // team. Likewise applyToVictim routes the firing hit as INCOMING damage to the struck
             // player actor (applyIncomingToTarget), not as a player damage row.
-            applyToVictim: (victim, damage, isAnchor, targetMitigation, preMitigation) =>
+            applyToVictim: (victim, damage, isPrimary, targetMitigation, preMitigation) =>
                 applyIncomingToTarget(
                     damage,
                     victim,
@@ -9367,7 +9337,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                         targetMitigation,
                         preMitigationDamage: preMitigation,
                     },
-                    isAnchor
+                    isPrimary
                 ),
         };
         const turnBindings = (side: Side): TurnBindings =>
@@ -9389,12 +9359,19 @@ export function runCombat(rawInput: CombatEngineInput): {
         ): void => {
             for (const victim of victims.values()) {
                 if (victim.currentHp <= 0) continue; // died to the firing hit (already splashed)
+                // The Bombs this detonation takes stay on the victim until its burst has landed:
+                // a lethal burst splashes every Bomb still on the ship (bomb-splash-on-death), the
+                // detonating ones included, as a lethal natural expiry does. The recipe consumes a
+                // scratch copy; the detonated entries leave the live container afterwards.
+                const liveBombs = victim.pendingBombs;
+                const bombsLeft = liveBombs.slice();
                 const result = detonateContainers(recipe, {
                     corrosionEntries: victim.corrosionEntries,
                     infernoEntries: victim.infernoEntries,
-                    pendingBombs: victim.pendingBombs,
+                    pendingBombs: bombsLeft,
                     victimHp: tb.victimMaxHpFor(victim),
                 });
+                const detonatedBombs = liveBombs.filter((b) => !bombsLeft.includes(b));
                 let bombDelivered = 0;
                 if (result.bomb > 0) {
                     const bombOutcome = applyVictimDamage(result.bomb, victim, sink, {
@@ -9429,6 +9406,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                     // The detonating caster (actorId) is the source-attacker.
                     creditDealt(actorId, victim.id, bombOutcome.incomingBooked);
                 }
+                for (const b of detonatedBombs) spliceOut(liveBombs, b);
                 const bypass = result.inferno + result.corrosion;
                 let bypassDelivered = 0;
                 if (bypass > 0) {
@@ -9467,8 +9445,9 @@ export function runCombat(rawInput: CombatEngineInput): {
             }
         };
 
-        // Routes a FORCED bomb detonation (a caster's
-        // countdown-reduce ability driving an existing PendingBomb to <=0, e.g. Lingshe) through
+        // Routes a FORCED detonation (a caster's countdown-reduce ability driving an existing
+        // PendingBomb to <=0, e.g. Lingshe; a duration cut driving a Bomb or an Echoing Burst
+        // accumulator to 0, e.g. Heliodor or Warpstrike — owner ruling R113) through
         // the SAME per-victim `applyVictimDamage` sink a natural countdown-0 burst uses
         // (processBombs' `creditDetonation` — see `applyPositionedTimedBurst` above). This is the
         // ONLY correct way to preserve Barrier full-damage-immunity, the Cheat-Death intercept,
@@ -9528,112 +9507,111 @@ export function runCombat(rawInput: CombatEngineInput): {
                 actor.pendingBombs.length > 0 || actor.pendingAccumulators.length > 0;
             if (!hasTimedContainers || !isPositional(actor.position, opposingRoster)) return;
 
-            processBombs({
-                pendingBombs: actor.pendingBombs,
-                emitBombDetonated: (actorId, stacks, damage) =>
-                    bus.emit({
-                        type: 'bomb-detonated',
-                        actorId,
-                        victimId: actor.id,
-                        round: r,
-                        stacks,
-                        damage,
+            // Bombs and accumulators that expire in this step detonate in order of application,
+            // and a Cheat Death the first of them triggers wipes the rest
+            // (`walkTimedBurstsInApplicationOrder`, owner ruling R115).
+            walkTimedBurstsInApplicationOrder(actor, {
+                bomb: (bomb, bombs) =>
+                    processBombs({
+                        bomb,
+                        bombs,
+                        emitBombDetonated: (actorId, stacks, damage) =>
+                            bus.emit({
+                                type: 'bomb-detonated',
+                                actorId,
+                                victimId: actor.id,
+                                round: r,
+                                stacks,
+                                damage,
+                            }),
+                        creditDetonation: (sourceId, damage) => {
+                            const outcome = applyVictimDamage(damage, actor, sink, {
+                                killerId: sourceId,
+                                byDirectDamage: true,
+                                bombPortion: damage, // full shield drain, no pen
+                                shieldPenetrationPct: 0,
+                            });
+                            // #355 B1: book what the funnel RECORDED — see `detonationDelivered`.
+                            const delivered = detonationDelivered(outcome);
+                            roundPerTargetDamage.set(
+                                actor.id,
+                                (roundPerTargetDamage.get(actor.id) ?? 0) + outcome.incomingBooked
+                            );
+                            // The bomb's applier (sourceId) bursting on the bursting actor's own
+                            // turn.
+                            creditDealt(sourceId, actor.id, outcome.incomingBooked);
+                            perActorDetonation.set(
+                                sourceId,
+                                (perActorDetonation.get(sourceId) ?? 0) + delivered
+                            );
+                            // The burst channel pays the applier's standing damage-dealt leech.
+                            // `'detonation'` is the channel, so a `leechScope:'detonation'` leech
+                            // pays HERE and only here, and an `'all'` one pays here too.
+                            //
+                            // Deliberately NOT `procLeechesForVictim`: that fires the victim's
+                            // TAKEN leech as well, and a burst does not proc one (owner ruling,
+                            // spec §2.2 — Malvex reads "directly damaged as a primary target").
+                            // Standing direction only.
+                            //
+                            // #355 B1: paid on the DELIVERED amount. "% of damage dealt" is the
+                            // final on-screen number — a Protection redirect counts (the damage
+                            // landed, on the protector) and a DoT transform does not (it has not
+                            // been dealt yet; it books per tick). `detonationDelivered` is exactly
+                            // that basis.
+                            procStandingLeechesPerVictim(sourceId, delivered, 'detonation');
+                        },
                     }),
-                creditDetonation: (sourceId, damage) => {
-                    const outcome = applyVictimDamage(damage, actor, sink, {
-                        killerId: sourceId,
-                        byDirectDamage: true,
-                        bombPortion: damage, // full shield drain, no pen
-                        shieldPenetrationPct: 0,
-                    });
-                    // #355 B1: book what the funnel RECORDED — see `detonationDelivered`.
-                    const delivered = detonationDelivered(outcome);
-                    roundPerTargetDamage.set(
-                        actor.id,
-                        (roundPerTargetDamage.get(actor.id) ?? 0) + outcome.incomingBooked
-                    );
-                    // The bomb's applier (sourceId) bursting on the bursting actor's own turn.
-                    creditDealt(sourceId, actor.id, outcome.incomingBooked);
-                    perActorDetonation.set(
-                        sourceId,
-                        (perActorDetonation.get(sourceId) ?? 0) + delivered
-                    );
-                    // The burst channel pays the applier's standing damage-dealt leech.
-                    // `'detonation'` is the channel, so a `leechScope:'detonation'` leech pays
-                    // HERE and only here, and an `'all'` one pays here too.
-                    //
-                    // Deliberately NOT `procLeechesForVictim`: that fires the victim's TAKEN leech
-                    // as well, and a burst does not proc one (owner ruling, spec §2.2 — Malvex
-                    // reads "directly damaged as a primary target"). Standing direction only.
-                    //
-                    // #355 B1: paid on the DELIVERED amount. "% of damage dealt" is the final
-                    // on-screen number — a Protection redirect counts (the damage landed, on the
-                    // protector) and a DoT transform does not (it has not been dealt yet; it books
-                    // per tick). `detonationDelivered` is exactly that basis.
-                    procStandingLeechesPerVictim(sourceId, delivered, 'detonation');
-                },
-            });
-
-            // Accumulator gather input. The accumulators a POSITIONED actor carries
-            // were seeded by the OPPOSING side's casts, so the side whose direct damage they
-            // gather is exactly `opposingRoster` — which makes this ONE expression correct for
-            // BOTH sites, with no side branch: the enemy site passes `allPlayerActors` and the
-            // player/team sites pass `enemyAttackerActors`.
-            //
-            // This replaces a bare sum over the scalar `roundDamage` map, whose comment asserted
-            // it was "CORRECT for the enemy site" and an "INERT placeholder" for the player side.
-            // Neither half held any more: the scalar map goes structurally empty the moment a cast
-            // resolves positionally (its direct credit is suppressed — see `creditPositionalDirect`),
-            // so the "correct" side gathered 0, and the player side was inert only because nothing
-            // fed it, not because the sum was unreachable.
-            const gatheredDirect = directDealtBy(opposingRoster);
-            processAccumulators({
-                pendingAccumulators: actor.pendingAccumulators,
-                gatheredDirect,
-                // #345: `actorId` is the accumulator's APPLIER (whose Echoing Burst this is) and
-                // `victimId` the holder it burst on — the same actorId/victimId split the sibling
-                // `bomb-detonated` emit above uses. Inside the shared `applyPositionedTimedBurst`,
-                // so both sides emit it: a player Valkyrie's burst on an enemy and an enemy
-                // Valkyrie's burst on a player ship announce themselves identically.
-                emitAccumulatorDetonated: (actorId, damage) =>
-                    bus.emit({
-                        type: 'accumulator-detonated',
-                        actorId,
-                        victimId: actor.id,
-                        round: r,
-                        damage,
+                accumulator: (acc, accs) =>
+                    processAccumulators({
+                        acc,
+                        accs,
+                        // #345: `actorId` is the accumulator's APPLIER (whose Echoing Burst this
+                        // is) and `victimId` the holder it burst on — the same actorId/victimId
+                        // split the sibling `bomb-detonated` emit above uses. Inside the shared
+                        // `applyPositionedTimedBurst`, so both sides emit it: a player Valkyrie's
+                        // burst on an enemy and an enemy Valkyrie's burst on a player ship announce
+                        // themselves identically.
+                        emitAccumulatorDetonated: (actorId, damage) =>
+                            bus.emit({
+                                type: 'accumulator-detonated',
+                                actorId,
+                                victimId: actor.id,
+                                round: r,
+                                damage,
+                            }),
+                        creditDetonation: (sourceId, damage) => {
+                            const outcome = applyVictimDamage(damage, actor, sink, {
+                                killerId: sourceId,
+                                byDirectDamage: true,
+                                bombPortion: damage, // full shield drain, no pen (bomb-style)
+                                shieldPenetrationPct: 0,
+                            });
+                            // #355 B1: book what the funnel RECORDED — see `detonationDelivered`.
+                            const delivered = detonationDelivered(outcome);
+                            roundPerTargetDamage.set(
+                                actor.id,
+                                (roundPerTargetDamage.get(actor.id) ?? 0) + outcome.incomingBooked
+                            );
+                            // The accumulator's applier (sourceId).
+                            creditDealt(sourceId, actor.id, outcome.incomingBooked);
+                            perActorDetonation.set(
+                                sourceId,
+                                (perActorDetonation.get(sourceId) ?? 0) + delivered
+                            );
+                            // The burst channel pays the applier's standing damage-dealt leech.
+                            // `'detonation'` is the channel, so a `leechScope:'detonation'` leech
+                            // pays HERE and only here, and an `'all'` one pays here too.
+                            //
+                            // Deliberately NOT `procLeechesForVictim`: that fires the victim's
+                            // TAKEN leech as well, and a burst does not proc one (owner ruling,
+                            // spec §2.2 — Malvex reads "directly damaged as a primary target").
+                            // Standing direction only.
+                            //
+                            // #355 B1: paid on the DELIVERED amount, same basis as the sibling bomb
+                            // burst above — a Protection redirect counts, a DoT transform does not.
+                            procStandingLeechesPerVictim(sourceId, delivered, 'detonation');
+                        },
                     }),
-                creditDetonation: (sourceId, damage) => {
-                    const outcome = applyVictimDamage(damage, actor, sink, {
-                        killerId: sourceId,
-                        byDirectDamage: true,
-                        bombPortion: damage, // full shield drain, no pen (bomb-style)
-                        shieldPenetrationPct: 0,
-                    });
-                    // #355 B1: book what the funnel RECORDED — see `detonationDelivered`.
-                    const delivered = detonationDelivered(outcome);
-                    roundPerTargetDamage.set(
-                        actor.id,
-                        (roundPerTargetDamage.get(actor.id) ?? 0) + outcome.incomingBooked
-                    );
-                    // The accumulator's applier (sourceId).
-                    creditDealt(sourceId, actor.id, outcome.incomingBooked);
-                    perActorDetonation.set(
-                        sourceId,
-                        (perActorDetonation.get(sourceId) ?? 0) + delivered
-                    );
-                    // The burst channel pays the applier's standing damage-dealt leech.
-                    // `'detonation'` is the channel, so a `leechScope:'detonation'` leech pays
-                    // HERE and only here, and an `'all'` one pays here too.
-                    //
-                    // Deliberately NOT `procLeechesForVictim`: that fires the victim's TAKEN leech
-                    // as well, and a burst does not proc one (owner ruling, spec §2.2 — Malvex
-                    // reads "directly damaged as a primary target"). Standing direction only.
-                    //
-                    // #355 B1: paid on the DELIVERED amount, same basis as the sibling bomb burst
-                    // above — a Protection redirect counts, a DoT transform does not.
-                    procStandingLeechesPerVictim(sourceId, delivered, 'detonation');
-                },
             });
         };
 
@@ -9698,6 +9676,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         // The selfHpPct denom is runtimeFor(actor).hp (equal to baseHpFor(id) by
         // construction). The per-kind bookkeeping TAILS after each call stay inline.
         const buildTurnArgs = (a: CombatActor, tgt: CombatActor | undefined) => {
+            castStartSeq = statusEngine.lastAppliedSeq();
             const tb = turnBindings(a.side);
             const rt = runtimeFor(a);
             const maxHp = rt.hp; // unified denom (baseHpFor(id) === runtimeFor(id).hp)
@@ -9843,11 +9822,11 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // bySide(a.side) (identical for player and enemy casters). Consumed only by a
                 // buff-steal ability whose config carries grantAdjacentAllies.
                 adjacentAllyIds: bySide(a.side).adjacentAllyIdsFor(a.id),
-                // R76: draw, at the landing, the conversion rolls this caster's DoT of `dotType`
-                // on `victimId` sets off (Belladonna), for a same-cast count gate. Returns the
-                // families it converted into.
-                decideSameCastConversions: (victimId: string, dotType: DoTType): string[] =>
-                    decideSameCastConversions(a.id, victimId, dotType),
+                // R76: draw, at the landing, the conversion rolls the `stacks` stacks of this
+                // caster's DoT of `dotType` on `victimId` set off (Belladonna), for a same-cast
+                // count gate.
+                decideSameCastConversions: (victimId: string, dotType: DoTType, stacks: number) =>
+                    decideSameCastConversions(a.id, victimId, dotType, stacks),
                 // Whether the two ADJACENCY counts derived in runPlayerTurn (from
                 // `adjacentAllyIds` / `adjacentEnemyIdsFor` above) are a measurement on this run.
                 // Same mode gate, same reason, as `enemyDestroyedCount` below.
@@ -10205,7 +10184,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                 damage: number,
                 outcome: VictimDamageOutcome,
                 didCrit: boolean,
-                isAnchor: boolean
+                /** The victim is a primary target of its sub-attack. */
+                isPrimary: boolean
             ) => void,
             /**
              * Emits ONE sub-attack's `attacked` events. Invoked once per sub-attack that produced
@@ -10215,10 +10195,15 @@ export function runCombat(rawInput: CombatEngineInput): {
              * The bucket's index is passed too, so it can be stamped onto each `attacked`
              * event. A victim-side once-per-attack rider guard needs it to reset between the
              * attacker's consecutive attacks instead of collapsing all N into one.
+             *
+             * `primaryIds` is THAT sub-attack's primary-target set
+             * (`SubAttackOutcome.primaryVictimIds`), re-resolved per sub-attack — not the cast's
+             * turn-start target, which a kill on an earlier sub-attack can retire.
              */
             emitAttackedForSubAttack: (
                 victims: Map<string, PositionalVictimSignal>,
-                subAttackIndex: number
+                subAttackIndex: number,
+                primaryIds: ReadonlySet<string>
             ) => void,
             /**
              * The enemy site emits its `attacked` AFTER the helper returns, from its own inline
@@ -10311,13 +10296,22 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // Per-victim crit: each covered footprint victim rolls at ITS own affinity-capped
                 // rate against this attacker (`PlayerTurnResult.rollVictimCrit`).
                 rollVictimCrit: sel.rollVictimCrit,
-                onVictimResolved: (victim, damage, outcome, didCrit, subAttackIndex, isAnchor) => {
-                    // The cast's hit on its anchor is the first aimed hit in that sub-attack's
-                    // chain, so it spends the anchor's primary-target allowance there.
-                    if (isAnchor) spendPrimaryHit(victim.id, castHitRoot(subAttackIndex ?? 0));
+                onVictimResolved: (
+                    victim,
+                    damage,
+                    outcome,
+                    didCrit,
+                    subAttackIndex,
+                    _isAnchor,
+                    isPrimary
+                ) => {
+                    // The cast's hit on a primary target is the first aimed hit on it in
+                    // that sub-attack's chain, so it spends that victim's primary-target
+                    // allowance there.
+                    if (isPrimary) spendPrimaryHit(victim.id, castHitRoot(subAttackIndex ?? 0));
                     // Injected per-site leech direction (Note A): standing (player→enemy) vs taken
                     // (enemy→player, which also captures the focus victim's shield-hit flag).
-                    onVictimResolved(victim, damage, outcome, didCrit, isAnchor);
+                    onVictimResolved(victim, damage, outcome, didCrit, isPrimary);
                     // §4.5 commit point for the mark `onVictimPreImpact` approved for this hit.
                     // ONLY A HIT THAT LANDED REDUCES STASIS (owner ruling 2026-09-15): a hit
                     // nullified by Barrier never reached the victim, so it reduces nothing. A hit
@@ -10480,6 +10474,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                 });
             };
             const signalledIndices = [...attackedSignals.keys()].sort((a, b) => a - b);
+            /** Sub-attack `idx`'s primary-target set, for its `attacked` events. */
+            const primaryIdsOf = (idx: number): ReadonlySet<string> =>
+                new Set(critAgg.subAttacks[idx]?.primaryVictimIds ?? []);
             // The indices that owe an emission step in the two loops that would otherwise walk
             // `attacked` signals ALONE — the nothing-landed fallback and the inline-emitted `else`.
             // A sub-attack can hold buffered debuff events with NO signals: the boundary hooks fire
@@ -10550,7 +10547,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                             steps.push({
                                 isEvent: false,
                                 idx,
-                                run: () => emitAttackedForSubAttack(victims, idx),
+                                run: () =>
+                                    emitAttackedForSubAttack(victims, idx, primaryIdsOf(idx)),
                             });
                         }
                         pushDebuffSteps(idx);
@@ -10586,7 +10584,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                                         sub.critVictimIds,
                                         idx,
                                         sub.deliveredDamage,
-                                        sub.victimIds
+                                        sub.victimIds,
+                                        sub.primaryVictimIds
                                     ),
                             });
                         }
@@ -10601,7 +10600,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                             steps.push({
                                 isEvent: false,
                                 idx,
-                                run: () => emitAttackedForSubAttack(victims, idx),
+                                run: () =>
+                                    emitAttackedForSubAttack(victims, idx, primaryIdsOf(idx)),
                             });
                         }
                         // This sub-attack's own debuff events, after its `attacked`.
@@ -10623,7 +10623,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                         steps.push({
                             isEvent: false,
                             idx,
-                            run: () => emitAttackedForSubAttack(victims, idx),
+                            run: () => emitAttackedForSubAttack(victims, idx, primaryIdsOf(idx)),
                         });
                     }
                     pushDebuffSteps(idx);
@@ -12082,8 +12082,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                         // PER-POSITIONED-PLAYER TIMED BURST: enemy-seeded bombs/accumulators on the
                         // focus attacker burst against its OWN HP at its turn-start, via the sink.
                         // Mirror of the enemy site's own burst; a no-op when the actor carries no
-                        // timed entries. Canonical turn-start order is
-                        // tickDoTs → processBombs → processAccumulators.
+                        // timed entries. Canonical turn-start order is tickDoTs, then the Bombs
+                        // and accumulators together in order of application.
                         applyPositionedTimedBurst(actor, sink, enemyAttackerActors);
 
                         // Dead-after-burst guard: a lethal self-burst stamps
@@ -12318,24 +12318,24 @@ export function runCombat(rawInput: CombatEngineInput): {
                                         castStasisStandsOn: turn.castStasisStandsOn,
                                         scheduledEnemyEffects: turn.scheduledEnemyEffects,
                                     },
-                                    (victim, damage, outcome, _didCrit, isAnchor) =>
+                                    (victim, damage, outcome, _didCrit, isPrimary) =>
                                         procLeechesForVictim(
                                             actor.id,
                                             victim,
                                             damage,
                                             outcome,
-                                            isAnchor
+                                            isPrimary
                                         ),
                                     // ONE sub-attack's victims per call, emitted right
                                     // after that sub-attack's own `ability-performed`. The index is
                                     // stamped onto each event.
-                                    (victims, subAttackIndex) => {
+                                    (victims, subAttackIndex, primaryIds) => {
                                         if (victims.size > 0) {
                                             emitPerVictimAttacked({
                                                 bus,
                                                 round: r,
                                                 attackerId: actor.id,
-                                                primaryId: tgt.id,
+                                                primaryIds,
                                                 victims,
                                                 subAttackIndex,
                                             });
@@ -12408,16 +12408,6 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 // inside this guard documents intent and keeps per-victim detonation out of
                                 // cumulativeDamage (it lands per-victim via applyVictimDamage above).
                                 creditDamage(actor.id, 'detonation', turn.detonationDamage);
-                            } else {
-                                // The suppressed direct credit's positional TWIN. Same
-                                // gate, opposite branch — which is the whole proof that the Echoing
-                                // Burst gather cannot double-count: a cast reaches exactly one of
-                                // these two lines. `castDelivered` (not `turn.directDamage`) is the
-                                // basis: it is what the per-victim apply ACTUALLY delivered across
-                                // the footprint, the same "damage dealt" basis `perTargetDealt`
-                                // records. Defined whenever `positional`, so the `?? 0` is
-                                // defensive only.
-                                creditPositionalDirect(actor.id, castDelivered ?? 0);
                             }
                             focusTurns.push(turn);
 
@@ -12623,22 +12613,22 @@ export function runCombat(rawInput: CombatEngineInput): {
                                         castStasisStandsOn: teamTurn.castStasisStandsOn,
                                         scheduledEnemyEffects: teamTurn.scheduledEnemyEffects,
                                     },
-                                    (victim, damage, outcome, _didCrit, isAnchor) =>
+                                    (victim, damage, outcome, _didCrit, isPrimary) =>
                                         procLeechesForVictim(
                                             actor.id,
                                             victim,
                                             damage,
                                             outcome,
-                                            isAnchor
+                                            isPrimary
                                         ),
                                     // Mirror of the focus site's per-sub-attack emit.
-                                    (victims, subAttackIndex) => {
+                                    (victims, subAttackIndex, primaryIds) => {
                                         if (victims.size > 0) {
                                             emitPerVictimAttacked({
                                                 bus,
                                                 round: r,
                                                 attackerId: actor.id,
-                                                primaryId: tgt.id,
+                                                primaryIds,
                                                 victims,
                                                 subAttackIndex,
                                             });
@@ -12707,13 +12697,6 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 // inside this guard documents intent and keeps per-victim detonation out of
                                 // cumulativeDamage (it lands per-victim via applyVictimDamage above).
                                 creditDamage(actor.id, 'detonation', teamTurn.detonationDamage);
-                            } else {
-                                // The walked team's mirror of the focus site's
-                                // positional direct twin — see its note for why the pair cannot
-                                // double-count. A walked team actor's direct damage IS part of the
-                                // gather (Echoing Burst gathers the whole side's direct), which is
-                                // the entire point of the fixture that pins the scaling.
-                                creditPositionalDirect(actor.id, teamCastDelivered ?? 0);
                             }
 
                             // The team turn's result row fields (action/roundCrit/etc.) are NOT consumed
@@ -13150,9 +13133,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // everything between is comment + `let` declarations, so the board this
                             // sees is the board the apply sees. Staging is also side-effect free (a
                             // pure `footprintVictims` read) and the apply skips any victim whose
-                            // share is not `> 0`, with `creditPositionalDirect` no-opping on 0
-                            // — so a zero-attack enemy (the DPS default) stages, lands nothing and
-                            // changes nothing.
+                            // share is not `> 0` — so a zero-attack enemy (the DPS default)
+                            // stages, lands nothing and changes nothing.
                             const stagedEnemyPassiveSlotHit =
                                 enemyPositional && enemyPassiveSlotHit && tgt !== undefined
                                     ? stagePassiveSlotHit(
@@ -13291,13 +13273,13 @@ export function runCombat(rawInput: CombatEngineInput): {
                                             // scheduled debuffs on the player side by the same draw.
                                             scheduledEnemyEffects: enemyScheduledEnemyEffects,
                                         },
-                                        (victim, dmg, outcome, _didCrit, isAnchor) => {
+                                        (victim, dmg, outcome, _didCrit, isPrimary) => {
                                             procLeechesForVictim(
                                                 actor.id,
                                                 victim,
                                                 dmg,
                                                 outcome,
-                                                isAnchor
+                                                isPrimary
                                             );
                                             if (victim.id === tgt.id) {
                                                 positionalShieldCaptured = true;
@@ -13312,13 +13294,13 @@ export function runCombat(rawInput: CombatEngineInput): {
                                         // ONE sub-attack's victims per call. The enemy DEFERS the
                                         // whole fan-out to its inline tail, so these calls run from
                                         // `emitDeferred` below, not here.
-                                        (victims, subAttackIndex) => {
+                                        (victims, subAttackIndex, primaryIds) => {
                                             if (victims.size > 0) {
                                                 emitPerVictimAttacked({
                                                     bus,
                                                     round: r,
                                                     attackerId: actor.id,
-                                                    primaryId: tgt.id,
+                                                    primaryIds,
                                                     victims,
                                                     subAttackIndex,
                                                 });
@@ -13332,19 +13314,6 @@ export function runCombat(rawInput: CombatEngineInput): {
                                     // The staged passive-slot instance lands now — after
                                     // the firing hit, exactly as the two player-side sites do it.
                                     landEnemyPassiveSlotHitOnce();
-                                    // The enemy site's positional direct twin. There is no
-                                    // `if (!enemyPositional) creditDamage(…,'direct',…)` to pair
-                                    // with: `roundDamage` is a player-credit map, so the enemy side
-                                    // has no scalar direct channel. This write is the enemy side's
-                                    // ONLY direct channel and can only run on the positional
-                                    // branch, so no double-count is reachable here.
-                                    creditPositionalDirect(
-                                        actor.id,
-                                        posApply.critAgg.subAttacks.reduce(
-                                            (sum, sub) => sum + (sub.deliveredDamage ?? 0),
-                                            0
-                                        )
-                                    );
                                 } else {
                                     // The enemy's non-positional INCOMING-damage accounting tail
                                     // (applyIncomingToTarget plus the single aggregate `attacked`
@@ -13407,12 +13376,10 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 // locals below.
                                 if (enemyPositional) {
                                     // Per-victim emit. One `attacked` per footprint player
-                                    // victim hit by this enemy cast (isPrimaryTarget only on the anchor,
-                                    // tgt.id) → EVERY covered player's on-attacked reactives wake (enemy
-                                    // counters land back on it / Second Wind etc.), not just the anchor.
-                                    // The gate broadens from "anchor was hit" to "any victim was hit": if
-                                    // the anchor whiffs but a covered victim is hit, emission fires for the
-                                    // covered victim and no isPrimaryTarget event fires that turn — correct.
+                                    // victim hit by this enemy cast (isPrimaryTarget on each of
+                                    // the sub-attack's `primaryVictimIds`) → EVERY struck player's
+                                    // on-attacked reactives wake (counters land back on the enemy
+                                    // / Second Wind etc.), not just the anchor's.
                                     // DEFERRED here (not inside the shared helper) because the enemy
                                     // emits at its inline tail. `enemyEmitDeferred` is the
                                     // remainder of the interleaved sequence the helper handed back:
@@ -13749,9 +13716,12 @@ export function runCombat(rawInput: CombatEngineInput): {
 
         // Toxic Overflow end-of-round Corrosion spread. Game rule (constants/buffs.ts): "At the end
         // of the round if a unit has Toxic Overflow and at least 1 stack of Corrosion, inflict
-        // Corrosion I for 3 turns to all adjacent allies and remove Toxic Overflow." Runs BEFORE
-        // the round-ended emit/drain below so each `corrosion-spread` event's enqueued reactions
-        // (Hemlock's self-heal, on-corrosion-spread) are flushed by the same drainReactions calls.
+        // Corrosion I for 3 turns to all adjacent allies and remove Toxic Overflow." Each spread
+        // Corrosion is an infliction by the ship that applied the Toxic Overflow (owner ruling):
+        // its own landing roll, Block Debuff respected, and a `dot-applied` every infliction
+        // reaction hears. Runs BEFORE the round-ended emit/drain below so the reactions the
+        // landings and each `corrosion-spread` event enqueue (Hemlock's self-heal,
+        // on-corrosion-spread) are flushed by the same drainReactions calls.
         // Team-symmetric: iterates every living actor. The holder's Toxic Overflow is
         // read out of the per-victim TIMED enemy-debuff store ONLY, via `holdsToxicOverflow` — see
         // the guard below for why that channel and not the broad name union; Corrosion lives on the
@@ -13786,23 +13756,72 @@ export function runCombat(rawInput: CombatEngineInput): {
             if (dotStackCount(holder.corrosionEntries) < 1) continue;
             toxicSpreaders.push(holder);
         }
+        // Every spread of this pass carries ONE reaction firing id: together they are one root
+        // cast (`rootCastKey`, triggers.ts).
+        const spreadFiringId = toxicSpreaders.length > 0 ? ++reactionFiringSeq : 0;
         for (const holder of toxicSpreaders) {
-            const affectedIds = bySide(
+            const adjacentIds = bySide(
                 isEnemySide(holder.id) ? 'enemy' : 'player'
             ).adjacentAllyIdsFor(holder.id);
+            // The Toxic Overflow's applier inflicts the spread (the holder, for a status carrying
+            // no caster).
+            const applierId = toxicOverflowApplierOf(statusEngine, holder.id) ?? holder.id;
+            const applier = allRuntimesById.get(applierId);
+            const resistLabel = dotResistLabel('corrosion', SPREAD_CORROSION_TIER);
+            // The adjacent allies the spread LANDED on — what Hemlock's "per enemy affected"
+            // repair counts.
+            const affectedIds: string[] = [];
             // Inflict Corrosion I (SPREAD_CORROSION_TIER, SPREAD_CORROSION_DURATION turns) on each
-            // adjacent ally. Attributed to the holder (a live, resolvable applier so the tick is
-            // counted — see tickDoTs's corrosion applier-ctx rule). New independent stack (DoTs of
-            // the same family stack), mirroring applyNewDoTs's corrosion entry shape.
-            for (const allyId of affectedIds) {
+            // adjacent ally, as any inflicted DoT lands: a Block Debuff holder auto-resists with no
+            // roll; otherwise the applier's hacking rolls against the recipient's security. A
+            // landed stack is a new independent entry (DoTs of the same family stack), mirroring
+            // applyNewDoTs's corrosion entry shape.
+            for (const allyId of adjacentIds) {
                 const ally = allActorsById.get(allyId);
                 if (!ally) continue;
+                const blocked = targetCarriesBlockDebuff(statusEngine, allyId);
+                const lands =
+                    !blocked &&
+                    (applier?.landsTimedEnemyApplication(
+                        undefined,
+                        ally.affinity,
+                        reactiveLandingChanceFor(applierId, allyId)
+                    ) ??
+                        true);
+                if (!lands) {
+                    bus.emit({
+                        type: 'debuff-resisted',
+                        sourceId: applierId,
+                        targetId: allyId,
+                        round: r,
+                        buffName: resistLabel,
+                        // A Block Debuff resist draws no roll.
+                        ...(blocked ? {} : { viaLandingRoll: true as const }),
+                        reactionFiringId: spreadFiringId,
+                        reactive: true,
+                    });
+                    continue;
+                }
+                const appliedSeq = statusEngine.nextAppliedSeq();
                 ally.corrosionEntries.push({
                     stacks: 1,
                     tier: SPREAD_CORROSION_TIER,
                     remainingRounds: SPREAD_CORROSION_DURATION,
-                    sourceId: holder.id,
-                    appliedSeq: statusEngine.nextAppliedSeq(),
+                    sourceId: applierId,
+                    appliedSeq,
+                });
+                affectedIds.push(allyId);
+                bus.emit({
+                    type: 'dot-applied',
+                    sourceId: applierId,
+                    targetId: allyId,
+                    round: r,
+                    dotType: 'corrosion',
+                    stacks: 1,
+                    tier: SPREAD_CORROSION_TIER,
+                    appliedSeq,
+                    reactionFiringId: spreadFiringId,
+                    reactive: true,
                 });
             }
             // Remove Toxic Overflow from the holder (targeted single-family removal — preserves any
