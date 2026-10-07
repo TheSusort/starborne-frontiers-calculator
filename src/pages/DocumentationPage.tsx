@@ -2874,7 +2874,8 @@ const DocumentationPage: React.FC = () => {
                                         &quot;inflicts a debuff&quot; reacts only to inflicted
                                         debuffs, and one that says &quot;applying a debuff&quot;
                                         only to applied ones, such as Provoke, Concentrate Fire or
-                                        the Burner set&apos;s Inferno.
+                                        the Burner set&apos;s Inferno (applied to every primary
+                                        target of the attack).
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Clause Order:</span> A
@@ -3216,12 +3217,16 @@ const DocumentationPage: React.FC = () => {
                                         off. The first aimed hit uses it up &mdash; the attack
                                         itself, a counter-attack, or a passive hit such as
                                         Sentinel&apos;s or Provider&apos;s. An area attack&apos;s
-                                        hit on a ship it was not aimed at does not count. Each
-                                        attack of a multi-attack skill (Enforcer) brings its own.
-                                        Ripper crits Stalwart, Stalwart counters Ripper, and
-                                        Sentinel&apos;s follow-up hit draws no second counter. Plain
-                                        &ldquo;when directly damaged&rdquo; passives (Isha, Opal)
-                                        fire on every hit.
+                                        hit on a ship it was not aimed at does not count, but an
+                                        attack that hits the whole enemy side (Curator&apos;s
+                                        active) has every enemy it strikes as a primary target, so
+                                        each of them reacts once. Each attack of a multi-attack
+                                        skill (Enforcer) brings its own, and each hit&apos;s primary
+                                        target is the enemy it is actually aimed at, even after a
+                                        kill re-aims it. Ripper crits Stalwart, Stalwart counters
+                                        Ripper, and Sentinel&apos;s follow-up hit draws no second
+                                        counter. Plain &ldquo;when directly damaged&rdquo; passives
+                                        (Isha, Opal) fire on every hit.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Chained reactions:</span> A
@@ -4706,12 +4711,14 @@ const DocumentationPage: React.FC = () => {
                                     in Stasis or Disabled still gets this bonus, but not its usual
                                     charge for the skipped turn). Two damage-over-time gear sets are
                                     also modeled: <strong>Burner</strong> (applies Inferno for 2
-                                    turns when the ship attacks; an applied Inferno lands without a
-                                    hacking roll, failing only when the ship is at an affinity
-                                    disadvantage against the target) and <strong>Decimation</strong>{' '}
-                                    (+10% DoT damage per equipped set, up to +30%, boosting your
-                                    Inferno and Corrosion ticks in both the combat simulator and the
-                                    DPS calculator). Five shield sources are also modeled: the{' '}
+                                    turns on every primary target when the ship attacks, so a
+                                    whole-battlefield attack such as Curator&apos;s active inflicts
+                                    it on every enemy; an applied Inferno lands without a hacking
+                                    roll, failing only when the ship is at an affinity disadvantage
+                                    against the target) and <strong>Decimation</strong> (+10% DoT
+                                    damage per equipped set, up to +30%, boosting your Inferno and
+                                    Corrosion ticks in both the combat simulator and the DPS
+                                    calculator). Five shield sources are also modeled: the{' '}
                                     <strong>Shield</strong> gear set (grants the equipped ship a
                                     shield each turn, 4% of its max HP per set),{' '}
                                     <strong>Adaptive Plating</strong> (grants the ship a shield from
