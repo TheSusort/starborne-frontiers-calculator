@@ -1006,6 +1006,7 @@ describe('complete gear sets stack', () => {
             expect(shipWithSet('REFLECT', pieces)?.config).toEqual({
                 type: 'damage-reflection',
                 pct: 10 * sets,
+                requirePrimaryTarget: true,
             });
         }
     });
