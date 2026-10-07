@@ -954,7 +954,7 @@ const IMPLANT_ABILITIES: Partial<Record<string, ImplantAbilityBuilder>> = {
     // D-PR7: on-death implants ----------------------------------------------------
     // Last Wish: "Upon death, repairs X% of all allies' max HP." Rides the reactive
     // heal executor on the on-destroyed trigger (Salvation precedent); basis 'target-hp'
-    // repairs each ally % of its OWN max HP. Reactive heals never crit. Fully modeled.
+    // repairs each ally % of its OWN max HP. Crits like any reactive repair. Fully modeled.
     LAST_WISH: (rarity) => {
         const pct = LAST_WISH_PCT[rarity];
         if (pct === undefined) return undefined;

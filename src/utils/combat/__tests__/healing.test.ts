@@ -1752,11 +1752,11 @@ describe('healing — Task 9: reactive listeners (on-ally-critically-repaired / 
 // ── Task 9: reactive heal/shield/cleanse executor ───────────────────────────────────────
 //
 // Driven through the engine in healing mode with a reactive ability carrying a start-of-round
-// trigger (fires through executeIntent every round). Asserts credits, no second crit, and no
+// trigger (fires through executeIntent every round). Asserts credits, the owner's crit fold, and no
 // heal-performed re-emission (the executor deliberately does NOT emit heal-performed — chain
 // guard), plus the healing-mode-off silent skip.
 describe('healing — Task 9: reactive executor (heal/shield/cleanse)', () => {
-    it('reactive heal credits directHeal (and consumption when target) but never emits heal-performed', () => {
+    it('reactive heal credits directHeal (crit-folded, and consumption when target) but never emits heal-performed', () => {
         idCounter = 0;
         const bus = createEventBus();
         const perfs: Extract<CombatEvent, { type: 'heal-performed' }>[] = [];
@@ -1766,7 +1766,7 @@ describe('healing — Task 9: reactive executor (heal/shield/cleanse)', () => {
                 numRounds: 3,
                 hp: 10000,
                 crit: 100,
-                critDamage: 100, // would double a crit-heal — proves the executor never crits
+                critDamage: 100, // crit rate 100 → the reactive repair crits, doubling it
                 healTargetId: 'attacker',
                 mode: 'healing',
                 bus,
@@ -1787,10 +1787,10 @@ describe('healing — Task 9: reactive executor (heal/shield/cleanse)', () => {
                 },
             })
         );
-        // 10000 × 10% = 1000/round, NO crit fold (critDamage 100 ignored) → 3000 over 3 rounds.
-        expect(focusHeal(result, 'directHeal')).toBe(3000);
+        // 10000 × 10% = 1000/round, crit-folded ×(1 + 100%) → 2000/round, 6000 over 3 rounds.
+        expect(focusHeal(result, 'directHeal')).toBe(6000);
         // Target is the caster itself → effectiveHeal/overheal split is credited (full overheal at full HP).
-        expect(focusHeal(result, 'overheal')).toBe(3000);
+        expect(focusHeal(result, 'overheal')).toBe(6000);
         // The executor must NOT emit heal-performed (chain guard).
         expect(perfs).toHaveLength(0);
     });

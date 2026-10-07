@@ -11022,6 +11022,18 @@ export function runCombat(rawInput: CombatEngineInput): {
                     const a = allActorsById.get(id);
                     return a ? effectiveStatsOf(statusEngine, selfBuffLookup, a) : undefined;
                 },
+                // Live crit rate / crit power for a reactive repair's crit draw — the same
+                // fold a counter-attack reads for its owner (`effectiveOutgoingStatsOf`).
+                healCritStatsFor: (id) => {
+                    const a = allActorsById.get(id);
+                    if (!a) return undefined;
+                    const o = effectiveOutgoingStatsOf(statusEngine, selfBuffLookup, a);
+                    return {
+                        crit: o.crit,
+                        critDamage: o.critDamage,
+                        alwaysCrits: a.alwaysCrits === true,
+                    };
+                },
                 // Doomsayer enemy-highest-attack resolver, the round's first
                 // real activator id, and the shared once-per-round consume set. All
                 // inert today — only consumed by the next task's executor branch.

@@ -7,6 +7,7 @@ export const CURRENT_VERSION = '1.75.0';
 // bumped version whose entries are still unreleased shows users a what's-new dialog listing
 // nothing. Do it by hand only if that script cannot.
 export const UNRELEASED_CHANGES: string[] = [
+    "Combat simulator: passive repairs like Hayyan's and Salvation's can now crit.",
     "Combat simulator: Snakeroot's passive now fires on every 4th DoT stack inflicted.",
     "DPS calculator: Snakeroot's passive now fires on every 4th DoT stack inflicted.",
     'Combat simulator: each Exposed stack now counts as one debuff in debuff counts.',
