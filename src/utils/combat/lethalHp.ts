@@ -70,14 +70,17 @@ export function resolveLethalHp(
         // StatusEngine entries, so clearRemovable doesn't touch them; they are debuffs all the
         // same (owner ruling R109), so they are wiped here: the survivor takes no further tick,
         // detonation or burst from them. Filter the DoT arrays, don't clear them — an
-        // `unremovable` stack (Acidic Decay) survives this wipe and keeps ticking. Bombs and
-        // accumulators carry no unremovable form and are emptied in place, so a turn already
-        // holding a reference to the array sees the wipe.
+        // `unremovable` stack (Acidic Decay) survives this wipe and keeps ticking. Every container
+        // is REASSIGNED, never emptied in place: this runs inside the burst loops
+        // (`processBombs`, `processAccumulators`, `reduceBombsOnVictim`) when the holder's own
+        // burst is the lethal blow, and those loops walk the array they were handed by index —
+        // emptying it under them would read past its end (echoingBurstIsADebuff's mid-burst
+        // cases).
         victim.corrosionEntries = victim.corrosionEntries.filter((e) => e.unremovable);
         victim.infernoEntries = victim.infernoEntries.filter((e) => e.unremovable);
         victim.genericDoTEntries = victim.genericDoTEntries.filter((e) => e.unremovable);
-        victim.pendingBombs.length = 0;
-        victim.pendingAccumulators.length = 0;
+        victim.pendingBombs = [];
+        victim.pendingAccumulators = [];
         // Real event INLINE for its combat listener (Yazid on-cheat-death-activated), so the
         // listener fires at this point in the sequence. The LOG-ONLY twin carries the nesting.
         opts.bus.emit({ type: 'cheat-death-activated', actorId: targetId, round: opts.round });
