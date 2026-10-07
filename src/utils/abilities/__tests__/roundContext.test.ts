@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { buildRoundContext } from '../roundContext';
+import { buildRoundContext, dotReadings } from '../roundContext';
+import { conditionsMet } from '../evaluateConditions';
 import { buildActorConditionContext } from '../../combat/triggers';
 
 describe('buildRoundContext', () => {
@@ -287,5 +288,41 @@ describe('buildActorConditionContext – condition-context plumbing', () => {
         });
         expect(ctx.enemyDotCount).toBe(2);
         expect(ctx.enemyDotFamilyCounts).toBeUndefined();
+    });
+
+    // Owner ruling R109: an Echoing Burst accumulator is one debuff. The drain-time and
+    // foreign-caster contexts spread `dotReadings` into `shared`, so the accumulator reaches the
+    // `enemy-debuff` count gate through this wrapper as it does on the cast path.
+    describe.each([false, true])('owner on the enemy side: %s', (ownerIsEnemySide) => {
+        it('counts an Echoing Burst accumulator in enemyDebuffCount and its count gates', () => {
+            const ctx = buildActorConditionContext(makeStatusEngine() as never, 'owner', {
+                enemyHpPct: 100,
+                ownerIsEnemySide,
+                ...dotReadings({
+                    corrosionEntries: [],
+                    infernoEntries: [],
+                    genericDoTEntries: [],
+                    pendingBombs: [],
+                    pendingAccumulators: [
+                        { roundsRemaining: 2, pct: 100, accumulated: 0, sourceId: 'caster' },
+                    ],
+                }),
+            });
+            expect(ctx.enemyDebuffCount).toBe(1);
+            expect(ctx.enemyDotCount).toBe(0);
+            expect(
+                conditionsMet(
+                    [
+                        {
+                            subject: 'enemy-debuff',
+                            derivable: true,
+                            countComparator: 'gte',
+                            countThreshold: 1,
+                        },
+                    ],
+                    ctx
+                )
+            ).toBe(true);
+        });
     });
 });

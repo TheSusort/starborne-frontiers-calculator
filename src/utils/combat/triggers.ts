@@ -3093,6 +3093,9 @@ export function buildActorConditionContext(
         /** Generic DoT stacks at drain time (`dotReadings`). Default 0 (no generic DoT tracked
          *  by this caller). Folded into `enemyDotCount` alongside corrosion/inferno. */
         genericStacks?: number;
+        /** Echoing Burst accumulators on the unit asked about (`dotReadings`). Default 0. Each
+         *  is one debuff in `enemyDebuffCount` (owner ruling R109), never in `enemyDotCount`. */
+        accumulatorCount?: number;
         /** Live per-family DoT stack counts (Belladonna's "3+ Acidic Decay" gate) at
          *  drain time. Default undefined — every family reads 0 via
          *  ConditionContext.enemyDotFamilyCounts' own fallback. */
@@ -3122,6 +3125,7 @@ export function buildActorConditionContext(
         infernoStacks: shared.infernoStacks,
         bombStacks: shared.bombStacks,
         genericStacks: shared.genericStacks,
+        accumulatorCount: shared.accumulatorCount,
         enemyDotFamilyCounts: shared.enemyDotFamilyCounts,
         effectiveCritRate: shared.effectiveCritRate ?? 0,
         enemyType: shared.enemyType,
