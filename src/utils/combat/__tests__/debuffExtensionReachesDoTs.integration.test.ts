@@ -348,7 +348,7 @@ describe('R109/R112: inflicted-scope extensions over what the cast applied', () 
         config: { type: 'extend-status', statusKind: 'debuff', turns: 1, scope: 'inflicted' },
     };
 
-    const castWith = (extend: Ability) => {
+    const castWith = (extend: Ability, casterSide: 'player' | 'enemy') => {
         const runtime = makeRuntime(
             'caster',
             {
@@ -359,11 +359,12 @@ describe('R109/R112: inflicted-scope extensions over what the cast applied', () 
                     },
                 ],
             },
-            { chargedCritGate: () => true }
+            { side: casterSide, chargedCritGate: () => true }
         );
         const statusEngine = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
         statusEngine.beginRound(1);
-        const victim = makeLoadedVictim('victim', 'enemy', statusEngine);
+        const victimSide = casterSide === 'player' ? 'enemy' : 'player';
+        const victim = makeLoadedVictim('victim', victimSide, statusEngine);
         runPlayerTurn(makeArgs(runtime, victim, statusEngine));
         return victim;
     };
@@ -378,21 +379,23 @@ describe('R109/R112: inflicted-scope extensions over what the cast applied', () 
         expect(v.corrosionEntries[0].remainingRounds).toBe(1);
     };
 
-    it('Asphyxiator extend-status: the fresh Corrosion, Bomb and Echoing Burst grow, the standing ones do not', () => {
-        const v = castWith(asphyxiatorExtend);
-        freshLanded(v);
-        expect(v.corrosionEntries[1].remainingRounds).toBe(3);
-        expect(v.pendingBombs.map((b) => b.countdown)).toEqual([1, 3]);
-        expect(v.pendingAccumulators.map((a) => a.roundsRemaining)).toEqual([1, 3]);
-    });
+    for (const side of ['player', 'enemy'] as const) {
+        it(`${side}-side Asphyxiator extend-status: the fresh Corrosion, Bomb and Echoing Burst grow, the standing ones do not`, () => {
+            const v = castWith(asphyxiatorExtend, side);
+            freshLanded(v);
+            expect(v.corrosionEntries[1].remainingRounds).toBe(3);
+            expect(v.pendingBombs.map((b) => b.countdown)).toEqual([1, 3]);
+            expect(v.pendingAccumulators.map((a) => a.roundsRemaining)).toEqual([1, 3]);
+        });
 
-    it('family-less inflicted extend-dot: the fresh Corrosion grows; the fresh Bomb and Echoing Burst do not', () => {
-        const v = castWith(familylessExtend);
-        freshLanded(v);
-        expect(v.corrosionEntries[1].remainingRounds).toBe(3);
-        expect(v.pendingBombs.map((b) => b.countdown)).toEqual([1, 2]);
-        expect(v.pendingAccumulators.map((a) => a.roundsRemaining)).toEqual([1, 2]);
-    });
+        it(`${side}-side family-less inflicted extend-dot: the fresh Corrosion grows; the fresh Bomb and Echoing Burst do not`, () => {
+            const v = castWith(familylessExtend, side);
+            freshLanded(v);
+            expect(v.corrosionEntries[1].remainingRounds).toBe(3);
+            expect(v.pendingBombs.map((b) => b.countdown)).toEqual([1, 2]);
+            expect(v.pendingAccumulators.map((a) => a.roundsRemaining)).toEqual([1, 2]);
+        });
+    }
 });
 
 /** A full-refit Ship carrying a docs/ship-skills.csv record's texts. */
