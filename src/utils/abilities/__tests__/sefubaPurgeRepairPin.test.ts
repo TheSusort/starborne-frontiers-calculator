@@ -1,7 +1,7 @@
 /**
- * Sefuba's R4 passive ("... repairs 8% of its max HP for each buff removed and also purges 1 extra
- * buff") repairs 12% per buff in game; the text's 8% is wrong. The earlier refit's passive (no
- * extra purge) keeps its text value. Real parsed kits (buildTraceShip).
+ * Sefuba's passive ("... repairs 8% of its max HP for each buff removed", with or without the extra
+ * purge) repairs 12% per buff in game on both tiers; the text's 8% is wrong. Real parsed kits
+ * (buildTraceShip).
  */
 import { describe, it, expect, beforeAll } from 'vitest';
 import { buildTraceShip, type RefitLevel } from '../../../../scripts/lib/traceShipFactory';
@@ -29,11 +29,11 @@ const purgeRepair = (refitLevel: RefitLevel) => {
 };
 
 describe('Sefuba purge repair', () => {
-    it('R4 (with the extra purge) repairs 12% per buff removed', () => {
+    it('the extra-purge passive repairs 12% per buff removed', () => {
         expect(purgeRepair(4)).toEqual({ pct: 12, perUnit: 12, hasExtraPurge: true });
     });
 
-    it('the base passive (no extra purge) keeps its text value of 8%', () => {
-        expect(purgeRepair(0)).toEqual({ pct: 8, perUnit: 8, hasExtraPurge: false });
+    it('the base passive (no extra purge) repairs 12% per buff removed', () => {
+        expect(purgeRepair(0)).toEqual({ pct: 12, perUnit: 12, hasExtraPurge: false });
     });
 });
