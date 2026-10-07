@@ -3083,15 +3083,16 @@ const DocumentationPage: React.FC = () => {
                                         hitting three enemies who each resist both its debuffs gives
                                         one Xcellence strike on each. Reactions to a critical DoT
                                         (Crocus, Wisteria) and Belladonna&apos;s conversion still
-                                        fire once per application. Anemone&apos;s repair when an
-                                        enemy takes damage-over-time damage fires once per stack
-                                        that ticks: 3 Corrosion stacks and 1 Inferno give four
-                                        repairs. A cleanse removes stacks the same way:
-                                        &ldquo;cleanses 1 debuff&rdquo; on 2 Corrosion stacks leaves
-                                        1. The most recently inflicted debuff goes first, named
-                                        debuff or damage-over-time stack alike (stacks inflicted
-                                        together share one time); Acidic Decay cannot be cleansed.
-                                        Defense Shred is cleansed one stack at a time: 3 stacks,
+                                        fire once per application; Wisteria&apos;s answers a
+                                        critical Corrosion only. Anemone&apos;s repair when an enemy
+                                        takes damage-over-time damage fires once per stack that
+                                        ticks: 3 Corrosion stacks and 1 Inferno give four repairs. A
+                                        cleanse removes stacks the same way: &ldquo;cleanses 1
+                                        debuff&rdquo; on 2 Corrosion stacks leaves 1. The most
+                                        recently inflicted debuff goes first, named debuff or
+                                        damage-over-time stack alike (stacks inflicted together
+                                        share one time); Acidic Decay cannot be cleansed. Defense
+                                        Shred is cleansed one stack at a time: 3 stacks,
                                         &ldquo;cleanses 1 debuff&rdquo;, 2 stacks left. Each stack
                                         of a debuff that stacks rather than refreshing counts as one
                                         debuff: 3 Defense Shred stacks meet Crocus&apos;s &ldquo;3

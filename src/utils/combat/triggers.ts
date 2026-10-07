@@ -1435,9 +1435,18 @@ export function registerReactiveListeners(args: {
                 case 'on-self-crit-dot':
                     bus.on('dot-applied', (e) => {
                         // Wisteria: self-subject sibling of on-ally-crit-dot above — THIS unit's
-                        // OWN crit-cast DoT infliction (sourceId === ownerId), not an ally's.
-                        // One enqueue per qualifying infliction event.
-                        if (e.viaCrit && e.sourceId === ownerId) {
+                        // OWN crit-cast DoT infliction (sourceId === ownerId), not an ally's, of
+                        // the family its clause names (`triggerStatusFilter`: "inflicts Corrosion
+                        // with a critical hit" → Corrosion only). One enqueue per qualifying
+                        // infliction event.
+                        if (
+                            e.viaCrit &&
+                            e.sourceId === ownerId &&
+                            passesStatusFilter(
+                                ra.ability.triggerStatusFilter,
+                                dotFamilyLabel(e.dotType)
+                            )
+                        ) {
                             enqueue({
                                 ...intent,
                                 eventCtx: {

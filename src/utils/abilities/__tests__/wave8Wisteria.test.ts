@@ -43,6 +43,8 @@ describe.skipIf(!csvAvailable())(
             expect(inferno.config.tier).toBe(30); // Inferno II
             expect(inferno.config.duration).toBe(2);
             expect(inferno.trigger).toBe('on-self-crit-dot');
+            // "inflicts Corrosion with a critical hit": a critical Inferno does not wake it.
+            expect(inferno.triggerStatusFilter).toBe('Corrosion');
             expect(inferno.target).toBe('enemy');
         });
 

@@ -1319,9 +1319,10 @@ export interface Ability {
      *  hand-set exception: 'inflict' by user ruling (2026-10-02). What each event counts as —
      *  `passesApplicationFilter`'s doc in triggers.ts. */
     triggerApplicationFilter?: 'inflict' | 'apply';
-    /** Status-FAMILY filter for `on-debuff-inflicted`: the reaction fires only when the landed
-     *  status belongs to this family — Lingshe's "When this Unit inflicts a Bomb it gains
-     *  Stealth" sets `'Bomb'`, so a Defense Down she lands wakes nothing. Matched by family, not
+    /** Status-FAMILY filter for `on-debuff-inflicted` and `on-self-crit-dot`: the reaction fires
+     *  only when the landed status belongs to this family — Lingshe's "When this Unit inflicts a
+     *  Bomb it gains Stealth" sets `'Bomb'`, so a Defense Down she lands wakes nothing; Wisteria's
+     *  "When this Unit inflicts Corrosion with a critical hit" sets `'Corrosion'`. Matched by family, not
      *  exact name ("a Bomb" means any Bomb tier), unlike `requireDamagedAllyStatus`, which names a
      *  status an ally HOLDS. A `dot-applied` compares its tierless DoT family label
      *  (`dotFamilyLabel`: 'Bomb', 'Corrosion', 'Inferno'). A `debuff-applied` compares

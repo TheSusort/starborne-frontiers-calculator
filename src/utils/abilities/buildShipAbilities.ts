@@ -61,6 +61,7 @@ import {
     parseAllyCritDot,
     detectAllyCritDotTrigger,
     parseSelfCritDotEffect,
+    parseSelfCritDotFamily,
     detectSelfCritDotTrigger,
     detectInflictSourceSlotFilter,
     parseSlotReactionDotEffect,
@@ -2048,12 +2049,15 @@ function abilitiesFromText(
                 selfCritDotPos >= 0 ? selfCritDotPos : 0
             );
             if (selfCritDotTrigger) {
+                // "inflicts Corrosion with a critical hit" answers that family only.
+                const selfCritDotFamily = parseSelfCritDotFamily(text);
                 out.push({
                     ability: {
                         id: nextId(),
                         type: 'dot',
                         target: 'enemy',
                         trigger: selfCritDotTrigger, // 'on-self-crit-dot'
+                        ...(selfCritDotFamily ? { triggerStatusFilter: selfCritDotFamily } : {}),
                         conditions: [],
                         config: {
                             type: 'dot',

@@ -2306,6 +2306,22 @@ export function parseSelfCritDotEffect(
     return { buffName: m[1].trim(), turns: parseInt(m[2], 10) };
 }
 
+const SELF_CRIT_DOT_FAMILY_RE =
+    /\bwhen\s+this\s+unit\s+inflicts\s+(?:an?\s+)?(bomb|corrosion|inferno)\s+with\s+a\s+critical\s+hit\b/i;
+
+/**
+ * The DoT family a SELF_CRIT_DOT_RE trigger clause names ("When this Unit inflicts Corrosion with
+ * a critical hit" → 'Corrosion'), capitalised as `dotFamilyLabel` writes it, for the reaction's
+ * `Ability.triggerStatusFilter`. Undefined when the clause names no single DoT family.
+ */
+export function parseSelfCritDotFamily(text: string | null | undefined): string | undefined {
+    if (!text || !parseSelfCritDot(text)) return undefined;
+    const m = SELF_CRIT_DOT_FAMILY_RE.exec(stripUnitTags(text));
+    if (!m) return undefined;
+    const family = m[1].toLowerCase();
+    return family.charAt(0).toUpperCase() + family.slice(1);
+}
+
 // SELF-subject "When this Unit inflicts a debuff with its active or charged skills" (Ripper) →
 // on-debuff-inflicted narrowed to debuffs those cast slots inflict (`Ability.
 // triggerSourceSlotFilter`). Group 1 is the slot list. Matched on stripped text.

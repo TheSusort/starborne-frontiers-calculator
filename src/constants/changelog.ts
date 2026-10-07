@@ -35,6 +35,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: Reflect set now reflects only hits aimed at its wearer.',
     "Combat simulator: Sefuba's purge repair now heals 12% per buff, matching the game.",
     'Combat simulator: purges and buff steals now fail at an affinity disadvantage.',
+    "Combat simulator: Wisteria's crit passive now fires only on Corrosion.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
