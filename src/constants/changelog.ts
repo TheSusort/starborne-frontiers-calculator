@@ -39,6 +39,14 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator: Valkyrie's Echoing Burst repair and other damage-based repairs can now crit.",
     'Combat simulator: Madax now receives 30% more repairs beside a supporter.',
     "Combat simulator: Zosimos's active now counts a repair that healed nothing.",
+    "Combat simulator: reactions to Enforcer's hits now resolve before his next hit.",
+    'Combat simulator: Bomb detonations and splash now resolve before reactions, on both sides.',
+    "Combat simulator: Demolisher's charge removal on a turn-start Bomb now precedes that turn's skill.",
+    'Combat simulator: a ship destroyed by a hit now fires its own reactions to it.',
+    'Combat simulator: Provider no longer reacts to debuffs landing on a dying enemy.',
+    "Combat simulator: Makoli's low-HP reaction now inflicts Disable as well as repairing.",
+    'Combat simulator: a ship freed from Stasis mid-exchange now reacts to later hits.',
+    "Combat simulator: each of Enforcer's hits now counts separately for once-per-skill reactions.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

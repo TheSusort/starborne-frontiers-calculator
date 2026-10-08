@@ -2951,7 +2951,9 @@ const DocumentationPage: React.FC = () => {
                                         Cobalt gains its charge and Out. Damage Up II only at full
                                         HP (as does his charged skill&apos;s extra damage equal to
                                         30% of his max HP), and Makoli repairs only when hit below
-                                        40% HP.
+                                        40% HP. A reaction to a hit reads that HP once, at the hit:
+                                        Makoli&apos;s 20% repair does not lift her above 40% before
+                                        her Disable half is judged, so both halves fire.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Buff Steal:</span> Skills
@@ -3004,9 +3006,17 @@ const DocumentationPage: React.FC = () => {
                                         Down, Meiying&apos;s Stasis). Demolisher&apos;s passive also
                                         detonates a splash equal to 100% of the exploded Bomb&apos;s
                                         damage onto the bombed enemy&apos;s neighbours, ignoring
-                                        Defense and unable to critically hit. This resolves on the
-                                        positioned board; in the single-target DPS calculator there
-                                        are no neighbours, so it has no effect.
+                                        Defense and unable to critically hit. A Bomb&apos;s
+                                        detonation and this splash resolve before any other reaction
+                                        to the hit that set it off, on either side: the splash lands
+                                        before the struck ship&apos;s own &ldquo;when directly
+                                        damaged&rdquo; reaction or an ally&apos;s on-crit follow-up.
+                                        A Bomb that explodes at its holder&apos;s turn start, and
+                                        the reactions to it, resolve before the holder acts:
+                                        Demolisher takes 2 charges from Akula first, so Akula uses
+                                        her normal skill instead of a charged skill that was ready.
+                                        This resolves on the positioned board; in the single-target
+                                        DPS calculator there are no neighbours, so it has no effect.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Per-enemy conditions:</span>{' '}
@@ -3249,7 +3259,13 @@ const DocumentationPage: React.FC = () => {
                                         a 2-turn Stasis, and it acts that same round. Damage over
                                         time and Bombs do not shorten Stasis, and neither do ships
                                         whose attacks &ldquo;do not reduce Stasis&rdquo;, such as
-                                        Akula.
+                                        Akula. A stasised ship does not react to a hit that lands
+                                        while it is in Stasis, even the hit that frees it, but does
+                                        react to a later hit once the Stasis is gone, even a
+                                        follow-up hit within the same exchange. A skill that deals
+                                        damage and then inflicts Stasis (Razi&apos;s charged) draws
+                                        no reaction to its own hit, because the Stasis is on by the
+                                        time the reaction would resolve.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">
@@ -3315,6 +3331,18 @@ const DocumentationPage: React.FC = () => {
                                         resolves after it, within the same turn.
                                     </p>
                                     <p className="text-theme-text mb-2">
+                                        <span className="text-primary">Dying ships:</span> Every
+                                        reaction triggers before a ship dies. A ship destroyed by a
+                                        hit still fires its own reactions to that hit: Warden still
+                                        inflicts Corrosion I on the attacker, Stalwart still
+                                        counters, Heliodor still repairs her allies. A repair cannot
+                                        bring the destroyed ship itself back. A debuff the killing
+                                        hit lands on the dying ship still lands (Enforcer&apos;s
+                                        crit Defense Shred), but no other ship reacts to it:
+                                        Provider stays silent until the next hit strikes a living
+                                        enemy.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
                                         <span className="text-primary">Purges:</span> A purge on a
                                         skill that hits several enemies strips buffs from every
                                         enemy it hits, not just the main target. Tithonus gains
@@ -3337,6 +3365,15 @@ const DocumentationPage: React.FC = () => {
                                         Multi-hit skills (e.g. &quot;attacks three times&quot;)
                                         crit-check each hit individually — on-crit follow-up effects
                                         (such as crit-triggered debuffs) fire once per critting hit.
+                                        Every reaction to one hit resolves before the next hit
+                                        lands: Enforcer&apos;s crit Defense Shred from his first hit
+                                        is already on the target for his second, and Stalwart&apos;s
+                                        counter to the first hit lands before the second. If a
+                                        counter destroys the attacker, its remaining hits never
+                                        happen. Each hit also counts as its own action for every
+                                        &ldquo;once per skill&rdquo; limit: each of Enforcer&apos;s
+                                        critting hits lands a Shred, and Provider, APEX, Hayyan,
+                                        Oleander, Xcellence and Insidiousness answer every one.
                                         Ships with &quot;extra action&quot; passives (Nuqtu,
                                         Sustainer, Liberator, Tygr, Tormenter) take a full
                                         additional turn each round, re-entering the turn queue at

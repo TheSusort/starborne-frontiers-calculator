@@ -189,6 +189,8 @@ import {
     registerReactiveListeners,
     claimHitRoot,
     setHitRoot,
+    hitRootInScope,
+    eventSeqWatermark,
     selfBuffNamesForOwners,
     selfBuffStacksForOwner,
     victimEnemyBuffs,
@@ -3240,6 +3242,11 @@ export function runCombat(rawInput: CombatEngineInput): {
     // only), this includes every enemy attacker, so a reactive granter on EITHER side resolves.
     // Used by grantExtraAction; the side-partitioned view is `actorsBySide`.
     const allActorsById = new Map<string, CombatActor>(allActors.map((a) => [a.id, a]));
+    // Stamp the reaction chain each death happens in (`CombatActor.destroyedInHitRoot`).
+    bus.on('ship-destroyed', (e) => {
+        const dead = allActorsById.get(e.actorId);
+        if (dead) dead.destroyedInHitRoot = hitRootInScope();
+    });
 
     /** Prophet (#591): each actor's LIVE, per-fight shield-penetration bonus — permanent and
      *  stacking, added on top of the static base at `attackerShieldPenOf`. Combat-wide (persists
@@ -4531,6 +4538,11 @@ export function runCombat(rawInput: CombatEngineInput): {
             // Owner effective max HP (live ctx ?? base HP) — gates Tenacity's >25% filter.
             // id-keyed and side-agnostic, so the same closure serves both side registrations.
             maxHpOf: (ownerId: string) => recipientMaxHp(ownerId),
+            // The same self-HP reading the drain gate uses, taken when a hit lands (A8).
+            // Stasis/Disable when the event happens (`Intent.ownerTurnBlockedAtEvent`).
+            isTurnBlockedOf: (ownerId: string) => isTurnBlocked(ownerId),
+            selfHpPctOf: (ownerId: string) =>
+                bySide(isEnemySide(ownerId) ? 'enemy' : 'player').selfHpPctFor?.(ownerId) ?? 100,
         });
     }
 
@@ -5886,9 +5898,12 @@ export function runCombat(rawInput: CombatEngineInput): {
     // whoever lands it, so two ships hitting a 2-turn Stasis before its holder's turn free it).
     // A hit queues its reduction; `settleStasisHits` spends every queued one at the tail of the
     // drain that follows the hit (`drainReactions`), so the reduction is in place before the next
-    // ship acts while the hit's own reactions still drain against the Stasis the hit landed on
-    // (stasis.test.ts (iii)). The reduction is therefore immediate at turn granularity: a victim
-    // whose Stasis reaches 0 this way takes its own turn later in the same round.
+    // ship acts. A reactive hit landing on the victim inside that drain spends the victim's queued
+    // reductions first, so it meets the Stasis as it then stands. Whether the victim reacts to a
+    // hit is judged when the hit lands (`Intent.ownerTurnBlockedAtEvent`), so the reduction's
+    // timing never re-opens a reaction to the hit that broke the Stasis (stasis.test.ts (iii)).
+    // The reduction is therefore immediate at turn granularity: a victim whose Stasis reaches 0
+    // this way takes its own turn later in the same round.
     const stasisBreakPending = new Map<string, number>();
     /** Mints `attacked.reactiveHitId` — one id per counter-attack / reactive proc hit. */
     let reactiveHitSeq = 0;
@@ -7880,13 +7895,15 @@ export function runCombat(rawInput: CombatEngineInput): {
             attackerId: string,
             abilityId: string,
             multiplier: number,
-            hits: number
+            hits: number,
+            // A destroyed owner whose counter the executor's dead-owner gate let through (R117).
+            allowDeadOwner?: boolean
         ): { dealt: number; didCrit: boolean } | void => {
             const owner = allActorsById.get(ownerId);
             const attacker = allActorsById.get(attackerId);
-            // Guards: owner alive, attacker alive, not self (spec rule 6).
+            // Guards: owner alive (unless allowed), attacker alive, not self (spec rule 6).
             if (!owner || !attacker) return;
-            if (owner.destroyedRound !== undefined) return;
+            if (owner.destroyedRound !== undefined && !allowDeadOwner) return;
             if (attacker.destroyedRound !== undefined || attacker.id === owner.id) return;
 
             const { ownerOutgoing, profile, forceAffinityAdvantage, critRate } = reactiveHitInputs(
@@ -7949,6 +7966,9 @@ export function runCombat(rawInput: CombatEngineInput): {
             // non-optional: the `?? 0` below then covers only the (unreachable) case of the throw
             // that skips the assignment, not a silently absent field.
             let counterOutcome: AppliedVictimDamage | undefined;
+            // The reductions earlier hits queued land first, so this hit meets the Stasis as it
+            // now stands (a Stasis an earlier hit took to 0 is gone).
+            spendStasisHits(attacker.id);
             const counterStasisAtImpact = attackBreaksStasis(owner) && isStasised(attacker.id);
             const counterIsPrimary = aimReactiveHit(attacker.id);
             try {
@@ -8206,6 +8226,8 @@ export function runCombat(rawInput: CombatEngineInput): {
             deferConsequenceLogs = true;
             // Annotated for the same reason as applyCounterAttack's `counterOutcome`.
             let procOutcome: AppliedVictimDamage | undefined;
+            // See applyCounterAttack: the reductions earlier hits queued land first.
+            if (!splashCopy) spendStasisHits(victim.id);
             const procStasisAtImpact =
                 !splashCopy && attackBreaksStasis(owner) && isStasised(victim.id);
             // A Bomb splash copy is not a direct hit, so it is aimed at no one.
@@ -8276,8 +8298,8 @@ export function runCombat(rawInput: CombatEngineInput): {
         // into a per-turn `turnStasisHitVictims` set; the cast queues one reduction per marked
         // hit (`resolveStasisBreaks`), and `drainReactions` spends them right after the drain that
         // follows the cast. This satisfies two invariants:
-        //  (i)  The on-attacked reactive's drainQueue check (Counter Shield suppression — test iii)
-        //       sees `isStasised(victim) = true` because the drain runs BEFORE the reduction.
+        //  (i)  The on-attacked reactive is suppressed (Counter Shield — test iii): the victim was
+        //       stasised when the hit landed (`Intent.ownerTurnBlockedAtEvent`).
         //  (ii) The reduction is in place before the next ship acts, so a victim whose Stasis it
         //       takes to 0 takes its own turn later this round (owner rulings 40 and 67).
         //
@@ -8851,6 +8873,8 @@ export function runCombat(rawInput: CombatEngineInput): {
             // Unsupplied by a caller → no boundary work.
             onSubAttackStart?: (sub: SubAttackBoundary) => void;
             onSubAttackEnd?: (sub: SubAttackBoundary) => void;
+            onSubAttackSettled?: (outcome: SubAttackOutcome) => void;
+            attackerStanding?: () => boolean;
         }): {
             anyCrit: boolean;
             critPairs: number;
@@ -8967,6 +8991,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                     // Forward the sub-attack boundary hooks (the per-sub-attack debuff landing).
                     onSubAttackStart: args.onSubAttackStart,
                     onSubAttackEnd: args.onSubAttackEnd,
+                    onSubAttackSettled: args.onSubAttackSettled,
+                    attackerStanding: args.attackerStanding,
                     // Per-victim crit: forward the firing turn's per-victim crit resolver.
                     rollVictimCrit: args.rollVictimCrit,
                     // Per-victim, per-sub-hit incoming %-reduction. Shared by every positional
@@ -9384,7 +9410,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 ...(critHits > 0 ? { critHits } : {}),
                 ...(critVictimIds.length > 0 ? { critVictimIds } : {}),
                 // The OUTGOING reactive listeners stamp this onto the intents they enqueue, so
-                // the drain (which runs once per turn, after every sub-attack) can gate per
+                // the drain (which runs after the sub-attack has finished) can gate per
                 // sub-attack. Conditional spread → the single-event paths emit no index.
                 ...(subAttack !== undefined ? { subAttackIndex: subAttack } : {}),
                 ...(deliveredDamage !== undefined ? { deliveredDamage } : {}),
@@ -10282,14 +10308,13 @@ export function runCombat(rawInput: CombatEngineInput): {
         //     Called at the SAME per-victim point for all three. All three route through
         //     `procLeechesForVictim`, which turns the seam's PRE-FUNNEL `damage` into the two
         //     directions' actual bases — read its basis block before adding a fourth site.
-        //   • emitAttackedForSubAttack — ONE sub-attack's `attacked` emit. The player→enemy sites
-        //     run the whole interleaved sequence HERE (before the per-victim detonation); the enemy
-        //     site DEFERS everything but its first `ability-performed` to AFTER its inline tail, by
-        //     passing `deferEmission` and running the returned `emitDeferred` there.
-        // Returns { critAgg, emitDeferred } so the enemy site can record enemyCritAgg (for its
-        // 0-damage deferred-emit fallback) and run that remainder. The signal map itself is NOT
-        // returned: every consumer reads it through `emitAttackedForSubAttack` / `emitDeferred`, so
-        // exposing it would only invite a second, out-of-order drain. sel carries the pre-call
+        //   • emitAttackedForSubAttack — ONE sub-attack's `attacked` emit. Every site runs the same
+        //     sequence inside the helper: the first `ability-performed`, then the per-victim
+        //     detonation, then the `attacked` events (see the emission note at its end).
+        // Returns { critAgg } so the enemy site can record enemyCritAgg (for its 0-damage
+        // deferred-emit fallback). The signal map itself is NOT returned: every consumer reads it
+        // through `emitAttackedForSubAttack`, so exposing it would only invite a second,
+        // out-of-order drain. sel carries the pre-call
         // head-locals the block reads (esp. preTurnVictimStatus, which MUST be the
         // pre-runPlayerTurn snapshot — never recomputed post-hoc).
         /**
@@ -10418,15 +10443,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 victims: Map<string, PositionalVictimSignal>,
                 subAttackIndex: number,
                 primaryIds: ReadonlySet<string>
-            ) => void,
-            /**
-             * The enemy site emits its `attacked` AFTER the helper returns, from its own inline
-             * tail. Set to defer everything except the FIRST `ability-performed`, which stays
-             * where the single aggregate emit sits (before the per-victim detonation): the
-             * returned `emitDeferred` runs the rest of the interleaved sequence at the call site's
-             * own emit point. With one hit that order is event → detonation → attacked.
-             */
-            deferEmission = false
+            ) => void
         ): {
             critAgg: {
                 anyCrit: boolean;
@@ -10434,8 +10451,6 @@ export function runCombat(rawInput: CombatEngineInput): {
                 critVictimIds: string[];
                 subAttacks: SubAttackOutcome[];
             };
-            /** Runs the deferred remainder of the emission sequence. No-op unless `deferEmission`. */
-            emitDeferred: () => void;
             /**
              * The anchor victim's at-impact Stasis marks, for the call site to resolve against the
              * cast's re-apply check. See `resolveAnchorStasisBreak`.
@@ -10483,6 +10498,125 @@ export function runCombat(rawInput: CombatEngineInput): {
             // Collect EVERY footprint victim hit by this cast's firing damage (unique by id) so each
             // can detonate its OWN containers after the firing hits land.
             const detonationTargets = new Map<string, CombatActor>();
+            // ── Emission steps ─────────────────────────────────────────────────
+            // A multi-hit skill is N consecutive full-walk attacks, so this cast emits ONE
+            // `ability-performed` per sub-attack that landed, each IMMEDIATELY followed by that
+            // sub-attack's own `attacked` events and then its debuff events.
+            //
+            // The adjacency is load-bearing, not cosmetic: buildCombatLog's `attacked` handler
+            // fills `openAttackEntry`, which is whichever attack row was created most recently.
+            // Emitting all N events first would leave rows 1..N-1 with zero targets, and
+            // `finalizeMissEntry` silently splices a target-less non-miss row out as a phantom —
+            // collapsing N rows into one and losing the per-sub-attack detail.
+            //
+            // Built as step lists rather than emitted inline so the cast's tail can run its first
+            // step, then the per-victim detonation, then the rest (see the note at the tail).
+            // `idx` names the sub-attack a step belongs to: running it puts that sub-attack's chain
+            // root in scope (`setHitRoot`), so the reactions its events wake join its chain.
+            type EmissionStep = { isEvent: boolean; idx?: number; run: () => void };
+            const runStep = (step: EmissionStep): void => {
+                if (step.idx !== undefined) setHitRoot(castHitRoot(step.idx), step.idx);
+                step.run();
+            };
+            /** Push sub-attack `idx`'s buffered debuff events, after that index's `attacked`. */
+            const pushDebuffSteps = (into: EmissionStep[], idx: number): void => {
+                const emitters = debuffEmittersBySubAttack.get(idx);
+                if (!emitters || emitters.length === 0) return;
+                into.push({
+                    isEvent: false,
+                    idx,
+                    run: () => {
+                        // #413: hand each emitter the index of the bucket it was filed under. This
+                        // is the only place that identity still exists — the pairs were built
+                        // inside runPlayerTurn's debuff loop, which does not know which sub-attack
+                        // it is in — and it is what lets a `debuff-resisted` be attack-scoped.
+                        for (const emit of emitters) emit(idx);
+                    },
+                });
+            };
+            /** Push sub-attack `idx`'s `attacked` events (its own primary-target set). */
+            const pushAttackedSteps = (
+                into: EmissionStep[],
+                idx: number,
+                sub: SubAttackOutcome | undefined
+            ): void => {
+                const victims = attackedSignals.get(idx);
+                if (!victims || victims.size === 0) return;
+                const primaryIds: ReadonlySet<string> = new Set(sub?.primaryVictimIds ?? []);
+                into.push({
+                    isEvent: false,
+                    idx,
+                    run: () => emitAttackedForSubAttack(victims, idx, primaryIds),
+                });
+            };
+            /** Push one landed sub-attack's `ability-performed`, carrying `share` as its damage. */
+            const pushEventStep = (
+                into: EmissionStep[],
+                dap: NonNullable<PositionalTurnSel['deferredAbilityPerformed']>,
+                sub: SubAttackOutcome,
+                share: number
+            ): void => {
+                into.push({
+                    isEvent: true,
+                    idx: sub.index,
+                    run: () =>
+                        emitDeferredAbilityPerformed(
+                            dap,
+                            share,
+                            sub.didCrit,
+                            // THIS sub-attack's critting victims, not the cast-wide critPairs —
+                            // that count is hits × victims and would make `on-crit` fire the whole
+                            // cast's tally N times over. Σ of these lengths reproduces critPairs
+                            // exactly.
+                            sub.critVictimIds.length,
+                            sub.critVictimIds,
+                            sub.index,
+                            sub.deliveredDamage,
+                            sub.victimIds,
+                            sub.primaryVictimIds
+                        ),
+                });
+            };
+            // A multi-hit attack resolves the reactions to one hit before the next hit lands
+            // (owner ruling R125): every sub-attack but the last emits its events as soon as it
+            // settles and the reactions they wake drain at once — so hit 1's crit Defense Shred
+            // is on the target for hit 2, and a counter to hit 1 lands before hit 2 (and can
+            // destroy the attacker, ending the attack). The last sub-attack emits with the cast's
+            // tail below, exactly as a single-hit cast does. `emittedEarly` names the sub-attacks
+            // already emitted, so the tail skips them.
+            const interleaveReactions = sel.scalars.hits > 1;
+            const emittedEarly = new Set<number>();
+            // One `ability-performed` per sub-attack carries the cast's pre-funnel damage split
+            // evenly over its hits (a multi-hit cast cannot know, mid-attack, how many of its hits
+            // will land), or over the emitting sub-attacks of a single-hit cast.
+            const eventShare = (emittingCount: number): number =>
+                (sel.deferredAbilityPerformed?.damage ?? 0) /
+                (interleaveReactions ? sel.scalars.hits : emittingCount);
+            const settleSubAttack = (sub: SubAttackOutcome): void => {
+                if (!interleaveReactions || sub.index === sel.scalars.hits - 1) return;
+                // This hit's Stasis reductions are owed before the reactions to it resolve, so
+                // the drain below settles them and the next hit meets the shortened Stasis.
+                resolveStasisBreaks(coveredStasisVictims.splice(0), sel.castStasisStandsOn);
+                resolveStasisBreaks(anchorStasisVictims.splice(0), sel.castStasisStandsOn);
+                const now: EmissionStep[] = [];
+                const dap = sel.deferredAbilityPerformed;
+                if (dap && sub.victimIds.length > 0) pushEventStep(now, dap, sub, eventShare(0));
+                pushAttackedSteps(now, sub.index, sub);
+                pushDebuffSteps(now, sub.index);
+                attackedSignals.delete(sub.index);
+                debuffEmittersBySubAttack.delete(sub.index);
+                emittedEarly.add(sub.index);
+                for (const step of now) runStep(step);
+                // The reactions drain outside the deferred-log window: a reaction's own rows nest
+                // under its own entries, not under this attack.
+                const deferring = deferReflectLogs;
+                deferReflectLogs = false;
+                try {
+                    drainReactions();
+                } finally {
+                    deferReflectLogs = deferring;
+                }
+            };
             const critAgg = drivePositionalApply({
                 scalars: sel.scalars,
                 hitCrits: sel.hitCrits,
@@ -10607,7 +10741,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                     stasisMarkByHit.set(`${victim.id}:${subAttackIndex}`, isAnchor);
                 },
                 onSubAttackStart: (sub) => {
-                    setHitRoot(castHitRoot(sub.index));
+                    setHitRoot(castHitRoot(sub.index), sub.index);
                     // Clauses written BEFORE the damage clause apply ahead of this sub-attack's
                     // damage — the locked intra-cast order, now per sub-attack. Sub-attack 0's
                     // before-damage clauses already applied inline at cast time.
@@ -10645,6 +10779,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                         sel.applyDebuffsForSubAttack?.(sub, 'after-damage') ?? []
                     );
                 },
+                onSubAttackSettled: settleSubAttack,
+                attackerStanding: () => actor.destroyedRound === undefined,
             });
             // Queue the Stasis reduction for every covered victim hit this cast did not itself
             // stasis — one per landed hit. The gate already ran in `onVictimPreImpact`, the only
@@ -10653,46 +10789,10 @@ export function runCombat(rawInput: CombatEngineInput): {
             // Pure state, no events: hoisted ABOVE the emission block so the
             // interleaved event/attacked pairs below stay adjacent, with nothing between them.
             resolveStasisBreaks(coveredStasisVictims, sel.castStasisStandsOn);
-            // ── Interleaved per-sub-attack emission ───────────────────────────
-            // A multi-hit skill is N consecutive full-walk attacks, so this cast emits ONE
-            // `ability-performed` per sub-attack that landed, each IMMEDIATELY followed by that
-            // sub-attack's own `attacked` events.
-            //
-            // The adjacency is load-bearing, not cosmetic: buildCombatLog's `attacked` handler
-            // fills `openAttackEntry`, which is whichever attack row was created most recently.
-            // Emitting all N events first would leave rows 1..N-1 with zero targets, and
-            // `finalizeMissEntry` silently splices a target-less non-miss row out as a phantom —
-            // collapsing N rows into one and losing the per-sub-attack detail.
-            //
-            // Built as a step list rather than emitted inline so the enemy site can run the first
-            // step here and the remainder after its own tail (see `deferEmission`).
-            // `idx` names the sub-attack a step belongs to: running it puts that sub-attack's chain
-            // root in scope (`setHitRoot`), so the reactions its events wake join its chain.
-            const steps: { isEvent: boolean; idx?: number; run: () => void }[] = [];
-            const runStep = (step: (typeof steps)[number]): void => {
-                if (step.idx !== undefined) setHitRoot(castHitRoot(step.idx));
-                step.run();
-            };
-            /** Push sub-attack `idx`'s buffered debuff events, after that index's `attacked`. */
-            const pushDebuffSteps = (idx: number): void => {
-                const emitters = debuffEmittersBySubAttack.get(idx);
-                if (!emitters || emitters.length === 0) return;
-                steps.push({
-                    isEvent: false,
-                    idx,
-                    run: () => {
-                        // #413: hand each emitter the index of the bucket it was filed under. This
-                        // is the only place that identity still exists — the pairs were built
-                        // inside runPlayerTurn's debuff loop, which does not know which sub-attack
-                        // it is in — and it is what lets a `debuff-resisted` be attack-scoped.
-                        for (const emit of emitters) emit(idx);
-                    },
-                });
-            };
+            // ── The cast's emission (every sub-attack not already emitted early) ───────────
+            // See "Emission steps" above for the ordering contract.
+            const steps: EmissionStep[] = [];
             const signalledIndices = [...attackedSignals.keys()].sort((a, b) => a - b);
-            /** Sub-attack `idx`'s primary-target set, for its `attacked` events. */
-            const primaryIdsOf = (idx: number): ReadonlySet<string> =>
-                new Set(critAgg.subAttacks[idx]?.primaryVictimIds ?? []);
             // The indices that owe an emission step in the two loops that would otherwise walk
             // `attacked` signals ALONE — the nothing-landed fallback and the inline-emitted `else`.
             // A sub-attack can hold buffered debuff events with NO signals: the boundary hooks fire
@@ -10717,9 +10817,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                 //    for a sub-attack whose whole hit was redirected by Protection or transformed
                 //    into a DoT. That is a real attack under the locked rule — it struck victims,
                 //    it rolled, it must emit — and excluding it ALSO re-inflates the survivors,
-                //    because `share = dap.damage / emitting.length` divides the cast's pre-funnel
-                //    directDamage by the emitting count. Gating on `damage === 0` here would be
-                //    wrong for exactly that reason.
+                //    because `eventShare` divides the cast's pre-funnel directDamage by the
+                //    emitting count. Gating on `damage === 0` here would be wrong for exactly that
+                //    reason.
                 //    NUANCE: such an event emits, but its outgoing riders do NOT pay out. It
                 //    carries `deliveredDamage: 0` and the `on-deal-damage` guard (triggers.ts)
                 //    reads THAT rather than `damage`, so the event exists for the log and for the
@@ -10758,72 +10858,36 @@ export function runCombat(rawInput: CombatEngineInput): {
                             ),
                     });
                     for (const idx of emissionIndices) {
-                        const victims = attackedSignals.get(idx);
-                        if (victims && victims.size > 0) {
-                            steps.push({
-                                isEvent: false,
-                                idx,
-                                run: () =>
-                                    emitAttackedForSubAttack(victims, idx, primaryIdsOf(idx)),
-                            });
-                        }
-                        pushDebuffSteps(idx);
+                        pushAttackedSteps(steps, idx, critAgg.subAttacks[idx]);
+                        pushDebuffSteps(steps, idx);
                     }
                 } else {
                     // Per-event damage: the cast's pre-funnel `directDamage` split across the
-                    // emitting sub-attacks — today's basis, N ways (see the Decisions table).
-                    // N=1 ⟹ the divisor is 1 ⟹ the exact same number as before.
-                    const share = dap.damage / emitting.length;
+                    // sub-attacks (`eventShare`). N=1 ⟹ the divisor is 1 ⟹ the whole figure.
+                    const share = eventShare(emitting.length);
                     const emittingIndices = new Set(emitting.map((sub) => sub.index));
                     const indices = [
                         ...new Set([
                             ...critAgg.subAttacks.map((sub) => sub.index),
                             ...signalledIndices,
                         ]),
-                    ].sort((a, b) => a - b);
+                    ]
+                        .filter((idx) => !emittedEarly.has(idx))
+                        .sort((a, b) => a - b);
                     for (const idx of indices) {
                         const sub = critAgg.subAttacks[idx];
-                        if (sub && emittingIndices.has(idx)) {
-                            steps.push({
-                                isEvent: true,
-                                idx,
-                                run: () =>
-                                    emitDeferredAbilityPerformed(
-                                        dap,
-                                        share,
-                                        sub.didCrit,
-                                        // THIS sub-attack's critting victims, not the cast-wide
-                                        // critPairs — that count is hits × victims and would make
-                                        // `on-crit` fire the whole cast's tally N times over. Σ of
-                                        // these lengths reproduces critPairs exactly.
-                                        sub.critVictimIds.length,
-                                        sub.critVictimIds,
-                                        idx,
-                                        sub.deliveredDamage,
-                                        sub.victimIds,
-                                        sub.primaryVictimIds
-                                    ),
-                            });
-                        }
+                        if (sub && emittingIndices.has(idx)) pushEventStep(steps, dap, sub, share);
                         // Emitted unconditionally on the index, independent of whether this bucket
                         // also produced an event: one `attacked` per victim per sub-attack is what
                         // keeps incoming procs correct. (Since the gate above
                         // tests the footprint alone, a bucket with signals always has an event too
                         // — signals only exist for victims — but the two are kept independent so a
                         // future gate change cannot silently drop `attacked` events.)
-                        const victims = attackedSignals.get(idx);
-                        if (victims && victims.size > 0) {
-                            steps.push({
-                                isEvent: false,
-                                idx,
-                                run: () =>
-                                    emitAttackedForSubAttack(victims, idx, primaryIdsOf(idx)),
-                            });
-                        }
+                        pushAttackedSteps(steps, idx, sub);
                         // This sub-attack's own debuff events, after its `attacked`.
                         // Unconditional on the index — a bucket can hold debuff events with no
                         // `attacked` signals when every hit was transformed into a DoT.
-                        pushDebuffSteps(idx);
+                        pushDebuffSteps(steps, idx);
                     }
                 }
                 // Sweep: a sub-attack that buffered log rows but emitted no event (nothing landed)
@@ -10834,39 +10898,25 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // `attacked` fan-out is ours. Same events, same per-victim order, now grouped by
                 // sub-attack.
                 for (const idx of emissionIndices) {
-                    const victims = attackedSignals.get(idx);
-                    if (victims && victims.size > 0) {
-                        steps.push({
-                            isEvent: false,
-                            idx,
-                            run: () => emitAttackedForSubAttack(victims, idx, primaryIdsOf(idx)),
-                        });
-                    }
-                    pushDebuffSteps(idx);
+                    pushAttackedSteps(steps, idx, critAgg.subAttacks[idx]);
+                    pushDebuffSteps(steps, idx);
                 }
             }
-            let emitDeferred = (): void => {};
-            if (deferEmission) {
-                // Keep ONLY a LEADING `ability-performed` here (its historical position); the rest
-                // of the sequence — including that event's own `attacked` — runs at the call
-                // site's emit point.
-                //
-                // The hoist tests `steps[0]` specifically, NOT `findIndex(isEvent)`. Searching past
-                // leading non-event steps would REORDER the stream whenever sub-attack 0 produced
-                // `attacked` signals but no event: it would pull sub-attack 1's event forward past
-                // sub-attack 0's `attacked`, which then replays after it and attaches sub-attack 0's
-                // victims to sub-attack 1's log row. When step 0 is not an event we defer the whole
-                // list, which keeps relative order intact at the cost of the historical position of
-                // the first event — the strictly safer trade.
-                const hoistFirst = steps.length > 0 && steps[0].isEvent;
-                if (hoistFirst) runStep(steps[0]);
-                const rest = hoistFirst ? steps.slice(1) : steps;
-                emitDeferred = () => {
-                    for (const step of rest) runStep(step);
-                };
-            } else {
-                for (const step of steps) runStep(step);
-            }
+            // The tail runs in one order on every site, both sides: a LEADING `ability-performed`,
+            // then the per-victim detonation, then the rest of the sequence (that event's own
+            // `attacked`, the debuff events, the later sub-attacks). A Bomb's detonation and its
+            // splash resolve before any reaction to the hit (owner ruling R126), and the reactions
+            // drain in the order their events were emitted, so the detonation must be emitted
+            // before the `attacked` that wakes the victims' reactions.
+            //
+            // The hoist tests `steps[0]` specifically, NOT `findIndex(isEvent)`. Searching past
+            // leading non-event steps would REORDER the stream whenever sub-attack 0 produced
+            // `attacked` signals but no event: it would pull sub-attack 1's event forward past
+            // sub-attack 0's `attacked`, which then replays after it and attaches sub-attack 0's
+            // victims to sub-attack 1's log row. When step 0 is not an event the whole list runs
+            // after the detonation, which keeps relative order intact.
+            const hoistFirst = steps.length > 0 && steps[0].isEvent;
+            if (hoistFirst) runStep(steps[0]);
             // Per-victim skill-triggered detonation. Each victim HIT by this cast that is STILL ALIVE
             // detonates its OWN containers (no role-scale — full stored stacks). Bombs = full shield
             // drain/no pen; inferno+corrosion BYPASS shield (DoT semantics). Credited to the
@@ -10877,7 +10927,8 @@ export function runCombat(rawInput: CombatEngineInput): {
             if (recipe && recipe.dets.length > 0) {
                 applyPerVictimDetonation(recipe, detonationTargets, sink, actor.id, tb);
             }
-            return { critAgg, emitDeferred, anchorStasisVictims };
+            for (const step of hoistFirst ? steps.slice(1) : steps) runStep(step);
+            return { critAgg, anchorStasisVictims };
         };
 
         // Rebind the per-round shield-granted accumulator EVERY round (not gated on
@@ -11113,8 +11164,12 @@ export function runCombat(rawInput: CombatEngineInput): {
             //    stasised still resolves Martyrdom's killer-Disable / Salvation's repair.
             //    Same `fromOwnDeath` stamp that exempts them from executeIntent's
             //    dead-owner gate.
+            // Judged twice: when the triggering event happened (`ownerTurnBlockedAtEvent` — a hit
+            // landing on a stasised ship draws no reaction even when it takes the Stasis to 0) and
+            // now (a Stasis that landed after the event, before this reaction resolves — "deals X
+            // and inflicts Stasis" draws no reaction to its own hit, R152).
             if (
-                isTurnBlocked(intent.ownerId) &&
+                (intent.ownerTurnBlockedAtEvent === true || isTurnBlocked(intent.ownerId)) &&
                 intent.ability.source !== 'equipment' &&
                 !intent.eventCtx?.fromOwnDeath
             ) {
@@ -11545,6 +11600,11 @@ export function runCombat(rawInput: CombatEngineInput): {
          * inside this drain: Cultivator cleanses → Grif's 75% and Cultivator's 4% repair in turn
          * order → Cultivator's 8% repair answering Grif's hit.
          *
+         * One exception to event order: the reactions to a Bomb's detonation
+         * (`Intent.answersBombDetonation` — Demolisher's splash and charge removal) resolve before
+         * every other queued reaction (owner ruling R126), so the splash lands before Makoli's
+         * low-HP repair or an ally's on-crit hit answering the same attack.
+         *
          * One drain ctx per side for the whole drain, built on first use (`onceByOwner`'s
          * per-ctx memo relies on that).
          */
@@ -11553,17 +11613,24 @@ export function runCombat(rawInput: CombatEngineInput): {
             const ctxFor = (side: Side): ReactiveSideCtx =>
                 (ctxBySide[side] ??= side === 'player' ? playerDrainCtx() : enemyDrainCtx());
             while (intentQueues.player.length > 0 || intentQueues.enemy.length > 0) {
+                // A Bomb's detonation and its splash resolve before any other reaction (R126):
+                // while an intent answering one is queued, only those are eligible.
+                const bombFirst =
+                    intentQueues.player.some((i) => i.answersBombDetonation) ||
+                    intentQueues.enemy.some((i) => i.answersBombDetonation);
+                const eligible = (intent: Intent): boolean =>
+                    !bombFirst || intent.answersBombDetonation === true;
                 let earliest = Infinity;
                 for (const side of ['player', 'enemy'] as const) {
                     for (const intent of intentQueues[side]) {
-                        earliest = Math.min(earliest, intent.eventSeq ?? 0);
+                        if (eligible(intent)) earliest = Math.min(earliest, intent.eventSeq ?? 0);
                     }
                 }
                 const byOwner = new Map<string, { side: Side; intents: Intent[] }>();
                 for (const side of ['player', 'enemy'] as const) {
                     const queue = intentQueues[side];
                     for (let i = 0; i < queue.length;) {
-                        if ((queue[i].eventSeq ?? 0) !== earliest) {
+                        if (!eligible(queue[i]) || (queue[i].eventSeq ?? 0) !== earliest) {
                             i++;
                             continue;
                         }
@@ -11622,6 +11689,33 @@ export function runCombat(rawInput: CombatEngineInput): {
             if (p.length) drainQueue(p, playerDrainCtx());
             const e = take(intentQueues.enemy);
             if (e.length) drainQueue(e, enemyDrainCtx());
+        };
+
+        /**
+         * The acting ship's turn-start Bombs and Echoing Bursts (`applyPositionedTimedBurst`), then
+         * the reactions to them, before the ship acts (owner ruling R127): a Bomb exploding at
+         * Akula's turn start lets Demolisher take 2 charges first, so a charged skill that was ready
+         * is not. Only the intents those detonations woke drain here; anything queued earlier in the
+         * turn keeps its post-cast drain. The detonations open no cast chain (`setHitRoot`): they
+         * are not the coming skill's hits.
+         */
+        const burstAtTurnStart = (actor: CombatActor, opposing: CombatActor[]): void => {
+            const watermark = eventSeqWatermark();
+            setHitRoot(undefined);
+            applyPositionedTimedBurst(actor, sink, opposing);
+            const held: Record<Side, Intent[]> = { player: [], enemy: [] };
+            for (const side of ['player', 'enemy'] as const) {
+                const queue = intentQueues[side];
+                for (let i = 0; i < queue.length;) {
+                    if ((queue[i].eventSeq ?? 0) < watermark)
+                        held[side].push(queue.splice(i, 1)[0]);
+                    else i++;
+                }
+            }
+            drainReactions();
+            for (const side of ['player', 'enemy'] as const)
+                intentQueues[side].unshift(...held[side]);
+            setHitRoot(castHitRoot(0), 0);
         };
 
         /**
@@ -11876,7 +11970,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 actingActorId = actor.id;
                 // This turn's cast opens a new reaction chain per sub-attack (`castHitRoot`).
                 castRootBase = `cast:${++castRootSeq}`;
-                setHitRoot(castHitRoot(0));
+                setHitRoot(castHitRoot(0), 0);
                 // #367: this actor's turn ctx does not exist until its `runPlayerTurn`
                 // returns, so clear the override HERE (one site — this assignment is shared by all
                 // three turn branches) rather than leaving the previous actor's ctx paired with the
@@ -12305,7 +12399,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                         // Mirror of the enemy site's own burst; a no-op when the actor carries no
                         // timed entries. Canonical turn-start order is tickDoTs, then the Bombs
                         // and accumulators together in order of application.
-                        applyPositionedTimedBurst(actor, sink, enemyAttackerActors);
+                        burstAtTurnStart(actor, enemyAttackerActors);
 
                         // Dead-after-burst guard: a lethal self-burst stamps
                         // destroyedRound inside applyVictimDamage AFTER the top-of-turn dead-skip
@@ -12698,7 +12792,7 @@ export function runCombat(rawInput: CombatEngineInput): {
 
                         // Per-positioned-player timed burst (walked-team ally). Same as the focus
                         // site; no focusTurns synthesis (a walked-team actor is never the focus).
-                        applyPositionedTimedBurst(actor, sink, enemyAttackerActors);
+                        burstAtTurnStart(actor, enemyAttackerActors);
                         const burstDestroyedActor =
                             actor.destroyedRound !== undefined &&
                             !(healTarget && actor.id === healTarget.id);
@@ -13010,7 +13104,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                         // Stasis: this burst sits INSIDE the `!isTurnBlocked` gate, so a stasised/
                         // disabled positioned enemy does NOT burst this turn (its whole turn is
                         // skipped per the locked combat rule).
-                        applyPositionedTimedBurst(actor, sink, allPlayerActors);
+                        burstAtTurnStart(actor, allPlayerActors);
 
                         // Dead-after-burst guard: a lethal timed burst above
                         // fires recordDestroyed inside applyVictimDamage, but the loop's
@@ -13435,16 +13529,6 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 // attack's hits so an early shield-denting hit still counts.
                                 let positionalShieldWasHit = false;
                                 let positionalShieldCaptured = false;
-                                // The deferred remainder of the enemy cast's interleaved emission
-                                // sequence (its first `ability-performed` already fired inside the
-                                // helper, at the position the single aggregate emit holds). Held in
-                                // the OUTER (enemy-turn) scope because the enemy→player site emits
-                                // its per-victim `attacked` from its inline tail below — unlike the
-                                // player→enemy sites, which emit inside the helper. Assigned from
-                                // the helper return when enemyPositional; stays undefined on the
-                                // non-positional path (single aggregate emit). The covered-victim
-                                // Stasis break and detonation targets are owned INSIDE the helper.
-                                let enemyEmitDeferred: (() => void) | undefined;
                                 if (enemyPositional) {
                                     // Opposing roster + victim wrapper from the per-side bindings
                                     // (enemy→player here). PLAYER-side wrapper: each player victim takes
@@ -13457,14 +13541,12 @@ export function runCombat(rawInput: CombatEngineInput): {
                                     // Shared drivePositionalTurnApply helper. The enemy injects the
                                     // enemy→player TAKEN leech (each player victim procs its OWN
                                     // damage-taken heal/shield leech off the damage IT took) PLUS the focus
-                                    // victim's shield-hit capture; and it passes `deferEmission` because
-                                    // the enemy defers its per-victim `attacked` emit to its inline
-                                    // tail below — see the deferral note there. enemyRollVictimCrit
+                                    // victim's shield-hit capture. enemyRollVictimCrit
                                     // is defined whenever enemyPositional (captured from
                                     // enemyTurn.rollVictimCrit in the same non-dead block). The
-                                    // helper owns the detonation targets + covered-victim Stasis
-                                    // break; it returns critAgg (for the 0-damage deferred-emit
-                                    // fallback) and emitDeferred (the rest of the interleaved sequence).
+                                    // helper owns the detonation targets, the covered-victim Stasis
+                                    // break and the per-victim `attacked` emission; it returns
+                                    // critAgg (for the 0-damage deferred-emit fallback).
                                     const tb = turnBindings(actor.side);
                                     const posApply = drivePositionalTurnApply(
                                         actor,
@@ -13512,9 +13594,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                                                         outcome.hpDamage < dmg);
                                             }
                                         },
-                                        // ONE sub-attack's victims per call. The enemy DEFERS the
-                                        // whole fan-out to its inline tail, so these calls run from
-                                        // `emitDeferred` below, not here.
+                                        // ONE sub-attack's victims per call, emitted right
+                                        // after that sub-attack's own `ability-performed`.
                                         (victims, subAttackIndex, primaryIds) => {
                                             if (victims.size > 0) {
                                                 emitPerVictimAttacked({
@@ -13526,11 +13607,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                                                     subAttackIndex,
                                                 });
                                             }
-                                        },
-                                        true
+                                        }
                                     );
                                     enemyCritAgg = posApply.critAgg;
-                                    enemyEmitDeferred = posApply.emitDeferred;
                                     enemyDriveAnchorStasis = posApply.anchorStasisVictims;
                                     // The staged passive-slot instance lands now — after
                                     // the firing hit, exactly as the two player-side sites do it.
@@ -13595,20 +13674,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 // positionalShieldCaptured/positionalShieldWasHit; the
                                 // non-positional else-branch computes the aggregate form from the
                                 // locals below.
-                                if (enemyPositional) {
-                                    // Per-victim emit. One `attacked` per footprint player
-                                    // victim hit by this enemy cast (isPrimaryTarget on each of
-                                    // the sub-attack's `primaryVictimIds`) → EVERY struck player's
-                                    // on-attacked reactives wake (counters land back on the enemy
-                                    // / Second Wind etc.), not just the anchor's.
-                                    // DEFERRED here (not inside the shared helper) because the enemy
-                                    // emits at its inline tail. `enemyEmitDeferred` is the
-                                    // remainder of the interleaved sequence the helper handed back:
-                                    // sub-attack 0's `attacked`, then each later sub-attack's
-                                    // `ability-performed` immediately followed by its own
-                                    // `attacked`.
-                                    enemyEmitDeferred?.();
-                                } else {
+                                if (!enemyPositional) {
                                     // Non-positional single aggregate emit.
                                     const shieldWasHit = positionalShieldCaptured
                                         ? positionalShieldWasHit

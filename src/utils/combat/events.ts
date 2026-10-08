@@ -114,9 +114,9 @@ export type CombatEvent =
            *  actors, since every actor's first sub-attack is also 0.
            *
            *  Exists so a reactive intent enqueued during sub-attack k can be gated at sub-attack
-           *  scope: intents from all N sub-attacks drain together at end of turn (drainReactions),
-           *  long after the engine's ambient `currentSubAttackIndex` has been cleared, so the
-           *  identity has to travel on the event. */
+           *  scope: an intent drains only after the sub-attack that raised it has finished
+           *  (drainReactions), when the engine's ambient `currentSubAttackIndex` has been cleared,
+           *  so the identity has to travel on the event. */
           subAttackIndex?: number;
           /** The skill slot (`'active'` / `'charged'`) the cast fired from. A reaction written in a
            *  skill's own text ("If this critically hits, ...") fires only on that slot's casts;
