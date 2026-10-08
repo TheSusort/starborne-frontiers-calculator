@@ -4501,6 +4501,9 @@ export function runCombat(rawInput: CombatEngineInput): {
             // Owner effective max HP (live ctx ?? base HP) — gates Tenacity's >25% filter.
             // id-keyed and side-agnostic, so the same closure serves both side registrations.
             maxHpOf: (ownerId: string) => recipientMaxHp(ownerId),
+            // The same self-HP reading the drain gate uses, taken when a hit lands (A8).
+            selfHpPctOf: (ownerId: string) =>
+                bySide(isEnemySide(ownerId) ? 'enemy' : 'player').selfHpPctFor?.(ownerId) ?? 100,
         });
     }
 

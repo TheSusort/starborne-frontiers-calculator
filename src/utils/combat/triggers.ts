@@ -381,6 +381,10 @@ export interface Intent {
          *  must still resolve, whereas a stale listener firing on some LATER event (e.g. a
          *  dead Curator reacting to an enemy charge rounds after dying) is suppressed. */
         fromOwnDeath?: boolean;
+        /** The owner's HP% right after the hit that woke this intent, when the triggering event
+         *  is a hit on the owner itself. The drain gate's self-HP reading prefers it over live
+         *  HP, so every intent of one reaction judges the same HP. */
+        ownerHpPctAtHit?: number;
         /** This ability's proc verdict, already drawn when the debuff that woke it landed
          *  (`debuff-applied.preDecidedProcs`, owner ruling R149). `passesProcChanceGate` spends it
          *  instead of drawing. Absent → the gate draws as usual. */
@@ -838,6 +842,9 @@ export function registerReactiveListeners(args: {
     /** Owner effective max HP resolver — gates Tenacity's incoming-damage-fraction
      *  filter. Optional: absent → the filter is skipped (no Tenacity in scope). */
     maxHpOf?: (ownerId: string) => number;
+    /** Owner live self-HP% — stamped onto an intent woken by a hit on its owner
+     *  (`eventCtx.ownerHpPctAtHit`). Optional: absent → the drain gate reads live HP. */
+    selfHpPctOf?: (ownerId: string) => number;
 }): void {
     const {
         bus: rawBus,
@@ -850,6 +857,7 @@ export function registerReactiveListeners(args: {
         debuffCountOf,
         footprintAllyIdsFor,
         maxHpOf,
+        selfHpPctOf,
     } = args;
     // Every listener below records which event it is answering (`Intent.eventSeq`,
     // `Intent.answersBombDetonation`).
@@ -857,14 +865,14 @@ export function registerReactiveListeners(args: {
         on: (type, listener) =>
             rawBus.on(type, (e) => {
                 const outerSeq = listeningEventSeq;
-                const outerType = listeningEventType;
+                const outerEvent = listeningEvent;
                 listeningEventSeq = seqOfEvent(e);
-                listeningEventType = e.type;
+                listeningEvent = e;
                 try {
                     listener(e);
                 } finally {
                     listeningEventSeq = outerSeq;
-                    listeningEventType = outerType;
+                    listeningEvent = outerEvent;
                 }
             }),
     };
@@ -879,12 +887,22 @@ export function registerReactiveListeners(args: {
             reactionChainProbe.lineageDropped++;
             return;
         }
+        // A reaction to a hit on its owner judges the owner's HP gate at that hit, once for the
+        // whole reaction (Makoli: "When directly damaged while below 40% HP ... repairs 20% ...
+        // and inflicts Disable" — her repair must not lift her above 40% before the Disable half
+        // is judged).
+        const hitOnOwner =
+            listeningEvent?.type === 'attacked' && listeningEvent.targetId === intent.ownerId;
+        const ownerHpPctAtHit = hitOnOwner ? selfHpPctOf?.(intent.ownerId) : undefined;
         enqueueRaw({
             ...intent,
+            ...(ownerHpPctAtHit !== undefined
+                ? { eventCtx: { ...intent.eventCtx, ownerHpPctAtHit } }
+                : {}),
             chainDepth: resolvingIntent ? (resolvingIntent.chainDepth ?? 0) + 1 : 0,
             reactionAncestry,
             eventSeq: listeningEventSeq ?? 0,
-            ...(listeningEventType === 'bomb-detonated' ? { answersBombDetonation: true } : {}),
+            ...(listeningEvent?.type === 'bomb-detonated' ? { answersBombDetonation: true } : {}),
             ...(currentHitRoot !== undefined ? { hitRoot: currentHitRoot } : {}),
         });
     };
@@ -3448,7 +3466,7 @@ function perVictimEnemyConditions(intent: Intent): Ability['conditions'] {
     return splitDrainGateConditions(intent).perVictim;
 }
 
-function buildDrainContext(ctx: IntentExecContext, ownerId: string) {
+function buildDrainContext(ctx: IntentExecContext, ownerId: string, intent?: Intent) {
     const ownerActor = ctx.actorById?.(ownerId);
     // Owner-aware drain gate: self-buff names come from the OWNER's snapshot so each
     // owner's reactive follow-up is gated against ITS OWN active buffs + the shared enemy state.
@@ -3473,7 +3491,9 @@ function buildDrainContext(ctx: IntentExecContext, ownerId: string) {
         // unresolvable. Do not reintroduce a scalar here.
         // Live self-HP% for drain-time hp-threshold gates: the engine reads each owner's own
         // current/max HP, both sides. The `?? 100` fallback is for callers with no closure.
-        selfHpPct: ctx.selfHpPctFor?.(ownerId) ?? 100,
+        // A reaction to a hit on its owner reads the HP stamped at that hit
+        // (`eventCtx.ownerHpPctAtHit`) instead.
+        selfHpPct: intent?.eventCtx?.ownerHpPctAtHit ?? ctx.selfHpPctFor?.(ownerId) ?? 100,
         // Names only — never folded, no double-fold: the drain owner's `enemy-buff` gate
         // reads the UNION of its opposing side's self-buffs; its `self-debuff` gate reads its OWN
         // enemy-applied debuffs (per-target store keyed by ownerId). Both read EMPTY on a DPS run
@@ -5092,7 +5112,7 @@ let listeningEventSeq: number | undefined;
 export function eventSeqWatermark(): number {
     return nextEventSeq;
 }
-let listeningEventType: CombatEvent['type'] | undefined;
+let listeningEvent: CombatEvent | undefined;
 const seqOfEvent = (e: object): number => {
     let seq = eventSeqByEvent.get(e);
     if (seq === undefined) {
@@ -5224,7 +5244,7 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
     // non-derivable-on-non-live subjects to 'always'; manual conditions keep literal gating
     // (manualCount). A failed gate is a silent skip (no resisted record).
     const gateConditions = liveGateConditions(scrubbedConditions);
-    const baseDrainCtx = buildDrainContext(ctx, intent.ownerId);
+    const baseDrainCtx = buildDrainContext(ctx, intent.ownerId, intent);
     // The re-check `scrubDrainGateConditions` promised: evaluate the scrubbed enemy-oriented
     // conditions against ONE resolved target's own live state.
     //

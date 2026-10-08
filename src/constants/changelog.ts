@@ -25,6 +25,7 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator: Demolisher's charge removal on a turn-start Bomb now precedes that turn's skill.",
     'Combat simulator: a ship destroyed by a hit now fires its own reactions to it.',
     'Combat simulator: Provider no longer reacts to debuffs landing on a dying enemy.',
+    "Combat simulator: Makoli's low-HP reaction now inflicts Disable as well as repairing.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

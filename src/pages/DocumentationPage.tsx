@@ -2935,7 +2935,9 @@ const DocumentationPage: React.FC = () => {
                                         Cobalt gains its charge and Out. Damage Up II only at full
                                         HP (as does his charged skill&apos;s extra damage equal to
                                         30% of his max HP), and Makoli repairs only when hit below
-                                        40% HP.
+                                        40% HP. A reaction to a hit reads that HP once, at the hit:
+                                        Makoli&apos;s 20% repair does not lift her above 40% before
+                                        her Disable half is judged, so both halves fire.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Buff Steal:</span> Skills
