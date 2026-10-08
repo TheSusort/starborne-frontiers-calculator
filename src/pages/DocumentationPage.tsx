@@ -3080,7 +3080,9 @@ const DocumentationPage: React.FC = () => {
                                         once-per-cast or once-per-round limits. Firewall&apos;s
                                         Block Debuff works the moment it procs: if Curator&apos;s
                                         Attack Down III procs it, the same skill&apos;s Crit Power
-                                        Down III is blocked and rolls nothing. APEX&apos;s 3% shield
+                                        Down III is blocked and rolls nothing. The same goes for
+                                        damage-over-time stacks: a proc on Snakeroot&apos;s first
+                                        Corrosion I stack blocks her second. APEX&apos;s 3% shield
                                         fires at most once per skill cast, whoever cast it: her
                                         active landing two debuffs, plus the debuffs Provider
                                         answers them with, gives one shield; an enemy&apos;s attack
@@ -4728,16 +4730,20 @@ const DocumentationPage: React.FC = () => {
                                     <strong>Leech</strong> gear set (heals the ship for 15% of all
                                     damage it deals each turn, per set) and the{' '}
                                     <strong>Bloodthirst</strong> implant (on-crit heal for 12%, 17%,
-                                    or 20% of damage dealt, depending on rarity). Chance-based procs
-                                    such as Bloodthirst are modeled at their expected average
-                                    frequency. Three conditional damage implants also apply:{' '}
-                                    <strong>Intrusion</strong> (more outgoing damage for each debuff
-                                    on the target), <strong>Arcane Siege</strong> (more outgoing
-                                    damage while the ship is shielded), and{' '}
-                                    <strong>Warpstrike</strong> (more outgoing damage while the ship
-                                    is debuffed). Incoming-damage reduction is also modeled:{' '}
-                                    <strong>Voidshade</strong> and <strong>Shadowguard</strong>{' '}
-                                    (reduced damage while stealthed),{' '}
+                                    or 20% of damage dealt, depending on rarity). Leech repairs pay
+                                    on counter-attack and implant-proc damage too, and the Leech
+                                    set, Bloodthirst and Last Wish repairs can crit at the
+                                    wearer&apos;s crit rate and crit power. A repair that heals
+                                    nothing because its target is at full HP still counts as a
+                                    repair. Chance-based procs such as Bloodthirst are modeled at
+                                    their expected average frequency. Three conditional damage
+                                    implants also apply: <strong>Intrusion</strong> (more outgoing
+                                    damage for each debuff on the target),{' '}
+                                    <strong>Arcane Siege</strong> (more outgoing damage while the
+                                    ship is shielded), and <strong>Warpstrike</strong> (more
+                                    outgoing damage while the ship is debuffed). Incoming-damage
+                                    reduction is also modeled: <strong>Voidshade</strong> and{' '}
+                                    <strong>Shadowguard</strong> (reduced damage while stealthed),{' '}
                                     <strong>Nebula Nullifier</strong> (reduced damage while in
                                     Stasis or Disabled), <strong>Hyperion Gaze</strong> and the{' '}
                                     <strong>Hardened</strong> gear set (reduced incoming

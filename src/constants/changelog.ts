@@ -14,6 +14,12 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: Nuqtu now gains one Core Charge per enemy buffing skill.',
     'Combat simulator: passive debuffs on an attacker now last through its next turn.',
     "Combat simulator: Firewall's Block Debuff now stops the rest of that skill's debuffs.",
+    "Combat simulator: Firewall's Block Debuff now also stops that skill's later DoT stacks.",
+    'Combat simulator: the Leech set now repairs from counter-attack and implant-proc damage.',
+    'Combat simulator: Leech set, Bloodthirst and Last Wish repairs can now critically hit.',
+    "Combat simulator: Valkyrie's Echoing Burst repair and other damage-based repairs can now crit.",
+    'Combat simulator: Madax now receives 30% more repairs beside a supporter.',
+    "Combat simulator: Zosimos's active now counts a repair that healed nothing.",
     "Combat simulator: reactions to Enforcer's hits now resolve before his next hit.",
     'Combat simulator: Bomb detonations and splash now resolve before reactions, on both sides.',
 ];

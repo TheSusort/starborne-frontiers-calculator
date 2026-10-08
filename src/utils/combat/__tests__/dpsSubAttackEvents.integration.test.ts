@@ -289,7 +289,7 @@ describe('non-positional outgoing riders — per-sub-attack fan-out', () => {
             type: 'heal',
             target: 'self',
             trigger: 'on-crit',
-            config: { type: 'heal', pct: 20, basis: 'damage-dealt' },
+            config: { type: 'heal', pct: 20, basis: 'damage-dealt', noCrit: true },
         });
 
     it('on-deal-damage fires once per SUB-ATTACK: a hits:3 Burner lands three Infernos', () => {

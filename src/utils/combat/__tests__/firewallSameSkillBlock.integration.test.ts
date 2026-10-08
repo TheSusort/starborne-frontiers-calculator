@@ -361,3 +361,201 @@ describe('R149 on a board with no positions set', () => {
         expect(out.blockDebuffGrants).toBe(0);
     });
 });
+
+/**
+ * Owner ruling R161: Firewall's Block Debuff also blocks the SAME skill's later DoT stacks.
+ * Snakeroot's active "deals 170% damage and inflicts 2 stacks of Corrosion I for 2 turns": a
+ * Firewall proc on the first stack blocks the second, which rolls nothing (R122: one Firewall roll
+ * per stack that lands).
+ */
+interface DotOutcome {
+    blockDebuffGrants: number;
+    stacksLanded: number;
+    resisted: { name: string; viaLandingRoll: boolean }[];
+    procDraws: number;
+}
+
+const observeDots = (input: CombatEngineInput, wearerId: string, seed = 9): DotOutcome => {
+    const base = makeKeyedRng(seed);
+    const out: DotOutcome = { blockDebuffGrants: 0, stacksLanded: 0, resisted: [], procDraws: 0 };
+    setupKeyedRng(seed);
+    setKeyedRng((key) => {
+        if (key === `${wearerId}:proc`) out.procDraws++;
+        return base(key);
+    });
+    const bus = createEventBus();
+    bus.on('buff-applied', (e) => {
+        if (e.actorId === wearerId && e.buffName === 'Block Debuff') out.blockDebuffGrants++;
+    });
+    bus.on('dot-applied', (e) => {
+        if (e.targetId === wearerId) out.stacksLanded += e.stacks;
+    });
+    bus.on('debuff-resisted', (e) => {
+        if (e.targetId === wearerId)
+            out.resisted.push({ name: e.buffName, viaLandingRoll: e.viaLandingRoll === true });
+    });
+    runCombat({ ...input, bus });
+    return out;
+};
+
+const realSlot = (ship: string, slot: 'active' | 'charged'): ShipSkills => {
+    const built = buildTraceShip(ship, { refitLevel: 4 });
+    if (!built) throw new Error(`${ship} missing from reference data`);
+    const found = buildShipAbilities(built).slots.find((s) => s.slot === slot);
+    if (!found) throw new Error(`${ship} has no ${slot} slot`);
+    return { slots: [{ ...found, slot: 'active' }] };
+};
+
+describe.each<Placement>(['player', 'enemy'])(
+    'R161 with the Firewall wearer on the %s side',
+    (placement) => {
+        const run = (procChance: number, seed?: number) => {
+            const wearer: BoardUnit = {
+                id: 'wearer',
+                kit: wearerKit(procChance),
+                position: 'M4',
+                speed: 1,
+            };
+            const snakeroot: BoardUnit = {
+                id: 'snakeroot',
+                kit: realSlot('Snakeroot', 'active'),
+                position: 'M4',
+                speed: 100,
+                attack: 1,
+                hacking: 1e6,
+            };
+            const { input, id } = boardInput(placement, wearer, [], [snakeroot], 1);
+            return observeDots(input, id(wearer), seed);
+        };
+
+        it("a Firewall proc on Snakeroot's first Corrosion I stack blocks the second", () => {
+            const out = run(1);
+            expect(out.stacksLanded).toBe(1);
+            expect(out.resisted).toHaveLength(1);
+            expect(out.resisted[0].viaLandingRoll).toBe(false);
+            expect(out.blockDebuffGrants).toBe(1);
+        });
+
+        it('control: a Firewall that never procs lets both stacks land', () => {
+            const out = run(1e-9);
+            expect(out.stacksLanded).toBe(2);
+            expect(out.resisted).toEqual([]);
+            expect(out.blockDebuffGrants).toBe(0);
+        });
+
+        it('R122 holds for stacks: one Firewall roll per stack that lands', () => {
+            const shapes = new Set<number>();
+            for (let seed = 1; seed <= 24; seed++) {
+                const out = run(0.5, seed);
+                expect(out.procDraws).toBe(out.stacksLanded);
+                if (out.stacksLanded === 1) expect(out.blockDebuffGrants).toBe(1);
+                shapes.add(out.stacksLanded);
+            }
+            expect([...shapes].sort()).toEqual([1, 2]);
+        });
+    }
+);
+
+describe('Butcher charged lands ONE stack of Inferno III (tier = magnitude)', () => {
+    it.each<Placement>(['player', 'enemy'])('Butcher on the %s side', (placement) => {
+        const target: BoardUnit = { id: 'target', kit: wearerKit(1e-9), position: 'M4', speed: 1 };
+        const butcher: BoardUnit = {
+            id: 'butcher',
+            kit: realSlot('Butcher', 'charged'),
+            position: 'M4',
+            speed: 100,
+            attack: 1,
+            hacking: 1e6,
+        };
+        const { input, id } = boardInput(
+            placement === 'player' ? 'enemy' : 'player',
+            target,
+            [],
+            [butcher],
+            1
+        );
+        const bus = createEventBus();
+        const inferno: { stacks: number; tier?: number }[] = [];
+        bus.on('dot-applied', (e) => {
+            if (e.targetId === id(target) && e.dotType === 'inferno')
+                inferno.push({ stacks: e.stacks, tier: e.tier });
+        });
+        runCombat({ ...input, bus });
+        expect(inferno).toEqual([{ stacks: 1, tier: 45 }]);
+    });
+});
+
+/** "When directly damaged, inflicts 2 stacks of Corrosion I on the attacker" (R161 on a reaction). */
+const twoStackDotReactor = (): ShipSkills => ({
+    slots: [
+        { slot: 'active', abilities: [] },
+        {
+            slot: 'passive',
+            abilities: [
+                {
+                    id: 'two-stack-dot-reaction',
+                    type: 'dot',
+                    target: 'enemy',
+                    trigger: 'on-attacked',
+                    conditions: [],
+                    config: { type: 'dot', dotType: 'corrosion', tier: 3, stacks: 2, duration: 2 },
+                },
+            ],
+        },
+    ],
+});
+
+describe.each<Placement>(['player', 'enemy'])(
+    'R161 on a passive DoT reaction, the Firewall wearer on the %s side',
+    (placement) => {
+        const run = (procChance: number) => {
+            const wearer: BoardUnit = {
+                id: 'wearer',
+                kit: {
+                    slots: [
+                        {
+                            slot: 'active',
+                            abilities: [
+                                {
+                                    id: 'hit',
+                                    type: 'damage',
+                                    target: 'enemy',
+                                    trigger: 'on-cast',
+                                    conditions: [],
+                                    config: { type: 'damage', multiplier: 100 },
+                                },
+                            ],
+                        },
+                        { slot: 'passive', abilities: [firewall(procChance)] },
+                    ],
+                },
+                position: 'M4',
+                speed: 100,
+                attack: 1,
+            };
+            const reactor: BoardUnit = {
+                id: 'reactor',
+                kit: twoStackDotReactor(),
+                position: 'M4',
+                speed: 1,
+                hacking: 1e6,
+            };
+            const { input, id } = boardInput(placement, wearer, [], [reactor], 1);
+            return observeDots(input, id(wearer));
+        };
+
+        it('a proc on the first Corrosion stack blocks the second', () => {
+            const out = run(1);
+            expect(out.stacksLanded).toBe(1);
+            expect(out.resisted).toHaveLength(1);
+            expect(out.resisted[0].viaLandingRoll).toBe(false);
+            expect(out.blockDebuffGrants).toBe(1);
+        });
+
+        it('control: a Firewall that never procs lets both stacks land', () => {
+            const out = run(1e-9);
+            expect(out.stacksLanded).toBe(2);
+            expect(out.blockDebuffGrants).toBe(0);
+        });
+    }
+);

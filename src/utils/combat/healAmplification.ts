@@ -1,4 +1,5 @@
 import { Ability, HealAmpCondition, HealAmpContext } from '../../types/abilities';
+import type { ShipRoleCategory } from '../../constants/shipTypes';
 
 function conditionMet(cond: HealAmpCondition, ctx: HealAmpContext): boolean {
     switch (cond) {
@@ -32,19 +33,29 @@ export function healAmplificationForCast(
 }
 
 /**
- * Summed incoming-heal amplification % for ONE repair landing on a recipient (Exuberance).
- * Unconditional ("when repaired"): for each incoming-heal-amplification ability the recipient carries,
- * add ampPct iff its proc fires. `rollProc` MUST be keyed by the recipient so all repairs the unit
- * receives share one combat-lifetime gate (single probability stream). Returns 0 when nothing applies.
+ * Summed incoming-heal amplification % for ONE repair landing on a recipient (Exuberance; Madax's
+ * "30% more repairs when adjacent to a supporter").
+ *
+ * For each incoming-heal-amplification ability the recipient carries: an ability gated on an
+ * adjacent role counts only while `hasAdjacentRole` says a living ally of that role stands next to
+ * the recipient right now; an ability with a `procChance` then adds `ampPct` iff its proc fires,
+ * and one without it always adds. The adjacency gate is checked BEFORE the proc roll, so an
+ * ineligible repair draws nothing. `rollProc` MUST be keyed by the recipient so all repairs the
+ * unit receives share one combat-lifetime gate (single probability stream). Returns 0 when nothing
+ * applies.
  */
 export function incomingHealAmpForRecipient(
     recipientAbilities: Ability[],
-    rollProc: (abilityId: string, chance: number) => boolean
+    rollProc: (abilityId: string, chance: number) => boolean,
+    hasAdjacentRole?: (role: ShipRoleCategory) => boolean
 ): number {
     let sum = 0;
     for (const a of recipientAbilities) {
         if (a.config.type !== 'incoming-heal-amplification') continue;
-        if (!rollProc(a.id, a.config.procChance)) continue;
+        const role = a.config.requiresAdjacentRole;
+        if (role !== undefined && !(hasAdjacentRole?.(role) ?? false)) continue;
+        const chance = a.config.procChance;
+        if (chance !== undefined && !rollProc(a.id, chance)) continue;
         sum += a.config.ampPct;
     }
     return sum;
