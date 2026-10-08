@@ -3305,6 +3305,18 @@ const DocumentationPage: React.FC = () => {
                                         resolves after it, within the same turn.
                                     </p>
                                     <p className="text-theme-text mb-2">
+                                        <span className="text-primary">Dying ships:</span> Every
+                                        reaction triggers before a ship dies. A ship destroyed by a
+                                        hit still fires its own reactions to that hit: Warden still
+                                        inflicts Corrosion I on the attacker, Stalwart still
+                                        counters, Heliodor still repairs her allies. A repair cannot
+                                        bring the destroyed ship itself back. A debuff the killing
+                                        hit lands on the dying ship still lands (Enforcer&apos;s
+                                        crit Defense Shred), but no other ship reacts to it:
+                                        Provider stays silent until the next hit strikes a living
+                                        enemy.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
                                         <span className="text-primary">Purges:</span> A purge on a
                                         skill that hits several enemies strips buffs from every
                                         enemy it hits, not just the main target. Tithonus gains

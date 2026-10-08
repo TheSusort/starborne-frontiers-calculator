@@ -550,6 +550,11 @@ export interface CombatActor {
     pendingAccumulators: PendingAccumulator[];
     /** Round this actor first reached 0 HP (set once via recordDestroyed). Undefined while alive. */
     destroyedRound?: number;
+    /** The reaction chain (`setHitRoot` in triggers.ts) in scope when this actor was destroyed, if
+     *  any. "All reactions trigger before a ship dies" (R117): the ship's own reactions to the
+     *  events of that chain still resolve after its death; reactions to any later chain do not.
+     *  Stamped by the engine from `ship-destroyed`. */
+    destroyedInHitRoot?: string;
     /** Board position of this actor — set at construction and consumed by the positional path:
      *  `isPositional` gates on it and `resolvePositionalTarget` reads it as the acting anchor. */
     position?: Position;

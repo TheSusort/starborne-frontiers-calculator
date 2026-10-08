@@ -186,6 +186,7 @@ import {
     registerReactiveListeners,
     claimHitRoot,
     setHitRoot,
+    hitRootInScope,
     eventSeqWatermark,
     selfBuffNamesForOwners,
     selfBuffStacksForOwner,
@@ -3230,6 +3231,11 @@ export function runCombat(rawInput: CombatEngineInput): {
     // only), this includes every enemy attacker, so a reactive granter on EITHER side resolves.
     // Used by grantExtraAction; the side-partitioned view is `actorsBySide`.
     const allActorsById = new Map<string, CombatActor>(allActors.map((a) => [a.id, a]));
+    // Stamp the reaction chain each death happens in (`CombatActor.destroyedInHitRoot`).
+    bus.on('ship-destroyed', (e) => {
+        const dead = allActorsById.get(e.actorId);
+        if (dead) dead.destroyedInHitRoot = hitRootInScope();
+    });
 
     /** Prophet (#591): each actor's LIVE, per-fight shield-penetration bonus — permanent and
      *  stacking, added on top of the static base at `attackerShieldPenOf`. Combat-wide (persists
@@ -7805,13 +7811,15 @@ export function runCombat(rawInput: CombatEngineInput): {
             attackerId: string,
             abilityId: string,
             multiplier: number,
-            hits: number
+            hits: number,
+            // A destroyed owner whose counter the executor's dead-owner gate let through (R117).
+            allowDeadOwner?: boolean
         ): { dealt: number; didCrit: boolean } | void => {
             const owner = allActorsById.get(ownerId);
             const attacker = allActorsById.get(attackerId);
-            // Guards: owner alive, attacker alive, not self (spec rule 6).
+            // Guards: owner alive (unless allowed), attacker alive, not self (spec rule 6).
             if (!owner || !attacker) return;
-            if (owner.destroyedRound !== undefined) return;
+            if (owner.destroyedRound !== undefined && !allowDeadOwner) return;
             if (attacker.destroyedRound !== undefined || attacker.id === owner.id) return;
 
             const { ownerOutgoing, profile, forceAffinityAdvantage, critRate } = reactiveHitInputs(

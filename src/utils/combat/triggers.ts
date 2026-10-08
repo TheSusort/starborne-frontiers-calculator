@@ -2872,7 +2872,9 @@ export interface IntentExecContext {
         attackerId: string,
         abilityId: string,
         multiplier: number,
-        hits: number
+        hits: number,
+        /** The owner is already destroyed but may still counter (`deadOwnerMayResolve`). */
+        allowDeadOwner?: boolean
     ) => ReactiveHitOutcome | void;
     /** Once-per-attack counter guard. Keyed `ownerId:abilityId:subAttackIndex` — see the counter
      *  branch's SCOPE NOTE. Cleared at each actor turn-start (engine) so the per-hit `attacked`
@@ -5125,6 +5127,11 @@ export function setHitRoot(root: string | undefined): void {
     currentHitRoot = root;
 }
 
+/** The reaction chain in scope right now (see `currentHitRoot`), or undefined. */
+export function hitRootInScope(): string | undefined {
+    return currentHitRoot;
+}
+
 /** The root a reactive hit landing now belongs to — see `currentHitRoot`. With none in scope the
  *  hit roots its own chain: `mint()` names it, and the resolving intent keeps it for the rest of
  *  its resolution. */
@@ -5146,6 +5153,15 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         resolvingIntent = outer;
         currentHitRoot = outerRoot;
     }
+}
+
+/** A destroyed owner's intent that still resolves: its own death reaction, or any reaction in the
+ *  chain it died in (R117) — see the dead-owner gate in `resolveIntent`. */
+function deadOwnerMayResolve(owner: { destroyedInHitRoot?: string }, intent: Intent): boolean {
+    return (
+        intent.eventCtx?.fromOwnDeath === true ||
+        (intent.hitRoot !== undefined && intent.hitRoot === owner.destroyedInHitRoot)
+    );
 }
 
 function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
@@ -5174,12 +5190,28 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
     // Dead-owner gate (combat-sim finding #1): a DESTROYED owner's stale reactives are
     // suppressed — a listener that fired on a LATER event (e.g. a dead Curator reacting to an
     // enemy charge rounds after dying) must not resolve. `destroyedRound` is the canonical
-    // aliveness signal (state.recordDestroyed). The owner's OWN death reaction is EXEMPT
-    // (eventCtx.fromOwnDeath, stamped by the self-scoped on-destroyed listener) so Martyrdom's
-    // killer-Disable and Salvation's self-destruct heal — born of the death itself — still fire.
+    // aliveness signal (state.recordDestroyed). Two exemptions:
+    //  - the owner's OWN death reaction (eventCtx.fromOwnDeath, stamped by the self-scoped
+    //    on-destroyed listener): Martyrdom's killer-Disable and Salvation's self-destruct heal;
+    //  - every reaction in the chain the owner died in ("all reactions trigger before a ship
+    //    dies", R117): Warden killed by a hit still inflicts Corrosion I on the attacker,
+    //    Stalwart still counters, Heliodor still repairs her allies. `destroyedInHitRoot` is the
+    //    chain in scope at the death; an intent of that same chain carries it as `hitRoot`.
     // Single, team-symmetric gate: the one drain feeds both sides, so this covers enemy-owner
     // reactives identically. Listeners only ENQUEUE (pure), so a skip leaves no partial state.
-    if (owner.actor.destroyedRound !== undefined && !intent.eventCtx?.fromOwnDeath) return;
+    if (owner.actor.destroyedRound !== undefined && !deadOwnerMayResolve(owner.actor, intent))
+        return;
+    // R141: a debuff landing on a ship that is destroyed (the hit that inflicted it killed it)
+    // wakes no other ship's reaction — Provider does not answer Enforcer's crit Defense Shred on
+    // the enemy his hit just destroyed. The dying ship's own reactions are the dead-owner gate's
+    // business above, so the owner is excluded here.
+    const debuffVictimId = intent.eventCtx?.debuffVictimId;
+    if (
+        debuffVictimId !== undefined &&
+        debuffVictimId !== intent.ownerId &&
+        ctx.isActorAlive?.(debuffVictimId) === false
+    )
+        return;
 
     // The drain-time gate conditions, with every subject a branch re-checks per resolved target
     // scrubbed out (see `scrubDrainGateConditions` for each arm and its re-check site). One
@@ -6901,7 +6933,8 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
             attackerId,
             intent.ability.id,
             cfg.multiplier,
-            cfg.hits ?? 1
+            cfg.hits ?? 1,
+            deadOwnerMayResolve(owner.actor, intent)
         );
         emitReactiveDamageLog(ctx, intent.ownerId, attackerId, outcome);
         return;
@@ -6959,11 +6992,9 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 // Xcellence: shieldBasisPct sibling of hpBasisPct — mutually
                 // exclusive in the corpus (no row sets both).
                 cfg.shieldBasisPct,
-                // Paracelsus: an on-destroyed retaliation's owner is already dead by the
-                // time this drains — fromOwnDeath (stamped by the on-destroyed listener) lets the
-                // executor's owner-alive gate stand aside for this one reaction, same exemption the
-                // dead-owner drain gate above already grants.
-                intent.eventCtx?.fromOwnDeath === true
+                // A dead owner's reaction that passed the dead-owner gate above (Paracelsus's
+                // on-destroyed retaliation, or a reaction in the chain it died in) still lands.
+                deadOwnerMayResolve(owner.actor, intent)
             );
             emitReactiveDamageLog(ctx, intent.ownerId, sourceId, hpOutcome);
             return;
@@ -7138,7 +7169,7 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 cfg.noCrit ?? false,
                 undefined, // hpBasisPct — inert on this path (the hpBasisPct/shieldBasisPct branch above returns early)
                 undefined, // shieldBasisPct — inert on this path, same reason
-                false, // allowDeadOwner
+                deadOwnerMayResolve(owner.actor, intent), // allowDeadOwner
                 // flatBasis/ignoresDefense are ONLY ever non-inert for
                 // Demolisher's splash (the sole ability carrying cfg.ignoresDefense===true AND
                 // reachable via a trigger — on-bomb-detonated — that stamps eventCtx.triggerDamage;

@@ -23,6 +23,8 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator: reactions to Enforcer's hits now resolve before his next hit.",
     'Combat simulator: Bomb detonations and splash now resolve before reactions, on both sides.',
     "Combat simulator: Demolisher's charge removal on a turn-start Bomb now precedes that turn's skill.",
+    'Combat simulator: a ship destroyed by a hit now fires its own reactions to it.',
+    'Combat simulator: Provider no longer reacts to debuffs landing on a dying enemy.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
