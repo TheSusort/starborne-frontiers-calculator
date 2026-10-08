@@ -19,6 +19,11 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat log: damage ticks now appear before the ship's own attack.",
     'Combat simulator: slot one now counts incoming damage over time in damage taken.',
     'Combat simulator: enemy Selenite no longer counts dead Stealth ships.',
+    'Combat simulator: the Leech set now repairs from counter-attack and implant-proc damage.',
+    'Combat simulator: Leech set, Bloodthirst and Last Wish repairs can now critically hit.',
+    "Combat simulator: Valkyrie's Echoing Burst repair and other damage-based repairs can now crit.",
+    'Combat simulator: Madax now receives 30% more repairs beside a supporter.',
+    "Combat simulator: Zosimos's active now counts a repair that healed nothing.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

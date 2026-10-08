@@ -1183,13 +1183,17 @@ export type AbilityConfig =
           /** Proc chance in (0,1); ABSENT = deterministic (always fires when gated). */
           procChance?: number;
       }
-    // D-PR6 recipient-side incoming heal amplification (unconditional — no condition field).
+    // Recipient-side incoming heal amplification (Exuberance; Madax's adjacent-supporter clause).
     | {
           type: 'incoming-heal-amplification';
           /** Amplification added to a repair RECEIVED when it fires, in percentage points. */
           ampPct: number;
-          /** Proc chance in (0,1). Rolled once per repair received. */
-          procChance: number;
+          /** Proc chance in (0,1). Rolled once per repair received. ABSENT = deterministic. */
+          procChance?: number;
+          /** The amplification applies only while a living ally of this role category stands
+           *  on a board cell adjacent to the recipient, read when the repair lands. ABSENT =
+           *  ungated. */
+          requiresAdjacentRole?: ShipRoleCategory;
       }
     // Reflect gear set (thorns): reflect `pct`% of each direct hit back to the attacker.
     // Victim-side passive — collected into incomingAbilitiesById. Apply seam wired in Task 5.
