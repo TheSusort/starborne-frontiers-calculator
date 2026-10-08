@@ -93,6 +93,8 @@ import {
     resolveSupportRecipients,
 } from './supportRecipients';
 import { resolveDebuffRecipientIds } from './debuffRecipients';
+import { clausePhase, isRemovalBeforeDamage } from './castClauseOrder';
+import { isAliveTarget } from './targetableActors';
 import { supportFootprintAllyIds } from './supportFootprint';
 import type { AttackerDamageScalars } from './victimDamage';
 import type { PreFightCombatModifiers } from './preFight/types';
@@ -334,6 +336,13 @@ export interface HealingRuntimeCtx {
  * `flushDeferredEnemyApplications` in engine.ts runs them back-to-back, which is the
  * single-sub-attack case.
  */
+/** The named debuffs THIS cast landed on each struck enemy through a clause written ahead of its
+ *  damage clause, keyed by enemy id. Clauses resolve in written order, so the cast's own damage
+ *  reads them as already on that enemy ("inflicts Stasis … and deals 210% damage" meets Tygr's
+ *  "+30% to enemies with Stasis" on that very hit). The engine's per-victim refolds merge each
+ *  covered enemy's entry into its pre-turn reading (`victimReadingCtx`). */
+export type CastNamesBeforeDamage = ReadonlyMap<string, readonly string[]>;
+
 export interface DeferredEnemyApplication {
     applyState: () => void;
     /** #413: the engine buffers these per sub-attack (`debuffEmittersBySubAttack`) and so is the
@@ -530,6 +539,8 @@ export interface PlayerTurnResult {
         primaryCtx: ConditionContext;
         /** The bound target `primaryCtx` describes (absent on a no-victim turn). */
         boundTargetId?: string;
+        /** See `CastNamesBeforeDamage`. */
+        castNamesBeforeDamage?: CastNamesBeforeDamage;
     };
     /** The firing damage ability's scaled bonus ("an additional 25% damage for each debuff on
      *  the enemy", "if the target is a defender it instead deals 205%") and the ctx
@@ -543,6 +554,8 @@ export interface PlayerTurnResult {
         primaryCtx: ConditionContext;
         /** The bound target `primaryCtx` describes (absent on a no-victim turn). */
         boundTargetId?: string;
+        /** See `CastNamesBeforeDamage`. */
+        castNamesBeforeDamage?: CastNamesBeforeDamage;
     };
     /** This turn's SCHEDULED enemy-debuff effects AFTER the per-round landing
      *  decision, i.e. exactly the entries that LANDED (`scheduledEnemy.roundEnemyDebuffs`:
@@ -1049,6 +1062,16 @@ export interface PlayerTurnArgs {
      *  which is not resolved until much later in the turn. Nothing between the two sites reads
      *  `incomingHealBuff` or `outgoingHealBuff`, which is what makes the late fold safe. */
     enemyAppliedFamilies?: FamilyMap;
+    /** Re-reads THIS acting actor's own debuff state — the live values of `selfDebuffNames`,
+     *  `selfDebuffCount` and `enemyAppliedFamilies`, which the turn args otherwise carry as of the
+     *  start of the turn. Called only after a self-cleanse written ahead of the cast's damage
+     *  removed something (see `isRemovalBeforeDamage`), so the hit no longer sees the cleansed
+     *  debuffs. Absent → the start-of-turn values stand. */
+    rereadOwnDebuffs?: () => {
+        selfDebuffNames: string[];
+        selfDebuffCount: number;
+        enemyAppliedFamilies?: FamilyMap;
+    };
     /** The opposing actor with the most buffs (Rhodium's `mostBuffsAmong`), resolved
      *  fresh per turn from THIS actor's opposing roster. Feeds an ON-CAST purge ability whose
      *  `target` is `'enemy-most-buffs'` (Lodolite's charged skill) — the reactive counterpart
@@ -1962,8 +1985,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         shieldedAllyCount: shieldedAllyCountArg = 0,
         // No default — undefined is the DPS-parity sentinel (see PlayerTurnArgs doc).
         enemyDebuffNames: enemyDebuffNamesArg,
-        selfDebuffNames: selfDebuffNamesArg = [],
-        selfDebuffCount: selfDebuffCountArg,
+        selfDebuffNames: selfDebuffNamesIn = [],
+        selfDebuffCount: selfDebuffCountIn,
         healEventOnly = false,
         onHitBreakStasis,
         aoeVictimIds,
@@ -2382,6 +2405,17 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         : positionalLanding
           ? landingAffinityMod < 0
           : affinityDisadvantage;
+    // Glossary, Debuff Duration Extension: "Affinity Adv units are immune" — an enemy with affinity
+    // advantage over the caster keeps its durations. The same rule, on the same raw affinities, as
+    // Charge Manipulation's gate in the engine's `removeChargesFrom`, and the one a purge or a buff
+    // steal lands by (no roll, nothing at an affinity disadvantage). Every extension seam below
+    // (timed debuffs and DoTs, every-debuff and inflicted-only), the purge and the steals ask this.
+    const extensionImmune = (vid: string | undefined): boolean => {
+        const victim =
+            vid === undefined || vid === enemy?.id ? enemy : opposingVictimById?.get(vid);
+        return getAffinityMatchup(attackerAff, victim?.affinity) === 'disadvantage';
+    };
+
     // Applies one passed timed self status to its recipients. The status lives on each recipient
     // (decrements at the recipient's Post Turn; family + persistent rules run per recipient side
     // because applyTimedAbilityStatus threads recipientId). buff-applied emits ONCE PER RECIPIENT
@@ -2469,6 +2503,215 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             });
         }
     };
+    // ── Status removals: buff steals and purges ─────────────────────────────────────────────
+    // Each helper performs the removal's STATE change and returns its events as a thunk, so a
+    // clause written after the damage can hold the events back with the write (see
+    // `deferredEnemyApplications`). Side-symmetric: player and enemy casters run the same code.
+
+    /** A generic "steals N buffs" clause: moves the newest removable TIMED buff(s) held by each
+     *  enemy the clause reaches onto `recipients` (statusEngine.steal). Victim-bound — it names
+     *  no status, so with no resolved target there is nothing to steal FROM. The sources follow
+     *  the same resolver as every direct enemy clause: "steals 1 buff from the primary target" on
+     *  a pattern skill steals `count` from EACH struck enemy (owner ruling 2026-10-03 — Tithonus
+     *  on Circle hitting A, B and C takes one from each), and every stolen buff goes to every
+     *  recipient. Each source is stolen from and logged on its own. */
+    const stealFromStruck = (
+        abTarget: Ability['target'],
+        count: number,
+        recipients: string[]
+    ): (() => void) => {
+        if (targetId === undefined) return () => {};
+        const sources = resolveDebuffRecipientIds({
+            abTarget,
+            anchorId: targetId,
+            aoeVictimIds,
+            adjacentEnemyIdsFor,
+            positionalLanding,
+            firingClause: true,
+            selectorEnemyIdFor,
+        }).map((id) => id ?? targetId);
+        const stolen: { sourceId: string; names: string[] }[] = [];
+        for (const sourceId of sources) {
+            if (extensionImmune(sourceId)) continue;
+            // How many stacks of each STACK-STEALABLE status the source holds right now.
+            // Computed HERE and passed in, rather than inside statusEngine.steal: the count
+            // has to aggregate all four status stores AND evaluate aura conditions against a
+            // neutral context, which is exactly what `selfBuffStacksForOwner` does. Passing
+            // its answer keeps ONE aggregator and avoids a statusEngine → triggers cycle.
+            // Empty for every source holding none, which is every ship but Meatshield and
+            // Lionheart — so this is inert on the rest of the corpus.
+            const stackStealable = new Map<string, number>();
+            for (const name of STACK_STEALABLE_STATUSES) {
+                const held = selfBuffStacksForOwner(statusEngine, sourceId, name);
+                if (held > 0) stackStealable.set(name, held);
+            }
+            const names = statusEngine.steal(sourceId, recipients, count, stackStealable);
+            if (names.length > 0) stolen.push({ sourceId, names });
+        }
+        return () => {
+            // Suppressed when nothing moved, as for the top-up and `purge-performed`. Emitting
+            // the NAMES rather than a count is the point of the event: this is the only
+            // channel that can tell a player their Protection changed hands, and the only
+            // log row — so the only fingerprint kind — a steal produces.
+            for (const { sourceId, names } of stolen) {
+                bus.emit({
+                    type: 'steal-performed',
+                    casterId: actor.id,
+                    targetId: sourceId,
+                    // Tithonus's clause DUPLICATES to its adjacent allies rather than
+                    // splitting (owner ruling 2026-09-03), so every recipient holds the full
+                    // `buffNames` set — a reader must not divide one by the other.
+                    recipientIds: recipients,
+                    buffNames: names,
+                    round: r,
+                });
+            }
+        };
+    };
+
+    /**
+     * An on-cast purge clause: removes `count` buffs from each enemy it reaches. An 'enemy' or
+     * 'all-enemies' purge reaches EVERY enemy the cast strikes: the footprint victims
+     * (aoeVictimIds, supplied by the engine in positional mode from the same resolver the damage
+     * uses): "purges N buffs from the enemy" on a pattern skill purges each struck enemy
+     * (Sefuba's active hitting A, B and C removes a buff from all three). No wording narrows that
+     * (owner rule; `aoeNarrowingPhraseTripwire.test.ts` holds the ruled phrases). A caller without
+     * a footprint (non-positional) stays on the single anchor `targetId`. Each victim emits its
+     * own purge-performed (Salvation/Sefuba are victim-scoped). The purge count is per victim.
+     *
+     * An 'enemy-most-buffs' purge (Lodolite's charged skill) resolves to the engine-supplied
+     * enemyMostBuffsId instead of the normal positional anchor (targetId) — the reactive
+     * counterpart (Rhodium, end-of-round) resolves this itself via triggers.ts and never reaches
+     * this on-cast path. Falls back to the anchor when no living opposing actor carries a buff
+     * (mostBuffsAmong's no-buffs-anywhere case) or for a non-positional/DPS caller that never
+     * supplies enemyMostBuffsId.
+     *
+     * #403 R4, DELIBERATE DIVERGENCE: the DEBUFF clause path (debuffRecipients.ts) does NOT fall
+     * back to the anchor when its selector fails to resolve — positional inflicts nobody,
+     * non-positional keeps the bound victim. Purge keeps the anchor fall-back: it is a different
+     * clause type and re-ruling it was outside #403. Every OTHER on-cast loop in this file that
+     * asks the footprint question — the `bomb-countdown-reduce` loop (reduceEnemyBombs), the
+     * standalone `shield-strip` loop and the `extend-status` debuff branch — resolves recipients
+     * through `resolveDebuffRecipientIds`; this purge differs on purpose. If you are aligning
+     * them, change this one and say so in the commit.
+     *
+     * A victim that is no longer alive is not purged: a purge written after the damage resolves
+     * after a hit that may have destroyed its victim. Every victim is purged before any
+     * purge-performed is emitted, so each event carries the whole wave's total
+     * (`purge-performed.waveTotal`).
+     */
+    const purgeStruck = (
+        abTarget: Ability['target'],
+        count: number | 'all',
+        stripsShield: boolean | undefined
+    ): { waveTotal: number; emit: () => void } => {
+        if (targetId === undefined) return { waveTotal: 0, emit: () => {} };
+        const recipients =
+            (abTarget === 'all-enemies' || abTarget === 'enemy') && aoeVictimIds
+                ? aoeVictimIds
+                : abTarget === 'enemy-most-buffs' && enemyMostBuffsId !== undefined
+                  ? [enemyMostBuffsId]
+                  : [targetId];
+        // The anchor fallback arm drops out when there is no victim — no victim means no
+        // anchor id for `vid` to match.
+        const victimOf = (vid: string): CombatActor | undefined =>
+            opposingVictimById?.get(vid) ?? (hasVictim && vid === enemy.id ? enemy : undefined);
+        const removals = recipients.map((vid) => {
+            const victim = victimOf(vid);
+            const reachable = victim === undefined || isAliveTarget(victim);
+            return {
+                vid,
+                victim,
+                removed: !reachable || extensionImmune(vid) ? 0 : statusEngine.purge(vid, count),
+            };
+        });
+        const waveTotal = removals.reduce((sum, x) => sum + x.removed, 0);
+        return {
+            waveTotal,
+            emit: () => {
+                let waveLead = true;
+                for (const { vid, victim, removed } of removals) {
+                    if (removed <= 0) continue;
+                    bus.emit({
+                        type: 'purge-performed',
+                        casterId: actor.id,
+                        targetId: vid,
+                        count: removed,
+                        round: r,
+                        waveTotal,
+                        waveLead,
+                    });
+                    waveLead = false;
+                    // I6: Lodolite legendary refit — "When this Unit Purges a buff from an enemy,
+                    // it removes 100% of the enemy's shield." Gated on the parsed ability config
+                    // (stripsShield), never a hardcoded ship name — see
+                    // detectPurgeStripsShield/buildShipAbilities. Strips AFTER the purge resolves,
+                    // on the SAME victim id. POSITIONAL-SCOPED like every other per-victim effect:
+                    // in a non-positional cast opposingVictimById is absent and only the anchor
+                    // resolves — the real battle sim always positions actors.
+                    if (stripsShield && victim) stripShieldPct(victim, 100, bus, actor.id, r);
+                }
+            },
+        };
+    };
+
+    /** Total buffs this cast's purges removed across every victim — the `buffs-purged-this-cast`
+     *  count the post-purge extra-action re-gate reads (Tithonus). Steals never add to it. A
+     *  purge written after the damage lands after that re-gate and is not counted. */
+    let buffsPurgedThisCast = 0;
+
+    // ── Removals written ahead of the damage clause ──────────────────────────────────────────
+    // Clauses resolve in written order (`isRemovalBeforeDamage`): these run before the caster's
+    // own stats are read below, so a buff Thresh steals counts for his hit, a debuff Sustainer
+    // cleanses does not cut it, and a buff Zeolite purges is gone from the enemy when it lands.
+    // The late loops (steal, purge, support pass) skip the clauses run here.
+    const removalsBeforeDamage = new Set<string>();
+    let ownDebuffsCleansed = false;
+    for (const ab of firingSkill?.abilities ?? []) {
+        if (!isRemovalBeforeDamage(firingSkill!.abilities, ab)) continue;
+        removalsBeforeDamage.add(ab.id);
+        const cfg = ab.config;
+        if (cfg.type === 'buff-steal') {
+            stealFromStruck(
+                ab.target,
+                cfg.count,
+                cfg.grantAdjacentAllies ? [actor.id, ...(adjacentAllyIds ?? [])] : [actor.id]
+            )();
+        } else if (cfg.type === 'purge') {
+            const wave = purgeStruck(ab.target, cfg.count, cfg.stripsShield);
+            buffsPurgedThisCast += wave.waveTotal;
+            wave.emit();
+        } else if (cfg.type === 'cleanse') {
+            const removed = cleanseDebuffs(
+                statusEngine,
+                actor.id,
+                actor,
+                cfg.count,
+                cfg.debuffType
+            );
+            if (removed > 0) {
+                ownDebuffsCleansed = true;
+                if (args.healing && !healEventOnly)
+                    args.healing.credit(actor.id, 'cleanseCount', removed);
+                bus.emit({
+                    type: 'cleanse-performed',
+                    casterId: actor.id,
+                    count: removed,
+                    round: r,
+                    targets: [actor.id],
+                });
+            }
+        }
+    }
+    // The caster's own debuff readings, as of now: a cleanse above removed some of what the
+    // start-of-turn args describe.
+    const ownDebuffsNow = ownDebuffsCleansed ? args.rereadOwnDebuffs?.() : undefined;
+    const selfDebuffNamesArg = ownDebuffsNow?.selfDebuffNames ?? selfDebuffNamesIn;
+    const selfDebuffCountArg = ownDebuffsNow ? ownDebuffsNow.selfDebuffCount : selfDebuffCountIn;
+    const enemyAppliedFamilies = ownDebuffsNow
+        ? ownDebuffsNow.enemyAppliedFamilies
+        : args.enemyAppliedFamilies;
+
     /** Firing-slot self statuses landed ahead of the cast's landing rolls (written order): an
      *  ungated hacking gain whose clause precedes an infliction (`beforeInflictClause` — Rys's
      *  "gains Hacking Up III …, and inflicts Speed Down II"). The status loop below skips them. A
@@ -3431,16 +3674,32 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
      *  `extend-status` needs (Asphyxiator). Written at the one landing funnel below, read by the
      *  extension block near the end of the turn. */
     const inflictedDebuffNamesByVictim = new Map<string, Set<string>>();
-    /** Timed debuffs THIS cast landed on the bound target BEFORE its damage (a clause written
-     *  ahead of the damage clause). Clauses resolve in written order, so the cast's payload gate
-     *  reads these as already on the target — see `enemyDebuffNames` on the payload-gate ctx. */
-    const beforeDamageNamesOnTarget = new Set<string>();
+    /** Timed debuffs THIS cast landed on each struck enemy BEFORE its damage (a clause written
+     *  ahead of the damage clause), by enemy id. Clauses resolve in written order, so the cast's
+     *  payload gates and its damage read these as already on that enemy — see
+     *  `enemyNamesWithCastLandings` and `CastNamesBeforeDamage`. */
+    const beforeDamageNamesByVictim = new Map<string, Set<string>>();
     // Landings held back by intra-cast clause order (see the `afterDamageClause` branch below).
     // Returned on the turn result. The engine drains this at ONE of two points — at the end of
     // sub-attack 0 when a later sub-attack exists (so hit 2 can see hit 1's stack), otherwise at
     // the post-walk `flushDeferredEnemyApplications`. Both run before the actor's Post-Turn
     // decrement, so either way the status keeps its normal window.
     const deferredEnemyApplications: DeferredEnemyApplication[] = [];
+    /** Holds a firing-slot status removal written AFTER the damage clause ("deals 160% damage and
+     *  purges 1 buff") back with the after-damage debuff landings, so the buff it removes still
+     *  stands for that damage. `run` performs the removal and returns its events. Returns false
+     *  (nothing held) for a clause written before the damage or in a slot that deals none. */
+    const deferAfterDamage = (ab: Ability, run: () => () => void): boolean => {
+        if (!firingSkill || clausePhase(firingSkill.abilities, ab) !== 'after-damage') return false;
+        let emit: (() => void) | undefined;
+        deferredEnemyApplications.push({
+            applyState: () => {
+                emit = run();
+            },
+            emitEvents: () => emit?.(),
+        });
+        return true;
+    };
 
     /**
      * Roll + apply ONE timed enemy status over one recipient list. Shared by the cast-time loop
@@ -3602,8 +3861,12 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                     // display-list refresh (see the TDZ note above pair).
                     writeState();
                     pair.emitEvents();
-                    if (vid === undefined || vid === targetId)
-                        beforeDamageNamesOnTarget.add(status.payload.buffName);
+                    let namesBefore = beforeDamageNamesByVictim.get(resolvedVictim.id);
+                    if (!namesBefore) {
+                        namesBefore = new Set<string>();
+                        beforeDamageNamesByVictim.set(resolvedVictim.id, namesBefore);
+                    }
+                    namesBefore.add(status.payload.buffName);
                 }
                 if (!anyLanded) {
                     inflictedEnemyDebuffs.push({
@@ -4031,6 +4294,21 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
      *  `enemyBuffNamesArg` carries. Without a reading (a non-positional run) the one enemy's union
      *  is its own. */
     const boundTargetBuffNames = targetGateReading?.buffNames ?? enemyBuffNamesArg;
+    /** The bound target's pre-turn debuff names plus what this cast landed on it ahead of its
+     *  damage clause: clauses resolve in written order, so the cast's damage and its payload gates
+     *  see a status written before the damage clause ("inflicts Stasis … and deals 210% damage" —
+     *  Tygr's "+30% to enemies with Stasis" and his "after damaging an enemy affected by Stasis").
+     *  A resisted or after-damage clause adds nothing. Undefined stays undefined (DPS sentinel).
+     *  Every other struck enemy gets the same overlay in the engine's per-victim refolds
+     *  (`CastNamesBeforeDamage`). */
+    const castNamesOnTarget = hasVictim ? beforeDamageNamesByVictim.get(enemy.id) : undefined;
+    const enemyNamesWithCastLandings =
+        enemyDebuffNamesArg === undefined || castNamesOnTarget === undefined
+            ? enemyDebuffNamesArg
+            : [
+                  ...enemyDebuffNamesArg,
+                  ...[...castNamesOnTarget].filter((n) => !enemyDebuffNamesArg.includes(n)),
+              ];
     const modifierCtx = buildRoundContext({
         // Live adjacency / kill counts (Panguan, Centurion, Judge) — see `liveCountCtx`.
         ...liveCountCtx,
@@ -4049,7 +4327,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         enemyBuffNames: boundTargetBuffNames,
         enemyBuffCount: enemyBuffCountArg,
         debuffedEnemyCount: debuffedEnemyCountArg,
-        enemyDebuffNames: enemyDebuffNamesArg,
+        enemyDebuffNames: enemyNamesWithCastLandings,
         selfDebuffNames: selfDebuffNamesArg,
         selfDebuffCount: selfDebuffCountArg,
         selfShielded: actor.shieldPool > 0,
@@ -4198,14 +4476,14 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // already consumed by the time control reaches here.
     //
     // Absent/empty map → empty deltas, and the self side is not even read.
-    if (args.enemyAppliedFamilies) {
+    if (enemyAppliedFamilies) {
         const ownNamed = [
             ...entry.activeSelfBuffs.flatMap((abf) =>
                 expandBuffEntry(abf, selfBuffLookup.get(abf.buffName) ?? [])
             ),
             ...abilitySelfEffects,
         ];
-        const { delta } = shadowedDelta(args.enemyAppliedFamilies, ownNamed, TURN_SHADOW_CHANNELS);
+        const { delta } = shadowedDelta(enemyAppliedFamilies, ownNamed, TURN_SHADOW_CHANNELS);
         scheduledTotals.attackBuff += delta.attack ?? 0;
         scheduledTotals.outgoingDamageBuff += delta.outgoingDamage ?? 0;
         scheduledTotals.incomingHealBuff += delta.incomingHeal ?? 0;
@@ -4415,22 +4693,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         enemyBuffNames: boundTargetBuffNames,
         enemyBuffCount: enemyBuffCountArg,
         debuffedEnemyCount: debuffedEnemyCountArg,
-        // The bound target's pre-turn debuff names plus what this cast landed on it before its
-        // damage, so a named `enemy-debuff` payload gate ("after damaging an enemy affected by
-        // Stasis") sees a status written ahead of the damage clause — the same landings
-        // `landedEnemyDebuffCount` already counts. A resisted or after-damage clause adds
-        // nothing. Undefined stays undefined (DPS sentinel). Only this payload-gate ctx carries
-        // the overlay: the outgoing-modifier ctx reads pre-turn status (see
-        // `perVictimOutgoingDeltaPct` in engine.ts for that causality rule).
-        enemyDebuffNames:
-            enemyDebuffNamesArg === undefined || beforeDamageNamesOnTarget.size === 0
-                ? enemyDebuffNamesArg
-                : [
-                      ...enemyDebuffNamesArg,
-                      ...[...beforeDamageNamesOnTarget].filter(
-                          (n) => !enemyDebuffNamesArg.includes(n)
-                      ),
-                  ],
+        // With this cast's before-damage landings counted in — see `enemyNamesWithCastLandings`.
+        enemyDebuffNames: enemyNamesWithCastLandings,
         selfDebuffNames: selfDebuffNamesArg,
         selfDebuffCount: selfDebuffCountArg,
         // Thread the acting actor's live own-turn counter so cast-path `every-n-turns` gates
@@ -5048,17 +5312,6 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         }
     }
 
-    // Glossary, Debuff Duration Extension: "Affinity Adv units are immune" — an enemy with affinity
-    // advantage over the caster keeps its durations. The same rule, on the same raw affinities, as
-    // Charge Manipulation's gate in the engine's `removeChargesFrom`, and the one a purge or a buff
-    // steal lands by (no roll, nothing at an affinity disadvantage). Every extension seam below
-    // (timed debuffs and DoTs, every-debuff and inflicted-only), the purge and the steals ask this.
-    const extensionImmune = (vid: string | undefined): boolean => {
-        const victim =
-            vid === undefined || vid === enemy?.id ? enemy : opposingVictimById?.get(vid);
-        return getAffinityMatchup(attackerAff, victim?.affinity) === 'disadvantage';
-    };
-
     /** The bound victim's DoT, Bomb and accumulator containers — the loose ones this turn was
      *  handed. Every other struck enemy's come off `opposingVictimById`. */
     const primaryHolder: DebuffEntryHolder = {
@@ -5472,15 +5725,13 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // without one: it names no status, so an unnamed clause with nobody to steal from must stay a
     // no-op rather than picking an arbitrary enemy.
     //
-    // ORDER: this block runs BEFORE the on-cast purge block below. The sole corpus
-    // ship carrying both in one skill (Tithonus) reads "steals 1 buff ... THEN purges 2 buffs",
-    // so the steal must see the target's FULL buff set and take its NEWEST buff; the purge then
-    // strips from what remains. Running purge first would let it remove the newest buffs before
-    // the steal, handing the caster a stale/older buff (or nothing).
+    // A clause written ahead of the damage already ran (`removalsBeforeDamage`); one written after
+    // it is held back with the debuff landings that follow the damage (`deferAfterDamage`).
     for (const ab of gatedSkill?.abilities ?? []) {
         if (
             ab.config.type === 'buff-steal' &&
             ab.trigger === 'on-cast' &&
+            !removalsBeforeDamage.has(ab.id) &&
             conditionsMet(ab.conditions, ctx)
         ) {
             const recipients = ab.config.grantAdjacentAllies
@@ -5564,181 +5815,41 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 }
                 continue;
             }
-            // The GENERIC "steal N buffs" path is victim-bound: it names no status, so with no
-            // resolved target there is nothing to steal FROM and no honest way to pick a source.
-            // The named branch above resolves its own; this one stays a no-op.
-            if (targetId === undefined) continue;
-            // The SOURCES follow the same resolver as every direct enemy clause: "steals 1 buff
-            // from the primary target" on a pattern skill steals `count` from EACH struck enemy
-            // (owner ruling 2026-10-03 — Tithonus on Circle hitting A, B and C takes one from
-            // each), and every stolen buff goes to every recipient. Each source is stolen from
-            // and logged on its own.
-            const sources = resolveDebuffRecipientIds({
-                abTarget: ab.target,
-                anchorId: targetId,
-                aoeVictimIds,
-                adjacentEnemyIdsFor,
-                positionalLanding,
-                firingClause: true,
-                selectorEnemyIdFor,
-            }).map((id) => id ?? targetId);
-            for (const sourceId of sources) {
-                if (extensionImmune(sourceId)) continue;
-                // How many stacks of each STACK-STEALABLE status the source holds right now.
-                // Computed HERE and passed in, rather than inside statusEngine.steal: the count
-                // has to aggregate all four status stores AND evaluate aura conditions against a
-                // neutral context, which is exactly what `selfBuffStacksForOwner` does. Passing
-                // its answer keeps ONE aggregator and avoids a statusEngine → triggers cycle.
-                // Empty for every source holding none, which is every ship but Meatshield and
-                // Lionheart — so this is inert on the rest of the corpus.
-                const stackStealable = new Map<string, number>();
-                for (const name of STACK_STEALABLE_STATUSES) {
-                    const held = selfBuffStacksForOwner(statusEngine, sourceId, name);
-                    if (held > 0) stackStealable.set(name, held);
-                }
-                const stolenNames = statusEngine.steal(
-                    sourceId,
-                    recipients,
-                    ab.config.count,
-                    stackStealable
-                );
-                // Same suppression rule as the top-up above and as `purge-performed`. Emitting
-                // the NAMES rather than a count is the point of the event: this is the only
-                // channel that can tell a player their Protection changed hands, and the only
-                // log row — so the only fingerprint kind — a steal produces.
-                if (stolenNames.length > 0) {
-                    bus.emit({
-                        type: 'steal-performed',
-                        casterId: actor.id,
-                        targetId: sourceId,
-                        // Tithonus's clause DUPLICATES to its adjacent allies rather than
-                        // splitting (owner ruling 2026-09-03), so every recipient holds the full
-                        // `buffNames` set — a reader must not divide one by the other.
-                        recipientIds: recipients,
-                        buffNames: stolenNames,
-                        round: r,
-                    });
-                }
-            }
+            // The GENERIC "steal N buffs" path (`stealFromStruck`).
+            const count = ab.config.count;
+            const steal = () => stealFromStruck(ab.target, count, recipients);
+            if (!deferAfterDamage(ab, steal)) steal()();
         }
     }
 
-    // On-cast purge: remove buffs from the acting actor's target. Keyed off targetId
-    // (the opposing victim) → side-symmetric (works for player AND enemy casters; no
-    // healEventOnly gate). gatedSkill holds the fired slot's abilities. NOT
-    // inside the args.healing gate.
+    // On-cast purge (`purgeStruck`), keyed off targetId (the opposing victim) → side-symmetric.
     // conditionsMet() enforces any ability-level gates (e.g. Nayra's target-repaired-this-round
-    // condition) so conditional purges only fire when their precondition holds.
-    // An 'enemy' or 'all-enemies' purge fans over the cast's footprint victims (aoeVictimIds)
-    // instead of just targetId.
-    // `buffsPurgedThisCast` totals what these purges removed across every victim — the
-    // `buffs-purged-this-cast` count the post-purge extra-action re-gate below reads. Steals
-    // (the loop above) never add to it.
-    let buffsPurgedThisCast = 0;
+    // condition) so conditional purges only fire when their precondition holds. A clause written
+    // ahead of the damage already ran (`removalsBeforeDamage`); one written after it is held back
+    // with the debuff landings that follow the damage (`deferAfterDamage`).
     if (targetId !== undefined) {
         for (const ab of gatedSkill?.abilities ?? []) {
             if (
                 ab.config.type === 'purge' &&
                 ab.trigger === 'on-cast' &&
+                !removalsBeforeDamage.has(ab.id) &&
                 conditionsMet(ab.conditions, ctx)
             ) {
-                // An 'enemy' or 'all-enemies' purge reaches EVERY enemy the cast strikes: the
-                // footprint victims (aoeVictimIds, supplied by the engine in positional mode from
-                // the same resolver the damage uses): "purges N buffs from the enemy" on a pattern
-                // skill purges each struck enemy (Sefuba's active hitting A, B and C removes a
-                // buff from all three). Wording that names one enemy ("from the primary target",
-                // "from that enemy") would stay single-victim, which this fan-out does not
-                // model; `purgeFanOutNarrowingTripwire.test.ts` fails if an on-cast enemy purge's
-                // text ever says so. A caller without a footprint (non-positional) stays on the
-                // single anchor `targetId`. Each victim emits its own purge-performed
-                // (Salvation/Sefuba are victim-scoped). The purge count is per victim.
-                // An 'enemy-most-buffs' purge (Lodolite's charged skill) resolves to the
-                // engine-supplied enemyMostBuffsId instead of the normal positional anchor
-                // (targetId) — the reactive counterpart (Rhodium, end-of-round) resolves this
-                // itself via triggers.ts and never reaches this on-cast path. Falls back to the
-                // anchor when no living opposing actor carries a buff (mostBuffsAmong's
-                // no-buffs-anywhere case) or for a non-positional/DPS caller that never supplies
-                // enemyMostBuffsId.
-                // #403 R4, DELIBERATE DIVERGENCE: the DEBUFF clause path (debuffRecipients.ts)
-                // does NOT fall back to the anchor when its selector fails to resolve — positional
-                // inflicts nobody, non-positional keeps the bound victim. Purge keeps the anchor
-                // fall-back: it is a different clause type and re-ruling it was outside #403. This
-                // purge loop and the debuff clause loop disagree on the unresolved case ON PURPOSE.
-                // If you are aligning them, change this one and say so in the commit.
-                //
-                // Every OTHER on-cast loop in this file that asks the footprint question — the
-                // `bomb-countdown-reduce` loop (reduceEnemyBombs), the standalone `shield-strip`
-                // loop and the `extend-status` debuff branch — resolves recipients through
-                // `resolveDebuffRecipientIds`, so they all agree on which enemy a selector names
-                // and on the two enemy-adjacency scopes (#403, #407).
-                //
-                // THIS purge loop is the one that differs, deliberately: it keeps its anchor
-                // fall-back for an unresolved selector (see the R4 paragraph above). A plain
-                // 'enemy' purge follows the footprint here as a firing-slot 'enemy' clause does
-                // in the resolver.
-                const recipients =
-                    (ab.target === 'all-enemies' || ab.target === 'enemy') && aoeVictimIds
-                        ? aoeVictimIds
-                        : ab.target === 'enemy-most-buffs' && enemyMostBuffsId !== undefined
-                          ? [enemyMostBuffsId]
-                          : [targetId];
-                // E4/#363: when the purge (or cleanse, Fuying) scales on crit power, total
-                // removed per victim = count × floor(live effectiveCritDamage / per).
-                // effectiveCritDamage (~line 2555 = dmgStats.critDamage) is the caster's LIVE
-                // crit power (buffs/debuffs folded), integer percent (e.g. 150). Hoisted out of
-                // the victim loop — constant within a cast. Shared with the cleanse branch below
-                // via scaledStatusCount (./statusCountScaling) — see that helper for the guards.
+                // E4/#363: when the purge scales on crit power, total removed per victim =
+                // count × floor(live effectiveCritDamage / per) — the caster's LIVE crit power,
+                // constant within a cast. Shared with the cleanse branch below via
+                // scaledStatusCount (./statusCountScaling) — see that helper for the guards.
                 const purgeCount = scaledStatusCount(
                     ab.config.count,
                     ab.config.countScaling,
                     effectiveCritDamage
                 );
-                // Every victim is purged before any purge-performed is emitted, so each event
-                // carries the whole wave's total (`purge-performed.waveTotal`).
-                const removals = recipients.map((vid) => ({
-                    vid,
-                    removed: extensionImmune(vid) ? 0 : statusEngine.purge(vid, purgeCount),
-                }));
-                const waveTotal = removals.reduce((sum, x) => sum + x.removed, 0);
-                buffsPurgedThisCast += waveTotal;
-                let waveLead = true;
-                for (const { vid, removed } of removals) {
-                    if (removed > 0) {
-                        bus.emit({
-                            type: 'purge-performed',
-                            casterId: actor.id,
-                            targetId: vid,
-                            count: removed,
-                            round: r,
-                            waveTotal,
-                            waveLead,
-                        });
-                        waveLead = false;
-                        // I6: Lodolite legendary refit — "When this Unit Purges a buff from an
-                        // enemy, it removes 100% of the enemy's shield." Gated on the parsed
-                        // ability config (stripsShield), never a hardcoded ship name — see
-                        // detectPurgeStripsShield/buildShipAbilities. Strips AFTER the purge
-                        // resolves, on the SAME victim id (vid). Team-symmetric for free: this
-                        // function runs identically for player and enemy casters (see the
-                        // "side-symmetric" note above), so an enemy-side ship carrying this
-                        // config strips a player shield the same way. Mirrors the victim-lookup
-                        // fallback used by the per-victim debuff-landing loop above (opposingVictimById
-                        // in positional mode; the anchor `enemy` actor otherwise). This makes the
-                        // strip POSITIONAL-SCOPED by the same design as every other per-victim effect:
-                        // in a non-positional cast opposingVictimById is absent and per-victim
-                        // resolution intentionally no-ops (the sim's per-victim fidelity is a
-                        // positional feature) — the real battle sim always positions actors, so a
-                        // resolved enemy-most-buffs victim is always in opposingVictimById.
-                        if (ab.config.stripsShield) {
-                            // The anchor fallback arm drops out when there is no victim —
-                            // no victim means no anchor id for `vid` to match.
-                            const victim =
-                                opposingVictimById?.get(vid) ??
-                                (hasVictim && vid === enemy.id ? enemy : undefined);
-                            if (victim) stripShieldPct(victim, 100, bus, actor.id, r);
-                        }
-                    }
-                }
+                const { stripsShield } = ab.config;
+                const purge = () => purgeStruck(ab.target, purgeCount, stripsShield).emit;
+                if (deferAfterDamage(ab, purge)) continue;
+                const wave = purgeStruck(ab.target, purgeCount, stripsShield);
+                buffsPurgedThisCast += wave.waveTotal;
+                wave.emit();
             }
         }
     }
@@ -6343,7 +6454,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // ability is `patternScoped`). See `scopedByFootprint`.
         const healAbilities: { ability: Ability; fromPassive: boolean }[] = [
             ...(gatedSkill?.abilities ?? [])
-                .filter((a) => !isHookOwned(a, false) && notPreCombat(a))
+                .filter(
+                    (a) =>
+                        !isHookOwned(a, false) && notPreCombat(a) && !removalsBeforeDamage.has(a.id)
+                )
                 .map((ability) => ({ ability, fromPassive: false })),
             ...(gatedPassive?.abilities ?? [])
                 .filter((a) => !isHookOwned(a, true) && notPreCombat(a))
@@ -6862,11 +6976,16 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // Same guard as positionalScalars — only meaningful when a damage ability fired.
     // Carries the exact ingredients (modifierAbilities + the per-turn modifierCtx) the engine
     // needs to re-fold outgoingDamage against each footprint victim's OWN enemy-status.
+    const castNamesBeforeDamage: CastNamesBeforeDamage | undefined =
+        beforeDamageNamesByVictim.size > 0
+            ? new Map([...beforeDamageNamesByVictim].map(([id, names]) => [id, [...names]]))
+            : undefined;
     const perVictimOutgoing: PlayerTurnResult['perVictimOutgoing'] = hasDamageAbility
         ? {
               modifierAbilities,
               primaryCtx: modifierCtx,
               ...(hasVictim ? { boundTargetId: enemy.id } : {}),
+              ...(castNamesBeforeDamage ? { castNamesBeforeDamage } : {}),
           }
         : undefined;
     const perVictimScaling: PlayerTurnResult['perVictimScaling'] =
@@ -6875,6 +6994,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                   scalingAbility,
                   primaryCtx: ctxFor.get(scalingAbility.id) ?? ctx,
                   ...(hasVictim ? { boundTargetId: enemy.id } : {}),
+                  ...(castNamesBeforeDamage ? { castNamesBeforeDamage } : {}),
               }
             : undefined;
 

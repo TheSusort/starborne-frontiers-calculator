@@ -12,6 +12,10 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat log: a Protection-redirected hit now shows only the damage the target took.',
     'Combat log: Protection-redirected counters and procs now show only damage taken.',
     'Combat simulator: Nuqtu now gains one Core Charge per enemy buffing skill.',
+    "Combat simulator: Tygr's own Stasis now boosts that same skill's damage.",
+    'Combat simulator: a buff stolen before the damage now boosts that hit.',
+    'Combat simulator: a cleanse written before the damage now clears debuffs first.',
+    'Combat simulator: a purge written after the damage now resolves after the hit.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
