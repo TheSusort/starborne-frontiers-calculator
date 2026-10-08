@@ -428,4 +428,67 @@ describe.each(SIDES)('the bounce as a direct hit, reflector on the %s side', (pl
         const gear = intake(reflectSetWearer(), 100);
         expect(gear.shieldAbsorbed).toBeCloseTo(gear.incoming, 6);
     });
+
+    it("a Leech-set Nosorog repairs 15% of the bounce it dealt (R165); the gear set's bounce does not leech", () => {
+        /** The passive abilities two-piece `sets` build. */
+        const gearPassives = (sets: string[]): ShipSkills['slots'][number]['abilities'] => {
+            const slots = ['weapon', 'hull', 'generator', 'sensor'] as const;
+            const pieces: GearPiece[] = sets.flatMap((set, s) =>
+                [0, 1].map((i) => ({
+                    id: `${set}-${i}`,
+                    slot: slots[s * 2 + i],
+                    level: 16,
+                    stars: 6,
+                    rarity: 'legendary',
+                    mainStat: null,
+                    subStats: [],
+                    setBonus: set,
+                }))
+            );
+            const ship = {
+                id: 'wearer-ship',
+                name: 'Wearer',
+                rarity: 'legendary',
+                faction: 'AURELIAN_SOVEREIGNTY',
+                type: 'DEFENDER',
+                baseStats: {},
+                equipment: Object.fromEntries(pieces.map((p) => [p.slot, p.id])),
+                implants: {},
+                refits: [],
+            } as unknown as Ship;
+            const built = buildShipAbilitiesWithEquipment(ship, (id) =>
+                pieces.find((p) => p.id === id)
+            );
+            return built.slots.find((s) => s.slot === 'passive')?.abilities ?? [];
+        };
+        const leechRepair = (reflectPassives: ShipSkills['slots'], gearSets: string[]) => {
+            const reflector: BoardUnit = {
+                ...nosorog(false),
+                kit: {
+                    slots: [
+                        { slot: 'active', abilities: [] },
+                        ...reflectPassives,
+                        { slot: 'passive', abilities: gearPassives(gearSets) },
+                    ],
+                },
+            };
+            const hitter = unit('hitter', hitKit(100));
+            const { input, id } = boardInput(placement, reflector, [], [hitter], 1);
+            const bus = createEventBus();
+            let repaired = 0;
+            bus.on('reactive-heal-performed', (e) => {
+                if (e.casterId === id(reflector)) repaired += e.amount;
+            });
+            const { rounds } = runCombat({ ...input, bus });
+            return { repaired, reflected: rounds[0].perActorReflected?.[id(hitter)] ?? 0 };
+        };
+        const leeching = leechRepair(passives('Nosorog'), ['LEECH']);
+        expect(leeching.reflected).toBeGreaterThan(0);
+        expect(leeching.repaired).toBeCloseTo(leeching.reflected * 0.15, 6);
+        // Controls: no reflect → nothing dealt; the gear set's bounce is not direct → no leech.
+        expect(leechRepair([], ['LEECH']).repaired).toBe(0);
+        const gear = leechRepair([], ['LEECH', 'REFLECT']);
+        expect(gear.reflected).toBeGreaterThan(0);
+        expect(gear.repaired).toBe(0);
+    });
 });

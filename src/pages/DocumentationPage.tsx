@@ -3257,15 +3257,17 @@ const DocumentationPage: React.FC = () => {
                                         attacker&apos;s protector&apos;s Protection, uses
                                         Nosorog&apos;s shield penetration, and is boosted by and
                                         spends the attacker&apos;s Exposed, and spends a Titanite
-                                        Plating stack. The Reflect gear set&apos;s bounce is not
-                                        direct damage and does none of this. A hit that Protection
-                                        moves entirely onto the protector (Lionheart&apos;s 10
-                                        stacks) is not direct damage to the ship it was aimed at:
-                                        that ship does not counter or react, and its Stasis does not
-                                        drop, but the skill&apos;s debuffs and other effects still
-                                        land on it. When only part of the hit is moved
-                                        (Meatshield&apos;s 30%), the share it keeps is still direct
-                                        damage.
+                                        Plating stack. It is damage Nosorog dealt, so his own
+                                        damage-dealt leech (the Leech set) repairs off it, as it
+                                        does off a counter-attack. The Reflect gear set&apos;s
+                                        bounce is not direct damage and does none of this. A hit
+                                        that Protection moves entirely onto the protector
+                                        (Lionheart&apos;s 10 stacks) is not direct damage to the
+                                        ship it was aimed at: that ship does not counter or react,
+                                        and its Stasis does not drop, but the skill&apos;s debuffs
+                                        and other effects still land on it. When only part of the
+                                        hit is moved (Meatshield&apos;s 30%), the share it keeps is
+                                        still direct damage.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">

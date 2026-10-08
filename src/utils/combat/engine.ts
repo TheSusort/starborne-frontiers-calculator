@@ -7470,6 +7470,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                                     reflectAim,
                                     true
                                 );
+                                // Damage the reflector dealt, so his standing leech pays on it
+                                // like a counter's (R165).
+                                payReactiveHitLeech(victim, reflectOutcome);
                             }
                         }
                     }

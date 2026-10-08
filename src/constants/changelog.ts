@@ -20,6 +20,7 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator: Protection now redirects Nosorog's reflect away from the attacker.",
     "Combat simulator: Nosorog's reflect now spends the attacker's Exposed and Titanite Plating.",
     "Combat simulator: Nosorog's reflect now uses his shield penetration.",
+    "Combat simulator: Nosorog's reflect now feeds his own damage-dealt leech, like a counter.",
     'Combat simulator: the Leech set now repairs from counter-attack and implant-proc damage.',
     'Combat simulator: Leech set, Bloodthirst and Last Wish repairs can now critically hit.',
     "Combat simulator: Valkyrie's Echoing Burst repair and other damage-based repairs can now crit.",
