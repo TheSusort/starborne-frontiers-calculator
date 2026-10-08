@@ -748,12 +748,15 @@ function parseModifiers(text: string): ParsedModifier[] {
         // same wording must NOT be promoted to a PERMANENT buff — that is wrong combat math. Only
         // emit when the clause is standalone/standing (no trigger words, no finite duration). A
         // second, triggered clause joined by "and" ("... by 20% and when it critically repairs")
-        // is a different effect and does not make this one conditional.
+        // is a different effect and does not make this one conditional; a plain "and" ("by 20%
+        // and Attack by 10% for 2 turns") continues the same clause, so its duration still binds.
         const defSentence = sentenceContaining(plain, defM.index!);
         const defClauseEnd = defM.index! + defM[0].length;
         const sentenceStart = plain.indexOf(defSentence);
         const afterMatch = defSentence.slice(defClauseEnd - sentenceStart);
-        const andAt = afterMatch.search(/\band\b/i);
+        const andAt = afterMatch.search(
+            /\band\s*,?\s*(?=when\b|if\b|while\b|upon\b|after\b|each\b|every\b|at the start of\b)/i
+        );
         const defClause = defSentence.slice(
             0,
             defClauseEnd - sentenceStart + (andAt === -1 ? afterMatch.length : andAt)
