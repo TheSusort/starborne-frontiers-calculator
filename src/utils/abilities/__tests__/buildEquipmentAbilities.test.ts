@@ -68,7 +68,6 @@ describe('buildEquipmentAbilities — Leech set', () => {
             pct: 15,
             basis: 'damage-dealt',
             leechScope: 'all',
-            noCrit: true,
         });
     });
 
@@ -600,7 +599,7 @@ describe('Exuberance implant', () => {
 // D-PR7: Last Wish (on-death repair all allies)
 // ---------------------------------------------------------------------------
 describe('Last Wish (on-death repair all allies)', () => {
-    it('legendary → heal/all-allies/on-destroyed, basis target-hp, pct 32, noCrit', () => {
+    it('legendary → heal/all-allies/on-destroyed, basis target-hp, pct 32, can crit', () => {
         const piece = makePiece({ id: 'lw-1', setBonus: 'LAST_WISH', rarity: 'legendary' });
         const ship = makeShip({ implants: { implant_major: 'lw-1' } });
         const abilities = buildEquipmentAbilities(ship, makeGetGearPiece({ 'lw-1': piece }));
@@ -612,8 +611,8 @@ describe('Last Wish (on-death repair all allies)', () => {
             type: 'heal',
             basis: 'target-hp',
             pct: 32,
-            noCrit: true,
         });
+        expect((a!.config as { noCrit?: boolean }).noCrit).toBeUndefined();
     });
     it('uncommon → pct 14', () => {
         const piece = makePiece({ id: 'lw-2', setBonus: 'LAST_WISH', rarity: 'uncommon' });

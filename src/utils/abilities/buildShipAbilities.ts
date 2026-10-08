@@ -136,6 +136,7 @@ import {
     classifyEnemyEffect,
     statusEffectCondition,
     parsePreCombatStatGrants,
+    parseAdjacentRoleRepairBonus,
     detectTransformToDot,
     detectProtectionTransformToDot,
     detectConvertDot,
@@ -3306,6 +3307,29 @@ function abilitiesFromText(
                 autoFilled: true,
             },
             pos: grant.pos,
+        });
+    }
+
+    // Madax: "When adjacent to a supporter, this Unit receives 30% more repairs". A deterministic,
+    // adjacency-gated recipient amplification read by every repair channel (see
+    // `incomingHealAmpForRecipient`).
+    const adjacentRepairBonus = parseAdjacentRoleRepairBonus(text);
+    if (adjacentRepairBonus) {
+        out.push({
+            ability: {
+                id: nextId(),
+                type: 'incoming-heal-amplification',
+                target: 'self',
+                trigger: 'on-cast',
+                conditions: [],
+                config: {
+                    type: 'incoming-heal-amplification',
+                    ampPct: adjacentRepairBonus.ampPct,
+                    requiresAdjacentRole: adjacentRepairBonus.requiresAdjacentRole,
+                },
+                autoFilled: true,
+            },
+            pos: adjacentRepairBonus.pos,
         });
     }
 

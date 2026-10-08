@@ -57,7 +57,6 @@ const GEAR_SET_ABILITIES: Partial<
             pct: 15 * sets,
             basis: 'damage-dealt',
             leechScope: 'all',
-            noCrit: true,
         },
         autoFilled: true,
     }),
@@ -972,7 +971,7 @@ const IMPLANT_ABILITIES: Partial<Record<string, ImplantAbilityBuilder>> = {
             target: 'all-allies',
             trigger: 'on-destroyed',
             conditions: [],
-            config: { type: 'heal', pct, basis: 'target-hp', noCrit: true },
+            config: { type: 'heal', pct, basis: 'target-hp' },
             autoFilled: true,
         };
     },

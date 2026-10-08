@@ -22,6 +22,11 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: Asphodel now gains one charge per critting skill, charged included.',
     'Combat simulator: Insidiousness now rolls per debuff, with one success per skill.',
     "Combat simulator: Synaptic Resonance now boosts the next critical hit's crit power.",
+    'Combat simulator: the Leech set now repairs from counter-attack and implant-proc damage.',
+    'Combat simulator: Leech set, Bloodthirst and Last Wish repairs can now critically hit.',
+    "Combat simulator: Valkyrie's Echoing Burst repair and other damage-based repairs can now crit.",
+    'Combat simulator: Madax now receives 30% more repairs beside a supporter.',
+    "Combat simulator: Zosimos's active now counts a repair that healed nothing.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

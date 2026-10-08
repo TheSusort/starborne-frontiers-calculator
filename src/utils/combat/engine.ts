@@ -5,7 +5,7 @@ import {
     SelectedGameBuff,
     TeamActorInput,
 } from '../../types/calculator';
-import type { ShipTypeName } from '../../constants/shipTypes';
+import type { ShipRoleCategory, ShipTypeName } from '../../constants/shipTypes';
 import { matchesRoleCategory, roleBaseClass } from '../../constants/shipTypes';
 import type { FactionName } from '../../constants/factions';
 import {
@@ -4082,7 +4082,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                   incomingHealAmpForRecipient(
                       incomingHealAmpAbilitiesOf(rid),
                       (abilityId, chance) =>
-                          rollRateGate(procChanceGates, `${rid}:${abilityId}`, chance)
+                          rollRateGate(procChanceGates, `${rid}:${abilityId}`, chance),
+                      (role) => livingAdjacentAllyHasRole(rid, role)
                   ),
               casterHealAmpPct: (casterId, rid) => {
                   const amps = healAmpAbilitiesOf(casterId);
@@ -4278,7 +4279,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                   // overheal = raw (the whole heal is wasted, which is correct in that state).
                   const consumed = Math.max(0, Math.min(raw, targetMaxHp - victim.currentHp));
                   victim.currentHp += consumed;
-                  if (consumed > 0) repairedThisRound.add(victim.id);
+                  // A repair that restores nothing (its target is at full HP) is still a repair
+                  // (R133b): the target-repaired gate and the Zosimos charge clause read it.
+                  if (raw > 0) repairedThisRound.add(victim.id);
                   return { reversed: false, consumed, overheal: raw - consumed };
               },
               grantShieldToTarget: (raw, victim = healTarget) => {
@@ -4876,6 +4879,12 @@ export function runCombat(rawInput: CombatEngineInput): {
         if (heals.length) incomingHealAmpAbilitiesById.set(rt.actor.id, heals);
         if (amps.length) healAmpAbilitiesById.set(rt.actor.id, amps);
     }
+    // A living ally of `role` stands on a cell adjacent to `id`, read now. Board adjacency is the
+    // one `adjacentAllyIds` defines (destroyed ships never count).
+    const livingAdjacentAllyHasRole = (id: string, role: ShipRoleCategory): boolean =>
+        adjacentAllyIds(id, actorsBySide(isEnemySide(id) ? 'enemy' : 'player')).some((allyId) =>
+            matchesRoleCategory(roleByActorId.get(allyId), [role])
+        );
     const incomingHealAmpAbilitiesOf = (id: string): Ability[] =>
         livePassiveEntries(id, incomingHealAmpAbilitiesById.get(id) ?? []);
     const healAmpAbilitiesOf = (id: string): Ability[] =>
@@ -7758,6 +7767,17 @@ export function runCombat(rawInput: CombatEngineInput): {
                 ? { protectionSplit: true, taken: outcome.incomingBooked }
                 : undefined;
 
+        /** Pays the owner's standing damage-dealt leech for one landed reactive hit (a counter or a
+         *  proc). The basis is what the funnel recorded plus anything a Protection cascade moved
+         *  (`detonationDelivered`); a hit converted into a DoT pays nothing here. */
+        const payReactiveHitLeech = (
+            owner: CombatActor,
+            outcome: AppliedVictimDamage | undefined
+        ): void => {
+            if (!outcome || owner.destroyedRound !== undefined) return;
+            procStandingLeechesPerVictim(owner.id, detonationDelivered(outcome), 'direct');
+        };
+
         const landReactiveHit = (
             owner: CombatActor,
             victim: CombatActor,
@@ -7915,6 +7935,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // Burst there gathers it (owner ruling).
                 gatherDirectHitIntoAccumulators(attacker, counterBooked);
             }
+            // The counter is damage its owner dealt, so the owner's standing "% of damage dealt"
+            // leech pays on it (R144), on the dealt basis `procLeechesForVictim` documents.
+            payReactiveHitLeech(owner, counterOutcome);
             // `dealt` stays the FULL counter, converted or not: it feeds only the log row
             // (triggers.ts emitReactiveDamageLog) and the reactive dealt-amount slot, and the main
             // cast path likewise logs its computed `directDamage` when a victim converts the hit
@@ -8172,6 +8195,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // gathers it. A Bomb splash copy is Bomb damage, not a direct hit: not gathered.
                 if (!splashCopy) gatherDirectHitIntoAccumulators(victim, procBooked);
             }
+            // A reactive proc is damage its owner dealt: the standing leech pays on it (R144). A
+            // splash copy of a Bomb burst is not a direct hit, so it does not.
+            if (!splashCopy) payReactiveHitLeech(owner, procOutcome);
             // `dealt` stays the full proc — log/dealt-slot only, as in applyCounterAttack.
             return { dealt: raw, didCrit, ...splitFigures(procOutcome) };
         };
