@@ -4735,34 +4735,36 @@ const DocumentationPage: React.FC = () => {
                                     debuffs, such as Provoke, Concentrate Fire or the Burner
                                     set&apos;s Inferno, never roll. At most one roll succeeds per
                                     skill cast, counting reactions to an enemy&apos;s skill as part
-                                    of that skill, and the hit lands on the enemy whose debuff
-                                    rolled). <strong>Synaptic Resonance</strong> gains Speed Up III
-                                    when an enemy is repaired and adds its crit power points to the
-                                    next critical hit only (90% crit power plus 10 is 100%). Three
-                                    heal implants are also modeled: <strong>Second Wind</strong>{' '}
-                                    (chance to repair itself when it takes a critical hit),{' '}
-                                    <strong>Nourishment</strong> (stronger repairs on allies with
-                                    less HP than the healer), and <strong>Vivacious Repair</strong>{' '}
-                                    (chance to double a repair on an ally below 25% HP), and{' '}
-                                    <strong>Exuberance</strong> (chance to increase the amount of a
-                                    repair this unit receives). Charge manipulation is also modeled:{' '}
-                                    <strong>Chrono Reaver</strong> (grants a bonus charge to the
-                                    carrier&apos;s charged skill every 2nd turn at legendary rarity
-                                    or every 3rd turn at epic; a unit in Stasis or Disabled still
-                                    gets this bonus, but not its usual charge for the skipped turn).
-                                    Two damage-over-time gear sets are also modeled:{' '}
-                                    <strong>Burner</strong> (applies Inferno for 2 turns on every
-                                    primary target when the ship attacks, so a whole-battlefield
-                                    attack such as Curator&apos;s active applies it on every enemy;
-                                    an applied Inferno lands without a hacking roll, failing only
-                                    when the ship is at an affinity disadvantage against the target)
-                                    and <strong>Decimation</strong> (+10% DoT damage per equipped
-                                    set, up to +30%, boosting your Inferno and Corrosion ticks in
-                                    both the combat simulator and the DPS calculator). Five shield
-                                    sources are also modeled: the <strong>Shield</strong> gear set
-                                    (grants the equipped ship a shield each turn, 4% of its max HP
-                                    per set), <strong>Adaptive Plating</strong> (grants the ship a
-                                    shield from the damage it takes, once per round),{' '}
+                                    of that skill, and a success hits every enemy that skill
+                                    debuffed). <strong>Synaptic Resonance</strong> gains Speed Up
+                                    III when an enemy is repaired and adds its crit power points to
+                                    the next critical hit only, whether a skill, a counter-attack, a
+                                    reactive hit or a passive hit (90% crit power plus 10 is 100%).
+                                    Three heal implants are also modeled:{' '}
+                                    <strong>Second Wind</strong> (chance to repair itself when it
+                                    takes a critical hit), <strong>Nourishment</strong> (stronger
+                                    repairs on allies with less HP than the healer), and{' '}
+                                    <strong>Vivacious Repair</strong> (chance to double a repair on
+                                    an ally below 25% HP), and <strong>Exuberance</strong> (chance
+                                    to increase the amount of a repair this unit receives). Charge
+                                    manipulation is also modeled: <strong>Chrono Reaver</strong>{' '}
+                                    (grants a bonus charge to the carrier&apos;s charged skill every
+                                    2nd turn at legendary rarity or every 3rd turn at epic; a unit
+                                    in Stasis or Disabled still gets this bonus, but not its usual
+                                    charge for the skipped turn). Two damage-over-time gear sets are
+                                    also modeled: <strong>Burner</strong> (applies Inferno for 2
+                                    turns on every primary target when the ship attacks, so a
+                                    whole-battlefield attack such as Curator&apos;s active applies
+                                    it on every enemy; an applied Inferno lands without a hacking
+                                    roll, failing only when the ship is at an affinity disadvantage
+                                    against the target) and <strong>Decimation</strong> (+10% DoT
+                                    damage per equipped set, up to +30%, boosting your Inferno and
+                                    Corrosion ticks in both the combat simulator and the DPS
+                                    calculator). Five shield sources are also modeled: the{' '}
+                                    <strong>Shield</strong> gear set (grants the equipped ship a
+                                    shield each turn, 4% of its max HP per set),{' '}
+                                    <strong>Adaptive Plating</strong> (grants the ship a shield from
+                                    the damage it takes, once per round),{' '}
                                     <strong>Abundant Renewal</strong> (turns over-healing on an ally
                                     into a shield for that ally), and{' '}
                                     <strong>Resonating Fury</strong> (a chance to grant Crit Power

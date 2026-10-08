@@ -768,7 +768,7 @@ const IMPLANT_ABILITIES: Partial<Record<string, ImplantAbilityBuilder>> = {
     // ruling, 2026-10-02; the text's "debuffing" names neither verb). One roll per debuff landed,
     // at most one success per skill cast
     // (`procScope:'per-debuff'` — that field's doc has the rule). The on-debuff-inflicted listener's
-    // `debuffVictimId` stamp puts the hit on the enemy whose debuff rolled.
+    // `debuffVictimId` stamp routes each hit to its debuffed enemy.
     INSIDIOUSNESS: (rarity) => {
         const m = INSIDIOUSNESS_MULT[rarity];
         const pc = INSIDIOUSNESS_PROC[rarity];

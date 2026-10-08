@@ -2865,7 +2865,7 @@ export interface IntentExecContext {
     reactionFiredThisAttack?: Set<string>;
     /** Proc verdict cache for scoped proc abilities. `procScope:'per-attack'`: keyed
      *  `ownerId:abilityId:subAttackIndex` → the single roll's outcome. `procScope:'per-debuff'`
-     *  (Insidiousness): keyed per root-cast cap — see `passesPerDebuffProcGate`. The map is
+     *  (Insidiousness): keyed per root-cast cap — see `perDebuffProcVictims`. The map is
      *  cleared at each actor turn-start (engine) beside `reactionFiredThisAttack`.
      *
      *  Named `…ThisSubAttack` deliberately: keying on `ownerId:abilityId` alone would make it a
@@ -4495,18 +4495,30 @@ function passesOncePerRootCastGate(
 
 /**
  * The `procScope:'per-debuff'` gate (Insidiousness — see that field's doc for the rule). Every
- * debuff the owner inflicts draws its own roll; once any roll under a root cast's cap has
- * succeeded, every other debuff of that cast fails without drawing (R131). A `procChance` of 1 or
- * more succeeds without drawing and still takes the cap. Draws from the owner's shared proc
- * sub-stream, as `passesProcChanceGate` does. Absent verdict map (unit ctxs) →
- * `passesProcChanceGate`'s per-event draws.
+ * debuff the owner inflicts draws its own roll; once a roll under a root cast's cap has
+ * succeeded, the cast's other debuffs do not draw (R131). The success hits EVERY enemy the cast
+ * debuffed (R158): the victim of the successful roll, every enemy whose earlier roll failed, and
+ * each enemy a later debuff of the cast reaches, once each. Returns the enemies this intent's
+ * proc hits (empty → no hit), or `undefined` when there is no verdict map (unit ctxs), where the
+ * caller falls back to `passesProcChanceGate`'s per-event draws. A `procChance` of 1 or more
+ * succeeds without drawing and still takes the cap. Draws from the owner's shared proc
+ * sub-stream, as `passesProcChanceGate` does.
  */
-function passesPerDebuffProcGate(intent: Intent, ctx: IntentExecContext): boolean {
+function perDebuffProcVictims(
+    intent: Intent,
+    ctx: IntentExecContext,
+    victimId: string
+): string[] | undefined {
     const memo = ctx.procDecisionThisSubAttack;
-    if (!memo) return passesProcChanceGate(intent, ctx);
+    if (!memo) return undefined;
     const gateKey = `${intent.ownerId}:${intent.ability.id}`;
     const capKey = `${gateKey}:per-cast-cap:${perDebuffProcCap(intent, ctx)}`;
-    if (memo.get(capKey) === true) return false;
+    const victimKey = (id: string) => `${capKey}:victim:${id}`;
+    if (memo.get(capKey) === true) {
+        if (memo.get(victimKey(victimId)) === true) return [];
+        memo.set(victimKey(victimId), true);
+        return [victimId];
+    }
     const pc = intent.ability.procChance;
     let verdict = true;
     if (pc !== undefined && pc > 0 && pc < 1) {
@@ -4517,8 +4529,22 @@ function passesPerDebuffProcGate(intent: Intent, ctx: IntentExecContext): boolea
         }
         verdict = !gate || gate(pc);
     }
-    if (verdict) memo.set(capKey, true);
-    return verdict;
+    if (!verdict) {
+        if (!memo.has(victimKey(victimId))) memo.set(victimKey(victimId), false);
+        return [];
+    }
+    memo.set(capKey, true);
+    const hit = [victimId];
+    const prefix = `${capKey}:victim:`;
+    for (const [key, hitAlready] of [...memo]) {
+        if (!key.startsWith(prefix) || hitAlready) continue;
+        const earlier = key.slice(prefix.length);
+        if (earlier === victimId) continue;
+        memo.set(key, true);
+        hit.push(earlier);
+    }
+    memo.set(victimKey(victimId), true);
+    return hit;
 }
 
 /**
@@ -4535,7 +4561,7 @@ function passesProcChanceGate(intent: Intent, ctx: IntentExecContext): boolean {
     // procScope:'per-attack': one roll for the whole attack. The verdict is memoized per
     // (owner, ability) and replayed for every later event this attack, so every event of one
     // attack shares ONE roll and all-or-none holds across its footprint. (`'per-debuff'` —
-    // Insidiousness — has its own gate, `passesPerDebuffProcGate`.) Opt-in by design — this gate
+    // Insidiousness — has its own gate, `perDebuffProcVictims`.) Opt-in by design — this gate
     // is shared with the heal/shield/buff/debuff branches, and memoizing unconditionally would
     // silently convert every other proc ability (Adaptive Plating, Smokescreen, Ambush,
     // Bloodthirst, Reactive Ward, Tenacity) to per-turn.
@@ -6815,9 +6841,13 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
     }
 
     if (cfg.type === 'damage') {
-        const procPasses =
+        const perDebuffVictims =
             intent.ability.procScope === 'per-debuff'
-                ? passesPerDebuffProcGate(intent, ctx)
+                ? perDebuffProcVictims(intent, ctx, intent.eventCtx?.debuffVictimId ?? '')
+                : undefined;
+        const procPasses =
+            perDebuffVictims !== undefined
+                ? perDebuffVictims.length > 0
                 : passesProcChanceGate(intent, ctx);
         if (!procPasses) return;
         // HP/Shield-basis reactive (Vindicator on-resist HP / Xcellence on-resist Shield):
@@ -6983,6 +7013,10 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
             // An empty living roster is a NO-OP, matching the selector arms above.
             if (opposing.length === 0) return;
             victimIds = [opposing[0]];
+        }
+        // A per-debuff proc's success hits the enemies the gate named (see `perDebuffProcVictims`).
+        if (perDebuffVictims !== undefined && intent.eventCtx?.debuffVictimId !== undefined) {
+            victimIds = perDebuffVictims;
         }
         // The all-enemies path already filtered per victim via
         // `resolveAoEReactiveDamageVictims`; the single-target paths (debuffVictimId / first living

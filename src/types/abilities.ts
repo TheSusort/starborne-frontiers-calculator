@@ -1532,9 +1532,9 @@ export interface Ability {
      *  inflicts (a DoT stack is a debuff; a debuff a reaction lands is its own), and at most ONE
      *  success per SKILL CAST that set the chain off, whoever cast it (an enemy's attack waking the
      *  owner's on-attacked Corrosion I, and the Out. Damage Down II that wakes, are that enemy's
-     *  one cast). Once a roll succeeds, the cast's other debuffs do not draw. The hit lands on the
-     *  enemy whose debuff rolled. See `perDebuffProcCap` / `passesPerDebuffProcGate` in
-     *  triggers.ts.
+     *  one cast). Once a roll succeeds, the cast's other debuffs do not draw, and the success (R158)
+     *  hits EVERY enemy the cast debuffed, once each. See `perDebuffProcCap` /
+     *  `perDebuffProcVictims` in triggers.ts.
      *
      *  `'per-attack'` draws the gate ONCE per ATTACK and reuses that verdict for every qualifying
      *  trigger event in that same attack, via IntentExecContext.procDecisionThisSubAttack. A

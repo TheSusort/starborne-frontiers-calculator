@@ -10,7 +10,8 @@
  *    enemy's attack waking Warden's Corrosion I, which wakes her Out. Damage Down II, is that
  *    enemy's one cast, so two rolls and at most one hit; once a roll succeeds the cast's other
  *    debuffs do not draw;
- *  - the hit lands on the enemy whose debuff rolled.
+ *  - a successful roll hits EVERY enemy the skill debuffed, once each (R158): a Curator cast
+ *    debuffing 3 enemies whose first roll passes hits all 3.
  * Only inflicted debuffs roll; an "applied" one (Concentrate Fire) never does.
  *
  * Instrument: `scriptProcs` scripts the carrier's `${owner}:proc` sub-stream — the only proc
@@ -619,7 +620,7 @@ describe('Insidiousness — reactions to an enemy’s skill: one cap for the who
 // A reaction that lands a debuff on two enemies lands two debuffs: two rolls, one success cap. An
 // on-crit "inflict X on that enemy" reaction to an AoE that crits both enemies lands X on each.
 // ---------------------------------------------------------------------------------------------
-describe('Insidiousness — a reaction landing on two enemies rolls per landed debuff', () => {
+describe('Insidiousness — a success hits every enemy the cast debuffed', () => {
     const allPattern = (): ParsedPattern => ({
         raw: 'all',
         shape: 'all',
@@ -648,30 +649,32 @@ describe('Insidiousness — a reaction landing on two enemies rolls per landed d
             shipSkills: kit(),
             enemyAttackers: twoFoes(),
         });
-    const totalHits = (events: CombatEvent[]) =>
-        procHits(events, 'attacker', 'foe-a').length + procHits(events, 'attacker', 'foe-b').length;
+    const hitsOn = (events: CombatEvent[]) => [
+        procHits(events, 'attacker', 'foe-a').length,
+        procHits(events, 'attacker', 'foe-b').length,
+    ];
 
     it('player side: both fail → two draws, no hit', () => {
         const draws = scriptProcs('attacker', [FAIL, FAIL]);
         const events = run(board());
         expect(debuffLandings(events, 'attacker', 'Crit Down')).toBe(2);
         expect(draws()).toBe(2);
-        expect(totalHits(events)).toBe(0);
+        expect(hitsOn(events)).toEqual([0, 0]);
     });
 
-    it('player side: the first passes → ONE hit on one enemy, one draw', () => {
+    it('player side: the first passes → BOTH enemies are hit once, one draw', () => {
         const draws = scriptProcs('attacker', [PASS, PASS]);
         const events = run(board());
         expect(debuffLandings(events, 'attacker', 'Crit Down')).toBe(2);
         expect(draws()).toBe(1);
-        expect(totalHits(events)).toBe(1);
+        expect(hitsOn(events)).toEqual([1, 1]);
     });
 
-    it('player side: the second passes after the first fails → one hit, two draws', () => {
+    it('player side: the second passes after the first fails → both enemies hit once, two draws', () => {
         const draws = scriptProcs('attacker', [FAIL, PASS]);
         const events = run(board());
         expect(draws()).toBe(2);
-        expect(totalHits(events)).toBe(1);
+        expect(hitsOn(events)).toEqual([1, 1]);
     });
 });
 

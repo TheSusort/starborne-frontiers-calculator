@@ -6175,12 +6175,12 @@ describe('Tasks 1.5 + 3.3 — Voidfire Catalyst: detonationDamage + bombSplashDa
 });
 
 // ---------------------------------------------------------------------------
-// Insidiousness: one roll per landed debuff, at most one success (one hit) per skill cast
+// Insidiousness: one roll per landed debuff, at most one success per skill cast, hitting every debuffed enemy
 // ---------------------------------------------------------------------------
 //
 // A Curator-shaped carrier (AoE damage + two inflicted debuffs, `all` / Pattern-All) wearing
 // legendary Insidiousness attacks two enemies. Each of its four landed debuffs per cast rolls, and
-// the first success hits the enemy whose debuff rolled, once: no second hit in that cast.
+// the first success hits every enemy that cast debuffed, once each: no second success in that cast.
 describe('Insidiousness integration — a roll per landed debuff, one hit per cast', () => {
     const IMPLANT_ID = 'insid-legendary';
 
@@ -6365,15 +6365,17 @@ describe('Insidiousness integration — a roll per landed debuff, one hit per ca
 
     afterEach(() => resetRateGateRng());
 
-    it('proc passes → exactly ONE Insidiousness hit per cast, on the enemy whose debuff rolled', () => {
+    it('proc passes → EVERY debuffed enemy takes exactly one Insidiousness hit per cast', () => {
         setKeyedRng(() => 0); // every keyed gate fires: debuffs land, the 21% proc passes
         const procs = insidiousnessProcs(run(true, [0, 0]));
 
         // 3 rounds → 3 carrier attacks, each landing four debuffs. The first debuff's roll
-        // succeeds and takes the cast's one success, so each attack yields ONE hit.
-        expect(procs).toHaveLength(3);
+        // succeeds and takes the cast's one success, which hits BOTH enemies once: 6 rows.
+        expect(procs).toHaveLength(6);
         for (const turn of [1, 2, 3]) {
-            expect(procs.filter((r) => r.turnIndex === turn)).toHaveLength(1);
+            const turnRows = procs.filter((r) => r.turnIndex === turn);
+            expect(turnRows).toHaveLength(2);
+            expect(new Set(turnRows.map((r) => r.victim)).size).toBe(2);
         }
 
         // Each row really is the 100%-multiplier implant hit: the cast is 60%, so the proc must be

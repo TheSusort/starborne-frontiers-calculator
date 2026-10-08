@@ -20,7 +20,7 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator: Meatshield's repair now needs a direct hit this round.",
     "Combat simulator: Pestilence's Corrosion now lands on the enemy that cleansed.",
     'Combat simulator: Asphodel now gains one charge per critting skill, charged included.',
-    'Combat simulator: Insidiousness now rolls per debuff, with one hit per skill.',
+    'Combat simulator: Insidiousness now rolls per debuff, with one success per skill.',
     "Combat simulator: Synaptic Resonance now boosts the next critical hit's crit power.",
 ];
 

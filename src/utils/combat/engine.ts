@@ -3247,9 +3247,10 @@ export function runCombat(rawInput: CombatEngineInput): {
         shieldPenBonusByActorId.set(ownerId, (shieldPenBonusByActorId.get(ownerId) ?? 0) + pct);
     };
 
-    /** Synaptic Resonance (R153): crit-power points armed on an actor's NEXT crit. A re-arm
-     *  refreshes the pending amount; the first crit hit the actor lands spends it
-     *  (`spendNextCritPower`). Keyed by actor id, so either side behaves identically. */
+    /** Synaptic Resonance (R153, R157): crit-power points armed on an actor's NEXT crit. A re-arm
+     *  refreshes the pending amount; the first crit the actor lands spends it
+     *  (`spendNextCritPower`) — a skill hit, a counter-attack, a reactive damage proc or a
+     *  passive-slot hit. Keyed by actor id, so either side behaves identically. */
     const nextCritPowerByActorId = new Map<string, number>();
     const armNextCritPower = (ownerId: string, pct: number): void => {
         nextCritPowerByActorId.set(ownerId, pct);
@@ -7826,7 +7827,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                     multiplierPct: multiplier * hits,
                     secondaryStatValue: 0,
                     hits: 1,
-                    effectiveCritDamage: ownerOutgoing.critDamage,
+                    effectiveCritDamage:
+                        ownerOutgoing.critDamage + (didCrit ? spendNextCritPower(ownerId) : 0),
                     // #395 / #389: a counter carries BOTH halves of the outgoing channel — the
                     // enemy-APPLIED `Out. Damage Down` on the owner AND the owner's OWN
                     // `Out. Damage Up` (Grif grants it to all allies).
@@ -8056,7 +8058,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                         multiplierPct: basisPct * hits,
                         secondaryStatValue: 0,
                         hits: 1,
-                        effectiveCritDamage: ownerOutgoing.critDamage,
+                        effectiveCritDamage:
+                            ownerOutgoing.critDamage + (didCrit ? spendNextCritPower(ownerId) : 0),
                         // #395 CLOSED THE #389 RESIDUAL HERE — twin of the counter-attack site's
                         // note. Was a hardcoded 0, dropping the enemy-APPLIED `Out. Damage Down` on
                         // the owner AND the owner's own `Out. Damage Up`. Applies on every basis:
@@ -9157,7 +9160,14 @@ export function runCombat(rawInput: CombatEngineInput): {
                     // to `applyToVictim` is provably the one baked into `damage`.
                     const defenseProfile = victimDefenseProfileOf(victim, profileOpts);
                     const damageParts = victimHitDamageParts(
-                        hit.scalars,
+                        hit.didCrit
+                            ? {
+                                  ...hit.scalars,
+                                  effectiveCritDamage:
+                                      hit.scalars.effectiveCritDamage +
+                                      spendNextCritPower(actor.id),
+                              }
+                            : hit.scalars,
                         defenseProfile,
                         hit.didCrit,
                         roleScale
