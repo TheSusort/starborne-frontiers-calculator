@@ -198,6 +198,41 @@ describe.each(SIDES)('protected ship on the %s side', (placement) => {
         expect(counters(true)).toEqual([]);
     });
 
+    it("a fully redirected hit spends none of Isha's Titanite Plating", () => {
+        // Isha gains 3 Titanite Plating first; a 3-hit attacker then hits her. Each stack is +5%
+        // defence and a direct hit spends one, so each hit reads one stack fewer than the last.
+        // Lionheart takes the first hit whole (and then drops his Protection), so the second hit
+        // reads the 3 stacks the first hit reads without him.
+        const takenPerHit = (protector: Protector): number[] => {
+            const isha: BoardUnit = {
+                id: 'isha',
+                kit: realKit('Isha'),
+                position: 'M4',
+                speed: 300,
+                defence: 2000,
+                chargeCount: 4,
+                startCharged: true,
+            };
+            const threeHits = hitter(hitKit(100, 3));
+            const allies = protector === 'none' ? [] : [protectorUnit(protector)];
+            const { input, id } = boardInput(placement, isha, allies, [threeHits], 1);
+            const bus = createEventBus();
+            const taken: number[] = [];
+            bus.on('attacked', (e) => {
+                if (e.targetId === id(isha) && e.attackerId === id(threeHits))
+                    taken.push(Math.round(e.takenDamage ?? -1));
+            });
+            runCombat({ ...input, bus });
+            return taken;
+        };
+        const bare = takenPerHit('none');
+        const covered = takenPerHit('Lionheart');
+        expect(bare).toHaveLength(3);
+        expect(bare[0]).toBeLessThan(bare[1]);
+        expect(covered[0]).toBe(0);
+        expect(covered.slice(1)).toEqual(bare.slice(0, 2));
+    });
+
     describe('Stasis', () => {
         /** Razi's charged Stasis (1 turn) with its damage stripped, as an active cast first in
          *  round 1 — a damage-free cast, so it neither breaks the Stasis nor spends Protection. */

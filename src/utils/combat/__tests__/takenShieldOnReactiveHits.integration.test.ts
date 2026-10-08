@@ -109,6 +109,33 @@ describe.each(SIDES)('shielder on the %s side', (placement) => {
             );
             expect(control).toBe(0);
         });
+
+        it("Incinerator's end-of-round hit is a primary-target hit (R101) → a second shield", () => {
+            const incinerator = (withPassive: boolean): BoardUnit => ({
+                id: 'incinerator',
+                kit: {
+                    slots: slotsOf('Incinerator', withPassive ? ['active', 'passive'] : ['active']),
+                },
+                position: 'M4',
+                speed: 300,
+                attack: 10_000,
+                hacking: 1_000_000,
+            });
+            const grants = (withPassive: boolean): number => {
+                const m = malvex(passiveOnly('Malvex'));
+                const { input, id } = boardInput(placement, m, [], [incinerator(withPassive)], 1);
+                const bus = createEventBus();
+                let n = 0;
+                bus.on('shield-applied', (e) => {
+                    if (e.granterId === id(m) && e.uncast) n++;
+                });
+                runCombat({ ...input, bus });
+                return n;
+            };
+            // Her active's hit shields him once; her end-of-round hit on an Inferno holder again.
+            expect(grants(false)).toBe(1);
+            expect(grants(true)).toBe(2);
+        });
     });
 
     describe('Quixilver', () => {
