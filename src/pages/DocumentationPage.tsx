@@ -3073,9 +3073,12 @@ const DocumentationPage: React.FC = () => {
                                         (Oleander&apos;s charge, Provider&apos;s hit, Lingshe&apos;s
                                         Stealth, Hayyan&apos;s repair, the Firewall implant&apos;s
                                         chance) fires once per stack that lands, within its own
-                                        once-per-cast or once-per-round limits. APEX&apos;s 3%
-                                        shield fires at most once per skill cast, whoever cast it:
-                                        her active landing two debuffs, plus the debuffs Provider
+                                        once-per-cast or once-per-round limits. Firewall&apos;s
+                                        Block Debuff works the moment it procs: if Curator&apos;s
+                                        Attack Down III procs it, the same skill&apos;s Crit Power
+                                        Down III is blocked and rolls nothing. APEX&apos;s 3% shield
+                                        fires at most once per skill cast, whoever cast it: her
+                                        active landing two debuffs, plus the debuffs Provider
                                         answers them with, gives one shield; an enemy&apos;s attack
                                         that wakes Warden&apos;s debuffs gives one more. Her Block
                                         Shield, and Xcellence&apos;s strike when an enemy resists a

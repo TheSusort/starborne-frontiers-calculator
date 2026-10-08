@@ -53,7 +53,8 @@ import {
     type EnemySelectorKind,
 } from '../abilities/abilityTargetSide';
 import { TITANITE_PLATING } from '../../constants/persistentStackingBuffs';
-import { dotResistLabel, targetCarriesBlockDebuff } from './debuffImmunity';
+import { dotResistLabel, isBlockDebuff, targetCarriesBlockDebuff } from './debuffImmunity';
+import { recipientCarriesBlockBuff } from './blockBuffBuffs';
 import {
     createOverclockHangoverTracker,
     isOverclock,
@@ -170,8 +171,10 @@ import {
     buildActorConditionContext,
     buildForcedTargetingStatus,
     countOwnersWithSelfBuff,
+    blockDebuffPendingOn,
     dotConversionKey,
     drawDotConversion,
+    drawProcVerdict,
     executeIntent,
     liveHealChannelPct,
     ownerDebuffNamesFor,
@@ -3899,6 +3902,10 @@ export function runCombat(rawInput: CombatEngineInput): {
     // (`IntentExecContext.preDecidedConversions`). Cleared at each actor turn-start, after that
     // cast's reactions have drained.
     const preDecidedConversions = new Map<string, boolean[]>();
+    // Firewall procs drawn at a landing whose Block Debuff grant has not resolved yet, per wearer
+    // (`IntentExecContext.pendingBlockDebuffGrants`, R149). Cleared at each actor turn-start with
+    // preDecidedConversions; a grant that never drains belongs to a ship that died.
+    const pendingBlockDebuffGrants = new Map<string, number>();
     // Verdict cache for scoped proc abilities: procScope:'per-attack' keys it per sub-attack,
     // procScope:'per-cast' (Insidiousness) per roll and per cap — see each gate in triggers.ts.
     // Cleared at each actor turn-start beside reactionFiredThisAttack so a later turn rolls afresh.
@@ -4541,6 +4548,59 @@ export function runCombat(rawInput: CombatEngineInput): {
             }
         }
         return out;
+    };
+
+    /**
+     * Owner ruling R149: Firewall's Block Debuff takes effect at once — a proc on a skill's first
+     * debuff blocks that same skill's later debuffs (and anything else landing on the wearer
+     * before the grant resolves). So the proc is drawn HERE, as the debuff lands, not when the
+     * reaction drains: one draw per landed debuff (R122), from the very gate the executor would
+     * draw from (`drawProcVerdict`). A success counts in `pendingBlockDebuffGrants` until the
+     * executor spends it and writes the grant, and every landing decision reads that count beside
+     * the store. The grant itself stays on the drain, so the skill's own damage never sees it.
+     *
+     * Covers the wearer's `on-debuffed` self-grants of Block Debuff that carry a proc chance and
+     * no gate. A wearer under Block Buff could not take the grant, so its success blocks nothing.
+     * Returns the verdicts by ability id, for the landing's `debuff-applied` to carry
+     * (`preDecidedProcs`); undefined when the wearer has none.
+     */
+    const decideBlockDebuffAtLanding = (wearerId: string): Record<string, boolean> | undefined => {
+        const wearer = allActorsById.get(wearerId);
+        if (!wearer || wearer.destroyedRound !== undefined) return undefined;
+        let verdicts: Record<string, boolean> | undefined;
+        for (const { ownerId, reactiveAbilities: owned } of [
+            ...reactivePerOwner,
+            ...enemyReactivePerOwner,
+        ]) {
+            if (ownerId !== wearerId) continue;
+            for (const { ability } of owned) {
+                const cfg = ability.config;
+                const pc = ability.procChance;
+                if (
+                    ability.trigger !== 'on-debuffed' ||
+                    ability.target !== 'self' ||
+                    cfg.type !== 'buff' ||
+                    !isBlockDebuff(cfg.buffName) ||
+                    ability.conditions.length > 0 ||
+                    ability.procScope !== undefined ||
+                    passiveSuppressedFor(ownerId, ability)
+                )
+                    continue;
+                // `passesProcChanceGate`'s pass-through chances never draw.
+                const verdict =
+                    pc === undefined || pc <= 0 || pc >= 1
+                        ? true
+                        : drawProcVerdict(ownerId, ability.id, pc, procChanceGates);
+                (verdicts ??= {})[ability.id] = verdict;
+                if (verdict && !recipientCarriesBlockBuff(statusEngine, wearerId)) {
+                    pendingBlockDebuffGrants.set(
+                        wearerId,
+                        (pendingBlockDebuffGrants.get(wearerId) ?? 0) + 1
+                    );
+                }
+            }
+        }
+        return verdicts;
     };
 
     // Owner-routed executor context: the executor resolves an intent's owner runtime
@@ -9839,6 +9899,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // count gate.
                 decideSameCastConversions: (victimId: string, dotType: DoTType, stacks: number) =>
                     decideSameCastConversions(a.id, victimId, dotType, stacks),
+                decideBlockDebuffAtLanding,
+                blockDebuffPendingFor: (wearerId: string) =>
+                    blockDebuffPendingOn(pendingBlockDebuffGrants, wearerId),
                 // Whether the two ADJACENCY counts derived in runPlayerTurn (from
                 // `adjacentAllyIds` / `adjacentEnemyIdsFor` above) are a measurement on this run.
                 // Same mode gate, same reason, as `enemyDestroyedCount` below.
@@ -11006,6 +11069,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // that carry a procChance fire at their stated rate via this accumulator.
                 procChanceGates,
                 preDecidedConversions,
+                pendingBlockDebuffGrants,
+                decideBlockDebuffAtLanding,
                 // Scoped proc verdict cache (Insidiousness: one roll per cast, plus one
                 // per reaction firing that cast sets off).
                 procDecisionThisSubAttack,
@@ -11689,6 +11754,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // later attack re-applies a self-scoped on-attacked rider.
                 reactionFiredThisAttack.clear();
                 preDecidedConversions.clear();
+                pendingBlockDebuffGrants.clear();
                 // Drop the scoped proc verdicts so this turn rolls afresh (Insidiousness: this
                 // turn's cast gets its own roll and its own one-success cap).
                 procDecisionThisSubAttack.clear();

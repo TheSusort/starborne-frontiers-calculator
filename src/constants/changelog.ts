@@ -13,6 +13,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat log: Protection-redirected counters and procs now show only damage taken.',
     'Combat simulator: Nuqtu now gains one Core Charge per enemy buffing skill.',
     'Combat simulator: passive debuffs on an attacker now last through its next turn.',
+    "Combat simulator: Firewall's Block Debuff now stops the rest of that skill's debuffs.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

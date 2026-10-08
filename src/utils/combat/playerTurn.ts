@@ -1082,6 +1082,13 @@ export interface PlayerTurnArgs {
         dotType: DoTType,
         stacks: number
     ) => { family: string; converted: number }[];
+    /** Owner ruling R149 (engine.ts `decideBlockDebuffAtLanding`): draws, as a debuff lands on
+     *  `wearerId`, its Firewall procs, and returns them for that landing's `debuff-applied`
+     *  (`preDecidedProcs`). Absent (unit fixtures) → Firewall rolls at the drain. */
+    decideBlockDebuffAtLanding?: (wearerId: string) => Record<string, boolean> | undefined;
+    /** Whether `wearerId` has a Firewall proc drawn at a landing whose Block Debuff has not
+     *  resolved yet — a debuff landing on it now is blocked, exactly as by a held Block Debuff. */
+    blockDebuffPendingFor?: (wearerId: string) => boolean;
     /** True when this run can MEASURE the live adjacency / kill counts below — false under
      *  `mode: 'dps'`, where the board and the opposing roster are synthetic and a live reading
      *  would be a permanent structural 0 rather than an observation. False (or absent) withholds
@@ -1951,6 +1958,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         adjacentAllyIds,
         adjacentEnemyIdsFor,
         decideSameCastConversions,
+        decideBlockDebuffAtLanding,
+        blockDebuffPendingFor,
         liveCountsMeasurable,
         enemyDestroyedCount: enemyDestroyedCountArg,
         selectorEnemyIdFor,
@@ -2281,7 +2290,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         buffName: string,
         victimId: string,
         application?: 'inflict' | 'apply',
-        sourceSlot: SkillSlot = action
+        sourceSlot: SkillSlot = action,
+        preDecidedProcs?: Record<string, boolean>
     ) =>
         bus.emit({
             type: 'debuff-applied',
@@ -2291,6 +2301,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             buffName,
             ...(application !== undefined ? { application } : {}),
             sourceSlot,
+            ...(preDecidedProcs !== undefined ? { preDecidedProcs } : {}),
         });
 
     // LIVE per-target debuff-landing chance. The sole producer of
@@ -2523,8 +2534,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // DRAWS. Call this (or its boolean wrapper) exactly ONCE per application: the `inflict` arm
     // consults `debuffLandingGate`, which advances the deterministic rate accumulator, so a second
     // call to "just check" would shift the schedule of every later application.
+    // `blockDebuffPendingFor` is read per application, not snapshotted with
+    // `targetImmuneToDebuffs`: a Firewall proc on this cast's earlier debuff blocks the rest (R149).
     const decideTimedEnemyApplicationLive = (application?: 'inflict' | 'apply'): LandingDecision =>
-        !hasVictim || targetImmuneToDebuffs
+        !hasVictim || targetImmuneToDebuffs || blockDebuffPendingFor?.(enemy.id) === true
             ? { landed: false, viaRoll: false }
             : application === 'apply'
               ? { landed: !landingAtDisadvantage, viaRoll: false }
@@ -2549,7 +2562,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     ): LandingDecision => {
         // #413: same three arms, same `viaRoll` contract as the turn-scoped twin above — only the
         // final `debuffLandingGate` call draws, and only it can produce a proc-worthy resist.
-        if (targetCarriesBlockDebuff(statusEngine, victim.id)) {
+        if (
+            targetCarriesBlockDebuff(statusEngine, victim.id) ||
+            blockDebuffPendingFor?.(victim.id) === true
+        ) {
             return { landed: false, viaRoll: false };
         }
         // Per-victim affinity honours the override (offensive advantage / this victim's
@@ -3531,6 +3547,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             const lands = decision.landed;
 
             if (lands) {
+                // The wearer's Firewall rolls as this debuff lands, so a proc blocks the cast's
+                // later debuffs (R149); the roll rides the `debuff-applied` to the drain.
+                const preDecidedProcs = decideBlockDebuffAtLanding?.(resolvedVictim.id);
                 // Intra-cast clause order: a clause that follows a damage clause in this same slot
                 // must not be in the store while that damage resolves. The unit of
                 // "that damage" is the SUB-ATTACK, not the cast.
@@ -3587,7 +3606,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                             status.payload.buffName,
                             emitTargetId,
                             status.payload.application,
-                            status.sourceSlot
+                            status.sourceSlot,
+                            preDecidedProcs
                         );
                     },
                     victimId: vid,

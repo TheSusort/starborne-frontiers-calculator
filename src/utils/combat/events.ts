@@ -197,6 +197,12 @@ export type CombatEvent =
            *  its own roll. */
           reactionFiringId?: number;
           viaAllyDebuffInflictedReaction?: true;
+          /** Proc verdicts the TARGET's reactions to this landing already drew, by ability id —
+           *  drawn at the landing because their effect must hold for the rest of the skill
+           *  (Firewall's Block Debuff, owner ruling R149; engine.ts `decideBlockDebuffAtLanding`).
+           *  The `on-debuffed` listener hands its own entry to the executor, which spends it
+           *  instead of drawing. Absent → every reaction draws at the drain. */
+          preDecidedProcs?: Readonly<Record<string, boolean>>;
       } & ReactiveStamp)
     | ({
           type: 'debuff-resisted';
