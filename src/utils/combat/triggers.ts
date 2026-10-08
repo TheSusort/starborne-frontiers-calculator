@@ -5533,6 +5533,7 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
             ) {
                 continue;
             }
+            const capped = ctx.statusEngine.selfBuffAtCap(rid, cfg.buffName);
             if (banksStacks) {
                 ctx.statusEngine.addSelfAccumulatingStacks(rid, status.payload, cfg.stacks, {
                     maxStacks: cfg.maxStacks ?? (cfg.isStackable ? undefined : cfg.stacks),
@@ -5541,6 +5542,7 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
             } else {
                 ctx.statusEngine.applyTimedAbilityStatus(ctx.round, status, rid);
             }
+            if (capped) continue;
             ctx.bus.emit({
                 type: 'buff-applied',
                 actorId: rid,

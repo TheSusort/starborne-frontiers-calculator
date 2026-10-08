@@ -294,3 +294,67 @@ describe.each(PLACEMENTS)('Nuqtu on the %s side: a start-of-combat passive grant
         expect(stacks).toBe(1);
     });
 });
+
+// R159: a stackable buff at its stack cap is not granted again, so it is no gain.
+describe.each(PLACEMENTS)('Nuqtu on the %s side: a gain at the stack cap', (p) => {
+    /** Ravager's real passive with Overload capped at 2 stacks. */
+    const cappedRavager = (): ShipSkills => ({
+        slots: [
+            { slot: 'active', abilities: hitKit(100).slots[0].abilities },
+            ...realKit('Ravager')
+                .slots.filter((s) => s.slot === 'passive')
+                .map((slot) => ({
+                    ...slot,
+                    abilities: slot.abilities.map((a) =>
+                        a.config.type === 'buff' && a.config.buffName === 'Overload'
+                            ? { ...a, config: { ...a.config, maxStacks: 2 } }
+                            : a
+                    ),
+                })),
+        ],
+    });
+
+    it('below the cap each Overload gain is a Core Charge; at the cap none is', () => {
+        const { stacks, buffEvents } = run(
+            p,
+            [{ id: 'rav', kit: cappedRavager(), position: 'M4' }],
+            5
+        );
+        expect(buffEvents.filter((e) => e.buffName === 'Overload')).toHaveLength(2);
+        expect(stacks).toBe(2);
+    });
+
+    it('a reactive grant at its cap is no gain either', () => {
+        const reactor: Gainer = {
+            id: 'reactor',
+            position: 'M4',
+            kit: {
+                slots: [
+                    { slot: 'active', abilities: [] },
+                    {
+                        slot: 'passive',
+                        abilities: [
+                            {
+                                ...buffAbility('react-stack', {
+                                    trigger: 'on-attacked',
+                                    buffName: 'Fortify',
+                                }),
+                                config: {
+                                    type: 'buff',
+                                    buffName: 'Fortify',
+                                    parsedEffects: {},
+                                    stacks: 1,
+                                    isStackable: true,
+                                    maxStacks: 2,
+                                    duration: 'recurring',
+                                },
+                            },
+                        ],
+                    },
+                ],
+            },
+        };
+        const { stacks } = run(p, [reactor], 4);
+        expect(stacks).toBe(2);
+    });
+});

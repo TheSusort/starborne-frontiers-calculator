@@ -267,8 +267,8 @@ export interface StatusEngine {
     beginRound(round: number): void;
     /** Takes (and clears) the stacks the cadence ticks since the last call added to
      *  ability-sourced accumulating self statuses, in tick order. The engine announces each as a
-     *  `buff-applied` where the tick happened. A gain counts even when the status is already at
-     *  its cap, like a reactive grant. */
+     *  `buff-applied` where the tick happened. A status already at its stack cap gains nothing
+     *  and is not announced (R159). */
     takeAccumGains(): AccumGain[];
     /** Notification that a source actually fired a slot this round. 'attacker'
      *  covers the attacker's own cadence AND all legacy/merged scheduled buffs
@@ -529,6 +529,9 @@ export interface StatusEngine {
         amount: number,
         opts: { maxStacks?: number; casterId?: string }
     ): void;
+    /** True when `ownerId` holds `buffName` as a stacking buff already at its stack cap: a grant
+     *  of it adds nothing, so it is not a gain (R159). */
+    selfBuffAtCap(ownerId: string, buffName: string): boolean;
     /** Register all buff/debuff abilities once at creation (classified by `kind`).
      *  `ownerId` routes self-side statuses to the correct per-owner store (defaults to 'attacker').
      *  `enemyTargetId` routes enemy-side accum/aura statuses to the correct per-target store
@@ -1237,8 +1240,9 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
     ): void => {
         let total = 0;
         for (const n of shares.values()) total += n;
+        const before = state.stacks;
         addAccumStacks(state, total);
-        if (state.payload === undefined) return;
+        if (state.payload === undefined || state.stacks === before) return;
         for (const [granterId, n] of shares) {
             if (n <= 0) continue;
             accumGains.push({
@@ -1768,6 +1772,13 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
     const selfBuffStackAdjustmentNames = (ownerId: string): string[] => [
         ...(stackAdjustments.get(ownerId)?.keys() ?? []),
     ];
+
+    const selfBuffAtCap = (ownerId: string, buffName: string): boolean => {
+        const accum = accumSelfMaps.get(ownerId)?.get(buffName);
+        if (accum?.maxStacks !== undefined && accum.stacks >= accum.maxStacks) return true;
+        const held = persistentSelfMaps.get(ownerId)?.get(buffName);
+        return held?.maxStacks !== undefined && held.stacks >= held.maxStacks;
+    };
 
     const addSelfAccumulatingStacks = (
         ownerId: string,
@@ -2630,6 +2641,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         selfBuffStackAdjustment,
         selfBuffStackAdjustmentNames,
         addSelfAccumulatingStacks,
+        selfBuffAtCap,
         registerAbilityStatuses,
         applyTimedAbilityStatus,
         activeAbilityStatuses,

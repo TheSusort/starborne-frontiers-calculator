@@ -2462,7 +2462,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             ) {
                 continue;
             }
+            const capped = statusEngine.selfBuffAtCap(rid, status.payload.buffName);
             statusEngine.applyTimedAbilityStatus(r, grant, rid);
+            if (capped) continue;
             bus.emit({
                 type: 'buff-applied',
                 actorId: rid,
