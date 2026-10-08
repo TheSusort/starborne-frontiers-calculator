@@ -16,6 +16,10 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: fully Protection-redirected hits no longer trigger counters or shorten Stasis.',
     'Combat simulator: Malvex now shields off counters and round-start hits aimed at him.',
     "Combat simulator: Quixilver's damage-taken shield now fires on passive and counter hits.",
+    "Combat simulator: Centurion and Nyxen now counter Nosorog's reflect like Stalwart does.",
+    "Combat simulator: Protection now redirects Nosorog's reflect away from the attacker.",
+    "Combat simulator: Nosorog's reflect now spends the attacker's Exposed and Titanite Plating.",
+    "Combat simulator: Nosorog's reflect now uses his shield penetration.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

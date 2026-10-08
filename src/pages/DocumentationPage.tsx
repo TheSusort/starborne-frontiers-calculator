@@ -3252,8 +3252,13 @@ const DocumentationPage: React.FC = () => {
                                         Nosorog&apos;s reflect is direct damage to the attacker and
                                         lands like a counter-attack: Warden hitting Nosorog takes
                                         the reflect, then inflicts Corrosion on him and repairs, and
-                                        Stalwart counters it. The Reflect gear set&apos;s bounce is
-                                        not direct damage and wakes nothing. A hit that Protection
+                                        every counter-attacker (Stalwart, Centurion, Nyxen) answers
+                                        it. Like any direct hit, the reflect is redirected by the
+                                        attacker&apos;s protector&apos;s Protection, uses
+                                        Nosorog&apos;s shield penetration, and is boosted by and
+                                        spends the attacker&apos;s Exposed, and spends a Titanite
+                                        Plating stack. The Reflect gear set&apos;s bounce is not
+                                        direct damage and does none of this. A hit that Protection
                                         moves entirely onto the protector (Lionheart&apos;s 10
                                         stacks) is not direct damage to the ship it was aimed at:
                                         that ship does not counter or react, and its Stasis does not

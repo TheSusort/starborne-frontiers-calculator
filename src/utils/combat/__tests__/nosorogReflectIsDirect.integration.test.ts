@@ -1,8 +1,9 @@
 /**
  * Owner ruling R137 (in game 2026-10-08): Nosorog's reflect IS direct damage to the attacker. It
  * behaves like a counter-attack, so the attacker's "when directly damaged" reactions answer it:
- * Warden inflicts Corrosion I and repairs, Isha repairs, Stalwart counters. The Reflect GEAR SET's
- * bounce is NOT direct damage, so nothing answers it.
+ * Warden inflicts Corrosion I and repairs, Isha repairs, and every counter answers it — Stalwart,
+ * Centurion and Nyxen alike (R160). The Reflect GEAR SET's bounce is NOT direct damage, so nothing
+ * answers it.
  *
  * Chain rule (R92 + lineage): Stalwart hits Nosorog → Nosorog reflects → that bounce is the first
  * aimed hit on Stalwart in the chain, so he counters → his counter hits Nosorog, whose
@@ -25,6 +26,9 @@ import {
     type Placement,
 } from '../__testutils__/realKitBoard';
 import type { ShipSkills } from '../../../types/abilities';
+import type { StatusEngine } from '../statusEngine';
+import { selfBuffStacksForOwner } from '../triggers';
+import { exposedIncomingPct } from '../exposedStatus';
 import type { Ship } from '../../../types/ship';
 import type { GearPiece } from '../../../types/gear';
 import { buildShipAbilitiesWithEquipment } from '../../abilities/buildShipAbilitiesWithEquipment';
@@ -191,9 +195,37 @@ describe.each(SIDES)('Nosorog on the %s side', (placement) => {
 
     it('Stalwart hits Nosorog → one reflect, one counter, and the chain stops there', () => {
         const obs = run(placement, unit('stalwart', hitterWith('Stalwart')), nosorog(true));
-        // The reflect lands like a counter, then Stalwart's counter answers it.
-        expect(obs.counters).toEqual(['nosorog>stalwart', 'stalwart>nosorog']);
+        expect(obs.counters).toEqual(['stalwart>nosorog']);
         expect(obs.reflectRows).toBe(1);
+    });
+
+    it('Centurion hits Nosorog → he retaliates against the reflect, and the chain stops (R160)', () => {
+        const obs = run(placement, unit('centurion', hitterWith('Centurion')), nosorog(true));
+        expect(obs.counters).toEqual(['centurion>nosorog']);
+        expect(obs.reflectRows).toBe(1);
+        const control = run(placement, unit('centurion', hitterWith('Centurion')), nosorog(false));
+        expect(control.counters).toEqual([]);
+    });
+
+    it('Nyxen hits Nosorog shielded → the reflect strikes her shield and she counters (R160)', () => {
+        // Her real active shields her (15% of max HP) before its added 100% hit lands on Nosorog.
+        const kit: ShipSkills = {
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        ...realKit('Nyxen').slots.find((s) => s.slot === 'active')!.abilities,
+                        ...hitKit(100).slots[0].abilities,
+                    ],
+                },
+                ...passives('Nyxen'),
+            ],
+        };
+        const obs = run(placement, unit('nyxen', kit), nosorog(true));
+        expect(obs.counters).toEqual(['nyxen>nosorog']);
+        expect(obs.reflectRows).toBe(1);
+        const control = run(placement, unit('nyxen', kit), nosorog(false));
+        expect(control.counters).toEqual([]);
     });
 
     it("Nosorog's own reaction to the hit resolves before Stalwart's counter to the reflect (R39)", () => {
@@ -239,5 +271,161 @@ describe.each(SIDES)('Nosorog on the %s side', (placement) => {
         expect(obs.attackerUncastShield).toBeGreaterThan(0);
         const control = run(placement, malvex, nosorog(false));
         expect(control.attackerUncastShield).toBe(0);
+    });
+});
+
+/**
+ * Owner ruling R162 (in game 2026-10-08): Nosorog's bounce is a direct hit in full — the
+ * attacker's protector's Protection redirects it, it spends the attacker's Titanite Plating and
+ * Exposed (and, per Exposed's own text, is amplified by it), and it uses Nosorog's shield
+ * penetration. The Reflect gear set's bounce keeps none of that.
+ */
+describe.each(SIDES)('the bounce as a direct hit, reflector on the %s side', (placement) => {
+    /** Runs `reflector` against `opponents`; opponents[0] is the ship that hits him. */
+    const board = (reflector: BoardUnit, opponents: BoardUnit[], reflectorShieldPen = 0) => {
+        const { input, id } = boardInput(placement, reflector, [], opponents, 1);
+        if (reflectorShieldPen > 0) {
+            if (placement === 'player') input.shieldPenetration = reflectorShieldPen;
+            else
+                input.enemyAttackers = input.enemyAttackers.map((e) =>
+                    e.id === id(reflector)
+                        ? { ...e, stats: { ...e.stats, shieldPenetration: reflectorShieldPen } }
+                        : e
+                );
+        }
+        return { input, id };
+    };
+
+    it("the hitter's Lionheart takes the bounce through Protection", () => {
+        const redirectedOntoLionheart = (reflector: BoardUnit): number => {
+            const hitter = unit('hitter', hitKit(100));
+            const lionheart: BoardUnit = {
+                id: 'lionheart',
+                kit: { slots: [{ slot: 'active', abilities: [] }, ...passives('Lionheart')] },
+                position: 'M2',
+                speed: 2,
+            };
+            const { input, id } = board(reflector, [hitter, lionheart]);
+            const bus = createEventBus();
+            let rows = 0;
+            bus.on('reactive-damage-performed', (e) => {
+                if (e.sourceId === id(hitter) && e.targetId === id(lionheart)) rows++;
+            });
+            runCombat({ ...input, bus });
+            return rows;
+        };
+        expect(redirectedOntoLionheart(nosorog(true))).toBeGreaterThan(0);
+        expect(redirectedOntoLionheart(reflectSetWearer())).toBe(0);
+    });
+
+    it("the bounce spends one of Isha's Titanite Plating stacks", () => {
+        const platingAfter = (reflector: BoardUnit): number => {
+            const isha: BoardUnit = {
+                ...unit('isha', realKit('Isha')),
+                chargeCount: 4,
+                startCharged: true,
+            };
+            const { input, id } = board(reflector, [isha]);
+            let engine: StatusEngine | undefined;
+            runCombat({ ...input, __testTapStatusEngine: (e) => (engine = e) });
+            return selfBuffStacksForOwner(engine!, id(isha), 'Titanite Plating');
+        };
+        expect(platingAfter(nosorog(false))).toBe(3);
+        expect(platingAfter(reflectSetWearer())).toBe(3);
+        expect(platingAfter(nosorog(true))).toBe(2);
+    });
+
+    it('Exposed on the hitter doubles the bounce and is spent by it', () => {
+        /** A bystander beside Nosorog that only puts `status` on the hitter, first. */
+        const exposer = (status: string): BoardUnit => ({
+            id: 'exposer',
+            kit: {
+                slots: [
+                    {
+                        slot: 'active',
+                        abilities: [
+                            {
+                                id: 'expose',
+                                type: 'debuff',
+                                target: 'enemy',
+                                trigger: 'on-cast',
+                                conditions: [],
+                                config: {
+                                    type: 'debuff',
+                                    buffName: status,
+                                    parsedEffects: {},
+                                    stacks: 1,
+                                    isStackable: false,
+                                    duration: 5,
+                                    application: 'apply',
+                                },
+                            },
+                        ],
+                    },
+                ],
+            },
+            position: 'M2',
+            speed: 400,
+        });
+        const measure = (reflector: BoardUnit, status: string) => {
+            const hitter = unit('hitter', hitKit(100));
+            const { input, id } = boardInput(placement, reflector, [exposer(status)], [hitter], 1);
+            let engine: StatusEngine | undefined;
+            // Read right after the hitter's attack resolves: Exposed is round-scoped, so an
+            // end-of-fight read would see it gone either way.
+            let exposedLeft = -1;
+            const bus = createEventBus();
+            bus.on('ability-performed', (e) => {
+                if (e.actorId === id(hitter)) exposedLeft = exposedIncomingPct(engine!, id(hitter));
+            });
+            const { rounds } = runCombat({
+                ...input,
+                bus,
+                __testTapStatusEngine: (e) => (engine = e),
+            });
+            return {
+                reflected: rounds[0].perActorReflected?.[id(hitter)] ?? 0,
+                exposedLeft,
+            };
+        };
+        const control = measure(nosorog(true), 'Inert Mark');
+        const exposed = measure(nosorog(true), 'Exposed');
+        expect(control.reflected).toBeGreaterThan(0);
+        expect(exposed.reflected).toBeCloseTo(control.reflected * 2, 6);
+        expect(exposed.exposedLeft).toBe(0);
+        // The gear set's bounce neither reads nor spends it.
+        const gear = measure(reflectSetWearer(), 'Exposed');
+        const gearControl = measure(reflectSetWearer(), 'Inert Mark');
+        expect(gear.reflected).toBeCloseTo(gearControl.reflected, 6);
+        expect(gear.exposedLeft).toBeGreaterThan(0);
+    });
+
+    it("the bounce uses Nosorog's shield penetration against a shielded hitter", () => {
+        // Nyxen's real active shields her (15% of max HP) before its added hit lands on Nosorog.
+        const nyxen = unit('nyxen', {
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        ...realKit('Nyxen').slots.find((s) => s.slot === 'active')!.abilities,
+                        ...hitKit(100).slots[0].abilities,
+                    ],
+                },
+            ],
+        });
+        const intake = (reflector: BoardUnit, pen: number) => {
+            const { input, id } = board(reflector, [nyxen], pen);
+            const { rounds } = runCombat(input);
+            return rounds[0].perActorIncoming?.[id(nyxen)] ?? { incoming: 0, shieldAbsorbed: 0 };
+        };
+        const unpenetrated = intake(nosorog(true), 0);
+        expect(unpenetrated.incoming).toBeGreaterThan(0);
+        expect(unpenetrated.shieldAbsorbed).toBeCloseTo(unpenetrated.incoming, 6);
+        const penetrated = intake(nosorog(true), 100);
+        expect(penetrated.incoming).toBeGreaterThan(0);
+        expect(penetrated.shieldAbsorbed).toBe(0);
+        // The gear set's bounce ignores the wearer's penetration.
+        const gear = intake(reflectSetWearer(), 100);
+        expect(gear.shieldAbsorbed).toBeCloseTo(gear.incoming, 6);
     });
 });
