@@ -22,6 +22,7 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator: Zosimos's active now counts a repair that healed nothing.",
     "Combat simulator: reactions to Enforcer's hits now resolve before his next hit.",
     'Combat simulator: Bomb detonations and splash now resolve before reactions, on both sides.',
+    "Combat simulator: Demolisher's charge removal on a turn-start Bomb now precedes that turn's skill.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

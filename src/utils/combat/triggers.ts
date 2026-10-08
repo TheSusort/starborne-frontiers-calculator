@@ -5085,6 +5085,11 @@ export const CHARGE_TARGET_KIND: Record<AbilityTarget, ChargeTargetKind> = {
 const eventSeqByEvent = new WeakMap<object, number>();
 let nextEventSeq = 1;
 let listeningEventSeq: number | undefined;
+/** The number the next event to reach a reactive listener will get: every intent woken from now on
+ *  carries an `eventSeq` at least this large. */
+export function eventSeqWatermark(): number {
+    return nextEventSeq;
+}
 let listeningEventType: CombatEvent['type'] | undefined;
 const seqOfEvent = (e: object): number => {
     let seq = eventSeqByEvent.get(e);

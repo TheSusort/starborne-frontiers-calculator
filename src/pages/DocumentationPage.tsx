@@ -2993,6 +2993,10 @@ const DocumentationPage: React.FC = () => {
                                         to the hit that set it off, on either side: the splash lands
                                         before the struck ship&apos;s own &ldquo;when directly
                                         damaged&rdquo; reaction or an ally&apos;s on-crit follow-up.
+                                        A Bomb that explodes at its holder&apos;s turn start, and
+                                        the reactions to it, resolve before the holder acts:
+                                        Demolisher takes 2 charges from Akula first, so Akula uses
+                                        her normal skill instead of a charged skill that was ready.
                                         This resolves on the positioned board; in the single-target
                                         DPS calculator there are no neighbours, so it has no effect.
                                     </p>

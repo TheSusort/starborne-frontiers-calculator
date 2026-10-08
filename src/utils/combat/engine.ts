@@ -186,6 +186,7 @@ import {
     registerReactiveListeners,
     claimHitRoot,
     setHitRoot,
+    eventSeqWatermark,
     selfBuffNamesForOwners,
     selfBuffStacksForOwner,
     victimEnemyBuffs,
@@ -11554,6 +11555,33 @@ export function runCombat(rawInput: CombatEngineInput): {
         };
 
         /**
+         * The acting ship's turn-start Bombs and Echoing Bursts (`applyPositionedTimedBurst`), then
+         * the reactions to them, before the ship acts (owner ruling R127): a Bomb exploding at
+         * Akula's turn start lets Demolisher take 2 charges first, so a charged skill that was ready
+         * is not. Only the intents those detonations woke drain here; anything queued earlier in the
+         * turn keeps its post-cast drain. The detonations open no cast chain (`setHitRoot`): they
+         * are not the coming skill's hits.
+         */
+        const burstAtTurnStart = (actor: CombatActor, opposing: CombatActor[]): void => {
+            const watermark = eventSeqWatermark();
+            setHitRoot(undefined);
+            applyPositionedTimedBurst(actor, sink, opposing);
+            const held: Record<Side, Intent[]> = { player: [], enemy: [] };
+            for (const side of ['player', 'enemy'] as const) {
+                const queue = intentQueues[side];
+                for (let i = 0; i < queue.length;) {
+                    if ((queue[i].eventSeq ?? 0) < watermark)
+                        held[side].push(queue.splice(i, 1)[0]);
+                    else i++;
+                }
+            }
+            drainReactions();
+            for (const side of ['player', 'enemy'] as const)
+                intentQueues[side].unshift(...held[side]);
+            setHitRoot(castHitRoot(0));
+        };
+
+        /**
          * Round-boundary phases — start of combat, start of round, end of round — resolve in the
          * SAME order as the round's turns, both sides interleaved: OWNER BY OWNER by
          * `orderByTurnPriority` (live effective speed DESC, board position, the player side on a
@@ -12232,7 +12260,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                         // Mirror of the enemy site's own burst; a no-op when the actor carries no
                         // timed entries. Canonical turn-start order is tickDoTs, then the Bombs
                         // and accumulators together in order of application.
-                        applyPositionedTimedBurst(actor, sink, enemyAttackerActors);
+                        burstAtTurnStart(actor, enemyAttackerActors);
 
                         // Dead-after-burst guard: a lethal self-burst stamps
                         // destroyedRound inside applyVictimDamage AFTER the top-of-turn dead-skip
@@ -12625,7 +12653,7 @@ export function runCombat(rawInput: CombatEngineInput): {
 
                         // Per-positioned-player timed burst (walked-team ally). Same as the focus
                         // site; no focusTurns synthesis (a walked-team actor is never the focus).
-                        applyPositionedTimedBurst(actor, sink, enemyAttackerActors);
+                        burstAtTurnStart(actor, enemyAttackerActors);
                         const burstDestroyedActor =
                             actor.destroyedRound !== undefined &&
                             !(healTarget && actor.id === healTarget.id);
@@ -12937,7 +12965,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                         // Stasis: this burst sits INSIDE the `!isTurnBlocked` gate, so a stasised/
                         // disabled positioned enemy does NOT burst this turn (its whole turn is
                         // skipped per the locked combat rule).
-                        applyPositionedTimedBurst(actor, sink, allPlayerActors);
+                        burstAtTurnStart(actor, allPlayerActors);
 
                         // Dead-after-burst guard: a lethal timed burst above
                         // fires recordDestroyed inside applyVictimDamage, but the loop's
