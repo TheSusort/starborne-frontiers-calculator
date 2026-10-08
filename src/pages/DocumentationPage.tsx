@@ -2886,6 +2886,18 @@ const DocumentationPage: React.FC = () => {
                                         hits. Works for both teams and in the DPS calculator.
                                     </p>
                                     <p className="text-theme-text mb-2">
+                                        <span className="text-primary">
+                                            Clause Order in Battles:
+                                        </span>{' '}
+                                        Steals, cleanses and purges follow the same order: a buff
+                                        Thresh steals before his damage boosts that hit, Sustainer
+                                        cleanses his debuffs before he hits, and Sefuba&apos;s
+                                        &quot;deals 160% damage and purges 1 buff&quot; hits through
+                                        the buff before removing it. A Stasis Tygr inflicts before
+                                        his damage counts for his own &quot;more damage to enemies
+                                        with Stasis&quot; on that hit. Works for both teams.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
                                         <span className="text-primary">Crit-Gated Effects:</span> In
                                         a battle, a healing simulation and the DPS calculator, an
                                         effect that says &quot;if a critical hit occurs&quot; or
@@ -2896,19 +2908,23 @@ const DocumentationPage: React.FC = () => {
                                         every hit enemy&apos;s debuffs and grants Crit Power Up II.
                                         Effects tied to one enemy&apos;s crit, such as
                                         Wisteria&apos;s Inferno, read that enemy&apos;s own crit.
-                                        Asphodel adds one charge for each enemy her skill crits, so
-                                        an area hit that crits two enemies adds two. &quot;When an
-                                        ally critically hits&quot; (Sentinel, Hermes, Howler) also
-                                        counts an ally&apos;s critting passive damage, such as
-                                        Chakara&apos;s round-start hit or a counter-attack.
+                                        Asphodel adds one charge for each skill that crits, normal
+                                        or charged, so an area hit that crits two enemies adds one.
+                                        The charge comes after a charged skill resets her.
+                                        &quot;When an ally critically hits&quot; (Sentinel, Hermes,
+                                        Howler) also counts an ally&apos;s critting passive damage,
+                                        such as Chakara&apos;s round-start hit or a counter-attack.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Stacking Reactions:</span> A
                                         passive that grants recurring stacks of a buff each time
                                         something happens, such as Nuqtu&apos;s Core Charge, adds
                                         them every time and keeps them up to the buff&apos;s cap.
-                                        Nuqtu gains one stack of Core Charge I for every buff an
-                                        enemy gains, so four enemy buffs before his turn give +16%
+                                        Nuqtu gains one stack of Core Charge I for every enemy skill
+                                        action that grants a buff, however many buffs or ships it
+                                        covers: an active or charged skill, one firing of a
+                                        reaction, or one turn of a passive such as Ravager&apos;s
+                                        Overload. Four such actions before his turn give +16%
                                         damage, and the stacks carry into later rounds until he
                                         holds 10. Works for both teams.
                                     </p>
@@ -2935,7 +2951,9 @@ const DocumentationPage: React.FC = () => {
                                         Cobalt gains its charge and Out. Damage Up II only at full
                                         HP (as does his charged skill&apos;s extra damage equal to
                                         30% of his max HP), and Makoli repairs only when hit below
-                                        40% HP.
+                                        40% HP. A reaction to a hit reads that HP once, at the hit:
+                                        Makoli&apos;s 20% repair does not lift her above 40% before
+                                        her Disable half is judged, so both halves fire.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Buff Steal:</span> Skills
@@ -2988,9 +3006,17 @@ const DocumentationPage: React.FC = () => {
                                         Down, Meiying&apos;s Stasis). Demolisher&apos;s passive also
                                         detonates a splash equal to 100% of the exploded Bomb&apos;s
                                         damage onto the bombed enemy&apos;s neighbours, ignoring
-                                        Defense and unable to critically hit. This resolves on the
-                                        positioned board; in the single-target DPS calculator there
-                                        are no neighbours, so it has no effect.
+                                        Defense and unable to critically hit. A Bomb&apos;s
+                                        detonation and this splash resolve before any other reaction
+                                        to the hit that set it off, on either side: the splash lands
+                                        before the struck ship&apos;s own &ldquo;when directly
+                                        damaged&rdquo; reaction or an ally&apos;s on-crit follow-up.
+                                        A Bomb that explodes at its holder&apos;s turn start, and
+                                        the reactions to it, resolve before the holder acts:
+                                        Demolisher takes 2 charges from Akula first, so Akula uses
+                                        her normal skill instead of a charged skill that was ready.
+                                        This resolves on the positioned board; in the single-target
+                                        DPS calculator there are no neighbours, so it has no effect.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Per-enemy conditions:</span>{' '}
@@ -3073,9 +3099,14 @@ const DocumentationPage: React.FC = () => {
                                         (Oleander&apos;s charge, Provider&apos;s hit, Lingshe&apos;s
                                         Stealth, Hayyan&apos;s repair, the Firewall implant&apos;s
                                         chance) fires once per stack that lands, within its own
-                                        once-per-cast or once-per-round limits. APEX&apos;s 3%
-                                        shield fires at most once per skill cast, whoever cast it:
-                                        her active landing two debuffs, plus the debuffs Provider
+                                        once-per-cast or once-per-round limits. Firewall&apos;s
+                                        Block Debuff works the moment it procs: if Curator&apos;s
+                                        Attack Down III procs it, the same skill&apos;s Crit Power
+                                        Down III is blocked and rolls nothing. The same goes for
+                                        damage-over-time stacks: a proc on Snakeroot&apos;s first
+                                        Corrosion I stack blocks her second. APEX&apos;s 3% shield
+                                        fires at most once per skill cast, whoever cast it: her
+                                        active landing two debuffs, plus the debuffs Provider
                                         answers them with, gives one shield; an enemy&apos;s attack
                                         that wakes Warden&apos;s debuffs gives one more. Her Block
                                         Shield, and Xcellence&apos;s strike when an enemy resists a
@@ -3144,20 +3175,22 @@ const DocumentationPage: React.FC = () => {
                                         (Pestilence, Larkspur, Grif, Arum, Yarrow) also hear the
                                         cleanses an enemy&apos;s passive performs (Nuqtu, Purifier,
                                         AEGIS, Hermes, Howler), but not a duration cut; a cleanse
-                                        that such a reaction provoked triggers them again. A count
-                                        written after an infliction in the same skill includes what
-                                        that skill landed, enemy by enemy: Crocus&apos;s Corrosion
-                                        II counts toward her own &ldquo;3 or more debuffs&rdquo;
-                                        Stasis (Asphyxiator&apos;s and Anemone&apos;s gates
-                                        likewise), and a resisted one does not. A passive reacting
-                                        to the hit (Bayah) counts only the debuffs from before the
-                                        skill. APEX&apos;s passive shield arrives as the
-                                        skill&apos;s first debuff lands, so her charged skill&apos;s
-                                        &ldquo;If this Unit has an active shield&rdquo; Disable
-                                        lands once an earlier debuff in it has landed. Likewise
-                                        Belladonna&apos;s charged Corrosion II, if her passive
-                                        converts it to Acidic Decay as it lands, counts toward that
-                                        skill&apos;s &ldquo;3 or more Acidic Decay&rdquo; Stasis.
+                                        that such a reaction provoked triggers them again.
+                                        Pestilence&apos;s Corrosion lands on the enemy that
+                                        cleansed. A count written after an infliction in the same
+                                        skill includes what that skill landed, enemy by enemy:
+                                        Crocus&apos;s Corrosion II counts toward her own &ldquo;3 or
+                                        more debuffs&rdquo; Stasis (Asphyxiator&apos;s and
+                                        Anemone&apos;s gates likewise), and a resisted one does not.
+                                        A passive reacting to the hit (Bayah) counts only the
+                                        debuffs from before the skill. APEX&apos;s passive shield
+                                        arrives as the skill&apos;s first debuff lands, so her
+                                        charged skill&apos;s &ldquo;If this Unit has an active
+                                        shield&rdquo; Disable lands once an earlier debuff in it has
+                                        landed. Likewise Belladonna&apos;s charged Corrosion II, if
+                                        her passive converts it to Acidic Decay as it lands, counts
+                                        toward that skill&apos;s &ldquo;3 or more Acidic
+                                        Decay&rdquo; Stasis.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Team Ships:</span> Pick a
@@ -3226,7 +3259,26 @@ const DocumentationPage: React.FC = () => {
                                         a 2-turn Stasis, and it acts that same round. Damage over
                                         time and Bombs do not shorten Stasis, and neither do ships
                                         whose attacks &ldquo;do not reduce Stasis&rdquo;, such as
-                                        Akula.
+                                        Akula. A stasised ship does not react to a hit that lands
+                                        while it is in Stasis, even the hit that frees it, but does
+                                        react to a later hit once the Stasis is gone, even a
+                                        follow-up hit within the same exchange. A skill that deals
+                                        damage and then inflicts Stasis (Razi&apos;s charged) draws
+                                        no reaction to its own hit, because the Stasis is on by the
+                                        time the reaction would resolve.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
+                                        <span className="text-primary">
+                                            Statuses landed by a reaction:
+                                        </span>{' '}
+                                        A buff or debuff that lands on a ship during its own turn
+                                        does not tick down at the end of that turn. Iridium&apos;s
+                                        1-turn Speed Down on the ship that just hit him still slows
+                                        its next turn, Guardian&apos;s Provoke drags the critting
+                                        enemy&apos;s next attack onto him, and Flamel&apos;s 2-turn
+                                        Stasis costs its attacker the next two turns unless a hit
+                                        shortens it. A Stasis works the moment it lands: the ship
+                                        takes no further reactions that turn.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">
@@ -3237,10 +3289,37 @@ const DocumentationPage: React.FC = () => {
                                         direct hits like any skill hit. They wake &ldquo;when
                                         directly damaged&rdquo; passives, shorten Stasis, are
                                         redirected by Protection, use the attacker&apos;s shield
-                                        penetration and spend Exposed. A counter-attack sets off
-                                        another counter-attack only when that one is a
-                                        &ldquo;primary target&rdquo; counter like Stalwart&apos;s.
-                                        Damage over time and Bomb explosions are not direct hits.
+                                        penetration and spend Exposed. They also feed damage-taken
+                                        shields: Malvex shields off a counter-attack or round-start
+                                        hit aimed at him, and Quixilver off any hit that breaks
+                                        through her shield. A counter-attack sets off another
+                                        counter-attack only when that one is a &ldquo;primary
+                                        target&rdquo; counter like Stalwart&apos;s. Damage over time
+                                        and Bomb explosions are not direct hits.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
+                                        <span className="text-primary">
+                                            Reflects and Protection:
+                                        </span>{' '}
+                                        Nosorog&apos;s reflect is direct damage to the attacker and
+                                        lands like a counter-attack: Warden hitting Nosorog takes
+                                        the reflect, then inflicts Corrosion on him and repairs, and
+                                        every counter-attacker (Stalwart, Centurion, Nyxen) answers
+                                        it. Like any direct hit, the reflect is redirected by the
+                                        attacker&apos;s protector&apos;s Protection, uses
+                                        Nosorog&apos;s shield penetration, and is boosted by and
+                                        spends the attacker&apos;s Exposed, and spends a Titanite
+                                        Plating stack. It is damage Nosorog dealt, so his own
+                                        damage-dealt leech (the Leech set) repairs off it, as it
+                                        does off a counter-attack. The Reflect gear set&apos;s
+                                        bounce is not direct damage and does none of this. A hit
+                                        that Protection moves entirely onto the protector
+                                        (Lionheart&apos;s 10 stacks) is not direct damage to the
+                                        ship it was aimed at: that ship does not counter or react,
+                                        and its Stasis does not drop, but the skill&apos;s debuffs
+                                        and other effects still land on it. When only part of the
+                                        hit is moved (Meatshield&apos;s 30%), the share it keeps is
+                                        still direct damage.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">
@@ -3279,6 +3358,18 @@ const DocumentationPage: React.FC = () => {
                                         resolves after it, within the same turn.
                                     </p>
                                     <p className="text-theme-text mb-2">
+                                        <span className="text-primary">Dying ships:</span> Every
+                                        reaction triggers before a ship dies. A ship destroyed by a
+                                        hit still fires its own reactions to that hit: Warden still
+                                        inflicts Corrosion I on the attacker, Stalwart still
+                                        counters, Heliodor still repairs her allies. A repair cannot
+                                        bring the destroyed ship itself back. A debuff the killing
+                                        hit lands on the dying ship still lands (Enforcer&apos;s
+                                        crit Defense Shred), but no other ship reacts to it:
+                                        Provider stays silent until the next hit strikes a living
+                                        enemy.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
                                         <span className="text-primary">Purges:</span> A purge on a
                                         skill that hits several enemies strips buffs from every
                                         enemy it hits, not just the main target. Tithonus gains
@@ -3301,6 +3392,15 @@ const DocumentationPage: React.FC = () => {
                                         Multi-hit skills (e.g. &quot;attacks three times&quot;)
                                         crit-check each hit individually — on-crit follow-up effects
                                         (such as crit-triggered debuffs) fire once per critting hit.
+                                        Every reaction to one hit resolves before the next hit
+                                        lands: Enforcer&apos;s crit Defense Shred from his first hit
+                                        is already on the target for his second, and Stalwart&apos;s
+                                        counter to the first hit lands before the second. If a
+                                        counter destroys the attacker, its remaining hits never
+                                        happen. Each hit also counts as its own action for every
+                                        &ldquo;once per skill&rdquo; limit: each of Enforcer&apos;s
+                                        critting hits lands a Shred, and Provider, APEX, Hayyan,
+                                        Oleander, Xcellence and Insidiousness answer every one.
                                         Ships with &quot;extra action&quot; passives (Nuqtu,
                                         Sustainer, Liberator, Tygr, Tormenter) take a full
                                         additional turn each round, re-entering the turn queue at
@@ -4742,14 +4842,18 @@ const DocumentationPage: React.FC = () => {
                                     <strong>Giant Slayer</strong> (chance to amplify a hit&apos;s
                                     damage against an enemy with higher attack), and{' '}
                                     <strong>Insidiousness</strong> (chance to deal bonus damage when
-                                    you inflict a debuff on an enemy. It rolls once per skill cast
-                                    that inflicts a debuff, plus once for each reaction that
-                                    inflicts one — one reaction landing on two enemies is one roll.
-                                    Applied debuffs, such as Provoke, Concentrate Fire or the Burner
+                                    you inflict a debuff on an enemy. It rolls once for every debuff
+                                    you inflict, whether your skill or one of your reactions lands
+                                    it, and a damage-over-time stack counts as a debuff. Applied
+                                    debuffs, such as Provoke, Concentrate Fire or the Burner
                                     set&apos;s Inferno, never roll. At most one roll succeeds per
                                     skill cast, counting reactions to an enemy&apos;s skill as part
-                                    of that skill, and a successful roll hits every enemy the
-                                    debuffs reached). Three heal implants are also modeled:{' '}
+                                    of that skill, and a success hits every enemy that skill
+                                    debuffed). <strong>Synaptic Resonance</strong> gains Speed Up
+                                    III when an enemy is repaired and adds its crit power points to
+                                    the next critical hit only, whether a skill, a counter-attack, a
+                                    reactive hit or a passive hit (90% crit power plus 10 is 100%).
+                                    Three heal implants are also modeled:{' '}
                                     <strong>Second Wind</strong> (chance to repair itself when it
                                     takes a critical hit), <strong>Nourishment</strong> (stronger
                                     repairs on allies with less HP than the healer), and{' '}
@@ -4843,22 +4947,22 @@ const DocumentationPage: React.FC = () => {
                                     attack and its reactions (never a reflected hit, and not when it
                                     is only splashed by an attack aimed at another ship — an
                                     area-of-effect attack aimed at Nosorog himself still counts;
-                                    Stalwart&apos;s counter and Legion Discipline II follow the same
-                                    rule, and Malvex&apos;s shield comes from skill hits only),{' '}
-                                    <strong>Chakara&apos;s</strong> charged skill bypasses part of
-                                    the enemy&apos;s Defense, and <strong>Anemone</strong>,{' '}
-                                    <strong>Panon</strong>, <strong>Wusheng</strong>, and{' '}
-                                    <strong>Tormenter</strong> each take reduced damage under their
-                                    own stated conditions. <strong>Anemone</strong> and{' '}
-                                    <strong>Wusheng</strong> take less direct damage (from an
-                                    attacking enemy afflicted with a damage-over-time effect, and
-                                    while Stealthed, respectively), <strong>Panon</strong> reduces
-                                    all incoming damage — direct and damage-over-time — while she
-                                    has Barrier Recharging, and <strong>Tormenter&apos;s</strong>{' '}
-                                    reduction (direct and damage-over-time) grows the lower her HP
-                                    falls. <strong>Vindicator</strong> retaliates when it resists an
-                                    enemy debuff, dealing damage equal to 30% of its own max HP back
-                                    to the ship that attempted it. <strong>Protection</strong> (e.g.{' '}
+                                    Stalwart&apos;s counter, Legion Discipline II and Malvex&apos;s
+                                    shield follow the same rule), <strong>Chakara&apos;s</strong>{' '}
+                                    charged skill bypasses part of the enemy&apos;s Defense, and{' '}
+                                    <strong>Anemone</strong>, <strong>Panon</strong>,{' '}
+                                    <strong>Wusheng</strong>, and <strong>Tormenter</strong> each
+                                    take reduced damage under their own stated conditions.{' '}
+                                    <strong>Anemone</strong> and <strong>Wusheng</strong> take less
+                                    direct damage (from an attacking enemy afflicted with a
+                                    damage-over-time effect, and while Stealthed, respectively),{' '}
+                                    <strong>Panon</strong> reduces all incoming damage — direct and
+                                    damage-over-time — while she has Barrier Recharging, and{' '}
+                                    <strong>Tormenter&apos;s</strong> reduction (direct and
+                                    damage-over-time) grows the lower her HP falls.{' '}
+                                    <strong>Vindicator</strong> retaliates when it resists an enemy
+                                    debuff, dealing damage equal to 30% of its own max HP back to
+                                    the ship that attempted it. <strong>Protection</strong> (e.g.{' '}
                                     <strong>Meatshield</strong>) now works as a damage transfer
                                     instead of a plain unremovable buff: each stack a living ally
                                     holds intercepts 10% of the direct damage another ally would
@@ -4876,8 +4980,15 @@ const DocumentationPage: React.FC = () => {
                                     gains 10 stacks of Protection at the start of each round, and
                                     after it absorbs the first hit redirected from an ally, it loses
                                     all Protection until the next round. The stacks hold whether an
-                                    enemy moves before or after Lionheart, on either team. More
-                                    implant and gear-set effects will be added in future updates.
+                                    enemy moves before or after Lionheart, on either team. Damage
+                                    taken through Protection is not a direct hit on the protector,
+                                    so Meatshield&apos;s &quot;directly damaged this round&quot;
+                                    repair needs a hit aimed at him. A standing &quot;+20%
+                                    defense&quot; passive (Grif, Hermes) lowers the damage its owner
+                                    takes. Lionheart&apos;s crit grants belong to the skill they are
+                                    written on: a crit by his active gives Attack Up II and one by
+                                    his charged skill gives Attack Up III. More implant and gear-set
+                                    effects will be added in future updates.
                                 </p>
                             </div>
                         </div>

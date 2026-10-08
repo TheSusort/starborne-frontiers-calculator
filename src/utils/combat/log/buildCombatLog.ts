@@ -967,6 +967,20 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
         ctx.claimHp(entry.targets[0]);
     },
 
+    /** An Echoing Burst going off. `actorId` is the applier who is credited, the target is the
+     *  holder it burst on, and the amount is the realized payout. */
+    'accumulator-detonated': (e, ctx) => {
+        if (!ctx.currentTurn && !ctx.currentRound) return;
+        const entry: CombatLogEntry = {
+            kind: 'detonation',
+            actorId: e.actorId,
+            targets: [{ targetId: e.victimId, amount: e.damage }],
+            reactions: [],
+            note: 'Echoing Burst detonated',
+        };
+        ctx.attachEntry(entry);
+    },
+
     'control-applied': (e, ctx) => {
         if (!ctx.currentTurn && !ctx.currentRound) return;
         const entry: CombatLogEntry = {

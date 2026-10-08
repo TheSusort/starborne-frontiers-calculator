@@ -447,9 +447,9 @@ describe('Insidiousness implant', () => {
         }
     });
 
-    it("carries procScope 'per-cast' (one roll per cast plus one per reaction it sets off)", () => {
+    it("carries procScope 'per-debuff' (one roll per debuff landed, one success per cast)", () => {
         const ab = buildForImplant('INSIDIOUSNESS', 'legendary')[0];
-        expect(ab.procScope).toBe('per-cast');
+        expect(ab.procScope).toBe('per-debuff');
         expect(ab.procChance).toBeCloseTo(0.21, 5);
         expect(ab.trigger).toBe('on-debuff-inflicted');
         expect(ab.config).toMatchObject({ type: 'damage', multiplier: 100, hits: 1 });

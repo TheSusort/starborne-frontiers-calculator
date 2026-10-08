@@ -114,10 +114,14 @@ export type CombatEvent =
            *  actors, since every actor's first sub-attack is also 0.
            *
            *  Exists so a reactive intent enqueued during sub-attack k can be gated at sub-attack
-           *  scope: intents from all N sub-attacks drain together at end of turn (drainReactions),
-           *  long after the engine's ambient `currentSubAttackIndex` has been cleared, so the
-           *  identity has to travel on the event. */
+           *  scope: an intent drains only after the sub-attack that raised it has finished
+           *  (drainReactions), when the engine's ambient `currentSubAttackIndex` has been cleared,
+           *  so the identity has to travel on the event. */
           subAttackIndex?: number;
+          /** The skill slot (`'active'` / `'charged'`) the cast fired from. A reaction written in a
+           *  skill's own text ("If this critically hits, ...") fires only on that slot's casts;
+           *  passive-slot reactions ignore it. Absent on an emitter that carries no cast slot. */
+          sourceSlot?: SkillSlot;
           didHit?: boolean;
       } & ReactiveStamp)
     | ({
@@ -134,6 +138,12 @@ export type CombatEvent =
           round: number;
           buffName: string;
           duration: number | 'recurring';
+          /** Names the one skill action (a passive's round or turn tick, a reaction clause's
+           *  firing, a combat-start grant) this gain belongs to, shared by every recipient the
+           *  action fed, so a listener that counts gains per action reads the action once. Absent
+           *  on a gain made by the granter's own active or charged cast, where the cast is the
+           *  action. */
+          grantKey?: string;
       } & ReactiveStamp)
     /** Emitted from each owner's Post Turn when a timed status decrements to 0
      *  (statusEngine.decrementPlayer/decrementEnemy); actorId is the status carrier
@@ -151,8 +161,8 @@ export type CombatEvent =
      *  of the lineage rule (`reactionKey` in triggers.ts), which the enqueue wrapper applies to
      *  every trigger; this brand stays for listener-level fixtures. Every OTHER on-debuff-inflicted
      *  ability of the owner still sees the debuff: the Insidiousness implant reacts to Warden's
-     *  reactive Out. Damage Down II as to a cast-inflicted one, and rolls for it separately
-     *  from the cast (`Ability.procScope` `'per-cast'`). Each ability in a chain fires at most
+     *  reactive Out. Damage Down II as to a cast-inflicted one, and rolls for it as its own
+     *  debuff (`Ability.procScope` `'per-debuff'`). Each ability in a chain fires at most
      *  once, so chain LENGTH is bounded by the owner's count of such abilities.
      *  Debuffs from OTHER reactive triggers (on-crit/on-attacked) carry no chain, so the chain
      *  guard lets every on-debuff-inflicted ability see them.
@@ -193,10 +203,16 @@ export type CombatEvent =
           /** Set on every debuff a REACTION lands (any trigger): the id of that one reaction
            *  firing, shared by everything the firing lands and distinct from every other firing in
            *  the combat. One round's Toxic Overflow spreads share one id (`rootCastKey`). Absent
-           *  on a cast's own inflictions. `procScope:'per-cast'` (Insidiousness) gives each firing
-           *  its own roll. */
+           *  on a cast's own inflictions. `procScope:'per-debuff'` (Insidiousness) caps its one
+           *  success on the cast a reaction's debuff belongs to. */
           reactionFiringId?: number;
           viaAllyDebuffInflictedReaction?: true;
+          /** Proc verdicts the TARGET's reactions to this landing already drew, by ability id —
+           *  drawn at the landing because their effect must hold for the rest of the skill
+           *  (Firewall's Block Debuff, owner ruling R149; engine.ts `decideBlockDebuffAtLanding`).
+           *  The `on-debuffed` listener hands its own entry to the executor, which spends it
+           *  instead of drawing. Absent → every reaction draws at the drain. */
+          preDecidedProcs?: Readonly<Record<string, boolean>>;
       } & ReactiveStamp)
     | ({
           type: 'debuff-resisted';
@@ -275,6 +291,9 @@ export type CombatEvent =
            *  so the `on-ally-debuff-inflicted` listener's `dot-applied` arm can skip its own
            *  reaction's output the same way the `debuff-applied` arm does. */
           viaAllyDebuffInflictedReaction?: true;
+          /** The `debuff-applied` sibling's `preDecidedProcs`, one entry per landed stack (owner
+           *  rulings R149/R161: every stack is its own landing and its own Firewall roll). */
+          preDecidedProcsPerStack?: ReadonlyArray<Readonly<Record<string, boolean>> | undefined>;
       } & ReactiveStamp)
     /** A heal/shield cast resolved (healing mode only). `targets` lists recipient actor
      *  ids in application order; `amount` is the summed RAW amount across recipients.
@@ -1027,8 +1046,13 @@ export type CombatEvent =
            *  hit. The combat log renders these hits from `reactive-damage-performed` instead. */
           reactiveHitId?: number;
           /** The hit is a counter-attack. Every reaction hears it except a counter that
-           *  `counterAnswersCounters` (triggers.ts) excludes. */
+           *  `counterAnswersCounters` (triggers.ts) excludes. Nosorog's reflect is not stamped:
+           *  every counter answers it (R160). */
           fromCounter?: true;
+          /** The hit struck this target but was no direct damage on it (`directlyDamagesVictim`:
+           *  Protection moved all of it onto protectors, R139). The event exists so the combat log
+           *  keeps the target's row; no "when directly damaged" reaction answers it. */
+          notDirectDamage?: true;
       };
 
 export type CombatEventType = CombatEvent['type'];

@@ -434,9 +434,10 @@ describe.skipIf(!csvAvailable())('#413 — Xcellence on-resist scope, cause and 
 
     // One ally, one turn, one resister — but a `hits: 2` skill is TWO consecutive full-walk
     // attacks, so the debuff loop runs at sub-attack 0 and again at sub-attack 1 and the same enemy
-    // resists twice. Both attacks are ONE skill cast, and Xcellence strikes each resisting enemy
-    // once per skill cast (`Ability.oncePerRootCast`, owner ruling 2026-10-06), so one proc.
-    it('fires once when ONE enemy resists on two attacks of the same skill cast', () => {
+    // resists twice. Xcellence strikes each resisting enemy once per skill cast
+    // (`Ability.oncePerRootCast`, owner ruling 2026-10-06), and each hit of a multi-hit skill counts
+    // as its own action (R166), so two procs.
+    it('fires once per attack when ONE enemy resists on two attacks of the same skill cast', () => {
         const result = simulateBattle({
             playerTeam: [
                 xcellencePlacement(xcellenceShip('xcellence'), 'M4', 200),
@@ -458,7 +459,7 @@ describe.skipIf(!csvAvailable())('#413 — Xcellence on-resist scope, cause and 
         // The instrument: two resists really did occur. Without this, a fixture whose skill parsed
         // to a single hit would assert the OLD behaviour and read as a pass.
         expect(flattenRound(round1).filter((e) => e.kind === 'debuff-resisted').length).toBe(2);
-        expect(onResistDamageForRound(round1, 'attacker')).toBeCloseTo(ONE_PROC, 0);
+        expect(onResistDamageForRound(round1, 'attacker')).toBeCloseTo(2 * ONE_PROC, 0);
     });
 
     // The two arms below split `emitBlockDebuffResist`, whose NAME says Block-Debuff but which

@@ -383,10 +383,10 @@ describe("Lionheart's crit grant already follows the cast's real crits", () => {
     });
 });
 
-describe("Asphodel's passive adds 1 charge per enemy her cast crits", () => {
-    // "This Unit adds 1 charge to its charged skill after critically damaging an enemy" (owner
-    // ruling 13, 2026-10-04): an area cast critting A and C adds 2. Charge count 4 so the cap
-    // (her real count is 2) cannot hide a +2 or +3; round 1 is an active cast on every seed.
+describe("Asphodel's passive adds 1 charge per cast that crits", () => {
+    // "This Unit adds 1 charge to its charged skill after critically damaging an enemy" (R128):
+    // an area cast critting A and C adds 1, however many enemies it crits. Charge count 4 so the
+    // cap (her real count is 2) cannot hide a +2 or +3; round 1 is an active cast on every seed.
     // Refit 0: the clause is her first passive, and her refit-2 "attacks always critically hit"
     // would crit every enemy on every seed, leaving no cast that crits only some.
     const playerAsphodel = (): CombatEngineInput => ({
@@ -415,14 +415,14 @@ describe("Asphodel's passive adds 1 charge per enemy her cast crits", () => {
     const expectPerCritCharge = (input: CombatEngineInput, casterId: string, aimedId: string) => {
         const readings = SEEDS.map((seed) => ({ seed, ...readCast(input, casterId, seed) }));
         const wrong = readings
-            .filter((r) => r.chargeGain !== r.critVictims.size)
+            .filter((r) => r.chargeGain !== (r.critVictims.size > 0 ? 1 : 0))
             .map((r) => ({ seed: r.seed, crit: [...r.critVictims], gain: r.chargeGain }));
         expect(wrong).toEqual([]);
         const covered = (r: CastReading) => [...r.critVictims].filter((id) => id !== aimedId);
-        // Crits on the aimed enemy and one covered enemy: +2.
+        // Crits on the aimed enemy and one covered enemy: still +1.
         expect(
             readings.some(
-                (r) => r.critVictims.has(aimedId) && covered(r).length === 1 && r.chargeGain === 2
+                (r) => r.critVictims.has(aimedId) && covered(r).length === 1 && r.chargeGain === 1
             )
         ).toBe(true);
         // A crit on a covered enemy alone: +1.
@@ -433,15 +433,15 @@ describe("Asphodel's passive adds 1 charge per enemy her cast crits", () => {
         ).toBe(true);
         // No crit: nothing.
         expect(readings.some((r) => r.critVictims.size === 0 && r.chargeGain === 0)).toBe(true);
-        // Every struck enemy crit: +3.
-        expect(readings.some((r) => r.critVictims.size === 3 && r.chargeGain === 3)).toBe(true);
+        // Every struck enemy crit: still +1.
+        expect(readings.some((r) => r.critVictims.size === 3 && r.chargeGain === 1)).toBe(true);
     };
 
-    it('player Asphodel: +1 per struck enemy crit', () => {
+    it('player Asphodel: +1 per cast that crits', () => {
         expectPerCritCharge(playerAsphodel(), 'attacker', 'enemy-a');
     });
 
-    it('enemy Asphodel: +1 per struck player ship crit', () => {
+    it('enemy Asphodel: +1 per cast that crits', () => {
         expectPerCritCharge(enemyAsphodel(), 'caster', 'attacker');
     });
 

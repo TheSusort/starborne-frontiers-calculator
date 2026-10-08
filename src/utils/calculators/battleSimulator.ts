@@ -363,6 +363,7 @@ export const LOG_EVENT_TYPES = [
     'dot-ticked',
     'dot-detonated',
     'bomb-detonated',
+    'accumulator-detonated',
     'control-applied',
     'cleanse-performed',
     'purge-performed',
