@@ -30,12 +30,11 @@ export function clausePhase(slotAbilities: readonly Ability[], ability: Ability)
  * damage"). `runPlayerTurn` runs these before the caster's stats are folded, so a stolen buff
  * counts, a cleansed debuff does not, and a purged buff is gone from the victim.
  *
- * Only an UNGATED, unscaled clause qualifies: its gate context and its crit-power scaling do not
- * exist that early in the turn, so a gated or scaled removal runs with the turn's late removal
- * loops instead; `writtenOrderRemovalCorpus.test.ts` fails if a shipped ship ever writes one ahead
- * of its damage.
- * An ally-aimed cleanse cannot change the caster's own hit, so it stays in the support pass.
- * Meatshield's named Protection top-up is not a plain steal and keeps its own path.
+ * Only an UNGATED, unscaled clause qualifies, and of the cleanses only a `self`-aimed one: a
+ * gate context, a crit-power scaling and the support pass's ally recipient routing do not exist
+ * that early in the turn, so any other removal runs with the turn's late removal loops instead.
+ * `writtenOrderRemovalCorpus.test.ts` fails if a shipped ship ever writes such a removal ahead of
+ * its damage. Meatshield's named Protection top-up is not a plain steal and keeps its own path.
  */
 export function isRemovalBeforeDamage(
     slotAbilities: readonly Ability[],
