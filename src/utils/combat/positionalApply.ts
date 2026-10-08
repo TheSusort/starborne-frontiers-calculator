@@ -401,6 +401,12 @@ export function applyPositionalDamage(args: {
         subAttackIndex?: number
     ) => number;
     /**
+     * OPTIONAL per-hit additive crit-power bonus (points) hook (Synaptic Resonance's armed next
+     * crit). Invoked once per hit with that victim's crit outcome; a returned bonus joins the
+     * hit's crit damage. The hook owns spending any pending bonus. Unsupplied → 0.
+     */
+    critPowerBonusFor?: (victim: CombatActor, didCrit: boolean, subAttackIndex?: number) => number;
+    /**
      * OPTIONAL per-victim crit resolver.
      * The anchor victim (the resolved target, `victim.id === anchorActor.id`) reuses
      * hitCrits[h]; each other footprint victim resolves via this callback.
@@ -447,6 +453,7 @@ export function applyPositionalDamage(args: {
         onVictimPreImpact,
         incomingReductionFor,
         outgoingAmplificationFor,
+        critPowerBonusFor,
         rollVictimCrit,
         onSubAttackStart,
         onSubAttackEnd,
@@ -530,7 +537,16 @@ export function applyPositionalDamage(args: {
                 typeof reductionParts === 'number' ? 0 : reductionParts.attackerSidePct;
             // Read the profile ONCE and derive both the hit and the mitigation factor from it, so
             // the factor handed to `applyToVictim` is provably the one baked into `dmg`.
-            const defenseProfile = defenseProfileOf(victim, didCrit);
+            const profileBase = defenseProfileOf(victim, didCrit);
+            const critPowerBonus = critPowerBonusFor?.(victim, didCrit, h) ?? 0;
+            const defenseProfile =
+                critPowerBonus !== 0
+                    ? {
+                          ...profileBase,
+                          critDamageDeltaPct:
+                              (profileBase.critDamageDeltaPct ?? 0) + critPowerBonus,
+                      }
+                    : profileBase;
             // ONE call, both figures. Calling `victimHitDamage` and a separate pre-mitigation
             // helper would repeat the whole assembly — the same profile read, the same affinity
             // resolve — on the hottest path in the engine, and would leave the two figures as

@@ -378,6 +378,8 @@ export function evaluateCondition(cond: Condition, ctx: ConditionContext): numbe
             return ctx.enemyShielded === undefined ? undefined : ctx.enemyShielded ? 1 : 0;
         case 'not-hit-this-round':
             return ctx.wasHitThisRound ? 0 : 1;
+        case 'hit-this-round':
+            return ctx.wasHitThisRound ? 1 : 0;
         case 'first-activator':
             return ctx.firstActivator ? 1 : 0;
         case 'last-standing':

@@ -1346,7 +1346,7 @@ export function tickDoTs(args: {
      *  victim is fixed for the call; only the per-entry applier ctx varies). Defaults to the
      *  applier's `ctx.dotMult` unchanged when absent. Production call sites pass the engine's
      *  `victimDotMult` closure. */
-    dotMultFor?: (ctx: PlayerRoundCtx) => number;
+    dotMultFor?: (ctx: PlayerRoundCtx, dotType: 'corrosion' | 'inferno') => number;
 }): void {
     const dotMultFor = args.dotMultFor ?? ((ctx: PlayerRoundCtx) => ctx.dotMult);
     // Per-(dotType,tier) tick group — the combat log shows each tier on its own line, so a mix of
@@ -1405,7 +1405,12 @@ export function tickDoTs(args: {
     tickByTier(
         'corrosion',
         args.corrosionEntries,
-        (e, ctx) => e.stacks * (e.tier / 100) * corrosionBaseHp * dotMultFor(ctx) * ctx.affinityMult
+        (e, ctx) =>
+            e.stacks *
+            (e.tier / 100) *
+            corrosionBaseHp *
+            dotMultFor(ctx, 'corrosion') *
+            ctx.affinityMult
     );
 
     // Step 5: Tick inferno (scales with the applier's effective attack, no outgoing buff)
@@ -1413,7 +1418,11 @@ export function tickDoTs(args: {
         'inferno',
         args.infernoEntries,
         (e, ctx) =>
-            e.stacks * (e.tier / 100) * ctx.effectiveAttack * dotMultFor(ctx) * ctx.affinityMult
+            e.stacks *
+            (e.tier / 100) *
+            ctx.effectiveAttack *
+            dotMultFor(ctx, 'inferno') *
+            ctx.affinityMult
     );
 
     // Tick generic DoTs — an ABSOLUTE per-tick amount, independent of stats/HP (no ctxFor
@@ -3240,6 +3249,20 @@ export function runCombat(rawInput: CombatEngineInput): {
         shieldPenBonusByActorId.set(ownerId, (shieldPenBonusByActorId.get(ownerId) ?? 0) + pct);
     };
 
+    /** Synaptic Resonance (R153, R157): crit-power points armed on an actor's NEXT crit. A re-arm
+     *  refreshes the pending amount; the first crit the actor lands spends it
+     *  (`spendNextCritPower`) — a skill hit, a counter-attack, a reactive damage proc or a
+     *  passive-slot hit. Keyed by actor id, so either side behaves identically. */
+    const nextCritPowerByActorId = new Map<string, number>();
+    const armNextCritPower = (ownerId: string, pct: number): void => {
+        nextCritPowerByActorId.set(ownerId, pct);
+    };
+    const spendNextCritPower = (ownerId: string): number => {
+        const pending = nextCritPowerByActorId.get(ownerId) ?? 0;
+        if (pending > 0) nextCritPowerByActorId.delete(ownerId);
+        return pending;
+    };
+
     /** The landing chance the REACTIVE path needs — `ownerId`'s live effective hacking vs
      *  `victimId`'s live effective security, with the two actors' own affinity matchup applied.
      *
@@ -3422,7 +3445,11 @@ export function runCombat(rawInput: CombatEngineInput): {
     // ADDED directly — no base-ctx subtraction needed (contrast
     // `perVictimOutgoingDeltaPct`, which must subtract because its abilities stay baked
     // into the aggregate).
-    const victimDotMult = (ctx: PlayerRoundCtx, victim: CombatActor): number => {
+    const victimDotMult = (
+        ctx: PlayerRoundCtx,
+        victim: CombatActor,
+        dotType: 'corrosion' | 'inferno'
+    ): number => {
         const gated = ctx.victimGatedDotDamage;
         if (!gated || gated.length === 0) return ctx.dotMult;
         let bonus = 0;
@@ -3439,7 +3466,15 @@ export function runCombat(rawInput: CombatEngineInput): {
                     ? { enemyBuffCount: actorBuffCount(statusEngine, victim.id) }
                     : {}),
             };
-            bonus += modifierTotalsFromAbilities(entry.abilities, victimCtx).dotDamage;
+            // A modifier naming one DoT family boosts only that family's ticks (Wildfire's
+            // "additional Inferno damage").
+            const forThisType = entry.abilities.filter(
+                (a) =>
+                    a.config.type !== 'modifier' ||
+                    a.config.dotType === undefined ||
+                    a.config.dotType === dotType
+            );
+            bonus += modifierTotalsFromAbilities(forThisType, victimCtx).dotDamage;
         }
         return ctx.dotMult + bonus / 100;
     };
@@ -3902,7 +3937,7 @@ export function runCombat(rawInput: CombatEngineInput): {
     // cast's reactions have drained.
     const preDecidedConversions = new Map<string, boolean[]>();
     // Verdict cache for scoped proc abilities: procScope:'per-attack' keys it per sub-attack,
-    // procScope:'per-cast' (Insidiousness) per roll and per cap — see each gate in triggers.ts.
+    // procScope:'per-debuff' (Insidiousness) per root-cast cap — see each gate in triggers.ts.
     // Cleared at each actor turn-start beside reactionFiredThisAttack so a later turn rolls afresh.
     const procDecisionThisSubAttack = new Map<string, boolean>();
     // Numbers every reactive-intent resolution (`IntentExecContext.reactionFiringId`).
@@ -4565,6 +4600,40 @@ export function runCombat(rawInput: CombatEngineInput): {
         ...enemyPlayerRuntimeByActorId,
         ...runtimesById,
     ]);
+
+    // Standing "+N% defense" passives (Grif, Hermes) per owner: unconditional, self-scoped
+    // `defense` modifiers on a passive slot. They join the victim's percentage defence channel
+    // (`victimIncomingModifiers`), so every hit the owner takes mitigates on the raised defence.
+    // A ship passive stops contributing while its holder is turn-blocked (`livePassiveEntries`).
+    interface StandingDefence {
+        pct: number;
+        source?: 'equipment';
+    }
+    const standingDefenceByOwner = new Map<string, StandingDefence[]>();
+    for (const [ownerId, rt] of allRuntimesById) {
+        const entries: StandingDefence[] = [];
+        for (const slot of rt.castSkills.slots) {
+            if (slot.slot !== 'passive') continue;
+            for (const a of slot.abilities) {
+                const c = a.config;
+                if (
+                    c.type === 'modifier' &&
+                    c.channel === 'defense' &&
+                    a.target === 'self' &&
+                    a.conditions.length === 0 &&
+                    !a.scaling
+                ) {
+                    entries.push({ pct: c.value, ...(a.source ? { source: a.source } : {}) });
+                }
+            }
+        }
+        if (entries.length > 0) standingDefenceByOwner.set(ownerId, entries);
+    }
+    const standingDefencePctOf = (ownerId: string): number =>
+        livePassiveEntries(ownerId, standingDefenceByOwner.get(ownerId) ?? []).reduce(
+            (sum, e) => sum + e.pct,
+            0
+        );
 
     // Passive-slot standing leeches per owner (damage-leech spec §4): X% of credited
     // damage repaired/shielded immediately at credit time. Scanned once at setup from each
@@ -7212,7 +7281,12 @@ export function runCombat(rawInput: CombatEngineInput): {
             // fully-Barrier-blocked hits return earlier (barriered:true) and are not recorded.
             // TODO(verify): whether a fully-Barrier-blocked direct attack should count as a hit
             // for Alacrity is unconfirmed in-game; current default is "not a hit".
-            if (cause?.byDirectDamage && (absorbed > 0 || hpDamage > 0)) {
+            // A Protection share taken for an ally is not direct damage to the protector (R139).
+            if (
+                cause?.byDirectDamage &&
+                !cause.isProtectionTransfer &&
+                (absorbed > 0 || hpDamage > 0)
+            ) {
                 hitThisRound.add(victim.id);
             }
             // Reflect (Nosorog, the Reflect gear set): thorns. When a reflector takes a DIRECT hit
@@ -7895,7 +7969,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                     multiplierPct: multiplier * hits,
                     secondaryStatValue: 0,
                     hits: 1,
-                    effectiveCritDamage: ownerOutgoing.critDamage,
+                    effectiveCritDamage:
+                        ownerOutgoing.critDamage + (didCrit ? spendNextCritPower(ownerId) : 0),
                     // #395 / #389: a counter carries BOTH halves of the outgoing channel — the
                     // enemy-APPLIED `Out. Damage Down` on the owner AND the owner's OWN
                     // `Out. Damage Up` (Grif grants it to all allies).
@@ -8128,7 +8203,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                         multiplierPct: basisPct * hits,
                         secondaryStatValue: 0,
                         hits: 1,
-                        effectiveCritDamage: ownerOutgoing.critDamage,
+                        effectiveCritDamage:
+                            ownerOutgoing.critDamage + (didCrit ? spendNextCritPower(ownerId) : 0),
                         // #395 CLOSED THE #389 RESIDUAL HERE — twin of the counter-attack site's
                         // note. Was a hardcoded 0, dropping the enemy-APPLIED `Out. Damage Down` on
                         // the owner AND the owner's own `Out. Damage Up`. Applies on every basis:
@@ -8438,7 +8514,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                 VICTIM_INCOMING_CHANNELS
             );
             return {
-                enemyDefenseModifier: selfDefense + (shadow.delta.defense ?? 0),
+                enemyDefenseModifier:
+                    selfDefense + standingDefencePctOf(victimId) + (shadow.delta.defense ?? 0),
                 incomingDamageModifier:
                     selfIncoming + (shadow.delta.incomingDamage ?? 0) + preFightIncoming + exposed,
                 // #358 ADDENDUM 3 (C2/C3): the VICTIM-SIDE half of the sum above, published
@@ -8996,6 +9073,10 @@ export function runCombat(rawInput: CombatEngineInput): {
                             attackerSidePct: attackerCritTerm,
                         };
                     },
+                    // Armed next-crit crit power (Synaptic Resonance): the first crit hit this
+                    // actor lands spends it, whichever victim or sub-attack that is.
+                    critPowerBonusFor: (_victim, didCrit) =>
+                        didCrit ? spendNextCritPower(args.actingId) : 0,
                     // Attacker-side outgoing amplification (Menace/Giant Slayer), per footprint
                     // victim per sub-hit. outgoingAmplificationForHit returns 0 for attackers with no
                     // outgoing-amplification ability.
@@ -9216,7 +9297,14 @@ export function runCombat(rawInput: CombatEngineInput): {
                     // to `applyToVictim` is provably the one baked into `damage`.
                     const defenseProfile = victimDefenseProfileOf(victim, profileOpts);
                     const damageParts = victimHitDamageParts(
-                        hit.scalars,
+                        hit.didCrit
+                            ? {
+                                  ...hit.scalars,
+                                  effectiveCritDamage:
+                                      hit.scalars.effectiveCritDamage +
+                                      spendNextCritPower(actor.id),
+                              }
+                            : hit.scalars,
                         defenseProfile,
                         hit.didCrit,
                         roleScale
@@ -9334,6 +9422,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 ...(primaryVictimIds !== undefined && primaryVictimIds.length > 0
                     ? { primaryVictimIds }
                     : {}),
+                sourceSlot: dap.sourceSlot,
                 didHit: true,
             });
             // The attack entry now exists — drain the reflect rows THIS sub-attack
@@ -10030,6 +10119,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // actor, this still tracks the heal target. Per-actor target-HP% is deferred to a
                 // later phase; inert today (bare enemies have no `hpSubject:'target'` gate).
                 targetHpPct: healTargetHpPctNow(),
+                wasHitThisRound: hitThisRound.has(a.id),
                 // `targetRepairedThisRound` (was the STRUCK victim `tgt` repaired this
                 // round? — C2b-3) moved into the victim-derived conditional block above; a
                 // no-victim turn omits it and `playerTurn.ts` defaults the destructure to `false`.
@@ -11098,6 +11188,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // Prophet (#591): side-agnostic — the same accumulator serves either
                 // drain side, so no per-side threading through `sideCtx` is needed.
                 addShieldPenBonus,
+                armNextCritPower,
                 // Bomb damagePerStack/affinity resolve per OWNER inside the executor
                 // (lastTurnCtxByActor.get(intent.ownerId)) — there is no global
                 // effectiveAttack/affinityMult on this ctx.
@@ -12012,7 +12103,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 attackerTauntedOrProvoked: false,
                             }),
                         // The tank is the ticking victim.
-                        dotMultFor: (ctx) => victimDotMult(ctx, healTarget),
+                        dotMultFor: (ctx, dotType) => victimDotMult(ctx, healTarget, dotType),
                     });
                     // The `credit` callback above threads the applier through to
                     // `procStandingLeechesPerVictim`, so a standing damage-dealt leech pays out
@@ -12172,7 +12263,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                     attackerTauntedOrProvoked: false,
                                 }),
                             // This actor IS the ticking victim.
-                            dotMultFor: (ctx) => victimDotMult(ctx, actor),
+                            dotMultFor: (ctx, dotType) => victimDotMult(ctx, actor, dotType),
                         });
                         if (total > 0) {
                             // DoT batch: bypass shield (byDirectDamage:false), aggregate of
