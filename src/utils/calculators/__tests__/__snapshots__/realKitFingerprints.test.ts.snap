@@ -501,8 +501,9 @@ exports[`kit fingerprints > Chakara 1`] = `
   "statusRich": [
     "attack",
     "attack:active",
+    "attack:charged",
     "charge-changed",
-    "purge:charged",
+    "purge",
   ],
   "wounded": [
     "attack",
@@ -1906,10 +1907,11 @@ exports[`kit fingerprints > Lodolite 1`] = `
   ],
   "statusRich": [
     "attack",
+    "attack:charged",
     "charge-changed",
     "control:active",
     "debuff",
-    "purge:charged",
+    "purge",
   ],
   "wounded": [
     "attack",
@@ -3246,12 +3248,11 @@ exports[`kit fingerprints > Sefuba 1`] = `
     "charge-changed",
   ],
   "statusRich": [
-    "attack",
     "attack:active",
     "attack:charged",
     "charge-changed",
     "heal",
-    "purge:active",
+    "purge",
   ],
   "wounded": [
     "attack:active",
@@ -4029,12 +4030,12 @@ exports[`kit fingerprints > Voron 1`] = `
     "dot-ticked",
   ],
   "statusRich": [
-    "attack",
     "attack:active",
+    "attack:charged",
     "charge-changed",
     "debuff",
     "dot-ticked",
-    "purge:charged",
+    "purge",
   ],
   "wounded": [
     "attack:active",
@@ -4400,6 +4401,7 @@ exports[`kit fingerprints > Zeolite 1`] = `
     "debuff:active",
     "debuff:charged",
     "purge",
+    "purge:active",
   ],
   "wounded": [
     "attack",
