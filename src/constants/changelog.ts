@@ -12,6 +12,10 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat log: a Protection-redirected hit now shows only the damage the target took.',
     'Combat log: Protection-redirected counters and procs now show only damage taken.',
     'Combat simulator: Nuqtu now gains one Core Charge per enemy buffing skill.',
+    'Combat simulator: Nuqtu now reacts to enemy Overload, Blast and Titanite Plating gains.',
+    'Combat simulator: Nuqtu now gains one Core Charge per enemy reaction or passive gain.',
+    "Combat simulator: Valkyrie's Echoing Burst now counts as a debuff inflicted.",
+    'Combat log: Echoing Burst detonations now show as their own row.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

@@ -6,6 +6,7 @@ import { isPersistentByName, persistentCapFor } from '../../constants/oneShotPer
 import { UNREMOVABLE_STATUSES, STACK_STEALABLE_STATUSES } from './cheatDeathBuffs';
 import { isBuffProtection } from './buffProtectionBuffs';
 import { EXPOSED } from './exposedStatus';
+import type { CombatEventBus } from './events';
 
 export interface ActiveBuff {
     buffName: string;
@@ -14,6 +15,39 @@ export interface ActiveBuff {
      *  ONCE at application and must NOT be re-rolled per round (see persistentStackingBuffs). */
     turnsRemaining: number | 'recurring' | 'permanent';
     stacks?: number; // defined for accumulating buffs; current stack count
+}
+
+/** One granter's stacks added to an ability-sourced accumulating self status by a cadence tick
+ *  (a round, an extra turn, or the granter's own cast). */
+export interface AccumGain {
+    /** The carrier that holds the status. */
+    ownerId: string;
+    buffName: string;
+    /** The ship whose passive or skill grants these stacks. */
+    granterId: string;
+    round: number;
+    /** Names the one passive firing a round or turn tick belongs to, shared by every carrier that
+     *  tick fed. Absent for a gain on the granter's own cast, which belongs to that cast. */
+    grantKey?: string;
+}
+
+/** Announces the cadence gains `engine` has banked as `buff-applied` events. Called where the tick
+ *  happened, so the log nests each under the turn or round that earned it. */
+export function announceAccumGains(
+    engine: Pick<StatusEngine, 'takeAccumGains'>,
+    bus: Pick<CombatEventBus, 'emit'>
+): void {
+    for (const g of engine.takeAccumGains()) {
+        bus.emit({
+            type: 'buff-applied',
+            actorId: g.ownerId,
+            granterId: g.granterId,
+            round: g.round,
+            buffName: g.buffName,
+            duration: 'recurring',
+            ...(g.grantKey !== undefined ? { grantKey: g.grantKey } : {}),
+        });
+    }
 }
 
 export interface StatusEngineInput {
@@ -231,6 +265,11 @@ export interface StatusEngine {
      *  per-round accumulating stacks — each granter's FIRST turn of the round; `beginTurn` adds
      *  its later ones. Call once at the top of each round, before any turns. */
     beginRound(round: number): void;
+    /** Takes (and clears) the stacks the cadence ticks since the last call added to
+     *  ability-sourced accumulating self statuses, in tick order. The engine announces each as a
+     *  `buff-applied` where the tick happened. A gain counts even when the status is already at
+     *  its cap, like a reactive grant. */
+    takeAccumGains(): AccumGain[];
     /** Notification that a source actually fired a slot this round. 'attacker'
      *  covers the attacker's own cadence AND all legacy/merged scheduled buffs
      *  (per-buff sourceChargeCount/sourceStartCharged are IGNORED — superseded by
@@ -1150,6 +1189,75 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         if (before === 0 && state.stacks > 0) state.appliedSeq = nextAppliedSeq();
     };
 
+    // Cadence gains awaiting announcement (`takeAccumGains`).
+    const accumGains: AccumGain[] = [];
+    let accumTickSeq = 0;
+    const takeAccumGains = (): AccumGain[] => accumGains.splice(0, accumGains.length);
+
+    /** The per-granter stacks one tick adds to `state`: the `'per-round'` contributions (every
+     *  granter's, or only `granterId`'s when given) or the `per-active`/`per-charge` ones the
+     *  `slot` cast triggers. A turn-blocked granter's SHIP passive banks nothing further; stacks
+     *  it already banked stay — they are standing state, the same line that keeps a stasised
+     *  ship's Barrier working. */
+    const sharesOf = (
+        state: AccumulatingState,
+        pick: (c: AccumulatingContribution) => boolean
+    ): Map<string, number> => {
+        const shares = new Map<string, number>();
+        for (const c of state.contributions) {
+            if (!pick(c)) continue;
+            shares.set(c.granterId, (shares.get(c.granterId) ?? 0) + c.rate);
+        }
+        return shares;
+    };
+    const perRoundShares = (state: AccumulatingState, granterId?: string): Map<string, number> =>
+        sharesOf(
+            state,
+            (c) =>
+                c.trigger === 'per-round' &&
+                (granterId === undefined || c.granterId === granterId) &&
+                !(
+                    c.sourceSlot !== undefined &&
+                    shipPassiveSuppressed({
+                        sourceSlot: c.sourceSlot,
+                        source: c.source,
+                        casterId: c.granterId,
+                    })
+                )
+        );
+
+    /** Adds the summed `shares` to a SELF carrier's status — one clamp over the total — and queues
+     *  one gain per granter for an ability-sourced status. `tick` names a round or turn tick;
+     *  omit it for a cast-slot tick. */
+    const bankSelfShares = (
+        ownerId: string,
+        state: AccumulatingState,
+        shares: Map<string, number>,
+        tick?: number
+    ): void => {
+        let total = 0;
+        for (const n of shares.values()) total += n;
+        addAccumStacks(state, total);
+        if (state.payload === undefined) return;
+        for (const [granterId, n] of shares) {
+            if (n <= 0) continue;
+            accumGains.push({
+                ownerId,
+                buffName: state.buffName,
+                granterId,
+                round: lastRound,
+                ...(tick !== undefined
+                    ? { grantKey: `accum:${tick}:${granterId}:${state.buffName}` }
+                    : {}),
+            });
+        }
+    };
+    const bankEnemyShares = (state: AccumulatingState, shares: Map<string, number>): void => {
+        let total = 0;
+        for (const n of shares.values()) total += n;
+        addAccumStacks(state, total);
+    };
+
     // The actor whose turn is currently executing (set at each turn-started via beginTurn).
     // Self-side timed writes stamp appliedThisTurn when the carrier id matches this — the
     // own-turn reprieve. Undefined before the first beginTurn → no reprieve (safe default).
@@ -1163,34 +1271,17 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         turnsBegunThisRound.set(actorId, begun);
         if (begun < 2) return;
         // A later turn this round (an extra action): bank the shares THIS granter owns.
-        for (const map of [...accumSelfMaps.values(), ...accumEnemyMaps.values()]) {
-            for (const state of map.values()) addAccumStacks(state, perRoundShare(state, actorId));
-        }
-    };
-
-    /** The stacks one round-cadence tick adds to `state`: the sum of its `'per-round'`
-     *  contributions — every granter's (#436: two granters of one buff on one owner both
-     *  accrue), or only `granterId`'s when given. A turn-blocked granter's SHIP passive banks
-     *  nothing further; stacks it already banked stay — they are standing state, the same line
-     *  that keeps a stasised ship's Barrier working. */
-    const perRoundShare = (state: AccumulatingState, granterId?: string): number => {
-        let amount = 0;
-        for (const c of state.contributions) {
-            if (c.trigger !== 'per-round') continue;
-            if (granterId !== undefined && c.granterId !== granterId) continue;
-            if (
-                c.sourceSlot !== undefined &&
-                shipPassiveSuppressed({
-                    sourceSlot: c.sourceSlot,
-                    source: c.source,
-                    casterId: c.granterId,
-                })
-            ) {
-                continue;
+        const tick = ++accumTickSeq;
+        for (const [ownerId, map] of accumSelfMaps) {
+            for (const state of map.values()) {
+                bankSelfShares(ownerId, state, perRoundShares(state, actorId), tick);
             }
-            amount += c.rate;
         }
-        return amount;
+        for (const map of accumEnemyMaps.values()) {
+            for (const state of map.values()) {
+                bankEnemyShares(state, perRoundShares(state, actorId));
+            }
+        }
     };
 
     // beginRound: advance the round counter (strictly sequential) and apply the
@@ -1217,21 +1308,17 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         turnsBegunThisRound.clear();
         // The `per-active`/`per-charge` triggers need no turn-block gate: they accrue on the
         // granter's own cast, which a blocked ship does not take.
-        const incrementPerRound = (map: Map<string, AccumulatingState>) => {
-            for (const state of map.values()) addAccumStacks(state, perRoundShare(state));
-        };
-        // Iterate EVERY owner's accum map so per-round stacks tick for all owners. Today only
-        // 'attacker' is seeded from scheduled buffs — team-actor accumulating ability statuses
-        // will appear under their own ownerId once registered. Behavior is identical for the
-        // attacker-only case.
-        for (const ownerAccum of accumSelfMaps.values()) {
-            incrementPerRound(ownerAccum);
+        const tick = ++accumTickSeq;
+        for (const [ownerId, map] of accumSelfMaps) {
+            for (const state of map.values()) {
+                bankSelfShares(ownerId, state, perRoundShares(state), tick);
+            }
         }
         // Iterate EVERY target's enemy accum map — mirrors the self side.
         // Today only DEFAULT_ENEMY_TARGET is seeded from scheduled debuffs; ability-sourced
         // accumulating enemy statuses will appear under their own targetId once registered.
-        for (const targetAccum of accumEnemyMaps.values()) {
-            incrementPerRound(targetAccum);
+        for (const map of accumEnemyMaps.values()) {
+            for (const state of map.values()) bankEnemyShares(state, perRoundShares(state));
         }
     };
 
@@ -1308,27 +1395,22 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         // whose kit carries an accumulating grant but no timed self/enemy buff has no
         // `timedBySource` entry at all, and gating the accrual on one would leave exactly the
         // dead channel this repairs.
-        const slotAmount = (state: AccumulatingState): number => {
-            let amount = 0;
-            for (const c of state.contributions) {
-                if (c.granterId !== sourceId) continue;
-                if (
-                    (c.trigger === 'per-active' && slot === 'active') ||
-                    (c.trigger === 'per-charge' && slot === 'charge')
-                ) {
-                    amount += c.rate;
-                }
-            }
-            return amount;
-        };
-        for (const ownerAccum of accumSelfMaps.values()) {
+        const slotShares = (state: AccumulatingState): Map<string, number> =>
+            sharesOf(
+                state,
+                (c) =>
+                    c.granterId === sourceId &&
+                    ((c.trigger === 'per-active' && slot === 'active') ||
+                        (c.trigger === 'per-charge' && slot === 'charge'))
+            );
+        for (const [ownerId, ownerAccum] of accumSelfMaps) {
             for (const state of ownerAccum.values()) {
-                addAccumStacks(state, slotAmount(state));
+                bankSelfShares(ownerId, state, slotShares(state));
             }
         }
         for (const targetAccum of accumEnemyMaps.values()) {
             for (const state of targetAccum.values()) {
-                addAccumStacks(state, slotAmount(state));
+                bankEnemyShares(state, slotShares(state));
             }
         }
 
@@ -2518,6 +2600,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
 
     return {
         beginRound,
+        takeAccumGains,
         nextAppliedSeq,
         lastAppliedSeq: () => appliedSeqCounter,
         sourceFired,
