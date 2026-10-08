@@ -8737,6 +8737,8 @@ export function runCombat(rawInput: CombatEngineInput): {
             // Unsupplied by a caller → no boundary work.
             onSubAttackStart?: (sub: SubAttackBoundary) => void;
             onSubAttackEnd?: (sub: SubAttackBoundary) => void;
+            onSubAttackSettled?: (outcome: SubAttackOutcome) => void;
+            attackerStanding?: () => boolean;
         }): {
             anyCrit: boolean;
             critPairs: number;
@@ -8853,6 +8855,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                     // Forward the sub-attack boundary hooks (the per-sub-attack debuff landing).
                     onSubAttackStart: args.onSubAttackStart,
                     onSubAttackEnd: args.onSubAttackEnd,
+                    onSubAttackSettled: args.onSubAttackSettled,
+                    attackerStanding: args.attackerStanding,
                     // Per-victim crit: forward the firing turn's per-victim crit resolver.
                     rollVictimCrit: args.rollVictimCrit,
                     // Per-victim, per-sub-hit incoming %-reduction. Shared by every positional
@@ -9259,7 +9263,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 ...(critHits > 0 ? { critHits } : {}),
                 ...(critVictimIds.length > 0 ? { critVictimIds } : {}),
                 // The OUTGOING reactive listeners stamp this onto the intents they enqueue, so
-                // the drain (which runs once per turn, after every sub-attack) can gate per
+                // the drain (which runs after the sub-attack has finished) can gate per
                 // sub-attack. Conditional spread → the single-event paths emit no index.
                 ...(subAttack !== undefined ? { subAttackIndex: subAttack } : {}),
                 ...(deliveredDamage !== undefined ? { deliveredDamage } : {}),
@@ -10346,6 +10350,125 @@ export function runCombat(rawInput: CombatEngineInput): {
             // Collect EVERY footprint victim hit by this cast's firing damage (unique by id) so each
             // can detonate its OWN containers after the firing hits land.
             const detonationTargets = new Map<string, CombatActor>();
+            // ── Emission steps ─────────────────────────────────────────────────
+            // A multi-hit skill is N consecutive full-walk attacks, so this cast emits ONE
+            // `ability-performed` per sub-attack that landed, each IMMEDIATELY followed by that
+            // sub-attack's own `attacked` events and then its debuff events.
+            //
+            // The adjacency is load-bearing, not cosmetic: buildCombatLog's `attacked` handler
+            // fills `openAttackEntry`, which is whichever attack row was created most recently.
+            // Emitting all N events first would leave rows 1..N-1 with zero targets, and
+            // `finalizeMissEntry` silently splices a target-less non-miss row out as a phantom —
+            // collapsing N rows into one and losing the per-sub-attack detail.
+            //
+            // Built as step lists rather than emitted inline so the enemy site can run the first
+            // step here and the remainder after its own tail (see `deferEmission`).
+            // `idx` names the sub-attack a step belongs to: running it puts that sub-attack's chain
+            // root in scope (`setHitRoot`), so the reactions its events wake join its chain.
+            type EmissionStep = { isEvent: boolean; idx?: number; run: () => void };
+            const runStep = (step: EmissionStep): void => {
+                if (step.idx !== undefined) setHitRoot(castHitRoot(step.idx));
+                step.run();
+            };
+            /** Push sub-attack `idx`'s buffered debuff events, after that index's `attacked`. */
+            const pushDebuffSteps = (into: EmissionStep[], idx: number): void => {
+                const emitters = debuffEmittersBySubAttack.get(idx);
+                if (!emitters || emitters.length === 0) return;
+                into.push({
+                    isEvent: false,
+                    idx,
+                    run: () => {
+                        // #413: hand each emitter the index of the bucket it was filed under. This
+                        // is the only place that identity still exists — the pairs were built
+                        // inside runPlayerTurn's debuff loop, which does not know which sub-attack
+                        // it is in — and it is what lets a `debuff-resisted` be attack-scoped.
+                        for (const emit of emitters) emit(idx);
+                    },
+                });
+            };
+            /** Push sub-attack `idx`'s `attacked` events (its own primary-target set). */
+            const pushAttackedSteps = (
+                into: EmissionStep[],
+                idx: number,
+                sub: SubAttackOutcome | undefined
+            ): void => {
+                const victims = attackedSignals.get(idx);
+                if (!victims || victims.size === 0) return;
+                const primaryIds: ReadonlySet<string> = new Set(sub?.primaryVictimIds ?? []);
+                into.push({
+                    isEvent: false,
+                    idx,
+                    run: () => emitAttackedForSubAttack(victims, idx, primaryIds),
+                });
+            };
+            /** Push one landed sub-attack's `ability-performed`, carrying `share` as its damage. */
+            const pushEventStep = (
+                into: EmissionStep[],
+                dap: NonNullable<PositionalTurnSel['deferredAbilityPerformed']>,
+                sub: SubAttackOutcome,
+                share: number
+            ): void => {
+                into.push({
+                    isEvent: true,
+                    idx: sub.index,
+                    run: () =>
+                        emitDeferredAbilityPerformed(
+                            dap,
+                            share,
+                            sub.didCrit,
+                            // THIS sub-attack's critting victims, not the cast-wide critPairs —
+                            // that count is hits × victims and would make `on-crit` fire the whole
+                            // cast's tally N times over. Σ of these lengths reproduces critPairs
+                            // exactly.
+                            sub.critVictimIds.length,
+                            sub.critVictimIds,
+                            sub.index,
+                            sub.deliveredDamage,
+                            sub.victimIds,
+                            sub.primaryVictimIds
+                        ),
+                });
+            };
+            // A multi-hit attack resolves the reactions to one hit before the next hit lands
+            // (owner ruling R125): every sub-attack but the last emits its events as soon as it
+            // settles and the reactions they wake drain at once — so hit 1's crit Defense Shred
+            // is on the target for hit 2, and a counter to hit 1 lands before hit 2 (and can
+            // destroy the attacker, ending the attack). The last sub-attack emits with the cast's
+            // tail below, exactly as a single-hit cast does. `emittedEarly` names the sub-attacks
+            // already emitted, so the tail skips them.
+            const interleaveReactions = sel.scalars.hits > 1;
+            const emittedEarly = new Set<number>();
+            // One `ability-performed` per sub-attack carries the cast's pre-funnel damage split
+            // evenly over its hits (a multi-hit cast cannot know, mid-attack, how many of its hits
+            // will land), or over the emitting sub-attacks of a single-hit cast.
+            const eventShare = (emittingCount: number): number =>
+                (sel.deferredAbilityPerformed?.damage ?? 0) /
+                (interleaveReactions ? sel.scalars.hits : emittingCount);
+            const settleSubAttack = (sub: SubAttackOutcome): void => {
+                if (!interleaveReactions || sub.index === sel.scalars.hits - 1) return;
+                // This hit's Stasis reductions are owed before the reactions to it resolve, so
+                // the drain below settles them and the next hit meets the shortened Stasis.
+                resolveStasisBreaks(coveredStasisVictims.splice(0), sel.castStasisStandsOn);
+                resolveStasisBreaks(anchorStasisVictims.splice(0), sel.castStasisStandsOn);
+                const now: EmissionStep[] = [];
+                const dap = sel.deferredAbilityPerformed;
+                if (dap && sub.victimIds.length > 0) pushEventStep(now, dap, sub, eventShare(0));
+                pushAttackedSteps(now, sub.index, sub);
+                pushDebuffSteps(now, sub.index);
+                attackedSignals.delete(sub.index);
+                debuffEmittersBySubAttack.delete(sub.index);
+                emittedEarly.add(sub.index);
+                for (const step of now) runStep(step);
+                // The reactions drain outside the deferred-log window: a reaction's own rows nest
+                // under its own entries, not under this attack.
+                const deferring = deferReflectLogs;
+                deferReflectLogs = false;
+                try {
+                    drainReactions();
+                } finally {
+                    deferReflectLogs = deferring;
+                }
+            };
             const critAgg = drivePositionalApply({
                 scalars: sel.scalars,
                 hitCrits: sel.hitCrits,
@@ -10508,6 +10631,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                         sel.applyDebuffsForSubAttack?.(sub, 'after-damage') ?? []
                     );
                 },
+                onSubAttackSettled: settleSubAttack,
+                attackerStanding: () => actor.destroyedRound === undefined,
             });
             // Queue the Stasis reduction for every covered victim hit this cast did not itself
             // stasis — one per landed hit. The gate already ran in `onVictimPreImpact`, the only
@@ -10516,46 +10641,10 @@ export function runCombat(rawInput: CombatEngineInput): {
             // Pure state, no events: hoisted ABOVE the emission block so the
             // interleaved event/attacked pairs below stay adjacent, with nothing between them.
             resolveStasisBreaks(coveredStasisVictims, sel.castStasisStandsOn);
-            // ── Interleaved per-sub-attack emission ───────────────────────────
-            // A multi-hit skill is N consecutive full-walk attacks, so this cast emits ONE
-            // `ability-performed` per sub-attack that landed, each IMMEDIATELY followed by that
-            // sub-attack's own `attacked` events.
-            //
-            // The adjacency is load-bearing, not cosmetic: buildCombatLog's `attacked` handler
-            // fills `openAttackEntry`, which is whichever attack row was created most recently.
-            // Emitting all N events first would leave rows 1..N-1 with zero targets, and
-            // `finalizeMissEntry` silently splices a target-less non-miss row out as a phantom —
-            // collapsing N rows into one and losing the per-sub-attack detail.
-            //
-            // Built as a step list rather than emitted inline so the enemy site can run the first
-            // step here and the remainder after its own tail (see `deferEmission`).
-            // `idx` names the sub-attack a step belongs to: running it puts that sub-attack's chain
-            // root in scope (`setHitRoot`), so the reactions its events wake join its chain.
-            const steps: { isEvent: boolean; idx?: number; run: () => void }[] = [];
-            const runStep = (step: (typeof steps)[number]): void => {
-                if (step.idx !== undefined) setHitRoot(castHitRoot(step.idx));
-                step.run();
-            };
-            /** Push sub-attack `idx`'s buffered debuff events, after that index's `attacked`. */
-            const pushDebuffSteps = (idx: number): void => {
-                const emitters = debuffEmittersBySubAttack.get(idx);
-                if (!emitters || emitters.length === 0) return;
-                steps.push({
-                    isEvent: false,
-                    idx,
-                    run: () => {
-                        // #413: hand each emitter the index of the bucket it was filed under. This
-                        // is the only place that identity still exists — the pairs were built
-                        // inside runPlayerTurn's debuff loop, which does not know which sub-attack
-                        // it is in — and it is what lets a `debuff-resisted` be attack-scoped.
-                        for (const emit of emitters) emit(idx);
-                    },
-                });
-            };
+            // ── The cast's emission (every sub-attack not already emitted early) ───────────
+            // See "Emission steps" above for the ordering contract.
+            const steps: EmissionStep[] = [];
             const signalledIndices = [...attackedSignals.keys()].sort((a, b) => a - b);
-            /** Sub-attack `idx`'s primary-target set, for its `attacked` events. */
-            const primaryIdsOf = (idx: number): ReadonlySet<string> =>
-                new Set(critAgg.subAttacks[idx]?.primaryVictimIds ?? []);
             // The indices that owe an emission step in the two loops that would otherwise walk
             // `attacked` signals ALONE — the nothing-landed fallback and the inline-emitted `else`.
             // A sub-attack can hold buffered debuff events with NO signals: the boundary hooks fire
@@ -10580,9 +10669,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                 //    for a sub-attack whose whole hit was redirected by Protection or transformed
                 //    into a DoT. That is a real attack under the locked rule — it struck victims,
                 //    it rolled, it must emit — and excluding it ALSO re-inflates the survivors,
-                //    because `share = dap.damage / emitting.length` divides the cast's pre-funnel
-                //    directDamage by the emitting count. Gating on `damage === 0` here would be
-                //    wrong for exactly that reason.
+                //    because `eventShare` divides the cast's pre-funnel directDamage by the
+                //    emitting count. Gating on `damage === 0` here would be wrong for exactly that
+                //    reason.
                 //    NUANCE: such an event emits, but its outgoing riders do NOT pay out. It
                 //    carries `deliveredDamage: 0` and the `on-deal-damage` guard (triggers.ts)
                 //    reads THAT rather than `damage`, so the event exists for the log and for the
@@ -10621,72 +10710,36 @@ export function runCombat(rawInput: CombatEngineInput): {
                             ),
                     });
                     for (const idx of emissionIndices) {
-                        const victims = attackedSignals.get(idx);
-                        if (victims && victims.size > 0) {
-                            steps.push({
-                                isEvent: false,
-                                idx,
-                                run: () =>
-                                    emitAttackedForSubAttack(victims, idx, primaryIdsOf(idx)),
-                            });
-                        }
-                        pushDebuffSteps(idx);
+                        pushAttackedSteps(steps, idx, critAgg.subAttacks[idx]);
+                        pushDebuffSteps(steps, idx);
                     }
                 } else {
                     // Per-event damage: the cast's pre-funnel `directDamage` split across the
-                    // emitting sub-attacks — today's basis, N ways (see the Decisions table).
-                    // N=1 ⟹ the divisor is 1 ⟹ the exact same number as before.
-                    const share = dap.damage / emitting.length;
+                    // sub-attacks (`eventShare`). N=1 ⟹ the divisor is 1 ⟹ the whole figure.
+                    const share = eventShare(emitting.length);
                     const emittingIndices = new Set(emitting.map((sub) => sub.index));
                     const indices = [
                         ...new Set([
                             ...critAgg.subAttacks.map((sub) => sub.index),
                             ...signalledIndices,
                         ]),
-                    ].sort((a, b) => a - b);
+                    ]
+                        .filter((idx) => !emittedEarly.has(idx))
+                        .sort((a, b) => a - b);
                     for (const idx of indices) {
                         const sub = critAgg.subAttacks[idx];
-                        if (sub && emittingIndices.has(idx)) {
-                            steps.push({
-                                isEvent: true,
-                                idx,
-                                run: () =>
-                                    emitDeferredAbilityPerformed(
-                                        dap,
-                                        share,
-                                        sub.didCrit,
-                                        // THIS sub-attack's critting victims, not the cast-wide
-                                        // critPairs — that count is hits × victims and would make
-                                        // `on-crit` fire the whole cast's tally N times over. Σ of
-                                        // these lengths reproduces critPairs exactly.
-                                        sub.critVictimIds.length,
-                                        sub.critVictimIds,
-                                        idx,
-                                        sub.deliveredDamage,
-                                        sub.victimIds,
-                                        sub.primaryVictimIds
-                                    ),
-                            });
-                        }
+                        if (sub && emittingIndices.has(idx)) pushEventStep(steps, dap, sub, share);
                         // Emitted unconditionally on the index, independent of whether this bucket
                         // also produced an event: one `attacked` per victim per sub-attack is what
                         // keeps incoming procs correct. (Since the gate above
                         // tests the footprint alone, a bucket with signals always has an event too
                         // — signals only exist for victims — but the two are kept independent so a
                         // future gate change cannot silently drop `attacked` events.)
-                        const victims = attackedSignals.get(idx);
-                        if (victims && victims.size > 0) {
-                            steps.push({
-                                isEvent: false,
-                                idx,
-                                run: () =>
-                                    emitAttackedForSubAttack(victims, idx, primaryIdsOf(idx)),
-                            });
-                        }
+                        pushAttackedSteps(steps, idx, sub);
                         // This sub-attack's own debuff events, after its `attacked`.
                         // Unconditional on the index — a bucket can hold debuff events with no
                         // `attacked` signals when every hit was transformed into a DoT.
-                        pushDebuffSteps(idx);
+                        pushDebuffSteps(steps, idx);
                     }
                 }
                 // Sweep: a sub-attack that buffered log rows but emitted no event (nothing landed)
@@ -10697,15 +10750,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // `attacked` fan-out is ours. Same events, same per-victim order, now grouped by
                 // sub-attack.
                 for (const idx of emissionIndices) {
-                    const victims = attackedSignals.get(idx);
-                    if (victims && victims.size > 0) {
-                        steps.push({
-                            isEvent: false,
-                            idx,
-                            run: () => emitAttackedForSubAttack(victims, idx, primaryIdsOf(idx)),
-                        });
-                    }
-                    pushDebuffSteps(idx);
+                    pushAttackedSteps(steps, idx, critAgg.subAttacks[idx]);
+                    pushDebuffSteps(steps, idx);
                 }
             }
             let emitDeferred = (): void => {};

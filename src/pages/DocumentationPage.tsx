@@ -3317,7 +3317,12 @@ const DocumentationPage: React.FC = () => {
                                         Multi-hit skills (e.g. &quot;attacks three times&quot;)
                                         crit-check each hit individually — on-crit follow-up effects
                                         (such as crit-triggered debuffs) fire once per critting hit.
-                                        Ships with &quot;extra action&quot; passives (Nuqtu,
+                                        Every reaction to one hit resolves before the next hit
+                                        lands: Enforcer&apos;s crit Defense Shred from his first hit
+                                        is already on the target for his second, and Stalwart&apos;s
+                                        counter to the first hit lands before the second. If a
+                                        counter destroys the attacker, its remaining hits never
+                                        happen. Ships with &quot;extra action&quot; passives (Nuqtu,
                                         Sustainer, Liberator, Tygr, Tormenter) take a full
                                         additional turn each round, re-entering the turn queue at
                                         their Speed position. An extra action is a turn, so a stack

@@ -968,7 +968,7 @@ export function registerReactiveListeners(args: {
                                 // they carry 0.
                                 triggerDamage: e.deliveredDamage ?? e.damage,
                                 // Carry this sub-attack's identity to the drain, which runs
-                                // once per turn — after every sub-attack — so it cannot ask the
+                                // after the sub-attack has finished, so it cannot ask the
                                 // engine which sub-attack it is in.
                                 subAttackIndex: e.subAttackIndex,
                                 // The enemies this sub-attack actually CRIT. Without
