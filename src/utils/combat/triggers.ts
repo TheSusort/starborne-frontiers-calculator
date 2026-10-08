@@ -126,6 +126,29 @@ export function reactionKey(intent: Pick<Intent, 'ownerId' | 'ability' | 'source
         : `${intent.ownerId}:ship:${intent.sourceSlot}:${intent.ability.trigger}`;
 }
 
+/** Times each ability has granted under one (clause, triggering event) pair, per run. */
+const grantOccurrences = new WeakMap<object, Map<string, number>>();
+
+/** Names the one firing of a reaction clause that granted a buff (`buff-applied.grantKey`): the
+ *  clause (`reactionKey`) answering one triggering event. Every recipient and every parsed ability
+ *  of that firing shares it; the same ability granting again for the same event (a per-stack
+ *  trigger enqueued once per stack) is a further firing. */
+function reactiveGrantKey(
+    intent: Intent,
+    ctx: Pick<IntentExecContext, 'statusEngine' | 'reactionFiringId'>
+): string {
+    const pair = `${reactionKey(intent)}@${intent.eventSeq ?? `f${ctx.reactionFiringId}`}`;
+    let counts = grantOccurrences.get(ctx.statusEngine);
+    if (!counts) {
+        counts = new Map();
+        grantOccurrences.set(ctx.statusEngine, counts);
+    }
+    const abilityKey = `${pair}|${intent.ability.id}`;
+    const n = counts.get(abilityKey) ?? 0;
+    counts.set(abilityKey, n + 1);
+    return `${pair}#${n}`;
+}
+
 /**
  * A NON-GAME safety net on a chain of reactions. The game has no chain limit (owner ruling R91):
  * the lineage rule above is what ends every loop, because a chain can only grow while every
@@ -2450,13 +2473,15 @@ export function registerReactiveListeners(args: {
                     break;
                 }
                 case 'on-enemy-buffed': {
-                    // A skill cast that grants buffs is ONE trigger however many recipients or
-                    // buffs it grants: the grants a granter's own turn raises (not reactive ones)
-                    // share that turn. Every other gain — a reaction's, or one outside any turn —
-                    // is its own trigger.
+                    // One trigger per skill action that grants buffs, however many recipients or
+                    // buffs it covers: an active or charged cast (the grants a granter's own turn
+                    // raises, outside any reaction), or one named firing — a reaction clause, a
+                    // passive's per-turn gain, a combat-start grant (`buff-applied.grantKey`).
+                    // A gain that names neither is its own trigger.
                     let turnSeq = 0;
                     let turnActor: string | undefined;
                     let lastCastSeq = -1;
+                    const seenActions = new Set<string>();
                     bus.on('turn-started', (e) => {
                         turnSeq++;
                         turnActor = e.actorId;
@@ -2471,7 +2496,13 @@ export function registerReactiveListeners(args: {
                         // gaining one. Nuqtu's self-cleanse + Terran Bolster III are both
                         // self-target — no eventCtx capture needed.
                         if (!isOpposing(e.actorId)) return;
-                        if (e.reactive !== true && turnActor === (e.granterId ?? e.actorId)) {
+                        if (e.grantKey !== undefined) {
+                            if (seenActions.has(e.grantKey)) return;
+                            seenActions.add(e.grantKey);
+                        } else if (
+                            e.reactive !== true &&
+                            turnActor === (e.granterId ?? e.actorId)
+                        ) {
                             if (lastCastSeq === turnSeq) return;
                             lastCastSeq = turnSeq;
                         }
@@ -5685,6 +5716,7 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
             duration,
             ...(cfg.hits !== undefined ? { hits: cfg.hits } : {}),
         };
+        const grantKey = reactiveGrantKey(intent, ctx);
         for (const rid of recipients) {
             if (recipientCarriesBlockBuff(ctx.statusEngine, rid)) continue; // Block Buff: silent skip
             // Barrier Recharging gates TWO different grants for a recipient already under the
@@ -5709,6 +5741,7 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
             ) {
                 continue;
             }
+            const capped = ctx.statusEngine.selfBuffAtCap(rid, cfg.buffName);
             if (banksStacks) {
                 ctx.statusEngine.addSelfAccumulatingStacks(rid, status.payload, cfg.stacks, {
                     maxStacks: cfg.maxStacks ?? (cfg.isStackable ? undefined : cfg.stacks),
@@ -5717,6 +5750,7 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
             } else {
                 ctx.statusEngine.applyTimedAbilityStatus(ctx.round, status, rid);
             }
+            if (capped) continue;
             ctx.bus.emit({
                 type: 'buff-applied',
                 actorId: rid,
@@ -5724,6 +5758,7 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 round: ctx.round,
                 buffName: cfg.buffName,
                 duration: banksStacks ? 'recurring' : duration,
+                grantKey,
             });
         }
         // Co-granted buffs (Last Stand's Barrier + Block Debuff) — applied in the
@@ -5770,6 +5805,7 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
                     round: ctx.round,
                     buffName: extra.buffName,
                     duration: extra.duration,
+                    grantKey,
                 });
             }
         }

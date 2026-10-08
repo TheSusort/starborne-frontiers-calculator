@@ -233,7 +233,7 @@ describe.each<Placement>(['player', 'enemy'])('subject on the %s side', (placeme
         // stack of Core Charge I" is one clause, though it parses to two abilities. A buffer beside
         // Nuqtu A gains Attack Up II:
         //  - B's clause answers it → B: 1 Core Charge, and two buff gains (TB, CC).
-        //  - A's clause answers each of those two separate events → A: 2 Core Charge.
+        //  - B's firing is one skill action granting buffs, so A's clause answers it once → A: 1.
         //  - A's buff gains would wake B's clause, already in each chain → stop.
         const selfBuff: ShipSkills = {
             slots: [
@@ -275,7 +275,7 @@ describe.each<Placement>(['player', 'enemy'])('subject on the %s side', (placeme
         const { input, id } = boardInput(placement, nuqtuA, [buffer], [nuqtuB], 1);
         const turns = runTurns(input);
         expect(turnOf(turns, id(buffer)).coreCharges).toEqual({
-            [id(nuqtuA)]: 2,
+            [id(nuqtuA)]: 1,
             [id(nuqtuB)]: 1,
         });
         // The chain ends on the lineage rule, not on the depth cap.

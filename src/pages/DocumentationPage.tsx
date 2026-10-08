@@ -2886,6 +2886,18 @@ const DocumentationPage: React.FC = () => {
                                         hits. Works for both teams and in the DPS calculator.
                                     </p>
                                     <p className="text-theme-text mb-2">
+                                        <span className="text-primary">
+                                            Clause Order in Battles:
+                                        </span>{' '}
+                                        Steals, cleanses and purges follow the same order: a buff
+                                        Thresh steals before his damage boosts that hit, Sustainer
+                                        cleanses his debuffs before he hits, and Sefuba&apos;s
+                                        &quot;deals 160% damage and purges 1 buff&quot; hits through
+                                        the buff before removing it. A Stasis Tygr inflicts before
+                                        his damage counts for his own &quot;more damage to enemies
+                                        with Stasis&quot; on that hit. Works for both teams.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
                                         <span className="text-primary">Crit-Gated Effects:</span> In
                                         a battle, a healing simulation and the DPS calculator, an
                                         effect that says &quot;if a critical hit occurs&quot; or
@@ -2908,8 +2920,11 @@ const DocumentationPage: React.FC = () => {
                                         passive that grants recurring stacks of a buff each time
                                         something happens, such as Nuqtu&apos;s Core Charge, adds
                                         them every time and keeps them up to the buff&apos;s cap.
-                                        Nuqtu gains one stack of Core Charge I for every buff an
-                                        enemy gains, so four enemy buffs before his turn give +16%
+                                        Nuqtu gains one stack of Core Charge I for every enemy skill
+                                        action that grants a buff, however many buffs or ships it
+                                        covers: an active or charged skill, one firing of a
+                                        reaction, or one turn of a passive such as Ravager&apos;s
+                                        Overload. Four such actions before his turn give +16%
                                         damage, and the stacks carry into later rounds until he
                                         holds 10. Works for both teams.
                                     </p>
@@ -3251,6 +3266,19 @@ const DocumentationPage: React.FC = () => {
                                         damage and then inflicts Stasis (Razi&apos;s charged) draws
                                         no reaction to its own hit, because the Stasis is on by the
                                         time the reaction would resolve.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
+                                        <span className="text-primary">
+                                            Statuses landed by a reaction:
+                                        </span>{' '}
+                                        A buff or debuff that lands on a ship during its own turn
+                                        does not tick down at the end of that turn. Iridium&apos;s
+                                        1-turn Speed Down on the ship that just hit him still slows
+                                        its next turn, Guardian&apos;s Provoke drags the critting
+                                        enemy&apos;s next attack onto him, and Flamel&apos;s 2-turn
+                                        Stasis costs its attacker the next two turns unless a hit
+                                        shortens it. A Stasis works the moment it lands: the ship
+                                        takes no further reactions that turn.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">

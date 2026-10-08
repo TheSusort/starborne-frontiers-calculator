@@ -94,6 +94,7 @@ import {
     AbilityStatusPayload,
     RegisteredAbilityStatus,
     StatusEngine,
+    announceAccumGains,
     createStatusEngine,
 } from './statusEngine';
 import { isPassivePerHitStatus, liveGateConditions } from './abilityStatusGating';
@@ -154,7 +155,9 @@ import {
 import { normalizeTeamActorsToWalked } from './teamActorWalk';
 import { normalizeCombatRoster } from './normalizeRoster';
 import { buildBuffDurationExtensionByOwner } from './buffDurationExtension';
+import { isDamageClause } from './castClauseOrder';
 import {
+    CastNamesBeforeDamage,
     HealingRuntimeCtx,
     PlayerActorRuntime,
     PlayerRoundCtx,
@@ -398,9 +401,7 @@ function registerActorAbilityStatuses(
             : -1;
         for (const [abilityIdx, ability] of slot.abilities.entries()) {
             const cfg = ability.config;
-            // A real damage-dealing clause. A 0-multiplier entry is a structural no-op (the
-            // fixtures' "took a turn" placeholder) and orders nothing.
-            if (isFiringSlot && cfg.type === 'damage' && cfg.multiplier > 0) sawDamageClause = true;
+            if (isFiringSlot && isDamageClause(ability)) sawDamageClause = true;
             if (isFiringSlot && cfg.type === 'dot') dotClauseIds.push(ability.id);
             if (cfg.type !== 'buff' && cfg.type !== 'debuff') continue;
             // #399: the store side comes from the ONE classifier (abilityTargetSide.ts), not a
@@ -764,6 +765,7 @@ function seedPassiveTimedStatuses(
                     round,
                     buffName: status.payload.buffName,
                     duration: status.duration,
+                    grantKey: `seed:${round}:${rt.actor.id}:${status.sourceSlot}`,
                 });
             }
         }
@@ -8509,15 +8511,14 @@ export function runCombat(rawInput: CombatEngineInput): {
         // non-enemy-status modifier (attack/crit/self-buff-gated outgoing, etc.) contributes
         // identically to both folds and cancels, isolating the pure per-victim delta.
         //
-        // CAUSALITY: the per-victim status MUST be a PRE-TURN snapshot, not a live re-read at
-        // apply time. `drivePositionalApply` runs AFTER `runPlayerTurn` returns, by which point
-        // this turn's OWN debuff-inflict ability has already mutated the status engine — a live
-        // read at that point would let a skill's own same-turn infliction retroactively satisfy
-        // its own per-victim gate (exactly the anti-causality bug I1 guards against for the
-        // PRIMARY target via buildTurnArgs's pre-turn `enemyDebuffNamesForTarget(tgt)` call).
-        // `snapshotPreTurnVictimStatus` is called by each of the three turn sites BEFORE their
-        // `runPlayerTurn` call, capturing every living opposing actor's status at that moment;
-        // `perVictimOutgoingDeltaPct` below reads ONLY from that frozen snapshot.
+        // CAUSALITY: the per-victim status is a PRE-TURN snapshot plus exactly the debuffs this
+        // cast landed on that victim through a clause written AHEAD of its damage clause
+        // (`CastNamesBeforeDamage`, merged by `victimReadingCtx`) — clauses resolve in written
+        // order. NOT a live re-read at apply time: `drivePositionalApply` runs AFTER
+        // `runPlayerTurn` returns, by which point a clause written AFTER the damage may already
+        // be in the store too, and it must not reach that damage. `snapshotPreTurnVictimStatus`
+        // is called by each of the three turn sites BEFORE their `runPlayerTurn` call; the bound
+        // target's `primaryCtx` carries the same overlay from inside the turn.
         //
         // The per-victim ctx is `victimReadingCtx` (its doc lists the re-pointed fields).
         // `enemyBuffNames` there is JUST this victim's: the per-turn primaryCtx carries a UNION
@@ -8591,7 +8592,8 @@ export function runCombat(rawInput: CombatEngineInput): {
         const victimReadingCtx = (
             primaryCtx: ConditionContext,
             snap: PreTurnVictimStatusSnapshot,
-            victim: CombatActor
+            victim: CombatActor,
+            castNamesBeforeDamage: CastNamesBeforeDamage | undefined
         ): ConditionContext => ({
             ...primaryCtx,
             enemyBuffNames: snap.enemyBuffNames,
@@ -8599,7 +8601,14 @@ export function runCombat(rawInput: CombatEngineInput): {
                 ? { enemyBuffCount: snap.enemyBuffCount }
                 : {}),
             ...(primaryCtx.enemyDebuffNames !== undefined
-                ? { enemyDebuffNames: snap.enemyDebuffNames }
+                ? {
+                      enemyDebuffNames: [
+                          ...snap.enemyDebuffNames,
+                          ...(castNamesBeforeDamage?.get(victim.id) ?? []).filter(
+                              (n) => !snap.enemyDebuffNames.includes(n)
+                          ),
+                      ],
+                  }
                 : {}),
             ...(primaryCtx.enemyDebuffCount !== undefined
                 ? { enemyDebuffCount: snap.enemyDebuffCount }
@@ -8626,7 +8635,8 @@ export function runCombat(rawInput: CombatEngineInput): {
             victim: CombatActor
         ): PerVictimOutgoingDelta => {
             if (!perVictimOutgoing) return NO_OUTGOING_DELTA;
-            const { modifierAbilities, primaryCtx, boundTargetId } = perVictimOutgoing;
+            const { modifierAbilities, primaryCtx, boundTargetId, castNamesBeforeDamage } =
+                perVictimOutgoing;
             if (modifierAbilities.length === 0) return NO_OUTGOING_DELTA; // nothing to re-fold
             // The bound target's own reading IS `primaryCtx`, so its delta is 0 by definition.
             if (victim.id === boundTargetId) return NO_OUTGOING_DELTA;
@@ -8635,7 +8645,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             // rather than crashing.
             const snap = preTurnStatus?.get(victim.id);
             if (!snap) return NO_OUTGOING_DELTA;
-            const victimCtx = victimReadingCtx(primaryCtx, snap, victim);
+            const victimCtx = victimReadingCtx(primaryCtx, snap, victim, castNamesBeforeDamage);
             const full = modifierTotalsFromAbilities(modifierAbilities, victimCtx);
             const base = modifierTotalsFromAbilities(modifierAbilities, primaryCtx);
             return {
@@ -8662,7 +8672,8 @@ export function runCombat(rawInput: CombatEngineInput): {
             didCrit: boolean
         ): number => {
             if (!perVictimScaling) return 0;
-            const { scalingAbility, primaryCtx, boundTargetId } = perVictimScaling;
+            const { scalingAbility, primaryCtx, boundTargetId, castNamesBeforeDamage } =
+                perVictimScaling;
             // The bound target's own reading IS `primaryCtx` (which also sees what this cast
             // landed on it ahead of its damage clause), so its delta is 0 by definition.
             if (victim.id === boundTargetId) return 0;
@@ -8671,7 +8682,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             const readsOwnCrit =
                 primaryCtx.roundCrit !== undefined &&
                 scalingAbility.conditions.some((c) => c.subject === 'self-crit');
-            const victimCtx = victimReadingCtx(primaryCtx, snap, victim);
+            const victimCtx = victimReadingCtx(primaryCtx, snap, victim, castNamesBeforeDamage);
             return (
                 scaledBonus(
                     scalingAbility,
@@ -10221,6 +10232,16 @@ export function runCombat(rawInput: CombatEngineInput): {
                     const fams = victimOwnEnemyFamilies(statusEngine, a.id);
                     return fams.size > 0 ? { enemyAppliedFamilies: fams } : {};
                 })(),
+                // The same three own-debuff readings, re-read live after a self-cleanse written
+                // ahead of the cast's damage (see `PlayerTurnArgs.rereadOwnDebuffs`).
+                rereadOwnDebuffs: () => {
+                    const fams = victimOwnEnemyFamilies(statusEngine, a.id);
+                    return {
+                        selfDebuffNames: ownerDebuffNames(a.id),
+                        selfDebuffCount: actorDebuffCount(statusEngine, a),
+                        ...(fams.size > 0 ? { enemyAppliedFamilies: fams } : {}),
+                    };
+                },
                 // Team-aura distribution. Union THIS actor's LIVING same-side allies' `all-allies`
                 // passive modifier abilities, EXCLUDING the actor's own id (its own aura is
                 // already in its own modifierAbilities — no double-count) — reuses
@@ -11838,6 +11859,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         })();
 
         bus.emit({ type: 'round-started', round: r });
+        announceAccumGains(statusEngine, bus);
         drainStartOfRound();
 
         // §4.5 Stasis reductions (`stasisBreakPending`, declared before the round loop). An entry
@@ -11978,6 +12000,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 statusEngine.beginTurn(actor.id);
 
                 bus.emit({ type: 'turn-started', actorId: actor.id, round: r });
+                announceAccumGains(statusEngine, bus);
                 // LOG-ONLY per-turn snapshot of the acting actor's live modelled stats
                 // (no listener subscribes — see the events.ts doc comment). Reads the SAME
                 // effectiveStatsOf fold every other live-stat call site in this file uses.
