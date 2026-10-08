@@ -6,7 +6,8 @@
  *    is once per (skill cast, debuffed ally) however many debuffs the cast landed on that ally
  *    (`oncePerRootCast: 'per-victim'`). Her clause says "inflicted", so an APPLIED DoT (the
  *    Burner set's Inferno) repairs nothing, as an applied debuff never did.
- *  - Firewall: no verb in its text, so inflicted and applied DoTs both count.
+ *  - Firewall: no verb in its text, so inflicted and applied DoTs both count. Its proc on one stack
+ *    blocks the same skill's later stacks (R161), so a certain proc grants once per cast.
  *
  * Real parsed kits (buildTraceShip, refit 4): Hayyan's passive, Snakeroot's active; Firewall via
  * the real equipment registry. Mounted on both sides; the inflicter is faster and hits the front
@@ -226,20 +227,22 @@ describe("Firewall: 'When debuffed' rolls once per landed DoT stack", () => {
         return count;
     };
     for (const side of ['player', 'enemy'] as const) {
-        it(`${side}-side, certain proc: Snakeroot's 2 stacks → 2 grants; named → 1; applied Inferno → 1; none → 0`, () => {
+        it(`${side}-side, certain proc: Snakeroot's 2 stacks → 1 grant (R161); named → 1; applied Inferno → 1; none → 0`, () => {
             setupKeyedRng(7);
-            expect(grants('snakeroot', side, 1)).toBe(2);
+            // The proc on the first stack blocks the second, which never lands or rolls (R161).
+            expect(grants('snakeroot', side, 1)).toBe(1);
             expect(grants('named', side, 1)).toBe(1);
             expect(grants('applied-inferno', side, 1)).toBe(1);
             expect(grants('none', side, 1)).toBe(0);
         });
-        it(`${side}-side, legendary 15%: about 15% of 400 Corrosion stacks proc`, () => {
+        it(`${side}-side, legendary 15%: about 15% of the landed Corrosion stacks proc`, () => {
             let total = 0;
             for (let seed = 1; seed <= 200; seed++) {
                 setupKeyedRng(seed);
                 total += grants('snakeroot', side);
             }
-            // 400 stacks at 15% → mean 60, sd ≈ 7.1.
+            // 200 casts of 2 stacks; a proc on the first blocks the second (R161), so about
+            // 200 × 1.85 = 370 stacks land and roll at 15% → mean ≈ 55.5, sd ≈ 6.9.
             expect(total).toBeGreaterThan(35);
             expect(total).toBeLessThan(90);
         });

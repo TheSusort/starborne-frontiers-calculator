@@ -657,6 +657,7 @@ const focusBoard = (opts: {
      *  Stealthed makes the owner the only pickable target and NO ally is ever hit — which is
      *  exactly how this board first came back with zero ally hits. */
     focusSelfBuffs?: CombatEngineInput['selfBuffs'];
+    numRounds?: number;
 }): CombatEngineInput => ({
     attack: 0,
     crit: 0,
@@ -664,7 +665,7 @@ const focusBoard = (opts: {
     defensePenetration: 0,
     hacking: opts.hacking ?? 0,
     chargeCount: 0,
-    numRounds: 2,
+    numRounds: opts.numRounds ?? 2,
     enemyDebuffs: [],
     selfDotModifier: 0,
     defensePenetrationBuff: 0,
@@ -723,6 +724,9 @@ describe('#363 engine — the Stasis inflictor reacts only to hits inside its pa
                 ability: stasisAbility(),
                 allyStatus: 'Stealth',
                 hacking: 2000, // she has to actually LAND the Stasis for the arm to be observable
+                // Three rounds, two attacks: the round-1 Stasis costs the enemy its round-2 turn
+                // (R123), so it attacks in rounds 1 and 3.
+                numRounds: 3,
                 // Her own Stealth, so EVERY player cell is Stealthed and the enemy's ordinary
                 // front-to-back line selection is restored (see focusSelfBuffs). Her pattern is
                 // Not-Self so she can never self-cast it, and the enemy's line from row M never
@@ -758,7 +762,7 @@ describe('#363 engine — the Stasis inflictor reacts only to hits inside its pa
         for (const id of Object.keys(PLAYER_CELLS)) {
             expect(result().direct.get(id), `${id} took no direct damage`).toBeGreaterThan(0);
         }
-        expect(result().allyHits.length).toBe(6); // 3 victims × 2 rounds, one line attack each
+        expect(result().allyHits.length).toBe(6); // 3 victims × 2 attacking rounds, one line attack each
     });
 
     it('PRECONDITION: the production resolver puts two allies inside the pattern and one outside', () => {

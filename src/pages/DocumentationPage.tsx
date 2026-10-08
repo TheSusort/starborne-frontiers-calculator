@@ -3089,9 +3089,14 @@ const DocumentationPage: React.FC = () => {
                                         (Oleander&apos;s charge, Provider&apos;s hit, Lingshe&apos;s
                                         Stealth, Hayyan&apos;s repair, the Firewall implant&apos;s
                                         chance) fires once per stack that lands, within its own
-                                        once-per-cast or once-per-round limits. APEX&apos;s 3%
-                                        shield fires at most once per skill cast, whoever cast it:
-                                        her active landing two debuffs, plus the debuffs Provider
+                                        once-per-cast or once-per-round limits. Firewall&apos;s
+                                        Block Debuff works the moment it procs: if Curator&apos;s
+                                        Attack Down III procs it, the same skill&apos;s Crit Power
+                                        Down III is blocked and rolls nothing. The same goes for
+                                        damage-over-time stacks: a proc on Snakeroot&apos;s first
+                                        Corrosion I stack blocks her second. APEX&apos;s 3% shield
+                                        fires at most once per skill cast, whoever cast it: her
+                                        active landing two debuffs, plus the debuffs Provider
                                         answers them with, gives one shield; an enemy&apos;s attack
                                         that wakes Warden&apos;s debuffs gives one more. Her Block
                                         Shield, and Xcellence&apos;s strike when an enemy resists a
@@ -3245,6 +3250,19 @@ const DocumentationPage: React.FC = () => {
                                         time and Bombs do not shorten Stasis, and neither do ships
                                         whose attacks &ldquo;do not reduce Stasis&rdquo;, such as
                                         Akula.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
+                                        <span className="text-primary">
+                                            Statuses landed by a reaction:
+                                        </span>{' '}
+                                        A buff or debuff that lands on a ship during its own turn
+                                        does not tick down at the end of that turn. Iridium&apos;s
+                                        1-turn Speed Down on the ship that just hit him still slows
+                                        its next turn, Guardian&apos;s Provoke drags the critting
+                                        enemy&apos;s next attack onto him, and Flamel&apos;s 2-turn
+                                        Stasis costs its attacker the next two turns unless a hit
+                                        shortens it. A Stasis works the moment it lands: the ship
+                                        takes no further reactions that turn.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">

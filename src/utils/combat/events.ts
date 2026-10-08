@@ -207,6 +207,12 @@ export type CombatEvent =
            *  success on the cast a reaction's debuff belongs to. */
           reactionFiringId?: number;
           viaAllyDebuffInflictedReaction?: true;
+          /** Proc verdicts the TARGET's reactions to this landing already drew, by ability id —
+           *  drawn at the landing because their effect must hold for the rest of the skill
+           *  (Firewall's Block Debuff, owner ruling R149; engine.ts `decideBlockDebuffAtLanding`).
+           *  The `on-debuffed` listener hands its own entry to the executor, which spends it
+           *  instead of drawing. Absent → every reaction draws at the drain. */
+          preDecidedProcs?: Readonly<Record<string, boolean>>;
       } & ReactiveStamp)
     | ({
           type: 'debuff-resisted';
@@ -285,6 +291,9 @@ export type CombatEvent =
            *  so the `on-ally-debuff-inflicted` listener's `dot-applied` arm can skip its own
            *  reaction's output the same way the `debuff-applied` arm does. */
           viaAllyDebuffInflictedReaction?: true;
+          /** The `debuff-applied` sibling's `preDecidedProcs`, one entry per landed stack (owner
+           *  rulings R149/R161: every stack is its own landing and its own Firewall roll). */
+          preDecidedProcsPerStack?: ReadonlyArray<Readonly<Record<string, boolean>> | undefined>;
       } & ReactiveStamp)
     /** A heal/shield cast resolved (healing mode only). `targets` lists recipient actor
      *  ids in application order; `amount` is the summed RAW amount across recipients.
