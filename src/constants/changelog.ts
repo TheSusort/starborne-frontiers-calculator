@@ -16,6 +16,11 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: a buff stolen before the damage now boosts that hit.',
     'Combat simulator: a cleanse written before the damage now clears debuffs first.',
     'Combat simulator: a purge written after the damage now resolves after the hit.',
+    'Combat simulator: the Leech set now repairs from counter-attack and implant-proc damage.',
+    'Combat simulator: Leech set, Bloodthirst and Last Wish repairs can now critically hit.',
+    "Combat simulator: Valkyrie's Echoing Burst repair and other damage-based repairs can now crit.",
+    'Combat simulator: Madax now receives 30% more repairs beside a supporter.',
+    "Combat simulator: Zosimos's active now counts a repair that healed nothing.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

@@ -713,7 +713,7 @@ describe('outgoing reactive triggers — per-sub-attack fan-out', () => {
             type: 'heal',
             target: 'self',
             trigger: 'on-crit',
-            config: { type: 'heal', pct: 20, basis: 'damage-dealt' },
+            config: { type: 'heal', pct: 20, basis: 'damage-dealt', noCrit: true },
         });
 
     /** Howler/Sentinel shape: an ALLY-routed grant on on-ally-crit (never self, so ungated). */

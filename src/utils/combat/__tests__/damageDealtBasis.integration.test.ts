@@ -87,7 +87,7 @@ const bloodthirstPassive = (): ShipSkills['slots'][number] => ({
             type: 'heal',
             target: 'self',
             trigger: 'on-crit',
-            config: { type: 'heal', pct: HEAL_PCT, basis: 'damage-dealt' },
+            config: { type: 'heal', pct: HEAL_PCT, basis: 'damage-dealt', noCrit: true },
         }),
     ],
 });
