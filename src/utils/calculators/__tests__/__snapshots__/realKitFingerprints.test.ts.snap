@@ -236,6 +236,8 @@ exports[`kit fingerprints > Asphyxiator 1`] = `
 {
   "plain": [
     "attack",
+    "buff",
+    "buff-expired",
     "charge-changed",
     "control",
     "debuff",
@@ -246,6 +248,8 @@ exports[`kit fingerprints > Asphyxiator 1`] = `
   ],
   "richEnemy": [
     "attack",
+    "buff",
+    "buff-expired",
     "charge-changed",
     "control",
     "debuff",
@@ -256,6 +260,8 @@ exports[`kit fingerprints > Asphyxiator 1`] = `
   ],
   "wounded": [
     "attack",
+    "buff",
+    "buff-expired",
     "charge-changed",
     "control",
     "debuff",

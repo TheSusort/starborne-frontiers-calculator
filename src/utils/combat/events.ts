@@ -118,6 +118,10 @@ export type CombatEvent =
            *  (drainReactions), when the engine's ambient `currentSubAttackIndex` has been cleared,
            *  so the identity has to travel on the event. */
           subAttackIndex?: number;
+          /** The skill slot (`'active'` / `'charged'`) the cast fired from. A reaction written in a
+           *  skill's own text ("If this critically hits, ...") fires only on that slot's casts;
+           *  passive-slot reactions ignore it. Absent on an emitter that carries no cast slot. */
+          sourceSlot?: SkillSlot;
           didHit?: boolean;
       } & ReactiveStamp)
     | ({
@@ -151,8 +155,8 @@ export type CombatEvent =
      *  of the lineage rule (`reactionKey` in triggers.ts), which the enqueue wrapper applies to
      *  every trigger; this brand stays for listener-level fixtures. Every OTHER on-debuff-inflicted
      *  ability of the owner still sees the debuff: the Insidiousness implant reacts to Warden's
-     *  reactive Out. Damage Down II as to a cast-inflicted one, and rolls for it separately
-     *  from the cast (`Ability.procScope` `'per-cast'`). Each ability in a chain fires at most
+     *  reactive Out. Damage Down II as to a cast-inflicted one, and rolls for it as its own
+     *  debuff (`Ability.procScope` `'per-debuff'`). Each ability in a chain fires at most
      *  once, so chain LENGTH is bounded by the owner's count of such abilities.
      *  Debuffs from OTHER reactive triggers (on-crit/on-attacked) carry no chain, so the chain
      *  guard lets every on-debuff-inflicted ability see them.
@@ -193,8 +197,8 @@ export type CombatEvent =
           /** Set on every debuff a REACTION lands (any trigger): the id of that one reaction
            *  firing, shared by everything the firing lands and distinct from every other firing in
            *  the combat. One round's Toxic Overflow spreads share one id (`rootCastKey`). Absent
-           *  on a cast's own inflictions. `procScope:'per-cast'` (Insidiousness) gives each firing
-           *  its own roll. */
+           *  on a cast's own inflictions. `procScope:'per-debuff'` (Insidiousness) caps its one
+           *  success on the cast a reaction's debuff belongs to. */
           reactionFiringId?: number;
           viaAllyDebuffInflictedReaction?: true;
           /** Proc verdicts the TARGET's reactions to this landing already drew, by ability id —

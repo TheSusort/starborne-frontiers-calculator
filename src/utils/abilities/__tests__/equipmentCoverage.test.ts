@@ -576,9 +576,9 @@ describe('equipmentCoverage — implants', () => {
     });
 
     // D-PR8: reactive self-buff implants
-    it('SYNAPTIC_RESONANCE produces 1 self Speed Up III buff on-enemy-repaired per rarity (no procChance)', () => {
+    it('SYNAPTIC_RESONANCE produces a self Speed Up III buff and a next-crit crit-power arming, both on-enemy-repaired per rarity (no procChance)', () => {
         for (const v of IMPLANTS['SYNAPTIC_RESONANCE'].variants) {
-            expect(implantAbilityCount('SYNAPTIC_RESONANCE', v.rarity)).toBe(1);
+            expect(implantAbilityCount('SYNAPTIC_RESONANCE', v.rarity)).toBe(2);
         }
     });
     it('AMBUSH produces 1 self Crit Power Up III buff per rarity (start-of-round, self-buff Stealth gate)', () => {
