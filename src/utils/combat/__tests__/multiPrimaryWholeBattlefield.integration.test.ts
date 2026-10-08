@@ -228,7 +228,8 @@ describe.each(SIDES)('Curator’s active (attacker on the %s side)', (placement)
 
     it('Stalwart counters once, Malvex gains one shield, Nosorog reflects once', () => {
         const obs = run(placement, curator(), [], trio());
-        expect(obs.counters).toEqual(['stalwart>curator']);
+        // Nosorog's reflect lands like a counter (R137), ahead of Stalwart's counter.
+        expect(obs.counters).toEqual(['nosorog>curator', 'stalwart>curator']);
         expect(obs.malvexShields).toHaveLength(1);
         expect(obs.malvexShields[0]).toBeCloseTo(obs.castTaken.malvex * 0.15, 3);
         // One 40% reflect of what Nosorog took (Curator has 0 defence).

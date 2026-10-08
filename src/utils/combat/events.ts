@@ -1012,9 +1012,14 @@ export type CombatEvent =
            *  victim's once-per-attack guards treat each one as its own attack. Absent on a cast
            *  hit. The combat log renders these hits from `reactive-damage-performed` instead. */
           reactiveHitId?: number;
-          /** The hit is a counter-attack. Every reaction hears it except a counter that
-           *  `counterAnswersCounters` (triggers.ts) excludes. */
+          /** The hit is a counter-attack, or Nosorog's reflect, which lands like one (R137). Every
+           *  reaction hears it except a counter that `counterAnswersCounters` (triggers.ts)
+           *  excludes. */
           fromCounter?: true;
+          /** The hit struck this target but was no direct damage on it (`directlyDamagesVictim`:
+           *  Protection moved all of it onto protectors, R139). The event exists so the combat log
+           *  keeps the target's row; no "when directly damaged" reaction answers it. */
+          notDirectDamage?: true;
       };
 
 export type CombatEventType = CombatEvent['type'];

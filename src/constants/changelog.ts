@@ -12,6 +12,10 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat log: a Protection-redirected hit now shows only the damage the target took.',
     'Combat log: Protection-redirected counters and procs now show only damage taken.',
     'Combat simulator: Nuqtu now gains one Core Charge per enemy buffing skill.',
+    "Combat simulator: Nosorog's reflect now counts as direct damage, waking attacker reactions.",
+    'Combat simulator: fully Protection-redirected hits no longer trigger counters or shorten Stasis.',
+    'Combat simulator: Malvex now shields off counters and round-start hits aimed at him.',
+    "Combat simulator: Quixilver's damage-taken shield now fires on passive and counter hits.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

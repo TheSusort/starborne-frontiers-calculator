@@ -3237,10 +3237,30 @@ const DocumentationPage: React.FC = () => {
                                         direct hits like any skill hit. They wake &ldquo;when
                                         directly damaged&rdquo; passives, shorten Stasis, are
                                         redirected by Protection, use the attacker&apos;s shield
-                                        penetration and spend Exposed. A counter-attack sets off
-                                        another counter-attack only when that one is a
-                                        &ldquo;primary target&rdquo; counter like Stalwart&apos;s.
-                                        Damage over time and Bomb explosions are not direct hits.
+                                        penetration and spend Exposed. They also feed damage-taken
+                                        shields: Malvex shields off a counter-attack or round-start
+                                        hit aimed at him, and Quixilver off any hit that breaks
+                                        through her shield. A counter-attack sets off another
+                                        counter-attack only when that one is a &ldquo;primary
+                                        target&rdquo; counter like Stalwart&apos;s. Damage over time
+                                        and Bomb explosions are not direct hits.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
+                                        <span className="text-primary">
+                                            Reflects and Protection:
+                                        </span>{' '}
+                                        Nosorog&apos;s reflect is direct damage to the attacker and
+                                        lands like a counter-attack: Warden hitting Nosorog takes
+                                        the reflect, then inflicts Corrosion on him and repairs, and
+                                        Stalwart counters it. The Reflect gear set&apos;s bounce is
+                                        not direct damage and wakes nothing. A hit that Protection
+                                        moves entirely onto the protector (Lionheart&apos;s 10
+                                        stacks) is not direct damage to the ship it was aimed at:
+                                        that ship does not counter or react, and its Stasis does not
+                                        drop, but the skill&apos;s debuffs and other effects still
+                                        land on it. When only part of the hit is moved
+                                        (Meatshield&apos;s 30%), the share it keeps is still direct
+                                        damage.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">
@@ -4827,22 +4847,22 @@ const DocumentationPage: React.FC = () => {
                                     attack and its reactions (never a reflected hit, and not when it
                                     is only splashed by an attack aimed at another ship — an
                                     area-of-effect attack aimed at Nosorog himself still counts;
-                                    Stalwart&apos;s counter and Legion Discipline II follow the same
-                                    rule, and Malvex&apos;s shield comes from skill hits only),{' '}
-                                    <strong>Chakara&apos;s</strong> charged skill bypasses part of
-                                    the enemy&apos;s Defense, and <strong>Anemone</strong>,{' '}
-                                    <strong>Panon</strong>, <strong>Wusheng</strong>, and{' '}
-                                    <strong>Tormenter</strong> each take reduced damage under their
-                                    own stated conditions. <strong>Anemone</strong> and{' '}
-                                    <strong>Wusheng</strong> take less direct damage (from an
-                                    attacking enemy afflicted with a damage-over-time effect, and
-                                    while Stealthed, respectively), <strong>Panon</strong> reduces
-                                    all incoming damage — direct and damage-over-time — while she
-                                    has Barrier Recharging, and <strong>Tormenter&apos;s</strong>{' '}
-                                    reduction (direct and damage-over-time) grows the lower her HP
-                                    falls. <strong>Vindicator</strong> retaliates when it resists an
-                                    enemy debuff, dealing damage equal to 30% of its own max HP back
-                                    to the ship that attempted it. <strong>Protection</strong> (e.g.{' '}
+                                    Stalwart&apos;s counter, Legion Discipline II and Malvex&apos;s
+                                    shield follow the same rule), <strong>Chakara&apos;s</strong>{' '}
+                                    charged skill bypasses part of the enemy&apos;s Defense, and{' '}
+                                    <strong>Anemone</strong>, <strong>Panon</strong>,{' '}
+                                    <strong>Wusheng</strong>, and <strong>Tormenter</strong> each
+                                    take reduced damage under their own stated conditions.{' '}
+                                    <strong>Anemone</strong> and <strong>Wusheng</strong> take less
+                                    direct damage (from an attacking enemy afflicted with a
+                                    damage-over-time effect, and while Stealthed, respectively),{' '}
+                                    <strong>Panon</strong> reduces all incoming damage — direct and
+                                    damage-over-time — while she has Barrier Recharging, and{' '}
+                                    <strong>Tormenter&apos;s</strong> reduction (direct and
+                                    damage-over-time) grows the lower her HP falls.{' '}
+                                    <strong>Vindicator</strong> retaliates when it resists an enemy
+                                    debuff, dealing damage equal to 30% of its own max HP back to
+                                    the ship that attempted it. <strong>Protection</strong> (e.g.{' '}
                                     <strong>Meatshield</strong>) now works as a damage transfer
                                     instead of a plain unremovable buff: each stack a living ally
                                     holds intercepts 10% of the direct damage another ally would
