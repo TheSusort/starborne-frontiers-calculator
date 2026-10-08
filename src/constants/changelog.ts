@@ -12,6 +12,13 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat log: a Protection-redirected hit now shows only the damage the target took.',
     'Combat log: Protection-redirected counters and procs now show only damage taken.',
     'Combat simulator: Nuqtu now gains one Core Charge per enemy buffing skill.',
+    "Combat log: attack rows now show each target's HP right after the hit.",
+    'Combat log: Repair Over Time ticks now get their own row.',
+    'Combat log: shield strips now get a row and a shield stripped stat.',
+    "Combat log: a bomb carrier's death splash now gets a row for each neighbour.",
+    "Combat log: damage ticks now appear before the ship's own attack.",
+    'Combat simulator: slot one now counts incoming damage over time in damage taken.',
+    'Combat simulator: enemy Selenite no longer counts dead Stealth ships.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

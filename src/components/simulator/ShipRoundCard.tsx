@@ -56,6 +56,7 @@ const ShipRoundCard: React.FC<ShipRoundCardProps> = ({ actorId, round, roster })
                     color="blue"
                 />
                 <StatCard title="Shield granted" value={fmt(state.shieldGranted)} color="blue" />
+                <StatCard title="Shield stripped" value={fmt(state.shieldStripped)} color="blue" />
                 <StatCard
                     title="Current shield"
                     value={fmt(state.currentShieldPool)}

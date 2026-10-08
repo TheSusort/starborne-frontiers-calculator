@@ -36,11 +36,13 @@ const colorForKind = (kind: CombatLogEntryKind): string => {
         case 'reversed-repair':
             return 'text-red-400';
         case 'heal':
+        case 'hot-ticked':
         case 'cheat-death':
             return 'text-green-400';
         case 'buff':
         case 'shield':
         case 'shield-destroyed':
+        case 'shield-stripped':
             return 'text-cyan-400';
         case 'debuff':
         case 'control':
@@ -191,6 +193,18 @@ const formatters: Record<
         if (entry.note) return `${who}: ${entry.note}`;
         if (t?.amount !== undefined) return `${who}: ${fmt(t.amount)}`;
         return who;
+    },
+    // "{holder}: Repair Over Time → {amount}", the HP the tick restored.
+    'hot-ticked': (entry, ctx) => {
+        const amount = entry.targets[0]?.amount;
+        const who = ctx.nameOf(entry.actorId);
+        return amount !== undefined ? `${who}: ${entry.note ?? 'repair'} → ${fmt(amount)}` : who;
+    },
+    // "{stripper} → {target}: 30% of shield stripped 1,200".
+    'shield-stripped': (entry, ctx) => {
+        const head = sourceTargetNoteLine(entry, ctx) as string;
+        const amount = entry.targets[0]?.amount;
+        return amount !== undefined ? `${head} ${fmt(amount)}` : head;
     },
     control: noteLine,
     // A reactive cleanse carries the cleansed ally as a target → "AEGIS → Ally: cleansed N";

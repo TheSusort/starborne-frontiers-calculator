@@ -1825,7 +1825,14 @@ function stripShieldPct(
     const before = victim.shieldPool;
     victim.shieldPool = Math.max(0, before * (1 - pct / 100));
     if (before > 0 && victim.shieldPool < before) {
-        bus.emit({ type: 'shield-stripped', casterId, targetId: victim.id, pct, round });
+        bus.emit({
+            type: 'shield-stripped',
+            casterId,
+            targetId: victim.id,
+            pct,
+            round,
+            removed: before - victim.shieldPool,
+        });
     }
 }
 

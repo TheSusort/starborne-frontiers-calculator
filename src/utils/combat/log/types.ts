@@ -41,6 +41,12 @@ export type CombatLogEntryKind =
     | 'debuff'
     | 'dot-applied'
     | 'dot-ticked'
+    /** A `Repair Over Time` tick restored HP on its holder (display only: a tick is not a repair
+     *  performed). `amount` is the HP that landed. */
+    | 'hot-ticked'
+    /** A shield strip (APEX, Laika, Malvex) took a share of the target's shield pool; `amount` is
+     *  the shield removed. */
+    | 'shield-stripped'
     | 'control'
     | 'cleanse'
     | 'purge'

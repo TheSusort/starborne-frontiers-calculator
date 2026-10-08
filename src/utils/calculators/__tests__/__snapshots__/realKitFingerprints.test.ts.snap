@@ -54,6 +54,7 @@ exports[`kit fingerprints > APEX 1`] = `
     "debuff",
     "debuff-resisted",
     "shield",
+    "shield-stripped",
   ],
   "wounded": [
     "attack",
@@ -910,6 +911,7 @@ exports[`kit fingerprints > Flamel 1`] = `
     "debuff",
     "debuff-resisted",
     "heal",
+    "hot-ticked",
   ],
   "richEnemy": [
     "buff",
@@ -919,6 +921,7 @@ exports[`kit fingerprints > Flamel 1`] = `
     "debuff",
     "debuff-resisted",
     "heal",
+    "hot-ticked",
   ],
   "wounded": [
     "buff",
@@ -928,6 +931,7 @@ exports[`kit fingerprints > Flamel 1`] = `
     "debuff",
     "debuff-resisted",
     "heal",
+    "hot-ticked",
   ],
 }
 `;
@@ -1667,6 +1671,7 @@ exports[`kit fingerprints > Laika 1`] = `
     "attack:charged",
     "charge-changed",
     "shield",
+    "shield-stripped",
   ],
   "statusRich": [
     "attack",
@@ -2069,6 +2074,7 @@ exports[`kit fingerprints > Malvex 1`] = `
     "buff:charged",
     "charge-changed",
     "shield",
+    "shield-stripped",
     "shield:active",
   ],
   "wounded": [
@@ -2500,6 +2506,7 @@ exports[`kit fingerprints > Oleander 1`] = `
     "charge-changed",
     "dot-ticked",
     "heal",
+    "hot-ticked",
   ],
   "richEnemy": [
     "buff",
@@ -2509,6 +2516,7 @@ exports[`kit fingerprints > Oleander 1`] = `
     "charge-changed",
     "dot-ticked",
     "heal",
+    "hot-ticked",
   ],
   "wounded": [
     "buff",
@@ -2518,6 +2526,7 @@ exports[`kit fingerprints > Oleander 1`] = `
     "charge-changed",
     "dot-ticked",
     "heal",
+    "hot-ticked",
   ],
 }
 `;
