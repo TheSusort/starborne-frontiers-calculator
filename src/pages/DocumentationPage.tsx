@@ -3282,19 +3282,6 @@ const DocumentationPage: React.FC = () => {
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">
-                                            Statuses landed by a reaction:
-                                        </span>{' '}
-                                        A buff or debuff that lands on a ship during its own turn
-                                        does not tick down at the end of that turn. Iridium&apos;s
-                                        1-turn Speed Down on the ship that just hit him still slows
-                                        its next turn, Guardian&apos;s Provoke drags the critting
-                                        enemy&apos;s next attack onto him, and Flamel&apos;s 2-turn
-                                        Stasis costs its attacker the next two turns unless a hit
-                                        shortens it. A Stasis works the moment it lands: the ship
-                                        takes no further reactions that turn.
-                                    </p>
-                                    <p className="text-theme-text mb-2">
-                                        <span className="text-primary">
                                             Passive damage is direct damage:
                                         </span>{' '}
                                         A hit from a passive (Chakara&apos;s round-start hit, Grif,
