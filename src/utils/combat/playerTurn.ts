@@ -6302,7 +6302,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // R2 is NOT a claim about `repairedThisRound`, and the two must not be conflated: an
         // on-repaired trigger and the `'target-repaired-this-round'` ability CONDITION are
         // different channels. The tick DOES enter `repairedThisRound` — `applyHealToTarget` adds
-        // its victim whenever `consumed > 0` (engine.ts), the set is read back as
+        // its victim whenever the tick's `raw > 0` (engine.ts), the set is read back as
         // `targetRepairedThisRound` when an actor's turn args are built (engine.ts), and that
         // flag gates the `'target-repaired-this-round'` condition (types/abilities.ts;
         // Nayra's charged purge and its Stasis/Exposed inflicts). EVERY holder arms the flag from
