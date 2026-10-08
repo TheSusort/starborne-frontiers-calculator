@@ -6427,6 +6427,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             // delivered, which is the locked basis for damage-proportional effects (protector damage
             // + target remainder).
             let protectionRedirected = 0;
+            let protectionSplit = false;
             if (
                 cause?.byDirectDamage &&
                 !carriesBarrier &&
@@ -6490,6 +6491,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                     : 1,
                         }))
                     );
+                    protectionSplit = cascade.targetRetainedFraction < 1;
                     // Redirect each protector's chunk BEFORE the victim's own HP is touched.
                     protectors.forEach((p, i) => {
                         const chunk = cascade.chunks[i];
@@ -7459,6 +7461,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // later, per tick, by the DoT path.
                 incomingBooked: incomingRecorded - transformedToDot,
                 ...(protectionRedirected > 0 ? { protectionRedirected } : {}),
+                ...(protectionSplit ? { protectionSplit } : {}),
             };
         };
         // Legacy healing-mode player intake — a THIN wrapper over applyVictimDamage. The sink
@@ -7672,6 +7675,15 @@ export function runCombat(rawInput: CombatEngineInput): {
          * `fromCounter` marks a counter's hit (`counterAnswersCounters` in triggers.ts).
          * `isPrimaryTarget` is the answer `aimReactiveHit` gave before the funnel.
          */
+        /** A Protection-split reactive hit also reports what its victim took, so the log rows the
+         *  victim at that rather than the hit as thrown. */
+        const splitFigures = (
+            outcome: AppliedVictimDamage | undefined
+        ): { protectionSplit: true; taken: number } | undefined =>
+            outcome?.protectionSplit
+                ? { protectionSplit: true, taken: outcome.incomingBooked }
+                : undefined;
+
         const landReactiveHit = (
             owner: CombatActor,
             victim: CombatActor,
@@ -7833,7 +7845,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             // cast path likewise logs its computed `directDamage` when a victim converts the hit
             // (playerTurn's deferredAbilityPerformed). Suppressing it would erase the counter from
             // the play-by-play entirely — a conversion emits no event of its own.
-            return { dealt: raw, didCrit };
+            return { dealt: raw, didCrit, ...splitFigures(counterOutcome) };
         };
 
         // The reactive `damage` executor branch (triggers.ts cfg.type==='damage') — Grif's
@@ -8085,7 +8097,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 if (!splashCopy) gatherDirectHitIntoAccumulators(victim, procBooked);
             }
             // `dealt` stays the full proc — log/dealt-slot only, as in applyCounterAttack.
-            return { dealt: raw, didCrit };
+            return { dealt: raw, didCrit, ...splitFigures(procOutcome) };
         };
 
         // §4.5 STASIS direct-damage break. Fires via the `onHitBreakStasis` hook
@@ -10152,6 +10164,8 @@ export function runCombat(rawInput: CombatEngineInput): {
             /** What the victim TOOK (the funnel's `incomingBooked`) — what `attacked.takenDamage`
              *  carries. Read that event field's doc for why the two are separate. */
             takenDamage: number;
+            /** A Protection cascade split this hit — `attacked.protectionSplit`. */
+            protectionSplit: boolean;
             shieldWasHit: boolean;
             hitOutcomes: boolean[];
         }
@@ -10358,10 +10372,12 @@ export function runCombat(rawInput: CombatEngineInput): {
                         const prev = bySubAttack.get(victim.id) ?? {
                             damage: 0,
                             takenDamage: 0,
+                            protectionSplit: false,
                             shieldWasHit: false,
                             hitOutcomes: [],
                         };
                         prev.damage += damage;
+                        prev.protectionSplit ||= outcome.protectionSplit === true;
                         // The funnel's own figure for this victim, accumulated beside the thrown
                         // one. `onVictimResolved`'s outcome is an `AppliedVictimDamage` here, so
                         // `incomingBooked` is always present; the fallback mirrors
@@ -13837,6 +13853,8 @@ export function runCombat(rawInput: CombatEngineInput): {
         // after the turn loop; it resolves in turn order (see `drainInTurnOrder`).
         bus.emit({ type: 'round-ended', round: r });
         drainEndOfRound();
+        // An end-of-round purge ends after the last Post Turn settle; the hangover lands now.
+        settleOverclockHangovers(r);
 
         // Exposed is "removed after taking direct damage or at the end of the round": whatever
         // stacks no hit spent this round go now, after the round's last drain. The Post-Turn

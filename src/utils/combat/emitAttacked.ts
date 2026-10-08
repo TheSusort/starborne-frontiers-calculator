@@ -36,6 +36,8 @@ export function emitAttacked(args: {
      * dropping it would let the readers' `?? damage` fallback resurrect the raw figure.
      */
     takenDamage?: number;
+    /** See `attacked.protectionSplit`. */
+    protectionSplit?: boolean;
     /**
      * Which sub-attack of the attacker's cast these events belong to.
      * Carried on the event so a victim-side once-per-attack rider guard can reset between the
@@ -63,6 +65,7 @@ export function emitAttacked(args: {
         shieldWasHit,
         damage,
         takenDamage,
+        protectionSplit,
         subAttackIndex,
         reactiveHitId,
         fromCounter,
@@ -78,6 +81,7 @@ export function emitAttacked(args: {
             ...(hitCrit ? { didCrit: true } : {}),
             ...(damage > 0 ? { damage } : {}),
             ...(takenDamage !== undefined ? { takenDamage } : {}),
+            ...(protectionSplit ? { protectionSplit: true as const } : {}),
             subAttackIndex: subAttackIndex ?? hitIndex,
             ...(reactiveHitId !== undefined ? { reactiveHitId } : {}),
             ...(fromCounter ? { fromCounter: true as const } : {}),

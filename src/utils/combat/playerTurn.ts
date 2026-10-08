@@ -71,7 +71,7 @@ import {
     cleanseDebuffs,
     pinApplierDefence,
     selfBuffNamesForOwners,
-    buffStackCount,
+    buffStackCountWithLedger,
     namedDebuffCount,
     activeWithStacks,
     selfBuffStacksForOwner,
@@ -2812,7 +2812,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     const priorAbilitySelf = statusEngine.timedAbilityStatuses('self', actor.id);
     const priorAbilitySelfNames = priorAbilitySelf.map((s) => s.active.buffName);
     /** The same buffs as the two name lists above, counted one per stack (R37). */
-    const priorSelfBuffCount = buffStackCount([
+    const priorSelfBuffCount = buffStackCountWithLedger(statusEngine, actor.id, [
         ...entry.activeSelfBuffs.filter((ab) => ab.stacks === undefined || ab.stacks > 0),
         ...priorAbilitySelf,
     ]);
@@ -4014,7 +4014,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         .map((ab) => ab.buffName);
     /** The same buffs, counted one per stack (R37) — the ability statuses carry their payloads,
      *  whose declared stacks an unspent timed entry's `active` omits. */
-    const activeSelfBuffCount = buffStackCount([
+    const activeSelfBuffCount = buffStackCountWithLedger(statusEngine, actor.id, [
         ...entry.activeSelfBuffs.filter((ab) => ab.stacks === undefined || ab.stacks > 0),
         ...selfAbilityStatuses,
     ]);

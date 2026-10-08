@@ -9,8 +9,8 @@
  *
  * "Removal or expiration" is every way the buff can leave (turn expiry, purge, steal, cleanse of
  * buffs), so the engine detects it as a disappearance rather than hooking each removal path:
- * `OverclockHangoverTracker.settle` runs after every actor's Post Turn and compares who holds an
- * Overclock now with who held one at the previous settle.
+ * `OverclockHangoverTracker.settle` runs after every actor's Post Turn and after the end-of-round
+ * effects, and compares who holds an Overclock now with who held one at the previous settle.
  */
 import { BUFFS } from '../../constants/buffs';
 import { parseBuffEffects } from '../calculators/buffParser';

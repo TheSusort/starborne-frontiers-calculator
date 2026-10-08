@@ -2378,16 +2378,36 @@ export function registerReactiveListeners(args: {
                     });
                     break;
                 }
-                case 'on-enemy-buffed':
+                case 'on-enemy-buffed': {
+                    // A skill cast that grants buffs is ONE trigger however many recipients or
+                    // buffs it grants: the grants a granter's own turn raises (not reactive ones)
+                    // share that turn. Every other gain — a reaction's, or one outside any turn —
+                    // is its own trigger.
+                    let turnSeq = 0;
+                    let turnActor: string | undefined;
+                    let lastCastSeq = -1;
+                    bus.on('turn-started', (e) => {
+                        turnSeq++;
+                        turnActor = e.actorId;
+                    });
+                    bus.on('turn-ended', () => {
+                        turnActor = undefined;
+                    });
                     bus.on('buff-applied', (e) => {
                         // Opposing-scoped: any opposing-side actor RECEIVING a timed buff
                         // (e.actorId is the recipient — events.ts). For the player call: an
                         // enemy attacker gaining a self-buff. For the enemy call: a player actor
                         // gaining one. Nuqtu's self-cleanse + Terran Bolster III are both
-                        // self-target — no eventCtx capture needed. One enqueue per application.
-                        if (isOpposing(e.actorId)) enqueue(intent);
+                        // self-target — no eventCtx capture needed.
+                        if (!isOpposing(e.actorId)) return;
+                        if (e.reactive !== true && turnActor === (e.granterId ?? e.actorId)) {
+                            if (lastCastSeq === turnSeq) return;
+                            lastCastSeq = turnSeq;
+                        }
+                        enqueue(intent);
                     });
                     break;
+                }
                 case 'on-enemy-taunt-gained':
                     bus.on('buff-applied', (e) => {
                         // Opposing-scoped AND buff-name-filtered mirror
@@ -2796,7 +2816,7 @@ export interface IntentExecContext {
         // Returns the mitigated/credited amount + crit flag so the caller can surface the proc in
         // the combat log (reactive-damage-performed); void/0 when the proc was guarded (dead
         // victim, non-positive) or the delegate is absent (unit fixtures).
-    ) => { dealt: number; didCrit: boolean } | void;
+    ) => ReactiveHitOutcome | void;
     /** Emit the log-only consequence twins that `applyReactiveDamage`/`applyCounterAttack`
      *  buffered while applying their hit — a Lifeline `shield-applied-log`, a
      *  `shield-destroyed-log`, a `cheat-death-log`. Called right AFTER the proc's own
@@ -2816,7 +2836,7 @@ export interface IntentExecContext {
         abilityId: string,
         multiplier: number,
         hits: number
-    ) => { dealt: number; didCrit: boolean } | void;
+    ) => ReactiveHitOutcome | void;
     /** Once-per-attack counter guard. Keyed `ownerId:abilityId:subAttackIndex` — see the counter
      *  branch's SCOPE NOTE. Cleared at each actor turn-start (engine) so the per-hit `attacked`
      *  events of ONE sub-attack collapse to a
@@ -3117,7 +3137,10 @@ export function buildActorConditionContext(
     for (const s of abilitySelf) selfBuffNames.push(s.active.buffName);
     return buildRoundContext({
         selfBuffNames,
-        selfBuffCount: buffStackCount([...scheduled, ...abilitySelf]),
+        selfBuffCount: buffStackCountWithLedger(statusEngine, ownerId, [
+            ...scheduled,
+            ...abilitySelf,
+        ]),
         landedEnemyDebuffCount: shared.ownerIsEnemySide
             ? 0
             : namedDebuffCount(snap.activeEnemyDebuffs),
@@ -3646,24 +3669,35 @@ export function buffStackCount(entries: readonly (ActiveBuff | ActiveAbilityStat
     return entries.reduce((n, e) => n + statusEntryStackCount(e), 0);
 }
 
-/** How many buffs `ownerId` carries right now (`buffStackCount`), across the SAME three sources as
- *  {@link selfBuffNamesForOwners} plus the per-owner stack ledger a steal writes (a stolen
- *  Protection stack is one buff fewer), each name clamped at 0. */
-export function actorBuffCount(statusEngine: StatusEngine, ownerId: string): number {
+/** `buffStackCount` of `entries` held by `ownerId`, with the per-owner stack ledger folded in per
+ *  NAME and clamped at 0: a stolen Protection stack is one buff fewer on the victim and one buff
+ *  more on a thief, including a thief with no entry of that name in `entries`. The one rule behind
+ *  every owner-keyed buff COUNT (`actorBuffCount`, the `selfBuffCount` subject). */
+export function buffStackCountWithLedger(
+    statusEngine: StatusEngine,
+    ownerId: string,
+    entries: readonly (ActiveBuff | ActiveAbilityStatus)[]
+): number {
     const byName = new Map<string, number>();
     const add = (name: string, n: number): void => {
         byName.set(name, (byName.get(name) ?? 0) + n);
     };
-    for (const ab of statusEngine.snapshot(ownerId).activeSelfBuffs)
-        add(ab.buffName, buffStackCount([ab]));
-    for (const s of statusEngine.timedAbilityStatuses('self', ownerId))
-        add(s.active.buffName, buffStackCount([s]));
-    for (const s of statusEngine.activeAbilityStatuses('self', () => NEUTRAL_NAMES_CTX, ownerId))
-        add(s.active.buffName, buffStackCount([s]));
+    for (const e of entries) add(('active' in e ? e.active : e).buffName, buffStackCount([e]));
+    for (const name of statusEngine.selfBuffStackAdjustmentNames(ownerId)) add(name, 0);
     let total = 0;
     for (const [name, n] of byName)
         total += Math.max(0, n + statusEngine.selfBuffStackAdjustment(ownerId, name));
     return total;
+}
+
+/** How many buffs `ownerId` carries right now (`buffStackCountWithLedger`), across the SAME three
+ *  sources as {@link selfBuffNamesForOwners}. */
+export function actorBuffCount(statusEngine: StatusEngine, ownerId: string): number {
+    return buffStackCountWithLedger(statusEngine, ownerId, [
+        ...statusEngine.snapshot(ownerId).activeSelfBuffs,
+        ...statusEngine.timedAbilityStatuses('self', ownerId),
+        ...statusEngine.activeAbilityStatuses('self', () => NEUTRAL_NAMES_CTX, ownerId),
+    ]);
 }
 
 /** Enemy-debuff NAMES carried in the per-TARGET store keyed by `targetId` (an actor's
@@ -4742,6 +4776,15 @@ function makeReactiveStampingBus(bus: CombatEventBus, duringTurnOf?: string): Co
     };
 }
 
+/** What a reactive damage hit reports back: the hit as thrown, and — when a Protection cascade
+ *  split it — what its victim took. */
+export interface ReactiveHitOutcome {
+    dealt: number;
+    didCrit: boolean;
+    protectionSplit?: true;
+    taken?: number;
+}
+
 /** Emit the `reactive-damage-performed` event for a proc that actually dealt damage.
  *  `ctx.bus` is the reactive stamping wrapper (when present) → the event is branded `duringTurnOf`
  *  so the combat log nests it under the triggering turn. Its one combat listener is
@@ -4751,7 +4794,7 @@ function emitReactiveDamageLog(
     ctx: IntentExecContext,
     ownerId: string,
     victimId: string,
-    outcome: { dealt: number; didCrit: boolean } | void
+    outcome: ReactiveHitOutcome | void
 ): void {
     if (ctx.bus && outcome && outcome.dealt > 0) {
         ctx.bus.emit({
@@ -4759,7 +4802,7 @@ function emitReactiveDamageLog(
             sourceId: ownerId,
             targetId: victimId,
             round: ctx.round,
-            amount: outcome.dealt,
+            amount: outcome.protectionSplit ? (outcome.taken ?? outcome.dealt) : outcome.dealt,
             didCrit: outcome.didCrit,
         });
     }

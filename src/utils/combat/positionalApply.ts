@@ -85,6 +85,9 @@ export interface VictimDamageOutcome {
      *  + target remainder), which is the locked basis for damage-proportional effects like
      *  Bloodthirst. Absent when no cascade fired. */
     protectionRedirected?: number;
+    /** A Protection cascade split this hit, even when no protector booked any intake (a share
+     *  deferred into a DoT). Absent when no cascade fired. */
+    protectionSplit?: boolean;
 }
 
 /** {@link VictimDamageOutcome} as returned by the engine's real apply funnel, where

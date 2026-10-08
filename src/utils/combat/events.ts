@@ -961,7 +961,7 @@ export type CombatEvent =
            *  aggregate, and NOT what the victim ended up taking. Pre-funnel: a Protection cascade
            *  may have moved a slice of it to a protector, an incoming-block proc may have shaved
            *  one. Present only when a damage aggregate is in scope. The combat log's row
-           *  `amount` reads this, for the primary target and splash alike. Anything sized on what the victim TOOK reads `takenDamage`
+           *  `amount` reads this, for the primary target and splash alike, except on a `protectionSplit` hit. Anything sized on what the victim TOOK reads `takenDamage`
            *  below. */
           damage?: number;
           /** What this victim actually TOOK from this sub-attack: the funnel's own recorded
@@ -1002,6 +1002,11 @@ export type CombatEvent =
            *  per-hit loop index when the caller supplies no sub-attack identity. Optional here
            *  only so hand-built fixture events can omit it. */
           subAttackIndex?: number;
+          /** True when a Protection cascade moved part of this hit onto protectors, even a share
+           *  the protector then deferred into a DoT. The combat log rows this victim at
+           *  `takenDamage` rather than the hit as thrown, so the protectors' own rows are not
+           *  counted against it twice. */
+          protectionSplit?: true;
           /** Present on the `attacked` a counter-attack or reactive damage proc raises (every
            *  non-DoT, non-Bomb hit is direct damage — ruling 36): a fresh id per such hit, so the
            *  victim's once-per-attack guards treat each one as its own attack. Absent on a cast

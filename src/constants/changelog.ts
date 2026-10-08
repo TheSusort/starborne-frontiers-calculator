@@ -6,7 +6,13 @@ export const CURRENT_VERSION = '1.75.1';
 // top of CHANGELOG, bumps CURRENT_VERSION and empties this array — all three together, because a
 // bumped version whose entries are still unreleased shows users a what's-new dialog listing
 // nothing. Do it by hand only if that script cannot.
-export const UNRELEASED_CHANGES: string[] = [];
+export const UNRELEASED_CHANGES: string[] = [
+    'Combat simulator: stolen Protection now counts toward buff-count effects.',
+    'Combat simulator: Overclock purged at end of round now leaves its hangover immediately.',
+    'Combat log: a Protection-redirected hit now shows only the damage the target took.',
+    'Combat log: Protection-redirected counters and procs now show only damage taken.',
+    'Combat simulator: Nuqtu now gains one Core Charge per enemy buffing skill.',
+];
 
 export const CHANGELOG: ChangelogEntry[] = [
     {

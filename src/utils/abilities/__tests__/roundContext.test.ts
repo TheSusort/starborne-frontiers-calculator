@@ -232,6 +232,8 @@ describe('buildActorConditionContext – condition-context plumbing', () => {
                 activeEnemyDebuffs: [],
             }),
             timedAbilityStatuses: () => [],
+            selfBuffStackAdjustment: () => 0,
+            selfBuffStackAdjustmentNames: () => [],
         };
     }
 

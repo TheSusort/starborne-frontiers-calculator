@@ -47,7 +47,8 @@ const run = (
     opponentKit: ShipSkills,
     rounds: number,
     opponentHitsAll = false,
-    allyKit: ShipSkills = hitKit()
+    allyKit: ShipSkills = hitKit(),
+    allySpeed = 10
 ): PerRound => {
     const graphite: BoardUnit = {
         id: 'graphite',
@@ -62,7 +63,7 @@ const run = (
         id: 'ally',
         kit: allyKit,
         position: 'M3',
-        speed: 10,
+        speed: allySpeed,
         attack: 1000,
     };
     const opponent: BoardUnit = {
@@ -132,6 +133,17 @@ describe.each<Placement>(['player', 'enemy'])('Graphite on the %s side', (placem
         // Round 1: the opponent (faster than the ally) purges Overclock before the ally acts.
         expect(r.hit[1]).toBe(850);
         expect(r.debuffs[1]).toEqual(['Attack Down I', 'Speed Down I']);
+    });
+
+    it('removal at round end: a purge after the last turn lands the hangover before the next round', () => {
+        // The ally is the fastest unit, so it opens every round. Rhodium purges at the end of
+        // round 1, so the ally's round-2 turn is its first under the hangover.
+        const r = run(placement, realKit('Rhodium'), 4, false, hitKit(), 500);
+        expect(r.hit[1]).toBe(1000);
+        expect(r.hit[2]).toBe(850);
+        expect(r.speed[2]).toBeCloseTo(425, 9);
+        expect(r.hit[3]).toBe(850);
+        expect(r.hit[4]).toBe(1000);
     });
 
     it("the hangover is not the holder applying a debuff: Yuyan's passive stays quiet", () => {

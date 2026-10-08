@@ -569,13 +569,16 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
         // A counter or proc's hit is logged by its own `reactive-damage-performed` row.
         if (e.reactiveHitId !== undefined) return;
         if (!ctx.openAttackEntry) return;
+        // A hit a Protection cascade split shows only the share this victim kept; the protectors'
+        // shares are their own rows, so the pre-redirect figure would count them twice.
+        const rowDamage = e.protectionSplit ? (e.takenDamage ?? e.damage) : e.damage;
         // Find-or-create the target for this victim (dedup by targetId).
         const existing = ctx.openAttackEntry.targets.find((t) => t.targetId === e.targetId);
         if (existing) {
             // The firing hit landing after its own passive-slot instance was logged: add it.
             if (ctx.passiveOnlyTargets.has(existing)) {
                 ctx.passiveOnlyTargets.delete(existing);
-                existing.amount = (existing.amount ?? 0) + (e.damage ?? 0);
+                existing.amount = (existing.amount ?? 0) + (rowDamage ?? 0);
             }
             // Multi-hit on the same victim: OR-accumulate didCrit and shieldWasHit, leave amount unchanged.
             if (e.didCrit) existing.didCrit = true;
@@ -587,7 +590,7 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
         // engine's 0-damage cast fallback) reads 0.
         const target: CombatLogTarget = {
             targetId: e.targetId,
-            amount: e.damage ?? (e.isPrimaryTarget === true ? 0 : undefined),
+            amount: rowDamage ?? (e.isPrimaryTarget === true ? 0 : undefined),
             didCrit: e.didCrit,
             shieldWasHit: e.shieldWasHit,
             didHit: true,
