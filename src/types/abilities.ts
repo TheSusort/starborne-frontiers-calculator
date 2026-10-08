@@ -1378,14 +1378,17 @@ export interface Ability {
      *  however many qualifying events the cast raised (the buff extension: a charged landing two
      *  debuffs extends once); `'per-victim'` at most once per (cast, debuffed victim) (the
      *  Inferno II: one per enemy the cast debuffed). A cast is one own turn of the owner — keyed
-     *  on the owner's `turnsTaken`, which every turn (extra actions included) advances. The slot
+     *  on the owner's `turnsTaken`, which every turn (extra actions included) advances; each hit
+     *  of a multi-hit skill counts as a cast of its own (R166, `castHitSuffix`). The slot
      *  is consumed when the reaction fires, whatever its own landing roll then does. Enforced
      *  executor-side by `passesOncePerCastGate` in triggers.ts. Absent → no per-cast cap. */
     oncePerCast?: 'cast' | 'per-victim';
     /** Once per ROOT cast: the reaction fires at most once per SKILL CAST that set the triggering
      *  event off, whoever cast it — the same cast identity `procScope:'per-debuff'` caps on
      *  (Insidiousness). Unlike `oncePerCast`, which counts only the OWNER's own casts, the cast
-     *  here belongs to whichever ship's skill woke the chain. An extra action is a cast of its own.
+     *  here belongs to whichever ship's skill woke the chain. An extra action is a cast of its own,
+     *  and so is each hit of a multi-hit skill (R166): Enforcer's three hits each land a Defense
+     *  Shred, and Provider answers each (`castHitSuffix` in triggers.ts).
      *  - `'cast'`: once per root cast, however many enemies it reached. APEX's 3% shield off her
      *    own active's two debuffs, plus the two Crit Rate Down II Provider's passive answers them
      *    with, is ONE fire; Provider's own active landing two more on his turn is ONE more; an
@@ -1534,7 +1537,8 @@ export interface Ability {
      *
      *  `'per-debuff'` (Insidiousness, `on-debuff-inflicted`; R131): ONE roll per debuff the owner
      *  inflicts (a DoT stack is a debuff; a debuff a reaction lands is its own), and at most ONE
-     *  success per SKILL CAST that set the chain off, whoever cast it (an enemy's attack waking the
+     *  success per SKILL CAST that set the chain off — per HIT of a multi-hit skill (R166) —
+     *  whoever cast it (an enemy's attack waking the
      *  owner's on-attacked Corrosion I, and the Out. Damage Down II that wakes, are that enemy's
      *  one cast). Once a roll succeeds, the cast's other debuffs do not draw, and the success (R158)
      *  hits EVERY enemy the cast debuffed, once each. See `perDebuffProcCap` /

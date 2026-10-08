@@ -473,18 +473,21 @@ exports[`kit fingerprints > Centurion 1`] = `
     "attack",
     "attack:active",
     "attack:charged",
+    "buff",
     "charge-changed",
   ],
   "richEnemy": [
     "attack",
     "attack:active",
     "attack:charged",
+    "buff",
     "charge-changed",
   ],
   "wounded": [
     "attack",
     "attack:active",
     "attack:charged",
+    "buff",
     "charge-changed",
   ],
 }
@@ -507,8 +510,9 @@ exports[`kit fingerprints > Chakara 1`] = `
   "statusRich": [
     "attack",
     "attack:active",
+    "attack:charged",
     "charge-changed",
-    "purge:charged",
+    "purge",
   ],
   "wounded": [
     "attack",
@@ -1459,7 +1463,6 @@ exports[`kit fingerprints > Iridium 1`] = `
   "statusRich": [
     "attack",
     "attack:active",
-    "attack:charged",
     "buff-expired",
     "charge-changed",
     "control:charged",
@@ -1637,6 +1640,7 @@ exports[`kit fingerprints > LUXX 1`] = `
   "plain": [
     "attack",
     "attack:active",
+    "buff",
     "buff-expired",
     "buff:charged",
     "charge-changed",
@@ -1645,6 +1649,7 @@ exports[`kit fingerprints > LUXX 1`] = `
   "richEnemy": [
     "attack",
     "attack:active",
+    "buff",
     "buff-expired",
     "buff:charged",
     "charge-changed",
@@ -1653,6 +1658,7 @@ exports[`kit fingerprints > LUXX 1`] = `
   "wounded": [
     "attack",
     "attack:active",
+    "buff",
     "buff-expired",
     "buff:charged",
     "charge-changed",
@@ -1912,10 +1918,11 @@ exports[`kit fingerprints > Lodolite 1`] = `
   ],
   "statusRich": [
     "attack",
+    "attack:charged",
     "charge-changed",
     "control:active",
     "debuff",
-    "purge:charged",
+    "purge",
   ],
   "wounded": [
     "attack",
@@ -2094,6 +2101,7 @@ exports[`kit fingerprints > Mangler 1`] = `
     "attack:active",
     "attack:charged",
     "bomb",
+    "buff",
     "charge-changed",
     "debuff-resisted",
     "dot-applied",
@@ -2105,6 +2113,7 @@ exports[`kit fingerprints > Mangler 1`] = `
     "attack:active",
     "attack:charged",
     "bomb",
+    "buff",
     "charge-changed",
     "debuff-resisted",
     "dot-applied",
@@ -2116,6 +2125,7 @@ exports[`kit fingerprints > Mangler 1`] = `
     "attack:active",
     "attack:charged",
     "bomb",
+    "buff",
     "charge-changed",
     "debuff-resisted",
     "dot-applied",
@@ -2332,6 +2342,7 @@ exports[`kit fingerprints > Nemesis 1`] = `
   "plain": [
     "attack",
     "attack:active",
+    "buff",
     "buff-expired",
     "buff:charged",
     "charge-changed",
@@ -2342,6 +2353,7 @@ exports[`kit fingerprints > Nemesis 1`] = `
   "richEnemy": [
     "attack",
     "attack:active",
+    "buff",
     "buff-expired",
     "buff:charged",
     "charge-changed",
@@ -2352,6 +2364,7 @@ exports[`kit fingerprints > Nemesis 1`] = `
   "wounded": [
     "attack",
     "attack:active",
+    "buff",
     "buff-expired",
     "buff:charged",
     "charge-changed",
@@ -3252,12 +3265,11 @@ exports[`kit fingerprints > Sefuba 1`] = `
     "charge-changed",
   ],
   "statusRich": [
-    "attack",
     "attack:active",
     "attack:charged",
     "charge-changed",
     "heal",
-    "purge:active",
+    "purge",
   ],
   "wounded": [
     "attack:active",
@@ -3365,6 +3377,7 @@ exports[`kit fingerprints > Shashou 1`] = `
   "plain": [
     "attack:active",
     "attack:charged",
+    "buff",
     "charge-changed",
     "debuff",
     "debuff-resisted",
@@ -3372,6 +3385,7 @@ exports[`kit fingerprints > Shashou 1`] = `
   "richEnemy": [
     "attack:active",
     "attack:charged",
+    "buff",
     "charge-changed",
     "debuff",
     "debuff-resisted",
@@ -3379,6 +3393,7 @@ exports[`kit fingerprints > Shashou 1`] = `
   "wounded": [
     "attack:active",
     "attack:charged",
+    "buff",
     "charge-changed",
     "debuff",
     "debuff-resisted",
@@ -3516,16 +3531,19 @@ exports[`kit fingerprints > Sokol 1`] = `
   "plain": [
     "attack:active",
     "attack:charged",
+    "buff",
     "charge-changed",
   ],
   "richEnemy": [
     "attack:active",
     "attack:charged",
+    "buff",
     "charge-changed",
   ],
   "wounded": [
     "attack:active",
     "attack:charged",
+    "buff",
     "charge-changed",
   ],
 }
@@ -3906,6 +3924,7 @@ exports[`kit fingerprints > Valkyrie 1`] = `
     "charge-changed",
     "debuff",
     "debuff-resisted",
+    "detonation",
     "heal",
   ],
   "richEnemy": [
@@ -3916,6 +3935,7 @@ exports[`kit fingerprints > Valkyrie 1`] = `
     "charge-changed",
     "debuff",
     "debuff-resisted",
+    "detonation",
     "heal",
   ],
   "wounded": [
@@ -3926,6 +3946,7 @@ exports[`kit fingerprints > Valkyrie 1`] = `
     "charge-changed",
     "debuff",
     "debuff-resisted",
+    "detonation",
     "heal",
   ],
 }
@@ -4035,12 +4056,12 @@ exports[`kit fingerprints > Voron 1`] = `
     "dot-ticked",
   ],
   "statusRich": [
-    "attack",
     "attack:active",
+    "attack:charged",
     "charge-changed",
     "debuff",
     "dot-ticked",
-    "purge:charged",
+    "purge",
   ],
   "wounded": [
     "attack:active",
@@ -4406,6 +4427,7 @@ exports[`kit fingerprints > Zeolite 1`] = `
     "debuff:active",
     "debuff:charged",
     "purge",
+    "purge:active",
   ],
   "wounded": [
     "attack",

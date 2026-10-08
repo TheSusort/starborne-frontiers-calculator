@@ -114,9 +114,9 @@ export type CombatEvent =
            *  actors, since every actor's first sub-attack is also 0.
            *
            *  Exists so a reactive intent enqueued during sub-attack k can be gated at sub-attack
-           *  scope: intents from all N sub-attacks drain together at end of turn (drainReactions),
-           *  long after the engine's ambient `currentSubAttackIndex` has been cleared, so the
-           *  identity has to travel on the event. */
+           *  scope: an intent drains only after the sub-attack that raised it has finished
+           *  (drainReactions), when the engine's ambient `currentSubAttackIndex` has been cleared,
+           *  so the identity has to travel on the event. */
           subAttackIndex?: number;
           /** The skill slot (`'active'` / `'charged'`) the cast fired from. A reaction written in a
            *  skill's own text ("If this critically hits, ...") fires only on that slot's casts;
@@ -138,6 +138,12 @@ export type CombatEvent =
           round: number;
           buffName: string;
           duration: number | 'recurring';
+          /** Names the one skill action (a passive's round or turn tick, a reaction clause's
+           *  firing, a combat-start grant) this gain belongs to, shared by every recipient the
+           *  action fed, so a listener that counts gains per action reads the action once. Absent
+           *  on a gain made by the granter's own active or charged cast, where the cast is the
+           *  action. */
+          grantKey?: string;
       } & ReactiveStamp)
     /** Emitted from each owner's Post Turn when a timed status decrements to 0
      *  (statusEngine.decrementPlayer/decrementEnemy); actorId is the status carrier
@@ -201,6 +207,12 @@ export type CombatEvent =
            *  success on the cast a reaction's debuff belongs to. */
           reactionFiringId?: number;
           viaAllyDebuffInflictedReaction?: true;
+          /** Proc verdicts the TARGET's reactions to this landing already drew, by ability id —
+           *  drawn at the landing because their effect must hold for the rest of the skill
+           *  (Firewall's Block Debuff, owner ruling R149; engine.ts `decideBlockDebuffAtLanding`).
+           *  The `on-debuffed` listener hands its own entry to the executor, which spends it
+           *  instead of drawing. Absent → every reaction draws at the drain. */
+          preDecidedProcs?: Readonly<Record<string, boolean>>;
       } & ReactiveStamp)
     | ({
           type: 'debuff-resisted';
@@ -279,6 +291,9 @@ export type CombatEvent =
            *  so the `on-ally-debuff-inflicted` listener's `dot-applied` arm can skip its own
            *  reaction's output the same way the `debuff-applied` arm does. */
           viaAllyDebuffInflictedReaction?: true;
+          /** The `debuff-applied` sibling's `preDecidedProcs`, one entry per landed stack (owner
+           *  rulings R149/R161: every stack is its own landing and its own Firewall roll). */
+          preDecidedProcsPerStack?: ReadonlyArray<Readonly<Record<string, boolean>> | undefined>;
       } & ReactiveStamp)
     /** A heal/shield cast resolved (healing mode only). `targets` lists recipient actor
      *  ids in application order; `amount` is the summed RAW amount across recipients.

@@ -480,7 +480,9 @@ const gateBoard = (allyStatus: string): CombatEngineInput => ({
     defensePenetration: 0,
     hacking: 2000, // she has to actually LAND the Stasis for the arm to be observable
     chargeCount: 0,
-    numRounds: 2,
+    // One round: the enemy attacks once in both runs. A Stasis it earns lasts through its next
+    // turn (R123), so a second round would compare an attacking control with a stasised enemy.
+    numRounds: 1,
     enemyDebuffs: [],
     selfDotModifier: 0,
     defensePenetrationBuff: 0,
