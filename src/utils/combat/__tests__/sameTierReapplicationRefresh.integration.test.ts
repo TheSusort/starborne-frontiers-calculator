@@ -22,6 +22,13 @@ import { buildShipAbilities } from '../../abilities/buildShipAbilities';
 import { parsePattern, parseTarget } from '../../targetingParser';
 import type { Ability, ShipSkills } from '../../../types/abilities';
 import type { Position } from '../../../types/encounters';
+import {
+    boardInput,
+    hitKit,
+    realKit,
+    type BoardUnit,
+    type Placement,
+} from '../__testutils__/realKitBoard';
 
 beforeAll(() => {
     if (!csvAvailable() || !shipDataAvailable()) {
@@ -237,6 +244,53 @@ describe('Wusheng re-gaining Stealth every turn keeps it through every enemy tur
         expect(out.hits[0] / control.hits[0]).toBeCloseTo(0.75, 5);
     });
 });
+
+/**
+ * Owner ruling R151: a same-tier re-grant keeps the LONGER duration, remaining = max(remaining,
+ * new). Yazid: "At the start of combat, this Unit gains Everliving Regeneration II for 9 turns";
+ * his charged skill (every third turn) "gains Everliving Regeneration II for 2 turns". The round-3
+ * and round-6 re-grants leave the 9-turn window alone; the round-9 one, with one turn left on the
+ * old copy, extends it through round 11. Real kit, every slot.
+ */
+describe.each<Placement>(['player', 'enemy'])(
+    'Yazid on the %s side keeps the longer Everliving Regeneration II (R151)',
+    (placement) => {
+        it('the 2-turn charged re-grant never cuts the 9-turn grant; it extends it at the end', () => {
+            const yazid: BoardUnit = {
+                id: 'yazid',
+                kit: realKit('Yazid'),
+                position: 'M4',
+                speed: 200,
+                attack: 1000,
+                chargeCount: 2,
+            };
+            const foe: BoardUnit = { id: 'foe', kit: hitKit(), position: 'M4', speed: 1 };
+            const { input, id } = boardInput(placement, yazid, [], [foe], 12);
+            const bus = createEventBus();
+            const grants: string[] = [];
+            const held: number[] = [];
+            const expired: number[] = [];
+            bus.on('buff-applied', (e) => {
+                if (e.actorId === id(yazid) && e.buffName === 'Everliving Regeneration II')
+                    grants.push(`${e.round}:${e.duration}`);
+            });
+            bus.on('status-snapshot', (e) => {
+                if (e.actorId === id(yazid) && e.buffNames.includes('Everliving Regeneration II'))
+                    held.push(e.round);
+            });
+            bus.on('buff-expired', (e) => {
+                if (e.actorId === id(yazid) && e.buffName === 'Everliving Regeneration II')
+                    expired.push(e.round);
+            });
+            runCombat({ ...input, bus });
+            // Instrument: the start-of-combat grant and three charged re-grants really happened.
+            expect(grants).toEqual(['1:9', '3:2', '6:2', '9:2', '12:2']);
+            // A 2-turn grant replacing the long one at round 3 would have ended it after round 5.
+            expect(held).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12]);
+            expect(expired).toEqual([11]);
+        });
+    }
+);
 
 // ─── Status-engine level ─────────────────────────────────────────────────────────────────────
 

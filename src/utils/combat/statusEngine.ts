@@ -135,13 +135,6 @@ export type RegisteredAbilityStatus =
     | (AbilityStatusBase & {
           kind: 'timed';
           duration: number;
-          /** Enemy-side own-turn reprieve opt-in (Martyrdom Disable). When true AND this status
-           *  lands on the actor whose turn is currently executing (recipient === currentTurnActorId),
-           *  the enemy-side write is flagged appliedThisTurn so decrementEnemy skips the first tick
-           *  — exactly as decrementPlayer protects same-turn self-buffs. Set ONLY by an on-destroyed
-           *  own-death reaction (a debuff born of the applier's death, landing on the killer during
-           *  the killer's own turn). Absent/false → unchanged (every other enemy debuff). */
-          reprieveOnRecipientTurn?: boolean;
           /** Intra-cast clause order (user-confirmed game rule, 2026-08-03): true when THIS
            *  status's clause sits AFTER a damage-dealing clause in the same firing slot — "deals
            *  X% damage and inflicts Defense Down" resolves the damage first, so the debuff must
@@ -282,8 +275,8 @@ export interface StatusEngine {
      *  Calling on an owner with no statuses (lazy-empty map) is a safe no-op.
      *  Returns expired buff names so the engine can emit buff-expired. */
     decrementPlayer(ownerId: string): { expired: string[] };
-    /** Mark the start of an actor's turn. Sets the "active carrier" so self-side timed
-     *  writes during this turn are flagged appliedThisTurn (own-turn reprieve). The id MUST
+    /** Mark the start of an actor's turn. Sets the "active carrier" so timed writes ONTO it
+     *  during this turn are flagged appliedThisTurn (own-turn reprieve). The id MUST
      *  match the self-store key for that actor: the focus actor uses 'attacker'; team actors
      *  use their real id. Called at each turn-started, extra actions included.
      *
@@ -607,7 +600,8 @@ export function familyChallengerWins(
  *  A different tier: the higher one wins (`familyChallengerWins`). An EQUAL tier is a re-application,
  *  which refreshes: the store keeps whichever copy lasts longer, and on a tie the fresh copy
  *  replaces the held one (so its caster, payload and application order are the newest). A shorter
- *  re-application never shortens the held copy.
+ *  re-application never shortens the held copy (owner ruling R151: remaining = max(remaining,
+ *  new) — Yazid's 9-turn Everliving Regeneration II survives his 2-turn charged re-grant).
  *
  *  "Lasts longer" counts the own-turn reprieve: a copy carrying `appliedThisTurn` survives one more
  *  Post-Turn than its `turnsRemaining` says. So a 1-turn self buff re-gained on the carrier's next
@@ -675,14 +669,12 @@ interface BuffState {
      *  the initial create and any family-rule refresh that re-sets the same key). Drives
      *  cleanse/purge newest-applied-first removal ordering. */
     appliedSeq: number;
-    /** Set true when this timed status was applied during the recipient's OWN turn (the
-     *  recipient was the active actor — see beginTurn). Granted a one-turn reprieve at that
-     *  turn's Post-Turn (skipped + flipped false by decrementPlayer/decrementEnemy), then
-     *  decrements normally from the recipient's next Post-Turn. Two cases set it:
-     *   - self-buffs a ship grants itself on its own turn (the original reprieve), and
-     *   - an on-destroyed own-death debuff landing on the killer during the killer's own turn
-     *     (`reprieveOnRecipientTurn`, #6b — legendary Martyrdom Disable). Every other off-turn
-     *     and enemy-side write leaves it falsy. */
+    /** Set true when this timed status landed on its holder during the holder's OWN turn, before
+     *  that turn's Post-Turn (the holder was the active actor — see beginTurn). Granted a one-turn
+     *  reprieve at that Post-Turn (skipped + flipped false by decrementPlayer/decrementEnemy), then
+     *  decrements normally from the holder's next Post-Turn, so it lasts through the holder's next
+     *  turn. One rule for both stores (`landsOnActingHolder`): a buff a ship gains on its own turn,
+     *  and a debuff a reaction lands on the attacker during the attacker's turn (owner ruling R123). */
     appliedThisTurn?: boolean;
     /** Remaining hit charges for a hit-counted status (see RegisteredAbilityStatus.hits).
      *  Undefined = turn-duration-governed; consumeStatusHit is a no-op on such an entry. */
@@ -1150,10 +1142,25 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         if (before === 0 && state.stacks > 0) state.appliedSeq = nextAppliedSeq();
     };
 
-    // The actor whose turn is currently executing (set at each turn-started via beginTurn).
-    // Self-side timed writes stamp appliedThisTurn when the carrier id matches this — the
-    // own-turn reprieve. Undefined before the first beginTurn → no reprieve (safe default).
+    // The actor whose turn is currently executing (set at each turn-started via beginTurn, cleared
+    // by that actor's Post-Turn in decrementPlayer and at round top). Undefined before the first
+    // beginTurn → no reprieve (safe default).
     let currentTurnActorId: string | undefined;
+    /**
+     * The own-turn reprieve rule, for every timed store write (`BuffState.appliedThisTurn`): a
+     * status that lands on the ship whose turn is executing, before that turn's Post-Turn, does
+     * not tick at that Post-Turn. One rule for buffs and debuffs, keyed on WHEN the status lands
+     * rather than on who sent it:
+     *  - a buff a ship gains on its own turn (its own cast, or a reaction during that turn);
+     *  - a debuff a REACTION lands on the acting ship (owner ruling R123: Iridium's 1-turn Speed
+     *    Down on the ship that just hit him still slows its next turn; Flamel's 2-turn Stasis
+     *    skips two of its turns). A cast never debuffs its own caster, so on the debuff side this
+     *    is exactly "landed during a reaction on the holder's own turn". A reaction anywhere else
+     *    needs no reprieve: its holder's next Post-Turn is after the holder's next turn anyway.
+     * Writes after the Post-Turn (turn-ended and round-ended drains, the Overclock hangover) find
+     * `currentTurnActorId` cleared and tick normally.
+     */
+    const landsOnActingHolder = (holderId: string): boolean => holderId === currentTurnActorId;
     // Turns each actor has begun this round (cleared by beginRound) — what tells a granter's
     // later turn from its first, which beginRound already banked.
     const turnsBegunThisRound = new Map<string, number>();
@@ -1255,7 +1262,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         const extension = side === 'self' && casterId ? buffDurationExtensionFor(casterId) : 0;
         const duration = buff.skillDuration + extension;
         const existing = map.get(familyKey);
-        const appliedThisTurn = side === 'self' && currentTurnActorId === 'attacker';
+        const appliedThisTurn = side === 'self' && landsOnActingHolder('attacker');
         if (!familyApplicationWins(existing, tier, duration, appliedThisTurn)) return;
         map.set(familyKey, {
             buffName: buff.buffName,
@@ -1499,16 +1506,10 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
     // Owner Post-Turn decrement helpers. The status CARRIER decrements its timed statuses
     // by one turn at its own Post-Turn. The two stores differ in their own-turn handling:
     //
-    //   - decrementPlayer (self-buff store): a timed self-buff applied during the carrier's
-    //     OWN turn is flagged appliedThisTurn (set by beginTurn, stamped in both self-side
-    //     timed write seams — applyTimedAbilityStatus and upsertBuff). Such an entry gets a
-    //     one-turn reprieve — it is skipped
-    //     once and the flag cleared, so it first decrements at the carrier's NEXT Post-Turn
-    //     (and thus lasts through the carrier's next turn). All other timed self statuses
-    //     decrement normally.
-    //   - decrementEnemy (debuffs landed on the carrier): UNCHANGED — it always decrements,
-    //     including same-turn applications, because debuffs are applied during the ATTACKER's
-    //     turn and so are never "own-turn" for the carrier they sit on.
+    // by one turn at its own Post-Turn. Both stores skip an entry flagged appliedThisTurn once
+    // (the own-turn reprieve, `landsOnActingHolder`) and clear the flag, so it first decrements
+    // at the carrier's NEXT Post-Turn and lasts through the carrier's next turn. Every other
+    // timed status decrements.
     //
     // Expired statuses are removed and their stored buffName reported so the engine emits
     // buff-expired. Ability-sourced timed statuses live in the same maps and decrement here.
@@ -1554,10 +1555,6 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
                 // Exposed has no turn clock: it leaves when a direct hit spends it or when the
                 // engine clears it at the end of the round (see exposedStatus.ts).
                 if (s.buffName === EXPOSED) continue;
-                // Own-turn reprieve (Martyrdom Disable): an on-destroyed debuff that landed on this
-                // actor DURING its own turn is skipped once (flag flips false), so it first
-                // decrements at this actor's NEXT Post-Turn and runs its full window. Mirrors
-                // decrementPlayer's self-side reprieve. All other enemy debuffs leave the flag falsy.
                 if (s.appliedThisTurn) {
                     s.appliedThisTurn = false; // reprieve consumed; next Post-Turn decrements
                     continue;
@@ -2075,7 +2072,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
             for (const st of stolen) {
                 const { familyKey, tier } = deriveFamilyKey(st.buffName);
                 const existing = recipientMap.get(familyKey);
-                const appliedThisTurn = recipientId === currentTurnActorId;
+                const appliedThisTurn = landsOnActingHolder(recipientId);
                 if (
                     !familyApplicationWins(
                         existing,
@@ -2101,14 +2098,9 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
                     // REMAINING stack count travels intact, same rule as hitsRemaining above.
                     stacks: st.stacks,
                     appliedSeq: nextAppliedSeq(),
-                    // Own-turn reprieve (Finding 2): a buff granted to the actor whose turn is
-                    // executing is protected from that same turn's Post-Turn decrement — its
-                    // REMAINING duration must travel intact per the ratified rule. Identical rule
-                    // to applyTimedAbilityStatus's self-side write: reprieve iff the recipient IS
-                    // the active actor. The caster (recipientIds[0], stealing on its own turn) gets
-                    // it; adjacent-ally recipients are not the active actor → no reprieve, they
-                    // decrement normally on their own turn (their duration was already preserved by
-                    // the transfer).
+                    // Own-turn reprieve (`landsOnActingHolder`): the thief stealing on its own
+                    // turn keeps the REMAINING duration intact through that turn's Post-Turn;
+                    // other recipients decrement on their own turns.
                     appliedThisTurn,
                 });
             }
@@ -2305,16 +2297,9 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
             beforeTimedEnemyApplication(enemyEffectiveId, status.payload.buffName);
         }
         const existing = map.get(familyKey);
-        // Own-turn reprieve. Self-side: any timed self-buff applied while its carrier is the
-        // active actor. Enemy-side: ONLY an opt-in reprieve status (on-destroyed Martyrdom
-        // Disable) landing on the actor whose turn is executing — so decrementEnemy skips the
-        // first same-turn tick, mirroring the self-side protection. All other enemy debuffs
-        // (no flag) stay falsy → decrement immediately.
-        const appliedThisTurn =
-            status.side === 'self'
-                ? selfEffectiveId === currentTurnActorId
-                : status.reprieveOnRecipientTurn === true &&
-                  enemyEffectiveId === currentTurnActorId;
+        const appliedThisTurn = landsOnActingHolder(
+            status.side === 'self' ? selfEffectiveId : enemyEffectiveId
+        );
         // A landed-but-family-blocked application is silently absorbed: the landing roll
         // was already consumed by the caller's gate (the family rule runs AFTER the landing
         // hook), so a blocked application is NOT recorded as resisted — the stronger/longer

@@ -742,74 +742,78 @@ describe('createStatusEngine — own-turn self-buff reprieve (beginTurn)', () =>
     });
 });
 
-describe('createStatusEngine — enemy-side own-turn reprieve (#6b Martyrdom Disable)', () => {
-    const enemyDisable = (
-        duration: number,
-        reprieve: boolean
+describe('createStatusEngine — a debuff landing on the acting ship takes the own-turn reprieve (R123)', () => {
+    const enemyStatus = (
+        buffName: string,
+        duration: number
     ): Extract<RegisteredAbilityStatus, { kind: 'timed' }> => ({
-        payload: { buffName: 'Disable', stacks: 1, parsedEffects: {} },
+        payload: { buffName, stacks: 1, parsedEffects: {} },
         side: 'enemy',
-        sourceSlot: 'active',
+        sourceSlot: 'passive',
         duration,
         conditions: [],
         kind: 'timed',
-        reprieveOnRecipientTurn: reprieve,
     });
+    const remaining = (eng: ReturnType<typeof createStatusEngine>, holder: string) =>
+        eng.timedAbilityStatuses('enemy', 'attacker', holder).map((s) => s.active.turnsRemaining);
 
-    it('an on-destroyed Disable(2) landing on the CURRENT turn actor survives its own Post-Turn, lasts two turns', () => {
+    it("a 2-turn Stasis landing on the acting ship survives that turn's Post-Turn and lasts two more turns", () => {
         const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
 
         eng.beginRound(1);
-        eng.beginTurn('killer'); // the killer is the active actor
-        // Martyrdom lands the Disable on the killer (enemyTargetId = 'killer') during its own turn.
-        eng.applyTimedAbilityStatus(1, enemyDisable(2, true), undefined, 'killer');
-        eng.decrementEnemy('killer'); // reprieve: skipped, flag flips false
-        expect(eng.timedAbilityStatuses('enemy', 'attacker', 'killer')).toHaveLength(1);
-        expect(
-            eng.timedAbilityStatuses('enemy', 'attacker', 'killer')[0].active.turnsRemaining
-        ).toBe(2);
+        eng.beginTurn('hitter'); // the hitter is the active actor; a reaction stasises it
+        eng.applyTimedAbilityStatus(1, enemyStatus('Stasis', 2), undefined, 'hitter');
+        eng.decrementPlayer('hitter');
+        eng.decrementEnemy('hitter'); // reprieve: skipped, flag flips false
+        expect(remaining(eng, 'hitter')).toEqual([2]);
 
         eng.beginRound(2);
-        eng.beginTurn('killer');
-        eng.decrementEnemy('killer'); // 2 → 1
-        expect(
-            eng.timedAbilityStatuses('enemy', 'attacker', 'killer')[0].active.turnsRemaining
-        ).toBe(1);
+        eng.beginTurn('hitter');
+        eng.decrementPlayer('hitter');
+        eng.decrementEnemy('hitter'); // 2 → 1
+        expect(remaining(eng, 'hitter')).toEqual([1]);
 
         eng.beginRound(3);
-        eng.beginTurn('killer');
-        eng.decrementEnemy('killer'); // 1 → 0 → expired
-        expect(eng.timedAbilityStatuses('enemy', 'attacker', 'killer')).toHaveLength(0);
+        eng.beginTurn('hitter');
+        eng.decrementPlayer('hitter');
+        eng.decrementEnemy('hitter'); // 1 → 0 → expired
+        expect(remaining(eng, 'hitter')).toEqual([]);
     });
 
-    it('SCOPE GUARD: a NON-reprieve enemy debuff applied during the recipient turn gets no reprieve (decrements immediately)', () => {
-        // The on-attacked/Provoke case: an ordinary enemy debuff (no reprieveOnRecipientTurn flag)
-        // landing on the actor whose turn is executing must NOT be flagged appliedThisTurn — its
-        // window is unchanged. Guards against the fix broadening beyond on-destroyed Martyrdom.
+    it('a hit still takes a reprieved 1-turn Stasis down at once (R40/R67)', () => {
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        eng.beginRound(1);
+        eng.beginTurn('hitter');
+        eng.applyTimedAbilityStatus(1, enemyStatus('Stasis', 1), undefined, 'hitter');
+        eng.reduceTimedEnemyStatus('hitter', 'Stasis');
+        expect(remaining(eng, 'hitter')).toEqual([]);
+    });
+
+    it('a debuff landing on a ship other than the acting one gets no reprieve', () => {
         const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
 
         eng.beginRound(1);
-        eng.beginTurn('killer');
-        eng.applyTimedAbilityStatus(1, enemyDisable(2, /* reprieve */ false), undefined, 'killer');
-        eng.decrementEnemy('killer'); // no reprieve → 2 → 1 immediately
-        expect(
-            eng.timedAbilityStatuses('enemy', 'attacker', 'killer')[0].active.turnsRemaining
-        ).toBe(1);
-    });
-
-    it('SCOPE GUARD: a reprieve-flagged debuff landing on a NON-current actor gets no reprieve', () => {
-        // The normal-debuff timing (recipient ≠ current turn actor): even a reprieve-flagged status
-        // is not protected when it lands on an actor other than the one currently acting.
-        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
-
-        eng.beginRound(1);
-        eng.beginTurn('killer');
-        // Lands on 'victim', not the acting 'killer' → not own-turn for 'victim'.
-        eng.applyTimedAbilityStatus(1, enemyDisable(2, true), undefined, 'victim');
+        eng.beginTurn('hitter');
+        // Lands on 'victim', not the acting 'hitter': it ticks at the victim's own next Post-Turn.
+        eng.applyTimedAbilityStatus(1, enemyStatus('Disable', 2), undefined, 'victim');
         eng.decrementEnemy('victim'); // no reprieve → 2 → 1
-        expect(
-            eng.timedAbilityStatuses('enemy', 'attacker', 'victim')[0].active.turnsRemaining
-        ).toBe(1);
+        expect(remaining(eng, 'victim')).toEqual([1]);
+    });
+
+    it('a debuff landing on the acting ship AFTER its Post-Turn (a turn-ended drain) gets no reprieve', () => {
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+
+        eng.beginRound(1);
+        eng.beginTurn('hitter');
+        eng.decrementPlayer('hitter'); // the Post-Turn clears the active actor
+        eng.decrementEnemy('hitter');
+        eng.applyTimedAbilityStatus(1, enemyStatus('Disable', 2), undefined, 'hitter');
+
+        eng.beginRound(2);
+        eng.beginTurn('hitter');
+        eng.decrementPlayer('hitter');
+        eng.decrementEnemy('hitter'); // no reprieve → 2 → 1
+        expect(remaining(eng, 'hitter')).toEqual([1]);
     });
 });
 

@@ -12,6 +12,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat log: a Protection-redirected hit now shows only the damage the target took.',
     'Combat log: Protection-redirected counters and procs now show only damage taken.',
     'Combat simulator: Nuqtu now gains one Core Charge per enemy buffing skill.',
+    'Combat simulator: passive debuffs on an attacker now last through its next turn.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

@@ -11693,12 +11693,11 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // turn's cast gets its own roll and its own one-success cap).
                 procDecisionThisSubAttack.clear();
 
-                // Set the active carrier for the own-turn self-buff reprieve: a TIMED self-buff
-                // written during this actor's own turn is flagged appliedThisTurn so it survives
-                // one extra Post Turn (lasting through the carrier's next turn, matching the game).
-                // Team-symmetric — applies to the focus, team actors, AND the enemy attackers
-                // (an enemy ship that self-buffs on its own turn gets the same reprieve). Must run
-                // BEFORE the turn body applies any buffs, so it precedes the kind-branch below.
+                // Set the active carrier for the own-turn reprieve: a TIMED status landing on this
+                // actor during its own turn (its own buffs, and debuffs reactions land on it —
+                // R123) survives this turn's Post Turn and lasts through its next turn. Read
+                // statusEngine's `landsOnActingHolder`. Team-symmetric. Must run BEFORE the turn
+                // body lands any status, so it precedes the kind-branch below.
                 statusEngine.beginTurn(actor.id);
 
                 bus.emit({ type: 'turn-started', actorId: actor.id, round: r });
@@ -13492,10 +13491,10 @@ export function runCombat(rawInput: CombatEngineInput): {
                 }
 
                 // Drain point (b): follow-ups triggered by this actor's turn body run as
-                // "consecutive actions" within the turn — BEFORE the owner Post Turn, so any
-                // status they apply obeys the same-turn decrement rule (the carrier's Post Turn
-                // below decrements it). A triggered effect therefore never boosts the hit that
-                // triggered it (the hit's damage was already computed in the turn body).
+                // "consecutive actions" within the turn — BEFORE the owner Post Turn. A status
+                // they land on this actor takes the own-turn reprieve (R123); one they land on
+                // anyone else ticks at that ship's own Post Turn. A triggered effect never boosts
+                // the hit that triggered it (the hit's damage was already computed in the turn body).
                 drainReactions();
                 // The cast's reaction chains are closed; end-of-turn reactions start their own.
                 setHitRoot(undefined);
