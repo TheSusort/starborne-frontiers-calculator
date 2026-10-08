@@ -241,6 +241,13 @@ export interface Intent {
      *  resolves the intents of the earliest event first, owner by owner in turn order (ruling 39).
      *  Absent reads as 0. */
     eventSeq?: number;
+    /** The owner was in Stasis or Disabled when the event that woke this intent happened. A
+     *  passive is off while its ship is stasised or disabled, and that is judged when the event
+     *  happens (a hit lands), not when the reaction drains: a hit that takes Stasis 1 → 0 still
+     *  draws no reaction (R79), while a later hit in the same chain, landing after the Stasis is
+     *  gone, does. The engine's drain drops an intent stamped here as it drops one whose owner is
+     *  blocked when it drains. Absent reads as false. */
+    ownerTurnBlockedAtEvent?: true;
     /** This intent answers a Bomb's detonation (`bomb-detonated`). A Bomb's detonation and its
      *  splash resolve before any other reaction (owner ruling R126), so the engine's drain takes
      *  these intents ahead of every other queued one. Absent reads as false. */
@@ -845,6 +852,9 @@ export function registerReactiveListeners(args: {
     /** Owner live self-HP% — stamped onto an intent woken by a hit on its owner
      *  (`eventCtx.ownerHpPctAtHit`). Optional: absent → the drain gate reads live HP. */
     selfHpPctOf?: (ownerId: string) => number;
+    /** Owner live Stasis/Disable — stamped onto every intent as `ownerTurnBlockedAtEvent`.
+     *  Optional: absent → never stamped. */
+    isTurnBlockedOf?: (ownerId: string) => boolean;
 }): void {
     const {
         bus: rawBus,
@@ -858,6 +868,7 @@ export function registerReactiveListeners(args: {
         footprintAllyIdsFor,
         maxHpOf,
         selfHpPctOf,
+        isTurnBlockedOf,
     } = args;
     // Every listener below records which event it is answering (`Intent.eventSeq`,
     // `Intent.answersBombDetonation`).
@@ -901,6 +912,7 @@ export function registerReactiveListeners(args: {
                 : {}),
             chainDepth: resolvingIntent ? (resolvingIntent.chainDepth ?? 0) + 1 : 0,
             reactionAncestry,
+            ...(isTurnBlockedOf?.(intent.ownerId) ? { ownerTurnBlockedAtEvent: true } : {}),
             eventSeq: listeningEventSeq ?? 0,
             ...(listeningEvent?.type === 'bomb-detonated' ? { answersBombDetonation: true } : {}),
             ...(currentHitRoot !== undefined ? { hitRoot: currentHitRoot } : {}),

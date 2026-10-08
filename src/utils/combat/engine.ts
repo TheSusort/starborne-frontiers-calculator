@@ -4502,6 +4502,8 @@ export function runCombat(rawInput: CombatEngineInput): {
             // id-keyed and side-agnostic, so the same closure serves both side registrations.
             maxHpOf: (ownerId: string) => recipientMaxHp(ownerId),
             // The same self-HP reading the drain gate uses, taken when a hit lands (A8).
+            // Stasis/Disable when the event happens (`Intent.ownerTurnBlockedAtEvent`).
+            isTurnBlockedOf: (ownerId: string) => isTurnBlocked(ownerId),
             selfHpPctOf: (ownerId: string) =>
                 bySide(isEnemySide(ownerId) ? 'enemy' : 'player').selfHpPctFor?.(ownerId) ?? 100,
         });
@@ -5825,9 +5827,12 @@ export function runCombat(rawInput: CombatEngineInput): {
     // whoever lands it, so two ships hitting a 2-turn Stasis before its holder's turn free it).
     // A hit queues its reduction; `settleStasisHits` spends every queued one at the tail of the
     // drain that follows the hit (`drainReactions`), so the reduction is in place before the next
-    // ship acts while the hit's own reactions still drain against the Stasis the hit landed on
-    // (stasis.test.ts (iii)). The reduction is therefore immediate at turn granularity: a victim
-    // whose Stasis reaches 0 this way takes its own turn later in the same round.
+    // ship acts. A reactive hit landing on the victim inside that drain spends the victim's queued
+    // reductions first, so it meets the Stasis as it then stands. Whether the victim reacts to a
+    // hit is judged when the hit lands (`Intent.ownerTurnBlockedAtEvent`), so the reduction's
+    // timing never re-opens a reaction to the hit that broke the Stasis (stasis.test.ts (iii)).
+    // The reduction is therefore immediate at turn granularity: a victim whose Stasis reaches 0
+    // this way takes its own turn later in the same round.
     const stasisBreakPending = new Map<string, number>();
     /** Mints `attacked.reactiveHitId` — one id per counter-attack / reactive proc hit. */
     let reactiveHitSeq = 0;
@@ -7884,6 +7889,9 @@ export function runCombat(rawInput: CombatEngineInput): {
             // non-optional: the `?? 0` below then covers only the (unreachable) case of the throw
             // that skips the assignment, not a silently absent field.
             let counterOutcome: AppliedVictimDamage | undefined;
+            // The reductions earlier hits queued land first, so this hit meets the Stasis as it
+            // now stands (a Stasis an earlier hit took to 0 is gone).
+            spendStasisHits(attacker.id);
             const counterStasisAtImpact = attackBreaksStasis(owner) && isStasised(attacker.id);
             const counterIsPrimary = aimReactiveHit(attacker.id);
             try {
@@ -8140,6 +8148,8 @@ export function runCombat(rawInput: CombatEngineInput): {
             deferConsequenceLogs = true;
             // Annotated for the same reason as applyCounterAttack's `counterOutcome`.
             let procOutcome: AppliedVictimDamage | undefined;
+            // See applyCounterAttack: the reductions earlier hits queued land first.
+            if (!splashCopy) spendStasisHits(victim.id);
             const procStasisAtImpact =
                 !splashCopy && attackBreaksStasis(owner) && isStasised(victim.id);
             // A Bomb splash copy is not a direct hit, so it is aimed at no one.
@@ -8210,8 +8220,8 @@ export function runCombat(rawInput: CombatEngineInput): {
         // into a per-turn `turnStasisHitVictims` set; the cast queues one reduction per marked
         // hit (`resolveStasisBreaks`), and `drainReactions` spends them right after the drain that
         // follows the cast. This satisfies two invariants:
-        //  (i)  The on-attacked reactive's drainQueue check (Counter Shield suppression — test iii)
-        //       sees `isStasised(victim) = true` because the drain runs BEFORE the reduction.
+        //  (i)  The on-attacked reactive is suppressed (Counter Shield — test iii): the victim was
+        //       stasised when the hit landed (`Intent.ownerTurnBlockedAtEvent`).
         //  (ii) The reduction is in place before the next ship acts, so a victim whose Stasis it
         //       takes to 0 takes its own turn later this round (owner rulings 40 and 67).
         //
@@ -11043,8 +11053,12 @@ export function runCombat(rawInput: CombatEngineInput): {
             //    stasised still resolves Martyrdom's killer-Disable / Salvation's repair.
             //    Same `fromOwnDeath` stamp that exempts them from executeIntent's
             //    dead-owner gate.
+            // Judged twice: when the triggering event happened (`ownerTurnBlockedAtEvent` — a hit
+            // landing on a stasised ship draws no reaction even when it takes the Stasis to 0) and
+            // now (a Stasis that landed after the event, before this reaction resolves — "deals X
+            // and inflicts Stasis" draws no reaction to its own hit, R152).
             if (
-                isTurnBlocked(intent.ownerId) &&
+                (intent.ownerTurnBlockedAtEvent === true || isTurnBlocked(intent.ownerId)) &&
                 intent.ability.source !== 'equipment' &&
                 !intent.eventCtx?.fromOwnDeath
             ) {

@@ -3241,7 +3241,13 @@ const DocumentationPage: React.FC = () => {
                                         a 2-turn Stasis, and it acts that same round. Damage over
                                         time and Bombs do not shorten Stasis, and neither do ships
                                         whose attacks &ldquo;do not reduce Stasis&rdquo;, such as
-                                        Akula.
+                                        Akula. A stasised ship does not react to a hit that lands
+                                        while it is in Stasis, even the hit that frees it, but does
+                                        react to a later hit once the Stasis is gone, even a
+                                        follow-up hit within the same exchange. A skill that deals
+                                        damage and then inflicts Stasis (Razi&apos;s charged) draws
+                                        no reaction to its own hit, because the Stasis is on by the
+                                        time the reaction would resolve.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">
