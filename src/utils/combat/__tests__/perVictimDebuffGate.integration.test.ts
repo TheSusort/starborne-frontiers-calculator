@@ -158,11 +158,15 @@ beforeEach(() => {
 });
 
 describe('player caster: the gate reads each struck enemy', () => {
-    const run = (conditions: Condition[], seeds: Record<string, Seed>, kits = emptyKit) =>
+    const run = (
+        conditions: Condition[],
+        seeds: Record<string, Seed>,
+        kits: (key: string) => ShipSkills = emptyKit
+    ) =>
         stasised(
             base({
                 shipSkills: casterKit(conditions),
-                enemyAttackers: BOARD.map(([k, p]) => enemy(k, p, kits())),
+                enemyAttackers: BOARD.map(([k, p]) => enemy(k, p, kits(k))),
             }),
             'attacker',
             seeds
@@ -194,12 +198,24 @@ describe('player caster: the gate reads each struck enemy', () => {
         ).toEqual(['enemy-a', 'enemy-c']);
     });
 
+    const healerKit = (): ShipSkills => ({
+        slots: [{ slot: 'active', abilities: [selfHeal()] }],
+    });
+
     it('repaired this round: only B (wounded, repairs itself before the cast) → B', () => {
         expect(
-            run(REPAIRED, { 'enemy-b': { hpFraction: 0.5 } }, () => ({
-                slots: [{ slot: 'active', abilities: [selfHeal()] }],
-            }))
+            run(REPAIRED, { 'enemy-b': { hpFraction: 0.5 } }, (key) =>
+                key === 'b' ? healerKit() : emptyKit()
+            )
         ).toEqual(['enemy-b']);
+    });
+
+    it('repaired this round: a repair that heals nothing still counts (A at full HP, B wounded)', () => {
+        expect(
+            run(REPAIRED, { 'enemy-b': { hpFraction: 0.5 } }, (key) =>
+                key === 'a' || key === 'b' ? healerKit() : emptyKit()
+            )
+        ).toEqual(['enemy-a', 'enemy-b']);
     });
 });
 
@@ -252,14 +268,21 @@ describe('enemy caster: the gate reads each struck player ship', () => {
         pattern: parsePattern('Pattern-Circle-Range-1'),
         shipSkills: casterKit(conditions),
     });
-    const run = (conditions: Condition[], seeds: Record<string, Seed>, kits = emptyKit) =>
+    const run = (
+        conditions: Condition[],
+        seeds: Record<string, Seed>,
+        kits: (key: string) => ShipSkills = emptyKit
+    ) =>
         stasised(
             base({
                 attack: 0,
                 hacking: 0,
                 speed: 150,
-                shipSkills: kits(),
-                teamActors: [ally('ally-b', 'M3', kits()), ally('ally-c', 'T4', kits())],
+                shipSkills: kits('attacker'),
+                teamActors: [
+                    ally('ally-b', 'M3', kits('ally-b')),
+                    ally('ally-c', 'T4', kits('ally-c')),
+                ],
                 enemyAttackers: [caster(conditions)],
             }),
             'enemy-caster',
@@ -286,11 +309,23 @@ describe('enemy caster: the gate reads each struck player ship', () => {
         ).toEqual(['ally-c', 'attacker']);
     });
 
+    const healerKit = (): ShipSkills => ({
+        slots: [{ slot: 'active', abilities: [selfHeal()] }],
+    });
+
     it('repaired this round: only B (wounded, repairs itself before the cast) → B', () => {
         expect(
-            run(REPAIRED, { 'ally-b': { hpFraction: 0.5 } }, () => ({
-                slots: [{ slot: 'active', abilities: [selfHeal()] }],
-            }))
+            run(REPAIRED, { 'ally-b': { hpFraction: 0.5 } }, (key) =>
+                key === 'ally-b' ? healerKit() : emptyKit()
+            )
         ).toEqual(['ally-b']);
+    });
+
+    it('repaired this round: a repair that heals nothing still counts (focus at full HP, B wounded)', () => {
+        expect(
+            run(REPAIRED, { 'ally-b': { hpFraction: 0.5 } }, (key) =>
+                key === 'attacker' || key === 'ally-b' ? healerKit() : emptyKit()
+            )
+        ).toEqual(['ally-b', 'attacker']);
     });
 });

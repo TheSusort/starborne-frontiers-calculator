@@ -12,6 +12,10 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat log: a Protection-redirected hit now shows only the damage the target took.',
     'Combat log: Protection-redirected counters and procs now show only damage taken.',
     'Combat simulator: Nuqtu now gains one Core Charge per enemy buffing skill.',
+    'Combat simulator: the Leech set now repairs from counter-attack and implant-proc damage.',
+    'Combat simulator: Leech set, Bloodthirst and Last Wish repairs can now critically hit.',
+    'Combat simulator: Madax now receives 30% more repairs beside a supporter.',
+    "Combat simulator: Zosimos's active now counts a repair that healed nothing.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

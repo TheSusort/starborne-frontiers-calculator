@@ -5761,6 +5761,32 @@ export function parsePreCombatStatGrants(text: string | null | undefined): PreCo
     return results;
 }
 
+// Madax: "When adjacent to a Supporter, this Unit receives 30% more repairs and increases …". The
+// clause names the role once and the received-repair bonus once; the role gate is read live.
+const ADJACENT_ROLE_MORE_REPAIRS_RE =
+    /when (?:this unit is )?adjacent to an?\s+(supporter|defender|attacker|debuffer),\s*this unit receives\s+(\d+(?:\.\d+)?)\s*%\s*more\s+repairs/i;
+
+export interface AdjacentRoleRepairBonus {
+    requiresAdjacentRole: ShipRoleCategory;
+    ampPct: number;
+    pos: number;
+}
+
+/** "When adjacent to a <role>, this Unit receives N% more repairs" (Madax). */
+export function parseAdjacentRoleRepairBonus(
+    text: string | null | undefined
+): AdjacentRoleRepairBonus | undefined {
+    if (!text) return undefined;
+    const plain = stripUnitTags(text).replace(/<br\s*\/?>/gi, '. ');
+    const m = ADJACENT_ROLE_MORE_REPAIRS_RE.exec(plain);
+    if (!m) return undefined;
+    return {
+        requiresAdjacentRole: m[1].toUpperCase() as ShipRoleCategory,
+        ampPct: parseFloat(m[2]),
+        pos: m.index,
+    };
+}
+
 export type SkillSource = 'active' | 'charge' | 'passive1' | 'passive2' | 'passive3';
 
 export interface SkillEffect {

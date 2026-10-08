@@ -4703,16 +4703,20 @@ const DocumentationPage: React.FC = () => {
                                     <strong>Leech</strong> gear set (heals the ship for 15% of all
                                     damage it deals each turn, per set) and the{' '}
                                     <strong>Bloodthirst</strong> implant (on-crit heal for 12%, 17%,
-                                    or 20% of damage dealt, depending on rarity). Chance-based procs
-                                    such as Bloodthirst are modeled at their expected average
-                                    frequency. Three conditional damage implants also apply:{' '}
-                                    <strong>Intrusion</strong> (more outgoing damage for each debuff
-                                    on the target), <strong>Arcane Siege</strong> (more outgoing
-                                    damage while the ship is shielded), and{' '}
-                                    <strong>Warpstrike</strong> (more outgoing damage while the ship
-                                    is debuffed). Incoming-damage reduction is also modeled:{' '}
-                                    <strong>Voidshade</strong> and <strong>Shadowguard</strong>{' '}
-                                    (reduced damage while stealthed),{' '}
+                                    or 20% of damage dealt, depending on rarity). Leech repairs pay
+                                    on counter-attack and implant-proc damage too, and the Leech
+                                    set, Bloodthirst and Last Wish repairs can crit at the
+                                    wearer&apos;s crit rate and crit power. A repair that heals
+                                    nothing because its target is at full HP still counts as a
+                                    repair. Chance-based procs such as Bloodthirst are modeled at
+                                    their expected average frequency. Three conditional damage
+                                    implants also apply: <strong>Intrusion</strong> (more outgoing
+                                    damage for each debuff on the target),{' '}
+                                    <strong>Arcane Siege</strong> (more outgoing damage while the
+                                    ship is shielded), and <strong>Warpstrike</strong> (more
+                                    outgoing damage while the ship is debuffed). Incoming-damage
+                                    reduction is also modeled: <strong>Voidshade</strong> and{' '}
+                                    <strong>Shadowguard</strong> (reduced damage while stealthed),{' '}
                                     <strong>Nebula Nullifier</strong> (reduced damage while in
                                     Stasis or Disabled), <strong>Hyperion Gaze</strong> and the{' '}
                                     <strong>Hardened</strong> gear set (reduced incoming
