@@ -88,6 +88,27 @@ export interface VictimDamageOutcome {
     /** A Protection cascade split this hit, even when no protector booked any intake (a share
      *  deferred into a DoT). Absent when no cascade fired. */
     protectionSplit?: boolean;
+    /** A Protection cascade moved ALL of this hit onto protectors, leaving this victim nothing
+     *  (Lionheart's 10 stacks). Read through {@link directlyDamagesVictim}. Absent otherwise,
+     *  including for a partial split. */
+    fullyRedirected?: boolean;
+}
+
+/**
+ * Whether a hit counts as DIRECT DAMAGE on the ship it struck — the one test behind every
+ * "when directly damaged" consequence of a hit for that ship: its `attacked` reactions (counters,
+ * Warden, Isha, an ally's on-ally-attacked), its primary-target allowance (R92) and its Stasis
+ * reduction (R40/R67).
+ *  - A hit fully transformed into a DoT (Voron, Orel, Hit Mitigation) is not (R138).
+ *  - A hit FULLY redirected by Protection is not direct damage to the protected ship (R139). A
+ *    partial redirect (Meatshield's 30%) leaves the kept share direct.
+ * A Barrier-nullified hit still answers true here; the Stasis reduction excludes it on its own
+ * (`barriered`).
+ */
+export function directlyDamagesVictim(
+    outcome: Pick<VictimDamageOutcome, 'transformedToDot' | 'fullyRedirected'>
+): boolean {
+    return (outcome.transformedToDot ?? 0) <= 0 && outcome.fullyRedirected !== true;
 }
 
 /** {@link VictimDamageOutcome} as returned by the engine's real apply funnel, where

@@ -30,6 +30,7 @@ export function emitPerVictimAttacked(args: {
             damage: number;
             takenDamage?: number;
             protectionSplit?: boolean;
+            notDirectDamage?: boolean;
             shieldWasHit: boolean;
             hitOutcomes: boolean[];
         }
@@ -49,6 +50,7 @@ export function emitPerVictimAttacked(args: {
             damage: sig.damage,
             ...(sig.takenDamage !== undefined ? { takenDamage: sig.takenDamage } : {}),
             ...(sig.protectionSplit ? { protectionSplit: true } : {}),
+            ...(sig.notDirectDamage ? { notDirectDamage: true } : {}),
             ...(args.subAttackIndex !== undefined ? { subAttackIndex: args.subAttackIndex } : {}),
         });
     }

@@ -91,7 +91,7 @@ export function exposedIncomingPct(statusEngine: StatusEngine, victimId: string)
  *    replaces the hit with a DoT, so nothing lands at that instant either — Exposed likewise
  *    survives, and a following real hit is still amplified.
  * The transform half is the same reading of the same value as the engine's `attacked` SUPPRESSION
- * for a fully converted hit (`fullyTransformedToDot`, in the per-victim `onVictimResolved` hook):
+ * for a fully converted hit (`directlyDamagesVictim`, positionalApply.ts):
  * that hit is not a direct hit, so it neither raises the "directly damaged" signal nor spends a
  * status the game text ties to "taking direct damage". One premise, both consequences — the cross
  * reference exists because an earlier round briefly asserted the opposite premise here (a transform

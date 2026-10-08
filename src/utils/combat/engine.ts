@@ -105,6 +105,7 @@ import {
 } from './positionalBinding';
 import {
     applyPositionalDamage,
+    directlyDamagesVictim,
     footprintVictims,
     isWholeBattlefieldPattern,
     type SubAttackBoundary,
@@ -5251,17 +5252,13 @@ export function runCombat(rawInput: CombatEngineInput): {
     // positional firing hit (`direct`) and the positional DoT tick.
     //
     // Wired at the positional apply sites (grep the call sites for the current set): the firing
-    // hit routes through `procLeechesForVictim`, the DoT ticks and the bomb/accumulator bursts
-    // pass their own `channel`, and the passive-slot damage instance calls it from its apply loop.
+    // hit and the passive-slot damage instance route through `procLeechesForVictim`, and the DoT
+    // ticks and the bomb/accumulator bursts pass their own `channel`.
     //
-    // The INCOMING direction is a different proc
-    // (`procTakenLeechesPerVictim`/`procLeechesForVictim`), and two of those sites deliberately do
-    // NOT reach it:
-    //   - a bomb/accumulator burst does not proc the victim's damage-taken leech (owner ruling
-    //     2026-08-18; Malvex reads "when directly damaged as a PRIMARY TARGET");
-    //   - the passive-slot damage instance does not either, since its victim is not its primary
-    //     target (owner ruling 2026-08-18, spec §2.2) — see `stagePassiveSlotHit`'s
-    //     `KNOWN GAPS (a)` block.
+    // The INCOMING direction is a different proc (`procTakenLeechesPerVictim`). Every direct hit
+    // reaches it — cast hits, the passive-slot instance, and counters, procs and Nosorog's reflect
+    // through `landReactiveHit` (R36/R140). A bomb/accumulator burst is not direct damage and
+    // does not.
     // A leech repair event's crit count: one per recipient whose repair crit, the field the
     // crit-repair listeners read on `reactive-heal-performed`.
     const leechCritHits = (perTarget: readonly { didCrit?: boolean }[]) => {
@@ -5910,14 +5907,15 @@ export function runCombat(rawInput: CombatEngineInput): {
     /**
      * Owner ruling R92 (in game 2026-10-06): a victim is a PRIMARY TARGET at most once per incoming
      * sub-attack, counting the whole reaction chain that sub-attack sets off (`setHitRoot` in
-     * triggers.ts names the chain). Any aimed hit spends it — the cast's hit on its anchor, a
-     * counter, a proc; a covered hit of an area pattern neither counts nor spends. A cast's hit is
-     * aimed at each of its sub-attack's primary targets (`SubAttackOutcome.primaryVictimIds` — the
-     * anchor, or every victim of a whole-battlefield attack, owner ruling R110). The FIRST aimed
-     * hit on a victim in a chain is the primary-target hit; Stalwart's counter and buff and
-     * Nosorog's reflect read that one answer. Malvex's shield is a damage-taken leech, which only
-     * cast hits proc (`procLeechesForVictim`), so it reads the cast's `isPrimary`. Keys are
-     * `victimId|root`; roots are unique for the whole run.
+     * triggers.ts names the chain). Any aimed hit that damages the victim directly spends it — the
+     * cast's hit on its anchor, a counter, a proc, Nosorog's reflect (R137); a covered hit of an
+     * area pattern neither counts nor spends, and nor does a hit Protection moved wholly onto
+     * protectors (R139, `directlyDamagesVictim`). A cast's hit is aimed at each of its
+     * sub-attack's primary targets (`SubAttackOutcome.primaryVictimIds` — the anchor, or every
+     * victim of a whole-battlefield attack, owner ruling R110). The FIRST aimed hit on a victim in
+     * a chain is the primary-target hit; Stalwart's counter and buff, Nosorog's reflect and
+     * Malvex's damage-taken shield read that one answer. Keys are `victimId|root`; roots are
+     * unique for the whole run.
      */
     const primaryHitsSpent = new Set<string>();
     /** Spends `victimId`'s primary-target allowance in chain `root`; true when it was unspent. */
@@ -6413,6 +6411,35 @@ export function runCombat(rawInput: CombatEngineInput): {
             pendingReflectLogs.push(...kept);
             flushConsequenceLogs(subAttack);
         };
+        /**
+         * The `attacked` of a direct-damage reflect (Nosorog, R137), held until the hit that
+         * provoked the reflect has emitted its own `attacked`: the attacker's reactions to the
+         * bounce answer a later event than the reflector's reactions to that hit (R39). Each entry
+         * keeps the chain root and the sub-attack it was raised in. Flushed after a cast
+         * sub-attack's `attacked` step (`subAttack` filters exactly as `flushReflectLogs`), after a
+         * counter's or proc's own `attacked` (`landReactiveHit`), and at the head of every reaction
+         * drain, so none outlives the turn that raised it.
+         */
+        const pendingReflectedAttacked: { root: string; subAttack?: number; emit: () => void }[] =
+            [];
+        const flushReflectedAttacked = (subAttack?: number): void => {
+            if (pendingReflectedAttacked.length === 0) return;
+            const ready = pendingReflectedAttacked.filter(
+                (row) =>
+                    subAttack === undefined ||
+                    row.subAttack === undefined ||
+                    row.subAttack === subAttack
+            );
+            const kept = pendingReflectedAttacked.filter((row) => !ready.includes(row));
+            pendingReflectedAttacked.length = 0;
+            pendingReflectedAttacked.push(...kept);
+            const outerRoot = hitRootInScope();
+            for (const row of ready) {
+                setHitRoot(row.root);
+                row.emit();
+            }
+            setHitRoot(outerRoot);
+        };
         const applyVictimDamage = (
             rawDamage: number,
             victim: CombatActor,
@@ -6428,9 +6455,14 @@ export function runCombat(rawInput: CombatEngineInput): {
                 shieldPenetrationPct?: number;
                 /** Portion of `rawDamage` that is bomb/detonation damage — drains shield in FULL, no pen. Default 0. */
                 bombPortion?: number;
-                /** True when THIS application is itself reflected thorns (Reflect gear set). The
-                 *  reflection block skips when set → no ping-pong (a reflected hit never reflects). */
+                /** True when THIS application is itself reflected thorns (Nosorog, the Reflect gear
+                 *  set). The reflection block skips when set → no ping-pong (a reflected hit never
+                 *  reflects). */
                 isReflected?: boolean;
+                /** With `isReflected`: the bounce of a ship's reflect, which is a direct hit in full
+                 *  (R137, R162) — Protection redirects it, and it spends Exposed and Titanite
+                 *  Plating like any direct hit. Absent for the Reflect gear set's bounce. */
+                directReflect?: boolean;
                 /** True for a FLAT copy of an already-resolved burst (Demolisher's Bomb splash):
                  *  Bomb damage, not a direct hit, so no Protection redirect and no Exposed spend. */
                 isSplashCopy?: boolean;
@@ -6567,8 +6599,9 @@ export function runCombat(rawInput: CombatEngineInput): {
             // fraction (10%/stack) of this victim's direct hit. The redirected chunk keeps the
             // ORIGINAL target's affinity/outgoing (both baked into `damage`) and re-mitigates on
             // the PROTECTOR's own defense — realized by the mit-ratio inside protectionCascade.
-            // Guards: direct damage only, and never a redirected/reflected application (loop-safe)
-            // or a Bomb splash copy. Counters and reactive procs are redirected (ruling 36).
+            // Guards: direct damage only, and never a redirected application (loop-safe), the
+            // Reflect gear set's bounce, or a Bomb splash copy. Counters, reactive procs and a
+            // ship's reflect are redirected (rulings 36, R162).
             // !carriesBarrier: Barrier sits strictly in front of every incoming-effect mechanism
             // (matches the incoming-block step and the transform step) — an invulnerable target
             // has no incoming hit for allies to soak.
@@ -6583,11 +6616,12 @@ export function runCombat(rawInput: CombatEngineInput): {
             // + target remainder).
             let protectionRedirected = 0;
             let protectionSplit = false;
+            let fullyRedirected = false;
             if (
                 cause?.byDirectDamage &&
                 !carriesBarrier &&
                 !cause.isProtectionTransfer &&
-                !cause.isReflected &&
+                (!cause.isReflected || cause.directReflect) &&
                 !cause.isSplashCopy &&
                 !wholeBattlefieldHit &&
                 damage > 0
@@ -6647,6 +6681,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                         }))
                     );
                     protectionSplit = cascade.targetRetainedFraction < 1;
+                    fullyRedirected = cascade.targetRetainedFraction <= 0;
                     // Redirect each protector's chunk BEFORE the victim's own HP is touched.
                     protectors.forEach((p, i) => {
                         const chunk = cascade.chunks[i];
@@ -6669,6 +6704,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 killerId: cause.killerId,
                                 byDirectDamage: true,
                                 isProtectionTransfer: true,
+                                // The protector is not directly damaged by its share (R139), so
+                                // the chunk is no primary-target hit on it and never reflects.
+                                isPrimaryTarget: false,
                                 shieldPenetrationPct: 0,
                                 bombPortion: 0,
                                 // #358 ADDENDUM 2: the P-space inflow this chunk was cut from,
@@ -7327,15 +7365,21 @@ export function runCombat(rawInput: CombatEngineInput): {
             ) {
                 hitThisRound.add(victim.id);
             }
-            // Reflect gear set: thorns. When a Reflect wearer takes a DIRECT hit that
-            // dealt net HP damage, reflect Σpct% of that net HP damage back at the attacker —
+            // Reflect (Nosorog, the Reflect gear set): thorns. When a reflector takes a DIRECT hit
+            // that dealt net HP damage, reflect Σpct% of that net HP damage back at the attacker —
             // mitigated by the attacker's affinity matchup (wearer is the source of the reflected
             // hit), defence, and incoming-reduction. Applied via a RECURSIVE applyVictimDamage with
             // isReflected:true so it (a) drains the attacker's shield→HP per the H1 rules, (b) runs
             // its own death handling (a reflected kill records the destroy + fires on-death FOR
             // FREE — recordDestroyed above), and (c) does NOT itself reflect (the isReflected guard
-            // below skips). applyVictimDamage emits NO attacked/reaction events (those live in the
-            // turn/wrapper layer), so reflection neither re-triggers reactions nor ping-pongs.
+            // below skips).
+            //
+            // A SHIP's reflect (Nosorog) is direct damage on the attacker (R137): it lands like a
+            // counter through `landReactiveHit`, so the attacker's "when directly damaged"
+            // reactions answer it (every counter included, R160), its Stasis drops and its
+            // damage-taken shields fire. The Reflect GEAR SET's bounce (`source: 'equipment'`) is
+            // not direct damage and raises none of that. A reflector carrying both sends one
+            // bounce, direct when any part of it is.
             //
             // GUARDS (any → skip): a reflected application (no ping-pong); no net HP damage; a DoT
             // tick (byDirectDamage === false); the victim has no damage-reflection ability. Fully
@@ -7359,8 +7403,9 @@ export function runCombat(rawInput: CombatEngineInput): {
             // covered by test case (e).
             // A counter-attack or reactive damage proc reflects like any other direct hit (owner
             // ruling 36), subject to Nosorog's primary-target gate below. Loop-safe: the reflected
-            // hit carries `isReflected` and never reflects, and this funnel emits no reaction
-            // events.
+            // hit carries `isReflected` and never reflects, and a counter its `attacked` provokes
+            // is aimed at a reflector whose primary-target allowance the provoking hit already
+            // spent (R92), so the gate below stops a second reflect.
             if (!cause?.isReflected && hpDamage > 0 && cause?.byDirectDamage !== false) {
                 // Direct slice of the net HP damage: exclude the bomb portion by the raw direct
                 // fraction of the post-block total. bombPortion 0 → directFraction 1 (full reflect);
@@ -7444,18 +7489,37 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 attackerTauntedOrProvoked: false,
                             }
                         );
+                        // A ship's reflect is a direct hit on the attacker (R137, R162).
+                        const directReflect = reflectAbilities.some(
+                            (a) => a.source !== 'equipment'
+                        );
                         // ONE evaluation, both axes (#358): `reflectedDamageParts` returns the
-                        // mitigated amount and its pre-defence twin from a single walk.
-                        const { damage: reflected, preMitigation: reflectedPreMit } =
-                            reflectedDamageParts({
-                                reflectPct,
-                                // Direct slice only — the bomb portion of a mixed hit never reflects.
-                                netHpDamage: reflectBasis,
-                                affinityDamageModifier,
-                                attackerDefenceReductionPct,
-                                reflectVictimIncomingReductionPct,
-                            });
+                        // mitigated amount and its pre-defence twin from a single walk. A direct
+                        // bounce also reads the attacker's Exposed (+100% per stack), which the
+                        // funnel then spends — amplify and consume in lockstep.
+                        const bounce = reflectedDamageParts({
+                            reflectPct,
+                            // Direct slice only — the bomb portion of a mixed hit never reflects.
+                            netHpDamage: reflectBasis,
+                            affinityDamageModifier,
+                            attackerDefenceReductionPct,
+                            reflectVictimIncomingReductionPct,
+                        });
+                        const exposedAmp = directReflect
+                            ? 1 + exposedIncomingPct(statusEngine, attacker.id) / 100
+                            : 1;
+                        const reflected = bounce.damage * exposedAmp;
+                        const reflectedPreMit = bounce.preMitigation * exposedAmp;
                         if (reflected > 0) {
+                            // Aimed at the attacker like a counter (R137); the aim and the Stasis
+                            // gate are read at impact, before the bounce lands.
+                            const reflectAim = directReflect
+                                ? aimReactiveHit(attacker.id)
+                                : undefined;
+                            const reflectStasisAtImpact =
+                                directReflect &&
+                                attackBreaksStasis(victim) &&
+                                isStasised(attacker.id);
                             // `sink` accumulates the attacker's incoming into the unified
                             // perActorIncoming/intakeFor map under its own id (ids are globally
                             // unique across sides — no per-side selection needed).
@@ -7463,7 +7527,18 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 killerId: victim.id,
                                 byDirectDamage: true,
                                 isReflected: true,
-                                shieldPenetrationPct: 0,
+                                // A direct bounce is redirected by the attacker's Protection,
+                                // spends its Titanite/Exposed and uses the reflector's shield
+                                // penetration (R162); the gear set's bounce does none of that.
+                                ...(directReflect
+                                    ? {
+                                          directReflect: true,
+                                          targetMitigation: 1 - attackerDefenceReductionPct / 100,
+                                      }
+                                    : {}),
+                                shieldPenetrationPct: directReflect
+                                    ? attackerShieldPenOf(victim.id)
+                                    : 0,
                                 bombPortion: 0,
                                 // #358 ADDENDUM 2: the same reflected hit without the reflect
                                 // victim's (the original attacker's) defence term.
@@ -7533,6 +7608,22 @@ export function runCombat(rawInput: CombatEngineInput): {
                                     triggerActorId: actingActorId,
                                 });
                             }
+                            if (reflectAim) {
+                                landReactiveHit(
+                                    victim,
+                                    attacker,
+                                    reflected,
+                                    false,
+                                    reflectOutcome,
+                                    reflectStasisAtImpact,
+                                    false,
+                                    reflectAim,
+                                    true
+                                );
+                                // Damage the reflector dealt, so his standing leech pays on it
+                                // like a counter's (R165).
+                                payReactiveHitLeech(victim, reflectOutcome);
+                            }
                         }
                     }
                 }
@@ -7552,7 +7643,9 @@ export function runCombat(rawInput: CombatEngineInput): {
             //    `bombPortion`) never read `incomingDamageModifierPct`;
             //  - the three SECONDARY hit types compute their damage without that channel too, so
             //    they would spend the status for nothing (found in review, PR #289):
-            //      · reflect  — `reflectedDamageForHit` folds only the attacker's incoming-REDUCTION,
+            //      · the Reflect gear set's bounce — `reflectedDamageParts` folds only the
+            //        attacker's incoming-REDUCTION. A ship's reflect (`directReflect`, R162) reads
+            //        Exposed at the reflect site and therefore spends here,
             //      · counter  — passes `incomingDamageModifierPct: 0` outright (documented approximation),
             //      · transfer — the redirected chunk comes off the ORIGINAL victim's cascade.
             //    Same three flags, same reasoning as the Protection-transfer eligibility guard above.
@@ -7573,7 +7666,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             //    one: like Barrier, the amount never re-books anywhere later (no deferred DoT tick),
             //    so Exposed staying armed costs nothing and matches Barrier's "nothing lands, ever".
             // That is deliberately the SAME reading of `transformedToDot` as the `attacked`
-            // suppression in the per-victim `onVictimResolved` hook (`fullyTransformedToDot`): a
+            // suppression `directlyDamagesVictim` (positionalApply.ts) drives: a
             // fully converted hit is not a direct hit, so it neither signals "directly damaged" to
             // on-attacked reactives nor spends a status whose game text is "removed after taking
             // direct damage". The two readings must stay in step — revisit them in the same commit
@@ -7594,7 +7687,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 cause?.byDirectDamage === true &&
                 (cause.bombPortion ?? 0) === 0 &&
                 !cause.isProtectionTransfer &&
-                !cause.isReflected &&
+                (!cause.isReflected || cause.directReflect) &&
                 !cause.isSplashCopy &&
                 immediateDamage - transformedToDot > 0
             ) {
@@ -7622,6 +7715,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 incomingBooked: incomingRecorded - transformedToDot,
                 ...(protectionRedirected > 0 ? { protectionRedirected } : {}),
                 ...(protectionSplit ? { protectionSplit } : {}),
+                ...(fullyRedirected ? { fullyRedirected } : {}),
             };
         };
         // Legacy healing-mode player intake — a THIN wrapper over applyVictimDamage. The sink
@@ -7818,23 +7912,17 @@ export function runCombat(rawInput: CombatEngineInput): {
         };
 
         /**
-         * A counter's or proc's hit is aimed at `victimId`, so it is a primary-target hit when it is
-         * the first aimed hit on that victim in its chain (`spendPrimaryHit`). Called once per hit,
-         * before the funnel, so the inline reflect and the `attacked` event read the same answer.
+         * A counter's, proc's or direct reflect's hit is aimed at `victimId`, so it is a
+         * primary-target hit when it is the first aimed hit on that victim in its chain
+         * (`primaryHitsSpent`). Read once per hit, before the funnel, so the inline reflect and the
+         * `attacked` event read the same answer; `landReactiveHit` spends it once the funnel shows
+         * the hit damaged the victim directly.
          */
-        const aimReactiveHit = (victimId: string): boolean =>
-            spendPrimaryHit(victimId, claimHitRoot(mintHitRoot));
+        const aimReactiveHit = (victimId: string): { root: string; isPrimary: boolean } => {
+            const root = claimHitRoot(mintHitRoot);
+            return { root, isPrimary: !primaryHitsSpent.has(`${victimId}|${root}`) };
+        };
 
-        /**
-         * The direct-hit consequences a counter-attack or reactive proc shares with a cast hit
-         * (ruling 36), run after its funnel application:
-         *  - the Stasis reduction, for a victim stasised at impact (`stasisAtImpact`, read before
-         *    the funnel) whose hit was not nullified by Barrier;
-         *  - the `attacked` event, for every "When directly damaged" reaction — unless the hit was
-         *    fully transformed into a DoT, which is not a direct hit (the cast path's rule).
-         * `fromCounter` marks a counter's hit (`counterAnswersCounters` in triggers.ts).
-         * `isPrimaryTarget` is the answer `aimReactiveHit` gave before the funnel.
-         */
         /** A Protection-split reactive hit also reports what its victim took, so the log rows the
          *  victim at that rather than the hit as thrown. */
         const splitFigures = (
@@ -7855,6 +7943,22 @@ export function runCombat(rawInput: CombatEngineInput): {
             procStandingLeechesPerVictim(owner.id, detonationDelivered(outcome), 'direct');
         };
 
+        /**
+         * The direct-hit consequences a counter-attack, a reactive proc or Nosorog's reflect (R137)
+         * shares with a cast hit (ruling 36), run after its funnel application. Each one asks
+         * `directlyDamagesVictim` first; a hit that was no direct damage on `victim` has none of
+         * them:
+         *  - the victim's primary-target allowance, spent when `aim` found it unspent (R92);
+         *  - the Stasis reduction, for a victim stasised at impact (`stasisAtImpact`, read before
+         *    the funnel) whose hit was not nullified by Barrier;
+         *  - the victim's damage-taken shields and repairs (Malvex, Quixilver);
+         *  - the `attacked` event, for every "When directly damaged" reaction.
+         * `fromCounter` marks a counter's hit (`counterAnswersCounters` in triggers.ts). A direct
+         * reflect does not carry it: every counter answers the reflect (R160). `deferAttacked`
+         * holds the `attacked` in `pendingReflectedAttacked` — the reflect lands inside the funnel
+         * of the hit that provoked it, before that hit's own `attacked`. Otherwise the event is
+         * emitted here, followed by any reflect this hit provoked.
+         */
         const landReactiveHit = (
             owner: CombatActor,
             victim: CombatActor,
@@ -7863,28 +7967,45 @@ export function runCombat(rawInput: CombatEngineInput): {
             outcome: AppliedVictimDamage,
             stasisAtImpact: boolean,
             fromCounter: boolean,
-            isPrimaryTarget: boolean
+            aim: { root: string; isPrimary: boolean },
+            deferAttacked = false
         ): void => {
-            if (stasisAtImpact && !outcome.barriered) resolveStasisBreaks([victim.id], () => false);
-            if ((outcome.transformedToDot ?? 0) > 0) return;
-            emitAttacked({
-                bus,
-                round: r,
-                targetId: victim.id,
-                attackerId: owner.id,
-                hitOutcomes: [didCrit],
-                isPrimaryTarget,
-                shieldWasHit:
-                    !outcome.barriered &&
-                    !outcome.converted &&
-                    outcome.shieldBefore > 0 &&
-                    outcome.hpDamage < raw,
-                damage: raw,
-                takenDamage: outcome.incomingBooked,
-                subAttackIndex: 0,
-                reactiveHitId: ++reactiveHitSeq,
-                fromCounter,
-            });
+            const direct = directlyDamagesVictim(outcome);
+            if (direct && aim.isPrimary) spendPrimaryHit(victim.id, aim.root);
+            if (direct && stasisAtImpact && !outcome.barriered)
+                resolveStasisBreaks([victim.id], () => false);
+            procTakenLeechesPerVictim(victim, outcome.incomingBooked, outcome, aim.isPrimary);
+            if (direct) {
+                const emit = (): void =>
+                    emitAttacked({
+                        bus,
+                        round: r,
+                        targetId: victim.id,
+                        attackerId: owner.id,
+                        hitOutcomes: [didCrit],
+                        isPrimaryTarget: aim.isPrimary,
+                        shieldWasHit:
+                            !outcome.barriered &&
+                            !outcome.converted &&
+                            outcome.shieldBefore > 0 &&
+                            outcome.hpDamage < raw,
+                        damage: raw,
+                        takenDamage: outcome.incomingBooked,
+                        subAttackIndex: 0,
+                        reactiveHitId: ++reactiveHitSeq,
+                        fromCounter,
+                    });
+                if (deferAttacked) {
+                    pendingReflectedAttacked.push({
+                        root: aim.root,
+                        subAttack: currentSubAttackIndex,
+                        emit,
+                    });
+                } else {
+                    emit();
+                }
+            }
+            if (!deferAttacked) flushReflectedAttacked();
         };
 
         // Full mitigated/crit counter walk from the counter owner to the attacker. Handed to the
@@ -7970,12 +8091,12 @@ export function runCombat(rawInput: CombatEngineInput): {
             // now stands (a Stasis an earlier hit took to 0 is gone).
             spendStasisHits(attacker.id);
             const counterStasisAtImpact = attackBreaksStasis(owner) && isStasised(attacker.id);
-            const counterIsPrimary = aimReactiveHit(attacker.id);
+            const counterAim = aimReactiveHit(attacker.id);
             try {
                 counterOutcome = applyVictimDamage(raw, attacker, sink, {
                     killerId: owner.id,
                     byDirectDamage: true,
-                    isPrimaryTarget: counterIsPrimary,
+                    isPrimaryTarget: counterAim.isPrimary,
                     // #358 ADDENDUM 2: the counter walk folds the ATTACKER's defence through
                     // `victimHitDamage`; `rawPreMit` is the same walk without it.
                     preMitigationDamage: rawPreMit,
@@ -7998,7 +8119,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 counterOutcome,
                 counterStasisAtImpact,
                 true,
-                counterIsPrimary
+                counterAim
             );
             // Surface on the attacker's incoming so it appears on the HP curve (mirror Reflect):
             // the intake the funnel RECORDED, so a portion the attacker's own incoming-block
@@ -8231,12 +8352,12 @@ export function runCombat(rawInput: CombatEngineInput): {
             const procStasisAtImpact =
                 !splashCopy && attackBreaksStasis(owner) && isStasised(victim.id);
             // A Bomb splash copy is not a direct hit, so it is aimed at no one.
-            const procIsPrimary = !splashCopy && aimReactiveHit(victim.id);
+            const procAim = splashCopy ? undefined : aimReactiveHit(victim.id);
             try {
                 procOutcome = applyVictimDamage(raw, victim, sink, {
                     killerId: ownerId,
                     byDirectDamage: true,
-                    isPrimaryTarget: procIsPrimary,
+                    isPrimaryTarget: procAim?.isPrimary ?? false,
                     ...(splashCopy ? { isSplashCopy: true } : {}),
                     // #358 ADDENDUM 2: equals `raw` on the flat-basis branch (which folds no
                     // defence at all) and the pre-defence walk on the attack-basis branch.
@@ -8250,7 +8371,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             } finally {
                 deferConsequenceLogs = wasDeferring;
             }
-            if (!splashCopy) {
+            if (procAim) {
                 landReactiveHit(
                     owner,
                     victim,
@@ -8259,7 +8380,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                     procOutcome,
                     procStasisAtImpact,
                     false,
-                    procIsPrimary
+                    procAim
                 );
             }
             // The intake the funnel RECORDED, mirroring applyCounterAttack (this site is
@@ -9156,24 +9277,13 @@ export function runCombat(rawInput: CombatEngineInput): {
          * All of that is the intended reading of "a real damage instance"; it is recorded here so
          * a later change plans around the real footprint rather than a convenient fiction.
          *
-         * KNOWN GAPS — (a) below is now FIXED (spec §3, site 4); (b) is real, corpus-bounded
-         * today, and deliberately UNFIXED here. Recorded in code so
-         * the next change to this helper does not have to rediscover them.
-         *   (a) FIXED (spec §3, site 4) for the OUTGOING direction, and correctly absent for the
-         *       incoming one. The apply loop below now calls `procStandingLeechesPerVictim(…,
-         *       'direct')`, so the ACTOR's standing damage-dealt leech pays out on this instance —
-         *       restoring what the pre-positional path paid when `passiveDamage` folded into the
-         *       aggregate `directDamage`.
-         *       It deliberately does NOT proc the VICTIM's damage-taken leech, and the earlier
-         *       version of this comment was WRONG to call that half a defect. Owner ruling
-         *       2026-08-18: a passive-slot instance does not proc a taken leech, because the victim
-         *       is not its primary target — Malvex reads "when directly damaged as a PRIMARY
-         *       TARGET", Quixilver "when taking HP damage and still having a shield". The repo's
-         *       locked granularity rule ("outgoing per attack, incoming per occurrence") governs
-         *       HOW OFTEN an incoming proc fires, NOT which channels qualify; which channels
-         *       qualify is decided by the ability's own text qualifier. Routing this site through
-         *       `procLeechesForVictim` would therefore ship a bug.
-         *   (b) A CAST WITH NO FIRING-SLOT DAMAGE ABILITY LOSES ITS PASSIVE INSTANCE ENTIRELY.
+         * LEECHES: the apply loop pays both directions through `procLeechesForVictim` — the
+         * ACTOR's standing damage-dealt leech, and the VICTIM's damage-taken shields with
+         * `isPrimary: false` (every hit is direct damage, R36/R140, so Quixilver's fires; the
+         * instance is not a primary-target hit, so Malvex's does not).
+         *
+         * KNOWN GAP, corpus-bounded today and deliberately UNFIXED here:
+         *   A CAST WITH NO FIRING-SLOT DAMAGE ABILITY LOSES ITS PASSIVE INSTANCE ENTIRELY.
          *       Every call site is inside the `positional` branch, and that gate requires
          *       `turn.positionalScalars != null` — the FIRING skill's scalars. A ship whose active
          *       or charged slot carries no `damage` ability therefore never reaches this helper,
@@ -9336,22 +9446,12 @@ export function runCombat(rawInput: CombatEngineInput): {
                         // turn that applied the Echoing Burst IS gathered.
                         gatherDirectHitIntoAccumulators(victim, booked);
                     }
-                    // The ruled "damage dealt" basis: booked intake PLUS anything a
-                    // Protection cascade diverted to protectors.
-                    const victimDelivered = booked + (outcome.protectionRedirected ?? 0);
-                    // This instance pays the actor's
-                    // standing damage-dealt leech. Channel `'direct'` — it is a direct-damage
-                    // intake (it passes `byDirectDamage: true` through `tb.applyToVictim`), so an
-                    // `'all'`-scoped leech pays and a `'detonation'`-scoped one does not.
-                    //
-                    // BASIS: `victimDelivered`, the funnel figure the firing-hit seam pays on too
-                    // (see the basis block in `procLeechesForVictim`) — NOT the pre-funnel
-                    // `damage`.
-                    //
-                    // Standing direction only, never `procLeechesForVictim`: the victim is not this
-                    // instance's primary target, so its damage-taken leech does not proc (owner
-                    // ruling, spec §2.2).
-                    procStandingLeechesPerVictim(actor.id, victimDelivered, 'direct');
+                    // Both leech directions, on the funnel figures `procLeechesForVictim`
+                    // documents: the actor's standing damage-dealt leech (channel `'direct'` — this
+                    // instance passes `byDirectDamage: true` through `tb.applyToVictim`) and the
+                    // victim's damage-taken shields (R140: Quixilver's fires on a passive hit). Not
+                    // a primary-target hit (`isPrimary: false` above), so Malvex's does not.
+                    procLeechesForVictim(actor.id, victim, damage, outcome, false);
                 }
             };
         };
@@ -9773,8 +9873,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // pays HERE and only here, and an `'all'` one pays here too.
                             //
                             // Deliberately NOT `procLeechesForVictim`: that fires the victim's
-                            // TAKEN leech as well, and a burst does not proc one (owner ruling,
-                            // spec §2.2 — Malvex reads "directly damaged as a primary target").
+                            // TAKEN leech as well, and a burst is not direct damage, so it procs
+                            // none.
                             // Standing direction only.
                             //
                             // #355 B1: paid on the DELIVERED amount. "% of damage dealt" is the
@@ -9827,8 +9927,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // pays HERE and only here, and an `'all'` one pays here too.
                             //
                             // Deliberately NOT `procLeechesForVictim`: that fires the victim's
-                            // TAKEN leech as well, and a burst does not proc one (owner ruling,
-                            // spec §2.2 — Malvex reads "directly damaged as a primary target").
+                            // TAKEN leech as well, and a burst is not direct damage, so it procs
+                            // none.
                             // Standing direction only.
                             //
                             // #355 B1: paid on the DELIVERED amount, same basis as the sibling bomb
@@ -10391,6 +10491,8 @@ export function runCombat(rawInput: CombatEngineInput): {
             takenDamage: number;
             /** A Protection cascade split this hit — `attacked.protectionSplit`. */
             protectionSplit: boolean;
+            /** The hit was no direct damage on this victim — `attacked.notDirectDamage`. */
+            notDirectDamage: boolean;
             shieldWasHit: boolean;
             hitOutcomes: boolean[];
         }
@@ -10534,7 +10636,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                     },
                 });
             };
-            /** Push sub-attack `idx`'s `attacked` events (its own primary-target set). */
+            /** Push sub-attack `idx`'s `attacked` events (its own primary-target set), then the
+             *  `attacked` of any direct reflect those hits provoked (`pendingReflectedAttacked`). */
             const pushAttackedSteps = (
                 into: EmissionStep[],
                 idx: number,
@@ -10546,7 +10649,10 @@ export function runCombat(rawInput: CombatEngineInput): {
                 into.push({
                     isEvent: false,
                     idx,
-                    run: () => emitAttackedForSubAttack(victims, idx, primaryIds),
+                    run: () => {
+                        emitAttackedForSubAttack(victims, idx, primaryIds);
+                        flushReflectedAttacked(idx);
+                    },
                 });
             };
             /** Push one landed sub-attack's `ability-performed`, carrying `share` as its damage. */
@@ -10653,47 +10759,40 @@ export function runCombat(rawInput: CombatEngineInput): {
                     _isAnchor,
                     isPrimary
                 ) => {
+                    // Whether this hit is direct damage on `victim` — read its doc.
+                    const direct = directlyDamagesVictim(outcome);
                     // The cast's hit on a primary target is the first aimed hit on it in
                     // that sub-attack's chain, so it spends that victim's primary-target
-                    // allowance there.
-                    if (isPrimary) spendPrimaryHit(victim.id, castHitRoot(subAttackIndex ?? 0));
+                    // allowance there — when it damaged the victim directly.
+                    if (isPrimary && direct)
+                        spendPrimaryHit(victim.id, castHitRoot(subAttackIndex ?? 0));
                     // Injected per-site leech direction (Note A): standing (player→enemy) vs taken
                     // (enemy→player, which also captures the focus victim's shield-hit flag).
                     onVictimResolved(victim, damage, outcome, didCrit, isPrimary);
                     // §4.5 commit point for the mark `onVictimPreImpact` approved for this hit.
-                    // ONLY A HIT THAT LANDED REDUCES STASIS (owner ruling 2026-09-15): a hit
-                    // nullified by Barrier never reached the victim, so it reduces nothing. A hit
-                    // the victim's SHIELD absorbed did land and does reduce — `barriered` is the
-                    // only outcome that means "nothing arrived", which is why it is the only one
-                    // read here. This hook is reached for every victim the pre-impact hook fired
-                    // on: the footprint loop between them is straight-line.
+                    // ONLY A DIRECT HIT THAT LANDED REDUCES STASIS (owner ruling 2026-09-15): a
+                    // hit nullified by Barrier never reached the victim, and a hit Protection
+                    // moved wholly onto protectors was no direct damage to it (R139), so neither
+                    // reduces. A hit the victim's SHIELD absorbed did land and does reduce. This
+                    // hook is reached for every victim the pre-impact hook fired on: the footprint
+                    // loop between them is straight-line.
                     const markKey = `${victim.id}:${subAttackIndex ?? 0}`;
                     const markIsAnchor = stasisMarkByHit.get(markKey);
                     if (markIsAnchor !== undefined) {
                         stasisMarkByHit.delete(markKey);
-                        if (!outcome.barriered) {
+                        if (!outcome.barriered && direct) {
                             (markIsAnchor ? anchorStasisVictims : coveredStasisVictims).push(
                                 victim.id
                             );
                         }
                     }
                     detonationTargets.set(victim.id, victim);
-                    // A hit whose FULL post-block damage was converted into a DoT (Voron/Orel's
-                    // transform-incoming-to-dot) dealt NO direct damage — it is not a direct hit,
-                    // so it must NOT contribute an `attacked` signal. Otherwise "directly damaged"
-                    // reactions (Cultivator's on-ally-attacked repair, counters, Tenacity) fire off
-                    // a hit that never landed. The transform is all-or-nothing, so transformedToDot
-                    // > 0 ⟺ zero direct damage. When Voron is stasised/disabled the transform never
-                    // runs (transformedToDot stays 0) and the hit signals normally — no special case
-                    // needed here — except that the engine does NOT yet disable a stasised or
-                    // disabled owner's passives, which is the game rule (owner, 2026-09-15). Measured in
-                    // `transformSuppressesAttacked.test.ts`'s KNOWN GAP arm. Consequence at the
-                    // §4.5 mark above, which reads `barriered` only: a stasised victim's transform
-                    // still fires and its Stasis is still reduced. Under the real rule the passive
-                    // would be off, the hit would land in full, and the reduction would be correct
-                    // — so the mark's answer is right for the wrong reason until that rule lands.
-                    const fullyTransformedToDot = (outcome.transformedToDot ?? 0) > 0;
-                    if (!fullyTransformedToDot) {
+                    // A hit that was no direct damage on this victim (`directlyDamagesVictim`) wakes
+                    // no "directly damaged" reaction (counters, Cultivator's on-ally-attacked
+                    // repair, Tenacity). A hit fully transformed into a DoT raises no `attacked` at
+                    // all; a hit Protection moved wholly onto protectors raises one stamped
+                    // `notDirectDamage`, so the combat log still rows the attack against its target.
+                    if (direct || outcome.fullyRedirected) {
                         // Bucket by sub-attack first. `subAttackIndex` is OPTIONAL on the callback
                         // contract; applyPositionalDamage always supplies it, and `?? 0` degrades
                         // to a single bucket for any caller that does not.
@@ -10707,11 +10806,13 @@ export function runCombat(rawInput: CombatEngineInput): {
                             damage: 0,
                             takenDamage: 0,
                             protectionSplit: false,
+                            notDirectDamage: false,
                             shieldWasHit: false,
                             hitOutcomes: [],
                         };
                         prev.damage += damage;
                         prev.protectionSplit ||= outcome.protectionSplit === true;
+                        prev.notDirectDamage ||= !direct;
                         // The funnel's own figure for this victim, accumulated beside the thrown
                         // one. `onVictimResolved`'s outcome is an `AppliedVictimDamage` here, so
                         // `incomingBooked` is always present; the fallback mirrors
@@ -10902,6 +11003,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                     pushDebuffSteps(steps, idx);
                 }
             }
+            // Sweep: a reflect whose sub-attack emitted no `attacked` step still raises its own.
+            steps.push({ isEvent: false, run: () => flushReflectedAttacked() });
             // The tail runs in one order on every site, both sides: a LEADING `ability-performed`,
             // then the per-victim detonation, then the rest of the sequence (that event's own
             // `attacked`, the debuff events, the later sub-attacks). A Bomb's detonation and its
@@ -11612,6 +11715,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             const ctxBySide: Partial<Record<Side, ReactiveSideCtx>> = {};
             const ctxFor = (side: Side): ReactiveSideCtx =>
                 (ctxBySide[side] ??= side === 'player' ? playerDrainCtx() : enemyDrainCtx());
+            flushReflectedAttacked();
             while (intentQueues.player.length > 0 || intentQueues.enemy.length > 0) {
                 // A Bomb's detonation and its splash resolve before any other reaction (R126):
                 // while an intent answering one is queued, only those are eligible.

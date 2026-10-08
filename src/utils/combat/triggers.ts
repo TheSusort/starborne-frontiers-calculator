@@ -1913,6 +1913,7 @@ export function registerReactiveListeners(args: {
                         // absent → every hit. The intent is per-EVENT (not the shared const):
                         // eventCtx captures the attacker for "on that enemy" counter routing.
                         if (e.targetId !== ownerId) return;
+                        if (e.notDirectDamage) return;
                         if (e.fromCounter && !counterAnswersCounters(ra.ability)) return;
                         const filter = ra.ability.triggerCritFilter;
                         if (filter === 'crit' && !e.didCrit) return;
@@ -2205,6 +2206,7 @@ export function registerReactiveListeners(args: {
                         // inflating numbers); an EMPTY filter array is treated as absent (any
                         // ally), not never-match.
                         if (isOpposing(e.targetId)) return;
+                        if (e.notDirectDamage) return;
                         if (e.fromCounter && !counterAnswersCounters(ra.ability)) return;
                         const filter = ra.ability.triggerCritFilter;
                         if (filter === 'crit' && !e.didCrit) return;
