@@ -1700,20 +1700,46 @@ const rollsOnPrimary = (dot: DoTApplicationEntry): boolean =>
 function rollDotStacks(
     dots: DoTApplicationConfig,
     landsNextStack: () => boolean,
-    onStackResisted: (dot: DoTApplicationEntry) => void
+    onStackResisted: (dot: DoTApplicationEntry) => void,
+    firewall?: StackFirewall
 ): DoTApplicationConfig {
     const landed: DoTApplicationConfig = [];
     for (const dot of dots) {
         if (!isLiveDot(dot)) continue;
-        let stacks = 0;
+        const procs: (Record<string, boolean> | undefined)[] = [];
         for (let i = 0; i < dot.stacks; i++) {
-            if (landsNextStack()) stacks += 1;
+            if (firewall?.blocked()) {
+                firewall.onBlocked(dot);
+                continue;
+            }
+            if (landsNextStack()) procs.push(firewall?.onLanded());
             else onStackResisted(dot);
         }
-        if (stacks > 0) landed.push({ ...dot, stacks });
+        if (procs.length > 0) {
+            const entry = { ...dot, stacks: procs.length };
+            if (procs.some((p) => p !== undefined)) landedStackProcs.set(entry, procs);
+            landed.push(entry);
+        }
     }
     return landed;
 }
+
+/** Owner rulings R149/R161: Firewall resolves as each DoT stack lands. `blocked` asks whether the
+ *  victim is under Block Debuff now, a Firewall proc on an earlier stack or debuff of this skill
+ *  included; a blocked stack draws nothing and goes to `onBlocked`. `onLanded` draws the victim's
+ *  Firewall for a landed stack (engine.ts `decideBlockDebuffAtLanding`). */
+interface StackFirewall {
+    blocked: () => boolean;
+    onBlocked: (dot: DoTApplicationEntry) => void;
+    onLanded: () => Record<string, boolean> | undefined;
+}
+
+/** The Firewall verdicts `rollDotStacks` drew for a landed entry, one per stack, for its
+ *  `dot-applied` (`preDecidedProcsPerStack`). Absent when the victim wears no Firewall. */
+const landedStackProcs = new WeakMap<
+    DoTApplicationEntry,
+    (Record<string, boolean> | undefined)[]
+>();
 
 // Step 3: Apply new DoT stacks from this round's skill (subject to landing roll).
 // `sourceId` (the applier) is stamped on every appended entry for per-actor attribution;
@@ -1734,13 +1760,20 @@ function applyNewDoTs(args: {
     genericDoTEntries: ActiveDoTStack[];
     pendingBombs: PendingBomb[];
     /** `appliedSeq` is the pushed entry's (`ActiveDoTStack.appliedSeq`). */
-    emitDotApplied: (dotType: DoTType, stacks: number, tier: number, appliedSeq: number) => void;
+    emitDotApplied: (
+        dotType: DoTType,
+        stacks: number,
+        tier: number,
+        appliedSeq: number,
+        preDecidedProcsPerStack: (Record<string, boolean> | undefined)[] | undefined
+    ) => void;
     /** Stamps each new entry's `appliedSeq` (`StatusEngine.nextAppliedSeq`). */
     nextAppliedSeq: () => number;
 }): void {
     for (const dot of args.dotsConfig) {
         if (!isLiveDot(dot)) continue;
         const appliedSeq = args.nextAppliedSeq();
+        const procs = landedStackProcs.get(dot);
         if (dot.type === 'corrosion') {
             args.corrosionEntries.push({
                 stacks: dot.stacks,
@@ -1749,7 +1782,7 @@ function applyNewDoTs(args: {
                 sourceId: args.sourceId,
                 appliedSeq,
             });
-            args.emitDotApplied('corrosion', dot.stacks, dot.tier, appliedSeq);
+            args.emitDotApplied('corrosion', dot.stacks, dot.tier, appliedSeq, procs);
         } else if (dot.type === 'inferno') {
             args.infernoEntries.push({
                 stacks: dot.stacks,
@@ -1758,7 +1791,7 @@ function applyNewDoTs(args: {
                 sourceId: args.sourceId,
                 appliedSeq,
             });
-            args.emitDotApplied('inferno', dot.stacks, dot.tier, appliedSeq);
+            args.emitDotApplied('inferno', dot.stacks, dot.tier, appliedSeq, procs);
         } else if (dot.type === 'bomb') {
             args.pendingBombs.push({
                 countdown: Math.max(1, dot.duration),
@@ -1771,7 +1804,7 @@ function applyNewDoTs(args: {
                 splashModifier: args.splashModifier,
                 appliedSeq,
             });
-            args.emitDotApplied('bomb', dot.stacks, dot.tier, appliedSeq);
+            args.emitDotApplied('bomb', dot.stacks, dot.tier, appliedSeq, procs);
         } else if (dot.type === 'generic') {
             args.genericDoTEntries.push({
                 stacks: dot.stacks,
@@ -1780,7 +1813,7 @@ function applyNewDoTs(args: {
                 sourceId: args.sourceId,
                 appliedSeq,
             });
-            args.emitDotApplied('generic', dot.stacks, dot.tier, appliedSeq);
+            args.emitDotApplied('generic', dot.stacks, dot.tier, appliedSeq, procs);
         }
     }
 }
@@ -3116,6 +3149,18 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
      *  its first stack takes and the accumulators ride; every later stack draws its own after it
      *  (`rollDotStacks`, R30), and each failed stack is a roll resist. Only for a real victim not
      *  immune to debuffs — Step 3's other branches decide those without a roll. */
+    /** The victim's Firewall, resolved stack by stack as this cast's DoTs land (R161). */
+    const stackFirewall = (
+        victimId: string,
+        onBlocked: (dot: DoTApplicationEntry) => void
+    ): StackFirewall | undefined =>
+        decideBlockDebuffAtLanding === undefined
+            ? undefined
+            : {
+                  blocked: () => blockDebuffPendingFor?.(victimId) === true,
+                  onBlocked,
+                  onLanded: () => decideBlockDebuffAtLanding(victimId),
+              };
     let primaryDotPlan: { castRoll: boolean; landed: DoTApplicationConfig } | undefined;
     const planPrimaryDots = (
         dots: DoTApplicationConfig
@@ -3148,7 +3193,17 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                     r,
                     dotResistLabel(dot.type, dot.tier),
                     true
+                ),
+            stackFirewall(victim.id, (dot) =>
+                emitBlockDebuffResist(
+                    bus,
+                    actor.id,
+                    victim.id,
+                    r,
+                    dotResistLabel(dot.type, dot.tier),
+                    false
                 )
+            )
         );
         primaryDotPlan = { castRoll, landed };
         return primaryDotPlan;
@@ -3185,7 +3240,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                     }
                     return decideDebuffOnVictim('inflict', victim).landed;
                 },
-                (dot) => emitDebuffResisted(dotResistLabel(dot.type, dot.tier), victim.id, true)
+                (dot) => emitDebuffResisted(dotResistLabel(dot.type, dot.tier), victim.id, true),
+                stackFirewall(victim.id, (dot) =>
+                    emitDebuffResisted(dotResistLabel(dot.type, dot.tier), victim.id, false)
+                )
             );
             plan = { blocked: false, firstLanded: decision.landed, landed };
         }
@@ -5278,7 +5336,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             genericDoTEntries,
             pendingBombs,
             nextAppliedSeq: statusEngine.nextAppliedSeq,
-            emitDotApplied: (dotType, stacks, tier, appliedSeq) =>
+            emitDotApplied: (dotType, stacks, tier, appliedSeq, preDecidedProcsPerStack) =>
                 bus.emit({
                     type: 'dot-applied',
                     sourceId: actor.id,
@@ -5290,6 +5348,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                     appliedSeq,
                     ...(critHits > 0 ? { viaCrit: true } : {}),
                     sourceSlot: action,
+                    ...(preDecidedProcsPerStack ? { preDecidedProcsPerStack } : {}),
                 }),
         });
 
@@ -5442,7 +5501,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             genericDoTEntries: victim.genericDoTEntries,
             pendingBombs: victim.pendingBombs,
             nextAppliedSeq: statusEngine.nextAppliedSeq,
-            emitDotApplied: (dotType, stacks, tier, appliedSeq) =>
+            emitDotApplied: (dotType, stacks, tier, appliedSeq, preDecidedProcsPerStack) =>
                 bus.emit({
                     type: 'dot-applied',
                     sourceId: actor.id,
@@ -5454,6 +5513,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                     appliedSeq,
                     ...(victimCrit ? { viaCrit: true } : {}),
                     sourceSlot: action,
+                    ...(preDecidedProcsPerStack ? { preDecidedProcsPerStack } : {}),
                 }),
         });
         // A covered enemy's fresh DoT is extended too (owner ruling 2026-09-02), its crit gate

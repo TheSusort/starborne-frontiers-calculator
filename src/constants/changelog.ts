@@ -14,6 +14,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: Nuqtu now gains one Core Charge per enemy buffing skill.',
     'Combat simulator: passive debuffs on an attacker now last through its next turn.',
     "Combat simulator: Firewall's Block Debuff now stops the rest of that skill's debuffs.",
+    "Combat simulator: Firewall's Block Debuff now also stops that skill's later DoT stacks.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

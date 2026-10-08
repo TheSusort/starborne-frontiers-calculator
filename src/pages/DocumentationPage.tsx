@@ -3076,7 +3076,9 @@ const DocumentationPage: React.FC = () => {
                                         once-per-cast or once-per-round limits. Firewall&apos;s
                                         Block Debuff works the moment it procs: if Curator&apos;s
                                         Attack Down III procs it, the same skill&apos;s Crit Power
-                                        Down III is blocked and rolls nothing. APEX&apos;s 3% shield
+                                        Down III is blocked and rolls nothing. The same goes for
+                                        damage-over-time stacks: a proc on Snakeroot&apos;s first
+                                        Corrosion I stack blocks her second. APEX&apos;s 3% shield
                                         fires at most once per skill cast, whoever cast it: her
                                         active landing two debuffs, plus the debuffs Provider
                                         answers them with, gives one shield; an enemy&apos;s attack
