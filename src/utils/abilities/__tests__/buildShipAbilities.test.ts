@@ -3318,6 +3318,21 @@ describe('buildShipAbilities', () => {
             expect(mod).toBeUndefined();
         });
 
+        it('does NOT emit a standing defense modifier when a non-trigger "and" sits before "for N turns"', () => {
+            const s = ship({
+                secondPassiveSkillText:
+                    'This Unit increases its Defense by 20% and Attack by 10% for 2 turns.',
+            });
+            const passive = passiveOf(s);
+            const mod = passive?.abilities.find(
+                (a) =>
+                    a.type === 'modifier' &&
+                    a.config.type === 'modifier' &&
+                    a.config.channel === 'defense'
+            );
+            expect(mod).toBeUndefined();
+        });
+
         it('does NOT emit a standing defense modifier for a trigger-gated "When an enemy cleanses" clause', () => {
             const s = ship({
                 secondPassiveSkillText:

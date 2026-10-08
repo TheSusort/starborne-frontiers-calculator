@@ -6175,13 +6175,13 @@ describe('Tasks 1.5 + 3.3 — Voidfire Catalyst: detonationDamage + bombSplashDa
 });
 
 // ---------------------------------------------------------------------------
-// Insidiousness: one roll per skill cast, applied to every debuffed enemy (all-or-none)
+// Insidiousness: one roll per landed debuff, at most one success per skill cast, hitting every debuffed enemy
 // ---------------------------------------------------------------------------
 //
 // A Curator-shaped carrier (AoE damage + two inflicted debuffs, `all` / Pattern-All) wearing
-// legendary Insidiousness attacks two enemies. Its four debuff applications per cast share ONE
-// roll, and a successful roll hits each enemy the debuffs actually reached, once.
-describe('Insidiousness integration — per-cast roll, all debuffed enemies', () => {
+// legendary Insidiousness attacks two enemies. Each of its four landed debuffs per cast rolls, and
+// the first success hits every enemy that cast debuffed, once each: no second success in that cast.
+describe('Insidiousness integration — a roll per landed debuff, one hit per cast', () => {
     const IMPLANT_ID = 'insid-legendary';
 
     const insidPiece = makePiece({
@@ -6369,13 +6369,11 @@ describe('Insidiousness integration — per-cast roll, all debuffed enemies', ()
         setKeyedRng(() => 0); // every keyed gate fires: debuffs land, the 21% proc passes
         const procs = insidiousnessProcs(run(true, [0, 0]));
 
-        // 3 rounds → 3 carrier attacks → BOTH enemies hit on each = 6 rows. Before the fix this
-        // was 4 rolls/attack all routed to enemy slot 1, so enemy 2 never appeared here.
+        // 3 rounds → 3 carrier attacks, each landing four debuffs. The first debuff's roll
+        // succeeds and takes the cast's one success, which hits BOTH enemies once: 6 rows.
         expect(procs).toHaveLength(6);
-        const perTurn = [1, 2, 3].map((t) => procs.filter((r) => r.turnIndex === t));
-        for (const turnRows of perTurn) {
-            // All-or-none within one attack: two victims, each hit exactly once — never a subset,
-            // and never twice (the two debuffs on one enemy share a single verdict AND a single hit).
+        for (const turn of [1, 2, 3]) {
+            const turnRows = procs.filter((r) => r.turnIndex === turn);
             expect(turnRows).toHaveLength(2);
             expect(new Set(turnRows.map((r) => r.victim)).size).toBe(2);
         }

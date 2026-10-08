@@ -263,6 +263,15 @@ const IRONCLAD_BLOCK: Record<string, { chance: number; pct: number }> = {
 };
 const SHADOWGUARD_CHANCE: Record<string, number> = { uncommon: 0.07, epic: 0.12, legendary: 0.16 };
 
+// Synaptic Resonance: crit-power points the next crit gains, by rarity (constants/implants.ts).
+const SYNAPTIC_NEXT_CRIT_POWER: Record<string, number> = {
+    common: 2,
+    uncommon: 4,
+    rare: 6,
+    epic: 8,
+    legendary: 10,
+};
+
 // D-PR4: Insidiousness reactive-damage-on-debuff implant value tables
 const INSIDIOUSNESS_MULT: Record<string, number> = {
     common: 60,
@@ -755,11 +764,10 @@ const IMPLANT_ABILITIES: Partial<Record<string, ImplantAbilityBuilder>> = {
     // D-PR4: reactive-damage-on-debuff implants
     // Insidiousness: X% chance to deal Y% damage when debuffing an enemy. It rolls ONLY on an
     // INFLICTED debuff, never an applied one (`triggerApplicationFilter: 'inflict'` — a user
-    // ruling, 2026-10-02; the text's "debuffing" names neither verb). One roll per skill cast
-    // plus one per reaction firing that cast sets off, at most one success per cast
-    // (`procScope:'per-cast'` — that field's doc has the rule). A successful roll hits each enemy
-    // it covers once; the on-debuff-inflicted listener's `debuffVictimId` stamp puts each hit on
-    // its own debuffed enemy.
+    // ruling, 2026-10-02; the text's "debuffing" names neither verb). One roll per debuff landed,
+    // at most one success per skill cast
+    // (`procScope:'per-debuff'` — that field's doc has the rule). The on-debuff-inflicted listener's
+    // `debuffVictimId` stamp routes each hit to its debuffed enemy.
     INSIDIOUSNESS: (rarity) => {
         const m = INSIDIOUSNESS_MULT[rarity];
         const pc = INSIDIOUSNESS_PROC[rarity];
@@ -771,7 +779,7 @@ const IMPLANT_ABILITIES: Partial<Record<string, ImplantAbilityBuilder>> = {
             triggerApplicationFilter: 'inflict',
             conditions: [],
             procChance: pc,
-            procScope: 'per-cast',
+            procScope: 'per-debuff',
             config: { type: 'damage', multiplier: m, hits: 1 },
             autoFilled: true,
         };
@@ -1000,11 +1008,26 @@ const IMPLANT_ABILITIES: Partial<Record<string, ImplantAbilityBuilder>> = {
             procChance,
         });
     },
-    // D-PR8: Synaptic Resonance — gain Speed Up III for 1 turn when an enemy is directly repaired.
-    // DETERMINISTIC (no procChance). LIVE today (enemies have real healing → on-enemy-repaired fires).
-    // The "+X% next-crit critDamage" half is DEFERRED (stacking next-crit consumable, no seam).
-    SYNAPTIC_RESONANCE: (_rarity) =>
-        mkNamedBuffGrant('Speed Up III', 'self', 'on-enemy-repaired', 1),
+    // D-PR8: Synaptic Resonance — "Gains Speed Up 3 for 1 turn when an enemy gets directly
+    // repaired. Increases the critDamage of the next crit by X%." DETERMINISTIC (no procChance).
+    // Both halves ride the same enemy-repair trigger: the Speed Up III grant, and an arming of X
+    // ADDITIVE crit-power points (R153: 90% + 10 = 100%) that the owner's next crit spends.
+    SYNAPTIC_RESONANCE: (rarity) => {
+        const speed = mkNamedBuffGrant('Speed Up III', 'self', 'on-enemy-repaired', 1);
+        const pct = SYNAPTIC_NEXT_CRIT_POWER[rarity];
+        if (!speed || pct === undefined) return speed;
+        return [
+            speed,
+            {
+                type: 'stat-gain',
+                target: 'self',
+                trigger: 'on-enemy-repaired',
+                conditions: [],
+                config: { type: 'stat-gain', stat: 'nextCritPower', pct },
+                autoFilled: true,
+            },
+        ];
+    },
     // D-PR8: Alacrity — at end of round, if not hit, X% chance to gain Speed Up III for 2 turns.
     ALACRITY: (rarity) => {
         const procChance = ALACRITY_PROC[rarity];

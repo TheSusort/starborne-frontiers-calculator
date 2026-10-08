@@ -60,6 +60,7 @@ import {
     ActiveBuff,
     ActiveAbilityStatus,
     RegisteredAbilityStatus,
+    announceAccumGains,
     createStatusEngine,
 } from './statusEngine';
 import { CombatEventBus, ShieldApplyAccumulator } from './events';
@@ -585,6 +586,8 @@ export interface PlayerTurnResult {
         damage: number;
         didCrit: boolean;
         critHits: number;
+        /** The slot the cast fired from — stamped onto the emitted `ability-performed`. */
+        sourceSlot: 'active' | 'charged';
     };
     turnCtx: PlayerRoundCtx; // round-scoped context for the enemy's DoT tick (this actor)
 }
@@ -915,6 +918,9 @@ export interface PlayerTurnArgs {
     /** The acting attacker's STRUCK target was repaired (HP-healed) this round. Default
      *  false. Threaded into the round contexts to gate target-repaired-this-round conditions. */
     targetRepairedThisRound?: boolean;
+    /** The acting unit was directly hit earlier this round (the engine's per-round hit set).
+     *  Default false. Threaded into the round contexts for `hit-this-round` gates. */
+    wasHitThisRound?: boolean;
     /** Enemy-side debuff target key. Passed as the `enemyTargetId` arg to the
      *  enemy-side statusEngine calls (applyTimedAbilityStatus / timedAbilityStatuses /
      *  activeAbilityStatuses). When UNDEFINED the statusEngine resolves to DEFAULT_ENEMY_TARGET.
@@ -1483,8 +1489,8 @@ const isAllyChargeTarget = (ability: Ability): boolean =>
     ability.target === 'lowest-hp-ally';
 
 /** A crit-gated charge the caster gains for itself (Asphodel: "adds 1 charge to its charged skill
- *  after critically damaging an enemy"). It is earned once per struck enemy the cast crits (owner
- *  ruling 2026-10-04: an area cast critting A and C adds 2), so it is counted by
+ *  after critically damaging an enemy"). It is earned once per SKILL that crits (R128): an area
+ *  cast critting A and C adds 1, and her charged skill earns it too. It is counted by
  *  `perCritChargeGain`, never by chargeGainFromSkill's cast-level sum. */
 const isPerCritOwnCharge = (ability: Ability): boolean =>
     ability.type === 'charge' &&
@@ -1493,8 +1499,8 @@ const isPerCritOwnCharge = (ability: Ability): boolean =>
     !isEnemyTarget(ability.target) &&
     hasSelfCritGate(ability.conditions);
 
-/** The charge a skill's per-crit own charges (`isPerCritOwnCharge`) add: each is gated and scaled
- *  once per struck enemy, against that enemy's own crit (`victimCrits`, one entry per enemy). */
+/** The charge a skill's crit-gated own charges (`isPerCritOwnCharge`) add: each is gated and scaled
+ *  once per entry of `victimCrits` (one entry per skill, whether it crit any struck enemy). */
 function perCritChargeGain(
     skill: Skill | undefined,
     ctxFor: Map<string, ConditionContext>,
@@ -1829,6 +1835,8 @@ function applyAccumulators(args: {
     sourceId: string;
     /** Stamps each new accumulator's `appliedSeq` (`StatusEngine.nextAppliedSeq`). */
     nextAppliedSeq: () => number;
+    /** Reports each landed accumulator as an inflicted debuff. */
+    emitInflicted: (buffName: string) => void;
 }): void {
     for (const acc of accumulatorsFromSkill(args.gatedSkill)) {
         args.pendingAccumulators.push({
@@ -1838,6 +1846,7 @@ function applyAccumulators(args: {
             sourceId: args.sourceId,
             appliedSeq: args.nextAppliedSeq(),
         });
+        args.emitInflicted('Echoing Burst');
     }
 }
 
@@ -1985,6 +1994,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         selfHpPct: selfHpPctArg = 100,
         targetHpPct: targetHpPctArg = 100,
         targetRepairedThisRound: targetRepairedThisRoundArg = false,
+        wasHitThisRound: wasHitThisRoundArg = false,
         targetId,
         enemyMostBuffsId,
         buffHolderIdByPosition,
@@ -2502,7 +2512,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             ) {
                 continue;
             }
+            const capped = statusEngine.selfBuffAtCap(rid, status.payload.buffName);
             statusEngine.applyTimedAbilityStatus(r, grant, rid);
+            if (capped) continue;
             bus.emit({
                 type: 'buff-applied',
                 actorId: rid,
@@ -2903,6 +2915,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         selfHpPct: selfHpPctArg,
         targetHpPct: targetHpPctArg,
         targetRepairedThisRound: targetRepairedThisRoundArg,
+        wasHitThisRound: wasHitThisRoundArg,
         enemyBuffNames: enemyBuffNamesArg,
         enemyBuffCount: enemyBuffCountArg,
         debuffedEnemyCount: debuffedEnemyCountArg,
@@ -3515,6 +3528,12 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // the post-walk `flushDeferredEnemyApplications`. Both run before the actor's Post-Turn
     // decrement, so either way the status keeps its normal window.
     const deferredEnemyApplications: DeferredEnemyApplication[] = [];
+    // The stacks this cast's own cadence banked (`sourceFired`) are announced once the damage has
+    // resolved, so the log's attack row keeps the skill tag ahead of them.
+    deferredEnemyApplications.push({
+        applyState: () => {},
+        emitEvents: () => announceAccumGains(statusEngine, bus),
+    });
 
     /**
      * Roll + apply ONE timed enemy status over one recipient list. Shared by the cast-time loop
@@ -3989,6 +4008,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         selfHpPct: selfHpPctArg,
         targetHpPct: targetHpPctArg,
         targetRepairedThisRound: targetRepairedThisRoundArg,
+        wasHitThisRound: wasHitThisRoundArg,
         enemyBuffNames: enemyBuffNamesArg,
         enemyBuffCount: enemyBuffCountArg,
         debuffedEnemyCount: debuffedEnemyCountArg,
@@ -4124,6 +4144,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         selfHpPct: selfHpPctArg,
         targetHpPct: targetHpPctArg,
         targetRepairedThisRound: targetRepairedThisRoundArg,
+        wasHitThisRound: wasHitThisRoundArg,
         enemyBuffNames: boundTargetBuffNames,
         enemyBuffCount: enemyBuffCountArg,
         debuffedEnemyCount: debuffedEnemyCountArg,
@@ -4490,6 +4511,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         selfHpPct: selfHpPctArg,
         targetHpPct: targetHpPctArg,
         targetRepairedThisRound: targetRepairedThisRoundArg,
+        wasHitThisRound: wasHitThisRoundArg,
         enemyBuffNames: boundTargetBuffNames,
         enemyBuffCount: enemyBuffCountArg,
         debuffedEnemyCount: debuffedEnemyCountArg,
@@ -5121,6 +5143,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 // actor turn-start (engine.ts) and both keys are already owner-scoped,
                 // so moving the suffix from 'x' to 0 is a pure rename with no collision.
                 subAttackIndex: h,
+                sourceSlot: action,
                 didHit: true,
             });
         }
@@ -5360,6 +5383,14 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 pendingAccumulators,
                 sourceId: actor.id,
                 nextAppliedSeq: statusEngine.nextAppliedSeq,
+                // Announced with the cast's other after-damage landings, so the log rows the
+                // infliction beneath the skill's own attack row.
+                emitInflicted: (buffName) =>
+                    deferredEnemyApplications.push({
+                        applyState: () => {},
+                        emitEvents: () =>
+                            emitDebuffApplied(actor.id, buffName, enemy.id, 'inflict'),
+                    }),
             });
         }
 
@@ -5411,11 +5442,11 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
      *  cast. Crit-gated DoT effects are per struck enemy instead (`victimCritOf`); every other
      *  crit-gated payload keeps reading `ctx.roundCrit`. */
     const hasCastWideCritClause = (firingSkill?.abilities ?? []).some(isCastWideCritClause);
-    /** This cast earns per-crit own charges (`isPerCritOwnCharge`) — counted per struck enemy
-     *  crit, so every struck enemy's crit must be known here. Charges accrue on active casts. */
+    /** This cast earns crit-gated own charges (`isPerCritOwnCharge`) — one per skill that crit any
+     *  struck enemy, so every struck enemy's crit must be known here. Both the active and the
+     *  charged skill earn them; a charged cast has already reset its pool at the top of the turn. */
     const earnsPerCritCharge =
         hasChargedSkill &&
-        action === 'active' &&
         [firingSkill, passiveSkill].some((s) =>
             chargeAbilitiesFromSkill(s).some(isPerCritOwnCharge)
         );
@@ -5449,11 +5480,11 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
      *  B alone). Equals `roundCrit` on a cast with no covered rolls (DPS, single target). */
     const anyVictimCrit = roundCrit || [...coveredFirstHitCrit.values()].some(Boolean);
     const victimCritOf = (id: string): boolean => coveredFirstHitCrit.get(id) ?? roundCrit;
-    // Per-crit own charges (Asphodel): one gain per struck enemy crit — the aimed enemy on any of
-    // its hits (`roundCrit`), each covered enemy on its first sub-attack. Same cap and event as
-    // the cast-level own gains above.
+    // Crit-gated own charges (Asphodel): one gain per skill that crit any struck enemy — the aimed
+    // enemy on any of its hits (`roundCrit`) or a covered enemy on its first sub-attack
+    // (`anyVictimCrit`). Same cap and event as the cast-level own gains above.
     if (earnsPerCritCharge) {
-        const victimCrits = [roundCrit, ...coveredFirstHitCrit.values()];
+        const victimCrits = [anyVictimCrit];
         const gain =
             perCritChargeGain(firingSkill, ctxFor, ctx, victimCrits) +
             perCritChargeGain(passiveSkill, passiveCtxFor, ctx, victimCrits);
@@ -7106,6 +7137,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                       damage: directDamage,
                       didCrit: roundCrit,
                       critHits,
+                      sourceSlot: action,
                   },
               }
             : {}),

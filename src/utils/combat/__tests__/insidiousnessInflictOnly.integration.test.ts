@@ -193,7 +193,7 @@ describe('Insidiousness — the implant reacts to inflicted debuffs only', () =>
             trigger: 'on-debuff-inflicted',
             triggerApplicationFilter: 'inflict',
             procChance: 0.21,
-            procScope: 'per-cast',
+            procScope: 'per-debuff',
         });
     });
 
