@@ -3,7 +3,9 @@
  * "when debuffed" / "when a debuff is inflicted" listener, and its detonation has a combat-log row.
  *
  *  - Valkyrie's charged ("inflicts Inc. Damage Up II and Echoing Burst") on a Firewall wearer rolls
- *    Firewall once per landed debuff: two rolls, not one.
+ *    Firewall once per landed debuff (R122). A proc on Inc. Damage Up II blocks the same skill's
+ *    Echoing Burst (R149): it is resisted with no landing roll and Firewall grants once. A Firewall
+ *    that never procs lets both land.
  *  - The burst's detonation appears in the combat log naming the holder, the source and the damage,
  *    and `accumulator-detonated` is on the simulator's subscription list (a handler for an
  *    unsubscribed type is dead code).
@@ -36,8 +38,8 @@ beforeEach(() => setupKeyedRng(7));
 
 const SIDES = ['player', 'enemy'] as const;
 
-/** The carrier's passive slot from the real registry: a Firewall implant that always procs. */
-const firewallPassive = (): ShipSkills['slots'][number] => {
+/** The carrier's passive slot from the real registry: a Firewall implant, its proc chance pinned. */
+const firewallPassive = (procChance: number): ShipSkills['slots'][number] => {
     const ship = {
         id: 'carrier-ship',
         name: 'Carrier',
@@ -64,7 +66,7 @@ const firewallPassive = (): ShipSkills['slots'][number] => {
     ).slots.find((s) => s.slot === 'passive');
     const fw = passive?.abilities.find((a) => a.trigger === 'on-debuffed');
     if (!fw) throw new Error('Firewall on-debuffed ability missing from the registry build');
-    return { slot: 'passive', abilities: [{ ...fw, procChance: 1 }] };
+    return { slot: 'passive', abilities: [{ ...fw, procChance }] };
 };
 
 const valkyrie = (charged: boolean): ShipSpec => ({
@@ -79,40 +81,55 @@ const valkyrie = (charged: boolean): ShipSpec => ({
 });
 
 describe('Valkyrie’s Echoing Burst landing is a debuff inflicted', () => {
-    const board = (charged: boolean): MirrorTeams => ({
+    const board = (charged: boolean, procChance: number): MirrorTeams => ({
         caster: [
             {
                 id: 'carrier',
                 position: 'M4',
                 speed: 1,
-                skills: { slots: [{ slot: 'active', abilities: [] }, firewallPassive()] },
+                skills: {
+                    slots: [{ slot: 'active', abilities: [] }, firewallPassive(procChance)],
+                },
             },
         ],
         other: [valkyrie(charged)],
     });
-    const read = (charged: boolean, side: 'player' | 'enemy') => {
-        const { input, idOf } = mirrorBoard(board(charged), side);
+    const read = (charged: boolean, side: 'player' | 'enemy', procChance = 1) => {
+        const { input, idOf } = mirrorBoard(board(charged, procChance), side);
         const carrier = idOf('carrier');
         const bus = createEventBus();
         const applied: string[] = [];
+        const resisted: { name: string; viaLandingRoll: boolean }[] = [];
         let firewallGrants = 0;
         bus.on('debuff-applied', (e) => {
             if (e.targetId === carrier) applied.push(e.buffName);
+        });
+        bus.on('debuff-resisted', (e) => {
+            if (e.targetId === carrier)
+                resisted.push({ name: e.buffName, viaLandingRoll: e.viaLandingRoll === true });
         });
         bus.on('buff-applied', (e) => {
             if (e.actorId === carrier && e.buffName === 'Block Debuff') firewallGrants++;
         });
         runCombat({ ...input, bus });
-        return { applied, firewallGrants };
+        return { applied, resisted, firewallGrants };
     };
 
     for (const side of SIDES) {
-        it(`${side}-side: the charged emits a debuff for the burst and Firewall rolls for it`, () => {
-            const { applied, firewallGrants } = read(true, side);
+        it(`${side}-side: a Firewall proc on Inc. Damage Up II blocks the same skill's Echoing Burst`, () => {
+            const { applied, resisted, firewallGrants } = read(true, side);
+            expect(applied).toEqual(['Inc. Damage Up II']);
+            expect(resisted).toEqual([{ name: 'Echoing Burst', viaLandingRoll: false }]);
+            expect(firewallGrants).toBe(1);
+        });
+
+        it(`${side}-side control: a Firewall that never procs lets the burst land as a debuff`, () => {
+            const { applied, resisted, firewallGrants } = read(true, side, 1e-9);
             expect(applied.filter((n) => n === 'Echoing Burst')).toHaveLength(1);
             // Inc. Damage Up II + Echoing Burst.
             expect(applied).toHaveLength(2);
-            expect(firewallGrants).toBe(2);
+            expect(resisted).toEqual([]);
+            expect(firewallGrants).toBe(0);
         });
 
         it(`${side}-side control: the active has no burst, so no Echoing Burst debuff`, () => {

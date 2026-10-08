@@ -1837,8 +1837,17 @@ function applyAccumulators(args: {
     nextAppliedSeq: () => number;
     /** Reports each landed accumulator as an inflicted debuff. */
     emitInflicted: (buffName: string) => void;
+    /** Whether the target is under Block Debuff now, a Firewall proc on an earlier debuff of
+     *  this skill included (R149): the accumulator is a debuff (R112), so it is blocked. */
+    blocked: () => boolean;
+    /** Reports an accumulator Block Debuff stopped (no landing roll). */
+    emitBlocked: (buffName: string) => void;
 }): void {
     for (const acc of accumulatorsFromSkill(args.gatedSkill)) {
+        if (args.blocked()) {
+            args.emitBlocked('Echoing Burst');
+            continue;
+        }
         args.pendingAccumulators.push({
             roundsRemaining: Math.max(1, acc.turns),
             pct: acc.pct,
@@ -5385,11 +5394,30 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 nextAppliedSeq: statusEngine.nextAppliedSeq,
                 // Announced with the cast's other after-damage landings, so the log rows the
                 // infliction beneath the skill's own attack row.
-                emitInflicted: (buffName) =>
+                // The target's Firewall rolls as the burst lands (R149); the roll rides the
+                // `debuff-applied` to the drain.
+                emitInflicted: (buffName) => {
+                    const preDecidedProcs = decideBlockDebuffAtLanding?.(enemy.id);
                     deferredEnemyApplications.push({
                         applyState: () => {},
                         emitEvents: () =>
-                            emitDebuffApplied(actor.id, buffName, enemy.id, 'inflict'),
+                            emitDebuffApplied(
+                                actor.id,
+                                buffName,
+                                enemy.id,
+                                'inflict',
+                                action,
+                                preDecidedProcs
+                            ),
+                    });
+                },
+                blocked: () =>
+                    targetCarriesBlockDebuff(statusEngine, enemy.id) ||
+                    blockDebuffPendingFor?.(enemy.id) === true,
+                emitBlocked: (buffName) =>
+                    deferredEnemyApplications.push({
+                        applyState: () => {},
+                        emitEvents: () => emitDebuffResisted(buffName, enemy.id, false),
                     }),
             });
         }
