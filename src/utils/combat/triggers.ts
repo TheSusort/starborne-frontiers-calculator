@@ -6381,19 +6381,13 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
             didCrit?: boolean;
         }[] = [];
         let healSum = 0;
-        // The repair's crit, drawn ONCE for every recipient (`rollReactiveHealCrit`). A repair
-        // sized off damage dealt/taken or off an over-repair is not a fresh repair roll: its basis
-        // is a figure an earlier hit/repair already settled (a crit hit's on-screen number; an
-        // over-repair that "doesn't scale a second time"), so those bases never draw. The one
-        // exception is an implant's damage-dealt repair (Bloodthirst), which crits again at the
-        // wearer's crit rate and power (R145).
+        // The repair's crit, drawn ONCE for every recipient (`rollReactiveHealCrit`). Every repair
+        // can crit (R155) whatever it is sized off, a hit it delivered or took included; only the
+        // ability's own `noCrit` stops it. A repair sized off an over-repair is the exception: it
+        // "doesn't scale a second time", so that basis never draws. A Repair Over Time tick has its
+        // own path and never crits.
         const healCanCrit =
-            cfg.type === 'heal' &&
-            !cfg.noCrit &&
-            (cfg.basis !== 'damage-dealt' || intent.ability.source === 'equipment') &&
-            cfg.basis !== 'damage-taken' &&
-            cfg.basis !== 'overheal' &&
-            recipients.length > 0;
+            cfg.type === 'heal' && !cfg.noCrit && cfg.basis !== 'overheal' && recipients.length > 0;
         const healCrit = healCanCrit
             ? rollReactiveHealCrit(intent.ownerId, ctx)
             : { didCrit: false, multiplier: 1 };
