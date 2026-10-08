@@ -93,6 +93,7 @@ import {
     AbilityStatusPayload,
     RegisteredAbilityStatus,
     StatusEngine,
+    announceAccumGains,
     createStatusEngine,
 } from './statusEngine';
 import { isPassivePerHitStatus, liveGateConditions } from './abilityStatusGating';
@@ -759,6 +760,7 @@ function seedPassiveTimedStatuses(
                     round,
                     buffName: status.payload.buffName,
                     duration: status.duration,
+                    grantKey: `seed:${round}:${rt.actor.id}:${status.sourceSlot}`,
                 });
             }
         }
@@ -11679,6 +11681,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         })();
 
         bus.emit({ type: 'round-started', round: r });
+        announceAccumGains(statusEngine, bus);
         drainStartOfRound();
 
         // §4.5 Stasis reductions (`stasisBreakPending`, declared before the round loop). An entry
@@ -11819,6 +11822,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 statusEngine.beginTurn(actor.id);
 
                 bus.emit({ type: 'turn-started', actorId: actor.id, round: r });
+                announceAccumGains(statusEngine, bus);
                 // LOG-ONLY per-turn snapshot of the acting actor's live modelled stats
                 // (no listener subscribes — see the events.ts doc comment). Reads the SAME
                 // effectiveStatsOf fold every other live-stat call site in this file uses.

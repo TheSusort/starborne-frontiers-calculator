@@ -2908,8 +2908,11 @@ const DocumentationPage: React.FC = () => {
                                         passive that grants recurring stacks of a buff each time
                                         something happens, such as Nuqtu&apos;s Core Charge, adds
                                         them every time and keeps them up to the buff&apos;s cap.
-                                        Nuqtu gains one stack of Core Charge I for every buff an
-                                        enemy gains, so four enemy buffs before his turn give +16%
+                                        Nuqtu gains one stack of Core Charge I for every enemy skill
+                                        action that grants a buff, however many buffs or ships it
+                                        covers: an active or charged skill, one firing of a
+                                        reaction, or one turn of a passive such as Ravager&apos;s
+                                        Overload. Four such actions before his turn give +16%
                                         damage, and the stacks carry into later rounds until he
                                         holds 10. Works for both teams.
                                     </p>

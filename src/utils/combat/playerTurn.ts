@@ -60,6 +60,7 @@ import {
     ActiveBuff,
     ActiveAbilityStatus,
     RegisteredAbilityStatus,
+    announceAccumGains,
     createStatusEngine,
 } from './statusEngine';
 import { CombatEventBus, ShieldApplyAccumulator } from './events';
@@ -1794,6 +1795,8 @@ function applyAccumulators(args: {
     sourceId: string;
     /** Stamps each new accumulator's `appliedSeq` (`StatusEngine.nextAppliedSeq`). */
     nextAppliedSeq: () => number;
+    /** Reports each landed accumulator as an inflicted debuff. */
+    emitInflicted: (buffName: string) => void;
 }): void {
     for (const acc of accumulatorsFromSkill(args.gatedSkill)) {
         args.pendingAccumulators.push({
@@ -1803,6 +1806,7 @@ function applyAccumulators(args: {
             sourceId: args.sourceId,
             appliedSeq: args.nextAppliedSeq(),
         });
+        args.emitInflicted('Echoing Burst');
     }
 }
 
@@ -2464,7 +2468,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             ) {
                 continue;
             }
+            const capped = statusEngine.selfBuffAtCap(rid, status.payload.buffName);
             statusEngine.applyTimedAbilityStatus(r, grant, rid);
+            if (capped) continue;
             bus.emit({
                 type: 'buff-applied',
                 actorId: rid,
@@ -3448,6 +3454,12 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // the post-walk `flushDeferredEnemyApplications`. Both run before the actor's Post-Turn
     // decrement, so either way the status keeps its normal window.
     const deferredEnemyApplications: DeferredEnemyApplication[] = [];
+    // The stacks this cast's own cadence banked (`sourceFired`) are announced once the damage has
+    // resolved, so the log's attack row keeps the skill tag ahead of them.
+    deferredEnemyApplications.push({
+        applyState: () => {},
+        emitEvents: () => announceAccumGains(statusEngine, bus),
+    });
 
     /**
      * Roll + apply ONE timed enemy status over one recipient list. Shared by the cast-time loop
@@ -5292,6 +5304,14 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 pendingAccumulators,
                 sourceId: actor.id,
                 nextAppliedSeq: statusEngine.nextAppliedSeq,
+                // Announced with the cast's other after-damage landings, so the log rows the
+                // infliction beneath the skill's own attack row.
+                emitInflicted: (buffName) =>
+                    deferredEnemyApplications.push({
+                        applyState: () => {},
+                        emitEvents: () =>
+                            emitDebuffApplied(actor.id, buffName, enemy.id, 'inflict'),
+                    }),
             });
         }
 
