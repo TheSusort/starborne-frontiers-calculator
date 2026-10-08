@@ -37,6 +37,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: Provider no longer reacts to debuffs landing on a dying enemy.',
     "Combat simulator: Makoli's low-HP reaction now inflicts Disable as well as repairing.",
     'Combat simulator: a ship freed from Stasis mid-exchange now reacts to later hits.',
+    "Combat simulator: each of Enforcer's hits now counts separately for once-per-skill reactions.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

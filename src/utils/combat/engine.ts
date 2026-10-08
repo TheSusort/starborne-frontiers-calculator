@@ -10494,7 +10494,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             // root in scope (`setHitRoot`), so the reactions its events wake join its chain.
             type EmissionStep = { isEvent: boolean; idx?: number; run: () => void };
             const runStep = (step: EmissionStep): void => {
-                if (step.idx !== undefined) setHitRoot(castHitRoot(step.idx));
+                if (step.idx !== undefined) setHitRoot(castHitRoot(step.idx), step.idx);
                 step.run();
             };
             /** Push sub-attack `idx`'s buffered debuff events, after that index's `attacked`. */
@@ -10720,7 +10720,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                     stasisMarkByHit.set(`${victim.id}:${subAttackIndex}`, isAnchor);
                 },
                 onSubAttackStart: (sub) => {
-                    setHitRoot(castHitRoot(sub.index));
+                    setHitRoot(castHitRoot(sub.index), sub.index);
                     // Clauses written BEFORE the damage clause apply ahead of this sub-attack's
                     // damage — the locked intra-cast order, now per sub-attack. Sub-attack 0's
                     // before-damage clauses already applied inline at cast time.
@@ -11694,7 +11694,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             drainReactions();
             for (const side of ['player', 'enemy'] as const)
                 intentQueues[side].unshift(...held[side]);
-            setHitRoot(castHitRoot(0));
+            setHitRoot(castHitRoot(0), 0);
         };
 
         /**
@@ -11948,7 +11948,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 actingActorId = actor.id;
                 // This turn's cast opens a new reaction chain per sub-attack (`castHitRoot`).
                 castRootBase = `cast:${++castRootSeq}`;
-                setHitRoot(castHitRoot(0));
+                setHitRoot(castHitRoot(0), 0);
                 // #367: this actor's turn ctx does not exist until its `runPlayerTurn`
                 // returns, so clear the override HERE (one site — this assignment is shared by all
                 // three turn branches) rather than leaving the previous actor's ctx paired with the

@@ -3355,7 +3355,11 @@ const DocumentationPage: React.FC = () => {
                                         is already on the target for his second, and Stalwart&apos;s
                                         counter to the first hit lands before the second. If a
                                         counter destroys the attacker, its remaining hits never
-                                        happen. Ships with &quot;extra action&quot; passives (Nuqtu,
+                                        happen. Each hit also counts as its own action for every
+                                        &ldquo;once per skill&rdquo; limit: each of Enforcer&apos;s
+                                        critting hits lands a Shred, and Provider, APEX, Hayyan,
+                                        Oleander, Xcellence and Insidiousness answer every one.
+                                        Ships with &quot;extra action&quot; passives (Nuqtu,
                                         Sustainer, Liberator, Tygr, Tormenter) take a full
                                         additional turn each round, re-entering the turn queue at
                                         their Speed position. An extra action is a turn, so a stack

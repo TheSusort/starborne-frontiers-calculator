@@ -220,7 +220,8 @@ describe.each<Placement>(['player', 'enemy'])('R141 with Enforcer on the %s side
             'Defense Shred',
             'Defense Shred',
         ]);
-        expect(s.providerHits(s.back)).toBeGreaterThan(0);
+        // Hits 2 and 3 each crit the ship behind; each hit is its own action (R166).
+        expect(s.providerHits(s.back)).toBe(2);
     });
 
     it('control: a front ship that survives draws Provider onto it', () => {

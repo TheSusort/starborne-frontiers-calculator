@@ -236,6 +236,9 @@ export interface Intent {
      *  scope; absent for a reaction to a phase event that has not hit anyone. Read through
      *  `claimHitRoot` when this intent's resolution lands a hit. */
     hitRoot?: string;
+    /** The cast sub-attack index `hitRoot` names, when it names one: which hit of a multi-hit
+     *  skill this intent's chain belongs to. Read by `castHitSuffix`. */
+    hitSubAttack?: number;
     /** Which bus event woke this intent, as a run-wide increasing number: every listener of one
      *  emitted event stamps the same value, and a later event a larger one. The engine's drain
      *  resolves the intents of the earliest event first, owner by owner in turn order (ruling 39).
@@ -267,7 +270,8 @@ export interface Intent {
          *  sub-attack rather than per turn.
          *  Undefined on `on-debuff-inflicted` too — its `debuff-applied` / `dot-applied` events
          *  carry no sub-attack index. Insidiousness, that trigger's proc, rolls per debuff landed
-         *  with one success per SKILL CAST (`procScope:'per-debuff'`), not per attack. */
+         *  with one success per SKILL CAST (`procScope:'per-debuff'`; per hit of a multi-hit
+         *  skill, via `Intent.hitSubAttack`). */
         subAttackIndex?: number;
         /** `attacked.reactiveHitId` of the triggering hit, stamped by `on-attacked` /
          *  `on-ally-attacked`: a counter's or proc's hit is its own attack (`attackKeyOf`). */
@@ -916,6 +920,7 @@ export function registerReactiveListeners(args: {
             eventSeq: listeningEventSeq ?? 0,
             ...(listeningEvent?.type === 'bomb-detonated' ? { answersBombDetonation: true } : {}),
             ...(currentHitRoot !== undefined ? { hitRoot: currentHitRoot } : {}),
+            ...(currentHitSubAttack !== undefined ? { hitSubAttack: currentHitSubAttack } : {}),
         });
     };
     // Same-side ally, OWNER EXCLUDED — for a trigger whose skill text names "another/other
@@ -4529,12 +4534,26 @@ function rootCastKey(
         : reactionFiringKey(reaction);
 }
 
+/** A multi-hit skill counts each hit as its own action for every once-per-cast cap (owner ruling
+ *  R166): Enforcer's three hits each land a Defense Shred, and Provider answers each. Appended to
+ *  a cast key, it splits the cast by the hit whose chain the intent belongs to
+ *  (`Intent.hitSubAttack`). The first hit — and every single-hit skill — keeps the bare cast
+ *  key, so nothing outside a multi-hit skill's later hits moves. */
+function castHitSuffix(intent: Intent): string {
+    const hit = intent.hitSubAttack ?? 0;
+    return hit > 0 ? `:hit-${hit}` : '';
+}
+
 /** The cap a `procScope:'per-debuff'` intent's success counts against: the root cast
- *  (`rootCastKey`; on this owner-only trigger a cast's inflictions are the owner's). A reaction's
- *  debuff counts against the cast that set the reaction off, so the owner's own charged setting
- *  off its Out. Damage Down II shares the owner's cast cap. */
+ *  (`rootCastKey`; on this owner-only trigger a cast's inflictions are the owner's), split per
+ *  hit of a multi-hit skill (`castHitSuffix`). A reaction's debuff counts against the cast that
+ *  set the reaction off, so the owner's own charged setting off its Out. Damage Down II shares the
+ *  owner's cast cap. */
 function perDebuffProcCap(intent: Intent, ctx: IntentExecContext): string {
-    return rootCastKey(ctx, intent.ownerId, intent.eventCtx?.inflictionReaction);
+    return (
+        rootCastKey(ctx, intent.ownerId, intent.eventCtx?.inflictionReaction) +
+        castHitSuffix(intent)
+    );
 }
 
 /** Once-per-root-cast gate backing `Ability.oncePerRootCast` (see that field's doc). Returns false
@@ -4557,7 +4576,7 @@ function passesOncePerRootCastGate(
         intent.eventCtx?.inflictionReaction
     );
     const key =
-        `${intent.ownerId}:${intent.ability.id}:root-${root}` +
+        `${intent.ownerId}:${intent.ability.id}:root-${root}${castHitSuffix(intent)}` +
         (scope === 'per-victim' ? `:${victimId ?? ''}` : '');
     if (ctx.oncePerRoundConsumed?.has(key)) return false;
     ctx.oncePerRoundConsumed?.add(key);
@@ -4741,7 +4760,7 @@ function passesOncePerCastGate(intent: Intent, ctx: IntentExecContext, victimId?
     if (scope === undefined) return true;
     const cast = ctx.turnsTakenFor?.(intent.ownerId) ?? 0;
     const key =
-        `${intent.ownerId}:${intent.ability.id}:cast:${cast}` +
+        `${intent.ownerId}:${intent.ability.id}:cast:${cast}${castHitSuffix(intent)}` +
         (scope === 'per-victim' ? `:${victimId ?? ''}` : '');
     if (ctx.oncePerRoundConsumed?.has(key)) return false;
     ctx.oncePerRoundConsumed?.add(key);
@@ -5189,10 +5208,14 @@ let resolvingIntent: Intent | undefined;
  * (round start, end of round) roots the chain at its own first hit (`claimHitRoot`).
  */
 let currentHitRoot: string | undefined;
+/** The cast sub-attack index `currentHitRoot` names, when it names one (`Intent.hitSubAttack`). */
+let currentHitSubAttack: number | undefined;
 
-/** Engine-side: the root for the cast sub-attack now resolving, or undefined outside a turn. */
-export function setHitRoot(root: string | undefined): void {
+/** Engine-side: the root for the cast sub-attack now resolving (and that sub-attack's index), or
+ *  undefined outside a turn. */
+export function setHitRoot(root: string | undefined, subAttackIndex?: number): void {
     currentHitRoot = root;
+    currentHitSubAttack = root === undefined ? undefined : subAttackIndex;
 }
 
 /** The reaction chain in scope right now (see `currentHitRoot`), or undefined. */
@@ -5206,20 +5229,26 @@ export function hitRootInScope(): string | undefined {
 export function claimHitRoot(mint: () => string): string {
     if (currentHitRoot !== undefined) return currentHitRoot;
     const root = mint();
-    if (resolvingIntent) currentHitRoot = root;
+    if (resolvingIntent) {
+        currentHitRoot = root;
+        currentHitSubAttack = undefined;
+    }
     return root;
 }
 
 export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
     const outer = resolvingIntent;
     const outerRoot = currentHitRoot;
+    const outerSubAttack = currentHitSubAttack;
     resolvingIntent = intent;
     currentHitRoot = intent.hitRoot;
+    currentHitSubAttack = intent.hitSubAttack;
     try {
         resolveIntent(intent, rawCtx);
     } finally {
         resolvingIntent = outer;
         currentHitRoot = outerRoot;
+        currentHitSubAttack = outerSubAttack;
     }
 }
 
