@@ -6175,13 +6175,13 @@ describe('Tasks 1.5 + 3.3 — Voidfire Catalyst: detonationDamage + bombSplashDa
 });
 
 // ---------------------------------------------------------------------------
-// Insidiousness: one roll per skill cast, applied to every debuffed enemy (all-or-none)
+// Insidiousness: one roll per landed debuff, at most one success (one hit) per skill cast
 // ---------------------------------------------------------------------------
 //
 // A Curator-shaped carrier (AoE damage + two inflicted debuffs, `all` / Pattern-All) wearing
-// legendary Insidiousness attacks two enemies. Its four debuff applications per cast share ONE
-// roll, and a successful roll hits each enemy the debuffs actually reached, once.
-describe('Insidiousness integration — per-cast roll, all debuffed enemies', () => {
+// legendary Insidiousness attacks two enemies. Each of its four landed debuffs per cast rolls, and
+// the first success hits the enemy whose debuff rolled, once: no second hit in that cast.
+describe('Insidiousness integration — a roll per landed debuff, one hit per cast', () => {
     const IMPLANT_ID = 'insid-legendary';
 
     const insidPiece = makePiece({
@@ -6365,19 +6365,15 @@ describe('Insidiousness integration — per-cast roll, all debuffed enemies', ()
 
     afterEach(() => resetRateGateRng());
 
-    it('proc passes → EVERY debuffed enemy takes exactly one Insidiousness hit per cast', () => {
+    it('proc passes → exactly ONE Insidiousness hit per cast, on the enemy whose debuff rolled', () => {
         setKeyedRng(() => 0); // every keyed gate fires: debuffs land, the 21% proc passes
         const procs = insidiousnessProcs(run(true, [0, 0]));
 
-        // 3 rounds → 3 carrier attacks → BOTH enemies hit on each = 6 rows. Before the fix this
-        // was 4 rolls/attack all routed to enemy slot 1, so enemy 2 never appeared here.
-        expect(procs).toHaveLength(6);
-        const perTurn = [1, 2, 3].map((t) => procs.filter((r) => r.turnIndex === t));
-        for (const turnRows of perTurn) {
-            // All-or-none within one attack: two victims, each hit exactly once — never a subset,
-            // and never twice (the two debuffs on one enemy share a single verdict AND a single hit).
-            expect(turnRows).toHaveLength(2);
-            expect(new Set(turnRows.map((r) => r.victim)).size).toBe(2);
+        // 3 rounds → 3 carrier attacks, each landing four debuffs. The first debuff's roll
+        // succeeds and takes the cast's one success, so each attack yields ONE hit.
+        expect(procs).toHaveLength(3);
+        for (const turn of [1, 2, 3]) {
+            expect(procs.filter((r) => r.turnIndex === turn)).toHaveLength(1);
         }
 
         // Each row really is the 100%-multiplier implant hit: the cast is 60%, so the proc must be

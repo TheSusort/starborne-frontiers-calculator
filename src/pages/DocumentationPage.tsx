@@ -2896,11 +2896,12 @@ const DocumentationPage: React.FC = () => {
                                         every hit enemy&apos;s debuffs and grants Crit Power Up II.
                                         Effects tied to one enemy&apos;s crit, such as
                                         Wisteria&apos;s Inferno, read that enemy&apos;s own crit.
-                                        Asphodel adds one charge for each enemy her skill crits, so
-                                        an area hit that crits two enemies adds two. &quot;When an
-                                        ally critically hits&quot; (Sentinel, Hermes, Howler) also
-                                        counts an ally&apos;s critting passive damage, such as
-                                        Chakara&apos;s round-start hit or a counter-attack.
+                                        Asphodel adds one charge for each skill that crits, normal
+                                        or charged, so an area hit that crits two enemies adds one.
+                                        The charge comes after a charged skill resets her.
+                                        &quot;When an ally critically hits&quot; (Sentinel, Hermes,
+                                        Howler) also counts an ally&apos;s critting passive damage,
+                                        such as Chakara&apos;s round-start hit or a counter-attack.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Stacking Reactions:</span> A
@@ -3144,20 +3145,22 @@ const DocumentationPage: React.FC = () => {
                                         (Pestilence, Larkspur, Grif, Arum, Yarrow) also hear the
                                         cleanses an enemy&apos;s passive performs (Nuqtu, Purifier,
                                         AEGIS, Hermes, Howler), but not a duration cut; a cleanse
-                                        that such a reaction provoked triggers them again. A count
-                                        written after an infliction in the same skill includes what
-                                        that skill landed, enemy by enemy: Crocus&apos;s Corrosion
-                                        II counts toward her own &ldquo;3 or more debuffs&rdquo;
-                                        Stasis (Asphyxiator&apos;s and Anemone&apos;s gates
-                                        likewise), and a resisted one does not. A passive reacting
-                                        to the hit (Bayah) counts only the debuffs from before the
-                                        skill. APEX&apos;s passive shield arrives as the
-                                        skill&apos;s first debuff lands, so her charged skill&apos;s
-                                        &ldquo;If this Unit has an active shield&rdquo; Disable
-                                        lands once an earlier debuff in it has landed. Likewise
-                                        Belladonna&apos;s charged Corrosion II, if her passive
-                                        converts it to Acidic Decay as it lands, counts toward that
-                                        skill&apos;s &ldquo;3 or more Acidic Decay&rdquo; Stasis.
+                                        that such a reaction provoked triggers them again.
+                                        Pestilence&apos;s Corrosion lands on the enemy that
+                                        cleansed. A count written after an infliction in the same
+                                        skill includes what that skill landed, enemy by enemy:
+                                        Crocus&apos;s Corrosion II counts toward her own &ldquo;3 or
+                                        more debuffs&rdquo; Stasis (Asphyxiator&apos;s and
+                                        Anemone&apos;s gates likewise), and a resisted one does not.
+                                        A passive reacting to the hit (Bayah) counts only the
+                                        debuffs from before the skill. APEX&apos;s passive shield
+                                        arrives as the skill&apos;s first debuff lands, so her
+                                        charged skill&apos;s &ldquo;If this Unit has an active
+                                        shield&rdquo; Disable lands once an earlier debuff in it has
+                                        landed. Likewise Belladonna&apos;s charged Corrosion II, if
+                                        her passive converts it to Acidic Decay as it lands, counts
+                                        toward that skill&apos;s &ldquo;3 or more Acidic
+                                        Decay&rdquo; Stasis.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Team Ships:</span> Pick a
@@ -4726,38 +4729,40 @@ const DocumentationPage: React.FC = () => {
                                     <strong>Giant Slayer</strong> (chance to amplify a hit&apos;s
                                     damage against an enemy with higher attack), and{' '}
                                     <strong>Insidiousness</strong> (chance to deal bonus damage when
-                                    you inflict a debuff on an enemy. It rolls once per skill cast
-                                    that inflicts a debuff, plus once for each reaction that
-                                    inflicts one — one reaction landing on two enemies is one roll.
-                                    Applied debuffs, such as Provoke, Concentrate Fire or the Burner
+                                    you inflict a debuff on an enemy. It rolls once for every debuff
+                                    you inflict, whether your skill or one of your reactions lands
+                                    it, and a damage-over-time stack counts as a debuff. Applied
+                                    debuffs, such as Provoke, Concentrate Fire or the Burner
                                     set&apos;s Inferno, never roll. At most one roll succeeds per
                                     skill cast, counting reactions to an enemy&apos;s skill as part
-                                    of that skill, and a successful roll hits every enemy the
-                                    debuffs reached). Three heal implants are also modeled:{' '}
-                                    <strong>Second Wind</strong> (chance to repair itself when it
-                                    takes a critical hit), <strong>Nourishment</strong> (stronger
-                                    repairs on allies with less HP than the healer), and{' '}
-                                    <strong>Vivacious Repair</strong> (chance to double a repair on
-                                    an ally below 25% HP), and <strong>Exuberance</strong> (chance
-                                    to increase the amount of a repair this unit receives). Charge
-                                    manipulation is also modeled: <strong>Chrono Reaver</strong>{' '}
-                                    (grants a bonus charge to the carrier&apos;s charged skill every
-                                    2nd turn at legendary rarity or every 3rd turn at epic; a unit
-                                    in Stasis or Disabled still gets this bonus, but not its usual
-                                    charge for the skipped turn). Two damage-over-time gear sets are
-                                    also modeled: <strong>Burner</strong> (applies Inferno for 2
-                                    turns on every primary target when the ship attacks, so a
-                                    whole-battlefield attack such as Curator&apos;s active applies
-                                    it on every enemy; an applied Inferno lands without a hacking
-                                    roll, failing only when the ship is at an affinity disadvantage
-                                    against the target) and <strong>Decimation</strong> (+10% DoT
-                                    damage per equipped set, up to +30%, boosting your Inferno and
-                                    Corrosion ticks in both the combat simulator and the DPS
-                                    calculator). Five shield sources are also modeled: the{' '}
-                                    <strong>Shield</strong> gear set (grants the equipped ship a
-                                    shield each turn, 4% of its max HP per set),{' '}
-                                    <strong>Adaptive Plating</strong> (grants the ship a shield from
-                                    the damage it takes, once per round),{' '}
+                                    of that skill, and the hit lands on the enemy whose debuff
+                                    rolled). <strong>Synaptic Resonance</strong> gains Speed Up III
+                                    when an enemy is repaired and adds its crit power points to the
+                                    next critical hit only (90% crit power plus 10 is 100%). Three
+                                    heal implants are also modeled: <strong>Second Wind</strong>{' '}
+                                    (chance to repair itself when it takes a critical hit),{' '}
+                                    <strong>Nourishment</strong> (stronger repairs on allies with
+                                    less HP than the healer), and <strong>Vivacious Repair</strong>{' '}
+                                    (chance to double a repair on an ally below 25% HP), and{' '}
+                                    <strong>Exuberance</strong> (chance to increase the amount of a
+                                    repair this unit receives). Charge manipulation is also modeled:{' '}
+                                    <strong>Chrono Reaver</strong> (grants a bonus charge to the
+                                    carrier&apos;s charged skill every 2nd turn at legendary rarity
+                                    or every 3rd turn at epic; a unit in Stasis or Disabled still
+                                    gets this bonus, but not its usual charge for the skipped turn).
+                                    Two damage-over-time gear sets are also modeled:{' '}
+                                    <strong>Burner</strong> (applies Inferno for 2 turns on every
+                                    primary target when the ship attacks, so a whole-battlefield
+                                    attack such as Curator&apos;s active applies it on every enemy;
+                                    an applied Inferno lands without a hacking roll, failing only
+                                    when the ship is at an affinity disadvantage against the target)
+                                    and <strong>Decimation</strong> (+10% DoT damage per equipped
+                                    set, up to +30%, boosting your Inferno and Corrosion ticks in
+                                    both the combat simulator and the DPS calculator). Five shield
+                                    sources are also modeled: the <strong>Shield</strong> gear set
+                                    (grants the equipped ship a shield each turn, 4% of its max HP
+                                    per set), <strong>Adaptive Plating</strong> (grants the ship a
+                                    shield from the damage it takes, once per round),{' '}
                                     <strong>Abundant Renewal</strong> (turns over-healing on an ally
                                     into a shield for that ally), and{' '}
                                     <strong>Resonating Fury</strong> (a chance to grant Crit Power
@@ -4860,8 +4865,15 @@ const DocumentationPage: React.FC = () => {
                                     gains 10 stacks of Protection at the start of each round, and
                                     after it absorbs the first hit redirected from an ally, it loses
                                     all Protection until the next round. The stacks hold whether an
-                                    enemy moves before or after Lionheart, on either team. More
-                                    implant and gear-set effects will be added in future updates.
+                                    enemy moves before or after Lionheart, on either team. Damage
+                                    taken through Protection is not a direct hit on the protector,
+                                    so Meatshield&apos;s &quot;directly damaged this round&quot;
+                                    repair needs a hit aimed at him. A standing &quot;+20%
+                                    defense&quot; passive (Grif, Hermes) lowers the damage its owner
+                                    takes. Lionheart&apos;s crit grants belong to the skill they are
+                                    written on: a crit by his active gives Attack Up II and one by
+                                    his charged skill gives Attack Up III. More implant and gear-set
+                                    effects will be added in future updates.
                                 </p>
                             </div>
                         </div>

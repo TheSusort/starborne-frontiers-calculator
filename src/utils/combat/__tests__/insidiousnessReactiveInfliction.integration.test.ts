@@ -212,7 +212,7 @@ describe('Insidiousness — the implant ability', () => {
             type: 'damage',
             trigger: 'on-debuff-inflicted',
             procChance: 0.21,
-            procScope: 'per-cast',
+            procScope: 'per-debuff',
             config: { type: 'damage', multiplier: 100, hits: 1 },
         });
     });

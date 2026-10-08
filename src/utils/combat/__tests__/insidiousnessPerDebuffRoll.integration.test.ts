@@ -1,14 +1,17 @@
 /**
  * Insidiousness ("When debuffing an enemy, there is a 21% chance to deal 100% damage." at
- * legendary) rolls per SKILL CAST (user + Solid Clouds dev, 2026-10-02):
- *  - ONE roll for everything the cast inflicts itself, however many debuffs and however many hits;
- *  - ONE extra roll for each reaction firing that inflicts during that cast (Warden's passive
- *    Out. Damage Down II off her charged Corrosion II; Ripper's catalogue Inferno II);
- *  - at most ONE successful roll per SKILL CAST that set the inflictions off, whoever cast it:
- *    an enemy's attack waking Warden's Corrosion I, which wakes her Out. Damage Down II, is that
- *    enemy's one cast — two rolls, at most one hit (user, 2026-10-02);
- *  - a successful cast roll hits EVERY enemy the cast debuffed (pinned on the Curator AoE board in
- *    equipmentAbilities.integration.test.ts).
+ * legendary) rolls once PER DEBUFF the owner inflicts, with at most ONE success per skill cast
+ * (R131):
+ *  - every debuff a cast inflicts draws its own roll (a 2-hit cast debuffing on each hit rolls
+ *    twice; a cast landing three debuffs rolls three times), and a DoT stack is a debuff;
+ *  - a debuff a reaction lands (Warden's Out. Damage Down II off her charged Corrosion II;
+ *    Ripper's catalogue Inferno II) draws its own roll too;
+ *  - at most ONE successful roll per SKILL CAST that set the inflictions off, whoever cast it: an
+ *    enemy's attack waking Warden's Corrosion I, which wakes her Out. Damage Down II, is that
+ *    enemy's one cast, so two rolls and at most one hit; once a roll succeeds the cast's other
+ *    debuffs do not draw;
+ *  - the hit lands on the enemy whose debuff rolled.
+ * Only inflicted debuffs roll; an "applied" one (Concentrate Fire) never does.
  *
  * Instrument: `scriptProcs` scripts the carrier's `${owner}:proc` sub-stream — the only proc
  * ability on these boards is Insidiousness (real legendary ability, 21%) — and COUNTS its draws,
@@ -154,13 +157,13 @@ beforeEach(() => {
     setupKeyedRng(5);
 });
 
-describe('Insidiousness — the implant declares the per-cast roll', () => {
-    it('legendary: reactive damage on on-debuff-inflicted, 21%, 100%, procScope per-cast', () => {
+describe('Insidiousness — the implant declares the per-debuff roll', () => {
+    it('legendary: reactive damage on on-debuff-inflicted, 21%, 100%, procScope per-debuff', () => {
         expect(insidiousness()).toMatchObject({
             type: 'damage',
             trigger: 'on-debuff-inflicted',
             procChance: 0.21,
-            procScope: 'per-cast',
+            procScope: 'per-debuff',
             config: { type: 'damage', multiplier: 100, hits: 1 },
         });
     });
@@ -205,7 +208,7 @@ const wardenSkills = (withReaction = true): ShipSkills => {
     };
 };
 
-describe('Insidiousness — Warden’s charged: one roll for the cast, one for her reaction', () => {
+describe('Insidiousness — Warden’s charged: a roll for her Corrosion, one for her reaction’s debuff', () => {
     /** Round 1: she opens with her charged skill on the inert foe. */
     const board = (withReaction = true) =>
         BASE({
@@ -301,9 +304,9 @@ describe('Insidiousness — Warden’s charged: one roll for the cast, one for h
 });
 
 // ---------------------------------------------------------------------------------------------
-// The cast's own inflictions: one roll however many hits or debuffs; no landing, no roll.
+// The cast's own inflictions: one roll per landed debuff, one success per cast; no landing, no roll.
 // ---------------------------------------------------------------------------------------------
-describe('Insidiousness — the cast’s own inflictions share one roll', () => {
+describe('Insidiousness — every landed debuff of a cast rolls, one success per cast', () => {
     const kit = (active: Ability[]): ShipSkills => ({
         slots: [
             { slot: 'active', abilities: active },
@@ -311,16 +314,24 @@ describe('Insidiousness — the cast’s own inflictions share one roll', () => 
         ],
     });
 
-    it('a 2-hit cast that debuffs on each hit rolls once', () => {
-        const draws = scriptProcs('attacker', [FAIL, PASS]);
+    it('a 2-hit cast that debuffs on each hit rolls per landing: both fail, no hit', () => {
+        const draws = scriptProcs('attacker', [FAIL, FAIL]);
         const events = run(BASE({ shipSkills: kit([hit(2), castDebuff('Seed Down')]) }));
         // Premise: the debuff landed on each of the two hits.
         expect(debuffLandings(events, 'attacker', 'Seed Down')).toBe(2);
-        expect(draws()).toBe(1);
+        expect(draws()).toBe(2);
         expect(procHits(events, 'attacker', 'foe')).toHaveLength(0);
     });
 
-    it('a 2-hit cast whose one roll passes hits the enemy once', () => {
+    it('a 2-hit cast: the second landing passes after the first fails → one hit, two draws', () => {
+        const draws = scriptProcs('attacker', [FAIL, PASS]);
+        const events = run(BASE({ shipSkills: kit([hit(2), castDebuff('Seed Down')]) }));
+        expect(debuffLandings(events, 'attacker', 'Seed Down')).toBe(2);
+        expect(draws()).toBe(2);
+        expect(procHits(events, 'attacker', 'foe')).toHaveLength(1);
+    });
+
+    it('a 2-hit cast whose first roll passes hits once; the cap stops the second draw', () => {
         const draws = scriptProcs('attacker', [PASS, PASS]);
         const events = run(BASE({ shipSkills: kit([hit(2), castDebuff('Seed Down')]) }));
         expect(debuffLandings(events, 'attacker', 'Seed Down')).toBe(2);
@@ -328,23 +339,31 @@ describe('Insidiousness — the cast’s own inflictions share one roll', () => 
         expect(procHits(events, 'attacker', 'foe')).toHaveLength(1);
     });
 
-    it('a cast landing three debuffs rolls once', () => {
+    it('a cast landing three debuffs draws until one succeeds', () => {
         const active = [
             hit(),
             castDebuff('Seed Down'),
             castDebuff('Root Down'),
             castDebuff('Leaf Down'),
         ];
-        let draws = scriptProcs('attacker', [FAIL, PASS, PASS]);
+        // All three fail: three draws, no hit.
+        let draws = scriptProcs('attacker', [FAIL, FAIL, FAIL]);
         let events = run(BASE({ shipSkills: kit(active) }));
         expect(
             ['Seed Down', 'Root Down', 'Leaf Down'].map((n) =>
                 debuffLandings(events, 'attacker', n)
             )
         ).toEqual([1, 1, 1]);
-        expect(draws()).toBe(1);
+        expect(draws()).toBe(3);
         expect(procHits(events, 'attacker', 'foe')).toHaveLength(0);
 
+        // The second passes: two draws, one hit; the third debuff never draws.
+        draws = scriptProcs('attacker', [FAIL, PASS, PASS]);
+        events = run(BASE({ shipSkills: kit(active) }));
+        expect(draws()).toBe(2);
+        expect(procHits(events, 'attacker', 'foe')).toHaveLength(1);
+
+        // The first passes: one draw, one hit.
         draws = scriptProcs('attacker', [PASS, PASS, PASS]);
         events = run(BASE({ shipSkills: kit(active) }));
         expect(draws()).toBe(1);
@@ -367,7 +386,7 @@ describe('Insidiousness — the cast’s own inflictions share one roll', () => 
         expect(procHits(events, 'attacker', 'foe')).toHaveLength(1);
     });
 
-    it('enemy side: an enemy carrier’s 2-hit debuffing cast rolls once', () => {
+    it('enemy side: an enemy carrier’s 2-hit debuffing cast rolls per landing', () => {
         const carrier: EnemyAttacker = {
             id: 'carrier',
             stats: {
@@ -386,11 +405,22 @@ describe('Insidiousness — the cast’s own inflictions share one roll', () => 
             pattern: basePattern(),
             shipSkills: kit([hit(2), castDebuff('Seed Down')]),
         };
-        const draws = scriptProcs('carrier', [FAIL, PASS]);
-        const events = run(BASE({ attack: 0, speed: 1, security: 0, enemyAttackers: [carrier] }));
+        const board = () => BASE({ attack: 0, speed: 1, security: 0, enemyAttackers: [carrier] });
+        let draws = scriptProcs('carrier', [FAIL, FAIL]);
+        let events = run(board());
         expect(debuffLandings(events, 'carrier', 'Seed Down')).toBe(2);
-        expect(draws()).toBe(1);
+        expect(draws()).toBe(2);
         expect(procHits(events, 'carrier', 'attacker')).toHaveLength(0);
+
+        draws = scriptProcs('carrier', [FAIL, PASS]);
+        events = run(board());
+        expect(draws()).toBe(2);
+        expect(procHits(events, 'carrier', 'attacker')).toHaveLength(1);
+
+        draws = scriptProcs('carrier', [PASS, PASS]);
+        events = run(board());
+        expect(draws()).toBe(1);
+        expect(procHits(events, 'carrier', 'attacker')).toHaveLength(1);
     });
 });
 
@@ -586,10 +616,10 @@ describe('Insidiousness — reactions to an enemy’s skill: one cap for the who
 });
 
 // ---------------------------------------------------------------------------------------------
-// One reaction firing is one roll, however many enemies it lands on: an on-crit "inflict X on
-// that enemy" reaction to an AoE that crits both enemies lands X on each, from ONE firing.
+// A reaction that lands a debuff on two enemies lands two debuffs: two rolls, one success cap. An
+// on-crit "inflict X on that enemy" reaction to an AoE that crits both enemies lands X on each.
 // ---------------------------------------------------------------------------------------------
-describe('Insidiousness — one reaction firing landing on two enemies is one roll', () => {
+describe('Insidiousness — a reaction landing on two enemies rolls per landed debuff', () => {
     const allPattern = (): ParsedPattern => ({
         raw: 'all',
         shape: 'all',
@@ -611,28 +641,37 @@ describe('Insidiousness — one reaction firing landing on two enemies is one ro
         ],
     });
     const twoFoes = () => [inert('foe-a'), { ...inert('foe-b'), position: 'M3' as const }];
+    const board = () =>
+        BASE({
+            crit: 100,
+            pattern: allPattern(),
+            shipSkills: kit(),
+            enemyAttackers: twoFoes(),
+        });
+    const totalHits = (events: CombatEvent[]) =>
+        procHits(events, 'attacker', 'foe-a').length + procHits(events, 'attacker', 'foe-b').length;
 
-    it('player side: one roll; when it passes both enemies are hit once', () => {
-        const board = () =>
-            BASE({
-                crit: 100,
-                pattern: allPattern(),
-                shipSkills: kit(),
-                enemyAttackers: twoFoes(),
-            });
-        let draws = scriptProcs('attacker', [PASS, PASS]);
-        let events = run(board());
+    it('player side: both fail → two draws, no hit', () => {
+        const draws = scriptProcs('attacker', [FAIL, FAIL]);
+        const events = run(board());
         expect(debuffLandings(events, 'attacker', 'Crit Down')).toBe(2);
-        expect(procHits(events, 'attacker', 'foe-a')).toHaveLength(1);
-        expect(procHits(events, 'attacker', 'foe-b')).toHaveLength(1);
-        expect(draws()).toBe(1);
+        expect(draws()).toBe(2);
+        expect(totalHits(events)).toBe(0);
+    });
 
-        draws = scriptProcs('attacker', [FAIL, PASS]);
-        events = run(board());
+    it('player side: the first passes → ONE hit on one enemy, one draw', () => {
+        const draws = scriptProcs('attacker', [PASS, PASS]);
+        const events = run(board());
         expect(debuffLandings(events, 'attacker', 'Crit Down')).toBe(2);
-        expect(procHits(events, 'attacker', 'foe-a')).toHaveLength(0);
-        expect(procHits(events, 'attacker', 'foe-b')).toHaveLength(0);
         expect(draws()).toBe(1);
+        expect(totalHits(events)).toBe(1);
+    });
+
+    it('player side: the second passes after the first fails → one hit, two draws', () => {
+        const draws = scriptProcs('attacker', [FAIL, PASS]);
+        const events = run(board());
+        expect(draws()).toBe(2);
+        expect(totalHits(events)).toBe(1);
     });
 });
 
@@ -640,7 +679,7 @@ describe('Insidiousness — one reaction firing landing on two enemies is one ro
 // The shipped battle simulator (simulateBattle, positional) reaches the same rule: catalogue
 // Ripper's active (Inc. Repair Down II) and his reactive Inferno II are two rolls, one hit.
 // ---------------------------------------------------------------------------------------------
-describe('Insidiousness — the battle simulator: one roll for the cast, one for the reaction', () => {
+describe('Insidiousness — the battle simulator: one roll per debuff, one success per cast', () => {
     const IMPLANT_ID = 'insid-legendary';
     const getGearPiece = (id: string): GearPiece | undefined =>
         id === IMPLANT_ID

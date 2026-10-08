@@ -512,6 +512,11 @@ export type ConditionSubject =
     // attacks do not count). Live-derived (ConditionContext.wasHitThisRound); defaults false
     // (DPS / not-yet-hit → "not hit" ⇒ met). Used by the Alacrity implant.
     | 'not-hit-this-round'
+    // The positive twin of `not-hit-this-round`: met when the condition owner WAS directly hit
+    // this round (Meatshield's "If this Unit has been directly damaged this round"). A Protection
+    // share taken for an ally is not a direct hit on the protector (R139). Live-derived
+    // (ConditionContext.wasHitThisRound).
+    | 'hit-this-round'
     | 'first-activator' // D-PR14 Doomsayer: this owner was the first actor to take a REAL
     //                      (non-Stasis/Disable-skipped) turn this round.
     // D-PR16: binary gate — this owner is the SOLE living actor on its own side. Live-derived by
@@ -864,7 +869,15 @@ export type AbilityConfig =
           type: 'shield-strip';
           pct: number;
       }
-    | { type: 'modifier'; channel: ModifierChannel; value: number; isMultiplicative: boolean }
+    | {
+          type: 'modifier';
+          channel: ModifierChannel;
+          value: number;
+          isMultiplicative: boolean;
+          /** A `dotDamage` modifier that names one DoT family ("additional Inferno damage",
+           *  Wildfire) boosts only that family's ticks. Absent → every DoT type. */
+          dotType?: 'corrosion' | 'inferno';
+      }
     | {
           type: 'buff';
           buffName: string;
@@ -990,10 +1003,15 @@ export type AbilityConfig =
      *  its own — the existing 100% total-pen clamp in shieldAbsorb.ts is the only ceiling.
      *  Consumed by the reactive executor (triggers.ts), which adds `pct` to the owner's
      *  live bonus via IntentExecContext.addShieldPenBonus; engine.ts's `attackerShieldPenOf` is
-     *  the sole read site that folds it onto the static base. `stat` is a union of one today,
-     *  matching `additional-damage`'s shape, so a future non-shield-pen stat-gain clause can
-     *  reuse this config rather than inventing a sibling. */
-    | { type: 'stat-gain'; stat: 'shieldPenetration'; pct: number }
+     *  the sole read site that folds it onto the static base. `stat` is a union, matching
+     *  `additional-damage`'s shape, so a further stat-gain clause can reuse this config rather
+     *  than inventing a sibling.
+     *
+     *  `'nextCritPower'` (Synaptic Resonance, R153) is NOT permanent: it arms `pct` additive
+     *  crit-power points that the owner's NEXT crit spends and clears. Arming again before a crit
+     *  refreshes the pending bonus to `pct`; it does not stack. Consumed through
+     *  IntentExecContext.armNextCritPower; engine.ts's positional apply is the read site. */
+    | { type: 'stat-gain'; stat: 'shieldPenetration' | 'nextCritPower'; pct: number }
     // A full extra turn: the engine re-inserts the granting actor into the round's
     // remaining turn queue at its speed position (game-verified 2026-06-06).
     | {
@@ -1361,7 +1379,7 @@ export interface Ability {
      *  executor-side by `passesOncePerCastGate` in triggers.ts. Absent → no per-cast cap. */
     oncePerCast?: 'cast' | 'per-victim';
     /** Once per ROOT cast: the reaction fires at most once per SKILL CAST that set the triggering
-     *  event off, whoever cast it — the same cast identity `procScope:'per-cast'` caps on
+     *  event off, whoever cast it — the same cast identity `procScope:'per-debuff'` caps on
      *  (Insidiousness). Unlike `oncePerCast`, which counts only the OWNER's own casts, the cast
      *  here belongs to whichever ship's skill woke the chain. An extra action is a cast of its own.
      *  - `'cast'`: once per root cast, however many enemies it reached. APEX's 3% shield off her
@@ -1510,23 +1528,20 @@ export interface Ability {
      *  behaviour of every other procChance ability (Adaptive Plating, Smokescreen, Ambush,
      *  Bloodthirst, Reactive Ward, Tenacity, Bulwark).
      *
-     *  `'per-cast'` (Insidiousness, `on-debuff-inflicted`; user + Solid Clouds dev, 2026-10-02):
-     *  ONE roll for everything the owner's skill cast inflicts itself, however many debuffs and
-     *  however many hits (an exception to the per-attack proc rule); ONE extra roll for each
-     *  reaction firing that inflicts in that cast (Warden's passive Out. Damage Down II off her
-     *  charged Corrosion II); and at most ONE successful roll per SKILL CAST that set the chain
-     *  off, whoever cast it (an enemy's attack waking the owner's on-attacked Corrosion I, and the
-     *  Out. Damage Down II that wakes, are that enemy's one cast). A successful cast roll hits
-     *  EVERY enemy the cast's own inflictions landed on, once each (a Curator cast debuffing 3
-     *  enemies hits all 3); a reaction's roll hits the enemies that reaction landed on. See
-     *  `perCastProcKeys` / `passesPerCastProcGate` in triggers.ts.
+     *  `'per-debuff'` (Insidiousness, `on-debuff-inflicted`; R131): ONE roll per debuff the owner
+     *  inflicts (a DoT stack is a debuff; a debuff a reaction lands is its own), and at most ONE
+     *  success per SKILL CAST that set the chain off, whoever cast it (an enemy's attack waking the
+     *  owner's on-attacked Corrosion I, and the Out. Damage Down II that wakes, are that enemy's
+     *  one cast). Once a roll succeeds, the cast's other debuffs do not draw. The hit lands on the
+     *  enemy whose debuff rolled. See `perDebuffProcCap` / `passesPerDebuffProcGate` in
+     *  triggers.ts.
      *
      *  `'per-attack'` draws the gate ONCE per ATTACK and reuses that verdict for every qualifying
      *  trigger event in that same attack, via IntentExecContext.procDecisionThisSubAttack. A
      *  `hits: N` skill is N consecutive full-walk attacks (R1), so a 3-hit skill draws THREE
      *  verdicts — one per sub-attack, each shared across that sub-attack's footprint.
      *  `subAttackProcGates.integration.test.ts` pins it on an on-crit rider. */
-    procScope?: 'per-attack' | 'per-cast';
+    procScope?: 'per-attack' | 'per-debuff';
     /** Reactive event-frequency gate: fire this ability only every Nth qualifying trigger
      *  event, counted per SOURCE (the triggering actor). N=2 → every second event. Gated
      *  executor-side via IntentExecContext.repairCountBySource, keyed

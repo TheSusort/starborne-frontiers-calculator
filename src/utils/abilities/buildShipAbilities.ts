@@ -47,6 +47,7 @@ import {
     debuffTriggerVerb,
     detectInflictedStatusFilter,
     detectPreCombatBuffTrigger,
+    detectStartOfCombatAndEveryTurn,
     detectPreCombatShieldTrigger,
     detectDamageReactionTrigger,
     detectHpCrossingTrigger,
@@ -217,6 +218,8 @@ interface ParsedModifier {
     target: AbilityTarget;
     conditions: Condition[];
     scaling?: ScalingRule;
+    /** The DoT family a `dotDamage` modifier names; absent → every DoT type. */
+    dotType?: 'corrosion' | 'inferno';
 }
 
 /**
@@ -666,6 +669,7 @@ function parseModifiers(text: string): ParsedModifier[] {
                 // a 0 bonus).
                 { subject: 'self-crit-power', derivable: true },
             ];
+            const family = dotCritPowerM[2].toLowerCase();
             out.push({
                 channel: 'dotDamage',
                 value: 0,
@@ -673,6 +677,7 @@ function parseModifiers(text: string): ParsedModifier[] {
                 target: isAllyScoped ? 'all-allies' : 'self',
                 conditions,
                 scaling: { conditionIndex: conditions.length - 1, perUnit: dotValue / per },
+                ...(family === 'inferno' || family === 'corrosion' ? { dotType: family } : {}),
             });
         }
     }
@@ -728,23 +733,34 @@ function parseModifiers(text: string): ParsedModifier[] {
         }
     }
 
-    // "increases its Defense by N%" → a STANDING self defense modifier (Grif refit's "This Unit
-    // increases its Defense by 20%"). Multiplicative (a % of base defense), self-scoped. Scoped
-    // to "Defense" specifically so it never collides with the "defense penetration" branches
-    // below (penetration carries the extra "penetration" word). Phase 4c PR 4 (Task 6).
-    const defM = plain.match(/increases?\s+its\s+defense\s+by\s+(\d+(?:\.\d+)?)%/i);
+    // "increases its Defense by N%" / "defense is increased by N%" → a STANDING self defense
+    // modifier (Grif's "This Unit increases its Defense by 20%", Hermes's "This Unit's defense is
+    // increased by 20% and when it critically repairs an ally, ..."). Multiplicative (a % of base
+    // defense), self-scoped. Scoped to "Defense" specifically so it never collides with the
+    // "defense penetration" branches below (penetration carries the extra "penetration" word).
+    const defM = plain.match(
+        /(?:increases?\s+its\s+defense\s+by|defense\s+is\s+increased\s+by)\s+(\d+(?:\.\d+)?)%/i
+    );
     if (defM) {
-        // Sentence-scope the standing modifier (CodeRabbit #99 FIX #2): a triggered ("when X,
-        // increases its Defense by 20%") or finite-duration ("increases its Defense by 20% for 2
-        // turns") clause with the same wording must NOT be promoted to a PERMANENT buff — that is
-        // wrong combat math. Only emit when the containing sentence is a standalone/standing clause
-        // (no trigger words, no finite duration). The gated/finite shapes are left for other
-        // parsing (reactive buff-grant / timed buff) to handle, or left unparsed.
+        // Sentence-scope the standing modifier: a triggered ("when X, increases its Defense by
+        // 20%") or finite-duration ("increases its Defense by 20% for 2 turns") clause with the
+        // same wording must NOT be promoted to a PERMANENT buff — that is wrong combat math. Only
+        // emit when the clause is standalone/standing (no trigger words, no finite duration). A
+        // second, triggered clause joined by "and" ("... by 20% and when it critically repairs")
+        // is a different effect and does not make this one conditional.
         const defSentence = sentenceContaining(plain, defM.index!);
-        const hasTrigger = /\b(when|if|while|upon|after|each|every)\b|at the start of/i.test(
-            defSentence
+        const defClauseEnd = defM.index! + defM[0].length;
+        const sentenceStart = plain.indexOf(defSentence);
+        const afterMatch = defSentence.slice(defClauseEnd - sentenceStart);
+        const andAt = afterMatch.search(/\band\b/i);
+        const defClause = defSentence.slice(
+            0,
+            defClauseEnd - sentenceStart + (andAt === -1 ? afterMatch.length : andAt)
         );
-        const hasFiniteDuration = /\bfor\s+\d+\s+turns?\b/i.test(defSentence);
+        const hasTrigger = /\b(when|if|while|upon|after|each|every)\b|at the start of/i.test(
+            defClause
+        );
+        const hasFiniteDuration = /\bfor\s+\d+\s+turns?\b/i.test(defClause);
         if (!hasTrigger && !hasFiniteDuration) {
             out.push({
                 channel: 'defense',
@@ -2112,17 +2128,19 @@ function abilitiesFromText(
     }
 
     // Ship-kit W3 (Pestilence): "When an enemy cleanses a Debuff this unit inflicts Corrosion II
-    // for 2 turns on all cleansed enemies" — a reactive PASSIVE-slot DoT. No existing path can
-    // produce this: buildDoTAutoFill scans ONLY active/charge sources (passive-slot DoTs are
-    // categorically excluded) and dotAbility() hardcodes trigger:'on-cast'. Build it directly here,
-    // mirroring the Crocus on-ally-crit-dot block above but gated on — and taking its trigger from —
+    // for 2 turns" — a reactive PASSIVE-slot DoT. No existing path can produce this:
+    // buildDoTAutoFill scans ONLY active/charge sources (passive-slot DoTs are categorically
+    // excluded) and dotAbility() hardcodes trigger:'on-cast'. Build it directly here, mirroring the
+    // Crocus on-ally-crit-dot block above but gated on — and taking its trigger from —
     // detectEnemyCleanseTrigger, which sentence-scopes the DoT's anchor to the "when an enemy
-    // cleanses a Debuff" clause (shares ENEMY_CLEANSE_RE with the named-buff grant path). A normal
-    // active/charge DoT never matches (no cleanse clause) → the buildDoTAutoFill path stays the sole
-    // producer for those; the named-buff cleanse grants (Arum/Yarrow/Larkspur) carry no DoT name
-    // (DOT_TIER_MAP miss) so they never reach here either. target:'all-enemies' marks the
-    // multi-recipient fan-out — the reactive dot executor lands it on eventCtx.cleansedEnemyIds
-    // (the actual cleansed enemies), never the DPS dummy sink.
+    // cleanses a Debuff" clause (shares ENEMY_CLEANSE_RE with the named-buff cleanse grant path). A
+    // normal active/charge DoT never matches (no cleanse clause) → the buildDoTAutoFill path stays
+    // the sole producer for those; the named-buff cleanse grants (Arum/Yarrow/Larkspur) carry no
+    // DoT name (DOT_TIER_MAP miss) so they never reach here either.
+    //
+    // Recipient: the enemy that CLEANSED (R134) — target 'enemy', which the reactive dot executor
+    // lands on the event's counterparty (the cleanser). Only an explicit "on all cleansed enemies"
+    // clause marks the multi-recipient fan-out ('all-enemies', landed on the cleansed ids).
     for (const eff of parseSkillEffects(text, 'active')) {
         const dotInfo = DOT_TIER_MAP[eff.buffName];
         if (!dotInfo) continue;
@@ -2133,7 +2151,7 @@ function abilitiesFromText(
             ability: {
                 id: nextId(),
                 type: 'dot',
-                target: 'all-enemies',
+                target: /\bon all cleansed enemies\b/i.test(text) ? 'all-enemies' : 'enemy',
                 trigger: cleanseDotTrigger, // 'on-enemy-cleansed'
                 conditions: [],
                 config: {
@@ -2531,6 +2549,16 @@ function abilitiesFromText(
         // clause-index anchor instead.
         if (detectTargetShieldGate(healSentence)) {
             healConditions.push({ subject: 'enemy-shield', derivable: true });
+        }
+        // Meatshield's active: "If this Unit has been directly damaged this round, it repairs 5% of
+        // its max HP" gates the repair on a direct hit taken earlier in the round. Cast-path
+        // clause only; a reactive heal carries its own trigger instead.
+        if (
+            !reactiveTrigger &&
+            (slot === 'active' || slot === 'charged') &&
+            /\bif this unit (?:has been|was) directly damaged this round\b/i.test(healSentence)
+        ) {
+            healConditions.push({ subject: 'hit-this-round', derivable: true });
         }
         let healScaling: ScalingRule | undefined;
         if (h.scaling?.countSource) {
@@ -3103,6 +3131,7 @@ function abilitiesFromText(
                     channel: modifier.channel,
                     value: modifier.value,
                     isMultiplicative: modifier.isMultiplicative,
+                    ...(modifier.dotType ? { dotType: modifier.dotType } : {}),
                 },
                 autoFilled: true,
             },
@@ -3994,6 +4023,21 @@ export function buildShipAbilities(rawShip: Ship): ShipSkills {
             }
         }
         pushToSlot(bySlot, slot, [{ ability, pos: pos >= 0 ? pos : MAX_POS }]);
+        // The combat-start half of "At the start of combat and every turn": a sibling grant on
+        // the 'pre-combat' trigger, seeded once before round 1 like every other combat-start grant.
+        if (
+            ability.trigger === 'start-of-turn' &&
+            ability.config.type === 'buff' &&
+            rowText &&
+            detectStartOfCombatAndEveryTurn(rowText, buff.buffName, occurrence)
+        ) {
+            pushToSlot(bySlot, slot, [
+                {
+                    ability: { ...ability, id: nextId(), trigger: 'pre-combat' },
+                    pos: pos >= 0 ? pos : MAX_POS,
+                },
+            ]);
+        }
     };
     // Player-side grants carry their parser ally-scope (self/ally/all-allies) so the engine
     // routes a walked team ship's grants correctly. Defaults to 'self' for round-trip buffs

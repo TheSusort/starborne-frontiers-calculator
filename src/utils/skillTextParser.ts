@@ -1921,6 +1921,21 @@ export function detectPreCombatBuffTrigger(
 }
 
 /**
+ * True when `buffName`'s own clause reads "At the start of combat and every turn, this Unit gains
+ * <Buff>" (Meiying's Stealth): the grant is BOTH a one-time combat-start seed and a per-turn
+ * refresh. The per-turn half carries the 'start-of-turn' trigger; this names the other half.
+ */
+export function detectStartOfCombatAndEveryTurn(
+    text: string | null | undefined,
+    buffName: string,
+    occurrenceIndex = 0
+): boolean {
+    if (!text || !buffName) return false;
+    const clause = resolveBuffClause(text, buffName, occurrenceIndex);
+    return /\bevery\s+turn\b/i.test(clause) && START_OF_COMBAT_GRANT_RE.test(clause);
+}
+
+/**
  * Epic PR4: returns 'pre-combat' when `anchorPos` (a shield ability's raw-text anchor) falls
  * inside the sentence carrying the "at the start of combat" phrase; otherwise undefined.
  * Position-scoped counterpart to detectPreCombatBuffTrigger for the NAMELESS shield grants
