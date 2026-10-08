@@ -2988,9 +2988,13 @@ const DocumentationPage: React.FC = () => {
                                         Down, Meiying&apos;s Stasis). Demolisher&apos;s passive also
                                         detonates a splash equal to 100% of the exploded Bomb&apos;s
                                         damage onto the bombed enemy&apos;s neighbours, ignoring
-                                        Defense and unable to critically hit. This resolves on the
-                                        positioned board; in the single-target DPS calculator there
-                                        are no neighbours, so it has no effect.
+                                        Defense and unable to critically hit. A Bomb&apos;s
+                                        detonation and this splash resolve before any other reaction
+                                        to the hit that set it off, on either side: the splash lands
+                                        before the struck ship&apos;s own &ldquo;when directly
+                                        damaged&rdquo; reaction or an ally&apos;s on-crit follow-up.
+                                        This resolves on the positioned board; in the single-target
+                                        DPS calculator there are no neighbours, so it has no effect.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Per-enemy conditions:</span>{' '}

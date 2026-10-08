@@ -15,6 +15,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: passive debuffs on an attacker now last through its next turn.',
     "Combat simulator: Firewall's Block Debuff now stops the rest of that skill's debuffs.",
     "Combat simulator: reactions to Enforcer's hits now resolve before his next hit.",
+    'Combat simulator: Bomb detonations and splash now resolve before reactions, on both sides.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

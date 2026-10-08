@@ -241,6 +241,10 @@ export interface Intent {
      *  resolves the intents of the earliest event first, owner by owner in turn order (ruling 39).
      *  Absent reads as 0. */
     eventSeq?: number;
+    /** This intent answers a Bomb's detonation (`bomb-detonated`). A Bomb's detonation and its
+     *  splash resolve before any other reaction (owner ruling R126), so the engine's drain takes
+     *  these intents ahead of every other queued one. Absent reads as false. */
+    answersBombDetonation?: true;
     eventCtx?: {
         counterTargetId?: string;
         damagedAllyId?: string;
@@ -847,16 +851,20 @@ export function registerReactiveListeners(args: {
         footprintAllyIdsFor,
         maxHpOf,
     } = args;
-    // Every listener below records which event it is answering (`Intent.eventSeq`).
+    // Every listener below records which event it is answering (`Intent.eventSeq`,
+    // `Intent.answersBombDetonation`).
     const bus: Pick<CombatEventBus, 'on'> = {
         on: (type, listener) =>
             rawBus.on(type, (e) => {
-                const outer = listeningEventSeq;
+                const outerSeq = listeningEventSeq;
+                const outerType = listeningEventType;
                 listeningEventSeq = seqOfEvent(e);
+                listeningEventType = e.type;
                 try {
                     listener(e);
                 } finally {
-                    listeningEventSeq = outer;
+                    listeningEventSeq = outerSeq;
+                    listeningEventType = outerType;
                 }
             }),
     };
@@ -876,6 +884,7 @@ export function registerReactiveListeners(args: {
             chainDepth: resolvingIntent ? (resolvingIntent.chainDepth ?? 0) + 1 : 0,
             reactionAncestry,
             eventSeq: listeningEventSeq ?? 0,
+            ...(listeningEventType === 'bomb-detonated' ? { answersBombDetonation: true } : {}),
             ...(currentHitRoot !== undefined ? { hitRoot: currentHitRoot } : {}),
         });
     };
@@ -5068,6 +5077,7 @@ export const CHARGE_TARGET_KIND: Record<AbilityTarget, ChargeTargetKind> = {
 const eventSeqByEvent = new WeakMap<object, number>();
 let nextEventSeq = 1;
 let listeningEventSeq: number | undefined;
+let listeningEventType: CombatEvent['type'] | undefined;
 const seqOfEvent = (e: object): number => {
     let seq = eventSeqByEvent.get(e);
     if (seq === undefined) {
