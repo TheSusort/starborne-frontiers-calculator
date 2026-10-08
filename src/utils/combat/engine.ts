@@ -7675,6 +7675,15 @@ export function runCombat(rawInput: CombatEngineInput): {
          * `fromCounter` marks a counter's hit (`counterAnswersCounters` in triggers.ts).
          * `isPrimaryTarget` is the answer `aimReactiveHit` gave before the funnel.
          */
+        /** A Protection-split reactive hit also reports what its victim took, so the log rows the
+         *  victim at that rather than the hit as thrown. */
+        const splitFigures = (
+            outcome: AppliedVictimDamage | undefined
+        ): { protectionSplit: true; taken: number } | undefined =>
+            outcome?.protectionSplit
+                ? { protectionSplit: true, taken: outcome.incomingBooked }
+                : undefined;
+
         const landReactiveHit = (
             owner: CombatActor,
             victim: CombatActor,
@@ -7836,7 +7845,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             // cast path likewise logs its computed `directDamage` when a victim converts the hit
             // (playerTurn's deferredAbilityPerformed). Suppressing it would erase the counter from
             // the play-by-play entirely — a conversion emits no event of its own.
-            return { dealt: raw, didCrit };
+            return { dealt: raw, didCrit, ...splitFigures(counterOutcome) };
         };
 
         // The reactive `damage` executor branch (triggers.ts cfg.type==='damage') — Grif's
@@ -8088,7 +8097,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 if (!splashCopy) gatherDirectHitIntoAccumulators(victim, procBooked);
             }
             // `dealt` stays the full proc — log/dealt-slot only, as in applyCounterAttack.
-            return { dealt: raw, didCrit };
+            return { dealt: raw, didCrit, ...splitFigures(procOutcome) };
         };
 
         // §4.5 STASIS direct-damage break. Fires via the `onHitBreakStasis` hook

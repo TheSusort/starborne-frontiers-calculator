@@ -10,6 +10,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: stolen Protection now counts toward buff-count effects.',
     'Combat simulator: Overclock purged at end of round now leaves its hangover immediately.',
     'Combat log: a Protection-redirected hit now shows only the damage the target took.',
+    'Combat log: Protection-redirected counters and procs now show only damage taken.',
     'Combat simulator: Nuqtu now gains one Core Charge per enemy buffing skill.',
 ];
 

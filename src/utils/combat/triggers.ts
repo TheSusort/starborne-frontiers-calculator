@@ -2816,7 +2816,7 @@ export interface IntentExecContext {
         // Returns the mitigated/credited amount + crit flag so the caller can surface the proc in
         // the combat log (reactive-damage-performed); void/0 when the proc was guarded (dead
         // victim, non-positive) or the delegate is absent (unit fixtures).
-    ) => { dealt: number; didCrit: boolean } | void;
+    ) => ReactiveHitOutcome | void;
     /** Emit the log-only consequence twins that `applyReactiveDamage`/`applyCounterAttack`
      *  buffered while applying their hit — a Lifeline `shield-applied-log`, a
      *  `shield-destroyed-log`, a `cheat-death-log`. Called right AFTER the proc's own
@@ -2836,7 +2836,7 @@ export interface IntentExecContext {
         abilityId: string,
         multiplier: number,
         hits: number
-    ) => { dealt: number; didCrit: boolean } | void;
+    ) => ReactiveHitOutcome | void;
     /** Once-per-attack counter guard. Keyed `ownerId:abilityId:subAttackIndex` — see the counter
      *  branch's SCOPE NOTE. Cleared at each actor turn-start (engine) so the per-hit `attacked`
      *  events of ONE sub-attack collapse to a
@@ -4776,6 +4776,15 @@ function makeReactiveStampingBus(bus: CombatEventBus, duringTurnOf?: string): Co
     };
 }
 
+/** What a reactive damage hit reports back: the hit as thrown, and — when a Protection cascade
+ *  split it — what its victim took. */
+export interface ReactiveHitOutcome {
+    dealt: number;
+    didCrit: boolean;
+    protectionSplit?: true;
+    taken?: number;
+}
+
 /** Emit the `reactive-damage-performed` event for a proc that actually dealt damage.
  *  `ctx.bus` is the reactive stamping wrapper (when present) → the event is branded `duringTurnOf`
  *  so the combat log nests it under the triggering turn. Its one combat listener is
@@ -4785,7 +4794,7 @@ function emitReactiveDamageLog(
     ctx: IntentExecContext,
     ownerId: string,
     victimId: string,
-    outcome: { dealt: number; didCrit: boolean } | void
+    outcome: ReactiveHitOutcome | void
 ): void {
     if (ctx.bus && outcome && outcome.dealt > 0) {
         ctx.bus.emit({
@@ -4793,7 +4802,7 @@ function emitReactiveDamageLog(
             sourceId: ownerId,
             targetId: victimId,
             round: ctx.round,
-            amount: outcome.dealt,
+            amount: outcome.protectionSplit ? (outcome.taken ?? outcome.dealt) : outcome.dealt,
             didCrit: outcome.didCrit,
         });
     }
