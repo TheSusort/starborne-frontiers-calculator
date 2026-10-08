@@ -6362,8 +6362,7 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
             // repair that over-repaired ONLY the caster is not zero and DOES redirect. This embodies two principles. (1) The ability's contract:
             // per overRepairRedirect.test.ts, a redirect with nothing to redirect applies
             // to nobody. (2) The engine's idiom that zero-magnitude events are not events, adopted
-            // at these sites: `consumed > 0` gates repairedThisRound.add (engine.ts), `burn > 0`
-            // gates the reversal log (engine.ts), and `healSum > 0` gates the
+            // at these sites: `burn > 0` gates the reversal log (engine.ts), and `healSum > 0` gates the
             // `reactive-heal-performed` emit below (the `cfg.type === 'heal' && ... && healSum > 0`
             // guard). That emit is already independently gated this way and therefore cannot fire
             // whether or not this zero-sum guard exists. (Incidentally,
@@ -6389,17 +6388,13 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
             didCrit?: boolean;
         }[] = [];
         let healSum = 0;
-        // The repair's crit, drawn ONCE for every recipient (`rollReactiveHealCrit`). A repair
-        // sized off damage dealt/taken or off an over-repair is not a fresh repair roll: its basis
-        // is a figure an earlier hit/repair already settled (a crit hit's on-screen number; an
-        // over-repair that "doesn't scale a second time"), so those bases never draw.
+        // The repair's crit, drawn ONCE for every recipient (`rollReactiveHealCrit`). Every repair
+        // can crit (R155) whatever it is sized off, a hit it delivered or took included; only the
+        // ability's own `noCrit` stops it. A repair sized off an over-repair is the exception: it
+        // "doesn't scale a second time", so that basis never draws. A Repair Over Time tick has its
+        // own path and never crits.
         const healCanCrit =
-            cfg.type === 'heal' &&
-            !cfg.noCrit &&
-            cfg.basis !== 'damage-dealt' &&
-            cfg.basis !== 'damage-taken' &&
-            cfg.basis !== 'overheal' &&
-            recipients.length > 0;
+            cfg.type === 'heal' && !cfg.noCrit && cfg.basis !== 'overheal' && recipients.length > 0;
         const healCrit = healCanCrit
             ? rollReactiveHealCrit(intent.ownerId, ctx)
             : { didCrit: false, multiplier: 1 };
