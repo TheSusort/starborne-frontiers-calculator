@@ -175,7 +175,7 @@ describe.skipIf(!csvAvailable())(
 describe.skipIf(!csvAvailable())(
     'Task 8 — Pestilence reactive Corrosion DoT on enemy-cleanse (verbatim docs/ship-skills.csv)',
     () => {
-        it('Pestilence p2 — "When an enemy cleanses a Debuff this unit inflicts Corrosion II for 2 turns on all cleansed enemies" builds a reactive dot on on-enemy-cleansed', () => {
+        it('Pestilence p2 — "When an enemy cleanses a debuff, this Unit inflicts Corrosion II for 2 turns" builds a reactive dot on on-enemy-cleansed', () => {
             const rec = recordFor('Pestilence');
             const s = ship({ secondPassiveSkillText: rec.passives[1] });
             const { slots } = buildShipAbilities(s);
@@ -186,10 +186,10 @@ describe.skipIf(!csvAvailable())(
             // produced a reactive passive-slot DoT before this task (buildDoTAutoFill scans only
             // active/charge sources; dotAbility() hardcodes on-cast).
             expect(dot!.trigger).toBe('on-enemy-cleansed');
-            // Multi-recipient marker: the DoT lands on ALL cleansed enemies. `all-enemies` is the
-            // fan-out signal; the reactive dot executor keys the actual recipients off the cleanse
-            // event's cleansedEnemyIds (not the DPS dummy sink).
-            expect(dot!.target).toBe('all-enemies');
+            // The Corrosion lands on the enemy that cleansed (R134): a single-enemy target the
+            // reactive dot executor resolves to the event's counterparty, not the all-enemies
+            // fan-out (which only an explicit "on all cleansed enemies" clause selects).
+            expect(dot!.target).toBe('enemy');
             expect(dot!.config.type).toBe('dot');
             if (dot!.config.type === 'dot') {
                 // Corrosion II → DOT_TIER_MAP potency tier 6 (the roman "II" is the game label;

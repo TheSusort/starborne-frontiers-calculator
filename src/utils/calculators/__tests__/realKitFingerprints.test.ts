@@ -331,10 +331,11 @@ describe('suite health', () => {
      *  Re-measured by parse, the corpus carries 4 steal / 14 purge / 19 cleanse ships, 36 distinct
      *  (Tithonus carries both a purge and a steal) — each now runs a `statusRich` arm.
      *
-     *  The three `CombatLogEntryKind`s STILL not here, and why none is a tuning failure:
-     *   - `detonation`: `buildCombatLog` books that entry to the bomb's VICTIM, not to the actor
-     *     that detonated it, so it can never appear in a focus-actor fingerprint unless the focus
-     *     is itself bombed — which needs an enemy that plants bombs, i.e. non-inert filler.
+     *  `detonation` IS here: an Echoing Burst going off is booked to the ship that applied it
+     *  (Valkyrie), so it reaches a focus-actor fingerprint. A damage-over-time detonation is
+     *  booked to the victim and still cannot.
+     *
+     *  The two `CombatLogEntryKind`s STILL not here, and why neither is a tuning failure:
      *   - `death`: booked to the actor that died. The focus surviving all 20 rounds is a hard
      *     requirement (its death truncates its own fingerprint), so this one is unreachable by
      *     construction.
@@ -351,6 +352,7 @@ describe('suite health', () => {
         'control',
         'debuff',
         'debuff-resisted',
+        'detonation',
         'dot-applied',
         'dot-ticked',
         'heal',

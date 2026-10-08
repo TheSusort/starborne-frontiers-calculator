@@ -10,9 +10,9 @@
  * by way of another of the owner's reactions), and every other ability on the trigger still sees
  * the reactive infliction.
  *
- * Insidiousness declares `procScope:'per-cast'`: one roll for the cast's own inflictions, one
- * more for each reaction firing that inflicts during the cast, and at most one successful roll per
- * cast (the roll rule itself is pinned in `insidiousnessPerCastRoll.integration.test.ts`). So a
+ * Insidiousness declares `procScope:'per-debuff'`: one roll per debuff landed and at most one
+ * successful roll per cast, whose hit reaches every enemy the cast debuffed (the roll rule itself
+ * is pinned in `insidiousnessPerDebuffRoll.integration.test.ts`). So a
  * reactive infliction is visible here only when the cast's roll fails: the boards below either
  * script the proc stream (`scriptProcs`: the cast's roll fails, the reaction's passes) and make the
  * reaction land on a DIFFERENT enemy (an `enemy-highest-attack` follow-up), or narrow
@@ -212,7 +212,7 @@ describe('Insidiousness — the implant ability', () => {
             type: 'damage',
             trigger: 'on-debuff-inflicted',
             procChance: 0.21,
-            procScope: 'per-cast',
+            procScope: 'per-debuff',
             config: { type: 'damage', multiplier: 100, hits: 1 },
         });
     });
@@ -226,7 +226,9 @@ describe('Insidiousness — rolls on a reactively inflicted debuff (player side)
         );
         expect(landings(events, 'attacker', 'front', 'Seed Down')).toEqual([1, 2, 3]);
         expect(landings(events, 'attacker', 'strong', CHAIN)).toEqual([1, 2, 3]);
-        expect(procHits(events, 'attacker', 'front')).toEqual([]);
+        // The reaction's roll passes: the success hits every enemy the cast debuffed, `front`
+        // (whose own roll failed) included.
+        expect(procHits(events, 'attacker', 'front')).toEqual([1, 2, 3]);
         expect(procHits(events, 'attacker', 'strong')).toEqual([1, 2, 3]);
         expect(draws()).toBe(6);
     });
@@ -298,7 +300,7 @@ describe('Insidiousness — rolls on a reactively inflicted debuff (player side)
             })
         );
         expect(procHits(events2, 'attacker', 'strong')).toEqual([1, 2, 3]);
-        expect(procHits(events2, 'attacker', 'front')).toEqual([]);
+        expect(procHits(events2, 'attacker', 'front')).toEqual([1, 2, 3]);
         expect(draws2()).toBe(6);
     });
 });
@@ -550,7 +552,7 @@ describe('Insidiousness — team symmetry (enemy-side carrier)', () => {
         const events = run(enemyBoard([reaction('reaction-a', CHAIN), realInsidiousness()]));
         expect(landings(events, 'carrier', 'attacker', 'Seed Down')).toEqual([1, 2, 3]);
         expect(landings(events, 'carrier', 'strong-ally', CHAIN)).toEqual([1, 2, 3]);
-        expect(procHits(events, 'carrier', 'attacker')).toEqual([]);
+        expect(procHits(events, 'carrier', 'attacker')).toEqual([1, 2, 3]);
         expect(procHits(events, 'carrier', 'strong-ally')).toEqual([1, 2, 3]);
         expect(draws()).toBe(6);
     });
