@@ -2886,6 +2886,18 @@ const DocumentationPage: React.FC = () => {
                                         hits. Works for both teams and in the DPS calculator.
                                     </p>
                                     <p className="text-theme-text mb-2">
+                                        <span className="text-primary">
+                                            Clause Order in Battles:
+                                        </span>{' '}
+                                        Steals, cleanses and purges follow the same order: a buff
+                                        Thresh steals before his damage boosts that hit, Sustainer
+                                        cleanses his debuffs before he hits, and Sefuba&apos;s
+                                        &quot;deals 160% damage and purges 1 buff&quot; hits through
+                                        the buff before removing it. A Stasis Tygr inflicts before
+                                        his damage counts for his own &quot;more damage to enemies
+                                        with Stasis&quot; on that hit. Works for both teams.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
                                         <span className="text-primary">Crit-Gated Effects:</span> In
                                         a battle, a healing simulation and the DPS calculator, an
                                         effect that says &quot;if a critical hit occurs&quot; or
