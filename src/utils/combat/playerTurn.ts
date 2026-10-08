@@ -2526,7 +2526,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
      *  the same resolver as every direct enemy clause: "steals 1 buff from the primary target" on
      *  a pattern skill steals `count` from EACH struck enemy (owner ruling 2026-10-03 — Tithonus
      *  on Circle hitting A, B and C takes one from each), and every stolen buff goes to every
-     *  recipient. Each source is stolen from and logged on its own. */
+     *  recipient. Each source is stolen from and logged on its own. A source that is no longer
+     *  alive is not stolen from, as for `purgeStruck`. */
     const stealFromStruck = (
         abTarget: Ability['target'],
         count: number,
@@ -2544,6 +2545,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         }).map((id) => id ?? targetId);
         const stolen: { sourceId: string; names: string[] }[] = [];
         for (const sourceId of sources) {
+            const source =
+                opposingVictimById?.get(sourceId) ??
+                (hasVictim && sourceId === enemy.id ? enemy : undefined);
+            if (source !== undefined && !isAliveTarget(source)) continue;
             if (extensionImmune(sourceId)) continue;
             // How many stacks of each STACK-STEALABLE status the source holds right now.
             // Computed HERE and passed in, rather than inside statusEngine.steal: the count

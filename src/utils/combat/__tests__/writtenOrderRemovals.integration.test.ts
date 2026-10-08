@@ -69,6 +69,7 @@ interface Spec {
     speed: number;
     attack?: number;
     defence?: number;
+    hp?: number;
     ship?: Partial<Ship>;
 }
 
@@ -86,7 +87,7 @@ const placement = (s: Spec): BattlePlacement => {
             hacking: 1e6,
             security: 0,
             defence: s.defence ?? 0,
-            hp: 1e12,
+            hp: s.hp ?? 1e12,
             speed: s.speed,
         },
     };
@@ -409,6 +410,43 @@ describe('a purge resolves where it is written relative to the damage', () => {
             );
         }
     );
+});
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+describe('a steal written after the damage takes nothing from the enemy that hit destroyed', () => {
+    // "deals 160% damage and steals 1 buff": the body re-gains Defense Up III before the subject
+    // acts. With 1e12 hull it survives and the steal lands; with 1,000 hull the hit destroys it.
+    const thief: Spec = {
+        id: 'S',
+        name: 'Bedrock',
+        position: 'M4',
+        speed: 100,
+        attack: 5000,
+        ship: {
+            activeSkillText:
+                'This Unit deals <unit-damage>160% damage</unit-damage> and <unit-skill>steals 1 buff</unit-skill>.',
+            chargeSkillText: '',
+            firstPassiveSkillText: '',
+            secondPassiveSkillText: '',
+            thirdPassiveSkillText: '',
+            refits: [],
+        },
+    };
+    const body = (hp: number): Spec => ({
+        ...hull('Body', 'M4', 300, selfBuff('Defense Up III')),
+        hp,
+    });
+    const stole = (r: Run) =>
+        r.events.some(
+            (e) => e.type === 'steal-performed' && e.casterId === r.idOf('S') && e.round === 1
+        );
+
+    it.each(SIDES)('%s side', (side) => {
+        expect(stole(run([thief], [body(1e12)], side, 1))).toBe(true);
+        const killed = run([thief], [body(1000)], side, 1);
+        expect(killed.events.some((e) => e.type === 'ship-destroyed' && e.round === 1)).toBe(true);
+        expect(stole(killed)).toBe(false);
+    });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────────────────────
