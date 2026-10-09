@@ -561,6 +561,22 @@ describe.each(PLACEMENTS)(
             expect(r.stacks).toBe(1);
         });
 
+        it('SYNTHETIC: two AoE hits striking three debuffers each fire the passive TWICE', () => {
+            const r = runMulti({
+                hits: 2,
+                nuqtuAt: 'M4',
+                nuqtuRole: 'DEBUFFER',
+                bystanders: [
+                    { id: 'top', position: 'T4', role: 'DEBUFFER', hp: 1e9 },
+                    { id: 'bottom', position: 'B4', role: 'DEBUFFER', hp: 1e9 },
+                ],
+                pattern: 'Pattern-Circle-Range-1',
+            });
+            expect(r.struck).toHaveLength(6);
+            expect(xaocGains(r)).toBe(2);
+            expect(r.stacks).toBe(2);
+        });
+
         it('CONTROL: one AoE hit striking three debuffers fires the passive ONCE (R17)', () => {
             const r = runMulti({
                 hits: 1,

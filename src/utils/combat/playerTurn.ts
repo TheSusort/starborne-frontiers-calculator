@@ -2613,6 +2613,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
      *  apart from the same source's firing on another hit (R178). The source is the ship's passive
      *  skill, or one gear-set bonus or implant (`equipmentEffectId`), as `reactionKey` in
      *  triggers.ts keys a reaction; every buff one source grants on one hit shares the key. */
+    // Captured here: the sub-attack hooks call this after `runPlayerTurn` has returned.
     const castTurnsTaken = actor.turnsTaken;
     const passiveRideGrantKey = (status: TimedStatus, hitIndex: number): string =>
         `cast:${actor.id}:${castTurnsTaken}:` +
