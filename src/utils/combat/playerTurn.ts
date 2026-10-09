@@ -5659,6 +5659,15 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 false
             );
         }
+        // The cast's accumulators are blocked by the same immunity (R112: a debuff), resisted
+        // as the else branch's `applyAccumulators` `emitBlocked` reports them.
+        for (const acc of accumulatorsFromSkill(gatedSkill)) {
+            resistedEnemyDebuffs.push({ buffName: 'Echoing Burst', turnsRemaining: acc.turns });
+            deferredEnemyApplications.push({
+                applyState: () => {},
+                emitEvents: () => emitDebuffResisted('Echoing Burst', enemy.id, false),
+            });
+        }
     } else {
         // DoTs gate at application, one landing roll per stack (`planPrimaryDots`): the cast's
         // first stack takes the shared per-round roll (memoized — shared with the recurring

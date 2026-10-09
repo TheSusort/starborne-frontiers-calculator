@@ -10,6 +10,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: Echoing Burst now lands on every enemy an AoE skill hits.',
     'Combat simulator: custom passive on-cast hits now count as direct hits.',
     "Combat simulator: Font of Power rolls once for Chimei's repair and its redirect.",
+    'Combat simulator: the log shows Echoing Burst blocked by a debuff-immune target.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
