@@ -474,6 +474,17 @@ export interface PlayerTurnResult {
         sub: { index: number; anchorId: string; victimIds: string[] },
         phase: 'before-damage' | 'after-damage'
     ) => DeferredEnemyApplication[];
+    /**
+     * Fires this cast's passive gains that ride each hit (`TimedStatus.perHit`) for ONE
+     * sub-attack ≥ 1, gated on the enemies that sub-attack struck (R178). The engine calls it at
+     * the sub-attack's end; the first sub-attack's firing already happened inside this function.
+     * Present only on a positional cast carrying such a gain, like `applyDebuffsForSubAttack`.
+     */
+    applyPerHitSelfStatusesForSubAttack?: (sub: {
+        index: number;
+        anchorId: string;
+        victimIds: string[];
+    }) => void;
     /** Present ONLY when this cast deferred its heal/shield/cleanse pass because it carries a
      *  firing-slot `damage-dealt` rider, whose basis is the damage the cast DELIVERED and so is
      *  unknowable until the engine's per-victim funnel has run.
@@ -2340,8 +2351,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
 
     const firingSkill = selectFiringSkill(shipSkills, action);
     const passiveSkill = shipSkills.slots.find((s) => s.slot === 'passive');
-    /** A timed status this cast applies: the firing slot's own, and a passive one that rides each
-     *  hit of a damaging cast (`TimedStatus.perHit`). */
+    /** A timed status this cast applies: the firing slot's own, and a passive one that rides the
+     *  hits of a damaging cast (`TimedStatus.perHit` — once per sub-attack on a positional cast,
+     *  once per cast otherwise, R17/R178). */
     const ridesThisCast = (status: TimedStatus): boolean =>
         status.sourceSlot === action || (status.perHit === true && hasDamageAbility);
     // noCrit is read from the UNGATED skill: the flag is a property of the attack
@@ -2505,8 +2517,13 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // Applies one passed timed self status to its recipients. The status lives on each recipient
     // (decrements at the recipient's Post Turn; family + persistent rules run per recipient side
     // because applyTimedAbilityStatus threads recipientId). buff-applied emits ONCE PER RECIPIENT
-    // with the recipient's actorId, with the granter riding alongside in `granterId`.
-    const applyTimedSelfStatus = (status: (typeof timedSelfBySlot)[number]): void => {
+    // with the recipient's actorId, with the granter riding alongside in `granterId`. `grantKey`
+    // names the firing the grant belongs to (`buff-applied.grantKey`); absent for the cast's own
+    // grants, where the cast is the action.
+    const applyTimedSelfStatus = (
+        status: (typeof timedSelfBySlot)[number],
+        grantKey?: string
+    ): void => {
         // recipients is set by the engine helper for every timed-by-slot status; default to
         // [actor.id] (self routing) for any caller that omitted it (statusEngine fixtures).
         // #363: the status's own recipient FACTION scope, copied off the source ability at
@@ -2588,9 +2605,23 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 round: r,
                 buffName: status.payload.buffName,
                 duration: status.duration,
+                ...(grantKey !== undefined ? { grantKey } : {}),
             });
         }
     };
+    // Captured here: the sub-attack hooks call this after `runPlayerTurn` has returned.
+    const castTurnsTaken = actor.turnsTaken;
+    /** The firing of one source that rides this cast's sub-attack `hitIndex`
+     *  (`TimedStatus.perHit`): its own skill action, apart from the cast (owner ruling R175), and
+     *  apart from the same source's firing on another hit (R178). The source is the ship's passive
+     *  skill, or one gear-set bonus or implant (`equipmentEffectId`), as `reactionKey` in
+     *  triggers.ts keys a reaction; every buff one source grants on one hit shares the key. */
+    const passiveRideGrantKey = (status: TimedStatus, hitIndex: number): string =>
+        `cast:${actor.id}:${castTurnsTaken}:` +
+        (status.equipmentEffectId !== undefined
+            ? `equipment:${status.equipmentEffectId}`
+            : `ship:${status.sourceSlot}`) +
+        `:hit${hitIndex}`;
     // ── Status removals: buff steals and purges ─────────────────────────────────────────────
     // Each helper performs the removal's STATE change and returns its events as a thunk, so a
     // clause written after the damage can hold the events back with the write (see
@@ -4388,7 +4419,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         if (!ridesThisCast(status) || selfStatusesBeforeRolls.has(status)) continue;
         if (status.perHit === true) {
             // A passive gain riding the cast's hits reads the struck enemies as they stood BEFORE
-            // the cast (owner ruling R15), and lands after the damage (`afterDamageClause`).
+            // the cast (owner ruling R15), and lands after the damage (`afterDamageClause`). This
+            // is the first sub-attack's firing; later ones fire through
+            // `applyPerHitSelfStatusesForSubAttack` (R178).
             if (hasVictim && anyStruckVictimMeets(status.conditions, preDebuffGateCtx))
                 endOfTurnSelfStatuses.push({ status, critDecided: false });
             continue;
@@ -7327,6 +7360,46 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
               }
             : undefined;
 
+    /** Lists the caster's live row for a self status just applied in this round's reported
+     *  self-buffs, refreshing a row already there. `activeSelfBuffsForRound` is the array the
+     *  result hands out, so a write after `runPlayerTurn` returns still reaches the round row. */
+    const listLiveSelfBuff = (status: TimedStatus): void => {
+        const live = statusEngine
+            .timedAbilityStatuses('self', actor.id)
+            .find((s) => s.payload.buffName === status.payload.buffName);
+        if (!live) return;
+        const at = activeSelfBuffsForRound.findIndex((b) => b.buffName === live.active.buffName);
+        if (at >= 0) activeSelfBuffsForRound[at] = live.active;
+        else activeSelfBuffsForRound.push(live.active);
+    };
+
+    /** The passive gains riding this cast's hits (`TimedStatus.perHit`), fired for ONE sub-attack
+     *  ≥ 1 — the first sub-attack fires through `endOfTurnSelfStatuses`. A multi-hit skill is N
+     *  full attacks, so each hit is its own firing (R178): a status fires once when any enemy
+     *  THAT sub-attack strikes passes its gate (R17), each struck enemy read as it stood before the
+     *  cast (R15) — `recipientGateCtxById` was built before any landing. */
+    const perHitSelfStatuses = timedSelfBySlot.filter((s) => s.perHit === true && ridesThisCast(s));
+    const applyPerHitSelfStatusesForSubAttack = (sub: {
+        index: number;
+        anchorId: string;
+        victimIds: string[];
+    }): void => {
+        const struckCtxs: ConditionContext[] = [];
+        for (const id of new Set([sub.anchorId, ...sub.victimIds])) {
+            if (hasVictim && id === enemy.id) {
+                struckCtxs.push(struckAnchorCtx(preDebuffGateCtx));
+                continue;
+            }
+            const v = opposingVictimById?.get(id);
+            if (v !== undefined) struckCtxs.push(otherStruckCtx(v, preDebuffGateCtx));
+        }
+        for (const status of perHitSelfStatuses) {
+            if (!struckCtxs.some((c) => conditionsMet(status.conditions, c))) continue;
+            applyTimedSelfStatus(status, passiveRideGrantKey(status, sub.index));
+            listLiveSelfBuff(status);
+        }
+    };
+
     // After-damage self/ally buffs, and crit-gated ones whose crit is now known, land now: the
     // scalars above (and the aggregate damage) were computed without them, so they boost only
     // later hits. DISPLAY ONLY afterwards: the round's reported self-buff list
@@ -7339,14 +7412,11 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             !conditionsMet(status.conditions, { ...postDebuffGateCtx, roundCrit: anyVictimCrit })
         )
             continue;
-        applyTimedSelfStatus(status);
-        const live = statusEngine
-            .timedAbilityStatuses('self', actor.id)
-            .find((s) => s.payload.buffName === status.payload.buffName);
-        if (!live) continue;
-        const at = activeSelfBuffsForRound.findIndex((b) => b.buffName === live.active.buffName);
-        if (at >= 0) activeSelfBuffsForRound[at] = live.active;
-        else activeSelfBuffsForRound.push(live.active);
+        applyTimedSelfStatus(
+            status,
+            status.perHit === true ? passiveRideGrantKey(status, 0) : undefined
+        );
+        listLiveSelfBuff(status);
     }
 
     return {
@@ -7376,6 +7446,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         applyDebuffsForSubAttack:
             positionalLanding && perSubAttackDebuffRecipes.length > 0
                 ? applyDebuffsForSubAttack
+                : undefined,
+        applyPerHitSelfStatusesForSubAttack:
+            positionalLanding && hasVictim && perHitSelfStatuses.length > 0
+                ? applyPerHitSelfStatusesForSubAttack
                 : undefined,
         // Set ONLY when this cast's support pass deferred (a firing-slot `damage-dealt` rider on an
         // engine-resolved cast). The engine MUST invoke it after the funnel — the repair/shield has

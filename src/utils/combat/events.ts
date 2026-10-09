@@ -138,8 +138,9 @@ export type CombatEvent =
           round: number;
           buffName: string;
           duration: number | 'recurring';
-          /** Names the one skill action (a passive's round or turn tick, a reaction clause's
-           *  firing, a combat-start grant) this gain belongs to, shared by every recipient the
+          /** Names the one skill action (a passive's round or turn tick, a passive firing on
+           *  its owner's cast, a reaction clause's firing, a combat-start grant) this gain
+           *  belongs to, shared by every recipient the
            *  action fed, so a listener that counts gains per action reads the action once. Absent
            *  on a gain made by the granter's own active or charged cast, where the cast is the
            *  action. */
