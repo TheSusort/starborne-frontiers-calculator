@@ -16,6 +16,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: Nuqtu gains a Core Charge for each enemy passive buff too.',
     "Combat simulator: Nosorog wearing the Reflect set bounces the set's share as non-direct.",
     "Combat simulator: Nosorog's reflect now scales with the attacker's damage-taken buffs and debuffs.",
+    'Combat simulator: a multi-hit skill triggers per-hit passive buffs on every hit.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

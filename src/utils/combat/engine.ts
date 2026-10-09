@@ -10546,6 +10546,9 @@ export function runCombat(rawInput: CombatEngineInput): {
              * precede its damage, which is almost the whole corpus.
              */
             applyDebuffsForSubAttack: PlayerTurnResult['applyDebuffsForSubAttack'];
+            /** This cast's per-hit passive gains for one sub-attack ≥ 1 (R178); undefined for a
+             *  cast carrying none. */
+            applyPerHitSelfStatusesForSubAttack: PlayerTurnResult['applyPerHitSelfStatusesForSubAttack'];
             deferredEnemyApplications: PlayerTurnResult['deferredEnemyApplications'];
             /** Whether a Stasis this cast wrote stands on a victim — its covered Stasis marks skip
              *  such a victim (see `resolveStasisBreaks`). */
@@ -10953,6 +10956,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                         sub.index,
                         sel.applyDebuffsForSubAttack?.(sub, 'after-damage') ?? []
                     );
+                    sel.applyPerHitSelfStatusesForSubAttack?.(sub);
                 },
                 onSubAttackSettled: settleSubAttack,
                 attackerStanding: () => actor.destroyedRound === undefined,
@@ -12809,6 +12813,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                                         deferredAbilityPerformed: turn.deferredAbilityPerformed,
                                         positionalDetonation: turn.positionalDetonation,
                                         applyDebuffsForSubAttack: turn.applyDebuffsForSubAttack,
+                                        applyPerHitSelfStatusesForSubAttack:
+                                            turn.applyPerHitSelfStatusesForSubAttack,
                                         deferredEnemyApplications: turn.deferredEnemyApplications,
                                         castStasisStandsOn: turn.castStasisStandsOn,
                                         scheduledEnemyEffects: turn.scheduledEnemyEffects,
@@ -13110,6 +13116,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                                         deferredAbilityPerformed: teamTurn.deferredAbilityPerformed,
                                         positionalDetonation: teamTurn.positionalDetonation,
                                         applyDebuffsForSubAttack: teamTurn.applyDebuffsForSubAttack,
+                                        applyPerHitSelfStatusesForSubAttack:
+                                            teamTurn.applyPerHitSelfStatusesForSubAttack,
                                         deferredEnemyApplications:
                                             teamTurn.deferredEnemyApplications,
                                         castStasisStandsOn: teamTurn.castStasisStandsOn,
@@ -13532,6 +13540,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                             const enemyDeferredApplications = enemyTurn.deferredEnemyApplications;
                             const enemyApplyDebuffsForSubAttack =
                                 enemyTurn.applyDebuffsForSubAttack;
+                            const enemyApplyPerHitSelfStatusesForSubAttack =
+                                enemyTurn.applyPerHitSelfStatusesForSubAttack;
                             // Capture the per-victim detonation recipe (returned whenever
                             // `positional: true` was set for this enemy turn — see the positional
                             // hint gate). Consumed by the enemy-site per-victim detonation loop below.
@@ -13756,6 +13766,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                                             deferredAbilityPerformed: enemyDeferredAbilityPerformed,
                                             positionalDetonation: enemyPositionalDetonation,
                                             applyDebuffsForSubAttack: enemyApplyDebuffsForSubAttack,
+                                            applyPerHitSelfStatusesForSubAttack:
+                                                enemyApplyPerHitSelfStatusesForSubAttack,
                                             // The SAME array the fallback flush below drains (see
                                             // the capture note), never a fresh one.
                                             deferredEnemyApplications: enemyDeferredApplications,
