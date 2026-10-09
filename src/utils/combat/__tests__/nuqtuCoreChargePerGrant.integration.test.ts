@@ -65,6 +65,12 @@ const buffAbility = (
     };
 };
 
+/** The kit's slots minus the charged: every cast is the real active. */
+const withoutCharged = (ship: string): ShipSkills => ({
+    ...realKit(ship),
+    slots: realKit(ship).slots.filter((s) => s.slot !== 'charged'),
+});
+
 const nuqtuUnit = (): BoardUnit => {
     const kit = realKit('Nuqtu');
     return {
@@ -89,6 +95,7 @@ interface Gainer {
     position: BoardUnit['position'];
     speed?: number;
     attack?: number;
+    hacking?: number;
     chargeCount?: number;
     startCharged?: boolean;
 }
@@ -99,6 +106,7 @@ const gainerUnit = (g: Gainer): BoardUnit => ({
     position: g.position,
     speed: g.speed ?? 300,
     attack: g.attack ?? 0,
+    hacking: g.hacking,
     hp: 1e9,
     chargeCount: g.chargeCount,
     startCharged: g.startCharged,
@@ -447,6 +455,35 @@ describe.each(PLACEMENTS)('Nuqtu on the %s side: a passive buff riding a cast (R
         const r = run(p, [anjian], 1, 'DEBUFFER');
         expect(gainedNames(r)).toEqual(['Stealth', 'Tianchao Precision II']);
         expect(r.stacks).toBe(1);
+    });
+});
+
+// R177: one passive skill is one activation, however many of its sentences fire. Sha Xing's
+// passive carries two ("gains Stealth when damaging a debuffer or supporter"; "gains Tianchen
+// Precision II when damaging a debuffed enemy"). Her active inflicts Inc. Repair Down on Nuqtu, so
+// from the second turn she strikes a debuffed debuffer and both sentences fire in one firing.
+describe.each(PLACEMENTS)('Nuqtu on the %s side: a two-sentence passive firing (R177)', (p) => {
+    const shaXing = (): Gainer => ({
+        id: 'shaxing',
+        kit: withoutCharged('Sha Xing'),
+        position: 'M4',
+        attack: 1000,
+        hacking: 1e6,
+    });
+    const gainedNames = (r: Result) => r.buffEvents.map((e) => e.buffName).sort();
+
+    it('CONTROL: striking an undebuffed debuffer fires only the Stealth sentence', () => {
+        const r = run(p, [shaXing()], 1, 'DEBUFFER');
+        expect(gainedNames(r)).toEqual(['Stealth']);
+        expect(r.stacks).toBe(1);
+    });
+
+    it('a debuffed debuffer fires both sentences in ONE firing: one Core Charge', () => {
+        const r = run(p, [shaXing()], 2, 'DEBUFFER');
+        // Both statuses landed on turn two (a vacuous run would show Stealth alone).
+        expect(gainedNames(r)).toEqual(['Stealth', 'Stealth', 'Tianchao Precision II']);
+        // One charge for turn one's firing, one for turn two's — not one per granted buff.
+        expect(r.stacks).toBe(2);
     });
 });
 
