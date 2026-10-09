@@ -226,6 +226,16 @@ const persistentDefenseShred: Ability = {
     },
 };
 
+/** Valkyrie-style "inflicts Echoing Burst": an accumulator, which is a debuff (R112). */
+const echoingBurst: Ability = {
+    id: 'eburst',
+    type: 'accumulate-detonate',
+    target: 'enemy',
+    trigger: 'on-cast',
+    conditions: [],
+    config: { type: 'accumulate-detonate', turns: 2, pct: 50 },
+};
+
 describe('Block Debuff — cast-side timed/persistent landing fold (engine)', () => {
     it('immune target auto-resists a TIMED debuff: it is in resistedDebuffs, NOT debuffs', () => {
         const entry = e1Effects(runWith(timedAttackDown, blockDebuffSelfSkills()));
@@ -253,6 +263,17 @@ describe('Block Debuff — cast-side timed/persistent landing fold (engine)', ()
         expect(entry).toBeDefined();
         expect(entry!.debuffs.map((d) => d.buffName)).toContain('Defense Shred');
         expect(entry!.resistedDebuffs).toHaveLength(0);
+    });
+
+    it('immune target blocks an Echoing Burst: it is in resistedDebuffs', () => {
+        const entry = e1Effects(runWith(echoingBurst, blockDebuffSelfSkills()));
+        expect(entry).toBeDefined();
+        expect(entry!.resistedDebuffs.map((d) => d.buffName)).toContain('Echoing Burst');
+    });
+
+    it('control: WITHOUT Block Debuff the same Echoing Burst is not resisted (non-vacuity)', () => {
+        const entry = e1Effects(runWith(echoingBurst, { slots: [] }));
+        expect(entry?.resistedDebuffs ?? []).toHaveLength(0);
     });
 });
 
