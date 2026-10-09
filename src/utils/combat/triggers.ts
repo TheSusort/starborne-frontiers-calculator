@@ -2419,6 +2419,7 @@ export function registerReactiveListeners(args: {
                     //     `reactionAncestry` is dropped, so Sansi A -> Sansi B -> Sansi A ends
                     //     before A repairs a second time in one chain.
                     //  2. Her `maxPerRound` (3) caps her firings across separate chains.
+                    // `sansiMirrorRepairChain.integration.test.ts` pins (1) on a mirror board.
                     // The other riders here (Ruiner's Bomb and Overload, Zosimos's charge, Nayra's
                     // debuff, Amartya's Defense Shred, Synaptic Resonance's Speed Up) do not
                     // repair, so they cannot extend a chain through this event.
