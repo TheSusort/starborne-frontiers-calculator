@@ -2673,19 +2673,16 @@ const DocumentationPage: React.FC = () => {
                                         zero under the single-target DPS assumptions.
                                     </p>
                                     <p className="text-theme-text mb-2">
-                                        <span className="text-primary">
-                                            Deterministic Simulation:
-                                        </span>{' '}
-                                        The simulator is fully deterministic — identical inputs
-                                        always produce identical results. Crits follow a per-round
-                                        fractional-accumulator schedule at the ship&apos;s effective
-                                        crit rate, with separate schedules for active and charged
-                                        hits to avoid cadence aliasing. Rounds where a crit lands
-                                        show a <span className="font-semibold">Crit</span> badge in
-                                        the chart tooltip. Attacks marked &quot;cannot critically
-                                        hit&quot; never crit and consume no crit chance. Debuff and
-                                        DoT landing, and chance-based DoT extensions, also follow
-                                        deterministic schedules — no randomness anywhere in the sim.
+                                        <span className="text-primary">Random Rolls:</span> Crits,
+                                        debuff and DoT landing (hacking against security), and
+                                        chance-based DoT extensions are each rolled at their stated
+                                        rate every time the calculator runs, so two runs of the same
+                                        setup can differ a little. A 70% crit rate crits about 70%
+                                        of the time over a long fight, with natural variance round
+                                        to round. Rounds where a crit lands show a{' '}
+                                        <span className="font-semibold">Crit</span> badge in the
+                                        chart tooltip. Attacks marked &quot;cannot critically
+                                        hit&quot; never crit and consume no crit chance.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Hard Condition Gates:</span>{' '}
@@ -2830,29 +2827,32 @@ const DocumentationPage: React.FC = () => {
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Turn Order:</span> Each
                                         simulated round, every ship acts once in descending Speed
-                                        order — higher Speed acts first, with team support ships
-                                        acting before the attacker on ties, and the enemy acting
-                                        last by default (enemy default speed 50). A faster support
-                                        applies its buffs before your attacker fires; a slower one
-                                        starts benefiting you the following round. Set each
-                                        ship&apos;s Speed in Combat Settings and on the
-                                        attacker&apos;s stats panel. Debuffs that land now persist
-                                        their full duration without re-rolling each round. Charged
-                                        skills without direct damage (pure utility) still fire on
-                                        their normal cadence and apply their effects. Speed Up buffs
-                                        make a ship act earlier in the round and Speed Down buffs
-                                        push it later — the turn order updates mid-round as speed
-                                        changes take effect, so a buff that fires on one ship&apos;s
-                                        turn is already reflected in the order for ships that have
-                                        not yet acted. Ships with conditional extra actions re-enter
-                                        the turn queue at their current Speed, including any live
-                                        Speed buffs or debuffs. End-of-round extra actions (such as
-                                        Harvester&apos;s on-ally-destroyed passive) drain after
-                                        every other ship has acted, regardless of Speed.
-                                        Start-of-combat, start-of-round and end-of-round effects
-                                        resolve in the same turn order, across both teams.
-                                        Start-of-combat effects, such as the Cloaking set&apos;s
-                                        Stealth, land before any start-of-round effect.
+                                        order — higher Speed acts first. On a Speed tie the ship
+                                        higher on the board acts first (top row, then middle, then
+                                        bottom, and the lower column number within a row), and when
+                                        two ships on opposite sides are tied in position too, your
+                                        ship acts first. The enemy acts last by default (enemy
+                                        default speed 50). A faster support applies its buffs before
+                                        your attacker fires; a slower one starts benefiting you the
+                                        following round. Set each ship&apos;s Speed in Combat
+                                        Settings and on the attacker&apos;s stats panel. Debuffs
+                                        that land now persist their full duration without re-rolling
+                                        each round. Charged skills without direct damage (pure
+                                        utility) still fire on their normal cadence and apply their
+                                        effects. Speed Up buffs make a ship act earlier in the round
+                                        and Speed Down buffs push it later — the turn order updates
+                                        mid-round as speed changes take effect, so a buff that fires
+                                        on one ship&apos;s turn is already reflected in the order
+                                        for ships that have not yet acted. Ships with conditional
+                                        extra actions re-enter the turn queue at their current
+                                        Speed, including any live Speed buffs or debuffs.
+                                        End-of-round extra actions (such as Harvester&apos;s
+                                        on-ally-destroyed passive) drain after every other ship has
+                                        acted, regardless of Speed. Start-of-combat, start-of-round
+                                        and end-of-round effects resolve in the same turn order,
+                                        across both teams. Start-of-combat effects, such as the
+                                        Cloaking set&apos;s Stealth, land before any start-of-round
+                                        effect.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Reactive Triggers:</span>{' '}
@@ -3744,9 +3744,10 @@ const DocumentationPage: React.FC = () => {
                                     </h4>
                                     <p className="text-theme-text mb-2">
                                         Calculate how much a supporter ship actually keeps a target
-                                        alive. The Healing Calculator runs on the same deterministic
-                                        combat engine as the DPS Calculator — identical inputs
-                                        always produce identical round-by-round results.
+                                        alive. The Healing Calculator runs on the same combat engine
+                                        as the DPS Calculator, including its random rolls (crits,
+                                        debuff landing), so repeat runs of the same setup can differ
+                                        a little round by round.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">
@@ -3924,8 +3925,7 @@ const DocumentationPage: React.FC = () => {
                                         and does not expire. Repair Over Time effects tick at the
                                         holder&apos;s turn, repairing a percentage of the
                                         holder&apos;s own max HP per stack. Crit heals resolve on
-                                        their own deterministic crit schedule, separate from any
-                                        damage crits.
+                                        their own crit rolls, separate from any damage crits.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Damage-Based Sustain:</span>{' '}
@@ -4715,9 +4715,10 @@ const DocumentationPage: React.FC = () => {
                             <div className="p-4 bg-dark-lighter">
                                 <h4 className="font-semibold text-primary mb-2">Combat Log</h4>
                                 <p className="text-theme-text mb-2">
-                                    The combat log shows a complete, hierarchical record of
-                                    everything that happens each round — nothing is omitted or
-                                    approximated.
+                                    The combat log shows a hierarchical record of what happens each
+                                    round: attacks, repairs, shields and strips, buffs and debuffs,
+                                    damage and Repair Over Time ticks, bomb detonations and
+                                    splashes, and deaths.
                                 </p>
                                 <ul className="text-theme-text list-disc pl-4 space-y-1">
                                     <li>
@@ -4742,8 +4743,20 @@ const DocumentationPage: React.FC = () => {
                                         <strong>Hit amounts match the target:</strong> An attack row
                                         shows the damage each target was dealt after its own defense
                                         and damage reductions, for the main target and every other
-                                        enemy hit alike. Extra damage a passive adds to the same hit
-                                        is included in that row.
+                                        enemy hit alike, and before any shield absorbs it (a row
+                                        whose hit met a shield says &quot;shield hit&quot;). Extra
+                                        damage a passive adds to the same hit is included in that
+                                        row.
+                                    </li>
+                                    <li>
+                                        <strong>Ticks, strips and splashes have rows:</strong>{' '}
+                                        Damage over Time and Repair Over Time ticks are listed at
+                                        the start of their holder&apos;s turn, before the ship acts.
+                                        A shield strip (APEX, Laika, Malvex) shows how much shield
+                                        it removed, and a bomb carrier&apos;s death splash shows the
+                                        damage each neighbour took. A ship killed by a DoT tick has
+                                        no killer named; a Bomb kill names the ship that planted the
+                                        Bomb.
                                     </li>
                                     <li>
                                         <strong>Wasted repairs and shields are named:</strong> Heal
@@ -5163,7 +5176,7 @@ const DocumentationPage: React.FC = () => {
                                     </li>
                                     <li>
                                         Replay one simulated fight as a full turn-by-turn log, to
-                                        see exactly what each ship did and why
+                                        see what each ship did, in order
                                     </li>
                                 </ul>
                             </div>

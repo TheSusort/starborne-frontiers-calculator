@@ -20,6 +20,7 @@ const state: ShipRoundState = {
     healingReceived: 200,
     shieldsAbsorbed: 0,
     shieldGranted: 0,
+    shieldStripped: 0,
     currentShieldPool: 0,
     incomingDamage: 0,
     incomingShieldAbsorbed: 0,

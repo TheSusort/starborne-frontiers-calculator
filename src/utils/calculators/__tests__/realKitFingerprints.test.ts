@@ -251,15 +251,13 @@ describe('suite health', () => {
     // These corpus ships are documented, kit-explained exceptions to "the focus takes real incoming
     // damage" — not a fixture failure:
     // Meiying gains Stealth "at the start of combat and every turn", so it is permanently
-    // untargetable; Voron "transforms the damage into a damage over time effect", so its intake
-    // books 0 at the instant of the hit even though it demonstrably IS being hit (it carries a
-    // `dot-ticked` token it would not otherwise have); Huanying "When this Unit inflicts a debuff
+    // untargetable; Huanying "When this Unit inflicts a debuff
     // it gains Stealth ... for 2 turns", and every cast lands a Bomb on this board, so she is
     // Stealthed every round and no enemy attack reaches her. Her Stealth grant needs a
     // LANDED infliction. Lingshe is the same shape: "When this Unit inflicts a Bomb it gains
     // Stealth", and her active's 3 Bomb stacks each roll to land (R30), so at least one lands on
     // every cast on this board and her Stealth never lapses.
-    const KNOWN_ZERO_DAMAGE: readonly string[] = ['Meiying', 'Voron', 'Huanying', 'Lingshe'];
+    const KNOWN_ZERO_DAMAGE: readonly string[] = ['Meiying', 'Huanying', 'Lingshe'];
 
     it('every corpus ship takes real incoming damage and survives all 20 rounds, in every scenario', () => {
         // The corpus-wide version of the two-ship spot-check in kitFingerprintScenarios.test.ts's
@@ -356,9 +354,11 @@ describe('suite health', () => {
         'dot-applied',
         'dot-ticked',
         'heal',
+        'hot-ticked',
         'purge',
         'shield',
         'shield-destroyed',
+        'shield-stripped',
         'steal',
     ] as const;
 

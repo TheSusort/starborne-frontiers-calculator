@@ -4865,7 +4865,8 @@ export type StampedEventType =
     | 'shield-destroyed-log'
     | 'shield-applied-log'
     | 'cheat-death-log'
-    | 'reversed-repair-log';
+    | 'reversed-repair-log'
+    | 'bomb-splash-log';
 
 /** Forces the array literal passed to it to contain every member of `T` exactly once — a
  *  missing or duplicated tag is a compile error, not a silent gap. Standard TS
@@ -4931,6 +4932,7 @@ const REACTIVE_STAMPED_EVENT_TYPE_LIST = exhaustiveArrayOf<StampedEventType>()([
     'shield-applied-log',
     'cheat-death-log',
     'reversed-repair-log',
+    'bomb-splash-log',
 ]);
 
 const REACTIVE_STAMPED_EVENT_TYPES: ReadonlySet<CombatEventType> = new Set<StampedEventType>(

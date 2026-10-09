@@ -39,9 +39,13 @@ const dotNote = (dotType: DoTType, tier: number | undefined, stacks: number): st
  * ordering is corrected at the presentation layer instead.
  *
  * Sorting top-level entries is safe AFTER the fold: reactions already live inside their trigger's
- * `.reactions[]` (they move with it) and `setHp` has already stamped its targets.
+ * `.reactions[]` (they move with it) and the HP stamps live on the target objects, which move with them.
  */
 const ENTRY_DISPLAY_RANK: Record<CombatLogEntryKind, number> = {
+    // -1 — a DoT or Repair Over Time tick lands at the start of its holder's turn, before the
+    // holder acts, so it prints before that turn's skill rows.
+    'dot-ticked': -1,
+    'hot-ticked': -1,
     // 0 — what the skill did.
     attack: 0,
     heal: 0,
@@ -55,12 +59,12 @@ const ENTRY_DISPLAY_RANK: Record<CombatLogEntryKind, number> = {
     // Rank 0 with its purge sibling: a steal is part of what the skill DID, not a consequence.
     steal: 0,
     bomb: 0,
+    'shield-stripped': 0,
     // 1 — charge bookkeeping for the turn.
     'charge-changed': 1,
     // 2 — consequences: what the skill (or the round) caused.
     'debuff-resisted': 2,
     detonation: 2,
-    'dot-ticked': 2,
     death: 2,
     'shield-destroyed': 2,
     'cheat-death': 2,
@@ -99,6 +103,16 @@ interface BuildContext {
     openAttackAbilityDidHit: boolean | undefined;
     /** Latest known HP percentages keyed by actorId. */
     hpPct: Map<string, number>;
+    /** HP% the engine reported for a victim BEFORE the row for that hit exists (a hit's
+     *  `hp-changed` precedes its `attacked` / `reactive-damage-performed`). The next damage row
+     *  naming that victim takes it. Cleared at every turn and round boundary. */
+    pendingHp: Map<string, number>;
+    /** Actors that have been destroyed; a damage row naming one reads 0%. */
+    destroyedActors: Set<string>;
+    /** The most recent damage-row target per victim that is still waiting for its HP% (a tick or
+     *  detonation row precedes its own `hp-changed`). The next HP report for that victim fills it.
+     *  Cleared at every turn and round boundary. */
+    awaitingHp: Map<string, CombatLogTarget>;
     /** Set of actorIds present in the roster (for filtering). */
     rosterIds: Set<string>;
     /**
@@ -158,8 +172,12 @@ interface BuildContext {
      * Only called when `currentStamp` is set.
      */
     routeReaction(entry: CombatLogEntry, stamp: { duringTurnOf: string }): void;
-    /** Update the running HP map and stamp the most-recent matching target. */
+    /** Record an HP report for `actorId`: stamp the damage row waiting for it, else hold it for
+     *  the row about to open. */
     setHp(actorId: string, pct: number): void;
+    /** A damage row has just been given `target`: stamp the HP% already reported for its victim,
+     *  or register the target to receive the report that follows. */
+    claimHp(target: CombatLogTarget): void;
     /**
      * If the open attack entry has zero targets and didHit was false, synthesize a
      * miss target. Called before closing or replacing the open entry.
@@ -210,6 +228,9 @@ function createBuildContext(
         openAttackAbilityTargetId: undefined,
         openAttackAbilityDidHit: undefined,
         hpPct: new Map(),
+        pendingHp: new Map(),
+        destroyedActors: new Set(),
+        awaitingHp: new Map(),
         rosterIds,
         runningCharge,
         chargeMax: chargeMaxMap,
@@ -221,6 +242,8 @@ function createBuildContext(
 
         openRound(round: number) {
             ctx.closeOpenAttack();
+            ctx.pendingHp.clear();
+            ctx.awaitingHp.clear();
             const r: CombatLogRound = { round, startOfRound: [], turns: [], endOfRound: [] };
             ctx.rounds.push(r);
             ctx.currentRound = r;
@@ -232,6 +255,8 @@ function createBuildContext(
             if (!ctx.currentRound) return;
             ctx.beforeFirstTurn = false;
             ctx.closeOpenAttack(); // also clears pendingSkill
+            ctx.pendingHp.clear();
+            ctx.awaitingHp.clear();
             const t: CombatLogTurn = {
                 actorId,
                 // Read chargeBefore from the running map at the moment the turn opens.
@@ -305,29 +330,31 @@ function createBuildContext(
 
         setHp(actorId: string, pct: number) {
             ctx.hpPct.set(actorId, pct);
-            // Check the currently-open attack entry first. An hp-changed that follows
-            // a reaction's attacked event pertains to the open entry (which may be nested
-            // inside a trigger's .reactions[]) rather than a top-level turn entry.
-            if (ctx.openAttackEntry) {
-                for (let j = ctx.openAttackEntry.targets.length - 1; j >= 0; j--) {
-                    if (ctx.openAttackEntry.targets[j].targetId === actorId) {
-                        ctx.openAttackEntry.targets[j].resultingHpPct = pct;
-                        return;
-                    }
-                }
+            // A row opened first (a tick, a detonation, or an `attacked` stream that reports HP
+            // afterwards) and is waiting for this report.
+            const waiting = ctx.awaitingHp.get(actorId);
+            if (waiting) {
+                waiting.resultingHpPct = pct;
+                ctx.awaitingHp.delete(actorId);
+                return;
             }
-            // Fall back: stamp the most-recent matching target in the current turn's entries.
-            if (!ctx.currentTurn) return;
-            for (let i = ctx.currentTurn.entries.length - 1; i >= 0; i--) {
-                const e = ctx.currentTurn.entries[i];
-                // Walk targets in reverse to find the most recently added matching target.
-                for (let j = e.targets.length - 1; j >= 0; j--) {
-                    if (e.targets[j].targetId === actorId) {
-                        e.targets[j].resultingHpPct = pct;
-                        return;
-                    }
-                }
+            // The row for this hit has not opened yet; it takes the report when it does.
+            ctx.pendingHp.set(actorId, pct);
+        },
+
+        claimHp(target: CombatLogTarget) {
+            const pending = ctx.pendingHp.get(target.targetId);
+            if (pending !== undefined) {
+                target.resultingHpPct = pending;
+                ctx.pendingHp.delete(target.targetId);
+                ctx.awaitingHp.delete(target.targetId);
+                return;
             }
+            if (ctx.destroyedActors.has(target.targetId)) {
+                target.resultingHpPct = 0;
+                return;
+            }
+            ctx.awaitingHp.set(target.targetId, target);
         },
 
         finalizeMissEntry() {
@@ -411,23 +438,8 @@ function createBuildContext(
             // `string | undefined` type; the sole condition that can actually fire the override is
             // roster non-membership.
             //
-            // RE-PARENTING HAZARD — LIVE, NARROW, DISPLAY-ONLY. An earlier draft said this was
-            // "only reachable once this arm is, i.e. today it is not". Wrong on both halves: the
-            // roster arm is reachable today (it is the point of this change — a multi-hit cast
-            // bound to the vestigial sink takes it), and `buildCombatLog.test.ts`'s "keeps the
-            // drained rider grants when the parent row is suppressed" already asserts three
-            // promoted `buff` entries landing in `currentTurn.entries`. A promoted `buff` reaction
-            // keeps its `targets: [{ targetId }]`, so those three are ALREADY inside `setHp`'s
-            // top-level reverse fallback scan (above) — the exact stale-`resultingHpPct`
-            // hazard the `buff-applied` handler's own comment flags for that shape. A later
-            // `hp-changed` for that actor can stamp a promoted grant instead of the row that was
-            // actually meant.
-            // WHY IT IS NOT FIXED HERE: the field is a rendered HP percentage on a log row and
-            // nothing downstream computes from it — no damage, no accounting, no test. The
-            // mis-stamp is also self-limiting: the scan takes the most recent matching target, so
-            // it can only mis-stamp when a promoted grant is the LAST entry naming that actor.
-            // The pre-existing hazard on `buff` rows is unchanged in kind by this arm; it is
-            // recorded rather than papered over, and behaviour is deliberately left alone.
+            // The promoted reactions keep their own targets and `resultingHpPct`; only the parent
+            // row is dropped.
             if (
                 ctx.openAttackEntry &&
                 ctx.openAttackEntry.kind === 'attack' &&
@@ -583,6 +595,7 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
             // Multi-hit on the same victim: OR-accumulate didCrit and shieldWasHit, leave amount unchanged.
             if (e.didCrit) existing.didCrit = true;
             if (e.shieldWasHit) existing.shieldWasHit = true;
+            ctx.claimHp(existing);
             return;
         }
         // New victim — primary and splash alike show what this victim was dealt, after its own
@@ -596,6 +609,7 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
             didHit: true,
         };
         ctx.openAttackEntry.targets.push(target);
+        ctx.claimHp(target);
     },
 
     'passive-slot-damage': (e, ctx) => {
@@ -610,6 +624,7 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
         const target: CombatLogTarget = { targetId: e.targetId, amount: e.damage, didHit: true };
         ctx.passiveOnlyTargets.add(target);
         ctx.openAttackEntry.targets.push(target);
+        ctx.claimHp(target);
     },
 
     'hp-changed': (e, ctx) => {
@@ -744,13 +759,6 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
         // `dot-applied` (sourceId) already use. `buff` was the lone grant-style kind booked to
         // its recipient, which made an ally-only support kit invisible to any actor-scoped
         // reader. Falls back to the receiver when no granter is carried (self-grant).
-        //
-        // This entry's non-empty `targets` puts it into setHp's reverse fallback scan (a
-        // `targets: []` entry is structurally invisible there).
-        // Harmless because in playerTurn.ts the buff-grant loop runs BEFORE
-        // shield-applied/heal-performed, so those more-recent entries win the reverse scan first —
-        // but reordering those emissions would silently let a buff entry's target get stamped with
-        // a stale resultingHpPct instead.
         const entry: CombatLogEntry = {
             kind: 'buff',
             actorId: e.granterId ?? e.actorId,
@@ -788,6 +796,7 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
             reactions: [],
         };
         ctx.attachEntry(entry);
+        ctx.claimHp(target);
     },
 
     'reactive-heal-performed': (e, ctx) => {
@@ -881,6 +890,35 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
             note: dotNote(e.dotType, e.tier, e.stacks),
         };
         ctx.attachEntry(entry);
+        ctx.claimHp(entry.targets[0]);
+    },
+
+    // A `Repair Over Time` tick: a display-only row on the holder (it is not a repair performed, so
+    // it wakes no trigger). Rendered ahead of the holder's own skill rows, see ENTRY_DISPLAY_RANK.
+    'hot-ticked': (e, ctx) => {
+        if (!ctx.currentTurn && !ctx.currentRound) return;
+        const entry: CombatLogEntry = {
+            kind: 'hot-ticked',
+            actorId: e.holderId,
+            targets: [{ targetId: e.holderId, amount: e.amount }],
+            reactions: [],
+            note: 'Repair Over Time',
+        };
+        ctx.attachEntry(entry);
+    },
+
+    // A shield strip: booked to the stripper, with the stripped ship as the target. No pending
+    // skill is consumed, so the cast's own attack row keeps its skill tag.
+    'shield-stripped': (e, ctx) => {
+        if (!ctx.currentTurn && !ctx.currentRound) return;
+        const entry: CombatLogEntry = {
+            kind: 'shield-stripped',
+            actorId: e.casterId,
+            targets: [{ targetId: e.targetId, amount: e.removed }],
+            reactions: [],
+            note: e.pct >= 100 ? 'shield stripped' : `${Math.round(e.pct)}% of shield stripped`,
+        };
+        ctx.attachEntry(entry);
     },
 
     'dot-detonated': (e, ctx) => {
@@ -895,6 +933,7 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
             note: 'DoT detonated',
         };
         ctx.attachEntry(entry);
+        ctx.claimHp(entry.targets[0]);
     },
 
     'bomb-detonated': (e, ctx) => {
@@ -910,6 +949,22 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
             note: `bombs detonated ×${e.stacks}`,
         };
         ctx.attachEntry(entry);
+        ctx.claimHp(entry.targets[0]);
+    },
+
+    // The splash a dying bomb carrier threw at an adjacent ally. Booked to the bomb's APPLIER, the
+    // actor credited with the damage, with the splashed ally as the target.
+    'bomb-splash-log': (e, ctx) => {
+        if (!ctx.currentTurn && !ctx.currentRound) return;
+        const entry: CombatLogEntry = {
+            kind: 'bomb',
+            actorId: e.actorId,
+            targets: [{ targetId: e.victimId, amount: e.damage }],
+            reactions: [],
+            note: 'bomb splash',
+        };
+        ctx.attachEntry(entry);
+        ctx.claimHp(entry.targets[0]);
     },
 
     /** An Echoing Burst going off. `actorId` is the applier who is credited, the target is the
@@ -996,6 +1051,9 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
     },
 
     'ship-destroyed': (e, ctx) => {
+        // A killing blow emits no `hp-changed`: the victim's rows read 0%.
+        ctx.destroyedActors.add(e.actorId);
+        ctx.setHp(e.actorId, 0);
         if (!ctx.currentTurn && !ctx.currentRound) return;
         // Carry the killer as a TARGET (not a raw id baked into the note) so the renderer's
         // `death` formatter resolves it to a ship name via nameOf.

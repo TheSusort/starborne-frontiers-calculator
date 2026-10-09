@@ -700,7 +700,8 @@ export type CombatEvent =
      *  an already-empty pool removes nothing and is suppressed) — mirrors `purge-performed`'s
      *  0-removed suppression. `casterId` = the stripping actor; `targetId` = the victim whose
      *  shield was reduced; `pct` = the percentage of the CURRENT pool removed (the same `pct`
-     *  argument passed to `stripShieldPct` — 100 for the purge-coupled branch, `ab.config.pct` otherwise).
+     *  argument passed to `stripShieldPct` — 100 for the purge-coupled branch, `ab.config.pct` otherwise);
+     *  `removed` = the shield the strip took off the pool.
      *  The `on-own-shield-strip` listener (triggers.ts) filters `casterId === ownerId`. */
     | ({
           type: 'shield-stripped';
@@ -708,6 +709,7 @@ export type CombatEvent =
           targetId: string;
           round: number;
           pct: number;
+          removed: number;
       } & ReactiveStamp)
     /** Corrosion SPREAD (Hemlock) at the end of a round. The
      *  engine's end-of-round Toxic Overflow mechanic (engine.ts) emits this for each unit that held
@@ -723,6 +725,18 @@ export type CombatEvent =
           type: 'corrosion-spread';
           sourceId: string;
           affectedIds: string[];
+          round: number;
+      } & ReactiveStamp)
+    /** LOG-ONLY: a bomb carrier died with the bomb still pending and its death splash landed on
+     *  an adjacent same-side ally. `actorId` = the bomb's applier (credited with the damage),
+     *  `victimId` = the splashed ally, `damage` = the intake the funnel recorded for the ally.
+     *  NO combat listener subscribes to it, so it can never chain; buffered on the positional
+     *  path to nest under the triggering attack, like `shield-destroyed-log`. */
+    | ({
+          type: 'bomb-splash-log';
+          actorId: string;
+          victimId: string;
+          damage: number;
           round: number;
       } & ReactiveStamp)
     /** A victim's shield pool was fully depleted by a DIRECT hit (AEGIS). Emitted from

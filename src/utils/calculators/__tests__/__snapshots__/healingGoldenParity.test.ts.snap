@@ -3865,7 +3865,7 @@ exports[`healingGoldenParity > enemy full-kit (debuff + DoT + self-buff bombard 
       },
       "perTargetDealt": {
         "e1": {
-          "attacker": 6000,
+          "attacker": 12000,
         },
       },
       "round": 2,
@@ -3928,7 +3928,7 @@ exports[`healingGoldenParity > enemy full-kit (debuff + DoT + self-buff bombard 
       },
       "perTargetDealt": {
         "e1": {
-          "attacker": 6000,
+          "attacker": 18000,
         },
       },
       "round": 3,
@@ -3991,7 +3991,7 @@ exports[`healingGoldenParity > enemy full-kit (debuff + DoT + self-buff bombard 
       },
       "perTargetDealt": {
         "e1": {
-          "attacker": 6000,
+          "attacker": 24000,
         },
       },
       "round": 4,
@@ -4054,7 +4054,7 @@ exports[`healingGoldenParity > enemy full-kit (debuff + DoT + self-buff bombard 
       },
       "perTargetDealt": {
         "e1": {
-          "attacker": 6000,
+          "attacker": 24000,
         },
       },
       "round": 5,
@@ -4117,7 +4117,7 @@ exports[`healingGoldenParity > enemy full-kit (debuff + DoT + self-buff bombard 
       },
       "perTargetDealt": {
         "e1": {
-          "attacker": 6000,
+          "attacker": 24000,
         },
       },
       "round": 6,

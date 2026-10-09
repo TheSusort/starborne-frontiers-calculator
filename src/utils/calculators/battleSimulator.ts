@@ -198,6 +198,10 @@ export interface ShipRoundState {
     shieldsAbsorbed: number;
     /** Shield pool granted to this actor this round (post-cap delta). */
     shieldGranted: number;
+    /** Shield removed from this actor's pool this round by an enemy's shield strip (APEX, Laika,
+     *  Malvex, Lodolite's purge-coupled strip). Pool at round end = pool at the previous round's
+     *  end + granted - absorbed - stripped. */
+    shieldStripped: number;
     /** Remaining shield pool at end of this round. */
     currentShieldPool: number;
     /**
@@ -310,6 +314,7 @@ export const ASSEMBLED_EVENT_TYPES = [
     // no snapshot.
     'hp-snapshot',
     'ship-destroyed',
+    'shield-stripped',
     'buff-applied',
     'buff-expired',
     'debuff-applied',
@@ -325,10 +330,10 @@ export const ASSEMBLED_EVENT_TYPES = [
  * the complete stream while the assembler's own type-guarded loops simply ignore the extra types.
  *
  * "Superset of ASSEMBLED" is ENFORCED, not just documented (the compile-time check below), so an
- * assembler input must be listed here too even when the log builder has no handler for it —
- * `hot-ticked` is exactly that case. `buildCombatLog`'s handler map is a guarded `Partial`, so a
- * type with no handler is an inert pass-through there; do not read a name's presence in this list
- * as a claim that it renders a log line.
+ * assembler input must be listed here too even when the log builder has no handler for it.
+ * `buildCombatLog`'s handler map is a guarded `Partial`, so a type with no handler is an inert
+ * pass-through there; do not read a name's presence in this list as a claim that it renders a
+ * log line.
  */
 export const LOG_EVENT_TYPES = [
     'round-started',
@@ -341,7 +346,6 @@ export const LOG_EVENT_TYPES = [
     'attacked',
     'hp-changed',
     'heal-performed',
-    // Assembler-only (no buildCombatLog handler) — see the note above and the event's own doc.
     'hot-ticked',
     'hp-snapshot',
     'shield-applied',
@@ -349,6 +353,8 @@ export const LOG_EVENT_TYPES = [
     'shield-destroyed-log',
     'cheat-death-log',
     'reversed-repair-log',
+    'bomb-splash-log',
+    'shield-stripped',
     'buff-applied',
     'buff-expired',
     'debuff-applied',
@@ -614,6 +620,16 @@ export function assembleBattleResult(args: {
             }
         }
 
+        const strippedThisRound = new Map<string, number>();
+        for (const e of roundEvents) {
+            if (e.type === 'shield-stripped') {
+                strippedThisRound.set(
+                    e.targetId,
+                    (strippedThisRound.get(e.targetId) ?? 0) + e.removed
+                );
+            }
+        }
+
         // Accumulate this round's per-victim taken damage into the running cumulative.
         const takenThisRound = perRoundPerTarget[round] ?? {};
         const shieldThisRound = perRoundPerShield[round] ?? {};
@@ -669,6 +685,7 @@ export function assembleBattleResult(args: {
                 healingReceived: snapshot?.repairReceived ?? healedThisRound,
                 shieldsAbsorbed: shield?.absorbed ?? 0,
                 shieldGranted: shield?.granted ?? 0,
+                shieldStripped: strippedThisRound.get(entry.actorId) ?? 0,
                 currentShieldPool: shield?.pool ?? 0,
                 incomingDamage: incomingHpThisRound,
                 incomingShieldAbsorbed: incoming?.shieldAbsorbed ?? 0,

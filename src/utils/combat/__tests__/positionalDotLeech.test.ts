@@ -466,21 +466,8 @@ describe('Site 2 — a standing leech pays out on a positional bomb burst', () =
  * above documents for the identical reason. `numRounds: 2` is required so the tick lands at the
  * focus's turn-start in round 2, once enemy-front's round-1 turn has set its ctx.
  *
- * ANTI-VACUITY (deviates from `dealtBy`, and why). Unlike every other site in this file, this
- * branch's `credit` callback ONLY ever accumulates into `tankDotDamage`; `applyIncomingToTarget`
- * is then called with no `killerId`/`sourceId` at all
- * (`applyIncomingToTarget(tankDotDamage, healTarget, { byDirectDamage: false })`), and no call
- * anywhere in this branch ever reaches `creditDealt`. So `perTargetDealt` (`dealtBy`) and
- * `perTargetDamage` are BOTH structurally silent for this branch — verified empirically by running
- * this exact fixture with the Step-3 fix applied and confirming `dealtBy(result.rounds,
- * 'enemy-front')` still reads 0. That is a genuine, separate, pre-existing attribution gap in the
- * heal-target branch (it never received the sibling branch's SP-F F1 `tickDealtBySource` /
- * `creditDealt` reshape) — NOT something this leech-channel fix (spec §3) can or should paper over;
- * wiring `creditDealt` into this branch would ripple `perTargetDealt` entries into every
- * healing-mode fixture with an enemy DoT on the tank, leech or not, which is a much wider blast
- * radius than this task's scope. Flagged for a follow-up task rather than fixed here.
- *
- * The load-bearing "it really landed, attributed to the right owner" proof instead uses the
+ * The tick's own damage attribution (`dealtBy`) has its own coverage (`slotZeroDotBooking`).
+ * The load-bearing "it really landed, attributed to the right owner" proof here uses the
  * healing display's own `incomingDamage`, fed by the SAME `credit` callback's `tankDotDamage`
  * accumulator via `applyIncomingToTarget` → `sink.addIncoming` — an independent bookkeeping write
  * from the leech's `healingCtx.credit`, so it still rules out "the 100 came from nowhere real":

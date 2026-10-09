@@ -3380,7 +3380,9 @@ export function runCombat(rawInput: CombatEngineInput): {
     };
     const playerEnemyBuffNames = (): string[] =>
         selfBuffNamesForOwners(statusEngine, livingEnemyAttackerIds());
-    const enemyEnemyBuffNames = (): string[] => selfBuffNamesForOwners(statusEngine, playerIds);
+    const livingPlayerIds = (): string[] => playerIds.filter(isActorAlive);
+    const enemyEnemyBuffNames = (): string[] =>
+        selfBuffNamesForOwners(statusEngine, livingPlayerIds());
     // Count (not union) of opposing actors holding Stealth, for
     // Selenite's "10% more direct damage for every enemy with Stealth" count-scaling.
     // Same owner-id sourcing as the buff-NAME unions immediately above (team-symmetric).
@@ -3390,7 +3392,7 @@ export function runCombat(rawInput: CombatEngineInput): {
     const playerStealthedEnemyCount = (): number =>
         countOwnersWithSelfBuff(statusEngine, livingEnemyAttackerIds(), 'Stealth');
     const enemyStealthedEnemyCount = (): number =>
-        countOwnersWithSelfBuff(statusEngine, playerIds, 'Stealth');
+        countOwnersWithSelfBuff(statusEngine, livingPlayerIds(), 'Stealth');
     // OWN-SIDE count of actors holding a shield pool, for Zenith's "for each ally with a shield"
     // damage scaling. The structural mirror of the stealth pair directly above, with two
     // differences that are the whole point of the subject:
@@ -6045,22 +6047,25 @@ export function runCombat(rawInput: CombatEngineInput): {
         // resolves against the FIGHT-WIDE `input.enemyType` scalar. Enemy-attacker runtimes face
         // the player side, which has no fight-wide class, so theirs resolves against undefined.
         if (r === 1) {
-            seedPassiveTimedStatuses(
-                [...runtimesById.values()],
-                statusEngine,
-                bus,
-                enemyType,
-                r,
-                factionOf
+            // Both sides' owners are granted in turn order (`orderByTurnPriority`), so the grants
+            // read in the same order whichever side an owner stands on.
+            const seedQueue = orderByTurnPriority(
+                [
+                    ...[...runtimesById.values()].map((rt) => ({ rt, seedEnemyType: enemyType })),
+                    ...enemyPlayerRuntimes.map((rt) => ({
+                        rt,
+                        seedEnemyType: undefined as EnemyBaseClass | undefined,
+                    })),
+                ].map((entry) => ({
+                    ...entry,
+                    speed: effectiveSpeedOf(entry.rt.actor),
+                    side: entry.rt.actor.side,
+                    position: entry.rt.actor.position,
+                }))
             );
-            seedPassiveTimedStatuses(
-                enemyPlayerRuntimes,
-                statusEngine,
-                bus,
-                undefined,
-                r,
-                factionOf
-            );
+            for (const { rt, seedEnemyType } of seedQueue) {
+                seedPassiveTimedStatuses([rt], statusEngine, bus, seedEnemyType, r, factionOf);
+            }
             // One-time "at the start of combat" passive shields (Crucialis/FrontLine)
             // — seeded silently ONCE here, never on cast (the cast path skips pre-combat
             // abilities). Same both-collections call shape as the timed seeding above.
@@ -7330,6 +7335,16 @@ export function runCombat(rawInput: CombatEngineInput): {
                                     // The bomb's original applier (sourceId), not the dying
                                     // bombed ship that splashed.
                                     creditDealt(bomb.sourceId, ally.id, splashBooked);
+                                    emitConsequenceLog({
+                                        type: 'bomb-splash-log',
+                                        actorId: bomb.sourceId,
+                                        victimId: ally.id,
+                                        damage: splashBooked,
+                                        round: r,
+                                        reactive: true,
+                                        duringTurnOf: actingActorId,
+                                        triggerActorId: actingActorId,
+                                    });
                                 }
                             }
                         }
@@ -12176,18 +12191,10 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // precedent and the E5-symmetry invariant. Moving this inside a stasis gate would
                 // wrongly silence a stasised victim's DoTs.
                 //
-                // #415 NOTE — this fork is REACHABLE IN DPS MODE, and it costs accounting.
-                // `healTarget = explicitHealTarget ?? attacker` in every mode, so the DPS FOCUS
-                // matches `isHealTarget` and its turn-start DoT tick takes the heal-target branch
-                // instead of the per-victim one. HP and intake are IDENTICAL (both branches end in
-                // `applyVictimDamage(…, sink)`), but the heal-target branch deliberately omits
-                // `creditDealt` and `roundPerTargetDamage` — the pre-existing healing-mode gap
-                // documented and DECLINED in place at the `tankDotDamage > 0` block below. So in
-                // DPS mode an enemy DoT ticking on the focus is absent from
-                // `RoundData.perTargetDamage[attacker]` and `perTargetDealt[<enemy>]`. Opt-in (it
-                // needs enemy attack > 0 AND a DoT-applying enemy kit) and accounting-only — NOT
-                // widened here, for the same reason it was declined below: closing it would move
-                // `perTargetDealt` in every healing-mode fixture carrying an enemy DoT on the tank.
+                // `healTarget = explicitHealTarget ?? attacker` in every mode, so the focus matches
+                // `isHealTarget` and its turn-start DoT tick takes the heal-target branch instead
+                // of the per-victim one. Both branches book the same intake and the same
+                // per-applier damage dealt.
                 const isHealTarget = !!healTarget && actor.id === healTarget.id;
                 if (isHealTarget) {
                     // Snapshot BEFORE tickDoTs so expiring entries still appear in the
@@ -12205,6 +12212,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                         })),
                     };
                     let tankDotDamage = 0;
+                    // Per-applier dealt detail for this tick batch (see the per-victim branch
+                    // below, which books the same map).
+                    const tankDealtBySource = new Map<string, number>();
                     // #358 ADDENDUM 3 (C2/C4): the same batch as THROWN — no Vortex Veil
                     // DoT-reduction, and a re-booked `convertHitToSelfDot` slice at its
                     // pre-defence size. Feeds the funnel's raw ("damage absorbed") axis only.
@@ -12233,11 +12243,16 @@ export function runCombat(rawInput: CombatEngineInput): {
                             dotType,
                             damage,
                             preMitigation,
-                            _dealtCreditId,
+                            dealtCreditId,
                             convertedFromHit
                         ) => {
                             tankDotDamage += damage;
                             tankDotDamagePreMit += preMitigation;
+                            const creditedTo = dealtCreditId ?? sourceId;
+                            tankDealtBySource.set(
+                                creditedTo,
+                                (tankDealtBySource.get(creditedTo) ?? 0) + damage
+                            );
                             // The applier is threaded through, so its standing damage-dealt leech
                             // pays out on a tick against the heal target — the same proc the
                             // sibling per-victim branch below uses. `dotType` IS a LeechChannel
@@ -12290,18 +12305,6 @@ export function runCombat(rawInput: CombatEngineInput): {
                     // on a tick against the heal target. The incoming direction is deliberately
                     // absent — a DoT tick does NOT proc the victim's damage-taken leech.
                     if (tankDotDamage > 0) {
-                        // ⚠️ OPEN GAP, distinct from the leech class and deliberately NOT fixed
-                        // here: this branch books NO per-victim damage-dealt attribution. The
-                        // sibling non-heal-target branch credits one `creditDealt(sourceId,
-                        // actor.id, dealt)` per distinct applier off its `tickDealtBySource`
-                        // map; this branch keeps only the aggregate `tankDotDamage` and so
-                        // writes `perTargetDealt` for nobody. Consequence for tests: `dealtBy`
-                        // reads NOTHING for a DoT ticking the heal target, however real the
-                        // tick is — use the healing display's `incomingDamage` instead (see
-                        // `positionalDotLeech.test.ts`'s "Site 3" block, which does).
-                        // Not fixed because wiring `creditDealt` in here would move
-                        // `perTargetDealt` in every healing-mode fixture carrying an enemy DoT
-                        // on the tank — far wider than the leech-channel class.
                         // A DoT-tick batch is an AGGREGATE of multiple appliers with no single
                         // killer → byDirectDamage:false, killerId undefined (overrides the
                         // wrapper's direct-damage default). A defaulted true would wrongly tag a
@@ -12314,6 +12317,13 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // `ActiveDoTStack.perTickPreMitigation`.
                             preMitigationDamage: tankDotDamagePreMit,
                         });
+                        roundPerTargetDamage.set(
+                            healTarget.id,
+                            (roundPerTargetDamage.get(healTarget.id) ?? 0) + tankDotDamage
+                        );
+                        for (const [sourceId, dealt] of tankDealtBySource) {
+                            creditDealt(sourceId, healTarget.id, dealt);
+                        }
                     }
                     // Dead-is-dead: if the turn-start DoT tick was LETHAL the tank just died
                     // (recordDestroyed fired inside applyIncomingToTarget). It must NOT fall through
