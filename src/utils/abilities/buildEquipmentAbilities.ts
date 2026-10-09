@@ -1044,9 +1044,9 @@ const IMPLANT_ABILITIES: Partial<Record<string, ImplantAbilityBuilder>> = {
         if (procChance === undefined) return undefined;
         return mkNamedBuffGrant('Attack Up I', 'all-allies', 'on-charged-cast', 1, { procChance });
     },
-    // D-PR9: Font of Power — on-own-repair-to-ally, grant repaired allies Power Infused
-    // Nanobots (target:'ally' + eventCtx.repairedAllyIds routing). D-PR10: the buff grants
-    // flat attack = 100% of the caster's attack, snapshotted at grant time.
+    // Font of Power — on-own-repair-to-ally, grant every repaired recipient Power Infused
+    // Nanobots (target:'ally' + eventCtx.repairedRecipientIds routing). The buff grants flat
+    // attack = 100% of the caster's attack, snapshotted at grant time.
     FONT_OF_POWER: (rarity) => {
         const procChance = FONT_OF_POWER_PROC[rarity];
         if (procChance === undefined) return undefined;

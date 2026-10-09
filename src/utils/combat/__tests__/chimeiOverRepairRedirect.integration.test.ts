@@ -627,9 +627,10 @@ describe('#435 acceptance — Font of Power and Abundant Renewal off a PASSIVE r
         expect(onLow[0].amount).toBeGreaterThan(0);
         expect(onLow[0].amount * totalOverheal(repair)).toBe(onTopped[0].amount * redirectExcess);
 
-        // ARM 2 (R-B) — Font of Power rolled its proc off the redirect too: the redirect's
-        // recipient carries the grant, which only the redirect could have delivered (the passive
-        // repair never reached `low`).
+        // ARM 2 (R-B, R169) — Font of Power reached the redirect's recipient too, under the one
+        // roll it drew for the passive repair and its redirect together: `low` carries the grant,
+        // which only the redirect could have delivered (the passive repair never reached `low`).
+        // The one-roll count is pinned in `fontOfPowerRedirectOneRoll.integration.test.ts`.
         expect(nanobotRecipients(window)).toContain(LOW_ID);
 
         // ARM 3 (R2, the negative) — and no cascade. `redirects` is already length 1 above; state
@@ -738,7 +739,7 @@ describe('#442 — the caster’s own over-repair feeds the redirect', () => {
  *
  * The gate did not simply go away — it became shape-scoped. An `overheal`-BASIS reaction is sized
  * by what a repair WASTED, so a caster-only repair qualifies; everything else on the trigger still
- * needs a non-self recipient, because Font of Power grants to `repairedAllyIds` and an empty list
+ * needs a non-self recipient, because Font of Power grants to `repairedRecipientIds` and an empty list
  * makes that branch fall through to the whole living side.
  *
  * FIXTURE. Chimei carries the Stealth aura and the two allies do not, so her Stealth-gated

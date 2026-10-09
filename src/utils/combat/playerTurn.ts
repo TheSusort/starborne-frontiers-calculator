@@ -1847,15 +1847,16 @@ function applyNewDoTs(args: {
     }
 }
 
-// Step 3b: Apply Echoing Burst-style accumulators inflicted by this round's skill. Each one is an
-// inflicted debuff: it draws its own landing decision (`decideLanding`, one draw per accumulator,
-// like any other named debuff of the cast) and a failed one is resisted; a target under Block
-// Debuff blocks it before any roll. Each gathers every direct hit its holder
+// Step 3b: Apply Echoing Burst-style accumulators inflicted by this round's skill on ONE victim —
+// the aimed enemy, or a covered enemy of an AoE pattern (each its own call, its own containers).
+// Each one is an inflicted debuff: it draws its own landing decision (`decideLanding`, one draw
+// per accumulator, like any other named debuff of the cast) and a failed one is resisted; a target
+// under Block Debuff blocks it before any roll. Each gathers every direct hit its holder
 // takes after it (`gatherDirectHitIntoAccumulators`). The skill's damage is written before its
 // debuffs, so this cast's own damage, which the engine lands on the board after this step, is not
 // gathered (`castStartSeq`). Returns how many accumulators landed.
 function applyAccumulators(args: {
-    gatedSkill: Skill | undefined;
+    accumulators: readonly { turns: number; pct: number }[];
     pendingAccumulators: PendingAccumulator[];
     sourceId: string;
     /** Stamps each new accumulator's `appliedSeq` (`StatusEngine.nextAppliedSeq`). */
@@ -1874,7 +1875,7 @@ function applyAccumulators(args: {
     emitResisted: (turns: number, viaLandingRoll: boolean) => void;
 }): number {
     let landed = 0;
-    for (const acc of accumulatorsFromSkill(args.gatedSkill)) {
+    for (const acc of args.accumulators) {
         if (args.blocked()) {
             args.emitBlocked(acc.turns);
             continue;
@@ -3432,6 +3433,43 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 const list = covered.get(rid);
                 if (list) list.push(dot);
                 else covered.set(rid, [dot]);
+            }
+        }
+        return covered;
+    };
+    /** The enemies besides the bound target each of `skill`'s Echoing Burst (`accumulate-detonate`)
+     *  clauses reaches, with the accumulators each receives. Recipients resolve exactly as
+     *  `coveredDotsFor`'s do, from each clause's own `target`. */
+    const coveredAccumulatorsFor = (
+        skill: Skill | undefined
+    ): Map<string, { turns: number; pct: number }[]> => {
+        const covered = new Map<string, { turns: number; pct: number }[]>();
+        if (targetId === undefined) return covered;
+        for (const ab of skill?.abilities ?? []) {
+            if (ab.config.type !== 'accumulate-detonate') continue;
+            const abTarget = ab.target;
+            if (
+                abTarget !== 'enemy' &&
+                abTarget !== 'all-enemies' &&
+                abTarget !== 'adjacent-enemies' &&
+                abTarget !== 'target-and-adjacent-enemies'
+            )
+                continue;
+            const acc = { turns: ab.config.turns, pct: ab.config.pct };
+            const recipients = resolveDebuffRecipientIds({
+                abTarget,
+                anchorId: targetId,
+                aoeVictimIds,
+                adjacentEnemyIdsFor,
+                positionalLanding,
+                firingClause: true,
+                selectorEnemyIdFor,
+            });
+            for (const rid of recipients) {
+                if (rid === undefined || rid === targetId) continue;
+                const list = covered.get(rid);
+                if (list) list.push(acc);
+                else covered.set(rid, [acc]);
             }
         }
         return covered;
@@ -5667,7 +5705,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // Accumulators each draw their own landing decision. Applied before the
         // inflicted-scope extensions below so those reach them.
         const accumulatorsLanded = applyAccumulators({
-            gatedSkill,
+            accumulators: accumulatorsFromSkill(gatedSkill),
             pendingAccumulators,
             sourceId: actor.id,
             nextAppliedSeq: statusEngine.nextAppliedSeq,
@@ -5731,15 +5769,18 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         }
     }
 
-    // Carry this cast's DoTs past the primary to every OTHER enemy each one reaches
-    // (`coveredDotsFor`). The primary is skipped: the block above already decided it.
+    // Carry this cast's DoTs and Echoing Bursts past the primary to every OTHER enemy each one
+    // reaches (`coveredDotsFor`, `coveredAccumulatorsFor` — the AoE-pattern rule). The primary is
+    // skipped: the block above already decided it.
     //
     // Each covered enemy is resolved on its OWN, independent of the primary's outcome either way:
-    // its landing (`planCoveredDots` — one decision for the first stack, one more draw per later
+    // its DoT landing (`planCoveredDots` — one decision for the first stack, one more draw per later
     // stack, a resist line per failed stack); its own containers and `dot-applied` (so an inflict
     // reaction fires once per enemy);
-    // a Bomb snapshotting the caster's affinity against THAT enemy; and both inflicted-scope
-    // extensions over the slice it just received, Valerian's crit-power chance drawn per enemy.
+    // a Bomb snapshotting the caster's affinity against THAT enemy; its Echoing Bursts, after its
+    // DoTs in written order, each with its own landing roll, Block Debuff / pending-Firewall check
+    // (R149) and `debuff-applied`; and both inflicted-scope extensions over the slice it just
+    // received, Valerian's crit-power chance drawn per enemy.
     //
     // Crit is per struck enemy (owner ruling 2026-10-03: Wisteria hitting A, B and C and critting
     // A alone inflicts her crit Inferno on A alone). A covered enemy's crit-gated DoT effects
@@ -5749,6 +5790,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // Cast-time only, like the primary's Step-3 apply: a multi-hit cast lands its DoTs once,
     // against the cast's footprint, not per sub-attack.
     const coveredDots = coveredDotsFor(gatedSkill, dotsConfig);
+    const coveredAccumulators = coveredAccumulatorsFor(gatedSkill);
     /** The firing skill carries a cast-wide crit clause — a crit-gated (`self-crit`) on-cast
      *  buff grant or status extension, whose "if a critical hit occurs" asks about the whole
      *  cast. Crit-gated DoT effects are per struck enemy instead (`victimCritOf`); every other
@@ -5775,7 +5817,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // clause can ask whether ANY struck enemy was crit (`anyVictimCrit`), and so does one earning
     // per-crit charges (`earnsPerCritCharge`), which counts the struck enemies crit.
     if (
-        (coveredDots.size > 0 || hasCastWideCritClause || earnsPerCritCharge) &&
+        (coveredDots.size > 0 ||
+            coveredAccumulators.size > 0 ||
+            hasCastWideCritClause ||
+            earnsPerCritCharge) &&
         positionalLanding &&
         hasDamageAbility
     ) {
@@ -5813,55 +5858,95 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             });
         }
     }
-    for (const [rid, victimDots] of coveredDots) {
+    for (const rid of new Set([...coveredDots.keys(), ...coveredAccumulators.keys()])) {
         const victim = opposingVictimById?.get(rid);
         if (!victim) continue;
-        const plan = planCoveredDots(victim, victimDots);
-        // Block Debuff blocks the whole application: one resist per DoT, no roll drawn, so none
-        // procs an on-resist reaction (#413).
-        if (plan.blocked) {
-            for (const dot of victimDots) {
-                emitDebuffResisted(dotResistLabel(dot.type, dot.tier), rid, false);
-            }
-            continue;
-        }
-        const landedVictimDots = plan.landed;
-        if (!plan.firstLanded && landedVictimDots.length === 0) continue;
-        // Per-VICTIM slice bounds, captured immediately before this victim's apply — the
+        // Per-VICTIM slice bounds, captured immediately before this victim's applies — the
         // primary's `primaryBefore` describes different containers entirely.
         const victimBefore = debuffEntryLengths(victim);
         const victimCrit = victimCritOf(rid);
         const victimCtx: ConditionContext = { ...ctx, roundCrit: victimCrit };
-        applyNewDoTs({
-            dotsConfig: landedVictimDots,
-            effectiveAttack,
-            affinityMult: 1 + affinityModsVsVictim(victim).damageModifier / 100,
-            detonationDamageModifier: dmgStats.detonationDamageModifier,
-            splashModifier: dmgStats.bombSplashModifier,
-            sourceId: actor.id,
-            corrosionEntries: victim.corrosionEntries,
-            infernoEntries: victim.infernoEntries,
-            genericDoTEntries: victim.genericDoTEntries,
-            pendingBombs: victim.pendingBombs,
-            nextAppliedSeq: statusEngine.nextAppliedSeq,
-            emitDotApplied: (dotType, stacks, tier, appliedSeq, preDecidedProcsPerStack) =>
-                bus.emit({
-                    type: 'dot-applied',
+        const victimDots = coveredDots.get(rid) ?? [];
+        /** Whether this enemy's DoT landing was attempted and not wholly resisted. */
+        let dotsReached = false;
+        if (victimDots.length > 0) {
+            const plan = planCoveredDots(victim, victimDots);
+            if (plan.blocked) {
+                // Block Debuff blocks the whole application: one resist per DoT, no roll drawn,
+                // so none procs an on-resist reaction (#413).
+                for (const dot of victimDots) {
+                    emitDebuffResisted(dotResistLabel(dot.type, dot.tier), rid, false);
+                }
+            } else if (plan.firstLanded || plan.landed.length > 0) {
+                dotsReached = true;
+                applyNewDoTs({
+                    dotsConfig: plan.landed,
+                    effectiveAttack,
+                    affinityMult: 1 + affinityModsVsVictim(victim).damageModifier / 100,
+                    detonationDamageModifier: dmgStats.detonationDamageModifier,
+                    splashModifier: dmgStats.bombSplashModifier,
                     sourceId: actor.id,
-                    targetId: rid,
-                    round: r,
-                    dotType,
-                    stacks,
-                    tier,
-                    appliedSeq,
-                    ...(victimCrit ? { viaCrit: true } : {}),
-                    sourceSlot: action,
-                    ...(preDecidedProcsPerStack ? { preDecidedProcsPerStack } : {}),
-                }),
+                    corrosionEntries: victim.corrosionEntries,
+                    infernoEntries: victim.infernoEntries,
+                    genericDoTEntries: victim.genericDoTEntries,
+                    pendingBombs: victim.pendingBombs,
+                    nextAppliedSeq: statusEngine.nextAppliedSeq,
+                    emitDotApplied: (dotType, stacks, tier, appliedSeq, preDecidedProcsPerStack) =>
+                        bus.emit({
+                            type: 'dot-applied',
+                            sourceId: actor.id,
+                            targetId: rid,
+                            round: r,
+                            dotType,
+                            stacks,
+                            tier,
+                            appliedSeq,
+                            ...(victimCrit ? { viaCrit: true } : {}),
+                            sourceSlot: action,
+                            ...(preDecidedProcsPerStack ? { preDecidedProcsPerStack } : {}),
+                        }),
+                });
+            }
+        }
+        // The same accumulator apply the primary runs, against this enemy's own containers,
+        // security, Block Debuff and Firewall.
+        const victimAccumulatorsLanded = applyAccumulators({
+            accumulators: coveredAccumulators.get(rid) ?? [],
+            pendingAccumulators: victim.pendingAccumulators,
+            sourceId: actor.id,
+            nextAppliedSeq: statusEngine.nextAppliedSeq,
+            emitInflicted: (buffName) => {
+                const preDecidedProcs = decideBlockDebuffAtLanding?.(rid);
+                deferredEnemyApplications.push({
+                    applyState: () => {},
+                    emitEvents: () =>
+                        emitDebuffApplied(
+                            actor.id,
+                            buffName,
+                            rid,
+                            'inflict',
+                            action,
+                            preDecidedProcs
+                        ),
+                });
+            },
+            blocked: () =>
+                targetCarriesBlockDebuff(statusEngine, rid) ||
+                blockDebuffPendingFor?.(rid) === true,
+            emitBlocked: () => {
+                deferredEnemyApplications.push({
+                    applyState: () => {},
+                    emitEvents: () => emitDebuffResisted('Echoing Burst', rid, false),
+                });
+            },
+            decideLanding: () => decideDebuffOnVictim('inflict', victim),
+            emitResisted: (_turns, viaLandingRoll) =>
+                emitDebuffResisted('Echoing Burst', rid, viaLandingRoll),
         });
-        // A covered enemy's fresh DoT is extended too (owner ruling 2026-09-02), its crit gate
-        // reading that enemy's own crit. An enemy that resisted `continue`d above and never
-        // reaches these lines.
+        // An enemy that took nothing from this cast has nothing to extend.
+        if (!dotsReached && victimAccumulatorsLanded === 0) continue;
+        // A covered enemy's fresh DoT, Bomb or Echoing Burst is extended too (owner ruling
+        // 2026-09-02), its crit gate reading that enemy's own crit.
         extendInflictedDoTs({
             abilities: [...(firingSkill?.abilities ?? []), ...(passiveSkill?.abilities ?? [])],
             ctx: victimCtx,

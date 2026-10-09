@@ -4,7 +4,7 @@
  * Wires the REACTION half of the shield-applied seam (H3.5 defined the event + trigger; H3.6
  * EMITS it once per cast keyed on the granter). An `on-shield-applied` reactive BUFF ability
  * owned by the granter must fan its grant out to the SHIELD RECIPIENTS of that cast — exactly
- * mirroring the `on-own-repair-to-ally` → `repairedAllyIds` precedent (Font of Power), where an
+ * mirroring the `on-own-repair-to-ally` → `repairedRecipientIds` precedent (Font of Power), where an
  * `ally`-target buff lands on the event-derived recipients rather than the owner/whole team.
  *
  * This proves BOTH halves as one path:

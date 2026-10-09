@@ -352,6 +352,13 @@ export interface Intent {
          *  The shipped implant text still reads "when applying repair to another ally"; the
          *  ruling is from observed play and overrides it. */
         repairedRecipientIds?: string[];
+        /** The repair event an on-own-repair-to-ally intent answers, as that event's `eventSeq`.
+         *  A Chimei over-repair redirect's own repair keeps the seq of the repair whose waste it
+         *  redirected, so the redirect and its parent are one repair event. `passesProcChanceGate`
+         *  draws one proc verdict per (owner, ability, repair event) and replays it for every
+         *  intent of that event (owner ruling R169: Font of Power rolls once for a repair plus its
+         *  redirect, and a success reaches every recipient of both). */
+        repairEventSeq?: number;
         /** The repairing actor's id (heal-performed.casterId), captured by the on-enemy-repaired
          *  listener. Used by the charge branch as the per-source key for an `everyNthEvent` gate
          *  AND as the single-target for "decrease THAT enemy's charge" (Zosimos). ALSO used to
@@ -1590,8 +1597,9 @@ export function registerReactiveListeners(args: {
                     break;
                 case 'on-own-repair-to-ally': {
                     // The OWNER's own repair (Font of Power). One enqueue per qualifying
-                    // repair -> one proc-gate roll; the buff grant fans out to every repaired
-                    // recipient via eventCtx.repairedRecipientIds, the caster included.
+                    // repair, one proc-gate roll per repair event (a redirect's repair shares its
+                    // parent's — `eventCtx.repairEventSeq`); the buff grant fans out to every
+                    // repaired recipient via eventCtx.repairedRecipientIds, the caster included.
                     //
                     // ⚠️ The trigger's NAME is a misnomer since #444 — "to-ally" no longer
                     // qualifies anything. It is deliberately NOT renamed: the string is an
@@ -1614,7 +1622,8 @@ export function registerReactiveListeners(args: {
                     const enqueueForOwnRepair = (
                         casterId: string,
                         perTarget: { targetId: string; overheal?: number }[],
-                        aggregateOverheal: number
+                        aggregateOverheal: number,
+                        repairEventSeq: number
                     ) => {
                         if (casterId !== ownerId) return;
                         // Every recipient, the caster included (#444). Non-empty whenever the
@@ -1649,6 +1658,7 @@ export function registerReactiveListeners(args: {
                                 // wasted, and self-inclusive since #444. Font of Power's grant
                                 // list.
                                 repairedRecipientIds: repaired,
+                                repairEventSeq,
                                 overhealAmount: aggregateOverheal,
                                 ...(Object.keys(overhealByRecipient).length > 0
                                     ? { overhealByRecipient }
@@ -1668,7 +1678,12 @@ export function registerReactiveListeners(args: {
                         const aggregateOverheal = e.perTarget
                             ? e.perTarget.reduce((sum, pt) => sum + (pt.overheal ?? 0), 0)
                             : (e.overheal ?? 0);
-                        enqueueForOwnRepair(e.casterId, perTarget, aggregateOverheal);
+                        enqueueForOwnRepair(
+                            e.casterId,
+                            perTarget,
+                            aggregateOverheal,
+                            listeningEventSeq ?? 0
+                        );
                     });
                     // #434: a repair performed from a LIVE TRIGGER is still a repair this owner
                     // performed — owner ruling 2026-08-30, posed as Cultivator's on-ally-damaged
@@ -1689,19 +1704,29 @@ export function registerReactiveListeners(args: {
                     //     below is its special case for this listener.
                     //
                     // The guard is deliberately SELF-exclusion and not an emit suppression: owner
-                    // ruling 2026-08-30 is that the redirect's own over-repair must still be
-                    // shielded by Abundant Renewal and still roll Font of Power's proc. Only a
-                    // SECOND redirect is forbidden. Suppressing the emit (the fromPurgeEvent
-                    // pattern) would blind those observers too.
+                    // ruling 2026-08-30 is that the redirect's own over-repair is still shielded by
+                    // Abundant Renewal and still reaches Font of Power. Only a SECOND redirect is
+                    // forbidden. Suppressing the emit (the fromPurgeEvent pattern) would blind
+                    // those observers too.
+                    //
+                    // The redirect's repair is part of the repair whose waste it redirected (owner
+                    // ruling R169), so it carries that repair's `repairEventSeq` rather than its
+                    // own: Font of Power answers both with one roll.
                     bus.on('reactive-heal-performed', (e) => {
                         if (e.casterId === ownerId && e.sourceAbilityId === intent.ability.id) {
                             return;
                         }
+                        const redirectedFrom =
+                            resolvingIntent?.ownerId === e.casterId &&
+                            resolvingIntent.ability.trigger === 'on-own-repair-to-ally'
+                                ? resolvingIntent.eventCtx?.repairEventSeq
+                                : undefined;
                         enqueueForOwnRepair(
                             e.casterId,
                             e.perTarget,
                             // SELF-INCLUSIVE, mirroring the cast arm — see the eventCtx docs.
-                            e.perTarget.reduce((sum, pt) => sum + (pt.overheal ?? 0), 0)
+                            e.perTarget.reduce((sum, pt) => sum + (pt.overheal ?? 0), 0),
+                            redirectedFrom ?? listeningEventSeq ?? 0
                         );
                     });
                     break;
@@ -2381,19 +2406,23 @@ export function registerReactiveListeners(args: {
                     };
                     bus.on('heal-performed', (e) => onEnemyRepair(e.casterId, e.targets));
                     // A REACTIVE repair is still "an enemy performing a repair" (Ruiner's Bomb).
-                    // Reactive heals deliberately emit NO `heal-performed` (chain guard — it would
-                    // re-trigger the caster's own on-repair listeners and loop), only the log-only
-                    // `reactive-heal-performed`; without this second subscription Ruiner was blind
-                    // to exactly the ships his passive is meant to punish — the reaction-healers
+                    // Reactive heals emit `reactive-heal-performed`, never `heal-performed`, so
+                    // this second subscription is what lets these riders see the reaction-healers
                     // (Heliodor's on-damaged self-repair, Cultivator's on-ally-damaged repair),
-                    // which repair many times a round and never once via heal-performed.
+                    // which repair many times a round and never via heal-performed.
                     //
-                    // CHAIN SAFETY: this is a listener on a type documented as having none, so it
-                    // must not reopen the loop the chain guard closed. It cannot: the enqueued
-                    // intents are the on-enemy-repaired riders (Ruiner's Bomb debuff + Overload
-                    // self-buff, Zosimos's charge removal, Amartya's Defense Shred) — none of them
-                    // heal, so none can emit another reactive-heal-performed. The lineage rule
-                    // (`reactionKey`) ends any future rider that could.
+                    // CHAIN SAFETY. Sansi's rider is itself a repair ("When an enemy is directly
+                    // repaired, limited to 3 times per round, this Unit repairs 5% ..."), so it
+                    // emits reactive-heal-performed and wakes the other side's on-enemy-repaired
+                    // listeners, an opposing Sansi's included. Two things bound that cycle:
+                    //  1. The lineage rule (`reactionKey`, R86): a clause already in an intent's
+                    //     `reactionAncestry` is dropped, so Sansi A -> Sansi B -> Sansi A ends
+                    //     before A repairs a second time in one chain.
+                    //  2. Her `maxPerRound` (3) caps her firings across separate chains.
+                    // `sansiMirrorRepairChain.integration.test.ts` pins (1) on a mirror board.
+                    // The other riders here (Ruiner's Bomb and Overload, Zosimos's charge, Nayra's
+                    // debuff, Amartya's Defense Shred, Synaptic Resonance's Speed Up) do not
+                    // repair, so they cannot extend a chain through this event.
                     bus.on('reactive-heal-performed', (e) =>
                         onEnemyRepair(
                             e.casterId,
@@ -2972,8 +3001,10 @@ export interface IntentExecContext {
     reactionFiredThisAttack?: Set<string>;
     /** Proc verdict cache for scoped proc abilities. `procScope:'per-attack'`: keyed
      *  `ownerId:abilityId:subAttackIndex` → the single roll's outcome. `procScope:'per-debuff'`
-     *  (Insidiousness): keyed per root-cast cap — see `perDebuffProcVictims`. The map is
-     *  cleared at each actor turn-start (engine) beside `reactionFiredThisAttack`.
+     *  (Insidiousness): keyed per root-cast cap — see `perDebuffProcVictims`. An
+     *  on-own-repair-to-ally proc (Font of Power): keyed per repair event
+     *  (`eventCtx.repairEventSeq`). The map is cleared at each actor turn-start (engine) beside
+     *  `reactionFiredThisAttack`.
      *
      *  Named `…ThisSubAttack` deliberately: keying on `ownerId:abilityId` alone would make it a
      *  per-TURN cache, replaying sub-attack #1's verdict for all N of a `hits: N` skill.
@@ -4687,6 +4718,18 @@ function passesProcChanceGate(intent: Intent, ctx: IntentExecContext): boolean {
     const pc = intent.ability.procChance;
     if (pc === undefined || pc <= 0 || pc >= 1) return true;
     const gateKey = `${intent.ownerId}:${intent.ability.id}`;
+    // An on-own-repair-to-ally intent draws one verdict per repair event, replayed for every
+    // intent of that event (`eventCtx.repairEventSeq`, R169).
+    const repairEventSeq = intent.eventCtx?.repairEventSeq;
+    if (repairEventSeq !== undefined) {
+        const repairMemo = ctx.procDecisionThisSubAttack;
+        const repairKey = `${gateKey}:repair-event:${repairEventSeq}`;
+        const replayed = repairMemo?.get(repairKey);
+        if (replayed !== undefined) return replayed;
+        const verdict = drawProcVerdict(intent.ownerId, intent.ability.id, pc, ctx.procChanceGates);
+        repairMemo?.set(repairKey, verdict);
+        return verdict;
+    }
     // procScope:'per-attack': one roll for the whole attack. The verdict is memoized per
     // (owner, ability) and replayed for every later event this attack, so every event of one
     // attack shares ONE roll and all-or-none holds across its footprint. (`'per-debuff'` —
