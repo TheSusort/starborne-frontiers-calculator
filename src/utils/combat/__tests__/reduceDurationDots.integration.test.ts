@@ -4,7 +4,7 @@
  * of all active debuffs on all allies by 1 turn" and Pestilence's "When this Unit inflicts a debuff,
  * it reduces the duration of all active debuffs on all allies by 1 turn" take a turn off every
  * Corrosion and Inferno entry; one cut to 0 expires as a natural expiry does, without ticking. An
- * unremovable DoT (Acidic Decay) is not shortened.
+ * unremovable DoT (Acidic Decay) is shortened like any other (R173).
  *
  * Measured against a control board identical but for the passive, so the DoTs' own per-turn
  * decrements cancel out. Real parsed kits (buildTraceShip on docs/ship-skills.csv). Each case runs
@@ -227,12 +227,13 @@ for (const playerMine of [true, false]) {
             slots: [{ slot: 'active', abilities: [] }, kit('Heliodor', ['passive']).slots[0]],
         });
 
-        it('two hits take two turns off Corrosion; Acidic Decay keeps its turns', () => {
+        it('two hits take two turns off Corrosion and Acidic Decay', () => {
             const control = run(board([heliodor(EMPTY)], [hitter], playerMine), holder, 2);
             const cut = run(board([heliodor(passive())], [hitter], playerMine), holder, 2);
             expect(control.corrosion).toHaveLength(1);
             expect(cut.corrosion).toEqual([control.corrosion[0] - 2]);
-            expect(cut.acidic).toEqual(control.acidic);
+            expect(control.acidic).toHaveLength(1);
+            expect(cut.acidic).toEqual([control.acidic[0] - 2]);
         });
 
         // Round 1's tick precedes the hitter's first turn, so it has no applier to deal from and
@@ -258,7 +259,7 @@ for (const playerMine of [true, false]) {
         const ally: Spec = { id: 'ally', kit: EMPTY, speed: 100, position: 'M3' };
         const target: Spec = { id: 'target', kit: EMPTY, speed: 10, position: 'M4' };
 
-        it('each landed infliction takes a turn off the ally’s Corrosion; Acidic Decay keeps its turns', () => {
+        it('each landed infliction takes a turn off the ally’s Corrosion and Acidic Decay', () => {
             const control = run(
                 board([pestilence(['active']), ally], [target], playerMine),
                 'ally',
@@ -272,7 +273,8 @@ for (const playerMine of [true, false]) {
             expect(control.corrosion).toHaveLength(1);
             // Two rounds, one landed Corrosion II each.
             expect(cut.corrosion).toEqual([control.corrosion[0] - 2]);
-            expect(cut.acidic).toEqual(control.acidic);
+            expect(control.acidic).toHaveLength(1);
+            expect(cut.acidic).toEqual([control.acidic[0] - 2]);
         });
 
         // As for Heliodor: the round-1 tick precedes the applier's first turn and deals nothing.

@@ -1867,43 +1867,45 @@ describe('reduceRandomDebuffDuration', () => {
         expect(eng.timedAbilityStatuses('enemy')).toHaveLength(0);
     });
 
-    it('skips UNREMOVABLE_STATUSES and returns 0 when that is the only debuff', () => {
+    it('cuts an unremovable debuff (Acidic Decay) when it is the only one (R173)', () => {
         const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
         eng.beginRound(1);
-        // 'Acidic Decay' is a real member of UNREMOVABLE_STATUSES.
         eng.applyTimedAbilityStatus(1, timedEnemyStatus('Acidic Decay', 3));
 
         const result = eng.reduceRandomDebuffDuration(DEFAULT_ENEMY_TARGET, 1, at(0));
 
-        expect(result).toBe(0);
-        // The debuff must be untouched.
-        const timed = eng.timedAbilityStatuses('enemy');
-        expect(timed).toHaveLength(1);
-        expect(timed[0].active.turnsRemaining).toBe(3);
+        expect(result).toBe(1);
+        expect(turnsOf(eng, 'Acidic Decay')).toBe(2);
     });
 
-    it('leaves an UNREMOVABLE debuff out of the pool, whatever the draw', () => {
-        // Acidic Decay (a real UNREMOVABLE_STATUSES member) is applied second, so it would be the
-        // newest — the head of the pool a draw of 0 picks — if it were a candidate.
+    it('never cuts a status whose own text says it cannot be reduced (Barrier Recharging)', () => {
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        eng.beginRound(1);
+        eng.applyTimedAbilityStatus(1, timedEnemyStatus('Barrier Recharging', 3));
+
+        const result = eng.reduceRandomDebuffDuration(DEFAULT_ENEMY_TARGET, 1, at(0));
+
+        expect(result).toBe(0);
+        expect(turnsOf(eng, 'Barrier Recharging')).toBe(3);
+    });
+
+    it('an unremovable debuff is in the pool and Barrier Recharging never is (R173)', () => {
+        // Acidic Decay is applied second, so it is the newest: the head of the pool a draw of 0
+        // picks. Barrier Recharging is newest of all yet must stay out of the pool.
         const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
         eng.beginRound(1);
         eng.applyTimedAbilityStatus(1, timedEnemyStatus('Defense Down', 3));
         eng.applyTimedAbilityStatus(1, timedEnemyStatus('Acidic Decay', 3));
-        const draw = () => {
-            throw new Error('drew although only one candidate is removable');
-        };
+        eng.applyTimedAbilityStatus(1, timedEnemyStatus('Barrier Recharging', 3));
 
-        const result = eng.reduceRandomDebuffDuration(DEFAULT_ENEMY_TARGET, 1, draw);
+        expect(eng.reduceRandomDebuffDuration(DEFAULT_ENEMY_TARGET, 1, at(0))).toBe(1);
+        expect(turnsOf(eng, 'Acidic Decay')).toBe(2);
+        expect(turnsOf(eng, 'Defense Down')).toBe(3);
+        expect(turnsOf(eng, 'Barrier Recharging')).toBe(3);
 
-        // Should have found a target (the removable Defense Down).
-        expect(result).toBe(1);
-        const timed = eng.timedAbilityStatuses('enemy');
-        const removable = timed.find((s) => s.payload.buffName === 'Defense Down');
-        const unremovable = timed.find((s) => s.payload.buffName === 'Acidic Decay');
-        // Removable was reduced.
-        expect(removable?.active.turnsRemaining).toBe(2);
-        // Unremovable was skipped — completely untouched.
-        expect(unremovable?.active.turnsRemaining).toBe(3);
+        expect(eng.reduceRandomDebuffDuration(DEFAULT_ENEMY_TARGET, 1, at(0.99))).toBe(1);
+        expect(turnsOf(eng, 'Defense Down')).toBe(2);
+        expect(turnsOf(eng, 'Barrier Recharging')).toBe(3);
     });
 
     it('returns 0 for an unknown actor id without throwing', () => {
@@ -1990,23 +1992,22 @@ describe('reduceAllDebuffsDuration', () => {
         );
     });
 
-    it('skips UNREMOVABLE_STATUSES, still reduces the other eligible debuffs', () => {
+    it('reduces an unremovable debuff too; Barrier Recharging alone is left untouched (R173)', () => {
         const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
         eng.beginRound(1);
-        // 'Acidic Decay' is a real member of UNREMOVABLE_STATUSES.
         eng.applyTimedAbilityStatus(1, timedEnemyStatus('Acidic Decay', 3));
+        eng.applyTimedAbilityStatus(1, timedEnemyStatus('Barrier Recharging', 3));
         eng.applyTimedAbilityStatus(1, timedEnemyStatus('Defense Down', 3));
 
         const result = eng.reduceAllDebuffsDuration(DEFAULT_ENEMY_TARGET, 1);
 
-        expect(result).toBe(1);
+        expect(result).toBe(2);
         const timed = eng.timedAbilityStatuses('enemy');
-        expect(
-            timed.find((s) => s.payload.buffName === 'Acidic Decay')?.active.turnsRemaining
-        ).toBe(3);
-        expect(
-            timed.find((s) => s.payload.buffName === 'Defense Down')?.active.turnsRemaining
-        ).toBe(2);
+        const turns = (n: string) =>
+            timed.find((s) => s.payload.buffName === n)?.active.turnsRemaining;
+        expect(turns('Acidic Decay')).toBe(2);
+        expect(turns('Defense Down')).toBe(2);
+        expect(turns('Barrier Recharging')).toBe(3);
     });
 
     it('returns 0 for an unknown actor id without throwing', () => {

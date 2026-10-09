@@ -524,17 +524,18 @@ describe('Echoing Burst accumulators are debuffs in the DoT-container helpers (R
         expect(dotCleanseCandidates(holder(), 'dot').map((c) => c.seq)).toEqual([1, 1]);
     });
 
-    it('the DoT half of a single random cut offers no accumulator (R112)', () => {
-        expect(dotDurationCutCandidates(holder()).map((c) => c.seq)).toEqual([1, 1]);
+    it('the DoT half of a single random cut offers no accumulator (R112) but does offer Acidic Decay (R173)', () => {
+        // Corrosion's 2 stacks (seq 1) and Acidic Decay's 1 stack (no appliedSeq → 0).
+        expect(dotDurationCutCandidates(holder()).map((c) => c.seq)).toEqual([1, 1, 0]);
     });
 
     it('the DoT half of an all-debuffs shorten leaves accumulators to their own cut (R112)', () => {
         const h = holder();
-        // Corrosion's 2 stacks; Acidic Decay is unremovable; Bombs and accumulators are cut by
+        // Corrosion's 2 stacks and Acidic Decay's 1 (R173); Bombs and accumulators are cut by
         // their own detonating helpers.
-        expect(shortenDotDurations(h, 2)).toBe(2);
+        expect(shortenDotDurations(h, 2)).toBe(2 + 1);
         expect(h.pendingAccumulators[0].roundsRemaining).toBe(2);
         expect(h.pendingBombs[0].countdown).toBe(3);
-        expect(h.corrosionEntries[1].remainingRounds).toBe(3);
+        expect(h.corrosionEntries[1].remainingRounds).toBe(1);
     });
 });

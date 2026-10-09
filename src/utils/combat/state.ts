@@ -260,8 +260,9 @@ export function dotCleanseCandidates(
  * The DoT half of a single random duration cut's pool (Warpstrike, owner ruling R35): one
  * candidate per Corrosion, Inferno and generic STACK `holder` carries (R26 — each stack is one
  * debuff), dated by its entry's `appliedSeq` (absent → 0). An `unremovable` entry (Acidic Decay)
- * offers none. Bombs and Echoing Burst accumulators come from `bombDurationCutCandidates` and
- * `accumulatorDurationCutCandidates`, which detonate one cut to 0 (owner ruling R113).
+ * offers its stacks like any other (R173). Bombs and Echoing Burst accumulators come from
+ * `bombDurationCutCandidates` and `accumulatorDurationCutCandidates`, which detonate one cut to 0
+ * (owner ruling R113).
  *
  * Cutting a stack of a multi-stack entry splits it off: the entry keeps its other stacks and
  * duration, and a one-stack copy (same `appliedSeq`, applier and family) with the shortened
@@ -276,7 +277,6 @@ export function dotDurationCutCandidates(holder: DotEntryHolder): DurationCutCan
         holder.genericDoTEntries,
     ]) {
         for (const e of entries) {
-            if (e.unremovable) continue;
             for (let s = 0; s < e.stacks; s++) {
                 out.push({
                     seq: e.appliedSeq ?? 0,
@@ -307,9 +307,9 @@ export function dotDurationCutCandidates(holder: DotEntryHolder): DurationCutCan
 /**
  * The DoT half of a duration cut on "all active debuffs" (Heliodor, Pestilence — owner ruling
  * 2026-10-04: DoTs are debuffs): takes `turns` off every Corrosion, Inferno and generic entry
- * `holder` carries. An entry cut to 0 is spliced out in place, as its own expiry does after a tick
- * (`expireStacks`) — so it does not tick again. An `unremovable` entry (Acidic Decay) is left
- * alone. Bombs and Echoing Burst accumulators are not touched here: their cuts are
+ * `holder` carries, an `unremovable` entry (Acidic Decay) included (R173). An entry cut to 0 is
+ * spliced out in place, as its own expiry does after a tick (`expireStacks`) — so it does not
+ * tick again. Bombs and Echoing Burst accumulators are not touched here: their cuts are
  * `reduceBombsOnVictim` and `reduceAccumulatorsOnVictim`, which detonate one driven to 0 (owner
  * ruling R113). Returns the DoT stacks shortened. A non-positive / non-finite `turns` → 0.
  */
@@ -324,7 +324,6 @@ export function shortenDotDurations(holder: DotEntryHolder, turns: number): numb
     ]) {
         for (let i = entries.length - 1; i >= 0; i--) {
             const e = entries[i];
-            if (e.unremovable) continue;
             e.remainingRounds -= delta;
             shortened += e.stacks;
             if (e.remainingRounds <= 0) entries.splice(i, 1);

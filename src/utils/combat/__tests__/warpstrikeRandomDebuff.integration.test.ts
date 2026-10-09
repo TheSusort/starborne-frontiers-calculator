@@ -1,11 +1,12 @@
 /**
  * The Warpstrike implant: "Increases damage by X% when directly damaging an enemy while debuffed,
  * and reduces a random active debuff's duration by 1 turn." Owner ruling 2026-10-04 (R35): the
- * debuff is picked at RANDOM over every removable debuff the wearer carries — named timed statuses
- * and DoT stacks alike (Corrosion, Inferno, generic, Bombs), each stack one candidate (R26).
- * Unremovable debuffs (Acidic Decay) are never picked. A picked stack of a multi-stack entry is
- * split off with its shortened duration; a DoT or named status cut to 0 expires without ticking,
- * and a Bomb or Echoing Burst cut to 0 detonates there and then (R113).
+ * debuff is picked at RANDOM over every debuff the wearer carries — named timed statuses and DoT
+ * stacks alike (Corrosion, Inferno, generic, Bombs), each stack one candidate (R26). Unremovable
+ * debuffs (Acidic Decay) are picked too: "unremovable" bars cleanse and purge, not a duration cut
+ * (R173). A picked stack of a multi-stack entry is split off with its shortened duration and
+ * keeps its `unremovable` flag and `family`; a DoT or named status cut to 0 expires without
+ * ticking, and a Bomb or Echoing Burst cut to 0 detonates there and then (R113).
  *
  * A plain hitter wears a real legendary Warpstrike (built by the equipment registry) and hits once
  * in a one-round fight. Its debuffs are seeded on it before its turn; every reading is compared
@@ -169,7 +170,13 @@ interface Seed {
 
 interface After {
     named: Map<string, number>;
-    corrosion: { stacks: number; remainingRounds: number; appliedSeq?: number }[];
+    corrosion: {
+        stacks: number;
+        remainingRounds: number;
+        appliedSeq?: number;
+        unremovable?: boolean;
+        family?: string;
+    }[];
     inferno: { stacks: number; remainingRounds: number }[];
     bombs: { stacks: number; countdown: number }[];
     /** `bomb-detonated` on the wearer whose detonator was the wearer itself. */
@@ -287,6 +294,8 @@ const run = (side: Side, withImplant: boolean, seed: Seed, numRounds = 1): After
         stacks: e.stacks,
         remainingRounds: e.remainingRounds,
         appliedSeq: e.appliedSeq,
+        ...(e.unremovable ? { unremovable: true } : {}),
+        ...(e.family ? { family: e.family } : {}),
     }));
     out.inferno = wearer.infernoEntries.map((e) => ({
         stacks: e.stacks,
@@ -368,27 +377,59 @@ for (const [tag, side] of SIDES) {
             expect(stackPicks).toBeGreaterThan(0);
         });
 
-        it('unremovable debuffs are never picked', () => {
+        it('an unremovable debuff is picked too: across seeds both it and a removable one lose a turn (R173)', () => {
             const seed: Seed = {
-                named: [{ name: 'Acidic Decay', turns: 9 }],
+                named: [{ name: 'Defense Down II', turns: 9 }],
                 corrosion: [
-                    dot(3, 9, { family: 'Acidic Decay', unremovable: true, appliedSeq: 0 }),
-                    dot(1, 9, { appliedSeq: 0 }),
+                    dot(2, 9, { family: 'Acidic Decay', unremovable: true, appliedSeq: 0 }),
                 ],
             };
             setupKeyedRng(1);
             const control = run(side, false, seed);
+            const namedBase = control.named.get('Defense Down II');
+            const decayBase = control.corrosion[0].remainingRounds;
+            expect(namedBase).toBeDefined();
+            let namedPicks = 0;
+            let decayPicks = 0;
             for (const s of SEEDS) {
                 setupKeyedRng(s);
                 const cut = run(side, true, seed);
-                expect(cut.named.get('Acidic Decay')).toBe(control.named.get('Acidic Decay'));
-                expect(cut.corrosion).toEqual([
-                    control.corrosion[0],
-                    {
-                        ...control.corrosion[1],
-                        remainingRounds: control.corrosion[1].remainingRounds - 1,
-                    },
-                ]);
+                const namedCut = cut.named.get('Defense Down II') === namedBase! - 1;
+                const shortDecay = cut.corrosion
+                    .filter((e) => e.remainingRounds === decayBase - 1)
+                    .reduce((n, e) => n + e.stacks, 0);
+                // Exactly one debuff loses exactly one turn on every seed.
+                expect((namedCut ? 1 : 0) + shortDecay).toBe(1);
+                // Every Acidic Decay stack stays unremovable and keeps its family.
+                for (const e of cut.corrosion) {
+                    expect(e.unremovable).toBe(true);
+                    expect(e.family).toBe('Acidic Decay');
+                }
+                if (namedCut) namedPicks += 1;
+                else decayPicks += 1;
+            }
+            expect(namedPicks).toBeGreaterThan(0);
+            expect(decayPicks).toBeGreaterThan(0);
+        });
+
+        it('a named Acidic Decay is picked; a named Barrier Recharging never is (R173)', () => {
+            const seed: Seed = {
+                named: [
+                    { name: 'Acidic Decay', turns: 9 },
+                    { name: 'Barrier Recharging', turns: 9 },
+                ],
+            };
+            setupKeyedRng(1);
+            const control = run(side, false, seed);
+            const decayBase = control.named.get('Acidic Decay');
+            const barrierBase = control.named.get('Barrier Recharging');
+            expect(decayBase).toBeDefined();
+            expect(barrierBase).toBeDefined();
+            for (const s of SEEDS) {
+                setupKeyedRng(s);
+                const cut = run(side, true, seed);
+                expect(cut.named.get('Acidic Decay')).toBe(decayBase! - 1);
+                expect(cut.named.get('Barrier Recharging')).toBe(barrierBase);
             }
         });
 
@@ -436,7 +477,7 @@ for (const [tag, side] of SIDES) {
             expect(cut.forcedDetonations).toBe(1);
         });
 
-        it('carrying nothing removable → nothing happens and nothing throws', () => {
+        it('carrying only Acidic Decay → it is cut and stays unremovable (R173)', () => {
             const seed: Seed = {
                 corrosion: [
                     dot(2, 9, { family: 'Acidic Decay', unremovable: true, appliedSeq: 0 }),
@@ -444,7 +485,31 @@ for (const [tag, side] of SIDES) {
             };
             const control = run(side, false, seed);
             const cut = run(side, true, seed);
-            expect(cut.corrosion).toEqual(control.corrosion);
+            const r = control.corrosion[0].remainingRounds;
+            expect(cut.corrosion).toEqual([
+                {
+                    stacks: 1,
+                    remainingRounds: r,
+                    appliedSeq: 0,
+                    unremovable: true,
+                    family: 'Acidic Decay',
+                },
+                {
+                    stacks: 1,
+                    remainingRounds: r - 1,
+                    appliedSeq: 0,
+                    unremovable: true,
+                    family: 'Acidic Decay',
+                },
+            ]);
+            expect(cut.cuts).toBe(1);
+        });
+
+        it('carrying only Barrier Recharging → nothing happens and nothing throws (R173)', () => {
+            const seed: Seed = { named: [{ name: 'Barrier Recharging', turns: 9 }] };
+            const control = run(side, false, seed);
+            const cut = run(side, true, seed);
+            expect(cut.named).toEqual(control.named);
             expect(cut.cuts).toBe(0);
         });
     });

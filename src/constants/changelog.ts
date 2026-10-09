@@ -12,6 +12,7 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator: Font of Power rolls once for Chimei's repair and its redirect.",
     'Combat simulator: the log shows Echoing Burst blocked by a debuff-immune target.',
     'Ships: "Copy as image" on ship cards works again.',
+    'Combat simulator: Warpstrike and duration cuts can now shorten Acidic Decay.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

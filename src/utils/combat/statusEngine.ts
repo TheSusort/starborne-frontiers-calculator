@@ -3,7 +3,11 @@ import { Condition, RecipientFilter, SkillSlot } from '../../types/abilities';
 import type { FactionName } from '../../constants/factions';
 import { conditionsMet, ConditionContext } from '../abilities/evaluateConditions';
 import { isPersistentByName, persistentCapFor } from '../../constants/oneShotPersistentBuffs';
-import { UNREMOVABLE_STATUSES, STACK_STEALABLE_STATUSES } from './cheatDeathBuffs';
+import {
+    UNREMOVABLE_STATUSES,
+    STACK_STEALABLE_STATUSES,
+    isDurationCutImmune,
+} from './cheatDeathBuffs';
 import { isBuffProtection } from './buffProtectionBuffs';
 import { EXPOSED } from './exposedStatus';
 import type { CombatEventBus } from './events';
@@ -400,10 +404,10 @@ export interface StatusEngine {
     lastAppliedSeq(): number;
     /** Reduce the duration of ONE debuff on `actorId` by `turns`, picked at RANDOM (owner ruling
      *  R35, Warpstrike's "reduces a random active debuff's duration by 1 turn"). The pool is every
-     *  removable timed debuff in the actor's per-victim enemy store plus `extra` — its DoT and Bomb
+     *  timed debuff in the actor's per-victim enemy store plus `extra` — its DoT and Bomb
      *  stacks, one candidate per stack, and its Echoing Bursts (`dotDurationCutCandidates`,
      *  `accumulatorDurationCutCandidates`, `bombDurationCutCandidates`).
-     *  'recurring'/'permanent' and UNREMOVABLE_STATUSES are skipped (consistent with cleanse); a
+     *  'recurring'/'permanent' and `isDurationCutImmune` statuses are skipped (R173); a
      *  named debuff reduced to <= 0 is removed (expired). The pool is ordered newest-applied first
      *  and `draw` (uniform in [0, 1)) indexes it; a one-candidate pool takes no draw. Returns 1 if
      *  a debuff was affected, else 0 (empty pool, or a non-positive / non-finite `turns`). */
@@ -415,7 +419,7 @@ export interface StatusEngine {
     ): number;
     /** Reduce the duration of EVERY eligible timed debuff on `actorId` by `turns` (Heliodor/
      *  Pestilence's "reduces the duration of all active Debuffs … by 1 turn"). Timed only; skips
-     *  'recurring'/'permanent' and UNREMOVABLE_STATUSES; a non-positive/non-finite `turns` is
+     *  'recurring'/'permanent' and `isDurationCutImmune` statuses (R173); a non-positive/non-finite `turns` is
      *  rejected. Returns the number of debuffs affected (removed early if their reduced
      *  duration is <= 0). Unknown id → 0. */
     reduceAllDebuffsDuration(actorId: string, turns: number): number;
@@ -1970,7 +1974,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         namedToo?: boolean
     ): number => removeNewestFirst(actorId, 'debuffs', count, extra, namedToo);
 
-    /** Reduce ONE removable debuff on `actorId` by `turns`, picked at random from the store's
+    /** Reduce ONE debuff on `actorId` by `turns` (R173: see `isDurationCutImmune`), picked at random from the store's
      *  timed debuffs and `extra` — see the interface doc. Only the per-victim timed enemy store is
      *  visited: accumulating/persistent maps have no finite duration. A non-positive / non-finite
      *  `turns` is rejected (→ 0): 0 would credit a no-op as success, a negative value would
@@ -1990,7 +1994,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
                 // Defensive: BuffState.turnsRemaining is typed `number` — non-numeric durations
                 // ('recurring'/'permanent') live in separate maps and cannot reach enemyMaps.
                 if (typeof s.turnsRemaining !== 'number') continue;
-                if (isUnremovable(s.buffName, s.turnsRemaining)) continue;
+                if (isDurationCutImmune(s.buffName)) continue;
                 pool.push({
                     seq: s.appliedSeq,
                     cut: (t) => {
@@ -2010,8 +2014,8 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
     };
 
     /** Shrinks EVERY eligible timed debuff on `actorId` by `turns`. Reads the per-victim
-     *  `enemyMaps` with the eligibility rules of reduceRandomDebuffDuration (numeric turnsRemaining only, skip
-     *  isUnremovable(name, turnsRemaining)); a reduced entry <= 0 is deleted (expired). Collects
+     *  `enemyMaps` with the eligibility rules of reduceRandomDebuffDuration (numeric turnsRemaining
+     *  only, skip `isDurationCutImmune`, R173); a reduced entry <= 0 is deleted (expired). Collects
      *  keys to delete in a separate pass so mutating the map mid-iteration is safe. Returns the
      *  count of debuffs affected; a non-positive/non-finite `turns` or unknown id returns 0. */
     const reduceAllDebuffsDuration = (actorId: string, turns: number): number => {
@@ -2023,7 +2027,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         const toDelete: string[] = [];
         for (const [key, s] of timedMap) {
             if (typeof s.turnsRemaining !== 'number') continue;
-            if (isUnremovable(s.buffName, s.turnsRemaining)) continue;
+            if (isDurationCutImmune(s.buffName)) continue;
             s.turnsRemaining -= delta;
             affected++;
             if (s.turnsRemaining <= 0) toDelete.push(key);

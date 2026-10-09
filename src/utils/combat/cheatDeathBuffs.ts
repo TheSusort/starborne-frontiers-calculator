@@ -20,6 +20,18 @@ export const CHEAT_DEATH_BUFFS: ReadonlySet<string> = new Set(['Cheat Death']);
  *  shipped Pallas/Thresh/Tithonus steal on its existing target. */
 export const STACK_STEALABLE_STATUSES: ReadonlySet<string> = new Set<string>(['Protection']);
 
+/** Statuses a duration cut never shortens (R173). "Unremovable" bars cleanse, purge and a Cheat
+ *  Death wipe (`UNREMOVABLE_STATUSES`) and says nothing about duration: Warpstrike's single random
+ *  cut and Heliodor/Pestilence's reduce-all reach an unremovable debuff such as Acidic Decay.
+ *  The one exception is a status whose own text says it cannot be reduced. */
+export const DURATION_CUT_IMMUNE_STATUSES: ReadonlySet<string> = new Set<string>([
+    'Barrier Recharging',
+]);
+
+export function isDurationCutImmune(buffName: string): boolean {
+    return DURATION_CUT_IMMUNE_STATUSES.has(buffName);
+}
+
 /** Named statuses that survive a cleanse/purge/Cheat-Death wipe. The persistent-stacking
  *  statuses (Defense Shred/Blast/Overload/Titanite) live in a separate store with its own rules:
  *  a cleanse takes Defense Shred one stack per debuff (owner ruling R44) and a Cheat-Death wipe
