@@ -7360,6 +7360,19 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
               }
             : undefined;
 
+    /** Lists the caster's live row for a self status just applied in this round's reported
+     *  self-buffs, refreshing a row already there. `activeSelfBuffsForRound` is the array the
+     *  result hands out, so a write after `runPlayerTurn` returns still reaches the round row. */
+    const listLiveSelfBuff = (status: TimedStatus): void => {
+        const live = statusEngine
+            .timedAbilityStatuses('self', actor.id)
+            .find((s) => s.payload.buffName === status.payload.buffName);
+        if (!live) return;
+        const at = activeSelfBuffsForRound.findIndex((b) => b.buffName === live.active.buffName);
+        if (at >= 0) activeSelfBuffsForRound[at] = live.active;
+        else activeSelfBuffsForRound.push(live.active);
+    };
+
     /** The passive gains riding this cast's hits (`TimedStatus.perHit`), fired for ONE sub-attack
      *  ≥ 1 — the first sub-attack fires through `endOfTurnSelfStatuses`. A multi-hit skill is N
      *  full attacks, so each hit is its own firing (R178): a status fires once when any enemy
@@ -7383,6 +7396,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         for (const status of perHitSelfStatuses) {
             if (!struckCtxs.some((c) => conditionsMet(status.conditions, c))) continue;
             applyTimedSelfStatus(status, passiveRideGrantKey(status, sub.index));
+            listLiveSelfBuff(status);
         }
     };
 
@@ -7402,13 +7416,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             status,
             status.perHit === true ? passiveRideGrantKey(status, 0) : undefined
         );
-        const live = statusEngine
-            .timedAbilityStatuses('self', actor.id)
-            .find((s) => s.payload.buffName === status.payload.buffName);
-        if (!live) continue;
-        const at = activeSelfBuffsForRound.findIndex((b) => b.buffName === live.active.buffName);
-        if (at >= 0) activeSelfBuffsForRound[at] = live.active;
-        else activeSelfBuffsForRound.push(live.active);
+        listLiveSelfBuff(status);
     }
 
     return {
