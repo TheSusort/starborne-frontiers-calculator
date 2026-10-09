@@ -2673,19 +2673,16 @@ const DocumentationPage: React.FC = () => {
                                         zero under the single-target DPS assumptions.
                                     </p>
                                     <p className="text-theme-text mb-2">
-                                        <span className="text-primary">
-                                            Deterministic Simulation:
-                                        </span>{' '}
-                                        The simulator is fully deterministic — identical inputs
-                                        always produce identical results. Crits follow a per-round
-                                        fractional-accumulator schedule at the ship&apos;s effective
-                                        crit rate, with separate schedules for active and charged
-                                        hits to avoid cadence aliasing. Rounds where a crit lands
-                                        show a <span className="font-semibold">Crit</span> badge in
-                                        the chart tooltip. Attacks marked &quot;cannot critically
-                                        hit&quot; never crit and consume no crit chance. Debuff and
-                                        DoT landing, and chance-based DoT extensions, also follow
-                                        deterministic schedules — no randomness anywhere in the sim.
+                                        <span className="text-primary">Random Rolls:</span> Crits,
+                                        debuff and DoT landing (hacking against security), and
+                                        chance-based DoT extensions are each rolled at their stated
+                                        rate every time the calculator runs, so two runs of the same
+                                        setup can differ a little. A 70% crit rate crits about 70%
+                                        of the time over a long fight, with natural variance round
+                                        to round. Rounds where a crit lands show a{' '}
+                                        <span className="font-semibold">Crit</span> badge in the
+                                        chart tooltip. Attacks marked &quot;cannot critically
+                                        hit&quot; never crit and consume no crit chance.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Hard Condition Gates:</span>{' '}
@@ -2830,29 +2827,32 @@ const DocumentationPage: React.FC = () => {
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Turn Order:</span> Each
                                         simulated round, every ship acts once in descending Speed
-                                        order — higher Speed acts first, with team support ships
-                                        acting before the attacker on ties, and the enemy acting
-                                        last by default (enemy default speed 50). A faster support
-                                        applies its buffs before your attacker fires; a slower one
-                                        starts benefiting you the following round. Set each
-                                        ship&apos;s Speed in Combat Settings and on the
-                                        attacker&apos;s stats panel. Debuffs that land now persist
-                                        their full duration without re-rolling each round. Charged
-                                        skills without direct damage (pure utility) still fire on
-                                        their normal cadence and apply their effects. Speed Up buffs
-                                        make a ship act earlier in the round and Speed Down buffs
-                                        push it later — the turn order updates mid-round as speed
-                                        changes take effect, so a buff that fires on one ship&apos;s
-                                        turn is already reflected in the order for ships that have
-                                        not yet acted. Ships with conditional extra actions re-enter
-                                        the turn queue at their current Speed, including any live
-                                        Speed buffs or debuffs. End-of-round extra actions (such as
-                                        Harvester&apos;s on-ally-destroyed passive) drain after
-                                        every other ship has acted, regardless of Speed.
-                                        Start-of-combat, start-of-round and end-of-round effects
-                                        resolve in the same turn order, across both teams.
-                                        Start-of-combat effects, such as the Cloaking set&apos;s
-                                        Stealth, land before any start-of-round effect.
+                                        order — higher Speed acts first. On a Speed tie the ship
+                                        higher on the board acts first (top row, then middle, then
+                                        bottom, and the lower column number within a row), and when
+                                        two ships on opposite sides are tied in position too, your
+                                        ship acts first. The enemy acts last by default (enemy
+                                        default speed 50). A faster support applies its buffs before
+                                        your attacker fires; a slower one starts benefiting you the
+                                        following round. Set each ship&apos;s Speed in Combat
+                                        Settings and on the attacker&apos;s stats panel. Debuffs
+                                        that land now persist their full duration without re-rolling
+                                        each round. Charged skills without direct damage (pure
+                                        utility) still fire on their normal cadence and apply their
+                                        effects. Speed Up buffs make a ship act earlier in the round
+                                        and Speed Down buffs push it later — the turn order updates
+                                        mid-round as speed changes take effect, so a buff that fires
+                                        on one ship&apos;s turn is already reflected in the order
+                                        for ships that have not yet acted. Ships with conditional
+                                        extra actions re-enter the turn queue at their current
+                                        Speed, including any live Speed buffs or debuffs.
+                                        End-of-round extra actions (such as Harvester&apos;s
+                                        on-ally-destroyed passive) drain after every other ship has
+                                        acted, regardless of Speed. Start-of-combat, start-of-round
+                                        and end-of-round effects resolve in the same turn order,
+                                        across both teams. Start-of-combat effects, such as the
+                                        Cloaking set&apos;s Stealth, land before any start-of-round
+                                        effect.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Reactive Triggers:</span>{' '}
@@ -2884,6 +2884,18 @@ const DocumentationPage: React.FC = () => {
                                         300% damage. After targeting a defender, gains Crit Power Up
                                         II&quot;) lands after that hit, so it only affects later
                                         hits. Works for both teams and in the DPS calculator.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
+                                        <span className="text-primary">
+                                            Clause Order in Battles:
+                                        </span>{' '}
+                                        Steals, cleanses and purges follow the same order: a buff
+                                        Thresh steals before his damage boosts that hit, Sustainer
+                                        cleanses his debuffs before he hits, and Sefuba&apos;s
+                                        &quot;deals 160% damage and purges 1 buff&quot; hits through
+                                        the buff before removing it. A Stasis Tygr inflicts before
+                                        his damage counts for his own &quot;more damage to enemies
+                                        with Stasis&quot; on that hit. Works for both teams.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Crit-Gated Effects:</span> In
@@ -2939,7 +2951,9 @@ const DocumentationPage: React.FC = () => {
                                         Cobalt gains its charge and Out. Damage Up II only at full
                                         HP (as does his charged skill&apos;s extra damage equal to
                                         30% of his max HP), and Makoli repairs only when hit below
-                                        40% HP.
+                                        40% HP. A reaction to a hit reads that HP once, at the hit:
+                                        Makoli&apos;s 20% repair does not lift her above 40% before
+                                        her Disable half is judged, so both halves fire.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Buff Steal:</span> Skills
@@ -2992,9 +3006,17 @@ const DocumentationPage: React.FC = () => {
                                         Down, Meiying&apos;s Stasis). Demolisher&apos;s passive also
                                         detonates a splash equal to 100% of the exploded Bomb&apos;s
                                         damage onto the bombed enemy&apos;s neighbours, ignoring
-                                        Defense and unable to critically hit. This resolves on the
-                                        positioned board; in the single-target DPS calculator there
-                                        are no neighbours, so it has no effect.
+                                        Defense and unable to critically hit. A Bomb&apos;s
+                                        detonation and this splash resolve before any other reaction
+                                        to the hit that set it off, on either side: the splash lands
+                                        before the struck ship&apos;s own &ldquo;when directly
+                                        damaged&rdquo; reaction or an ally&apos;s on-crit follow-up.
+                                        A Bomb that explodes at its holder&apos;s turn start, and
+                                        the reactions to it, resolve before the holder acts:
+                                        Demolisher takes 2 charges from Akula first, so Akula uses
+                                        her normal skill instead of a charged skill that was ready.
+                                        This resolves on the positioned board; in the single-target
+                                        DPS calculator there are no neighbours, so it has no effect.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Per-enemy conditions:</span>{' '}
@@ -3077,9 +3099,14 @@ const DocumentationPage: React.FC = () => {
                                         (Oleander&apos;s charge, Provider&apos;s hit, Lingshe&apos;s
                                         Stealth, Hayyan&apos;s repair, the Firewall implant&apos;s
                                         chance) fires once per stack that lands, within its own
-                                        once-per-cast or once-per-round limits. APEX&apos;s 3%
-                                        shield fires at most once per skill cast, whoever cast it:
-                                        her active landing two debuffs, plus the debuffs Provider
+                                        once-per-cast or once-per-round limits. Firewall&apos;s
+                                        Block Debuff works the moment it procs: if Curator&apos;s
+                                        Attack Down III procs it, the same skill&apos;s Crit Power
+                                        Down III is blocked and rolls nothing. The same goes for
+                                        damage-over-time stacks: a proc on Snakeroot&apos;s first
+                                        Corrosion I stack blocks her second. APEX&apos;s 3% shield
+                                        fires at most once per skill cast, whoever cast it: her
+                                        active landing two debuffs, plus the debuffs Provider
                                         answers them with, gives one shield; an enemy&apos;s attack
                                         that wakes Warden&apos;s debuffs gives one more. Her Block
                                         Shield, and Xcellence&apos;s strike when an enemy resists a
@@ -3232,7 +3259,26 @@ const DocumentationPage: React.FC = () => {
                                         a 2-turn Stasis, and it acts that same round. Damage over
                                         time and Bombs do not shorten Stasis, and neither do ships
                                         whose attacks &ldquo;do not reduce Stasis&rdquo;, such as
-                                        Akula.
+                                        Akula. A stasised ship does not react to a hit that lands
+                                        while it is in Stasis, even the hit that frees it, but does
+                                        react to a later hit once the Stasis is gone, even a
+                                        follow-up hit within the same exchange. A skill that deals
+                                        damage and then inflicts Stasis (Razi&apos;s charged) draws
+                                        no reaction to its own hit, because the Stasis is on by the
+                                        time the reaction would resolve.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
+                                        <span className="text-primary">
+                                            Statuses landed by a reaction:
+                                        </span>{' '}
+                                        A buff or debuff that lands on a ship during its own turn
+                                        does not tick down at the end of that turn. Iridium&apos;s
+                                        1-turn Speed Down on the ship that just hit him still slows
+                                        its next turn, Guardian&apos;s Provoke drags the critting
+                                        enemy&apos;s next attack onto him, and Flamel&apos;s 2-turn
+                                        Stasis costs its attacker the next two turns unless a hit
+                                        shortens it. A Stasis works the moment it lands: the ship
+                                        takes no further reactions that turn.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">
@@ -3243,10 +3289,37 @@ const DocumentationPage: React.FC = () => {
                                         direct hits like any skill hit. They wake &ldquo;when
                                         directly damaged&rdquo; passives, shorten Stasis, are
                                         redirected by Protection, use the attacker&apos;s shield
-                                        penetration and spend Exposed. A counter-attack sets off
-                                        another counter-attack only when that one is a
-                                        &ldquo;primary target&rdquo; counter like Stalwart&apos;s.
-                                        Damage over time and Bomb explosions are not direct hits.
+                                        penetration and spend Exposed. They also feed damage-taken
+                                        shields: Malvex shields off a counter-attack or round-start
+                                        hit aimed at him, and Quixilver off any hit that breaks
+                                        through her shield. A counter-attack sets off another
+                                        counter-attack only when that one is a &ldquo;primary
+                                        target&rdquo; counter like Stalwart&apos;s. Damage over time
+                                        and Bomb explosions are not direct hits.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
+                                        <span className="text-primary">
+                                            Reflects and Protection:
+                                        </span>{' '}
+                                        Nosorog&apos;s reflect is direct damage to the attacker and
+                                        lands like a counter-attack: Warden hitting Nosorog takes
+                                        the reflect, then inflicts Corrosion on him and repairs, and
+                                        every counter-attacker (Stalwart, Centurion, Nyxen) answers
+                                        it. Like any direct hit, the reflect is redirected by the
+                                        attacker&apos;s protector&apos;s Protection, uses
+                                        Nosorog&apos;s shield penetration, and is boosted by and
+                                        spends the attacker&apos;s Exposed, and spends a Titanite
+                                        Plating stack. It is damage Nosorog dealt, so his own
+                                        damage-dealt leech (the Leech set) repairs off it, as it
+                                        does off a counter-attack. The Reflect gear set&apos;s
+                                        bounce is not direct damage and does none of this. A hit
+                                        that Protection moves entirely onto the protector
+                                        (Lionheart&apos;s 10 stacks) is not direct damage to the
+                                        ship it was aimed at: that ship does not counter or react,
+                                        and its Stasis does not drop, but the skill&apos;s debuffs
+                                        and other effects still land on it. When only part of the
+                                        hit is moved (Meatshield&apos;s 30%), the share it keeps is
+                                        still direct damage.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">
@@ -3285,6 +3358,18 @@ const DocumentationPage: React.FC = () => {
                                         resolves after it, within the same turn.
                                     </p>
                                     <p className="text-theme-text mb-2">
+                                        <span className="text-primary">Dying ships:</span> Every
+                                        reaction triggers before a ship dies. A ship destroyed by a
+                                        hit still fires its own reactions to that hit: Warden still
+                                        inflicts Corrosion I on the attacker, Stalwart still
+                                        counters, Heliodor still repairs her allies. A repair cannot
+                                        bring the destroyed ship itself back. A debuff the killing
+                                        hit lands on the dying ship still lands (Enforcer&apos;s
+                                        crit Defense Shred), but no other ship reacts to it:
+                                        Provider stays silent until the next hit strikes a living
+                                        enemy.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
                                         <span className="text-primary">Purges:</span> A purge on a
                                         skill that hits several enemies strips buffs from every
                                         enemy it hits, not just the main target. Tithonus gains
@@ -3307,6 +3392,15 @@ const DocumentationPage: React.FC = () => {
                                         Multi-hit skills (e.g. &quot;attacks three times&quot;)
                                         crit-check each hit individually — on-crit follow-up effects
                                         (such as crit-triggered debuffs) fire once per critting hit.
+                                        Every reaction to one hit resolves before the next hit
+                                        lands: Enforcer&apos;s crit Defense Shred from his first hit
+                                        is already on the target for his second, and Stalwart&apos;s
+                                        counter to the first hit lands before the second. If a
+                                        counter destroys the attacker, its remaining hits never
+                                        happen. Each hit also counts as its own action for every
+                                        &ldquo;once per skill&rdquo; limit: each of Enforcer&apos;s
+                                        critting hits lands a Shred, and Provider, APEX, Hayyan,
+                                        Oleander, Xcellence and Insidiousness answer every one.
                                         Ships with &quot;extra action&quot; passives (Nuqtu,
                                         Sustainer, Liberator, Tygr, Tormenter) take a full
                                         additional turn each round, re-entering the turn queue at
@@ -3650,9 +3744,10 @@ const DocumentationPage: React.FC = () => {
                                     </h4>
                                     <p className="text-theme-text mb-2">
                                         Calculate how much a supporter ship actually keeps a target
-                                        alive. The Healing Calculator runs on the same deterministic
-                                        combat engine as the DPS Calculator — identical inputs
-                                        always produce identical round-by-round results.
+                                        alive. The Healing Calculator runs on the same combat engine
+                                        as the DPS Calculator, including its random rolls (crits,
+                                        debuff landing), so repeat runs of the same setup can differ
+                                        a little round by round.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">
@@ -3830,8 +3925,7 @@ const DocumentationPage: React.FC = () => {
                                         and does not expire. Repair Over Time effects tick at the
                                         holder&apos;s turn, repairing a percentage of the
                                         holder&apos;s own max HP per stack. Crit heals resolve on
-                                        their own deterministic crit schedule, separate from any
-                                        damage crits.
+                                        their own crit rolls, separate from any damage crits.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Damage-Based Sustain:</span>{' '}
@@ -4621,9 +4715,10 @@ const DocumentationPage: React.FC = () => {
                             <div className="p-4 bg-dark-lighter">
                                 <h4 className="font-semibold text-primary mb-2">Combat Log</h4>
                                 <p className="text-theme-text mb-2">
-                                    The combat log shows a complete, hierarchical record of
-                                    everything that happens each round — nothing is omitted or
-                                    approximated.
+                                    The combat log shows a hierarchical record of what happens each
+                                    round: attacks, repairs, shields and strips, buffs and debuffs,
+                                    damage and Repair Over Time ticks, bomb detonations and
+                                    splashes, and deaths.
                                 </p>
                                 <ul className="text-theme-text list-disc pl-4 space-y-1">
                                     <li>
@@ -4648,8 +4743,20 @@ const DocumentationPage: React.FC = () => {
                                         <strong>Hit amounts match the target:</strong> An attack row
                                         shows the damage each target was dealt after its own defense
                                         and damage reductions, for the main target and every other
-                                        enemy hit alike. Extra damage a passive adds to the same hit
-                                        is included in that row.
+                                        enemy hit alike, and before any shield absorbs it (a row
+                                        whose hit met a shield says &quot;shield hit&quot;). Extra
+                                        damage a passive adds to the same hit is included in that
+                                        row.
+                                    </li>
+                                    <li>
+                                        <strong>Ticks, strips and splashes have rows:</strong>{' '}
+                                        Damage over Time and Repair Over Time ticks are listed at
+                                        the start of their holder&apos;s turn, before the ship acts.
+                                        A shield strip (APEX, Laika, Malvex) shows how much shield
+                                        it removed, and a bomb carrier&apos;s death splash shows the
+                                        damage each neighbour took. A ship killed by a DoT tick has
+                                        no killer named; a Bomb kill names the ship that planted the
+                                        Bomb.
                                     </li>
                                     <li>
                                         <strong>Wasted repairs and shields are named:</strong> Heal
@@ -4841,22 +4948,22 @@ const DocumentationPage: React.FC = () => {
                                     attack and its reactions (never a reflected hit, and not when it
                                     is only splashed by an attack aimed at another ship — an
                                     area-of-effect attack aimed at Nosorog himself still counts;
-                                    Stalwart&apos;s counter and Legion Discipline II follow the same
-                                    rule, and Malvex&apos;s shield comes from skill hits only),{' '}
-                                    <strong>Chakara&apos;s</strong> charged skill bypasses part of
-                                    the enemy&apos;s Defense, and <strong>Anemone</strong>,{' '}
-                                    <strong>Panon</strong>, <strong>Wusheng</strong>, and{' '}
-                                    <strong>Tormenter</strong> each take reduced damage under their
-                                    own stated conditions. <strong>Anemone</strong> and{' '}
-                                    <strong>Wusheng</strong> take less direct damage (from an
-                                    attacking enemy afflicted with a damage-over-time effect, and
-                                    while Stealthed, respectively), <strong>Panon</strong> reduces
-                                    all incoming damage — direct and damage-over-time — while she
-                                    has Barrier Recharging, and <strong>Tormenter&apos;s</strong>{' '}
-                                    reduction (direct and damage-over-time) grows the lower her HP
-                                    falls. <strong>Vindicator</strong> retaliates when it resists an
-                                    enemy debuff, dealing damage equal to 30% of its own max HP back
-                                    to the ship that attempted it. <strong>Protection</strong> (e.g.{' '}
+                                    Stalwart&apos;s counter, Legion Discipline II and Malvex&apos;s
+                                    shield follow the same rule), <strong>Chakara&apos;s</strong>{' '}
+                                    charged skill bypasses part of the enemy&apos;s Defense, and{' '}
+                                    <strong>Anemone</strong>, <strong>Panon</strong>,{' '}
+                                    <strong>Wusheng</strong>, and <strong>Tormenter</strong> each
+                                    take reduced damage under their own stated conditions.{' '}
+                                    <strong>Anemone</strong> and <strong>Wusheng</strong> take less
+                                    direct damage (from an attacking enemy afflicted with a
+                                    damage-over-time effect, and while Stealthed, respectively),{' '}
+                                    <strong>Panon</strong> reduces all incoming damage — direct and
+                                    damage-over-time — while she has Barrier Recharging, and{' '}
+                                    <strong>Tormenter&apos;s</strong> reduction (direct and
+                                    damage-over-time) grows the lower her HP falls.{' '}
+                                    <strong>Vindicator</strong> retaliates when it resists an enemy
+                                    debuff, dealing damage equal to 30% of its own max HP back to
+                                    the ship that attempted it. <strong>Protection</strong> (e.g.{' '}
                                     <strong>Meatshield</strong>) now works as a damage transfer
                                     instead of a plain unremovable buff: each stack a living ally
                                     holds intercepts 10% of the direct damage another ally would
@@ -5069,7 +5176,7 @@ const DocumentationPage: React.FC = () => {
                                     </li>
                                     <li>
                                         Replay one simulated fight as a full turn-by-turn log, to
-                                        see exactly what each ship did and why
+                                        see what each ship did, in order
                                     </li>
                                 </ul>
                             </div>

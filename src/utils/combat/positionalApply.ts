@@ -88,6 +88,27 @@ export interface VictimDamageOutcome {
     /** A Protection cascade split this hit, even when no protector booked any intake (a share
      *  deferred into a DoT). Absent when no cascade fired. */
     protectionSplit?: boolean;
+    /** A Protection cascade moved ALL of this hit onto protectors, leaving this victim nothing
+     *  (Lionheart's 10 stacks). Read through {@link directlyDamagesVictim}. Absent otherwise,
+     *  including for a partial split. */
+    fullyRedirected?: boolean;
+}
+
+/**
+ * Whether a hit counts as DIRECT DAMAGE on the ship it struck — the one test behind every
+ * "when directly damaged" consequence of a hit for that ship: its `attacked` reactions (counters,
+ * Warden, Isha, an ally's on-ally-attacked), its primary-target allowance (R92) and its Stasis
+ * reduction (R40/R67).
+ *  - A hit fully transformed into a DoT (Voron, Orel, Hit Mitigation) is not (R138).
+ *  - A hit FULLY redirected by Protection is not direct damage to the protected ship (R139). A
+ *    partial redirect (Meatshield's 30%) leaves the kept share direct.
+ * A Barrier-nullified hit still answers true here; the Stasis reduction excludes it on its own
+ * (`barriered`).
+ */
+export function directlyDamagesVictim(
+    outcome: Pick<VictimDamageOutcome, 'transformedToDot' | 'fullyRedirected'>
+): boolean {
+    return (outcome.transformedToDot ?? 0) <= 0 && outcome.fullyRedirected !== true;
 }
 
 /** {@link VictimDamageOutcome} as returned by the engine's real apply funnel, where
@@ -105,7 +126,8 @@ export type AppliedVictimDamage = VictimDamageOutcome & { incomingBooked: number
  * ONE attack's spread and shares a single outgoing roll.
  *
  * Emitted for EVERY iteration including whiffs, so `subAttacks[h]` always corresponds to loop
- * iteration `h`.
+ * iteration `h`. An attack cut short by its attacker's destruction (`attackerStanding`) has no
+ * entries for the sub-attacks it never made.
  *
  * The engine turns each NON-EMPTY entry into its own `ability-performed`.
  * See docs/superpowers/specs/2026-08-07-multi-hit-full-walk-attacks-design.md.
@@ -410,6 +432,18 @@ export function applyPositionalDamage(args: {
      */
     onSubAttackStart?: (sub: SubAttackBoundary) => void;
     onSubAttackEnd?: (sub: SubAttackBoundary) => void;
+    /**
+     * Runs once a sub-attack that resolved an anchor is complete and recorded, with its own
+     * outcome — after `onSubAttackEnd`. A multi-hit attack resolves the reactions to one hit
+     * before the next hit (owner ruling R125), and this is where the caller does it.
+     */
+    onSubAttackSettled?: (outcome: SubAttackOutcome) => void;
+    /**
+     * Asked before every sub-attack after the first: false ends the attack there. An attacker
+     * destroyed between its hits (a counter to an earlier hit) makes no further hits (R125).
+     * Unsupplied → every sub-attack runs.
+     */
+    attackerStanding?: () => boolean;
 }): {
     anyCrit: boolean;
     critPairs: number;
@@ -436,6 +470,8 @@ export function applyPositionalDamage(args: {
         rollVictimCrit,
         onSubAttackStart,
         onSubAttackEnd,
+        onSubAttackSettled,
+        attackerStanding,
     } = args;
 
     let anyCrit = false;
@@ -451,6 +487,7 @@ export function applyPositionalDamage(args: {
     // truth that victimHitDamage also reads), avoiding silent under/over-application from a
     // divergent separate `hits` arg.
     for (let h = 0; h < scalars.hits; h++) {
+        if (h > 0 && attackerStanding && !attackerStanding()) break;
         // Re-resolve the anchor against the LIVE roster (a victim killed on an earlier hit
         // is already gone from opposingLiving via currentHp === 0 filtering).
         const anchorActor = resolvePositionalTarget(
@@ -580,7 +617,7 @@ export function applyPositionalDamage(args: {
             primaryVictimIds,
         });
 
-        subAttacks.push({
+        const outcome: SubAttackOutcome = {
             index: h,
             whiffed: false,
             didCrit: subDidCrit,
@@ -589,7 +626,9 @@ export function applyPositionalDamage(args: {
             victimIds: subVictimIds,
             primaryVictimIds,
             critVictimIds: subCritVictimIds,
-        });
+        };
+        subAttacks.push(outcome);
+        onSubAttackSettled?.(outcome);
     }
     return { anyCrit, critPairs, critVictimIds: [...critVictims], subAttacks };
 }

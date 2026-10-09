@@ -7,7 +7,8 @@
  * (`actor.destroyedRound !== undefined`) is skipped — EXCEPT the owner's own death reaction
  * (a self-scoped `on-destroyed` enqueue, tagged `eventCtx.fromOwnDeath`), which is born of the
  * death itself and must still resolve (Martyrdom's killer-Disable, Salvation's self-destruct
- * heal).
+ * heal) — and every reaction in the chain the owner died in (R117: "all reactions trigger before
+ * a ship dies"), matched on the intent's `hitRoot` against the owner's `destroyedInHitRoot`.
  *
  * Two layers, two harnesses:
  *  1. executeIntent gate (drain-time) — hand-built Intent + IntentExecContext, mirroring the
@@ -57,14 +58,14 @@ const reactiveDebuffIntent = (counterTargetId: string, over: Partial<Intent> = {
 
 /** Owner runtime whose landing gates always pass — the ONLY thing that can stop the
  *  application is the dead-owner gate under test. `destroyedRound` controls aliveness. */
-const ownerRuntime = (destroyedRound?: number): PlayerActorRuntime =>
+const ownerRuntime = (destroyedRound?: number, destroyedInHitRoot?: string): PlayerActorRuntime =>
     ({
-        actor: { id: 'owner', destroyedRound } as CombatActor,
+        actor: { id: 'owner', destroyedRound, destroyedInHitRoot } as CombatActor,
         landsTimedEnemyApplication: () => true,
         debuffLandingGate: () => true,
     }) as unknown as PlayerActorRuntime;
 
-const buildCtx = (destroyedRound?: number): IntentExecContext => {
+const buildCtx = (destroyedRound?: number, destroyedInHitRoot?: string): IntentExecContext => {
     const se = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
     se.beginRound(1);
     return {
@@ -74,7 +75,7 @@ const buildCtx = (destroyedRound?: number): IntentExecContext => {
         corrosionEntries: [],
         infernoEntries: [],
         pendingBombs: [],
-        runtimes: new Map([['owner', ownerRuntime(destroyedRound)]]),
+        runtimes: new Map([['owner', ownerRuntime(destroyedRound, destroyedInHitRoot)]]),
         grantAllyCharges: () => {},
         removeEnemyCharges: () => {},
         removeChargesFrom: () => {},
@@ -113,6 +114,18 @@ describe('dead-owner reactive gate (executeIntent drain)', () => {
             ctx
         );
         expect(enemyHasDebuff(ctx, 'enemy-1', 'Attack Down II')).toBe(true);
+    });
+
+    it("a DEAD owner's reaction in the chain it died in STILL applies (R117)", () => {
+        const ctx = buildCtx(/* destroyedRound */ 0, 'cast:1:0');
+        executeIntent(reactiveDebuffIntent('enemy-1', { hitRoot: 'cast:1:0' }), ctx);
+        expect(enemyHasDebuff(ctx, 'enemy-1', 'Attack Down II')).toBe(true);
+    });
+
+    it("a DEAD owner's reaction in a LATER chain is still suppressed", () => {
+        const ctx = buildCtx(/* destroyedRound */ 0, 'cast:1:0');
+        executeIntent(reactiveDebuffIntent('enemy-1', { hitRoot: 'cast:2:0' }), ctx);
+        expect(enemyHasDebuff(ctx, 'enemy-1', 'Attack Down II')).toBe(false);
     });
 });
 

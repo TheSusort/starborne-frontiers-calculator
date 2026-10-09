@@ -114,9 +114,9 @@ export type CombatEvent =
            *  actors, since every actor's first sub-attack is also 0.
            *
            *  Exists so a reactive intent enqueued during sub-attack k can be gated at sub-attack
-           *  scope: intents from all N sub-attacks drain together at end of turn (drainReactions),
-           *  long after the engine's ambient `currentSubAttackIndex` has been cleared, so the
-           *  identity has to travel on the event. */
+           *  scope: an intent drains only after the sub-attack that raised it has finished
+           *  (drainReactions), when the engine's ambient `currentSubAttackIndex` has been cleared,
+           *  so the identity has to travel on the event. */
           subAttackIndex?: number;
           /** The skill slot (`'active'` / `'charged'`) the cast fired from. A reaction written in a
            *  skill's own text ("If this critically hits, ...") fires only on that slot's casts;
@@ -207,6 +207,12 @@ export type CombatEvent =
            *  success on the cast a reaction's debuff belongs to. */
           reactionFiringId?: number;
           viaAllyDebuffInflictedReaction?: true;
+          /** Proc verdicts the TARGET's reactions to this landing already drew, by ability id —
+           *  drawn at the landing because their effect must hold for the rest of the skill
+           *  (Firewall's Block Debuff, owner ruling R149; engine.ts `decideBlockDebuffAtLanding`).
+           *  The `on-debuffed` listener hands its own entry to the executor, which spends it
+           *  instead of drawing. Absent → every reaction draws at the drain. */
+          preDecidedProcs?: Readonly<Record<string, boolean>>;
       } & ReactiveStamp)
     | ({
           type: 'debuff-resisted';
@@ -285,6 +291,9 @@ export type CombatEvent =
            *  so the `on-ally-debuff-inflicted` listener's `dot-applied` arm can skip its own
            *  reaction's output the same way the `debuff-applied` arm does. */
           viaAllyDebuffInflictedReaction?: true;
+          /** The `debuff-applied` sibling's `preDecidedProcs`, one entry per landed stack (owner
+           *  rulings R149/R161: every stack is its own landing and its own Firewall roll). */
+          preDecidedProcsPerStack?: ReadonlyArray<Readonly<Record<string, boolean>> | undefined>;
       } & ReactiveStamp)
     /** A heal/shield cast resolved (healing mode only). `targets` lists recipient actor
      *  ids in application order; `amount` is the summed RAW amount across recipients.
@@ -691,7 +700,8 @@ export type CombatEvent =
      *  an already-empty pool removes nothing and is suppressed) — mirrors `purge-performed`'s
      *  0-removed suppression. `casterId` = the stripping actor; `targetId` = the victim whose
      *  shield was reduced; `pct` = the percentage of the CURRENT pool removed (the same `pct`
-     *  argument passed to `stripShieldPct` — 100 for the purge-coupled branch, `ab.config.pct` otherwise).
+     *  argument passed to `stripShieldPct` — 100 for the purge-coupled branch, `ab.config.pct` otherwise);
+     *  `removed` = the shield the strip took off the pool.
      *  The `on-own-shield-strip` listener (triggers.ts) filters `casterId === ownerId`. */
     | ({
           type: 'shield-stripped';
@@ -699,6 +709,7 @@ export type CombatEvent =
           targetId: string;
           round: number;
           pct: number;
+          removed: number;
       } & ReactiveStamp)
     /** Corrosion SPREAD (Hemlock) at the end of a round. The
      *  engine's end-of-round Toxic Overflow mechanic (engine.ts) emits this for each unit that held
@@ -714,6 +725,18 @@ export type CombatEvent =
           type: 'corrosion-spread';
           sourceId: string;
           affectedIds: string[];
+          round: number;
+      } & ReactiveStamp)
+    /** LOG-ONLY: a bomb carrier died with the bomb still pending and its death splash landed on
+     *  an adjacent same-side ally. `actorId` = the bomb's applier (credited with the damage),
+     *  `victimId` = the splashed ally, `damage` = the intake the funnel recorded for the ally.
+     *  NO combat listener subscribes to it, so it can never chain; buffered on the positional
+     *  path to nest under the triggering attack, like `shield-destroyed-log`. */
+    | ({
+          type: 'bomb-splash-log';
+          actorId: string;
+          victimId: string;
+          damage: number;
           round: number;
       } & ReactiveStamp)
     /** A victim's shield pool was fully depleted by a DIRECT hit (AEGIS). Emitted from
@@ -1023,8 +1046,13 @@ export type CombatEvent =
            *  hit. The combat log renders these hits from `reactive-damage-performed` instead. */
           reactiveHitId?: number;
           /** The hit is a counter-attack. Every reaction hears it except a counter that
-           *  `counterAnswersCounters` (triggers.ts) excludes. */
+           *  `counterAnswersCounters` (triggers.ts) excludes. Nosorog's reflect is not stamped:
+           *  every counter answers it (R160). */
           fromCounter?: true;
+          /** The hit struck this target but was no direct damage on it (`directlyDamagesVictim`:
+           *  Protection moved all of it onto protectors, R139). The event exists so the combat log
+           *  keeps the target's row; no "when directly damaged" reaction answers it. */
+          notDirectDamage?: true;
       };
 
 export type CombatEventType = CombatEvent['type'];

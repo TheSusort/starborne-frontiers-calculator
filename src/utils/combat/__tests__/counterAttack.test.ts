@@ -332,7 +332,7 @@ describe('G PR1 — counter primary-target gate (executor level)', () => {
             makeCounterCtx(spy)
         );
         expect(spy).toHaveBeenCalledTimes(1);
-        expect(spy).toHaveBeenCalledWith(OWNER, 'foe', 'cnt-gate', 50, 1);
+        expect(spy).toHaveBeenCalledWith(OWNER, 'foe', 'cnt-gate', 50, 1, false);
     });
 
     it('requirePrimaryTarget:true + isPrimaryTarget NOT true → does NOT fire', () => {
@@ -369,7 +369,7 @@ describe('G PR1 — counter primary-target gate (executor level)', () => {
             makeCounterCtx(spy)
         );
         expect(spy).toHaveBeenCalledTimes(1);
-        expect(spy).toHaveBeenCalledWith(OWNER, 'foe', 'cnt-gate', 100, 1);
+        expect(spy).toHaveBeenCalledWith(OWNER, 'foe', 'cnt-gate', 100, 1, false);
     });
 
     it('requireShieldHit:true + shieldWasHit false → does NOT fire', () => {
@@ -427,7 +427,7 @@ describe('G PR2 — Centurion self/adjacent-ally counter (executor level)', () =
             makeCounterCtx(spy)
         );
         expect(spy).toHaveBeenCalledTimes(1);
-        expect(spy).toHaveBeenCalledWith(OWNER, 'foe', 'cnt-gate', 50, 1);
+        expect(spy).toHaveBeenCalledWith(OWNER, 'foe', 'cnt-gate', 50, 1, false);
     });
 
     it('counter does NOT fire when no attacker is routed (counterTargetId absent)', () => {

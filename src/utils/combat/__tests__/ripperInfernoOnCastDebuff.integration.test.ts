@@ -624,7 +624,7 @@ const corrosionDot = (target: Ability['target']): Ability => ({
     config: { type: 'dot', dotType: 'corrosion', tier: 3, stacks: 1, duration: 3 },
 });
 
-describe('Ripper — the cap is per CAST, not per round or per hit', () => {
+describe('Ripper — the cap is per CAST (each hit of a multi-hit skill is one), not per round', () => {
     it('an extra action in the same round is a second cast: 2 landings → 2 Infernos in round 1', () => {
         const events = run(
             BASE({
@@ -642,7 +642,8 @@ describe('Ripper — the cap is per CAST, not per round or per hit', () => {
         ]);
     });
 
-    it('a 2-hit active landing its debuff on both hits is ONE cast: 1 Inferno', () => {
+    it('each hit of a 2-hit active is its own action (R166): 2 landings → 2 Infernos', () => {
+        // The cap within one hit is pinned by "(2) his charged lands two debuffs on one enemy".
         const events = run(
             BASE({
                 numRounds: 1,
@@ -651,19 +652,10 @@ describe('Ripper — the cap is per CAST, not per round or per hit', () => {
             })
         );
         expect(debuffLandingRounds(events, 'attacker', 'victim')).toEqual([1, 1]);
-        expect(infernoLandings(events, 'attacker', 'victim')).toEqual([{ round: 1, tier: 30 }]);
-    });
-
-    it('control: the same 2-hit active with the cap stripped lands one Inferno per hit', () => {
-        const uncapped: Ability = { ...inferno(), oncePerCast: undefined };
-        const events = run(
-            BASE({
-                numRounds: 1,
-                shipSkills: kit([uncapped], { active: [twoHitStrike(), incRepairDown()] }),
-                enemyAttackers: [victimAt('victim', 0)],
-            })
-        );
-        expect(infernoLandings(events, 'attacker', 'victim')).toHaveLength(2);
+        expect(infernoLandings(events, 'attacker', 'victim')).toEqual([
+            { round: 1, tier: 30 },
+            { round: 1, tier: 30 },
+        ]);
     });
 
     // R2: Ripper casts twice in round 1 (extra action) on victim A. In round 2 the ally kills A

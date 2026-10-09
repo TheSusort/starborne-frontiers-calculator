@@ -332,12 +332,12 @@ describe('Insidiousness — every landed debuff of a cast rolls, one success per
         expect(procHits(events, 'attacker', 'foe')).toHaveLength(1);
     });
 
-    it('a 2-hit cast whose first roll passes hits once; the cap stops the second draw', () => {
+    it('each hit of a 2-hit cast has its own one-success cap (R166): two passes, two hits', () => {
         const draws = scriptProcs('attacker', [PASS, PASS]);
         const events = run(BASE({ shipSkills: kit([hit(2), castDebuff('Seed Down')]) }));
         expect(debuffLandings(events, 'attacker', 'Seed Down')).toBe(2);
-        expect(draws()).toBe(1);
-        expect(procHits(events, 'attacker', 'foe')).toHaveLength(1);
+        expect(draws()).toBe(2);
+        expect(procHits(events, 'attacker', 'foe')).toHaveLength(2);
     });
 
     it('a cast landing three debuffs draws until one succeeds', () => {
@@ -418,10 +418,11 @@ describe('Insidiousness — every landed debuff of a cast rolls, one success per
         expect(draws()).toBe(2);
         expect(procHits(events, 'carrier', 'attacker')).toHaveLength(1);
 
+        // Each hit is its own action (R166): both pass, both hit.
         draws = scriptProcs('carrier', [PASS, PASS]);
         events = run(board());
-        expect(draws()).toBe(1);
-        expect(procHits(events, 'carrier', 'attacker')).toHaveLength(1);
+        expect(draws()).toBe(2);
+        expect(procHits(events, 'carrier', 'attacker')).toHaveLength(2);
     });
 });
 

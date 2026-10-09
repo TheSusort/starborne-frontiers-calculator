@@ -5,7 +5,8 @@ import type { CombatEventBus } from './events';
  * the caller supplies the victim/attacker ids, the per-hit crit list, and the pre-decided
  * focus-victim signals. Conditional spreads keep the emitted shape minimal (and identical to the
  * historical inline enemy-turn emit it replaces). DoT/bomb/detonation hits never call this — only
- * direct hits emit `attacked`: cast hits, counter-attacks and reactive damage procs.
+ * hits emit `attacked`: cast hits, counter-attacks, reactive damage procs and Nosorog's reflect.
+ * A hit that was no direct damage on its target carries `notDirectDamage`.
  */
 export function emitAttacked(args: {
     bus: CombatEventBus;
@@ -52,6 +53,8 @@ export function emitAttacked(args: {
     subAttackIndex?: number;
     /** A counter-attack's or reactive proc's hit — see `attacked.reactiveHitId`. */
     reactiveHitId?: number;
+    /** See `attacked.notDirectDamage`. */
+    notDirectDamage?: boolean;
     /** See `attacked.fromCounter`. */
     fromCounter?: boolean;
 }): void {
@@ -69,6 +72,7 @@ export function emitAttacked(args: {
         subAttackIndex,
         reactiveHitId,
         fromCounter,
+        notDirectDamage,
     } = args;
     hitOutcomes.forEach((hitCrit, hitIndex) => {
         bus.emit({
@@ -85,6 +89,7 @@ export function emitAttacked(args: {
             subAttackIndex: subAttackIndex ?? hitIndex,
             ...(reactiveHitId !== undefined ? { reactiveHitId } : {}),
             ...(fromCounter ? { fromCounter: true as const } : {}),
+            ...(notDirectDamage ? { notDirectDamage: true as const } : {}),
         });
     });
 }

@@ -259,11 +259,25 @@ export interface Intent {
      *  scope; absent for a reaction to a phase event that has not hit anyone. Read through
      *  `claimHitRoot` when this intent's resolution lands a hit. */
     hitRoot?: string;
+    /** The cast sub-attack index `hitRoot` names, when it names one: which hit of a multi-hit
+     *  skill this intent's chain belongs to. Read by `castHitSuffix`. */
+    hitSubAttack?: number;
     /** Which bus event woke this intent, as a run-wide increasing number: every listener of one
      *  emitted event stamps the same value, and a later event a larger one. The engine's drain
      *  resolves the intents of the earliest event first, owner by owner in turn order (ruling 39).
      *  Absent reads as 0. */
     eventSeq?: number;
+    /** The owner was in Stasis or Disabled when the event that woke this intent happened. A
+     *  passive is off while its ship is stasised or disabled, and that is judged when the event
+     *  happens (a hit lands), not when the reaction drains: a hit that takes Stasis 1 → 0 still
+     *  draws no reaction (R79), while a later hit in the same chain, landing after the Stasis is
+     *  gone, does. The engine's drain drops an intent stamped here as it drops one whose owner is
+     *  blocked when it drains. Absent reads as false. */
+    ownerTurnBlockedAtEvent?: true;
+    /** This intent answers a Bomb's detonation (`bomb-detonated`). A Bomb's detonation and its
+     *  splash resolve before any other reaction (owner ruling R126), so the engine's drain takes
+     *  these intents ahead of every other queued one. Absent reads as false. */
+    answersBombDetonation?: true;
     eventCtx?: {
         counterTargetId?: string;
         damagedAllyId?: string;
@@ -279,7 +293,8 @@ export interface Intent {
          *  sub-attack rather than per turn.
          *  Undefined on `on-debuff-inflicted` too — its `debuff-applied` / `dot-applied` events
          *  carry no sub-attack index. Insidiousness, that trigger's proc, rolls per debuff landed
-         *  with one success per SKILL CAST (`procScope:'per-debuff'`), not per attack. */
+         *  with one success per SKILL CAST (`procScope:'per-debuff'`; per hit of a multi-hit
+         *  skill, via `Intent.hitSubAttack`). */
         subAttackIndex?: number;
         /** `attacked.reactiveHitId` of the triggering hit, stamped by `on-attacked` /
          *  `on-ally-attacked`: a counter's or proc's hit is its own attack (`attackKeyOf`). */
@@ -400,6 +415,14 @@ export interface Intent {
          *  must still resolve, whereas a stale listener firing on some LATER event (e.g. a
          *  dead Curator reacting to an enemy charge rounds after dying) is suppressed. */
         fromOwnDeath?: boolean;
+        /** The owner's HP% right after the hit that woke this intent, when the triggering event
+         *  is a hit on the owner itself. The drain gate's self-HP reading prefers it over live
+         *  HP, so every intent of one reaction judges the same HP. */
+        ownerHpPctAtHit?: number;
+        /** This ability's proc verdict, already drawn when the debuff that woke it landed
+         *  (`debuff-applied.preDecidedProcs`, owner ruling R149). `passesProcChanceGate` spends it
+         *  instead of drawing. Absent → the gate draws as usual. */
+        preDecidedProc?: boolean;
         /** The recipient ids ACTUALLY cleansed by the owner's OWN cleanse-performed
          *  event (cleanse-performed.targets — a subset of the cleanse's targeted recipients,
          *  only those with a real removal). The `on-own-cleanse` listener stamps this so an
@@ -853,6 +876,12 @@ export function registerReactiveListeners(args: {
     /** Owner effective max HP resolver — gates Tenacity's incoming-damage-fraction
      *  filter. Optional: absent → the filter is skipped (no Tenacity in scope). */
     maxHpOf?: (ownerId: string) => number;
+    /** Owner live self-HP% — stamped onto an intent woken by a hit on its owner
+     *  (`eventCtx.ownerHpPctAtHit`). Optional: absent → the drain gate reads live HP. */
+    selfHpPctOf?: (ownerId: string) => number;
+    /** Owner live Stasis/Disable — stamped onto every intent as `ownerTurnBlockedAtEvent`.
+     *  Optional: absent → never stamped. */
+    isTurnBlockedOf?: (ownerId: string) => boolean;
 }): void {
     const {
         bus: rawBus,
@@ -865,17 +894,23 @@ export function registerReactiveListeners(args: {
         debuffCountOf,
         footprintAllyIdsFor,
         maxHpOf,
+        selfHpPctOf,
+        isTurnBlockedOf,
     } = args;
-    // Every listener below records which event it is answering (`Intent.eventSeq`).
+    // Every listener below records which event it is answering (`Intent.eventSeq`,
+    // `Intent.answersBombDetonation`).
     const bus: Pick<CombatEventBus, 'on'> = {
         on: (type, listener) =>
             rawBus.on(type, (e) => {
-                const outer = listeningEventSeq;
+                const outerSeq = listeningEventSeq;
+                const outerEvent = listeningEvent;
                 listeningEventSeq = seqOfEvent(e);
+                listeningEvent = e;
                 try {
                     listener(e);
                 } finally {
-                    listeningEventSeq = outer;
+                    listeningEventSeq = outerSeq;
+                    listeningEvent = outerEvent;
                 }
             }),
     };
@@ -890,12 +925,25 @@ export function registerReactiveListeners(args: {
             reactionChainProbe.lineageDropped++;
             return;
         }
+        // A reaction to a hit on its owner judges the owner's HP gate at that hit, once for the
+        // whole reaction (Makoli: "When directly damaged while below 40% HP ... repairs 20% ...
+        // and inflicts Disable" — her repair must not lift her above 40% before the Disable half
+        // is judged).
+        const hitOnOwner =
+            listeningEvent?.type === 'attacked' && listeningEvent.targetId === intent.ownerId;
+        const ownerHpPctAtHit = hitOnOwner ? selfHpPctOf?.(intent.ownerId) : undefined;
         enqueueRaw({
             ...intent,
+            ...(ownerHpPctAtHit !== undefined
+                ? { eventCtx: { ...intent.eventCtx, ownerHpPctAtHit } }
+                : {}),
             chainDepth: resolvingIntent ? (resolvingIntent.chainDepth ?? 0) + 1 : 0,
             reactionAncestry,
+            ...(isTurnBlockedOf?.(intent.ownerId) ? { ownerTurnBlockedAtEvent: true } : {}),
             eventSeq: listeningEventSeq ?? 0,
+            ...(listeningEvent?.type === 'bomb-detonated' ? { answersBombDetonation: true } : {}),
             ...(currentHitRoot !== undefined ? { hitRoot: currentHitRoot } : {}),
+            ...(currentHitSubAttack !== undefined ? { hitSubAttack: currentHitSubAttack } : {}),
         });
     };
     // Same-side ally, OWNER EXCLUDED — for a trigger whose skill text names "another/other
@@ -995,7 +1043,7 @@ export function registerReactiveListeners(args: {
                                 // they carry 0.
                                 triggerDamage: e.deliveredDamage ?? e.damage,
                                 // Carry this sub-attack's identity to the drain, which runs
-                                // once per turn — after every sub-attack — so it cannot ask the
+                                // after the sub-attack has finished, so it cannot ask the
                                 // engine which sub-attack it is in.
                                 subAttackIndex: e.subAttackIndex,
                                 // The enemies this sub-attack actually CRIT. Without
@@ -1865,6 +1913,7 @@ export function registerReactiveListeners(args: {
                         // absent → every hit. The intent is per-EVENT (not the shared const):
                         // eventCtx captures the attacker for "on that enemy" counter routing.
                         if (e.targetId !== ownerId) return;
+                        if (e.notDirectDamage) return;
                         if (e.fromCounter && !counterAnswersCounters(ra.ability)) return;
                         const filter = ra.ability.triggerCritFilter;
                         if (filter === 'crit' && !e.didCrit) return;
@@ -1910,23 +1959,38 @@ export function registerReactiveListeners(args: {
                     // unconditionally (passesApplicationFilter's doc).
                     bus.on('debuff-applied', (e) => {
                         if (
-                            e.targetId === ownerId &&
-                            passesApplicationFilter(
+                            e.targetId !== ownerId ||
+                            !passesApplicationFilter(
                                 ra.ability.triggerApplicationFilter,
                                 e.application
                             )
                         )
-                            enqueue(intent);
+                            return;
+                        // A verdict drawn at the landing (Firewall, R149) rides to the executor.
+                        const preDecidedProc = e.preDecidedProcs?.[ra.ability.id];
+                        enqueue(
+                            preDecidedProc === undefined
+                                ? intent
+                                : { ...intent, eventCtx: { preDecidedProc } }
+                        );
                     });
                     bus.on('dot-applied', (e) => {
                         if (
-                            e.targetId === ownerId &&
-                            passesApplicationFilter(
+                            e.targetId !== ownerId ||
+                            !passesApplicationFilter(
                                 ra.ability.triggerApplicationFilter,
                                 e.application
                             )
                         )
-                            for (let i = 0; i < dotInflictions(e); i++) enqueue(intent);
+                            return;
+                        for (let i = 0; i < dotInflictions(e); i++) {
+                            const preDecidedProc = e.preDecidedProcsPerStack?.[i]?.[ra.ability.id];
+                            enqueue(
+                                preDecidedProc === undefined
+                                    ? intent
+                                    : { ...intent, eventCtx: { preDecidedProc } }
+                            );
+                        }
                     });
                     break;
                 case 'on-ally-debuffed': {
@@ -2142,6 +2206,7 @@ export function registerReactiveListeners(args: {
                         // inflating numbers); an EMPTY filter array is treated as absent (any
                         // ally), not never-match.
                         if (isOpposing(e.targetId)) return;
+                        if (e.notDirectDamage) return;
                         if (e.fromCounter && !counterAnswersCounters(ra.ability)) return;
                         const filter = ra.ability.triggerCritFilter;
                         if (filter === 'crit' && !e.didCrit) return;
@@ -2749,6 +2814,15 @@ export interface IntentExecContext {
      *  per landed stack, in landing order. The convert-dot executor spends the first instead of
      *  drawing. Absent → every roll is drawn. */
     preDecidedConversions?: Map<string, boolean[]>;
+    /** Owner ruling R149 — Firewall's Block Debuff takes effect the moment its proc lands, though
+     *  its grant resolves at the drain. `pendingBlockDebuffGrants` counts, per wearer, the procs
+     *  drawn at a landing whose grant has not resolved yet: a later debuff's landing treats the
+     *  wearer as holding Block Debuff while it is above 0, and `passesProcChanceGate` takes one
+     *  off as it spends a successful verdict. `decideBlockDebuffAtLanding` draws those verdicts
+     *  for a landed debuff and returns them for its `debuff-applied` (`preDecidedProcs`). Both
+     *  live in engine.ts; absent (unit contexts) → Firewall resolves at the drain alone. */
+    pendingBlockDebuffGrants?: Map<string, number>;
+    decideBlockDebuffAtLanding?: (victimId: string) => Record<string, boolean> | undefined;
     /** Live self-HP% per owner (0..100) for drain-time hp-threshold gates: each owner's own
      *  current/max HP, both sides. A caller that supplies no closure at all (unit contexts) falls
      *  back to 100 in buildDrainContext. */
@@ -2874,7 +2948,9 @@ export interface IntentExecContext {
         attackerId: string,
         abilityId: string,
         multiplier: number,
-        hits: number
+        hits: number,
+        /** The owner is already destroyed but may still counter (`deadOwnerMayResolve`). */
+        allowDeadOwner?: boolean
     ) => ReactiveHitOutcome | void;
     /** Once-per-attack counter guard. Keyed `ownerId:abilityId:subAttackIndex` — see the counter
      *  branch's SCOPE NOTE. Cleared at each actor turn-start (engine) so the per-hit `attacked`
@@ -3451,7 +3527,7 @@ function perVictimEnemyConditions(intent: Intent): Ability['conditions'] {
     return splitDrainGateConditions(intent).perVictim;
 }
 
-function buildDrainContext(ctx: IntentExecContext, ownerId: string) {
+function buildDrainContext(ctx: IntentExecContext, ownerId: string, intent?: Intent) {
     const ownerActor = ctx.actorById?.(ownerId);
     // Owner-aware drain gate: self-buff names come from the OWNER's snapshot so each
     // owner's reactive follow-up is gated against ITS OWN active buffs + the shared enemy state.
@@ -3476,7 +3552,9 @@ function buildDrainContext(ctx: IntentExecContext, ownerId: string) {
         // unresolvable. Do not reintroduce a scalar here.
         // Live self-HP% for drain-time hp-threshold gates: the engine reads each owner's own
         // current/max HP, both sides. The `?? 100` fallback is for callers with no closure.
-        selfHpPct: ctx.selfHpPctFor?.(ownerId) ?? 100,
+        // A reaction to a hit on its owner reads the HP stamped at that hit
+        // (`eventCtx.ownerHpPctAtHit`) instead.
+        selfHpPct: intent?.eventCtx?.ownerHpPctAtHit ?? ctx.selfHpPctFor?.(ownerId) ?? 100,
         // Names only — never folded, no double-fold: the drain owner's `enemy-buff` gate
         // reads the UNION of its opposing side's self-buffs; its `self-debuff` gate reads its OWN
         // enemy-applied debuffs (per-target store keyed by ownerId). Both read EMPTY on a DPS run
@@ -4489,12 +4567,26 @@ function rootCastKey(
         : reactionFiringKey(reaction);
 }
 
+/** A multi-hit skill counts each hit as its own action for every once-per-cast cap (owner ruling
+ *  R166): Enforcer's three hits each land a Defense Shred, and Provider answers each. Appended to
+ *  a cast key, it splits the cast by the hit whose chain the intent belongs to
+ *  (`Intent.hitSubAttack`). The first hit — and every single-hit skill — keeps the bare cast
+ *  key, so nothing outside a multi-hit skill's later hits moves. */
+function castHitSuffix(intent: Intent): string {
+    const hit = intent.hitSubAttack ?? 0;
+    return hit > 0 ? `:hit-${hit}` : '';
+}
+
 /** The cap a `procScope:'per-debuff'` intent's success counts against: the root cast
- *  (`rootCastKey`; on this owner-only trigger a cast's inflictions are the owner's). A reaction's
- *  debuff counts against the cast that set the reaction off, so the owner's own charged setting
- *  off its Out. Damage Down II shares the owner's cast cap. */
+ *  (`rootCastKey`; on this owner-only trigger a cast's inflictions are the owner's), split per
+ *  hit of a multi-hit skill (`castHitSuffix`). A reaction's debuff counts against the cast that
+ *  set the reaction off, so the owner's own charged setting off its Out. Damage Down II shares the
+ *  owner's cast cap. */
 function perDebuffProcCap(intent: Intent, ctx: IntentExecContext): string {
-    return rootCastKey(ctx, intent.ownerId, intent.eventCtx?.inflictionReaction);
+    return (
+        rootCastKey(ctx, intent.ownerId, intent.eventCtx?.inflictionReaction) +
+        castHitSuffix(intent)
+    );
 }
 
 /** Once-per-root-cast gate backing `Ability.oncePerRootCast` (see that field's doc). Returns false
@@ -4517,7 +4609,7 @@ function passesOncePerRootCastGate(
         intent.eventCtx?.inflictionReaction
     );
     const key =
-        `${intent.ownerId}:${intent.ability.id}:root-${root}` +
+        `${intent.ownerId}:${intent.ability.id}:root-${root}${castHitSuffix(intent)}` +
         (scope === 'per-victim' ? `:${victimId ?? ''}` : '');
     if (ctx.oncePerRoundConsumed?.has(key)) return false;
     ctx.oncePerRoundConsumed?.add(key);
@@ -4586,6 +4678,12 @@ function perDebuffProcVictims(
  * passes). Branch-local by design.
  */
 function passesProcChanceGate(intent: Intent, ctx: IntentExecContext): boolean {
+    // Drawn at the landing that woke this reaction (R149): spend it, never draw a second roll.
+    const preDecided = intent.eventCtx?.preDecidedProc;
+    if (preDecided !== undefined) {
+        if (preDecided) spendPendingBlockDebuff(ctx.pendingBlockDebuffGrants, intent.ownerId);
+        return preDecided;
+    }
     const pc = intent.ability.procChance;
     if (pc === undefined || pc <= 0 || pc >= 1) return true;
     const gateKey = `${intent.ownerId}:${intent.ability.id}`;
@@ -4610,18 +4708,47 @@ function passesProcChanceGate(intent: Intent, ctx: IntentExecContext): boolean {
     const memoKey = `${gateKey}:${attackKeyOf(intent.eventCtx)}`;
     const cached = memo?.get(memoKey);
     if (cached !== undefined) return cached;
-    let gate = ctx.procChanceGates?.get(gateKey);
-    if (ctx.procChanceGates && !gate) {
+    const verdict = drawProcVerdict(intent.ownerId, intent.ability.id, pc, ctx.procChanceGates);
+    memo?.set(memoKey, verdict);
+    return verdict;
+}
+
+/** One draw of an owner's proc-chance ability from the gate `passesProcChanceGate` draws from, so
+ *  a verdict drawn ahead of the drain (engine.ts's `decideBlockDebuffAtLanding`) takes the same
+ *  place in the same stream. No gate map (unit-test contexts) → true. */
+export function drawProcVerdict(
+    ownerId: string,
+    abilityId: string,
+    procChance: number,
+    gates: Map<string, RateGate> | undefined
+): boolean {
+    if (!gates) return true;
+    const gateKey = `${ownerId}:${abilityId}`;
+    let gate = gates.get(gateKey);
+    if (!gate) {
         // Keyed by owner + purpose, NOT the finer-grained map key — every
         // proc-chance ability on this owner shares the owner's "proc" sub-stream, which is
         // enough for cross-actor locality (this task's invariant) without re-litigating
         // per-ability draw order within one actor.
-        gate = makeRateGate(`${intent.ownerId}:proc`);
-        ctx.procChanceGates.set(gateKey, gate);
+        gate = makeRateGate(`${ownerId}:proc`);
+        gates.set(gateKey, gate);
     }
-    const verdict = !gate || gate(pc);
-    memo?.set(memoKey, verdict);
-    return verdict;
+    return gate(procChance);
+}
+
+/** Whether `wearerId` has a Block Debuff proc drawn at a landing whose grant has not resolved yet
+ *  — a debuff landing on it now is blocked (IntentExecContext.pendingBlockDebuffGrants). */
+export function blockDebuffPendingOn(
+    pending: ReadonlyMap<string, number> | undefined,
+    wearerId: string
+): boolean {
+    return (pending?.get(wearerId) ?? 0) > 0;
+}
+
+function spendPendingBlockDebuff(pending: Map<string, number> | undefined, wearerId: string): void {
+    const left = (pending?.get(wearerId) ?? 0) - 1;
+    if (left > 0) pending?.set(wearerId, left);
+    else pending?.delete(wearerId);
 }
 
 /** Once-per-round gate, shared by the damage/heal/shield executors (the debuff branch
@@ -4666,7 +4793,7 @@ function passesOncePerCastGate(intent: Intent, ctx: IntentExecContext, victimId?
     if (scope === undefined) return true;
     const cast = ctx.turnsTakenFor?.(intent.ownerId) ?? 0;
     const key =
-        `${intent.ownerId}:${intent.ability.id}:cast:${cast}` +
+        `${intent.ownerId}:${intent.ability.id}:cast:${cast}${castHitSuffix(intent)}` +
         (scope === 'per-victim' ? `:${victimId ?? ''}` : '');
     if (ctx.oncePerRoundConsumed?.has(key)) return false;
     ctx.oncePerRoundConsumed?.add(key);
@@ -4738,7 +4865,8 @@ export type StampedEventType =
     | 'shield-destroyed-log'
     | 'shield-applied-log'
     | 'cheat-death-log'
-    | 'reversed-repair-log';
+    | 'reversed-repair-log'
+    | 'bomb-splash-log';
 
 /** Forces the array literal passed to it to contain every member of `T` exactly once — a
  *  missing or duplicated tag is a compile error, not a silent gap. Standard TS
@@ -4804,6 +4932,7 @@ const REACTIVE_STAMPED_EVENT_TYPE_LIST = exhaustiveArrayOf<StampedEventType>()([
     'shield-applied-log',
     'cheat-death-log',
     'reversed-repair-log',
+    'bomb-splash-log',
 ]);
 
 const REACTIVE_STAMPED_EVENT_TYPES: ReadonlySet<CombatEventType> = new Set<StampedEventType>(
@@ -5080,6 +5209,12 @@ export const CHARGE_TARGET_KIND: Record<AbilityTarget, ChargeTargetKind> = {
 const eventSeqByEvent = new WeakMap<object, number>();
 let nextEventSeq = 1;
 let listeningEventSeq: number | undefined;
+/** The number the next event to reach a reactive listener will get: every intent woken from now on
+ *  carries an `eventSeq` at least this large. */
+export function eventSeqWatermark(): number {
+    return nextEventSeq;
+}
+let listeningEvent: CombatEvent | undefined;
 const seqOfEvent = (e: object): number => {
     let seq = eventSeqByEvent.get(e);
     if (seq === undefined) {
@@ -5108,10 +5243,19 @@ let resolvingIntent: Intent | undefined;
  * (round start, end of round) roots the chain at its own first hit (`claimHitRoot`).
  */
 let currentHitRoot: string | undefined;
+/** The cast sub-attack index `currentHitRoot` names, when it names one (`Intent.hitSubAttack`). */
+let currentHitSubAttack: number | undefined;
 
-/** Engine-side: the root for the cast sub-attack now resolving, or undefined outside a turn. */
-export function setHitRoot(root: string | undefined): void {
+/** Engine-side: the root for the cast sub-attack now resolving (and that sub-attack's index), or
+ *  undefined outside a turn. */
+export function setHitRoot(root: string | undefined, subAttackIndex?: number): void {
     currentHitRoot = root;
+    currentHitSubAttack = root === undefined ? undefined : subAttackIndex;
+}
+
+/** The reaction chain in scope right now (see `currentHitRoot`), or undefined. */
+export function hitRootInScope(): string | undefined {
+    return currentHitRoot;
 }
 
 /** The root a reactive hit landing now belongs to — see `currentHitRoot`. With none in scope the
@@ -5120,21 +5264,36 @@ export function setHitRoot(root: string | undefined): void {
 export function claimHitRoot(mint: () => string): string {
     if (currentHitRoot !== undefined) return currentHitRoot;
     const root = mint();
-    if (resolvingIntent) currentHitRoot = root;
+    if (resolvingIntent) {
+        currentHitRoot = root;
+        currentHitSubAttack = undefined;
+    }
     return root;
 }
 
 export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
     const outer = resolvingIntent;
     const outerRoot = currentHitRoot;
+    const outerSubAttack = currentHitSubAttack;
     resolvingIntent = intent;
     currentHitRoot = intent.hitRoot;
+    currentHitSubAttack = intent.hitSubAttack;
     try {
         resolveIntent(intent, rawCtx);
     } finally {
         resolvingIntent = outer;
         currentHitRoot = outerRoot;
+        currentHitSubAttack = outerSubAttack;
     }
+}
+
+/** A destroyed owner's intent that still resolves: its own death reaction, or any reaction in the
+ *  chain it died in (R117) — see the dead-owner gate in `resolveIntent`. */
+function deadOwnerMayResolve(owner: { destroyedInHitRoot?: string }, intent: Intent): boolean {
+    return (
+        intent.eventCtx?.fromOwnDeath === true ||
+        (intent.hitRoot !== undefined && intent.hitRoot === owner.destroyedInHitRoot)
+    );
 }
 
 function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
@@ -5163,12 +5322,28 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
     // Dead-owner gate (combat-sim finding #1): a DESTROYED owner's stale reactives are
     // suppressed — a listener that fired on a LATER event (e.g. a dead Curator reacting to an
     // enemy charge rounds after dying) must not resolve. `destroyedRound` is the canonical
-    // aliveness signal (state.recordDestroyed). The owner's OWN death reaction is EXEMPT
-    // (eventCtx.fromOwnDeath, stamped by the self-scoped on-destroyed listener) so Martyrdom's
-    // killer-Disable and Salvation's self-destruct heal — born of the death itself — still fire.
+    // aliveness signal (state.recordDestroyed). Two exemptions:
+    //  - the owner's OWN death reaction (eventCtx.fromOwnDeath, stamped by the self-scoped
+    //    on-destroyed listener): Martyrdom's killer-Disable and Salvation's self-destruct heal;
+    //  - every reaction in the chain the owner died in ("all reactions trigger before a ship
+    //    dies", R117): Warden killed by a hit still inflicts Corrosion I on the attacker,
+    //    Stalwart still counters, Heliodor still repairs her allies. `destroyedInHitRoot` is the
+    //    chain in scope at the death; an intent of that same chain carries it as `hitRoot`.
     // Single, team-symmetric gate: the one drain feeds both sides, so this covers enemy-owner
     // reactives identically. Listeners only ENQUEUE (pure), so a skip leaves no partial state.
-    if (owner.actor.destroyedRound !== undefined && !intent.eventCtx?.fromOwnDeath) return;
+    if (owner.actor.destroyedRound !== undefined && !deadOwnerMayResolve(owner.actor, intent))
+        return;
+    // R141: a debuff landing on a ship that is destroyed (the hit that inflicted it killed it)
+    // wakes no other ship's reaction — Provider does not answer Enforcer's crit Defense Shred on
+    // the enemy his hit just destroyed. The dying ship's own reactions are the dead-owner gate's
+    // business above, so the owner is excluded here.
+    const debuffVictimId = intent.eventCtx?.debuffVictimId;
+    if (
+        debuffVictimId !== undefined &&
+        debuffVictimId !== intent.ownerId &&
+        ctx.isActorAlive?.(debuffVictimId) === false
+    )
+        return;
 
     // The drain-time gate conditions, with every subject a branch re-checks per resolved target
     // scrubbed out (see `scrubDrainGateConditions` for each arm and its re-check site). One
@@ -5181,7 +5356,7 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
     // non-derivable-on-non-live subjects to 'always'; manual conditions keep literal gating
     // (manualCount). A failed gate is a silent skip (no resisted record).
     const gateConditions = liveGateConditions(scrubbedConditions);
-    const baseDrainCtx = buildDrainContext(ctx, intent.ownerId);
+    const baseDrainCtx = buildDrainContext(ctx, intent.ownerId, intent);
     // The re-check `scrubDrainGateConditions` promised: evaluate the scrubbed enemy-oriented
     // conditions against ONE resolved target's own live state.
     //
@@ -5676,16 +5851,6 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
             casterId: intent.ownerId,
             kind: 'timed',
             duration: typeof cfg.duration === 'number' ? cfg.duration : 1,
-            // #6b: an on-destroyed OWN-DEATH reaction (Martyrdom's killer-Disable) lands on the
-            // killer DURING the killer's own turn, so the killer's same-turn Post-Turn would eat
-            // the first tick (a legendary Disable(2) would block only one turn). Opt this debuff
-            // into the enemy-side own-turn reprieve — decrementEnemy then skips the first tick when
-            // the recipient is the current turn actor, so it runs its full window. Scoped to
-            // own-death reactions (eventCtx.fromOwnDeath, stamped by the on-destroyed listener);
-            // every other enemy debuff (on-attacked/Provoke, applied on the ATTACKER's turn) is
-            // unaffected.
-            reprieveOnRecipientTurn:
-                intent.ability.trigger === 'on-destroyed' && intent.eventCtx?.fromOwnDeath === true,
         };
         // Counter-infliction routing: an intent whose eventCtx names the
         // attacking enemy ("on that enemy" — Warden) lands on THAT enemy's per-target
@@ -5775,8 +5940,12 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 continue;
             if (!passesOncePerRootCastGate(intent, ctx, debuffTargetId)) continue;
             // Block Debuff: a target carrying Block Debuff auto-resists the whole application —
-            // one resist, no landing roll drawn (the same rule the DoT branch keeps per DoT).
-            const blockedByImmunity = targetCarriesBlockDebuff(ctx.statusEngine, debuffTargetId);
+            // one resist, no landing roll drawn (the same rule the DoT branch keeps per DoT). A
+            // Firewall proc drawn at an earlier landing whose grant is still to resolve counts (R149).
+            const blockDebuffPending = (): boolean =>
+                blockDebuffPendingOn(ctx.pendingBlockDebuffGrants, debuffTargetId);
+            const blockedByImmunity =
+                targetCarriesBlockDebuff(ctx.statusEngine, debuffTargetId) || blockDebuffPending();
             // #413: `cfg.application` is the sole input `owner.landsTimedEnemyApplication` uses to
             // pick its arm: `'apply'` resolves on affinity and draws nothing, anything else calls
             // `debuffLandingGate`. So this reads the arm choice rather than re-deciding the
@@ -5797,19 +5966,29 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
             // (unit ctxs) → the closure's `?? liveDebuffLandingChance ?? 1` chain.
             const attempted = Math.max(1, status.payload.stacks ?? 1);
             let landed = 0;
+            // Each landed stack's Firewall verdicts, drawn as it lands (R149) and carried on its
+            // `debuff-applied`; a proc there blocks the stacks after it, which roll nothing.
+            const landedProcs: (Record<string, boolean> | undefined)[] = [];
+            let blockedStacks = 0;
             if (!blockedByImmunity) {
                 for (let i = 0; i < attempted; i++) {
+                    if (blockDebuffPending()) {
+                        blockedStacks = attempted - i;
+                        break;
+                    }
                     if (
                         owner.landsTimedEnemyApplication(
                             cfg.application,
                             ctx.affinityOf?.(debuffTargetId),
                             ctx.liveDebuffLandingChanceFor?.(intent.ownerId, debuffTargetId)
                         )
-                    )
+                    ) {
                         landed += 1;
+                        landedProcs.push(ctx.decideBlockDebuffAtLanding?.(debuffTargetId));
+                    }
                 }
             }
-            const resists = blockedByImmunity ? 1 : attempted - landed;
+            const resists = blockedByImmunity ? 1 : attempted - landed - blockedStacks;
             if (landed > 0) {
                 // ONE application carrying the landed stacks: a second 1-stack application of a
                 // payload without `isStackable` would refresh to 1 rather than add (see
@@ -5846,9 +6025,13 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
                     ...(intent.ability.trigger === 'on-ally-debuff-inflicted'
                         ? { viaAllyDebuffInflictedReaction: true as const }
                         : {}),
+                    ...(landedProcs[i] !== undefined ? { preDecidedProcs: landedProcs[i] } : {}),
                 });
             }
-            for (let i = 0; i < resists; i++) {
+            // Roll resists first (their gate was drawn), then the stacks a Block Debuff proc on
+            // an earlier stack stopped (no gate drawn).
+            for (let i = 0; i < resists + blockedStacks; i++) {
+                const viaRoll = i < resists && drewLandingRoll;
                 // A persistent-stacking name (would have landed as a never-expiring stack)
                 // surfaces its resisted display row as 'permanent', not its turn count.
                 const turnsRemaining: ActiveBuff['turnsRemaining'] = PERSISTENT_STACKING_BUFFS.has(
@@ -5863,7 +6046,7 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
                     // can route retaliation back at it.
                     sourceId: intent.ownerId,
                     ...reactionFiringStamp(ctx),
-                    ...(drewLandingRoll ? { viaLandingRoll: true as const } : {}),
+                    ...(viaRoll ? { viaLandingRoll: true as const } : {}),
                     // The RESOLVED target the debuff was aimed at (enemy-highest-attack /
                     // counter-infliction route) — so the combat log names the ship that resisted
                     // ("src → <that ship>: X resisted"). Always a real actor: an unresolved target
@@ -5909,7 +6092,7 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
         const landDotOn = (
             victim: CombatActor | undefined,
             victimId: string,
-            stacks: number
+            { stacks, procs }: { stacks: number; procs: (Record<string, boolean> | undefined)[] }
         ): void => {
             // The pushed entry's `appliedSeq`, carried on the landing event.
             let appliedSeq: number | undefined;
@@ -5992,6 +6175,7 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 ...(intent.ability.trigger === 'on-ally-debuff-inflicted'
                     ? { viaAllyDebuffInflictedReaction: true as const }
                     : {}),
+                ...(procs.some((p) => p !== undefined) ? { preDecidedProcsPerStack: procs } : {}),
             });
         };
 
@@ -6015,10 +6199,26 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
         /** How many of the DoT's stacks land on `victimId`: one landing check per stack (owner
          *  ruling R30), each through the owner's gate exactly as a single stack's — the first is
          *  the draw a 1-stack DoT always took, and each later stack draws after it. A failed stack
-         *  surfaces as its own resist. */
-        const landedStacksOn = (victimId: string): number => {
-            let landed = 0;
+         *  surfaces as its own resist. Each landed stack draws the victim's Firewall at once, and
+         *  a proc blocks the stacks after it, which draw nothing (R161, R122). */
+        const landedStacksOn = (
+            victimId: string
+        ): { stacks: number; procs: (Record<string, boolean> | undefined)[] } => {
+            const procs: (Record<string, boolean> | undefined)[] = [];
             for (let i = 0; i < cfg.stacks; i++) {
+                if (blockDebuffPendingOn(ctx.pendingBlockDebuffGrants, victimId)) {
+                    emitBlockDebuffResist(
+                        ctx.bus,
+                        intent.ownerId,
+                        victimId,
+                        ctx.round,
+                        dotResistLabel(cfg.dotType, cfg.tier),
+                        false,
+                        intent.eventCtx?.subAttackIndex,
+                        ctx.reactionFiringId
+                    );
+                    continue;
+                }
                 if (
                     owner.landsTimedEnemyApplication(
                         cfg.application,
@@ -6026,10 +6226,10 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
                         ctx.liveDebuffLandingChanceFor?.(intent.ownerId, victimId)
                     )
                 )
-                    landed += 1;
+                    procs.push(ctx.decideBlockDebuffAtLanding?.(victimId));
                 else emitFailedDotLanding(victimId);
             }
-            return landed;
+            return { stacks: procs.length, procs };
         };
 
         // Pestilence: a reactive DoT whose ability targets 'all-enemies' and whose triggering
@@ -6062,7 +6262,10 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 // is "a Block-Debuff victim auto-resists and no gate is drawn for it". Drawing
                 // first would make this the only site of its kind AND let a block-carrying victim
                 // consume draws it should not, shifting the owner's gate schedule.
-                if (targetCarriesBlockDebuff(ctx.statusEngine, victimId)) {
+                if (
+                    targetCarriesBlockDebuff(ctx.statusEngine, victimId) ||
+                    blockDebuffPendingOn(ctx.pendingBlockDebuffGrants, victimId)
+                ) {
                     // #413: no gate is drawn on this arm (that is the point of the note above), so
                     // this resist must not proc an on-resist reaction.
                     emitBlockDebuffResist(
@@ -6079,7 +6282,7 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 }
                 // The timed-debuff landing path, shared — see the single-victim draw below.
                 const landed = landedStacksOn(victimId);
-                if (landed > 0) landDotOn(victim, victimId, landed);
+                if (landed.stacks > 0) landDotOn(victim, victimId, landed);
             }
             return;
         }
@@ -6135,7 +6338,10 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
             // Block Debuff: an immune target auto-resists this reactive DoT — block
             // it AND emit a resist event. Placed AFTER the inert-DoT guard above so a
             // zero-stack/tier DoT doesn't surface a spurious resist.
-            if (targetCarriesBlockDebuff(ctx.statusEngine, victimId)) {
+            if (
+                targetCarriesBlockDebuff(ctx.statusEngine, victimId) ||
+                blockDebuffPendingOn(ctx.pendingBlockDebuffGrants, victimId)
+            ) {
                 // #413: block path — no landing gate drawn, so no on-resist proc.
                 emitBlockDebuffResist(
                     ctx.bus,
@@ -6160,7 +6366,7 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
             //    event carries. An undefined chance (unit ctxs, a read before the owner's first
             //    turn) falls back to the owner's cached chance, then 1, inside the gate.
             const landed = landedStacksOn(victimId);
-            if (landed > 0) landDotOn(victim, victimId, landed);
+            if (landed.stacks > 0) landDotOn(victim, victimId, landed);
         }
         return;
     }
@@ -6865,7 +7071,8 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
             attackerId,
             intent.ability.id,
             cfg.multiplier,
-            cfg.hits ?? 1
+            cfg.hits ?? 1,
+            deadOwnerMayResolve(owner.actor, intent)
         );
         emitReactiveDamageLog(ctx, intent.ownerId, attackerId, outcome);
         return;
@@ -6927,11 +7134,9 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 // Xcellence: shieldBasisPct sibling of hpBasisPct — mutually
                 // exclusive in the corpus (no row sets both).
                 cfg.shieldBasisPct,
-                // Paracelsus: an on-destroyed retaliation's owner is already dead by the
-                // time this drains — fromOwnDeath (stamped by the on-destroyed listener) lets the
-                // executor's owner-alive gate stand aside for this one reaction, same exemption the
-                // dead-owner drain gate above already grants.
-                intent.eventCtx?.fromOwnDeath === true
+                // A dead owner's reaction that passed the dead-owner gate above (Paracelsus's
+                // on-destroyed retaliation, or a reaction in the chain it died in) still lands.
+                deadOwnerMayResolve(owner.actor, intent)
             );
             emitReactiveDamageLog(ctx, intent.ownerId, sourceId, hpOutcome);
             return;
@@ -7095,7 +7300,7 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 cfg.noCrit ?? false,
                 undefined, // hpBasisPct — inert on this path (the hpBasisPct/shieldBasisPct branch above returns early)
                 undefined, // shieldBasisPct — inert on this path, same reason
-                false, // allowDeadOwner
+                deadOwnerMayResolve(owner.actor, intent), // allowDeadOwner
                 // flatBasis/ignoresDefense are ONLY ever non-inert for
                 // Demolisher's splash (the sole ability carrying cfg.ignoresDefense===true AND
                 // reachable via a trigger — on-bomb-detonated — that stamps eventCtx.triggerDamage;

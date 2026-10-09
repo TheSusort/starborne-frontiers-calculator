@@ -54,6 +54,7 @@ exports[`kit fingerprints > APEX 1`] = `
     "debuff",
     "debuff-resisted",
     "shield",
+    "shield-stripped",
   ],
   "wounded": [
     "attack",
@@ -510,8 +511,9 @@ exports[`kit fingerprints > Chakara 1`] = `
   "statusRich": [
     "attack",
     "attack:active",
+    "attack:charged",
     "charge-changed",
-    "purge:charged",
+    "purge",
   ],
   "wounded": [
     "attack",
@@ -919,6 +921,7 @@ exports[`kit fingerprints > Flamel 1`] = `
     "debuff",
     "debuff-resisted",
     "heal",
+    "hot-ticked",
   ],
   "richEnemy": [
     "buff",
@@ -928,6 +931,7 @@ exports[`kit fingerprints > Flamel 1`] = `
     "debuff",
     "debuff-resisted",
     "heal",
+    "hot-ticked",
   ],
   "wounded": [
     "buff",
@@ -937,6 +941,7 @@ exports[`kit fingerprints > Flamel 1`] = `
     "debuff",
     "debuff-resisted",
     "heal",
+    "hot-ticked",
   ],
 }
 `;
@@ -1462,7 +1467,6 @@ exports[`kit fingerprints > Iridium 1`] = `
   "statusRich": [
     "attack",
     "attack:active",
-    "attack:charged",
     "buff-expired",
     "charge-changed",
     "control:charged",
@@ -1679,6 +1683,7 @@ exports[`kit fingerprints > Laika 1`] = `
     "attack:charged",
     "charge-changed",
     "shield",
+    "shield-stripped",
   ],
   "statusRich": [
     "attack",
@@ -1918,10 +1923,11 @@ exports[`kit fingerprints > Lodolite 1`] = `
   ],
   "statusRich": [
     "attack",
+    "attack:charged",
     "charge-changed",
     "control:active",
     "debuff",
-    "purge:charged",
+    "purge",
   ],
   "wounded": [
     "attack",
@@ -2081,6 +2087,7 @@ exports[`kit fingerprints > Malvex 1`] = `
     "buff:charged",
     "charge-changed",
     "shield",
+    "shield-stripped",
     "shield:active",
   ],
   "wounded": [
@@ -2518,6 +2525,7 @@ exports[`kit fingerprints > Oleander 1`] = `
     "charge-changed",
     "dot-ticked",
     "heal",
+    "hot-ticked",
   ],
   "richEnemy": [
     "buff",
@@ -2527,6 +2535,7 @@ exports[`kit fingerprints > Oleander 1`] = `
     "charge-changed",
     "dot-ticked",
     "heal",
+    "hot-ticked",
   ],
   "wounded": [
     "buff",
@@ -2536,6 +2545,7 @@ exports[`kit fingerprints > Oleander 1`] = `
     "charge-changed",
     "dot-ticked",
     "heal",
+    "hot-ticked",
   ],
 }
 `;
@@ -3264,12 +3274,11 @@ exports[`kit fingerprints > Sefuba 1`] = `
     "charge-changed",
   ],
   "statusRich": [
-    "attack",
     "attack:active",
     "attack:charged",
     "charge-changed",
     "heal",
-    "purge:active",
+    "purge",
   ],
   "wounded": [
     "attack:active",
@@ -4056,12 +4065,12 @@ exports[`kit fingerprints > Voron 1`] = `
     "dot-ticked",
   ],
   "statusRich": [
-    "attack",
     "attack:active",
+    "attack:charged",
     "charge-changed",
     "debuff",
     "dot-ticked",
-    "purge:charged",
+    "purge",
   ],
   "wounded": [
     "attack:active",
@@ -4427,6 +4436,7 @@ exports[`kit fingerprints > Zeolite 1`] = `
     "debuff:active",
     "debuff:charged",
     "purge",
+    "purge:active",
   ],
   "wounded": [
     "attack",

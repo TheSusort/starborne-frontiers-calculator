@@ -652,13 +652,17 @@ describe('per-victim DoT ticks at each positioned ship’s turn-start (PR-C C2)'
         );
         expect(totalCorrosionTicks.length).toBeGreaterThanOrEqual(1);
 
-        // The heal-target branch routes the tick into the tank's INCOMING accounting (NOT a player
-        // damage row) — so perTargetDamage['team-ally'] is NEVER populated by a per-victim DoT tick.
-        // (The ally takes no firing hit at M2, so the key stays absent every round — proving no
-        // per-victim DoT row was written for the heal-target carrier.)
-        for (const round of result.rounds) {
-            expect(round.perTargetDamage?.['team-ally']).toBeUndefined();
-        }
+        // The heal-target branch books each tick once: the ally's per-round damage equals the
+        // damage its ticks dealt (a double tick would book twice).
+        const tickTotal = totalCorrosionTicks.reduce(
+            (sum, e) => sum + (e as CombatEvent & { damage: number }).damage,
+            0
+        );
+        const bookedTotal = result.rounds.reduce(
+            (sum, round) => sum + (round.perTargetDamage?.['team-ally'] ?? 0),
+            0
+        );
+        expect(bookedTotal).toBeCloseTo(tickTotal, 6);
     });
 
     it('Round-1 faster-victim, no applier ctx: tickDoTs skips the entry (no HP/row) but still ages the stack', () => {
