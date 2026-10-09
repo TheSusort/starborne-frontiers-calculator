@@ -1847,11 +1847,13 @@ function applyNewDoTs(args: {
     }
 }
 
-// Step 3b: Apply Echoing Burst-style accumulators inflicted by this round's skill
-// (gated by the same landing roll as inflicted debuffs). Each gathers every direct hit its holder
+// Step 3b: Apply Echoing Burst-style accumulators inflicted by this round's skill. Each one is an
+// inflicted debuff: it draws its own landing decision (`decideLanding`, one draw per accumulator,
+// like any other named debuff of the cast) and a failed one is resisted; a target under Block
+// Debuff blocks it before any roll. Each gathers every direct hit its holder
 // takes after it (`gatherDirectHitIntoAccumulators`). The skill's damage is written before its
 // debuffs, so this cast's own damage, which the engine lands on the board after this step, is not
-// gathered (`castStartSeq`).
+// gathered (`castStartSeq`). Returns how many accumulators landed.
 function applyAccumulators(args: {
     gatedSkill: Skill | undefined;
     pendingAccumulators: PendingAccumulator[];
@@ -1861,14 +1863,25 @@ function applyAccumulators(args: {
     /** Reports each landed accumulator as an inflicted debuff. */
     emitInflicted: (buffName: string) => void;
     /** Whether the target is under Block Debuff now, a Firewall proc on an earlier debuff of
-     *  this skill included (R149): the accumulator is a debuff (R112), so it is blocked. */
+     *  this skill included (R149): the accumulator is a debuff (R112), so it is blocked before
+     *  any landing roll is drawn. */
     blocked: () => boolean;
     /** Reports an accumulator Block Debuff stopped (no landing roll). */
-    emitBlocked: (buffName: string) => void;
-}): void {
+    emitBlocked: (turns: number) => void;
+    /** One landing decision for one accumulator — DRAWS, so it is called once per accumulator. */
+    decideLanding: () => LandingDecision;
+    /** Reports a resisted accumulator; `viaLandingRoll` is whether the landing roll was drawn. */
+    emitResisted: (turns: number, viaLandingRoll: boolean) => void;
+}): number {
+    let landed = 0;
     for (const acc of accumulatorsFromSkill(args.gatedSkill)) {
         if (args.blocked()) {
-            args.emitBlocked('Echoing Burst');
+            args.emitBlocked(acc.turns);
+            continue;
+        }
+        const decision = args.decideLanding();
+        if (!decision.landed) {
+            args.emitResisted(acc.turns, decision.viaRoll);
             continue;
         }
         args.pendingAccumulators.push({
@@ -1879,7 +1892,9 @@ function applyAccumulators(args: {
             appliedSeq: args.nextAppliedSeq(),
         });
         args.emitInflicted('Echoing Burst');
+        landed++;
     }
+    return landed;
 }
 
 /**
@@ -5649,50 +5664,54 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 }),
         });
 
-        // Accumulators ride the cast's shared round roll, not the per-stack DoT rolls. Applied
-        // before the inflicted-scope extensions below so those reach them.
-        if (castRoll) {
-            applyAccumulators({
-                gatedSkill,
-                pendingAccumulators,
-                sourceId: actor.id,
-                nextAppliedSeq: statusEngine.nextAppliedSeq,
-                // Announced with the cast's other after-damage landings, so the log rows the
-                // infliction beneath the skill's own attack row.
-                // The target's Firewall rolls as the burst lands (R149); the roll rides the
-                // `debuff-applied` to the drain.
-                emitInflicted: (buffName) => {
-                    const preDecidedProcs = decideBlockDebuffAtLanding?.(enemy.id);
-                    deferredEnemyApplications.push({
-                        applyState: () => {},
-                        emitEvents: () =>
-                            emitDebuffApplied(
-                                actor.id,
-                                buffName,
-                                enemy.id,
-                                'inflict',
-                                action,
-                                preDecidedProcs
-                            ),
-                    });
-                },
-                blocked: () =>
-                    targetCarriesBlockDebuff(statusEngine, enemy.id) ||
-                    blockDebuffPendingFor?.(enemy.id) === true,
-                emitBlocked: (buffName) =>
-                    deferredEnemyApplications.push({
-                        applyState: () => {},
-                        emitEvents: () => emitDebuffResisted(buffName, enemy.id, false),
-                    }),
-            });
-        }
+        // Accumulators each draw their own landing decision. Applied before the
+        // inflicted-scope extensions below so those reach them.
+        const accumulatorsLanded = applyAccumulators({
+            gatedSkill,
+            pendingAccumulators,
+            sourceId: actor.id,
+            nextAppliedSeq: statusEngine.nextAppliedSeq,
+            // Announced with the cast's other after-damage landings, so the log rows the
+            // infliction beneath the skill's own attack row. The target's Firewall rolls as the
+            // burst lands (R149); the roll rides the `debuff-applied` to the drain.
+            emitInflicted: (buffName) => {
+                const preDecidedProcs = decideBlockDebuffAtLanding?.(enemy.id);
+                deferredEnemyApplications.push({
+                    applyState: () => {},
+                    emitEvents: () =>
+                        emitDebuffApplied(
+                            actor.id,
+                            buffName,
+                            enemy.id,
+                            'inflict',
+                            action,
+                            preDecidedProcs
+                        ),
+                });
+            },
+            blocked: () =>
+                targetCarriesBlockDebuff(statusEngine, enemy.id) ||
+                blockDebuffPendingFor?.(enemy.id) === true,
+            emitBlocked: (turns) => {
+                resistedEnemyDebuffs.push({ buffName: 'Echoing Burst', turnsRemaining: turns });
+                deferredEnemyApplications.push({
+                    applyState: () => {},
+                    emitEvents: () => emitDebuffResisted('Echoing Burst', enemy.id, false),
+                });
+            },
+            decideLanding: () => decideTimedEnemyApplicationLive('inflict'),
+            emitResisted: (turns, viaLandingRoll) => {
+                resistedEnemyDebuffs.push({ buffName: 'Echoing Burst', turnsRemaining: turns });
+                emitDebuffResisted('Echoing Burst', enemy.id, viaLandingRoll);
+            },
+        });
 
         // Step 3a: 'inflicted'-scope extensions grow ONLY this cast's new DoTs, Bombs and
         // accumulators (Valerian). Sourced from the same firing+passive ability set as Step 2.9.
-        // Skipped when the cast's first roll failed and no later stack landed either: nothing was
-        // appended, and skipping keeps the deterministic extendChanceGate schedule free of
-        // phantom draws.
-        if (castRoll || landedPrimaryDots.length > 0) {
+        // Skipped when the cast's first roll failed and no later stack or accumulator landed
+        // either: nothing was appended, and skipping keeps the deterministic extendChanceGate
+        // schedule free of phantom draws.
+        if (castRoll || landedPrimaryDots.length > 0 || accumulatorsLanded > 0) {
             extendInflictedDoTs({
                 abilities: [...(firingSkill?.abilities ?? []), ...(passiveSkill?.abilities ?? [])],
                 ctx,

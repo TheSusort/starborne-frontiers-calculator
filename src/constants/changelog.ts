@@ -38,6 +38,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: Nuqtu now reacts to enemy Overload, Blast and Titanite Plating gains.',
     'Combat simulator: Nuqtu now gains one Core Charge per enemy reaction or passive gain.',
     "Combat simulator: Valkyrie's Echoing Burst now counts as a debuff inflicted.",
+    "Combat simulator: Valkyrie's Echoing Burst now rolls against security and can be resisted.",
     'Combat log: Echoing Burst detonations now show as their own row.',
     'Combat simulator: a stackable buff already at its cap no longer counts as gained.',
     'Combat simulator: Asphyxiator now gains Overload when any enemy has 3 debuffs.',
