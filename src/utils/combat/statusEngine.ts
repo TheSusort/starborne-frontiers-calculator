@@ -116,6 +116,9 @@ interface AbilityStatusBase {
      *  suppressed while its caster is turn-blocked (see `setTurnBlockedReader`); an equipment one
      *  is not. Read `Ability.source`'s doc for the rule. */
     source?: 'equipment';
+    /** The one gear-set bonus or implant an equipment status came from, copied off
+     *  `Ability.equipmentEffectId`. Absent on a ship's own skill. */
+    equipmentEffectId?: string;
     /** Player-side RECIPIENTS that receive this status (ally routing): `self` → [casterId];
      *  `ally`/`all-allies` → every player actor id (fixed source order). Enemy-side statuses ignore
      *  this (enemy maps are singular). The ENGINE always sets this on the timed-by-slot statuses it

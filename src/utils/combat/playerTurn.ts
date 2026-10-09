@@ -2597,9 +2597,15 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             });
         }
     };
-    /** The firing of this actor's passive that rides this cast (`TimedStatus.perHit`): its own
-     *  skill action, apart from the cast (owner ruling R175), shared by every buff it grants. */
-    const passiveRideGrantKey = `cast:${actor.id}:${actor.turnsTaken}:passive`;
+    /** The firing of one source that rides this cast (`TimedStatus.perHit`): its own skill action,
+     *  apart from the cast (owner ruling R175). The source is the ship's passive skill, or one
+     *  gear-set bonus or implant (`equipmentEffectId`), as `reactionKey` in triggers.ts keys a
+     *  reaction; every buff one source grants on this cast shares the key. */
+    const passiveRideGrantKey = (status: TimedStatus): string =>
+        `cast:${actor.id}:${actor.turnsTaken}:` +
+        (status.equipmentEffectId !== undefined
+            ? `equipment:${status.equipmentEffectId}`
+            : `ship:${status.sourceSlot}`);
     // ── Status removals: buff steals and purges ─────────────────────────────────────────────
     // Each helper performs the removal's STATE change and returns its events as a thunk, so a
     // clause written after the damage can hold the events back with the write (see
@@ -7348,7 +7354,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             !conditionsMet(status.conditions, { ...postDebuffGateCtx, roundCrit: anyVictimCrit })
         )
             continue;
-        applyTimedSelfStatus(status, status.perHit === true ? passiveRideGrantKey : undefined);
+        applyTimedSelfStatus(
+            status,
+            status.perHit === true ? passiveRideGrantKey(status) : undefined
+        );
         const live = statusEngine
             .timedAbilityStatuses('self', actor.id)
             .find((s) => s.payload.buffName === status.payload.buffName);

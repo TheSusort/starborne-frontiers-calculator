@@ -410,6 +410,31 @@ describe.each(PLACEMENTS)('Nuqtu on the %s side: a passive buff riding a cast (R
         expect(r.stacks).toBe(2);
     });
 
+    it('SYNTHETIC: a ship passive and an implant both riding one cast are TWO Core Charges', () => {
+        // No real gear-set bonus or implant grants a buff when its wearer damages an enemy, so the
+        // implant here is synthetic; Rys's passive is real.
+        const implant: Ability = {
+            ...buffAbility('equip-implant-test', {
+                buffName: 'Attack Up II',
+                conditions: [
+                    { subject: 'enemy-type', derivable: true, requiredEnemyType: 'Debuffer' },
+                ],
+            }),
+            source: 'equipment',
+            equipmentEffectId: 'implant-test',
+        };
+        const base = rys(false);
+        const kit: ShipSkills = {
+            ...base.kit,
+            slots: base.kit.slots.map((s) =>
+                s.slot === 'passive' ? { ...s, abilities: [...s.abilities, implant] } : s
+            ),
+        };
+        const r = run(p, [{ ...base, kit }], 1, 'DEBUFFER');
+        expect(gainedNames(r)).toEqual(['Attack Up II', 'XAOC Swiftness II']);
+        expect(r.stacks).toBe(2);
+    });
+
     it("Anjian's passive granting two buffs in one firing is ONE Core Charge", () => {
         const anjian: Gainer = {
             id: 'anjian',

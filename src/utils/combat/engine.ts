@@ -571,6 +571,9 @@ function registerActorAbilityStatuses(
                 // Provenance for the turn-block suppression — see `Ability.source`. Attached only
                 // when the ability carries it, so a ship-skill status omits the key entirely.
                 ...(ability.source ? { source: ability.source } : {}),
+                ...(ability.equipmentEffectId !== undefined
+                    ? { equipmentEffectId: ability.equipmentEffectId }
+                    : {}),
                 // #363 (Fuying): carry the recipient FACTION scope onto the status. `recipients`
                 // above is the roster-wide ally fan-out; the faction intersection happens at
                 // APPLICATION time in playerTurn (where the actor→faction map is in scope), not
