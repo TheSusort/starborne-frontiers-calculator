@@ -1,72 +1,19 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '1.75.1';
+export const CURRENT_VERSION = '1.75.2';
 
 // Accumulates between releases. `npm run release` folds these into a new ChangelogEntry at the
 // top of CHANGELOG, bumps CURRENT_VERSION and empties this array — all three together, because a
 // bumped version whose entries are still unreleased shows users a what's-new dialog listing
 // nothing. Do it by hand only if that script cannot.
-export const UNRELEASED_CHANGES: string[] = [
-    'Combat simulator: stolen Protection now counts toward buff-count effects.',
-    'Combat simulator: Overclock purged at end of round now leaves its hangover immediately.',
-    'Combat log: a Protection-redirected hit now shows only the damage the target took.',
-    'Combat log: Protection-redirected counters and procs now show only damage taken.',
-    'Combat simulator: Nuqtu now gains one Core Charge per enemy buffing skill.',
-    "Combat log: attack rows now show each target's HP right after the hit.",
-    'Combat log: Repair Over Time ticks now get their own row.',
-    'Combat log: shield strips now get a row and a shield stripped stat.',
-    "Combat log: a bomb carrier's death splash now gets a row for each neighbour.",
-    "Combat log: damage ticks now appear before the ship's own attack.",
-    'Combat simulator: slot one now counts incoming damage over time in damage taken.',
-    'Combat simulator: enemy Selenite no longer counts dead Stealth ships.',
-    "Combat simulator: Nosorog's reflect now counts as direct damage, waking attacker reactions.",
-    'Combat simulator: fully Protection-redirected hits no longer trigger counters or shorten Stasis.',
-    'Combat simulator: Malvex now shields off counters and round-start hits aimed at him.',
-    "Combat simulator: Quixilver's damage-taken shield now fires on passive and counter hits.",
-    "Combat simulator: Centurion and Nyxen now counter Nosorog's reflect like Stalwart does.",
-    "Combat simulator: Protection now redirects Nosorog's reflect away from the attacker.",
-    "Combat simulator: Nosorog's reflect now spends the attacker's Exposed and Titanite Plating.",
-    "Combat simulator: Nosorog's reflect now uses his shield penetration.",
-    "Combat simulator: Nosorog's reflect now feeds his own damage-dealt leech, like a counter.",
-    'Combat simulator: passive debuffs on an attacker now last through its next turn.',
-    "Combat simulator: Firewall's Block Debuff now stops the rest of that skill's debuffs.",
-    "Combat simulator: Firewall's Block Debuff now also stops that skill's later DoT stacks.",
-    "Combat simulator: Tygr's own Stasis now boosts that same skill's damage.",
-    'Combat simulator: a buff stolen before the damage now boosts that hit.',
-    'Combat simulator: a cleanse written before the damage now clears debuffs first.',
-    'Combat simulator: a purge written after the damage now resolves after the hit.',
-    'Combat simulator: Nuqtu now reacts to enemy Overload, Blast and Titanite Plating gains.',
-    'Combat simulator: Nuqtu now gains one Core Charge per enemy reaction or passive gain.',
-    "Combat simulator: Valkyrie's Echoing Burst now counts as a debuff inflicted.",
-    "Combat simulator: Valkyrie's Echoing Burst now rolls against security and can be resisted.",
-    'Combat log: Echoing Burst detonations now show as their own row.',
-    'Combat simulator: a stackable buff already at its cap no longer counts as gained.',
-    'Combat simulator: Asphyxiator now gains Overload when any enemy has 3 debuffs.',
-    "Combat simulator: Grif's and Hermes's defense bonus now reduces damage taken.",
-    "Combat simulator: Lionheart's active and charged crit grants no longer overlap.",
-    'Combat simulator: Meiying now starts combat with Stealth.',
-    "Combat simulator: Wildfire's Scorching Radiation bonus now applies to Inferno only.",
-    "Combat simulator: Meatshield's repair now needs a direct hit this round.",
-    "Combat simulator: Pestilence's Corrosion now lands on the enemy that cleansed.",
-    'Combat simulator: Asphodel now gains one charge per critting skill, charged included.',
-    'Combat simulator: Insidiousness now rolls per debuff, with one success per skill.',
-    "Combat simulator: Synaptic Resonance now boosts the next critical hit's crit power.",
-    'Combat simulator: the Leech set now repairs from counter-attack and implant-proc damage.',
-    'Combat simulator: Leech set, Bloodthirst and Last Wish repairs can now critically hit.',
-    "Combat simulator: Valkyrie's Echoing Burst repair and other damage-based repairs can now crit.",
-    'Combat simulator: Madax now receives 30% more repairs beside a supporter.',
-    "Combat simulator: Zosimos's active now counts a repair that healed nothing.",
-    "Combat simulator: reactions to Enforcer's hits now resolve before his next hit.",
-    'Combat simulator: Bomb detonations and splash now resolve before reactions, on both sides.',
-    "Combat simulator: Demolisher's charge removal on a turn-start Bomb now precedes that turn's skill.",
-    'Combat simulator: a ship destroyed by a hit now fires its own reactions to it.',
-    'Combat simulator: Provider no longer reacts to debuffs landing on a dying enemy.',
-    "Combat simulator: Makoli's low-HP reaction now inflicts Disable as well as repairing.",
-    'Combat simulator: a ship freed from Stasis mid-exchange now reacts to later hits.',
-    "Combat simulator: each of Enforcer's hits now counts separately for once-per-skill reactions.",
-];
+export const UNRELEASED_CHANGES: string[] = [];
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.75.2',
+        date: '2026-10-09',
+        changes: ['57 combat simulator fixes.'],
+    },
     {
         version: '1.75.1',
         date: '2026-10-07',
