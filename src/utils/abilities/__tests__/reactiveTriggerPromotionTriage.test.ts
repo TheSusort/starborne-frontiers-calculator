@@ -188,7 +188,7 @@ describe('cluster 3 — on-ally-debuff-inflicted', () => {
         // GAP: needs-capture — the charge half ALREADY rides on-ally-debuff-inflicted, but the
         // "grants RoT to that Ally" buff stays on-cast. on-ally-debuff-inflicted fires but captures
         // no ally id (triggers.ts:365-378), so "that Ally" can't be routed. Add which-ally capture
-        // off the repairedAllyIds precedent; per-ally cap keys owner:ability:allyId.
+        // off the repairedRecipientIds precedent; per-ally cap keys owner:ability:allyId.
     });
 });
 

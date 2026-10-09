@@ -739,7 +739,7 @@ describe('#442 — the caster’s own over-repair feeds the redirect', () => {
  *
  * The gate did not simply go away — it became shape-scoped. An `overheal`-BASIS reaction is sized
  * by what a repair WASTED, so a caster-only repair qualifies; everything else on the trigger still
- * needs a non-self recipient, because Font of Power grants to `repairedAllyIds` and an empty list
+ * needs a non-self recipient, because Font of Power grants to `repairedRecipientIds` and an empty list
  * makes that branch fall through to the whole living side.
  *
  * FIXTURE. Chimei carries the Stealth aura and the two allies do not, so her Stealth-gated

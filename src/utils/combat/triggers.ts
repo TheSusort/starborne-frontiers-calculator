@@ -2406,19 +2406,22 @@ export function registerReactiveListeners(args: {
                     };
                     bus.on('heal-performed', (e) => onEnemyRepair(e.casterId, e.targets));
                     // A REACTIVE repair is still "an enemy performing a repair" (Ruiner's Bomb).
-                    // Reactive heals deliberately emit NO `heal-performed` (chain guard — it would
-                    // re-trigger the caster's own on-repair listeners and loop), only the log-only
-                    // `reactive-heal-performed`; without this second subscription Ruiner was blind
-                    // to exactly the ships his passive is meant to punish — the reaction-healers
+                    // Reactive heals emit `reactive-heal-performed`, never `heal-performed`, so
+                    // this second subscription is what lets these riders see the reaction-healers
                     // (Heliodor's on-damaged self-repair, Cultivator's on-ally-damaged repair),
-                    // which repair many times a round and never once via heal-performed.
+                    // which repair many times a round and never via heal-performed.
                     //
-                    // CHAIN SAFETY: this is a listener on a type documented as having none, so it
-                    // must not reopen the loop the chain guard closed. It cannot: the enqueued
-                    // intents are the on-enemy-repaired riders (Ruiner's Bomb debuff + Overload
-                    // self-buff, Zosimos's charge removal, Amartya's Defense Shred) — none of them
-                    // heal, so none can emit another reactive-heal-performed. The lineage rule
-                    // (`reactionKey`) ends any future rider that could.
+                    // CHAIN SAFETY. Sansi's rider is itself a repair ("When an enemy is directly
+                    // repaired, limited to 3 times per round, this Unit repairs 5% ..."), so it
+                    // emits reactive-heal-performed and wakes the other side's on-enemy-repaired
+                    // listeners, an opposing Sansi's included. Two things bound that cycle:
+                    //  1. The lineage rule (`reactionKey`, R86): a clause already in an intent's
+                    //     `reactionAncestry` is dropped, so Sansi A -> Sansi B -> Sansi A ends
+                    //     before A repairs a second time in one chain.
+                    //  2. Her `maxPerRound` (3) caps her firings across separate chains.
+                    // The other riders here (Ruiner's Bomb and Overload, Zosimos's charge, Nayra's
+                    // debuff, Amartya's Defense Shred, Synaptic Resonance's Speed Up) do not
+                    // repair, so they cannot extend a chain through this event.
                     bus.on('reactive-heal-performed', (e) =>
                         onEnemyRepair(
                             e.casterId,
