@@ -169,7 +169,7 @@ const run = (
             .map((e) =>
                 e.type === 'accumulator-detonated' ? { round: e.round, damage: e.damage } : null
             );
-    return { on, detonations };
+    return { on, detonations, events };
 };
 
 describe.each<Placement>(['player', 'enemy'])('caster on the %s side', (placement) => {
@@ -269,6 +269,47 @@ describe.each<Placement>(['player', 'enemy'])('caster on the %s side', (placemen
         });
         expect(on('o_M3').burstApplied).toHaveLength(1);
         expect(on('o_M3').blockDebuffGrants).toBe(1);
+    });
+
+    it('an aimed enemy immune to debuffs resists a DoT skill’s Echoing Burst, uninflicted', () => {
+        // The aimed enemy acts first and grants itself Block Debuff, so the cast meets an immune
+        // aimed target and every debuff of the skill is blocked.
+        const blockDebuff: Ability = {
+            id: 'self-block-debuff',
+            type: 'buff',
+            target: 'self',
+            trigger: 'on-cast',
+            conditions: [],
+            config: {
+                type: 'buff',
+                buffName: 'Block Debuff',
+                parsedEffects: {},
+                stacks: 1,
+                isStackable: false,
+                duration: 2,
+            },
+        };
+        const { on, events } = run(placement, [hit, corrosion, echoingBurst], 'Pattern-Base', {
+            overrides: {
+                o_M4: {
+                    speed: 200,
+                    kit: { slots: [{ slot: 'active', abilities: [blockDebuff] }] },
+                },
+            },
+        });
+        // Instrument: the Corrosion was blocked (a resist with no landing roll), not inflicted.
+        const dotBlocked = events.filter(
+            (e) =>
+                e.type === 'debuff-resisted' &&
+                e.buffName === 'Corrosion I' &&
+                !('viaLandingRoll' in e && e.viaLandingRoll)
+        );
+        expect(dotBlocked).toHaveLength(1);
+        expect(on('o_M4').corrosion).toBe(0);
+        // The Echoing Burst is not inflicted and is reported as blocked, like the DoT.
+        expect(on('o_M4').burstApplied).toHaveLength(0);
+        expect(on('o_M4').burstResisted).toHaveLength(1);
+        expect(on('o_M4').burstResisted[0]).not.toHaveProperty('viaLandingRoll');
     });
 
     it('control: a single-target (Pattern-Base) cast reaches the aimed enemy only', () => {
