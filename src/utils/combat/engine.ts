@@ -9265,37 +9265,36 @@ export function runCombat(rawInput: CombatEngineInput): {
          *      passive across the whole footprint, at half damage on covered cells.
          * The multi-victim test pins both directions.
          *
-         * WHAT IT DELIBERATELY DOES NOT DO. It emits no `ability-performed` and no `attacked`, and
-         * fires no outgoing rider — because the passive instance never had any of those. On the
-         * non-positional path it was a pure ADDEND on `directDamage`: no event, no rider, no
-         * separate attack row. This restores parity; inventing an event stream for it would be a
-         * new mechanic, not a fix. Crit is likewise NOT re-decided here — `hit.didCrit` was fixed
-         * in `runPlayerTurn` (`noCrit` honoured, otherwise the round's own draw reused) and every
-         * footprint victim reuses that ONE outcome instead of rolling its own, so NO CRIT DRAW is
-         * added and the crit stream's schedule is untouched.
+         * A DIRECT HIT (owner rulings R36 / R168: every hit is direct damage, a passive's
+         * included). Each victim's hit runs the same consequences as a counter or reactive proc
+         * (`landReactiveHit`): it emits `attacked` (with a `reactiveHitId`), so "when directly
+         * damaged" reactions fire on it; it lowers a stasised victim's Stasis by one turn
+         * (R40/R67); and it may spend the victim's primary-target allowance (R92, via
+         * `aimReactiveHit` — on the cast's anchor the firing hit has already spent it, so this hit
+         * is not primary there). It emits no `ability-performed` and fires no outgoing rider: the
+         * log shows it through its own `passive-slot-damage`, folded into the cast's row for that
+         * victim (buildCombatLog skips an `attacked` carrying a `reactiveHitId`). Crit is NOT
+         * re-decided here — `hit.didCrit` was fixed in `runPlayerTurn` (`noCrit` honoured,
+         * otherwise the round's own draw reused) and every footprint victim reuses that ONE
+         * outcome, so NO CRIT DRAW is added.
          *
-         * WHAT IT DOES DRAW AND PROVOKE — read this before repeating "the instance draws no RNG",
-         * which is true of CRIT only and false in general. It IS a real damage instance: it goes
-         * through the real per-victim funnel (`tb.applyToVictim` → `applyOutgoingToEnemy`, which
-         * passes `byDirectDamage: true`) and the real per-victim defence profile, so shields,
-         * Barrier, Cheat Death, Protection and the per-victim credit channel (`perTargetDealt`)
-         * all see it like any other damage source. Concretely, against a victim that carries one:
+         * WHAT ELSE IT DRAWS AND PROVOKES. It goes through the real per-victim funnel
+         * (`tb.applyToVictim` → `applyOutgoingToEnemy`, which passes `byDirectDamage: true`) and
+         * the real per-victim defence profile, so shields, Barrier, Cheat Death, Protection and
+         * the per-victim credit channel (`perTargetDealt`) all see it like any other damage
+         * source. Concretely, against a victim that carries one:
          *   • an `incoming-block` ability — the instance ADVANCES that victim's
          *     `directIntakeIndex` (so it counts as an nth direct hit for `nth-hit-2plus`) and
          *     ROLLS a `makeRateGate` draw on the victim's own `<id>:proc` sub-stream, which can
          *     also spend an `oncePerRound` block. Both are pinned in
          *     `passiveSlotDamageFootprint.integration.test.ts`.
          *   • a `damage-reflection` ability — the instance does not set `isReflected`, so it
-         *     PROVOKES thorns back at the attacker exactly as the firing hit
-         *     does. (`isPrimary: false` below still exempts it from a `requirePrimaryTarget`
-         *     reflect — Nosorog — since it is not the cast's primary-target hit.)
-         * All of that is the intended reading of "a real damage instance"; it is recorded here so
-         * a later change plans around the real footprint rather than a convenient fiction.
+         *     PROVOKES thorns back at the attacker exactly as the firing hit does; a
+         *     `requirePrimaryTarget` reflect (Nosorog) reads the same `aim` answer as `attacked`.
          *
-         * LEECHES: the apply loop pays both directions through `procLeechesForVictim` — the
-         * ACTOR's standing damage-dealt leech, and the VICTIM's damage-taken shields with
-         * `isPrimary: false` (every hit is direct damage, R36/R140, so Quixilver's fires; the
-         * instance is not a primary-target hit, so Malvex's does not).
+         * LEECHES: the victim's damage-taken shields ride `landReactiveHit` (R140: Quixilver's
+         * fires on a passive hit; Malvex's only when the hit is primary); the actor's standing
+         * damage-dealt leech is `payReactiveHitLeech` (R144).
          *
          * KNOWN GAP, corpus-bounded today and deliberately UNFIXED here:
          *   A CAST WITH NO FIRING-SLOT DAMAGE ABILITY LOSES ITS PASSIVE INSTANCE ENTIRELY.
@@ -9422,6 +9421,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                     );
                     const damage = damageParts.damage;
                     if (!(damage > 0)) continue;
+                    // The log row: folded into the cast's row for this victim (buildCombatLog).
                     bus.emit({
                         type: 'passive-slot-damage',
                         attackerId: actor.id,
@@ -9429,18 +9429,19 @@ export function runCombat(rawInput: CombatEngineInput): {
                         round: currentRound,
                         damage,
                     });
-                    // `isPrimary: false` — this instance is not the cast's primary-target hit,
-                    // so it must not satisfy a `requirePrimaryTarget` reflect gate (Nosorog).
+                    // Read before the funnel, as a counter or proc reads them: the Stasis this hit
+                    // meets (earlier hits' queued reductions land first) and its primary-target
+                    // allowance (R92).
+                    spendStasisHits(victim.id);
+                    const stasisAtImpact = attackBreaksStasis(actor) && isStasised(victim.id);
+                    const aim = aimReactiveHit(victim.id);
                     // 4th arg: this instance is a SECOND positional damage path into the funnel, so
                     // it owes the Protection cascade the same mitigation factor the firing hit
-                    // hands down. Omitting it left this path on the fallback re-derivation — the
-                    // very defect the firing path was fixed for (penetration and buff-folded
-                    // defence both dropped), so a passive-slot instance landing on a protected
-                    // victim over-transferred to the protector.
+                    // hands down, or a protected victim over-transfers to the protector.
                     const outcome = tb.applyToVictim(
                         victim,
                         damage,
-                        false,
+                        aim.isPrimary,
                         victimDefenceMitigation(defenseProfile, hit.scalars.defensePenetrationPct),
                         // #358 ADDENDUM 2: the SECOND positional damage path into the funnel owes
                         // it the same pre-defence figure the firing hit hands down.
@@ -9450,6 +9451,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                     // does — a Protection cascade / incoming block / DoT transform all move the
                     // number, and re-crediting the pre-funnel hit would double-count.
                     const booked = outcome.incomingBooked ?? damage;
+                    const applied: AppliedVictimDamage = { ...outcome, incomingBooked: booked };
                     if (booked > 1e-9) {
                         roundPerTargetDamage.set(
                             victim.id,
@@ -9461,12 +9463,20 @@ export function runCombat(rawInput: CombatEngineInput): {
                         // turn that applied the Echoing Burst IS gathered.
                         gatherDirectHitIntoAccumulators(victim, booked);
                     }
-                    // Both leech directions, on the funnel figures `procLeechesForVictim`
-                    // documents: the actor's standing damage-dealt leech (channel `'direct'` — this
-                    // instance passes `byDirectDamage: true` through `tb.applyToVictim`) and the
-                    // victim's damage-taken shields (R140: Quixilver's fires on a passive hit). Not
-                    // a primary-target hit (`isPrimary: false` above), so Malvex's does not.
-                    procLeechesForVictim(actor.id, victim, damage, outcome, false);
+                    // The direct-hit consequences (R36/R168): primary allowance, Stasis
+                    // reduction, the victim's damage-taken shields and repairs, and `attacked`.
+                    landReactiveHit(
+                        actor,
+                        victim,
+                        damage,
+                        hit.didCrit,
+                        applied,
+                        stasisAtImpact,
+                        false,
+                        aim
+                    );
+                    // The actor's standing damage-dealt leech (R144).
+                    payReactiveHitLeech(actor, applied);
                 }
             };
         };
