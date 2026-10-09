@@ -7536,15 +7536,20 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // which the funnel then spends. The gear set's share takes its defence
                             // from `effectiveStatsOf(attacker)` — the attacker's own self-sourced
                             // buffs only, no enemy-applied Defense Down — and has no status channel.
-                            const directProfile = directReflect
-                                ? reactiveHitInputs(victim, attacker).profile
+                            const directInputs = directReflect
+                                ? reactiveHitInputs(victim, attacker)
                                 : undefined;
-                            const shareDefenceReductionPct = directProfile
-                                ? // OPEN OWNER QUESTION: the wearer's own defence penetration is not
-                                  // applied to the bounce (a counter applies it). Not to be aligned
-                                  // with the counter without a ruling.
-                                  victimDefenceReductionPct(directProfile, 0)
-                                : attackerDefenceReductionPct;
+                            const directProfile = directInputs?.profile;
+                            // R179: the ship's own share applies the reflector's outgoing defence
+                            // penetration, exactly as a counter does; the gear set's share reads
+                            // the attacker's plain defence and applies none.
+                            const shareDefenceReductionPct =
+                                directProfile && directInputs
+                                    ? victimDefenceReductionPct(
+                                          directProfile,
+                                          directInputs.ownerOutgoing.defensePenetration
+                                      )
+                                    : attackerDefenceReductionPct;
                             // ONE evaluation, both axes (#358): `reflectedDamageParts` returns the
                             // mitigated amount and its pre-defence twin from a single walk.
                             const bounce = reflectedDamageParts({

@@ -753,3 +753,70 @@ describe.each(SIDES)(
         });
     }
 );
+
+/**
+ * Owner ruling R179 (2026-10-09): Nosorog's own defence penetration applies to his bounce, the
+ * ship's share only — exactly as a counter applies its owner's. The Reflect gear set's share
+ * ignores it.
+ */
+describe.each(SIDES)(
+    "the bounce applies the reflector's defence penetration, reflector on the %s side",
+    (placement) => {
+        /** Acts before the hitter and gives itself `pen`% defence penetration for the round. */
+        const withPen = (unitIn: BoardUnit, pen: number): BoardUnit => ({
+            ...unitIn,
+            speed: 1_000,
+            kit: {
+                slots: [
+                    {
+                        slot: 'active',
+                        abilities: [
+                            {
+                                id: 'pen-buff',
+                                type: 'buff',
+                                target: 'self',
+                                trigger: 'on-cast',
+                                conditions: [],
+                                config: {
+                                    type: 'buff',
+                                    buffName: 'Pen Up',
+                                    parsedEffects: { defensePenetration: pen },
+                                    stacks: 1,
+                                    isStackable: false,
+                                    duration: 5,
+                                },
+                            },
+                        ],
+                    },
+                    ...unitIn.kit.slots.filter((s) => s.slot !== 'active'),
+                ],
+            },
+        });
+        const armoured = () => unit('warden', hitterWith('Warden'), { defence: 5_000 });
+        const factor = (defence: number) => 1 - calculateDamageReduction(defence) / 100;
+
+        it("Nosorog's own share is computed against the hitter's defence reduced by his penetration", () => {
+            const control = bounceOf(placement, withPen(nosorog(true), 0), { hitter: armoured() });
+            const pen = bounceOf(placement, withPen(nosorog(true), 40), { hitter: armoured() });
+            expect(control.rows).toHaveLength(1);
+            expect(control.rows[0]).toBeGreaterThan(0);
+            expect(pen.rows).toHaveLength(1);
+            expect(pen.rows[0]).toBeCloseTo(
+                (control.rows[0] * factor(5_000 * 0.6)) / factor(5_000),
+                6
+            );
+            expect(pen.rows[0]).toBeGreaterThan(control.rows[0]);
+        });
+
+        it("the Reflect gear set's share ignores the wearer's penetration", () => {
+            const control = bounceOf(placement, withPen(reflectSetWearer(), 0), {
+                hitter: armoured(),
+            });
+            const pen = bounceOf(placement, withPen(reflectSetWearer(), 40), {
+                hitter: armoured(),
+            });
+            expect(control.rows[0]).toBeGreaterThan(0);
+            expect(pen.rows[0]).toBeCloseTo(control.rows[0], 6);
+        });
+    }
+);
