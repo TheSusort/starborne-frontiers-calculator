@@ -11,6 +11,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: custom passive on-cast hits now count as direct hits.',
     "Combat simulator: Font of Power rolls once for Chimei's repair and its redirect.",
     'Combat simulator: the log shows Echoing Burst blocked by a debuff-immune target.',
+    'Ships: "Copy as image" on ship cards works again.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
