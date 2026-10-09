@@ -72,7 +72,7 @@ function makeRuntime(
         chargedCritGate: () => true,
         activeHealCritGate: () => false,
         chargedHealCritGate: () => false,
-        debuffLandingGate: scriptedGate(landingOutcomes),
+        debuffLandingGate: scriptedGate([...landingOutcomes]),
         extendChanceGate: makeRateGate(),
         landsTimedEnemyApplication: () => true,
         selfBuffLookup: new Map(),
@@ -162,6 +162,7 @@ describe.each(['player', 'enemy'] as const)('%s-side caster', (side) => {
 
     it('control: the same cast without the extension leaves the burst at its written length', () => {
         const v = cast(side, [corrosionClause, echoClause], FAIL_DOT_LAND_BURST);
+        expect(v.corrosionEntries).toEqual([]);
         expect(v.pendingAccumulators.map((a) => a.roundsRemaining)).toEqual([2]);
     });
 
