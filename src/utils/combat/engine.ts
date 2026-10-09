@@ -114,7 +114,11 @@ import {
     type SubAttackOutcome,
 } from './positionalApply';
 import type { AttackerDamageScalars, VictimDefenseProfile } from './victimDamage';
-import { victimHitDamageParts, victimDefenceMitigation } from './victimDamage';
+import {
+    victimHitDamageParts,
+    victimDefenceMitigation,
+    victimDefenceReductionPct,
+} from './victimDamage';
 import {
     incomingReductionForHit,
     incomingBlockForIntake,
@@ -7523,23 +7527,30 @@ export function runCombat(rawInput: CombatEngineInput): {
                         for (const { reflectPct, directReflect } of shares) {
                             // The ship's share can destroy the attacker before the set's lands.
                             if (attacker.destroyedRound !== undefined) break;
+                            // A ship's bounce reads the attacker's buffs and debuffs through the
+                            // counter's own profile (R176): its defence with Defense Up/Down, and
+                            // the incoming-damage status channel — Inc. Damage Up/Down and Exposed,
+                            // which the funnel then spends. The gear set's bounce reads neither.
+                            const directProfile = directReflect
+                                ? reactiveHitInputs(victim, attacker).profile
+                                : undefined;
+                            const shareDefenceReductionPct = directProfile
+                                ? victimDefenceReductionPct(directProfile, 0)
+                                : attackerDefenceReductionPct;
                             // ONE evaluation, both axes (#358): `reflectedDamageParts` returns the
-                            // mitigated amount and its pre-defence twin from a single walk. A direct
-                            // bounce also reads the attacker's Exposed (+100% per stack), which the
-                            // funnel then spends — amplify and consume in lockstep.
+                            // mitigated amount and its pre-defence twin from a single walk.
                             const bounce = reflectedDamageParts({
                                 reflectPct,
                                 // Direct slice only — the bomb portion of a mixed hit never reflects.
                                 netHpDamage: reflectBasis,
                                 affinityDamageModifier,
-                                attackerDefenceReductionPct,
+                                attackerDefenceReductionPct: shareDefenceReductionPct,
                                 reflectVictimIncomingReductionPct,
+                                incomingDamageModifierPct: directProfile?.incomingDamageModifierPct,
+                                victimSideIncomingPct: directProfile?.victimSideIncomingPct,
                             });
-                            const exposedAmp = directReflect
-                                ? 1 + exposedIncomingPct(statusEngine, attacker.id) / 100
-                                : 1;
-                            const reflected = bounce.damage * exposedAmp;
-                            const reflectedPreMit = bounce.preMitigation * exposedAmp;
+                            const reflected = bounce.damage;
+                            const reflectedPreMit = bounce.preMitigation;
                             if (reflected > 0) {
                                 // Aimed at the attacker like a counter (R137); the aim and the Stasis
                                 // gate are read at impact, before the bounce lands.
@@ -7568,7 +7579,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                             ? {
                                                   directReflect: true,
                                                   targetMitigation:
-                                                      1 - attackerDefenceReductionPct / 100,
+                                                      1 - shareDefenceReductionPct / 100,
                                               }
                                             : {}),
                                         shieldPenetrationPct: directReflect
@@ -7682,7 +7693,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             //    they would spend the status for nothing (found in review, PR #289):
             //      · the Reflect gear set's bounce — `reflectedDamageParts` folds only the
             //        attacker's incoming-REDUCTION. A ship's reflect (`directReflect`, R162) reads
-            //        Exposed at the reflect site and therefore spends here,
+            //        Exposed through the counter's profile (R176) and therefore spends here,
             //      · counter  — passes `incomingDamageModifierPct: 0` outright (documented approximation),
             //      · transfer — the redirected chunk comes off the ORIGINAL victim's cascade.
             //    Same three flags, same reasoning as the Protection-transfer eligibility guard above.

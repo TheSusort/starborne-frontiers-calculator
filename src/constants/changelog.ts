@@ -15,6 +15,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: Warpstrike and duration cuts can now shorten Acidic Decay.',
     'Combat simulator: Nuqtu gains a Core Charge for each enemy passive buff too.',
     "Combat simulator: Nosorog wearing the Reflect set bounces the set's share as non-direct.",
+    "Combat simulator: Nosorog's reflect now scales with the attacker's damage-taken buffs and debuffs.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

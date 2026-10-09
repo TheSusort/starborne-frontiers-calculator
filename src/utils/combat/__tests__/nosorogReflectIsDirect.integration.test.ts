@@ -33,6 +33,7 @@ import type { Ship } from '../../../types/ship';
 import type { GearPiece } from '../../../types/gear';
 import { buildShipAbilitiesWithEquipment } from '../../abilities/buildShipAbilitiesWithEquipment';
 import { getGearSet } from '../../../constants/gearSets';
+import { calculateDamageReduction } from '../../autogear/statResolution';
 
 beforeAll(() => {
     if (!csvAvailable() || !shipDataAvailable())
@@ -674,3 +675,106 @@ describe.each(SIDES)('Nosorog wearing the Reflect set, on the %s side', (placeme
         expect(obs.counters).toEqual(['hitter>reflector']);
     });
 });
+
+/** Warden (his real passives) whose cast first grants himself `buff`, then hits for 100%. */
+const wardenSelfBuffed = (buff: string, parsedEffects: Record<string, number>): BoardUnit =>
+    unit('warden', {
+        slots: [
+            {
+                slot: 'active',
+                abilities: [
+                    {
+                        id: 'self-buff',
+                        type: 'buff',
+                        target: 'self',
+                        trigger: 'on-cast',
+                        conditions: [],
+                        config: {
+                            type: 'buff',
+                            buffName: buff,
+                            parsedEffects,
+                            stacks: 1,
+                            isStackable: false,
+                            duration: 5,
+                        },
+                    },
+                    ...hitKit(100).slots[0].abilities,
+                ],
+            },
+            ...passives('Warden'),
+        ],
+    });
+
+/**
+ * Owner ruling R176 (2026-10-09): Nosorog's bounce reads the attacker's buffs and debuffs the way a
+ * counter-attack does — Inc. Damage Up/Down and Exposed share one incoming channel. The Reflect gear
+ * set's bounce reads none of them.
+ */
+describe.each(SIDES)(
+    "the bounce reads the hitter's incoming modifiers, reflector on the %s side",
+    (placement) => {
+        const warden = () => unit('warden', hitterWith('Warden'));
+
+        it('Inc. Damage Up II on Warden makes the bounce 30% larger', () => {
+            const control = bounceOf(placement, nosorog(true), { hitter: warden() });
+            const up = bounceOf(placement, nosorog(true), {
+                hitter: warden(),
+                status: 'Inc. Damage Up II',
+                parsedEffects: { incomingDamage: 30 },
+            });
+            expect(control.rows).toHaveLength(1);
+            expect(control.rows[0]).toBeGreaterThan(0);
+            expect(up.rows[0]).toBeCloseTo(control.rows[0] * 1.3, 6);
+        });
+
+        it('Inc. Damage Down II on Warden makes the bounce 30% smaller', () => {
+            const control = bounceOf(placement, nosorog(true), {
+                hitter: wardenSelfBuffed('Inert Buff', {}),
+            });
+            const down = bounceOf(placement, nosorog(true), {
+                hitter: wardenSelfBuffed('Inc. Damage Down II', { incomingDamage: -30 }),
+            });
+            expect(control.rows).toHaveLength(1);
+            expect(control.rows[0]).toBeGreaterThan(0);
+            expect(down.rows[0]).toBeCloseTo(control.rows[0] * 0.7, 6);
+        });
+
+        it('Exposed and Inc. Damage Up II add in one channel; Exposed is applied once', () => {
+            const control = bounceOf(placement, nosorog(true), { hitter: warden() });
+            const both = bounceOf(placement, nosorog(true), {
+                hitter: warden(),
+                status: 'Exposed',
+                parsedEffects: { incomingDamage: 30 },
+            });
+            expect(both.rows[0]).toBeCloseTo(control.rows[0] * 2.3, 6);
+            expect(both.exposedLeft).toBe(0);
+        });
+
+        it('Defense Down II on an armoured Warden lowers his defence against the bounce', () => {
+            const armoured = () => unit('warden', hitterWith('Warden'), { defence: 5_000 });
+            const control = bounceOf(placement, nosorog(true), { hitter: armoured() });
+            const shredded = bounceOf(placement, nosorog(true), {
+                hitter: armoured(),
+                status: 'Defense Down II',
+                parsedEffects: { defense: -30 },
+            });
+            const factor = (defence: number) => 1 - calculateDamageReduction(defence) / 100;
+            expect(control.rows[0]).toBeGreaterThan(0);
+            expect(shredded.rows[0]).toBeCloseTo(
+                (control.rows[0] * factor(3_500)) / factor(5_000),
+                6
+            );
+        });
+
+        it("the Reflect gear set's bounce ignores Inc. Damage Up II", () => {
+            const control = bounceOf(placement, reflectSetWearer(), { hitter: warden() });
+            const up = bounceOf(placement, reflectSetWearer(), {
+                hitter: warden(),
+                status: 'Inc. Damage Up II',
+                parsedEffects: { incomingDamage: 30 },
+            });
+            expect(control.rows[0]).toBeGreaterThan(0);
+            expect(up.rows[0]).toBeCloseTo(control.rows[0], 6);
+        });
+    }
+);

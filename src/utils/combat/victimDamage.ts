@@ -157,11 +157,20 @@ export function victimDefenceMitigation(
     v: VictimDefenseProfile,
     defensePenetrationPct: number
 ): number {
+    return 1 - victimDefenceReductionPct(v, defensePenetrationPct) / 100;
+}
+
+/** The damage-reduction percentage behind `victimDefenceMitigation` — for a caller whose model
+ *  takes the percentage (Nosorog's bounce, `reflectedDamageParts`) and must land on the exact
+ *  factor `victimDefenceMitigation` returns. */
+export function victimDefenceReductionPct(
+    v: VictimDefenseProfile,
+    defensePenetrationPct: number
+): number {
     const effectiveDefense =
         (v.defence * (1 + v.defenceModifierPct / 100) + (v.defenceFlat ?? 0)) *
         (1 - defensePenetrationPct / 100);
-    const damageReduction = effectiveDefense > 0 ? calculateDamageReduction(effectiveDefense) : 0;
-    return 1 - damageReduction / 100;
+    return effectiveDefense > 0 ? calculateDamageReduction(effectiveDefense) : 0;
 }
 
 /**

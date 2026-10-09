@@ -1,8 +1,8 @@
 /**
- * Pure reflected ("thorns") damage calculator for the Reflect gear set.
+ * Pure reflected ("thorns") damage calculator for the Reflect gear set and a ship's own
+ * reflect (Nosorog).
  *
- * When a ship wearing Reflect takes a direct hit, it reflects a portion of the
- * damage back at the attacker. This module computes that raw reflected amount
+ * When a reflector takes a direct hit, it reflects a portion of the damage back at the attacker. This module computes that raw reflected amount
  * **before shield absorb** — the engine seam applies shield, inside
  * `applyVictimDamage` (`engine.ts`).
  *
@@ -10,6 +10,9 @@
  *   reflected = pct% × netHpDamage × affinityFactor
  *               × (1 − defenceReduction/100)
  *               × (1 − incomingReductionPct/100)
+ *
+ * A ship's reflect also reads the attacker's incoming-damage status channel (R176), one more
+ * factor `(1 + incomingDamageModifierPct/100)`; the gear set's bounce leaves it at 0.
  *
  * Affinity argument order convention:
  *   The WEARER is the source of the reflected hit. Call
@@ -54,8 +57,10 @@ export function reflectedDamageForHit(args: {
  *  • `preMitigation` — the "damage absorbed" axis: the same hit with EVERY reduction that
  *    belongs to the recipient removed. Two terms go, both replaced by an exact 1:
  *    `attackerDefenceReductionPct` and `reflectVictimIncomingReductionPct`.
- *    What survives is the hit as THROWN — the reflect percentage, the reflector's affinity, and
- *    the `netHpDamage` the reflector actually took.
+ *    The status channel loses only its victim-side slice (`victimSideIncomingPct`, the
+ *    recipient's own Inc. Damage Down family), the same split `victimHitDamageParts` makes.
+ *    What survives is the hit as THROWN — the reflect percentage, the reflector's affinity, the
+ *    `netHpDamage` the reflector actually took, and attacker-applied amplification (Exposed).
  *
  * WHY `reflectVictimIncomingReductionPct` COMES OUT of `preMitigation`.
  * The duel-fit model governs `damage` — the number the recipient's HP bar actually loses — and
@@ -78,18 +83,31 @@ export function reflectedDamageParts(args: {
     attackerDefenceReductionPct: number;
     /** The bounce-back RECIPIENT's own incoming-reduction — victim-side. See the overload above. */
     reflectVictimIncomingReductionPct: number;
+    /**
+     * The bounce-back recipient's incoming-damage STATUS channel
+     * (`VictimDefenseProfile.incomingDamageModifierPct`): Inc. Damage Up/Down, Exposed and the
+     * rest, signed (negative = takes less). Nosorog's bounce reads it like a counter (R176); the
+     * Reflect gear set's leaves it at the default 0.
+     */
+    incomingDamageModifierPct?: number;
+    /** The victim-side slice of that channel (`VictimDefenseProfile.victimSideIncomingPct`),
+     *  which `preMitigation` strips while keeping the attacker-applied rest. Default 0. */
+    victimSideIncomingPct?: number;
 }): { damage: number; preMitigation: number } {
     if (args.reflectPct <= 0 || args.netHpDamage <= 0) return { damage: 0, preMitigation: 0 };
     const base = (args.reflectPct / 100) * args.netHpDamage;
     const affinity = 1 + args.affinityDamageModifier / 100;
     const defence = 1 - args.attackerDefenceReductionPct / 100;
     const incoming = 1 - args.reflectVictimIncomingReductionPct / 100;
+    const statusChannel = args.incomingDamageModifierPct ?? 0;
+    const status = 1 + statusChannel / 100;
+    const statusAsThrown = 1 + (statusChannel - (args.victimSideIncomingPct ?? 0)) / 100;
     return {
-        damage: Math.max(0, base * affinity * defence * incoming),
+        damage: Math.max(0, base * affinity * defence * incoming * status),
         // The identical product with an exact 1 in BOTH victim-side slots (defence and incoming) —
         // the same shape `victimHitDamageParts` uses, so neither axis is ever reconstructed by
         // division. `damage` above keeps its own operand order and its own locals: the exact-1
         // constants appear only here, never folded into the mitigated product.
-        preMitigation: Math.max(0, base * affinity * 1 * 1),
+        preMitigation: Math.max(0, base * affinity * 1 * 1 * statusAsThrown),
     };
 }
