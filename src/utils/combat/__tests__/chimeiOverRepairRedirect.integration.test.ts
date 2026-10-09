@@ -627,9 +627,10 @@ describe('#435 acceptance — Font of Power and Abundant Renewal off a PASSIVE r
         expect(onLow[0].amount).toBeGreaterThan(0);
         expect(onLow[0].amount * totalOverheal(repair)).toBe(onTopped[0].amount * redirectExcess);
 
-        // ARM 2 (R-B) — Font of Power rolled its proc off the redirect too: the redirect's
-        // recipient carries the grant, which only the redirect could have delivered (the passive
-        // repair never reached `low`).
+        // ARM 2 (R-B, R169) — Font of Power reached the redirect's recipient too, under the one
+        // roll it drew for the passive repair and its redirect together: `low` carries the grant,
+        // which only the redirect could have delivered (the passive repair never reached `low`).
+        // The one-roll count is pinned in `fontOfPowerRedirectOneRoll.integration.test.ts`.
         expect(nanobotRecipients(window)).toContain(LOW_ID);
 
         // ARM 3 (R2, the negative) — and no cascade. `redirects` is already length 1 above; state

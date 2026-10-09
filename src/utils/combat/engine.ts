@@ -3954,7 +3954,8 @@ export function runCombat(rawInput: CombatEngineInput): {
     // preDecidedConversions; a grant that never drains belongs to a ship that died.
     const pendingBlockDebuffGrants = new Map<string, number>();
     // Verdict cache for scoped proc abilities: procScope:'per-attack' keys it per sub-attack,
-    // procScope:'per-debuff' (Insidiousness) per root-cast cap — see each gate in triggers.ts.
+    // procScope:'per-debuff' (Insidiousness) per root-cast cap, an on-own-repair-to-ally proc
+    // (Font of Power) per repair event — see each gate in triggers.ts.
     // Cleared at each actor turn-start beside reactionFiredThisAttack so a later turn rolls afresh.
     const procDecisionThisSubAttack = new Map<string, boolean>();
     // Numbers every reactive-intent resolution (`IntentExecContext.reactionFiringId`).

@@ -9,6 +9,7 @@ export const CURRENT_VERSION = '1.75.2';
 export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: Echoing Burst now lands on every enemy an AoE skill hits.',
     'Combat simulator: custom passive on-cast hits now count as direct hits.',
+    "Combat simulator: Font of Power rolls once for Chimei's repair and its redirect.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
