@@ -422,14 +422,15 @@ export interface StatusEngine {
     ): number;
     /** Reduce the duration of EVERY eligible timed debuff on `actorId` by `turns` (Heliodor/
      *  Pestilence's "reduces the duration of all active Debuffs … by 1 turn"). Timed only; skips
-     *  'recurring'/'permanent' and `isDurationCutImmune` statuses (R173); a non-positive/non-finite `turns` is
-     *  rejected. Returns the number of debuffs affected (removed early if their reduced
-     *  duration is <= 0). Unknown id → 0. */
+     *  'recurring'/'permanent' and `isDurationCutImmune` statuses (R173); a non-positive or
+     *  non-finite `turns` is rejected. Returns the number of debuffs affected (removed early if
+     *  their reduced duration is <= 0). Unknown id → 0. */
     reduceAllDebuffsDuration(actorId: string, turns: number): number;
     /** The clean inverse of reduceAllDebuffsDuration (Lev) — extends EVERY eligible
-     *  timed debuff on `actorId` (per-victim `enemyMaps`) by `turns`. Same eligibility rules
-     *  (numeric turnsRemaining only, skips isUnremovable(name, turnsRemaining)) and the same
-     *  non-positive/non-finite `turns` rejection, but NEVER expires an entry — extending only
+     *  timed debuff on `actorId` (per-victim `enemyMaps`) by `turns`. Eligible: a numeric
+     *  turnsRemaining that is not `isUnremovable(name, turnsRemaining)` — unlike the reduce paths,
+     *  which reach unremovable debuffs (R173). Same non-positive/non-finite `turns` rejection as
+     *  reduceAllDebuffsDuration, but NEVER expires an entry — extending only
      *  grows `turnsRemaining`, so there is no deletion pass. Returns the number of debuffs
      *  affected. Unknown id → 0.
      *
@@ -1977,11 +1978,12 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         namedToo?: boolean
     ): number => removeNewestFirst(actorId, 'debuffs', count, extra, namedToo);
 
-    /** Reduce ONE debuff on `actorId` by `turns` (R173: see `isDurationCutImmune`), picked at random from the store's
-     *  timed debuffs and `extra` — see the interface doc. Only the per-victim timed enemy store is
-     *  visited: accumulating/persistent maps have no finite duration. A non-positive / non-finite
-     *  `turns` is rejected (→ 0): 0 would credit a no-op as success, a negative value would
-     *  INCREASE the duration, and NaN would corrupt `turnsRemaining`. */
+    /** Reduce ONE debuff on `actorId` by `turns` (R173: see `isDurationCutImmune`), picked at
+     *  random from the store's timed debuffs and `extra` — see the interface doc. Only the
+     *  per-victim timed enemy store is visited: accumulating/persistent maps have no finite
+     *  duration. A non-positive / non-finite `turns` is rejected (→ 0): 0 would credit a no-op as
+     *  success, a negative value would INCREASE the duration, and NaN would corrupt
+     *  `turnsRemaining`. */
     const reduceRandomDebuffDuration = (
         actorId: string,
         turns: number,
@@ -2040,11 +2042,12 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
     };
 
     /** The clean inverse of reduceAllDebuffsDuration (Lev) — extends EVERY eligible
-     *  timed debuff on `actorId` (per-victim `enemyMaps`) by `turns`. Same store and
-     *  eligibility rules as reduceAllDebuffsDuration (numeric turnsRemaining only, skip
-     *  isUnremovable(name, turnsRemaining)) but ADDS instead of subtracting, and there is no
-     *  deletion pass — extending a duration can never expire an entry. Returns the count of
-     *  debuffs affected; a non-positive/non-finite `turns` or unknown id returns 0.
+     *  timed debuff on `actorId` (per-victim `enemyMaps`) by `turns`. Same store as
+     *  reduceAllDebuffsDuration, but its own eligibility: a numeric turnsRemaining that is not
+     *  `isUnremovable(name, turnsRemaining)` (the reduce paths skip only `isDurationCutImmune`,
+     *  R173). It ADDS instead of subtracting, and there is no deletion pass — extending a duration
+     *  can never expire an entry. Returns the count of debuffs affected; a non-positive or
+     *  non-finite `turns` or unknown id returns 0.
      *
      *  `onlyNames` restricts the extension to statuses with one of those exact names — the
      *  INFLICTED-scope case (Asphyxiator), where the caller has recorded what its own cast just

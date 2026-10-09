@@ -7541,7 +7541,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // mitigated amount and its pre-defence twin from a single walk.
                             const bounce = reflectedDamageParts({
                                 reflectPct,
-                                // Direct slice only — the bomb portion of a mixed hit never reflects.
+                                // Direct slice only — the bomb portion of a mixed hit never
+                                // reflects.
                                 netHpDamage: reflectBasis,
                                 affinityDamageModifier,
                                 attackerDefenceReductionPct: shareDefenceReductionPct,
@@ -7552,8 +7553,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                             const reflected = bounce.damage;
                             const reflectedPreMit = bounce.preMitigation;
                             if (reflected > 0) {
-                                // Aimed at the attacker like a counter (R137); the aim and the Stasis
-                                // gate are read at impact, before the bounce lands.
+                                // Aimed at the attacker like a counter (R137); the aim and the
+                                // Stasis gate are read at impact, before the bounce lands.
                                 const reflectAim = directReflect
                                     ? aimReactiveHit(attacker.id)
                                     : undefined;
@@ -7572,9 +7573,10 @@ export function runCombat(rawInput: CombatEngineInput): {
                                         killerId: victim.id,
                                         byDirectDamage: true,
                                         isReflected: true,
-                                        // A direct bounce is redirected by the attacker's Protection,
-                                        // spends its Titanite/Exposed and uses the reflector's shield
-                                        // penetration (R162); the gear set's bounce does none of that.
+                                        // A direct bounce is redirected by the attacker's
+                                        // Protection, spends its Titanite/Exposed and uses the
+                                        // reflector's shield penetration (R162); the gear set's
+                                        // bounce does none of that.
                                         ...(directReflect
                                             ? {
                                                   directReflect: true,
@@ -7586,8 +7588,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                                             ? attackerShieldPenOf(victim.id)
                                             : 0,
                                         bombPortion: 0,
-                                        // #358 ADDENDUM 2: the same reflected hit without the reflect
-                                        // victim's (the original attacker's) defence term.
+                                        // #358 ADDENDUM 2: the same reflected hit without the
+                                        // reflect victim's (the original attacker's) defence term.
                                         preMitigationDamage: reflectedPreMit,
                                     }
                                 );
@@ -7595,47 +7597,51 @@ export function runCombat(rawInput: CombatEngineInput): {
                                     attacker.id,
                                     (perActorReflected.get(attacker.id) ?? 0) + reflected
                                 );
-                                // Surface the reflected hit as the attacker's per-victim incoming so it
-                                // flows into RoundData.perTargetDamage → the attacker's damageTaken /
-                                // hpPct (mirrors how a normal direct hit's emitHit accumulates). Without
-                                // this, reflected damage would mutate the attacker's live HP but never
-                                // appear on the reconstructed HP curve.
+                                // Surface the reflected hit as the attacker's per-victim incoming
+                                // so it flows into RoundData.perTargetDamage → the attacker's
+                                // damageTaken / hpPct (mirrors how a normal direct hit's emitHit
+                                // accumulates). Without this, reflected damage would mutate the
+                                // attacker's live HP but never appear on the reconstructed HP
+                                // curve.
                                 //
-                                // Booked as the intake the funnel RECORDED (`incomingBooked`), not the
-                                // bounce we computed. The recipient's own incoming-block can convert a
-                                // bounce into a self-DoT (its Hit Mitigation one-shot or a Voron/Orel
-                                // transform — a bounce-back DOES read both; see the Hit Mitigation
-                                // guard's note), and that converted amount lands LATER as generic DoT
-                                // ticks, each booking its own increment into these two maps. Booking the
-                                // full bounce here as well would count it twice on both display channels
-                                // (damageTaken, and the HP curve for any round that leaves no
-                                // `perActorIncoming` bucket for this actor to prefer). A barriered bounce
-                                // IS booked, exactly as a barriered direct hit is on the main path.
+                                // Booked as the intake the funnel RECORDED (`incomingBooked`), not
+                                // the bounce we computed. The recipient's own incoming-block can
+                                // convert a bounce into a self-DoT (its Hit Mitigation one-shot or
+                                // a Voron/Orel transform — a bounce-back DOES read both; see the
+                                // Hit Mitigation guard's note), and that converted amount lands
+                                // LATER as generic DoT ticks, each booking its own increment into
+                                // these two maps. Booking the full bounce here as well would count
+                                // it twice on both display channels (damageTaken, and the HP curve
+                                // for any round that leaves no `perActorIncoming` bucket for this
+                                // actor to prefer). A barriered bounce IS booked, exactly as a
+                                // barriered direct hit is on the main path.
                                 const reflectBooked = reflectOutcome.incomingBooked;
                                 if (reflectBooked > 1e-9) {
                                     roundPerTargetDamage.set(
                                         attacker.id,
                                         (roundPerTargetDamage.get(attacker.id) ?? 0) + reflectBooked
                                     );
-                                    // The reflecting WEARER (victim.id) is the source-attacker
-                                    // of this bounce-back hit; `attacker` (the original attacker, now
-                                    // the recipient) is the victim key — direction-inverted vs the outer
-                                    // names. Must move in LOCKSTEP with the write above: `perTargetDealt`
-                                    // is documented as a per-attacker mirror of EVERY
-                                    // roundPerTargetDamage increment, and `damageDealt`/`damageTaken`
-                                    // reconcile by construction. (A converted bounce is credited to the
-                                    // recipient itself — `convertHitToSelfDot` stamps the self-DoT
-                                    // `sourceId: victim.id` — so the reflector rightly loses the credit.)
+                                    // The reflecting WEARER (victim.id) is the source-attacker of
+                                    // this bounce-back hit; `attacker` (the original attacker, now
+                                    // the recipient) is the victim key — direction-inverted vs the
+                                    // outer names. Must move in LOCKSTEP with the write above:
+                                    // `perTargetDealt` is documented as a per-attacker mirror of
+                                    // EVERY roundPerTargetDamage increment, and
+                                    // `damageDealt`/`damageTaken` reconcile by construction. (A
+                                    // converted bounce is credited to the recipient itself —
+                                    // `convertHitToSelfDot` stamps the self-DoT
+                                    // `sourceId: victim.id` — so the reflector rightly loses the
+                                    // credit.)
                                     creditDealt(victim.id, attacker.id, reflectBooked);
                                 }
                                 // Log-only reflect surface (see the deferReflectLogs doc above
-                                // applyVictimDamage). On the deferred (positional) path we BUFFER the
-                                // row and flush it after emitDeferredAbilityPerformed creates the
-                                // attack entry, so it nests under the attack (not a preceding
+                                // applyVictimDamage). On the deferred (positional) path we BUFFER
+                                // the row and flush it after emitDeferredAbilityPerformed creates
+                                // the attack entry, so it nests under the attack (not a preceding
                                 // charge/buff entry). Off the deferred path the attacker's
-                                // ability-performed already exists → emit inline. Stamp duringTurnOf
-                                // with the acting attacker either way; didCrit omitted (reflects don't
-                                // crit).
+                                // ability-performed already exists → emit inline. Stamp
+                                // duringTurnOf with the acting attacker either way; didCrit omitted
+                                // (reflects don't crit).
                                 if (deferReflectLogs) {
                                     pendingReflectLogs.push({
                                         sourceId: victim.id,
@@ -7685,19 +7691,22 @@ export function runCombat(rawInput: CombatEngineInput): {
             // the caller computed this hit's damage off the amplified modifier, so the hit that pays
             // for the status is the one that benefits from it.
             //
-            // The governing rule: consume ONLY on a hit that actually read the amplification. So the
-            // exclusions mirror exactly what the incoming-damage channel itself excludes:
-            //  - DoT-tick batches and bomb/detonation portions (`byDirectDamage: false` / a non-zero
-            //    `bombPortion`) never read `incomingDamageModifierPct`;
-            //  - the three SECONDARY hit types compute their damage without that channel too, so
-            //    they would spend the status for nothing (found in review, PR #289):
-            //      · the Reflect gear set's bounce — `reflectedDamageParts` folds only the
-            //        attacker's incoming-REDUCTION. A ship's reflect (`directReflect`, R162) reads
-            //        Exposed through the counter's profile (R176) and therefore spends here,
-            //      · counter  — passes `incomingDamageModifierPct: 0` outright (documented approximation),
-            //      · transfer — the redirected chunk comes off the ORIGINAL victim's cascade.
-            //    Same three flags, same reasoning as the Protection-transfer eligibility guard above.
-            //  - the Barrier branch already returned without reaching here.
+            // The governing rule: consume ONLY on a hit that actually read the amplification.
+            // These hits READ the victim's incoming-damage status channel (Exposed included), so
+            // they spend here:
+            //  - a cast hit, through `defenseProfileOf` (`victimDefenseProfileOf`);
+            //  - a counter-attack or reactive damage proc, through `reactiveHitInputs`' profile;
+            //  - a ship's reflect (`cause.directReflect`, R162), through that same profile (R176).
+            // These do NOT read it, so they must not spend (PR #289):
+            //  - DoT-tick batches and bomb/detonation portions (`byDirectDamage: false` / a
+            //    non-zero `bombPortion`);
+            //  - the Reflect gear set's bounce (`isReflected` without `directReflect`) —
+            //    `reflectedDamageParts` gets status channel 0 for it;
+            //  - a Protection transfer (`isProtectionTransfer`) — the redirected chunk comes off
+            //    the ORIGINAL victim's cascade;
+            //  - a Bomb splash copy (`isSplashCopy`).
+            // Same flags, same reasoning as the Protection-transfer eligibility guard above. The
+            // Barrier branch already returned without reaching here.
             //
             // NOTHING LANDED AT THAT INSTANT is the single premise the final term encodes, and it
             // covers all three ways this funnel can cancel a hit (owner ruling, 2026-08-03; extended
@@ -7728,9 +7737,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             // amount, which contradicts what a deferral is. Do not "fix" it in this guard.
             //
             // If a secondary path ever starts reading `Exposed`, drop its flag from this guard in the
-            // same commit — amplify and consume must stay in lockstep. A counter or reactive proc
-            // reads `Exposed` (`reactiveHitInputs`) and spends it here; a Bomb splash copy does
-            // neither.
+            // same commit — amplify and consume must stay in lockstep.
             if (
                 cause?.byDirectDamage === true &&
                 (cause.bombPortion ?? 0) === 0 &&

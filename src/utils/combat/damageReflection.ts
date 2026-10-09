@@ -2,9 +2,9 @@
  * Pure reflected ("thorns") damage calculator for the Reflect gear set and a ship's own
  * reflect (Nosorog).
  *
- * When a reflector takes a direct hit, it reflects a portion of the damage back at the attacker. This module computes that raw reflected amount
- * **before shield absorb** — the engine seam applies shield, inside
- * `applyVictimDamage` (`engine.ts`).
+ * When a reflector takes a direct hit, it reflects a portion of the damage back at the attacker.
+ * This module computes that raw reflected amount **before shield absorb** — the engine seam
+ * applies shield, inside `applyVictimDamage` (`engine.ts`).
  *
  * Empirically-validated model (two in-game duels):
  *   reflected = pct% × netHpDamage × affinityFactor
@@ -30,8 +30,8 @@ export function reflectedDamageForHit(args: {
     attackerDefenceReductionPct: number;
     /**
      * Incoming-reduction % on the RECIPIENT of the bounce-back (default 0) — i.e. the ship that
-     * threw the original hit and is now the VICTIM of the thorns. The incoming-reduction channel, resolved at
-     * `engine.ts` as `incomingReductionForHit(incomingAbilitiesOf(attacker.id), …)`.
+     * threw the original hit and is now the VICTIM of the thorns. The incoming-reduction channel,
+     * resolved at `engine.ts` as `incomingReductionForHit(incomingAbilitiesOf(attacker.id), …)`.
      *
      * ⚠️ DO NOT RENAME THIS TO `attackerIncomingReductionPct`. "attacker" reads as POSITIONAL
      * here (who threw the original hit) where a reader takes it as CAUSAL (attacker-side, and

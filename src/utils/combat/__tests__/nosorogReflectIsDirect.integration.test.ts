@@ -378,40 +378,15 @@ describe.each(SIDES)('the bounce as a direct hit, reflector on the %s side', (pl
     });
 
     it('Exposed on the hitter doubles the bounce and is spent by it', () => {
-        /** A bystander beside Nosorog that only puts `status` on the hitter, first. */
-        const exposer = (status: string): BoardUnit => ({
-            id: 'exposer',
-            kit: {
-                slots: [
-                    {
-                        slot: 'active',
-                        abilities: [
-                            {
-                                id: 'expose',
-                                type: 'debuff',
-                                target: 'enemy',
-                                trigger: 'on-cast',
-                                conditions: [],
-                                config: {
-                                    type: 'debuff',
-                                    buffName: status,
-                                    parsedEffects: {},
-                                    stacks: 1,
-                                    isStackable: false,
-                                    duration: 5,
-                                    application: 'apply',
-                                },
-                            },
-                        ],
-                    },
-                ],
-            },
-            position: 'M2',
-            speed: 400,
-        });
         const measure = (reflector: BoardUnit, status: string) => {
             const hitter = unit('hitter', hitKit(100));
-            const { input, id } = boardInput(placement, reflector, [exposer(status)], [hitter], 1);
+            const { input, id } = boardInput(
+                placement,
+                reflector,
+                [statusPlanter(status)],
+                [hitter],
+                1
+            );
             let engine: StatusEngine | undefined;
             // Read right after the hitter's attack resolves: Exposed is round-scoped, so an
             // end-of-fight read would see it gone either way.
