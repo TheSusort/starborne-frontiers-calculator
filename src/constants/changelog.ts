@@ -1,26 +1,22 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '1.75.2';
+export const CURRENT_VERSION = '1.75.3';
 
 // Accumulates between releases. `npm run release` folds these into a new ChangelogEntry at the
 // top of CHANGELOG, bumps CURRENT_VERSION and empties this array — all three together, because a
 // bumped version whose entries are still unreleased shows users a what's-new dialog listing
 // nothing. Do it by hand only if that script cannot.
-export const UNRELEASED_CHANGES: string[] = [
-    "Combat simulator: Nosorog's reflect now uses his defence penetration.",
-    'Combat simulator: Echoing Burst now lands on every enemy an AoE skill hits.',
-    'Combat simulator: custom passive on-cast hits now count as direct hits.',
-    "Combat simulator: Font of Power rolls once for Chimei's repair and its redirect.",
-    'Combat simulator: the log shows Echoing Burst blocked by a debuff-immune target.',
-    'Ships: "Copy as image" on ship cards works again.',
-    'Combat simulator: Warpstrike and duration cuts can now shorten Acidic Decay.',
-    'Combat simulator: Nuqtu gains a Core Charge for each enemy passive buff too.',
-    "Combat simulator: Nosorog's reflect and the Reflect set now bounce as separate hits.",
-    "Combat simulator: Nosorog's reflect now scales with the attacker's damage-taken buffs and debuffs.",
-    'Combat simulator: a multi-hit skill triggers per-hit passive buffs on every hit.',
-];
+export const UNRELEASED_CHANGES: string[] = [];
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.75.3',
+        date: '2026-10-09',
+        changes: [
+            '10 combat simulator fixes.',
+            'Ships: "Copy as image" on ship cards works again.',
+        ],
+    },
     {
         version: '1.75.2',
         date: '2026-10-09',
