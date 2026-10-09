@@ -9270,7 +9270,8 @@ export function runCombat(rawInput: CombatEngineInput): {
          * included). Each victim's hit runs the same consequences as a counter or reactive proc
          * (`landReactiveHit`): it emits `attacked` (with a `reactiveHitId`), so "when directly
          * damaged" reactions fire on it; it lowers a stasised victim's Stasis by one turn
-         * (R40/R67); and it may spend the victim's primary-target allowance (R92, via
+         * (R40/R67), except a Stasis this same cast wrote and left standing (R9,
+         * `castStasisStandsOn`); and it may spend the victim's primary-target allowance (R92, via
          * `aimReactiveHit` — on the cast's anchor the firing hit has already spent it, so this hit
          * is not primary there). It emits no `ability-performed` and fires no outgoing rider: the
          * log shows it through its own `passive-slot-damage`, folded into the cast's row for that
@@ -9389,7 +9390,10 @@ export function runCombat(rawInput: CombatEngineInput): {
                 scheduledEnemyEffects?: SelectedGameBuff[];
                 perVictimOutgoing?: PlayerTurnResult['perVictimOutgoing'];
                 preTurnVictimStatus?: Map<string, PreTurnVictimStatusSnapshot>;
-            }
+            },
+            /** The cast's own Stasis record (`PlayerTurnResult.castStasisStandsOn`): a Stasis this
+             *  cast wrote and left standing is not shortened by its own passive hit (R9). */
+            castStasisStandsOn: (victimId: string) => boolean
         ): (() => void) | undefined => {
             // The turn's already-resolved anchor IS the turn-start resolution (selectTurnTarget ran
             // before runPlayerTurn). A cast whose selection fell back to the position-less legacy
@@ -9434,7 +9438,12 @@ export function runCombat(rawInput: CombatEngineInput): {
                     // meets (earlier hits' queued reductions land first) and its primary-target
                     // allowance (R92).
                     spendStasisHits(victim.id);
-                    const stasisAtImpact = attackBreaksStasis(actor) && isStasised(victim.id);
+                    // Part of the cast: a Stasis this cast wrote and left standing is spared, as
+                    // the firing hit spares it (R9).
+                    const stasisAtImpact =
+                        attackBreaksStasis(actor) &&
+                        isStasised(victim.id) &&
+                        !castStasisStandsOn(victim.id);
                     const aim = aimReactiveHit(victim.id);
                     // 4th arg: this instance is a SECOND positional damage path into the funnel, so
                     // it owes the Protection cascade the same mitigation factor the firing hit
@@ -12732,11 +12741,18 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 // the firing hit, so neither instance's kill can swallow the other.
                                 // See stagePassiveSlotHit for the invariant and the measurements.
                                 const landPassiveSlotHit = turn.passiveSlotHit
-                                    ? stagePassiveSlotHit(actor, tb, tgt, turn.passiveSlotHit, {
-                                          scheduledEnemyEffects: turn.scheduledEnemyEffects,
-                                          perVictimOutgoing: turn.perVictimOutgoing,
-                                          preTurnVictimStatus,
-                                      })
+                                    ? stagePassiveSlotHit(
+                                          actor,
+                                          tb,
+                                          tgt,
+                                          turn.passiveSlotHit,
+                                          {
+                                              scheduledEnemyEffects: turn.scheduledEnemyEffects,
+                                              perVictimOutgoing: turn.perVictimOutgoing,
+                                              preTurnVictimStatus,
+                                          },
+                                          turn.castStasisStandsOn
+                                      )
                                     : undefined;
                                 const posApply = drivePositionalTurnApply(
                                     actor,
@@ -13026,11 +13042,18 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 // Mirror of the focus site — stage the walked team
                                 // actor's passive-slot instance against the turn-entry board.
                                 const landTeamPassiveSlotHit = teamTurn.passiveSlotHit
-                                    ? stagePassiveSlotHit(actor, tb, tgt, teamTurn.passiveSlotHit, {
-                                          scheduledEnemyEffects: teamTurn.scheduledEnemyEffects,
-                                          perVictimOutgoing: teamTurn.perVictimOutgoing,
-                                          preTurnVictimStatus: teamPreTurnVictimStatus,
-                                      })
+                                    ? stagePassiveSlotHit(
+                                          actor,
+                                          tb,
+                                          tgt,
+                                          teamTurn.passiveSlotHit,
+                                          {
+                                              scheduledEnemyEffects: teamTurn.scheduledEnemyEffects,
+                                              perVictimOutgoing: teamTurn.perVictimOutgoing,
+                                              preTurnVictimStatus: teamPreTurnVictimStatus,
+                                          },
+                                          teamTurn.castStasisStandsOn
+                                      )
                                     : undefined;
                                 const teamPosApply = drivePositionalTurnApply(
                                     actor,
@@ -13586,7 +13609,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                                               scheduledEnemyEffects: enemyScheduledEnemyEffects,
                                               perVictimOutgoing: enemyPerVictimOutgoing,
                                               preTurnVictimStatus: enemyPreTurnVictimStatus,
-                                          }
+                                          },
+                                          enemyTurn.castStasisStandsOn
                                       )
                                     : undefined;
                             let enemyPassiveSlotLanded = false;

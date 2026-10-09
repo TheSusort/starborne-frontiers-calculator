@@ -190,4 +190,61 @@ describe.each<Placement>(['player', 'enemy'])('attacker on the %s side', (placem
         // Control: the firing hit alone leaves 1 turn of Stasis, so the victim skips its turn.
         expect(actsThisRound(false)).toBe(false);
     });
+
+    it('the passive on-cast hit does not shorten a Stasis its own cast applied (R9)', () => {
+        // The attacker's active inflicts a 1-turn Stasis BEFORE its damage, then hits; the passive
+        // rides the same cast. A cast's own fresh Stasis is never shortened by that cast, so the
+        // victim skips its turn either way.
+        const ownStasis: Ability = {
+            ...stasis,
+            id: 'own-stasis-1',
+            config: { ...stasis.config, duration: 1 } as Ability['config'],
+        };
+        const actsThisRound = (withPassive: boolean): boolean => {
+            const caster: BoardUnit = {
+                id: 'atk',
+                kit: {
+                    slots: [
+                        {
+                            slot: 'active',
+                            abilities: [ownStasis, ...hitKit(100).slots[0].abilities],
+                        },
+                        ...(withPassive
+                            ? [{ slot: 'passive' as const, abilities: [passiveHit] }]
+                            : []),
+                    ],
+                },
+                position: 'M4',
+                speed: 100,
+                attack: 1000,
+                hacking: 1e6,
+            };
+            const victim: BoardUnit = {
+                id: 'victim',
+                kit: hitKit(1),
+                position: 'M4',
+                speed: 1,
+                hp: 1e9,
+                security: 0,
+            };
+            const { all, id } = run(placement, caster, [], [victim]);
+            const vid = id(victim);
+            // Instrument: the passive hit really landed on the victim, and so did the Stasis.
+            if (withPassive) {
+                expect(all.filter((e) => e.type === 'attacked' && e.targetId === vid)).toHaveLength(
+                    2
+                );
+            }
+            expect(
+                all.some(
+                    (e) =>
+                        e.type === 'debuff-applied' && e.targetId === vid && e.buffName === 'Stasis'
+                )
+            ).toBe(true);
+            return all.some((e) => e.type === 'ability-performed' && e.actorId === vid);
+        };
+        expect(actsThisRound(true)).toBe(false);
+        // Control: the firing hit alone already leaves the cast's own Stasis standing.
+        expect(actsThisRound(false)).toBe(false);
+    });
 });
