@@ -2,7 +2,7 @@
  * Nuqtu's Core Charge I (R121, R136): one stack per skill action that grants at least one buff to
  * an enemy, however many buffs or recipients that action covers. A skill action is an active or
  * charged cast, one firing of a reaction, or one firing of a passive (a per-turn gain, a
- * start-of-combat grant).
+ * start-of-combat grant, a buff its owner's cast sets off — R175).
  *
  * The stack is read through the real Nuqtu passive (buildTraceShip, refit 4) with a plain 100% hit
  * as his active. Every case runs with Nuqtu on the player side and on the enemy side.
@@ -13,6 +13,7 @@ import { createEventBus, type CombatEvent } from '../events';
 import { selfBuffStacksForOwner } from '../triggers';
 import type { StatusEngine } from '../statusEngine';
 import type { Ability, ShipSkills } from '../../../types/abilities';
+import type { ShipTypeName } from '../../../constants/shipTypes';
 import { setupKeyedRng } from '../../calculators/rateAccumulator';
 import { csvAvailable } from '../../../../scripts/lib/shipSkillCsv';
 import { shipDataAvailable } from '../../../../scripts/lib/shipDataSnapshot';
@@ -106,10 +107,20 @@ interface Result {
     buffEvents: Extract<CombatEvent, { type: 'buff-applied' }>[];
 }
 
-/** Nuqtu faces `gainers`; reads his Core Charge stacks and every buff the gainers received. */
-const run = (placement: Placement, gainers: Gainer[], numRounds = 1): Result => {
+/** Nuqtu faces `gainers`; reads his Core Charge stacks and every buff the gainers received.
+ *  `nuqtuRole` is the role his attackers read when they strike him ("when damaging a debuffer"). */
+const run = (
+    placement: Placement,
+    gainers: Gainer[],
+    numRounds = 1,
+    nuqtuRole?: ShipTypeName
+): Result => {
     const nuqtu = nuqtuUnit();
     const { input, id } = boardInput(placement, nuqtu, [], gainers.map(gainerUnit), numRounds);
+    if (nuqtuRole !== undefined) {
+        if (placement === 'player') input.role = nuqtuRole;
+        else input.enemyAttackers.find((a) => a.id === nuqtu.id)!.role = nuqtuRole;
+    }
     const bus = createEventBus();
     const buffEvents: Result['buffEvents'] = [];
     bus.on('buff-applied', (e) => {
@@ -356,5 +367,58 @@ describe.each(PLACEMENTS)('Nuqtu on the %s side: a gain at the stack cap', (p) =
         };
         const { stacks } = run(p, [reactor], 4);
         expect(stacks).toBe(2);
+    });
+});
+
+// R175: a passive that grants a buff when its owner's cast damages an enemy is its own activation,
+// apart from the cast. Rys (refit 4): the charged gains Hacking Up III; the passive gains XAOC
+// Swiftness II when damaging a debuffer or supporter. Anjian (refit 4): the passive gains Stealth
+// and Tianchen Precision II on the same gate — one firing, two buffs.
+describe.each(PLACEMENTS)('Nuqtu on the %s side: a passive buff riding a cast (R175)', (p) => {
+    /** Rys's real kit; `charged` starts her charged, otherwise her charged slot is stripped so
+     *  every cast is the buffless active. */
+    const rys = (charged: boolean): Gainer => ({
+        id: 'rys',
+        kit: charged
+            ? realKit('Rys')
+            : {
+                  ...realKit('Rys'),
+                  slots: realKit('Rys').slots.filter((s) => s.slot !== 'charged'),
+              },
+        position: 'M4',
+        attack: 1000,
+        chargeCount: charged ? 1 : 0,
+        startCharged: charged,
+    });
+    const gainedNames = (r: Result) => r.buffEvents.map((e) => e.buffName).sort();
+
+    it("Rys's charged buff and her passive buff in one attack are TWO Core Charges", () => {
+        const r = run(p, [rys(true)], 1, 'DEBUFFER');
+        expect(gainedNames(r)).toEqual(['Hacking Up III', 'XAOC Swiftness II']);
+        expect(r.stacks).toBe(2);
+    });
+
+    it('CONTROL: against a defender her passive stays silent and the charged is ONE', () => {
+        const r = run(p, [rys(true)], 1, 'DEFENDER');
+        expect(gainedNames(r)).toEqual(['Hacking Up III']);
+        expect(r.stacks).toBe(1);
+    });
+
+    it("Rys's buffless active with her passive buff is ONE Core Charge per turn", () => {
+        const r = run(p, [rys(false)], 2, 'DEBUFFER');
+        expect(gainedNames(r)).toEqual(['XAOC Swiftness II', 'XAOC Swiftness II']);
+        expect(r.stacks).toBe(2);
+    });
+
+    it("Anjian's passive granting two buffs in one firing is ONE Core Charge", () => {
+        const anjian: Gainer = {
+            id: 'anjian',
+            kit: realKit('Anjian'),
+            position: 'M4',
+            attack: 1000,
+        };
+        const r = run(p, [anjian], 1, 'DEBUFFER');
+        expect(gainedNames(r)).toEqual(['Stealth', 'Tianchao Precision II']);
+        expect(r.stacks).toBe(1);
     });
 });

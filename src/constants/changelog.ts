@@ -13,6 +13,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: the log shows Echoing Burst blocked by a debuff-immune target.',
     'Ships: "Copy as image" on ship cards works again.',
     'Combat simulator: Warpstrike and duration cuts can now shorten Acidic Decay.',
+    'Combat simulator: Nuqtu gains a Core Charge for each enemy passive buff too.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

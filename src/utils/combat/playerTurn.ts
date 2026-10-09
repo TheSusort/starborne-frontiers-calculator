@@ -2505,8 +2505,13 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // Applies one passed timed self status to its recipients. The status lives on each recipient
     // (decrements at the recipient's Post Turn; family + persistent rules run per recipient side
     // because applyTimedAbilityStatus threads recipientId). buff-applied emits ONCE PER RECIPIENT
-    // with the recipient's actorId, with the granter riding alongside in `granterId`.
-    const applyTimedSelfStatus = (status: (typeof timedSelfBySlot)[number]): void => {
+    // with the recipient's actorId, with the granter riding alongside in `granterId`. `grantKey`
+    // names the firing the grant belongs to (`buff-applied.grantKey`); absent for the cast's own
+    // grants, where the cast is the action.
+    const applyTimedSelfStatus = (
+        status: (typeof timedSelfBySlot)[number],
+        grantKey?: string
+    ): void => {
         // recipients is set by the engine helper for every timed-by-slot status; default to
         // [actor.id] (self routing) for any caller that omitted it (statusEngine fixtures).
         // #363: the status's own recipient FACTION scope, copied off the source ability at
@@ -2588,9 +2593,13 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 round: r,
                 buffName: status.payload.buffName,
                 duration: status.duration,
+                ...(grantKey !== undefined ? { grantKey } : {}),
             });
         }
     };
+    /** The firing of this actor's passive that rides this cast (`TimedStatus.perHit`): its own
+     *  skill action, apart from the cast (owner ruling R175), shared by every buff it grants. */
+    const passiveRideGrantKey = `cast:${actor.id}:${actor.turnsTaken}:passive`;
     // ── Status removals: buff steals and purges ─────────────────────────────────────────────
     // Each helper performs the removal's STATE change and returns its events as a thunk, so a
     // clause written after the damage can hold the events back with the write (see
@@ -7339,7 +7348,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             !conditionsMet(status.conditions, { ...postDebuffGateCtx, roundCrit: anyVictimCrit })
         )
             continue;
-        applyTimedSelfStatus(status);
+        applyTimedSelfStatus(status, status.perHit === true ? passiveRideGrantKey : undefined);
         const live = statusEngine
             .timedAbilityStatuses('self', actor.id)
             .find((s) => s.payload.buffName === status.payload.buffName);

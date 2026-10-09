@@ -2507,7 +2507,8 @@ export function registerReactiveListeners(args: {
                     // One trigger per skill action that grants buffs, however many recipients or
                     // buffs it covers: an active or charged cast (the grants a granter's own turn
                     // raises, outside any reaction), or one named firing — a reaction clause, a
-                    // passive's per-turn gain, a combat-start grant (`buff-applied.grantKey`).
+                    // passive's per-turn gain, a passive riding the cast (R175), a combat-start
+                    // grant (`buff-applied.grantKey`).
                     // A gain that names neither is its own trigger.
                     let turnSeq = 0;
                     let turnActor: string | undefined;
