@@ -61,8 +61,8 @@ const nosorog = (withReflect: boolean): BoardUnit => ({
     attack: 10_000,
 });
 
-/** A hull wearing the Reflect gear set and nothing else. */
-const reflectSetWearer = (): BoardUnit => {
+/** The passive slot the Reflect gear set builds (its damage-reflection ability). */
+const reflectSetPassive = (): ShipSkills['slots'][number] => {
     const slots = ['weapon', 'hull', 'generator', 'sensor'] as const;
     const pieces: GearPiece[] = slots
         .slice(0, getGearSet('REFLECT')?.minPieces ?? 2)
@@ -91,13 +91,54 @@ const reflectSetWearer = (): BoardUnit => {
     const passive = built.slots.find((s) => s.slot === 'passive');
     if (!passive?.abilities.some((a) => a.config.type === 'damage-reflection'))
         throw new Error('Reflect set did not build a damage-reflection passive');
-    return {
-        id: 'nosorog',
-        kit: { slots: [{ slot: 'active', abilities: [] }, passive] },
-        position: 'M4',
-        speed: 1,
-        attack: 10_000,
-    };
+    return passive;
+};
+
+/** A hull wearing the Reflect gear set and nothing else. */
+const reflectSetWearer = (): BoardUnit => ({
+    id: 'nosorog',
+    kit: { slots: [{ slot: 'active', abilities: [] }, reflectSetPassive()] },
+    position: 'M4',
+    speed: 1,
+    attack: 10_000,
+});
+
+/** Nosorog with his real reflect passive AND the Reflect gear set. */
+const nosorogWithReflectSet = (): BoardUnit => ({
+    ...nosorog(true),
+    kit: {
+        slots: [{ slot: 'active', abilities: [] }, ...passives('Nosorog'), reflectSetPassive()],
+    },
+});
+
+/** The passive abilities two-piece `sets` build. */
+const gearSetPassives = (sets: string[]): ShipSkills['slots'][number]['abilities'] => {
+    const slots = ['weapon', 'hull', 'generator', 'sensor'] as const;
+    const pieces: GearPiece[] = sets.flatMap((set, s) =>
+        [0, 1].map((i) => ({
+            id: `${set}-${i}`,
+            slot: slots[s * 2 + i],
+            level: 16,
+            stars: 6,
+            rarity: 'legendary',
+            mainStat: null,
+            subStats: [],
+            setBonus: set,
+        }))
+    );
+    const ship = {
+        id: 'wearer-ship',
+        name: 'Wearer',
+        rarity: 'legendary',
+        faction: 'AURELIAN_SOVEREIGNTY',
+        type: 'DEFENDER',
+        baseStats: {},
+        equipment: Object.fromEntries(pieces.map((p) => [p.slot, p.id])),
+        implants: {},
+        refits: [],
+    } as unknown as Ship;
+    const built = buildShipAbilitiesWithEquipment(ship, (id) => pieces.find((p) => p.id === id));
+    return built.slots.find((s) => s.slot === 'passive')?.abilities ?? [];
 };
 
 interface Observed {
@@ -430,37 +471,6 @@ describe.each(SIDES)('the bounce as a direct hit, reflector on the %s side', (pl
     });
 
     it("a Leech-set Nosorog repairs 15% of the bounce it dealt (R165); the gear set's bounce does not leech", () => {
-        /** The passive abilities two-piece `sets` build. */
-        const gearPassives = (sets: string[]): ShipSkills['slots'][number]['abilities'] => {
-            const slots = ['weapon', 'hull', 'generator', 'sensor'] as const;
-            const pieces: GearPiece[] = sets.flatMap((set, s) =>
-                [0, 1].map((i) => ({
-                    id: `${set}-${i}`,
-                    slot: slots[s * 2 + i],
-                    level: 16,
-                    stars: 6,
-                    rarity: 'legendary',
-                    mainStat: null,
-                    subStats: [],
-                    setBonus: set,
-                }))
-            );
-            const ship = {
-                id: 'wearer-ship',
-                name: 'Wearer',
-                rarity: 'legendary',
-                faction: 'AURELIAN_SOVEREIGNTY',
-                type: 'DEFENDER',
-                baseStats: {},
-                equipment: Object.fromEntries(pieces.map((p) => [p.slot, p.id])),
-                implants: {},
-                refits: [],
-            } as unknown as Ship;
-            const built = buildShipAbilitiesWithEquipment(ship, (id) =>
-                pieces.find((p) => p.id === id)
-            );
-            return built.slots.find((s) => s.slot === 'passive')?.abilities ?? [];
-        };
         const leechRepair = (reflectPassives: ShipSkills['slots'], gearSets: string[]) => {
             const reflector: BoardUnit = {
                 ...nosorog(false),
@@ -468,7 +478,7 @@ describe.each(SIDES)('the bounce as a direct hit, reflector on the %s side', (pl
                     slots: [
                         { slot: 'active', abilities: [] },
                         ...reflectPassives,
-                        { slot: 'passive', abilities: gearPassives(gearSets) },
+                        { slot: 'passive', abilities: gearSetPassives(gearSets) },
                     ],
                 },
             };
@@ -490,5 +500,177 @@ describe.each(SIDES)('the bounce as a direct hit, reflector on the %s side', (pl
         const gear = leechRepair([], ['LEECH', 'REFLECT']);
         expect(gear.reflected).toBeGreaterThan(0);
         expect(gear.repaired).toBe(0);
+    });
+});
+
+/** A bystander on the reflector's side that only puts `status` on the hitter, first. */
+const statusPlanter = (status: string, parsedEffects: Record<string, number> = {}): BoardUnit => ({
+    id: 'planter',
+    kit: {
+        slots: [
+            {
+                slot: 'active',
+                abilities: [
+                    {
+                        id: 'plant',
+                        type: 'debuff',
+                        target: 'enemy',
+                        trigger: 'on-cast',
+                        conditions: [],
+                        config: {
+                            type: 'debuff',
+                            buffName: status,
+                            parsedEffects,
+                            stacks: 1,
+                            isStackable: false,
+                            duration: 5,
+                            application: 'apply',
+                        },
+                    },
+                ],
+            },
+        ],
+    },
+    position: 'M2',
+    speed: 400,
+});
+
+interface Bounce {
+    /** Each bounce row the reflector emitted onto the hitter, in log order. */
+    rows: number[];
+    /** The hitter's round-1 reflected intake (perActorReflected). */
+    reflected: number;
+    /** The hitter's Exposed read right after its attack resolves. */
+    exposedLeft: number;
+    /** What the hitter's Lionheart took through Protection. */
+    redirected: number;
+    /** Counter-attacks, as `from>to`. */
+    counters: string[];
+    /** What the reflector repaired itself for. */
+    repaired: number;
+}
+
+/**
+ * One round: `hitter` (100% hit) strikes `reflector`; a planter on the reflector's side puts
+ * `status` on the hitter first. `lionheart` adds the hitter's protector beside it.
+ */
+const bounceOf = (
+    placement: Placement,
+    reflector: BoardUnit,
+    opts: {
+        status?: string;
+        parsedEffects?: Record<string, number>;
+        hitter?: BoardUnit;
+        lionheart?: boolean;
+    } = {}
+): Bounce => {
+    const hitter = opts.hitter ?? unit('hitter', hitKit(100));
+    const lionheart: BoardUnit = {
+        id: 'lionheart',
+        kit: { slots: [{ slot: 'active', abilities: [] }, ...passives('Lionheart')] },
+        position: 'M2',
+        speed: 2,
+    };
+    const { input, id } = boardInput(
+        placement,
+        reflector,
+        [statusPlanter(opts.status ?? 'Inert Mark', opts.parsedEffects)],
+        opts.lionheart ? [hitter, lionheart] : [hitter],
+        1
+    );
+    const hit = id(hitter);
+    const ref = id(reflector);
+    const out: Bounce = {
+        rows: [],
+        reflected: 0,
+        exposedLeft: -1,
+        redirected: 0,
+        counters: [],
+        repaired: 0,
+    };
+    let engine: StatusEngine | undefined;
+    const bus = createEventBus();
+    bus.on('ability-performed', (e) => {
+        if (e.actorId === hit) out.exposedLeft = exposedIncomingPct(engine!, hit);
+    });
+    bus.on('reactive-damage-performed', (e) => {
+        if (e.sourceId === ref && e.targetId === hit) out.rows.push(e.amount);
+        if (opts.lionheart && e.sourceId === hit && e.targetId === id(lionheart))
+            out.redirected += e.amount;
+    });
+    bus.on('attacked', (e) => {
+        if (e.fromCounter)
+            out.counters.push(
+                `${e.attackerId === hit ? 'hitter' : 'reflector'}>${e.targetId === ref ? 'reflector' : 'hitter'}`
+            );
+    });
+    bus.on('reactive-heal-performed', (e) => {
+        if (e.casterId === ref) out.repaired += e.amount;
+    });
+    const { rounds } = runCombat({ ...input, bus, __testTapStatusEngine: (e) => (engine = e) });
+    out.reflected = rounds[0].perActorReflected?.[hit] ?? 0;
+    return out;
+};
+
+/**
+ * R137: Nosorog's bounce is direct damage and the Reflect gear set's is not, so a Nosorog wearing
+ * the set reflects one hit as TWO bounces — his own share as a direct hit (Exposed, Protection,
+ * leech, counters), then the set's share as a plain bounce.
+ */
+describe.each(SIDES)('Nosorog wearing the Reflect set, on the %s side', (placement) => {
+    it('the two shares land as separate bounces; only his own share reads and spends Exposed', () => {
+        const ship = bounceOf(placement, nosorog(true)).rows;
+        const gear = bounceOf(placement, reflectSetWearer()).rows;
+        expect(ship).toHaveLength(1);
+        expect(gear).toHaveLength(1);
+        const [S, G] = [ship[0], gear[0]];
+        expect(S).toBeGreaterThan(0);
+        expect(G).toBeGreaterThan(0);
+
+        const plain = bounceOf(placement, nosorogWithReflectSet());
+        expect(plain.rows).toHaveLength(2);
+        expect(plain.rows[0]).toBeCloseTo(S, 6);
+        expect(plain.rows[1]).toBeCloseTo(G, 6);
+
+        const exposed = bounceOf(placement, nosorogWithReflectSet(), { status: 'Exposed' });
+        expect(exposed.rows).toHaveLength(2);
+        expect(exposed.rows[0]).toBeCloseTo(S * 2, 6);
+        expect(exposed.rows[1]).toBeCloseTo(G, 6);
+        expect(exposed.reflected).toBeCloseTo(S * 2 + G, 6);
+        expect(exposed.exposedLeft).toBe(0);
+    });
+
+    it("the hitter's Lionheart takes only Nosorog's own share through Protection", () => {
+        const shipOnly = bounceOf(placement, nosorog(true), { lionheart: true });
+        expect(shipOnly.redirected).toBeGreaterThan(0);
+        const both = bounceOf(placement, nosorogWithReflectSet(), { lionheart: true });
+        expect(both.rows).toHaveLength(2);
+        expect(both.rows[1]).toBeGreaterThan(0);
+        expect(both.redirected).toBeCloseTo(shipOnly.redirected, 6);
+    });
+
+    it('a Leech-set Nosorog repairs 15% of his own share only (R165)', () => {
+        const reflector: BoardUnit = {
+            ...nosorog(false),
+            kit: {
+                slots: [
+                    { slot: 'active', abilities: [] },
+                    ...passives('Nosorog'),
+                    { slot: 'passive', abilities: gearSetPassives(['LEECH', 'REFLECT']) },
+                ],
+            },
+        };
+        const obs = bounceOf(placement, reflector);
+        expect(obs.rows).toHaveLength(2);
+        expect(obs.rows[1]).toBeGreaterThan(0);
+        expect(obs.repaired).toBeCloseTo(obs.rows[0] * 0.15, 6);
+    });
+
+    it('Stalwart counters his own share once and never the set share', () => {
+        const obs = bounceOf(placement, nosorogWithReflectSet(), {
+            hitter: unit('hitter', hitterWith('Stalwart')),
+        });
+        expect(obs.rows).toHaveLength(2);
+        expect(obs.counters).toEqual(['hitter>reflector']);
     });
 });

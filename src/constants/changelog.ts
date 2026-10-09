@@ -14,6 +14,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Ships: "Copy as image" on ship cards works again.',
     'Combat simulator: Warpstrike and duration cuts can now shorten Acidic Decay.',
     'Combat simulator: Nuqtu gains a Core Charge for each enemy passive buff too.',
+    "Combat simulator: Nosorog wearing the Reflect set bounces the set's share as non-direct.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
