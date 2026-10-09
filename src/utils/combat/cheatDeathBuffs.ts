@@ -23,7 +23,7 @@ export const STACK_STEALABLE_STATUSES: ReadonlySet<string> = new Set<string>(['P
 /** Statuses a duration cut never shortens (R173). "Unremovable" bars cleanse, purge and a Cheat
  *  Death wipe (`UNREMOVABLE_STATUSES`) and says nothing about duration: Warpstrike's single random
  *  cut and Heliodor/Pestilence's reduce-all reach an unremovable debuff such as Acidic Decay.
- *  The one exception is a status whose own text says it cannot be reduced. */
+ *  The exception is a status whose own text says it cannot be reduced. */
 export const DURATION_CUT_IMMUNE_STATUSES: ReadonlySet<string> = new Set<string>([
     'Barrier Recharging',
 ]);

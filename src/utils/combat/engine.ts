@@ -7490,6 +7490,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                     ) {
                         // The WEARER (victim) is the source of the reflected hit → affinity is
                         // resolved wearer→attacker (computeAffinityModifiers(victim, attacker)).
+                        // OPEN OWNER QUESTION: a ship's bounce applies neither the attacker's
+                        // Defensive Affinity Override nor the wearer's Offensive Affinity Override
+                        // (a counter applies both). Not to be aligned with the counter without a ruling.
                         const affinityDamageModifier = computeAffinityModifiers(
                             victim.affinity,
                             attacker.affinity
@@ -7530,12 +7533,17 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // A ship's bounce reads the attacker's buffs and debuffs through the
                             // counter's own profile (R176): its defence with Defense Up/Down, and
                             // the incoming-damage status channel — Inc. Damage Up/Down and Exposed,
-                            // which the funnel then spends. The gear set's bounce reads neither.
+                            // which the funnel then spends. The gear set's share takes its defence
+                            // from `effectiveStatsOf(attacker)` — the attacker's own self-sourced
+                            // buffs only, no enemy-applied Defense Down — and has no status channel.
                             const directProfile = directReflect
                                 ? reactiveHitInputs(victim, attacker).profile
                                 : undefined;
                             const shareDefenceReductionPct = directProfile
-                                ? victimDefenceReductionPct(directProfile, 0)
+                                ? // OPEN OWNER QUESTION: the wearer's own defence penetration is not
+                                  // applied to the bounce (a counter applies it). Not to be aligned
+                                  // with the counter without a ruling.
+                                  victimDefenceReductionPct(directProfile, 0)
                                 : attackerDefenceReductionPct;
                             // ONE evaluation, both axes (#358): `reflectedDamageParts` returns the
                             // mitigated amount and its pre-defence twin from a single walk.

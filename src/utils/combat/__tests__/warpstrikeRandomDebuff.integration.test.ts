@@ -315,7 +315,7 @@ beforeEach(() => {
 const SEEDS = Array.from({ length: 24 }, (_, i) => i + 1);
 
 for (const [tag, side] of SIDES) {
-    describe(`${tag}: Warpstrike shortens a random removable debuff`, () => {
+    describe(`${tag}: Warpstrike shortens a random debuff`, () => {
         it('carrying only one Corrosion stack → that stack loses a turn', () => {
             const seed: Seed = { corrosion: [dot(1, 9, { appliedSeq: 0 })] };
             const control = run(side, false, seed);

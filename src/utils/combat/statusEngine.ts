@@ -206,11 +206,12 @@ export type RegisteredAbilityStatus =
           /** A PASSIVE-slot status that rides each hit of its owner's cast rather than standing
            *  from combat start — `isPassivePerHitStatus` (abilityStatusGating.ts) decides which.
            *  playerTurn applies it on every active or charged cast: an enemy debuff on each struck
-           *  enemy whose own gate passes; a self gain once per HIT (sub-attack) when any enemy that
-           *  hit strikes passes its gate — one AoE hit over several enemies fires once (R17), a
-           *  multi-hit skill fires on each of its hits, each its own firing (R178). Both read the
-           *  struck enemies' state from before the cast (R15). The combat-start passive seed skips
-           *  it. Absent → the slot's ordinary lifecycle. */
+           *  enemy whose own gate passes; on a positional cast a self gain fires once per HIT
+           *  (sub-attack) when any enemy that hit strikes passes its gate — one AoE hit over
+           *  several enemies fires once (R17), a multi-hit skill fires on each of its hits, each
+           *  its own firing (R178); a non-positional or DPS-calculator cast fires once per cast.
+           *  Both read the struck enemies' state from before the cast (R15). The combat-start
+           *  passive seed skips it. Absent → the slot's ordinary lifecycle. */
           perHit?: true;
           /** Hit-counted lifecycle (Quixilver R2 / "Barrier for 1 hit"). When set, the status
            *  additionally expires after this many qualifying hits, spent via consumeStatusHit.
