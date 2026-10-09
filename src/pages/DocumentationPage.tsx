@@ -4754,8 +4754,9 @@ const DocumentationPage: React.FC = () => {
                                         the start of their holder&apos;s turn, before the ship acts.
                                         A shield strip (APEX, Laika, Malvex) shows how much shield
                                         it removed, and a bomb carrier&apos;s death splash shows the
-                                        damage each neighbour took. A ship killed by a DoT or Bomb
-                                        has no killer named.
+                                        damage each neighbour took. A ship killed by a DoT tick has
+                                        no killer named; a Bomb kill names the ship that planted the
+                                        Bomb.
                                     </li>
                                     <li>
                                         <strong>Wasted repairs and shields are named:</strong> Heal
