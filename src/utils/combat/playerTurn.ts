@@ -97,7 +97,12 @@ import { resolveDebuffRecipientIds } from './debuffRecipients';
 import { clausePhase, isRemovalBeforeDamage } from './castClauseOrder';
 import { isAliveTarget } from './targetableActors';
 import { supportFootprintAllyIds } from './supportFootprint';
-import { capIncomingPct, type AttackerDamageScalars } from './victimDamage';
+import {
+    capIncomingPct,
+    victimDefenceReductionPct,
+    type AttackerDamageScalars,
+    type VictimDefenseProfile,
+} from './victimDamage';
 import type { PreFightCombatModifiers } from './preFight/types';
 import { effectiveDamageStatsOf, liveDebuffLandingChance } from './effectiveStats';
 import {
@@ -865,8 +870,17 @@ export interface PlayerTurnArgs {
     genericDoTEntries?: ActiveDoTStack[];
     pendingBombs?: PendingBomb[];
     pendingAccumulators?: PendingAccumulator[];
-    /** Absent on a no-victim turn (no victim ⇒ no defence to pierce). */
+    /** Absent on a no-victim turn (no victim ⇒ no defence to pierce). A standalone caller's flat
+     *  defence for the bound target; the engine passes `victimDefenseProfile` instead, and that
+     *  wins when both are present. */
     enemyDefense?: number;
+    /** The bound target's LIVE defensive profile — the engine's `victimDefenseProfileOf`, the
+     *  same read the positional apply mitigates each hit with — so the turn's own damage figures
+     *  (`directDamage`, `secondaryDamage`, `conditionalDamage`, the deferred `ability-performed`
+     *  basis) agree with what lands on the bound target (#657). Called at the damage assembly with
+     *  this turn's gated scheduled enemy effects, after the cast's pre-damage clauses landed.
+     *  Absent on a no-victim turn and for standalone callers. */
+    victimDefenseProfile?: (scheduledEnemyEffects: SelectedGameBuff[]) => VictimDefenseProfile;
     /** Absent on a no-victim turn. The `enemyHpPct` derivation below answers
      *  `undefined` when this is absent — the honest "no reading" answer, never a fabricated
      *  100. */
@@ -2050,6 +2064,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         pendingBombs = [],
         pendingAccumulators = [],
         enemyDefense = 0,
+        victimDefenseProfile,
         enemyHp = 0,
         enemyType: fightWideEnemyType,
         targetGateReading,
@@ -2361,7 +2376,12 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // read the wrong flag — not representable from skill text today.
     const { noCrit: damageNoCrit, scalingAbility: damageAbility } =
         damageInputsFromSkill(firingSkill);
-    const hasDamageAbility = damageAbility !== undefined;
+    // Does this cast STRIKE: a `damage` ability, or a stat-scaled `additional-damage` one standing
+    // alone (Prophet's "deals damage equal to 50x its security"). Either is a hit, so either
+    // resolves per victim through the engine's positional apply (#657). Pre-gate, like
+    // `damageAbility` above.
+    const hasDamageAbility =
+        damageAbility !== undefined || secondaryFromSkill(firingSkill) !== undefined;
 
     // `victimId` is REQUIRED. There is no
     // victim to default to on a no-victim turn, and an application/resist event with no victim is
@@ -4854,9 +4874,19 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // registerReactiveListeners in triggers.ts.
     const roundCrit = critHits > 0;
     const effectivePen = dmgStats.effectivePen;
-    const effectiveDefense =
-        enemyDefense * (1 + enemyDefenseModifier / 100) * (1 - effectivePen / 100);
-    const damageReduction = effectiveDefense > 0 ? calculateDamageReduction(effectiveDefense) : 0;
+    // The bound target's defence: its live profile when the engine supplies one (the read the
+    // positional apply lands with), else the standalone caller's flat figure with this turn's
+    // enemy-applied defence modifier.
+    const damageReduction = victimDefenseProfile
+        ? victimDefenceReductionPct(
+              victimDefenseProfile(scheduledEnemy.roundEnemyDebuffs),
+              effectivePen
+          )
+        : (() => {
+              const effectiveDefense =
+                  enemyDefense * (1 + enemyDefenseModifier / 100) * (1 - effectivePen / 100);
+              return effectiveDefense > 0 ? calculateDamageReduction(effectiveDefense) : 0;
+          })();
 
     // Step 1: Calculate direct damage
     const enemyDotMod = toEnemyDotModifier(roundEnemyDebuffs);
@@ -5324,16 +5354,16 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     const passiveDamage =
         effectiveAttack * (passiveMultiplier / 100) * passiveCritMultiplier * nonCritFactor;
     // A CAST WITH NO VICTIM DEALS NO DAMAGE — full stop (owner's ruling). Fencing the
-    // EMIT was not enough: `enemyDefense` is absent on a no-victim turn and resolves to 0, so
-    // `effectiveDefense` → `damageReduction` → `nonCritFactor` → `postDefenseFactor` would carry
+    // EMIT was not enough: a no-victim turn has no defence to read (no profile; `enemyDefense`
+    // resolves to 0), so `damageReduction` → `nonCritFactor` → `postDefenseFactor` would carry
     // these three magnitudes out as REAL numbers answering "an enemy with no defence" — the exact
     // disguised-ghost shape this rung deletes — and the CALLER folds them into the round
     // accumulator regardless of any event guard. It also zeroes the `% of damage dealt` support
     // basis below (`castDeliveredDamage ?? directDamage`), which is the same ruling applied to a
     // repair scaled off damage that never happened.
     // WHY THE THREE ASSIGNMENTS AND NOT A POINT FURTHER UP: the whole chain from
-    // `effectiveDefense` down to `passiveDamage` above consists of intermediate FACTORS whose only consumers
-    // are these three lines (grep-verified: `effectiveDefense`, `damageReduction`, `nonCritFactor`,
+    // `damageReduction` down to `passiveDamage` above consists of intermediate FACTORS whose only consumers
+    // are these three lines (grep-verified: `damageReduction`, `nonCritFactor`,
     // `postDefenseFactor`, `preCritDamage` and `passiveDamage` appear nowhere else), so no phantom
     // magnitude escapes past this point and each returned number is fenced where it is produced
     // rather than zeroed after the fact. `detonationDamage` is fenced at its own branch.
@@ -7170,14 +7200,12 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // positionally. Pinned to `deferAbilityPerformed` — the SAME condition that already hands
         // `ability-performed` to the engine — so the engine has exactly one place to invoke both.
         //
-        // CORRECTS the rest of that claim: the two CAN now disagree about whether a cast is
-        // engine-resolved, on a no-victim turn (an ally-targeted cast — engine.ts's two player call
-        // sites). `deferAbilityPerformed` carries no `hasVictim` term, so this deferral still fires;
-        // but the engine victim-FENCED its `positional` apply gate, so the basis it feeds back
-        // (`castDelivered`) is undefined and the call lands on its `?? turn.directDamage` fallback.
-        // That fallback is the correct answer rather than a degradation: `directDamage` is fenced to 0
-        // with no victim, so the support pass still runs and a damage-dealt-scaled repair on a cast
-        // that hit nobody repairs 0. Do NOT re-pin the two by adding `hasVictim` to
+        // The two CAN disagree about whether a cast is engine-resolved, on a no-victim turn (an
+        // ally-targeted cast). `deferAbilityPerformed` carries no `hasVictim` term, so this deferral
+        // still fires; but the engine's `positional` apply gate is victim-fenced, so no apply runs and
+        // the engine resolves the pass off a delivered basis of 0 (its `?? 0` fallback — search
+        // `THE FALLBACK IS REACHABLE` in engine.ts). The support pass still runs, and a
+        // damage-dealt-scaled repair on a cast that hit nobody repairs 0. Do NOT re-pin the two by adding `hasVictim` to
         // `deferAbilityPerformed` or to the engine's `willApplyPositionally`: that flag also selects
         // `positionalLanding` below, so it would move the turn's crit draws.
         //

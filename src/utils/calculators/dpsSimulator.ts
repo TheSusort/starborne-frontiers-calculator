@@ -199,9 +199,8 @@ export interface RoundData {
     enemyHpPct: number;
     /** Direct (non-DoT, non-detonation) damage the focus dealt this round.
      *
-     *  RE-DERIVED BY SUBTRACTION on the DPS path, not read from the engine's row: the positional
-     *  apply suppresses `creditDamage(actor,'direct',…)`, so the engine's own `directDamage`
-     *  reads ~0 for a real-enemy run. `simulateDPS` recomputes it as the focus's `perTargetDealt`
+     *  RE-DERIVED BY SUBTRACTION on the DPS path, not read from the engine's row: the engine
+     *  credits direct hits per victim only, so its own `directDamage` row reads 0. `simulateDPS` recomputes it as the focus's `perTargetDealt`
      *  total minus the honest per-kind rows below (corrosion + inferno + detonation), clamped at
      *  0. `genericDamage` is deliberately NOT one of the subtrahends — it is folded INTO this
      *  total rather than carved out of it; see `genericDamage`'s own doc below. It is the ONLY
@@ -280,9 +279,8 @@ export interface RoundData {
      *
      *  REACTIVE DAMAGE **IS** INCLUDED, and this comment used to say the opposite.
      *  `applyReactiveDamage` writes here via `creditDealt` (shipped in #318); `applyCounterAttack`
-     *  and reflect write it unconditionally too. It used to fall back to credit-only
-     *  `creditDamage` on a run with no positioned enemy roster, but SP-4c-2d deleted that arm —
-     *  the roster is always positioned below the normalization boundary. Verified empirically
+     *  and reflect write it unconditionally too — the roster is always positioned below the
+     *  normalization boundary, so there is no credit-only fallback. Verified empirically
      *  across four reactive shapes — start-of-round proc, adjacent-ally retaliation, reflect, and a
      *  true on-attacked counter — each crediting this channel keyed by the reacting actor.
      *
@@ -747,10 +745,8 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
     const reportedRounds =
         realRoundsToKill !== undefined ? rounds.filter((r) => r.round <= realRoundsToKill) : rounds;
 
-    // A positional run — which since SP-4b-2a is every DPS run — suppresses the engine's
-    // `creditDamage(actor,'direct',…)` fold — `if (!positional)` at engine.ts:9082, because the
-    // firing hit lands per-victim via applyPositionalDamage and crediting again would double-count.
-    // So `rawTotals.cumulative` reads ~0 here and the per-victim map is the only honest source.
+    // The engine lands and credits every hit per victim (the positional apply), never as a scalar
+    // lump, so `rawTotals.cumulative` reads 0 here and the per-victim map is the only honest source.
     // Mirrors how battleSimulator derives ShipRoundState.damageDealt from the same map (SP-F F1).
     const perRoundFocusDamage = focusDamagePerRound(reportedRounds, FOCUS_ACTOR_ID);
     const totalDamage = Math.round(focusDamageTotal(reportedRounds, FOCUS_ACTOR_ID));
@@ -764,11 +760,10 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
     // raw float and shipped `Total (with team): 179,514.401` to the page. The running sum
     // accumulates the RAW values and rounds only for display, so the last row's cumulative equals
     // `summary.totalDamage` (which rounds the same raw total once) exactly.
-    // `directDamage` is the ONLY per-kind row the positional path zeroes. `corrosionDamage`,
-    // `infernoDamage` and `detonationDamage` fold `perActorDot`/`perActorDetonation`
-    // (engine.ts:10483-10490) and are already honest; `focus.direct` alone (engine.ts:10482) is
-    // not, because `creditDamage(actor,'direct',…)` sits inside `if (!positional)`
-    // (engine.ts:9082-9083).
+    // `directDamage` is the ONLY per-kind row the engine leaves at 0. `corrosionDamage`,
+    // `infernoDamage` and `detonationDamage` fold `perActorDot`/`perActorDetonation` and are
+    // already honest; the engine's direct row is not, because direct hits are credited per victim
+    // only.
     //
     // Recovered by SUBTRACTION, not by reading `perTargetDealt` directly: that channel INCLUDES
     // the focus's DoT ticks and its detonation (measured — a corrosion round reads
