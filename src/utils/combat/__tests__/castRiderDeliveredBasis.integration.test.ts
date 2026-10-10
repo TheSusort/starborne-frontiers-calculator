@@ -34,10 +34,9 @@
  * order — the repair is scaled off that attack.
  *
  * SCOPE. The DPS calculator never reaches this code (`simulateDPS` sets neither `healTargetId` nor
- * `mode: 'battle'`, so the whole heal block is unreachable). The healing calculator reaches
- * it but threads no positions, so no positional apply runs, nothing defers, and it keeps reading
- * `directDamage` — byte-identical, and pinned by healingGoldenParity + healing.test.ts. Only the
- * positional battle simulator changes.
+ * `mode: 'battle'`, so the whole heal block is unreachable). The healing calculator and the
+ * battle simulator both do: each places every actor on the board (`healingPlacement.ts` for the
+ * healing calculator), so a rider-carrying cast resolves positionally and defers like any other.
  *
  * ANTI-VACUITY. Every test re-measures the delivered basis inline, so a future change that made
  * the two bases agree again turns this file red instead of hollowing it out.
@@ -210,5 +209,45 @@ describe('a cast damage-dealt rider scales off the whole footprint it delivered 
         expect(delivered).toEqual([0]);
         // Pre-fix: 4000, paid out of a hit that dealt no damage at all.
         expect(repairs).toEqual([]);
+    });
+});
+
+/**
+ * A cast that applied no damage positionally has delivered NOTHING, so its deferred rider resolves
+ * off 0 — never off the turn's pre-funnel `directDamage` (#657). Two shapes reach that seam:
+ *   (A) an ALLY-targeted cast carrying a damage clause: it defers (the deferral flag is not
+ *       victim-fenced) but resolves no opposing victim, so no apply runs;
+ *   (B) an enemy whose cast deals 0 (attack 0): its apply block is skipped on `damage > 0`.
+ * The basis is asserted through the repair the rider pays out.
+ */
+describe('a deferred cast rider with no positional apply resolves off 0', () => {
+    afterEach(() => resetRateGateRng());
+
+    it('(A) an ally-targeted damage cast with a damage-dealt rider repairs nothing', () => {
+        const { repairs, delivered } = observe(
+            focusCast(basePattern(), [enemyAt('v1', 'M4')], {
+                target: { raw: 'ally-team', side: 'ally', selection: 'team' },
+            })
+        );
+        // FIXTURE GUARD: no damage event — the cast struck nobody.
+        expect(delivered).toEqual([]);
+        expect(repairs.reduce((a, b) => a + b, 0)).toBe(0);
+    });
+
+    it('(B) a 0-attack enemy carrying the rider repairs nothing', () => {
+        const caster = {
+            ...enemyAt('e-rider', 'M4', [castWithRider()]),
+            stats: { attack: 0, crit: 100, critDamage: 100, defence: 0, hp: HP, speed: 900 },
+            target: parsedTarget('front'),
+            pattern: basePattern(),
+        } as EnemyAttacker;
+        const { repairs } = observe(
+            focusCast(basePattern(), [caster], {
+                shipSkills: { slots: [] },
+                position: 'M4',
+            }),
+            'e-rider'
+        );
+        expect(repairs.reduce((a, b) => a + b, 0)).toBe(0);
     });
 });

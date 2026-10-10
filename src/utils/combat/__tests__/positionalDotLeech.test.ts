@@ -240,10 +240,10 @@ describe("SP-4b-2b Task 2b — a leechScope:'all' standing leech pays out on a p
         // the leech assertion could pass trivially by the DoT never ticking at all (0 → 0).
         expect(result.rounds[0].perTargetDamage?.['enemy-back']).toBe(500);
         expect(dealtBy(result.rounds, 'attacker')).toBe(500);
-        // ANTI-VACUITY: attack 0 → the firing hit landed on the footprint victim for ZERO, so it
-        // contributed no direct-channel leech and the whole directHeal figure below is the DoT-tick
-        // leech. (`dealtBy` above is 500 exactly — the tick and nothing else.)
-        expect(result.rounds[0].perTargetDamage?.['enemy-front']).toBe(0);
+        // ANTI-VACUITY: attack 0 → the cast dealt no damage, so it struck nobody (owner ruling
+        // 2026-10-10) and contributed no direct-channel leech; the whole directHeal figure below
+        // is the DoT-tick leech. (`dealtBy` above is 500 exactly — the tick and nothing else.)
+        expect(result.rounds[0].perTargetDamage?.['enemy-front']).toBeUndefined();
 
         expect(sumHeal(result, 'directHeal', 'attacker')).toBeCloseTo(100, 6);
     });
@@ -430,9 +430,9 @@ describe('Site 2 — a standing leech pays out on a positional bomb burst', () =
         // ANTI-VACUITY, load-bearing: the burst really landed on the positioned enemy. Without it
         // a zero payout would be indistinguishable from "no detonation happened".
         expect(result.rounds[0].perTargetDamage?.['enemy-back']).toBe(6000);
-        // ANTI-VACUITY: attack 0 → the firing hit dealt nothing, so no direct-channel leech can
-        // contribute and the whole figure below is the burst leech.
-        expect(result.rounds[0].perTargetDamage?.['enemy-front']).toBe(0);
+        // ANTI-VACUITY: attack 0 → the cast dealt no damage and struck nobody, so no
+        // direct-channel leech can contribute and the whole figure below is the burst leech.
+        expect(result.rounds[0].perTargetDamage?.['enemy-front']).toBeUndefined();
 
         expect(sumHeal(result, 'directHeal', 'attacker')).toBeCloseTo(expected, 6);
     });

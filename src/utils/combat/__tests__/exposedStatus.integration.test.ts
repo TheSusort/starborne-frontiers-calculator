@@ -46,13 +46,15 @@ const nHitAttack = (hits: number): Ability => ({
 /** The default 2-hit attack. */
 const twoHitAttack = (): Ability => nHitAttack(HITS);
 
-const noopAttack = (): Ability => ({
-    id: 'noop',
+/** The smallest real attack: it exists only to wake the foe's on-attacked reaction. A 0%
+ *  hit would not — a cast dealing no damage is not an attack (owner ruling 2026-10-10). */
+const wakeAttack = (): Ability => ({
+    id: 'wake',
     type: 'damage',
     target: 'enemy',
     trigger: 'on-cast',
     conditions: [],
-    config: { type: 'damage', multiplier: 0, hits: 1 },
+    config: { type: 'damage', multiplier: 1, hits: 1 },
 });
 
 /** Nayra's shape — the OTHER corpus applier: a plain on-cast enemy debuff, which lands through
@@ -198,7 +200,7 @@ function playerHitsExposedEnemy(
  */
 function enemyHitsExposedPlayer(statusName: string): number {
     const focusSkills: ShipSkills = {
-        slots: [{ slot: 'active', abilities: [noopAttack()] }],
+        slots: [{ slot: 'active', abilities: [wakeAttack()] }],
     };
 
     const input: CombatEngineInput = {

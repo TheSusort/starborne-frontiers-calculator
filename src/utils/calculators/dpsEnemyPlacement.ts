@@ -59,10 +59,8 @@ export const DEFAULT_FRONT_ENEMY_TARGET: ParsedTarget = {
  * ALSO load-bearing, not cosmetic. The positional apply gate is
  * `resolvesPositionalVictim(...) && target != null && pattern != null && turn.positionalScalars != null`
  * (the focus cast site in engine.ts; the team and enemy sites mirror it). With a target but no
- * pattern the cast still RESOLVES onto the real enemy and still credits `cumulativeDamage` via the
- * legacy single-apply — but it never runs the per-victim apply, so `creditDealt` never fires and
- * `RoundData.perTargetDealt` comes back empty. That failure is silent: damage looks right while the
- * per-victim accounting the metric depends on is missing. The boundary fills target and pattern
+ * pattern the cast still RESOLVES onto the real enemy but never runs the per-victim apply, so
+ * `creditDealt` never fires and `RoundData.perTargetDealt` comes back empty — a silent zero. The boundary fills target and pattern
  * INDEPENDENTLY for exactly this reason, and the resulting half-filled state no longer occurs below
  * `runCombat` — the audit found the signature (total credited, `perTargetDealt` empty) zero times.
  */
