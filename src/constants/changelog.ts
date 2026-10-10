@@ -18,7 +18,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: Nourishment and Vivacious Repair now boost leech repairs too.',
     'Combat simulator: expired Inc. and Out. Repair buffs no longer boost later repairs.',
     "DPS calculator: secondary and conditional damage now use the target's current defence.",
-    'DPS calculator and combat simulator: skills dealing only stat-scaled damage now hit their targets.',
+    'Skill editor: an ability with only stat-scaled damage now hits its target.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

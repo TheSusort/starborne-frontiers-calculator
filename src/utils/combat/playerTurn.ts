@@ -2377,9 +2377,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     const { noCrit: damageNoCrit, scalingAbility: damageAbility } =
         damageInputsFromSkill(firingSkill);
     // Does this cast STRIKE: a `damage` ability, or a stat-scaled `additional-damage` one standing
-    // alone (Prophet's "deals damage equal to 50x its security"). Either is a hit, so either
-    // resolves per victim through the engine's positional apply (#657). Pre-gate, like
-    // `damageAbility` above.
+    // alone (authorable in the skill editor; the parser gives a text-only stat rider such as
+    // Prophet's a base attack, #361). Either is a hit, so either resolves per victim through the
+    // engine's positional apply (#657). Pre-gate, like `damageAbility` above.
     const hasDamageAbility =
         damageAbility !== undefined || secondaryFromSkill(firingSkill) !== undefined;
 
