@@ -20,6 +20,7 @@ export const UNRELEASED_CHANGES: string[] = [
     "DPS calculator: secondary and conditional damage now use the target's current defence.",
     'Skill editor: an ability with only stat-scaled damage now hits its target.',
     "Combat simulator: hit damage figures now include the target's damage reduction.",
+    'Combat simulator: hits dealing no damage no longer trigger on-attacked effects.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

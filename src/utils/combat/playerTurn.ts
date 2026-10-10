@@ -1006,14 +1006,6 @@ export interface PlayerTurnArgs {
      *  count a `self-debuff` gate without a name reads. Absent (DPS/standalone callers) → the
      *  count of `selfDebuffNames`. */
     selfDebuffCount?: number;
-    /** Stasis direct-damage break hook. When supplied, fires AFTER scheduled
-     *  debuffs are applied (sourceFired) but BEFORE the ability timed-debuff loop, so the break
-     *  correctly precedes any Stasis re-application from the same attack's debuff abilities.
-     *  Receives the resolved enemy target id (`targetId`). The engine wires this for every
-     *  direct-channel turn with a live, currently-stasised target, positional or not; absent for
-     *  DPS/standalone callers → inert. The mark it writes is consumed only when the turn does NOT
-     *  apply positionally — see `resolveAnchorStasisBreak` (engine.ts). */
-    onHitBreakStasis?: (targetId: string) => void;
     /**
      * The firing skill's footprint victim ids, supplied by the engine in
      * positional mode. The on-cast purge fans an 'enemy' or 'all-enemies' purge over these
@@ -2099,7 +2091,6 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         selfDebuffNames: selfDebuffNamesIn = [],
         selfDebuffCount: selfDebuffCountIn,
         healEventOnly = false,
-        onHitBreakStasis,
         aoeVictimIds,
         opposingVictimById,
         recipientGateReadings,
@@ -3808,33 +3799,6 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             }
         return c;
     };
-
-    // §4.5 Direct-damage Stasis break. Fires AFTER scheduled debuffs (sourceFired)
-    // but BEFORE the ability timed-debuff loop, so a Stasis re-application from THIS attack's
-    // debuff abilities is not inadvertently removed. The engine wires `onHitBreakStasis` for
-    // every direct-channel turn with a live, currently-stasised target, positional or not; DPS/
-    // standalone callers leave it absent → no-op. The mark this call writes is CONSUMED only when
-    // the turn does not apply positionally — a positional apply's own per-victim
-    // `onVictimPreImpact` marks supersede it (see `resolveAnchorStasisBreak`'s call sites). Receives
-    // the resolved target id so the break can key the statusEngine's per-actor enemy store
-    // correctly (side-symmetric: same key regardless of whether the actor is a player or enemy).
-    // Only fire when targetId is defined (the engine always supplies it for direct-channel
-    // break-eligible turns; DPS/standalone callers without a real targetId are inert).
-    // ONLY DIRECT DAMAGE reduces Stasis (owner ruling 2026-09-15): a DoT tick does not, and
-    // neither does a cast that inflicts a debuff without dealing damage. The engine wires this
-    // hook off target liveness alone, so without this gate a damage-less cast marks a break
-    // exactly as a real hit would. Reuses `hasDamageAbility` deliberately: it is the same
-    // predicate that decides `positionalScalars`, so this non-positional gate and the positional
-    // drive's own can never disagree about whether the cast hit.
-    //
-    // KNOWN GAP (#537): `hasDamageAbility` is PRE-GATE — `gateFiringAbilities` has no round
-    // context to gate against until far below — so a cast whose damage ability gates OFF deals
-    // nothing and still marks a break. The SAME pre-gate predicate decides `positionalScalars`,
-    // which is what lets the engine drive its positional apply and mark stasised victims at
-    // impact, so a placement-board cast reaches the gap by that route instead: the two seams move
-    // together or not at all. Corpus-unreachable today — `gatedDamageStasisReach.corpus.test.ts`
-    // measures it and fails the day a firing slot can cast with every damage ability gated off.
-    if (targetId !== undefined && hasDamageAbility) onHitBreakStasis?.(targetId);
 
     // (b) Gate + apply this round's firing-skill TIMED enemy debuff abilities.
     // Each recipient whose condition gate passes (asked per recipient, `recipientGateCtx`) draws
