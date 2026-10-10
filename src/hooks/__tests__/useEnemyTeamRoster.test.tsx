@@ -109,6 +109,26 @@ describe('useEnemyTeamRoster', () => {
         expect(Object.keys(input)).toContain('chargedPattern');
     });
 
+    it('enemyInputs routes every entered combat stat into `stats`, the engine-read field (#654)', () => {
+        const { result } = renderHook(() => useEnemyTeamRoster(DEFENSE_OPTS));
+        act(() => result.current.addEnemy());
+        const id = result.current.enemies[0].id;
+        act(() =>
+            result.current.updateEnemy(id, {
+                hacking: 37,
+                defensePenetration: 31,
+                shieldPenetration: 23,
+                healModifier: 17,
+            })
+        );
+        expect(result.current.enemyInputs[0].stats).toMatchObject({
+            hacking: 37,
+            defensePenetration: 31,
+            shieldPenetration: 23,
+            healModifier: 17,
+        });
+    });
+
     it('teamActors omits `position` entirely for an unplaced ship', () => {
         const { result } = renderHook(() => useEnemyTeamRoster(HEALING_OPTS));
         // Presence of `position` means "the user picked this cell" — sending the index default

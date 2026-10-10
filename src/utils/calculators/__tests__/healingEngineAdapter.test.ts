@@ -1049,3 +1049,60 @@ describe('Holistic review #1: healing mode engages the live debuff-landing recom
         expect(landed).toBe(0);
     });
 });
+
+// #654: an enemy's hacking reaches the engine through `stats.hacking`, the one field the engine
+// reads. Hacking 0 vs the heal target's default security 100 never lands; the engine's own default
+// (200) always does — so the 0 arm only passes if the entered value actually arrived.
+describe('#654 enemy hacking reaches the landing roll', () => {
+    const enemyAppliedCount = (hacking: number): number => {
+        idCounter = 0;
+        const events: CombatEvent[] = [];
+        const bus = createEventBus();
+        bus.on('debuff-applied', (e) => events.push(e));
+        simulateHealing({
+            ...BASE({
+                rounds: 4,
+                enemies: [
+                    {
+                        id: 'e1',
+                        stats: {
+                            attack: 0,
+                            crit: 0,
+                            critDamage: 0,
+                            speed: 10,
+                            hp: 1_000_000,
+                            hacking,
+                        },
+                        chargeCount: 0,
+                        startCharged: false,
+                        shipSkills: healSkills([
+                            ab({
+                                type: 'debuff',
+                                target: 'enemy',
+                                config: {
+                                    type: 'debuff',
+                                    buffName: 'Defense Down',
+                                    parsedEffects: { defense: -10 },
+                                    stacks: 1,
+                                    isStackable: false,
+                                    application: 'inflict',
+                                    duration: 2,
+                                },
+                            }),
+                        ]),
+                    },
+                ],
+            }),
+            bus,
+        });
+        return events.filter((e) => e.type === 'debuff-applied' && e.sourceId === 'e1').length;
+    };
+
+    it('hacking 200 lands every round (the debuff path is live)', () => {
+        expect(enemyAppliedCount(200)).toBe(4);
+    });
+
+    it('hacking 0 never lands', () => {
+        expect(enemyAppliedCount(0)).toBe(0);
+    });
+});

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import type { EnemyActorInput } from '../../utils/combat/engine';
 import { PageLayout } from '../../components/ui';
 import { Ship, AffinityName } from '../../types/ship';
 import { asFactionName } from '../../constants/factions';
@@ -132,6 +133,10 @@ const DPSCalculatorPage: React.FC = () => {
         attack: 0,
         crit: 0,
         critDamage: 150,
+        hacking: 200,
+        defensePenetration: 0,
+        shieldPenetration: 0,
+        healModifier: 0,
         shipSkills: buildDefaultShipSkills(),
     });
     const [enemyShip, setEnemyShip] = useState<Ship | null>(null);
@@ -153,6 +158,10 @@ const DPSCalculatorPage: React.FC = () => {
             attack: stats.attack,
             crit: stats.crit,
             critDamage: stats.critDamage,
+            hacking: stats.hacking,
+            defensePenetration: stats.defensePenetration,
+            shieldPenetration: stats.shieldPenetration,
+            healModifier: stats.healModifier,
             shipSkills: buildShipAbilitiesWithEquipment(ship, getGearPiece),
         }));
     };
@@ -351,7 +360,14 @@ const DPSCalculatorPage: React.FC = () => {
                                 defence: enemyConfig.defense,
                                 hp: enemyConfig.hp,
                                 security: enemyConfig.security,
-                            },
+                                hacking: enemyConfig.hacking,
+                                defensePenetration: enemyConfig.defensePenetration,
+                                shieldPenetration: enemyConfig.shieldPenetration,
+                                healModifier: enemyConfig.healModifier,
+                                // `Required`: a stat the engine gains fails `tsc` until it is forwarded.
+                            } satisfies Required<EnemyActorInput['stats']>,
+                            role: enemyShip?.type,
+                            name: enemyShip?.name,
                             chargeCount: 0,
                             startCharged: false,
                             shipSkills: enemyConfig.shipSkills,
@@ -627,7 +643,14 @@ const DPSCalculatorPage: React.FC = () => {
                             config={enemyConfig}
                             onUpdate={updateEnemy}
                             // Defense/HP/Security/Speed already have inputs in the grid above.
-                            fields={['attack', 'crit', 'critDamage']}
+                            fields={[
+                                'attack',
+                                'crit',
+                                'critDamage',
+                                'hacking',
+                                'defensePenetration',
+                                'shieldPenetration',
+                            ]}
                             onSelectShip={selectEnemyShip}
                             onShipSkillsChange={(shipSkills) =>
                                 setEnemyConfig((prev) => ({ ...prev, shipSkills }))

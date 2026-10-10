@@ -47,9 +47,15 @@ export interface EnemyAttackerInput {
         crit: number;
         critDamage: number;
         speed: number;
-        /** Shield penetration (H1 Task 2). Optional — threaded onto the engine enemy actor's
-         *  stats.shieldPenetration. No production reader until H1 Task 4. */
+        /** Shield penetration %. Optional — undefined treated as 0 by the engine. */
         shieldPenetration?: number;
+        /** Defence penetration %. Optional — undefined treated as 0 by the engine. */
+        defensePenetration?: number;
+        /** Heal-modifier % on this enemy's own repairs. Optional — undefined treated as 0. */
+        healModifier?: number;
+        /** Hacking — the attacker term of the live landing roll for this enemy's debuffs.
+         *  Absent → the engine's 200 (100% landing at neutral security). */
+        hacking?: number;
         /** Enemy's own defence. Load-bearing since SP-3: the healer's damage cast now lands on
          *  this enemy, and that number is the basis for `damage-dealt` heal/shield riders.
          *  Absent → the legacy sink's 10,000 (the pre-SP-3 punching bag), NOT the engine's 0. */
@@ -78,10 +84,6 @@ export interface EnemyAttackerInput {
      *  computeAffinityModifiers(enemyAffinity, targetAffinity) to produce the matchup.
      *  Absent → neutral defaults (modifier 0, cap 100, penalty 0). */
     affinity?: AffinityName;
-    /** Enemy attacker's hacking stat — threaded onto the engine enemy actor so the engine's
-     *  live per-turn landing recompute (hacking vs heal-target security) drives inbound debuff
-     *  landing. Absent → engine defaults hacking to 200 (100% landing at neutral security). */
-    hacking?: number;
     /** Board slot. Optional since SP-4b-1 — `normalizeCombatRoster` auto-places an enemy that
      *  arrives without one (`defaultEnemySlot`, walked from the front column). Supply it to choose
      *  the cell; an EXPLICIT cell also beats another enemy's invented one on a collision. */
@@ -106,6 +108,12 @@ export interface EnemyAttackerInput {
      *  faction-scoped grant never reaches this enemy (conservative). Spread straight through by
      *  `engineEnemyAttackers` below, same as every other passthrough field on this interface. */
     faction?: FactionName;
+    /** This enemy's ship role (Ship.type), for role-filtered classification. Absent → never
+     *  matches a role filter. Spread through like `faction`. */
+    role?: ShipTypeName;
+    /** This enemy's real ship name, for the live `ally-on-team` roster check. Absent → that
+     *  gate's assume-met fallback. Spread through like `faction`. */
+    name?: string;
 }
 
 export interface HealingSimulationInput {

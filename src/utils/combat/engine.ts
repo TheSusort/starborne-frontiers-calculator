@@ -853,6 +853,9 @@ export interface EnemyActorInput {
          *  (base for effectiveStatsOf.security, and the defender term of
          *  `liveDebuffLandingChance`, which defaults a missing base to 100). */
         security?: number;
+        /** Defence penetration %. Optional — undefined treated as 0. Flows onto the enemy
+         *  CombatActor's stats and runtime exactly as the player walk's does. */
+        defensePenetration?: number;
         /** Shield penetration. Optional — flows onto the enemy CombatActor's
          *  stats.shieldPenetration, which `attackerShieldPenOf` resolves into the
          *  `shieldPenetrationPct` that reaches `shieldAbsorb` as `penPct`. */
@@ -1010,7 +1013,7 @@ export function buildEnemyPlayerActorRuntime(
             attack: e.stats.attack,
             crit: e.stats.crit,
             critDamage: e.stats.critDamage,
-            defensePenetration: 0,
+            defensePenetration: e.stats.defensePenetration ?? 0,
             shieldPenetration: e.stats.shieldPenetration ?? 0,
             defence: e.stats.defence ?? 0,
             hp: e.stats.hp ?? 0,
@@ -1065,7 +1068,7 @@ export function buildEnemyPlayerActorRuntime(
         attack: e.stats.attack,
         crit: e.stats.crit,
         critDamage: e.stats.critDamage,
-        defensePenetration: 0,
+        defensePenetration: e.stats.defensePenetration ?? 0,
         defence: e.stats.defence ?? 0,
         hp: e.stats.hp ?? 0,
         // Fold the enemy's own heal-modifier (team symmetry with the player focus/walk
@@ -1643,26 +1646,8 @@ export interface CombatEngineInput {
      *  `battleSimulator` both supply real values. */
     enemyAttackers: {
         id: string;
-        stats: {
-            attack: number;
-            crit: number;
-            critDamage: number;
-            speed: number;
-            /** Enemy's own defence stat. Default 0 when the caller supplies none. */
-            defence?: number;
-            /** Enemy's own hp stat. Default 0 when the caller supplies none. */
-            hp?: number;
-            /** Base hacking. Optional — base for effectiveStatsOf.hacking and for
-             *  `liveDebuffLandingChance`'s attacker term (missing base defaults to 200). */
-            hacking?: number;
-            /** Base security. Optional — base for effectiveStatsOf.security and for
-             *  `liveDebuffLandingChance`'s defender term (missing base defaults to 100). */
-            security?: number;
-            /** Shield penetration. Optional — flows onto the enemy CombatActor's
-             *  stats.shieldPenetration, which `attackerShieldPenOf` resolves into the
-             *  `shieldPenetrationPct` that reaches `shieldAbsorb` as `penPct`. */
-            shieldPenetration?: number;
-        };
+        /** One definition — see `EnemyActorInput.stats`. */
+        stats: EnemyActorInput['stats'];
         chargeCount: number;
         startCharged: boolean;
         shipSkills?: ShipSkills;
@@ -8745,10 +8730,12 @@ export function runCombat(rawInput: CombatEngineInput): {
                             enemyDebuffNames: enemyDebuffNamesForTarget(v),
                             enemyBuffNames: selfBuffNamesForOwners(statusEngine, [v.id]),
                             enemyBuffCount: actorBuffCount(statusEngine, v.id),
-                            enemyHpPct:
-                                v.stats.hp > 0
-                                    ? Math.max(0, Math.min(100, (100 * v.currentHp) / v.stats.hp))
-                                    : 100,
+                            enemyHpPct: (() => {
+                                const maxHp = recipientMaxHp(v.id);
+                                return maxHp > 0
+                                    ? Math.max(0, Math.min(100, (100 * v.currentHp) / maxHp))
+                                    : 100;
+                            })(),
                             enemyDebuffCount:
                                 ownerDebuffCount(statusEngine, v.id) + carriedDebuffEntries(v),
                             enemyDotCount: dots,
@@ -9705,7 +9692,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             // Meatshield defense-substitution (approximation) — see the
             // substitutedDefenceFor doc comment above for the full rule.
             victimDefenceFor: (tgt) => substitutedDefenceFor(tgt, tgt.stats.defence),
-            victimMaxHpFor: (tgt) => tgt.stats.hp,
+            victimMaxHpFor: (tgt) => recipientMaxHp(tgt.id),
             enemyTypeArg: enemyType,
             enemyBuffNamesUnion: playerEnemyBuffNames,
             stealthedEnemyCount: playerStealthedEnemyCount,

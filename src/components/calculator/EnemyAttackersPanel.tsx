@@ -25,6 +25,12 @@ export interface EnemyAttackerConfig {
     speed: number;
     /** Enemy hacking — drives inbound debuff landing chance vs the heal target's security. */
     hacking: number;
+    /** Defence penetration % — pierces the defence of the player ship it hits. */
+    defensePenetration: number;
+    /** Shield penetration % — pierces the shields of the player ship it hits. */
+    shieldPenetration: number;
+    /** Heal-modifier % on the enemy's own repairs. Filled from a picked ship; no manual field. */
+    healModifier: number;
     chargeCount: number;
     startCharged: boolean;
     /** Affinity for the matchup vs the heal target. Default 'antimatter' (neutral when the
@@ -121,6 +127,38 @@ const EnemyCard: React.FC<{
                         onUpdate({ hacking: Math.max(0, parseInt(e.target.value) || 0) })
                     }
                     helpLabel="The enemy's hacking stat. Landing chance for its debuffs = (enemy hacking − heal-target security), clamped to 0–100%. Affinity shifts the hacking side ±25% — advantage over the heal target raises it, disadvantage lowers it."
+                />
+                <Input
+                    label="Defense Pen (%)"
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={enemy.defensePenetration}
+                    onChange={(e) =>
+                        onUpdate({
+                            defensePenetration: Math.min(
+                                100,
+                                Math.max(0, parseInt(e.target.value) || 0)
+                            ),
+                        })
+                    }
+                    helpLabel="Ignores this share of the defence of the ship it hits."
+                />
+                <Input
+                    label="Shield Pen (%)"
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={enemy.shieldPenetration}
+                    onChange={(e) =>
+                        onUpdate({
+                            shieldPenetration: Math.min(
+                                100,
+                                Math.max(0, parseInt(e.target.value) || 0)
+                            ),
+                        })
+                    }
+                    helpLabel="Ignores this share of the shield of the ship it hits."
                 />
                 <Input
                     label="HP"

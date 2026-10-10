@@ -19,6 +19,10 @@ const config = (): EnemyShipConfig => ({
     crit: 0,
     critDamage: 150,
     speed: 40,
+    hacking: 200,
+    defensePenetration: 0,
+    shieldPenetration: 0,
+    healModifier: 0,
     shipSkills: buildDefaultShipSkills(),
 });
 
