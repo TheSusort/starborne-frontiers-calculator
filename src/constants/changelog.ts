@@ -19,6 +19,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: expired Inc. and Out. Repair buffs no longer boost later repairs.',
     "DPS calculator: secondary and conditional damage now use the target's current defence.",
     'Skill editor: an ability with only stat-scaled damage now hits its target.',
+    "Combat simulator: hit damage figures now include the target's damage reduction.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

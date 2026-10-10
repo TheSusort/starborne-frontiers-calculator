@@ -260,5 +260,138 @@ describe('#657 real kits: Zosimos → Yuyan, seeded composition 1', () => {
         expect(took).toBeDefined();
         expect(cast!.didCrit).toBe(false);
         expect(cast!.damage).toBeCloseTo(took!.damage!, 6);
+
+        // Round 2, Zosimos → Heliodor: Heliodor's own incoming reduction is in what it took, and
+        // so in the figure the cast reports (#658).
+        const cast2 = seen.find(
+            (e): e is AbilityPerformed =>
+                e.type === 'ability-performed' &&
+                e.round === 2 &&
+                isZosimos(e.actorId) &&
+                e.targetId.includes('Heliodor')
+        );
+        const took2 = seen.find(
+            (e): e is Attacked =>
+                e.type === 'attacked' &&
+                e.round === 2 &&
+                isZosimos(e.attackerId) &&
+                e.targetId.includes('Heliodor')
+        );
+        expect(cast2).toBeDefined();
+        expect(took2).toBeDefined();
+        expect(cast2!.didCrit).toBe(false);
+        expect(cast2!.damage).toBeCloseTo(took2!.damage!, 6);
     });
 });
+
+/**
+ * The same agreement for the victim's own INCOMING term: its `Inc. Damage Down` family and its
+ * gear/kit `incoming-reduction`, composed (and capped at −70) exactly as the positional apply
+ * composes them. Both directions.
+ */
+const incDamageDown: Ability = {
+    id: 'inc-down',
+    type: 'buff',
+    target: 'self',
+    trigger: 'on-cast',
+    conditions: [],
+    config: {
+        type: 'buff',
+        buffName: 'Inc. Damage Down II',
+        parsedEffects: { incomingDamage: -40 },
+        stacks: 1,
+        isStackable: false,
+        duration: 10,
+    },
+};
+const directReduction = (pct: number): Ability => ({
+    id: `reduction-${pct}`,
+    type: 'incoming-reduction',
+    target: 'self',
+    trigger: 'on-cast',
+    conditions: [],
+    config: {
+        type: 'incoming-reduction',
+        scope: 'direct',
+        condition: 'always',
+        pct,
+        critFamily: false,
+    },
+});
+const VICTIM_KITS = {
+    'Inc. Damage Down': [incDamageDown],
+    'incoming-reduction': [directReduction(30)],
+    'both, past the 70% cap': [incDamageDown, directReduction(45)],
+} as const;
+
+describe.each(Object.entries(VICTIM_KITS))(
+    '#658 the turn-level figure includes the victim incoming term (%s)',
+    (_name, kit) => {
+        const victimSlots: ShipSkills['slots'] = [{ slot: 'passive', abilities: [...kit] }];
+
+        it('player hits enemy', () => {
+            const bus = createEventBus();
+            const { ap, at } = castPairs(bus, 'attacker');
+            const result = runCombat({
+                ...common,
+                numRounds: 1,
+                bus,
+                attack: ATTACK,
+                defence: 0,
+                hp: 1_000_000,
+                speed: 900,
+                position: 'M4',
+                security: SECURITY,
+                shipSkills: { slots: casterSlots },
+                enemyAttackers: [
+                    enemyActor('holder', {
+                        attack: 0,
+                        defence: BASE_DEFENCE,
+                        security: 0,
+                        speed: 100,
+                        slots: victimSlots,
+                    }),
+                ],
+            });
+            expect(at).toHaveLength(1);
+            // The victim's reduction really applied to what landed.
+            expect(at[0].damage!).toBeLessThan(landedAt(BASE_DEFENCE) - 1);
+            expect(ap).toHaveLength(1);
+            expect(ap[0].damage).toBeCloseTo(at[0].damage!, 6);
+            expect(result.rawTotals.totalSecondary).toBeCloseTo(
+                (at[0].damage! * SECURITY * SEC_MULTIPLE) / unmitigated,
+                6
+            );
+        });
+
+        it('enemy hits player', () => {
+            const bus = createEventBus();
+            const { ap, at } = castPairs(bus, 'caster');
+            runCombat({
+                ...common,
+                numRounds: 1,
+                bus,
+                attack: 0,
+                defence: BASE_DEFENCE,
+                hp: 100_000_000,
+                speed: 100,
+                position: 'M4',
+                security: 0,
+                shipSkills: { slots: victimSlots },
+                enemyAttackers: [
+                    enemyActor('caster', {
+                        attack: ATTACK,
+                        defence: 0,
+                        security: SECURITY,
+                        speed: 900,
+                        slots: casterSlots,
+                    }),
+                ],
+            });
+            expect(at).toHaveLength(1);
+            expect(at[0].damage!).toBeLessThan(landedAt(BASE_DEFENCE) - 1);
+            expect(ap).toHaveLength(1);
+            expect(ap[0].damage).toBeCloseTo(at[0].damage!, 6);
+        });
+    }
+);

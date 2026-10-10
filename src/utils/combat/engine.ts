@@ -9952,6 +9952,51 @@ export function runCombat(rawInput: CombatEngineInput): {
         //       read that as "no enemy", never as "an enemy with neutral stats" (contract §B).
         // The selfHpPct denom is runtimeFor(actor).hp (equal to baseHpFor(id) by
         // construction). The per-kind bookkeeping TAILS after each call stay inline.
+        /**
+         * The bound target's gear/kit `incoming-reduction` for the turn's own damage figure, read
+         * the way the positional apply's `incomingReductionFor` reads it for a hit (Iridium-as-tank):
+         * the non-crit baseline, and the crit-family DELTA a crit adds — which also carries the
+         * crit-conditional pre-fight terms (victim `incomingCritDamage`, attacker
+         * `outgoingCritDamage`), negated because this channel is a REDUCTION. Every cast site, both
+         * sides (#658). What LANDS takes its own per-hit reduction in drivePositionalApply.
+         *
+         * The victim terms are fenced on the victim's presence; the attacker's own
+         * `outgoingCritDamage` is not victim-derived and applies regardless. Both values feed only
+         * runPlayerTurn's `hasVictim`-fenced damage figures, never `turnCtx` or `positionalScalars`.
+         */
+        const boundTargetIncomingReduction = (
+            actor: CombatActor,
+            tgt: CombatActor | undefined
+        ): { incomingReductionNonCritPct: number; incomingReductionCritFamilyPct: number } => {
+            let nonCrit = 0;
+            let critAll = 0;
+            if (tgt !== undefined) {
+                const tgtIncoming = incomingAbilitiesOf(tgt.id);
+                if (tgtIncoming.length > 0) {
+                    const ctxFor = (didCrit: boolean) => ({
+                        didCrit,
+                        attackerStealthed: isStealthed(actor.id),
+                        victimStealthed: isStealthed(tgt.id),
+                        victimTurnBlocked: isTurnBlocked(tgt.id),
+                        hitIndexThisRound: 0,
+                        attackerHasDot: attackerHasDot(actor.id),
+                        victimHasBarrierRecharging: hasBarrierRecharging(tgt.id),
+                        victimHasShield: hasShield(tgt.id),
+                        selfHpPct: selfHpPctOf(tgt.id),
+                        attackerTauntedOrProvoked: attackerTauntedOrProvoked(actor.id),
+                    });
+                    nonCrit = incomingReductionForHit(tgtIncoming, ctxFor(false));
+                    critAll = incomingReductionForHit(tgtIncoming, ctxFor(true));
+                }
+            }
+            const preFightCritFamilyPct =
+                -(tgt?.preFight?.incomingCritDamage ?? 0) -
+                (actor.preFight?.outgoingCritDamage ?? 0);
+            return {
+                incomingReductionNonCritPct: nonCrit,
+                incomingReductionCritFamilyPct: critAll - nonCrit + preFightCritFamilyPct,
+            };
+        };
         const buildTurnArgs = (a: CombatActor, tgt: CombatActor | undefined) => {
             castStartSeq = statusEngine.lastAppliedSeq();
             const tb = turnBindings(a.side);
@@ -10131,6 +10176,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // an empty/zero placeholder) is what routes the consumer to its documented
                 // "no enemy" defaults (`?? []` / `?? 0` / `!== undefined` guards in playerTurn.ts),
                 // instead of resurrecting the dummy ghost this rung deletes.
+                // The bound target's gear/kit incoming reduction — see the helper.
+                ...boundTargetIncomingReduction(a, tgt),
                 ...(tgt && tgtReading
                     ? {
                           enemy: tgt,
@@ -13210,82 +13257,6 @@ export function runCombat(rawInput: CombatEngineInput): {
                                       enemyTurnStasisHitVictims.add(targetId);
                                   }
                                 : undefined;
-                            // Victim-side incoming %-reduction against the bound target, for the
-                            // turn's own bound-target damage figure — Iridium-as-tank. `tgt` is the
-                            // victim; `actor` is the acting enemy attacker. The non-crit baseline is
-                            // the reduction with didCrit:false; the crit-family DELTA is the extra
-                            // reduction a crit adds. Guarded by length so a victim with no incoming
-                            // abilities passes 0/0. (What LANDS takes its own per-sub-hit reduction
-                            // in drivePositionalApply; this fold feeds only the turn-level figure
-                            // and the `damage > 0` gate below.)
-                            //
-                            // Fenced on the victim's PRESENCE, not just on the ability list.
-                            // With no victim there is nobody whose incoming channel could reduce
-                            // anything, and the two args default to 0 inside runPlayerTurn — which is
-                            // also what the two PLAYER cast sites pass (they never thread these at
-                            // all), so the no-victim enemy turn matches them. Safe to fence: both
-                            // args feed ONLY `damageCritMultiplier`/`nonCritFactor`, whose every
-                            // consumer (`directDamage`/`secondaryDamage`/`conditionalDamage`, and
-                            // `passiveDamage` through `directDamage`) is already `hasVictim`-fenced
-                            // in playerTurn.ts. Neither reaches `turnCtx` or `positionalScalars`, the
-                            // two things this turn PUBLISHES as standing state — checked, because
-                            // fencing a value that is also published is the defect that once silenced
-                            // every supporter's reactive debuffs.
-                            let incomingReductionNonCritPct = 0;
-                            let incomingReductionCritAll = 0;
-                            if (tgt !== undefined) {
-                                const tgtIncoming = incomingAbilitiesOf(tgt.id);
-                                incomingReductionNonCritPct = tgtIncoming.length
-                                    ? incomingReductionForHit(tgtIncoming, {
-                                          didCrit: false,
-                                          attackerStealthed: isStealthed(actor.id),
-                                          victimStealthed: isStealthed(tgt.id),
-                                          victimTurnBlocked: isTurnBlocked(tgt.id),
-                                          hitIndexThisRound: 0,
-                                          attackerHasDot: attackerHasDot(actor.id),
-                                          victimHasBarrierRecharging: hasBarrierRecharging(tgt.id),
-                                          victimHasShield: hasShield(tgt.id),
-                                          selfHpPct: selfHpPctOf(tgt.id),
-                                          attackerTauntedOrProvoked: attackerTauntedOrProvoked(
-                                              actor.id
-                                          ),
-                                      })
-                                    : 0;
-                                incomingReductionCritAll = tgtIncoming.length
-                                    ? incomingReductionForHit(tgtIncoming, {
-                                          didCrit: true,
-                                          attackerStealthed: isStealthed(actor.id),
-                                          victimStealthed: isStealthed(tgt.id),
-                                          victimTurnBlocked: isTurnBlocked(tgt.id),
-                                          hitIndexThisRound: 0,
-                                          attackerHasDot: attackerHasDot(actor.id),
-                                          victimHasBarrierRecharging: hasBarrierRecharging(tgt.id),
-                                          victimHasShield: hasShield(tgt.id),
-                                          selfHpPct: selfHpPctOf(tgt.id),
-                                          attackerTauntedOrProvoked: attackerTauntedOrProvoked(
-                                              actor.id
-                                          ),
-                                      })
-                                    : 0;
-                            }
-                            // Crit-conditional pre-fight damage modifiers, mirrored from
-                            // the positional incomingReductionFor site (crit hits only, via
-                            // the crit-family delta). Same sign convention: the channel is a
-                            // REDUCTION, leader values are benefit/penalty-phrased, so both
-                            // terms are negated (victim incomingCritDamage -10 → +10 reduction
-                            // on crits; attacker outgoingCritDamage -10 → its crits deal 10%
-                            // less). Absent → 0.
-                            // Only the VICTIM term is fenced. The ACTING enemy's own
-                            // `outgoingCritDamage` is not victim-derived, so it keeps applying
-                            // on a no-victim turn — collapsing the whole expression would have
-                            // silently dropped a modifier that has nothing to do with the victim.
-                            const preFightCritFamilyPct =
-                                -(tgt?.preFight?.incomingCritDamage ?? 0) -
-                                (actor.preFight?.outgoingCritDamage ?? 0);
-                            const incomingReductionCritFamilyPct =
-                                incomingReductionCritAll -
-                                incomingReductionNonCritPct +
-                                preFightCritFamilyPct;
                             // Snapshot BEFORE runPlayerTurn (the enemy's
                             // opposing roster is the PLAYER team — allPlayerActors).
                             const enemyPreTurnVictimStatus =
@@ -13295,8 +13266,6 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 ...enemyTurnArgs,
                                 deferAbilityPerformedToEngine: enemyWillApplyPositionally,
                                 onHitBreakStasis: enemyBreakHook,
-                                incomingReductionNonCritPct,
-                                incomingReductionCritFamilyPct,
                             });
                             landedScheduledEnemyEffectsByActor.set(
                                 actor.id,

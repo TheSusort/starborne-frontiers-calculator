@@ -875,7 +875,8 @@ export interface PlayerTurnArgs {
      *  wins when both are present. */
     enemyDefense?: number;
     /** The bound target's LIVE defensive profile — the engine's `victimDefenseProfileOf`, the
-     *  same read the positional apply mitigates each hit with — so the turn's own damage figures
+     *  same read the positional apply mitigates each hit with (its defence AND its incoming
+     *  channel) — so the turn's own damage figures
      *  (`directDamage`, `secondaryDamage`, `conditionalDamage`, the deferred `ability-performed`
      *  basis) agree with what lands on the bound target (#657). Called at the damage assembly with
      *  this turn's gated scheduled enemy effects, after the cast's pre-damage clauses landed.
@@ -4877,11 +4878,11 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // The bound target's defence: its live profile when the engine supplies one (the read the
     // positional apply lands with), else the standalone caller's flat figure with this turn's
     // enemy-applied defence modifier.
-    const damageReduction = victimDefenseProfile
-        ? victimDefenceReductionPct(
-              victimDefenseProfile(scheduledEnemy.roundEnemyDebuffs),
-              effectivePen
-          )
+    // ONE read of the live profile serves both victim terms below: defence here, and the incoming
+    // channel at the damage assembly.
+    const boundVictimProfile = victimDefenseProfile?.(scheduledEnemy.roundEnemyDebuffs);
+    const damageReduction = boundVictimProfile
+        ? victimDefenceReductionPct(boundVictimProfile, effectivePen)
         : (() => {
               const effectiveDefense =
                   enemyDefense * (1 + enemyDefenseModifier / 100) * (1 - effectivePen / 100);
@@ -5289,10 +5290,16 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // restructuring the damage assembly. drawHits 0 (noCrit) → fraction 0 →
     // multiplier 1 (the "cannot critically hit" path, unchanged).
     const critFraction = drawHits > 0 ? critHits / drawHits : 0;
-    // Victim-side incoming %-reduction against the bound target (aggregate path).
-    // Both default 0.
+    // Victim-side incoming %-reduction against the bound target. Both default 0.
     const equipNonCrit = args.incomingReductionNonCritPct ?? 0;
     const R = args.incomingReductionCritFamilyPct ?? 0;
+    // The bound target's incoming channel: its live profile's (the victim's own Inc. Damage
+    // Down/Up family, pre-fight incoming, attacker-applied amplification and Exposed — what the
+    // positional apply lands with, #658), else this turn's enemy-applied modifier for a
+    // standalone caller.
+    const victimIncomingPct = boundVictimProfile
+        ? (boundVictimProfile.incomingDamageModifierPct ?? incomingDamageModifier)
+        : incomingDamageModifier;
     // Crit-family reduction folds ADDITIVELY into the incoming channel for the CRIT
     // FRACTION only — consistent with the positional path (victimHitDamage). Expressed as a
     // ratio against the non-crit incoming factor so damageCritMultiplier * nonCritFactor stays
@@ -5304,11 +5311,11 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // attack against the SAME victim, so the victim's crit reduction applies to both.
     // The non-crit and crit incoming terms are each floored on their own (`capIncomingPct`), so the
     // crit ratio is built from the floored pair.
-    const incBase = capIncomingPct(incomingDamageModifier - equipNonCrit); // all hits
+    const incBase = capIncomingPct(victimIncomingPct - equipNonCrit); // all hits
     const incDenom = 1 + incBase / 100;
     const critIncomingRatio =
         incDenom !== 0
-            ? (1 + capIncomingPct(incomingDamageModifier - equipNonCrit - R) / 100) / incDenom
+            ? (1 + capIncomingPct(victimIncomingPct - equipNonCrit - R) / 100) / incDenom
             : 1;
     const damageCritMultiplier =
         1 - critFraction + critFraction * (1 + effectiveCritDamage / 100) * critIncomingRatio;
