@@ -849,7 +849,7 @@ describe('simulateDPS', () => {
             enemyDebuffs: [] as SelectedGameBuff[],
         };
 
-        it('defensePenetrationBuff adds to defensePenetration', () => {
+        it('a defence penetration self-buff adds to defensePenetration', () => {
             const withPen = simulateDPS({
                 ...base,
                 enemyDefense: 500,

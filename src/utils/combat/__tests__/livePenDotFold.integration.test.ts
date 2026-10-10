@@ -133,6 +133,27 @@ describe('scheduled penetration and DoT modifiers are derived live', () => {
         );
     });
 
+    it('a picked Out. Detonation Damage Up raises bomb detonation damage', () => {
+        setupKeyedRng(1);
+        const bombBase = {
+            ...base,
+            attack: 10000,
+            enemyDefense: 0,
+            activeDoTs: [{ id: 'b', type: 'bomb' as const, tier: 100, stacks: 1, duration: 1 }],
+            rounds: 1,
+        };
+        const plain = simulateDPS(bombBase).rounds[0].detonationDamage;
+        const withDet = simulateDPS({
+            ...bombBase,
+            selfBuffs: [buff('Out. Detonation Damage Up', { detonationDamage: 30 })],
+        }).rounds[0].detonationDamage;
+        expect(plain).toBeGreaterThan(0);
+        expect(withDet).toBeGreaterThan(plain);
+    });
+
+    // Regression guards: a walked actor's pen/DoT from its OWN kit statuses was already live and
+    // must stay so. A walked actor's scheduled picks never reach its own turns (the status engine
+    // owns scheduled self-buffs as 'attacker'), so there is no scheduled-pick case here.
     describe('walked team actor', () => {
         const dmg = (): Ability => ({
             id: 'd',

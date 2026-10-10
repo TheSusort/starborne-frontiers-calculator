@@ -324,12 +324,12 @@ export interface EffectiveDamageStats {
      *  everywhere. Exposed for the 'security' secondary-damage basis (#361, Prophet's
      *  "damage equal to 50x its security"). */
     security: number;
-    /** base + base pen-buff + modifier pen + ability-DoT pen (the 4-source pipeline). */
+    /** base pen + castPenBonus + modifier pen + pen from scheduled and ability self-buffs. */
     effectivePen: number;
-    /** toDotAndPenModifiers(abilitySelfEffects, []).dotDamageModifier — self Out. DoT, for dotMult. */
+    /** Self Out. DoT from scheduled and ability self-buffs plus `mod.dotDamage`, for dotMult. */
     selfDotDamageModifier: number;
     /** mod.detonationDamage (stat-modifier abilities) + dotPen.detonationDamageModifier
-     *  ("Out. Detonation Damage Up" buffs) — outgoing detonation-burst multiplier delta
+     *  ("Out. Detonation Damage Up" scheduled and ability self-buffs) — outgoing detonation-burst multiplier delta
      *  (percentage points). */
     detonationDamageModifier: number;
     /** mod.bombSplashDamage — outgoing bomb-splash multiplier delta (percentage points). */

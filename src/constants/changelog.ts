@@ -12,6 +12,8 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: damage reduction from non-defence sources now caps at 70%.',
     'Damage deconstruction: incoming damage modifiers now cap at -70%.',
     'Combat simulator: timed penetration and DoT buffs now apply only while active.',
+    'DPS calculator: penetration and DoT buffs picked on team ships now boost your ship.',
+    'DPS calculator: picked Out. Detonation Damage Up buffs now apply.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

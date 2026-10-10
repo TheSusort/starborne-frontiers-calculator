@@ -4865,7 +4865,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
 
     // Step 1: Calculate direct damage
     const enemyDotMod = toEnemyDotModifier(roundEnemyDebuffs);
-    // Ability-status self Out. DoT folds in per-round (KNOWN-DIFF b). Enemy Inc. DoT is
+    // Self Out. DoT (scheduled and ability self-buffs) arrives via dmgStats. Enemy Inc. DoT is
     // already inside enemyDotMod (roundEnemyDebuffs includes abilityEnemyEffects).
     const dotMult = 1 + (enemyDotMod + dmgStats.selfDotDamageModifier) / 100;
     // The anchor damage mult honours the forced-affinity override (equals the runtime

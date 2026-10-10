@@ -364,7 +364,12 @@ describe('effectiveDamageStatsOf — four-layer fold characterization', () => {
                 id: 'sched-1',
                 buffName: 'Attack Up',
                 stacks: 1,
-                parsedEffects: { attack: 30, outgoingDamage: 10 },
+                parsedEffects: {
+                    attack: 30,
+                    outgoingDamage: 10,
+                    defensePenetration: 7,
+                    dotDamage: 4,
+                },
                 isStackable: false,
             },
             {
