@@ -55,7 +55,12 @@ import type { CombatActor } from '../combat/state';
 import type { Position } from '../../types/encounters';
 import type { Ship, AffinityName } from '../../types/ship';
 import type { CombatStatBlock, DoTType } from '../../types/calculator';
-import { runCombat, CombatEngineInput, TeamActorEngineInput } from '../combat/engine';
+import {
+    runCombat,
+    CombatEngineInput,
+    EnemyActorInput,
+    TeamActorEngineInput,
+} from '../combat/engine';
 import { createEventBus } from '../combat/events';
 import { buildShipAbilities } from '../abilities/buildShipAbilities';
 import { buildShipAbilitiesWithEquipment } from '../abilities/buildShipAbilitiesWithEquipment';
@@ -896,27 +901,14 @@ function toWalkStats(
     };
 }
 
-/** Shape `DerivedCombatStats` into the enemy attacker's `stats` bundle. Centralized so a
- *  future stat addition can't be missed at one of the call sites. */
-function toEnemyStats(
-    stats: DerivedCombatStats
-): Pick<
-    DerivedCombatStats,
-    | 'attack'
-    | 'crit'
-    | 'critDamage'
-    | 'speed'
-    | 'defence'
-    | 'hp'
-    | 'hacking'
-    | 'security'
-    | 'shieldPenetration'
-    | 'healModifier'
-> {
+/** Shape `DerivedCombatStats` into the enemy attacker's `stats` bundle. `Required` is the tripwire: a stat the engine's enemy input gains fails `tsc` here until it is
+ *  forwarded, so the enemy side cannot silently fall back to a zero (#654). */
+function toEnemyStats(stats: DerivedCombatStats): Required<EnemyActorInput['stats']> {
     return {
         attack: stats.attack,
         crit: stats.crit,
         critDamage: stats.critDamage,
+        defensePenetration: stats.defensePenetration,
         speed: stats.speed,
         defence: stats.defence,
         hp: stats.hp,

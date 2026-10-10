@@ -128,6 +128,9 @@ export function useEnemyTeamRoster(options: UseEnemyTeamRosterOptions): UseEnemy
                         critDamage: Math.round(final.critDamage ?? 0),
                         speed: Math.round(final.speed ?? 50),
                         hacking: Math.round(final.hacking ?? 200),
+                        defensePenetration: Math.round(final.defensePenetration ?? 0),
+                        shieldPenetration: Math.round(final.shieldPenetration ?? 0),
+                        healModifier: Math.round(final.healModifier ?? 0),
                         // The enemy is a real, killable actor since SP-3: its own HP/defence/security
                         // drive whether it dies, how much the healer's cast hurts it (the basis for
                         // damage-dealt riders), and whether the healer's debuffs land on it.
@@ -218,6 +221,7 @@ export function useEnemyTeamRoster(options: UseEnemyTeamRosterOptions): UseEnemy
                             crit: Math.round(final.crit ?? 0),
                             critDamage: Math.round(final.critDamage ?? 0),
                             defensePenetration: Math.round(final.defensePenetration ?? 0),
+                            shieldPenetration: Math.round(final.shieldPenetration ?? 0),
                             hacking: Math.round(final.hacking ?? 200),
                             defence: Math.round(final.defence ?? 0),
                             hp: Math.round(final.hp ?? 0),
@@ -341,7 +345,14 @@ export function useEnemyTeamRoster(options: UseEnemyTeamRosterOptions): UseEnemy
                         hp: e.hp,
                         defence: e.defence,
                         security: e.security,
-                    },
+                        defensePenetration: e.defensePenetration,
+                        shieldPenetration: e.shieldPenetration,
+                        healModifier: e.healModifier,
+                        // `Required`: a stat the input gains fails `tsc` until it is forwarded.
+                    } satisfies Required<EnemyAttackerInput['stats']>,
+                    // Identity derived from `shipId`, mirroring the team-ship branch's `name`.
+                    role: enemyShip?.type,
+                    name: enemyShip?.name,
                     hacking: e.hacking,
                     chargeCount: e.chargeCount,
                     startCharged: e.startCharged,

@@ -47,9 +47,12 @@ export interface EnemyAttackerInput {
         crit: number;
         critDamage: number;
         speed: number;
-        /** Shield penetration (H1 Task 2). Optional — threaded onto the engine enemy actor's
-         *  stats.shieldPenetration. No production reader until H1 Task 4. */
+        /** Shield penetration %. Optional — undefined treated as 0 by the engine. */
         shieldPenetration?: number;
+        /** Defence penetration %. Optional — undefined treated as 0 by the engine. */
+        defensePenetration?: number;
+        /** Heal-modifier % on this enemy's own repairs. Optional — undefined treated as 0. */
+        healModifier?: number;
         /** Enemy's own defence. Load-bearing since SP-3: the healer's damage cast now lands on
          *  this enemy, and that number is the basis for `damage-dealt` heal/shield riders.
          *  Absent → the legacy sink's 10,000 (the pre-SP-3 punching bag), NOT the engine's 0. */
@@ -106,6 +109,12 @@ export interface EnemyAttackerInput {
      *  faction-scoped grant never reaches this enemy (conservative). Spread straight through by
      *  `engineEnemyAttackers` below, same as every other passthrough field on this interface. */
     faction?: FactionName;
+    /** This enemy's ship role (Ship.type), for role-filtered classification. Absent → never
+     *  matches a role filter. Spread through like `faction`. */
+    role?: ShipTypeName;
+    /** This enemy's real ship name, for the live `ally-on-team` roster check. Absent → that
+     *  gate's assume-met fallback. Spread through like `faction`. */
+    name?: string;
 }
 
 export interface HealingSimulationInput {

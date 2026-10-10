@@ -273,6 +273,12 @@ export interface EnemyShipConfig {
     crit: number;
     critDamage: number;
     speed: number;
+    /** Drives the landing chance of this enemy's debuffs on your ships. */
+    hacking: number;
+    defensePenetration: number;
+    shieldPenetration: number;
+    /** Heal-modifier % on this enemy's own repairs. */
+    healModifier: number;
     shipSkills: ShipSkills;
 }
 

@@ -2540,8 +2540,9 @@ const DocumentationPage: React.FC = () => {
                                         Under Enemy Target you can pick an actual ship &mdash;
                                         filling its stats and skills from game data &mdash; or set
                                         them by hand (defense, HP, security, speed, attack, crit,
-                                        crit damage, affinity, type, buffs/debuffs). Once its HP
-                                        reaches 0 the fight ends on that round.
+                                        crit damage, hacking, defense and shield penetration,
+                                        affinity, type, buffs/debuffs). Once its HP reaches 0 the
+                                        fight ends on that round.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">

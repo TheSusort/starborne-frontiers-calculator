@@ -32,6 +32,10 @@ const STAT_FIELDS: ReadonlyArray<{
     { field: 'crit', label: 'Crit' },
     { field: 'critDamage', label: 'Crit Damage' },
     { field: 'speed', label: 'Speed', helpLabel: 'decides whether it acts before you' },
+    { field: 'hacking', label: 'Hacking', helpLabel: 'lands its debuffs on your ships' },
+    { field: 'defensePenetration', label: 'Defense Pen (%)' },
+    { field: 'shieldPenetration', label: 'Shield Pen (%)' },
+    { field: 'healModifier', label: 'Heal Modifier (%)' },
 ];
 
 /**

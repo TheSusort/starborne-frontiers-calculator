@@ -46,6 +46,9 @@ const manual: EnemyAttackerConfig = {
     critDamage: 0,
     speed: 50,
     hacking: 0,
+    defensePenetration: 0,
+    shieldPenetration: 0,
+    healModifier: 0,
     chargeCount: 0,
     startCharged: false,
     // SP-3b Task 8: an enemy is a real, placed, killable actor. `hp: 0` would mean an
