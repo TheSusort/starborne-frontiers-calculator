@@ -130,8 +130,6 @@ function makeRuntime(opts: RuntimeOpts = {}): PlayerActorRuntime {
         defence: 0,
         hp: 20000,
         healModifier: 0,
-        selfDotModifier: 0,
-        defensePenetrationBuff: 0,
         affinityDamageModifier: affMod,
         affinityCritCap: 100,
         affinityCritPenalty: 0,

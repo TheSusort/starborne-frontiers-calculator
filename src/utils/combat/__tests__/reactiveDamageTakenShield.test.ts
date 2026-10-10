@@ -105,8 +105,6 @@ function makeShieldCtx(
                     defence: 0,
                     hp: MAX_HP,
                     healModifier: 0,
-                    selfDotModifier: 0,
-                    defensePenetrationBuff: 0,
                     affinityDamageModifier: 0,
                     affinityCritCap: 100,
                     affinityCritPenalty: 0,

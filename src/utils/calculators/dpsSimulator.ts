@@ -19,7 +19,6 @@ import type { ParsedTarget, ParsedPattern } from '../targetingParser';
 import type { CombatEventBus, CombatEvent } from '../combat/events';
 import { flatInputToAbilities } from '../abilities/flatInputToAbilities';
 import { selectFiringSkill } from '../abilities/applyAbilities';
-import { toDotAndPenModifiers } from './dpsBuffHelpers';
 import { computeAffinityModifiers } from './affinityUtils';
 import { actorsDamagePerRound, focusDamagePerRound, focusDamageTotal } from './dpsMetricFromDealt';
 
@@ -444,8 +443,7 @@ export interface ActiveDoTState {
  * For each team actor carrying shipSkills (and stats), resolve its OWN rates exactly as the
  * attacker's are resolved — landing chance from ITS hacking vs the enemy security with ITS
  * affinity damage modifier, and affinity damage/crit modifiers from ITS affinity vs the enemy.
- * The walked actor's selfDotModifier/defensePenetrationBuff start at 0 (its walked statuses
- * produce those in-loop). A legacy team actor (no shipSkills/stats) passes through unchanged.
+ * A legacy team actor (no shipSkills/stats) passes through unchanged.
  *
  * `healModifier` IS threaded from `CombatStatBlock.healModifier` (default 0 when absent) into
  * the walk bundle, so walked team actors fold their own heal-modifier into heal casts (the
@@ -468,8 +466,6 @@ export function deriveTeamEngineActors(
                 shipSkills: t.shipSkills,
                 stats: t.stats,
                 healModifier: t.stats.healModifier ?? 0,
-                selfDotModifier: 0,
-                defensePenetrationBuff: 0,
                 affinityDamageModifier: aff.damageModifier,
                 affinityCritCap: aff.critCap,
                 affinityCritPenalty: aff.critPenalty,
@@ -584,11 +580,6 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
               }),
           ];
 
-    // Self-side constants (not subject to rolls)
-    const { defensePenetrationBuff, dotDamageModifier: selfDotModifier } = toDotAndPenModifiers(
-        selfBuffs,
-        []
-    );
     const shipSkills = input.shipSkills ?? flatInputToAbilities(input);
     const chargedSkill = selectFiringSkill(shipSkills, 'charged');
     // A charged skill "exists" when the slot carries ANY ability — damage or pure
@@ -671,8 +662,6 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         numRounds,
         selfBuffs,
         enemyDebuffs,
-        selfDotModifier,
-        defensePenetrationBuff,
         hasChargedSkill,
         startCharged: input.startCharged ?? false,
         affinityDamageModifier,

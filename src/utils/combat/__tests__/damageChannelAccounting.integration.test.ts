@@ -289,8 +289,6 @@ const frontAlly = (maxHp: number): TeamActorEngineInput => ({
             defence: 0,
             hp: maxHp,
         },
-        selfDotModifier: 0,
-        defensePenetrationBuff: 0,
         affinityDamageModifier: 0,
         affinityCritCap: 100,
         affinityCritPenalty: 0,

@@ -130,8 +130,6 @@ function runLongFight(ship: Ship): Array<Extract<CombatEvent, { type: 'charge-ch
         numRounds: ROUNDS,
         selfBuffs: [],
         enemyDebuffs: [],
-        selfDotModifier: 0,
-        defensePenetrationBuff: 0,
         hasChargedSkill: (ship.chargeSkillCharge ?? 0) > 0,
         startCharged: false,
         affinityDamageModifier: 0,

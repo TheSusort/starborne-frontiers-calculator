@@ -92,8 +92,6 @@ function makeRuntime(castSkills: ShipSkills): PlayerActorRuntime {
         defence: 0,
         hp: 20_000,
         healModifier: 0,
-        selfDotModifier: 0,
-        defensePenetrationBuff: 0,
         affinityDamageModifier: 0,
         affinityCritCap: 100,
         affinityCritPenalty: 0,

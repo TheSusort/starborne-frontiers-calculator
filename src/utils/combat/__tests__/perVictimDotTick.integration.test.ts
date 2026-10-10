@@ -118,8 +118,6 @@ const POSITIONAL_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngi
     numRounds: 2,
     selfBuffs: [],
     enemyDebuffs: [],
-    selfDotModifier: 0,
-    defensePenetrationBuff: 0,
     hasChargedSkill: false,
     startCharged: false,
     affinityDamageModifier: 0,
@@ -156,8 +154,6 @@ const NONPOS_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineIn
     numRounds: 2,
     selfBuffs: [],
     enemyDebuffs: [],
-    selfDotModifier: 0,
-    defensePenetrationBuff: 0,
     hasChargedSkill: false,
     startCharged: false,
     affinityDamageModifier: 0,
@@ -194,8 +190,6 @@ const teamAlly = (id: string, position: Position, hp: number): TeamActorEngineIn
     walk: {
         shipSkills: { slots: [basicSlot()] },
         stats: teamStats(hp),
-        selfDotModifier: 0,
-        defensePenetrationBuff: 0,
         affinityDamageModifier: 0,
         affinityCritCap: 100,
         affinityCritPenalty: 0,
@@ -773,7 +767,7 @@ describe('per-victim DoT ticks at each positioned ship’s turn-start (PR-C C2)'
         // The APPLIER is `team-ally`, not the focus. `tickDoTs` skips any entry whose applier has
         // no turn ctx yet (`if (!ctx) continue`, engine.ts), and a `hp: 0` focus that is also
         // the heal target is skipped by the dead-target guard and never records one — measured: it
-        // emits no `turn-started`, while the ally does. The ally's ctx is neutral (selfDotModifier 0,
+        // emits no `turn-started`, while the ally does. The ally's ctx is neutral (no DoT modifier,
         // affinityDamageModifier 0 → dotMult 1, affinityMult 1), so it changes no factor below.
         let premise: { isPositional: boolean; resolvesVictim: boolean } | undefined;
         const { events, result } = collect(

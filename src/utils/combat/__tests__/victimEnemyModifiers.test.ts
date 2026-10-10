@@ -106,8 +106,6 @@ const BASE_INPUT = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInp
     numRounds: 1,
     selfBuffs: [],
     enemyDebuffs: [defenseDown],
-    selfDotModifier: 0,
-    defensePenetrationBuff: 0,
     hasChargedSkill: false,
     startCharged: false,
     affinityDamageModifier: 0,
@@ -207,8 +205,6 @@ describe('B1 Task 3 — victimEnemyModifiers: scheduled channel is global, abili
             selfBuffs: [],
             // No scheduled debuffs — ability-only.
             enemyDebuffs: [],
-            selfDotModifier: 0,
-            defensePenetrationBuff: 0,
             hasChargedSkill: false,
             startCharged: false,
             affinityDamageModifier: 0,

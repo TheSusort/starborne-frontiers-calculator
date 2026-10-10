@@ -1164,8 +1164,6 @@ export function simulateBattle(
                 // SP-F F4: fold the walked actor's heal-modifier on its heal casts (read flat as
                 // `w.healModifier`). Team symmetry with the focus/enemy paths.
                 healModifier: plan.stats.healModifier,
-                selfDotModifier: 0,
-                defensePenetrationBuff: 0,
                 affinityDamageModifier: aff.damageModifier,
                 affinityCritCap: aff.critCap,
                 affinityCritPenalty: aff.critPenalty,
@@ -1244,8 +1242,6 @@ export function simulateBattle(
         numRounds,
         selfBuffs: [],
         enemyDebuffs: [],
-        selfDotModifier: 0,
-        defensePenetrationBuff: 0,
         hasChargedSkill: hasCharged(focus),
         startCharged: focus.startCharged,
         affinityDamageModifier: focusAff.damageModifier,

@@ -5,8 +5,8 @@
  * before the `effectiveDamageStatsOf` call that builds `dmgStats`).
  *
  * Name-keyed rather than folded into a `parsedEffects` channel: a one-shot per-cast bonus has no
- * honest standing value, so routing it through `defensePenetrationBuff` permanently would leak
- * +20% pen into every later hit AND into the DPS-mode aggregate scalars and the buff-display UI —
+ * honest standing value, so routing it through a standing penetration stat would leak
+ * +20% pen into every later hit AND into the buff-display UI —
  * exactly what name-keying exists to prevent. See chargedOverdrive.ts's own doc comment for the
  * full argument, and for why it must never be confused with the STANDING `Charge Overdrive II`
  * (one letter apart, identical magnitude, different lifetime).
@@ -134,8 +134,6 @@ const granterAlly = (): TeamActor => ({
             defence: 0,
             hp: HP,
         },
-        selfDotModifier: 0,
-        defensePenetrationBuff: 0,
         affinityDamageModifier: 0,
         affinityCritCap: 100,
         affinityCritPenalty: 0,
@@ -174,8 +172,6 @@ const BASE = (
         numRounds: 1,
         selfBuffs: [],
         enemyDebuffs: [],
-        selfDotModifier: 0,
-        defensePenetrationBuff: 0,
         hasChargedSkill: true,
         startCharged: false,
         affinityDamageModifier: 0,

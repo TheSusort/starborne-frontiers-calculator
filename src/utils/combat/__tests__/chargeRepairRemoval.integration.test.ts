@@ -132,8 +132,6 @@ const buildZosimosInput = (
     numRounds,
     selfBuffs: [],
     enemyDebuffs: [],
-    selfDotModifier: 0,
-    defensePenetrationBuff: 0,
     // false → the focus's own cast-path charge cadence is a no-op; Zosimos's charges move ONLY
     // via the reactive self-gain (chargeCount 10 still enables the gain branch).
     hasChargedSkill: false,

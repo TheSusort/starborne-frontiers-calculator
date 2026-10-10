@@ -84,8 +84,6 @@ function makeCtx(opts?: {
                     defence: 0,
                     hp: 10000,
                     healModifier: 0,
-                    selfDotModifier: 0,
-                    defensePenetrationBuff: 0,
                     affinityDamageModifier: 0,
                     affinityCritCap: 100,
                     affinityCritPenalty: 0,

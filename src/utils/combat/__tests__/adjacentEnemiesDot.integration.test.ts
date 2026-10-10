@@ -309,8 +309,6 @@ describe('single-entry roster edge case (positional, no neighbours to fan out to
         numRounds: 3,
         selfBuffs: [],
         enemyDebuffs: [],
-        selfDotModifier: 0,
-        defensePenetrationBuff: 0,
         hasChargedSkill: false,
         startCharged: false,
         affinityDamageModifier: 0,

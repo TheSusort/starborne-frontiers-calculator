@@ -69,8 +69,6 @@ const base = (over: Partial<CombatEngineInput>): CombatEngineInput => ({
     numRounds: 1,
     selfBuffs: [],
     enemyDebuffs: [],
-    selfDotModifier: 0,
-    defensePenetrationBuff: 0,
     hasChargedSkill: false,
     startCharged: false,
     affinityDamageModifier: 0,
@@ -121,8 +119,6 @@ const PLAYER: Side = {
                     walk: {
                         shipSkills: reactor,
                         stats: { ...reactorStats, defensePenetration: 0 },
-                        selfDotModifier: 0,
-                        defensePenetrationBuff: 0,
                         affinityDamageModifier: 0,
                         affinityCritCap: 100,
                         affinityCritPenalty: 0,

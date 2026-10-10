@@ -341,7 +341,7 @@ export interface EffectiveDamageStats {
 /**
  * Damage-mode effective stats: folds the four layers the damage path uses, given resolved
  * ingredients (the turn loop owns gating/application and side effects — see the A1b plan).
- *   layer 1 = scheduledTotals (resolveSelfBuffTotals output)
+ *   layer 1 = scheduledTotals (the six tracked totals folded from `scheduledSelfBuffs`)
  *   layers 2+3 = abilitySelfEffects (timed + gated active ability statuses, as SelectedGameBuff[])
  *   layer 4 = modifierAbilities gated by modifierCtx
  * Reproduces the inline fold in playerTurn.ts (runPlayerTurn) exactly.
@@ -358,17 +358,30 @@ export function effectiveDamageStatsOf(args: {
          *  defender-side convention for the hacking-vs-security comparison, not a damage basis. */
         security: number;
         defensePenetration: number;
-        defensePenetrationBuff: number;
+        /** Per-cast penetration bonus (Charged Overdrive II). Never a standing stat: the caller
+         *  passes it for the one cast it applies to. */
+        castPenBonus: number;
     };
     scheduledTotals: ReturnType<typeof calculateBuffTotals>;
+    /** The expanded scheduled self-buff list `scheduledTotals` was folded from. Defence
+     *  penetration, DoT-damage and detonation-damage modifiers are read from it live, together
+     *  with `abilitySelfEffects`, so they follow the schedule exactly as the totals do. */
+    scheduledSelfBuffs: SelectedGameBuff[];
     abilitySelfEffects: SelectedGameBuff[];
     modifierAbilities: Ability[];
     modifierCtx: ConditionContext;
 }): EffectiveDamageStats {
-    const { base, scheduledTotals, abilitySelfEffects, modifierAbilities, modifierCtx } = args;
+    const {
+        base,
+        scheduledTotals,
+        scheduledSelfBuffs,
+        abilitySelfEffects,
+        modifierAbilities,
+        modifierCtx,
+    } = args;
     const ability = calculateBuffTotals(toSimBuffs(abilitySelfEffects));
     const mod = modifierTotalsFromAbilities(modifierAbilities, modifierCtx);
-    const dotPen = toDotAndPenModifiers(abilitySelfEffects, []);
+    const dotPen = toDotAndPenModifiers([...scheduledSelfBuffs, ...abilitySelfEffects], []);
 
     const totals: ReturnType<typeof calculateBuffTotals> = {
         attackBuff: scheduledTotals.attackBuff + ability.attackBuff + mod.attack,
@@ -399,7 +412,7 @@ export function effectiveDamageStatsOf(args: {
         security,
         effectivePen:
             base.defensePenetration +
-            base.defensePenetrationBuff +
+            base.castPenBonus +
             mod.defensePenetration +
             dotPen.defensePenetrationBuff,
         selfDotDamageModifier: dotPen.dotDamageModifier + mod.dotDamage,

@@ -128,8 +128,6 @@ function makeRuntime(
         defence: 0,
         hp: 20000,
         healModifier: 0,
-        selfDotModifier: 0,
-        defensePenetrationBuff: 0,
         affinityDamageModifier: preset.damageModifier,
         affinityCritCap: preset.critCap,
         affinityCritPenalty: preset.critPenalty,

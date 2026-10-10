@@ -86,8 +86,6 @@ const healBase = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput
     numRounds: 2,
     selfBuffs: [],
     enemyDebuffs: [],
-    selfDotModifier: 0,
-    defensePenetrationBuff: 0,
     hasChargedSkill: false,
     startCharged: false,
     affinityDamageModifier: 0,

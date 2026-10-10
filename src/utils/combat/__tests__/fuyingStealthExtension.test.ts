@@ -386,8 +386,6 @@ function makeFuyingRuntime(ability: Ability, position: Position): PlayerActorRun
         defence: 0,
         hp: 1_000_000_000,
         healModifier: 0,
-        selfDotModifier: 0,
-        defensePenetrationBuff: 0,
         affinityDamageModifier: 0,
         affinityCritCap: 100,
         affinityCritPenalty: 0,

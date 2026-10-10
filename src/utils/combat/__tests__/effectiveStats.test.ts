@@ -354,7 +354,7 @@ describe('effectiveDamageStatsOf — four-layer fold characterization', () => {
         hp: 10000,
         security: 0,
         defensePenetration: 10,
-        defensePenetrationBuff: 5,
+        castPenBonus: 5,
     };
 
     it('reproduces four-layer fold for attack/defence/crit/critDamage/hp/pen/dot with concrete fixtures', () => {
@@ -444,6 +444,7 @@ describe('effectiveDamageStatsOf — four-layer fold characterization', () => {
         const dmg = effectiveDamageStatsOf({
             base,
             scheduledTotals,
+            scheduledSelfBuffs: scheduledBuffs,
             abilitySelfEffects,
             modifierAbilities,
             modifierCtx,
@@ -452,7 +453,7 @@ describe('effectiveDamageStatsOf — four-layer fold characterization', () => {
         // --- Compute expectations inline exactly as playerTurn.ts does ---
         const abilityTotals = calculateBuffTotals(toSimBuffs(abilitySelfEffects));
         const mod = modifierTotalsFromAbilities(modifierAbilities, modifierCtx);
-        const dotPen = toDotAndPenModifiers(abilitySelfEffects, []);
+        const dotPen = toDotAndPenModifiers([...scheduledBuffs, ...abilitySelfEffects], []);
 
         const attackBuff = scheduledTotals.attackBuff + abilityTotals.attackBuff + mod.attack;
         const defenceBuff = scheduledTotals.defenceBuff + abilityTotals.defenceBuff + mod.defence;
@@ -468,15 +469,15 @@ describe('effectiveDamageStatsOf — four-layer fold characterization', () => {
         expect(dmg.critDamage).toBe(base.critDamage + critDamageBuff);
         expect(dmg.hp).toBe(base.hp * (1 + hpBuff / 100));
 
-        // effectivePen = base defPen + base defPenBuff + modifier defPen + dotPen defPenBuff
+        // effectivePen = base defPen + cast pen bonus + modifier defPen + dotPen defPenBuff
         const expectedPen =
             base.defensePenetration +
-            base.defensePenetrationBuff +
+            base.castPenBonus +
             mod.defensePenetration +
             dotPen.defensePenetrationBuff;
         expect(dmg.effectivePen).toBe(expectedPen);
 
-        // selfDotDamageModifier comes from toDotAndPenModifiers(abilitySelfEffects, [])
+        // selfDotDamageModifier comes from toDotAndPenModifiers(scheduled + ability self effects, [])
         expect(dmg.selfDotDamageModifier).toBe(dotPen.dotDamageModifier);
 
         // totals.outgoingDamageBuff = scheduled + ability + mod.outgoingDamage
@@ -528,6 +529,7 @@ describe('effectiveDamageStatsOf — four-layer fold characterization', () => {
         const dmg = effectiveDamageStatsOf({
             base,
             scheduledTotals,
+            scheduledSelfBuffs: [],
             abilitySelfEffects: [],
             modifierAbilities: [],
             modifierCtx,
@@ -537,7 +539,7 @@ describe('effectiveDamageStatsOf — four-layer fold characterization', () => {
         expect(dmg.attack).toBe(base.attack * (1 + scheduledTotals.attackBuff / 100));
         // mod.defensePenetration and dotPen.defensePenetrationBuff are both zero when those layers
         // are empty — this proves the pen formula reduces to base-only (not the full 4-source form).
-        expect(dmg.effectivePen).toBe(base.defensePenetration + base.defensePenetrationBuff);
+        expect(dmg.effectivePen).toBe(base.defensePenetration + base.castPenBonus);
         expect(dmg.selfDotDamageModifier).toBe(0);
         expect(dmg.totals.outgoingDamageBuff).toBe(scheduledTotals.outgoingDamageBuff);
     });
@@ -552,7 +554,7 @@ describe('effectiveDamageStatsOf — dotDamage modifier folds into selfDotDamage
         hp: 10000,
         security: 0,
         defensePenetration: 10,
-        defensePenetrationBuff: 5,
+        castPenBonus: 5,
     };
 
     it('a dotDamage modifier ability raises selfDotDamageModifier (feeds dotMult)', () => {
@@ -590,6 +592,7 @@ describe('effectiveDamageStatsOf — dotDamage modifier folds into selfDotDamage
         const dmg = effectiveDamageStatsOf({
             base,
             scheduledTotals,
+            scheduledSelfBuffs: [],
             abilitySelfEffects: [],
             modifierAbilities,
             modifierCtx,
@@ -831,12 +834,13 @@ describe('attackFlat additive fold — adds AFTER the percentage term', () => {
             hp: 1,
             security: 0,
             defensePenetration: 0,
-            defensePenetrationBuff: 0,
+            castPenBonus: 0,
         };
 
         const dmg = effectiveDamageStatsOf({
             base,
             scheduledTotals,
+            scheduledSelfBuffs: [],
             abilitySelfEffects,
             modifierAbilities: [],
             modifierCtx,

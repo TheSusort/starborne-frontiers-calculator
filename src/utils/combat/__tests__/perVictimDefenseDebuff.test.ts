@@ -227,8 +227,6 @@ describe('B1 Task 4 — per-victim defense + incoming-damage debuff in positiona
             selfBuffs: [],
             // No scheduled enemy debuffs — all debuffs are ability-sourced (per-victim).
             enemyDebuffs: [],
-            selfDotModifier: 0,
-            defensePenetrationBuff: 0,
             hasChargedSkill: false,
             startCharged: false,
             affinityDamageModifier: 0,

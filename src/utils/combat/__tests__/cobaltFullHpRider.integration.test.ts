@@ -67,8 +67,6 @@ const board = (side: 'player' | 'enemy', preHit: number): CombatEngineInput => {
         numRounds: 1,
         selfBuffs: [],
         enemyDebuffs: [],
-        selfDotModifier: 0,
-        defensePenetrationBuff: 0,
         affinityDamageModifier: 0,
         affinityCritCap: 100,
         affinityCritPenalty: 0,

@@ -164,8 +164,6 @@ const teamAlly = (id: string, position: Position, hp: number): TeamActorEngineIn
     walk: {
         shipSkills: { slots: [basicSlot()] },
         stats: teamStats(hp),
-        selfDotModifier: 0,
-        defensePenetrationBuff: 0,
         affinityDamageModifier: 0,
         affinityCritCap: 100,
         affinityCritPenalty: 0,
@@ -189,8 +187,6 @@ const BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => 
     numRounds: 1,
     selfBuffs: [],
     enemyDebuffs: [],
-    selfDotModifier: 0,
-    defensePenetrationBuff: 0,
     hasChargedSkill: false,
     startCharged: false,
     affinityDamageModifier: 0,
