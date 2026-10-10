@@ -9,6 +9,7 @@ import { registerReactiveListeners, Intent, ReactiveAbility } from '../triggers'
 import { buildShipAbilities } from '../../abilities/buildShipAbilities';
 import { Ship } from '../../../types/ship';
 import { bareEnemy } from '../__testutils__/bareRosterFixture';
+import { emptyPreFightModifiers } from '../preFight/types';
 
 let idCounter = 0;
 const ab = (partial: Partial<Ability> & Pick<Ability, 'type' | 'config'>): Ability => ({
@@ -2844,19 +2845,22 @@ describe('healing mode — Cheat Death intercept (Phase 4b)', () => {
         // Not destroyed (saved by Cheat Death).
         expect(destroyed.filter((e) => e.actorId === 'attacker')).toHaveLength(0);
         expect(result.healing!.destroyedRound).toBeUndefined();
-        // The repair drained SAME round: the tank was at 1 HP, the 60%-max repair — scaled by
-        // Everliving Regeneration II's +20% Incoming Repair (60% × 2000 × 1.20 = 1440) —
-        // consumed against the 1999 deficit → effectiveHeal ~1440 credited to the tank.
-        expect(focusHeal(result, 'effectiveHeal')).toBeCloseTo(1440, 6);
+        // The repair drained SAME round: the tank was at 1 HP, and the 60%-max repair
+        // (60% × 2000 = 1200) was consumed against the 1999 deficit → effectiveHeal 1200 credited
+        // to the tank. NOT raised by Everliving Regeneration II's +20% Incoming Repair: Cheat Death
+        // wipes every removable status on activation, and the repair fires after the wipe, when
+        // the channel is read (`liveHealChannelPct`). Owner ruling 2026-10-10: no +20% after Cheat Death.
+        expect(focusHeal(result, 'effectiveHeal')).toBeCloseTo(1200, 6);
         // A Barrier buff was granted to the tank (effect unmodeled — name only).
         expect(buffs.some((e) => e.actorId === 'attacker' && e.buffName === 'Barrier')).toBe(true);
     });
 
     // ── Reactive repair scales with the recipient's Incoming Repair (parity fix) ──
-    // Yazid's kit grants Everliving Regeneration II (+20% Incoming Repair) AT START OF
-    // COMBAT and Cheat Death. When Cheat Death fires, the 60%-of-max reactive repair must
-    // scale with that +20% — exactly like a CAST repair does — so the effective heal is
-    // 60% × 2000 × 1.20 = 1440, NOT the un-amplified 1200. (No crit on reactive heals.)
+    // When Cheat Death fires, Yazid's 60%-of-max reactive repair scales with his Incoming Repair
+    // exactly like a CAST repair does. The +20% comes from a pre-fight baseline, which Cheat
+    // Death's removable-status wipe cannot touch (his kit's own Everliving Regeneration II is
+    // wiped before the repair — see the test above), so the effective heal is
+    // 60% × 2000 × 1.20 = 1440, NOT the un-amplified 1200.
     it('Yazid: cheat-death reactive repair scales with the recipient Incoming Repair (+20%)', () => {
         idCounter = 0;
         const bus = createEventBus();
@@ -2879,6 +2883,7 @@ describe('healing mode — Cheat Death intercept (Phase 4b)', () => {
                 mode: 'healing',
                 bus,
                 selfBuffs: [],
+                preFight: { ...emptyPreFightModifiers(), incomingHeal: 20 },
                 // An inert SURVIVING ally. The heal target dies for real in R2 (Cheat
                 // Death already spent in R1), and alone it IS the whole player side — that wipe
                 // would end the match at R2 and rob this case of the R3 row its no-re-seed claim
@@ -2914,8 +2919,8 @@ describe('healing mode — Cheat Death intercept (Phase 4b)', () => {
             })
         );
         expect(cheated).toHaveLength(1);
-        // 60% × 2000 × 1.20 (Everliving Regeneration II incoming repair) = 1440. The 1999 HP
-        // deficit (1 HP after the lethal hit) fully absorbs the 1440, so effectiveHeal = 1440.
+        // 60% × 2000 × 1.20 (the pre-fight +20% incoming repair) = 1440. The 1999 HP deficit
+        // (1 HP after the lethal hit) fully absorbs the 1440, so effectiveHeal = 1440.
         expect(focusHeal(result, 'directHeal')).toBeCloseTo(1440, 6);
         expect(focusHeal(result, 'effectiveHeal')).toBeCloseTo(1440, 6);
     });

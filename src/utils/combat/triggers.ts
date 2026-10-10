@@ -23,8 +23,9 @@ import { enemySelectorKind, type EnemySelectorKind } from '../abilities/abilityT
 import { buildRoundContext, dotReadings } from '../abilities/roundContext';
 import { drawKeyed, makeRateGate } from '../calculators/rateAccumulator';
 import { computeAffinityModifiers, getAffinityMatchup } from '../calculators/affinityUtils';
-import { toSelfDefenseModifier } from '../calculators/dpsBuffHelpers';
+import { toSelfDefenseModifier, toSimBuffs } from '../calculators/dpsBuffHelpers';
 import {
+    calculateBuffTotals,
     expandEnemyDebuffs,
     incomingHealFactor,
     payloadToSelectedBuff,
@@ -700,6 +701,13 @@ const UNTIL_PURGED_GRANTS: ReadonlySet<string> = new Set([
     'Defensive Affinity Override',
 ]);
 
+/** The 0..1 crit chance of a repair that is not a cast (reactive repairs and both engine leech
+ *  procs), from the healer's LIVE crit stats: an always-crit healer crits at 1 whatever lowers its
+ *  crit; otherwise its live crit rate, clamped to 0..1. */
+export function healCritRateOf(stats: { crit: number; alwaysCrits: boolean }): number {
+    return stats.alwaysCrits ? 1 : Math.min(1, Math.max(0, stats.crit / 100));
+}
+
 /**
  * Draw the crit for ONE reactive repair and return its multiplier (1 when it does not crit).
  *
@@ -716,7 +724,7 @@ export function rollReactiveHealCrit(
 ): { didCrit: boolean; multiplier: number } {
     const stats = ctx.healCritStatsFor?.(ownerId);
     if (!stats || !ctx.procChanceGates) return { didCrit: false, multiplier: 1 };
-    const rate = stats.alwaysCrits ? 1 : Math.min(1, Math.max(0, stats.crit / 100));
+    const rate = healCritRateOf(stats);
     const key = `${ownerId}:reactive-heal-crit`;
     let gate = ctx.procChanceGates.get(key);
     if (!gate) {
@@ -2804,11 +2812,10 @@ export interface IntentExecContext {
     /** Per-actor last-turn ctx (effectiveAttack/affinityMult for bombs). Undefined for an
      *  owner that has not acted this run (faster enemy, round 1) → bomb follow-ups skip. */
     lastTurnCtxByActor: Map<string, PlayerRoundCtx>;
-    /** #396: an actor's OWN named self-sourced statuses (`victimSelfBuffs`), for the cross-store
-     *  family comparison `liveHealChannelPct` performs on the two heal channels. Engine-populated;
-     *  it cannot be derived here because this ctx carries no `selfBuffLookup`, and the scheduled
-     *  (manual-picker) list is exactly where a same-family straddle actually comes from. Absent
-     *  (unit fixtures, DPS mode) → the live enemy half is taken un-shadowed. */
+    /** #396: an actor's OWN named self-sourced statuses (`victimSelfBuffs`) — the own half of the
+     *  two heal channels `liveHealChannelPct` reads live, and the side of its cross-store family
+     *  comparison. Engine-populated; it cannot be derived here because this ctx carries no
+     *  `selfBuffLookup`. Absent (unit fixtures, DPS mode) → that helper's published-ctx fallback. */
     selfNamedBuffsFor?: (actorId: string) => SelectedGameBuff[];
     /** Last reactive-damage amount each owner dealt this drain cycle. A reactive shield
      *  on the same trigger with basis 'damage-dealt' but no eventCtx.triggerDamage (on-enemy-
@@ -4139,76 +4146,54 @@ export function victimOwnEnemyFamilies(
 }
 
 /**
- * One heal channel's percentage-point total for `actorId`, read by a CROSS-ACTOR consumer — with
- * the enemy-applied half taken LIVE rather than from a published snapshot (#367).
+ * One heal channel's percentage-point total for `actorId`, as it stands NOW — for any repair that
+ * reads a ship's channel outside that ship's own turn computation (a repair landing on it, a leech
+ * or reactive repair it performs).
  *
- * WHY THIS EXISTS. `runPlayerTurn` folds `victimOwnEnemyHealModifiers` into the acting actor's own
- * totals and publishes the folded result as `turnCtx.incomingHealPct` / `outgoingHealPct`. That is
- * exactly right for the actor's own turn, but `lastTurnCtxByActor` is written ONLY at an actor's
- * own turn — so anybody reading somebody ELSE's published ctx reads that actor's LAST TURN's
- * totals. When the applier is SLOWER than the victim, the debuff lands after the victim's turn and
- * a repair later in the same round would read a ctx that predates the debuff. With
- * `Inc. Repair Down II` applied for ONE turn (Larkspur, Ripper, Sha Xing) and `III` for one turn
- * (Sansi), such a debuff could expire having reduced nothing at all.
+ * THREE TERMS, all read at call time:
+ *   - the actor's pre-fight baseline (`preFightPct`: squad leaders);
+ *   - its OWN statuses on the channel (`ownNamedBuffs`: scheduled self-buffs, timed and aura
+ *     `'self'` statuses — `victimSelfBuffs`), summed the way `runPlayerTurn` sums them;
+ *   - the ENEMY-APPLIED families on the channel (#367), as the post-shadowing DELTA against those
+ *     own statuses (#396: highest tier wins per named family whichever side applied it).
  *
- * THE ARITHMETIC, and why it cannot double-count. `playerTurn` publishes the enemy-applied portion
- * separately (`enemyAppliedIncomingHealPct` / `enemyAppliedOutgoingHealPct`) from the very values
- * the fold consumed, so subtracting it removes EXACTLY what the ctx contains, and the live read
- * puts back today's value. With a FAST applier the two are equal and the whole operation is a
- * no-op — which is what keeps the -50% case at -50% instead of -100%.
+ * WHY NOT THE PUBLISHED TURN CTX. `lastTurnCtxByActor` is written only at an actor's own turn, and
+ * a timed status ticks at its holder's Post-Turn, AFTER that publish. So a ctx can carry a self-buff
+ * that has since expired (Meatshield's `Inc. Repair Up III` running out on a turn he does not
+ * re-grant it), or miss an enemy debuff a slower applier landed after it. Reading the stores
+ * directly is right at every moment. `ownHealChannelFreshness.test.ts` pins the Meatshield case;
+ * `enemyAppliedIncomingRepair.test.ts` the enemy half.
  *
- * The two arms are ASYMMETRIC in what they subtract, and that is the whole fence:
- *   - ctx present → ctx total − the ctx's own enemy-applied portion + the live one. The field is
- *     OPTIONAL, and absent means the ctx folded no enemy term, so `?? 0` subtracts nothing — which
- *     is correct, not a fallback.
- *   - ctx absent (pre-first-turn) → there is no stale total to correct; the baseline is the actor's
- *     `preFight` value and the live term is simply added. Not a formality: nearly every corpus
- *     `Inc. Repair Down` applier inflicts it from a DAMAGE clause, which can land in round 1
- *     before the victim has taken a turn.
+ * NOT for an actor reading its OWN current turn's totals — those are computed in `runPlayerTurn`
+ * from the cast's own condition context.
  *
- * NOT for an actor reading its OWN current turn's totals — those are computed fresh from
- * `dmgStats.totals` and already correct; running them through here would subtract a term the
- * caller never added.
- *
- * ⚠️ THE LIVE HALF IS SHADOWED TOO (#396). Both the ctx's `stale` term and the `live` term are
- * post-shadowing DELTAS, not raw enemy sums: `runPlayerTurn` publishes the delta its fold actually
- * added, and this function recomputes today's delta the same way. They cancel for a fast applier.
- * Doing the subtraction against a raw sum and the addition against a delta (or vice versa) would
- * leave the difference behind — which is why the two halves are deliberately the same quantity.
- *
- * The comparison needs the actor's OWN named statuses, which this function cannot derive on its
- * own — it has no `selfBuffLookup`. Callers that have one pass `ownNamedBuffs`
- * (`victimSelfBuffs(...)`); callers that do not omit it, and the live half degrades to the raw
- * enemy sum (every applied family wins uncontested), so an un-threaded caller loses the shadowing
- * rather than getting it wrong.
- *
- * ⚠️ THE CHANNEL IS NOW ASYMMETRICALLY FRESH, and only the enemy half is live. The ctx's own
- * SELF-side contribution (`Inc. Repair Up`, a pre-fight baseline, any timed self-buff) is still
- * whatever was published at the holder's last turn — so a self-buff that expired since then is
- * still counted here for the rest of the round. That staleness is PRE-EXISTING and out of scope
- * for #367; do not read "live" above as a claim about the whole channel.
+ * WITHOUT `ownNamedBuffs` (a caller that has no `selfBuffLookup`) the own half falls back to the
+ * published `ctx`: its total minus the enemy-applied portion it published, plus today's enemy
+ * delta; before the actor's first turn, the pre-fight baseline plus the enemy delta. That caller
+ * also loses the shadowing comparison — every applied family wins uncontested.
  */
 export function liveHealChannelPct(
     statusEngine: StatusEngine,
     actorId: string,
     channel: keyof EnemyAppliedHealModifiers,
-    /** The actor's PUBLISHED last-turn ctx, or undefined before its first turn. */
+    /** The actor's PUBLISHED last-turn ctx, or undefined before its first turn. Read only when
+     *  `ownNamedBuffs` is absent. */
     ctx: PlayerRoundCtx | undefined,
-    /** The pre-first-turn baseline for this channel (the actor's `preFight` value, or 0). */
+    /** The pre-fight baseline for this channel (the actor's `preFight` value, or 0). */
     preFightPct: number,
-    /** #396: the actor's OWN named self-sourced statuses, for the cross-store family comparison.
-     *  See the `⚠️ THE LIVE HALF IS SHADOWED TOO` note above for what omitting it costs. */
+    /** The actor's OWN named self-sourced statuses (`victimSelfBuffs(...)`). */
     ownNamedBuffs?: SelectedGameBuff[]
 ): number {
     const shadowChannel: ShadowChannel =
         channel === 'incomingHealPct' ? 'incomingHeal' : 'outgoingHeal';
     const applied = victimOwnEnemyFamilies(statusEngine, actorId, [shadowChannel]);
-    // The live half is the SHADOWED delta, matching what `runPlayerTurn`'s fold contributes and
-    // what the ctx therefore carries. With no `ownNamedBuffs` the self side is empty, every applied
-    // family wins uncontested, and the delta collapses to the raw enemy sum — an un-threaded
-    // caller loses the shadowing rather than getting a wrong number.
     const live =
         shadowedDelta(applied, ownNamedBuffs ?? [], [shadowChannel]).delta[shadowChannel] ?? 0;
+    if (ownNamedBuffs !== undefined) {
+        const own = calculateBuffTotals(toSimBuffs(ownNamedBuffs));
+        const ownPct = channel === 'incomingHealPct' ? own.incomingHealBuff : own.outgoingHealBuff;
+        return preFightPct + ownPct + live;
+    }
     if (ctx === undefined) return preFightPct + live;
     const stale =
         channel === 'incomingHealPct'
@@ -6554,32 +6539,20 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
             eventCountMultiplier !== undefined
                 ? intent.ability.scaling!.perUnit * eventCountMultiplier
                 : cfg.pct;
-        // The heal fold uses the OWNER's last-turn ctx stats; before the owner's first
-        // turn, fall back to runtime base stats. It MIRRORS the cast
-        // path: owner healModifier × owner outgoingHeal × recipient incomingHeal — so a
-        // reactive repair (e.g. Yazid's Cheat-Death 60%) scales with the recipient's Incoming
-        // Repair (Everliving Regeneration) just like a cast repair, and crits on the owner's crit
-        // rate and crit power (`rollReactiveHealCrit`). Shield stays
-        // basis×pct (shields aren't repairs — no heal-modifier channels). The owner's standing
-        // heal buffs are not re-derived at drain time (the last-turn ctx values are used).
+        // The heal fold MIRRORS the cast path: owner healModifier × owner outgoingHeal ×
+        // recipient incomingHeal — so a reactive repair (e.g. Yazid's Cheat-Death 60%) scales with
+        // the recipient's Incoming Repair (Everliving Regeneration) just like a cast repair, and
+        // crits on the owner's crit rate and crit power (`rollReactiveHealCrit`). Shield stays
+        // basis×pct (shields aren't repairs — no heal-modifier channels).
         // If the cast-path fold in playerTurn.ts (heal block) changes, revisit this mirror.
-        const ownerCtx = ctx.lastTurnCtxByActor.get(intent.ownerId);
-        // Owner outgoing-repair %; and recipient incoming-repair % (self → owner's own ctx,
-        // any other recipient → its last-turn ctx via the runtime accessor). Mirrors the cast
-        // path's incomingPctFor (playerTurn.ts). F3: pre-first-turn (no ctx yet), fall back
-        // to the owner's pre-fight heal baseline — FALLBACK ONLY, never added to a ctx value
-        // (the ctx already folds preFight via playerTurn's scheduledTotals fold), so no
-        // double-count.
         //
-        // #367: BOTH channels go through `liveHealChannelPct` rather than reading the ctx
-        // directly, because a reactive repair fires at a moment the owner did not choose — a
-        // round tail, an incoming hit — so its owner's published ctx can predate a debuff a
-        // SLOWER enemy applied earlier in the same round. That helper re-reads the enemy-applied
-        // half live and subtracts the stale half the ctx already carries; it also carries the
-        // pre-first-turn arm, so a reactive repair firing before its owner's first turn still
-        // sees the debuff.
-        // The NON-self recipient branch needs nothing here: it inherits the identical treatment
-        // from the engine's `recipientIncomingHealPct`, which calls the same helper.
+        // #367: BOTH channels go through `liveHealChannelPct`, which reads them as they stand NOW
+        // (pre-fight baseline + own statuses + enemy-applied delta): a reactive repair fires at a
+        // moment the owner did not choose — a round tail, an incoming hit — when its published
+        // turn ctx can be out of date. The ctx is passed only for a drain ctx built without
+        // `selfNamedBuffsFor` (the helper's fallback). A NON-self recipient gets the identical
+        // treatment from the engine's `recipientIncomingHealPct`, which calls the same helper.
+        const ownerCtx = ctx.lastTurnCtxByActor.get(intent.ownerId);
         const ownerOutgoing = liveHealChannelPct(
             ctx.statusEngine,
             intent.ownerId,
