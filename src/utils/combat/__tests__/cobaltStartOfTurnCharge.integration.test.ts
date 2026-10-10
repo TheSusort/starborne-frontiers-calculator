@@ -161,8 +161,6 @@ const buildInput = (opts: {
         numRounds: opts.numRounds,
         selfBuffs: [],
         enemyDebuffs: [],
-        selfDotModifier: 0,
-        defensePenetrationBuff: 0,
         hasChargedSkill: true,
         startCharged: false,
         affinityDamageModifier: 0,

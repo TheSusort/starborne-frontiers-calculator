@@ -117,8 +117,6 @@ const teamDetonator = (id: string, position: Position, dets: Ability[]): TeamAct
     walk: {
         shipSkills: { slots: [detonateSlot(...dets)] },
         stats: teamStats(),
-        selfDotModifier: 0,
-        defensePenetrationBuff: 0,
         affinityDamageModifier: 0,
         affinityCritCap: 100,
         affinityCritPenalty: 0,
@@ -165,8 +163,6 @@ const BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => 
     numRounds: 1,
     selfBuffs: [],
     enemyDebuffs: [],
-    selfDotModifier: 0,
-    defensePenetrationBuff: 0,
     hasChargedSkill: false,
     startCharged: false,
     affinityDamageModifier: 0,
@@ -358,8 +354,6 @@ describe('per-victim skill-triggered detonation (positional WALKED-TEAM ally →
                         walk: {
                             shipSkills: { slots: [detonateSlot(detonate('bomb'))] },
                             stats: teamStats(),
-                            selfDotModifier: 0,
-                            defensePenetrationBuff: 0,
                             affinityDamageModifier: 0,
                             affinityCritCap: 100,
                             affinityCritPenalty: 0,

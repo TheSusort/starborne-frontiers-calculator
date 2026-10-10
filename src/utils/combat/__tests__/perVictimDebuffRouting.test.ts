@@ -118,8 +118,6 @@ describe('B1 Task 3 — per-victim ability-debuff routing (perVictimDebuffRoutin
             selfBuffs: [],
             // No scheduled debuffs — ability-sourced only.
             enemyDebuffs: [],
-            selfDotModifier: 0,
-            defensePenetrationBuff: 0,
             hasChargedSkill: false,
             startCharged: false,
             affinityDamageModifier: 0,

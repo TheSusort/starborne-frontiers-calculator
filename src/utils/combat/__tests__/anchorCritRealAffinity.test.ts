@@ -65,8 +65,6 @@ function makeRuntime(crit: number): PlayerActorRuntime {
         defence: 0,
         hp: 20000,
         healModifier: 0,
-        selfDotModifier: 0,
-        defensePenetrationBuff: 0,
         affinityDamageModifier: 0,
         // Representative matchup scalars (neutral — as if enemy[0] were same-affinity).
         affinityCritCap: 100,

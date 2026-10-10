@@ -27,8 +27,6 @@ export function synthesizeBuffOnlyWalk(actor: TeamActorEngineInput): TeamActorEn
         walk: {
             shipSkills: buildEmptyShipSkills(),
             stats: { ...NEUTRAL_WALK_STATS },
-            selfDotModifier: 0,
-            defensePenetrationBuff: 0,
             affinityDamageModifier: 0,
             affinityCritCap: 100,
             affinityCritPenalty: 0,

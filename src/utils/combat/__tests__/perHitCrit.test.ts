@@ -344,8 +344,6 @@ function makeHitCritRuntime(skills: ShipSkills, critAlwaysFires: boolean): Playe
         defence: 0,
         hp: 20000,
         healModifier: 0,
-        selfDotModifier: 0,
-        defensePenetrationBuff: 0,
         affinityDamageModifier: 0,
         affinityCritCap: 100,
         affinityCritPenalty: 0,

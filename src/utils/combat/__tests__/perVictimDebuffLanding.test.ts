@@ -89,8 +89,6 @@ const runPositionalRound = (shipSkills: ShipSkills, enemyAttackers: EnemyAttacke
         numRounds: 1,
         selfBuffs: [],
         enemyDebuffs: [],
-        selfDotModifier: 0,
-        defensePenetrationBuff: 0,
         hasChargedSkill: false,
         startCharged: false,
         affinityDamageModifier: 0,

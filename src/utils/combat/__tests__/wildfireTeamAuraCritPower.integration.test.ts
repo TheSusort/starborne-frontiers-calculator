@@ -136,8 +136,6 @@ const teamActor = (
     walk: {
         shipSkills: skills,
         stats: teamStats(attack, critDamage),
-        selfDotModifier: 0,
-        defensePenetrationBuff: 0,
         affinityDamageModifier: 0,
         affinityCritCap: 100,
         affinityCritPenalty: 0,
@@ -190,8 +188,6 @@ const baseEngineInput = (overrides: Partial<CombatEngineInput> = {}): CombatEngi
     numRounds: 2,
     selfBuffs: [],
     enemyDebuffs: [],
-    selfDotModifier: 0,
-    defensePenetrationBuff: 0,
     hasChargedSkill: false,
     startCharged: false,
     affinityDamageModifier: 0,

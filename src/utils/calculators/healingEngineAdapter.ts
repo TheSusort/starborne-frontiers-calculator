@@ -10,7 +10,6 @@ import { runCombat, EnemyRoundEffects } from '../combat/engine';
 import { selectFiringSkill } from '../abilities/applyAbilities';
 import type { ParsedTarget, ParsedPattern, ShipTargeting } from '../targetingParser';
 import { computeAffinityModifiers } from './affinityUtils';
-import { toDotAndPenModifiers } from './dpsBuffHelpers';
 import { deriveTeamEngineActors } from './dpsSimulator';
 import { DEFAULT_FRONT_ENEMY_TARGET } from './dpsEnemyPlacement';
 import {
@@ -505,12 +504,6 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
     const LEGACY_SINK_HP = 1_000_000;
     const LEGACY_SINK_SECURITY = 100;
 
-    // Self-side static folds (defPen / dot from self-buffs) — same discipline as simulateDPS.
-    const { defensePenetrationBuff, dotDamageModifier: selfDotModifier } = toDotAndPenModifiers(
-        selfBuffs,
-        []
-    );
-
     // hasChargedSkill widening: chargeCount >= 1 AND the charged slot carries ANY ability.
     const chargedSkill = selectFiringSkill(shipSkills, 'charged');
     const hasChargedSkill = chargeCount >= 1 && (chargedSkill?.abilities.length ?? 0) > 0;
@@ -700,8 +693,6 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
         numRounds,
         selfBuffs,
         enemyDebuffs: [],
-        selfDotModifier,
-        defensePenetrationBuff,
         hasChargedSkill,
         startCharged: input.startCharged ?? false,
         affinityDamageModifier: 0,

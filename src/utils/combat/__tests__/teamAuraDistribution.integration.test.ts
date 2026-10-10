@@ -141,8 +141,6 @@ const teamAlly = (id: string, attack: number, skills: ShipSkills): TeamActorEngi
     walk: {
         shipSkills: skills,
         stats: teamStats(attack),
-        selfDotModifier: 0,
-        defensePenetrationBuff: 0,
         affinityDamageModifier: 0,
         affinityCritCap: 100,
         affinityCritPenalty: 0,
@@ -168,8 +166,6 @@ const baseEngineInput = (overrides: Partial<CombatEngineInput> = {}): CombatEngi
     numRounds: 1,
     selfBuffs: [],
     enemyDebuffs: [],
-    selfDotModifier: 0,
-    defensePenetrationBuff: 0,
     hasChargedSkill: false,
     startCharged: false,
     affinityDamageModifier: 0,

@@ -46,8 +46,6 @@ const stasisLandedOnEnemy = (enemyType: EnemyBaseClass): number => {
         numRounds: 1,
         selfBuffs: [],
         enemyDebuffs: [],
-        selfDotModifier: 0,
-        defensePenetrationBuff: 0,
         hasChargedSkill: true,
         startCharged: true,
         affinityDamageModifier: 0,

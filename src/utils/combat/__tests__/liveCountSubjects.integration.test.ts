@@ -142,8 +142,6 @@ const engineBase = (
     numRounds: 1,
     selfBuffs: [],
     enemyDebuffs: [],
-    selfDotModifier: 0,
-    defensePenetrationBuff: 0,
     hasChargedSkill: false,
     startCharged: false,
     affinityDamageModifier: 0,
@@ -245,8 +243,6 @@ const teamAt = (id: string, position: Position) => ({
     walk: {
         shipSkills: inertTeamSkills(),
         stats: TEAM_STATS,
-        selfDotModifier: 0,
-        defensePenetrationBuff: 0,
         affinityDamageModifier: 0,
         affinityCritCap: 100,
         affinityCritPenalty: 0,

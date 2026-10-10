@@ -661,8 +661,6 @@ export interface PlayerActorRuntime {
      *  turn deliberately publishes nothing, so this field can never hold the 0 that caused the
      *  original Flamel defect. */
     liveDebuffLandingChance?: number;
-    selfDotModifier: number;
-    defensePenetrationBuff: number;
     affinityDamageModifier: number;
     affinityCritCap: number;
     affinityCritPenalty: number;
@@ -1240,20 +1238,27 @@ export interface PlayerTurnArgs {
 
 // expandBuffs/expandEnemyDebuffs moved to buffTotals.ts (re-exported from lines 41-50 above).
 
-// Per-round self-buff totals from the status engine's active list. Expands each
-// active buff back into its SelectedGameBuff effects (stack override included) and
-// folds them into the six tracked totals. The later active-passive modifier
-// fold-in stays in the loop (it depends on modifierCtx); these totals are returned
-// mutable so the loop can add the modifier deltas at the original sequence point.
-function resolveSelfBuffTotals(args: {
+// The status engine's active scheduled self-buff list, expanded back into its SelectedGameBuff
+// effects (accumulating stack override included). Every scheduled self channel reads THIS list:
+// the six tracked totals via `resolveSelfBuffTotals`, and the defence-penetration / DoT-damage /
+// detonation-damage modifiers via `effectiveDamageStatsOf`.
+function expandScheduledSelfBuffs(args: {
     activeSelfBuffs: ActiveBuff[];
     selfBuffLookup: Map<string, SelectedGameBuff[]>;
-}): ReturnType<typeof calculateBuffTotals> {
-    const roundSelfBuffs = args.activeSelfBuffs.flatMap((ab) =>
+}): SelectedGameBuff[] {
+    return args.activeSelfBuffs.flatMap((ab) =>
         // Accumulating buff: override static stacks with per-round count; skip when 0
         expandBuffEntry(ab, args.selfBuffLookup.get(ab.buffName) ?? [])
     );
-    return calculateBuffTotals(toSimBuffs(roundSelfBuffs));
+}
+
+// Per-round self-buff totals folded from the expanded scheduled list. The later active-passive
+// modifier fold-in stays in the loop (it depends on modifierCtx); these totals are returned
+// mutable so the loop can add the modifier deltas at the original sequence point.
+function resolveSelfBuffTotals(
+    scheduledSelfBuffs: SelectedGameBuff[]
+): ReturnType<typeof calculateBuffTotals> {
+    return calculateBuffTotals(toSimBuffs(scheduledSelfBuffs));
 }
 
 // Per-round RECURRING/always enemy-debuff expansion with landing logic.
@@ -2127,8 +2132,6 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         crit,
         critDamage,
         defensePenetration,
-        defensePenetrationBuff,
-        selfDotModifier,
         affinityDamageModifier,
         affinityCritCap,
         affinityCritPenalty,
@@ -3045,10 +3048,11 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // abilitySelfEffects + modifiers, so no per-layer `+=` staging is needed here — only
     // critBuffForGates is staged, to feed the mid-fold gate estimates (cappedCrit) that read a
     // partial crit total before the final fold.
-    const scheduledTotals = resolveSelfBuffTotals({
+    const scheduledSelfBuffs = expandScheduledSelfBuffs({
         activeSelfBuffs: entry.activeSelfBuffs,
         selfBuffLookup,
     });
+    const scheduledTotals = resolveSelfBuffTotals(scheduledSelfBuffs);
     // Fold the actor's pre-fight modifier baseline (squad leaders) into the layer-1
     // totals — outgoingDamage → outgoing-damage buff, outgoingHeal/incomingHeal → the heal
     // buffs. All three flow through effectiveDamageStatsOf into the existing consumers
@@ -4626,7 +4630,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // abilitySelfEffects + layer 4 modifierAbilities gated by modifierCtx). The accessor
     // reproduces the prior inline fold byte-for-byte; the turn loop owns gating/side effects.
     // `Charged Overdrive II`'s `chargedOverdrivePen` was read/consumed above, before the
-    // self-status-apply loop; folded here into base.defensePenetrationBuff rather than into
+    // self-status-apply loop; folded here into base.castPenBonus rather than into
     // effectiveStats.ts: `dmgStats` is turn-local, rebuilt every turn, so the bonus cannot outlive
     // this cast. Pushing it into the standing stat instead would leak +20% pen into every later hit
     // AND into the DPS-mode aggregate scalars and the buff-display UI, which is exactly what
@@ -4683,12 +4687,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     //
     // Absent/empty map → empty deltas, and the self side is not even read.
     if (enemyAppliedFamilies) {
-        const ownNamed = [
-            ...entry.activeSelfBuffs.flatMap((abf) =>
-                expandBuffEntry(abf, selfBuffLookup.get(abf.buffName) ?? [])
-            ),
-            ...abilitySelfEffects,
-        ];
+        const ownNamed = [...scheduledSelfBuffs, ...abilitySelfEffects];
         const { delta } = shadowedDelta(enemyAppliedFamilies, ownNamed, TURN_SHADOW_CHANNELS);
         scheduledTotals.attackBuff += delta.attack ?? 0;
         scheduledTotals.outgoingDamageBuff += delta.outgoingDamage ?? 0;
@@ -4723,9 +4722,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             // fold (base + securityBuff, no affinity) matches liveDebuffLandingChance's effSec.
             security: actor.stats.security ?? 0,
             defensePenetration,
-            defensePenetrationBuff: defensePenetrationBuff + chargedOverdrivePen,
+            castPenBonus: chargedOverdrivePen,
         },
         scheduledTotals,
+        scheduledSelfBuffs,
         abilitySelfEffects,
         modifierAbilities: dotDamageUnconditional,
         modifierCtx,
@@ -4865,9 +4865,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
 
     // Step 1: Calculate direct damage
     const enemyDotMod = toEnemyDotModifier(roundEnemyDebuffs);
-    // Ability-status self Out. DoT folds in per-round (KNOWN-DIFF b). Enemy Inc. DoT is
+    // Self Out. DoT (scheduled and ability self-buffs) arrives via dmgStats. Enemy Inc. DoT is
     // already inside enemyDotMod (roundEnemyDebuffs includes abilityEnemyEffects).
-    const dotMult = 1 + (selfDotModifier + enemyDotMod + dmgStats.selfDotDamageModifier) / 100;
+    const dotMult = 1 + (enemyDotMod + dmgStats.selfDotDamageModifier) / 100;
     // The anchor damage mult honours the forced-affinity override (equals the runtime
     // scalar when no override).
     const affinityMult = 1 + effAffinityDamageModifier / 100;

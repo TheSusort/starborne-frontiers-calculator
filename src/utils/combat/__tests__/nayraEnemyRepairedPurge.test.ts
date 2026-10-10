@@ -143,8 +143,6 @@ describe('E5 Task 2: player-Nayra purge gated on target-repaired-this-round vs a
         numRounds: 3,
         selfBuffs: [],
         enemyDebuffs: [],
-        selfDotModifier: 0,
-        defensePenetrationBuff: 0,
         hasChargedSkill: false,
         startCharged: false,
         affinityDamageModifier: 0,

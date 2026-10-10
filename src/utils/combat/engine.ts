@@ -1074,8 +1074,6 @@ export function buildEnemyPlayerActorRuntime(
         // Fold the enemy's own heal-modifier (team symmetry with the player focus/walk
         // paths); was hard-coded 0 before F4. Undefined → 0.
         healModifier: e.stats.healModifier ?? 0,
-        selfDotModifier: 0,
-        defensePenetrationBuff: 0,
         affinityDamageModifier: resolvedDamageMod,
         affinityCritCap: resolvedCritCap,
         affinityCritPenalty: resolvedCritPenalty,
@@ -1497,8 +1495,6 @@ export type TeamActorEngineInput = TeamActorInput & {
     walk?: {
         shipSkills: ShipSkills;
         stats: CombatStatBlock;
-        selfDotModifier: number;
-        defensePenetrationBuff: number;
         affinityDamageModifier: number;
         affinityCritCap: number;
         affinityCritPenalty: number;
@@ -1582,10 +1578,6 @@ export interface CombatEngineInput {
      *  their own turns via the status engine's teamSources, NOT merged into selfBuffs/
      *  enemyDebuffs (no-double-count). */
     teamActors?: TeamActorEngineInput[];
-    // Rate/fold fields below (selfDotModifier, defensePenetrationBuff)
-    // are pre-derived by the adapter (simulateDPS) — pass the resolved values, not raw hacking.
-    selfDotModifier: number;
-    defensePenetrationBuff: number;
     hasChargedSkill: boolean;
     startCharged: boolean;
     affinityDamageModifier: number;
@@ -2363,8 +2355,6 @@ export function runCombat(rawInput: CombatEngineInput): {
         numRounds,
         selfBuffs,
         enemyDebuffs,
-        selfDotModifier,
-        defensePenetrationBuff,
         hasChargedSkill,
         startCharged,
         affinityDamageModifier,
@@ -2793,8 +2783,6 @@ export function runCombat(rawInput: CombatEngineInput): {
         defence,
         hp,
         healModifier: input.healModifier ?? 0,
-        selfDotModifier,
-        defensePenetrationBuff,
         affinityDamageModifier,
         affinityCritCap,
         affinityCritPenalty,
@@ -2895,8 +2883,6 @@ export function runCombat(rawInput: CombatEngineInput): {
             defence: w.stats.defence,
             hp: w.stats.hp,
             healModifier: w.healModifier ?? 0,
-            selfDotModifier: w.selfDotModifier,
-            defensePenetrationBuff: w.defensePenetrationBuff,
             affinityDamageModifier: w.affinityDamageModifier,
             affinityCritCap: w.affinityCritCap,
             affinityCritPenalty: w.affinityCritPenalty,

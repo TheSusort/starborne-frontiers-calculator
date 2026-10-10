@@ -95,8 +95,6 @@ const base = (over: Partial<CombatEngineInput>): CombatEngineInput => ({
     numRounds: ROUNDS,
     selfBuffs: [],
     enemyDebuffs: [],
-    selfDotModifier: 0,
-    defensePenetrationBuff: 0,
     hasChargedSkill: false,
     startCharged: false,
     affinityDamageModifier: 0,

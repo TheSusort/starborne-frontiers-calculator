@@ -143,8 +143,6 @@ describe('C2b-3 Task 3: Nayra purge gated on target-repaired-this-round', () => 
         numRounds: 3,
         selfBuffs: [],
         enemyDebuffs: [],
-        selfDotModifier: 0,
-        defensePenetrationBuff: 0,
         hasChargedSkill: false,
         startCharged: false,
         affinityDamageModifier: 0,

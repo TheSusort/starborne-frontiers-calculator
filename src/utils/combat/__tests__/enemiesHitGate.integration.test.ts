@@ -96,8 +96,6 @@ const focusBase = (enemyPositions: Position[]): CombatEngineInput => ({
     numRounds: 1,
     selfBuffs: [],
     enemyDebuffs: [],
-    selfDotModifier: 0,
-    defensePenetrationBuff: 0,
     hasChargedSkill: false,
     startCharged: false,
     affinityDamageModifier: 0,
@@ -177,8 +175,6 @@ const playerTeamActorAt = (id: string, position: Position): TeamActorEngineInput
             defence: 0,
             hp: 1_000_000_000,
         },
-        selfDotModifier: 0,
-        defensePenetrationBuff: 0,
         affinityDamageModifier: 0,
         affinityCritCap: 100,
         affinityCritPenalty: 0,
@@ -199,8 +195,6 @@ const enemyRageGranted = (playerPositions: Position[]): boolean => {
         numRounds: 1,
         selfBuffs: [],
         enemyDebuffs: [],
-        selfDotModifier: 0,
-        defensePenetrationBuff: 0,
         hasChargedSkill: false,
         startCharged: false,
         affinityDamageModifier: 0,
@@ -278,8 +272,6 @@ const tygrChargesAfterRound1 = (enemyPositions?: Position[]): number => {
         numRounds: 1,
         selfBuffs: [],
         enemyDebuffs: [],
-        selfDotModifier: 0,
-        defensePenetrationBuff: 0,
         // Charge accumulation is gated on hasChargedSkill (playerTurn.ts) — true here so the
         // +1 self-charge-gain ability can actually bank toward chargeCount without the ACTUAL
         // charged skill ever firing (5 is never reached by a single +1 gain).

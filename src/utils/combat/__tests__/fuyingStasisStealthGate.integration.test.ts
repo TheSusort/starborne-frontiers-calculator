@@ -453,8 +453,6 @@ const buffedAlly = (id: string, position: Position, buffName: string) => ({
             ],
         },
         stats: inertWalkStats(HUGE_HP),
-        selfDotModifier: 0,
-        defensePenetrationBuff: 0,
         affinityDamageModifier: 0,
         affinityCritCap: 100,
         affinityCritPenalty: 0,
@@ -484,8 +482,6 @@ const gateBoard = (allyStatus: string): CombatEngineInput => ({
     // turn (R123), so a second round would compare an attacking control with a stasised enemy.
     numRounds: 1,
     enemyDebuffs: [],
-    selfDotModifier: 0,
-    defensePenetrationBuff: 0,
     hasChargedSkill: false,
     startCharged: false,
     affinityDamageModifier: 0,

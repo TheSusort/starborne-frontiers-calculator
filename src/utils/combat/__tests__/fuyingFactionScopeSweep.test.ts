@@ -48,8 +48,6 @@ const inertAlly = (id: string, faction?: FactionName) => ({
     walk: {
         shipSkills: { slots: [] },
         stats: inertWalkStats(500_000),
-        selfDotModifier: 0,
-        defensePenetrationBuff: 0,
         affinityDamageModifier: 0,
         affinityCritCap: 100,
         affinityCritPenalty: 0,
@@ -84,8 +82,6 @@ const BASE = (shipSkills: ShipSkills): CombatEngineInput => ({
     numRounds: 1,
     selfBuffs: [],
     enemyDebuffs: [],
-    selfDotModifier: 0,
-    defensePenetrationBuff: 0,
     hasChargedSkill: false,
     startCharged: false,
     affinityDamageModifier: 0,
