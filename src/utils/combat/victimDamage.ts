@@ -138,6 +138,29 @@ export interface VictimDefenseProfile {
     forceAffinityDisadvantage?: boolean;
 }
 
+/** Magnitude of the floor on the net non-defence incoming term. See {@link capIncomingPct}. */
+export const NON_DEFENCE_REDUCTION_CAP_PCT = 70;
+
+/**
+ * THE 70% CAP ON NON-DEFENCE DAMAGE REDUCTION (#658). A direct hit's victim-side modifiers other
+ * than defence sum into ONE signed percentage — the victim's `Inc. Damage Down/Up` family,
+ * pre-fight incoming, gear/kit `incoming-reduction` (crit family on crits), attacker-applied
+ * amplification (`Out. Damage Up` on the incoming channel, `Exposed`) and the attacker's
+ * squad-leader `outgoingCritDamage` penalty — and that sum is floored here, then applied once as
+ * `(1 + total/100)`. Negative = the victim takes less.
+ *
+ * Outside the sum and never capped: defence mitigation, affinity, the attacker's
+ * `outgoingDamageBuff`, per-hit outgoing amplification and crit damage itself. DoT ticks
+ * (`incomingDotReductionPct`) are not direct hits and are not capped. `preMitigation` ("damage as
+ * thrown") is not capped either: it excludes the victim-side terms by design.
+ *
+ * Every site that composes a direct hit's incoming term calls this on the net sum; a total above
+ * the floor comes back as the same double.
+ */
+export function capIncomingPct(netIncomingPct: number): number {
+    return Math.max(netIncomingPct, -NON_DEFENCE_REDUCTION_CAP_PCT);
+}
+
 /**
  * The DEFENCE factor this victim applies to an incoming hit — the `(1 − damageReduction/100)`
  * term of `victimHitDamage` below, isolated so a consumer that needs to UNDO the mitigation can
@@ -242,7 +265,9 @@ export function victimHitDamageParts(
     // left-to-right order the engine used when it handed over one fused number
     // (`(equip + victimCritTerm) + attackerCritTerm`). `a - (b + c)` and `a - b - c` are not the
     // same double, and splitting the channel must not move a single existing damage figure.
-    const incoming = incomingChannel - (equipReductionPct + attackerSideReductionPct);
+    const incoming = capIncomingPct(
+        incomingChannel - (equipReductionPct + attackerSideReductionPct)
+    );
     // #358: the SAME channel with every victim-side reduction removed, and ONLY
     // those. Three things come off / stay on:
     //   • OFF — the victim's own `Inc. Damage Down` family and its pre-fight incoming baseline,

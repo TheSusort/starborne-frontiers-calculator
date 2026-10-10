@@ -97,7 +97,7 @@ import { resolveDebuffRecipientIds } from './debuffRecipients';
 import { clausePhase, isRemovalBeforeDamage } from './castClauseOrder';
 import { isAliveTarget } from './targetableActors';
 import { supportFootprintAllyIds } from './supportFootprint';
-import type { AttackerDamageScalars } from './victimDamage';
+import { capIncomingPct, type AttackerDamageScalars } from './victimDamage';
 import type { PreFightCombatModifiers } from './preFight/types';
 import { effectiveDamageStatsOf, liveDebuffLandingChance } from './effectiveStats';
 import {
@@ -5277,9 +5277,14 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // Redefining damageCritMultiplier (vs a separate factor) is correct: both downstream uses —
     // postDefenseFactor (firing hit) and passiveCritMultiplier (passive hit) — are the SAME enemy
     // attack against the SAME victim, so the victim's crit reduction applies to both.
-    const incBase = incomingDamageModifier - equipNonCrit; // incoming channel for all hits
+    // The non-crit and crit incoming terms are each floored on their own (`capIncomingPct`), so the
+    // crit ratio is built from the floored pair.
+    const incBase = capIncomingPct(incomingDamageModifier - equipNonCrit); // all hits
     const incDenom = 1 + incBase / 100;
-    const critIncomingRatio = incDenom !== 0 ? (1 + (incBase - R) / 100) / incDenom : 1;
+    const critIncomingRatio =
+        incDenom !== 0
+            ? (1 + capIncomingPct(incomingDamageModifier - equipNonCrit - R) / 100) / incDenom
+            : 1;
     const damageCritMultiplier =
         1 - critFraction + critFraction * (1 + effectiveCritDamage / 100) * critIncomingRatio;
     // Crit-independent damage pipeline (defense, outgoing/incoming, affinity) — shared

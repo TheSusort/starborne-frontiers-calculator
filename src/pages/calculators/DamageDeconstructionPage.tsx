@@ -11,6 +11,7 @@ import { useShips } from '../../contexts/ShipsContext';
 import { useInventory } from '../../contexts/InventoryProvider';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';
 import { calculateTotalStats } from '../../utils/ship/statsCalculator';
+import { capIncomingPct } from '../../utils/combat/victimDamage';
 interface BuffDebuff {
     value: number;
     description: string;
@@ -141,9 +142,9 @@ const DamageDeconstructionPage: React.FC = () => {
         totalAttack *= 1 + outgoingDamageBuffSum / 100;
 
         // Apply incoming damage buffs
-        const incomingDamageBuffSum = form.enemyIncomingDamageBuffs.reduce(
-            (sum, buff) => sum + buff.value,
-            0
+        // Floored like the simulator's incoming term (`capIncomingPct`).
+        const incomingDamageBuffSum = capIncomingPct(
+            form.enemyIncomingDamageBuffs.reduce((sum, buff) => sum + buff.value, 0)
         );
         const incomingDamageMultiplier = 1 + incomingDamageBuffSum / 100;
 
