@@ -2849,7 +2849,7 @@ describe('healing mode — Cheat Death intercept (Phase 4b)', () => {
         // (60% × 2000 = 1200) was consumed against the 1999 deficit → effectiveHeal 1200 credited
         // to the tank. NOT raised by Everliving Regeneration II's +20% Incoming Repair: Cheat Death
         // wipes every removable status on activation, and the repair fires after the wipe, when
-        // the channel is read (`liveHealChannelPct`).
+        // the channel is read (`liveHealChannelPct`). Owner ruling 2026-10-10: no +20% after Cheat Death.
         expect(focusHeal(result, 'effectiveHeal')).toBeCloseTo(1200, 6);
         // A Barrier buff was granted to the tank (effect unmodeled — name only).
         expect(buffs.some((e) => e.actorId === 'attacker' && e.buffName === 'Barrier')).toBe(true);
