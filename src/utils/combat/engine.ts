@@ -8730,10 +8730,12 @@ export function runCombat(rawInput: CombatEngineInput): {
                             enemyDebuffNames: enemyDebuffNamesForTarget(v),
                             enemyBuffNames: selfBuffNamesForOwners(statusEngine, [v.id]),
                             enemyBuffCount: actorBuffCount(statusEngine, v.id),
-                            enemyHpPct:
-                                v.stats.hp > 0
-                                    ? Math.max(0, Math.min(100, (100 * v.currentHp) / v.stats.hp))
-                                    : 100,
+                            enemyHpPct: (() => {
+                                const maxHp = recipientMaxHp(v.id);
+                                return maxHp > 0
+                                    ? Math.max(0, Math.min(100, (100 * v.currentHp) / maxHp))
+                                    : 100;
+                            })(),
                             enemyDebuffCount:
                                 ownerDebuffCount(statusEngine, v.id) + carriedDebuffEntries(v),
                             enemyDotCount: dots,
