@@ -9690,7 +9690,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             // Meatshield defense-substitution (approximation) — see the
             // substitutedDefenceFor doc comment above for the full rule.
             victimDefenceFor: (tgt) => substitutedDefenceFor(tgt, tgt.stats.defence),
-            victimMaxHpFor: (tgt) => tgt.stats.hp,
+            victimMaxHpFor: (tgt) => recipientMaxHp(tgt.id),
             enemyTypeArg: enemyType,
             enemyBuffNamesUnion: playerEnemyBuffNames,
             stealthedEnemyCount: playerStealthedEnemyCount,
