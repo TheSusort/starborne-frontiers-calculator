@@ -2286,15 +2286,11 @@ function attackBreaksStasis(actor: CombatActor): boolean {
 export function runCombat(rawInput: CombatEngineInput): {
     rounds: RoundData[];
     rawTotals: {
-        direct: number;
         corrosion: number;
         inferno: number;
         detonation: number;
-        cumulative: number;
         totalSecondary: number;
         totalConditional: number;
-        /** Total non-focus player (team) damage across all rounds — adapter summary. */
-        teamTotal: number;
         /**
          * Total generic (absolute-per-tick) DoT damage the FOCUS DEALT across all rounds, like the
          * other rawTotals. Fed by `convertHitToSelfDot` — Voron/Orel's `transform-incoming-to-dot`
@@ -2929,9 +2925,6 @@ export function runCombat(rawInput: CombatEngineInput): {
         effectiveStatsOf(statusEngine, selfBuffLookup, actor).speed;
 
     // All mutable state declared fresh on every call
-    let cumulativeDamage = 0;
-    let totalTeamRaw = 0;
-    let totalDirectRaw = 0;
     let totalCorrosionRaw = 0;
     let totalInfernoRaw = 0;
     // Total generic (absolute-per-tick) DoT damage; mirrors totalCorrosionRaw/totalInfernoRaw.
@@ -3740,8 +3733,8 @@ export function runCombat(rawInput: CombatEngineInput): {
     // Per-victim skill-triggered detonation (positional): per-round accumulator (detonating
     // actor id → total detonation damage it dealt across footprint victims THIS round). Mirrors
     // perActorSplash's lifecycle (declared once, rebound fresh each round, captured by the
-    // positional detonation loop). Sources the focus detonationDamage display row in positional
-    // mode (focus.detonation is 0 there — the aggregate credit is suppressed). Absent when empty.
+    // positional detonation loop). Sources the focus detonationDamage display row. Absent when
+    // empty.
     let perActorDetonation = new Map<string, number>();
     // Per-round per-applier DoT-tick display tally (sourceId → {corrosion, inferno}). Populated
     // ONLY by the positional per-victim DoT-tick path; folded into the FOCUS actor's
@@ -5992,13 +5985,12 @@ export function runCombat(rawInput: CombatEngineInput): {
         // The helper `dmg(id)` lazily creates entries on first write — actors that never
         // produce damage in a round simply have no entry, keeping the map sparse.
         //
-        // §4.5 — CREDIT vs INTAKE are COMPLEMENTARY, not redundant. This
-        // `roundDamage` path is
-        // the CREDIT side: damage *dealt*, keyed by SOURCE id, feeding row totals + damage-dealt
-        // leeches. The `perActorIncoming`/`intakeFor` path below is the INTAKE side:
-        // damage *taken*, keyed by VICTIM id, feeding healing-mode rows. They record different
-        // facts about the same hit (who dealt it vs who took it); the engine does NOT merge
-        // them.
+        // Per-actor secondary/conditional display sub-buckets (`ActorDamage`). Damage itself is
+        // credited per victim: §4.5 — CREDIT vs INTAKE are COMPLEMENTARY, not redundant.
+        // `creditDealt` → `perTargetDealt` is the CREDIT side: damage *dealt*, keyed by SOURCE id.
+        // The `perActorIncoming`/`intakeFor` path below is the INTAKE side: damage *taken*, keyed
+        // by VICTIM id, feeding healing-mode rows. They record different facts about the same hit
+        // (who dealt it vs who took it); the engine does NOT merge them.
         const roundDamage = new Map<string, ActorDamage>();
         // Per-round per-victim positional damage accumulator (victim actor id → summed damage
         // dealt to it this round). Populated by the positional apply path's emitHit callback (all
@@ -6064,15 +6056,8 @@ export function runCombat(rawInput: CombatEngineInput): {
         // roundPerTargetDamage write above is unaffected"). The victim demonstrably lost the HP
         // either way; inventing a dealer for it would be the fallback R7′ forbids.
         //
-        // ⚠️ KNOWN ASYMMETRY (#362 fix-wave-1): this deliberately does NOT write the scalar
-        // `roundDamage`/`ActorDamage` channel (below) that DPS-mode rows are built
-        // from. `ShipRoundState.damageDealt` and `damageTaken` — the BATTLE report's damage
-        // numbers — derive from `perTargetDealt`/`perTargetDamage`, which this DOES write, so the
-        // battle report's damage columns are complete. What is NOT complete is DPS mode: an
-        // applier standing in DPS-mode's focus-ship seat gets a round-total row computed off the
-        // scalar channel, so a Zosimos burn is absent from that one row. Not fixed here: wiring
-        // the scalar channel in would need the same consideration `perTargetDealt`'s mirroring
-        // got: every existing scalar-channel fixture would move.
+        // `ShipRoundState.damageDealt` / `damageTaken` and the DPS calculator's rows all derive
+        // from `perTargetDealt`/`perTargetDamage`, which this writes.
         bookReversalDamage = (victimId, applierId, amount) => {
             if (amount <= 0) return;
             roundPerTargetDamage.set(victimId, (roundPerTargetDamage.get(victimId) ?? 0) + amount);
@@ -6108,8 +6093,8 @@ export function runCombat(rawInput: CombatEngineInput): {
         // Fresh map each round; intakeFor() get-or-creates on first write.
         //
         // §4.5 — this is the INTAKE side (damage *taken*, keyed by VICTIM id); the
-        // complementary CREDIT side is `roundDamage` (damage *dealt*,
-        // keyed by SOURCE id). Complementary facts, not duplicates — see the note there.
+        // complementary CREDIT side is `perTargetDealt` (damage *dealt*,
+        // keyed by SOURCE id). Complementary facts, not duplicates — see the note at `roundDamage`.
         const perActorIncoming = new Map<string, ActorIntake>();
         const intakeFor = (id: string): ActorIntake => {
             let entry = perActorIncoming.get(id);
@@ -8270,10 +8255,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             // (roundPerTargetDamage → damageTaken) and attributed to the owner (creditDealt →
             // perTargetDealt → damageDealt). Mirrors applyCounterAttack (Reflect, Protection,
             // shield penetration and Exposed apply, ruling 36) — a
-            // Bomb splash copy excepted (`splashCopy`) — and deliberately does NOT write
-            // `roundDamage`: cumulativeDamage is the scalar
-            // aggregate channel, so folding the reactive into it would double-count exactly like
-            // the per-victim DoT/detonation split documented at the round tail. The DPS calculator
+            // Bomb splash copy excepted (`splashCopy`). The DPS calculator
             // reads the per-victim map instead (dpsSimulator.ts's focusDamageTotal), which this is
             // what feeds.
             //
@@ -9623,8 +9605,8 @@ export function runCombat(rawInput: CombatEngineInput): {
         // Shared per-victim skill-triggered detonation loop. Each victim hit by the cast
         // that is STILL ALIVE detonates its OWN containers (no role-scale). Bombs = full
         // shield drain/no pen; inferno+corrosion BYPASS shield. Credited to the detonating
-        // actor's per-round detonation tally + roundPerTargetDamage; NOT into cumulativeDamage
-        // (HP lands per-victim via applyVictimDamage). Used by the focus (player→enemy),
+        // actor's per-round detonation tally + roundPerTargetDamage (HP lands per-victim via
+        // applyVictimDamage). Used by the focus (player→enemy),
         // enemy (enemy→player), and walked-team (player→enemy) sites — the ONLY difference
         // between call sites is the sink + the recipe source + the per-side tb.
         const applyPerVictimDetonation = (
@@ -9768,9 +9750,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         // applyVictimDamage (the per-victim sink). Bombs + accumulators = full shield drain, NO
         // penetration (bomb-splash precedent). Credited to the per-round detonation tally keyed by
         // the bomb's APPLIER (sourceId, unchanged attribution) + roundPerTargetDamage on the
-        // bursting actor. NEVER routed through the `roundDamage` detonation bucket — that feeds the
-        // SCALAR channel (`cumulativeDamage`), and a per-victim amount must not also book there (the
-        // two-channel rule at the round tail). STRICT no-op when the actor carries no timed
+        // bursting actor. STRICT no-op when the actor carries no timed
         // containers OR is not positioned vs opposingRoster. Used by the enemy site
         // (sink=sink, roster=allPlayerActors) and the focus attacker + walked-team sites
         // (sink=sink, roster=enemyAttackerActors) — the single shared sink works for both
@@ -11030,8 +11010,8 @@ export function runCombat(rawInput: CombatEngineInput): {
             // Per-victim skill-triggered detonation. Each victim HIT by this cast that is STILL ALIVE
             // detonates its OWN containers (no role-scale — full stored stacks). Bombs = full shield
             // drain/no pen; inferno+corrosion BYPASS shield (DoT semantics). Credited to the
-            // detonating actor's per-round detonation tally + roundPerTargetDamage; NOT into
-            // cumulativeDamage (HP lands per-victim via applyVictimDamage). `sink` serves both
+            // detonating actor's per-round detonation tally + roundPerTargetDamage (HP lands
+            // per-victim via applyVictimDamage). `sink` serves both
             // directions. recipe present only when a detonate-dot ability fired.
             const recipe = sel.positionalDetonation;
             if (recipe && recipe.dets.length > 0) {
@@ -12164,9 +12144,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // AFFLICTED ship's own max HP. The dead-target guard above already skipped a
                 // destroyed heal target, so it is alive here. Empty containers → a no-op.
                 //
-                // The per-victim branch lands HP via applyVictimDamage (DoT → bypass shield) and
-                // NEVER writes the scalar `roundDamage` direct bucket (no cumulativeDamage
-                // double-feed).
+                // The per-victim branch lands HP via applyVictimDamage (DoT → bypass shield).
                 //
                 // OUTSIDE every `if (!isTurnBlocked)` stasis gate (this prologue precedes all
                 // kind-branches) → a STASISED victim STILL ticks, matching the heal-target
@@ -12396,13 +12374,10 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 // comment above `procStandingLeechesPerVictim`'s definition
                                 // in this file — not repeated here.
                                 //
-                                // SPECIFIC TO THIS CALL SITE: crediting the scalar channel was not
-                                // an option here, because it would also write `dmg(sourceId)[dotType]`,
-                                // double-feeding the scalar DoT channel this branch already
-                                // feeds via the `total`/`tickDealtBySource` writes above (see
-                                // the cumulativeDamage note in the C2 header) — the per-victim
-                                // proc touches HEAL buckets/pools only, so no damage number
-                                // moves. Cadence: `tickDoTs` calls `credit` once per ENTRY, so
+                                // SPECIFIC TO THIS CALL SITE: the tick's damage is already credited
+                                // by the `total`/`tickDealtBySource` writes above, and the
+                                // per-victim proc touches HEAL buckets/pools only, so no damage
+                                // number moves. Cadence: `tickDoTs` calls `credit` once per ENTRY, so
                                 // the owner's heal-crit gate draws once per entry here too.
                                 //
                                 // MECHANICS axis — deliberately `sourceId`, never `creditedTo`:
@@ -12793,8 +12768,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                             const d = dmg(actor.id);
                             // secondary/conditional are DISPLAY sub-buckets — a view of damage the
                             // firing hit already counted. They feed `rawTotals` only (one read, at
-                            // the row assembly below) and never `cumulativeDamage`, the HP decline
-                            // or the standing-leech hook. The damage itself lands per victim in the
+                            // the row assembly below) and never the HP decline or the
+                            // standing-leech hook. The damage itself lands per victim in the
                             // positional apply above, or not at all: a turn that does not apply
                             // positionally struck nobody (no victim, or no hit), so there is no
                             // lump to credit here (#657). `unappliedTurnDamage.test.ts` is the
@@ -13073,8 +13048,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // the bucket. It is KEPT because team symmetry is a locked rule here —
                             // every walked team actor runs the same code path as the focus — and
                             // because the values are already computed, so keeping them costs one
-                            // add. Like the focus pair, these are DISPLAY sub-buckets of `direct`
-                            // and never feed `cumulativeDamage`.
+                            // add. Like the focus pair, these are DISPLAY sub-buckets of the cast's
+                            // own damage figure.
                             td.secondary += teamTurn.secondaryDamage;
                             td.conditional += teamTurn.conditionalDamage;
 
@@ -13156,10 +13131,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                         // containers count down + burst at the START of THIS enemy's turn —
                         // against ITS OWN HP — via `applyVictimDamage` (the same per-victim
                         // sink skill-detonation and bomb-splash-on-death #161 use). The
-                        // burst is NEVER routed through the scalar `roundDamage` detonation bucket:
-                        // that feeds the SCALAR channel (`cumulativeDamage`), which would
-                        // double-COUNT a per-victim amount (the two-channel rule at the round
-                        // tail).
+                        // burst is credited per victim only.
                         //
                         // GATE: only a POSITIONED enemy (enemy-site positional sense — the same
                         // `resolvesPositionalVictim(actor.position, allPlayerActors)` predicate the
@@ -13700,8 +13672,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             // row was assembled discarded the round's per-round maps (`roundDamage`,
             // `roundPerTargetDealt`, `roundPerTargetDamage`), so a TEAM actor that acted earlier in
             // this same round — faster than the enemy, which was faster than the dying attacker —
-            // had its damage silently dropped from `cumulativeDamage`, `rawTotals` and
-            // `perTargetDealt`, even though it had already reduced the enemy's real HP. The
+            // had its damage silently dropped from `rawTotals` and `perTargetDealt`, even though it had already reduced the enemy's real HP. The
             // synthesized turn supplies the row's attacker provenance so post-round assembly still
             // runs and credits that damage; the run then terminates just after the row is pushed
             // (see the focus-death exit below), so the run ends AT the death round rather than
@@ -13742,87 +13713,30 @@ export function runCombat(rawInput: CombatEngineInput): {
 
         // --- Post-round assembly: derive row fields from the FOCUS entry, total the
         // round's damage, update cumulative totals, and push the RoundData row.
+        // The engine credits damage per victim only (`perTargetDealt`, `perActorDot`,
+        // `perActorDetonation`); the scalar `roundDamage` entry carries just the focus's
+        // secondary/conditional display sub-buckets. Row fields come from the per-victim maps.
         const focus = dmg(focusActorId);
-        // Row fields sourced from the focus entry. secondary/conditional go only to
-        // rawTotals (RoundData has no sub-bucket columns) so they're read inline below.
-        const directDamage = focus.direct;
         const focusDot = perActorDot.get(focusActorId);
-        const corrosionDamage = focus.corrosion + (focusDot?.corrosion ?? 0);
-        const infernoDamage = focus.inferno + (focusDot?.inferno ?? 0);
-        // Mirrors corrosionDamage/infernoDamage. Its only producer is `convertHitToSelfDot`
-        // (`transform-incoming-to-dot`, Hit Mitigation), whose ticks reach the focus through the
-        // entry's `dealtCreditId` rather than its `sourceId` — see `rawTotals.generic`'s doc.
-        const genericDamage = focus.generic + (focusDot?.generic ?? 0);
-        const focusPositionalDetonation = perActorDetonation.get(focusActorId) ?? 0;
-        const detonationDamage = focus.detonation + focusPositionalDetonation;
+        const corrosionDamage = focusDot?.corrosion ?? 0;
+        const infernoDamage = focusDot?.inferno ?? 0;
+        // Its only producer is `convertHitToSelfDot` (`transform-incoming-to-dot`, Hit
+        // Mitigation), whose ticks reach the focus through the entry's `dealtCreditId` rather than
+        // its `sourceId` — see `rawTotals.generic`'s doc.
+        const genericDamage = focusDot?.generic ?? 0;
+        const detonationDamage = perActorDetonation.get(focusActorId) ?? 0;
 
-        // Aggregate dot-detonated fires ONLY for the non-positional aggregate path; positional
-        // detonation already emitted per-victim bomb-detonated/dot-detonated in the apply loop.
-        //
-        // `targetId` is `SENTINEL_ENEMY_ACTOR_ID` rather than a positioned enemy because this event
-        // describes the AGGREGATE scalar channel, which has no per-victim identity; naming
-        // `enemyAttackers[0]` would invent one.
-        if (focus.detonation > 0) {
-            bus.emit({
-                type: 'dot-detonated',
-                targetId: SENTINEL_ENEMY_ACTOR_ID,
-                round: r,
-                damage: focus.detonation,
-            });
-        }
-
-        // Deliberately uses focus.corrosion/focus.inferno/focus.generic ONLY (not the
-        // perActorDot-folded corrosionDamage/infernoDamage/genericDamage locals) — per-victim DoT
-        // ticks land via applyVictimDamage. THE TWO-CHANNEL ACCOUNTING RULE: a per-victim
-        // amount books on the per-victim maps (roundPerTargetDamage / perTargetDealt — what
-        // dpsSimulator reads), and `cumulativeDamage` is the separate FOCUS-only scalar aggregate;
-        // each amount belongs to exactly ONE of the two. Folding per-victim ticks in here would
-        // inflate `rawTotals.cumulative` and depress every drain-time `enemyHpPct` gate (whose
-        // denominator is this same cumulative) for damage that is already counted elsewhere. Same
-        // guard as the focusPositionalDetonation/detonation comment below.
-        const totalRoundDamage =
-            focus.direct + focus.corrosion + focus.inferno + focus.detonation + focus.generic;
-        cumulativeDamage += totalRoundDamage;
         // Row/summary rawTotals stay FOCUS-only — only the focus actor reaches summary DPS
         // and the damage-type breakdown (config comparison stays meaningful).
-        totalDirectRaw += focus.direct;
         totalSecondaryRaw += focus.secondary;
         totalConditionalRaw += focus.conditional;
         totalCorrosionRaw += corrosionDamage;
         totalInfernoRaw += infernoDamage;
         totalGenericRaw += genericDamage;
-        // Summary detonation reflects per-victim positional detonation too
-        // (focusPositionalDetonation is 0 non-positionally). NOTE: cumulativeDamage and
-        // totalRoundDamage above deliberately use focus.detonation ONLY — per-victim detonation
-        // lands via applyVictimDamage and is therefore already booked on the per-victim maps, so
-        // folding it into cumulativeDamage would count the same damage on both channels (see the
-        // two-channel note above).
         totalDetonationRaw += detonationDamage;
-
-        // Team damage = Σ over all NON-focus actor entries of every channel (direct already
-        // includes its secondary/conditional sub-buckets, so they are NOT added separately). It is
-        // NOT the real roster's HP delta: every per-victim amount (positional casts, reactive
-        // procs, per-victim DoT and detonation ticks) books on the per-victim maps instead, per the
-        // two-channel rule above. There is no cumulative team-damage scalar: #341 made the row read
-        // the enemy roster at the round head (`enteringEnemyHpPct`) instead of deriving an HP%
-        // from one. `totalTeamRaw` below is the only team-damage accumulator, surfaced on the
-        // result as `teamTotal`.
-        //
-        // ⚠️ This scalar fold is INCOMPLETE for a walked team actor that resolved positionally: its
-        // credit lands in `perTargetDealt` and never reaches here (#331). It is not the DPS-facing
-        // number — `simulateDPS` re-derives `RoundData.teamDamage`/`teamTotalDamage` from
-        // `perTargetDealt` for exactly that reason, and the fallback to this scalar is
-        // taken only when there are no walked team actors at all, where it is 0 either way.
-        let teamRoundDamage = 0;
-        for (const [id, d] of roundDamage) {
-            if (id === focusActorId) continue;
-            teamRoundDamage += d.direct + d.corrosion + d.inferno + d.detonation + d.generic;
-        }
-        totalTeamRaw += teamRoundDamage;
 
         // There is no round-tail enemy-HP write: a positioned enemy takes its damage during the
         // turn walk, through the shared per-victim funnel, and its death is detected there.
-        // `cumulativeDamage` is the report's scalar damage total, not any actor's HP ledger.
 
         // Toxic Overflow end-of-round Corrosion spread. Game rule (constants/buffs.ts): "At the end
         // of the round if a unit has Toxic Overflow and at least 1 stack of Corrosion, inflict
@@ -14035,16 +13949,19 @@ export function runCombat(rawInput: CombatEngineInput): {
             chargeCount: hasChargedSkill ? chargeCount : 0,
             didCrit: roundCrit,
             enemyHpPct: Math.round(enemyHpPct),
-            directDamage: Math.round(directDamage),
+            // directDamage / totalRoundDamage / cumulativeDamage / teamDamage are the DPS
+            // calculator's per-round figures. The engine has no scalar damage channel to fill them
+            // from; `simulateDPS` derives them from `perTargetDealt` (dpsMetricFromDealt.ts).
+            directDamage: 0,
             corrosionDamage: Math.round(corrosionDamage),
             infernoDamage: Math.round(infernoDamage),
             detonationDamage: Math.round(detonationDamage),
-            totalRoundDamage: Math.round(totalRoundDamage),
-            cumulativeDamage: Math.round(cumulativeDamage),
+            totalRoundDamage: 0,
+            cumulativeDamage: 0,
             // genericDamage: set ONLY when nonzero.
             ...(genericDamage > 0 ? { genericDamage: Math.round(genericDamage) } : {}),
             // teamDamage set ONLY when walked team actors exist.
-            ...(hasWalkedTeam ? { teamDamage: Math.round(teamRoundDamage) } : {}),
+            ...(hasWalkedTeam ? { teamDamage: 0 } : {}),
             // extraTurns set ONLY when ≥ 1.
             ...(focusTurns.length > 1 ? { extraTurns: focusTurns.length - 1 } : {}),
             // perTargetDamage set ONLY when the positional path OR a #362 Reversed Repairs burn
@@ -14326,14 +14243,11 @@ export function runCombat(rawInput: CombatEngineInput): {
     return {
         rounds: roundData,
         rawTotals: {
-            direct: totalDirectRaw,
             corrosion: totalCorrosionRaw,
             inferno: totalInfernoRaw,
             detonation: totalDetonationRaw,
-            cumulative: cumulativeDamage,
             totalSecondary: totalSecondaryRaw,
             totalConditional: totalConditionalRaw,
-            teamTotal: totalTeamRaw,
             generic: totalGenericRaw,
         },
         // Additive — present whenever the heal REPORT is active (battle mode too; DPS callers

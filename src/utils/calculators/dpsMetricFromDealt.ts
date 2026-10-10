@@ -7,7 +7,7 @@ import type { RoundData } from './dpsSimulator';
  * per-attacker×victim map `battleSimulator` derives `ShipRoundState.damageDealt` from (SP-F F1).
  *
  * Why this exists: the engine lands and credits every hit per victim, never as a scalar lump, so
- * `rawTotals.cumulative` reads 0 and the per-victim map is the only honest source for the metric.
+ * the per-victim map is the only source for the metric.
  * `simulateDPS` always faces a real positioned enemy (supplied or synthesized), so this path is the
  * ONLY one the DPS metric takes.
  *
