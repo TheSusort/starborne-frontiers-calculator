@@ -9,7 +9,6 @@ export const CURRENT_VERSION = '1.75.3';
 export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: enemy ships now use their own defence and shield penetration.',
     'Healing and DPS calculators: enemies now take penetration and hacking from picked ships.',
-    'Combat simulator: enemy HP buffs now count toward their health percentage.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

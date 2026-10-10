@@ -3,6 +3,9 @@
  * attacker reads the same figure an enemy attacker reads off a buffed player ship. An enemy at
  * 100,000 current HP with a +20% HP buff has a 120,000 max, so it sits at 83% — not 100%.
  *
+ * No in-game buff moves max HP mid-fight (Lionheart and squad leaders fold into base stats before
+ * combat), so the buff here is synthetic: it pins the engine's `hp` buff channel as team-symmetric.
+ *
  * The probe is an Akula-shape hit: damage scaled up to +30% by the target's current HP percentage.
  * The enemy is faster than the focus and buffs itself first, so its raised max is published before
  * the focus acts. Each arm builds its own input, so the comparison is between distinct boards.
