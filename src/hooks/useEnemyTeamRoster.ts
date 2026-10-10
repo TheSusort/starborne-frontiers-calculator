@@ -348,12 +348,12 @@ export function useEnemyTeamRoster(options: UseEnemyTeamRosterOptions): UseEnemy
                         defensePenetration: e.defensePenetration,
                         shieldPenetration: e.shieldPenetration,
                         healModifier: e.healModifier,
+                        hacking: e.hacking,
                         // `Required`: a stat the input gains fails `tsc` until it is forwarded.
                     } satisfies Required<EnemyAttackerInput['stats']>,
                     // Identity derived from `shipId`, mirroring the team-ship branch's `name`.
                     role: enemyShip?.type,
                     name: enemyShip?.name,
-                    hacking: e.hacking,
                     chargeCount: e.chargeCount,
                     startCharged: e.startCharged,
                     shipSkills: e.shipSkills,

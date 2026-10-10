@@ -53,6 +53,9 @@ export interface EnemyAttackerInput {
         defensePenetration?: number;
         /** Heal-modifier % on this enemy's own repairs. Optional — undefined treated as 0. */
         healModifier?: number;
+        /** Hacking — the attacker term of the live landing roll for this enemy's debuffs.
+         *  Absent → the engine's 200 (100% landing at neutral security). */
+        hacking?: number;
         /** Enemy's own defence. Load-bearing since SP-3: the healer's damage cast now lands on
          *  this enemy, and that number is the basis for `damage-dealt` heal/shield riders.
          *  Absent → the legacy sink's 10,000 (the pre-SP-3 punching bag), NOT the engine's 0. */
@@ -81,10 +84,6 @@ export interface EnemyAttackerInput {
      *  computeAffinityModifiers(enemyAffinity, targetAffinity) to produce the matchup.
      *  Absent → neutral defaults (modifier 0, cap 100, penalty 0). */
     affinity?: AffinityName;
-    /** Enemy attacker's hacking stat — threaded onto the engine enemy actor so the engine's
-     *  live per-turn landing recompute (hacking vs heal-target security) drives inbound debuff
-     *  landing. Absent → engine defaults hacking to 200 (100% landing at neutral security). */
-    hacking?: number;
     /** Board slot. Optional since SP-4b-1 — `normalizeCombatRoster` auto-places an enemy that
      *  arrives without one (`defaultEnemySlot`, walked from the front column). Supply it to choose
      *  the cell; an EXPLICIT cell also beats another enemy's invented one on a collision. */
