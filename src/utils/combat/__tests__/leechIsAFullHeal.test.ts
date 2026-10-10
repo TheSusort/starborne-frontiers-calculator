@@ -7,8 +7,7 @@
  *     events etc."* — so the OUTGOING channel reaches it too (§7), and a leech EMITS a repair
  *     event, which is what makes an on-repair reaction see it at all (§8).
  *
- * Sections 1-6 are the incoming half and predate the rename from `leechIncomingRepair.test.ts`;
- * `engine.ts` cites "section 6" by that old name in two places, updated with the rename.
+ * Sections 1-6 are the incoming half and predate the rename from `leechIncomingRepair.test.ts`.
  *
  * ── THE RULING ────────────────────────────────────────────────────────────────────────────────
  * Asked of the owner on 2026-08-23: "Round 2. Your Iridium has a passive that repairs it for a
@@ -26,8 +25,8 @@
  *
  * The fix folds `incomingHealFactor(recipientIncomingHealPct(rid))` into each proc's per-recipient
  * raw. `recipientIncomingHealPct` is `engine.ts`'s existing wrapper over `triggers.ts`'s
- * `liveHealChannelPct` — the ONE resolution path #367 consolidated (stale enemy-applied portion of
- * the published ctx subtracted, a live read re-added), reused rather than re-derived.
+ * `liveHealChannelPct` — the ONE resolution of the channel, read live at the moment of the repair,
+ * reused rather than re-derived.
  * `incomingHealFactor` (`buffTotals.ts`) floors the multiplier at 0 so a fully-suppressed leech
  * lands at 0 and never flips sign.
  *
@@ -36,8 +35,8 @@
  * board (it used to say FOUR — #374 deleted the two dead ones):
  *   - `procStandingLeechesPerVictim` — the damage-DEALT leech (sections 1-3, and 6);
  *   - `procTakenLeechesPerVictim` — the damage-TAKEN leech (sections 4-5, and 6).
- * Section 6 is the FRESHNESS axis, which cuts across both: which ctx each proc's SELF-side half of
- * the channel is read from. It is also where the two procs legitimately DIFFER — read its header.
+ * Section 6 is the FRESHNESS axis, which cuts across both: the leecher's OWN timed Up counts
+ * exactly while it stands.
  * The two that used to sit alongside these — the aggregate `procStandingLeeches` and the
  * non-positional heal-target taken-leech block — were the pair #368 measured as executed by ZERO
  * tests in the whole corpus. #374 deleted them, so these two are now the whole surface.
@@ -219,13 +218,8 @@ const passiveSlot = (abilities: Ability[]): ShipSkills['slots'][number] => ({
  *  one self-side source `liveHealChannelPct` reads without ANY published ctx, so it is visible in
  *  every round including the first — which is why the one-round sections below use it.
  *
- *  ⚠️ THE PARAGRAPH THAT STOOD HERE IS SUPERSEDED, and its residual is CLOSED. It said a
- *  status-seeded `Inc. Repair Up` "would NOT work in a one-round fixture" because the leech read
- *  the leecher's PREVIOUS turn's ctx (measured then as 10,000 / 15,000 / 15,000 over three rounds).
- *  That was a real defect, not a property of the channel, and the #367 fix wave fixed it: the leech
- *  now reads the ACTING turn's own ctx, so a status-seeded Up lands in round 1 too. Section 6 owns
- *  that claim, with its own three-round measurement. `preFightIncoming` is kept for sections 2 and
- *  4 because it is the shortest vehicle for a one-round fixture, not because it is the only one. */
+ *  A status-seeded Up works in a one-round fixture too (section 6); `preFightIncoming` is used in
+ *  sections 2 and 4 because it is the shortest vehicle, not because it is the only one. */
 const preFightIncoming = (incomingHeal: number): PreFightCombatModifiers => ({
     ...emptyPreFightModifiers(),
     incomingHeal,
@@ -255,6 +249,7 @@ interface RoleShape {
     critDamage?: number;
     slots?: ShipSkills['slots'];
     preFight?: PreFightCombatModifiers;
+    alwaysCrits?: boolean;
 }
 
 const walkedAlly = (args: RoleShape): TeamActorEngineInput => ({
@@ -269,7 +264,10 @@ const walkedAlly = (args: RoleShape): TeamActorEngineInput => ({
     pattern: parsePattern('Pattern-Base'),
     ...(args.preFight ? { preFight: args.preFight } : {}),
     walk: {
-        shipSkills: { slots: args.slots ?? [] },
+        shipSkills: {
+            slots: args.slots ?? [],
+            ...(args.alwaysCrits ? { alwaysCrits: true } : {}),
+        },
         stats: {
             attack: args.attack ?? 0,
             crit: args.crit ?? 0,
@@ -302,7 +300,10 @@ const enemyShip = (args: RoleShape): EnemyAttackerInput => ({
     position: args.position,
     target: parseTarget('front'),
     pattern: parsePattern('Pattern-Base'),
-    shipSkills: { slots: args.slots ?? [] },
+    shipSkills: {
+        slots: args.slots ?? [],
+        ...(args.alwaysCrits ? { alwaysCrits: true } : {}),
+    },
     ...(args.preFight ? { preFight: args.preFight } : {}),
 });
 
@@ -324,13 +325,24 @@ interface FixtureOpts {
     numRounds?: number;
     /** A self-granted status on the leecher (see `selfGrant`). Its presence also gives ZOSIMOS an
      *  attack in the `'dealt'` mode, since the grant rides `on-attacked`. */
-    victimSelfGrant?: { name: string; duration: number; incomingHeal?: number };
+    victimSelfGrant?: {
+        name: string;
+        duration: number;
+        incomingHeal?: number;
+        /** Any other percentage points the grant carries (§10: `crit`, `critDamage`). */
+        parsedEffects?: ParsedBuffEffects;
+    };
     /** §8: extra passive-slot abilities on the LEECHER — an on-repair reaction, to prove the leech
      *  is visible to one. Appended after the leech itself. */
     victimExtraPassives?: Ability[];
     /** The leecher's crit rate. Set, it also drops the leech's `noCrit`, as on a ship-kit leech
      *  (Magnolia, Valerian); 100 makes every leech repair crit. */
     victimCrit?: number;
+    /** §10: the leecher's "attacks always critically hit" flag (`ShipSkills.alwaysCrits`). Also
+     *  drops the leech's `noCrit`, as `victimCrit` does. */
+    victimAlwaysCrits?: boolean;
+    /** The leecher's HP when the fight starts. Default `START_HP` (half). */
+    victimStartHp?: number;
 }
 
 interface FixtureRun {
@@ -391,17 +403,19 @@ function runFixture(opts: FixtureOpts): FixtureRun {
     ];
 
     const grant = opts.victimSelfGrant;
+    const leechCanCrit = opts.victimCrit !== undefined || opts.victimAlwaysCrits === true;
     const victimPassives: Ability[] = [
         opts.leechKind === 'dealt'
-            ? standingLeech(LEECH_PCT, opts.victimCrit !== undefined)
-            : takenLeech(LEECH_PCT, opts.victimCrit !== undefined),
+            ? standingLeech(LEECH_PCT, leechCanCrit)
+            : takenLeech(LEECH_PCT, leechCanCrit),
         ...(grant
             ? [
-                  selfGrant(
-                      grant.name,
-                      grant.duration,
-                      grant.incomingHeal === undefined ? {} : { incomingHeal: grant.incomingHeal }
-                  ),
+                  selfGrant(grant.name, grant.duration, {
+                      ...grant.parsedEffects,
+                      ...(grant.incomingHeal === undefined
+                          ? {}
+                          : { incomingHeal: grant.incomingHeal }),
+                  }),
               ]
             : []),
         ...(opts.victimExtraPassives ?? []),
@@ -421,12 +435,13 @@ function runFixture(opts: FixtureOpts): FixtureRun {
         ...(opts.victimCrit !== undefined
             ? { crit: opts.victimCrit, critDamage: LEECH_CRIT_POWER }
             : {}),
+        ...(opts.victimAlwaysCrits ? { alwaysCrits: true } : {}),
     };
 
     let victim: CombatActor | undefined;
     const seed = (actors: CombatActor[]): void => {
         victim = actors.find((a) => a.id === VICTIM_ID);
-        if (victim) victim.currentHp = START_HP;
+        if (victim) victim.currentHp = opts.victimStartHp ?? START_HP;
     };
     let statusEngine: StatusEngine | undefined;
     const bus = createEventBus();
@@ -786,45 +801,22 @@ describe('#362 composition — a reduced leech reverses for the REDUCED amount',
     }
 });
 
-// ══ 6 — FRESHNESS: THE SELF-SIDE HALF COMES FROM THE ACTING TURN, NOT THE PREVIOUS ONE ═══════
+// ══ 6 — FRESHNESS: THE LEECHER'S OWN TIMED UP COUNTS EXACTLY WHILE IT STANDS ═══════════════
 // Sections 2 and 4 prove the Up direction with `preFight.incomingHeal`, which is visible in every
-// round — so they could not see the gap this section covers. The SELF-side half of the channel
-// otherwise arrives through the leecher's published `turnCtx`, and on the two PLAYER-side turn
-// branches `lastTurnCtxByActor.set` sits BELOW the positional apply that procs the leech. So the
-// leech used to read the leecher's PREVIOUS turn:
-//
-//   MEASURED, pre-fix, player-side damage-dealt leech, three rounds, self-granted +75%:
-//     standing all fight   10,000 / 17,500 / 17,500   ← round 1 blind
-//     granted for 2 turns  10,000 / 17,500 / 17,500   ← round 1 blind AND round 3 a PHANTOM
-//   MEASURED, post-fix:
-//     standing all fight   17,500 / 17,500 / 17,500
-//     granted for 2 turns  17,500 / 17,500 / 10,000
-//
-// The ENEMY-side damage-dealt arm was already correct before the fix (that branch publishes its ctx
-// ABOVE its positional apply) and is asserted here so the two sides are held to one profile — the
-// point of the fix is that they no longer agree by accident of statement order.
+// round — so they could not see this. A timed self-granted Up must raise every leech that fires
+// while it stands, from the first, and none after it has expired: the channel is read at the
+// moment of the repair (`liveHealChannelPct`), not from a turn ctx the leecher published earlier.
 //
 // THE VEHICLE, AND WHAT IT IS AND IS NOT A MODEL OF. The status name and its +75% are the corpus's:
 // Meatshield's active grants ITSELF `Inc. Repair Up III` for 2 turns, the only `Inc. Repair Up`
 // anywhere in `docs/ship-skills.csv`, and `src/constants/buffs.ts` prices that name at +75%.
-// The SHAPE here is synthetic, deliberately and on measured grounds:
-//   - Meatshield itself can never exercise this. It has ZERO `damage` abilities on any slot, so a
-//     Meatshield wearing the Leech gear set has nothing to leech off. No ship grants an
-//     `Inc. Repair Up` to an ALLY either, so no shipped ship can hand one to a leecher. The
-//     ROUND-1 arm below is the case a real user hits — through the buff picker, gear or a pre-fight
-//     modifier, all permanent — and the EXPIRY arm is a tripwire for the first timed self-side Up
-//     that ships, not a re-enactment of one that exists.
-//   - `selfGrant` rides `on-attacked` + `oncePerCombat` so the status can actually RUN OUT: an
-//     on-cast grant re-applies every round (a same-tier re-cast that outlasts the remaining window
-//     wins), leaving no expiry to observe.
+// The SHAPE here is synthetic: Meatshield has ZERO `damage` abilities on any slot, so he never
+// leeches, and no ship grants an `Inc. Repair Up` to an ALLY. (`ownHealChannelFreshness.test.ts`
+// drives the real Meatshield on a cast repair.) `selfGrant` rides `on-attacked` + `oncePerCombat`
+// so the status can actually RUN OUT: an on-cast grant re-applies every round.
 //
-// THE TAKEN-LEECH ARM IS DELIBERATELY ASSERTED AS STILL STALE. Its recipient is the ship being
-// ATTACKED, never the actor on turn, so the acting-turn ctx cannot reach it — and it is
-// corpus-inert: the whole roster's `damage-taken` passive leeches are Malvex's and Quixilver's, and
-// both are SHIELDS, which this fold never touches (measured: 149 CSV rows built through
-// `buildShipAbilities` + `partitionReactiveAbilities`, zero `damage-taken` HEALs). Pinning the
-// stale profile makes that a tripwire rather than an omission: the day a `damage-taken` heal ships,
-// this test is what says the freshness question was never answered for that site.
+// ROUND 1 OF THE TAKEN LEECH IS PLAIN, and that is event order, not staleness: Zosimos's first hit
+// both procs the taken leech and fires the `on-attacked` grant, and the leech resolves first.
 
 /** Rounds 1..3 of the leecher's gross repair credit, for one self-grant duration. */
 const threeRoundProfile = (
@@ -850,7 +842,7 @@ const UP_III = 'Inc. Repair Up III';
 const UP_III_PCT = 75;
 const UP_III_RAW = LEECH_RAW * (1 + UP_III_PCT / 100);
 
-describe('the self-side half of the channel is read from the ACTING turn', () => {
+describe("the leecher's own timed Up counts exactly while it stands", () => {
     for (const victimSide of SIDES) {
         it(`${victimSide}-side leecher: a self-granted Inc. Repair Up III raises the damage-dealt leech in ROUND 1`, () => {
             const withUp = threeRoundProfile(victimSide, 'dealt', 5, UP_III_PCT);
@@ -900,18 +892,35 @@ describe('the self-side half of the channel is read from the ACTING turn', () =>
             expect(expiring.victimDirectHealByRound).toEqual([UP_III_RAW, UP_III_RAW, LEECH_RAW]);
         });
 
-        it(`${victimSide}-side leecher: the damage-TAKEN leech's self-side half is still one turn behind`, () => {
+        it(`${victimSide}-side leecher: the damage-TAKEN leech is raised from the first hit after the grant`, () => {
             const withUp = threeRoundProfile(victimSide, 'taken', 5, UP_III_PCT);
             const baseline = threeRoundProfile(victimSide, 'taken', 5);
 
             expect(withUp.victimSelfBuffNames).toContain(UP_III);
             expect(baseline.victimDirectHealByRound).toEqual([LEECH_RAW, LEECH_RAW, LEECH_RAW]);
 
-            // Round 1 is the plain leech — the recipient of a taken leech is the ship being
-            // attacked, never the actor whose turn is running, so no acting-turn ctx exists for it.
-            // Corpus-inert (both `damage-taken` passive leeches in the roster are SHIELDS), and
-            // pinned so it cannot become live and unnoticed.
+            // Round 1 is plain by event order (see the section header); every later hit sees the Up.
             expect(withUp.victimDirectHealByRound).toEqual([LEECH_RAW, UP_III_RAW, UP_III_RAW]);
+        });
+
+        it(`${victimSide}-side leecher: the damage-TAKEN leech after the Up expires is not a phantom`, () => {
+            // Granted on round 1's hit for 2 turns, the Up ticks at the leecher's own Post-Turn in
+            // rounds 1 and 2 and is gone before Zosimos's round-3 hit — which lands BEFORE the
+            // leecher's next turn, the window a published turn ctx would still carry the Up into.
+            const expiring = threeRoundProfile(victimSide, 'taken', 2, UP_III_PCT);
+            const baseline = threeRoundProfile(victimSide, 'taken', 2);
+            const roundTwoOnly = runFixture({
+                victimSide,
+                leechKind: 'taken',
+                enemyStatuses: [{ name: CONTROL }],
+                numRounds: 2,
+                victimSelfGrant: { name: UP_III, duration: 2, incomingHeal: UP_III_PCT },
+            });
+            expect(roundTwoOnly.victimDirectHealByRound[1]).toBe(UP_III_RAW);
+            expect(expiring.victimSelfBuffNames).not.toContain(UP_III);
+            expect(baseline.victimDirectHealByRound).toEqual([LEECH_RAW, LEECH_RAW, LEECH_RAW]);
+
+            expect(expiring.victimDirectHealByRound).toEqual([LEECH_RAW, UP_III_RAW, LEECH_RAW]);
         });
     }
 });
@@ -1153,6 +1162,169 @@ describe("a leech is raised by the leecher's own Exuberance", () => {
             it(`${victimSide}-side damage-${leechKind.toUpperCase()} leech: always ${LEECH_RAW} without it, ${LEECH_RAW} or ${BOOSTED} with it`, () => {
                 expect(amountsSeen(victimSide, leechKind, false)).toEqual([LEECH_RAW]);
                 expect(amountsSeen(victimSide, leechKind, true)).toEqual([LEECH_RAW, BOOSTED]);
+            });
+        }
+    }
+});
+
+// ══ 10 — a leech crits on the leecher's LIVE crit rate and crit power ════════════════════════
+//
+// A leech is a repair (heal ruling 4, #447), so its crit reads the same live numbers every other
+// repair reads: a timed self buff on crit rate or crit power, and "this Unit's attacks always
+// critically hit", all reach it. Base stats alone are not the leecher's crit.
+//
+// The damage-TAKEN leech is the instrument for the amounts: Zosimos's hit is the basis, so nothing
+// the leecher's own crit does can move the basis and the ratio isolates the leech's crit. The
+// grant rides the same `on-attacked` event that procs the taken leech, so round 2 is the first
+// round the grant is guaranteed to be standing when the leech fires; round 1 is not asserted.
+// The damage-DEALT leech is checked through the crit flag on its repair event, because a crit buff
+// on the leecher also crits the hit the leech is sized from.
+
+describe('a leech crits on the leecher’s live crit rate and crit power', () => {
+    const GRANT = 'Leech Crit Grant';
+    const takenRun = (
+        victimSide: (typeof SIDES)[number],
+        victimCrit: number,
+        parsedEffects: ParsedBuffEffects
+    ): FixtureRun =>
+        runFixture({
+            victimSide,
+            leechKind: 'taken',
+            enemyStatuses: [],
+            numRounds: 2,
+            victimCrit,
+            victimSelfGrant: { name: GRANT, duration: 5, parsedEffects },
+        });
+
+    for (const victimSide of SIDES) {
+        it(`${victimSide}-side damage-TAKEN leech: a +100% crit rate grant makes a 0%-crit leech crit`, () => {
+            const buffed = takenRun(victimSide, 0, { crit: 100 });
+            const control = takenRun(victimSide, 0, {});
+            expect(buffed.victimSelfBuffNames).toContain(GRANT);
+            expect(control.victimDirectHealByRound[1]).toBe(LEECH_RAW);
+            expect(buffed.victimDirectHealByRound[1]).toBeCloseTo(
+                LEECH_RAW * (1 + LEECH_CRIT_POWER / 100),
+                5
+            );
+        });
+
+        it(`${victimSide}-side damage-TAKEN leech: a +50% crit power grant raises a critting leech`, () => {
+            const buffed = takenRun(victimSide, 100, { critDamage: 50 });
+            const control = takenRun(victimSide, 100, {});
+            expect(control.victimDirectHealByRound[1]).toBeCloseTo(
+                LEECH_RAW * (1 + LEECH_CRIT_POWER / 100),
+                5
+            );
+            expect(buffed.victimDirectHealByRound[1]).toBeCloseTo(
+                LEECH_RAW * (1 + (LEECH_CRIT_POWER + 50) / 100),
+                5
+            );
+        });
+
+        it(`${victimSide}-side damage-TAKEN leech: an always-crit leecher crits at 0% crit rate`, () => {
+            const always = runFixture({
+                victimSide,
+                leechKind: 'taken',
+                enemyStatuses: [],
+                victimCrit: 0,
+                victimAlwaysCrits: true,
+            });
+            const control = runFixture({
+                victimSide,
+                leechKind: 'taken',
+                enemyStatuses: [],
+                victimCrit: 0,
+            });
+            expect(control.victimDirectHeal).toBe(LEECH_RAW);
+            expect(always.victimDirectHeal).toBeCloseTo(
+                LEECH_RAW * (1 + LEECH_CRIT_POWER / 100),
+                5
+            );
+        });
+
+        it(`${victimSide}-side damage-DEALT leech: a +100% crit rate grant makes a 0%-crit leech crit`, () => {
+            const run = (parsedEffects: ParsedBuffEffects) =>
+                runFixture({
+                    victimSide,
+                    leechKind: 'dealt',
+                    enemyStatuses: [],
+                    victimCrit: 0,
+                    victimSelfGrant: { name: GRANT, duration: 5, parsedEffects },
+                }).repairEvents.filter((e) => e.casterId === VICTIM_ID);
+            const buffed = run({ crit: 100 });
+            const control = run({});
+            expect(control).toHaveLength(1);
+            expect(control[0].critHits).toBeUndefined();
+            expect(buffed).toHaveLength(1);
+            expect(buffed[0].critHits).toBe(1);
+        });
+    }
+});
+
+// ══ 11 — the leecher's own caster-side repair amp rolls on its leech ═════════════════════════
+//
+// Vivacious Repair (legendary): "32% chance to double the repair amount when targeting an ally
+// below 25% HP." The CASTER-side twin of section 9's Exuberance: it belongs to the ship performing
+// the repair, and a leech is a repair, so it rolls on a leech exactly as on a cast or reactive
+// repair. The leecher starts at 20% HP so a self leech meets the below-25% condition. Built from
+// the REAL builder; seeded, and read as the SET of round-1 amounts, as in section 9.
+//
+// Nourishment ("when targeting an ally with lower HP") is the same channel, but a self leech's
+// recipient is its own caster and can never have lower HP than itself, so it is not the vehicle.
+
+describe("a leech is raised by the leecher's own Vivacious Repair", () => {
+    const vivacious = buildEquipmentAbilities(
+        { implants: { implant_major: 'viv' } } as unknown as Ship,
+        (id) =>
+            id === 'viv'
+                ? ({
+                      id,
+                      setBonus: 'VIVACIOUS_REPAIR',
+                      rarity: 'legendary',
+                  } as unknown as GearPiece)
+                : undefined
+    );
+    const SEEDS = 40;
+    const LOW_HP = VICTIM_MAX_HP * 0.2;
+
+    const amountsSeen = (
+        victimSide: 'player' | 'enemy',
+        leechKind: 'dealt' | 'taken',
+        withVivacious: boolean
+    ): number[] => {
+        const seen = new Set<number>();
+        for (let seed = 1; seed <= SEEDS; seed++) {
+            setupKeyedRng(seed);
+            const run = runFixture({
+                victimSide,
+                leechKind,
+                enemyStatuses: [],
+                victimStartHp: LOW_HP,
+                ...(withVivacious ? { victimExtraPassives: vivacious } : {}),
+            });
+            seen.add(Math.round(run.victimDirectHeal));
+        }
+        return [...seen].sort((a, b) => a - b);
+    };
+
+    it('the real builder yields one Vivacious Repair ability (+100% at a 32% chance)', () => {
+        expect(vivacious).toHaveLength(1);
+        expect(vivacious[0].config).toMatchObject({
+            type: 'heal-amplification',
+            condition: 'target-below-25',
+            ampPct: 100,
+            procChance: 0.32,
+        });
+    });
+
+    for (const victimSide of SIDES) {
+        for (const leechKind of ['dealt', 'taken'] as const) {
+            it(`${victimSide}-side damage-${leechKind.toUpperCase()} leech: always ${LEECH_RAW} without it, ${LEECH_RAW} or ${LEECH_RAW * 2} with it`, () => {
+                expect(amountsSeen(victimSide, leechKind, false)).toEqual([LEECH_RAW]);
+                expect(amountsSeen(victimSide, leechKind, true)).toEqual([
+                    LEECH_RAW,
+                    LEECH_RAW * 2,
+                ]);
             });
         }
     }

@@ -263,14 +263,9 @@ export interface HealingRuntimeCtx {
     creditPerformed?: (sourceId: string, amount: number) => void;
     /** Recipient stats via lastTurnCtxByActor with base-stat fallback (pre-first-turn). */
     recipientMaxHp: (actorId: string) => number;
-    /** ONE ARGUMENT ON PURPOSE. The engine's implementation takes an optional second — a FRESH
-     *  `PlayerRoundCtx` overriding the `lastTurnCtxByActor` read, added by the #367 fix wave so the
-     *  leech procs can resolve the ACTING actor's self-side incoming-repair half before its ctx is
-     *  published. It is deliberately not exposed here: every caller through this interface already
-     *  short-circuits its OWN actor (`incomingPctFor`'s self arms in this file and in `triggers.ts`)
-     *  and reaches this function only for a DIFFERENT recipient, for whom the map is the correct
-     *  source. Widening this signature would invite a caller to pass a ctx belonging to the wrong
-     *  actor. */
+    /** A recipient's incoming-repair % as it stands now (`liveHealChannelPct`). Callers here
+     *  short-circuit their OWN actor (`incomingPctFor`'s self arms in this file and in
+     *  `triggers.ts`) and reach this only for a DIFFERENT recipient. */
     recipientIncomingHealPct: (actorId: string) => number;
     /** Summed incoming-heal amplification % for a repair landing on `rid` (Exuberance). Rolls the
      *  recipient's incoming-heal-amp procs ONCE (combat-lifetime gate keyed rid+ability). Absent →
@@ -6410,8 +6405,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         const healing = args.healing;
         const healCritGate = action === 'charged' ? chargedHealCritGate : activeHealCritGate;
         // Recipient's incoming-heal %: the acting actor reads its own LOCAL folded total;
-        // any other recipient resolves through lastTurnCtxByActor (may be stale/base for a
-        // non-target non-self recipient — an accepted approximation, see plan).
+        // any other recipient resolves live through the engine (`liveHealChannelPct`).
         const incomingPctFor = (rid: string): number =>
             rid === actor.id
                 ? dmgStats.totals.incomingHealBuff

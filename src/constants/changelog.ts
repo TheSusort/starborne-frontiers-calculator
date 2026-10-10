@@ -14,6 +14,9 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: timed penetration and DoT buffs now apply only while active.',
     'DPS calculator: penetration and DoT buffs picked on team ships now boost your ship.',
     'DPS calculator: picked Out. Detonation Damage Up buffs now apply.',
+    'Combat simulator: leech repairs now crit with buffed crit rate and crit power.',
+    'Combat simulator: Nourishment and Vivacious Repair now boost leech repairs too.',
+    'Combat simulator: expired Inc. and Out. Repair buffs no longer boost later repairs.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
