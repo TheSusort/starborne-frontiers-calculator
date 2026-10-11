@@ -15,6 +15,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import type { CombatEvent } from '../events';
 import { setRateGateRng, resetRateGateRng } from '../../calculators/rateAccumulator';
 import { simulateBattle, type BattlePlacement } from '../../calculators/battleSimulator';
+import { foldActorBuffTotals } from '../effectiveStats';
 import { createStatusEngine, type RegisteredAbilityStatus } from '../statusEngine';
 import type { Ship } from '../../../types/ship';
 import type { Position } from '../../../types/encounters';
@@ -204,6 +205,36 @@ describe('#670 the status store: independent instances versus the family rule', 
         const held = eng.timedAbilityStatuses('self', 'x');
         expect(held).toHaveLength(2);
         expect(held.map((s) => s.payload.parsedEffects.attackFlat).sort()).toEqual([300, 500]);
+    });
+
+    // Fence: guards the join between the status store and the attack fold.
+    it('two Nanobots copies on one holder both add their flat attack to the fold', () => {
+        const foldFlat = (grants: Array<[string, number]>) => {
+            const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+            eng.beginRound(1);
+            for (const [casterId, attackFlat] of grants) {
+                eng.applyTimedAbilityStatus(
+                    1,
+                    timed('Power Infused Nanobots', 2, {
+                        casterId,
+                        payload: {
+                            buffName: 'Power Infused Nanobots',
+                            stacks: 1,
+                            parsedEffects: { attackFlat },
+                        },
+                    }),
+                    'x'
+                );
+            }
+            return foldActorBuffTotals(eng, new Map(), 'x').attackFlatBuff;
+        };
+        expect(foldFlat([['a', 1000]])).toBe(1000);
+        expect(
+            foldFlat([
+                ['a', 1000],
+                ['b', 2000],
+            ])
+        ).toBe(3000);
     });
 
     it('a stolen Repair Over Time lands beside the copy the thief already holds', () => {
