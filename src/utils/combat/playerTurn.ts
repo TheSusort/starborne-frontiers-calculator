@@ -867,6 +867,11 @@ export interface PlayerTurnArgs {
      *  §A.4-A.5). Absent is NOT "a neutral enemy": every read below answers "there is no enemy". */
     enemy?: CombatActor;
     statusEngine: StatusEngine;
+    /** The engine's GLOBAL scheduled-buff expansion table (buffName → effects), for live stat
+     *  reads of ANY actor. The runtime's own `selfBuffLookup` is empty for team and enemy
+     *  runtimes, so it cannot expand another actor's scheduled buffs. Absent → the runtime's
+     *  lookup (direct `runPlayerTurn` fixtures). */
+    globalSelfBuffLookup?: Map<string, SelectedGameBuff[]>;
     // DoT containers (live on the enemy actor; passed through for clarity). Absent on a
     // no-victim turn — a DoT applied to nobody lands nowhere.
     corrosionEntries?: ActiveDoTStack[];
@@ -2219,11 +2224,12 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
      *
      *  `noVictimAbsentSubject.integration.test.ts` pins the no-victim `stat-vs-target` shape
      *  synthetically, because no shipped kit pairs an ally target with a `stat-vs-target` gate. */
+    const liveStatsLookup = args.globalSelfBuffLookup ?? selfBuffLookup;
     const victimStatGateCtx = (v: CombatActor | undefined) => {
         if (v === undefined) return {};
         // LIVE speed and crit power: the victim's buffs and every debuff on it (Speed Down, Crit
         // Power Down), whichever side applied them.
-        const liveVictim = effectiveStatsOf(statusEngine, selfBuffLookup, v);
+        const liveVictim = effectiveStatsOf(statusEngine, liveStatsLookup, v);
         return {
             targetSpeed: liveVictim.speed,
             targetCurrentHp: v.currentHp,
@@ -2233,12 +2239,13 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
 
     /** The acting unit's LIVE speed for the owner-vs-target gates: its buffs and every debuff on
      *  it (Speed Up/Down), read at the call so a status landed earlier this turn counts. */
-    const liveSelfSpeed = (): number => effectiveStatsOf(statusEngine, selfBuffLookup, actor).speed;
+    const liveSelfSpeed = (): number =>
+        effectiveStatsOf(statusEngine, liveStatsLookup, actor).speed;
     /** The acting unit's LIVE crit-power modifier (scheduled + timed self buffs plus the shadowed
      *  enemy-applied Crit Power Down) for the gate context built before the cast's own statuses
      *  land. Added to `runtime.critDamage`, the base the gear-derived stat lives on. */
     const liveSelfCritDamageBuff = (): number =>
-        foldActorBuffTotals(statusEngine, selfBuffLookup, actor.id).critDamageBuff;
+        foldActorBuffTotals(statusEngine, liveStatsLookup, actor.id).critDamageBuff;
 
     /** The victim's shield-presence gate field (Malvex charged Barrier), shared by all four gate
      *  contexts. Read PRE-strip: a `type:'shield-strip'` clause in the same cast (Malvex's own

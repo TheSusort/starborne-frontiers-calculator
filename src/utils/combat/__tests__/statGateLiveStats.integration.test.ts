@@ -333,4 +333,62 @@ describe('Chakara speed gate counts Speed Up/Down on both ships', () => {
         expect(control.length).toBeGreaterThan(0);
         expect(debuffed.length).toBeLessThan(control.length);
     });
+    it("enemy-side Chakara: the focus's scheduled Speed Up counts against the enemy's gate", () => {
+        // Enemy Chakara 100, focus base 80 (gate unmet); a manually picked Speed Up III (+60%)
+        // lifts the focus to 128, above Chakara, so the gate is met and charges are added.
+        const input = (withBuff: boolean): CombatEngineInput =>
+            base({
+                speed: 80,
+                healTargetId: 'attacker',
+                mode: 'healing',
+                selfBuffs: withBuff
+                    ? [
+                          {
+                              id: 'speed-up',
+                              buffName: 'Speed Up III',
+                              stacks: 1,
+                              parsedEffects: { speed: 60 },
+                              isStackable: false,
+                          },
+                      ]
+                    : [],
+                enemyAttackers: [
+                    {
+                        id: 'e1',
+                        stats: {
+                            attack: 1000,
+                            crit: 0,
+                            critDamage: 0,
+                            speed: 100,
+                            hp: 1_000_000,
+                            defence: 0,
+                        },
+                        chargeCount: 9,
+                        startCharged: false,
+                        shipSkills: {
+                            slots: [
+                                { slot: 'active', abilities: chakaraActive() },
+                                {
+                                    slot: 'charged',
+                                    abilities: [
+                                        {
+                                            id: 'charged-hit',
+                                            type: 'damage',
+                                            target: 'enemy',
+                                            trigger: 'on-cast',
+                                            conditions: [],
+                                            config: { type: 'damage', multiplier: 100 },
+                                        },
+                                    ],
+                                },
+                            ],
+                        },
+                    },
+                ],
+            });
+        const unbuffed = grantsBy(collect(input(false)), 'e1');
+        const buffed = grantsBy(collect(input(true)), 'e1');
+        expect(unbuffed).toHaveLength(0);
+        expect(buffed.length).toBeGreaterThan(0);
+    });
 });

@@ -10189,6 +10189,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // global `__enemy__` store rather than keying them by a target that isn't there.
                 ...(tgt ? { targetId: tgt.id } : {}),
                 statusEngine,
+                globalSelfBuffLookup: selfBuffLookup,
                 enemyType: tb.enemyTypeArg,
                 bus,
                 round: r,
