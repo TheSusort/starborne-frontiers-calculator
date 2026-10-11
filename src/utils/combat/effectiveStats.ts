@@ -8,6 +8,7 @@ import { StatusEngine } from './statusEngine';
 import { CombatActor } from './state';
 import {
     calculateBuffTotals,
+    strongestPerFamily,
     flatDefence,
     payloadToSelectedBuff,
     shadowedDelta,
@@ -63,7 +64,8 @@ export interface EffectiveStats {
  * family against THE VERY LIST the totals were built from — `shadowedDelta` subtracts the self
  * contribution when the enemy tier wins, so a list that merely resembles the folded one removes a
  * term the totals never held. Sharing the construction makes that impossible to get wrong; two
- * hand-kept copies would drift the first time either source gains a layer.
+ * hand-kept copies would drift the first time either source gains a layer. The fold and the
+ * shadowing comparison both read `allSelfSourced`, which is reduced by `strongestPerFamily`.
  */
 function selfSourcedBuffs(
     statusEngine: StatusEngine,
@@ -90,13 +92,11 @@ function selfSourcedBuffs(
     return { scheduledSelfBuffs, timedEffects, auraEffects };
 }
 
-/** Every list `selfSourcedBuffs` returned, in one array — the self side a shadowing comparison
- *  must be handed (see `foldActorBuffTotals`). */
-const allSelfSourced = (lists: ReturnType<typeof selfSourcedBuffs>): SelectedGameBuff[] => [
-    ...lists.scheduledSelfBuffs,
-    ...lists.timedEffects,
-    ...lists.auraEffects,
-];
+/** Every list `selfSourcedBuffs` returned, in one array reduced to one instance per named family
+ *  (`strongestPerFamily`) — the self side a shadowing comparison must be handed (see
+ *  `foldActorBuffTotals`). */
+const allSelfSourced = (lists: ReturnType<typeof selfSourcedBuffs>): SelectedGameBuff[] =>
+    strongestPerFamily([...lists.scheduledSelfBuffs, ...lists.timedEffects, ...lists.auraEffects]);
 
 /**
  * Sum an actor's live self-buff totals from the same two sources foldSpeedBuffPct uses
@@ -114,8 +114,8 @@ export function foldActorBuffTotals(
     opts: { includeAuras?: boolean } = {}
 ): ReturnType<typeof calculateBuffTotals> {
     const lists = selfSourcedBuffs(statusEngine, selfBuffLookup, actorId, opts.includeAuras);
-    const scheduled = calculateBuffTotals(toSimBuffs(lists.scheduledSelfBuffs));
-    const timed = calculateBuffTotals(toSimBuffs([...lists.timedEffects, ...lists.auraEffects]));
+    const self = allSelfSourced(lists);
+    const own = calculateBuffTotals(toSimBuffs(self));
     // #398 — THIRD SOURCE: this actor's OWN per-victim ENEMY store, i.e. the debuffs the opposing
     // side applied TO it. Without it, `Crit Rate Down`, `Crit Power Down`, `Speed Down`,
     // `Hacking Down` and `Security Down` land in that store, display, tick down and change
@@ -134,33 +134,23 @@ export function foldActorBuffTotals(
     // `Speed Down I` (-20) resolves to -50 — not -70, and not -20.
     //
     // THE SELF LIST MUST BE WHAT THIS FOLD CONSUMED, or `shadowedDelta`'s subtraction removes a
-    // contribution the totals never held. Both lists below are the exact ones summed above.
+    // contribution the totals never held. `self` is the exact list folded above.
     //
     // Team-agnostic for free: the enemy store is keyed by victim id regardless of side, so this
     // reads a player-inflicted debuff on an enemy ship identically. Both side arms are pinned in
     // `enemyAppliedStatChannels.test.ts`.
     const { delta: enemyDelta } = shadowedDelta(
         victimOwnEnemyFamilies(statusEngine, actorId, FOLD_SHADOW_CHANNELS),
-        allSelfSourced(lists),
+        self,
         FOLD_SHADOW_CHANNELS
     );
-    // Field-by-field sum is intentional: explicit enumeration preserves type-safety over a generic key reduce.
     return {
-        attackBuff: scheduled.attackBuff + timed.attackBuff,
-        critBuff: scheduled.critBuff + timed.critBuff + (enemyDelta.crit ?? 0),
-        critDamageBuff:
-            scheduled.critDamageBuff + timed.critDamageBuff + (enemyDelta.critDamage ?? 0),
-        outgoingDamageBuff: scheduled.outgoingDamageBuff + timed.outgoingDamageBuff,
-        defenceBuff: scheduled.defenceBuff + timed.defenceBuff,
-        hpBuff: scheduled.hpBuff + timed.hpBuff,
-        outgoingHealBuff: scheduled.outgoingHealBuff + timed.outgoingHealBuff,
-        incomingHealBuff: scheduled.incomingHealBuff + timed.incomingHealBuff,
-        speedBuff: scheduled.speedBuff + timed.speedBuff + (enemyDelta.speed ?? 0),
-        hackingBuff: scheduled.hackingBuff + timed.hackingBuff + (enemyDelta.hacking ?? 0),
-        securityBuff: scheduled.securityBuff + timed.securityBuff + (enemyDelta.security ?? 0),
-        attackFlatBuff: scheduled.attackFlatBuff + timed.attackFlatBuff,
-        defenceFlatBuff: scheduled.defenceFlatBuff + timed.defenceFlatBuff,
-        defencePerSecurityBuff: scheduled.defencePerSecurityBuff + timed.defencePerSecurityBuff,
+        ...own,
+        critBuff: own.critBuff + (enemyDelta.crit ?? 0),
+        critDamageBuff: own.critDamageBuff + (enemyDelta.critDamage ?? 0),
+        speedBuff: own.speedBuff + (enemyDelta.speed ?? 0),
+        hackingBuff: own.hackingBuff + (enemyDelta.hacking ?? 0),
+        securityBuff: own.securityBuff + (enemyDelta.security ?? 0),
     };
 }
 
@@ -235,11 +225,11 @@ export interface EffectiveOutgoingStats {
  * contribution is in the total. It always was on `attack`; on `outgoingDamage` the total was 0, so
  * shadowing there would have removed a term that was never added.
  *
- * NOT FOR THE TURN LOOP. `runPlayerTurn` folds the same delta itself, into `scheduledTotals` ahead
- * of `effectiveDamageStatsOf` (see its `args.enemyAppliedFamilies` block); calling this there
- * would double-count. It is also NOT a general replacement for `effectiveStatsOf` — the ~20 other
+ * NOT FOR THE TURN LOOP. `runPlayerTurn` folds the same delta itself, into the `extras` it hands
+ * `effectiveDamageStatsOf` (see its `enemyAppliedDelta` block); calling this there
+ * would double-count. It is also NOT a general replacement for `effectiveStatsOf` — the other
  * engine readers of `.attack`/`.defence` are not throwing an attack and must keep the status-mode
- * fold. Two call sites, deliberately.
+ * fold.
  *
  * Team-agnostic for free, for the same reason `foldActorBuffTotals` is: the per-victim enemy store
  * is keyed by the holder's id regardless of side, and both call sites run for a player or an enemy
@@ -264,8 +254,8 @@ export function effectiveOutgoingStatsOf(
     const s = actor.stats;
     return {
         // Same shape as `effectiveStatsOf.attack`, with the delta added to the SAME additive
-        // percentage term — mirroring the turn loop's `scheduledTotals.attackBuff += delta.attack`
-        // rather than post-multiplying, which would compound instead of adding.
+        // percentage term — mirroring the turn loop's `extras.attackBuff += delta.attack` rather
+        // than post-multiplying, which would compound instead of adding.
         attack: s.attack * (1 + (t.attackBuff + attackPct) / 100) + t.attackFlatBuff,
         outgoingDamageBuffPct: t.outgoingDamageBuff + outgoingDamagePct,
         crit: s.crit + t.critBuff,
@@ -336,17 +326,18 @@ export interface EffectiveDamageStats {
     detonationDamageModifier: number;
     /** mod.bombSplashDamage — outgoing bomb-splash multiplier delta (percentage points). */
     bombSplashModifier: number;
-    /** Full summed buff totals (layers 1+2+3+4) — exposes outgoingDamage/heal channels for the turn loop. */
+    /** Full summed buff totals (named layers, extras and layer 4) — exposes outgoingDamage/heal channels for the turn loop. */
     totals: ReturnType<typeof calculateBuffTotals>;
 }
 
 /**
- * Damage-mode effective stats: folds the four layers the damage path uses, given resolved
- * ingredients (the turn loop owns gating/application and side effects — see the A1b plan).
- *   layer 1 = scheduledTotals (the six tracked totals folded from `scheduledSelfBuffs`)
- *   layers 2+3 = abilitySelfEffects (timed + gated active ability statuses, as SelectedGameBuff[])
+ * Damage-mode effective stats: folds the layers the damage path uses, given resolved
+ * ingredients (the turn loop owns gating/application and side effects).
+ *   layers 1+2+3 = selfNamedBuffs (scheduled self-buffs + timed and gated ability statuses),
+ *     reduced to one instance per named family — highest tier wins; only DoTs and bombs stack
+ *     (#667, `strongestPerFamily`)
+ *   extras = non-named additive terms (squad-leader `preFight`, enemy-applied shadowing delta)
  *   layer 4 = modifierAbilities gated by modifierCtx
- * Reproduces the inline fold in playerTurn.ts (runPlayerTurn) exactly.
  */
 export function effectiveDamageStatsOf(args: {
     base: {
@@ -364,44 +355,38 @@ export function effectiveDamageStatsOf(args: {
          *  passes it for the one cast it applies to. */
         castPenBonus: number;
     };
-    scheduledTotals: ReturnType<typeof calculateBuffTotals>;
-    /** The expanded scheduled self-buff list `scheduledTotals` was folded from. Defence
-     *  penetration, DoT-damage and detonation-damage modifiers are read from it live, together
-     *  with `abilitySelfEffects`, so they follow the schedule exactly as the totals do. */
-    scheduledSelfBuffs: SelectedGameBuff[];
-    abilitySelfEffects: SelectedGameBuff[];
+    /** Every NAMED own-side status this cast folds: scheduled self-buffs and ability statuses
+     *  together. Reduced with `strongestPerFamily` inside, so a family held twice counts once.
+     *  Defence penetration, DoT-damage and detonation-damage modifiers are read from the same
+     *  reduced list. */
+    selfNamedBuffs: SelectedGameBuff[];
+    /** Non-named additive terms, in totals shape: the squad-leader `preFight` baseline and the
+     *  enemy-applied shadowing delta. Never a named family, so never reduced. */
+    extras: ReturnType<typeof calculateBuffTotals>;
     modifierAbilities: Ability[];
     modifierCtx: ConditionContext;
 }): EffectiveDamageStats {
-    const {
-        base,
-        scheduledTotals,
-        scheduledSelfBuffs,
-        abilitySelfEffects,
-        modifierAbilities,
-        modifierCtx,
-    } = args;
-    const ability = calculateBuffTotals(toSimBuffs(abilitySelfEffects));
+    const { base, selfNamedBuffs, extras, modifierAbilities, modifierCtx } = args;
+    const named = strongestPerFamily(selfNamedBuffs);
+    const own = calculateBuffTotals(toSimBuffs(named));
     const mod = modifierTotalsFromAbilities(modifierAbilities, modifierCtx);
-    const dotPen = toDotAndPenModifiers([...scheduledSelfBuffs, ...abilitySelfEffects], []);
+    const dotPen = toDotAndPenModifiers(named, []);
 
     const totals: ReturnType<typeof calculateBuffTotals> = {
-        attackBuff: scheduledTotals.attackBuff + ability.attackBuff + mod.attack,
-        critBuff: scheduledTotals.critBuff + ability.critBuff + mod.crit,
-        critDamageBuff: scheduledTotals.critDamageBuff + ability.critDamageBuff + mod.critDamage,
-        outgoingDamageBuff:
-            scheduledTotals.outgoingDamageBuff + ability.outgoingDamageBuff + mod.outgoingDamage,
-        defenceBuff: scheduledTotals.defenceBuff + ability.defenceBuff + mod.defence,
-        hpBuff: scheduledTotals.hpBuff + ability.hpBuff + mod.hp,
-        outgoingHealBuff: scheduledTotals.outgoingHealBuff + ability.outgoingHealBuff,
-        incomingHealBuff: scheduledTotals.incomingHealBuff + ability.incomingHealBuff,
-        speedBuff: scheduledTotals.speedBuff + ability.speedBuff,
-        hackingBuff: scheduledTotals.hackingBuff + ability.hackingBuff,
-        securityBuff: scheduledTotals.securityBuff + ability.securityBuff,
-        attackFlatBuff: scheduledTotals.attackFlatBuff + ability.attackFlatBuff,
-        defenceFlatBuff: scheduledTotals.defenceFlatBuff + ability.defenceFlatBuff,
-        defencePerSecurityBuff:
-            scheduledTotals.defencePerSecurityBuff + ability.defencePerSecurityBuff,
+        attackBuff: own.attackBuff + extras.attackBuff + mod.attack,
+        critBuff: own.critBuff + extras.critBuff + mod.crit,
+        critDamageBuff: own.critDamageBuff + extras.critDamageBuff + mod.critDamage,
+        outgoingDamageBuff: own.outgoingDamageBuff + extras.outgoingDamageBuff + mod.outgoingDamage,
+        defenceBuff: own.defenceBuff + extras.defenceBuff + mod.defence,
+        hpBuff: own.hpBuff + extras.hpBuff + mod.hp,
+        outgoingHealBuff: own.outgoingHealBuff + extras.outgoingHealBuff,
+        incomingHealBuff: own.incomingHealBuff + extras.incomingHealBuff,
+        speedBuff: own.speedBuff + extras.speedBuff,
+        hackingBuff: own.hackingBuff + extras.hackingBuff,
+        securityBuff: own.securityBuff + extras.securityBuff,
+        attackFlatBuff: own.attackFlatBuff + extras.attackFlatBuff,
+        defenceFlatBuff: own.defenceFlatBuff + extras.defenceFlatBuff,
+        defencePerSecurityBuff: own.defencePerSecurityBuff + extras.defencePerSecurityBuff,
     };
     const security = base.security + totals.securityBuff;
 

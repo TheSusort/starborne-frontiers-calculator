@@ -611,11 +611,27 @@ const TIER_VALUES: Record<string, number> = { I: 1, II: 2, III: 3, IV: 4, V: 5 }
 // Each tier is its own entity, not a family where higher replaces lower.
 const DOT_PREFIXES = new Set(['Corrosion', 'Inferno', 'Bomb']);
 
+/** Whether a status name belongs to a family that STACKS rather than shadows — DoTs and bombs,
+ *  the only exceptions to highest-tier-wins. */
+export function isStackingFamily(name: string): boolean {
+    return DOT_PREFIXES.has(name.split(' ')[0]);
+}
+
+/** Buffs whose instances tick or apply independently per applier rather than overwrite (owner
+ *  ruling 2026-10-11): Repair Over Time and Power Infused Nanobots. */
+const INDEPENDENT_BUFF_PREFIXES = ['Repair Over Time', 'Power Infused Nanobots'];
+
+/** Whether every instance of a status counts on its own in an own-side stat fold: the stacking
+ *  families (`isStackingFamily`) plus the independently ticking buffs above. */
+export function stacksIndependently(name: string): boolean {
+    return isStackingFamily(name) || INDEPENDENT_BUFF_PREFIXES.some((p) => name.startsWith(p));
+}
+
 /** EXPORTED for #389's cross-store tier shadowing (`buffTotals.outgoingFamiliesOf`), which must
  *  key families by exactly the same rule this engine uses internally — a second copy of the
  *  Roman-suffix/DoT-prefix logic would drift. */
 export function deriveFamilyKey(name: string): { familyKey: string; tier: number } {
-    if (DOT_PREFIXES.has(name.split(' ')[0])) return { familyKey: name, tier: 0 };
+    if (isStackingFamily(name)) return { familyKey: name, tier: 0 };
     const m = ROMAN_SUFFIX.exec(name);
     if (!m) return { familyKey: name, tier: 0 };
     return { familyKey: name.slice(0, m.index), tier: TIER_VALUES[m[1]] };

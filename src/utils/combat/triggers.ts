@@ -32,6 +32,7 @@ import {
     expandBuffEntry,
     familiesOf,
     shadowedDelta,
+    strongestPerFamily,
     type FamilyMap,
     type ShadowChannel,
 } from './buffTotals';
@@ -4261,7 +4262,8 @@ export function victimEnemyBuffs(
  *  Inc. Damage Down/Up. Team-agnostic: 'self'-side statuses are keyed by the actor's own id
  *  (same read selfBuffNamesForOwners uses for either team). The aura/accumulating channel
  *  carries the same NEUTRAL-ctx approximation noted on victimEnemyBuffs; the live ship sources
- *  (Makoli/Salvation/Shelter/Refine/Battlecry) are TIMED and not approximated. */
+ *  (Makoli/Salvation/Shelter/Refine/Battlecry) are TIMED and not approximated.
+ *  Returns one instance per named family (`strongestPerFamily`). */
 export function victimSelfBuffs(
     statusEngine: StatusEngine,
     victimId: string,
@@ -4275,7 +4277,7 @@ export function victimSelfBuffs(
     const timed = statusEngine
         .timedAbilityStatuses('self', victimId)
         .map((s) => payloadToSelectedBuff(s.payload));
-    return [...scheduled, ...timed, ...selfAuraBuffs(statusEngine, victimId)];
+    return strongestPerFamily([...scheduled, ...timed, ...selfAuraBuffs(statusEngine, victimId)]);
 }
 
 /** An actor's OWN aura and accumulating self statuses (Centurion's Core Charge stacks, an

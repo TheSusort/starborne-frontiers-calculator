@@ -1,6 +1,6 @@
 import { Buff, SelectedGameBuff } from '../../types/calculator';
 import type { AbilityStatusPayload, ActiveBuff } from './statusEngine';
-import { deriveFamilyKey, familyChallengerWins } from './statusEngine';
+import { deriveFamilyKey, familyChallengerWins, stacksIndependently } from './statusEngine';
 
 // ---------------------------------------------------------------------------
 // Leaf helpers shared by the player turn (playerTurn.ts) and the effective-stat
@@ -297,8 +297,9 @@ export interface ChannelContribution {
     tier: number;
     /** Σ of EVERY instance's post-stacks magnitude on this channel (percentage points, or flat
      *  units for `hacking`/`security` — see `pct`) — i.e. exactly what an
-     *  additive fold of the same list (`calculateBuffTotals`) puts into the totals. Equals `pct`
-     *  whenever the list holds a single instance of the family, which is every corpus case. */
+     *  additive fold of the same list (`calculateBuffTotals`) puts into the totals. Own-side
+     *  callers pass lists reduced by `strongestPerFamily`, so there `sum === pct`; subtracting
+     *  `sum` in `shadowedDelta` stays the defensive basis for an unreduced list. */
     sum: number;
 }
 
@@ -393,6 +394,63 @@ export function familiesOf(
     return out;
 }
 
+/** Σ |post-stacks magnitude| over every numeric effect of one instance — the equal-tier
+ *  tie-break `strongestPerFamily` hands `familyChallengerWins`. It mixes percentage and flat
+ *  units and counts stated costs (a negative defence term adds to it), which is acceptable
+ *  because it only breaks ties between equal-tier instances of one family. */
+function instanceMagnitude(b: SelectedGameBuff): number {
+    let m = 0;
+    for (const v of Object.values(b.parsedEffects)) {
+        if (typeof v === 'number') m += Math.abs(v * b.stacks);
+    }
+    return m;
+}
+
+/**
+ * The own-side list with ONE instance per named family — the strongest, by `familyChallengerWins`
+ * (higher tier, then larger post-stacks magnitude; an exact tie keeps the earlier instance).
+ * Survivors keep their input order.
+ *
+ * Every fold of a ship's own buffs runs its list through this first: the locked rule is highest
+ * tier wins per family, and `calculateBuffTotals` is a plain sum. The same family reaches one
+ * actor's list more than once from a manual pick plus a kit grant, or from `selfBuffLookup`
+ * holding one `buffName` for several team actors.
+ *
+ * Passed through untouched: everything `stacksIndependently` names (DoTs, bombs, Repair Over Time,
+ * Power Infused Nanobots — each instance counts on its own), any other heal-over-time entry, and
+ * entries with no numeric effect (nothing to double).
+ *
+ * A fold that also shadows against enemy-applied families must hand `shadowedDelta` this SAME
+ * reduced list, because `shadowedDelta` subtracts the self `sum`.
+ */
+export function strongestPerFamily(buffs: SelectedGameBuff[]): SelectedGameBuff[] {
+    const winner = new Map<string, { index: number; tier: number; magnitude: number }>();
+    const keep: boolean[] = buffs.map(() => true);
+    buffs.forEach((b, index) => {
+        const magnitude = instanceMagnitude(b);
+        if (
+            stacksIndependently(b.buffName) ||
+            b.parsedEffects.hotPct !== undefined ||
+            magnitude === 0
+        ) {
+            return;
+        }
+        const { familyKey, tier } = deriveFamilyKey(b.buffName);
+        const prev = winner.get(familyKey);
+        if (!prev) {
+            winner.set(familyKey, { index, tier, magnitude });
+            return;
+        }
+        if (familyChallengerWins(prev.tier, prev.magnitude, tier, magnitude)) {
+            keep[prev.index] = false;
+            winner.set(familyKey, { index, tier, magnitude });
+        } else {
+            keep[index] = false;
+        }
+    });
+    return buffs.filter((_, i) => keep[i]);
+}
+
 /** One channel's pair of figures: raise the total to exactly the applied value when the applied
  *  instance wins the family, and leave it alone when the actor's own instance does. */
 function channelDelta(
@@ -426,15 +484,13 @@ function channelDelta(
  * the self side. Both directions of the ruling fall out of the one expression.
  *
  * SUBTRACTING THE SUM (not the strongest own instance) is what makes the delta structurally unable
- * to push the total past the applied value. Duplicate self-side instances of one family are
- * reachable two ways — `selfBuffLookup` accumulates entries across the attacker AND every team
- * actor under one `buffName`, and the same family can stand in `activeSelfBuffs` (scheduled) and
- * `abilitySelfEffects` (ability) at once with no shadowing between those two either — and with the
- * strongest subtracted instead, each duplicate left its own value behind in the total.
+ * to push the total past the applied value. Own-side callers pass a list reduced by
+ * `strongestPerFamily`, so there the sum IS the strongest instance; the sum remains the defensive
+ * basis for an unreduced list, where subtracting only the strongest would leave each duplicate's
+ * value behind in the total.
  *
- * `selfBuffs` MUST be the same named-status lists the caller's own fold consumed, or the
- * subtraction removes something the total never contained. See the call sites in playerTurn.ts and
- * engine.ts.
+ * `selfBuffs` MUST be the same named-status list the caller's own fold consumed, or the
+ * subtraction removes something the total never contained.
  */
 export function shadowedDelta(
     enemyFamilies: FamilyMap,
