@@ -65,11 +65,11 @@ const healer = (id: string, position: Position, speed: number, text = ROT): Enem
     role: 'SUPPORTER',
 });
 
-const run = (extraTurnActor: boolean) =>
+const run = (extraTurnActor: boolean, rot = ROT) =>
     runCombat({
         enemyAttackers: [
-            healer('healA', 'T1', 150),
-            healer('healB', 'T2', 140),
+            healer('healA', 'T1', 150, rot),
+            healer('healB', 'T2', 140, rot),
             healer(
                 'actor',
                 'T3',
@@ -102,8 +102,10 @@ const run = (extraTurnActor: boolean) =>
         speed: 100,
     });
 
-const copiesOn = (id: string, extraTurnActor: boolean): number => {
-    const e = run(extraTurnActor).healing?.rounds[0]?.enemyEffects.find((x) => x.enemyId === id);
+const copiesOn = (id: string, extraTurnActor: boolean, rot = ROT): number => {
+    const e = run(extraTurnActor, rot).healing?.rounds[0]?.enemyEffects.find(
+        (x) => x.enemyId === id
+    );
     return e?.selfBuffs.filter((b) => b.buffName === 'Repair Over Time II').length ?? 0;
 };
 
@@ -114,5 +116,11 @@ describe('enemy round overview lists each independent Repair Over Time copy', ()
 
     it('an enemy that takes an extra turn still lists each copy once', () => {
         expect(copiesOn('actor', true)).toBe(2);
+    });
+
+    it('an enemy whose copies expired before its extra turn lists none', () => {
+        const ONE_TURN =
+            'This Unit grants <unit-skill>Repair Over Time II</unit-skill> to all allies for 1 turn.';
+        expect(copiesOn('actor', true, ONE_TURN)).toBe(0);
     });
 });

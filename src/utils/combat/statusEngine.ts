@@ -2245,6 +2245,9 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
                 // Exposed can diverge from its declared count, and buff steal reads self stores),
                 // but a dropped `stacks` would make a stolen partly-spent status read as full.
                 stacks: s.stacks,
+                // A scheduled independent copy keeps the pick that applied it.
+                sourceId: s.sourceId,
+                pickIndex: s.pickIndex,
             };
         });
         for (const recipientId of recipientIds) {
@@ -2279,6 +2282,8 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
                     hitsRemaining: st.hitsRemaining,
                     // REMAINING stack count travels intact, same rule as hitsRemaining above.
                     stacks: st.stacks,
+                    ...(st.sourceId !== undefined && { sourceId: st.sourceId }),
+                    ...(st.pickIndex !== undefined && { pickIndex: st.pickIndex }),
                     appliedSeq: seq,
                     // Own-turn reprieve (`landsOnActingHolder`): the thief stealing on its own
                     // turn keeps the REMAINING duration intact through that turn's Post-Turn;

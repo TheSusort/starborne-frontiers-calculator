@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { createStatusEngine, RegisteredAbilityStatus } from '../statusEngine';
+import type { SelectedGameBuff } from '../../../types/calculator';
 
 // statusEngine.steal — moves the newest stealable buff(s) from a source actor to one or
 // more recipients, remaining duration intact. Mirrors purgeRemoval.test.ts's harness (a minimal
@@ -189,5 +190,45 @@ describe('statusEngine.steal (PR10 — buff steal)', () => {
         expect(
             eng.timedAbilityStatuses('self', 'thief').map((s) => s.active.buffName)
         ).not.toContain('Barrier');
+    });
+});
+
+describe('statusEngine.steal keeps the pick identity of a scheduled independent copy', () => {
+    it('the thief holds the stolen Repair Over Time copy with its sourceId and pickIndex', () => {
+        const rot: SelectedGameBuff = {
+            id: 'Repair Over Time II',
+            buffName: 'Repair Over Time II',
+            skillSource: 'active',
+            skillDuration: 2,
+            stacks: 1,
+            parsedEffects: {},
+            isStackable: false,
+        };
+        const eng = createStatusEngine({
+            selfBuffs: [],
+            enemyDebuffs: [],
+            teamSources: [{ sourceId: 'healer', selfBuffs: [rot], enemyDebuffs: [] }],
+        });
+        eng.beginRound(1);
+        eng.sourceFired('healer', 'active', 1);
+        expect(eng.snapshot('attacker').activeSelfBuffs).toEqual([
+            {
+                buffName: 'Repair Over Time II',
+                turnsRemaining: 2,
+                sourceId: 'healer',
+                pickIndex: 0,
+            },
+        ]);
+
+        expect(eng.steal('attacker', ['thief'], 1)).toEqual(['Repair Over Time II']);
+
+        expect(eng.snapshot('thief').activeSelfBuffs).toEqual([
+            {
+                buffName: 'Repair Over Time II',
+                turnsRemaining: 2,
+                sourceId: 'healer',
+                pickIndex: 0,
+            },
+        ]);
     });
 });

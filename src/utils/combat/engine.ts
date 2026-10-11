@@ -13532,10 +13532,14 @@ export function runCombat(rawInput: CombatEngineInput): {
                                     : 0
                             );
                             emitUndrivenAbilityPerformed(enemyTurn, enemyDrives);
-                            if (enemyTurn.activeSelfBuffs.length > 0) {
-                                // `activeSelfBuffs` is the enemy's whole self-buff set after this
-                                // turn, so a later turn's independent copies replace an earlier
-                                // turn's rather than adding to them.
+                            // `activeSelfBuffs` is the enemy's whole self-buff set after this
+                            // turn, so a later turn's independent copies replace an earlier
+                            // turn's rather than adding to them, and an empty set clears the
+                            // copies an earlier turn recorded. No entry is created just to clear.
+                            if (
+                                enemyTurn.activeSelfBuffs.length > 0 ||
+                                roundEnemyEffects.has(actor.id)
+                            ) {
                                 const entry = enemyRoundEntry();
                                 entry.selfBuffs = entry.selfBuffs.filter(
                                     (b) => !isIndependentInstance(b.buffName)

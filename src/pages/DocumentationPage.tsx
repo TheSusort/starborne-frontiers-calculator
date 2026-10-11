@@ -3535,9 +3535,10 @@ const DocumentationPage: React.FC = () => {
                                         enemy&apos;s own is the stronger, yours is the one that is
                                         shadowed. This is the general rule for buffs and debuffs,
                                         not something specific to this page: only damage over time
-                                        and bombs stack. Two DIFFERENT debuffs still combine: an
-                                        Attack Down and an Out. Damage Down on the same enemy both
-                                        apply.
+                                        and bombs stack, plus each Repair Over Time and Power
+                                        Infused Nanobots grant, which is kept as its own copy. Two
+                                        DIFFERENT debuffs still combine: an Attack Down and an Out.
+                                        Damage Down on the same enemy both apply.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         There is also an exception on the ALLY side rather than the
