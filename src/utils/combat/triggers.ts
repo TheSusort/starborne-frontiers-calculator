@@ -4299,6 +4299,7 @@ export function applierDefenceOf(
     selfBuffLookup: Map<string, SelectedGameBuff[]>
 ): number {
     return (
+        // eslint-disable-next-line no-restricted-syntax -- base defence scaled by the applier's own percentage defence modifier on the next line
         applier.stats.defence *
         (1 + toSelfDefenseModifier(victimSelfBuffs(statusEngine, applier.id, selfBuffLookup)) / 100)
     );

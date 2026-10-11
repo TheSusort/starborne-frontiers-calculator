@@ -304,8 +304,10 @@ export function liveDebuffLandingChance(
 ): number {
     const atk = foldActorBuffTotals(statusEngine, selfBuffLookup, attacker.id);
     const def = foldActorBuffTotals(statusEngine, selfBuffLookup, defender.id);
+    /* eslint-disable no-restricted-syntax -- base hacking/security fed into the fold: the live buff totals are added on the next lines */
     const baseHacking = attacker.stats.hacking ?? 200;
     const baseSecurity = defender.stats.security ?? 100;
+    /* eslint-enable no-restricted-syntax */
     const effHacking = affinityScaledHacking(baseHacking + atk.hackingBuff, affinityModifier);
     const effSec = baseSecurity + def.securityBuff;
     return Math.min(100, Math.max(0, effHacking - effSec)) / 100;
