@@ -21,7 +21,8 @@ import { csvAvailable } from '../../../../scripts/lib/shipSkillCsv';
 import { shipDataAvailable } from '../../../../scripts/lib/shipDataSnapshot';
 import { buildShipAbilities } from '../../abilities/buildShipAbilities';
 import { parsePattern, parseTarget } from '../../targetingParser';
-import type { ShipSkills } from '../../../types/abilities';
+import { hitKit } from '../__testutils__/realKitBoard';
+import type { Ability, ShipSkills } from '../../../types/abilities';
 import type { EnemyBaseClass } from '../../../types/calculator';
 import type { ShipTypeName } from '../../../constants/shipTypes';
 import type { ParsedPattern } from '../../targetingParser';
@@ -59,7 +60,12 @@ const POS: Record<Label, Position> = { A: 'M4', B: 'M3', C: 'T4', OUT: 'M2' };
 const LABELS: Label[] = ['A', 'B', 'C', 'OUT'];
 
 /** A durable, harmless enemy, faster than the caster. */
-const enemyAt = (id: string, position: Position, role: ShipTypeName): EnemyAttacker => ({
+const enemyAt = (
+    id: string,
+    position: Position,
+    role: ShipTypeName,
+    shipSkills: ShipSkills = NO_SKILLS
+): EnemyAttacker => ({
     id,
     stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 1e9, speed: 150, security: 0 },
     chargeCount: 0,
@@ -67,12 +73,17 @@ const enemyAt = (id: string, position: Position, role: ShipTypeName): EnemyAttac
     position,
     target: parseTarget('front'),
     pattern: single(),
-    shipSkills: NO_SKILLS,
+    shipSkills,
     role,
 });
 
 /** A durable, harmless player-side ship, faster than the enemy caster. */
-const playerShip = (id: string, position: Position, role: ShipTypeName): TeamActor => ({
+const playerShip = (
+    id: string,
+    position: Position,
+    role: ShipTypeName,
+    shipSkills: ShipSkills = NO_SKILLS
+): TeamActor => ({
     id,
     speed: 150,
     chargeCount: 0,
@@ -84,7 +95,7 @@ const playerShip = (id: string, position: Position, role: ShipTypeName): TeamAct
     pattern: single(),
     role,
     walk: {
-        shipSkills: NO_SKILLS,
+        shipSkills,
         stats: {
             attack: 0,
             crit: 0,
@@ -131,6 +142,12 @@ const base = (over: Partial<CombatEngineInput>): CombatEngineInput => ({
 
 const roleOf = (roles: Roles, l: Label): ShipTypeName => roles[l] ?? 'ATTACKER';
 
+/** Kit overrides for one board: the caster's whole kit, and any struck-side ship's kit. */
+interface Kits {
+    caster?: ShipSkills;
+    struck?: Partial<Record<Label, ShipSkills>>;
+}
+
 interface Side {
     casterId: string;
     ids: Record<Label, string>;
@@ -138,19 +155,22 @@ interface Side {
         ship: string,
         pattern: ParsedPattern,
         roles: Roles,
-        enemyType?: EnemyBaseClass
+        enemyType?: EnemyBaseClass,
+        kits?: Kits
     ) => CombatEngineInput;
 }
 
 const PLAYER: Side = {
     casterId: 'attacker',
     ids: { A: 'enemy-a', B: 'enemy-b', C: 'enemy-c', OUT: 'enemy-out' },
-    input: (ship, pattern, roles, enemyType) =>
+    input: (ship, pattern, roles, enemyType, kits) =>
         base({
-            shipSkills: realKit(ship),
+            shipSkills: kits?.caster ?? realKit(ship),
             pattern,
             ...(enemyType ? { enemyType } : {}),
-            enemyAttackers: LABELS.map((l) => enemyAt(PLAYER.ids[l], POS[l], roleOf(roles, l))),
+            enemyAttackers: LABELS.map((l) =>
+                enemyAt(PLAYER.ids[l], POS[l], roleOf(roles, l), kits?.struck?.[l])
+            ),
         }),
 };
 
@@ -159,15 +179,16 @@ const PLAYER: Side = {
 const ENEMY: Side = {
     casterId: 'enemy-caster',
     ids: { A: 'attacker', B: 'ally-b', C: 'ally-c', OUT: 'ally-out' },
-    input: (ship, pattern, roles, enemyType) =>
+    input: (ship, pattern, roles, enemyType, kits) =>
         base({
             attack: 0,
             speed: 150,
             pattern: single(),
             role: roleOf(roles, 'A'),
+            ...(kits?.struck?.A ? { shipSkills: kits.struck.A } : {}),
             ...(enemyType ? { enemyType } : {}),
             teamActors: (['B', 'C', 'OUT'] as Label[]).map((l) =>
-                playerShip(ENEMY.ids[l], POS[l], roleOf(roles, l))
+                playerShip(ENEMY.ids[l], POS[l], roleOf(roles, l), kits?.struck?.[l])
             ),
             enemyAttackers: [
                 {
@@ -186,7 +207,7 @@ const ENEMY: Side = {
                     position: 'M4',
                     target: parseTarget('front'),
                     pattern,
-                    shipSkills: realKit(ship),
+                    shipSkills: kits?.caster ?? realKit(ship),
                 },
             ],
         }),
@@ -202,13 +223,22 @@ interface Measured {
     afterCast: (buffName: string) => boolean;
     /** Direct damage the caster's round-N hits dealt to the aimed enemy. */
     aimedDamage: (round: number) => number;
+    /** A round-1 hit of the caster's on A drew on A's shield (`attacked.shieldWasHit`). */
+    aimedShieldHit: boolean;
+    /** A's HP fell at any point of round 1 (`hp-changed`). */
+    aimedHpDropped: boolean;
 }
 
 const measure = (
     side: Side,
     ship: string,
     roles: Roles,
-    opts: { pattern?: ParsedPattern; enemyType?: EnemyBaseClass; numRounds?: number } = {}
+    opts: {
+        pattern?: ParsedPattern;
+        enemyType?: EnemyBaseClass;
+        numRounds?: number;
+        kits?: Kits;
+    } = {}
 ): Measured => {
     const bus = createEventBus();
     const caster = side.casterId;
@@ -216,6 +246,12 @@ const measure = (
     const gains: string[] = [];
     const log: string[] = [];
     const aimed = new Map<number, number>();
+    let aimedShieldHit = false;
+    let aimedHpDropped = false;
+    bus.on('hp-changed', (e: Extract<CombatEvent, { type: 'hp-changed' }>) => {
+        if (e.targetId === side.ids.A && e.round === 1 && e.newPct < e.oldPct)
+            aimedHpDropped = true;
+    });
     bus.on('skill-fired', (e: Extract<CombatEvent, { type: 'skill-fired' }>) => {
         if (e.actorId === caster && e.round === 1) log.push('cast');
     });
@@ -224,6 +260,7 @@ const measure = (
         if (e.targetId === side.ids.A)
             aimed.set(e.round, (aimed.get(e.round) ?? 0) + (e.damage ?? 0));
         if (e.round === 1) struck.add(e.targetId);
+        if (e.round === 1 && e.targetId === side.ids.A && e.shieldWasHit) aimedShieldHit = true;
     });
     bus.on('buff-applied', (e: Extract<CombatEvent, { type: 'buff-applied' }>) => {
         if (e.actorId !== caster || e.round !== 1) return;
@@ -231,7 +268,7 @@ const measure = (
         log.push(`buff:${e.buffName}`);
     });
     runCombat({
-        ...side.input(ship, opts.pattern ?? circle(), roles, opts.enemyType),
+        ...side.input(ship, opts.pattern ?? circle(), roles, opts.enemyType, opts.kits),
         ...(opts.numRounds ? { numRounds: opts.numRounds } : {}),
         bus,
     });
@@ -244,6 +281,8 @@ const measure = (
             return at >= 0 && cast >= 0 && cast < at;
         },
         aimedDamage: (round) => aimed.get(round) ?? 0,
+        aimedShieldHit,
+        aimedHpDropped,
     };
 };
 
@@ -352,6 +391,180 @@ describe('DPS calculator: the configured enemy class decides, on every damaging 
         it(`${ship}: against a Debuffer, ${buffName} every round; against an Attacker, never`, () => {
             expect(run(ship, buffName, 'Debuffer')).toEqual([1, 2, 3]);
             expect(run(ship, buffName, 'Attacker')).toEqual([]);
+        });
+    }
+});
+
+/** Self-casts `ability` from the active slot every turn. A is faster than the caster on both
+ *  sides, so the status is up before the caster's round-1 hit. */
+const selfCast = (ability: Ability): ShipSkills => ({
+    slots: [{ slot: 'active', abilities: [ability] }],
+});
+const selfBuff = (buffName: string): Ability => ({
+    id: `self-${buffName}`,
+    type: 'buff',
+    target: 'self',
+    trigger: 'on-cast',
+    conditions: [],
+    config: {
+        type: 'buff',
+        buffName,
+        parsedEffects: {},
+        stacks: 1,
+        isStackable: false,
+        duration: 99,
+    },
+});
+/** A standing self-Barrier from an implant: full damage immunity for the whole run. */
+const barrierKit = (): ShipSkills => ({
+    slots: [
+        { slot: 'active', abilities: [] },
+        {
+            slot: 'passive',
+            abilities: [
+                {
+                    id: 'barrier-implant',
+                    type: 'buff',
+                    target: 'self',
+                    trigger: 'on-cast',
+                    conditions: [],
+                    source: 'equipment',
+                    config: {
+                        type: 'buff',
+                        buffName: 'Barrier',
+                        stacks: 1,
+                        isStackable: false,
+                        parsedEffects: {},
+                    },
+                },
+            ],
+        },
+    ],
+});
+/** An `incoming-block` that always procs and blocks the whole hit. */
+const fullBlockKit = (): ShipSkills => ({
+    slots: [
+        { slot: 'active', abilities: [] },
+        {
+            slot: 'passive',
+            abilities: [
+                {
+                    id: 'full-block',
+                    type: 'incoming-block',
+                    target: 'self',
+                    trigger: 'on-cast',
+                    conditions: [],
+                    config: {
+                        type: 'incoming-block',
+                        condition: 'always',
+                        procChance: 1,
+                        blockPct: 1,
+                        oncePerRound: false,
+                    },
+                    autoFilled: true,
+                },
+            ],
+        },
+    ],
+});
+/** Lionheart's passive alone: 10 Protection at the start of each round, covering every ally. */
+const lionheartPassive = (): ShipSkills => ({
+    slots: [
+        { slot: 'active', abilities: [] },
+        ...realKit('Lionheart').slots.filter((s) => s.slot === 'passive'),
+    ],
+});
+/** Rys's real passive riding a synthetic multi-hit active. */
+const rysMultiHit = (hits: number): ShipSkills => ({
+    slots: [
+        { slot: 'active', abilities: hitKit(100, hits).slots[0].abilities },
+        ...realKit('Rys').slots.filter((s) => s.slot === 'passive'),
+    ],
+});
+
+const SWIFTNESS = 'XAOC Swiftness II';
+
+describe('Rys: "when damaging a supporter" needs the hit to do damage to the supporter (#655)', () => {
+    for (const side of [PLAYER, ENEMY]) {
+        const tag = side === PLAYER ? 'player' : 'enemy-side';
+        const run = (struckA: ShipSkills | undefined, caster?: ShipSkills): Measured =>
+            measure(
+                side,
+                'Rys',
+                { A: 'SUPPORTER' },
+                {
+                    pattern: single(),
+                    kits: {
+                        ...(caster ? { caster } : {}),
+                        struck: struckA ? { A: struckA } : {},
+                    },
+                }
+            );
+
+        it(`${tag}: CONTROL — an unprotected supporter takes the hit → gains`, () => {
+            const m = run(undefined);
+            expect(m.aimedHpDropped).toBe(true);
+            expect(only(m, SWIFTNESS)).toEqual([SWIFTNESS]);
+            expect(m.afterCast(SWIFTNESS)).toBe(true);
+        });
+
+        // FENCE: passes before and after — a shield-soaked hit is direct damage to the shield.
+        it(`${tag}: FENCE — a hit A's shield soaks whole still damaged A → gains`, () => {
+            const m = run(
+                selfCast({
+                    id: 'self-shield',
+                    type: 'shield',
+                    target: 'self',
+                    trigger: 'on-cast',
+                    conditions: [],
+                    config: { type: 'shield', pct: 100, basis: 'hp' },
+                })
+            );
+            expect(m.aimedShieldHit).toBe(true);
+            expect(m.aimedHpDropped).toBe(false);
+            expect(only(m, SWIFTNESS)).toEqual([SWIFTNESS]);
+            expect(m.afterCast(SWIFTNESS)).toBe(true);
+        });
+
+        it(`${tag}: Hit Mitigation turns the hit into a DoT → no gain`, () => {
+            const m = run(selfCast(selfBuff('Hit Mitigation')));
+            expect(m.aimedHpDropped).toBe(false);
+            expect(only(m, SWIFTNESS)).toEqual([]);
+        });
+
+        it(`${tag}: Protection moves the whole hit off A → no gain`, () => {
+            const m = measure(
+                side,
+                'Rys',
+                { A: 'SUPPORTER' },
+                { pattern: single(), kits: { struck: { B: lionheartPassive() } } }
+            );
+            expect(m.aimedHpDropped).toBe(false);
+            expect(only(m, SWIFTNESS)).toEqual([]);
+        });
+
+        it(`${tag}: Barrier nullifies the hit → no gain`, () => {
+            const m = run(barrierKit());
+            expect(m.aimedHpDropped).toBe(false);
+            expect(only(m, SWIFTNESS)).toEqual([]);
+        });
+
+        it(`${tag}: an incoming-block that blocks the whole hit → no gain`, () => {
+            const m = run(fullBlockKit());
+            expect(m.aimedHpDropped).toBe(false);
+            expect(only(m, SWIFTNESS)).toEqual([]);
+        });
+
+        it(`${tag}: CONTROL — a 2-hit cast whose hits both land gains on each hit`, () => {
+            const m = run(undefined, rysMultiHit(2));
+            expect(only(m, SWIFTNESS)).toEqual([SWIFTNESS, SWIFTNESS]);
+        });
+
+        it(`${tag}: a 2-hit cast whose first hit Hit Mitigation takes gains once, from the second`, () => {
+            const m = run(selfCast(selfBuff('Hit Mitigation')), rysMultiHit(2));
+            expect(m.aimedHpDropped).toBe(true);
+            expect(only(m, SWIFTNESS)).toEqual([SWIFTNESS]);
+            expect(m.afterCast(SWIFTNESS)).toBe(true);
         });
     }
 });

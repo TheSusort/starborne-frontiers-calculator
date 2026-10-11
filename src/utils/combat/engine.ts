@@ -105,6 +105,7 @@ import {
 } from './positionalBinding';
 import {
     applyPositionalDamage,
+    damagedVictim,
     directlyDamagesVictim,
     footprintVictims,
     isWholeBattlefieldPattern,
@@ -10467,8 +10468,8 @@ export function runCombat(rawInput: CombatEngineInput): {
              * precede its damage, which is almost the whole corpus.
              */
             applyDebuffsForSubAttack: PlayerTurnResult['applyDebuffsForSubAttack'];
-            /** This cast's per-hit passive gains for one sub-attack ≥ 1 (R178); undefined for a
-             *  cast carrying none. */
+            /** This cast's per-hit passive gains for one sub-attack (R178); undefined for a cast
+             *  carrying none. */
             applyPerHitSelfStatusesForSubAttack: PlayerTurnResult['applyPerHitSelfStatusesForSubAttack'];
             deferredEnemyApplications: PlayerTurnResult['deferredEnemyApplications'];
             /** Whether a Stasis this cast wrote stands on a victim — its covered Stasis marks skip
@@ -10626,6 +10627,9 @@ export function runCombat(rawInput: CombatEngineInput): {
              *  Per HIT, not per victim: a cast whose first hit is nullified and whose second lands
              *  still reduces Stasis. */
             const stasisMarkByHit = new Map<string, boolean>();
+            /** Per sub-attack, the victims its hit did damage to (`damagedVictim`) — the struck
+             *  set a "when damaging X" passive gain reads (#655). */
+            const damagedVictimsBySubAttack = new Map<number, Set<string>>();
             // Collect EVERY footprint victim hit by this cast's firing damage (unique by id) so each
             // can detonate its OWN containers after the firing hits land.
             const detonationTargets = new Map<string, CombatActor>();
@@ -10790,6 +10794,15 @@ export function runCombat(rawInput: CombatEngineInput): {
                 ) => {
                     // Whether this hit is direct damage on `victim` — read its doc.
                     const direct = directlyDamagesVictim(outcome);
+                    if (damagedVictim(outcome, damage)) {
+                        const subAttack = subAttackIndex ?? 0;
+                        let damaged = damagedVictimsBySubAttack.get(subAttack);
+                        if (!damaged) {
+                            damaged = new Set<string>();
+                            damagedVictimsBySubAttack.set(subAttack, damaged);
+                        }
+                        damaged.add(victim.id);
+                    }
                     // The cast's hit on a primary target is the first aimed hit on it in
                     // that sub-attack's chain, so it spends that victim's primary-target
                     // allowance there — when it damaged the victim directly.
@@ -10882,6 +10895,13 @@ export function runCombat(rawInput: CombatEngineInput): {
                     );
                 },
                 onSubAttackEnd: (sub) => {
+                    // Every sub-attack's per-hit gains fire here, the first included, once the
+                    // funnel has said which victims the hit did damage to.
+                    const firePerHitGains = (): void =>
+                        sel.applyPerHitSelfStatusesForSubAttack?.({
+                            ...sub,
+                            directVictimIds: [...(damagedVictimsBySubAttack.get(sub.index) ?? [])],
+                        });
                     if (sub.index === 0) {
                         // Sub-attack 0 keeps its CAST-TIME roll (several consumers read that
                         // outcome before this loop runs — see applyDebuffsForSubAttack's doc). What
@@ -10902,13 +10922,14 @@ export function runCombat(rawInput: CombatEngineInput): {
                             for (const pair of pending) pair.applyState();
                             bufferDebuffEmitters(sub.index, pending);
                         }
+                        firePerHitGains();
                         return;
                     }
                     bufferDebuffEmitters(
                         sub.index,
                         sel.applyDebuffsForSubAttack?.(sub, 'after-damage') ?? []
                     );
-                    sel.applyPerHitSelfStatusesForSubAttack?.(sub);
+                    firePerHitGains();
                 },
                 onSubAttackSettled: settleSubAttack,
                 attackerStanding: () => actor.destroyedRound === undefined,

@@ -482,14 +482,16 @@ export interface PlayerTurnResult {
     ) => DeferredEnemyApplication[];
     /**
      * Fires this cast's passive gains that ride each hit (`TimedStatus.perHit`) for ONE
-     * sub-attack ≥ 1, gated on the enemies that sub-attack struck (R178). The engine calls it at
-     * the sub-attack's end; the first sub-attack's firing already happened inside this function.
-     * Present only on a positional cast carrying such a gain, like `applyDebuffsForSubAttack`.
+     * sub-attack, gated on the enemies that sub-attack did damage to (`directVictimIds`, R178,
+     * #655). The engine calls it at every sub-attack's end, the first included. Present only on a
+     * positional cast carrying such a gain, like `applyDebuffsForSubAttack`.
      */
     applyPerHitSelfStatusesForSubAttack?: (sub: {
         index: number;
         anchorId: string;
         victimIds: string[];
+        /** The sub-attack's victims its hit did damage to — `damagedVictim` (positionalApply.ts). */
+        directVictimIds: string[];
     }) => void;
     /** Present ONLY when this cast deferred its heal/shield/cleanse pass because it carries a
      *  firing-slot `damage-dealt` rider, whose basis is the damage the cast DELIVERED and so is
@@ -4434,13 +4436,19 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         status: (typeof timedSelfBySlot)[number];
         critDecided: boolean;
     }[] = [];
+    /** The passive gains riding this cast's hits (`TimedStatus.perHit`). */
+    const perHitSelfStatuses = timedSelfBySlot.filter((s) => s.perHit === true && ridesThisCast(s));
+    /** A positional cast fires its per-hit gains per sub-attack from the engine, through
+     *  `applyPerHitSelfStatusesForSubAttack`, once the funnel knows which victims each hit did
+     *  damage to (#655). Only the non-positional DPS-calculator cast fires them here. */
+    const perHitGainsFireFromEngine =
+        positionalLanding && hasVictim && perHitSelfStatuses.length > 0;
     for (const status of timedSelfBySlot) {
         if (!ridesThisCast(status) || selfStatusesBeforeRolls.has(status)) continue;
         if (status.perHit === true) {
+            if (perHitGainsFireFromEngine) continue;
             // A passive gain riding the cast's hits reads the struck enemies as they stood BEFORE
-            // the cast (owner ruling R15), and lands after the damage (`afterDamageClause`). This
-            // is the first sub-attack's firing; later ones fire through
-            // `applyPerHitSelfStatusesForSubAttack` (R178).
+            // the cast (owner ruling R15), and lands after the damage (`afterDamageClause`).
             if (hasVictim && anyStruckVictimMeets(status.conditions, preDebuffGateCtx))
                 endOfTurnSelfStatuses.push({ status, critDecided: false });
             continue;
@@ -7405,19 +7413,19 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         else activeSelfBuffsForRound.push(live.active);
     };
 
-    /** The passive gains riding this cast's hits (`TimedStatus.perHit`), fired for ONE sub-attack
-     *  ≥ 1 — the first sub-attack fires through `endOfTurnSelfStatuses`. A multi-hit skill is N
-     *  full attacks, so each hit is its own firing (R178): a status fires once when any enemy
-     *  THAT sub-attack strikes passes its gate (R17), each struck enemy read as it stood before the
-     *  cast (R15) — `recipientGateCtxById` was built before any landing. */
-    const perHitSelfStatuses = timedSelfBySlot.filter((s) => s.perHit === true && ridesThisCast(s));
+    /** The passive gains riding this cast's hits (`TimedStatus.perHit`), fired for ONE
+     *  sub-attack of a positional cast. A multi-hit skill is N full attacks, so each hit is its own
+     *  firing (R178): a status fires once when any enemy THAT sub-attack did damage to
+     *  (`directVictimIds`, `damagedVictim`'s doc, #655) passes its gate (R17), each such enemy read
+     *  as it stood before the cast (R15) — `recipientGateCtxById` was built before any landing. */
     const applyPerHitSelfStatusesForSubAttack = (sub: {
         index: number;
         anchorId: string;
         victimIds: string[];
+        directVictimIds: string[];
     }): void => {
         const struckCtxs: ConditionContext[] = [];
-        for (const id of new Set([sub.anchorId, ...sub.victimIds])) {
+        for (const id of new Set(sub.directVictimIds)) {
             if (hasVictim && id === enemy.id) {
                 struckCtxs.push(struckAnchorCtx(preDebuffGateCtx));
                 continue;
@@ -7479,10 +7487,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             positionalLanding && perSubAttackDebuffRecipes.length > 0
                 ? applyDebuffsForSubAttack
                 : undefined,
-        applyPerHitSelfStatusesForSubAttack:
-            positionalLanding && hasVictim && perHitSelfStatuses.length > 0
-                ? applyPerHitSelfStatusesForSubAttack
-                : undefined,
+        applyPerHitSelfStatusesForSubAttack: perHitGainsFireFromEngine
+            ? applyPerHitSelfStatusesForSubAttack
+            : undefined,
         // Set ONLY when this cast's support pass deferred (a firing-slot `damage-dealt` rider on an
         // engine-resolved cast). The engine MUST invoke it after the funnel — the repair/shield has
         // not happened yet. Undefined on every other path, where the pass already ran inline.
