@@ -14,7 +14,8 @@ import { calculateBuffTotals } from '../buffTotals';
 import { toSimBuffs } from '../../calculators/dpsBuffHelpers';
 import type { ConditionContext } from '../../abilities/evaluateConditions';
 import type { Ability } from '../../../types/abilities';
-import { runCombat } from '../engine';
+import { runCombat, type CombatEngineInput, type TeamActorEngineInput } from '../engine';
+import { parsePattern, parseTarget } from '../../targetingParser';
 import { bareEnemy } from '../__testutils__/bareRosterFixture';
 import { dealtBy } from '../__testutils__/perTargetDealt';
 
@@ -270,6 +271,276 @@ describe('turn loop — a family held via the schedule AND an ability status fol
         expect(scheduledOnly[1]).toBeGreaterThan(none[1]);
         expect(both).toEqual(scheduledOnly);
         expect(both[1]).toBe(kitOnly[1]);
+    });
+});
+
+describe('turn loop — own duplicate family meets a stronger enemy-applied tier (#667)', () => {
+    // The focus holds `Attack Down I` twice (scheduled + its own passive-slot status) and the
+    // enemy applies `Attack Down III` before the focus's first turn. One own instance per family
+    // means the shadowing comparison and the fold read the same list, so the turn lands on
+    // exactly the applied -45: not -30 (the delta computed against the unreduced own sum), and
+    // not -60 (additive).
+    const HP = 10_000_000;
+    const AD1 = { attack: -15 };
+    const AD3 = { attack: -45 };
+    const dmgAbility = (): Ability => ({
+        id: 'dmg',
+        type: 'damage',
+        target: 'enemy',
+        trigger: 'on-cast',
+        conditions: [],
+        config: { type: 'damage', multiplier: 100 },
+    });
+    const selfGrant = (): Ability => ({
+        id: 'kit-ad1',
+        type: 'buff',
+        target: 'self',
+        trigger: 'on-cast',
+        conditions: [],
+        config: {
+            type: 'buff',
+            buffName: 'Attack Down I',
+            parsedEffects: AD1,
+            stacks: 1,
+            isStackable: false,
+            duration: 10,
+        },
+    });
+    const enemyCast = (buffName: string, parsedEffects: SelectedGameBuff['parsedEffects']) =>
+        ({
+            id: `cast-${buffName}`,
+            type: 'debuff',
+            target: 'enemy',
+            trigger: 'on-cast',
+            conditions: [],
+            config: {
+                type: 'debuff',
+                buffName,
+                parsedEffects,
+                stacks: 1,
+                isStackable: false,
+                duration: 10,
+                application: 'apply',
+            },
+        }) as Ability;
+
+    const run = (opts: { scheduled: boolean; kit: boolean; applied: boolean }) => {
+        let statusEngine: StatusEngine | undefined;
+        const r = runCombat({
+            numRounds: 2,
+            selfBuffs: opts.scheduled ? [sel('manual-ad1', 'Attack Down I', AD1)] : [],
+            enemyDebuffs: [],
+            hasChargedSkill: false,
+            startCharged: false,
+            defensePenetration: 0,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            chargeCount: 0,
+            target: parseTarget('front'),
+            pattern: parsePattern('Pattern-Base'),
+            attack: 1000,
+            crit: 0,
+            critDamage: 0,
+            defence: 0,
+            hp: HP,
+            speed: 100,
+            position: 'M1',
+            shipSkills: {
+                slots: [
+                    { slot: 'active', abilities: [dmgAbility()] },
+                    ...(opts.kit ? [{ slot: 'passive' as const, abilities: [selfGrant()] }] : []),
+                ],
+            },
+            enemyAttackers: [
+                {
+                    id: 'applier',
+                    stats: {
+                        attack: 0,
+                        crit: 0,
+                        critDamage: 0,
+                        defence: 0,
+                        hp: HP,
+                        speed: 950,
+                        hacking: 100_000,
+                        security: 0,
+                    },
+                    chargeCount: 0,
+                    startCharged: false,
+                    position: 'M1',
+                    target: parseTarget('front'),
+                    pattern: parsePattern('Pattern-Base'),
+                    shipSkills: {
+                        slots: [
+                            {
+                                slot: 'active',
+                                abilities: [
+                                    opts.applied
+                                        ? enemyCast('Attack Down III', AD3)
+                                        : enemyCast('Inert Marker', {}),
+                                ],
+                            },
+                        ],
+                    },
+                },
+            ],
+            __testTapStatusEngine: (e) => {
+                statusEngine = e;
+            },
+        });
+        return {
+            dealt: r.rounds.map((round) => dealtBy([round], 'attacker')),
+            enemyStore: statusEngine!
+                .timedAbilityStatuses('enemy', undefined, 'attacker')
+                .map((s) => s.payload.buffName),
+        };
+    };
+
+    it('scheduled + kit Attack Down I under an applied Attack Down III folds to exactly -45', () => {
+        const both = run({ scheduled: true, kit: true, applied: true });
+        const single = run({ scheduled: true, kit: false, applied: true });
+        const appliedOnly = run({ scheduled: false, kit: false, applied: true });
+        const ownOnly = run({ scheduled: true, kit: true, applied: false });
+        const clean = run({ scheduled: false, kit: false, applied: false });
+
+        // The payload really sits in the focus's own enemy store.
+        expect(both.enemyStore).toContain('Attack Down III');
+        expect(ownOnly.enemyStore).not.toContain('Attack Down III');
+        // Instrument: the own instance (-15) and the applied tier (-45) each move the number.
+        expect(ownOnly.dealt[0]).toBeLessThan(clean.dealt[0]);
+        expect(appliedOnly.dealt[0]).toBeLessThan(ownOnly.dealt[0]);
+
+        expect(both.dealt).toEqual(single.dealt);
+        expect(both.dealt).toEqual(appliedOnly.dealt);
+        // Exactly -45 on the attack channel: damage is linear in attack here (0 defence, no crit).
+        for (let i = 0; i < clean.dealt.length; i++) {
+            expect(both.dealt[i] / clean.dealt[i]).toBeCloseTo(0.55, 6);
+        }
+    });
+});
+
+describe('status mode — own duplicate family meets a stronger enemy-applied tier (#667)', () => {
+    const SD1 = { speed: -20 };
+    const SD2 = { speed: -50 };
+
+    const fold = (applied: boolean) => {
+        const scheduled = sel('manual-sd1', 'Speed Down I', SD1);
+        const eng = engineWith([scheduled], [timedStatus('Speed Down I', SD1)]);
+        if (applied) {
+            const enemyStatus: Extract<RegisteredAbilityStatus, { kind: 'timed' }> = {
+                ...timedStatus('Speed Down II', SD2),
+                side: 'enemy',
+            };
+            eng.registerAbilityStatuses([enemyStatus], 'applier', 'attacker');
+            eng.applyTimedAbilityStatus(1, enemyStatus, undefined, 'attacker');
+            expect(
+                eng
+                    .timedAbilityStatuses('enemy', undefined, 'attacker')
+                    .map((s) => s.payload.buffName)
+            ).toContain('Speed Down II');
+        }
+        const lookup = new Map([['Speed Down I', [scheduled]]]);
+        return foldActorBuffTotals(eng, lookup, 'attacker').speedBuff;
+    };
+
+    it('scheduled + timed Speed Down I fold once, and an applied Speed Down II lands on -50', () => {
+        expect(fold(true)).toBe(-50);
+        // The no-enemy arm is the one that sees an unreduced own list: with the applied tier
+        // standing, `shadowedDelta` subtracts the own `sum`, so -40 + -10 still lands on -50.
+        expect(fold(false)).toBe(-20);
+    });
+});
+
+describe('engine lookup — two carriers of one scheduled family expand to one instance (#667)', () => {
+    // The engine's `selfBuffLookup` merges the focus's and every team actor's `selfBuffs` by
+    // name, so a family scheduled on both expands to two entries for the focus. The turn loop
+    // reduces that expansion, and `effectiveDamageStatsOf` reduces its input again, so this
+    // pins the end-to-end result rather than any one reduction.
+    const HP = 10_000_000;
+    const attackUp = (id: string) => sel(id, 'Attack Up III', { attack: 45 });
+    const ally = (selfBuffs: SelectedGameBuff[]): TeamActorEngineInput => ({
+        id: 'ally',
+        speed: 50,
+        chargeCount: 0,
+        startCharged: false,
+        selfBuffs,
+        enemyDebuffs: [],
+        position: 'M4',
+        target: parseTarget('front'),
+        pattern: parsePattern('Pattern-Base'),
+        walk: {
+            shipSkills: { slots: [] },
+            stats: {
+                attack: 0,
+                crit: 0,
+                critDamage: 0,
+                defensePenetration: 0,
+                hacking: 0,
+                security: 0,
+                defence: 0,
+                hp: HP,
+            },
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            hasChargedSkill: false,
+        },
+    });
+    const run = (focusBuffs: SelectedGameBuff[], allyBuffs: SelectedGameBuff[]) => {
+        const input: CombatEngineInput = {
+            numRounds: 2,
+            selfBuffs: focusBuffs,
+            enemyDebuffs: [],
+            hasChargedSkill: false,
+            startCharged: false,
+            defensePenetration: 0,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            chargeCount: 0,
+            target: parseTarget('front'),
+            pattern: parsePattern('Pattern-Base'),
+            attack: 1000,
+            crit: 0,
+            critDamage: 0,
+            defence: 0,
+            hp: HP,
+            speed: 100,
+            position: 'M1',
+            shipSkills: {
+                slots: [
+                    {
+                        slot: 'active',
+                        abilities: [
+                            {
+                                id: 'dmg',
+                                type: 'damage',
+                                target: 'enemy',
+                                trigger: 'on-cast',
+                                conditions: [],
+                                config: { type: 'damage', multiplier: 100 },
+                            },
+                        ],
+                    },
+                ],
+            },
+            teamActors: [ally(allyBuffs)],
+            enemyAttackers: bareEnemy({
+                position: 'M1',
+                stats: { hp: HP },
+            }),
+        };
+        const r = runCombat(input);
+        return r.rounds.map((round) => dealtBy([round], 'attacker'));
+    };
+
+    it('focus damage with the family on focus AND ally equals the focus-only run', () => {
+        const none = run([], []);
+        const focusOnly = run([attackUp('f')], []);
+        const both = run([attackUp('f')], [attackUp('a')]);
+        expect(focusOnly[0]).toBeGreaterThan(none[0]);
+        expect(both).toEqual(focusOnly);
+        expect(both[0] / none[0]).toBeCloseTo(1.45, 6);
     });
 });
 

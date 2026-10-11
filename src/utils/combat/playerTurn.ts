@@ -1252,9 +1252,9 @@ export interface PlayerTurnArgs {
 // expandBuffs/expandEnemyDebuffs moved to buffTotals.ts (re-exported from lines 41-50 above).
 
 // The status engine's active scheduled self-buff list, expanded back into its SelectedGameBuff
-// effects (accumulating stack override included). Every scheduled self channel reads THIS list:
-// the six tracked totals via `resolveSelfBuffTotals`, and the defence-penetration / DoT-damage /
-// detonation-damage modifiers via `effectiveDamageStatsOf`.
+// effects (accumulating stack override included). The turn loop reduces it with
+// `strongestPerFamily`; every scheduled self channel, including defence-penetration / DoT-damage /
+// detonation-damage, then reaches the final fold through `selfNamedBuffs`.
 function expandScheduledSelfBuffs(args: {
     activeSelfBuffs: ActiveBuff[];
     selfBuffLookup: Map<string, SelectedGameBuff[]>;
@@ -1265,9 +1265,8 @@ function expandScheduledSelfBuffs(args: {
     );
 }
 
-// Per-round self-buff totals folded from the expanded scheduled list. The later active-passive
-// modifier fold-in stays in the loop (it depends on modifierCtx); these totals are returned
-// mutable so the loop can add the modifier deltas at the original sequence point.
+// Per-round totals of the reduced scheduled list. They seed only the crit gate estimates that run
+// before the ability statuses resolve; the final fold is `effectiveDamageStatsOf`'s.
 function resolveSelfBuffTotals(
     scheduledSelfBuffs: SelectedGameBuff[]
 ): ReturnType<typeof calculateBuffTotals> {

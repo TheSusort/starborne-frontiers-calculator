@@ -297,8 +297,9 @@ export interface ChannelContribution {
     tier: number;
     /** Σ of EVERY instance's post-stacks magnitude on this channel (percentage points, or flat
      *  units for `hacking`/`security` — see `pct`) — i.e. exactly what an
-     *  additive fold of the same list (`calculateBuffTotals`) puts into the totals. Equals `pct`
-     *  whenever the list holds a single instance of the family, which is every corpus case. */
+     *  additive fold of the same list (`calculateBuffTotals`) puts into the totals. Own-side
+     *  callers pass lists reduced by `strongestPerFamily`, so there `sum === pct`; subtracting
+     *  `sum` in `shadowedDelta` stays the defensive basis for an unreduced list. */
     sum: number;
 }
 
@@ -394,7 +395,9 @@ export function familiesOf(
 }
 
 /** Σ |post-stacks magnitude| over every numeric effect of one instance — the equal-tier
- *  tie-break `strongestPerFamily` hands `familyChallengerWins`. */
+ *  tie-break `strongestPerFamily` hands `familyChallengerWins`. It mixes percentage and flat
+ *  units and counts stated costs (a negative defence term adds to it), which is acceptable
+ *  because it only breaks ties between equal-tier instances of one family. */
 function instanceMagnitude(b: SelectedGameBuff): number {
     let m = 0;
     for (const v of Object.values(b.parsedEffects)) {
@@ -414,8 +417,9 @@ function instanceMagnitude(b: SelectedGameBuff): number {
  * holding one `buffName` for several team actors.
  *
  * Passed through untouched: stacking families (`isStackingFamily` — DoTs and bombs), heal-over-time
- * entries (`hotPct` is read per applier downstream, never from a fold), and entries with no numeric
- * effect (nothing to double).
+ * entries, and entries with no numeric effect (nothing to double). Heal-over-time is not read by
+ * any stat fold, so reducing it here would change nothing; de-duplicating HoT ticks is outside
+ * this helper's scope.
  *
  * A fold that also shadows against enemy-applied families must hand `shadowedDelta` this SAME
  * reduced list, because `shadowedDelta` subtracts the self `sum`.
@@ -481,15 +485,13 @@ function channelDelta(
  * the self side. Both directions of the ruling fall out of the one expression.
  *
  * SUBTRACTING THE SUM (not the strongest own instance) is what makes the delta structurally unable
- * to push the total past the applied value. Duplicate self-side instances of one family are
- * reachable two ways — `selfBuffLookup` accumulates entries across the attacker AND every team
- * actor under one `buffName`, and the same family can stand in `activeSelfBuffs` (scheduled) and
- * `abilitySelfEffects` (ability) at once with no shadowing between those two either — and with the
- * strongest subtracted instead, each duplicate left its own value behind in the total.
+ * to push the total past the applied value. Own-side callers pass a list reduced by
+ * `strongestPerFamily`, so there the sum IS the strongest instance; the sum remains the defensive
+ * basis for an unreduced list, where subtracting only the strongest would leave each duplicate's
+ * value behind in the total.
  *
- * `selfBuffs` MUST be the same named-status lists the caller's own fold consumed, or the
- * subtraction removes something the total never contained. See the call sites in playerTurn.ts and
- * engine.ts.
+ * `selfBuffs` MUST be the same named-status list the caller's own fold consumed, or the
+ * subtraction removes something the total never contained.
  */
 export function shadowedDelta(
     enemyFamilies: FamilyMap,

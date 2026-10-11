@@ -225,11 +225,11 @@ export interface EffectiveOutgoingStats {
  * contribution is in the total. It always was on `attack`; on `outgoingDamage` the total was 0, so
  * shadowing there would have removed a term that was never added.
  *
- * NOT FOR THE TURN LOOP. `runPlayerTurn` folds the same delta itself, into `scheduledTotals` ahead
- * of `effectiveDamageStatsOf` (see its `args.enemyAppliedFamilies` block); calling this there
- * would double-count. It is also NOT a general replacement for `effectiveStatsOf` — the ~20 other
+ * NOT FOR THE TURN LOOP. `runPlayerTurn` folds the same delta itself, into the `extras` it hands
+ * `effectiveDamageStatsOf` (see its `enemyAppliedDelta` block); calling this there
+ * would double-count. It is also NOT a general replacement for `effectiveStatsOf` — the other
  * engine readers of `.attack`/`.defence` are not throwing an attack and must keep the status-mode
- * fold. Two call sites, deliberately.
+ * fold.
  *
  * Team-agnostic for free, for the same reason `foldActorBuffTotals` is: the per-victim enemy store
  * is keyed by the holder's id regardless of side, and both call sites run for a player or an enemy
@@ -254,8 +254,8 @@ export function effectiveOutgoingStatsOf(
     const s = actor.stats;
     return {
         // Same shape as `effectiveStatsOf.attack`, with the delta added to the SAME additive
-        // percentage term — mirroring the turn loop's `scheduledTotals.attackBuff += delta.attack`
-        // rather than post-multiplying, which would compound instead of adding.
+        // percentage term — mirroring the turn loop's `extras.attackBuff += delta.attack` rather
+        // than post-multiplying, which would compound instead of adding.
         attack: s.attack * (1 + (t.attackBuff + attackPct) / 100) + t.attackFlatBuff,
         outgoingDamageBuffPct: t.outgoingDamageBuff + outgoingDamagePct,
         crit: s.crit + t.critBuff,
