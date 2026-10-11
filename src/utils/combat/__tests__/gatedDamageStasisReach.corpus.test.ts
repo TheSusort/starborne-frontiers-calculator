@@ -36,10 +36,9 @@ import type { Ability } from '../../../types/abilities';
 const FIRING_ACTIONS = ['active', 'charged'] as const;
 
 const SEAMS =
-    'Two seams read the PRE-GATE damage predicate and would both need fixing: the §4.5 ' +
-    'Stasis-break hook in playerTurn.ts, AND `positionalScalars` in playerTurn.ts, which is ' +
-    "what lets the engine's positional drive mark stasised victims in `onVictimPreImpact`. " +
-    'Fixing only the hook leaves every placement-board cast still breaking Stasis.';
+    '`positionalScalars` (playerTurn.ts) is built from the PRE-GATE `hasDamageAbility`; the ' +
+    "engine's positional drive, whose `onVictimPreImpact` marks stasised victims, runs only " +
+    'when `castDealsDamage` (engine.ts) holds on the GATED multiplier. Check that gate first.';
 
 function requireReferenceData(): void {
     // The CSV alone. `buildTraceShip` resolves a CSV-only record on fallback stats, and this
