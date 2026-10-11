@@ -13532,8 +13532,16 @@ export function runCombat(rawInput: CombatEngineInput): {
                                     : 0
                             );
                             emitUndrivenAbilityPerformed(enemyTurn, enemyDrives);
-                            if (enemyTurn.activeSelfBuffs.length > 0)
-                                enemyRoundEntry().selfBuffs.push(...enemyTurn.activeSelfBuffs);
+                            if (enemyTurn.activeSelfBuffs.length > 0) {
+                                // `activeSelfBuffs` is the enemy's whole self-buff set after this
+                                // turn, so a later turn's independent copies replace an earlier
+                                // turn's rather than adding to them.
+                                const entry = enemyRoundEntry();
+                                entry.selfBuffs = entry.selfBuffs.filter(
+                                    (b) => !isIndependentInstance(b.buffName)
+                                );
+                                entry.selfBuffs.push(...enemyTurn.activeSelfBuffs);
+                            }
                         } // end dead-after-burst guard (!burstDestroyedActor)
                     } // end stasis gate (real-enemy branch)
                 }

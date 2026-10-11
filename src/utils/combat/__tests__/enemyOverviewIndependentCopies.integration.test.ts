@@ -16,7 +16,11 @@ type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 
 const NO_SKILLS: ShipSkills = { slots: [{ slot: 'active', abilities: [] }] };
 
-const rotKit = (id: string): ShipSkills => {
+const ROT =
+    'This Unit grants <unit-skill>Repair Over Time II</unit-skill> to all allies for 2 turns.';
+const EXTRA = 'Once per round, this Unit <unit-skill>gains one extra action</unit-skill>.';
+
+const kit = (id: string, activeSkillText: string): ShipSkills => {
     const ship: Ship = {
         id,
         name: id,
@@ -37,8 +41,7 @@ const rotKit = (id: string): ShipSkills => {
         implants: {},
         refits: [],
         affinity: 'antimatter',
-        activeSkillText:
-            'This Unit grants <unit-skill>Repair Over Time II</unit-skill> to all allies for 2 turns.',
+        activeSkillText,
         activeTarget: 'self',
         activePattern: 'Pattern-Base',
         chargeSkillCharge: 0,
@@ -50,7 +53,7 @@ const rotKit = (id: string): ShipSkills => {
     };
 };
 
-const healer = (id: string, position: Position, speed: number): EnemyAttacker => ({
+const healer = (id: string, position: Position, speed: number, text = ROT): EnemyAttacker => ({
     id,
     stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 1e9, speed, security: 0 },
     chargeCount: 0,
@@ -58,13 +61,22 @@ const healer = (id: string, position: Position, speed: number): EnemyAttacker =>
     position,
     target: parseTarget('front'),
     pattern: parsePattern('Pattern-Base'),
-    shipSkills: rotKit(id),
+    shipSkills: kit(id, text),
     role: 'SUPPORTER',
 });
 
-const run = () =>
+const run = (extraTurnActor: boolean) =>
     runCombat({
-        enemyAttackers: [healer('healA', 'T1', 150), healer('healB', 'T2', 140)],
+        enemyAttackers: [
+            healer('healA', 'T1', 150),
+            healer('healB', 'T2', 140),
+            healer(
+                'actor',
+                'T3',
+                130,
+                extraTurnActor ? EXTRA : 'This Unit deals <unit-damage>100% damage</unit-damage>.'
+            ),
+        ],
         attack: 1000,
         crit: 0,
         critDamage: 0,
@@ -90,12 +102,17 @@ const run = () =>
         speed: 100,
     });
 
+const copiesOn = (id: string, extraTurnActor: boolean): number => {
+    const e = run(extraTurnActor).healing?.rounds[0]?.enemyEffects.find((x) => x.enemyId === id);
+    return e?.selfBuffs.filter((b) => b.buffName === 'Repair Over Time II').length ?? 0;
+};
+
 describe('enemy round overview lists each independent Repair Over Time copy', () => {
     it('an enemy holding two Repair Over Time copies lists two rows', () => {
-        const effects = run().healing?.rounds[0]?.enemyEffects ?? [];
-        const rows = effects.map(
-            (e) => e.selfBuffs.filter((b) => b.buffName === 'Repair Over Time II').length
-        );
-        expect(Math.max(...rows, 0)).toBe(2);
+        expect(copiesOn('actor', false)).toBe(2);
+    });
+
+    it('an enemy that takes an extra turn still lists each copy once', () => {
+        expect(copiesOn('actor', true)).toBe(2);
     });
 });
