@@ -19,11 +19,12 @@
  *   idle focus + mate 2 / 2   (the idle pick adds nothing)
  */
 import { describe, it, expect, beforeEach } from 'vitest';
-import { simulateDPS } from '../dpsSimulator';
+import { simulateDPS, type DPSSimulationInput } from '../dpsSimulator';
 import { setupKeyedRng } from '../rateAccumulator';
 import { realEnemyInput, damageKit, REAL_ENEMY_ID } from '../__testutils__/dpsRealEnemyFixture';
 import type { CombatEvent } from '../../combat/events';
 import type { SelectedGameBuff, TeamActorInput } from '../../../types/calculator';
+import type { ShipSkills } from '../../../types/abilities';
 
 beforeEach(() => {
     setupKeyedRng(12345);
@@ -47,16 +48,38 @@ const team = (selfBuffs: SelectedGameBuff[]): TeamActorInput => ({
     enemyDebuffs: [],
 });
 
-/** `hot-ticked` events on the focus, counted per round. */
-const focusTicksByRound = (
+/** A focus kit with a charged slot, so `chargeCount` makes the focus fire its charge pick. */
+const chargedKit = (): ShipSkills => ({
+    slots: [
+        ...damageKit().slots,
+        {
+            slot: 'charged',
+            abilities: [
+                {
+                    id: 'c1',
+                    type: 'damage',
+                    target: 'enemy',
+                    trigger: 'on-cast',
+                    conditions: [],
+                    config: { type: 'damage', multiplier: 100 },
+                },
+            ],
+        },
+    ],
+});
+
+/** The amount of every `hot-ticked` event on the focus, grouped by round. */
+const focusTickAmountsByRound = (
     selfBuffs: SelectedGameBuff[],
-    teamActors: TeamActorInput[] | undefined
-): Map<number, number> => {
+    teamActors: TeamActorInput[] | undefined,
+    over: Partial<DPSSimulationInput> = {}
+): Map<number, number[]> => {
     const events: CombatEvent[] = [];
     simulateDPS({
         ...realEnemyInput({
             selfBuffs,
             ...(teamActors ? { teamActors } : {}),
+            ...over,
             enemyAttackers: [
                 {
                     id: REAL_ENEMY_ID,
@@ -77,12 +100,24 @@ const focusTicksByRound = (
         }),
         bus: { on: () => {}, emit: (e: CombatEvent) => void events.push(e) },
     });
-    const byRound = new Map<number, number>();
+    const byRound = new Map<number, number[]>();
     for (const e of events) {
         if (e.type !== 'hot-ticked' || e.holderId !== 'attacker') continue;
+        byRound.set(e.round, [...(byRound.get(e.round) ?? []), e.amount]);
+    }
+    return byRound;
+};
+
+/** `hot-ticked` events on the focus, counted per round. */
+const focusTicksByRound = (
+    selfBuffs: SelectedGameBuff[],
+    teamActors: TeamActorInput[] | undefined
+): Map<number, number> => {
+    const byRound = new Map<number, number>();
+    for (const [round, amounts] of focusTickAmountsByRound(selfBuffs, teamActors)) {
         // A clipped tick would make the count stop meaning "live copies".
-        expect(e.amount).toBe(20_000);
-        byRound.set(e.round, (byRound.get(e.round) ?? 0) + 1);
+        for (const amount of amounts) expect(amount).toBe(20_000);
+        byRound.set(round, amounts.length);
     }
     return byRound;
 };
@@ -122,5 +157,36 @@ describe('scheduled Repair Over Time ticks per applying source (#671)', () => {
         );
         expect(ticks.get(2)).toBe(2);
         expect(ticks.get(3)).toBe(2);
+    });
+
+    // One ship, two picks of the same buff name. Each copy ticks its OWN pick once. The charge
+    // pick carries a different `hotPct` (3 → 30,000) so each tick's amount names the pick behind
+    // it, and an unrelated pick sits first in the list so the picks' positions are not 0 and 1.
+    const samePicks = (): SelectedGameBuff[] => [
+        rot('x', {
+            buffName: 'Attack Up II',
+            parsedEffects: { attack: 10 },
+            skillSource: 'active',
+            skillDuration: 2,
+        }),
+        rot('a', { skillSource: 'active', skillDuration: 2 }),
+        rot('c', { parsedEffects: { hotPct: 3 }, skillSource: 'charge', skillDuration: 2 }),
+    ];
+    const sorted = (xs: number[] | undefined) => [...(xs ?? [])].sort((p, q) => p - q);
+
+    it('a same-name charge pick that never fires adds nothing to the active copies', () => {
+        const ticks = focusTickAmountsByRound(samePicks(), undefined);
+        expect(sorted(ticks.get(2))).toEqual([20_000, 20_000]);
+        expect(sorted(ticks.get(3))).toEqual([20_000, 20_000, 20_000]);
+    });
+
+    it('same-name active and charge picks that both fire each tick their own copy once', () => {
+        // chargeCount 1: the focus alternates active (rounds 1, 3) and charged (round 2) turns.
+        const ticks = focusTickAmountsByRound(samePicks(), undefined, {
+            chargeCount: 1,
+            shipSkills: chargedKit(),
+        });
+        expect(sorted(ticks.get(2))).toEqual([20_000, 30_000]);
+        expect(sorted(ticks.get(3))).toEqual([20_000, 20_000, 30_000]);
     });
 });

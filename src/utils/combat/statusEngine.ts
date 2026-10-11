@@ -20,10 +20,14 @@ export interface ActiveBuff {
     turnsRemaining: number | 'recurring' | 'permanent';
     stacks?: number; // defined for accumulating buffs; current stack count
     /** The ship whose scheduled pick applied this copy (the `sourceFired` source id). Set only on
-     *  a scheduled independent instance (`isIndependentInstance`): each such copy is one source's
-     *  firing, and its heal-over-time tick expands only that source's own pick (#671). Undefined
-     *  on every other entry, which expands against the merged lookup. */
+     *  a scheduled independent instance (`isIndependentInstance`): each such copy is one pick's
+     *  firing, and its heal-over-time tick expands only that pick (#671). Undefined on every
+     *  other entry, which expands against the merged lookup. */
     sourceId?: string;
+    /** Set with `sourceId`: the applying pick's index in that source's own scheduled self list
+     *  (`StatusEngineInput.selfBuffs` for `'attacker'`, the team source's `selfBuffs` otherwise).
+     *  Identifies the pick when one source holds two picks of the same buff name. */
+    pickIndex?: number;
 }
 
 /** One granter's stacks added to an ability-sourced accumulating self status by a cadence tick
@@ -750,9 +754,10 @@ interface BuffState {
      *  application from `status.casterId`. Undefined for scheduled timed upserts (no caster
      *  identity) and for timed statuses whose registered status omitted casterId. */
     casterId?: string;
-    /** The firing source of a scheduled independent instance (`upsertBuff`'s `casterId`);
-     *  surfaced on the snapshot as `ActiveBuff.sourceId`. Undefined on every other entry. */
+    /** The firing source and pick of a scheduled independent instance; surfaced on the snapshot
+     *  as `ActiveBuff.sourceId` / `ActiveBuff.pickIndex`. Undefined on every other entry. */
     sourceId?: string;
+    pickIndex?: number;
     /** Monotonic application order, newest = largest. Stamped at every write/refresh (both
      *  the initial create and any family-rule refresh that re-sets the same key). Drives
      *  cleanse/purge newest-applied-first removal ordering. */
@@ -848,6 +853,8 @@ interface PersistentStackState {
 interface TimedSourceSets {
     timedSelf: SelectedGameBuff[];
     timedEnemy: SelectedGameBuff[];
+    /** The source's whole scheduled self list — the list `ActiveBuff.pickIndex` indexes. */
+    selfPicks: SelectedGameBuff[];
 }
 
 /**
@@ -989,11 +996,12 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
     // Per-source TIMED sets. 'attacker' holds the legacy merged arrays' timed entries;
     // each team source holds its own. sourceFired looks the firing source up here.
     const timedBySource = new Map<string, TimedSourceSets>();
-    timedBySource.set('attacker', { timedSelf, timedEnemy });
+    timedBySource.set('attacker', { timedSelf, timedEnemy, selfPicks: selfBuffs });
     for (const src of teamSources) {
         timedBySource.set(src.sourceId, {
             timedSelf: src.selfBuffs.filter((b) => !isAccumulating(b) && !isAlwaysActive(b)),
             timedEnemy: src.enemyDebuffs.filter((b) => !isAccumulating(b) && !isAlwaysActive(b)),
+            selfPicks: src.selfBuffs,
         });
     }
 
@@ -1382,7 +1390,12 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
     // Scheduled timed upserts always target the 'attacker' owner on the self side and
     // the DEFAULT_ENEMY_TARGET on the enemy side: scheduled buffs/debuffs ride the attacker's
     // cadence and route to the singular default stores.
-    const upsertBuff = (buff: SelectedGameBuff, side: 'self' | 'enemy', casterId?: string) => {
+    const upsertBuff = (
+        buff: SelectedGameBuff,
+        side: 'self' | 'enemy',
+        casterId?: string,
+        pickIndex?: number
+    ) => {
         const map = side === 'self' ? getSelfMap('attacker') : getEnemyMap(DEFAULT_ENEMY_TARGET);
         // Persistent stacking statuses route by NAME before the family-rule timed path: this
         // application landed (the landing hook already ran at the call site), so add a stack
@@ -1408,6 +1421,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
                 appliedSeq: seq,
                 appliedThisTurn,
                 sourceId: casterId,
+                pickIndex,
             });
             return;
         }
@@ -1488,7 +1502,8 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
 
         // Timed scheduled buffs (this source's) whose skillSource matches the fired slot.
         for (const buff of sets.timedSelf) {
-            if (buff.skillSource === slot) upsertBuff(buff, 'self', sourceId);
+            if (buff.skillSource === slot)
+                upsertBuff(buff, 'self', sourceId, sets.selfPicks.indexOf(buff));
         }
         // Timed ENEMY upserts draw the landing decision ONCE here. A rejected
         // application is NOT upserted (the existing in-window status is untouched) and
@@ -1628,6 +1643,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
                               buffName: s.buffName,
                               turnsRemaining: s.turnsRemaining,
                               ...(s.sourceId !== undefined && { sourceId: s.sourceId }),
+                              ...(s.pickIndex !== undefined && { pickIndex: s.pickIndex }),
                           }))
                     : []),
                 ...selfPersistentSnap,

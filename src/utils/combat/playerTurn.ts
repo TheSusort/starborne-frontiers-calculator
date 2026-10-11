@@ -698,9 +698,10 @@ export interface PlayerActorRuntime {
     // Lookups: attacker carries the global merged lookups; team runtimes get empty maps
     selfBuffLookup: Map<string, SelectedGameBuff[]>;
     /** Each scheduled source's own self picks, keyed by the id `sourceFired` receives for it
-     *  (`'attacker'` for the focus, the team actor's id otherwise). A scheduled heal-over-time
-     *  copy carries its applier as `ActiveBuff.sourceId` and ticks only that source's pick
-     *  (#671). Same attacker-only ownership as `selfBuffLookup`. */
+     *  (`'attacker'` for the focus, the team actor's id otherwise). Each list is the SAME array
+     *  the status engine was given for that source, so `ActiveBuff.pickIndex` indexes it: a
+     *  scheduled heal-over-time copy ticks only the pick that applied it (#671). Same
+     *  attacker-only ownership as `selfBuffLookup`. */
     scheduledSelfBuffsBySource: Map<string, SelectedGameBuff[]>;
     enemyDebuffLookup: Map<string, SelectedGameBuff[]>;
 }
@@ -6730,17 +6731,18 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         }
         // (b) Scheduled snapshot HoTs (applier = the holder itself). Mirror resolveSelfBuffTotals'
         // lookup consumption: expandBuffs applies the per-round stack override, so the expanded
-        // SelectedGameBuff carries the effective stacks already. A copy that names its source
-        // (`ActiveBuff.sourceId`) expands only that source's pick, so one copy is one tick and a
-        // pick that never fired never ticks (#671); every other entry expands against the merged
+        // SelectedGameBuff carries the effective stacks already. A copy that names its pick
+        // (`ActiveBuff.sourceId` + `pickIndex`) expands only that pick, so one copy is one tick and
+        // a pick that never fired never ticks (#671); every other entry expands against the merged
         // lookup.
         for (const ab of entry.activeSelfBuffs) {
-            const picks =
-                ab.sourceId !== undefined
-                    ? (scheduledSelfBuffsBySource.get(ab.sourceId) ?? []).filter(
-                          (b) => b.buffName === ab.buffName
-                      )
-                    : (selfBuffLookup.get(ab.buffName) ?? []);
+            let picks: SelectedGameBuff[];
+            if (ab.sourceId !== undefined && ab.pickIndex !== undefined) {
+                const pick = scheduledSelfBuffsBySource.get(ab.sourceId)?.[ab.pickIndex];
+                picks = pick ? [pick] : [];
+            } else {
+                picks = selfBuffLookup.get(ab.buffName) ?? [];
+            }
             for (const b of expandBuffEntry(ab, picks)) {
                 const hotPct = b.parsedEffects?.hotPct;
                 if (!hotPct) continue;
