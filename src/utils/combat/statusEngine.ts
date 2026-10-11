@@ -617,6 +617,16 @@ export function isStackingFamily(name: string): boolean {
     return DOT_PREFIXES.has(name.split(' ')[0]);
 }
 
+/** Buffs whose instances tick or apply independently per applier rather than overwrite (owner
+ *  ruling 2026-10-11): Repair Over Time and Power Infused Nanobots. */
+const INDEPENDENT_BUFF_PREFIXES = ['Repair Over Time', 'Power Infused Nanobots'];
+
+/** Whether every instance of a status counts on its own in an own-side stat fold: the stacking
+ *  families (`isStackingFamily`) plus the independently ticking buffs above. */
+export function stacksIndependently(name: string): boolean {
+    return isStackingFamily(name) || INDEPENDENT_BUFF_PREFIXES.some((p) => name.startsWith(p));
+}
+
 /** EXPORTED for #389's cross-store tier shadowing (`buffTotals.outgoingFamiliesOf`), which must
  *  key families by exactly the same rule this engine uses internally — a second copy of the
  *  Roman-suffix/DoT-prefix logic would drift. */

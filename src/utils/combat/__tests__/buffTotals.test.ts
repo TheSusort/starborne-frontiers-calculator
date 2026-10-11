@@ -155,6 +155,16 @@ describe('strongestPerFamily — one instance per named family (#667)', () => {
         expect(out).toHaveLength(6);
     });
 
+    it('independently ticking buffs are never reduced: Repair Over Time and Nanobots', () => {
+        const out = strongestPerFamily([
+            b('n1', 'Power Infused Nanobots', { attackFlat: 3000 }),
+            b('n2', 'Power Infused Nanobots', { attackFlat: 2500 }),
+            b('r1', 'Repair Over Time II', { hotPct: 10, outgoingHeal: 5 }),
+            b('r2', 'Repair Over Time II', { hotPct: 10, outgoingHeal: 5 }),
+        ]);
+        expect(out).toHaveLength(4);
+    });
+
     it('entries with no numeric effect and heal-over-time entries pass through', () => {
         const out = strongestPerFamily([
             b('e1', 'Stealth', {}),

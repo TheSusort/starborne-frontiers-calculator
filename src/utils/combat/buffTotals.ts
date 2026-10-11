@@ -1,6 +1,6 @@
 import { Buff, SelectedGameBuff } from '../../types/calculator';
 import type { AbilityStatusPayload, ActiveBuff } from './statusEngine';
-import { deriveFamilyKey, familyChallengerWins, isStackingFamily } from './statusEngine';
+import { deriveFamilyKey, familyChallengerWins, stacksIndependently } from './statusEngine';
 
 // ---------------------------------------------------------------------------
 // Leaf helpers shared by the player turn (playerTurn.ts) and the effective-stat
@@ -416,10 +416,9 @@ function instanceMagnitude(b: SelectedGameBuff): number {
  * actor's list more than once from a manual pick plus a kit grant, or from `selfBuffLookup`
  * holding one `buffName` for several team actors.
  *
- * Passed through untouched: stacking families (`isStackingFamily` — DoTs and bombs), heal-over-time
- * entries, and entries with no numeric effect (nothing to double). Heal-over-time is not read by
- * any stat fold, so reducing it here would change nothing; de-duplicating HoT ticks is outside
- * this helper's scope.
+ * Passed through untouched: everything `stacksIndependently` names (DoTs, bombs, Repair Over Time,
+ * Power Infused Nanobots — each instance counts on its own), any other heal-over-time entry, and
+ * entries with no numeric effect (nothing to double).
  *
  * A fold that also shadows against enemy-applied families must hand `shadowedDelta` this SAME
  * reduced list, because `shadowedDelta` subtracts the self `sum`.
@@ -430,7 +429,7 @@ export function strongestPerFamily(buffs: SelectedGameBuff[]): SelectedGameBuff[
     buffs.forEach((b, index) => {
         const magnitude = instanceMagnitude(b);
         if (
-            isStackingFamily(b.buffName) ||
+            stacksIndependently(b.buffName) ||
             b.parsedEffects.hotPct !== undefined ||
             magnitude === 0
         ) {
