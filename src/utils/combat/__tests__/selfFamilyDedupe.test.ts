@@ -1,3 +1,5 @@
+import { readFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, it, expect } from 'vitest';
 import {
     foldActorBuffTotals,
@@ -268,5 +270,50 @@ describe('turn loop — a family held via the schedule AND an ability status fol
         expect(scheduledOnly[1]).toBeGreaterThan(none[1]);
         expect(both).toEqual(scheduledOnly);
         expect(both[1]).toBe(kitOnly[1]);
+    });
+});
+
+describe('own-side folds go through strongestPerFamily (source tripwire)', () => {
+    const combatDir = join(__dirname, '..');
+    const read = (file: string) => readFileSync(join(combatDir, file), 'utf8');
+
+    /** Source from `start` to the next top-level closing brace (`\n}\n`). */
+    const bodyFrom = (source: string, start: string): string => {
+        const at = source.indexOf(start);
+        expect(at, `${start} not found`).toBeGreaterThanOrEqual(0);
+        const end = source.indexOf('\n}\n', at);
+        return source.slice(at, end === -1 ? undefined : end);
+    };
+
+    it('effectiveDamageStatsOf reduces the named own buffs', () => {
+        const body = bodyFrom(read('effectiveStats.ts'), 'export function effectiveDamageStatsOf(');
+        expect(body).toContain('strongestPerFamily(selfNamedBuffs)');
+    });
+
+    it('victimSelfBuffs returns the reduced own buffs', () => {
+        const body = bodyFrom(read('triggers.ts'), 'export function victimSelfBuffs(');
+        expect(body).toContain('strongestPerFamily(');
+    });
+
+    it('allSelfSourced reduces the own-source lists', () => {
+        const source = read('effectiveStats.ts');
+        const at = source.indexOf('const allSelfSourced');
+        expect(at).toBeGreaterThanOrEqual(0);
+        expect(source.slice(at, source.indexOf(';\n', at))).toContain('strongestPerFamily(');
+    });
+
+    it('the turn loop reduces scheduled and combined own buffs', () => {
+        const source = read('playerTurn.ts');
+        expect(source).toMatch(
+            /const selfNamedBuffs = strongestPerFamily\(\[\s*\.\.\.scheduledSelfBuffs,\s*\.\.\.abilitySelfEffects\s*\]\)/
+        );
+        expect(source).toMatch(/strongestPerFamily\(\s*expandScheduledSelfBuffs\(/);
+    });
+
+    it('no combat module folds a spread of own lists straight through calculateBuffTotals', () => {
+        const offenders = readdirSync(combatDir)
+            .filter((f) => /\.tsx?$/.test(f) && f !== 'buffTotals.ts')
+            .filter((f) => /calculateBuffTotals\(\s*toSimBuffs\(\s*\[/.test(read(f)));
+        expect(offenders).toEqual([]);
     });
 });
