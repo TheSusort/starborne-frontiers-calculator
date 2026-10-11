@@ -96,6 +96,7 @@ import {
     StatusEngine,
     announceAccumGains,
     createStatusEngine,
+    isIndependentInstance,
 } from './statusEngine';
 import { isPassivePerHitStatus, liveGateConditions } from './abilityStatusGating';
 import {
@@ -1128,11 +1129,16 @@ export function buildEnemyPlayerActorRuntime(
 
 /** De-dupe ActiveBuffs by buffName, keeping the first occurrence. Used to collapse the
  *  per-round enemy-effects union (multiple enemy attackers can carry the same status) so
- *  the UI shows each effect once per round. */
+ *  the UI shows each effect once per round. An independent instance (`isIndependentInstance`)
+ *  is one entry per copy and is never collapsed, matching the player panels. */
 function dedupeByBuffName(buffs: ActiveBuff[]): ActiveBuff[] {
     const seen = new Set<string>();
     const out: ActiveBuff[] = [];
     for (const b of buffs) {
+        if (isIndependentInstance(b.buffName)) {
+            out.push(b);
+            continue;
+        }
         if (seen.has(b.buffName)) continue;
         seen.add(b.buffName);
         out.push(b);

@@ -1896,14 +1896,15 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
 
     /** Remove a named buff family from ALL of `actorId`'s self stores. The three self-side
      *  doors a buff can arrive through each use a different key:
-     *   - timed `selfMaps` are keyed by `deriveFamilyKey(buffName).familyKey`,
+     *   - timed `selfMaps` hold the family's entries, found by `deriveFamilyKey(entry.buffName)`;
+     *     an independent-instance family (`isIndependentInstance`) holds one entry per
+     *     application under its `independentKey`, every other family holds at most one,
      *   - accumulating `accumSelfMaps` are keyed by the raw `buffName` (payload.buffName),
      *   - persistent `persistentSelfMaps` are keyed by the raw `buffName`.
-     *  Clearing all three makes removal robust regardless of which door applied the buff.
+     *  Every timed entry of the family is removed, and clearing all three makes removal robust
+     *  regardless of which door applied the buff.
      *  Lazy-empty / unknown id / unknown name → safe no-op. */
     const removeSelfBuffByName = (actorId: string, buffName: string): void => {
-        // Every timed entry of the family goes: an independent-instance family holds one entry
-        // per application (`independentKey`), every other family holds at most one.
         const timedMap = selfMaps.get(actorId);
         if (timedMap) {
             const { familyKey } = deriveFamilyKey(buffName);

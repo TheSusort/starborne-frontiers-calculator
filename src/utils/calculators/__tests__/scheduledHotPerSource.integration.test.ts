@@ -7,8 +7,9 @@
  *
  * The board: a 1,000,000-HP focus against a 150,000-attack enemy, so every focus turn starts
  * wounded by more than every live copy's tick (Repair Over Time II at `hotPct: 2` = 20,000 a
- * tick). `hot-ticked` fires only for HP actually restored, and every tick here is asserted to be
- * a full 20,000, so the count per focus turn is exactly the number of live copies.
+ * tick). `hot-ticked` fires only for HP actually restored, and every tick in the count-based
+ * tests is asserted to be a full 20,000, so the count per focus turn is exactly the number of
+ * live copies.
  *
  * Each pick lasts 2 turns and is re-granted every turn its source acts. The focus's own copy is
  * gained on its own turn, so it ticks on three focus turns; the teammate acts first, so its copy
