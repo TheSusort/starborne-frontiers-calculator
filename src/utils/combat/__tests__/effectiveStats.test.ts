@@ -448,9 +448,8 @@ describe('effectiveDamageStatsOf — four-layer fold characterization', () => {
 
         const dmg = effectiveDamageStatsOf({
             base,
-            scheduledTotals,
-            scheduledSelfBuffs: scheduledBuffs,
-            abilitySelfEffects,
+            selfNamedBuffs: [...scheduledBuffs, ...abilitySelfEffects],
+            extras: calculateBuffTotals([]),
             modifierAbilities,
             modifierCtx,
         });
@@ -533,9 +532,8 @@ describe('effectiveDamageStatsOf — four-layer fold characterization', () => {
 
         const dmg = effectiveDamageStatsOf({
             base,
-            scheduledTotals,
-            scheduledSelfBuffs: [],
-            abilitySelfEffects: [],
+            selfNamedBuffs: scheduledBuffs,
+            extras: calculateBuffTotals([]),
             modifierAbilities: [],
             modifierCtx,
         });
@@ -596,9 +594,8 @@ describe('effectiveDamageStatsOf — dotDamage modifier folds into selfDotDamage
 
         const dmg = effectiveDamageStatsOf({
             base,
-            scheduledTotals,
-            scheduledSelfBuffs: [],
-            abilitySelfEffects: [],
+            selfNamedBuffs: [],
+            extras: calculateBuffTotals([]),
             modifierAbilities,
             modifierCtx,
         });
@@ -844,9 +841,8 @@ describe('attackFlat additive fold — adds AFTER the percentage term', () => {
 
         const dmg = effectiveDamageStatsOf({
             base,
-            scheduledTotals,
-            scheduledSelfBuffs: [],
-            abilitySelfEffects,
+            selfNamedBuffs: [...scheduledBuffs, ...abilitySelfEffects],
+            extras: calculateBuffTotals([]),
             modifierAbilities: [],
             modifierCtx,
         });

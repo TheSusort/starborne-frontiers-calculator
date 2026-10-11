@@ -7,6 +7,7 @@ export const CURRENT_VERSION = '1.75.3';
 // bumped version whose entries are still unreleased shows users a what's-new dialog listing
 // nothing. Do it by hand only if that script cannot.
 export const UNRELEASED_CHANGES: string[] = [
+    'Combat simulator: a buff picked manually and granted by a skill now counts once.',
     "Combat simulator: Bayah's Stasis check now counts the enemy's Crit Power Down.",
     "Combat simulator: Chakara's speed comparison now counts Speed buffs and debuffs.",
     'Combat simulator: Meatshield now shares his hangar defence, ignoring his own buffs.',

@@ -133,6 +133,7 @@ import {
     incomingHealFactor,
     payloadToSelectedBuff,
     shadowedDelta,
+    strongestPerFamily,
     type FamilyMap,
 } from './buffTotals';
 export { calculateBuffTotals, expandEnemyDebuffs, payloadToSelectedBuff };
@@ -3074,27 +3075,30 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     const scheduledSelfBuffNames = entry.activeSelfBuffs
         .filter((ab) => ab.stacks === undefined || ab.stacks > 0)
         .map((ab) => ab.buffName);
-    // Layer 1 of the damage fold (scheduled manual + team self buffs). The accessor
-    // (effectiveDamageStatsOf) recomputes ALL four layers from scheduledTotals +
-    // abilitySelfEffects + modifiers, so no per-layer `+=` staging is needed here — only
-    // critBuffForGates is staged, to feed the mid-fold gate estimates (cappedCrit) that read a
-    // partial crit total before the final fold.
-    const scheduledSelfBuffs = expandScheduledSelfBuffs({
-        activeSelfBuffs: entry.activeSelfBuffs,
-        selfBuffLookup,
-    });
+    // Scheduled manual + team self buffs, one instance per named family. The final fold
+    // (effectiveDamageStatsOf) reads them together with the ability statuses as `selfNamedBuffs`;
+    // `scheduledTotals` only seeds the crit gate estimates (cappedCrit) that read a partial crit
+    // total before the ability statuses resolve.
+    const scheduledSelfBuffs = strongestPerFamily(
+        expandScheduledSelfBuffs({
+            activeSelfBuffs: entry.activeSelfBuffs,
+            selfBuffLookup,
+        })
+    );
     const scheduledTotals = resolveSelfBuffTotals(scheduledSelfBuffs);
-    // Fold the actor's pre-fight modifier baseline (squad leaders) into the layer-1
-    // totals — outgoingDamage → outgoing-damage buff, outgoingHeal/incomingHeal → the heal
+    // Non-named additive terms for the final fold (`effectiveDamageStatsOf`'s `extras`): the
+    // squad-leader baseline here, the enemy-applied shadowing delta at the late fold.
+    // preFight: outgoingDamage → outgoing-damage buff, outgoingHeal/incomingHeal → the heal
     // buffs. All three flow through effectiveDamageStatsOf into the existing consumers
     // (damage assembly, heal block, turnCtx, positionalScalars) with buff-channel semantics
     // (direct damage only; additive pct points). outgoingCritDamage is deliberately NOT
     // folded (crit-conditional damage modifier — consumed at the engine's crit-family
     // sites, never via critDamageBuff/effectiveDamageStatsOf). Absent → nothing is folded.
+    const extras = calculateBuffTotals([]);
     if (args.preFight) {
-        scheduledTotals.outgoingDamageBuff += args.preFight.outgoingDamage;
-        scheduledTotals.outgoingHealBuff += args.preFight.outgoingHeal;
-        scheduledTotals.incomingHealBuff += args.preFight.incomingHeal;
+        extras.outgoingDamageBuff += args.preFight.outgoingDamage;
+        extras.outgoingHealBuff += args.preFight.outgoingHeal;
+        extras.incomingHealBuff += args.preFight.incomingHeal;
     }
     // The enemy-APPLIED heal fold does NOT belong here beside `preFight` (#367/#396). It lives in
     // the late shadowing block (search `enemyAppliedFamilies`): the locked rule is
@@ -3102,8 +3106,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // named statuses from BOTH the scheduled list and `abilitySelfEffects` — and
     // `abilitySelfEffects` does not exist yet at this point in the turn. Nothing between here and
     // there reads `incomingHealBuff` or `outgoingHealBuff`.
-    // Partial crit-buff total for the gate estimates: starts at layer 1, then gains
-    // layers 2+3 (abilityTotalsForGates) before the modifier gate at the modifierCtx.
+    // Partial crit-buff total for the gate estimates: starts at the scheduled list, then is
+    // replaced by the family-reduced scheduled + ability total before the modifier gate at the
+    // modifierCtx.
     let critBuffForGates = scheduledTotals.critBuff;
     // Parallel PRE-modifier critDAMAGE (crit power) estimate — layers 1+2+3, mirroring
     // critBuffForGates above. Feeds modifierCtx.selfCritPower (Wildfire's "for every 10%
@@ -4472,21 +4477,19 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         ...statusEngine.activeAbilityStatuses('self', resolveCtx(postDebuffGateCtx), actor.id),
     ];
     const abilitySelfEffects = selfAbilityStatuses.map((s) => payloadToSelectedBuff(s.payload));
-    // Stage layers 2+3 into the gate-only crit partial so the modifier gate (modifierCtx,
-    // below) sees layers 1+2+3 — matching the pre-A1b staged critBuff at that point. The
-    // full four-layer fold (and the other channels) is owned by effectiveDamageStatsOf.
-    const abilityTotalsForGates = calculateBuffTotals(toSimBuffs(abilitySelfEffects));
-    critBuffForGates += abilityTotalsForGates.critBuff;
-    critDamageForGates += abilityTotalsForGates.critDamageBuff;
+    // The cast's own named statuses, one instance per family — the list the final fold and the
+    // enemy-shadowing comparison both read. The gate-only crit partials take its totals, so the
+    // modifier gate (modifierCtx, below) sees every named layer; the full fold (and the other
+    // channels) is owned by effectiveDamageStatsOf.
+    const selfNamedBuffs = strongestPerFamily([...scheduledSelfBuffs, ...abilitySelfEffects]);
+    const selfNamedTotals = calculateBuffTotals(toSimBuffs(selfNamedBuffs));
+    critBuffForGates = selfNamedTotals.critBuff;
+    critDamageForGates = selfNamedTotals.critDamageBuff;
     // The enemy-applied stat deltas (Crit Power Down and the rest of the shadowed channels),
     // resolved once: the owner-vs-target crit-power gates read it through `critDamageForGates`,
-    // and the damage fold below applies it to `scheduledTotals`.
+    // and the damage fold below adds it to `extras`.
     const enemyAppliedDelta = enemyAppliedFamilies
-        ? shadowedDelta(
-              enemyAppliedFamilies,
-              [...scheduledSelfBuffs, ...abilitySelfEffects],
-              TURN_SHADOW_CHANNELS
-          ).delta
+        ? shadowedDelta(enemyAppliedFamilies, selfNamedBuffs, TURN_SHADOW_CHANNELS).delta
         : undefined;
     critDamageForGates += enemyAppliedDelta?.critDamage ?? 0;
 
@@ -4641,9 +4644,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             : []),
         ...allyDotDamageGated,
     ];
-    // Final four-layer effective-stat fold (layer 1 scheduledTotals + layers 2+3
-    // abilitySelfEffects + layer 4 modifierAbilities gated by modifierCtx). The accessor
-    // reproduces the prior inline fold byte-for-byte; the turn loop owns gating/side effects.
+    // Final effective-stat fold: `selfNamedBuffs` (scheduled + ability statuses, one instance
+    // per family) + `extras` + layer 4 modifierAbilities gated by modifierCtx. The turn loop
+    // owns gating/side effects.
     // `Charged Overdrive II`'s `chargedOverdrivePen` was read/consumed above, before the
     // self-status-apply loop; folded here into base.castPenBonus rather than into
     // effectiveStats.ts: `dmgStats` is turn-local, rebuilt every turn, so the bonus cannot outlive
@@ -4654,33 +4657,24 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
      *  actually added, captured at the fold and republished on `turnCtx` below. */
     let enemyAppliedHealDelta:
         { enemyAppliedIncomingHealPct: number; enemyAppliedOutgoingHealPct: number } | undefined;
-    // #389/#396: fold this actor's enemy-APPLIED families into layer 1, with the owner's
+    // #389/#396: fold this actor's enemy-APPLIED families into `extras`, with the owner's
     // cross-store tier shadowing applied (highest tier wins per named family, regardless of which
     // side applied it). Four channels: `Attack Down` / `Out. Damage Down` (#389) and
     // `Inc. Repair Down` / `Out. Repair Down` (#367's channels, shadowed here by #396).
     //
     // WHY ALL FOUR SIT HERE. The shadowing comparison needs this actor's OWN named statuses on the
-    // same channels, and those live in TWO lists: the scheduled self-buffs (layer 1) and
-    // `abilitySelfEffects` (layers 2+3, resolved). The second does not exist yet at the
-    // early `preFight` fold where #367 originally summed the heal pair — which is exactly why #396
-    // moved them down here rather than shadowing them in place. The delta is applied at the last
-    // moment before `scheduledTotals` is consumed, which is safe and checked: nothing between the
-    // early site and here reads `attackBuff`, `outgoingDamageBuff`, `incomingHealBuff` or
-    // `outgoingHealBuff` (the only other readers of any of them are inside
-    // `effectiveDamageStatsOf` itself, immediately below).
+    // same channels, and those live in TWO lists: the scheduled self-buffs and
+    // `abilitySelfEffects` (resolved). The second does not exist yet at the early `preFight`
+    // site, which is why the delta is computed down here rather than shadowed in place.
     //
     // THE SELF LIST MUST MATCH WHAT THE FOLD CONSUMES, or the subtraction inside `shadowedDelta`
-    // removes a contribution the totals never contained. Both halves below are therefore taken
-    // from the exact same sources the fold uses: `entry.activeSelfBuffs` + `selfBuffLookup` is
-    // literally what `resolveSelfBuffTotals` expanded into `scheduledTotals`, and
-    // `abilitySelfEffects` is passed straight through to the accessor.
+    // removes a contribution the totals never contained. Both read `selfNamedBuffs`.
     //
     // TWO LAYERS ARE DELIBERATELY EXCLUDED, because neither is a NAMED family and so neither can
     // participate in family shadowing: layer 4 `modifierAbilities` (un-named ability modifier
-    // channels like "+30% damage to Stasis enemies") and the squad-leader `preFight` baseline —
-    // which now covers `preFight.outgoingHeal` / `preFight.incomingHeal` too, still folded at the
-    // early site and still outside the comparison. All keep contributing to the totals as before;
-    // they are simply invisible to the shadowing comparison.
+    // channels like "+30% damage to Stasis enemies") and the squad-leader `preFight` baseline
+    // (including `preFight.outgoingHeal` / `preFight.incomingHeal`), carried in `extras`. Both
+    // contribute to the totals; they are invisible to the shadowing comparison.
     //
     // #398 — the crit-RATE gate estimate (`critBuffForGates`, consumed as `cappedCrit(...)` before
     // this point) does not see the enemy-applied `Crit Rate Down`: it carries the same documented
@@ -4693,18 +4687,18 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // Absent/empty map → empty deltas, and the self side is not even read.
     if (enemyAppliedDelta) {
         const delta = enemyAppliedDelta;
-        scheduledTotals.attackBuff += delta.attack ?? 0;
-        scheduledTotals.outgoingDamageBuff += delta.outgoingDamage ?? 0;
-        scheduledTotals.incomingHealBuff += delta.incomingHeal ?? 0;
-        scheduledTotals.outgoingHealBuff += delta.outgoingHeal ?? 0;
+        extras.attackBuff += delta.attack ?? 0;
+        extras.outgoingDamageBuff += delta.outgoingDamage ?? 0;
+        extras.incomingHealBuff += delta.incomingHeal ?? 0;
+        extras.outgoingHealBuff += delta.outgoingHeal ?? 0;
         // #398: the three damage-path stat channels. `crit`/`critDamage` reach the per-hit crit
         // roll and the crit multiplier through `dmgStats` immediately below; `security` reaches the
         // security-scaled damage basis. `speed` and `hacking` are NOT folded here — they have no
         // consumer on this path and are wired at `foldActorBuffTotals` instead (see
         // TURN_SHADOW_CHANNELS' own doc for the split).
-        scheduledTotals.critBuff += delta.crit ?? 0;
-        scheduledTotals.critDamageBuff += delta.critDamage ?? 0;
-        scheduledTotals.securityBuff += delta.security ?? 0;
+        extras.critBuff += delta.crit ?? 0;
+        extras.critDamageBuff += delta.critDamage ?? 0;
+        extras.securityBuff += delta.security ?? 0;
         // The EFFECTIVE enemy-applied contribution, published below so a cross-actor reader can
         // subtract exactly what this ctx contains (`liveHealChannelPct`, #367's staleness fence).
         // It is the DELTA, not the raw applied value: under shadowing those differ whenever the
@@ -4729,14 +4723,13 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             defensePenetration,
             castPenBonus: chargedOverdrivePen,
         },
-        scheduledTotals,
-        scheduledSelfBuffs,
-        abilitySelfEffects,
+        selfNamedBuffs,
+        extras,
         modifierAbilities: dotDamageUnconditional,
         modifierCtx,
     });
     const effectiveAttack = dmgStats.attack;
-    // Full buff total at the final fold; equals the prior staged critBuff (layers 1+2+3+4).
+    // Full buff total at the final fold (named layers, extras and layer 4).
     const effectiveCrit =
         args.deferAbilityPerformedToEngine === true
             ? realAffinityCappedCrit(dmgStats.totals.critBuff)
@@ -4932,7 +4925,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         selfSpeed: liveSelfSpeed(),
         selfCurrentHp: actor.currentHp,
         // Mirrors modifierCtx's existing selfCritPower estimate (layers 1+2+3, pre-modifier) —
-        // both this ctx and modifierCtx sit AFTER critDamageForGates' final += (line ~1431), so
+        // both this ctx and modifierCtx sit AFTER critDamageForGates' last write (the enemy-applied term), so
         // the value is identical and stable here.
         selfCritPower: critDamage + critDamageForGates,
         // The bound target's stats. Chakara's charge gate ("all damaged enemies have more
