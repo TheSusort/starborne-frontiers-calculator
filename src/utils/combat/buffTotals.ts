@@ -1,6 +1,6 @@
 import { Buff, SelectedGameBuff } from '../../types/calculator';
 import type { AbilityStatusPayload, ActiveBuff } from './statusEngine';
-import { deriveFamilyKey, familyChallengerWins } from './statusEngine';
+import { deriveFamilyKey, familyChallengerWins, isStackingFamily } from './statusEngine';
 
 // ---------------------------------------------------------------------------
 // Leaf helpers shared by the player turn (playerTurn.ts) and the effective-stat
@@ -391,6 +391,61 @@ export function familiesOf(
         out.set(familyKey, entry);
     }
     return out;
+}
+
+/** Σ |post-stacks magnitude| over every numeric effect of one instance — the equal-tier
+ *  tie-break `strongestPerFamily` hands `familyChallengerWins`. */
+function instanceMagnitude(b: SelectedGameBuff): number {
+    let m = 0;
+    for (const v of Object.values(b.parsedEffects)) {
+        if (typeof v === 'number') m += Math.abs(v * b.stacks);
+    }
+    return m;
+}
+
+/**
+ * The own-side list with ONE instance per named family — the strongest, by `familyChallengerWins`
+ * (higher tier, then larger post-stacks magnitude; an exact tie keeps the earlier instance).
+ * Survivors keep their input order.
+ *
+ * Every fold of a ship's own buffs runs its list through this first: the locked rule is highest
+ * tier wins per family, and `calculateBuffTotals` is a plain sum. The same family reaches one
+ * actor's list more than once from a manual pick plus a kit grant, or from `selfBuffLookup`
+ * holding one `buffName` for several team actors.
+ *
+ * Passed through untouched: stacking families (`isStackingFamily` — DoTs and bombs), heal-over-time
+ * entries (`hotPct` is read per applier downstream, never from a fold), and entries with no numeric
+ * effect (nothing to double).
+ *
+ * A fold that also shadows against enemy-applied families must hand `shadowedDelta` this SAME
+ * reduced list, because `shadowedDelta` subtracts the self `sum`.
+ */
+export function strongestPerFamily(buffs: SelectedGameBuff[]): SelectedGameBuff[] {
+    const winner = new Map<string, { index: number; tier: number; magnitude: number }>();
+    const keep: boolean[] = buffs.map(() => true);
+    buffs.forEach((b, index) => {
+        const magnitude = instanceMagnitude(b);
+        if (
+            isStackingFamily(b.buffName) ||
+            b.parsedEffects.hotPct !== undefined ||
+            magnitude === 0
+        ) {
+            return;
+        }
+        const { familyKey, tier } = deriveFamilyKey(b.buffName);
+        const prev = winner.get(familyKey);
+        if (!prev) {
+            winner.set(familyKey, { index, tier, magnitude });
+            return;
+        }
+        if (familyChallengerWins(prev.tier, prev.magnitude, tier, magnitude)) {
+            keep[prev.index] = false;
+            winner.set(familyKey, { index, tier, magnitude });
+        } else {
+            keep[index] = false;
+        }
+    });
+    return buffs.filter((_, i) => keep[i]);
 }
 
 /** One channel's pair of figures: raise the total to exactly the applied value when the applied

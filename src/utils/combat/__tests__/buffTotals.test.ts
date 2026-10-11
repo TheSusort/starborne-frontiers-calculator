@@ -2,10 +2,12 @@ import { describe, it, expect } from 'vitest';
 import {
     calculateBuffTotals,
     familiesOf,
+    strongestPerFamily,
     shadowedDelta,
     FOLD_SHADOW_CHANNELS,
 } from '../buffTotals';
 import type { SelectedGameBuff } from '../../../types/calculator';
+import { toSimBuffs } from '../../calculators/dpsBuffHelpers';
 
 describe('calculateBuffTotals — attackFlat channel (D-PR10)', () => {
     it('sums attackFlat into attackFlatBuff (D-PR10)', () => {
@@ -100,5 +102,81 @@ describe('#398 — the five newly-live channels', () => {
             FOLD_SHADOW_CHANNELS
         );
         expect(delta.hacking).toBe(-70); // -80 own → -150 applied
+    });
+});
+
+describe('strongestPerFamily — one instance per named family (#667)', () => {
+    const b = (
+        id: string,
+        buffName: string,
+        parsedEffects: SelectedGameBuff['parsedEffects'],
+        stacks = 1
+    ): SelectedGameBuff => ({ id, buffName, stacks, parsedEffects, isStackable: false });
+
+    it('keeps one copy of an identical duplicate', () => {
+        const out = strongestPerFamily([
+            b('a', 'Attack Up III', { attack: 45 }),
+            b('b', 'Attack Up III', { attack: 45 }),
+        ]);
+        expect(out.map((x) => x.id)).toEqual(['a']);
+    });
+
+    it('higher tier wins regardless of order', () => {
+        const lo = b('lo', 'Attack Up I', { attack: 15 });
+        const hi = b('hi', 'Attack Up III', { attack: 45 });
+        expect(strongestPerFamily([lo, hi]).map((x) => x.id)).toEqual(['hi']);
+        expect(strongestPerFamily([hi, lo]).map((x) => x.id)).toEqual(['hi']);
+    });
+
+    it('equal tier: larger post-stacks magnitude wins', () => {
+        const one = b('one', 'Overload', { attack: 10 }, 1);
+        const three = b('three', 'Overload', { attack: 10 }, 3);
+        expect(strongestPerFamily([one, three]).map((x) => x.id)).toEqual(['three']);
+    });
+
+    it('different families all survive', () => {
+        const out = strongestPerFamily([
+            b('a', 'Attack Up III', { attack: 45 }),
+            b('d', 'Defense Up II', { defense: 30 }),
+            b('c', 'Crit Power Up I', { critDamage: 20 }),
+        ]);
+        expect(out.map((x) => x.id)).toEqual(['a', 'd', 'c']);
+    });
+
+    it('DoT and bomb instances are never reduced', () => {
+        const out = strongestPerFamily([
+            b('c1', 'Corrosion III', { dotDamage: 5 }),
+            b('c2', 'Corrosion III', { dotDamage: 5 }),
+            b('i1', 'Inferno II', { dotDamage: 5 }),
+            b('i2', 'Inferno II', { dotDamage: 5 }),
+            b('b1', 'Bomb I', { dotDamage: 5 }),
+            b('b2', 'Bomb I', { dotDamage: 5 }),
+        ]);
+        expect(out).toHaveLength(6);
+    });
+
+    it('entries with no numeric effect and heal-over-time entries pass through', () => {
+        const out = strongestPerFamily([
+            b('e1', 'Stealth', {}),
+            b('e2', 'Stealth', {}),
+            b('h1', 'Repair Over Time II', { hotPct: 10 }),
+            b('h2', 'Repair Over Time II', { hotPct: 10 }),
+        ]);
+        expect(out).toHaveLength(4);
+    });
+
+    it('a fold of the reduced list counts a duplicated family once', () => {
+        const totals = calculateBuffTotals(
+            toSimBuffs(
+                strongestPerFamily([
+                    b('a', 'Attack Up III', { attack: 45 }),
+                    b('b', 'Attack Up III', { attack: 45 }),
+                    b('s', 'Speed Up II', { speed: 30 }),
+                    b('t', 'Speed Up I', { speed: 15 }),
+                ])
+            )
+        );
+        expect(totals.attackBuff).toBe(45);
+        expect(totals.speedBuff).toBe(30);
     });
 });
