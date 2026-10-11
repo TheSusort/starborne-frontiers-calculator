@@ -313,7 +313,10 @@ const DefenseCalculatorPage: React.FC = () => {
                         healModifier: config.healModifier,
                     },
                     shipSkills: config.shipSkills,
-                    selfBuffs: [...globalBuffs, ...config.buffs],
+                    // The kit reaches the engine through `shipSkills`; an auto-filled copy here would
+                    // sum with it on the turn the skill fires (#662). Same rule as the DPS page and
+                    // `useEnemyTeamRoster`. Theoretical EHP still reads `config.buffs` unfiltered.
+                    selfBuffs: [...globalBuffs, ...config.buffs.filter((b) => !b.autoFilled)],
                     chargeCount: config.chargeCount,
                     startCharged: config.startCharged,
                     affinity: config.affinity,
