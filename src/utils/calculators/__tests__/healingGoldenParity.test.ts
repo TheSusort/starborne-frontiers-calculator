@@ -159,8 +159,9 @@ describe('healingGoldenParity', () => {
     // ── Scenario 3: HoT (Repair Over Time) ───────────────────────────────────
     // Active slot grants ITSELF a 2-turn Repair Over Time II buff (hotPct 15) alongside a
     // small 5% heal. The buff fans to self; each tick scales the holder's effectiveMaxHp
-    // 10000 × 15% = 1500 (hotHeal), credited to the holder. Re-cast every active round →
-    // the window never lapses → HoT ticks visible in hotHeal each round.
+    // 10000 × 15% = 1500 (hotHeal), credited to the holder. Every cast is its own 2-turn copy
+    // (#670), and a self copy gained on the holder's own turn keeps both turns through that
+    // turn's Post-Turn, so a copy cast in round r ticks in rounds r, r+1 and r+2.
     snap('HoT (Repair Over Time II buff + small heal)', () =>
         BASE({
             rounds: 10,
@@ -2090,7 +2091,8 @@ describe('healingGoldenParity', () => {
     // (targetHpPct entering [100, 99, 98, 97]).
     //
     // LIVE (role 'ATTACKER'): each round's enemy hit grants the RoT to the tank with
-    // casterId = 'graphite' (re-granted every round, isStackable false → 1 stack standing).
+    // casterId = 'graphite'. Every grant is its own 2-turn copy (#670), so a round's grant and
+    // the one before it are both live on the tank's next turn.
     // HoT tick contract (playerTurn.ts): the buff ticks on the HOLDER's (tank's) turn for
     // holderMaxHp × hotPct% × stacks × (1 + holderIncomingHeal%) = 100000 × 5% × 1 × 1 = 5000
     // (owner ruling R55: the holder's own max HP),
@@ -2098,11 +2100,13 @@ describe('healingGoldenParity', () => {
     // is not the focus), NOT rounds[].hotHeal.
     // Turn order (verified empirically, matches expectation): the round-1 grant lands on the
     // ENEMY's turn (last in the round, speed 10), AFTER the tank's round-1 turn → the first
-    // tick is on the tank's ROUND-2 turn.
-    //   ⇒ teamHealing [0, 5000, 5000, 5000]; teamTotalHealing 15000. Tank HP: R1 −1000 →
-    //     99000 (enter R2 at 99%); from R2 the tick (deficit 1000 → consumed 1000, overheal
-    //     4000, credited to graphite) restores full HP before the hit → entering pct holds
-    //     at 99. Focus buckets (directHeal/hotHeal/effectiveHealing) stay 0 throughout.
+    // tick is on the tank's ROUND-2 turn. A copy granted at the end of round r ticks on the
+    // tank's round r+1 and r+2 turns, so the tank ticks one copy in round 2 and two (round
+    // r−1's and r−2's) in rounds 3 and 4.
+    //   ⇒ teamHealing [0, 5000, 10000, 10000]; teamTotalHealing 25000. Tank HP: R1 −1000 →
+    //     99000 (enter R2 at 99%); from R2 the first tick (deficit 1000 → consumed 1000) restores
+    //     full HP before the hit, every other tick is overheal → entering pct holds at 99.
+    //     Focus buckets (directHeal/hotHeal/effectiveHealing) stay 0 throughout.
     const scenario25Input = (tankRole: TeamActorInput['role']) => {
         const graphite: TeamActorInput = {
             id: 'graphite',
@@ -2206,10 +2210,11 @@ describe('healingGoldenParity', () => {
         expect(result.rounds.map((r) => r.targetHpPct)).toEqual([100, 99, 98, 97]);
     });
 
-    // Supplementary: live variant — the grant lands on the tank every round; the HoT ticks on
+    // Supplementary: live variant — the grant lands on the tank every round; each copy ticks on
     // the tank's turn from ROUND 2 (round-1 grant lands AFTER the tank's round-1 turn) for
     // the tank's own maxHp × 5% = 5000, surfaced as teamHealing (graphite is a non-focus applier).
-    it('scenario 25: ATTACKER tank → RoT granted each round, 5000 team HoT/round from round 2', () => {
+    // Two copies are live from round 3 (see the scenario note above).
+    it('scenario 25: ATTACKER tank → RoT granted each round, 5000 per live copy from round 2', () => {
         idCounter = 0;
         const bus = createEventBus();
         const grants: Extract<CombatEvent, { type: 'buff-applied' }>[] = [];
@@ -2219,12 +2224,12 @@ describe('healingGoldenParity', () => {
         const result = simulateHealing({ ...scenario25Input('ATTACKER'), bus });
         expect(grants.length).toBe(4); // one grant per enemy attack turn
         expect(grants.every((g) => g.actorId === 'tank')).toBe(true);
-        expect(result.rounds.map((r) => r.teamHealing)).toEqual([0, 5000, 5000, 5000]);
-        expect(result.summary.teamTotalHealing).toBe(15000);
+        expect(result.rounds.map((r) => r.teamHealing)).toEqual([0, 5000, 10000, 10000]);
+        expect(result.summary.teamTotalHealing).toBe(25000);
         // The tick is credited to graphite (non-focus) → focus buckets stay empty.
         expect(result.rounds.map((r) => r.hotHeal)).toEqual([0, 0, 0, 0]);
         expect(result.rounds.map((r) => r.directHeal)).toEqual([0, 0, 0, 0]);
-        // The 5000 tick out-heals the 1000 hit from round 2 → entering HP holds at 99%.
+        // The first tick out-heals the 1000 hit from round 2 → entering HP holds at 99%.
         expect(result.rounds.map((r) => r.targetHpPct)).toEqual([100, 99, 99, 99]);
     });
 

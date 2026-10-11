@@ -85,6 +85,7 @@ function makeRuntime(skills: ShipSkills, attackStat = 10000): PlayerActorRuntime
         extendChanceGate: makeRateGate(),
         landsTimedEnemyApplication: () => true,
         selfBuffLookup: new Map(),
+        scheduledSelfBuffsBySource: new Map(),
         enemyDebuffLookup: new Map(),
     };
 }

@@ -663,14 +663,19 @@ describe('healing mode — HoT (Repair Over Time) ticking', () => {
                 ]),
             })
         );
-        // The attacker re-casts the ally HoT every round, so the target ticks all 3 rounds:
-        // 3 × 1200 (target, its own 8000) + 3 × 1500 (the attacker's fanned self-copy, its own
-        // 10000) = 8100, all overheal at full HP. A caster-basis tick would read 9000.
-        expect(sumHeal(result, 'overheal', 'attacker')).toBe(8100);
+        // The attacker re-casts the ally HoT every round and every grant is its own 2-turn copy
+        // (#670). Live copies per holder turn:
+        //  - t1 (1200/tick, its own 8000): round 1 holds one, rounds 2 and 3 hold last round's and
+        //    this round's → 1 + 2 + 2 = 5 ticks = 6000.
+        //  - the attacker's fanned self-copy (1500/tick, its own 10000): a self copy gained on its
+        //    own turn keeps both turns through that turn's Post-Turn, so round 1 holds one, round
+        //    2 two, round 3 three → 6 ticks = 9000.
+        // 6000 + 9000 = 15000, all overheal at full HP. A caster-basis tick would read 18000.
+        expect(sumHeal(result, 'overheal', 'attacker')).toBe(15000);
         expect(sumHeal(result, 'effectiveHeal', 'attacker')).toBe(0);
         // Attribution: the HoT credits the APPLIER (attacker), never the holder t1.
         expect(sumHeal(result, 'hotHeal', 't1')).toBe(0);
-        expect(sumHeal(result, 'hotHeal', 'attacker')).toBe(8100);
+        expect(sumHeal(result, 'hotHeal', 'attacker')).toBe(15000);
     });
 
     // ── Test 2: self-HoT scales with current (buffed) effectiveHp ─────────────

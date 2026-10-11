@@ -236,6 +236,7 @@ function makeRuntime(crit: boolean, buffs: SelectedGameBuff[]): PlayerActorRunti
         extendChanceGate: makeRateGate(),
         landsTimedEnemyApplication: () => true,
         selfBuffLookup: new Map(),
+        scheduledSelfBuffsBySource: new Map(),
         enemyDebuffLookup: buffs.length ? new Map([[STATUS_BUFF, buffs]]) : new Map(),
     };
 }

@@ -386,6 +386,7 @@ describe('Phase 4c PR 4 Task 5a: event-only enemy heal/cleanse emission', () => 
             extendChanceGate: makeRateGate(),
             landsTimedEnemyApplication: () => true,
             selfBuffLookup: new Map(),
+            scheduledSelfBuffsBySource: new Map(),
             enemyDebuffLookup: new Map(),
         };
     };
@@ -719,6 +720,7 @@ describe('#369: HoT ticking applies on both sides, and only credits behind healE
             extendChanceGate: makeRateGate(),
             landsTimedEnemyApplication: () => true,
             selfBuffLookup: new Map([['Repair Over Time', [hotBuff()]]]),
+            scheduledSelfBuffsBySource: new Map(),
             enemyDebuffLookup: new Map(),
         };
     };

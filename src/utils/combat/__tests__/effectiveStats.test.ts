@@ -561,8 +561,6 @@ describe('effectiveDamageStatsOf — dotDamage modifier folds into selfDotDamage
     };
 
     it('a dotDamage modifier ability raises selfDotDamageModifier (feeds dotMult)', () => {
-        const scheduledTotals = calculateBuffTotals(toSimBuffs([]));
-
         const modifierAbilities: Ability[] = [
             {
                 id: 'decimation',
@@ -802,8 +800,6 @@ describe('attackFlat additive fold — adds AFTER the percentage term', () => {
                 isStackable: false,
             },
         ];
-        const scheduledTotals = calculateBuffTotals(toSimBuffs(scheduledBuffs));
-
         // Layer 2+3: ability self-effects carry attackFlat=300
         const abilitySelfEffects: SelectedGameBuff[] = [
             {

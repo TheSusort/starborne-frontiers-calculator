@@ -96,6 +96,7 @@ import {
     StatusEngine,
     announceAccumGains,
     createStatusEngine,
+    isIndependentInstance,
 } from './statusEngine';
 import { isPassivePerHitStatus, liveGateConditions } from './abilityStatusGating';
 import {
@@ -105,6 +106,7 @@ import {
 } from './positionalBinding';
 import {
     applyPositionalDamage,
+    damagedVictim,
     directlyDamagesVictim,
     footprintVictims,
     isWholeBattlefieldPattern,
@@ -830,7 +832,8 @@ function seedPreCombatShields(runtimes: PlayerActorRuntime[]): void {
 //   affinity:      The adapter's pre-resolved matchup (`affinityDamageModifier` /
 //                  `affinityCritCap` / `affinityCritPenalty`); absent → neutral defaults
 //                  (modifier 0, cap 100, penalty 0, no disadvantage).
-//   selfBuffLookup: Empty map (walked-style: payload effects are self-contained).
+//   selfBuffLookup / scheduledSelfBuffsBySource: Empty maps (walked-style: payload effects
+//                  are self-contained).
 //   enemyDebuffLookup: The engine's global map (same as walked-team actors).
 //   status registration: registerActorAbilityStatuses registers any buff/debuff abilities
 //                  the enemy's kit carries (no-op for damage-only shipSkills).
@@ -1118,6 +1121,7 @@ export function buildEnemyPlayerActorRuntime(
                       targetLandingChance ?? runtime.liveDebuffLandingChance ?? 1
                   ),
         selfBuffLookup: new Map(),
+        scheduledSelfBuffsBySource: new Map(),
         enemyDebuffLookup,
     };
     return runtime;
@@ -1125,11 +1129,16 @@ export function buildEnemyPlayerActorRuntime(
 
 /** De-dupe ActiveBuffs by buffName, keeping the first occurrence. Used to collapse the
  *  per-round enemy-effects union (multiple enemy attackers can carry the same status) so
- *  the UI shows each effect once per round. */
+ *  the UI shows each effect once per round. An independent instance (`isIndependentInstance`)
+ *  is one entry per copy and is never collapsed, matching the player panels. */
 function dedupeByBuffName(buffs: ActiveBuff[]): ActiveBuff[] {
     const seen = new Set<string>();
     const out: ActiveBuff[] = [];
     for (const b of buffs) {
+        if (isIndependentInstance(b.buffName)) {
+            out.push(b);
+            continue;
+        }
         if (seen.has(b.buffName)) continue;
         seen.add(b.buffName);
         out.push(b);
@@ -2747,6 +2756,12 @@ export function runCombat(rawInput: CombatEngineInput): {
         const existing = selfBuffLookup.get(b.buffName) ?? [];
         selfBuffLookup.set(b.buffName, [...existing, b]);
     }
+    // Each source's own self picks, keyed by the id `sourceFired` receives for it — see
+    // `PlayerActorRuntime.scheduledSelfBuffsBySource`.
+    const scheduledSelfBuffsBySource = new Map<string, SelectedGameBuff[]>([
+        ['attacker', selfBuffs],
+        ...teamActors.map((t) => [t.id, t.selfBuffs] as [string, SelectedGameBuff[]]),
+    ]);
     const enemyDebuffLookup = new Map<string, SelectedGameBuff[]>();
     for (const b of [...enemyDebuffs, ...teamActors.flatMap((t) => t.enemyDebuffs)]) {
         const existing = enemyDebuffLookup.get(b.buffName) ?? [];
@@ -2790,6 +2805,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         extendChanceGate,
         landsTimedEnemyApplication,
         selfBuffLookup,
+        scheduledSelfBuffsBySource,
         enemyDebuffLookup,
     };
 
@@ -2902,6 +2918,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             //    map here silently zeroes those stat effects on the team's own turn (the attacker
             //    runtime holds the same global map, so attacker turns were already correct).
             selfBuffLookup: new Map(),
+            scheduledSelfBuffsBySource: new Map(),
             enemyDebuffLookup,
         };
         teamRuntimeById.set(t.id, runtime);
@@ -10457,8 +10474,8 @@ export function runCombat(rawInput: CombatEngineInput): {
              * precede its damage, which is almost the whole corpus.
              */
             applyDebuffsForSubAttack: PlayerTurnResult['applyDebuffsForSubAttack'];
-            /** This cast's per-hit passive gains for one sub-attack ≥ 1 (R178); undefined for a
-             *  cast carrying none. */
+            /** This cast's per-hit passive gains for one sub-attack (R178); undefined for a cast
+             *  carrying none. */
             applyPerHitSelfStatusesForSubAttack: PlayerTurnResult['applyPerHitSelfStatusesForSubAttack'];
             deferredEnemyApplications: PlayerTurnResult['deferredEnemyApplications'];
             /** Whether a Stasis this cast wrote stands on a victim — its covered Stasis marks skip
@@ -10616,6 +10633,9 @@ export function runCombat(rawInput: CombatEngineInput): {
              *  Per HIT, not per victim: a cast whose first hit is nullified and whose second lands
              *  still reduces Stasis. */
             const stasisMarkByHit = new Map<string, boolean>();
+            /** Per sub-attack, the victims its hit did damage to (`damagedVictim`) — the struck
+             *  set a "when damaging X" passive gain reads (#655). */
+            const damagedVictimsBySubAttack = new Map<number, Set<string>>();
             // Collect EVERY footprint victim hit by this cast's firing damage (unique by id) so each
             // can detonate its OWN containers after the firing hits land.
             const detonationTargets = new Map<string, CombatActor>();
@@ -10780,6 +10800,14 @@ export function runCombat(rawInput: CombatEngineInput): {
                 ) => {
                     // Whether this hit is direct damage on `victim` — read its doc.
                     const direct = directlyDamagesVictim(outcome);
+                    if (damagedVictim(outcome, damage)) {
+                        let damaged = damagedVictimsBySubAttack.get(subAttackIndex);
+                        if (!damaged) {
+                            damaged = new Set<string>();
+                            damagedVictimsBySubAttack.set(subAttackIndex, damaged);
+                        }
+                        damaged.add(victim.id);
+                    }
                     // The cast's hit on a primary target is the first aimed hit on it in
                     // that sub-attack's chain, so it spends that victim's primary-target
                     // allowance there — when it damaged the victim directly.
@@ -10872,6 +10900,13 @@ export function runCombat(rawInput: CombatEngineInput): {
                     );
                 },
                 onSubAttackEnd: (sub) => {
+                    // Every sub-attack's per-hit gains fire here, the first included, once the
+                    // funnel has said which victims the hit did damage to.
+                    const firePerHitGains = (): void =>
+                        sel.applyPerHitSelfStatusesForSubAttack?.({
+                            ...sub,
+                            directVictimIds: [...(damagedVictimsBySubAttack.get(sub.index) ?? [])],
+                        });
                     if (sub.index === 0) {
                         // Sub-attack 0 keeps its CAST-TIME roll (several consumers read that
                         // outcome before this loop runs — see applyDebuffsForSubAttack's doc). What
@@ -10892,13 +10927,14 @@ export function runCombat(rawInput: CombatEngineInput): {
                             for (const pair of pending) pair.applyState();
                             bufferDebuffEmitters(sub.index, pending);
                         }
+                        firePerHitGains();
                         return;
                     }
                     bufferDebuffEmitters(
                         sub.index,
                         sel.applyDebuffsForSubAttack?.(sub, 'after-damage') ?? []
                     );
-                    sel.applyPerHitSelfStatusesForSubAttack?.(sub);
+                    firePerHitGains();
                 },
                 onSubAttackSettled: settleSubAttack,
                 attackerStanding: () => actor.destroyedRound === undefined,
@@ -13301,6 +13337,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                             );
                             // Surface this enemy attacker's effects for the UI's round overview:
                             // its own active self-buffs and the debuffs it landed on the heal target,
+                            // through `enemyRoundEntry`. The self-buffs are copied after the
+                            // positional drive below, which lists the per-hit gains it grants
+                            // (`applyPerHitSelfStatusesForSubAttack`) on `activeSelfBuffs`.
                             // ATTRIBUTED to this enemy's actor id. NAMES ONLY for display — never folded
                             // into any sim value. Empty for a bare enemy → no entry recorded for it.
                             // Debuffs use inflictedEnemyDebuffs (source-accurate: only what THIS enemy
@@ -13327,12 +13366,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                               stacks: d.stacks,
                                           }))
                                     : [];
-                            if (
-                                enemyTurn.activeSelfBuffs.length > 0 ||
-                                enemyTurn.inflictedEnemyDebuffs.length > 0 ||
-                                enemyTurn.resistedEnemyDebuffs.length > 0 ||
-                                resistedEnemyDots.length > 0
-                            ) {
+                            const enemyRoundEntry = () => {
                                 let entry = roundEnemyEffects.get(actor.id);
                                 if (!entry) {
                                     entry = {
@@ -13343,7 +13377,14 @@ export function runCombat(rawInput: CombatEngineInput): {
                                     };
                                     roundEnemyEffects.set(actor.id, entry);
                                 }
-                                entry.selfBuffs.push(...enemyTurn.activeSelfBuffs);
+                                return entry;
+                            };
+                            if (
+                                enemyTurn.inflictedEnemyDebuffs.length > 0 ||
+                                enemyTurn.resistedEnemyDebuffs.length > 0 ||
+                                resistedEnemyDots.length > 0
+                            ) {
+                                const entry = enemyRoundEntry();
                                 entry.debuffs.push(...enemyTurn.inflictedEnemyDebuffs);
                                 entry.resistedDebuffs.push(...enemyTurn.resistedEnemyDebuffs);
                                 entry.resistedDots.push(...resistedEnemyDots);
@@ -13491,6 +13532,20 @@ export function runCombat(rawInput: CombatEngineInput): {
                                     : 0
                             );
                             emitUndrivenAbilityPerformed(enemyTurn, enemyDrives);
+                            // `activeSelfBuffs` is the enemy's whole self-buff set after this
+                            // turn, so a later turn's independent copies replace an earlier
+                            // turn's rather than adding to them, and an empty set clears the
+                            // copies an earlier turn recorded. No entry is created just to clear.
+                            if (
+                                enemyTurn.activeSelfBuffs.length > 0 ||
+                                roundEnemyEffects.has(actor.id)
+                            ) {
+                                const entry = enemyRoundEntry();
+                                entry.selfBuffs = entry.selfBuffs.filter(
+                                    (b) => !isIndependentInstance(b.buffName)
+                                );
+                                entry.selfBuffs.push(...enemyTurn.activeSelfBuffs);
+                            }
                         } // end dead-after-burst guard (!burstDestroyedActor)
                     } // end stasis gate (real-enemy branch)
                 }

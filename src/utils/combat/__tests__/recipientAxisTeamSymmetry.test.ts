@@ -345,10 +345,13 @@ describe('#375 — a HoT tick credits the recipient axis on BOTH sides', () => {
             // LIVENESS — the tick really moved HP.
             expect(run.holderHpAfter).toBeGreaterThan(HOLDER_START);
 
+            // The medic re-grants on its round-2 turn, before the holder acts, and every Repair
+            // Over Time grant is its own copy (#670): the holder ticks round 1's copy and round
+            // 2's, one `REPAIR` each, all of it inside the holder's headroom.
             const recipient = healingRound(run, 1).perRecipient.get(HOLDER_ID);
             expect(recipient).toBeDefined();
-            expect(recipient!.hotHeal).toBe(REPAIR);
-            expect(recipient!.effectiveHeal).toBe(REPAIR);
+            expect(recipient!.hotHeal).toBe(2 * REPAIR);
+            expect(recipient!.effectiveHeal).toBe(2 * REPAIR);
         });
     }
 

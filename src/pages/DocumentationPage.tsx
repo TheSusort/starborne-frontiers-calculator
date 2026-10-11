@@ -3535,9 +3535,10 @@ const DocumentationPage: React.FC = () => {
                                         enemy&apos;s own is the stronger, yours is the one that is
                                         shadowed. This is the general rule for buffs and debuffs,
                                         not something specific to this page: only damage over time
-                                        and bombs stack. Two DIFFERENT debuffs still combine: an
-                                        Attack Down and an Out. Damage Down on the same enemy both
-                                        apply.
+                                        and bombs stack, plus each Repair Over Time and Power
+                                        Infused Nanobots grant, which is kept as its own copy. Two
+                                        DIFFERENT debuffs still combine: an Attack Down and an Out.
+                                        Damage Down on the same enemy both apply.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         There is also an exception on the ALLY side rather than the
@@ -3925,8 +3926,11 @@ const DocumentationPage: React.FC = () => {
                                         its max HP) that soaks incoming damage before HP is touched,
                                         and does not expire. Repair Over Time effects tick at the
                                         holder&apos;s turn, repairing a percentage of the
-                                        holder&apos;s own max HP per stack. Crit heals resolve on
-                                        their own crit rolls, separate from any damage crits.
+                                        holder&apos;s own max HP per stack. Every Repair Over Time
+                                        and Power Infused Nanobots grant is its own copy with its
+                                        own timer, so overlapping grants all tick or apply. Crit
+                                        heals resolve on their own crit rolls, separate from any
+                                        damage crits.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Damage-Based Sustain:</span>{' '}

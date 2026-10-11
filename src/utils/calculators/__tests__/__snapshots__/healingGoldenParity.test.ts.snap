@@ -785,13 +785,17 @@ exports[`healingGoldenParity > HoT (Repair Over Time II buff + small heal) 1`] =
           "buffName": "Repair Over Time II",
           "turnsRemaining": 2,
         },
+        {
+          "buffName": "Repair Over Time II",
+          "turnsRemaining": 2,
+        },
       ],
       "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
       "convertedToShield": 0,
-      "cumulativeHealing": 4000,
+      "cumulativeHealing": 5500,
       "didCrit": false,
       "directHeal": 500,
       "effectiveHealing": 0,
@@ -801,17 +805,21 @@ exports[`healingGoldenParity > HoT (Repair Over Time II buff + small heal) 1`] =
           "buffName": "Repair Over Time II",
           "turnsRemaining": 2,
         },
+        {
+          "buffName": "Repair Over Time II",
+          "turnsRemaining": 2,
+        },
       ],
-      "hotHeal": 1500,
+      "hotHeal": 3000,
       "incomingDamage": 0,
       "incomingDamageRaw": 0,
-      "overheal": 2000,
+      "overheal": 3500,
       "perRecipient": {
         "attacker": {
           "directHeal": 500,
           "effectiveHealing": 0,
-          "hotHeal": 1500,
-          "overheal": 2000,
+          "hotHeal": 3000,
+          "overheal": 3500,
         },
       },
       "round": 2,
@@ -819,11 +827,19 @@ exports[`healingGoldenParity > HoT (Repair Over Time II buff + small heal) 1`] =
       "shieldAbsorbed": 0,
       "targetHpPct": 100,
       "targetShieldPool": 0,
-      "totalRoundHealing": 2000,
+      "totalRoundHealing": 3500,
     },
     {
       "action": "active",
       "activeSelfBuffs": [
+        {
+          "buffName": "Repair Over Time II",
+          "turnsRemaining": 1,
+        },
+        {
+          "buffName": "Repair Over Time II",
+          "turnsRemaining": 2,
+        },
         {
           "buffName": "Repair Over Time II",
           "turnsRemaining": 2,
@@ -834,7 +850,7 @@ exports[`healingGoldenParity > HoT (Repair Over Time II buff + small heal) 1`] =
       "charges": 0,
       "cleanseCount": 0,
       "convertedToShield": 0,
-      "cumulativeHealing": 6000,
+      "cumulativeHealing": 10500,
       "didCrit": false,
       "directHeal": 500,
       "effectiveHealing": 0,
@@ -842,19 +858,27 @@ exports[`healingGoldenParity > HoT (Repair Over Time II buff + small heal) 1`] =
       "healTargetBuffs": [
         {
           "buffName": "Repair Over Time II",
+          "turnsRemaining": 1,
+        },
+        {
+          "buffName": "Repair Over Time II",
+          "turnsRemaining": 2,
+        },
+        {
+          "buffName": "Repair Over Time II",
           "turnsRemaining": 2,
         },
       ],
-      "hotHeal": 1500,
+      "hotHeal": 4500,
       "incomingDamage": 0,
       "incomingDamageRaw": 0,
-      "overheal": 2000,
+      "overheal": 5000,
       "perRecipient": {
         "attacker": {
           "directHeal": 500,
           "effectiveHealing": 0,
-          "hotHeal": 1500,
-          "overheal": 2000,
+          "hotHeal": 4500,
+          "overheal": 5000,
         },
       },
       "round": 3,
@@ -862,11 +886,19 @@ exports[`healingGoldenParity > HoT (Repair Over Time II buff + small heal) 1`] =
       "shieldAbsorbed": 0,
       "targetHpPct": 100,
       "targetShieldPool": 0,
-      "totalRoundHealing": 2000,
+      "totalRoundHealing": 5000,
     },
     {
       "action": "active",
       "activeSelfBuffs": [
+        {
+          "buffName": "Repair Over Time II",
+          "turnsRemaining": 1,
+        },
+        {
+          "buffName": "Repair Over Time II",
+          "turnsRemaining": 2,
+        },
         {
           "buffName": "Repair Over Time II",
           "turnsRemaining": 2,
@@ -877,7 +909,7 @@ exports[`healingGoldenParity > HoT (Repair Over Time II buff + small heal) 1`] =
       "charges": 0,
       "cleanseCount": 0,
       "convertedToShield": 0,
-      "cumulativeHealing": 8000,
+      "cumulativeHealing": 15500,
       "didCrit": false,
       "directHeal": 500,
       "effectiveHealing": 0,
@@ -885,19 +917,27 @@ exports[`healingGoldenParity > HoT (Repair Over Time II buff + small heal) 1`] =
       "healTargetBuffs": [
         {
           "buffName": "Repair Over Time II",
+          "turnsRemaining": 1,
+        },
+        {
+          "buffName": "Repair Over Time II",
+          "turnsRemaining": 2,
+        },
+        {
+          "buffName": "Repair Over Time II",
           "turnsRemaining": 2,
         },
       ],
-      "hotHeal": 1500,
+      "hotHeal": 4500,
       "incomingDamage": 0,
       "incomingDamageRaw": 0,
-      "overheal": 2000,
+      "overheal": 5000,
       "perRecipient": {
         "attacker": {
           "directHeal": 500,
           "effectiveHealing": 0,
-          "hotHeal": 1500,
-          "overheal": 2000,
+          "hotHeal": 4500,
+          "overheal": 5000,
         },
       },
       "round": 4,
@@ -905,11 +945,19 @@ exports[`healingGoldenParity > HoT (Repair Over Time II buff + small heal) 1`] =
       "shieldAbsorbed": 0,
       "targetHpPct": 100,
       "targetShieldPool": 0,
-      "totalRoundHealing": 2000,
+      "totalRoundHealing": 5000,
     },
     {
       "action": "active",
       "activeSelfBuffs": [
+        {
+          "buffName": "Repair Over Time II",
+          "turnsRemaining": 1,
+        },
+        {
+          "buffName": "Repair Over Time II",
+          "turnsRemaining": 2,
+        },
         {
           "buffName": "Repair Over Time II",
           "turnsRemaining": 2,
@@ -920,7 +968,7 @@ exports[`healingGoldenParity > HoT (Repair Over Time II buff + small heal) 1`] =
       "charges": 0,
       "cleanseCount": 0,
       "convertedToShield": 0,
-      "cumulativeHealing": 10000,
+      "cumulativeHealing": 20500,
       "didCrit": false,
       "directHeal": 500,
       "effectiveHealing": 0,
@@ -928,19 +976,27 @@ exports[`healingGoldenParity > HoT (Repair Over Time II buff + small heal) 1`] =
       "healTargetBuffs": [
         {
           "buffName": "Repair Over Time II",
+          "turnsRemaining": 1,
+        },
+        {
+          "buffName": "Repair Over Time II",
+          "turnsRemaining": 2,
+        },
+        {
+          "buffName": "Repair Over Time II",
           "turnsRemaining": 2,
         },
       ],
-      "hotHeal": 1500,
+      "hotHeal": 4500,
       "incomingDamage": 0,
       "incomingDamageRaw": 0,
-      "overheal": 2000,
+      "overheal": 5000,
       "perRecipient": {
         "attacker": {
           "directHeal": 500,
           "effectiveHealing": 0,
-          "hotHeal": 1500,
-          "overheal": 2000,
+          "hotHeal": 4500,
+          "overheal": 5000,
         },
       },
       "round": 5,
@@ -948,11 +1004,19 @@ exports[`healingGoldenParity > HoT (Repair Over Time II buff + small heal) 1`] =
       "shieldAbsorbed": 0,
       "targetHpPct": 100,
       "targetShieldPool": 0,
-      "totalRoundHealing": 2000,
+      "totalRoundHealing": 5000,
     },
     {
       "action": "active",
       "activeSelfBuffs": [
+        {
+          "buffName": "Repair Over Time II",
+          "turnsRemaining": 1,
+        },
+        {
+          "buffName": "Repair Over Time II",
+          "turnsRemaining": 2,
+        },
         {
           "buffName": "Repair Over Time II",
           "turnsRemaining": 2,
@@ -963,7 +1027,7 @@ exports[`healingGoldenParity > HoT (Repair Over Time II buff + small heal) 1`] =
       "charges": 0,
       "cleanseCount": 0,
       "convertedToShield": 0,
-      "cumulativeHealing": 12000,
+      "cumulativeHealing": 25500,
       "didCrit": false,
       "directHeal": 500,
       "effectiveHealing": 0,
@@ -971,19 +1035,27 @@ exports[`healingGoldenParity > HoT (Repair Over Time II buff + small heal) 1`] =
       "healTargetBuffs": [
         {
           "buffName": "Repair Over Time II",
+          "turnsRemaining": 1,
+        },
+        {
+          "buffName": "Repair Over Time II",
+          "turnsRemaining": 2,
+        },
+        {
+          "buffName": "Repair Over Time II",
           "turnsRemaining": 2,
         },
       ],
-      "hotHeal": 1500,
+      "hotHeal": 4500,
       "incomingDamage": 0,
       "incomingDamageRaw": 0,
-      "overheal": 2000,
+      "overheal": 5000,
       "perRecipient": {
         "attacker": {
           "directHeal": 500,
           "effectiveHealing": 0,
-          "hotHeal": 1500,
-          "overheal": 2000,
+          "hotHeal": 4500,
+          "overheal": 5000,
         },
       },
       "round": 6,
@@ -991,11 +1063,19 @@ exports[`healingGoldenParity > HoT (Repair Over Time II buff + small heal) 1`] =
       "shieldAbsorbed": 0,
       "targetHpPct": 100,
       "targetShieldPool": 0,
-      "totalRoundHealing": 2000,
+      "totalRoundHealing": 5000,
     },
     {
       "action": "active",
       "activeSelfBuffs": [
+        {
+          "buffName": "Repair Over Time II",
+          "turnsRemaining": 1,
+        },
+        {
+          "buffName": "Repair Over Time II",
+          "turnsRemaining": 2,
+        },
         {
           "buffName": "Repair Over Time II",
           "turnsRemaining": 2,
@@ -1006,7 +1086,7 @@ exports[`healingGoldenParity > HoT (Repair Over Time II buff + small heal) 1`] =
       "charges": 0,
       "cleanseCount": 0,
       "convertedToShield": 0,
-      "cumulativeHealing": 14000,
+      "cumulativeHealing": 30500,
       "didCrit": false,
       "directHeal": 500,
       "effectiveHealing": 0,
@@ -1014,19 +1094,27 @@ exports[`healingGoldenParity > HoT (Repair Over Time II buff + small heal) 1`] =
       "healTargetBuffs": [
         {
           "buffName": "Repair Over Time II",
+          "turnsRemaining": 1,
+        },
+        {
+          "buffName": "Repair Over Time II",
+          "turnsRemaining": 2,
+        },
+        {
+          "buffName": "Repair Over Time II",
           "turnsRemaining": 2,
         },
       ],
-      "hotHeal": 1500,
+      "hotHeal": 4500,
       "incomingDamage": 0,
       "incomingDamageRaw": 0,
-      "overheal": 2000,
+      "overheal": 5000,
       "perRecipient": {
         "attacker": {
           "directHeal": 500,
           "effectiveHealing": 0,
-          "hotHeal": 1500,
-          "overheal": 2000,
+          "hotHeal": 4500,
+          "overheal": 5000,
         },
       },
       "round": 7,
@@ -1034,11 +1122,19 @@ exports[`healingGoldenParity > HoT (Repair Over Time II buff + small heal) 1`] =
       "shieldAbsorbed": 0,
       "targetHpPct": 100,
       "targetShieldPool": 0,
-      "totalRoundHealing": 2000,
+      "totalRoundHealing": 5000,
     },
     {
       "action": "active",
       "activeSelfBuffs": [
+        {
+          "buffName": "Repair Over Time II",
+          "turnsRemaining": 1,
+        },
+        {
+          "buffName": "Repair Over Time II",
+          "turnsRemaining": 2,
+        },
         {
           "buffName": "Repair Over Time II",
           "turnsRemaining": 2,
@@ -1049,7 +1145,7 @@ exports[`healingGoldenParity > HoT (Repair Over Time II buff + small heal) 1`] =
       "charges": 0,
       "cleanseCount": 0,
       "convertedToShield": 0,
-      "cumulativeHealing": 16000,
+      "cumulativeHealing": 35500,
       "didCrit": false,
       "directHeal": 500,
       "effectiveHealing": 0,
@@ -1057,19 +1153,27 @@ exports[`healingGoldenParity > HoT (Repair Over Time II buff + small heal) 1`] =
       "healTargetBuffs": [
         {
           "buffName": "Repair Over Time II",
+          "turnsRemaining": 1,
+        },
+        {
+          "buffName": "Repair Over Time II",
+          "turnsRemaining": 2,
+        },
+        {
+          "buffName": "Repair Over Time II",
           "turnsRemaining": 2,
         },
       ],
-      "hotHeal": 1500,
+      "hotHeal": 4500,
       "incomingDamage": 0,
       "incomingDamageRaw": 0,
-      "overheal": 2000,
+      "overheal": 5000,
       "perRecipient": {
         "attacker": {
           "directHeal": 500,
           "effectiveHealing": 0,
-          "hotHeal": 1500,
-          "overheal": 2000,
+          "hotHeal": 4500,
+          "overheal": 5000,
         },
       },
       "round": 8,
@@ -1077,11 +1181,19 @@ exports[`healingGoldenParity > HoT (Repair Over Time II buff + small heal) 1`] =
       "shieldAbsorbed": 0,
       "targetHpPct": 100,
       "targetShieldPool": 0,
-      "totalRoundHealing": 2000,
+      "totalRoundHealing": 5000,
     },
     {
       "action": "active",
       "activeSelfBuffs": [
+        {
+          "buffName": "Repair Over Time II",
+          "turnsRemaining": 1,
+        },
+        {
+          "buffName": "Repair Over Time II",
+          "turnsRemaining": 2,
+        },
         {
           "buffName": "Repair Over Time II",
           "turnsRemaining": 2,
@@ -1092,7 +1204,7 @@ exports[`healingGoldenParity > HoT (Repair Over Time II buff + small heal) 1`] =
       "charges": 0,
       "cleanseCount": 0,
       "convertedToShield": 0,
-      "cumulativeHealing": 18000,
+      "cumulativeHealing": 40500,
       "didCrit": false,
       "directHeal": 500,
       "effectiveHealing": 0,
@@ -1100,19 +1212,27 @@ exports[`healingGoldenParity > HoT (Repair Over Time II buff + small heal) 1`] =
       "healTargetBuffs": [
         {
           "buffName": "Repair Over Time II",
+          "turnsRemaining": 1,
+        },
+        {
+          "buffName": "Repair Over Time II",
+          "turnsRemaining": 2,
+        },
+        {
+          "buffName": "Repair Over Time II",
           "turnsRemaining": 2,
         },
       ],
-      "hotHeal": 1500,
+      "hotHeal": 4500,
       "incomingDamage": 0,
       "incomingDamageRaw": 0,
-      "overheal": 2000,
+      "overheal": 5000,
       "perRecipient": {
         "attacker": {
           "directHeal": 500,
           "effectiveHealing": 0,
-          "hotHeal": 1500,
-          "overheal": 2000,
+          "hotHeal": 4500,
+          "overheal": 5000,
         },
       },
       "round": 9,
@@ -1120,11 +1240,19 @@ exports[`healingGoldenParity > HoT (Repair Over Time II buff + small heal) 1`] =
       "shieldAbsorbed": 0,
       "targetHpPct": 100,
       "targetShieldPool": 0,
-      "totalRoundHealing": 2000,
+      "totalRoundHealing": 5000,
     },
     {
       "action": "active",
       "activeSelfBuffs": [
+        {
+          "buffName": "Repair Over Time II",
+          "turnsRemaining": 1,
+        },
+        {
+          "buffName": "Repair Over Time II",
+          "turnsRemaining": 2,
+        },
         {
           "buffName": "Repair Over Time II",
           "turnsRemaining": 2,
@@ -1135,7 +1263,7 @@ exports[`healingGoldenParity > HoT (Repair Over Time II buff + small heal) 1`] =
       "charges": 0,
       "cleanseCount": 0,
       "convertedToShield": 0,
-      "cumulativeHealing": 20000,
+      "cumulativeHealing": 45500,
       "didCrit": false,
       "directHeal": 500,
       "effectiveHealing": 0,
@@ -1143,19 +1271,27 @@ exports[`healingGoldenParity > HoT (Repair Over Time II buff + small heal) 1`] =
       "healTargetBuffs": [
         {
           "buffName": "Repair Over Time II",
+          "turnsRemaining": 1,
+        },
+        {
+          "buffName": "Repair Over Time II",
+          "turnsRemaining": 2,
+        },
+        {
+          "buffName": "Repair Over Time II",
           "turnsRemaining": 2,
         },
       ],
-      "hotHeal": 1500,
+      "hotHeal": 4500,
       "incomingDamage": 0,
       "incomingDamageRaw": 0,
-      "overheal": 2000,
+      "overheal": 5000,
       "perRecipient": {
         "attacker": {
           "directHeal": 500,
           "effectiveHealing": 0,
-          "hotHeal": 1500,
-          "overheal": 2000,
+          "hotHeal": 4500,
+          "overheal": 5000,
         },
       },
       "round": 10,
@@ -1163,25 +1299,25 @@ exports[`healingGoldenParity > HoT (Repair Over Time II buff + small heal) 1`] =
       "shieldAbsorbed": 0,
       "targetHpPct": 100,
       "targetShieldPool": 0,
-      "totalRoundHealing": 2000,
+      "totalRoundHealing": 5000,
     },
   ],
   "summary": {
-    "avgHealingPerRound": 2000,
+    "avgHealingPerRound": 4550,
     "perRecipient": {
       "attacker": {
         "totalEffectiveHealing": 0,
-        "totalOverheal": 20000,
+        "totalOverheal": 45500,
       },
     },
     "totalBarrierAbsorbed": 0,
     "totalCleanses": 0,
     "totalDirectHeal": 5000,
     "totalEffectiveHealing": 0,
-    "totalHealing": 20000,
-    "totalHotHeal": 15000,
+    "totalHealing": 45500,
+    "totalHotHeal": 40500,
     "totalIncomingDamage": 0,
-    "totalOverheal": 20000,
+    "totalOverheal": 45500,
     "totalShield": 0,
     "totalShieldAbsorbed": 0,
   },
@@ -6918,19 +7054,23 @@ exports[`healingGoldenParity > role-filtered RoT grant LIVE (tank role ATTACKER 
       "healTargetBuffs": [
         {
           "buffName": "Repair Over Time III",
+          "turnsRemaining": 1,
+        },
+        {
+          "buffName": "Repair Over Time III",
           "turnsRemaining": 2,
         },
       ],
       "hotHeal": 0,
       "incomingDamage": 1000,
       "incomingDamageRaw": 1000,
-      "overheal": 4000,
+      "overheal": 9000,
       "perRecipient": {
         "tank": {
           "directHeal": 0,
           "effectiveHealing": 1000,
-          "hotHeal": 5000,
-          "overheal": 4000,
+          "hotHeal": 10000,
+          "overheal": 9000,
         },
       },
       "perTargetDealt": {
@@ -6943,7 +7083,7 @@ exports[`healingGoldenParity > role-filtered RoT grant LIVE (tank role ATTACKER 
       "shieldAbsorbed": 0,
       "targetHpPct": 99,
       "targetShieldPool": 0,
-      "teamHealing": 5000,
+      "teamHealing": 10000,
       "totalRoundHealing": 0,
     },
     {
@@ -6962,19 +7102,23 @@ exports[`healingGoldenParity > role-filtered RoT grant LIVE (tank role ATTACKER 
       "healTargetBuffs": [
         {
           "buffName": "Repair Over Time III",
+          "turnsRemaining": 1,
+        },
+        {
+          "buffName": "Repair Over Time III",
           "turnsRemaining": 2,
         },
       ],
       "hotHeal": 0,
       "incomingDamage": 1000,
       "incomingDamageRaw": 1000,
-      "overheal": 4000,
+      "overheal": 9000,
       "perRecipient": {
         "tank": {
           "directHeal": 0,
           "effectiveHealing": 1000,
-          "hotHeal": 5000,
-          "overheal": 4000,
+          "hotHeal": 10000,
+          "overheal": 9000,
         },
       },
       "perTargetDealt": {
@@ -6987,7 +7131,7 @@ exports[`healingGoldenParity > role-filtered RoT grant LIVE (tank role ATTACKER 
       "shieldAbsorbed": 0,
       "targetHpPct": 99,
       "targetShieldPool": 0,
-      "teamHealing": 5000,
+      "teamHealing": 10000,
       "totalRoundHealing": 0,
     },
   ],
@@ -6996,10 +7140,10 @@ exports[`healingGoldenParity > role-filtered RoT grant LIVE (tank role ATTACKER 
     "perRecipient": {
       "tank": {
         "totalEffectiveHealing": 3000,
-        "totalOverheal": 12000,
+        "totalOverheal": 22000,
       },
     },
-    "teamTotalHealing": 15000,
+    "teamTotalHealing": 25000,
     "totalBarrierAbsorbed": 0,
     "totalCleanses": 0,
     "totalDirectHeal": 0,
@@ -7007,7 +7151,7 @@ exports[`healingGoldenParity > role-filtered RoT grant LIVE (tank role ATTACKER 
     "totalHealing": 0,
     "totalHotHeal": 0,
     "totalIncomingDamage": 4000,
-    "totalOverheal": 12000,
+    "totalOverheal": 22000,
     "totalShield": 0,
     "totalShieldAbsorbed": 0,
   },

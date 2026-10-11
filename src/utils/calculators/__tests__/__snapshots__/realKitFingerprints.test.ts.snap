@@ -921,6 +921,7 @@ exports[`kit fingerprints > Flamel 1`] = `
 {
   "plain": [
     "buff",
+    "buff-expired",
     "buff:active",
     "buff:charged",
     "charge-changed",
@@ -931,6 +932,7 @@ exports[`kit fingerprints > Flamel 1`] = `
   ],
   "richEnemy": [
     "buff",
+    "buff-expired",
     "buff:active",
     "buff:charged",
     "charge-changed",
@@ -941,6 +943,7 @@ exports[`kit fingerprints > Flamel 1`] = `
   ],
   "wounded": [
     "buff",
+    "buff-expired",
     "buff:active",
     "buff:charged",
     "charge-changed",

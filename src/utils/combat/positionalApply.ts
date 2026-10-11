@@ -111,6 +111,24 @@ export function directlyDamagesVictim(
     return (outcome.transformedToDot ?? 0) <= 0 && outcome.fullyRedirected !== true;
 }
 
+/** Whether a hit DID DAMAGE to the ship it struck, for "when damaging X" gains (owner ruling
+ *  2026-10-11, #655): direct damage ({@link directlyDamagesVictim}) that was not nullified by
+ *  Barrier and booked more than 0. A shield-soaked hit counts — the shield took direct damage —
+ *  and a hit an `incoming-block` proc blocked whole books 0, so it does not. */
+export function damagedVictim(
+    outcome: Pick<
+        VictimDamageOutcome,
+        'transformedToDot' | 'fullyRedirected' | 'barriered' | 'incomingBooked'
+    >,
+    damage: number
+): boolean {
+    return (
+        directlyDamagesVictim(outcome) &&
+        outcome.barriered !== true &&
+        (outcome.incomingBooked ?? damage) > 0
+    );
+}
+
 /** {@link VictimDamageOutcome} as returned by the engine's real apply funnel, where
  *  {@link VictimDamageOutcome.incomingBooked} is guaranteed. Lets the engine-internal booking
  *  sites read it without a fallback while the injected-callback interface above stays satisfiable
