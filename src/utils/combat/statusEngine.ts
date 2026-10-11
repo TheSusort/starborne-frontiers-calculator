@@ -617,15 +617,26 @@ export function isStackingFamily(name: string): boolean {
     return DOT_PREFIXES.has(name.split(' ')[0]);
 }
 
-/** Buffs whose instances tick or apply independently per applier rather than overwrite (owner
- *  ruling 2026-10-11): Repair Over Time and Power Infused Nanobots. */
+/** Buffs whose every application is its own instance rather than overwriting another (owner
+ *  ruling 2026-10-11): Repair Over Time (every tier) and Power Infused Nanobots. */
 const INDEPENDENT_BUFF_PREFIXES = ['Repair Over Time', 'Power Infused Nanobots'];
 
-/** Whether every instance of a status counts on its own in an own-side stat fold: the stacking
- *  families (`isStackingFamily`) plus the independently ticking buffs above. */
-export function stacksIndependently(name: string): boolean {
-    return isStackingFamily(name) || INDEPENDENT_BUFF_PREFIXES.some((p) => name.startsWith(p));
+/** A status every application of which is its own store entry with its own timer — never contested,
+ *  refreshed or shadowed by another copy (owner ruling 2026-10-11, #670): heal-over-time and
+ *  Power Infused Nanobots. DoTs stack too but live in the actor's DoT arrays, not these maps. */
+export function isIndependentInstance(name: string): boolean {
+    return INDEPENDENT_BUFF_PREFIXES.some((p) => name.startsWith(p));
 }
+
+/** Whether every instance of a status counts on its own in an own-side stat fold: the stacking
+ *  families (`isStackingFamily`) plus the independent instances (`isIndependentInstance`). */
+export function stacksIndependently(name: string): boolean {
+    return isStackingFamily(name) || isIndependentInstance(name);
+}
+
+/** The timed-map key of one independent instance (`isIndependentInstance`): the family key
+ *  suffixed with that application's `appliedSeq`, so no two copies share a key. */
+const independentKey = (familyKey: string, seq: number): string => `${familyKey}#${seq}`;
 
 /** EXPORTED for #389's cross-store tier shadowing (`buffTotals.outgoingFamiliesOf`), which must
  *  key families by exactly the same rule this engine uses internally — a second copy of the
@@ -1379,8 +1390,19 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         // The `&& casterId` is defensive: scheduled buffs always carry a concrete firing sourceId.
         const extension = side === 'self' && casterId ? buffDurationExtensionFor(casterId) : 0;
         const duration = buff.skillDuration + extension;
-        const existing = map.get(familyKey);
         const appliedThisTurn = side === 'self' && landsOnActingHolder('attacker');
+        if (isIndependentInstance(buff.buffName)) {
+            const seq = nextAppliedSeq();
+            map.set(independentKey(familyKey, seq), {
+                buffName: buff.buffName,
+                turnsRemaining: duration,
+                tier,
+                appliedSeq: seq,
+                appliedThisTurn,
+            });
+            return;
+        }
+        const existing = map.get(familyKey);
         if (!familyApplicationWins(existing, tier, duration, appliedThisTurn)) return;
         map.set(familyKey, {
             buffName: buff.buffName,
@@ -1854,7 +1876,15 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
      *  Clearing all three makes removal robust regardless of which door applied the buff.
      *  Lazy-empty / unknown id / unknown name → safe no-op. */
     const removeSelfBuffByName = (actorId: string, buffName: string): void => {
-        selfMaps.get(actorId)?.delete(deriveFamilyKey(buffName).familyKey);
+        // Every timed entry of the family goes: an independent-instance family holds one entry
+        // per application (`independentKey`), every other family holds at most one.
+        const timedMap = selfMaps.get(actorId);
+        if (timedMap) {
+            const { familyKey } = deriveFamilyKey(buffName);
+            for (const [key, entry] of timedMap) {
+                if (deriveFamilyKey(entry.buffName).familyKey === familyKey) timedMap.delete(key);
+            }
+        }
         // Accumulating (per-round) Overload: RESET stacks to 0 instead of deleting the entry.
         // The "gains Overload every turn" grant is a single seeded accumulating entry that
         // beginRound's per-round tick increments; deleting it would stop accrual permanently, but
@@ -2147,7 +2177,8 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
      *  Each recipient receives an independent copy of every stolen entry (same payload +
      *  REMAINING turnsRemaining, routed through the same family-tier-win rule a normal
      *  applyTimedAbilityStatus write uses) — a stolen buff can still be absorbed if the
-     *  recipient already holds a stronger/longer version of the same buff family. Returns the
+     *  recipient already holds a stronger/longer version of the same buff family. An independent
+     *  instance (`isIndependentInstance`) is never absorbed: it lands as a copy of its own. Returns the
      *  buff names actually removed from the source (grants are best-effort per recipient and do
      *  not affect this return value). Unknown sourceId / nothing eligible → []. */
     const steal = (
@@ -2193,11 +2224,12 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
             const recipientMap = getSelfMap(recipientId);
             for (const st of stolen) {
                 const { familyKey, tier } = deriveFamilyKey(st.buffName);
-                const existing = recipientMap.get(familyKey);
                 const appliedThisTurn = landsOnActingHolder(recipientId);
+                const independent = isIndependentInstance(st.buffName);
                 if (
+                    !independent &&
                     !familyApplicationWins(
-                        existing,
+                        recipientMap.get(familyKey),
                         tier,
                         st.turnsRemaining,
                         appliedThisTurn,
@@ -2205,7 +2237,8 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
                     )
                 )
                     continue;
-                recipientMap.set(familyKey, {
+                const seq = nextAppliedSeq();
+                recipientMap.set(independent ? independentKey(familyKey, seq) : familyKey, {
                     buffName: st.buffName,
                     turnsRemaining: st.turnsRemaining,
                     tier,
@@ -2219,7 +2252,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
                     hitsRemaining: st.hitsRemaining,
                     // REMAINING stack count travels intact, same rule as hitsRemaining above.
                     stacks: st.stacks,
-                    appliedSeq: nextAppliedSeq(),
+                    appliedSeq: seq,
                     // Own-turn reprieve (`landsOnActingHolder`): the thief stealing on its own
                     // turn keeps the REMAINING duration intact through that turn's Post-Turn;
                     // other recipients decrement on their own turns.
@@ -2418,10 +2451,27 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         if (status.side === 'enemy') {
             beforeTimedEnemyApplication(enemyEffectiveId, status.payload.buffName);
         }
-        const existing = map.get(familyKey);
         const appliedThisTurn = landsOnActingHolder(
             status.side === 'self' ? selfEffectiveId : enemyEffectiveId
         );
+        // An independent instance is never contested by the family rule and never merges stacks
+        // with a held copy: it is a store entry of its own (`isIndependentInstance`).
+        if (isIndependentInstance(status.payload.buffName)) {
+            const seq = nextAppliedSeq();
+            map.set(independentKey(familyKey, seq), {
+                buffName: status.payload.buffName,
+                turnsRemaining: duration,
+                tier,
+                payload: status.payload,
+                casterId: status.casterId,
+                stacks: status.payload.stacks ?? 1,
+                appliedSeq: seq,
+                appliedThisTurn,
+                ...(status.hits !== undefined ? { hitsRemaining: status.hits } : {}),
+            });
+            return true;
+        }
+        const existing = map.get(familyKey);
         // A landed-but-family-blocked application is silently absorbed: the landing roll
         // was already consumed by the caller's gate (the family rule runs AFTER the landing
         // hook), so a blocked application is NOT recorded as resisted — the stronger/longer
