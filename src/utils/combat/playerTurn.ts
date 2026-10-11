@@ -4440,7 +4440,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     const perHitSelfStatuses = timedSelfBySlot.filter((s) => s.perHit === true && ridesThisCast(s));
     /** A positional cast fires its per-hit gains per sub-attack from the engine, through
      *  `applyPerHitSelfStatusesForSubAttack`, once the funnel knows which victims each hit did
-     *  damage to (#655). Only the non-positional DPS-calculator cast fires them here. */
+     *  damage to (#655). A cast without `positionalLanding` fires them here. */
     const perHitGainsFireFromEngine =
         positionalLanding && hasVictim && perHitSelfStatuses.length > 0;
     for (const status of timedSelfBySlot) {

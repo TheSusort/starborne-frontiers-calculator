@@ -10795,11 +10795,10 @@ export function runCombat(rawInput: CombatEngineInput): {
                     // Whether this hit is direct damage on `victim` — read its doc.
                     const direct = directlyDamagesVictim(outcome);
                     if (damagedVictim(outcome, damage)) {
-                        const subAttack = subAttackIndex ?? 0;
-                        let damaged = damagedVictimsBySubAttack.get(subAttack);
+                        let damaged = damagedVictimsBySubAttack.get(subAttackIndex);
                         if (!damaged) {
                             damaged = new Set<string>();
-                            damagedVictimsBySubAttack.set(subAttack, damaged);
+                            damagedVictimsBySubAttack.set(subAttackIndex, damaged);
                         }
                         damaged.add(victim.id);
                     }
@@ -13332,6 +13331,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                             );
                             // Surface this enemy attacker's effects for the UI's round overview:
                             // its own active self-buffs and the debuffs it landed on the heal target,
+                            // through `enemyRoundEntry`. The self-buffs are copied after the
+                            // positional drive below, which lists the per-hit gains it grants
+                            // (`applyPerHitSelfStatusesForSubAttack`) on `activeSelfBuffs`.
                             // ATTRIBUTED to this enemy's actor id. NAMES ONLY for display — never folded
                             // into any sim value. Empty for a bare enemy → no entry recorded for it.
                             // Debuffs use inflictedEnemyDebuffs (source-accurate: only what THIS enemy
@@ -13358,12 +13360,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                               stacks: d.stacks,
                                           }))
                                     : [];
-                            if (
-                                enemyTurn.activeSelfBuffs.length > 0 ||
-                                enemyTurn.inflictedEnemyDebuffs.length > 0 ||
-                                enemyTurn.resistedEnemyDebuffs.length > 0 ||
-                                resistedEnemyDots.length > 0
-                            ) {
+                            const enemyRoundEntry = () => {
                                 let entry = roundEnemyEffects.get(actor.id);
                                 if (!entry) {
                                     entry = {
@@ -13374,7 +13371,14 @@ export function runCombat(rawInput: CombatEngineInput): {
                                     };
                                     roundEnemyEffects.set(actor.id, entry);
                                 }
-                                entry.selfBuffs.push(...enemyTurn.activeSelfBuffs);
+                                return entry;
+                            };
+                            if (
+                                enemyTurn.inflictedEnemyDebuffs.length > 0 ||
+                                enemyTurn.resistedEnemyDebuffs.length > 0 ||
+                                resistedEnemyDots.length > 0
+                            ) {
+                                const entry = enemyRoundEntry();
                                 entry.debuffs.push(...enemyTurn.inflictedEnemyDebuffs);
                                 entry.resistedDebuffs.push(...enemyTurn.resistedEnemyDebuffs);
                                 entry.resistedDots.push(...resistedEnemyDots);
@@ -13522,6 +13526,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                                     : 0
                             );
                             emitUndrivenAbilityPerformed(enemyTurn, enemyDrives);
+                            if (enemyTurn.activeSelfBuffs.length > 0)
+                                enemyRoundEntry().selfBuffs.push(...enemyTurn.activeSelfBuffs);
                         } // end dead-after-burst guard (!burstDestroyedActor)
                     } // end stasis gate (real-enemy branch)
                 }

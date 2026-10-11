@@ -218,6 +218,11 @@ interface Measured {
     struck: string[];
     /** The caster's `buff-applied` names in round 1, in emission order. */
     gains: string[];
+    /** The `grantKey` of each round-1 `buff-applied` of `buffName` on the caster, in order. A
+     *  per-hit gain's key ends `:hit<sub-attack index>`. */
+    grantKeys: (buffName: string) => string[];
+    /** The self-buff names the round-1 heal report lists for the caster's enemy-effects entry. */
+    enemyEntrySelfBuffs: string[];
     /** Whether the named gain was emitted after the caster's round-1 cast began — never as a
      *  combat-start seed. */
     afterCast: (buffName: string) => boolean;
@@ -244,6 +249,7 @@ const measure = (
     const caster = side.casterId;
     const struck = new Set<string>();
     const gains: string[] = [];
+    const keyed: { name: string; key: string | undefined }[] = [];
     const log: string[] = [];
     const aimed = new Map<number, number>();
     let aimedShieldHit = false;
@@ -265,9 +271,10 @@ const measure = (
     bus.on('buff-applied', (e: Extract<CombatEvent, { type: 'buff-applied' }>) => {
         if (e.actorId !== caster || e.round !== 1) return;
         gains.push(e.buffName);
+        keyed.push({ name: e.buffName, key: e.grantKey });
         log.push(`buff:${e.buffName}`);
     });
-    runCombat({
+    const result = runCombat({
         ...side.input(ship, opts.pattern ?? circle(), roles, opts.enemyType, opts.kits),
         ...(opts.numRounds ? { numRounds: opts.numRounds } : {}),
         bus,
@@ -283,6 +290,11 @@ const measure = (
         aimedDamage: (round) => aimed.get(round) ?? 0,
         aimedShieldHit,
         aimedHpDropped,
+        grantKeys: (name) => keyed.filter((k) => k.name === name).map((k) => k.key ?? ''),
+        enemyEntrySelfBuffs: (
+            result.healing?.rounds[0]?.enemyEffects.find((e) => e.enemyId === caster)?.selfBuffs ??
+            []
+        ).map((b) => b.buffName),
     };
 };
 
@@ -564,7 +576,35 @@ describe('Rys: "when damaging a supporter" needs the hit to do damage to the sup
             const m = run(selfCast(selfBuff('Hit Mitigation')), rysMultiHit(2));
             expect(m.aimedHpDropped).toBe(true);
             expect(only(m, SWIFTNESS)).toEqual([SWIFTNESS]);
+            expect(m.grantKeys(SWIFTNESS)).toEqual([expect.stringMatching(/:hit1$/)]);
             expect(m.afterCast(SWIFTNESS)).toBe(true);
         });
     }
+});
+
+describe('Rys on the enemy side: the round overview lists a per-hit gain', () => {
+    it("a single hit on a supporter lists XAOC Swiftness II on the caster's entry", () => {
+        const m = measure(ENEMY, 'Rys', { A: 'SUPPORTER' }, { pattern: single() });
+        expect(only(m, SWIFTNESS)).toEqual([SWIFTNESS]);
+        expect(m.enemyEntrySelfBuffs).toContain(SWIFTNESS);
+    });
+    it('a 2-hit cast whose first hit Hit Mitigation takes still lists it', () => {
+        const m = measure(
+            ENEMY,
+            'Rys',
+            { A: 'SUPPORTER' },
+            {
+                pattern: single(),
+                kits: {
+                    caster: rysMultiHit(2),
+                    struck: { A: selfCast(selfBuff('Hit Mitigation')) },
+                },
+            }
+        );
+        expect(m.enemyEntrySelfBuffs).toContain(SWIFTNESS);
+    });
+    it('CONTROL: no struck supporter lists nothing', () => {
+        const m = measure(ENEMY, 'Rys', {}, { pattern: single() });
+        expect(m.enemyEntrySelfBuffs).not.toContain(SWIFTNESS);
+    });
 });
