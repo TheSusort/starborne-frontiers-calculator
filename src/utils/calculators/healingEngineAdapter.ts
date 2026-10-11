@@ -655,9 +655,11 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
             // zeroes every damage-dealt rider.
             stats: {
                 ...e.stats,
+                /* eslint-disable no-restricted-syntax -- defaults the legacy sink's configured stats into the engine input */
                 defence: e.stats.defence ?? LEGACY_SINK_DEFENCE,
                 hp: e.stats.hp ?? LEGACY_SINK_HP,
                 security: e.stats.security ?? LEGACY_SINK_SECURITY,
+                /* eslint-enable no-restricted-syntax */
             },
             affinityDamageModifier: aff.damageModifier,
             affinityCritCap: aff.critCap,

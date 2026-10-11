@@ -684,6 +684,7 @@ export function selectNextActor(actors: CombatActor[]): CombatActor {
                     'at least one actor must have speed > 0.'
             );
         }
+        // eslint-disable-next-line no-restricted-syntax -- not the engine's turn order: the engine orders turns with selectNextBySpeed over live speed
         for (const a of actors) a.turnMeter += a.stats.speed;
     }
     return eligible().reduce((best, a) => (a.turnMeter > best.turnMeter ? a : best));
@@ -700,6 +701,7 @@ export function selectNextActor(actors: CombatActor[]): CombatActor {
  */
 export function buildTurnQueue(actors: CombatActor[]): CombatActor[] {
     return orderByTurnPriority(
+        // eslint-disable-next-line no-restricted-syntax -- not the engine's turn order: the engine orders turns with selectNextBySpeed over live speed
         actors.map((a) => ({ actor: a, speed: a.stats.speed, side: a.side, position: a.position }))
     ).map((w) => w.actor);
 }

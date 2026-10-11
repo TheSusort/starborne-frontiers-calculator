@@ -104,7 +104,12 @@ import {
     type VictimDefenseProfile,
 } from './victimDamage';
 import type { PreFightCombatModifiers } from './preFight/types';
-import { effectiveDamageStatsOf, liveDebuffLandingChance } from './effectiveStats';
+import {
+    effectiveDamageStatsOf,
+    effectiveStatsOf,
+    foldActorBuffTotals,
+    liveDebuffLandingChance,
+} from './effectiveStats';
 import {
     targetCarriesBlockDebuff,
     emitBlockDebuffResist,
@@ -2214,14 +2219,26 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
      *
      *  `noVictimAbsentSubject.integration.test.ts` pins the no-victim `stat-vs-target` shape
      *  synthetically, because no shipped kit pairs an ally target with a `stat-vs-target` gate. */
-    const victimStatGateCtx = (v: CombatActor | undefined) =>
-        v !== undefined
-            ? {
-                  targetSpeed: v.stats.speed,
-                  targetCurrentHp: v.currentHp,
-                  targetCritPower: v.stats.critDamage,
-              }
-            : {};
+    const victimStatGateCtx = (v: CombatActor | undefined) => {
+        if (v === undefined) return {};
+        // LIVE speed and crit power: the victim's buffs and every debuff on it (Speed Down, Crit
+        // Power Down), whichever side applied them.
+        const liveVictim = effectiveStatsOf(statusEngine, selfBuffLookup, v);
+        return {
+            targetSpeed: liveVictim.speed,
+            targetCurrentHp: v.currentHp,
+            targetCritPower: liveVictim.critDamage,
+        };
+    };
+
+    /** The acting unit's LIVE speed for the owner-vs-target gates: its buffs and every debuff on
+     *  it (Speed Up/Down), read at the call so a status landed earlier this turn counts. */
+    const liveSelfSpeed = (): number => effectiveStatsOf(statusEngine, selfBuffLookup, actor).speed;
+    /** The acting unit's LIVE crit-power modifier (scheduled + timed self buffs plus the shadowed
+     *  enemy-applied Crit Power Down) for the gate context built before the cast's own statuses
+     *  land. Added to `runtime.critDamage`, the base the gear-derived stat lives on. */
+    const liveSelfCritDamageBuff = (): number =>
+        foldActorBuffTotals(statusEngine, selfBuffLookup, actor.id).critDamageBuff;
 
     /** The victim's shield-presence gate field (Malvex charged Barrier), shared by all four gate
      *  contexts. Read PRE-strip: a `type:'shield-strip'` clause in the same cast (Malvex's own
@@ -3253,9 +3270,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // DPS-safe); selfCritPower is a layer-1-only estimate here (critDamageForGates hasn't
         // folded layers 2+3 yet at this point in the turn) — matching this ctx's existing
         // effectiveCritRate, which is the same partial-fold convention.
-        selfSpeed: actor.stats.speed,
+        selfSpeed: liveSelfSpeed(),
         selfCurrentHp: actor.currentHp,
-        selfCritPower: critDamage + critDamageForGates,
+        selfCritPower: critDamage + liveSelfCritDamageBuff(),
         // Omitted entirely when there is no victim — see victimStatGateCtx.
         ...victimStatGateCtx(enemy),
         // The caster's own shield-presence gate, live-derived from
@@ -4454,6 +4471,17 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     const abilityTotalsForGates = calculateBuffTotals(toSimBuffs(abilitySelfEffects));
     critBuffForGates += abilityTotalsForGates.critBuff;
     critDamageForGates += abilityTotalsForGates.critDamageBuff;
+    // The enemy-applied stat deltas (Crit Power Down and the rest of the shadowed channels),
+    // resolved once: the owner-vs-target crit-power gates read it through `critDamageForGates`,
+    // and the damage fold below applies it to `scheduledTotals`.
+    const enemyAppliedDelta = enemyAppliedFamilies
+        ? shadowedDelta(
+              enemyAppliedFamilies,
+              [...scheduledSelfBuffs, ...abilitySelfEffects],
+              TURN_SHADOW_CHANNELS
+          ).delta
+        : undefined;
+    critDamageForGates += enemyAppliedDelta?.critDamage ?? 0;
 
     // Snapshot lists for this round / context: ability statuses appended AFTER
     // scheduled ones (KNOWN-DIFF c ordering).
@@ -4647,28 +4675,17 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // early site and still outside the comparison. All keep contributing to the totals as before;
     // they are simply invisible to the shadowing comparison.
     //
-    // ⚠️ #398 — THE CRIT CHANNELS *ARE* READ IN BETWEEN, and this fold is deliberately still here.
-    // The claim above ("nothing between the early site and here reads ...") holds for the four
-    // original channels but NOT for the two crit ones this change adds. Both staged gate estimates
-    // read them earlier:
-    //   • `critBuffForGates`   — initialised, then `+=`'d by layers 2+3, then consumed as
-    //                            `cappedCrit(critBuffForGates)`;
-    //   • `critDamageForGates` — initialised, then consumed as `selfCritPower`.
-    // Every one of those reads happens BEFORE this point, so those estimates do not see the enemy-applied term.
-    // That is the SAME documented approximation they already carry for layer 4 (`modifierAbilities`,
-    // excluded for self-referential-gate avoidance) — not a new class of inaccuracy. Folding earlier
-    // is not available: the shadowing comparison needs `abilitySelfEffects`, which does not exist
-    // where those estimates are initialised — which is exactly why #396 moved the heal pair down
-    // here.
-    // The AUTHORITATIVE values are exact: `effectiveCrit` / `dmgStats.critDamage` drive the real
-    // crit rolls and damage, and the ctx publishes `effectiveCritRate: effectiveCrit`,
-    // the final number. Do NOT "fix" this by adding the delta to the gate estimates — they are
-    // already consumed by the time control reaches here.
+    // #398 — the crit-RATE gate estimate (`critBuffForGates`, consumed as `cappedCrit(...)` before
+    // this point) does not see the enemy-applied `Crit Rate Down`: it carries the same documented
+    // approximation as layer 4 (`modifierAbilities`, excluded for self-referential-gate
+    // avoidance). The crit-POWER estimate (`critDamageForGates`) DOES carry the enemy-applied term,
+    // because the owner-vs-target crit-power gates read it (see `enemyAppliedDelta`). The
+    // AUTHORITATIVE values are exact: `effectiveCrit` / `dmgStats.critDamage` drive the real crit
+    // rolls and damage, and the ctx publishes `effectiveCritRate: effectiveCrit`.
     //
     // Absent/empty map → empty deltas, and the self side is not even read.
-    if (enemyAppliedFamilies) {
-        const ownNamed = [...scheduledSelfBuffs, ...abilitySelfEffects];
-        const { delta } = shadowedDelta(enemyAppliedFamilies, ownNamed, TURN_SHADOW_CHANNELS);
+    if (enemyAppliedDelta) {
+        const delta = enemyAppliedDelta;
         scheduledTotals.attackBuff += delta.attack ?? 0;
         scheduledTotals.outgoingDamageBuff += delta.outgoingDamage ?? 0;
         scheduledTotals.incomingHealBuff += delta.incomingHeal ?? 0;
@@ -4700,6 +4717,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             hp,
             // #361: read off the actor rather than `runtime`, which carries no security — the
             // fold (base + securityBuff, no affinity) matches liveDebuffLandingChance's effSec.
+            // eslint-disable-next-line no-restricted-syntax -- base security fed into effectiveDamageStatsOf, which adds the live securityBuff
             security: actor.stats.security ?? 0,
             defensePenetration,
             castPenBonus: chargedOverdrivePen,
@@ -4904,7 +4922,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // enemy-walk) passes via buildTurnArgs's `runtime`/`enemy` — so this is team-symmetric
         // with zero player/enemy branching. The target half is omitted outright when
         // there is no victim (see victimStatGateCtx); the OWNER half below always has a subject.
-        selfSpeed: actor.stats.speed,
+        selfSpeed: liveSelfSpeed(),
         selfCurrentHp: actor.currentHp,
         // Mirrors modifierCtx's existing selfCritPower estimate (layers 1+2+3, pre-modifier) —
         // both this ctx and modifierCtx sit AFTER critDamageForGates' final += (line ~1431), so

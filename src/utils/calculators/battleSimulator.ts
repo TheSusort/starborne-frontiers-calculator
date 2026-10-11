@@ -1122,6 +1122,7 @@ export function simulateBattle(
         const aff = computeAffinityModifiers(plan.affinity, enemyRepAffinity);
         return {
             id: plan.id,
+            // eslint-disable-next-line no-restricted-syntax -- the plan's pre-fight stat sheet seeds the engine input; the engine folds buffs live
             speed: plan.stats.speed,
             chargeCount: plan.chargeCount,
             startCharged: plan.startCharged,
@@ -1232,6 +1233,7 @@ export function simulateBattle(
     }
 
     const { rounds: engineRounds } = runCombat({
+        /* eslint-disable no-restricted-syntax -- the plan's pre-fight stat sheet seeds the engine input; the engine folds buffs live */
         attack: focus.stats.attack,
         crit: focus.stats.crit,
         critDamage: focus.stats.critDamage,
@@ -1260,6 +1262,7 @@ export function simulateBattle(
         // team-vs-team test in twoTeamBattle.test.ts.
         hacking: focus.stats.hacking,
         security: focus.stats.security,
+        /* eslint-enable no-restricted-syntax */
         position: focus.position,
         target: withStealthBypass(focus.targeting?.target, focus.activeIgnoresStealth),
         pattern: focus.targeting?.pattern,

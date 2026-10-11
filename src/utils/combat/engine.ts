@@ -1011,6 +1011,7 @@ export function buildEnemyPlayerActorRuntime(
         side: 'enemy',
         kind: 'enemy',
         stats: {
+            /* eslint-disable no-restricted-syntax -- builds the actor's base stats from the roster input; live reads fold buffs over these */
             attack: e.stats.attack,
             crit: e.stats.crit,
             critDamage: e.stats.critDamage,
@@ -1023,6 +1024,7 @@ export function buildEnemyPlayerActorRuntime(
             // `liveDebuffLandingChance`'s attacker/defender terms.
             hacking: e.stats.hacking,
             security: e.stats.security,
+            /* eslint-enable no-restricted-syntax */
         },
         chargeCount: e.chargeCount,
         startCharged: e.startCharged,
@@ -1066,11 +1068,13 @@ export function buildEnemyPlayerActorRuntime(
         timedSelfBySlot,
         timedEnemyBySlot,
         hasChargedSkill,
+        /* eslint-disable no-restricted-syntax -- builds the actor's base stat runtime from the roster input; live reads fold buffs over these */
         attack: e.stats.attack,
         crit: e.stats.crit,
         critDamage: e.stats.critDamage,
         defensePenetration: e.stats.defensePenetration ?? 0,
         defence: e.stats.defence ?? 0,
+        /* eslint-enable no-restricted-syntax */
         hp: e.stats.hp ?? 0,
         // Fold the enemy's own heal-modifier (team symmetry with the player focus/walk
         // paths); was hard-coded 0 before F4. Undefined → 0.
@@ -2507,6 +2511,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             kind: 'team',
             stats: t.walk
                 ? {
+                      /* eslint-disable no-restricted-syntax -- builds the actor's base stats from the walked team-actor input; live reads fold buffs over these */
                       attack: t.walk.stats.attack,
                       crit: t.walk.stats.crit,
                       critDamage: t.walk.stats.critDamage,
@@ -2517,6 +2522,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                       speed: t.speed,
                       hacking: t.walk.stats.hacking,
                       security: t.walk.stats.security,
+                      /* eslint-enable no-restricted-syntax */
                   }
                 : {
                       attack: 0,
@@ -2859,11 +2865,13 @@ export function runCombat(rawInput: CombatEngineInput): {
             timedSelfBySlot: teamTimed.timedSelfBySlot,
             timedEnemyBySlot: teamTimed.timedEnemyBySlot,
             hasChargedSkill: w.hasChargedSkill,
+            /* eslint-disable no-restricted-syntax -- builds the actor's base stat runtime from the walked team-actor input; live reads fold buffs over these */
             attack: w.stats.attack,
             crit: w.stats.crit,
             critDamage: w.stats.critDamage,
             defensePenetration: w.stats.defensePenetration,
             defence: w.stats.defence,
+            /* eslint-enable no-restricted-syntax */
             hp: w.stats.hp,
             healModifier: w.healModifier ?? 0,
             affinityDamageModifier: w.affinityDamageModifier,
@@ -7703,6 +7711,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         // in this file is either an explicit intentional bypass (0) or already-resolved input
         // forwarded from here.
         const attackerShieldPenOf = (id?: string): number =>
+            // eslint-disable-next-line no-restricted-syntax -- the static base shield penetration; the live Prophet bonus is added on the next line
             ((id ? allActorsById.get(id)?.stats.shieldPenetration : undefined) ?? 0) +
             (id ? (shieldPenBonusByActorId.get(id) ?? 0) : 0);
         const applyIncomingToTarget = (
@@ -8763,8 +8772,10 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // substitutedDefenceFor doc comment above for the full rule.
                 defence:
                     (opts.substituteDefence ?? true)
-                        ? substitutedDefenceFor(v, v.stats.defence)
+                        ? /* eslint-disable no-restricted-syntax -- base defence; the defence modifier and flat channels are applied separately via defenceModifierPct and defenceFlat */
+                          substitutedDefenceFor(v, v.stats.defence)
                         : v.stats.defence,
+                /* eslint-enable no-restricted-syntax */
                 // Per-victim defense-debuff sourcing (was hardcoded 0).
                 // Addendum A2: ALSO the victim's own self-sourced defence modifiers (Defense Up,
                 // and by the A5 ruling the negative Overload/Supercharged half) — see the

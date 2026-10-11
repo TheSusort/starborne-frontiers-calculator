@@ -7,6 +7,19 @@ import importPlugin from 'eslint-plugin-import';
 import prettier from 'eslint-config-prettier';
 import globals from 'globals';
 
+/** The `ActorStats` fields a buff or debuff can change mid-fight (everything but `hp`). */
+const LIVE_FOLDABLE_STATS = [
+    'attack',
+    'crit',
+    'critDamage',
+    'defensePenetration',
+    'shieldPenetration',
+    'defence',
+    'speed',
+    'hacking',
+    'security',
+].join('|');
+
 export default tseslint.config(
     // Replaces the old `ignorePatterns`. A bare `ignores` object is a global ignore.
     { ignores: ['dist', 'node_modules', 'src/test-utils'] },
@@ -106,6 +119,37 @@ export default tseslint.config(
 
             // Console
             'no-console': ['error', { allow: ['error', 'warn'] }],
+        },
+    },
+
+    {
+        // Tripwire: a live-foldable `ActorStats` field read straight off `.stats` is the BASE
+        // value, which ignores the actor's buffs and debuffs. Read it through the live fold
+        // (`effectiveStatsOf` and friends in `effectiveStats.ts`), or disable the line with the
+        // present-tense reason the base is correct there. `hp` is deliberately absent: max HP is
+        // static for the whole fight. Reads through a local alias (`const s = actor.stats`) are
+        // not matched.
+        files: ['src/utils/combat/**/*.{ts,tsx}', 'src/utils/calculators/**/*.{ts,tsx}'],
+        ignores: [
+            '**/__tests__/**',
+            '**/__testutils__/**',
+            '**/*.test.{ts,tsx}',
+            '**/*.integration.test.ts',
+        ],
+        rules: {
+            'no-restricted-syntax': [
+                'error',
+                {
+                    selector: `MemberExpression[object.type="MemberExpression"][object.property.name="stats"][property.name=/^(${LIVE_FOLDABLE_STATS})$/]`,
+                    message:
+                        'Base stat read: this ignores buffs and debuffs. Read it through the live fold (effectiveStatsOf in effectiveStats.ts), or disable with the reason the base is correct here.',
+                },
+                {
+                    selector: `VariableDeclarator[init.type="MemberExpression"][init.property.name="stats"] > ObjectPattern > Property[key.name=/^(${LIVE_FOLDABLE_STATS})$/]`,
+                    message:
+                        'Base stat read (destructured): this ignores buffs and debuffs. Read it through the live fold (effectiveStatsOf in effectiveStats.ts), or disable with the reason the base is correct here.',
+                },
+            ],
         },
     },
 
