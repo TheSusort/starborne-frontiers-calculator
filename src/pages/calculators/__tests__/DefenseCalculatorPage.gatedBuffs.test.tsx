@@ -5,6 +5,7 @@ import DefenseCalculatorPage from '../DefenseCalculatorPage';
 import { ShipSelector } from '../../../components/ship/ShipSelector';
 import { computeBuffedStats } from '../../../utils/calculators/defenseCalculator';
 import type { Ship } from '../../../types/ship';
+import { simulateDefenseSurvivability } from '../../../utils/calculators/defenseSurvivabilitySim';
 
 // Task 8 (#391): Theoretical EHP must NOT count an auto-filled kit buff whose grant is
 // conditionally GATED (e.g. Redeemer's "Defense Up II when HP drops below 60%"). This file
@@ -116,6 +117,13 @@ vi.mock('../../../utils/calculators/skillBuffAutoFill', async (importOriginal) =
             enemyDebuffs: [],
         }),
     };
+});
+
+// A pass-through spy: the real sim runs, the test reads the input the page handed it.
+vi.mock('../../../utils/calculators/defenseSurvivabilitySim', async (importOriginal) => {
+    const actual =
+        await importOriginal<typeof import('../../../utils/calculators/defenseSurvivabilitySim')>();
+    return { ...actual, simulateDefenseSurvivability: vi.fn(actual.simulateDefenseSurvivability) };
 });
 
 const mockShip: Ship = {
@@ -320,5 +328,36 @@ describe('DefenseCalculatorPage ?shipId= arrival (#414)', () => {
 
         expect(within(card).getByDisplayValue('Ship 1')).toBeInTheDocument();
         expect(within(card).queryByText('Not counted (conditional):')).not.toBeInTheDocument();
+    });
+});
+
+describe('DefenseCalculatorPage engine input (#662)', () => {
+    beforeEach(() => {
+        mockGetShipById.mockReset();
+        mockGetShipById.mockReturnValue(undefined);
+        mockState.conditions = [];
+        vi.mocked(simulateDefenseSurvivability).mockClear();
+        vi.mocked(ShipSelector).mockReset();
+        vi.mocked(ShipSelector).mockImplementation(
+            ({ onSelect }: { onSelect: (ship: Ship) => void }) => (
+                <button onClick={() => onSelect(mockShip)}>pick mock ship</button>
+            )
+        );
+    });
+
+    // The kit grant reaches the engine once, through `shipSkills`. An auto-filled copy in
+    // `selfBuffs` would sum with it on the turn the skill fires (Attack Up III read as +90%).
+    it('passes the kit grant through shipSkills only, never as an auto-filled self-buff', () => {
+        renderDefenseCalculatorPage();
+        const card = screen.getByText('pick mock ship').closest('.card') as HTMLElement;
+        fireEvent.click(within(card).getByText('pick mock ship'));
+
+        const calls = vi.mocked(simulateDefenseSurvivability).mock.calls;
+        const input = calls[calls.length - 1][0];
+        const kitBuffNames = input.shipSkills.slots.flatMap((s) =>
+            s.abilities.map((a) => (a.config as { buffName?: string }).buffName)
+        );
+        expect(kitBuffNames).toContain('Defense Up II');
+        expect(input.selfBuffs.filter((b) => b.autoFilled)).toEqual([]);
     });
 });
