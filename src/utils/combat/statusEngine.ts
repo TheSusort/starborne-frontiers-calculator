@@ -19,6 +19,11 @@ export interface ActiveBuff {
      *  ONCE at application and must NOT be re-rolled per round (see persistentStackingBuffs). */
     turnsRemaining: number | 'recurring' | 'permanent';
     stacks?: number; // defined for accumulating buffs; current stack count
+    /** The ship whose scheduled pick applied this copy (the `sourceFired` source id). Set only on
+     *  a scheduled independent instance (`isIndependentInstance`): each such copy is one source's
+     *  firing, and its heal-over-time tick expands only that source's own pick (#671). Undefined
+     *  on every other entry, which expands against the merged lookup. */
+    sourceId?: string;
 }
 
 /** One granter's stacks added to an ability-sourced accumulating self status by a cadence tick
@@ -745,6 +750,9 @@ interface BuffState {
      *  application from `status.casterId`. Undefined for scheduled timed upserts (no caster
      *  identity) and for timed statuses whose registered status omitted casterId. */
     casterId?: string;
+    /** The firing source of a scheduled independent instance (`upsertBuff`'s `casterId`);
+     *  surfaced on the snapshot as `ActiveBuff.sourceId`. Undefined on every other entry. */
+    sourceId?: string;
     /** Monotonic application order, newest = largest. Stamped at every write/refresh (both
      *  the initial create and any family-rule refresh that re-sets the same key). Drives
      *  cleanse/purge newest-applied-first removal ordering. */
@@ -1399,6 +1407,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
                 tier,
                 appliedSeq: seq,
                 appliedThisTurn,
+                sourceId: casterId,
             });
             return;
         }
@@ -1618,6 +1627,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
                           .map((s) => ({
                               buffName: s.buffName,
                               turnsRemaining: s.turnsRemaining,
+                              ...(s.sourceId !== undefined && { sourceId: s.sourceId }),
                           }))
                     : []),
                 ...selfPersistentSnap,

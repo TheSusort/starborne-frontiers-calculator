@@ -356,6 +356,7 @@ function makeHitCritRuntime(skills: ShipSkills, critAlwaysFires: boolean): Playe
         extendChanceGate: makeRateGate(),
         landsTimedEnemyApplication: () => true,
         selfBuffLookup: new Map(),
+        scheduledSelfBuffsBySource: new Map(),
         enemyDebuffLookup: new Map(),
     };
 }

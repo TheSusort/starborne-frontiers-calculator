@@ -697,6 +697,11 @@ export interface PlayerActorRuntime {
     ) => boolean;
     // Lookups: attacker carries the global merged lookups; team runtimes get empty maps
     selfBuffLookup: Map<string, SelectedGameBuff[]>;
+    /** Each scheduled source's own self picks, keyed by the id `sourceFired` receives for it
+     *  (`'attacker'` for the focus, the team actor's id otherwise). A scheduled heal-over-time
+     *  copy carries its applier as `ActiveBuff.sourceId` and ticks only that source's pick
+     *  (#671). Same attacker-only ownership as `selfBuffLookup`. */
+    scheduledSelfBuffsBySource: Map<string, SelectedGameBuff[]>;
     enemyDebuffLookup: Map<string, SelectedGameBuff[]>;
 }
 
@@ -2130,6 +2135,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         timedEnemyBySlot,
         timedSelfBySlot,
         selfBuffLookup,
+        scheduledSelfBuffsBySource,
         enemyDebuffLookup,
         activeCritGate,
         chargedCritGate,
@@ -6724,9 +6730,18 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         }
         // (b) Scheduled snapshot HoTs (applier = the holder itself). Mirror resolveSelfBuffTotals'
         // lookup consumption: expandBuffs applies the per-round stack override, so the expanded
-        // SelectedGameBuff carries the effective stacks already.
+        // SelectedGameBuff carries the effective stacks already. A copy that names its source
+        // (`ActiveBuff.sourceId`) expands only that source's pick, so one copy is one tick and a
+        // pick that never fired never ticks (#671); every other entry expands against the merged
+        // lookup.
         for (const ab of entry.activeSelfBuffs) {
-            for (const b of expandBuffEntry(ab, selfBuffLookup.get(ab.buffName) ?? [])) {
+            const picks =
+                ab.sourceId !== undefined
+                    ? (scheduledSelfBuffsBySource.get(ab.sourceId) ?? []).filter(
+                          (b) => b.buffName === ab.buffName
+                      )
+                    : (selfBuffLookup.get(ab.buffName) ?? []);
+            for (const b of expandBuffEntry(ab, picks)) {
                 const hotPct = b.parsedEffects?.hotPct;
                 if (!hotPct) continue;
                 tickHot(undefined, hotPct, b.stacks ?? 1);

@@ -7,6 +7,7 @@ export const CURRENT_VERSION = '1.75.3';
 // bumped version whose entries are still unreleased shows users a what's-new dialog listing
 // nothing. Do it by hand only if that script cannot.
 export const UNRELEASED_CHANGES: string[] = [
+    'DPS calculator: a picked Repair Over Time now heals only from ships that apply it.',
     'Combat simulator: every Repair Over Time and Power Infused Nanobots grant now stacks.',
     'Combat simulator: a buff granted twice now counts once, highest tier winning.',
     "Combat simulator: Bayah's Stasis check now counts the enemy's Crit Power Down.",

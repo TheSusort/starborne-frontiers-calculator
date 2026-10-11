@@ -87,6 +87,7 @@ function cast(application: Application, firewallPending: boolean) {
         extendChanceGate: () => false,
         landsTimedEnemyApplication: () => true,
         selfBuffLookup: new Map(),
+        scheduledSelfBuffsBySource: new Map(),
         enemyDebuffLookup: new Map(),
     };
     const enemy = createActor({

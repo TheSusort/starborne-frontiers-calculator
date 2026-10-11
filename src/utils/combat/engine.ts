@@ -830,7 +830,8 @@ function seedPreCombatShields(runtimes: PlayerActorRuntime[]): void {
 //   affinity:      The adapter's pre-resolved matchup (`affinityDamageModifier` /
 //                  `affinityCritCap` / `affinityCritPenalty`); absent → neutral defaults
 //                  (modifier 0, cap 100, penalty 0, no disadvantage).
-//   selfBuffLookup: Empty map (walked-style: payload effects are self-contained).
+//   selfBuffLookup / scheduledSelfBuffsBySource: Empty maps (walked-style: payload effects
+//                  are self-contained).
 //   enemyDebuffLookup: The engine's global map (same as walked-team actors).
 //   status registration: registerActorAbilityStatuses registers any buff/debuff abilities
 //                  the enemy's kit carries (no-op for damage-only shipSkills).
@@ -1118,6 +1119,7 @@ export function buildEnemyPlayerActorRuntime(
                       targetLandingChance ?? runtime.liveDebuffLandingChance ?? 1
                   ),
         selfBuffLookup: new Map(),
+        scheduledSelfBuffsBySource: new Map(),
         enemyDebuffLookup,
     };
     return runtime;
@@ -2747,6 +2749,12 @@ export function runCombat(rawInput: CombatEngineInput): {
         const existing = selfBuffLookup.get(b.buffName) ?? [];
         selfBuffLookup.set(b.buffName, [...existing, b]);
     }
+    // Each source's own self picks, keyed by the id `sourceFired` receives for it — see
+    // `PlayerActorRuntime.scheduledSelfBuffsBySource`.
+    const scheduledSelfBuffsBySource = new Map<string, SelectedGameBuff[]>([
+        ['attacker', selfBuffs],
+        ...teamActors.map((t) => [t.id, t.selfBuffs] as [string, SelectedGameBuff[]]),
+    ]);
     const enemyDebuffLookup = new Map<string, SelectedGameBuff[]>();
     for (const b of [...enemyDebuffs, ...teamActors.flatMap((t) => t.enemyDebuffs)]) {
         const existing = enemyDebuffLookup.get(b.buffName) ?? [];
@@ -2790,6 +2798,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         extendChanceGate,
         landsTimedEnemyApplication,
         selfBuffLookup,
+        scheduledSelfBuffsBySource,
         enemyDebuffLookup,
     };
 
@@ -2902,6 +2911,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             //    map here silently zeroes those stat effects on the team's own turn (the attacker
             //    runtime holds the same global map, so attacker turns were already correct).
             selfBuffLookup: new Map(),
+            scheduledSelfBuffsBySource: new Map(),
             enemyDebuffLookup,
         };
         teamRuntimeById.set(t.id, runtime);

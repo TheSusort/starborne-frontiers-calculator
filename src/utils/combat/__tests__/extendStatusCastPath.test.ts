@@ -105,6 +105,7 @@ function makeRuntime(
         extendChanceGate: makeRateGate(),
         landsTimedEnemyApplication: () => true,
         selfBuffLookup: new Map(),
+        scheduledSelfBuffsBySource: new Map(),
         enemyDebuffLookup: new Map(),
     };
 }
