@@ -6,7 +6,7 @@
  * Protection-as-damage-transfer (a Defender intercepting ally damage) is a DEFERRED mechanic
  * (design doc §1) — nothing is ever "transferred by Protection" in this model, so the "not
  * transferred" gate is vacuously satisfied: ALL direct damage to a living non-defender ally is
- * mitigated using the CARRIER's effective defence instead of the ally's own.
+ * mitigated using the CARRIER's hangar defence (its buffs excluded) instead of the ally's own.
  *
  * The ability is injected directly (not parsed from CSV text) to isolate the engine plumbing
  * under test from the parser wiring, which is covered separately by the SP-F triage probe in
@@ -195,6 +195,45 @@ describe('Meatshield defense-substitution — PLAYER side (victimDefenceFor path
             'ally-1'
         );
         expect(withoutMeatshield).toEqual([ENEMY_ATTACK]);
+    });
+
+    it("shares Meatshield's HANGAR defence: his own Defense Up does not change what the ally takes", () => {
+        // Meatshield (speed 100) acts before the enemy (speed 50) and casts Defense Up III on
+        // himself, so the buff is live when the enemy's hit lands on the ally.
+        const defenseUpActive: ShipSkills['slots'][number] = {
+            slot: 'active',
+            abilities: [
+                {
+                    id: 'meatshield-defense-up',
+                    type: 'buff',
+                    target: 'self',
+                    trigger: 'on-cast',
+                    conditions: [],
+                    config: {
+                        type: 'buff',
+                        buffName: 'Defense Up III',
+                        parsedEffects: { defense: 60 },
+                        stacks: 1,
+                        isStackable: false,
+                        duration: 2,
+                    },
+                },
+            ],
+        };
+        const landed = landedDamagesFor(
+            BASE_INPUT({
+                teamActors: [
+                    teamActor('meatshield', MEATSHIELD_DEFENCE, {
+                        passive: [meatshieldPassive, defenseUpActive],
+                    }),
+                    teamActor('ally-1', 0, { role: 'ATTACKER', position: VICTIM_SLOT }),
+                ],
+                enemyAttackers: [manualEnemy('enemy-1', ENEMY_ATTACK)],
+            }),
+            'ally-1'
+        );
+        expect(landed).toHaveLength(1);
+        expect(landed[0]).toBeCloseTo(EXPECTED_SUBSTITUTED_DAMAGE, 5);
     });
 
     it('negative case: a DEFENDER ally is NOT substituted — takes the same FULL hit as the control, despite Meatshield being present', () => {

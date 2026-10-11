@@ -9,6 +9,7 @@ export const CURRENT_VERSION = '1.75.3';
 export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator: Bayah's Stasis check now counts the enemy's Crit Power Down.",
     "Combat simulator: Chakara's speed comparison now counts Speed buffs and debuffs.",
+    'Combat simulator: Meatshield now shares his hangar defence, ignoring his own buffs.',
     'Combat simulator: enemy ships now use their own defence and shield penetration.',
     'Healing and DPS calculators: enemies now take penetration and hacking from picked ships.',
     'Combat simulator: damage reduction from non-defence sources now caps at 70%.',
