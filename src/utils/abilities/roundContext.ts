@@ -69,7 +69,7 @@ export function buildRoundContext(state: {
     effectiveCritRate: number; // 0..100
     enemyType?: EnemyBaseClass;
     roundCrit?: boolean;
-    /** Derived enemy HP% (0..100): 100 × max(0, 1 − cumulativeDamage/enemyHp). Passed through
+    /** The bound enemy's HP% (0..100) from its live current HP vs its max HP. Passed through
      *  as-is; absent means no enemy/victim reading exists this round (no phantom is invented). */
     enemyHpPct?: number;
     /** Self HP% (0..100). Default 100 (DPS-assumption: self never takes damage). */

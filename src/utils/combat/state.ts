@@ -6,33 +6,16 @@ import type { CombatEventBus } from './events';
 import type { PreFightCombatModifiers } from './preFight/types';
 import type { DurationCutCandidate } from './statusEngine';
 
-/** Per-actor damage contributions within one round (spec: per-actor accounting —
- *  the simulator-page seam). secondary/conditional are sub-buckets of direct
- *  (mirroring rawTotals); corrosion/inferno/detonation are the enemy-turn channels
- *  attributed to the entry's applier. */
+/** Per-actor display sub-buckets within one round: the secondary (stat-scaled) and conditional
+ *  slices of the actor's own cast damage figure. Damage itself is credited per victim
+ *  (`RoundData.perTargetDealt`); these only feed `rawTotals.totalSecondary/totalConditional`. */
 export interface ActorDamage {
-    direct: number;
     secondary: number;
     conditional: number;
-    corrosion: number;
-    inferno: number;
-    detonation: number;
-    /** Absolute-per-tick generic DoT channel (Voron/Orel damage-transform, Acidic Decay
-     *  family). Mirrors corrosion/inferno — an enemy-turn DoT-tick channel attributed to the
-     *  entry's applier. */
-    generic: number;
 }
 
 export function emptyActorDamage(): ActorDamage {
-    return {
-        direct: 0,
-        secondary: 0,
-        conditional: 0,
-        corrosion: 0,
-        inferno: 0,
-        detonation: 0,
-        generic: 0,
-    };
+    return { secondary: 0, conditional: 0 };
 }
 
 /** Per-actor healing contributions within one round (healing-calc adoption; mirrors

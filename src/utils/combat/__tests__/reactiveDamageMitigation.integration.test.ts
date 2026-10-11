@@ -117,29 +117,14 @@ const buildPlayerOwnerInput = (opts: {
     enemyAttackers: [opts.enemy],
 });
 
-/** Sums every `direct`-channel creditDamage call attributed to `sourceId` across the whole run. */
-const creditedDirectDamageFor = (sourceId: string, input: CombatEngineInput): number => {
-    let total = 0;
-    runCombat({
-        ...input,
-        __testTapCreditDamage: (id, channel, amount) => {
-            if (id === sourceId && channel === 'direct') total += amount;
-        },
-    });
-    return total;
-};
-
 /**
  * Sums the PER-VICTIM dealt credit attributed to `sourceId` across the whole run.
  *
  * This is where every reactive proc below now books. The normalization boundary places
  * every actor and synthesizes the missing `target`/`pattern`, so the proc resolves onto the real,
  * placed opposing actor and `applyReactiveDamage` takes its per-victim branch — lowering that
- * actor's real HP and crediting through `creditDealt` (→ `RoundData.perTargetDealt`). The
- * credit-only `creditDamage('direct')` channel that `creditedDirectDamageFor` taps is the LEGACY
- * sink's route and is no longer written at all. The two are mutually exclusive per proc, which is
- * why each magnitude below is paired with a "the old channel stays 0" assertion: `dealt > 0` alone
- * would still pass if a later change credited both and double-counted.
+ * actor's real HP and crediting through `creditDealt` (→ `RoundData.perTargetDealt`), its only
+ * destination.
  */
 const dealtFor = (sourceId: string, input: CombatEngineInput): number =>
     dealtBy(runCombat(input).rounds, sourceId);
@@ -159,9 +144,6 @@ describe('PR4b: reactive damage executor — defense mitigation + crit (player-o
         });
         const lowDefence = dealtFor('attacker', lowDefInput);
         const highDefence = dealtFor('attacker', highDefInput);
-        // Nothing is credited in parallel on the legacy scalar channel.
-        expect(creditedDirectDamageFor('attacker', lowDefInput)).toBe(0);
-        expect(creditedDirectDamageFor('attacker', highDefInput)).toBe(0);
 
         const unmitigated = ATTACK * (MULT / 100);
         // Pre-PR4b baseline: both lowDefence and highDefence would equal `unmitigated` exactly
@@ -231,9 +213,6 @@ describe('PR4b: reactive damage executor — defense mitigation + crit (player-o
             reactionAbilities: reactiveDamage(0),
             enemy: chargedCastEnemy('e1', 0),
         });
-        // Extended to BOTH channels — pinning only the scalar one went vacuous the moment the
-        // proc moved to the per-victim channel.
-        expect(creditedDirectDamageFor('attacker', input)).toBe(0);
         expect(dealtFor('attacker', input)).toBe(0);
     });
 
@@ -242,8 +221,6 @@ describe('PR4b: reactive damage executor — defense mitigation + crit (player-o
             reactionAbilities: reactiveDamage(80),
             enemy: nonChargingEnemy('e1', 0),
         });
-        // Both channels, for the same reason as the zero-damage guard above.
-        expect(creditedDirectDamageFor('attacker', input)).toBe(0);
         expect(dealtFor('attacker', input)).toBe(0);
     });
 });
@@ -314,8 +291,6 @@ describe('PR4b: reactive damage executor — team-symmetric mitigation (enemy-ow
         });
         const lowDefence = dealtFor('e1', lowDefInput);
         const highDefence = dealtFor('e1', highDefInput);
-        expect(creditedDirectDamageFor('e1', lowDefInput)).toBe(0);
-        expect(creditedDirectDamageFor('e1', highDefInput)).toBe(0);
 
         const unmitigated = ATTACK * (MULT / 100);
         expect(lowDefence).toBeCloseTo(unmitigated, 0);

@@ -69,9 +69,8 @@ function placeSide(
  * `resolvesPositionalVictim(...) && target` (no target → the selection short-circuits, and BOTH
  * sides answer with NO victim — there is no dummy-actor or heal-target fallback), and the
  * positional APPLY gate additionally needs `pattern != null`. With a target but no pattern the cast
- * resolves onto the real enemy and still credits `cumulativeDamage` through the legacy single-apply
- * (the credit is suppressed only when the POSITIONAL branch is taken), but never runs the
- * per-victim apply — so `perTargetDealt` comes back EMPTY while the damage number looks plausible.
+ * resolves onto the real enemy but never runs the per-victim apply, so it lands nothing and
+ * `perTargetDealt` comes back EMPTY.
  * That is why the two are filled independently rather than as a pair.
  *
  * Both sentences describe what happens WITHOUT these fills. With them, neither state is reachable

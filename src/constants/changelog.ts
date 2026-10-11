@@ -17,6 +17,10 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: leech repairs now crit with buffed crit rate and crit power.',
     'Combat simulator: Nourishment and Vivacious Repair now boost leech repairs too.',
     'Combat simulator: expired Inc. and Out. Repair buffs no longer boost later repairs.',
+    "DPS calculator: secondary and conditional damage now use the target's current defence.",
+    'Skill editor: an ability with only stat-scaled damage now hits its target.',
+    "Combat simulator: hit damage figures now include the target's damage reduction.",
+    'Combat simulator: hits dealing no damage no longer trigger on-attacked effects.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

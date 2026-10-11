@@ -525,23 +525,15 @@ const sentinelObserver = (position: Position): TeamActorEngineInput => ({
 
 function runSentinel(input: CombatEngineInput) {
     const bus = createEventBus();
-    const credits: { sourceId: string; amount: number }[] = [];
     const reactiveDamage: Extract<CombatEvent, { type: 'reactive-damage-performed' }>[] = [];
     const reactiveHeals: Extract<CombatEvent, { type: 'reactive-heal-performed' }>[] = [];
     bus.on('reactive-damage-performed', (e) => reactiveDamage.push(e));
     bus.on('reactive-heal-performed', (e) => reactiveHeals.push(e));
-    const result = runCombat({
-        ...input,
-        bus,
-        __testTapCreditDamage: (sourceId, _channel, amount) => credits.push({ sourceId, amount }),
-    });
-    // Against a real, positioned opposing roster a reactive proc reduces the victim's real HP and
-    // books its intake per-victim (creditDealt → RoundData.perTargetDealt) instead of onto the
-    // credit-only `credits` channel above — see engine.ts's applyReactiveDamage gate. Both are
-    // returned so each assertion can name the channel it means.
+    const result = runCombat({ ...input, bus });
+    // A reactive proc reduces the victim's real HP and books its intake per-victim
+    // (creditDealt → RoundData.perTargetDealt) — see engine.ts's applyReactiveDamage.
     return {
         result,
-        credits,
         dealt: dealtEntries(result.rounds),
         reactiveDamage,
         reactiveHeals,
@@ -594,11 +586,9 @@ describe('Sentinel (player-side) — reactive heal + damage fire on ally crit, n
     });
 
     it('deals reactive damage (credited to Sentinel) when an ally crits', () => {
-        const { credits, dealt } = runSentinel(BASE());
-        // Booked against the real positioned enemy, attributed to Sentinel — not on the credit-only
-        // channel, which stays empty for it (the two are mutually exclusive per proc).
+        const { dealt } = runSentinel(BASE());
+        // Booked against the real positioned enemy, attributed to Sentinel.
         expect(dealt.some((d) => d.sourceId === 'sentinel' && d.amount > 0)).toBe(true);
-        expect(credits.some((c) => c.sourceId === 'sentinel' && c.amount > 0)).toBe(false);
     });
 
     it('emits log-only reactive damage + heal events, stamped to the crit-ing ally turn', () => {
@@ -625,12 +615,10 @@ describe('Sentinel (player-side) — reactive heal + damage fire on ally crit, n
             crit: 0,
             teamActors: [sentinelObserver('M3'), critAlly('ally-b', 'M2', 0)],
         };
-        const { result, credits, dealt } = runSentinel(noCrit);
+        const { result, dealt } = runSentinel(noCrit);
         expect(totalDirectHeal(result, 'sentinel')).toBe(0);
-        // Neither channel — the leak would show up on the per-victim one now that a positioned proc
-        // books there, so asserting only the credit-only channel would be vacuous.
+        // The leak would show up on the per-victim channel, where a positioned proc books.
         expect(dealt.some((d) => d.sourceId === 'sentinel' && d.amount > 0)).toBe(false);
-        expect(credits.some((c) => c.sourceId === 'sentinel' && c.amount > 0)).toBe(false);
     });
 });
 
@@ -759,13 +747,12 @@ describe('Sentinel (enemy-side) — team symmetry: an enemy Sentinel reacts to i
             enemyAttackers: [enemySentinel, enemyCritAlly],
         };
 
-        const { result, credits, dealt, reactiveHeals } = runSentinel(input);
+        const { result, dealt, reactiveHeals } = runSentinel(input);
         // The enemy Sentinel's repair fires (directHeal credited) and its reactive damage books
         // per-victim — both keyed to the ENEMY owner, never a player-side actor. Same channel as the
         // player-side case above, which is the team-symmetry claim.
         expect(totalDirectHeal(result, 'enemy-sentinel')).toBeGreaterThan(0);
         expect(dealt.some((d) => d.sourceId === 'enemy-sentinel' && d.amount > 0)).toBe(true);
-        expect(credits.some((c) => c.sourceId === 'enemy-sentinel' && c.amount > 0)).toBe(false);
         // Team symmetry at the recipient level: the reactive repair lands on the crit-ing ENEMY
         // ally (enemy-critter), never crossing onto a player-side actor.
         const heal = reactiveHeals.filter((e) => e.casterId === 'enemy-sentinel');

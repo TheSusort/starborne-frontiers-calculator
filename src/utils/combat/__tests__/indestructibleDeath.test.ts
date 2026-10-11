@@ -160,27 +160,14 @@ describe('SP-U U5 — the real positioned DPS enemy is destructible', () => {
         expect(creditedRounds.map((rd) => rd.round)).toEqual([1, 2, 3]);
         expect(result.rounds).toHaveLength(3);
 
-        // The scalar totals are dead the moment a roster exists — the DIRECT-CAST credit skip
-        // (`if (!positional) {` around `creditDamage(...)`) suppresses them on a positional cast —
-        // so they are 0 across the board, pinned so a future regression that starts double-booking
-        // through BOTH channels is caught here.
-        //
-        // ⚠️ CORRECTION: an earlier note here predicted `rawTotals` would "go with the
-        // dummy" and told a future rung to DELETE this assertion. That prediction was wrong.
-        // `rawTotals` is the report's scalar damage summary and it survives the dummy's deletion
-        // intact; what went is the dummy's own HP ledger and `enemyOutcome`. So this block stays —
-        // but read it for what it is: an assertion that the scalar channel books NOTHING on a
-        // positional run, not a pin on intended values. The live claim (per-victim booking) is the
-        // `creditedRounds` assertion above it.
+        // The focus casts plain damage (no DoT, detonation, secondary or conditional slice), so
+        // every per-kind summary total is 0: the hits are counted in `perTargetDealt` above only.
         expect(result.rawTotals).toEqual({
-            direct: 0,
             corrosion: 0,
             inferno: 0,
             detonation: 0,
-            cumulative: 0,
             totalSecondary: 0,
             totalConditional: 0,
-            teamTotal: 0,
             generic: 0,
         });
     });

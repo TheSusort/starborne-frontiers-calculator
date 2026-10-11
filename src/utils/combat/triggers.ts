@@ -2937,10 +2937,8 @@ export interface IntentExecContext {
      *  `victimId` (Judge/Chakara/Incinerator/Rhodium start-of-round/end-of-round, Grif's
      *  on-enemy-cleansed, FrontLine's on-enemy-charged-cast). `abilityId` keys the dedicated
      *  reactive-damage crit gate; `noCrit` (Grif/Rhodium "cannot critically hit") skips the roll
-     *  entirely. Mirrors `applyCounterAttack`'s mitigated/crit walk. Against a real positioned
-     *  victim it reduces that victim's HP and books the intake per-victim; otherwise it credits the
-     *  owner's round damage-dealt bucket (creditDamage) without touching HP — see the gate in
-     *  engine.ts's applyReactiveDamage, which owns that choice. Absent → the damage
+     *  entirely. Mirrors `applyCounterAttack`'s mitigated/crit walk. It reduces the resolved
+     *  victim's HP and books the intake per victim (engine.ts's applyReactiveDamage). Absent → the damage
      *  branch is inert (unit fixtures / DPS mode w/o delegate). `allowDeadOwner` (Paracelsus)
      *  lets an on-destroyed retaliation fire even though its owner is already
      *  stamped destroyedRound — the reaction is BORN of that same death. `opts` (Demolisher
@@ -3147,7 +3145,7 @@ export interface IntentExecContext {
 /** Build the drain-time condition context from CURRENT engine state. This is a
  *  drain-time snapshot (documented): self-buff names from the status engine, the
  *  current landed-debuff count approximation, DoT container lengths, enemyType, and
- *  the enemyHpPct derived from cumulative damage. Drain has no per-hit crit outcome,
+ *  the caller's enemyHpPct reading. Drain has no per-hit crit outcome,
  *  so crit-gated conditions are evaluated with effectiveCritRate 0 (treated as
  *  not-crit at drain time). */
 /**

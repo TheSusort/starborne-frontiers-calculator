@@ -2,19 +2,13 @@
  * #537 reachability census — can a firing slot deal ZERO direct damage because its damage
  * abilities all gated off?
  *
- * WHY THIS EXISTS. Two engine seams decide "this cast hit" from a PRE-GATE predicate
- * (`damageInputsFromSkill(firingSkill).scalingAbility !== undefined`), evaluated before
- * `gateFiringAbilities` has a round context to gate against:
- *
- *   1. `playerTurn.ts` — the §4.5 non-positional Stasis-break hook (`onHitBreakStasis`).
- *   2. `playerTurn.ts` — `positionalScalars`, which is what makes the engine drive
- *      `drivePositionalTurnApply`, whose `onVictimPreImpact` (engine.ts) marks EVERY stasised
- *      victim — anchor and covered — with no damage check of its own.
- *
- * Both therefore say "hit" for a cast whose damage ability gates OFF, contradicting the locked
- * ruling that ONLY DIRECT DAMAGE reduces Stasis (owner, 2026-09-15). Neither is reachable on the
- * shipped corpus, which is why the pre-gate predicate stands: this file is the measurement that
- * says so, and the alarm that fires the day it stops being true.
+ * WHY THIS EXISTS. `positionalScalars` (playerTurn.ts) is decided by a PRE-GATE predicate
+ * (`hasDamageAbility`), evaluated before `gateFiringAbilities` has a round context to gate
+ * against. The engine drives `drivePositionalTurnApply` — whose `onVictimPreImpact` marks every
+ * stasised victim — only when `castDealsDamage` (engine.ts) also holds, and that reads the GATED
+ * multiplier, so a cast whose damage ability gates OFF deals no damage, is not driven and breaks
+ * no Stasis (owner rulings 2026-09-15 and 2026-10-10). This census remains the measurement of
+ * whether any shipped firing slot can reach that state at all.
  *
  * THE PREDICATE IS THE POINT. A census over `ability.conditions` answers a DIFFERENT question:
  * it counts every conditioned damage ability, and almost all of them are scalers rather than
@@ -42,10 +36,9 @@ import type { Ability } from '../../../types/abilities';
 const FIRING_ACTIONS = ['active', 'charged'] as const;
 
 const SEAMS =
-    'Two seams read the PRE-GATE damage predicate and would both need fixing: the §4.5 ' +
-    'Stasis-break hook in playerTurn.ts, AND `positionalScalars` in playerTurn.ts, which is ' +
-    "what lets the engine's positional drive mark stasised victims in `onVictimPreImpact`. " +
-    'Fixing only the hook leaves every placement-board cast still breaking Stasis.';
+    '`positionalScalars` (playerTurn.ts) is built from the PRE-GATE `hasDamageAbility`; the ' +
+    "engine's positional drive, whose `onVictimPreImpact` marks stasised victims, runs only " +
+    'when `castDealsDamage` (engine.ts) holds on the GATED multiplier. Check that gate first.';
 
 function requireReferenceData(): void {
     // The CSV alone. `buildTraceShip` resolves a CSV-only record on fallback stats, and this

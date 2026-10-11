@@ -677,13 +677,8 @@ describe('D-PR2 integration — INTRUSION engine-level (outgoing damage amplifie
                 })
             );
 
-            // The cast resolves positionally onto the real, placed enemy, so its damage
-            // is booked per-victim (`RoundData.perTargetDealt`) instead of on the legacy dummy
-            // sink's `rawTotals.direct` — measured at 39d463f1 this fixture read
-            // 11 500 / 10 000 / 10 000 / 10 000 on that scalar and now reads 0 on all four. Same
-            // damage, different channel (mechanism M3); the old channel is pinned empty in every
-            // arm because the two destinations are mutually exclusive per cast, so a later change
-            // that credited BOTH would double-count and is caught here rather than passing.
+            // The cast resolves positionally onto the real, placed enemy, so its damage is
+            // booked per-victim (`RoundData.perTargetDealt`), the engine's only damage channel.
             const dealt = (r: ReturnType<typeof runCombat>) => dealtBy(r.rounds, FOCUS_ID);
 
             // Non-vacuous: the bare baseline really is hitting (its 10 000 just moved channel).
@@ -696,14 +691,6 @@ describe('D-PR2 integration — INTRUSION engine-level (outgoing damage amplifie
             // Qualitative assertion B: INTRUSION is dormant when no debuffs are present.
             // Direct damage must equal the bare baseline.
             expect(dealt(withIntrusionNoDebuffs)).toBe(dealt(bareNoDebuffs));
-
-            for (const r of [
-                withIntrusionWithDebuffs,
-                bareWithDebuffs,
-                withIntrusionNoDebuffs,
-                bareNoDebuffs,
-            ])
-                expect(r.rawTotals.direct).toBe(0);
         }
     );
 });
@@ -825,12 +812,8 @@ describe('D-PR4 Task 9 integration — Insidiousness reactive damage fires on de
                 })
             );
 
-            // Both the active's damage and the reactive proc's damage are booked
-            // per-victim now that the cast resolves onto a real placed enemy — measured at
-            // 39d463f1 this read 116 400 / 80 000 on `rawTotals.direct` and now reads 0 / 0 there
-            // (mechanism M3). Same damage, different channel, so the comparison moves with it and
-            // the empty scalar is pinned in both arms (the two destinations are mutually exclusive
-            // per cast, so a later change crediting both would double-count and fail here).
+            // Both the active's damage and the reactive proc's damage are booked per-victim
+            // (`RoundData.perTargetDealt`), which is what this compares.
             const dealt = (r: ReturnType<typeof runCombat>) => dealtBy(r.rounds, FOCUS_ID);
 
             // Qualitative: Insidiousness adds reactive damage on top of the base active damage.
@@ -846,8 +829,6 @@ describe('D-PR4 Task 9 integration — Insidiousness reactive damage fires on de
             const ACTUAL_PROCS = 13;
             const reactiveContribution = dealt(withInsidiousness) - dealt(withoutInsidiousness);
             expect(reactiveContribution).toBeCloseTo(ACTUAL_PROCS * PER_PROC, 1);
-            expect(withInsidiousness.rawTotals.direct).toBe(0);
-            expect(withoutInsidiousness.rawTotals.direct).toBe(0);
         }
     );
 
@@ -878,10 +859,7 @@ describe('D-PR4 Task 9 integration — Insidiousness reactive damage fires on de
             );
 
             // Must be EQUAL: no debuffs applied → no reactive triggers → zero Insidiousness damage.
-            // Read per-victim (M3): on a positional run `rawTotals.direct` is 0 in BOTH arms, so
-            // comparing that scalar would be VACUOUSLY equal (0 === 0) and could not see an
-            // Insidiousness proc appear. Measured at 39d463f1 both arms read 80 000 on the scalar;
-            // that 80 000 now lives in `perTargetDealt`, which is what this compares.
+            // Read per-victim (`perTargetDealt`), where both the cast and any proc book.
             const dealt = (r: ReturnType<typeof runCombat>) => dealtBy(r.rounds, FOCUS_ID);
             expect(dealt(bareNoDeb)).toBeGreaterThan(0); // non-vacuous: the active really hits
             expect(dealt(withInsidiousnessNoDeb)).toBe(dealt(bareNoDeb));
@@ -4180,18 +4158,12 @@ describe('D-PR reactive cleanse — Warpstrike duration-reduction + damage half'
                 enemyAttackers: [selfDebuffer()],
             })
         );
-        // The carrier's cast now resolves positionally onto the real, placed enemy, so its
-        // damage is booked per-victim (`RoundData.perTargetDealt`, via applyVictimDamage) instead of
-        // on the legacy dummy sink's `rawTotals.direct`. Same damage, different channel — so the
-        // comparison moves with it, and the old channel is pinned empty in BOTH arms because the two
-        // destinations are mutually exclusive per cast (a `dealt` comparison alone would still pass
-        // if a later change credited both and double-counted).
+        // The carrier's cast resolves positionally onto the real, placed enemy, so its damage is
+        // booked per-victim (`RoundData.perTargetDealt`, via applyVictimDamage).
         const warpDealt = dealtBy(withWarp.rounds, 'attacker');
         const controlDealt = dealtBy(control.rounds, 'attacker');
         expect(controlDealt).toBeGreaterThan(0); // non-vacuous: the carrier really is hitting
         expect(warpDealt).toBeGreaterThan(controlDealt);
-        expect(withWarp.rawTotals.direct).toBe(0);
-        expect(control.rawTotals.direct).toBe(0);
     });
 });
 
@@ -4844,16 +4816,11 @@ describe('H1 Task 10 integration — Arcane Siege activates with a live shield',
                 })
             );
 
-            // Read the carrier's damage per-victim (M3) — the cast resolves positionally
-            // onto the real placed enemy, so `rawTotals.direct` (the legacy dummy sink) is 0 in
-            // both arms. Measured at 39d463f1: boosted 11 500 / baseline 10 000 on that scalar;
-            // identical values now appear in `perTargetDealt`, keyed by the carrier. `dealtBy`
+            // Read the carrier's damage per-victim (`perTargetDealt`), keyed by the carrier. `dealtBy`
             // filters to the carrier, so the shield ally's own 1-attack hit is excluded and the
             // +15% ratio below stays exact.
             const boosted = dealtBy(withShield.rounds, FOCUS_ID);
             const baseline = dealtBy(withoutShield.rounds, FOCUS_ID);
-            expect(withShield.rawTotals.direct).toBe(0);
-            expect(withoutShield.rawTotals.direct).toBe(0);
 
             // Sanity: the carrier actually dealt damage in both runs.
             expect(baseline).toBeGreaterThan(0);

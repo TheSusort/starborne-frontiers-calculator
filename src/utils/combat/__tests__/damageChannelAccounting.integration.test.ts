@@ -95,9 +95,6 @@ describe('SP-4b-1 §4B — damage is never credited to neither channel', () => {
         const result = runCombat(rosterWithEnemyHp(0));
 
         expect(result.rounds.map(positionalIn)).toEqual([PER_CAST, PER_CAST, PER_CAST, PER_CAST]);
-        // ...and NOT into the legacy sink — the shape this test used to name is gone.
-        expect(result.rawTotals.cumulative).toBe(0);
-        expect(result.rawTotals.direct).toBe(0);
     });
 
     // INVERTED THIS TEST. It read "an EMPTY opposing roster credits every cast to the
@@ -126,8 +123,6 @@ describe('SP-4b-1 §4B — damage is never credited to neither channel', () => {
         const result = runCombat(rosterWithEnemyHp(500_000));
 
         expect(result.rounds.map(positionalIn)).toEqual([PER_CAST, PER_CAST, PER_CAST, PER_CAST]);
-        // ...and NOT also into the legacy sink.
-        expect(result.rawTotals.cumulative).toBe(0);
         expect(__getNoVictimTurnCount()).toBe(0);
     });
 
@@ -148,7 +143,6 @@ describe('SP-4b-1 §4B — damage is never credited to neither channel', () => {
 
         expect(result.rounds.map(positionalIn)).toEqual([PER_CAST]);
         expect(result.rounds).toHaveLength(1);
-        expect(result.rawTotals.cumulative).toBe(0);
     });
 
     it('INVARIANT: across every roster shape, no round books into both channels, and a round with a living victim books into one', () => {
@@ -202,9 +196,7 @@ describe('SP-4b-1 §4B — damage is never credited to neither channel', () => {
             );
 
             // The whole cast output is accounted for: nothing between the channels.
-            const total =
-                result.rounds.reduce((sum, round) => sum + positionalIn(round), 0) +
-                result.rawTotals.cumulative;
+            const total = result.rounds.reduce((sum, round) => sum + positionalIn(round), 0);
             expect(total, `${shape.name}: total accounted damage`).toBe(
                 expectedBookedRounds * PER_CAST
             );
@@ -499,7 +491,5 @@ describe('SP-4b-1 §4B — the MIRROR: enemy→player obeys the same accounting 
             PER_CAST,
         ]);
         expect(result.rounds.every((r) => r.perTargetDealt?.['attacker'] === undefined)).toBe(true);
-        // The focus's own scalar sink stays empty — the ally's damage never leaked into it.
-        expect(result.rawTotals.cumulative).toBe(0);
     });
 });

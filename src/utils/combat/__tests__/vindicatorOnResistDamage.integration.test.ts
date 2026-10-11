@@ -106,22 +106,9 @@ const BASE = (
     ...overrides,
 });
 
-// Sums direct-channel creditDamage attributed to `sourceId` across the run.
-const creditedDirectFor = (sourceId: string, input: CombatEngineInput): number => {
-    let total = 0;
-    runCombat({
-        ...input,
-        __testTapCreditDamage: (id, channel, amount) => {
-            if (id === sourceId && channel === 'direct') total += amount;
-        },
-    });
-    return total;
-};
-
-// Sums the PER-VICTIM dealt credit attributed to `sourceId` across the run. Against a real,
-// positioned opposing roster a reactive proc reduces the victim's real HP through applyVictimDamage
-// and books its intake there (creditDealt → RoundData.perTargetDealt) instead of on the credit-only
-// `creditDamage` channel above — see engine.ts's applyReactiveDamage gate.
+// Sums the PER-VICTIM dealt credit attributed to `sourceId` across the run. A reactive proc
+// reduces the victim's real HP through applyVictimDamage and books its intake there
+// (creditDealt → RoundData.perTargetDealt) — see engine.ts's applyReactiveDamage.
 const dealtFor = (sourceId: string, input: CombatEngineInput): number =>
     dealtBy(runCombat(input).rounds, sourceId);
 
@@ -129,19 +116,13 @@ const dealtFor = (sourceId: string, input: CombatEngineInput): number =>
 // `target`/`pattern`, so the carrier's proc now resolves POSITIONALLY onto the real
 // `enemyAttackers[]` entry instead of the legacy dummy sink. `applyReactiveDamage` therefore takes
 // its per-victim branch: the proc lowers that enemy's real HP and books the intake via
-// `creditDealt` (→ `RoundData.perTargetDealt`), and the credit-only `creditDamage('direct')`
-// channel — the one `creditedDirectFor` taps — is no longer written at all. Every magnitude below
-// moves to `dealtFor` and additionally pins the old channel EMPTY: the two destinations are
-// mutually exclusive per proc, so asserting only `dealt > 0` would still pass if a later change
-// re-credited both and double-counted.
+// `creditDealt` (→ `RoundData.perTargetDealt`), its only destination.
 describe('Vindicator on-resist HP damage — engine integration', () => {
     it('deals ~30% of the carrier max HP to the resisted enemy (defence-0, mitigation ~none)', () => {
         const input = BASE([noopActive, onResistPassive(30)], {
             enemyAttackers: [debuffEnemy('enemy-deb', 1)],
         });
         expect(dealtFor('attacker', input)).toBeCloseTo(CARRIER_HP * 0.3, 0);
-        // The scalar sink is not credited in parallel.
-        expect(creditedDirectFor('attacker', input)).toBe(0);
     });
 
     it('is mitigated by the victim defence', () => {
@@ -157,9 +138,6 @@ describe('Vindicator on-resist HP damage — engine integration', () => {
         const highDef = dealtFor('attacker', highDefInput);
         expect(highDef).toBeGreaterThan(0);
         expect(highDef).toBeLessThan(lowDef);
-        // Neither run leaks a parallel scalar credit that could carry the mitigation instead.
-        expect(creditedDirectFor('attacker', lowDefInput)).toBe(0);
-        expect(creditedDirectFor('attacker', highDefInput)).toBe(0);
     });
 
     it('procs once when two debuffs from ONE cast are both resisted', () => {
@@ -167,7 +145,6 @@ describe('Vindicator on-resist HP damage — engine integration', () => {
             enemyAttackers: [debuffEnemy('enemy-deb', 2)],
         });
         expect(dealtFor('attacker', input)).toBeCloseTo(CARRIER_HP * 0.3, 0); // one proc, not two
-        expect(creditedDirectFor('attacker', input)).toBe(0);
     });
 
     it('procs once per DISTINCT enemy resisting in the same round', () => {
@@ -175,14 +152,10 @@ describe('Vindicator on-resist HP damage — engine integration', () => {
             enemyAttackers: [debuffEnemy('enemy-a', 1), debuffEnemy('enemy-b', 1)],
         });
         expect(dealtFor('attacker', input)).toBeCloseTo(CARRIER_HP * 0.6, 0); // two procs
-        expect(creditedDirectFor('attacker', input)).toBe(0);
     });
 
     it('control: no on-resist passive → no credit', () => {
         const input = BASE([noopActive], { enemyAttackers: [debuffEnemy('enemy-deb', 1)] });
-        // Extended to BOTH channels — pinning only the scalar one would have gone vacuous the
-        // moment the proc moved to the per-victim channel.
-        expect(creditedDirectFor('attacker', input)).toBe(0);
         expect(dealtFor('attacker', input)).toBe(0);
     });
 });
@@ -276,14 +249,10 @@ describe('Vindicator on-resist HP damage — team symmetry (enemy-owned)', () =>
         };
         // This fixture positions BOTH sides (it must, to route the player's debuff at the real
         // enemy Vindicator), so the retaliation reduces the player's real HP and books its intake
-        // per-victim rather than on the credit-only `creditDamage` channel the non-positional
-        // fixtures above read. Same magnitude, different channel.
+        // per-victim, exactly as the fixtures above.
         const dealt = dealtFor('enemy-vindi', input);
         expect(dealt).toBeGreaterThan(0);
         expect(dealt).toBeCloseTo(ENEMY_HP * 0.3, 0);
-        // And nothing lands on the credit-only channel — the two are mutually exclusive by
-        // construction, so a regression that silently reverted the routing would fail here.
-        expect(creditedDirectFor('enemy-vindi', input)).toBe(0);
     });
 });
 

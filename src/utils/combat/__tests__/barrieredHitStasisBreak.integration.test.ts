@@ -13,11 +13,9 @@
  * answer; `onVictimResolved` commits it only when the hit was not barriered. Both hooks are in
  * `drivePositionalTurnApply` (engine.ts).
  *
- * WHY THERE IS NO NON-POSITIONAL ARM. `resolveAnchorStasisBreak`'s `?? <cast-time set>` operand,
- * fed by playerTurn's `onHitBreakStasis`, is unreachable through `runCombat`:
+ * WHY THERE IS NO NON-POSITIONAL ARM. A cast that hits always drives positionally:
  * `normalizeCombatRoster` fills an absent pattern with `DEFAULT_BASE_PATTERN` (see
- * `dpsEnemyPlacement.ts`, which documents the fill), so a damage cast with a resolved victim
- * always drives positionally. No fixture can measure a non-positional barriered hit.
+ * `dpsEnemyPlacement.ts`, which documents the fill), and the drive is the only Stasis-break mark.
  *
  * INSTRUMENT. Three arms per case, each of which must read differently or the fixture is blind:
  *  - NO BARRIER  — the victim is hit, HP falls, Stasis is reduced, it acts early.
