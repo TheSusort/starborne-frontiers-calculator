@@ -147,7 +147,7 @@ describe('DefenseShipCard', () => {
         // The breakdown carries its OWN sub-total, explicitly labelled as the post-reduction axis —
         // without it a reader sums 25,000 + 5,000 against an 80,000 headline and calls it a bug.
         // "(after its reductions)", not "(after defence)": the sub-total is also after the victim's
-        // own `Inc. Damage Down`, `equipReductionPct`, `preFightIncoming` and block procs, so the
+        // own `Inc. Damage Down`, gear reductions, the squad-leader incoming baseline and block procs, so the
         // narrower label understated what it covers (finding M5).
         expect(screen.getByText(/Reached the ship \(after its reductions\)/i)).toBeInTheDocument();
         expect(screen.getByText('30,000')).toBeInTheDocument();

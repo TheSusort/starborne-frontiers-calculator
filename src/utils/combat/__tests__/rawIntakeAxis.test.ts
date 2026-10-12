@@ -10,7 +10,7 @@
  * at a factor of 0).
  *
  * ADDENDUM 3 WIDENED IT past defence: EVERY victim-side reduction now comes off this axis (the
- * victim's own `Inc. Damage Down` family and pre-fight incoming baseline, `equipReductionPct`,
+ * victim's own `Inc. Damage Down` family and gear/implant reductions (`reduction: IncomingReductionParts`),
  * `incomingDotReductionPct`, the reflect channel's incoming-reduction), while attacker-side
  * modifiers and enemy-APPLIED amplification (`Out. Damage Up`, `Exposed`) stay in.
  *

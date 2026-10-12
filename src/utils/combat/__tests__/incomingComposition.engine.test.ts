@@ -24,6 +24,9 @@ beforeEach(() => {
     setupKeyedRng(672);
 });
 
+/** Crit Damage (percent) of an always-crit attacker. */
+const CRIT_DAMAGE = 50;
+
 const target = (): ParsedTarget => ({ raw: 'front', side: 'enemy', selection: 'front' });
 const pattern = (): ParsedPattern => ({ raw: 'base', shape: 'base', range: 0, modifiers: {} });
 
@@ -37,7 +40,12 @@ const hit = (id: string, multiplier: number): Ability => ({
 });
 
 /** An `always` direct-hit reduction: ship kit (passive bucket) or equipment (separate factor). */
-const reduction = (id: string, pct: number, equipment: boolean): Ability => ({
+const reduction = (
+    id: string,
+    pct: number,
+    equipment: boolean,
+    condition: 'always' | 'incoming-crit' = 'always'
+): Ability => ({
     id,
     type: 'incoming-reduction',
     target: 'self',
@@ -47,9 +55,9 @@ const reduction = (id: string, pct: number, equipment: boolean): Ability => ({
     config: {
         type: 'incoming-reduction',
         scope: 'direct',
-        condition: 'always',
+        condition,
         pct,
-        critFamily: false,
+        critFamily: condition === 'incoming-crit',
     },
 });
 
@@ -75,6 +83,8 @@ interface VictimKit {
     buff?: number;
     passive?: number;
     equipment?: number;
+    /** Equipment reduction that applies to crits only (`incoming-crit`). */
+    critEquipment?: number;
     /** Squad-leader `preFight.incomingDamage`, signed (−5 = takes 5% less). */
     leaderIncoming?: number;
 }
@@ -83,6 +93,9 @@ const victimSlots = (id: string, kit: VictimKit): ShipSkills['slots'] => {
     const passive: Ability[] = [
         ...(kit.passive !== undefined ? [reduction(`${id}-passive`, kit.passive, false)] : []),
         ...(kit.equipment !== undefined ? [reduction(`${id}-gear`, kit.equipment, true)] : []),
+        ...(kit.critEquipment !== undefined
+            ? [reduction(`${id}-gear-crit`, kit.critEquipment, true, 'incoming-crit')]
+            : []),
     ];
     return [
         {
@@ -135,9 +148,14 @@ const outgoingDown = (pct: number): SelectedGameBuff => ({
 });
 
 /** The player focus (attack 5000, 100%) fires at an enemy victim that acts first. */
-const enemyVictimRun = (kit: VictimKit, attacker: { outgoing?: number } = {}): CombatEngineInput =>
+const enemyVictimRun = (
+    kit: VictimKit,
+    attacker: { outgoing?: number; crit?: number } = {}
+): CombatEngineInput =>
     BASE({
         attack: 5000,
+        crit: attacker.crit ?? 0,
+        critDamage: attacker.crit ? CRIT_DAMAGE : 0,
         shipSkills: { slots: [{ slot: 'active', abilities: [hit('focus-hit', 100)] }] },
         speed: 1000,
         position: 'M4',
@@ -160,7 +178,7 @@ const enemyVictimRun = (kit: VictimKit, attacker: { outgoing?: number } = {}): C
     });
 
 /** An enemy attacker (attack 5000, 100%) fires at a player team victim that acts first. */
-const playerVictimRun = (kit: VictimKit): CombatEngineInput =>
+const playerVictimRun = (kit: VictimKit, attackerCrit = 0): CombatEngineInput =>
     BASE({
         teamActors: [
             {
@@ -193,7 +211,14 @@ const playerVictimRun = (kit: VictimKit): CombatEngineInput =>
         enemyAttackers: [
             {
                 id: 'enemy-1',
-                stats: { attack: 5000, crit: 0, critDamage: 0, defence: 0, hp: 1e9, speed: 1 },
+                stats: {
+                    attack: 5000,
+                    crit: attackerCrit,
+                    critDamage: attackerCrit ? CRIT_DAMAGE : 0,
+                    defence: 0,
+                    hp: 1e9,
+                    speed: 1,
+                },
                 chargeCount: 0,
                 startCharged: false,
                 position: 'M1',
@@ -287,6 +312,23 @@ describe('direct-hit composition in the engine (#672)', () => {
         expect(enemySide.aggregate).toBeCloseTo(enemySide.taken, 6);
         const playerSide = observe(playerVictimRun(kit), 'enemy-1', 'victim');
         expect(playerSide.taken).toBeCloseTo(1995, 6);
+        expect(playerSide.aggregate).toBeCloseTo(playerSide.taken, 6);
+    });
+
+    it('a crit-conditional equipment term reaches both paths: crit hit × 0.85 of the unreduced crit', () => {
+        // Always-crit attacker; the victim's `incoming-crit` equipment term (15) applies only on a crit.
+        const kit: VictimKit = { critEquipment: 15 };
+        const uncut = observe(enemyVictimRun({}, { crit: 100 }), 'attacker', 'enemy-victim');
+        // Liveness: the hit really crit, so the term has something to act on.
+        expect(uncut.taken).toBeGreaterThan(5000);
+        // 5000 × (1 + 50% crit damage) × (1 − 15%).
+        expect(uncut.taken).toBeCloseTo(7500, 6);
+        const expected = 5000 * 1.5 * 0.85;
+        const enemySide = observe(enemyVictimRun(kit, { crit: 100 }), 'attacker', 'enemy-victim');
+        expect(enemySide.taken).toBeCloseTo(expected, 6);
+        expect(enemySide.aggregate).toBeCloseTo(enemySide.taken, 6);
+        const playerSide = observe(playerVictimRun(kit, 100), 'enemy-1', 'victim');
+        expect(playerSide.taken).toBeCloseTo(expected, 6);
         expect(playerSide.aggregate).toBeCloseTo(playerSide.taken, 6);
     });
 });

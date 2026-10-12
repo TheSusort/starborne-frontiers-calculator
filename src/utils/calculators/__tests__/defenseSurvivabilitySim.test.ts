@@ -784,7 +784,7 @@ describe('damageAbsorbed is RAW damage withstood (#358 addendum 2)', () => {
 //         amplification ('Out. Damage Up', 'Exposed'). Shield and Barrier absorption still count:
 //         those pools eat damage that ARRIVED, they do not reduce what was thrown.
 //   OUT — every victim-side reduction: defence mitigation, the ship's own `Inc. Damage Down`
-//         family, `preFightIncoming`, `equipReductionPct`, and the incoming-block proc.
+//         family, the squad-leader incoming baseline, gear/implant reductions, and the incoming-block proc.
 // ══════════════════════════════════════════════════════════════════════════════════════════════
 describe('damage absorbed — per-channel direction and presence (#358 addendum 3, C5)', () => {
     /** A passive slot: the incoming-* families are collected from PASSIVE slots only
@@ -884,8 +884,8 @@ describe('damage absorbed — per-channel direction and presence (#358 addendum 
     // behaviour end to end and only the SOURCING differs. Kept as a comment rather than a skipped
     // test: a `.skip` reads as coverage in the count while proving nothing.
 
-    // ── CHANNEL 4/5: `equipReductionPct` (D-PR3 gear-sourced incoming reduction) ───────────────
-    it('DIRECTION (channel 4/5 — equipReductionPct): a flat incoming reduction RAISES absorbed', () => {
+    // ── CHANNEL 4/5: gear-sourced incoming reduction (`reduction: IncomingReductionParts`) ───────────────
+    it('DIRECTION (channel 4/5 — gear reduction): a flat incoming reduction RAISES absorbed', () => {
         const geared = run({
             ...CASUALTY,
             shipSkills: passives([
@@ -941,7 +941,7 @@ describe('damage absorbed — per-channel direction and presence (#358 addendum 
     // ── CHANNEL 6: the DoT-reduction channel (Vortex Veil) ─────────────────────────────────────
     //
     // ⚠️ NOT IN C2'S EXPLICIT "OUT" LIST — a deliberate extension, flagged rather than smuggled.
-    // C2's list names `equipReductionPct` (the DIRECT-damage half of D-PR3) but not
+    // C2's list names the gear-sourced reduction (the DIRECT-damage half) but not
     // `incomingDotReductionPct` (its DoT half). Both are the defender reducing what it takes, and
     // C2's governing sentence is "measured BEFORE the defender reduces it", so leaving this one in
     // would have re-created the exact shape this addendum exists to end: a defensive ability

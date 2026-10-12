@@ -73,20 +73,21 @@ export interface VictimDefenseProfile {
     /**
      * THE VICTIM-SIDE SLICE OF A MIXED CHANNEL (#358).
      *
-     * `incomingDamageModifierPct` is NOT one thing. The engine sums FOUR contributions into it
+     * `incomingDamageModifierPct` is NOT one thing. The engine sums THREE contributions into it
      * (`victimIncomingModifiers`):
      *   • `enemy.incomingDamageModifier` — 'Out. Damage Up' the ATTACKER's side applied. KEEP.
      *   • `exposed` — 'Exposed' stacks the ATTACKER's side applied. KEEP.
      *   • `selfIncoming` — the victim's OWN 'Inc. Damage Down/Up' self-buffs. STRIP.
-     *   • `preFightIncoming` — squad-leader incoming protections on the victim. STRIP.
      *
      * The first two AMPLIFY what lands (they are part of "the attacker's attack with modifiers");
-     * the last two are the DEFENDER reducing what it takes. "Damage absorbed" counts the attack as
-     * thrown, so only the victim-side pair comes off the pre-mitigation axis.
+     * the last is the DEFENDER reducing what it takes. "Damage absorbed" counts the attack as
+     * thrown, so only the victim's own slice comes off the pre-mitigation axis.
      *
-     * THIS FIELD CARRIES THAT PAIR (`selfIncoming + preFightIncoming`), signed exactly as it rides
+     * THIS FIELD CARRIES THAT SLICE (`selfIncoming − ownSuppressed`), signed exactly as it rides
      * the summed channel (negative = the victim takes less). `preMitigation` below subtracts it
-     * back out; `damage` is untouched by it.
+     * back out; `damage` is untouched by it. The squad-leader incoming baseline is NOT in the
+     * channel at all: it is a separate multiplicative factor composed with gear/implant
+     * reductions (`hitReductionFor`, `composeIncomingFactor`), so it never reaches this axis.
      *
      * WHY IT MUST BE THREADED AND NOT DERIVED. Treating `incomingDamageModifierPct` as ATOMIC and
      * leaving the whole term on the pre-defence axis makes a defender with 'Inc. Damage Down II'
@@ -95,8 +96,7 @@ export interface VictimDefenseProfile {
      * equally wrong. Nothing downstream can recover the split from the sum, so the split travels
      * with the profile.
      *
-     * Defaults to 0 → inert for any victim with no self-sourced incoming modifier and no
-     * pre-fight incoming baseline.
+     * Defaults to 0 → inert for any victim with no self-sourced incoming modifier.
      */
     victimSideIncomingPct?: number;
     /**
