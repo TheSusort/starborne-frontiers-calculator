@@ -11,7 +11,7 @@ import { useShips } from '../../contexts/ShipsContext';
 import { useInventory } from '../../contexts/InventoryProvider';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';
 import { calculateTotalStats } from '../../utils/ship/statsCalculator';
-import { capIncomingPct } from '../../utils/combat/victimDamage';
+import { composeIncomingFactor } from '../../utils/combat/victimDamage';
 interface BuffDebuff {
     value: number;
     description: string;
@@ -141,12 +141,10 @@ const DamageDeconstructionPage: React.FC = () => {
         );
         totalAttack *= 1 + outgoingDamageBuffSum / 100;
 
-        // Apply incoming damage buffs
-        // Floored like the simulator's incoming term (`capIncomingPct`).
-        const incomingDamageBuffSum = capIncomingPct(
+        // Apply incoming damage buffs — the simulator's own composition (`composeIncomingFactor`).
+        const incomingDamageMultiplier = composeIncomingFactor(
             form.enemyIncomingDamageBuffs.reduce((sum, buff) => sum + buff.value, 0)
         );
-        const incomingDamageMultiplier = 1 + incomingDamageBuffSum / 100;
 
         // Calculate the effective damage that would have been dealt without defense
         const effectiveDamage = totalAttack * incomingDamageMultiplier;

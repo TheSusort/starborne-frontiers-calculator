@@ -73,20 +73,21 @@ export interface VictimDefenseProfile {
     /**
      * THE VICTIM-SIDE SLICE OF A MIXED CHANNEL (#358).
      *
-     * `incomingDamageModifierPct` is NOT one thing. The engine sums FOUR contributions into it
+     * `incomingDamageModifierPct` is NOT one thing. The engine sums THREE contributions into it
      * (`victimIncomingModifiers`):
      *   • `enemy.incomingDamageModifier` — 'Out. Damage Up' the ATTACKER's side applied. KEEP.
      *   • `exposed` — 'Exposed' stacks the ATTACKER's side applied. KEEP.
      *   • `selfIncoming` — the victim's OWN 'Inc. Damage Down/Up' self-buffs. STRIP.
-     *   • `preFightIncoming` — squad-leader incoming protections on the victim. STRIP.
      *
      * The first two AMPLIFY what lands (they are part of "the attacker's attack with modifiers");
-     * the last two are the DEFENDER reducing what it takes. "Damage absorbed" counts the attack as
-     * thrown, so only the victim-side pair comes off the pre-mitigation axis.
+     * the last is the DEFENDER reducing what it takes. "Damage absorbed" counts the attack as
+     * thrown, so only the victim's own slice comes off the pre-mitigation axis.
      *
-     * THIS FIELD CARRIES THAT PAIR (`selfIncoming + preFightIncoming`), signed exactly as it rides
+     * THIS FIELD CARRIES THAT SLICE (`selfIncoming − ownSuppressed`), signed exactly as it rides
      * the summed channel (negative = the victim takes less). `preMitigation` below subtracts it
-     * back out; `damage` is untouched by it.
+     * back out; `damage` is untouched by it. The squad-leader incoming baseline is NOT in the
+     * channel at all: it is a separate multiplicative factor composed with gear/implant
+     * reductions (`hitReductionFor`, `composeIncomingFactor`), so it never reaches this axis.
      *
      * WHY IT MUST BE THREADED AND NOT DERIVED. Treating `incomingDamageModifierPct` as ATOMIC and
      * leaving the whole term on the pre-defence axis makes a defender with 'Inc. Damage Down II'
@@ -95,8 +96,7 @@ export interface VictimDefenseProfile {
      * equally wrong. Nothing downstream can recover the split from the sum, so the split travels
      * with the profile.
      *
-     * Defaults to 0 → inert for any victim with no self-sourced incoming modifier and no
-     * pre-fight incoming baseline.
+     * Defaults to 0 → inert for any victim with no self-sourced incoming modifier.
      */
     victimSideIncomingPct?: number;
     /**
@@ -138,27 +138,58 @@ export interface VictimDefenseProfile {
     forceAffinityDisadvantage?: boolean;
 }
 
-/** Magnitude of the floor on the net non-defence incoming term. See {@link capIncomingPct}. */
+/** Magnitude of the floor on the non-defence incoming factor. See {@link composeIncomingFactor}. */
 export const NON_DEFENCE_REDUCTION_CAP_PCT = 70;
 
 /**
- * THE 70% CAP ON NON-DEFENCE DAMAGE REDUCTION (#658). A direct hit's victim-side modifiers other
- * than defence sum into ONE signed percentage — the victim's `Inc. Damage Down/Up` family,
- * pre-fight incoming, gear/kit `incoming-reduction` (crit family on crits), attacker-applied
- * amplification (`Out. Damage Up` on the incoming channel, `Exposed`) and the attacker's
- * squad-leader `outgoingCritDamage` penalty — and that sum is floored here, then applied once as
- * `(1 + total/100)`. Negative = the victim takes less.
- *
- * Outside the sum and never capped: defence mitigation, affinity, the attacker's
- * `outgoingDamageBuff`, per-hit outgoing amplification and crit damage itself. DoT ticks
- * (`incomingDotReductionPct`) are not direct hits and are not capped. `preMitigation` ("damage as
- * thrown") is not capped either: it excludes the victim-side terms by design.
- *
- * Every site that composes a direct hit's incoming term calls this on the net sum; a total above
- * the floor comes back as the same double.
+ * A victim's incoming reductions for ONE hit, kept in the buckets the game composes separately
+ * (#672, owner-measured). The buff/debuff channel is not here — it travels on the defence profile
+ * as `incomingDamageModifierPct`.
+ *   • `passivePct` — every ship-skill passive reduction that applies (own kit and ally auras).
+ *     They ADD with each other. Positive = takes less.
+ *   • `separatePcts` — each gear set, implant and squad-leader reduction. Each is its OWN factor.
  */
-export function capIncomingPct(netIncomingPct: number): number {
-    return Math.max(netIncomingPct, -NON_DEFENCE_REDUCTION_CAP_PCT);
+export interface IncomingReductionParts {
+    passivePct: number;
+    separatePcts: readonly number[];
+}
+
+export const NO_INCOMING_REDUCTION: IncomingReductionParts = { passivePct: 0, separatePcts: [] };
+
+export function mergeIncomingReductionParts(
+    a: IncomingReductionParts,
+    b: IncomingReductionParts
+): IncomingReductionParts {
+    return {
+        passivePct: a.passivePct + b.passivePct,
+        separatePcts: [...a.separatePcts, ...b.separatePcts],
+    };
+}
+
+/**
+ * THE non-defence incoming factor of a direct hit (#672):
+ *   (1 + buffs/100) × (1 − passives/100) × Π(1 − separate/100), floored at a 70% reduction.
+ * `buffChannelPct` is signed (negative = takes less). The attacker's outgoing modifiers, crit
+ * damage and its squad-leader crit term are NOT part of this product and are never capped.
+ * A buff-only victim gets exactly `1 + buffChannelPct/100`, so fights without passives or gear
+ * keep their numbers bit for bit.
+ */
+export function composeIncomingFactor(
+    buffChannelPct: number,
+    parts: IncomingReductionParts = NO_INCOMING_REDUCTION
+): number {
+    let factor = 1 + buffChannelPct / 100;
+    if (parts.passivePct !== 0) factor *= Math.max(0, 1 - parts.passivePct / 100);
+    for (const pct of parts.separatePcts) factor *= Math.max(0, 1 - pct / 100);
+    return Math.max(factor, 1 - NON_DEFENCE_REDUCTION_CAP_PCT / 100);
+}
+
+/** The reduction factor on a DoT tick: passives sum, separate factors multiply, no cap.
+ *  The tick's own `Inc. DoT Damage Up` multiplier is applied where the tick is built. */
+export function composeDotReductionFactor(parts: IncomingReductionParts): number {
+    let factor = parts.passivePct !== 0 ? Math.max(0, 1 - parts.passivePct / 100) : 1;
+    for (const pct of parts.separatePcts) factor *= Math.max(0, 1 - pct / 100);
+    return factor;
 }
 
 /**
@@ -208,29 +239,22 @@ export function victimDefenceReductionPct(
  * @param v        this victim's defensive profile
  * @param didCrit  the per-hit crit outcome (hitCrits[h])
  * @param roleScale 1 (origin) | 0.5 (covered) positional split factor
- * @param equipReductionPct  VICTIM-side gear/kit incoming %-reduction (percentage points),
- *        folded ADDITIVELY into the incoming term. Default 0 → inert for victims without an
- *        incoming-reduction ability.
- * @param attackerSideReductionPct  the ATTACKER-side half of the same channel — today the
- *        attacker's own squad-leader `outgoingCritDamage` penalty. Same units and same sign
- *        convention, but it belongs to the attack AS THROWN, so it rides BOTH axes. Default 0.
+ * @param reduction  the VICTIM's bucketed incoming reductions for this hit (ship passives, and
+ *        each gear/implant/squad-leader reduction as its own factor). Composed with the buff
+ *        channel by `composeIncomingFactor`, capped there. Default: none.
+ * @param attackerCritPenaltyPct  the ATTACKER's squad-leader crit penalty for this hit, percent,
+ *        positive = its crits deal less. Not a victim reduction: it multiplies outside the cap
+ *        and rides both the damage and the "as thrown" axes. Default 0.
  */
 export function victimHitDamage(
     s: AttackerDamageScalars,
     v: VictimDefenseProfile,
     didCrit: boolean,
     roleScale: number,
-    equipReductionPct = 0,
-    attackerSideReductionPct = 0
+    reduction: IncomingReductionParts = NO_INCOMING_REDUCTION,
+    attackerCritPenaltyPct = 0
 ): number {
-    return victimHitDamageParts(
-        s,
-        v,
-        didCrit,
-        roleScale,
-        equipReductionPct,
-        attackerSideReductionPct
-    ).damage;
+    return victimHitDamageParts(s, v, didCrit, roleScale, reduction, attackerCritPenaltyPct).damage;
 }
 
 export function victimHitDamageParts(
@@ -238,8 +262,8 @@ export function victimHitDamageParts(
     v: VictimDefenseProfile,
     didCrit: boolean,
     roleScale: number,
-    equipReductionPct = 0,
-    attackerSideReductionPct = 0
+    reduction: IncomingReductionParts = NO_INCOMING_REDUCTION,
+    attackerCritPenaltyPct = 0
 ): { damage: number; preMitigation: number } {
     // preCritDamage assembled exactly as the engine, then split evenly per hit.
     const multiplierPct = s.multiplierPct + (v.multiplierDeltaPct ?? 0);
@@ -261,43 +285,33 @@ export function victimHitDamageParts(
     // attacker-fixed scalar. The engine-wired path always passes an explicit
     // value; the `??` fallback serves direct-call callers (e.g. positionalApply unit tests).
     const incomingChannel = v.incomingDamageModifierPct ?? s.incomingDamageModifierPct;
-    // BYTE-IDENTITY: the two halves are re-SUMMED before the subtraction, in the same
-    // left-to-right order the engine used when it handed over one fused number
-    // (`(equip + victimCritTerm) + attackerCritTerm`). `a - (b + c)` and `a - b - c` are not the
-    // same double, and splitting the channel must not move a single existing damage figure.
-    const incoming = capIncomingPct(
-        incomingChannel - (equipReductionPct + attackerSideReductionPct)
-    );
-    // #358: the SAME channel with every victim-side reduction removed, and ONLY
-    // those. Three things come off / stay on:
-    //   • OFF — the victim's own `Inc. Damage Down` family and its pre-fight incoming baseline,
-    //     both carried in `victimSideIncomingPct`;
-    //   • OFF — `equipReductionPct`, the gear/kit incoming reduction, which is simply not
-    //     added to this axis;
-    //   • ON  — `attackerSideReductionPct`, subtracted here as well as above. It is the ATTACKER's
-    //     own squad-leader `outgoingCritDamage` penalty: it makes the attack smaller AS THROWN, so
-    //     excluding it would over-report. It rides its own parameter for that reason: fused into
-    //     `equipReductionPct` it comes off the thrown axis as collateral — a MIXED channel treated
-    //     as atomic, the same defect shape one layer further down.
-    // What survives is the attack as thrown, including attacker-APPLIED amplification
-    // (`Out. Damage Up`, `Exposed`). See `victimSideIncomingPct` for why the split is threaded.
-    const incomingAsThrown =
-        incomingChannel - (v.victimSideIncomingPct ?? 0) - attackerSideReductionPct;
+    // THE composition (#672): buff channel × victim passives × each separate reduction, capped.
+    // The attacker's own squad-leader crit penalty is NOT a victim reduction: it multiplies
+    // outside the cap, on both axes.
+    const incomingFactor = composeIncomingFactor(incomingChannel, reduction);
+    const attackerCritFactor = 1 - attackerCritPenaltyPct / 100;
+    // "Damage as thrown" (#358): the buff channel minus its victim-side slice
+    // (`victimSideIncomingPct`), with no passive or separate reduction and no cap. Attacker-applied
+    // amplification (`Out. Damage Up`, `Exposed`) and the attacker's crit penalty stay on.
+    const incomingAsThrown = incomingChannel - (v.victimSideIncomingPct ?? 0);
 
-    // Fold the per-victim enemy-status-gated delta additively into the same
-    // percentage term as the attacker-fixed outgoing buff — both are additive-percentage
-    // contributions to the SAME `(1 + x/100)` multiplier, so there is no rounding
-    // divergence from a single-victim (delta === 0) evaluation.
+    // The per-victim enemy-status-gated delta and the attacker-fixed outgoing buff are additive
+    // contributions to the SAME `(1 + x/100)` multiplier.
     const outgoingPct = s.outgoingDamageBuffPct + (v.outgoingDamageDeltaPct ?? 0);
     const nonCritFactor =
-        defenceMitigation * (1 + outgoingPct / 100) * (1 + incoming / 100) * affinityMult;
-    // #358 ADDENDUM 2/3: the same product with EVERY victim-side reduction removed — the defence
-    // term replaced by an exact 1 (addendum 2) and the incoming term re-based on `incomingAsThrown`
-    // (addendum 3). The `damage` expression below keeps its own operand order and its own
-    // `incoming` local, so no floating-point re-association reaches it, while the pre-mitigation
-    // figure is computed at source rather than reconstructed by division.
+        defenceMitigation *
+        (1 + outgoingPct / 100) *
+        incomingFactor *
+        attackerCritFactor *
+        affinityMult;
+    // The same product with every victim-side reduction removed: the defence term is an exact 1
+    // and the incoming term is re-based on `incomingAsThrown`.
     const nonCritFactorPreDefence =
-        1 * (1 + outgoingPct / 100) * (1 + incomingAsThrown / 100) * affinityMult;
+        1 *
+        (1 + outgoingPct / 100) *
+        (1 + incomingAsThrown / 100) *
+        attackerCritFactor *
+        affinityMult;
 
     const hitCritMultiplier =
         1 + (didCrit ? 1 : 0) * ((s.effectiveCritDamage + (v.critDamageDeltaPct ?? 0)) / 100);

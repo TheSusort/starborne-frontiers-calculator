@@ -1,6 +1,7 @@
 import { Ability, IncomingCondition, IncomingHitContext } from '../../types/abilities';
 import type { FactionName } from '../../constants/factions';
 import { resolveSupportRecipients } from './supportRecipients';
+import { IncomingReductionParts, NO_INCOMING_REDUCTION } from './victimDamage';
 
 /**
  * #363 — which actors an ALLY-SCOPED `incoming-reduction` ability protects.
@@ -57,8 +58,9 @@ export function allyScopedIncomingRecipients(args: {
  *
  * The dedupe key is the `id`, NOT object identity: two distinct runtimes for the same actor id
  * each hand back a distinct object describing the SAME underlying ability, and
- * `incomingReductionForHit` SUMS non-crit-family entries — so an identity-keyed dedupe would let
- * a 30% aura silently double to 60%. Mutates `list` in place (matches the call site's existing
+ * `incomingReductionPartsForHit` sums every ship-kit entry into `passivePct` and makes each
+ * equipment entry its own factor — so an identity-keyed dedupe would let a 30% aura silently
+ * double to 60%. Mutates `list` in place (matches the call site's existing
  * get-or-create-then-push idiom) and also returns it for convenience.
  */
 export function addIncomingAbilityDeduped(list: Ability[], ability: Ability): Ability[] {
@@ -73,10 +75,10 @@ export function addIncomingAbilityDeduped(list: Ability[], ability: Ability): Ab
  * Fuying alive, a Stealthed Anjian takes 10,000 → 7,000. Round 3, Fuying destroyed, the same hit on
  * the same still-Stealthed Anjian → the full 10,000.
  *
- * WHY IT LIVES HERE AND NOT IN `incomingReductionForHit`. The fan-out pass writes the carrier's
- * `Ability` object into each RECIPIENT's list, so the recipient-side read has no idea who the owner
- * was — and `incomingReductionForHit` is a pure fold over `Ability[]` with many call sites
- * across the engine (block, transform, threshold-shield, reflection all share the same list). This
+ * WHY IT LIVES HERE AND NOT IN `incomingReductionPartsForHit`. The fan-out pass writes the
+ * carrier's `Ability` object into each RECIPIENT's list, so the recipient-side read has no idea who
+ * the owner was — and `incomingReductionPartsForHit` is a pure fold over `Ability[]`, and the same
+ * list also feeds block, transform, threshold-shield and reflection reads. This
  * filter sits on the LIST accessor instead, so every one of those consumers inherits the liveness
  * rule at once and no per-hit signature has to grow an owner parameter.
  *
@@ -109,7 +111,7 @@ export function withLiveAllyScopedOwners(
 
 /** True when an incoming condition is satisfied by the hit context. Exported so the
  *  engine's applyVictimDamage transform hook can gate a 'transform-incoming-to-dot' ability's
- *  `condition` the same way incomingReductionForHit/incomingBlockForIntake do internally. */
+ *  `condition` the same way incomingReductionPartsForHit/incomingBlockForIntake do internally. */
 export function conditionMet(cond: IncomingCondition, ctx: IncomingHitContext): boolean {
     switch (cond) {
         case 'self-stealth':
@@ -140,32 +142,36 @@ export function conditionMet(cond: IncomingCondition, ctx: IncomingHitContext): 
 }
 
 /**
- * Total incoming %-reduction for one hit:
- *   max(applicable crit-family entries) + sum(applicable non-crit-family entries).
+ * The victim's incoming reductions for one hit, in the buckets the game composes separately
+ * (`IncomingReductionParts`, #672): ship-kit entries sum into `passivePct`; every
+ * `source: 'equipment'` entry (gear set or implant) is its own entry in `separatePcts`.
+ * `critFamily` is a condition marker only and does not change the bucket.
  * `scope` must match the hit: 'dot' entries apply only when ctx.dotType is set; 'direct'
- * entries only when it is not. Returns 0 when nothing applies.
+ * entries only when it is not.
  */
-export function incomingReductionForHit(
+export function incomingReductionPartsForHit(
     victimAbilities: Ability[],
     ctx: IncomingHitContext
-): number {
+): IncomingReductionParts {
     const isDot = ctx.dotType !== undefined;
-    let nonCritSum = 0;
-    let critFamilyMax = 0;
+    let passivePct = 0;
+    const separatePcts: number[] = [];
     for (const a of victimAbilities) {
         if (a.config.type !== 'incoming-reduction') continue;
-        const { scope, condition, pct, critFamily, hpScaling } = a.config;
+        const { scope, condition, pct, hpScaling } = a.config;
         if ((scope === 'dot') !== isDot) continue;
         if (!conditionMet(condition, ctx)) continue;
-        // hpScaling REPLACES the flat pct with a continuous HP-proportional
-        // value (Tormenter) — perUnit per missing-HP-point, capped.
+        // hpScaling REPLACES the flat pct with a continuous HP-proportional value (Tormenter).
         const effectivePct = hpScaling
             ? Math.min(hpScaling.cap, hpScaling.perUnit * (100 - ctx.selfHpPct))
             : pct;
-        if (critFamily) critFamilyMax = Math.max(critFamilyMax, effectivePct);
-        else nonCritSum += effectivePct;
+        if (effectivePct === 0) continue;
+        if (a.source === 'equipment') separatePcts.push(effectivePct);
+        else passivePct += effectivePct;
     }
-    return nonCritSum + critFamilyMax;
+    return passivePct === 0 && separatePcts.length === 0
+        ? NO_INCOMING_REDUCTION
+        : { passivePct, separatePcts };
 }
 
 /**

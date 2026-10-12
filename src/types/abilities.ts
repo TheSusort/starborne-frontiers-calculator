@@ -1143,10 +1143,11 @@ export type AbilityConfig =
            *  IGNORED when `hpScaling` is set (Tormenter) — the effective reduction is computed
            *  from `hpScaling` instead. */
           pct: number;
-          /** Grouping ONLY: true → take-max crit-reduction family; false → additive.
-           *  Orthogonal to the gate — the crit gate is enforced by condition='incoming-crit*'. */
+          /** Marks a crit-damage-reduction source. It does not change how the entry composes
+           *  (`incomingReductionPartsForHit` buckets by `source`), and the crit gate itself is
+           *  enforced by condition='incoming-crit*'. */
           critFamily: boolean;
-          /** Epic PR12 (C): HP-proportional reduction (Tormenter — "gains up to 30% damage
+          /** HP-proportional reduction (Tormenter — "gains up to 30% damage
            *  reduction as its health decreases"). When set, the effective pct is
            *  `min(cap, perUnit * (100 - victim's live HP%))` — mirrors the Revenge gear set's
            *  self-hp-missing-pct formula (perUnit = cap/100 reaches the cap exactly at 0 HP).

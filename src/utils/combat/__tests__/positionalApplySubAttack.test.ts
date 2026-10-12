@@ -1,7 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import { parsePattern, parseTarget } from '../../targetingParser';
 import { applyPositionalDamage, isWholeBattlefieldPattern } from '../positionalApply';
-import type { AttackerDamageScalars, VictimDefenseProfile } from '../victimDamage';
+import {
+    NO_INCOMING_REDUCTION,
+    type AttackerDamageScalars,
+    type VictimDefenseProfile,
+} from '../victimDamage';
 import type { CombatActor } from '../state';
 
 // CHARACTERIZATION TESTS (epic: multi-hit full-walk attacks, PR1).
@@ -184,7 +188,7 @@ describe('applyPositionalDamage — subAttackIndex threading', () => {
             },
             incomingReductionFor: (_v, _c, subAttackIndex) => {
                 reductionIdx.push(subAttackIndex as number);
-                return 0;
+                return { parts: NO_INCOMING_REDUCTION, attackerCritPenaltyPct: 0 };
             },
             outgoingAmplificationFor: (_v, _c, subAttackIndex) => {
                 ampIdx.push(subAttackIndex as number);

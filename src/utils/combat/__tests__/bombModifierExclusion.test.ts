@@ -7,7 +7,7 @@
  * DIRECT per-hit calc in `applyPositionalDamage` — must NOT scale bomb-detonation damage.
  * Bombs apply through a SEPARATE path (`processBombs` / `applyVictimDamage(..., { bombPortion })`
  * / `detonationDamageModifier`) that never reads `incomingDamageModifierPct`. DoT ticks likewise
- * honour only `incomingDotReductionPct` (Vortex Veil). This is BY DESIGN, not a deferral.
+ * honour only `incomingDotFactor` (Vortex Veil). This is BY DESIGN, not a deferral.
  *
  * This suite is a REGRESSION LOCK: bombs already bypass the modifier on current code, so every
  * assertion below should PASS as-is. If any FAILS, a modifier has leaked into the bomb path —

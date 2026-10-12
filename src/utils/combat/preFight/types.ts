@@ -32,7 +32,7 @@ export interface PreFightStatBlock {
  * The squad-leader pass accumulates these (F1); the battle simulator attaches the
  * block to each unit's engine actor (`CombatActor.preFight`) and the engine folds
  * every channel at its consumption site (F3): outgoingDamage/outgoingHeal/incomingHeal
- * into the self-buff totals, incomingDamage into the per-victim incoming channel,
+ * into the self-buff totals, incomingDamage as a separate factor composed in `hitReductionFor`,
  * incoming/outgoingCritDamage at the crit-family damage sites (crit-conditional damage
  * modifiers — NOT the Crit Power stat), startingShieldPctOfHp as the starting shieldPool.
  */

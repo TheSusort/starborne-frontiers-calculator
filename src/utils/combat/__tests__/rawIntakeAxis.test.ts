@@ -10,8 +10,8 @@
  * at a factor of 0).
  *
  * ADDENDUM 3 WIDENED IT past defence: EVERY victim-side reduction now comes off this axis (the
- * victim's own `Inc. Damage Down` family and pre-fight incoming baseline, `equipReductionPct`,
- * `incomingDotReductionPct`, the reflect channel's incoming-reduction), while attacker-side
+ * victim's own `Inc. Damage Down` family and gear/implant reductions (`reduction: IncomingReductionParts`),
+ * `incomingDotFactor`, the reflect channel's incoming-reduction), while attacker-side
  * modifiers and enemy-APPLIED amplification (`Out. Damage Up`, `Exposed`) stay in.
  *
  * ⚠️ SCALING — READ THIS BEFORE TRUSTING AN OLDER COMMENT. This axis is scaled by the Protection
@@ -59,7 +59,7 @@
  * The remaining paths (bomb splash, bomb/accumulator burst, forced detonation, DoT-detonation
  * bypass) fold no defence and meet no other victim-side reduction, so raw === post there by
  * construction — the `?? rawDamage` default in the funnel, and the suite-health test at the bottom.
- * The DoT tick batch was in that group under addendum 2 and is NOT any more: `incomingDotReductionPct`
+ * The DoT tick batch is NOT in that group: `incomingDotFactor`
  * (Vortex Veil) is a victim-side reduction, so a tick on a veil carrier has two distinct axes. Both
  * tick sites carry a `preMitigationDamage` write; only the heal-target one had a test.
  *
@@ -640,7 +640,7 @@ describe('#358 A2 — path 7: the Protection transfer chunk', () => {
 // WHY THIS PATH IS HERE AT ALL, when the file header lists the DoT tick batch among the paths that
 // "fold NO defence, so raw === post there by construction". That was true under addendum 2, whose
 // only victim-side term was DEFENCE. Addendum 3 widened "damage absorbed" to exclude EVERY
-// victim-side reduction, and a DoT tick has one: `incomingDotReductionPct` (Vortex Veil, the DoT
+// victim-side reduction, and a DoT tick has one: `incomingDotFactor` (Vortex Veil, the DoT
 // half of D-PR3). So the batch grew a genuine second axis, and the engine grew two writes to carry
 // it — `preMitigationDamage: tankDotDamagePreMit` on the heal-target branch and
 // `preMitigationDamage: totalPreMit` on the per-victim twin.

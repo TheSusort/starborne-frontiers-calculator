@@ -98,9 +98,11 @@ import { clausePhase, isRemovalBeforeDamage } from './castClauseOrder';
 import { isAliveTarget } from './targetableActors';
 import { supportFootprintAllyIds } from './supportFootprint';
 import {
-    capIncomingPct,
+    composeIncomingFactor,
+    NO_INCOMING_REDUCTION,
     victimDefenceReductionPct,
     type AttackerDamageScalars,
+    type IncomingReductionParts,
     type VictimDefenseProfile,
 } from './victimDamage';
 import type { PreFightCombatModifiers } from './preFight/types';
@@ -1044,11 +1046,15 @@ export interface PlayerTurnArgs {
      *  returns a `positionalDetonation` recipe for the engine to apply per footprint victim.
      *  detonationDamage is 0 in this mode. Absent/false → anchor detonation. */
     positional?: boolean;
-    /** Victim-side incoming %-reduction against the bound target.
-     *  nonCrit = applies to ALL hits (Voidshade/Nebula); critFamily = take-max crit-family reduction
-     *  applied to the crit fraction only (Iridium/Hardened/Hyperion). Both default 0. */
-    incomingReductionNonCritPct?: number;
-    incomingReductionCritFamilyPct?: number;
+    /** The bound target's bucketed incoming reductions (`IncomingReductionParts`) for a non-crit
+     *  hit and for a crit hit (which adds crit-conditional entries such as Iridium/Hardened and
+     *  the victim's squad-leader crit term). Composed by `composeIncomingFactor`. Default: none;
+     *  the crit set defaults to the non-crit one. */
+    incomingReductionNonCrit?: IncomingReductionParts;
+    incomingReductionCrit?: IncomingReductionParts;
+    /** The attacker's squad-leader crit penalty, percent, positive = its crits deal less. Applied
+     *  to the crit fraction only, outside the cap. Default 0. */
+    attackerCritPenaltyPct?: number;
     /** The bound target's live effective attack (for Giant Slayer's higher-attack gate).
      *  Absent → targetHigherAttack false → Giant Slayer inert. */
     targetEffectiveAttack?: number;
@@ -5286,42 +5292,30 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // restructuring the damage assembly. drawHits 0 (noCrit) → fraction 0 →
     // multiplier 1 (the "cannot critically hit" path, unchanged).
     const critFraction = drawHits > 0 ? critHits / drawHits : 0;
-    // Victim-side incoming %-reduction against the bound target. Both default 0.
-    const equipNonCrit = args.incomingReductionNonCritPct ?? 0;
-    const R = args.incomingReductionCritFamilyPct ?? 0;
-    // The bound target's incoming channel: its live profile's (the victim's own Inc. Damage
-    // Down/Up family, pre-fight incoming, attacker-applied amplification and Exposed — what the
-    // positional apply lands with, #658), else this turn's enemy-applied modifier for a
-    // standalone caller.
+    // The bound target's buff/debuff channel (its live profile's, else this turn's enemy-applied
+    // modifier for a standalone caller), composed with its bucketed reductions (#672).
     const victimIncomingPct = boundVictimProfile
         ? (boundVictimProfile.incomingDamageModifierPct ?? incomingDamageModifier)
         : incomingDamageModifier;
-    // Crit-family reduction folds ADDITIVELY into the incoming channel for the CRIT
-    // FRACTION only — consistent with the positional path (victimHitDamage). Expressed as a
-    // ratio against the non-crit incoming factor so damageCritMultiplier * nonCritFactor stays
-    // structurally valid and the passive-hit path is unaffected. R=0 → ratio 1.
-    // The crit fraction therefore sees incoming channel (incBase - R)
-    // additively, exactly like positional victimHitDamage; the non-crit fraction sees incBase.
-    // Redefining damageCritMultiplier (vs a separate factor) is correct: both downstream uses —
-    // postDefenseFactor (firing hit) and passiveCritMultiplier (passive hit) — are the SAME enemy
-    // attack against the SAME victim, so the victim's crit reduction applies to both.
-    // The non-crit and crit incoming terms are each floored on their own (`capIncomingPct`), so the
-    // crit ratio is built from the floored pair.
-    const incBase = capIncomingPct(victimIncomingPct - equipNonCrit); // all hits
-    const incDenom = 1 + incBase / 100;
-    const critIncomingRatio =
-        incDenom !== 0
-            ? (1 + capIncomingPct(victimIncomingPct - equipNonCrit - R) / 100) / incDenom
-            : 1;
+    const nonCritParts = args.incomingReductionNonCrit ?? NO_INCOMING_REDUCTION;
+    const incomingNonCrit = composeIncomingFactor(victimIncomingPct, nonCritParts);
+    // The crit fraction composes its own (crit-conditional) reductions and the attacker's crit
+    // penalty, expressed as a ratio against the non-crit factor so
+    // damageCritMultiplier × nonCritFactor stays the per-hit expectation. No crit terms → 1.
+    // Both downstream uses — postDefenseFactor (firing hit) and passiveCritMultiplier (passive
+    // hit) — are the same attack against the same victim, so both read this ratio.
+    const incomingCrit =
+        composeIncomingFactor(victimIncomingPct, args.incomingReductionCrit ?? nonCritParts) *
+        (1 - (args.attackerCritPenaltyPct ?? 0) / 100);
+    const critIncomingRatio = incomingNonCrit !== 0 ? incomingCrit / incomingNonCrit : 1;
     const damageCritMultiplier =
         1 - critFraction + critFraction * (1 + effectiveCritDamage / 100) * critIncomingRatio;
     // Crit-independent damage pipeline (defense, outgoing/incoming, affinity) — shared
     // by the firing hit and the passive hit, which may differ in crit treatment (noCrit).
-    // The incoming channel (incBase) folds the non-crit reduction additively; 0 → unchanged.
     const nonCritFactor =
         (1 - damageReduction / 100) *
         (1 + dmgStats.totals.outgoingDamageBuff / 100) *
-        (1 + incBase / 100) *
+        incomingNonCrit *
         affinityMult;
     // Per-hit outgoing amplification (Menace/Giant Slayer), firing hit only. Collapses to
     // damageCritMultiplier when no amplification fired (ampNonCritWeight=nonCritHits,

@@ -1,8 +1,8 @@
 /**
- * The non-defence incoming term of a direct hit is floored at -70 (#658): the victim's `Inc.
- * Damage Down/Up` family, pre-fight incoming, gear/kit incoming-reduction (crit family on crits),
- * attacker-applied amplification (`Exposed`) and the attacker's squad-leader crit penalty sum
- * into ONE signed percentage applied once as `(1 + total/100)`.
+ * The non-defence incoming factor of a direct hit is floored at a 70% reduction (#658, #672):
+ * (1 + buff channel) × (1 − Σ ship passives) × Π(1 − each gear/implant/leader reduction), the
+ * whole product floored at 0.30 (`composeIncomingFactor`). The attacker's squad-leader crit
+ * penalty multiplies outside the floor.
  *
  * Covered here: the helper, the positional path (`victimHitDamageParts`), the aggregate path
  * (`runPlayerTurn`), both victim sides end to end, and the exclusions (defence, `preMitigation`,
@@ -11,10 +11,11 @@
 import { describe, expect, it } from 'vitest';
 import {
     NON_DEFENCE_REDUCTION_CAP_PCT,
-    capIncomingPct,
+    composeIncomingFactor,
     victimHitDamageParts,
     AttackerDamageScalars,
     VictimDefenseProfile,
+    type IncomingReductionParts,
 } from '../victimDamage';
 import { runCombat, CombatEngineInput } from '../engine';
 import { createEventBus } from '../events';
@@ -29,15 +30,20 @@ import type { Position } from '../../../types/encounters';
 
 // ── Helper ──────────────────────────────────────────────────────────────────────────────
 
-describe('capIncomingPct', () => {
-    it('floors at -70 and leaves everything above it alone', () => {
+describe('composeIncomingFactor floor', () => {
+    it('floors the buff channel alone at a 70% reduction and leaves everything above it alone', () => {
         expect(NON_DEFENCE_REDUCTION_CAP_PCT).toBe(70);
-        expect(capIncomingPct(-80)).toBe(-70);
-        expect(capIncomingPct(-70)).toBe(-70);
-        expect(capIncomingPct(-69)).toBe(-69);
-        expect(capIncomingPct(0)).toBe(0);
-        expect(capIncomingPct(40)).toBe(40);
+        expect(composeIncomingFactor(-80)).toBeCloseTo(0.3, 12);
+        expect(composeIncomingFactor(-70)).toBeCloseTo(0.3, 12);
+        expect(composeIncomingFactor(-69)).toBeCloseTo(0.31, 12);
+        expect(composeIncomingFactor(0)).toBe(1);
+        expect(composeIncomingFactor(40)).toBeCloseTo(1.4, 12);
     });
+});
+
+const parts = (passivePct: number, separatePcts: number[] = []): IncomingReductionParts => ({
+    passivePct,
+    separatePcts,
 });
 
 // ── Positional path: victimHitDamageParts ───────────────────────────────────────────────
@@ -61,16 +67,27 @@ const victim = (over: Partial<VictimDefenseProfile> = {}): VictimDefenseProfile 
     ...over,
 });
 
-describe('victimHitDamageParts: the non-defence incoming term is floored at -70', () => {
-    it('-60 Inc. Damage Down and -20 gear (-80) lands at 0.30', () => {
+describe('victimHitDamageParts: the non-defence incoming factor is floored at 0.30', () => {
+    it('-60 Inc. Damage Down × passive 40 (0.24) lands at 0.30', () => {
         const { damage } = victimHitDamageParts(
             scalars(),
             victim({ incomingDamageModifierPct: -60, victimSideIncomingPct: -60 }),
             false,
             1,
-            20
+            parts(40)
         );
         expect(damage).toBeCloseTo(3000, 8);
+    });
+
+    it('-60 Inc. Damage Down × separate gear 20 is 0.32, above the floor', () => {
+        const { damage } = victimHitDamageParts(
+            scalars(),
+            victim({ incomingDamageModifierPct: -60, victimSideIncomingPct: -60 }),
+            false,
+            1,
+            parts(0, [20])
+        );
+        expect(damage).toBeCloseTo(3200, 8);
     });
 
     it('-69 is unchanged', () => {
@@ -83,42 +100,44 @@ describe('victimHitDamageParts: the non-defence incoming term is floored at -70'
         expect(damage).toBeCloseTo(3100, 8);
     });
 
-    it('the same -80 with +25 Exposed is -55, below the cap, and lands at 0.45', () => {
+    it('-60 Inc. Damage Down with +25 Exposed (-35) × passive 40 is 0.39, above the floor', () => {
         const { damage } = victimHitDamageParts(
             scalars(),
             victim({ incomingDamageModifierPct: -60 + 25, victimSideIncomingPct: -60 }),
             false,
             1,
-            20
+            parts(40)
         );
-        expect(damage).toBeCloseTo(4500, 8);
+        expect(damage).toBeCloseTo(3900, 8);
     });
 
-    it('a victim at -70 takes the same crit with or without the attacker leader crit penalty', () => {
+    it('a floored victim still takes a smaller crit from an attacker with a leader crit penalty', () => {
+        // The attacker's crit penalty multiplies OUTSIDE the floor.
         const v = victim({ incomingDamageModifierPct: -70, victimSideIncomingPct: -70 });
-        const without = victimHitDamageParts(scalars(), v, true, 1, 0, 0).damage;
-        const withPenalty = victimHitDamageParts(scalars(), v, true, 1, 0, 10).damage;
+        const without = victimHitDamageParts(scalars(), v, true, 1, undefined, 0).damage;
+        const withPenalty = victimHitDamageParts(scalars(), v, true, 1, undefined, 10).damage;
         expect(without).toBeCloseTo(6000, 8); // 10000 * (1 + 100/100) * 0.30
-        expect(withPenalty).toBe(without);
+        expect(withPenalty).toBeCloseTo(without * 0.9, 8);
     });
 
-    it('crit-family gear that pushes a crit past -70 is capped too', () => {
+    it('crit-conditional gear that pushes a crit past the floor is capped too', () => {
+        // buff 0.40 × separate 40 (0.60) = 0.24 → 0.30
         const v = victim({ incomingDamageModifierPct: -60, victimSideIncomingPct: -60 });
-        const { damage } = victimHitDamageParts(scalars(), v, true, 1, 20);
+        const { damage } = victimHitDamageParts(scalars(), v, true, 1, parts(0, [40]));
         expect(damage).toBeCloseTo(6000, 8);
     });
 
-    it('above the cap the damage is bit-identical to the unfloored expression', () => {
+    it('above the floor the damage is bit-identical to the composed expression', () => {
         const { damage } = victimHitDamageParts(
             scalars(),
             victim({ incomingDamageModifierPct: -33.3 }),
             true,
             1,
-            12.7,
+            parts(12.7),
             4.1
         );
-        const incoming = -33.3 - (12.7 + 4.1);
-        expect(damage).toBe(10000 * 2 * (1 * (1 + 0 / 100) * (1 + incoming / 100) * 1) * 1);
+        const incoming = composeIncomingFactor(-33.3, parts(12.7));
+        expect(damage).toBe(10000 * 2 * (1 * (1 + 0 / 100) * incoming * (1 - 4.1 / 100) * 1) * 1);
     });
 
     it('preMitigation never reads the cap: it strips only the victim-side slice', () => {
@@ -133,17 +152,17 @@ describe('victimHitDamageParts: the non-defence incoming term is floored at -70'
     });
 
     it('preMitigation keeps attacker-applied amplification and the attacker crit penalty uncapped', () => {
-        // Channel: -90 victim-side + 25 Exposed = -65 net; as thrown = +25, minus the attacker's
-        // own 10 penalty = +15.
+        // Channel: -90 victim-side + 25 Exposed = -65 net; as thrown = ×1.25, times the
+        // attacker's own 10 penalty (×0.90).
         const { preMitigation } = victimHitDamageParts(
             scalars(),
             victim({ incomingDamageModifierPct: -65, victimSideIncomingPct: -90 }),
             true,
             1,
-            0,
+            undefined,
             10
         );
-        expect(preMitigation).toBeCloseTo(10000 * 2 * 1.15, 8);
+        expect(preMitigation).toBeCloseTo(10000 * 2 * 1.25 * 0.9, 8);
     });
 
     it('defence mitigation is not part of the sum and stays uncapped', () => {
@@ -279,40 +298,53 @@ function aggregate(crit: boolean, statusPct: number, extra: Partial<PlayerTurnAr
 }
 
 // attack 10000 x 3 hits = 30000 pre-crit; critDamage 100 doubles a crit.
-describe('runPlayerTurn aggregate path: the non-defence incoming term is floored at -70', () => {
-    it('non-crit: -60 status and 20 gear (-80) lands at 0.30', () => {
-        expect(aggregate(false, -60, { incomingReductionNonCritPct: 20 })).toBeCloseTo(9000, 6);
+describe('runPlayerTurn aggregate path: the non-defence incoming factor is floored at 0.30', () => {
+    it('non-crit: -60 status × passive 40 (0.24) lands at 0.30', () => {
+        expect(aggregate(false, -60, { incomingReductionNonCrit: parts(40) })).toBeCloseTo(9000, 6);
     });
 
-    it('non-crit: -69 is unchanged', () => {
-        expect(aggregate(false, -60, { incomingReductionNonCritPct: 9 })).toBeCloseTo(9300, 6);
+    it('non-crit: -60 status × passive 22.5 (0.31) is unchanged', () => {
+        expect(aggregate(false, -60, { incomingReductionNonCrit: parts(22.5) })).toBeCloseTo(
+            9300,
+            6
+        );
     });
 
-    it('non-crit: -35 status and 20 gear (-55) is below the cap and lands at 0.45', () => {
-        expect(aggregate(false, -35, { incomingReductionNonCritPct: 20 })).toBeCloseTo(13500, 6);
+    it('non-crit: -35 status × separate gear 20 is 0.52', () => {
+        expect(aggregate(false, -35, { incomingReductionNonCrit: parts(0, [20]) })).toBeCloseTo(
+            15600,
+            6
+        );
     });
 
     it('crit: the crit fraction is floored independently of the non-crit base', () => {
-        // incBase = -60 (above the cap); incBase - R = -80 floors to -70. The crit hit lands at
-        // 30000 * 2 * 0.30. Flooring only incBase would leave it at 30000 * 2 * 0.20.
-        expect(aggregate(true, -60, { incomingReductionCritFamilyPct: 20 })).toBeCloseTo(18000, 6);
+        // Non-crit 0.40 (above the floor); crit 0.40 × passive 40 = 0.24 floors to 0.30. The crit
+        // hit lands at 30000 * 2 * 0.30.
+        expect(aggregate(true, -60, { incomingReductionCrit: parts(40) })).toBeCloseTo(18000, 6);
     });
 
-    it('crit: a base already below the cap and a crit-family term add nothing past -70', () => {
-        // incBase = -80 floors to -70; incBase - R = -90 floors to -70; ratio is exactly 1.
-        // Flooring only incBase would give a crit ratio of (1 - 0.90) / 0.30.
-        expect(aggregate(true, -80, { incomingReductionCritFamilyPct: 10 })).toBeCloseTo(18000, 6);
+    it('crit: a base already below the floor and a crit-conditional term add nothing past it', () => {
+        // Non-crit 0.20 floors to 0.30; crit 0.20 × 0.90 floors to 0.30; ratio is exactly 1.
+        expect(aggregate(true, -80, { incomingReductionCrit: parts(0, [10]) })).toBeCloseTo(
+            18000,
+            6
+        );
     });
 
-    it('crit: a victim at -70 takes the same crit with or without crit-family gear', () => {
+    it('crit: a victim at -70 takes the same crit with or without crit-conditional gear', () => {
         const without = aggregate(true, -70);
-        const withGear = aggregate(true, -70, { incomingReductionCritFamilyPct: 35 });
+        const withGear = aggregate(true, -70, { incomingReductionCrit: parts(0, [35]) });
         expect(withGear).toBeCloseTo(without, 6);
     });
 
-    it('crit: -69 base with a crit-family term that stays above -70 is unchanged', () => {
-        // incBase = -50, R = 19 -> -69 (above the cap): 30000 * 2 * 0.31.
-        expect(aggregate(true, -50, { incomingReductionCritFamilyPct: 19 })).toBeCloseTo(18600, 6);
+    it('crit: the attacker leader crit penalty multiplies outside the floor', () => {
+        const without = aggregate(true, -70);
+        const withPenalty = aggregate(true, -70, { attackerCritPenaltyPct: 10 });
+        expect(withPenalty).toBeCloseTo(without * 0.9, 6);
+    });
+
+    it('crit: -50 base × crit passive 38 (0.31) is unchanged', () => {
+        expect(aggregate(true, -50, { incomingReductionCrit: parts(38) })).toBeCloseTo(18600, 6);
     });
 });
 
@@ -328,7 +360,7 @@ const parsedTarget = (selection: ParsedTarget['selection']): ParsedTarget => ({
 });
 const basePattern = (): ParsedPattern => ({ raw: 'base', shape: 'base', range: 0, modifiers: {} });
 
-/** Gear/kit incoming reduction on every non-crit direct hit. */
+/** A ship-kit (passive bucket) incoming reduction on every direct hit. */
 const gearReduction = (pct: number): ShipSkills['slots'][number] => ({
     slot: 'passive',
     abilities: [
@@ -482,7 +514,7 @@ const playerAttacker = (): Partial<CombatEngineInput> => ({
     pattern: basePattern(),
 });
 
-describe('positional path end to end: both victim sides land at the floor', () => {
+describe('positional path end to end: both victim sides compose and land at the floor', () => {
     const playerSide = (kit: { status?: number; gear?: number }) => (hp: number) =>
         BASE({
             teamActors: [playerVictim(hp, kit)],
@@ -494,8 +526,11 @@ describe('positional path end to end: both victim sides land at the floor', () =
     it('player victim: -80 gear lands 5000 at 0.30', () => {
         expectLanded(playerSide({ gear: 80 }), 'victim', 1500);
     });
-    it('player victim: -60 Inc. Damage Down and -20 gear lands at 0.30', () => {
-        expectLanded(playerSide({ status: -60, gear: 20 }), 'victim', 1500);
+    it('player victim: -60 Inc. Damage Down × passive 40 (0.24) lands at 0.30', () => {
+        expectLanded(playerSide({ status: -60, gear: 40 }), 'victim', 1500);
+    });
+    it('player victim: -60 Inc. Damage Down × passive 20 is 0.32', () => {
+        expectLanded(playerSide({ status: -60, gear: 20 }), 'victim', 1600);
     });
     it('player victim: -69 is unchanged (0.31)', () => {
         expectLanded(playerSide({ gear: 69 }), 'victim', 1550);
@@ -503,8 +538,11 @@ describe('positional path end to end: both victim sides land at the floor', () =
     it('enemy victim: -80 gear lands 5000 at 0.30', () => {
         expectLanded(enemySide({ gear: 80 }), 'enemy-victim', 1500);
     });
-    it('enemy victim: -60 Inc. Damage Down and -20 gear lands at 0.30', () => {
-        expectLanded(enemySide({ status: -60, gear: 20 }), 'enemy-victim', 1500);
+    it('enemy victim: -60 Inc. Damage Down × passive 40 (0.24) lands at 0.30', () => {
+        expectLanded(enemySide({ status: -60, gear: 40 }), 'enemy-victim', 1500);
+    });
+    it('enemy victim: -60 Inc. Damage Down × passive 20 is 0.32', () => {
+        expectLanded(enemySide({ status: -60, gear: 20 }), 'enemy-victim', 1600);
     });
     it('enemy victim: -69 is unchanged (0.31)', () => {
         expectLanded(enemySide({ gear: 69 }), 'enemy-victim', 1550);

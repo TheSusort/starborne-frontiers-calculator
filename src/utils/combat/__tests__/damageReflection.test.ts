@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { reflectedDamageForHit } from '../damageReflection';
+import { reflectedDamageForHit, reflectedDamageParts } from '../damageReflection';
+import { NO_INCOMING_REDUCTION } from '../victimDamage';
 import { calculateDamageReduction } from '../../autogear/priorityScore';
 
 describe('reflectedDamageForHit', () => {
@@ -9,7 +10,7 @@ describe('reflectedDamageForHit', () => {
             netHpDamage: 5000,
             affinityDamageModifier: 0,
             attackerDefenceReductionPct: 40,
-            reflectVictimIncomingReductionPct: 0,
+            reflectVictimReduction: NO_INCOMING_REDUCTION,
         });
         expect(r).toBe(0);
     });
@@ -20,7 +21,7 @@ describe('reflectedDamageForHit', () => {
             netHpDamage: 0,
             affinityDamageModifier: 0,
             attackerDefenceReductionPct: 40,
-            reflectVictimIncomingReductionPct: 0,
+            reflectVictimReduction: NO_INCOMING_REDUCTION,
         });
         expect(r).toBe(0);
     });
@@ -31,7 +32,7 @@ describe('reflectedDamageForHit', () => {
             netHpDamage: 28056,
             affinityDamageModifier: -25,
             attackerDefenceReductionPct: calculateDamageReduction(3001),
-            reflectVictimIncomingReductionPct: 0,
+            reflectVictimReduction: NO_INCOMING_REDUCTION,
         });
         expect(r).toBeGreaterThan(1100);
         expect(r).toBeLessThan(1180); // ≈1141
@@ -43,7 +44,7 @@ describe('reflectedDamageForHit', () => {
             netHpDamage: 48318,
             affinityDamageModifier: 0,
             attackerDefenceReductionPct: calculateDamageReduction(4093),
-            reflectVictimIncomingReductionPct: 0,
+            reflectVictimReduction: NO_INCOMING_REDUCTION,
         });
         expect(r).toBeGreaterThan(2200);
         expect(r).toBeLessThan(2300); // ≈2252
@@ -55,14 +56,14 @@ describe('reflectedDamageForHit', () => {
             netHpDamage: 10000,
             affinityDamageModifier: 0,
             attackerDefenceReductionPct: 40,
-            reflectVictimIncomingReductionPct: 0,
+            reflectVictimReduction: NO_INCOMING_REDUCTION,
         });
         const advantage = reflectedDamageForHit({
             reflectPct: 10,
             netHpDamage: 10000,
             affinityDamageModifier: 25,
             attackerDefenceReductionPct: 40,
-            reflectVictimIncomingReductionPct: 0,
+            reflectVictimReduction: NO_INCOMING_REDUCTION,
         });
         expect(advantage).toBeGreaterThan(neutral);
     });
@@ -73,14 +74,14 @@ describe('reflectedDamageForHit', () => {
             netHpDamage: 10000,
             affinityDamageModifier: 0,
             attackerDefenceReductionPct: 40,
-            reflectVictimIncomingReductionPct: 0,
+            reflectVictimReduction: NO_INCOMING_REDUCTION,
         });
         const disadvantage = reflectedDamageForHit({
             reflectPct: 10,
             netHpDamage: 10000,
             affinityDamageModifier: -25,
             attackerDefenceReductionPct: 40,
-            reflectVictimIncomingReductionPct: 0,
+            reflectVictimReduction: NO_INCOMING_REDUCTION,
         });
         expect(disadvantage).toBeLessThan(neutral);
     });
@@ -91,14 +92,14 @@ describe('reflectedDamageForHit', () => {
             netHpDamage: 10000,
             affinityDamageModifier: 0,
             attackerDefenceReductionPct: 50,
-            reflectVictimIncomingReductionPct: 0,
+            reflectVictimReduction: NO_INCOMING_REDUCTION,
         });
         const noDefence = reflectedDamageForHit({
             reflectPct: 10,
             netHpDamage: 10000,
             affinityDamageModifier: 0,
             attackerDefenceReductionPct: 0,
-            reflectVictimIncomingReductionPct: 0,
+            reflectVictimReduction: NO_INCOMING_REDUCTION,
         });
         // No defence reduction should yield more damage than with 50% DR
         expect(noDefence).toBeGreaterThan(withDefence);
@@ -112,15 +113,55 @@ describe('reflectedDamageForHit', () => {
             netHpDamage: 10000,
             affinityDamageModifier: 0,
             attackerDefenceReductionPct: 0,
-            reflectVictimIncomingReductionPct: 0,
+            reflectVictimReduction: NO_INCOMING_REDUCTION,
         });
         const halved = reflectedDamageForHit({
             reflectPct: 10,
             netHpDamage: 10000,
             affinityDamageModifier: 0,
             attackerDefenceReductionPct: 0,
-            reflectVictimIncomingReductionPct: 50,
+            reflectVictimReduction: { passivePct: 50, separatePcts: [] },
         });
         expect(halved).toBeCloseTo(base / 2, 5);
+    });
+
+    describe('composed recipient reductions (capped)', () => {
+        const base = {
+            reflectPct: 100,
+            netHpDamage: 1000,
+            affinityDamageModifier: 0,
+            attackerDefenceReductionPct: 0,
+        };
+
+        it('multiplies the status channel with the passive bucket', () => {
+            const r = reflectedDamageParts({
+                ...base,
+                reflectVictimReduction: { passivePct: 40, separatePcts: [] },
+                incomingDamageModifierPct: -30,
+                victimSideIncomingPct: -30,
+            });
+            expect(r.damage).toBeCloseTo(420, 6);
+            expect(r.preMitigation).toBeCloseTo(1000, 6);
+        });
+
+        it('floors the composed factor at a 70% reduction', () => {
+            const r = reflectedDamageParts({
+                ...base,
+                reflectVictimReduction: { passivePct: 40, separatePcts: [20] },
+                incomingDamageModifierPct: -45,
+                victimSideIncomingPct: -45,
+            });
+            expect(r.damage).toBeCloseTo(300, 6);
+            expect(r.preMitigation).toBeCloseTo(1000, 6);
+        });
+
+        it('applies a passive-only recipient (gear-set share) without a status channel', () => {
+            const r = reflectedDamageParts({
+                ...base,
+                reflectVictimReduction: { passivePct: 25, separatePcts: [] },
+            });
+            expect(r.damage).toBeCloseTo(750, 6);
+            expect(r.preMitigation).toBeCloseTo(1000, 6);
+        });
     });
 });

@@ -157,7 +157,11 @@ const corrosionEnemy = (): EnemyAttacker => ({
 
 /** Run 2 rounds. Collect all dot-ticked events from R2 onward (R1 has no ticks yet).
  *  Returns the damage emitted per tick-event for the given dotType. */
-function collectDotTicks(withVortexVeil: boolean, dotType: 'inferno' | 'corrosion'): number[] {
+function collectDotTicks(
+    withVortexVeil: boolean,
+    dotType: 'inferno' | 'corrosion',
+    opts: { kitDotPassivePct?: number; enemy?: EnemyAttacker } = {}
+): number[] {
     const bus = createEventBus();
     const ticks: number[] = [];
     bus.on('dot-ticked', (e) => {
@@ -168,8 +172,29 @@ function collectDotTicks(withVortexVeil: boolean, dotType: 'inferno' | 'corrosio
     });
 
     const passive = withVortexVeil ? vortexVeilPassiveSlot() : undefined;
+    const kitPassive: ShipSkills['slots'][number] | undefined = opts.kitDotPassivePct
+        ? {
+              slot: 'passive',
+              abilities: [
+                  {
+                      id: 'kit-dot-reduction',
+                      type: 'incoming-reduction',
+                      target: 'self',
+                      trigger: 'on-cast',
+                      conditions: [],
+                      config: {
+                          type: 'incoming-reduction',
+                          scope: 'dot',
+                          condition: 'always',
+                          pct: opts.kitDotPassivePct,
+                          critFamily: false,
+                      },
+                  } satisfies Ability,
+              ],
+          }
+        : undefined;
     const shipSkills: ShipSkills = {
-        slots: [noopActive, ...(passive ? [passive] : [])],
+        slots: [noopActive, ...(passive ? [passive] : []), ...(kitPassive ? [kitPassive] : [])],
     };
 
     const input: CombatEngineInput = {
@@ -192,7 +217,7 @@ function collectDotTicks(withVortexVeil: boolean, dotType: 'inferno' | 'corrosio
         healTargetId: 'attacker',
         mode: 'healing',
         bus,
-        enemyAttackers: dotType === 'inferno' ? [infernoEnemy()] : [corrosionEnemy()],
+        enemyAttackers: [opts.enemy ?? (dotType === 'inferno' ? infernoEnemy() : corrosionEnemy())],
     };
     runCombat(input);
     return ticks;
@@ -231,5 +256,50 @@ describe('D-PR3 Task 8 — Vortex Veil reduces enemy-applied DoT ticks on the he
         expect(ticks.length).toBeGreaterThanOrEqual(1);
         expect(ticks[0]).toBeCloseTo(3500, 6);
         expect(ticks[0]).toBeLessThan(5000);
+    });
+});
+
+describe('DoT reductions multiply per source bucket', () => {
+    it('a ship-kit DoT passive (20) and Vortex Veil (30) multiply: 5000 x 0.8 x 0.7 = 2800', () => {
+        const ticks = collectDotTicks(true, 'inferno', { kitDotPassivePct: 20 });
+        expect(ticks.length).toBeGreaterThanOrEqual(1);
+        expect(ticks[0]).toBeCloseTo(2800, 6);
+    });
+
+    it('a ship-kit DoT passive alone takes the tick to 0.80 with or without Inc. DoT Damage Up', () => {
+        // The same enemy applies the same Inc. DoT Damage Up III (+30%) before the Inferno on
+        // both carriers, so the ratio isolates the reduction.
+        const incDotUpThenInferno = (): EnemyAttacker => {
+            const e = infernoEnemy();
+            e.shipSkills!.slots[0].abilities.unshift({
+                id: 'inc-dot-up',
+                type: 'debuff',
+                target: 'enemy',
+                trigger: 'on-cast',
+                conditions: [],
+                config: {
+                    type: 'debuff',
+                    buffName: 'Inc. DoT Damage Up III',
+                    parsedEffects: { incomingDotDamage: 30 },
+                    stacks: 1,
+                    isStackable: false,
+                    application: 'inflict',
+                    duration: 3,
+                },
+            } satisfies Ability);
+            return e;
+        };
+        const plain = collectDotTicks(false, 'inferno');
+        const reduced = collectDotTicks(false, 'inferno', { kitDotPassivePct: 20 });
+        expect(reduced[0] / plain[0]).toBeCloseTo(0.8, 9);
+
+        const plainUp = collectDotTicks(false, 'inferno', { enemy: incDotUpThenInferno() });
+        const reducedUp = collectDotTicks(false, 'inferno', {
+            kitDotPassivePct: 20,
+            enemy: incDotUpThenInferno(),
+        });
+        // Vacuity guard: the Up multiplier is actually in play.
+        expect(plainUp[0]).toBeGreaterThan(plain[0] * 1.05);
+        expect(reducedUp[0] / plainUp[0]).toBeCloseTo(0.8, 9);
     });
 });

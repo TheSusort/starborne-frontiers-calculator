@@ -12,7 +12,7 @@ function conditionMet(cond: OutgoingCondition, ctx: OutgoingHitContext): boolean
 
 /**
  * Summed amplification % for one in-flight direct hit (attacker side; mirror of
- * incomingReductionForHit). For each outgoing-amplification ability whose condition is met,
+ * incomingReductionPartsForHit). For each outgoing-amplification ability whose condition is met,
  * advance its proc gate via `rollProc(abilityId, procChance)`; on a firing gate, add `ampPct`.
  * Eligibility gates the gate — an ineligible hit never advances rollProc (matches "when
  * critically damaging" / "when directly damaging a higher-attack enemy"). Returns 0 when

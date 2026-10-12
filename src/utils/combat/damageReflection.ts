@@ -1,3 +1,5 @@
+import { composeIncomingFactor, type IncomingReductionParts } from './victimDamage';
+
 /**
  * Pure reflected ("thorns") damage calculator for the Reflect gear set and a ship's own
  * reflect (Nosorog).
@@ -9,10 +11,10 @@
  * Empirically-validated model (two in-game duels):
  *   reflected = pct% × netHpDamage × affinityFactor
  *               × (1 − defenceReduction/100)
- *               × (1 − incomingReductionPct/100)
+ *               × composeIncomingFactor(statusChannel, recipientReductions)
  *
- * A ship's reflect also reads the attacker's incoming-damage status channel (R176), one more
- * factor `(1 + incomingDamageModifierPct/100)`; the gear set's bounce leaves it at 0.
+ * The last factor is the same capped composition a direct hit takes. A ship's reflect also reads
+ * the attacker's incoming-damage status channel (R176); the gear set's bounce leaves it at 0.
  *
  * Affinity argument order convention:
  *   The WEARER is the source of the reflected hit. Call
@@ -29,22 +31,15 @@ export function reflectedDamageForHit(args: {
     /** calculateDamageReduction(attacker effective defence), range 0..~88 */
     attackerDefenceReductionPct: number;
     /**
-     * Incoming-reduction % on the RECIPIENT of the bounce-back (default 0) — i.e. the ship that
-     * threw the original hit and is now the VICTIM of the thorns. The incoming-reduction channel,
-     * resolved at `engine.ts` as `incomingReductionForHit(incomingAbilitiesOf(attacker.id), …)`.
+     * The RECIPIENT's reductions against the bounce-back — i.e. the ship that threw the original
+     * hit and is now the VICTIM of the thorns (`hitReductionFor(reflector, recipient).parts` at
+     * `engine.ts`). Composed with the status channel exactly as any direct hit is, and capped:
+     * read `composeIncomingFactor`.
      *
-     * ⚠️ DO NOT RENAME THIS TO `attackerIncomingReductionPct`. "attacker" reads as POSITIONAL
-     * here (who threw the original hit) where a reader takes it as CAUSAL (attacker-side, and
-     * therefore not a victim-side reduction to strip).
-     * The distinction is not cosmetic — `attackerSideReductionPct` in `victimDamage.ts`, ONE call
-     * away, is where "attacker" genuinely IS causal (the attacker's own squad-leader penalty). Two
-     * adjacent parameters with the same prefix and opposite meanings is exactly the shape that
-     * produces this defect, so the positional one does not carry the prefix.
-     * (`attackerDefenceReductionPct` below is positional in the same way and keeps its name only
-     * because it names a stat OF that ship rather than a side; read it as "the bounce-back
-     * recipient's own defence".)
+     * Named for the recipient, not "attacker": `attackerCritPenaltyPct` in `victimDamage.ts` is
+     * causal-attacker, and a shared prefix with the opposite meaning invites mixing them up.
      */
-    reflectVictimIncomingReductionPct: number;
+    reflectVictimReduction: IncomingReductionParts;
 }): number {
     return reflectedDamageParts(args).damage;
 }
@@ -56,13 +51,13 @@ export function reflectedDamageForHit(args: {
  *  • `damage`       — what the recipient takes: the full empirical model above, every term intact.
  *  • `preMitigation` — the "damage absorbed" axis: the same hit with EVERY reduction that
  *    belongs to the recipient removed. Two terms go, both replaced by an exact 1:
- *    `attackerDefenceReductionPct` and `reflectVictimIncomingReductionPct`.
+ *    `attackerDefenceReductionPct` and `reflectVictimReduction`.
  *    The status channel loses only its victim-side slice (`victimSideIncomingPct`, the
  *    recipient's own Inc. Damage Down family), the same split `victimHitDamageParts` makes.
  *    What survives is the hit as THROWN — the reflect percentage, the reflector's affinity, the
  *    `netHpDamage` the reflector actually took, and attacker-applied amplification (Exposed).
  *
- * WHY `reflectVictimIncomingReductionPct` COMES OUT of `preMitigation`.
+ * WHY `reflectVictimReduction` COMES OUT of `preMitigation`.
  * The duel-fit model governs `damage` — the number the recipient's HP bar actually loses — and
  * `damage` keeps the term. `preMitigation` is not a fit to anything; it is by construction a
  * DEPARTURE from the fit, since it already replaces the fitted defence term with a literal 1. A
@@ -81,8 +76,8 @@ export function reflectedDamageParts(args: {
     affinityDamageModifier: number;
     /** calculateDamageReduction(attacker effective defence), range 0..~88 */
     attackerDefenceReductionPct: number;
-    /** The bounce-back RECIPIENT's own incoming-reduction — victim-side. See the overload above. */
-    reflectVictimIncomingReductionPct: number;
+    /** The bounce-back RECIPIENT's own reductions — victim-side. See the overload above. */
+    reflectVictimReduction: IncomingReductionParts;
     /**
      * The bounce-back recipient's incoming-damage STATUS channel
      * (`VictimDefenseProfile.incomingDamageModifierPct`): Inc. Damage Up/Down, Exposed and the
@@ -98,16 +93,16 @@ export function reflectedDamageParts(args: {
     const base = (args.reflectPct / 100) * args.netHpDamage;
     const affinity = 1 + args.affinityDamageModifier / 100;
     const defence = 1 - args.attackerDefenceReductionPct / 100;
-    const incoming = 1 - args.reflectVictimIncomingReductionPct / 100;
     const statusChannel = args.incomingDamageModifierPct ?? 0;
-    const status = 1 + statusChannel / 100;
+    const incoming = composeIncomingFactor(statusChannel, args.reflectVictimReduction);
     const statusAsThrown = 1 + (statusChannel - (args.victimSideIncomingPct ?? 0)) / 100;
     return {
-        damage: Math.max(0, base * affinity * defence * incoming * status),
+        damage: Math.max(0, base * affinity * defence * incoming),
         // The identical product with an exact 1 in BOTH victim-side slots (defence and incoming),
         // and the status channel losing only its victim-side slice (`statusAsThrown`) — the same
-        // shape `victimHitDamageParts` uses, so no axis is ever reconstructed by division. `damage` above keeps its own operand order and its own locals: the exact-1
-        // constants appear only here, never folded into the mitigated product.
+        // shape `victimHitDamageParts` uses, so no axis is ever reconstructed by division. `damage`
+        // multiplies the composed, capped `incoming` factor; the exact-1 constants appear only
+        // here.
         preMitigation: Math.max(0, base * affinity * 1 * 1 * statusAsThrown),
     };
 }

@@ -10,6 +10,7 @@ import {
     victimHitDamageParts,
     victimDefenceMitigation,
     type AttackerDamageScalars,
+    type IncomingReductionParts,
     type VictimDefenseProfile,
 } from './victimDamage';
 import type { CombatActor } from './state';
@@ -391,23 +392,17 @@ export function applyPositionalDamage(args: {
         isPrimary: boolean
     ) => void;
     /**
-     * OPTIONAL per-sub-hit incoming %-reduction hook. Invoked per footprint victim with
-     * that victim's per-hit crit outcome; the returned percentage points are folded additively
-     * into the incoming term of {@link victimHitDamage}. Unsupplied → 0 (inert for victims
-     * without an incoming-reduction ability).
-     *
-     * #358 ADDENDUM 3: the channel is MIXED, so the hook may return the SPLIT instead of a single
-     * number. A bare `number` keeps its original meaning — entirely VICTIM-side, which is what
-     * every non-crit hit and every direct-call test supplies. The object form separates out the
-     * ATTACKER-side half (`attackerSidePct`, today the attacker's own squad-leader
-     * `outgoingCritDamage` penalty), which shrinks the attack AS THROWN and must therefore stay on
-     * BOTH damage axes rather than being stripped from the pre-mitigation one as collateral.
+     * OPTIONAL per-sub-hit incoming-reduction hook. Invoked per footprint victim with that
+     * victim's per-hit crit outcome; returns the victim's bucketed reductions (`parts`, composed
+     * with the buff channel and capped by {@link victimHitDamageParts}) and the attacker's
+     * squad-leader crit penalty (`attackerCritPenaltyPct`, applied outside the cap on both damage
+     * axes). Unsupplied → no reduction and no penalty.
      */
     incomingReductionFor?: (
         victim: CombatActor,
         didCrit: boolean,
         subAttackIndex?: number
-    ) => number | { victimSidePct: number; attackerSidePct: number };
+    ) => { parts: IncomingReductionParts; attackerCritPenaltyPct: number };
     /**
      * OPTIONAL per-hit attacker-side outgoing amplification % hook (Menace/Giant Slayer).
      * Invoked per footprint victim with that victim's per-hit crit outcome; the returned percentage
@@ -562,13 +557,7 @@ export function applyPositionalDamage(args: {
                 subDidCrit = true;
                 subCritVictimIds.push(victim.id);
             }
-            // #358: unpack the (possibly split) reduction. A bare number is 100% victim-side,
-            // which is what a direct-call site that supplies no split means.
-            const reductionParts = incomingReductionFor?.(victim, didCrit, h) ?? 0;
-            const equipReductionPct =
-                typeof reductionParts === 'number' ? reductionParts : reductionParts.victimSidePct;
-            const attackerSideReductionPct =
-                typeof reductionParts === 'number' ? 0 : reductionParts.attackerSidePct;
+            const reduction = incomingReductionFor?.(victim, didCrit, h);
             // Read the profile ONCE and derive both the hit and the mitigation factor from it, so
             // the factor handed to `applyToVictim` is provably the one baked into `dmg`.
             const profileBase = defenseProfileOf(victim, didCrit);
@@ -590,8 +579,8 @@ export function applyPositionalDamage(args: {
                 defenseProfile,
                 didCrit,
                 roleScale,
-                equipReductionPct,
-                attackerSideReductionPct
+                reduction?.parts,
+                reduction?.attackerCritPenaltyPct
             );
             const ampPct = outgoingAmplificationFor?.(victim, didCrit, h) ?? 0;
             const dmg = ampPct !== 0 ? dmgBase * (1 + ampPct / 100) : dmgBase;

@@ -1,7 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { parsePattern, parseTarget } from '../../targetingParser';
 import { footprintVictims, applyPositionalDamage } from '../positionalApply';
-import type { AttackerDamageScalars, VictimDefenseProfile } from '../victimDamage';
+import {
+    NO_INCOMING_REDUCTION,
+    type AttackerDamageScalars,
+    type IncomingReductionParts,
+    type VictimDefenseProfile,
+} from '../victimDamage';
 import type { CombatActor } from '../state';
 
 const actor = (id: string, position: CombatActor['position'], currentHp = 100): CombatActor =>
@@ -231,7 +236,12 @@ describe('applyPositionalDamage', () => {
         const pattern = parsePattern('Pattern-Base');
         const target = parseTarget('front');
 
-        const run = (incomingReductionFor?: (v: CombatActor, c: boolean) => number): number => {
+        const run = (
+            incomingReductionFor?: (
+                v: CombatActor,
+                c: boolean
+            ) => { parts: IncomingReductionParts; attackerCritPenaltyPct: number }
+        ): number => {
             const only = actor('only', 'M4', 1e9);
             let landed = 0;
             applyPositionalDamage({
@@ -252,8 +262,12 @@ describe('applyPositionalDamage', () => {
             return landed;
         };
 
-        const baseline = run(); // unsupplied → 0 → byte-identical to pre-D-PR3
-        const reduced = run(() => 40); // 40-point incoming reduction folds in
+        const baseline = run(); // unsupplied → no reduction
+        // One 40-point reduction; a lone entry gives the same factor in either bucket.
+        const reduced = run(() => ({
+            parts: { passivePct: 40, separatePcts: [] },
+            attackerCritPenaltyPct: 0,
+        }));
 
         // defence 0 + neutral affinity + no buffs → incoming factor is the only modifier.
         expect(reduced).toBeCloseTo(baseline * 0.6, 6);
@@ -279,7 +293,7 @@ describe('applyPositionalDamage', () => {
             },
             incomingReductionFor: (_v, didCrit) => {
                 seenCrits.push(didCrit);
-                return 0;
+                return { parts: NO_INCOMING_REDUCTION, attackerCritPenaltyPct: 0 };
             },
         });
 

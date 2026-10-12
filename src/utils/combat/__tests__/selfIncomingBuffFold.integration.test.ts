@@ -540,35 +540,20 @@ describe('D-PR12 Task 4 Case A — enemy-side victim: Inc. Damage Down fold is t
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Case B: additive D-PR3 composition — NOT a product
+// Case B: a buff and an implant reduction MULTIPLY (#672)
 // ─────────────────────────────────────────────────────────────────────────────
-describe('D-PR12 Task 4 Case B — additive composition with D-PR3 incoming-reduction', () => {
+describe('Case B —buff channel × separate implant reduction', () => {
     /**
-     * Composition model (victimDamage.ts lines ~100-107):
+     * Composition (`composeIncomingFactor`): the friendly Inc. Damage Down II (-30, buff
+     * channel) and Voidshade (20, an implant → its own separate factor) multiply:
      *
-     *   incoming = (v.incomingDamageModifierPct ?? s.incomingDamageModifierPct) - equipReductionPct;
-     *   nonCritFactor = (1 - damageReduction/100)
-     *                 * (1 + s.outgoingDamageBuffPct/100)
-     *                 * (1 + incoming/100)       ← ONE scalar factor
-     *                 * affinityMult;
+     *   5000 × (1 − 0.30) × (1 − 0.20) = 5000 × 0.70 × 0.80 = 2800
      *
-     * D-PR12 friendly buff (-30) and D-PR3 Voidshade equipment reduction (20) BOTH land in the
-     * SAME `incoming` scalar, subtracted together before the multiply:
-     *
-     *   incoming = (-30) - 20 = -50  →  nonCritFactor ∋ (1 + -50/100) = 0.50  →  taken = 2500
-     *
-     * ADDITIVE (correct) vs. PRODUCT (wrong — the product would be wrong because there's
-     * literally one factor in the formula):
-     *   additive:  5000 × (1 + (-30 - 20)/100) = 5000 × 0.50 = 2500
-     *   product:   5000 × (1 - 0.30) × (1 - 0.20) = 5000 × 0.70 × 0.80 = 2800
-     *
-     * Discriminating hp = 2650:
-     *   - additive 2500 < 2650 → SURVIVES (correct)
-     *   - product  2800 > 2650 → would DIE (wrong)
+     * The retired additive channel gave 5000 × (1 − 0.50) = 2500. Brackets at 2799 (dies) and
+     * 2801 (survives) pin 2800 and reject 2500, which would survive at 2799.
      *
      * Sub-assertions prove BOTH terms are required: with ONLY one effect the victim still
-     * dies at hp=2650 (4000 > 2650 and 3500 > 2650), so only the additive sum (2500 < 2650)
-     * allows survival — pinning the additive-within-one-factor behavior.
+     * dies at hp=2650 (4000 > 2650 and 3500 > 2650).
      *
      * Voidshade legendary = 20% incoming-direct reduction WHILE STEALTHED.
      * The victim self-casts Stealth (duration 99) to gate the Voidshade reduction; this is
@@ -583,15 +568,10 @@ describe('D-PR12 Task 4 Case B — additive composition with D-PR3 incoming-redu
             enemyAttackers: [offensiveEnemy('enemy-cb', 'M1', 'front')],
         });
 
-    it('BOTH D-PR3 (Voidshade 20%) AND Inc. Damage Down II (-30%) → survives at hp=2650 (additive 2500 < 2650)', () => {
-        // Additive: incoming = -30 - 20 = -50 → taken = 5000 × 0.50 = 2500 < 2650 → SURVIVES.
-        // Product model (wrong): 5000 × 0.70 × 0.80 = 2800 > 2650 → would die — survival here
-        // discriminates ADDITIVE from product and proves (1 + incoming/100) is one factor.
-        expect(
-            destroyedIds(run(2650, { voidshade: true, stealth: true, incDmgDown: true })).has(
-                'victim-cb'
-            )
-        ).toBe(false);
+    it('BOTH Voidshade (separate 20) AND Inc. Damage Down II (buff -30) → 0.70 × 0.80 = 2800 taken', () => {
+        const both = { voidshade: true, stealth: true, incDmgDown: true };
+        expect(destroyedIds(run(2799, both)).has('victim-cb')).toBe(true);
+        expect(destroyedIds(run(2801, both)).has('victim-cb')).toBe(false);
     });
 
     it('ONLY D-PR3 Voidshade (20%, no Inc. Damage Down) → dies at hp=2650 (4000 > 2650)', () => {
