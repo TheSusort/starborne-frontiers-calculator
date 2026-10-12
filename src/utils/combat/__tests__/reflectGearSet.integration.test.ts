@@ -22,6 +22,7 @@ import { simulateBattle, BattlePlacement } from '../../calculators/battleSimulat
 import { Ship, AffinityName } from '../../../types/ship';
 import { GearPiece } from '../../../types/gear';
 import { reflectedDamageForHit } from '../damageReflection';
+import { NO_INCOMING_REDUCTION } from '../victimDamage';
 import { computeAffinityModifiers } from '../../calculators/affinityUtils';
 import { calculateDamageReduction } from '../../autogear/priorityScore';
 import { getGearSet } from '../../../constants/gearSets';
@@ -234,7 +235,7 @@ describe('REFLECT gear set — thorns damage at the victim seam', () => {
             netHpDamage,
             affinityDamageModifier,
             attackerDefenceReductionPct,
-            reflectVictimIncomingReductionPct: 0,
+            reflectVictimReduction: NO_INCOMING_REDUCTION,
         });
         // Sanity: the helper produces a positive, mitigated value (< raw 10% of net).
         expect(expected).toBeGreaterThan(0);
@@ -304,7 +305,7 @@ describe('REFLECT gear set — DoT / bomb do not reflect', () => {
             netHpDamage: 5000,
             affinityDamageModifier: 0,
             attackerDefenceReductionPct: 0,
-            reflectVictimIncomingReductionPct: 0,
+            reflectVictimReduction: NO_INCOMING_REDUCTION,
         });
         expect(wouldReflectIfNotGuarded).toBeGreaterThan(0);
         // Engine-level: a DoT-only enemy turn reflects nothing. Build an enemy whose only damage
@@ -349,7 +350,7 @@ describe('REFLECT gear set — DoT / bomb do not reflect', () => {
             netHpDamage: 5000,
             affinityDamageModifier: 0,
             attackerDefenceReductionPct: 0,
-            reflectVictimIncomingReductionPct: 0,
+            reflectVictimReduction: NO_INCOMING_REDUCTION,
         });
         expect(wouldReflectIfNotGuarded).toBeGreaterThan(0);
 

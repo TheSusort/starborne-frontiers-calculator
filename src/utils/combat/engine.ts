@@ -7444,29 +7444,19 @@ export function runCombat(rawInput: CombatEngineInput): {
                         ).defence;
                         const attackerDefenceReductionPct =
                             attackerDefence > 0 ? calculateDamageReduction(attackerDefence) : 0;
-                        // Attacker's incoming-reduction against the reflected (direct) hit. Minimal
-                        // ctx: no crit/stealth, direct scope (dotType undefined). Returns 0 for an
-                        // attacker with no incoming-reduction ability → matches the duel-fit default.
-                        const reflectVictimIncomingReductionPct = incomingReductionForHit(
-                            incomingAbilitiesOf(attacker.id),
+                        // The reflected hit's attacker is the reflector (`victim`, outer scope) and
+                        // its victim is `attacker`, who receives the bounce-back.
+                        const reflectVictimReduction = hitReductionFor(
+                            victim.id,
+                            attacker.id,
+                            false,
                             {
-                                didCrit: false,
                                 attackerStealthed: false,
                                 victimStealthed: false,
                                 victimTurnBlocked: false,
-                                hitIndexThisRound: 0,
-                                // The reflected hit's "attacker" is the reflector (victim, outer
-                                // scope) and its "victim" is `attacker` (receiving the bounce-back).
-                                attackerHasDot: attackerHasDot(victim.id),
-                                victimHasBarrierRecharging: hasBarrierRecharging(attacker.id),
-                                victimHasShield: hasShield(attacker.id),
-                                selfHpPct: selfHpPctOf(attacker.id),
-                                // No 'transform-incoming-to-dot' ability reads the reflect ctx
-                                // (Voron/Orel's own incoming-reduction, not the reflected hit's
-                                // reduction) — default false, mirroring the pattern above.
                                 attackerTauntedOrProvoked: false,
                             }
-                        );
+                        ).parts;
                         for (const { reflectPct, directReflect } of shares) {
                             // The ship's share can destroy the attacker before the set's lands.
                             if (attacker.destroyedRound !== undefined) break;
@@ -7499,7 +7489,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 netHpDamage: reflectBasis,
                                 affinityDamageModifier,
                                 attackerDefenceReductionPct: shareDefenceReductionPct,
-                                reflectVictimIncomingReductionPct,
+                                reflectVictimReduction,
                                 incomingDamageModifierPct: directProfile?.incomingDamageModifierPct,
                                 victimSideIncomingPct: directProfile?.victimSideIncomingPct,
                             });

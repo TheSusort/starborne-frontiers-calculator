@@ -34,6 +34,7 @@ import type { GearPiece } from '../../../types/gear';
 import { buildShipAbilitiesWithEquipment } from '../../abilities/buildShipAbilitiesWithEquipment';
 import { getGearSet } from '../../../constants/gearSets';
 import { calculateDamageReduction } from '../../autogear/statResolution';
+import { emptyPreFightModifiers } from '../preFight';
 
 beforeAll(() => {
     if (!csvAvailable() || !shipDataAvailable())
@@ -820,3 +821,31 @@ describe.each(SIDES)(
         });
     }
 );
+
+describe('the bounce recipient takes its squad-leader incoming baseline', () => {
+    const reflectedWith = (leaderIncoming: number): number => {
+        const attacker = unit('warden', hitterWith('Warden'));
+        const reflector = nosorog(true);
+        const { input, id } = boardInput('player', reflector, [], [attacker], 1);
+        const enemies = input.enemyAttackers ?? [];
+        const attackerId = id(attacker);
+        const { rounds } = runCombat({
+            ...input,
+            enemyAttackers: enemies.map((e) =>
+                e.id === attacker.id
+                    ? {
+                          ...e,
+                          preFight: { ...emptyPreFightModifiers(), incomingDamage: leaderIncoming },
+                      }
+                    : e
+            ),
+        });
+        return rounds.reduce((sum, r) => sum + (r.perActorReflected?.[attackerId] ?? 0), 0);
+    };
+
+    it('a -5 squad-leader baseline on the recipient scales the bounce to 0.95x', () => {
+        const plain = reflectedWith(0);
+        expect(plain).toBeGreaterThan(0);
+        expect(reflectedWith(-5) / plain).toBeCloseTo(0.95, 6);
+    });
+});
