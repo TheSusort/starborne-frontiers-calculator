@@ -315,8 +315,8 @@ export function applyPositionalDamage(args: {
      * and returns the resolved {@link VictimDamageOutcome} (shield-before / HP-damage / barriered).
      * The third param is `isAnchor` — true when this victim IS the sub-attack's resolved anchor.
      * The trailing `isPrimary` says whether this victim is a PRIMARY TARGET of the sub-attack
-     * (see {@link SubAttackOutcome.primaryVictimIds}) — what Nosorog's "reflects damage taken … as
-     * a PRIMARY TARGET" gate reads. Both optional so a stub caller keeps compiling.
+     * (see {@link SubAttackOutcome.primaryVictimIds}) — what Nosorog's primary-target reflect
+     * gate reads. Both optional so a stub caller keeps compiling.
      */
     applyToVictim: (
         victim: CombatActor,

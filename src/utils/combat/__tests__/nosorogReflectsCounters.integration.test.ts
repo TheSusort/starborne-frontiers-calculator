@@ -2,7 +2,7 @@
  * Nosorog reflects a counter-attack (owner ruling R36 follow-up, 2026-10-05: every hit is direct,
  * and Nosorog reacts to counters and passive hits).
  *
- * Nosorog's passive: "This Unit reflects 40% of the damage taken back to the enemy when directly
+ * Nosorog's passive: "This Unit reflects 16% of the damage back to the enemy when directly
  * damaged as a primary target." Stalwart's passive: "When this Unit is directly damaged as a
  * primary target, it deals 30% damage to the enemy …".
  *

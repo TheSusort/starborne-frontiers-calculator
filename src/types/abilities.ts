@@ -1215,7 +1215,7 @@ export type AbilityConfig =
           requiresAdjacentRole?: ShipRoleCategory;
       }
     // Reflect gear set (thorns): reflect `pct`% of each direct hit back to the attacker.
-    // Victim-side passive — collected into incomingAbilitiesById. Apply seam wired in Task 5.
+    // Victim-side passive — collected into incomingAbilitiesById.
     | {
           type: 'damage-reflection';
           /** Percentage of the incoming hit, as thrown, reflected back to the attacker (e.g. 7). */

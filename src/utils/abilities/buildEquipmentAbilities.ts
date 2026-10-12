@@ -127,9 +127,8 @@ const GEAR_SET_ABILITIES: Partial<
     }),
     // Reflect (2pc set): reflect 7% per set of each direct hit back to the attacker (thorns),
     // only on a hit aimed at the wearer (`requirePrimaryTarget`, the Stalwart/Nosorog rule).
-    // Victim-side passive — collected into incomingAbilitiesById by config.type; apply seam
-    // wired in Task 5. Top-level type:'modifier' is a placeholder (the engine keys on
-    // config.type:'damage-reflection', not the top-level type).
+    // Victim-side passive — collected into incomingAbilitiesById by config.type. Top-level type:'modifier' is a placeholder (the engine keys
+    // on config.type:'damage-reflection', not the top-level type).
     REFLECT: (sets) => ({
         type: 'modifier',
         target: 'self',

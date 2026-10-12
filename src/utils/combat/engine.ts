@@ -7369,8 +7369,9 @@ export function runCombat(rawInput: CombatEngineInput): {
             //
             // GATE (owner rulings, #678): the hit must have landed. A hit the reflector's shield
             // soaks whole still reflects in full; a hit that does nothing reflects nothing —
-            // Barrier-nullified (returned above), fully blocked, fully redirected by Protection,
-            // or converted into a self-DoT or a shield (each leaves `damage` at 0 by this point).
+            // fully blocked, fully redirected by Protection, or converted into a self-DoT or a
+            // shield (each leaves `damage` at 0 by this point). A Barrier-nullified hit returns
+            // before this block.
             // A partial block or a partial Protection redirect still reflects the whole thrown
             // hit: both are the reflector's side, which the rule ignores. A DoT tick
             // (byDirectDamage === false), a reflected application (no ping-pong) and a hit without
@@ -7391,7 +7392,6 @@ export function runCombat(rawInput: CombatEngineInput): {
                 !cause?.isReflected &&
                 cause?.byDirectDamage !== false &&
                 damage > 0 &&
-                !carriesBarrier &&
                 reflectBase > 0
             ) {
                 // A requirePrimaryTarget reflect ability fires only on a primary-target hit

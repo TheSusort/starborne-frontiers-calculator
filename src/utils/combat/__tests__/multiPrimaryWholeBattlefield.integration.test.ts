@@ -231,7 +231,8 @@ describe.each(SIDES)('Curator’s active (attacker on the %s side)', (placement)
         expect(obs.counters).toEqual(['stalwart>curator']);
         expect(obs.malvexShields).toHaveLength(1);
         expect(obs.malvexShields[0]).toBeCloseTo(obs.castTaken.malvex * 0.15, 3);
-        // One 16% reflect of what Nosorog took (Curator has 0 defence).
+        // One 16% reflect of the hit Curator threw. That equals what Nosorog took: neither ship has
+        // defence and Curator never crits.
         expect(obs.reflected.curator).toBeCloseTo(obs.castTaken.nosorog * 0.16, 3);
     });
 
