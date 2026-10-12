@@ -4843,24 +4843,29 @@ const DocumentationPage: React.FC = () => {
                                     (reduced crit damage taken, scaling with rarity),{' '}
                                     <strong>Vortex Veil</strong> (reduced Inferno and Corrosion
                                     damage), and <strong>Ironclad</strong> (a chance to block a
-                                    repeated hit from the same attacker). Outgoing-damage
-                                    amplification is also modeled: <strong>Menace</strong> (chance
-                                    to amplify a hit&apos;s damage on a critical hit),{' '}
-                                    <strong>Giant Slayer</strong> (chance to amplify a hit&apos;s
-                                    damage against an enemy with higher attack), and{' '}
-                                    <strong>Insidiousness</strong> (chance to deal bonus damage when
-                                    you inflict a debuff on an enemy. It rolls once for every debuff
-                                    you inflict, whether your skill or one of your reactions lands
-                                    it, and a damage-over-time stack counts as a debuff. Applied
-                                    debuffs, such as Provoke, Concentrate Fire or the Burner
-                                    set&apos;s Inferno, never roll. At most one roll succeeds per
-                                    skill cast, counting reactions to an enemy&apos;s skill as part
-                                    of that skill, and a success hits every enemy that skill
-                                    debuffed). <strong>Synaptic Resonance</strong> gains Speed Up
-                                    III when an enemy is repaired and adds its crit power points to
-                                    the next critical hit only, whether a skill, a counter-attack, a
-                                    reactive hit or a passive hit (90% crit power plus 10 is 100%).
-                                    Three heal implants are also modeled:{' '}
+                                    repeated hit from the same attacker). Damage reductions combine
+                                    the way the game combines them: buffs and debuffs such as Inc.
+                                    Damage Down add together; ship passive reductions add together
+                                    and then multiply with those buffs; each gear set, implant and
+                                    squad leader reduction multiplies on its own; and all of it
+                                    together can cut a hit by at most 70%, before Defense.
+                                    Outgoing-damage amplification is also modeled:{' '}
+                                    <strong>Menace</strong> (chance to amplify a hit&apos;s damage
+                                    on a critical hit), <strong>Giant Slayer</strong> (chance to
+                                    amplify a hit&apos;s damage against an enemy with higher
+                                    attack), and <strong>Insidiousness</strong> (chance to deal
+                                    bonus damage when you inflict a debuff on an enemy. It rolls
+                                    once for every debuff you inflict, whether your skill or one of
+                                    your reactions lands it, and a damage-over-time stack counts as
+                                    a debuff. Applied debuffs, such as Provoke, Concentrate Fire or
+                                    the Burner set&apos;s Inferno, never roll. At most one roll
+                                    succeeds per skill cast, counting reactions to an enemy&apos;s
+                                    skill as part of that skill, and a success hits every enemy that
+                                    skill debuffed). <strong>Synaptic Resonance</strong> gains Speed
+                                    Up III when an enemy is repaired and adds its crit power points
+                                    to the next critical hit only, whether a skill, a
+                                    counter-attack, a reactive hit or a passive hit (90% crit power
+                                    plus 10 is 100%). Three heal implants are also modeled:{' '}
                                     <strong>Second Wind</strong> (chance to repair itself when it
                                     takes a critical hit), <strong>Nourishment</strong> (stronger
                                     repairs on allies with less HP than the healer), and{' '}

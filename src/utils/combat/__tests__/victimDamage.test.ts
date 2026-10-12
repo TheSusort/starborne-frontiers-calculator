@@ -228,11 +228,11 @@ describe('victimHitDamage', () => {
 // this addendum exists to remove. Dropping the term wholesale would have been just as wrong: it
 // would have stripped the attacker's 'Out. Damage Up' / 'Exposed' amplification too.
 //
-// These arms fence the SPLIT itself, at the one place it is applied. They cover BOTH engine
-// contributors to `victimSideIncomingPct` at once — `selfIncoming` and `preFightIncoming` are
-// summed into the single field by `victimIncomingModifiers`, so a value here stands for either.
-// (That the engine actually PUTS `preFightIncoming` in that field is pinned separately, in
-// `preFightModifiersEngine.test.ts`.)
+// These arms fence the SPLIT itself, at the one place it is applied. `victimSideIncomingPct`
+// carries only the victim's own `Inc. Damage Down/Up` family (`selfIncoming`). The squad-leader
+// incoming baseline is not on this channel: `hitReductionFor` passes it as a separate factor in
+// the `reduction` parts, which the bucket arms below cover (and `preFightModifiersEngine.test.ts`
+// pins that it never reaches `victimIncomingModifiers`).
 // ══════════════════════════════════════════════════════════════════════════════════════════════
 describe('victimHitDamageParts — the victim-side / attacker-side incoming split (#358 addendum 3)', () => {
     const scalars = (over: Partial<AttackerDamageScalars> = {}): AttackerDamageScalars => ({

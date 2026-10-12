@@ -193,15 +193,6 @@ export function composeDotReductionFactor(parts: IncomingReductionParts): number
 }
 
 /**
- * The 70% floor applied to ONE pre-summed signed incoming percentage (negative = takes less).
- * The simulator does not compose direct hits this way: it multiplies the buckets and floors the
- * product in `composeIncomingFactor` (#672). A total above the floor comes back as the same double.
- */
-export function capIncomingPct(netIncomingPct: number): number {
-    return Math.max(netIncomingPct, -NON_DEFENCE_REDUCTION_CAP_PCT);
-}
-
-/**
  * The DEFENCE factor this victim applies to an incoming hit — the `(1 − damageReduction/100)`
  * term of `victimHitDamage` below, isolated so a consumer that needs to UNDO the mitigation can
  * read the exact factor that was applied instead of re-deriving one from the victim's live stats.

@@ -100,8 +100,9 @@ export function reflectedDamageParts(args: {
         damage: Math.max(0, base * affinity * defence * incoming),
         // The identical product with an exact 1 in BOTH victim-side slots (defence and incoming),
         // and the status channel losing only its victim-side slice (`statusAsThrown`) — the same
-        // shape `victimHitDamageParts` uses, so no axis is ever reconstructed by division. `damage` above keeps its own operand order and its own locals: the exact-1
-        // constants appear only here, never folded into the mitigated product.
+        // shape `victimHitDamageParts` uses, so no axis is ever reconstructed by division. `damage`
+        // multiplies the composed, capped `incoming` factor; the exact-1 constants appear only
+        // here.
         preMitigation: Math.max(0, base * affinity * 1 * 1 * statusAsThrown),
     };
 }

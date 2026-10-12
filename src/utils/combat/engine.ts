@@ -4807,7 +4807,7 @@ export function runCombat(rawInput: CombatEngineInput): {
     // actor it came from in `allyScopedOwnerByRecipient`, and `incomingAbilitiesOf` filters dead
     // owners out on every read — see `withLiveAllyScopedOwners` for the owner ruling (the aura
     // stops when its carrier dies) and why the filter sits on the LIST accessor rather than inside
-    // `incomingReductionForHit`.
+    // `incomingReductionPartsForHit`.
     //
     // recipientId → (abilityId → owner actor id). Keyed by ability id to MIRROR
     // `addIncomingAbilityDeduped`'s own id-keyed dedupe: whichever owner won the dedupe race is the
@@ -7864,8 +7864,8 @@ export function runCombat(rawInput: CombatEngineInput): {
          *
          * A counter or proc is direct damage (ruling 36), so the profile is the cast's in full:
          * `Exposed` (spent by `applyVictimDamage`) and Meatshield's defence substitution included.
-         * It does not read the victim's gear/kit incoming-reduction abilities
-         * (`incomingReductionForHit`), which the cast path takes outside the profile.
+         * The profile does not carry the victim's gear/kit incoming-reduction abilities: the
+         * caller reads those per hit through `hitReductionFor`, exactly as the cast path does.
          *
          * Scheduled (input-level) enemy debuffs come from the OWNER's most recent turn's LANDED set
          * (`landedScheduledEnemyEffectsByActor`) — the same gated list the owner's own cast read,

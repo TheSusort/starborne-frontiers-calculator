@@ -11,7 +11,6 @@
 import { describe, expect, it } from 'vitest';
 import {
     NON_DEFENCE_REDUCTION_CAP_PCT,
-    capIncomingPct,
     composeIncomingFactor,
     victimHitDamageParts,
     AttackerDamageScalars,
@@ -31,14 +30,14 @@ import type { Position } from '../../../types/encounters';
 
 // ── Helper ──────────────────────────────────────────────────────────────────────────────
 
-describe('capIncomingPct', () => {
-    it('floors at -70 and leaves everything above it alone', () => {
+describe('composeIncomingFactor floor', () => {
+    it('floors the buff channel alone at a 70% reduction and leaves everything above it alone', () => {
         expect(NON_DEFENCE_REDUCTION_CAP_PCT).toBe(70);
-        expect(capIncomingPct(-80)).toBe(-70);
-        expect(capIncomingPct(-70)).toBe(-70);
-        expect(capIncomingPct(-69)).toBe(-69);
-        expect(capIncomingPct(0)).toBe(0);
-        expect(capIncomingPct(40)).toBe(40);
+        expect(composeIncomingFactor(-80)).toBeCloseTo(0.3, 12);
+        expect(composeIncomingFactor(-70)).toBeCloseTo(0.3, 12);
+        expect(composeIncomingFactor(-69)).toBeCloseTo(0.31, 12);
+        expect(composeIncomingFactor(0)).toBe(1);
+        expect(composeIncomingFactor(40)).toBeCloseTo(1.4, 12);
     });
 });
 

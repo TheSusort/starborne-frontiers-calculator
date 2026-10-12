@@ -871,18 +871,19 @@ describe('damage absorbed — per-channel direction and presence (#358 addendum 
         expect(warded.damageAbsorbed).toBe(360_000);
     });
 
-    // ── CHANNEL 3/5: `preFightIncoming` (squad-leader incoming protections) ────────────────────
+    // ── CHANNEL 3/5: squad-leader incoming protections (`preFight.incomingDamage`) ─────────────
     //
     // NOT REACHABLE FROM THIS BOUNDARY — `DefenseSimulationInput` exposes no pre-fight block — so
     // it is fenced where it IS reachable, and the two halves together are the arm:
-    //   • `preFightModifiersEngine.test.ts` proves the engine puts `preFight.incomingDamage` into
-    //     `victimSideIncomingModifier`, the field the split travels on;
-    //   • `victimDamage.test.ts`'s split block proves a value in that field lowers `damage` and
+    //   • `preFightModifiersEngine.test.ts` proves the engine applies `preFight.incomingDamage` as
+    //     its own separate factor (`hitReductionFor`'s `separatePcts`) and never puts it on the
+    //     `victimIncomingModifiers` channel;
+    //   • `victimDamage.test.ts`'s bucket arms prove a separate reduction lowers `damage` and
     //     leaves `preMitigation` alone.
-    // `selfIncoming` and `preFightIncoming` are summed into that ONE field by
-    // `victimIncomingModifiers`, so channel 2's engine-level arm above covers the summed term's
-    // behaviour end to end and only the SOURCING differs. Kept as a comment rather than a skipped
-    // test: a `.skip` reads as coverage in the count while proving nothing.
+    // It travels in the same `reduction` parts as channel 4's gear reduction, so channel 4's
+    // engine-level arm below covers the bucket's behaviour end to end and only the SOURCING
+    // differs. Kept as a comment rather than a skipped test: a `.skip` reads as coverage in the
+    // count while proving nothing.
 
     // ── CHANNEL 4/5: gear-sourced incoming reduction (`reduction: IncomingReductionParts`) ───────────────
     it('DIRECTION (channel 4/5 — gear reduction): a flat incoming reduction RAISES absorbed', () => {

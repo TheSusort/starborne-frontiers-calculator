@@ -7,6 +7,8 @@ export const CURRENT_VERSION = '1.75.3';
 // bumped version whose entries are still unreleased shows users a what's-new dialog listing
 // nothing. Do it by hand only if that script cannot.
 export const UNRELEASED_CHANGES: string[] = [
+    'Combat simulator: ship passive damage reductions now multiply with Inc. Damage Down.',
+    'Combat simulator: gear, implant and squad leader reductions now multiply separately.',
     'Combat simulator: reflected damage now respects the 70% damage reduction cap.',
     'Combat simulator: "when damaging" passives no longer fire on hits dealing no damage.',
     'DPS calculator: a picked Repair Over Time now heals only from its applying ship.',

@@ -23,7 +23,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import { detectGrantFactionScope } from '../../skillTextParser';
 import { buildShipAbilities } from '../../abilities/buildShipAbilities';
 import { resolveSupportRecipients } from '../supportRecipients';
-import { allyScopedIncomingRecipients, incomingReductionForHit } from '../incomingEffects';
+import { allyScopedIncomingRecipients, incomingReductionPartsForHit } from '../incomingEffects';
 import { runCombat, type CombatEngineInput } from '../engine';
 import { createEventBus, type CombatEvent } from '../events';
 import { lazyFixture } from '../__testutils__/lazyFixture';
@@ -612,19 +612,21 @@ describe('Fuying Stealth DR aura (#363) — the per-hit gate', () => {
     };
 
     it('reduces a DIRECT hit on a Stealthed victim', () => {
-        expect(incomingReductionForHit([aura as never], base as never)).toBe(30);
+        expect(incomingReductionPartsForHit([aura as never], base as never).passivePct).toBe(30);
     });
 
     it('does NOT reduce a DoT tick on the same victim — the clause says "direct damage"', () => {
         expect(
-            incomingReductionForHit([aura as never], { ...base, dotType: 'inferno' } as never)
+            incomingReductionPartsForHit([aura as never], { ...base, dotType: 'inferno' } as never)
+                .passivePct
         ).toBe(0);
     });
 
     it('does NOT reduce an unstealthed victim', () => {
-        expect(incomingReductionForHit([aura as never], { ...base, victimStealthed: false })).toBe(
-            0
-        );
+        expect(
+            incomingReductionPartsForHit([aura as never], { ...base, victimStealthed: false })
+                .passivePct
+        ).toBe(0);
     });
 });
 
