@@ -6469,12 +6469,12 @@ export function runCombat(rawInput: CombatEngineInput): {
             // TRIPWIRE: a direct hit that reaches a reflector without `cause.reflectBase` is a
             // damage path that skipped threading it, and throws rather than reflecting 0.
             if (
-                cause?.byDirectDamage === true &&
-                !cause.isReflected &&
-                !cause.isProtectionTransfer &&
-                !cause.isSplashCopy &&
-                (cause.bombPortion ?? 0) === 0 &&
-                cause.reflectBase === undefined &&
+                cause?.byDirectDamage !== false &&
+                !cause?.isReflected &&
+                !cause?.isProtectionTransfer &&
+                !cause?.isSplashCopy &&
+                (cause?.bombPortion ?? 0) === 0 &&
+                cause?.reflectBase === undefined &&
                 incomingAbilitiesOf(victim.id).some((a) => a.config.type === 'damage-reflection')
             ) {
                 throw new Error(

@@ -586,7 +586,7 @@ export const BUFFS: Buff[] = [
     {
         name: 'Reflect',
         description:
-            'Reflects stated % of Damage Received. Reflected damage is affected by DEF and cannot Crit',
+            'Reflects 10/20/30% of the damage of each hit taken. Reflected damage is affected by DEF and cannot Crit',
         type: 'buff',
     },
     {

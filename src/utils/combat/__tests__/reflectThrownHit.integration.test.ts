@@ -14,11 +14,16 @@ import { createEventBus } from '../events';
 import { setupKeyedRng } from '../../calculators/rateAccumulator';
 import { csvAvailable } from '../../../../scripts/lib/shipSkillCsv';
 import { shipDataAvailable } from '../../../../scripts/lib/shipDataSnapshot';
-import { boardInput, hitKit, type BoardUnit, type Placement } from '../__testutils__/realKitBoard';
+import {
+    boardInput,
+    hitKit,
+    realKit,
+    type BoardUnit,
+    type Placement,
+} from '../__testutils__/realKitBoard';
 import type { Ability, ShipSkills } from '../../../types/abilities';
 import type { Ship } from '../../../types/ship';
 import type { GearPiece } from '../../../types/gear';
-import { buildShipAbilities } from '../../abilities/buildShipAbilities';
 import { buildShipAbilitiesWithEquipment } from '../../abilities/buildShipAbilitiesWithEquipment';
 import { getGearSet } from '../../../constants/gearSets';
 import { calculateDamageReduction } from '../../autogear/statResolution';
@@ -31,27 +36,9 @@ beforeEach(() => setupKeyedRng(678));
 
 const SIDES: Placement[] = ['player', 'enemy'];
 
-const NOSOROG_REFLECT_16 =
-    'This Unit reflects 16% of the damage taken back to the enemy when directly damaged as a primary target.';
-
-/** Nosorog's reflect passive, built through the parser from its patch text. */
-const nosorogReflectPassives = (): ShipSkills['slots'] => {
-    const built = buildShipAbilities({
-        id: 'nosorog-ship',
-        name: 'Nosorog',
-        rarity: 'legendary',
-        faction: 'AURELIAN_SOVEREIGNTY',
-        type: 'DEFENDER',
-        baseStats: {} as Ship['baseStats'],
-        equipment: {},
-        implants: {},
-        refits: [],
-        activeSkillText: '',
-        firstPassiveSkillText: NOSOROG_REFLECT_16,
-        chargeSkillCharge: 0,
-    } as Partial<Ship> as Ship);
-    return built.slots.filter((s) => s.slot === 'passive');
-};
+/** Nosorog's real parsed passives (the reference data carries the patched 16% text). */
+const nosorogReflectPassives = (): ShipSkills['slots'] =>
+    realKit('Nosorog').slots.filter((s) => s.slot === 'passive');
 
 /** The passive slot the Reflect gear set builds (its damage-reflection ability). */
 const reflectSetPassives = (): ShipSkills['slots'] => {
@@ -131,13 +118,18 @@ const nosorog = (
 });
 
 /** Belladonna's measured stats behind a plain 140% active. */
-const belladonna = (opts: { crit?: boolean; outgoing?: number } = {}): BoardUnit => ({
+const belladonna = (
+    opts: { crit?: boolean; outgoing?: number; attackBuff?: number } = {}
+): BoardUnit => ({
     id: 'belladonna',
     kit: {
         slots: [
             {
                 slot: 'active',
                 abilities: [
+                    ...(opts.attackBuff
+                        ? [selfBuff('Attack Up III', { attack: opts.attackBuff })]
+                        : []),
                     ...(opts.outgoing
                         ? [selfBuff('Out. Damage Up III', { outgoingDamage: opts.outgoing })]
                         : []),
@@ -223,6 +215,15 @@ describe.each(SIDES)('Nosorog on the %s side reflects the hit as thrown (#678)',
         expect(buffed.rows).toHaveLength(1);
         expect(buffed.rows[0]).toBeGreaterThan(0);
         expect(buffed.rows[0]).toBeCloseTo(base.rows[0], 6);
+    });
+
+    it("the attacker's Attack Up III plus Legion Discipline III (+65%) scales the reflect by 1.65", () => {
+        const base = plain();
+        const buffed = fight(placement, nosorog(), belladonna({ attackBuff: 65 }));
+        expect(base.rows[0]).toBeGreaterThan(0);
+        expect(buffed.rows).toHaveLength(1);
+        expect(buffed.rows[0]).toBeGreaterThan(0);
+        expect(buffed.rows[0]).toBeCloseTo(base.rows[0] * 1.65, 6);
     });
 
     it('a shield that soaks the whole hit still reflects in full', () => {

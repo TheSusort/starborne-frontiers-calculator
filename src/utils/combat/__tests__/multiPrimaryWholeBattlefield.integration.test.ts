@@ -231,8 +231,8 @@ describe.each(SIDES)('Curator’s active (attacker on the %s side)', (placement)
         expect(obs.counters).toEqual(['stalwart>curator']);
         expect(obs.malvexShields).toHaveLength(1);
         expect(obs.malvexShields[0]).toBeCloseTo(obs.castTaken.malvex * 0.15, 3);
-        // One 40% reflect of what Nosorog took (Curator has 0 defence).
-        expect(obs.reflected.curator).toBeCloseTo(obs.castTaken.nosorog * 0.4, 3);
+        // One 16% reflect of what Nosorog took (Curator has 0 defence).
+        expect(obs.reflected.curator).toBeCloseTo(obs.castTaken.nosorog * 0.16, 3);
     });
 
     it('Curator crits Stalwart and Sentinel taps him → he still counters ONCE, onto Curator', () => {
