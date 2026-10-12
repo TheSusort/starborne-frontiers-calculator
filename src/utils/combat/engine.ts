@@ -126,9 +126,9 @@ import {
     victimHitDamageParts,
     victimDefenceMitigation,
     victimDefenceReductionPct,
+    composeDotReductionFactor,
 } from './victimDamage';
 import {
-    incomingReductionForHit,
     incomingReductionPartsForHit,
     incomingBlockForIntake,
     conditionMet,
@@ -1349,9 +1349,9 @@ export function tickDoTs(args: {
      *  group's tier MAGNITUDE (corrosion 3/6/9, inferno 15/30/45; 0 for generic). */
     emitTicked: (dotType: TickableDoTType, damage: number, stacks: number, tier: number) => void;
     /**
-     * @param damage        the tick's damage as the victim TAKES it — post `incomingDotReductionPct`.
+     * @param damage        the tick's damage as the victim TAKES it — post `incomingDotFactor`.
      * @param preMitigation #358 ADDENDUM 3 (C2/C4): the same tick as THROWN. Two victim-side
-     *        reductions are absent from it: this carrier's `incomingDotReductionPct` (Vortex Veil),
+     *        reductions are absent from it: this carrier's `incomingDotFactor` (Vortex Veil),
      *        and — for a generic DoT re-booking a `convertHitToSelfDot` deferral — the defence
      *        mitigation the original direct hit folded, recovered from the entry's
      *        `perTickPreMitigation`. Equal to `damage` for every tick that had neither.
@@ -1373,9 +1373,10 @@ export function tickDoTs(args: {
          *  doc for the ruling. Absent/false on every applied DoT. */
         convertedFromHit?: boolean
     ) => void;
-    /** Vortex Veil: % reduction applied to this carrier's DoT ticks of the given type.
-     *  Absent → 0. */
-    incomingDotReductionPct?: (dotType: TickableDoTType) => number;
+    /** Multiplier on this carrier's DoT ticks of the given type: ship-kit DoT passives sum into
+     *  one factor, each equipment reduction (Vortex Veil) is its own factor
+     *  (`composeDotReductionFactor`). Absent → 1. */
+    incomingDotFactor?: (dotType: TickableDoTType) => number;
     /** Resolves the EFFECTIVE dotMult for one applier's ctx, given the
      *  ticking VICTIM (this tickDoTs call's whole entries list belongs to ONE victim, so the
      *  victim is fixed for the call; only the per-entry applier ctx varies). Defaults to the
@@ -1423,8 +1424,7 @@ export function tickDoTs(args: {
             total += d;
         }
         if (total <= 0) return;
-        const reductionPct = args.incomingDotReductionPct?.(dotType) ?? 0;
-        const factor = 1 - reductionPct / 100;
+        const factor = args.incomingDotFactor?.(dotType) ?? 1;
         // #358 ADDENDUM 3: `d` (pre-`factor`) is the tick as THROWN; `d * factor` is what the
         // carrier takes after its own DoT-reduction ability. Both are handed over — see `credit`.
         for (const { sourceId, d } of creditOrder) args.credit(sourceId, dotType, d * factor, d);
@@ -1490,8 +1490,7 @@ export function tickDoTs(args: {
         genericStacks += e.stacks;
     }
     if (genericSum > 0) {
-        const reductionPct = args.incomingDotReductionPct?.('generic') ?? 0;
-        const factor = 1 - reductionPct / 100;
+        const factor = args.incomingDotFactor?.('generic') ?? 1;
         for (const { sourceId, d, pre, dealtCreditId, convertedFromHit } of genericCredits)
             args.credit(sourceId, 'generic', d * factor, pre, dealtCreditId, convertedFromHit);
         // Generic DoTs are untiered (absolute per-tick) → single tier-0 group.
@@ -1946,7 +1945,7 @@ interface ActorIntake {
      *
      *  WHAT COMES OUT, as of addendum 3: the defence-mitigation factor (every direct-damage caller
      *  folds it before the funnel sees it), the victim's own `Inc. Damage Down` family and its
-     *  pre-fight incoming baseline, passive/gear reductions, `incomingDotReductionPct`
+     *  pre-fight incoming baseline, passive/gear reductions, `incomingDotFactor`
      *  (Vortex Veil), and the reflect channel's incoming-reduction. WHAT STAYS IN: attacker-side
      *  modifiers and enemy-APPLIED amplification (`Out. Damage Up`, `Exposed`), plus
      *  shield/Barrier absorption — those pools eat damage that ARRIVED.
@@ -6431,7 +6430,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 /** #358: the amount the caller reduced to produce `rawDamage` for this
                  *  victim — pre-defence-mitigation, and pre EVERY other victim-side
                  *  reduction the caller applied: the `Inc. Damage Down` family, passive/gear
-                 *  reductions, `incomingDotReductionPct`, the reflect channel's incoming-reduction.
+                 *  reductions, `incomingDotFactor`, the reflect channel's incoming-reduction.
                  *  Recorded on the victim's `.incomingRaw` axis alongside `.incoming`, scaled by
                  *  the Protection retention fraction but deliberately NOT by the incoming-block
                  *  proc (see the `damageRaw` block below — a blocked hit was still thrown in full).
@@ -8493,7 +8492,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             // Direct-damage channel ONLY — by design. Per the game rules, incoming/outgoing
             // damage modifiers (Inc. Damage Down/Up, Out. Damage Up) apply to DIRECT hits
             // only; DoT ticks (corrosion/inferno) and bombs are EXCLUDED. DoT reduction has a
-            // dedicated channel (incomingDotReductionPct / Vortex Veil); bombs apply through
+            // dedicated channel (incomingDotFactor / Vortex Veil); bombs apply through
             // the detonation/bombPortion path which never reads incomingDamageModifierPct.
             // Locked by bombModifierExclusion.test.ts.
             // ONE read, both terms: victimSelfBuffs is a three-channel status-engine fold and this
@@ -12283,27 +12282,29 @@ export function runCombat(rawInput: CombatEngineInput): {
                         // Vortex Veil: reduce the carrier's incoming DoT ticks when the tank
                         // equips it. The condition 'dot-inferno-corrosion' gates on dotType being
                         // set, so querying with either dotType returns the same %. Absent → 0.
-                        incomingDotReductionPct: (dotType) =>
-                            incomingReductionForHit(incomingAbilitiesOf(healTarget.id), {
-                                didCrit: false,
-                                attackerStealthed: false,
-                                victimStealthed: isStealthed(healTarget.id),
-                                victimTurnBlocked: isTurnBlocked(healTarget.id),
-                                hitIndexThisRound: 0,
-                                dotType,
-                                // A DoT tick has no single attacker (aggregate of appliers) —
-                                // 'attacker-has-dot' abilities are scope:'direct' only, so this
-                                // never matters (scope-filtered before conditionMet reads it).
-                                attackerHasDot: false,
-                                victimHasBarrierRecharging: hasBarrierRecharging(healTarget.id),
-                                victimHasShield: hasShield(healTarget.id),
-                                selfHpPct: selfHpPctOf(healTarget.id),
-                                // Same no-single-attacker reasoning as attackerHasDot above —
-                                // 'attacker-taunted-or-provoke' abilities are 'transform-
-                                // incoming-to-dot' (direct-only, gated inside applyVictimDamage
-                                // itself), so this reduction-path ctx never reads it.
-                                attackerTauntedOrProvoked: false,
-                            }),
+                        incomingDotFactor: (dotType) =>
+                            composeDotReductionFactor(
+                                incomingReductionPartsForHit(incomingAbilitiesOf(healTarget.id), {
+                                    didCrit: false,
+                                    attackerStealthed: false,
+                                    victimStealthed: isStealthed(healTarget.id),
+                                    victimTurnBlocked: isTurnBlocked(healTarget.id),
+                                    hitIndexThisRound: 0,
+                                    dotType,
+                                    // A DoT tick has no single attacker (aggregate of appliers) —
+                                    // 'attacker-has-dot' abilities are scope:'direct' only, so this
+                                    // never matters (scope-filtered before conditionMet reads it).
+                                    attackerHasDot: false,
+                                    victimHasBarrierRecharging: hasBarrierRecharging(healTarget.id),
+                                    victimHasShield: hasShield(healTarget.id),
+                                    selfHpPct: selfHpPctOf(healTarget.id),
+                                    // Same no-single-attacker reasoning as attackerHasDot above —
+                                    // 'attacker-taunted-or-provoke' abilities are 'transform-
+                                    // incoming-to-dot' (direct-only, gated inside applyVictimDamage
+                                    // itself), so this reduction-path ctx never reads it.
+                                    attackerTauntedOrProvoked: false,
+                                })
+                            ),
                         // The tank is the ticking victim.
                         dotMultFor: (ctx, dotType) => victimDotMult(ctx, healTarget, dotType),
                     });
@@ -12440,22 +12441,24 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 }
                             },
                             // Vortex Veil: reduce this carrier's incoming DoT ticks.
-                            incomingDotReductionPct: (dotType) =>
-                                incomingReductionForHit(incomingAbilitiesOf(actor.id), {
-                                    didCrit: false,
-                                    attackerStealthed: false,
-                                    victimStealthed: isStealthed(actor.id),
-                                    victimTurnBlocked: isTurnBlocked(actor.id),
-                                    hitIndexThisRound: 0,
-                                    dotType,
-                                    // See the sibling tank-path call above: no single attacker
-                                    // on a DoT tick; harmless (scope:'direct'-only condition).
-                                    attackerHasDot: false,
-                                    victimHasBarrierRecharging: hasBarrierRecharging(actor.id),
-                                    victimHasShield: hasShield(actor.id),
-                                    selfHpPct: selfHpPctOf(actor.id),
-                                    attackerTauntedOrProvoked: false,
-                                }),
+                            incomingDotFactor: (dotType) =>
+                                composeDotReductionFactor(
+                                    incomingReductionPartsForHit(incomingAbilitiesOf(actor.id), {
+                                        didCrit: false,
+                                        attackerStealthed: false,
+                                        victimStealthed: isStealthed(actor.id),
+                                        victimTurnBlocked: isTurnBlocked(actor.id),
+                                        hitIndexThisRound: 0,
+                                        dotType,
+                                        // See the sibling tank-path call above: no single attacker
+                                        // on a DoT tick; harmless (scope:'direct'-only condition).
+                                        attackerHasDot: false,
+                                        victimHasBarrierRecharging: hasBarrierRecharging(actor.id),
+                                        victimHasShield: hasShield(actor.id),
+                                        selfHpPct: selfHpPctOf(actor.id),
+                                        attackerTauntedOrProvoked: false,
+                                    })
+                                ),
                             // This actor IS the ticking victim.
                             dotMultFor: (ctx, dotType) => victimDotMult(ctx, actor, dotType),
                         });

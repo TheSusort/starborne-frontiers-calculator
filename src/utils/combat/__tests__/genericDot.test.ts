@@ -89,7 +89,7 @@ describe('generic DoT', () => {
         expect(gen).toEqual([]);
     });
 
-    it('a generic DoT tick respects incomingDotReductionPct', () => {
+    it('a generic DoT tick respects incomingDotFactor', () => {
         const gen: ActiveDoTStack[] = [
             { stacks: 2, tier: 0, remainingRounds: 1, sourceId: 'v', perTickAmount: 100 },
         ];
@@ -104,7 +104,7 @@ describe('generic DoT', () => {
             credit: (_sourceId, dotType, damage) => {
                 if (dotType === 'generic') credited += damage;
             },
-            incomingDotReductionPct: (dotType) => (dotType === 'generic' ? 50 : 0),
+            incomingDotFactor: (dotType) => (dotType === 'generic' ? 0.5 : 1),
         });
 
         // 100 * 2 stacks = 200 raw, halved by the 50% reduction → 100.
@@ -241,7 +241,7 @@ describe('generic DoT', () => {
             emitTicked: () => {},
             credit: (_sourceId, _dotType, damage, preMitigation) =>
                 seen.push({ damage, preMitigation }),
-            incomingDotReductionPct: () => reductionPct,
+            incomingDotFactor: () => 1 - reductionPct / 100,
         });
         return seen;
     };
@@ -298,7 +298,7 @@ describe('generic DoT', () => {
                 >,
             emitTicked: () => {},
             credit: (_s, _t, damage, preMitigation) => seen.push({ damage, preMitigation }),
-            incomingDotReductionPct: () => 50,
+            incomingDotFactor: () => 0.5,
         });
         expect(seen).toEqual([{ damage: 3_000, preMitigation: 6_000 }]);
     });
