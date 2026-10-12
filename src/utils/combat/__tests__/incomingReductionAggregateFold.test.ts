@@ -1,23 +1,18 @@
 /**
- * D-PR3 Task 9 — aggregate-path victim-side incoming %-reduction fold.
- *
- * Pins the new `incomingReductionNonCritPct` / `incomingReductionCritFamilyPct`
- * inputs to `runPlayerTurn` at the unit level (mirrors perHitCrit.test.ts harness).
+ * Aggregate-path victim-side incoming reductions (`runPlayerTurn`'s `incomingReductionNonCrit` /
+ * `incomingReductionCrit` / `attackerCritPenaltyPct`), composed by `composeIncomingFactor`
+ * (#672): (1 + buffs) × (1 − Σ passives) × Π(1 − each separate reduction), floored at 0.30.
  *
  * Baseline math (attack=10000, multiplier=100, hits=3, 0 defence/buffs):
  *   effectiveMultiplier = 300 → preCritDamage = 10000 × 3.0 = 30000.
  *   critDamage = 100 → at 100% crit damageCritMultiplier = 1 + 1×(100/100) = 2.0.
  *
- * Crit-family reduction (R) applies to the crit FRACTION only:
- *   damageCritMultiplier = (1 - cf) + cf × (1 + cd/100) × (1 - R/100).
- *   100% crit, R=35: (0) + 1×2.0×0.65 = 1.3 → directDamage = 30000 × 1.3 = 39000.
- *   0%  crit, R=35: 1.0 → directDamage = 30000 (unchanged — no crit portion).
- *
- * Non-crit reduction applies to ALL hits via the incoming modifier term:
- *   nonCritFactor ×= (1 + (incomingMod - equipNonCrit)/100).
- *   0% crit, nonCrit=20: 30000 × 0.8 = 24000.
+ * The crit reduction set applies to the crit FRACTION only, as a ratio against the non-crit
+ * factor: 100% crit, crit passive 35 → 2.0 × 0.65 = 1.3 → 39000. 0% crit → unchanged.
+ * The non-crit set applies to ALL hits: 0% crit, passive 20 → 30000 × 0.8 = 24000.
  */
 import { describe, expect, it } from 'vitest';
+import type { IncomingReductionParts } from '../victimDamage';
 import { runPlayerTurn, PlayerActorRuntime, PlayerTurnArgs } from '../playerTurn';
 import { createActor } from '../state';
 import { createStatusEngine } from '../statusEngine';
@@ -155,39 +150,51 @@ function makeArgs(
     };
 }
 
+const parts = (passivePct: number, separatePcts: number[] = []): IncomingReductionParts => ({
+    passivePct,
+    separatePcts,
+});
+
 describe('aggregate-path incoming %-reduction fold', () => {
-    it('crit-family R=35 on a 100% crit reduces the crit portion (60000 → 39000)', () => {
+    it('crit passive 35 on a 100% crit reduces the crit portion (60000 → 39000)', () => {
         const baseline = runPlayerTurn(makeArgs(makeRuntime(true)));
         expect(baseline.directDamage).toBe(60000);
         const reduced = runPlayerTurn(
-            makeArgs(makeRuntime(true), { incomingReductionCritFamilyPct: 35 })
+            makeArgs(makeRuntime(true), { incomingReductionCrit: parts(35) })
         );
-        // (1-1) + 1×2.0×0.65 = 1.3 → 30000 × 1.3 = 39000.
-        expect(reduced.directDamage).toBe(39000);
+        // passive bucket: 2.0 × 0.65 = 1.3 → 30000 × 1.3 = 39000.
+        expect(reduced.directDamage).toBeCloseTo(39000, 6);
     });
 
-    it('crit-family R=35 on a NON-crit hit leaves damage unchanged', () => {
+    it('a crit-only reduction on a NON-crit hit leaves damage unchanged', () => {
         const baseline = runPlayerTurn(makeArgs(makeRuntime(false)));
         expect(baseline.directDamage).toBe(30000);
         const reduced = runPlayerTurn(
-            makeArgs(makeRuntime(false), { incomingReductionCritFamilyPct: 35 })
+            makeArgs(makeRuntime(false), { incomingReductionCrit: parts(35) })
         );
         expect(reduced.directDamage).toBe(30000);
     });
 
-    it('non-crit reduction 20% reduces ALL hits (30000 → 24000) on a non-crit', () => {
+    it('non-crit passive 20 reduces ALL hits (30000 → 24000) on a non-crit', () => {
         const reduced = runPlayerTurn(
-            makeArgs(makeRuntime(false), { incomingReductionNonCritPct: 20 })
+            makeArgs(makeRuntime(false), { incomingReductionNonCrit: parts(20) })
         );
-        expect(reduced.directDamage).toBe(24000);
+        expect(reduced.directDamage).toBeCloseTo(24000, 6);
     });
 
-    it('non-crit reduction 20% reduces a 100% crit too (60000 → 48000)', () => {
-        // crit multiplier 2.0 unaffected; nonCritFactor ×0.8 → 60000 × 0.8 = 48000.
+    it('non-crit separate reduction 20 reduces a 100% crit too (60000 → 48000)', () => {
+        // The crit set defaults to the non-crit one: ratio 1, nonCritFactor ×0.8.
         const reduced = runPlayerTurn(
-            makeArgs(makeRuntime(true), { incomingReductionNonCritPct: 20 })
+            makeArgs(makeRuntime(true), { incomingReductionNonCrit: parts(0, [20]) })
         );
-        expect(reduced.directDamage).toBe(48000);
+        expect(reduced.directDamage).toBeCloseTo(48000, 6);
+    });
+
+    it('the attacker crit penalty scales only the crit fraction (60000 → 54000)', () => {
+        const crit = runPlayerTurn(makeArgs(makeRuntime(true), { attackerCritPenaltyPct: 10 }));
+        expect(crit.directDamage).toBeCloseTo(54000, 6);
+        const nonCrit = runPlayerTurn(makeArgs(makeRuntime(false), { attackerCritPenaltyPct: 10 }));
+        expect(nonCrit.directDamage).toBe(30000);
     });
 
     it('both inputs omitted → byte-identical to baseline (crit and non-crit)', () => {
@@ -195,10 +202,8 @@ describe('aggregate-path incoming %-reduction fold', () => {
         expect(runPlayerTurn(makeArgs(makeRuntime(false))).directDamage).toBe(30000);
     });
 
-    // PARITY: crit-family reduction must fold ADDITIVELY into the incoming channel —
-    // matching the positional path (victimHitDamage) — when an enemy "+N% damage taken" debuff
-    // (incomingDamageModifier != 0) co-occurs with a crit-family reduction R on the SAME victim.
-    // The crit hit's incoming channel = (incomingDamageModifier - R), NOT a multiplicative split.
+    // PARITY with the positional path (victimHitDamageParts): an enemy "+N% damage taken" debuff
+    // (buff channel) and a crit passive on the SAME victim MULTIPLY (#672).
     describe('parity with positional path when incomingDamageModifier != 0', () => {
         const lookup = new Map<string, SelectedGameBuff[]>([
             [DMG_TAKEN_BUFF, [damageTakenBuff(30)]],
@@ -211,17 +216,16 @@ describe('aggregate-path incoming %-reduction fold', () => {
             expect(out.directDamage).toBe(78000);
         });
 
-        it('+30% damage-taken AND crit-family R=35, all hits crit → ADDITIVE channel (30-35)', () => {
-            // ADDITIVE (canonical, positional): crit incoming channel = (30 - 35) = -5
-            //   crit factor = (1 + (30-35)/100) = 0.95 → 60000 × 0.95 = 57000.
-            // OLD multiplicative deviation would give: 60000 × (1.30 × 0.65) = 50700 (WRONG).
+        it('+30% damage-taken × crit passive 35, all hits crit → 1.30 × 0.65', () => {
+            // buff channel × passive bucket: 60000 × 1.30 × 0.65 = 50700.
+            // The retired additive channel (30 − 35 = −5) gave 57000.
             const out = runPlayerTurn(
-                makeArgs(makeRuntime(true, lookup), { incomingReductionCritFamilyPct: 35 }, [
+                makeArgs(makeRuntime(true, lookup), { incomingReductionCrit: parts(35) }, [
                     damageTakenBuff(30),
                 ])
             );
-            expect(out.directDamage).toBe(57000);
-            expect(out.directDamage).not.toBe(50700);
+            expect(out.directDamage).toBeCloseTo(50700, 6);
+            expect(out.directDamage).not.toBeCloseTo(57000, 0);
         });
     });
 });

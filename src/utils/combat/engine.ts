@@ -115,14 +115,21 @@ import {
     type AppliedVictimDamage,
     type SubAttackOutcome,
 } from './positionalApply';
-import type { AttackerDamageScalars, VictimDefenseProfile } from './victimDamage';
+import type {
+    AttackerDamageScalars,
+    IncomingReductionParts,
+    VictimDefenseProfile,
+} from './victimDamage';
 import {
+    NO_INCOMING_REDUCTION,
+    mergeIncomingReductionParts,
     victimHitDamageParts,
     victimDefenceMitigation,
     victimDefenceReductionPct,
 } from './victimDamage';
 import {
     incomingReductionForHit,
+    incomingReductionPartsForHit,
     incomingBlockForIntake,
     conditionMet,
     allyScopedIncomingRecipients,
@@ -1939,10 +1946,10 @@ interface ActorIntake {
      *
      *  WHAT COMES OUT, as of addendum 3: the defence-mitigation factor (every direct-damage caller
      *  folds it before the funnel sees it), the victim's own `Inc. Damage Down` family and its
-     *  pre-fight incoming baseline, `equipReductionPct`, `incomingDotReductionPct` (Vortex Veil),
-     *  and the reflect channel's incoming-reduction. WHAT STAYS IN: attacker-side modifiers and
-     *  enemy-APPLIED amplification (`Out. Damage Up`, `Exposed`), plus shield/Barrier absorption —
-     *  those pools eat damage that ARRIVED.
+     *  pre-fight incoming baseline, passive/gear reductions, `incomingDotReductionPct`
+     *  (Vortex Veil), and the reflect channel's incoming-reduction. WHAT STAYS IN: attacker-side
+     *  modifiers and enemy-APPLIED amplification (`Out. Damage Up`, `Exposed`), plus
+     *  shield/Barrier absorption — those pools eat damage that ARRIVED.
      *
      *  SCALING, precisely: recorded at the same instant as `incoming` and scaled by the Protection
      *  retention fraction, but NOT by the incoming-block proc — a blocked hit was thrown in full
@@ -5148,6 +5155,50 @@ export function runCombat(rawInput: CombatEngineInput): {
         selfBuffNamesForOwners(statusEngine, [actorId]).includes('Taunt') ||
         provokerOf(statusEngine, actorId) !== undefined;
 
+    /**
+     * The victim-side reductions and the attacker's crit penalty for ONE direct hit
+     * (#672 composition; read `composeIncomingFactor`). The squad-leader incoming baseline
+     * and, on a crit, the victim's squad-leader crit term are separate factors; the
+     * attacker's squad-leader crit term is returned apart because it is not a reduction the
+     * victim owns and is never capped. Team-symmetric: reads only ids and the live state.
+     */
+    const hitReductionFor = (
+        attackerId: string,
+        victimId: string,
+        didCrit: boolean,
+        ctxOverrides: Partial<IncomingHitContext> = {}
+    ): { parts: IncomingReductionParts; attackerCritPenaltyPct: number } => {
+        const ctx: IncomingHitContext = {
+            didCrit,
+            attackerStealthed: isStealthed(attackerId),
+            victimStealthed: isStealthed(victimId),
+            victimTurnBlocked: isTurnBlocked(victimId),
+            hitIndexThisRound: 0, // read only by incoming-block
+            attackerHasDot: attackerHasDot(attackerId),
+            victimHasBarrierRecharging: hasBarrierRecharging(victimId),
+            victimHasShield: hasShield(victimId),
+            selfHpPct: selfHpPctOf(victimId),
+            attackerTauntedOrProvoked: attackerTauntedOrProvoked(attackerId),
+            ...ctxOverrides,
+        };
+        const kit = incomingReductionPartsForHit(incomingAbilitiesOf(victimId), ctx);
+        // Squad-leader data is benefit/penalty-phrased (−5 = takes 5% less), so negate.
+        const victimPre = allActorsById.get(victimId)?.preFight;
+        const leader: number[] = [];
+        const baseline = -(victimPre?.incomingDamage ?? 0);
+        if (baseline !== 0) leader.push(baseline);
+        const critTerm = didCrit ? -(victimPre?.incomingCritDamage ?? 0) : 0;
+        if (critTerm !== 0) leader.push(critTerm);
+        const parts =
+            leader.length === 0
+                ? kit
+                : mergeIncomingReductionParts(kit, { passivePct: 0, separatePcts: leader });
+        const attackerCritPenaltyPct = didCrit
+            ? -(allActorsById.get(attackerId)?.preFight?.outgoingCritDamage ?? 0)
+            : 0;
+        return { parts, attackerCritPenaltyPct };
+    };
+
     // PER-VICTIM standing-leech proc for the POSITIONAL apply path.
     //
     // THIS IS THE ONLY STANDING-LEECH PROC (#374). It works by
@@ -6379,11 +6430,11 @@ export function runCombat(rawInput: CombatEngineInput): {
                 targetMitigation?: number;
                 /** #358: the amount the caller reduced to produce `rawDamage` for this
                  *  victim — pre-defence-mitigation, and pre EVERY other victim-side
-                 *  reduction the caller applied: the `Inc. Damage Down` family, `equipReductionPct`,
-                 *  `incomingDotReductionPct`, the reflect channel's incoming-reduction. Recorded on
-                 *  the victim's `.incomingRaw` axis alongside `.incoming`, scaled by the Protection
-                 *  retention fraction but deliberately NOT by the incoming-block proc (see the
-                 *  `damageRaw` block below — a blocked hit was still thrown in full).
+                 *  reduction the caller applied: the `Inc. Damage Down` family, passive/gear
+                 *  reductions, `incomingDotReductionPct`, the reflect channel's incoming-reduction.
+                 *  Recorded on the victim's `.incomingRaw` axis alongside `.incoming`, scaled by
+                 *  the Protection retention fraction but deliberately NOT by the incoming-block
+                 *  proc (see the `damageRaw` block below — a blocked hit was still thrown in full).
                  *  ABSENT means "this path applies NO victim-side reduction whatsoever" (a plain
                  *  DoT tick, a bomb/detonation burst, the flat-basis reactive) and the funnel books
                  *  `rawDamage` on both axes. A DoT tick on a Vortex Veil carrier is NOT such a path
@@ -8412,9 +8463,9 @@ export function runCombat(rawInput: CombatEngineInput): {
         ): {
             enemyDefenseModifier: number;
             incomingDamageModifier: number;
-            /** #358 ADDENDUM 3 (C2): the VICTIM-SIDE contributions to `incomingDamageModifier`
-             *  (`selfIncoming + preFightIncoming`), split out so the pre-mitigation damage axis can
-             *  strip them while keeping the attacker-applied amplification. */
+            /** #358: the VICTIM-SIDE contributions to `incomingDamageModifier` (`selfIncoming`),
+             *  split out so the pre-mitigation damage axis can strip them while keeping the
+             *  attacker-applied amplification. */
             victimSideIncomingModifier: number;
             /** Flat defence from the victim's own three self-buff channels (`flatDefence`). */
             defenceFlat: number;
@@ -8491,8 +8542,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             //
             // NO DOUBLE COUNT: `enemy.enemyDefenseModifier` reads the victim's ENEMY-debuff store
             // only; `defence` above is the RAW base stat; and pre-fight (squad-leader) defence is a
-            // raw stat MUTATION (`PreFightStatBlock.defence`), not a modifier channel — unlike the
-            // incoming twin, which needs its `preFightIncoming` term for exactly that reason.
+            // raw stat MUTATION (`PreFightStatBlock.defence`), not a modifier channel.
             const selfDefense = toSelfDefenseModifier(victimSelf);
             // Flat defence (Terran Guard, Magnetized Shielding) from the same three-channel list;
             // Magnetized Shielding's term reads the victim's LIVE security, Security Down included.
@@ -8503,13 +8553,6 @@ export function runCombat(rawInput: CombatEngineInput): {
                       effectiveStatsOf(statusEngine, selfBuffLookup, victimActor).security
                   )
                 : 0;
-            // The victim's pre-fight incomingDamage baseline (squad-leader "±N% incoming
-            // direct damage") folds ADDITIVELY into the same per-victim channel the
-            // self-buff term rides (consumed via defenseProfileOf → incomingDamageModifierPct).
-            // Sign convention matches the buff channel: negative = takes less damage
-            // (leader protections use negative values). Absent → 0. Like
-            // the buff channel, this is DIRECT damage only (DoTs/bombs never read it).
-            const preFightIncoming = allActorsById.get(victimId)?.preFight?.incomingDamage ?? 0;
             // #396: the two channels above are a CROSS-STORE meeting point — `enemy.*` reads the
             // victim's ENEMY store and `self*` reads its SELF store, on the same `parsedEffects`
             // key. Under the locked rule (highest tier wins for all buffs/debuffs regardless of
@@ -8524,10 +8567,12 @@ export function runCombat(rawInput: CombatEngineInput): {
             // `selfIncoming` were folded from — the invariant `shadowedDelta` requires, or the
             // subtraction removes a contribution the totals never contained.
             //
-            // `preFightIncoming` and `exposed` stay OUTSIDE the comparison and keep adding: the
-            // squad-leader baseline is not a named family, and `Exposed` is a name-keyed one-shot
-            // that deliberately does not ride `parsedEffects` (see exposedStatus.ts). Same
-            // exclusion #389 made for `modifierAbilities` and `preFight.outgoingDamage`.
+            // `exposed` stays OUTSIDE the comparison and keeps adding: `Exposed` is a name-keyed
+            // one-shot that deliberately does not ride `parsedEffects` (see exposedStatus.ts).
+            //
+            // This channel carries buffs/debuffs only. The victim's squad-leader incoming baseline
+            // (`preFight.incomingDamage`) is NOT on it: it is a separate factor composed in
+            // `hitReductionFor` (#672).
             //
             // `shadowedDelta` also collapses same-family duplicates WITHIN the enemy list. That is
             // the same rule, not a new one: two instances of one family never add, whichever store
@@ -8540,20 +8585,19 @@ export function runCombat(rawInput: CombatEngineInput): {
             return {
                 enemyDefenseModifier:
                     selfDefense + standingDefencePctOf(victimId) + (shadow.delta.defense ?? 0),
-                incomingDamageModifier:
-                    selfIncoming + (shadow.delta.incomingDamage ?? 0) + preFightIncoming + exposed,
-                // #358 ADDENDUM 3 (C2/C3): the VICTIM-SIDE half of the sum above, published
-                // separately because the sum is a MIXED channel and nothing downstream can
-                // un-mix it. `enemy.incomingDamageModifier` and `exposed` are amplification the
-                // ATTACKER's side applied — part of the attack as thrown; `selfIncoming` and
-                // `preFightIncoming` are the DEFENDER reducing what it takes. "Damage absorbed"
-                // strips only the latter pair, so only the latter pair travels here.
+                incomingDamageModifier: selfIncoming + (shadow.delta.incomingDamage ?? 0) + exposed,
+                // #358: the VICTIM-SIDE half of the sum above, published separately because the
+                // sum is a MIXED channel and nothing downstream can un-mix it.
+                // `enemy.incomingDamageModifier` and `exposed` are amplification the ATTACKER's
+                // side applied — part of the attack as thrown; `selfIncoming` is the DEFENDER
+                // reducing what it takes. "Damage absorbed" strips only the latter, so only the
+                // latter travels here.
                 // See `VictimDefenseProfile.victimSideIncomingPct` for the failure this fixes.
                 // #396: a self-sourced instance the enemy side SHADOWS is not in the
                 // channel at all, so it must not be reported as a victim-side reduction either —
                 // otherwise "damage absorbed" would strip a term the mixed total does not hold.
                 victimSideIncomingModifier:
-                    selfIncoming - (shadow.ownSuppressed.incomingDamage ?? 0) + preFightIncoming,
+                    selfIncoming - (shadow.ownSuppressed.incomingDamage ?? 0),
                 defenceFlat,
             };
         };
@@ -9061,59 +9105,10 @@ export function runCombat(rawInput: CombatEngineInput): {
                     attackerStanding: args.attackerStanding,
                     // Per-victim crit: forward the firing turn's per-victim crit resolver.
                     rollVictimCrit: args.rollVictimCrit,
-                    // Per-victim, per-sub-hit incoming %-reduction. Shared by every positional
-                    // cast site since drivePositionalApply makes ONE
-                    // applyPositionalDamage call. incomingReductionForHit returns 0 for actors with
-                    // no incoming-reduction ability.
-                    //
-                    // #358 — NOT A PURELY VICTIM-SIDE CHANNEL. On a CRIT this returns a SPLIT
-                    // rather than one fused number, because the fused number would cover three
-                    // terms, two of which belong to the
-                    // victim and one of which belongs to the ATTACKER (its squad-leader
-                    // `outgoingCritDamage` penalty). "Damage absorbed" strips victim-side
-                    // reductions only, and a fused number cannot be un-mixed downstream. The
-                    // attacker's own penalty makes the attack smaller AS THROWN, so it must reach
-                    // the pre-mitigation axis intact.
-                    incomingReductionFor: (victim, didCrit) => {
-                        const equip = incomingReductionForHit(incomingAbilitiesOf(victim.id), {
-                            didCrit,
-                            attackerStealthed: isStealthed(args.actingId),
-                            victimStealthed: isStealthed(victim.id),
-                            victimTurnBlocked: isTurnBlocked(victim.id),
-                            hitIndexThisRound: 0, // unused by reduction (only block reads it)
-                            attackerHasDot: attackerHasDot(args.actingId),
-                            victimHasBarrierRecharging: hasBarrierRecharging(victim.id),
-                            victimHasShield: hasShield(victim.id),
-                            selfHpPct: selfHpPctOf(victim.id),
-                            attackerTauntedOrProvoked: attackerTauntedOrProvoked(args.actingId),
-                        });
-                        // A non-crit hit reads no crit-family term at all, so the whole reduction
-                        // is victim-side and the bare-number form says exactly that.
-                        if (!didCrit) return equip;
-                        // Crit-conditional pre-fight damage modifiers, gated per sub-hit on
-                        // didCrit — the SAME crit-family mechanism as the equip reduction above
-                        // (a hit that crits sees the extra reduction on its whole damage).
-                        // SIGN CONVENTION: this channel is a REDUCTION (positive = less damage),
-                        // while the leader data is benefit/penalty-phrased pct points:
-                        //   victim incomingCritDamage  -10 → takes 10% smaller crits → +10 reduction;
-                        //   attacker outgoingCritDamage -10 (Negotiator III on enemies) → its crits
-                        //   deal 10% less → +10 reduction; positive values invert symmetrically.
-                        // Hence both terms are NEGATED. Absent → 0.
-                        const victimCritTerm = -(victim.preFight?.incomingCritDamage ?? 0);
-                        const attackerCritTerm = -(
-                            allActorsById.get(args.actingId)?.preFight?.outgoingCritDamage ?? 0
-                        );
-                        // WHICH SIDE OWNS WHICH TERM: `victimCritTerm` is the VICTIM taking
-                        // smaller crits (a reduction it owns → comes off "damage absorbed");
-                        // `attackerCritTerm` is the ATTACKER's crits landing smaller (the attack
-                        // as thrown → stays on both axes). `victimHitDamageParts` re-sums the two
-                        // halves in this same left-to-right order before subtracting, so the split
-                        // introduces no floating-point re-association into `damage`.
-                        return {
-                            victimSidePct: equip + victimCritTerm,
-                            attackerSidePct: attackerCritTerm,
-                        };
-                    },
+                    // Per-victim, per-sub-hit incoming reductions and the attacker's crit
+                    // penalty (read `hitReductionFor`).
+                    incomingReductionFor: (victim, didCrit) =>
+                        hitReductionFor(args.actingId, victim.id, didCrit),
                     // Armed next-crit crit power (Synaptic Resonance): the first crit hit this
                     // actor lands spends it, whichever victim or sub-attack that is.
                     critPowerBonusFor: (_victim, didCrit) =>
@@ -9951,50 +9946,34 @@ export function runCombat(rawInput: CombatEngineInput): {
         // The selfHpPct denom is runtimeFor(actor).hp (equal to baseHpFor(id) by
         // construction). The per-kind bookkeeping TAILS after each call stay inline.
         /**
-         * The bound target's gear/kit `incoming-reduction` for the turn's own damage figure, read
-         * the way the positional apply's `incomingReductionFor` reads it for a hit (Iridium-as-tank):
-         * the non-crit baseline, and the crit-family DELTA a crit adds — which also carries the
-         * crit-conditional pre-fight terms (victim `incomingCritDamage`, attacker
-         * `outgoingCritDamage`), negated because this channel is a REDUCTION. Every cast site, both
-         * sides (#658). What LANDS takes its own per-hit reduction in drivePositionalApply.
+         * The bound target's bucketed incoming reductions for the turn's own damage figure, read
+         * through `hitReductionFor` exactly as the positional apply reads them for a hit: once
+         * for a non-crit and once for a crit (crit-conditional kit/gear entries and the victim's
+         * squad-leader `incomingCritDamage`), plus the attacker's squad-leader crit penalty.
+         * Every cast site, both sides. What LANDS takes its own per-hit reduction in
+         * drivePositionalApply.
          *
          * The victim terms are fenced on the victim's presence; the attacker's own
-         * `outgoingCritDamage` is not victim-derived and applies regardless. Both values feed only
-         * runPlayerTurn's `hasVictim`-fenced damage figures, never `turnCtx` or `positionalScalars`.
+         * `outgoingCritDamage` is not victim-derived and applies regardless. All three values feed
+         * only runPlayerTurn's `hasVictim`-fenced damage figures, never `turnCtx` or
+         * `positionalScalars`.
          */
         const boundTargetIncomingReduction = (
             actor: CombatActor,
             tgt: CombatActor | undefined
-        ): { incomingReductionNonCritPct: number; incomingReductionCritFamilyPct: number } => {
-            let nonCrit = 0;
-            let critAll = 0;
-            if (tgt !== undefined) {
-                const tgtIncoming = incomingAbilitiesOf(tgt.id);
-                if (tgtIncoming.length > 0) {
-                    const ctxFor = (didCrit: boolean) => ({
-                        didCrit,
-                        attackerStealthed: isStealthed(actor.id),
-                        victimStealthed: isStealthed(tgt.id),
-                        victimTurnBlocked: isTurnBlocked(tgt.id),
-                        hitIndexThisRound: 0,
-                        attackerHasDot: attackerHasDot(actor.id),
-                        victimHasBarrierRecharging: hasBarrierRecharging(tgt.id),
-                        victimHasShield: hasShield(tgt.id),
-                        selfHpPct: selfHpPctOf(tgt.id),
-                        attackerTauntedOrProvoked: attackerTauntedOrProvoked(actor.id),
-                    });
-                    nonCrit = incomingReductionForHit(tgtIncoming, ctxFor(false));
-                    critAll = incomingReductionForHit(tgtIncoming, ctxFor(true));
-                }
-            }
-            const preFightCritFamilyPct =
-                -(tgt?.preFight?.incomingCritDamage ?? 0) -
-                (actor.preFight?.outgoingCritDamage ?? 0);
-            return {
-                incomingReductionNonCritPct: nonCrit,
-                incomingReductionCritFamilyPct: critAll - nonCrit + preFightCritFamilyPct,
-            };
-        };
+        ): {
+            incomingReductionNonCrit: IncomingReductionParts;
+            incomingReductionCrit: IncomingReductionParts;
+            attackerCritPenaltyPct: number;
+        } => ({
+            incomingReductionNonCrit: tgt
+                ? hitReductionFor(actor.id, tgt.id, false).parts
+                : NO_INCOMING_REDUCTION,
+            incomingReductionCrit: tgt
+                ? hitReductionFor(actor.id, tgt.id, true).parts
+                : NO_INCOMING_REDUCTION,
+            attackerCritPenaltyPct: -(actor.preFight?.outgoingCritDamage ?? 0),
+        });
         const buildTurnArgs = (a: CombatActor, tgt: CombatActor | undefined) => {
             castStartSeq = statusEngine.lastAppliedSeq();
             const tb = turnBindings(a.side);

@@ -36,7 +36,7 @@ export function reflectedDamageForHit(args: {
      * ⚠️ DO NOT RENAME THIS TO `attackerIncomingReductionPct`. "attacker" reads as POSITIONAL
      * here (who threw the original hit) where a reader takes it as CAUSAL (attacker-side, and
      * therefore not a victim-side reduction to strip).
-     * The distinction is not cosmetic — `attackerSideReductionPct` in `victimDamage.ts`, ONE call
+     * The distinction is not cosmetic — `attackerCritPenaltyPct` in `victimDamage.ts`, ONE call
      * away, is where "attacker" genuinely IS causal (the attacker's own squad-leader penalty). Two
      * adjacent parameters with the same prefix and opposite meanings is exactly the shape that
      * produces this defect, so the positional one does not carry the prefix.

@@ -320,7 +320,7 @@ export interface RoundData {
      *
      *  #358 ADDENDUM 2/3: `incomingRaw` is `incoming` BEFORE **every victim-side reduction** — the
      *  raw damage THROWN at it. Not just defence: also the victim's own `Inc. Damage Down` family,
-     *  its pre-fight incoming baseline, `equipReductionPct`, `incomingDotReductionPct` and the
+     *  its pre-fight incoming baseline, passive/gear reductions, `incomingDotReductionPct` and the
      *  reflect channel's incoming-reduction. (Addendum 2 stripped only the defence factor; addendum
      *  3 widened it to the full list, so "before the victim's defence-mitigation factor" now
      *  under-states what this axis excludes.) Attacker-side modifiers and enemy-APPLIED

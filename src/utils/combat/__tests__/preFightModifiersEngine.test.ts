@@ -3,8 +3,9 @@
  * baseline, exercising the fold sites the battle-sim integration tests cannot isolate:
  *
  *   1. createActor shield seeding (`startingShieldPctOfHp` → shieldPool; absent → 0).
- *   2. Victim-side `incomingDamage` riding the per-victim D-PR12 channel, observed
- *      through `__testTapVictimEnemyModifiers`.
+ *   2. Victim-side `incomingDamage` stays OFF the per-victim buff/debuff channel (observed
+ *      through `__testTapVictimEnemyModifiers`) and still reduces damage as its own separate
+ *      factor (#672, composed in `hitReductionFor`).
  *   3. Heal channels: caster `outgoingHeal` and recipient `incomingHeal` (incl. the
  *      PRE-FIRST-TURN receipt via the engine's recipientIncomingHealPct fallback, and
  *      the no-double-count proof once the recipient has a turn ctx).
@@ -103,8 +104,8 @@ const BASE_INPUT = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInp
     ...overrides,
 });
 
-describe('F3 — victim-side incomingDamage rides the per-victim modifier channel', () => {
-    it('folds the actor’s preFight.incomingDamage into victimIncomingModifiers (its own id only)', () => {
+describe('F3 — victim-side incomingDamage is not on the per-victim buff/debuff channel', () => {
+    it('the actor’s preFight.incomingDamage never reaches victimIncomingModifiers', () => {
         let captured:
             | ((victimId: string) => {
                   enemyDefenseModifier: number;
@@ -121,19 +122,15 @@ describe('F3 — victim-side incomingDamage rides the per-victim modifier channe
             })
         );
         expect(captured).toBeDefined();
-        // The focus actor's own per-victim read carries its pre-fight protection…
+        // The squad-leader baseline is a separate factor, not a buff: the channel stays clean on
+        // the carrier (its damage effect is pinned by the 'separate factor' describe below)…
         expect(captured!('attacker')).toEqual({
             enemyDefenseModifier: 0,
-            incomingDamageModifier: -5,
-            // #358 ADDENDUM 3 (C2): `preFightIncoming` is a VICTIM-SIDE reduction, so it must
-            // appear in BOTH the mixed sum above and the victim-side split — the split is what
-            // `victimHitDamageParts` subtracts back off the "damage absorbed" axis. A squad-leader
-            // protection that failed to register here would silently shrink its own ship's headline.
-            victimSideIncomingModifier: -5,
+            incomingDamageModifier: 0,
+            victimSideIncomingModifier: 0,
             defenceFlat: 0,
         });
-        // …and does NOT bleed onto other actors: neither the vestigial dummy sink nor the real
-        // positioned opponent has any preFight of its own.
+        // …and on every other actor.
         expect(captured!('enemy')).toEqual({
             enemyDefenseModifier: 0,
             incomingDamageModifier: 0,
@@ -148,13 +145,7 @@ describe('F3 — victim-side incomingDamage rides the per-victim modifier channe
         });
     });
 
-    // The no-bleed control above is weak ON ITS OWN: `victimIncomingModifiers` returns {0,0} for
-    // ANY id it does not know, so `captured!(BARE_ENEMY_ID)` reading zeros is equally consistent
-    // with "the roster entry has no preFight" and with "the reader has never heard of that id".
-    // This case supplies the discriminator by giving the ROSTER ENTRY its own preFight: if the
-    // reader resolves the id at all, it must report -9 here. Together the two cases say what the
-    // first alone could not — the read is id-scoped, not merely quiet.
-    it('resolves a ROSTER member’s own preFight by id (discriminates the no-bleed control above)', () => {
+    it('a ROSTER member’s own preFight.incomingDamage stays off the channel too', () => {
         let captured:
             | ((victimId: string) => {
                   enemyDefenseModifier: number;
@@ -173,16 +164,10 @@ describe('F3 — victim-side incomingDamage rides the per-victim modifier channe
         expect(captured).toBeDefined();
         expect(captured!(BARE_ENEMY_ID)).toEqual({
             enemyDefenseModifier: 0,
-            incomingDamageModifier: -9,
-            // #358 ADDENDUM 3 (C2): `preFightIncoming` is a VICTIM-SIDE reduction, so it must
-            // appear in BOTH the mixed sum above and the victim-side split — the split is what
-            // `victimHitDamageParts` subtracts back off the "damage absorbed" axis. A squad-leader
-            // protection that failed to register here would silently shrink its own ship's headline.
-            victimSideIncomingModifier: -9,
+            incomingDamageModifier: 0,
+            victimSideIncomingModifier: 0,
             defenceFlat: 0,
         });
-        // …and the focus, which supplied no preFight of its own this time, still reads zeros — so
-        // the -9 is scoped to the roster entry rather than being a fight-wide fold.
         expect(captured!('attacker')).toEqual({
             enemyDefenseModifier: 0,
             incomingDamageModifier: 0,
@@ -356,6 +341,15 @@ describe('F3 — aggregate crit-family mirror (legacy non-positional enemy path)
                 focusPreFight: preFight({ incomingCritDamage: -10 }),
             })
         ).toBeCloseTo(1_350);
+    });
+
+    it('victim-side incomingDamage -5 → the target takes 5% less as a separate factor', () => {
+        expect(
+            focusDamageTaken({
+                enemyCrit: 0,
+                focusPreFight: preFight({ incomingDamage: -5 }),
+            })
+        ).toBeCloseTo(950);
     });
 
     it('both crit-family modifiers are INERT on non-crit hits', () => {

@@ -4,10 +4,10 @@
  *
  * The stat is not read by the engine: it arrives as `incoming-reduction` abilities with
  * `condition: 'incoming-crit'` and `critFamily: true` — the Hardened set from
- * `buildShipAbilitiesWithEquipment` (equipment) and the parsed "N% damage reduction from critical
- * hits" innate. Reading `ActorStats.damageReduction` in the engine as well would double-count the
- * innate source, which `incomingReductionForHit` already resolves by max-of-crit-family. This
- * suite is the tripwire for the reaching; the cap rule lives at `capIncomingPct`.
+ * `buildShipAbilitiesWithEquipment` (equipment → its own separate factor) and the parsed "N%
+ * damage reduction from critical hits" innate (ship kit → the passive bucket). Reading
+ * `ActorStats.damageReduction` in the engine as well would double-count the innate source. This
+ * suite is the tripwire for the reaching; the composition and cap live at `composeIncomingFactor`.
  *
  * Observation: death brackets on a victim hit by a 5000-attack, 100%-multiplier, 100%-crit-damage
  * attacker at defence 0 (non-crit 5000, crit 10000). Six Hardened pieces are three complete sets:
@@ -254,11 +254,12 @@ describe.each(SIDES)('Hardened set crit reduction reaches damage: %s', (_name, s
         expectLanded(side({ wearing: true, crit: false }), id, 5000);
     });
     it('the crit reduction is inside the cap: a victim already at -70 gains nothing from Hardened', () => {
-        // 70% non-crit reduction alone: 10000 * 0.30. Hardened would make the crit net -85.
+        // passive 70 alone: 10000 * 0.30. With Hardened the product is 0.30 × 0.85 = 0.255,
+        // floored back to 0.30.
         expectLanded(side({ wearing: false, crit: true, extraPct: 70 }), id, 3000);
         expectLanded(side({ wearing: true, crit: true, extraPct: 70 }), id, 3000);
     });
-    it('below the cap Hardened still counts: -50 non-crit and -15 Hardened is -65 on a crit', () => {
-        expectLanded(side({ wearing: true, crit: true, extraPct: 50 }), id, 3500);
+    it('below the cap Hardened still counts: passive 50 × Hardened separate 15 is 0.425 on a crit', () => {
+        expectLanded(side({ wearing: true, crit: true, extraPct: 50 }), id, 4250);
     });
 });
