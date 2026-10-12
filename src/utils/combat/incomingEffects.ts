@@ -1,6 +1,7 @@
 import { Ability, IncomingCondition, IncomingHitContext } from '../../types/abilities';
 import type { FactionName } from '../../constants/factions';
 import { resolveSupportRecipients } from './supportRecipients';
+import { IncomingReductionParts, NO_INCOMING_REDUCTION } from './victimDamage';
 
 /**
  * #363 — which actors an ALLY-SCOPED `incoming-reduction` ability protects.
@@ -57,7 +58,7 @@ export function allyScopedIncomingRecipients(args: {
  *
  * The dedupe key is the `id`, NOT object identity: two distinct runtimes for the same actor id
  * each hand back a distinct object describing the SAME underlying ability, and
- * `incomingReductionForHit` SUMS non-crit-family entries — so an identity-keyed dedupe would let
+ * `incomingReductionForHit` SUMS same-bucket entries — so an identity-keyed dedupe would let
  * a 30% aura silently double to 60%. Mutates `list` in place (matches the call site's existing
  * get-or-create-then-push idiom) and also returns it for convenience.
  */
@@ -140,32 +141,45 @@ export function conditionMet(cond: IncomingCondition, ctx: IncomingHitContext): 
 }
 
 /**
- * Total incoming %-reduction for one hit:
- *   max(applicable crit-family entries) + sum(applicable non-crit-family entries).
+ * The victim's incoming reductions for one hit, in the buckets the game composes separately
+ * (`IncomingReductionParts`, #672): ship-kit entries sum into `passivePct`; every
+ * `source: 'equipment'` entry (gear set or implant) is its own entry in `separatePcts`.
+ * `critFamily` is a condition marker only and does not change the bucket.
  * `scope` must match the hit: 'dot' entries apply only when ctx.dotType is set; 'direct'
- * entries only when it is not. Returns 0 when nothing applies.
+ * entries only when it is not.
  */
+export function incomingReductionPartsForHit(
+    victimAbilities: Ability[],
+    ctx: IncomingHitContext
+): IncomingReductionParts {
+    const isDot = ctx.dotType !== undefined;
+    let passivePct = 0;
+    const separatePcts: number[] = [];
+    for (const a of victimAbilities) {
+        if (a.config.type !== 'incoming-reduction') continue;
+        const { scope, condition, pct, hpScaling } = a.config;
+        if ((scope === 'dot') !== isDot) continue;
+        if (!conditionMet(condition, ctx)) continue;
+        // hpScaling REPLACES the flat pct with a continuous HP-proportional value (Tormenter).
+        const effectivePct = hpScaling
+            ? Math.min(hpScaling.cap, hpScaling.perUnit * (100 - ctx.selfHpPct))
+            : pct;
+        if (effectivePct === 0) continue;
+        if (a.source === 'equipment') separatePcts.push(effectivePct);
+        else passivePct += effectivePct;
+    }
+    return passivePct === 0 && separatePcts.length === 0
+        ? NO_INCOMING_REDUCTION
+        : { passivePct, separatePcts };
+}
+
+/** Scalar view of `incomingReductionPartsForHit`: the plain sum of every bucket. */
 export function incomingReductionForHit(
     victimAbilities: Ability[],
     ctx: IncomingHitContext
 ): number {
-    const isDot = ctx.dotType !== undefined;
-    let nonCritSum = 0;
-    let critFamilyMax = 0;
-    for (const a of victimAbilities) {
-        if (a.config.type !== 'incoming-reduction') continue;
-        const { scope, condition, pct, critFamily, hpScaling } = a.config;
-        if ((scope === 'dot') !== isDot) continue;
-        if (!conditionMet(condition, ctx)) continue;
-        // hpScaling REPLACES the flat pct with a continuous HP-proportional
-        // value (Tormenter) — perUnit per missing-HP-point, capped.
-        const effectivePct = hpScaling
-            ? Math.min(hpScaling.cap, hpScaling.perUnit * (100 - ctx.selfHpPct))
-            : pct;
-        if (critFamily) critFamilyMax = Math.max(critFamilyMax, effectivePct);
-        else nonCritSum += effectivePct;
-    }
-    return nonCritSum + critFamilyMax;
+    const p = incomingReductionPartsForHit(victimAbilities, ctx);
+    return p.separatePcts.reduce((sum, x) => sum + x, p.passivePct);
 }
 
 /**

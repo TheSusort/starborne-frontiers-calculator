@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
     incomingReductionForHit,
+    incomingReductionPartsForHit,
     incomingBlockForIntake,
     addIncomingAbilityDeduped,
     withLiveAllyScopedOwners,
@@ -69,6 +70,84 @@ const block = (
     config: { type: 'incoming-block', condition, procChance, blockPct, oncePerRound },
 });
 
+const red = (
+    pct: number,
+    opts: {
+        condition?: IncomingCondition;
+        critFamily?: boolean;
+        equipment?: boolean;
+        scope?: 'direct' | 'dot';
+    } = {}
+): Ability => ({
+    id: `r-${pct}-${opts.condition ?? 'always'}-${opts.equipment ? 'eq' : 'kit'}`,
+    type: 'incoming-reduction',
+    target: 'self',
+    trigger: 'on-cast',
+    conditions: [],
+    autoFilled: true,
+    ...(opts.equipment ? { source: 'equipment' as const } : {}),
+    config: {
+        type: 'incoming-reduction',
+        scope: opts.scope ?? 'direct',
+        condition: opts.condition ?? 'always',
+        pct,
+        critFamily: opts.critFamily ?? false,
+    },
+});
+
+describe('incomingReductionPartsForHit (#672 buckets)', () => {
+    it('ship passives sum into passivePct', () => {
+        const p = incomingReductionPartsForHit(
+            [red(25, { condition: 'self-stealth' }), red(10, { condition: 'self-stealth' })],
+            ctx({ victimStealthed: true })
+        );
+        expect(p).toEqual({ passivePct: 35, separatePcts: [] });
+    });
+    it('each equipment reduction is its own separate factor', () => {
+        const p = incomingReductionPartsForHit(
+            [
+                red(20, { condition: 'self-stealth', equipment: true }),
+                red(25, { condition: 'self-stealth' }),
+            ],
+            ctx({ victimStealthed: true })
+        );
+        expect(p).toEqual({ passivePct: 25, separatePcts: [20] });
+    });
+    it('Iridium (kit, crit) and Hardened (gear, crit) land in different buckets on a crit', () => {
+        const abilities = [
+            red(35, { condition: 'incoming-crit', critFamily: true }),
+            red(15, { condition: 'incoming-crit', critFamily: true, equipment: true }),
+        ];
+        expect(incomingReductionPartsForHit(abilities, ctx({ didCrit: true }))).toEqual({
+            passivePct: 35,
+            separatePcts: [15],
+        });
+        expect(incomingReductionPartsForHit(abilities, ctx({ didCrit: false }))).toEqual({
+            passivePct: 0,
+            separatePcts: [],
+        });
+    });
+    it('dot scope only applies to dot hits', () => {
+        const abilities = [red(20, { scope: 'dot' }), red(30)];
+        expect(incomingReductionPartsForHit(abilities, ctx({ dotType: 'inferno' }))).toEqual({
+            passivePct: 20,
+            separatePcts: [],
+        });
+        expect(incomingReductionPartsForHit(abilities, ctx())).toEqual({
+            passivePct: 30,
+            separatePcts: [],
+        });
+    });
+    it('hpScaling (Tormenter) lands in passivePct', () => {
+        const p = incomingReductionPartsForHit(
+            [hpScalingReduction(0.3, 30)],
+            ctx({ selfHpPct: 50 })
+        );
+        expect(p.passivePct).toBeCloseTo(15, 6);
+        expect(p.separatePcts).toEqual([]);
+    });
+});
+
 describe('incomingReductionForHit', () => {
     it('non-crit-family reductions add (Voidshade self-stealth + Nebula self-stasis-or-disable)', () => {
         const a = [
@@ -82,22 +161,10 @@ describe('incomingReductionForHit', () => {
     it('self-stealth reduction inert when not stealthed', () => {
         expect(incomingReductionForHit([reduction('self-stealth', 20, false)], ctx())).toBe(0);
     });
-    it('crit-family reductions take MAX not sum (Hardened 5 + Iridium 35 on a crit → 35)', () => {
-        const a = [reduction('incoming-crit', 5, true), reduction('incoming-crit', 35, true)];
-        expect(incomingReductionForHit(a, ctx({ didCrit: true }))).toBe(35);
-    });
     it('crit-family inert on a non-crit hit', () => {
         expect(
             incomingReductionForHit([reduction('incoming-crit', 35, true)], ctx({ didCrit: false }))
         ).toBe(0);
-    });
-    it('crit-family MAX adds to non-crit-family sum (20 + max(5,35)=35 → 55)', () => {
-        const a = [
-            reduction('self-stealth', 20, false),
-            reduction('incoming-crit', 5, true),
-            reduction('incoming-crit', 35, true),
-        ];
-        expect(incomingReductionForHit(a, ctx({ didCrit: true, victimStealthed: true }))).toBe(55);
     });
     it('Hyperion gates on crit AND attacker-stealthed', () => {
         const a = [reduction('incoming-crit-by-stealthed', 35, true)];
