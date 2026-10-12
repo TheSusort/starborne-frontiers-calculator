@@ -8044,6 +8044,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             // Roll the OWNER's crit via the dedicated gate (one stream per counter ability per owner).
             const didCrit = rollRateGate(counterCritGates, `${ownerId}:${abilityId}`, critRate);
 
+            const counterReduction = hitReductionFor(ownerId, attackerId, didCrit);
             const rawParts = victimHitDamageParts(
                 {
                     effectiveAttack: ownerOutgoing.attack,
@@ -8073,7 +8074,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                 },
                 profile,
                 didCrit,
-                1 // roleScale: a counter is a single full hit
+                1, // roleScale: a counter is a single full hit
+                counterReduction.parts,
+                counterReduction.attackerCritPenaltyPct
             );
             const raw = rawParts.damage;
             const rawPreMit = rawParts.preMitigation;
@@ -8285,6 +8288,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                           ? shieldBasisPct
                           : multiplier;
 
+                const procReduction = hitReductionFor(ownerId, victimId, didCrit);
                 const procParts = victimHitDamageParts(
                     {
                         effectiveAttack: basisStat,
@@ -8313,7 +8317,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                     // term entirely (defence: 0) instead of the normal substituted defence.
                     opts?.ignoresDefense ? { ...profile, defence: 0 } : profile,
                     didCrit,
-                    1 // roleScale: a reactive proc is a single full hit
+                    1, // roleScale: a reactive proc is a single full hit
+                    procReduction.parts,
+                    procReduction.attackerCritPenaltyPct
                 );
                 raw = procParts.damage;
                 rawPreMit = procParts.preMitigation;
@@ -9335,6 +9341,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                     // it, exactly as the firing hit's positional loop does — so the factor handed
                     // to `applyToVictim` is provably the one baked into `damage`.
                     const defenseProfile = victimDefenseProfileOf(victim, profileOpts);
+                    const slotReduction = hitReductionFor(actor.id, victim.id, hit.didCrit);
                     const damageParts = victimHitDamageParts(
                         hit.didCrit
                             ? {
@@ -9346,7 +9353,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                             : hit.scalars,
                         defenseProfile,
                         hit.didCrit,
-                        roleScale
+                        roleScale,
+                        slotReduction.parts,
+                        slotReduction.attackerCritPenaltyPct
                     );
                     const damage = damageParts.damage;
                     if (!(damage > 0)) continue;

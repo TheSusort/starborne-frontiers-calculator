@@ -29,6 +29,7 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator: hit damage figures now include the target's damage reduction.",
     'Combat simulator: hits dealing no damage no longer trigger on-attacked effects.',
     "Defense calculator: a ship's own skill buffs no longer count twice when they fire.",
+    'Combat simulator: counters and reactive hits now respect gear and implant reductions.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

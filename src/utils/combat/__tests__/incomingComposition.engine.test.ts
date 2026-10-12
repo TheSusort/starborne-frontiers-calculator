@@ -14,6 +14,7 @@ import { setupKeyedRng } from '../../calculators/rateAccumulator';
 import { emptyPreFightModifiers } from '../preFight';
 import type { PreFightCombatModifiers } from '../preFight';
 import { Ability, ShipSkills } from '../../../types/abilities';
+import { dealtBy } from '../__testutils__/perTargetDealt';
 import { SelectedGameBuff } from '../../../types/calculator';
 import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
 
@@ -330,5 +331,104 @@ describe('direct-hit composition in the engine (#672)', () => {
         const playerSide = observe(playerVictimRun(kit, 100), 'enemy-1', 'victim');
         expect(playerSide.taken).toBeCloseTo(expected, 6);
         expect(playerSide.aggregate).toBeCloseTo(playerSide.taken, 6);
+    });
+});
+
+// Counters, reactive damage procs and passive-slot hits are direct hits too: the victim's gear and
+// squad-leader reductions reach them through the same composition as a skill hit.
+describe('reactive and passive-slot hits compose the victim reductions (#672)', () => {
+    type Source = 'counter' | 'reactive' | 'passive-slot';
+
+    const reactiveAbility = (id: string, type: 'counter' | 'damage'): Ability => ({
+        id,
+        type,
+        target: 'enemy',
+        trigger: 'on-attacked',
+        conditions: [],
+        config:
+            type === 'counter'
+                ? { type: 'counter', multiplier: 100, hits: 1 }
+                : { type: 'damage', multiplier: 100 },
+    });
+
+    /**
+     * The player focus (attack 5000) hits the `enemy-victim` carrying `kit`, via the source under
+     * test. Returns the damage the focus (or, for a counter/proc, its owner) booked on the victim.
+     * counter / reactive: the victim swings first and the focus's on-attacked ability answers it.
+     * passive-slot: the focus swings first with a 100% active plus a 50% passive-slot instance.
+     */
+    const landedOnVictim = (source: Source, kit: VictimKit): number => {
+        const answers = source !== 'passive-slot';
+        const victimSkills = victimSlots('enemy-victim', kit).map((slot) =>
+            slot.slot === 'active' && answers
+                ? { ...slot, abilities: [hit('enemy-victim-hit', 100)] }
+                : slot
+        );
+        const focusSlots: ShipSkills['slots'] = answers
+            ? [
+                  { slot: 'active', abilities: [hit('focus-noop', 0)] },
+                  {
+                      slot: 'passive',
+                      abilities: [
+                          reactiveAbility(
+                              'focus-react',
+                              source === 'counter' ? 'counter' : 'damage'
+                          ),
+                      ],
+                  },
+              ]
+            : [
+                  { slot: 'active', abilities: [hit('focus-hit', 100)] },
+                  {
+                      slot: 'passive',
+                      abilities: [{ ...hit('focus-passive', 50), target: 'enemy' }],
+                  },
+              ];
+        const input = BASE({
+            attack: 5000,
+            speed: answers ? 1 : 1000,
+            position: 'M4',
+            target: target(),
+            pattern: pattern(),
+            shipSkills: { slots: focusSlots },
+            enemyAttackers: [
+                {
+                    id: 'enemy-victim',
+                    stats: {
+                        attack: 1000,
+                        crit: 0,
+                        critDamage: 0,
+                        defence: 0,
+                        hp: 1e9,
+                        speed: answers ? 2000 : 1,
+                    },
+                    chargeCount: 0,
+                    startCharged: false,
+                    position: 'M1',
+                    target: target(),
+                    pattern: pattern(),
+                    shipSkills: { slots: victimSkills },
+                    ...(leaderPreFight(kit) ? { preFight: leaderPreFight(kit) } : {}),
+                } satisfies EnemyAttacker,
+            ],
+        });
+        return dealtBy(runCombat(input).rounds, 'attacker');
+    };
+
+    it.each<[Source, number]>([
+        ['counter', 5000],
+        ['reactive', 5000],
+        // 100% firing hit + 50% passive-slot instance.
+        ['passive-slot', 7500],
+    ])('%s: equipment 20 → ratio 0.80, squad-leader incoming −5 → ratio 0.95', (source, base) => {
+        // Liveness: the source really lands on an unreduced victim.
+        expect(landedOnVictim(source, {})).toBeCloseTo(base, 6);
+        expect(landedOnVictim(source, { equipment: 20 }) / landedOnVictim(source, {})).toBeCloseTo(
+            0.8,
+            6
+        );
+        expect(
+            landedOnVictim(source, { leaderIncoming: -5 }) / landedOnVictim(source, {})
+        ).toBeCloseTo(0.95, 6);
     });
 });
