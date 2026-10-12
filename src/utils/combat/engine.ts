@@ -6447,6 +6447,13 @@ export function runCombat(rawInput: CombatEngineInput): {
                  *  Never reconstructed by dividing by `targetMitigation` — that is lossy and
                  *  undefined at a factor of 0. */
                 preMitigationDamage?: number;
+                /** The hit as THROWN, which a reflector reflects its percentage of (#678):
+                 *  `victimHitDamageParts(...).reflectBase` for this victim. Every direct hit
+                 *  (`byDirectDamage: true`, `bombPortion` 0) that is not a Protection chunk, a
+                 *  splash copy or a bounce carries it; the funnel throws when one reaches a
+                 *  reflector without it. Absent on bomb bursts and DoT ticks, which never
+                 *  reflect. */
+                reflectBase?: number;
                 /** This hit is a primary-target hit (Nosorog's `requirePrimaryTarget` reflect
                  *  gate): a cast's hit on one of its sub-attack's primary targets
                  *  (`SubAttackOutcome.primaryVictimIds` — the anchor, or every victim of a
@@ -6459,6 +6466,21 @@ export function runCombat(rawInput: CombatEngineInput): {
             // AppliedVictimDamage, not VictimDamageOutcome: this funnel always sets
             // `incomingBooked`, so the booking sites below read it without a fallback.
         ): AppliedVictimDamage => {
+            // TRIPWIRE: a direct hit that reaches a reflector without `cause.reflectBase` is a
+            // damage path that skipped threading it, and throws rather than reflecting 0.
+            if (
+                cause?.byDirectDamage === true &&
+                !cause.isReflected &&
+                !cause.isProtectionTransfer &&
+                !cause.isSplashCopy &&
+                (cause.bombPortion ?? 0) === 0 &&
+                cause.reflectBase === undefined &&
+                incomingAbilitiesOf(victim.id).some((a) => a.config.type === 'damage-reflection')
+            ) {
+                throw new Error(
+                    'reflect: direct hit reached a reflector without cause.reflectBase (#678)'
+                );
+            }
             // A hit may be reduced by proc block BEFORE it is recorded/absorbed. `damage`
             // becomes mutable so the block step can shave it; everything downstream (addIncoming,
             // shield drain, hp damage) operates on the post-block value.
@@ -6905,8 +6927,8 @@ export function runCombat(rawInput: CombatEngineInput): {
             //
             // MIXED DIRECT + BOMB HIT: a single apply can carry `byDirectDamage: true` with
             // `0 < bombPortion < damage` — a cast that both lands a direct hit and detonates a bomb
-            // in the same apply (see the MIXED DIRECT + DETONATE HIT note on the reflect guard
-            // below).
+            // in the same apply. No caller builds one: a positional cast lands its detonation as
+            // its own per-victim apply.
             // `bombPortion === 0` is false for this case, so this guard skips entirely: the block is
             // NOT consumed (correct — reading `damage` here would spend it on a hit this funnel does
             // not treat as purely direct) but it also does NOT blunt the direct slice — the full
@@ -7330,14 +7352,13 @@ export function runCombat(rawInput: CombatEngineInput): {
             ) {
                 hitThisRound.add(victim.id);
             }
-            // Reflect (Nosorog, the Reflect gear set): thorns. When a reflector takes a DIRECT hit
-            // that dealt net HP damage, reflect Σpct% of that net HP damage back at the attacker —
-            // mitigated by the attacker's affinity matchup (wearer is the source of the reflected
-            // hit), defence, and incoming-reduction. Applied via a RECURSIVE applyVictimDamage with
-            // isReflected:true so it (a) drains the attacker's shield→HP per the H1 rules, (b) runs
-            // its own death handling (a reflected kill records the destroy + fires on-death FOR
-            // FREE — recordDestroyed above), and (c) does NOT itself reflect (the isReflected guard
-            // below skips).
+            // Reflect (Nosorog, the Reflect gear set): thorns. When a reflector takes a DIRECT hit,
+            // it reflects Σpct% of that hit AS THROWN (`cause.reflectBase`) back at the attacker.
+            // The rule — which terms enter and which are ignored — lives in `damageReflection.ts`
+            // (#678). Applied via a RECURSIVE applyVictimDamage with isReflected:true so it (a)
+            // drains the attacker's shield→HP per the H1 rules, (b) runs its own death handling (a
+            // reflected kill records the destroy + fires on-death FOR FREE — recordDestroyed
+            // above), and (c) does NOT itself reflect (the isReflected guard below skips).
             //
             // A SHIP's reflect (Nosorog) is direct damage on the attacker (R137): it lands like a
             // counter through `landReactiveHit`, so the attacker's "when directly damaged"
@@ -7346,21 +7367,14 @@ export function runCombat(rawInput: CombatEngineInput): {
             // not direct damage and raises none of that. A reflector carrying both sends one
             // bounce, direct when any part of it is.
             //
-            // GUARDS (any → skip): a reflected application (no ping-pong); no net HP damage; a DoT
-            // tick (byDirectDamage === false); the victim has no damage-reflection ability. Fully
-            // inert (no helper calls) for every fixture without REFLECT equipment.
-            //
-            // MIXED DIRECT + DETONATE HIT: a single apply can carry damage = directDamage +
-            // detonationDamage with byDirectDamage:true AND bombPortion > 0 (a cast that both lands a
-            // direct hit and detonates a bomb in the same hit; no caller builds one today — the
-            // positional apply lands detonation as its own per-victim apply).
-            // The bomb portion never reflects (bombs full-drain, no reflect); the direct portion does.
-            // We split the net HP damage proportionally by the RAW direct fraction of the post-block
-            // total (`damage`). This is an intentional approximation: shieldAbsorb mixes the direct
-            // and bomb slices into a single hpDamage, so we cannot recover the exact direct HP loss —
-            // we apportion it by raw fraction. Pure-direct (bombPortion 0) → fraction 1 → full
-            // hpDamage. Pure-bomb (bombPortion === total) → fraction 0 → basis 0 → skip (no
-            // reflect).
+            // GATE (owner rulings, #678): the hit must have landed. A hit the reflector's shield
+            // soaks whole still reflects in full; a hit that does nothing reflects nothing —
+            // Barrier-nullified (returned above), fully blocked, fully redirected by Protection,
+            // or converted into a self-DoT or a shield (each leaves `damage` at 0 by this point).
+            // A partial block or a partial Protection redirect still reflects the whole thrown
+            // hit: both are the reflector's side, which the rule ignores. A DoT tick
+            // (byDirectDamage === false), a reflected application (no ping-pong) and a hit without
+            // a `reflectBase` (bomb bursts) never reflect.
             //
             // KILLING-BLOW NOTE: no guard on victim.destroyedRound — if the hit that killed the
             // wearer also triggers reflection, the thorns still fire (hit landed before death).
@@ -7372,15 +7386,14 @@ export function runCombat(rawInput: CombatEngineInput): {
             // hit carries `isReflected` and never reflects, and a counter its `attacked` provokes
             // is aimed at a reflector whose primary-target allowance the provoking hit already
             // spent (R92), so the gate below stops a second reflect.
-            if (!cause?.isReflected && hpDamage > 0 && cause?.byDirectDamage !== false) {
-                // Direct slice of the net HP damage: exclude the bomb portion by the raw direct
-                // fraction of the post-block total. bombPortion 0 → directFraction 1 (full reflect);
-                // bombPortion === total → directFraction 0 → basis 0 → skipped below.
-                const totalRaw = damage;
-                const bombPortion = cause?.bombPortion ?? 0;
-                const directFraction =
-                    totalRaw > 0 ? Math.max(0, (totalRaw - bombPortion) / totalRaw) : 0;
-                const reflectBasis = hpDamage * directFraction;
+            const reflectBase = cause?.reflectBase ?? 0;
+            if (
+                !cause?.isReflected &&
+                cause?.byDirectDamage !== false &&
+                damage > 0 &&
+                !carriesBarrier &&
+                reflectBase > 0
+            ) {
                 // A requirePrimaryTarget reflect ability fires only on a primary-target hit
                 // (`cause.isPrimaryTarget`, see its doc). Nosorog and the Reflect gear set both
                 // carry `requirePrimaryTarget`; an ability without it reflects every direct hit.
@@ -7393,18 +7406,12 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // one victim, which IS the primary). A FUTURE non-positional real-roster AoE path would
                 // have to pass isPrimaryTarget explicitly, or a covered victim would wrongly reflect.
                 //
-                // Counters and procs pass the answer `aimReactiveHit` gave. Detonation/bomb
-                // reactive hits pass bombPortion===total → directFraction 0 → reflectBasis 0 (no
-                // reflect); DoT ticks pass byDirectDamage:false (guard above).
-                const reflectAbilities =
-                    reflectBasis > 0
-                        ? incomingAbilitiesOf(victim.id).filter(
-                              (a) =>
-                                  a.config.type === 'damage-reflection' &&
-                                  (!a.config.requirePrimaryTarget ||
-                                      cause?.isPrimaryTarget !== false)
-                          )
-                        : [];
+                // Counters and procs pass the answer `aimReactiveHit` gave.
+                const reflectAbilities = incomingAbilitiesOf(victim.id).filter(
+                    (a) =>
+                        a.config.type === 'damage-reflection' &&
+                        (!a.config.requirePrimaryTarget || cause?.isPrimaryTarget !== false)
+                );
                 if (reflectAbilities.length > 0) {
                     const reflectPctOf = (fromEquipment: boolean): number =>
                         reflectAbilities.reduce(
@@ -7460,6 +7467,13 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 attackerTauntedOrProvoked: false,
                             }
                         ).parts;
+                        // The REFLECTOR's Out. Damage Up scales both shares: it is a property of
+                        // reflect itself, not of the ship's direct share (#678).
+                        const reflectorOutgoingPct = effectiveOutgoingStatsOf(
+                            statusEngine,
+                            selfBuffLookup,
+                            victim
+                        ).outgoingDamageBuffPct;
                         for (const { reflectPct, directReflect } of shares) {
                             // The ship's share can destroy the attacker before the set's lands.
                             if (attacker.destroyedRound !== undefined) break;
@@ -7487,9 +7501,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // mitigated amount and its pre-defence twin from a single walk.
                             const bounce = reflectedDamageParts({
                                 reflectPct,
-                                // Direct slice only — the bomb portion of a mixed hit never
-                                // reflects.
-                                reflectBase: reflectBasis,
+                                reflectBase,
+                                reflectorOutgoingPct,
                                 affinityDamageModifier,
                                 attackerDefenceReductionPct: shareDefenceReductionPct,
                                 reflectVictimReduction,
@@ -7798,6 +7811,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                 targetMitigation?: number;
                 /** #358 ADDENDUM 2/3 — see applyVictimDamage's `cause.preMitigationDamage`. */
                 preMitigationDamage?: number;
+                /** See applyVictimDamage's `cause.reflectBase`. */
+                reflectBase?: number;
             } = {
                 killerId: actingActorId,
                 byDirectDamage: true,
@@ -7839,7 +7854,9 @@ export function runCombat(rawInput: CombatEngineInput): {
             /** #358 ADDENDUM 2/3 — the pre-REDUCTION twin of `damage` (pre-defence and pre every
              *  other victim-side reduction), supplied by the positional apply. See
              *  applyVictimDamage's `cause.preMitigationDamage`. */
-            preMitigationDamage?: number
+            preMitigationDamage?: number,
+            /** The hit as thrown — see applyVictimDamage's `cause.reflectBase`. */
+            reflectBase?: number
         ): VictimDamageOutcome =>
             // A player→enemy hit is always DIRECT damage from the acting attacker.
             // Positional player→enemy hits are all-direct (no detonation slice here), so
@@ -7851,6 +7868,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 isPrimaryTarget,
                 targetMitigation,
                 preMitigationDamage,
+                reflectBase,
             });
         // TEST-ONLY: hand the genuine wrapper out once. `__testTapApplyOutgoingToEnemy` has no
         // production caller — only `applyOutgoingToEnemy.test.ts` and
@@ -8105,6 +8123,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                     // #358 ADDENDUM 2: the counter walk folds the ATTACKER's defence through
                     // `victimHitDamage`; `rawPreMit` is the same walk without it.
                     preMitigationDamage: rawPreMit,
+                    reflectBase: rawParts.reflectBase,
                     // The exact defence factor `raw` carries, for the Protection cascade.
                     targetMitigation: victimDefenceMitigation(
                         profile,
@@ -8228,6 +8247,9 @@ export function runCombat(rawInput: CombatEngineInput): {
             let raw: number;
             /** #358 ADDENDUM 2: the pre-defence twin of `raw`. */
             let rawPreMit: number;
+            /** The hit as thrown (`cause.reflectBase`). Absent on the flat-basis copy, which is
+             *  Bomb damage and never reflects. */
+            let rawReflectBase: number | undefined;
             let didCrit: boolean;
 
             if (opts?.flatBasis !== undefined) {
@@ -8316,6 +8338,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 );
                 raw = procParts.damage;
                 rawPreMit = procParts.preMitigation;
+                rawReflectBase = procParts.reflectBase;
                 rawMitigation = opts?.ignoresDefense
                     ? 1
                     : victimDefenceMitigation(profile, ownerOutgoing.defensePenetration);
@@ -8367,6 +8390,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                     // #358 ADDENDUM 2: equals `raw` on the flat-basis branch (which folds no
                     // defence at all) and the pre-defence walk on the attack-basis branch.
                     preMitigationDamage: rawPreMit,
+                    reflectBase: rawReflectBase,
                     targetMitigation: rawMitigation,
                     shieldPenetrationPct: splashCopy ? 0 : attackerShieldPenOf(ownerId),
                     // A splash copy is Bomb damage through and through: full shield drain, no
@@ -8927,7 +8951,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                  *  divides by the factor that was applied instead of re-deriving one. */
                 targetMitigation?: number,
                 /** #358 ADDENDUM 2 — the pre-defence twin of `damage`. */
-                preMitigation?: number
+                preMitigation?: number,
+                /** The hit as thrown — forwarded into `cause.reflectBase`. */
+                reflectBase?: number
             ) => VictimDamageOutcome;
             // Per-victim leech: OPTIONAL per-direction hook. drivePositionalApply is ONE
             // helper shared by every site (focus / team / enemy); since standing (player→
@@ -9051,7 +9077,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                         subAttackIndex,
                         targetMitigation,
                         preMitigation,
-                        isPrimary
+                        isPrimary,
+                        reflectBase
                     ) => {
                         const prevSubAttack = currentSubAttackIndex;
                         const prevWholeBattlefield = wholeBattlefieldHit;
@@ -9063,7 +9090,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 damage,
                                 isPrimary,
                                 targetMitigation,
-                                preMitigation
+                                preMitigation,
+                                reflectBase
                             );
                         } finally {
                             currentSubAttackIndex = prevSubAttack;
@@ -9381,7 +9409,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                         victimDefenceMitigation(defenseProfile, hit.scalars.defensePenetrationPct),
                         // #358 ADDENDUM 2: the SECOND positional damage path into the funnel owes
                         // it the same pre-defence figure the firing hit hands down.
-                        damageParts.preMitigation
+                        damageParts.preMitigation,
+                        damageParts.reflectBase
                     );
                     // Credit the intake the funnel RECORDED, exactly as the firing hit's emitHit
                     // does — a Protection cascade / incoming block / DoT transform all move the
@@ -9570,7 +9599,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                 isPrimary?: boolean,
                 targetMitigation?: number,
                 /** #358 ADDENDUM 2 — the pre-defence twin of `damage`. */
-                preMitigation?: number
+                preMitigation?: number,
+                /** The hit as thrown — see applyVictimDamage's `cause.reflectBase`. */
+                reflectBase?: number
             ) => VictimDamageOutcome;
         }
         const playerTurnBindings: TurnBindings = {
@@ -9581,8 +9612,22 @@ export function runCombat(rawInput: CombatEngineInput): {
             stealthedEnemyCount: playerStealthedEnemyCount,
             shieldedAllyCount: playerShieldedAllyCount,
             healEventOnly: false,
-            applyToVictim: (victim, damage, isPrimary, targetMitigation, preMitigation) =>
-                applyOutgoingToEnemy(damage, victim, isPrimary, targetMitigation, preMitigation),
+            applyToVictim: (
+                victim,
+                damage,
+                isPrimary,
+                targetMitigation,
+                preMitigation,
+                reflectBase
+            ) =>
+                applyOutgoingToEnemy(
+                    damage,
+                    victim,
+                    isPrimary,
+                    targetMitigation,
+                    preMitigation,
+                    reflectBase
+                ),
         };
         const enemyTurnBindings: TurnBindings = {
             opposingRoster: allPlayerActors,
@@ -9599,7 +9644,14 @@ export function runCombat(rawInput: CombatEngineInput): {
             // bySide('enemy').grantAllyCharges (resolved in buildTurnArgs by side), NEVER the player
             // team. Likewise applyToVictim routes the firing hit as INCOMING damage to the struck
             // player actor (applyIncomingToTarget), not as a player damage row.
-            applyToVictim: (victim, damage, isPrimary, targetMitigation, preMitigation) =>
+            applyToVictim: (
+                victim,
+                damage,
+                isPrimary,
+                targetMitigation,
+                preMitigation,
+                reflectBase
+            ) =>
                 applyIncomingToTarget(
                     damage,
                     victim,
@@ -9610,6 +9662,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                         byDirectDamage: true,
                         targetMitigation,
                         preMitigationDamage: preMitigation,
+                        reflectBase,
                     },
                     isPrimary
                 ),

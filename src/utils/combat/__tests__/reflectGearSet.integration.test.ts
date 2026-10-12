@@ -1,14 +1,15 @@
 /**
  * reflectGearSet.integration.test.ts
  *
- * Engine integration tests for the REFLECT gear set's thorns damage (Task 5 — apply seam).
+ * Engine integration tests for the REFLECT gear set's thorns damage (the apply seam).
  *
  * The wearer's `damage-reflection` ability is built through the REAL registry
  * (`buildShipAbilitiesWithEquipment` with `setBonus: 'REFLECT'` pieces) and collected into the
  * engine's `incomingAbilitiesById`. When a Reflect wearer takes a DIRECT hit, the engine reflects
- * `Σpct% × netHpDamage` back at the attacker — mitigated by the attacker's affinity matchup,
- * defence, and incoming-reduction — via a recursive `applyVictimDamage` against the attacker
- * (drains shield→HP, can kill, fires on-death, no ping-pong, no `attacked`/reaction events).
+ * `Σpct%` of the hit as thrown back at the attacker — the rule lives in `damageReflection.ts`
+ * (#678) — via a recursive `applyVictimDamage` against the attacker (drains shield→HP, can kill,
+ * fires on-death, no ping-pong, no `attacked`/reaction events). The exact magnitude is pinned
+ * end-to-end in `reflectThrownHit.integration.test.ts`.
  *
  * Battles are driven through `simulateBattle` (the full bySide path) so a real ENEMY attacker
  * hits a real player Reflect wearer. Sub-cases that are awkward to stage end-to-end assert at the
@@ -220,7 +221,7 @@ describe('REFLECT gear set — thorns damage at the victim seam', () => {
     // -----------------------------------------------------------------------
     it('(f) magnitude: reflected value matches reflectedDamageForHit for defence 3001 + affinity disadvantage', () => {
         const reflectPct = (getGearSet('REFLECT')?.minPieces ?? 2) > 0 ? 10 : 0; // registry pct = 10
-        const netHpDamage = 4000;
+        const thrownHit = 4000;
         // Wearer thermal vs attacker chemical → wearer has ADVANTAGE → +25 on the reflected hit.
         // Use a disadvantage matchup for the wearer as the prompt specifies: wearer chemical,
         // attacker thermal → chemical loses to thermal → -25.
@@ -232,14 +233,14 @@ describe('REFLECT gear set — thorns damage at the victim seam', () => {
         const attackerDefenceReductionPct = calculateDamageReduction(3001);
         const expected = reflectedDamageForHit({
             reflectPct,
-            reflectBase: netHpDamage,
+            reflectBase: thrownHit,
             affinityDamageModifier,
             attackerDefenceReductionPct,
             reflectVictimReduction: NO_INCOMING_REDUCTION,
         });
-        // Sanity: the helper produces a positive, mitigated value (< raw 10% of net).
+        // Sanity: the helper produces a positive, mitigated value (< raw 10% of the hit).
         expect(expected).toBeGreaterThan(0);
-        expect(expected).toBeLessThan(0.1 * netHpDamage);
+        expect(expected).toBeLessThan(0.1 * thrownHit);
     });
 });
 
@@ -296,10 +297,11 @@ describe('REFLECT gear set — DoT / bomb do not reflect', () => {
         // does not credit reflected damage. Simplest robust proof: an enemy that deals ONLY a DoT
         // tick (no direct hit) — modelled as the helper returning 0 for the DoT path is N/A; the
         // engine guard (byDirectDamage===false → skip) is unit-tested at the helper boundary:
-        // netHpDamage from a DoT is real, but the engine never calls reflectedDamageForHit on a DoT.
+        // a DoT tick is real damage, but the engine never calls reflectedDamageForHit on a DoT.
         //
-        // We assert the contract at the helper: reflectPct applied to a DoT's net HP would be > 0,
-        // so the ZERO reflection must come from the engine's byDirectDamage guard, NOT the helper.
+        // We assert the contract at the helper: reflectPct applied to a tick-sized hit would be
+        // > 0, so the ZERO reflection must come from the engine's byDirectDamage guard, NOT the
+        // helper.
         const wouldReflectIfNotGuarded = reflectedDamageForHit({
             reflectPct: 10,
             reflectBase: 5000,
@@ -330,21 +332,21 @@ describe('REFLECT gear set — DoT / bomb do not reflect', () => {
         expect(totalDamageTaken(result, foe)).toBe(0);
     });
 
-    it('(g) bomb/detonation damage on the wearer produces ZERO reflected damage (bombPortion guard)', () => {
-        // The guard `(cause?.bombPortion ?? 0) === 0` in applyVictimDamage blocks reflection when
-        // any bomb/detonation damage is present. We prove: (1) the helper WOULD reflect a
-        // bomb-scale HP loss if not guarded, so zero reflection must come from the engine guard;
+    it('(g) bomb/detonation damage on the wearer produces ZERO reflected damage', () => {
+        // A bomb burst reaches applyVictimDamage with no `reflectBase` (it is no thrown skill
+        // hit), so it reflects nothing. We prove: (1) the helper WOULD reflect a bomb-scale hit
+        // if it were given one, so zero reflection must come from the engine;
         // (2) at the engine level, an enemy whose ONLY delivery is bomb apply+detonate damages the
         // wearer but the attacker takes NO reflected damage.
         //
         // Enemy skill: applies Bomb II then immediately detonates it (no <unit-damage> tag → no
         // direct damage). Round 1: detonate fires on an empty pendingBombs list → 0 detonation;
         // the new bomb is queued. Round 2+: detonate pops the queued bomb → detonationDamage > 0 →
-        // bombPortion > 0 → reflection block is skipped. The wearer takes real HP damage each
+        // a burst with no reflectBase → no reflect. The wearer takes real HP damage each
         // detonation round, but the enemy's damageTaken stays 0 throughout.
         //
         // Part 1 — helper contract: reflectedDamageForHit returns > 0 for bomb-scale HP damage,
-        // proving the ZERO at the engine level comes from the bombPortion guard, not the helper.
+        // proving the ZERO at the engine level comes from the engine, not the helper.
         const wouldReflectIfNotGuarded = reflectedDamageForHit({
             reflectPct: 10,
             reflectBase: 5000,
@@ -393,27 +395,18 @@ describe('REFLECT gear set — DoT / bomb do not reflect', () => {
             (e) => e.kind === 'dot-applied' && e.note?.startsWith('bomb')
         );
         expect(bombApplied).toBe(true);
-        // The enemy attacker took ZERO reflected damage — the pure-bomb hit reflects nothing
-        // (directFraction === 0 → reflect basis 0).
+        // The enemy attacker took ZERO reflected damage — the pure-bomb hit reflects nothing.
         expect(totalDamageTaken(result, foe)).toBe(0);
     });
 
-    it('(h) a MIXED direct + detonate hit reflects the DIRECT slice only — positive but less than a pure-direct hit of the same total', () => {
-        // The fix: a single apply can carry damage = directDamage + detonationDamage with
-        // byDirectDamage:true AND bombPortion > 0 (a cast that lands a direct hit AND detonates a
-        // bomb in the same hit). The OLD guard (bombPortion > 0 → skip) suppressed reflection
-        // entirely. The NEW behavior reflects the direct slice only (netHpDamage × directFraction).
-        //
+    it('(h) a cast that hits AND detonates a bomb reflects its direct hit only — the same as the hit alone', () => {
         // Enemy skill: deals 100% direct damage AND inflicts+detonates Bomb II in the same cast.
         // Round 1: direct hit lands; detonate fires on an empty queue (0 detonation); bomb queued.
-        // Round 2+: the cast lands BOTH a direct hit and a real detonation → bombPortion > 0 →
-        // mixed hit. The wearer reflects ONLY the direct slice back at the enemy.
+        // Round 2+: the cast lands a direct hit and a real detonation. The detonation is its own
+        // apply with no `reflectBase`, so the wearer reflects exactly what it reflects off the
+        // direct hit alone (#678: the reflect is a share of the hit as thrown).
         const pieces = reflectPieces();
         const getGearPiece = getGearPieceFor(pieces);
-
-        const mixedEnemy = makeAttacker('foe', 'Foe', 'antimatter');
-        (mixedEnemy as { activeSkillText?: string }).activeSkillText =
-            'This Unit deals <unit-damage>100% damage</unit-damage>, inflicts <unit-skill>Bomb II</unit-skill> for 2 turns, detonates Bomb effects with 100% of their power.';
 
         const buildBattle = (enemy: Ship) =>
             simulateBattle(
@@ -435,52 +428,23 @@ describe('REFLECT gear set — DoT / bomb do not reflect', () => {
                 getGearPiece
             );
 
+        const mixedEnemy = makeAttacker('foe', 'Foe', 'antimatter');
+        (mixedEnemy as { activeSkillText?: string }).activeSkillText =
+            'This Unit deals <unit-damage>100% damage</unit-damage>, inflicts <unit-skill>Bomb II</unit-skill> for 2 turns, detonates Bomb effects with 100% of their power.';
         const mixed = buildBattle(mixedEnemy);
-        const foeMixed = enemyId(mixed);
 
-        // The bomb DID land (mixed scenario is non-trivial: a bomb detonates on the wearer).
+        // The bomb DID land (the scenario is non-trivial: a bomb detonates on the wearer).
         const bombApplied = allLogEntries(mixed).some(
             (e) => e.kind === 'dot-applied' && e.note?.startsWith('bomb')
         );
         expect(bombApplied).toBe(true);
-
-        // CORE OF THE FIX: the mixed hit reflects a POSITIVE amount (direct slice no longer
-        // suppressed). Reflected damage surfaces as the enemy attacker's damageTaken.
-        const mixedReflected = totalDamageTaken(mixed, foeMixed);
+        const mixedReflected = totalDamageTaken(mixed, enemyId(mixed));
         expect(mixedReflected).toBeGreaterThan(0);
 
-        // Control: a PURE-DIRECT enemy whose single direct hit deals the SAME total damage the
-        // mixed enemy delivers (direct + bomb). The mixed enemy's bomb is 100% of a Bomb-II-tier
-        // hit at 10_000 attack; a pure-direct enemy at the same attack landing only its direct hit
-        // delivers LESS total than direct+bomb, but reflects on the FULL net HP (no bomb slice
-        // excluded). To make the inequality clean, give the pure-direct control DOUBLE attack so
-        // its single direct hit lands MORE total damage than the mixed enemy's direct+bomb sum —
-        // yet it reflects on the full direct hit. The mixed enemy reflects only its (smaller)
-        // direct slice, so mixedReflected < pure-direct reflected.
-        const pureDirectEnemy = makeAttacker('foe', 'Foe', 'antimatter');
-        const pureDirect = simulateBattle(
-            {
-                playerTeam: [
-                    place(makeTank('wearer', 'Wearer', 'thermal', pieces), 'M4', {
-                        attack: 5000,
-                        hp: 1_000_000,
-                    }),
-                ],
-                enemyTeam: [
-                    place(pureDirectEnemy, 'M4', {
-                        attack: 20_000,
-                        hp: 1_000_000,
-                    }),
-                ],
-                rounds: 4,
-            },
-            getGearPiece
-        );
-        const foePure = enemyId(pureDirect);
-        const pureReflected = totalDamageTaken(pureDirect, foePure);
-        // The pure-direct hit (full net HP reflected, larger attack) reflects MORE than the mixed
-        // hit's direct slice (bomb portion excluded).
-        expect(pureReflected).toBeGreaterThan(mixedReflected);
+        // Control: the same 100% hit at the same attack, without the bomb.
+        const pureDirect = buildBattle(makeAttacker('foe', 'Foe', 'antimatter'));
+        const pureReflected = totalDamageTaken(pureDirect, enemyId(pureDirect));
+        expect(mixedReflected).toBeCloseTo(pureReflected, 6);
     });
 });
 
@@ -539,8 +503,8 @@ describe('REFLECT gear set — reflected kill', () => {
         const getGearPiece = getGearPieceFor(pieces);
 
         // NON-DAMAGING wearer (self-repair) → the enemy can ONLY die to REFLECTED thorns, never the
-        // wearer's own offence. The enemy hits hard (big net HP damage on the wearer → big reflected
-        // hit back) and has very low HP, so the first reflected hit kills it. We confirm a death
+        // wearer's own offence. The enemy hits hard (a big thrown hit → a big reflected hit
+        // back) and has very low HP, so the first reflected hit kills it. We confirm a death
         // event is emitted for the enemy.
         const result = simulateBattle(
             {
