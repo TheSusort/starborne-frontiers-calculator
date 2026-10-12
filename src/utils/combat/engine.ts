@@ -1373,9 +1373,8 @@ export function tickDoTs(args: {
          *  doc for the ruling. Absent/false on every applied DoT. */
         convertedFromHit?: boolean
     ) => void;
-    /** Multiplier on this carrier's DoT ticks of the given type: ship-kit DoT passives sum into
-     *  one factor, each equipment reduction (Vortex Veil) is its own factor
-     *  (`composeDotReductionFactor`). Absent → 1. */
+    /** Multiplier on this carrier's DoT ticks of the given type; the composition rule lives in
+     *  `composeDotReductionFactor`. Absent → 1. */
     incomingDotFactor?: (dotType: TickableDoTType) => number;
     /** Resolves the EFFECTIVE dotMult for one applier's ctx, given the
      *  ticking VICTIM (this tickDoTs call's whole entries list belongs to ONE victim, so the
@@ -5167,20 +5166,25 @@ export function runCombat(rawInput: CombatEngineInput): {
         didCrit: boolean,
         ctxOverrides: Partial<IncomingHitContext> = {}
     ): { parts: IncomingReductionParts; attackerCritPenaltyPct: number } => {
-        const ctx: IncomingHitContext = {
-            didCrit,
-            attackerStealthed: isStealthed(attackerId),
-            victimStealthed: isStealthed(victimId),
-            victimTurnBlocked: isTurnBlocked(victimId),
-            hitIndexThisRound: 0, // read only by incoming-block
-            attackerHasDot: attackerHasDot(attackerId),
-            victimHasBarrierRecharging: hasBarrierRecharging(victimId),
-            victimHasShield: hasShield(victimId),
-            selfHpPct: selfHpPctOf(victimId),
-            attackerTauntedOrProvoked: attackerTauntedOrProvoked(attackerId),
-            ...ctxOverrides,
-        };
-        const kit = incomingReductionPartsForHit(incomingAbilitiesOf(victimId), ctx);
+        const victimIncoming = incomingAbilitiesOf(victimId);
+        // The ctx is only read by incoming-reduction abilities; skip building it when none exist.
+        let kit: IncomingReductionParts = NO_INCOMING_REDUCTION;
+        if (victimIncoming.some((a) => a.config.type === 'incoming-reduction')) {
+            const ctx: IncomingHitContext = {
+                didCrit,
+                attackerStealthed: isStealthed(attackerId),
+                victimStealthed: isStealthed(victimId),
+                victimTurnBlocked: isTurnBlocked(victimId),
+                hitIndexThisRound: 0, // read only by incoming-block
+                attackerHasDot: attackerHasDot(attackerId),
+                victimHasBarrierRecharging: hasBarrierRecharging(victimId),
+                victimHasShield: hasShield(victimId),
+                selfHpPct: selfHpPctOf(victimId),
+                attackerTauntedOrProvoked: attackerTauntedOrProvoked(attackerId),
+                ...ctxOverrides,
+            };
+            kit = incomingReductionPartsForHit(victimIncoming, ctx);
+        }
         // Squad-leader data is benefit/penalty-phrased (−5 = takes 5% less), so negate.
         const victimPre = allActorsById.get(victimId)?.preFight;
         const leader: number[] = [];

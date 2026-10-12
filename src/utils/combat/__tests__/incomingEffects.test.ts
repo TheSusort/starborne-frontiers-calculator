@@ -5,6 +5,7 @@ import {
     addIncomingAbilityDeduped,
     withLiveAllyScopedOwners,
 } from '../incomingEffects';
+import { composeIncomingFactor } from '../victimDamage';
 import { Ability, IncomingCondition, IncomingHitContext } from '../../../types/abilities';
 
 const ctx = (over: Partial<IncomingHitContext> = {}): IncomingHitContext => ({
@@ -111,6 +112,14 @@ describe('incomingReductionPartsForHit (#672 buckets)', () => {
             ctx({ victimStealthed: true })
         );
         expect(p).toEqual({ passivePct: 25, separatePcts: [20] });
+    });
+    it('two equipment reductions multiply instead of summing', () => {
+        const parts = incomingReductionPartsForHit(
+            [red(15, { equipment: true }), red(20, { equipment: true })],
+            ctx()
+        );
+        expect(parts).toEqual({ passivePct: 0, separatePcts: [15, 20] });
+        expect(composeIncomingFactor(0, parts)).toBeCloseTo(0.85 * 0.8, 6);
     });
     it('Iridium (kit, crit) and Hardened (gear, crit) land in different buckets on a crit', () => {
         const abilities = [

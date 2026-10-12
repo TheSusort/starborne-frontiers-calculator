@@ -943,7 +943,7 @@ describe('damage absorbed — per-channel direction and presence (#358 addendum 
     //
     // ⚠️ NOT IN C2'S EXPLICIT "OUT" LIST — a deliberate extension, flagged rather than smuggled.
     // C2's list names the gear-sourced reduction (the DIRECT-damage half) but not
-    // `incomingDotReductionPct` (its DoT half). Both are the defender reducing what it takes, and
+    // `incomingDotFactor` (its DoT half). Both are the defender reducing what it takes, and
     // C2's governing sentence is "measured BEFORE the defender reduces it", so leaving this one in
     // would have re-created the exact shape this addendum exists to end: a defensive ability
     // lowering its own owner's headline, on the one channel nobody had listed. Stripped, and

@@ -542,7 +542,7 @@ describe('D-PR12 Task 4 Case A — enemy-side victim: Inc. Damage Down fold is t
 // ─────────────────────────────────────────────────────────────────────────────
 // Case B: a buff and an implant reduction MULTIPLY (#672)
 // ─────────────────────────────────────────────────────────────────────────────
-describe('D-PR12 Task 4 Case B — buff channel × separate implant reduction', () => {
+describe('Case B —buff channel × separate implant reduction', () => {
     /**
      * Composition (`composeIncomingFactor`): the friendly Inc. Damage Down II (-30, buff
      * channel) and Voidshade (20, an implant → its own separate factor) multiply:

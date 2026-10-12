@@ -149,7 +149,7 @@ export interface DefenseSurvivabilityResult {
  *   • `damageAbsorbed` (THE HEADLINE — the raw axis, "everything thrown at the ship"). A
  *     victim-side reduction MOVES NOTHING HERE, by construction and by ruling: defence mitigation,
  *     the defender's own `Inc. Damage Down` family, its squad-leader baseline, its passive and
- *     gear reductions, `incomingDotReductionPct` (Vortex Veil), the incoming-block proc and the
+ *     gear reductions, `incomingDotFactor` (Vortex Veil's DoT multiplier), the incoming-block proc and the
  *     reflect channel's own incoming-reduction are all excluded. What DOES move it:
  *       – SURVIVING ONE MORE INCOMING HIT. The figure grows one whole HIT at a time — never by the
  *         amount a reduction shaves off each hit — so any defensive channel that buys a hit raises

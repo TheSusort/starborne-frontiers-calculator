@@ -200,7 +200,7 @@ export interface HealingRoundData {
     barrierAbsorbed: number;
     /** #358 ADDENDUM 2/3: `incomingDamage` BEFORE EVERY victim-side reduction — the RAW damage
      *  thrown at the focus this round. Not just defence: also its own `Inc. Damage Down` family,
-     *  its pre-fight incoming baseline, passive/gear reductions, `incomingDotReductionPct` and the
+     *  its pre-fight incoming baseline, passive/gear reductions, `incomingDotFactor` and the
      *  reflect channel's incoming-reduction. `incomingDamage` is post-reduction, so it FALLS as a
      *  ship gets tankier; this is the axis the "Damage absorbed" headline reads.
      *  `>= incomingDamage` OVER A WINDOW SUM, equal when the victim applies no reduction at all —

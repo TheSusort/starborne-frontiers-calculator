@@ -59,7 +59,7 @@
  * The remaining paths (bomb splash, bomb/accumulator burst, forced detonation, DoT-detonation
  * bypass) fold no defence and meet no other victim-side reduction, so raw === post there by
  * construction — the `?? rawDamage` default in the funnel, and the suite-health test at the bottom.
- * The DoT tick batch was in that group under addendum 2 and is NOT any more: `incomingDotFactor`
+ * The DoT tick batch is NOT in that group: `incomingDotFactor`
  * (Vortex Veil) is a victim-side reduction, so a tick on a veil carrier has two distinct axes. Both
  * tick sites carry a `preMitigationDamage` write; only the heal-target one had a test.
  *

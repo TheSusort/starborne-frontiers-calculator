@@ -4848,7 +4848,7 @@ const DocumentationPage: React.FC = () => {
                                     Damage Down add together; ship passive reductions add together
                                     and then multiply with those buffs; each gear set, implant and
                                     squad leader reduction multiplies on its own; and all of it
-                                    together can cut a hit by at most 70%, before Defense.
+                                    together can cut a hit by at most 70%, not counting Defense.
                                     Outgoing-damage amplification is also modeled:{' '}
                                     <strong>Menace</strong> (chance to amplify a hit&apos;s damage
                                     on a critical hit), <strong>Giant Slayer</strong> (chance to

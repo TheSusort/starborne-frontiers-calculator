@@ -7,6 +7,7 @@ export const CURRENT_VERSION = '1.75.3';
 // bumped version whose entries are still unreleased shows users a what's-new dialog listing
 // nothing. Do it by hand only if that script cannot.
 export const UNRELEASED_CHANGES: string[] = [
+    'Combat simulator: counters and reactive hits now respect gear and implant reductions.',
     'Combat simulator: ship passive damage reductions now multiply with Inc. Damage Down.',
     'Combat simulator: gear, implant and squad leader reductions now multiply separately.',
     'Combat simulator: reflected damage now respects the 70% damage reduction cap.',
@@ -32,7 +33,6 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator: hit damage figures now include the target's damage reduction.",
     'Combat simulator: hits dealing no damage no longer trigger on-attacked effects.',
     "Defense calculator: a ship's own skill buffs no longer count twice when they fire.",
-    'Combat simulator: counters and reactive hits now respect gear and implant reductions.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
