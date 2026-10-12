@@ -7489,7 +7489,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 reflectPct,
                                 // Direct slice only — the bomb portion of a mixed hit never
                                 // reflects.
-                                netHpDamage: reflectBasis,
+                                reflectBase: reflectBasis,
                                 affinityDamageModifier,
                                 attackerDefenceReductionPct: shareDefenceReductionPct,
                                 reflectVictimReduction,

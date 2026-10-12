@@ -232,7 +232,7 @@ describe('REFLECT gear set — thorns damage at the victim seam', () => {
         const attackerDefenceReductionPct = calculateDamageReduction(3001);
         const expected = reflectedDamageForHit({
             reflectPct,
-            netHpDamage,
+            reflectBase: netHpDamage,
             affinityDamageModifier,
             attackerDefenceReductionPct,
             reflectVictimReduction: NO_INCOMING_REDUCTION,
@@ -302,7 +302,7 @@ describe('REFLECT gear set — DoT / bomb do not reflect', () => {
         // so the ZERO reflection must come from the engine's byDirectDamage guard, NOT the helper.
         const wouldReflectIfNotGuarded = reflectedDamageForHit({
             reflectPct: 10,
-            netHpDamage: 5000,
+            reflectBase: 5000,
             affinityDamageModifier: 0,
             attackerDefenceReductionPct: 0,
             reflectVictimReduction: NO_INCOMING_REDUCTION,
@@ -347,7 +347,7 @@ describe('REFLECT gear set — DoT / bomb do not reflect', () => {
         // proving the ZERO at the engine level comes from the bombPortion guard, not the helper.
         const wouldReflectIfNotGuarded = reflectedDamageForHit({
             reflectPct: 10,
-            netHpDamage: 5000,
+            reflectBase: 5000,
             affinityDamageModifier: 0,
             attackerDefenceReductionPct: 0,
             reflectVictimReduction: NO_INCOMING_REDUCTION,

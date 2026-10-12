@@ -264,7 +264,7 @@ export function victimHitDamageParts(
     roleScale: number,
     reduction: IncomingReductionParts = NO_INCOMING_REDUCTION,
     attackerCritPenaltyPct = 0
-): { damage: number; preMitigation: number } {
+): { damage: number; preMitigation: number; reflectBase: number } {
     // preCritDamage assembled exactly as the engine, then split evenly per hit.
     const multiplierPct = s.multiplierPct + (v.multiplierDeltaPct ?? 0);
     const preCritDamage = s.effectiveAttack * (multiplierPct / 100) + s.secondaryStatValue;
@@ -319,5 +319,8 @@ export function victimHitDamageParts(
     return {
         damage: perHitShare * hitCritMultiplier * nonCritFactor * roleScale,
         preMitigation: perHitShare * hitCritMultiplier * nonCritFactorPreDefence * roleScale,
+        // The hit as thrown, before every multiplier: no crit, outgoing, affinity, defence or
+        // incoming term. What a reflector reflects its percentage of (#678).
+        reflectBase: perHitShare * roleScale,
     };
 }

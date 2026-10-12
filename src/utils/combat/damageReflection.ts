@@ -4,17 +4,26 @@ import { composeIncomingFactor, type IncomingReductionParts } from './victimDama
  * Pure reflected ("thorns") damage calculator for the Reflect gear set and a ship's own
  * reflect (Nosorog).
  *
- * When a reflector takes a direct hit, it reflects a portion of the damage back at the attacker.
- * This module computes that raw reflected amount **before shield absorb** — the engine seam
- * applies shield, inside `applyVictimDamage` (`engine.ts`).
+ * A reflector reflects a percentage of the hit AS THROWN: the attacker's per-hit raw damage
+ * (`victimHitDamageParts(...).reflectBase`), before crit, the attacker's outgoing buffs,
+ * affinity, defence or any incoming term. The bounce is then re-derived from the REFLECTOR's
+ * side: its own Out. Damage Up, the affinity matchup, the original attacker's defence, and the
+ * original attacker's own incoming reductions. This computes that raw reflected amount
+ * **before shield absorb** — the engine seam applies shield, inside `applyVictimDamage`
+ * (`engine.ts`).
  *
- * Empirically-validated model (two in-game duels):
- *   reflected = pct% × netHpDamage × affinityFactor
+ *   reflected = pct% × reflectBase × (1 + reflectorOutgoing/100) × affinityFactor
  *               × (1 − defenceReduction/100)
  *               × composeIncomingFactor(statusChannel, recipientReductions)
  *
+ * What the reflector took, its own shield and its own mitigation do not enter: the hit is
+ * reflected whole. Measured (#678): Belladonna (attack 4598, defence 3647) hitting a 16%
+ * Nosorog with a 140% active reflected 504 in game against ~509.3 from this model; every
+ * measured fight sits at model × 0.9895, a constant the model does not carry. The affinity
+ * term is kept but has not been measured.
+ *
  * The last factor is the same capped composition a direct hit takes. A ship's reflect also reads
- * the attacker's incoming-damage status channel (R176); the gear set's bounce leaves it at 0.
+ * the attacker's incoming-damage status channel; the gear set's bounce leaves it at 0.
  *
  * Affinity argument order convention:
  *   The WEARER is the source of the reflected hit. Call
@@ -24,8 +33,10 @@ import { composeIncomingFactor, type IncomingReductionParts } from './victimDama
 export function reflectedDamageForHit(args: {
     /** Reflect percentage, e.g. 10 for 10 % */
     reflectPct: number;
-    /** HP the wearer actually lost on this hit (net, after wearer's own shield) */
-    netHpDamage: number;
+    /** The hit as thrown: `victimHitDamageParts(...).reflectBase`. */
+    reflectBase: number;
+    /** The REFLECTOR's outgoing damage buff (Out. Damage Up), signed %. Default 0. */
+    reflectorOutgoingPct?: number;
     /** From computeAffinityModifiers(wearer, attacker).damageModifier — one of -25 | 0 | 25 */
     affinityDamageModifier: number;
     /** calculateDamageReduction(attacker effective defence), range 0..~88 */
@@ -40,6 +51,8 @@ export function reflectedDamageForHit(args: {
      * causal-attacker, and a shared prefix with the opposite meaning invites mixing them up.
      */
     reflectVictimReduction: IncomingReductionParts;
+    incomingDamageModifierPct?: number;
+    victimSideIncomingPct?: number;
 }): number {
     return reflectedDamageParts(args).damage;
 }
@@ -48,21 +61,19 @@ export function reflectedDamageForHit(args: {
  * #358: BOTH axes of one reflected hit, from ONE evaluation — so the model cannot be changed on
  * one axis and left stale on the other.
  *
- *  • `damage`       — what the recipient takes: the full empirical model above, every term intact.
+ *  • `damage`       — what the recipient takes: the full model above, every term intact.
  *  • `preMitigation` — the "damage absorbed" axis: the same hit with EVERY reduction that
  *    belongs to the recipient removed. Two terms go, both replaced by an exact 1:
  *    `attackerDefenceReductionPct` and `reflectVictimReduction`.
  *    The status channel loses only its victim-side slice (`victimSideIncomingPct`, the
  *    recipient's own Inc. Damage Down family), the same split `victimHitDamageParts` makes.
- *    What survives is the hit as THROWN — the reflect percentage, the reflector's affinity, the
- *    `netHpDamage` the reflector actually took, and attacker-applied amplification (Exposed).
+ *    What survives is the hit as THROWN — the reflect percentage, the reflector's outgoing buff
+ *    and affinity, the thrown `reflectBase`, and attacker-applied amplification (Exposed).
  *
  * WHY `reflectVictimReduction` COMES OUT of `preMitigation`.
- * The duel-fit model governs `damage` — the number the recipient's HP bar actually loses — and
- * `damage` keeps the term. `preMitigation` is not a fit to anything; it is by construction a
- * DEPARTURE from the fit, since it already replaces the fitted defence term with a literal 1. A
- * term cannot be defended as load-bearing for an empirical constant on an axis that no constant is
- * fitted against.
+ * The model governs `damage` — the number the recipient's HP bar actually loses — and `damage`
+ * keeps the term. `preMitigation` is not measured against anything; it already replaces the
+ * defence term with a literal 1, so a recipient reduction has no claim to stay on that axis.
  * MEASURED, on a defender swinging 200% of 50,000 attack into a 50%-reflect enemy over 4 rounds:
  * `0% incoming-reduction -> 200,000 absorbed` · `30% -> 140,000` · `60% -> 80,000`, with IDENTICAL
  * round counts. Leaving it in makes a purely defensive passive quarter its owner's own headline
@@ -72,7 +83,10 @@ export function reflectedDamageForHit(args: {
  */
 export function reflectedDamageParts(args: {
     reflectPct: number;
-    netHpDamage: number;
+    /** The hit as thrown: `victimHitDamageParts(...).reflectBase`. */
+    reflectBase: number;
+    /** The REFLECTOR's outgoing damage buff (Out. Damage Up), signed %. Default 0. */
+    reflectorOutgoingPct?: number;
     affinityDamageModifier: number;
     /** calculateDamageReduction(attacker effective defence), range 0..~88 */
     attackerDefenceReductionPct: number;
@@ -89,20 +103,21 @@ export function reflectedDamageParts(args: {
      *  which `preMitigation` strips while keeping the attacker-applied rest. Default 0. */
     victimSideIncomingPct?: number;
 }): { damage: number; preMitigation: number } {
-    if (args.reflectPct <= 0 || args.netHpDamage <= 0) return { damage: 0, preMitigation: 0 };
-    const base = (args.reflectPct / 100) * args.netHpDamage;
+    if (args.reflectPct <= 0 || args.reflectBase <= 0) return { damage: 0, preMitigation: 0 };
+    const base = (args.reflectPct / 100) * args.reflectBase;
+    const outgoing = 1 + (args.reflectorOutgoingPct ?? 0) / 100;
     const affinity = 1 + args.affinityDamageModifier / 100;
     const defence = 1 - args.attackerDefenceReductionPct / 100;
     const statusChannel = args.incomingDamageModifierPct ?? 0;
     const incoming = composeIncomingFactor(statusChannel, args.reflectVictimReduction);
     const statusAsThrown = 1 + (statusChannel - (args.victimSideIncomingPct ?? 0)) / 100;
     return {
-        damage: Math.max(0, base * affinity * defence * incoming),
+        damage: Math.max(0, base * outgoing * affinity * defence * incoming),
         // The identical product with an exact 1 in BOTH victim-side slots (defence and incoming),
         // and the status channel losing only its victim-side slice (`statusAsThrown`) — the same
         // shape `victimHitDamageParts` uses, so no axis is ever reconstructed by division. `damage`
         // multiplies the composed, capped `incoming` factor; the exact-1 constants appear only
         // here.
-        preMitigation: Math.max(0, base * affinity * 1 * 1 * statusAsThrown),
+        preMitigation: Math.max(0, base * outgoing * affinity * 1 * 1 * statusAsThrown),
     };
 }
