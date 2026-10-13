@@ -1,9 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { runSimulation } from '../simulationCalculator';
 import { customFormulaScore } from '../../autogear/customFormula';
-import { calculateDirectDamage } from '../../autogear/statResolution';
+import { calculateDirectDamage, calculateEffectiveHP } from '../../autogear/statResolution';
 import type { BaseStats } from '../../../types/stats';
 import type { RoleBasis, CustomFormula } from '../../../types/autogear';
+import type { ShipTypeName } from '../../../constants/shipTypes';
 
 // `crit: 0` makes `Math.random() * 100 <= 0` fire only on an exact 0.0 draw — negligible over a
 // handful of calls, so this stays deterministic without mocking Math.random (`Autogear results
@@ -168,5 +169,15 @@ describe('runSimulation — Custom formula path', () => {
         const result = runSimulation(baseStats, null, undefined, { customFormula: formula });
         expect(result.formulaScore).toBeDefined();
         expect(result.averageDamage).toBeUndefined();
+    });
+});
+
+describe('runSimulation — defender effective HP (#673)', () => {
+    it('matches calculateEffectiveHP for a ship with damage reduction', () => {
+        const s: BaseStats = { ...baseStats, damageReduction: 35 };
+        const expected = Math.round(calculateEffectiveHP(s.hp, s.defence, s.damageReduction));
+        for (const role of ['DEFENDER', 'DEBUFFER_DEFENSIVE', 'DEBUFFER_DEFENSIVE_SECURITY']) {
+            expect(runSimulation(s, role as ShipTypeName).effectiveHP).toBe(expected);
+        }
     });
 });

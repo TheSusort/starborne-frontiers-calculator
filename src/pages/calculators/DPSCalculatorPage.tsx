@@ -818,6 +818,10 @@ const DPSCalculatorPage: React.FC = () => {
                             OutgoingDmg%) × (1 + IncomingDmg%) × (1 + Affinity%)
                         </p>
                         <p className="mb-2">
+                            The target&apos;s own passive and gear reductions also apply. Together
+                            with incoming damage buffs, non-defence reduction is capped at 70%.
+                        </p>
+                        <p className="mb-2">
                             Some ships deal additional damage equal to a percentage of their Defense
                             or max HP (e.g. Chakara, Lodolite). This secondary term is added to the
                             base hit before crit and defense reduction are applied, and it scales

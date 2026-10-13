@@ -50,6 +50,28 @@ export function composeIncomingFactor(
     return Math.max(factor, 1 - NON_DEFENCE_REDUCTION_CAP_PCT / 100);
 }
 
+/**
+ * The expected incoming factor of one hit from an enemy that crits `critRatePct`% of the time.
+ * `critReductionPct` is the victim's `damageReduction` stat (Iridium's passive / the Hardened set),
+ * which reduces CRITICAL hits only; the non-crit branch sees the buff channel alone. Each branch
+ * goes through {@link composeIncomingFactor}, so the 70% floor binds per branch. Enemy crit power
+ * is ignored: the model is exact at a 100% crit rate, where it cancels out of EHP.
+ */
+export function expectedIncomingFactor(
+    buffChannelPct: number,
+    critReductionPct: number,
+    critRatePct: number
+): number {
+    const w = critRatePct / 100;
+    const nonCrit = composeIncomingFactor(buffChannelPct);
+    if (!critReductionPct) return nonCrit;
+    const crit = composeIncomingFactor(buffChannelPct, {
+        passivePct: 0,
+        separatePcts: [critReductionPct],
+    });
+    return (1 - w) * nonCrit + w * crit;
+}
+
 /** The reduction factor on a DoT tick: passives sum, separate factors multiply, no cap.
  *  The ticking victim's `Inc. DoT Damage Up` is not part of it: it sits additively in the tick's
  *  dotMult (`victimDotMult` in engine.ts), and this factor multiplies that. */

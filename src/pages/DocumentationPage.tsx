@@ -1219,7 +1219,10 @@ const DocumentationPage: React.FC = () => {
                                                 Optimizes for survival through:
                                             </p>
                                             <ul className="text-theme-text list-disc pl-4 space-y-1">
-                                                <li>Effective HP (HP × damage reduction)</li>
+                                                <li>
+                                                    Effective HP (HP, defence, and crit damage
+                                                    reduction, assuming enemies always crit)
+                                                </li>
                                                 <li>Healing and shield regeneration</li>
                                                 <li>Survival rounds calculation</li>
                                             </ul>
@@ -1417,9 +1420,10 @@ const DocumentationPage: React.FC = () => {
                                         algorithm will try to keep stats within these ranges while
                                         optimizing the overall build. You can also limit three
                                         derived stats: <strong>Effective HP</strong> — a
-                                        survivability value combining HP, Defense, and damage
-                                        reduction — <strong>Direct Damage</strong> — an offensive
-                                        value combining attack, crit rate, crit power, and defense
+                                        survivability value combining HP, Defense, and crit damage
+                                        reduction (assuming enemies always crit) —{' '}
+                                        <strong>Direct Damage</strong> — an offensive value
+                                        combining attack, crit rate, crit power, and defense
                                         penetration — and <strong>Crit Multiplier</strong> — how
                                         much crit rate and crit power multiply your damage by, on
                                         their own.
@@ -3621,17 +3625,19 @@ const DocumentationPage: React.FC = () => {
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Theoretical EHP</span> is the
                                         third figure, and the old static one: an estimate computed
-                                        from configured stats, not a live measurement. No enemy ever
-                                        fires at it round by round, and it cannot see shields,
-                                        Barrier or self-repair. A kit buff whose own grant carries a
-                                        condition is held back UNLESS this figure can tell, from
-                                        what you have configured on this page, that the condition is
-                                        actually satisfied. HP-based gates are checked against a
-                                        ship at full health: Redeemer&apos;s first passive grants
-                                        Defense Up II only once its own HP drops below 60%, so at
-                                        full health this figure leaves that +30% Defense out &mdash;
-                                        on a 100,000 HP ship at 5,000 Defense that is the difference
-                                        between counting it (283,125) and holding it back (240,062).
+                                        from configured stats, not a live measurement. Incoming
+                                        damage buffs add together, and reduction from anything other
+                                        than defence is capped at 70% in total. No enemy ever fires
+                                        at it round by round, and it cannot see shields, Barrier or
+                                        self-repair. A kit buff whose own grant carries a condition
+                                        is held back UNLESS this figure can tell, from what you have
+                                        configured on this page, that the condition is actually
+                                        satisfied. HP-based gates are checked against a ship at full
+                                        health: Redeemer&apos;s first passive grants Defense Up II
+                                        only once its own HP drops below 60%, so at full health this
+                                        figure leaves that +30% Defense out &mdash; on a 100,000 HP
+                                        ship at 5,000 Defense that is the difference between
+                                        counting it (283,125) and holding it back (240,062).
                                         Roster-based gates are checked against the ally and enemy
                                         rosters on this page: Chakara&apos;s &ldquo;lowest Speed
                                         among allies&rdquo; counts as soon as no ally in your team

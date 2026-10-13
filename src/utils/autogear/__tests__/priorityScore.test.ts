@@ -377,3 +377,27 @@ describe('calculatePriorityScore / calculateRoleScore — an unknown role with a
         expect(withBasis).not.toBeCloseTo(withoutBasis, 5);
     });
 });
+
+describe('calculateEffectiveHP — crit damage reduction (#673)', () => {
+    it('divides by the crit-hit factor instead of multiplying by 1 + dr', () => {
+        const base = calculateEffectiveHP(50000, 8000, 0);
+        expect(calculateEffectiveHP(50000, 8000, 35)).toBeCloseTo(base / 0.65, 6);
+    });
+
+    it('floors the non-defence factor at 0.30', () => {
+        const base = calculateEffectiveHP(50000, 8000, 0);
+        expect(calculateEffectiveHP(50000, 8000, 90)).toBeCloseTo(base / 0.3, 6);
+    });
+});
+
+describe('calculateRoleScore — SUPPORTER_BUFFER reads damageReduction (#673)', () => {
+    it('scores higher with crit damage reduction than without', () => {
+        const without = calculateRoleScore('SUPPORTER_BUFFER', stats, []);
+        const withDr = calculateRoleScore(
+            'SUPPORTER_BUFFER',
+            { ...stats, damageReduction: 35 },
+            []
+        );
+        expect(withDr).toBeGreaterThan(without);
+    });
+});

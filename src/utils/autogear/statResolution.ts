@@ -1,5 +1,7 @@
 import { BaseStats, LimitableStat } from '../../types/stats';
 import type { BasisTerm } from '../../types/autogear';
+import { expectedIncomingFactor } from '../damageComposition';
+import { ENEMY_CRIT_RATE } from '../../constants/simulation';
 
 // Defense reduction curve approximation based on the graph
 export function calculateDamageReduction(defense: number): number {
@@ -24,8 +26,11 @@ export function calculateEffectiveHP(
     const defenseReduction = calculateDamageReduction(defense);
     // Calculate effective HP from HP and defence-based damage reduction
     const effectiveHpFromDefense = primary * (100 / (100 - defenseReduction));
-    // Apply damageReduction stat (from gear/refits) as a separate multiplier
-    return effectiveHpFromDefense * (1 + damageReductionPercent / 100);
+    // The `damageReduction` stat (Iridium / Hardened) cuts crit hits only; `expectedIncomingFactor`
+    // weights it by the assumed enemy crit rate, so EHP divides by the factor.
+    return (
+        effectiveHpFromDefense / expectedIncomingFactor(0, damageReductionPercent, ENEMY_CRIT_RATE)
+    );
 }
 
 /**
