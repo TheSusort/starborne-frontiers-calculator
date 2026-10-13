@@ -13,7 +13,7 @@ import { bareInput } from '../__testutils__/bareRosterFixture';
 /**
  * Active slot: a firing hit plus an `additional-damage` ability — that is what
  * `secondaryFromSkill` (applyAbilities.ts) maps into `turn.secondaryDamage`. It scales off the
- * CASTER's own stat (`stat: 'hp'` → `effectiveHp`, playerTurn.ts), so the fixture's focus
+ * CASTER's own stat (`stat: 'hp'` → `maxHp`, playerTurn.ts), so the fixture's focus
  * must carry non-zero HP or the sub-bucket is 0 for a reason that has nothing to do with this fix.
  * `bareInput()` supplies `hp: 1_000_000`.
  */

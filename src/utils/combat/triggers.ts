@@ -3123,7 +3123,7 @@ export interface IntentExecContext {
      *  base DoT-type names). Feeds the per-victim `enemy-debuff` name-gate (Incinerator's "with
      *  Inferno"). Optional — absent in unit-test ctxs (→ [] per victim). */
     enemyDebuffNamesFor?: (victimId: string) => string[];
-    /** A victim's current effective max HP (engine's recipientMaxHp) — the
+    /** A victim's max HP (engine.ts's `maxHpOf`, static for the fight) — the
      *  denominator for the per-victim hp-threshold gate (Judge's "<50% HP"). Optional — absent
      *  in unit-test ctxs. */
     recipientMaxHpFor?: (victimId: string) => number;
@@ -5143,9 +5143,9 @@ function buildPerVictimConditionCtx(
 ): ReturnType<typeof buildDrainContext> {
     const base = buildDrainContext(ctx, ownerId);
     // Per-victim HP% from the victim's own live currentHp/maxHp — but ONLY when the engine tracks a
-    // real max HP for this victim (`recipientMaxHp`: the actor's last-turn effectiveMaxHp, else its
-    // registered base HP). Otherwise fall back to `base.enemyHpPct` rather than dividing by 0, which
-    // would read a spurious 0% and always fire.
+    // real max HP for this victim (`recipientMaxHpFor`, engine.ts's `maxHpOf`). Otherwise fall
+    // back to `base.enemyHpPct` rather than dividing by 0, which would read a spurious 0% and
+    // always fire.
     //
     // WHAT REACHES THAT FALLBACK: the arm is CORPUS-INERT — no shape the suite can build reaches
     // it. The two ways in are (a) an `IntentExecContext` with no `recipientMaxHpFor` resolver — the
@@ -6660,7 +6660,7 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
                         overhealToLowestHpAlly
                           ? overhealSum
                           : (intent.eventCtx?.overhealAmount ?? 0)
-                      : (ownerCtx?.effectiveMaxHp ?? owner.hp);
+                      : owner.hp;
         // Per-ally overheal routing (Abundant Renewal): when the triggering AoE repair supplied a
         // per-ally over-repair breakdown, an `overheal`-basis shield grants EACH over-repaired ally
         // a shield scaled off ITS OWN overheal and lands on that ally. Absent (legacy single-target

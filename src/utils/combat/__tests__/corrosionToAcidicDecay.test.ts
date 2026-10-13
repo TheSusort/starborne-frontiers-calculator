@@ -131,7 +131,7 @@ describe('Belladonna (player-side) — converts an ally-inflicted Corrosion into
     const BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
         // A real opponent for the ally-inflicted Corrosion to land on. The DEFAULT
         // 500k HP is deliberate and safe here: corrosion MAGNITUDE scales with the victim's own
-        // `recipientMaxHp` in the per-victim positional tick, but this fixture asserts only the
+        // `maxHpOf` in the per-victim positional tick, but this fixture asserts only the
         // entry's family/tier/unremovable/remainingRounds — never a damage number — so the HP
         // choice cannot move any assertion. The focus has attack 0 and the ally 100 over a single
         // round, so the opponent trivially survives.

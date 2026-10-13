@@ -19,7 +19,7 @@
  *
  * PRE-FIX this fails twice over: the `heal-performed` payload carries no `overheal` (so the
  * listener can't thread it and `overhealAmount` is undefined), and even if it did the `overheal`
- * basis is not in the union and falls through to effectiveMaxHp — so the grant would be
+ * basis is not in the union and falls through to the owner's max HP — so the grant would be
  * 0.50 × maxHp (50,000 → 25,000), far larger than 0.50 × OH (4,000 → 2,000).
  */
 import { describe, it, expect, vi } from 'vitest';
@@ -156,10 +156,7 @@ function makeShieldCtx(
         grantExtraAction: () => {},
         playerIds: [OWNER_ID, ALLY_ID],
         lastTurnCtxByActor: new Map([
-            [
-                OWNER_ID,
-                { effectiveAttack: 10000, affinityMult: 1, effectiveMaxHp: MAX_HP } as never,
-            ],
+            [OWNER_ID, { effectiveAttack: 10000, affinityMult: 1 } as never],
         ]),
         recordResisted: () => {},
         healing,

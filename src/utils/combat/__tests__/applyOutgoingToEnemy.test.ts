@@ -17,7 +17,7 @@
  * to test the REAL closure (not a mock), `runCombat` also accepts a narrow test-only tap
  * `__testTapApplyOutgoingToEnemy` that hands the genuine closure out once on the first round it
  * is built. Each test runs a healing-mode `runCombat` (the cheapest way to spin up the engine's
- * statusEngine/bus/recordDestroyed/recipientMaxHp context the closure captures), captures the
+ * statusEngine/bus/recordDestroyed/maxHpOf context the closure captures), captures the
  * real wrapper through the tap, then invokes it against a hand-built enemy `CombatActor` victim
  * and observes the genuine mutations/emissions.
  *

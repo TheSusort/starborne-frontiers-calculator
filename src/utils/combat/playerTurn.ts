@@ -181,12 +181,12 @@ export interface PlayerRoundCtx {
      *  that victim's own live value (`victimIncomingDotDamagePct`). */
     dotMult: number;
     affinityMult: number;
-    /** Healing-calc seams (additive): the actor's current effective defence/max-HP, and its
+    /** Healing-calc seams (additive): the actor's current effective defence, and its
      *  outgoing/incoming-heal % as of its last turn — read by enemy attacks (target defence),
-     *  'target-hp' heals, outgoing-heal scaling, and incoming-heal amplification (corrosion
-     *  applier-ctx rule). */
+     *  outgoing-heal scaling, and incoming-heal amplification (corrosion applier-ctx rule). Max HP
+     *  is not carried here: it is static for the fight, read off `stats.hp` (engine.ts's
+     *  `maxHpOf`). */
     effectiveDefence: number;
-    effectiveMaxHp: number;
     outgoingHealPct: number;
     incomingHealPct: number;
     /** #367: the ENEMY-APPLIED portion that is ALREADY INCLUDED in `incomingHealPct` /
@@ -278,7 +278,7 @@ export interface HealingRuntimeCtx {
      *  not a repair PERFORMED. See `HealingRoundEngine.perRecipient`'s doc for the full contract
      *  and `creditPerformedRepair` in engine.ts for the in-engine twin. */
     creditPerformed?: (sourceId: string, amount: number) => void;
-    /** Recipient stats via lastTurnCtxByActor with base-stat fallback (pre-first-turn). */
+    /** A recipient's max HP — engine.ts's `maxHpOf`, static for the fight. */
     recipientMaxHp: (actorId: string) => number;
     /** A recipient's incoming-repair % as it stands now (`liveHealChannelPct`). Callers here
      *  short-circuit their OWN actor (`incomingPctFor`'s self arms in this file and in
@@ -2172,6 +2172,11 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         hp,
         allyChargePerRound,
     } = runtime;
+    /** This actor's max HP: its post-prefight `stats.hp` (the engine's `maxHpOf`), static for the
+     *  whole fight (owner ruling D, #658; census in `maxHpStaticTripwire.test.ts`). Every
+     *  self-max-HP read in this turn uses it. 0 in a DPS run that omits `hp`; each consumer
+     *  guards that. */
+    const maxHp = actor.stats.hp;
     // chargeCount lives on the actor (CombatActor carries it); read from there.
     const chargeCount = actor.chargeCount;
 
@@ -3315,18 +3320,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // land regardless of the caster's real shieldPool, which is just as wrong as the
         // original unconditional-inflict bug this task fixes.
         selfShielded: actor.shieldPool > 0,
-        // Approximates max HP with the static base stat (`actor.stats.hp`), NOT the live
-        // buff-inclusive value drain-time reads (engine.ts's isSelfShieldFull via
-        // recipientMaxHp). This ctx is built before `dmgStats`/`effectiveHp` exist in the turn
-        // (they're computed further down) and cannot be reordered here without
-        // reordering the whole turn, which is out of scope. Consequence: an actor under an
-        // active max-HP buff can read "full" here slightly EARLY (base HP is smaller than the
-        // buffed HP, so the shieldPool>=threshold trips sooner). Inert today regardless — the
-        // only shipped consumer of `self-shield-full` is the reactive end-of-turn drain path,
-        // which reads the live value and is unaffected by this approximation. Left in place
-        // (not deleted): dropping the field would make a future on-cast gate on this subject
-        // silently never fire, which is worse than the approximation.
-        selfShieldFull: actor.stats.hp > 0 && actor.shieldPool >= actor.stats.hp,
+        // Max HP is static for the fight (`maxHp`, the same figure engine.ts's isSelfShieldFull
+        // reads at drain time). Kept on this ctx so a future on-cast gate on this subject fires
+        // rather than reading the DPS-safe `false` default.
+        selfShieldFull: maxHp > 0 && actor.shieldPool >= maxHp,
         // Malvex charged Barrier: the TARGET's shield-presence gate — derivation, PRE-strip reading
         // and the no-victim answer all documented on victimShieldGateCtx.
         ...victimShieldGateCtx(enemy),
@@ -4419,10 +4416,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         selfDebuffNames: selfDebuffNamesArg,
         selfDebuffCount: selfDebuffCountArg,
         turnsTaken: actor.turnsTaken,
-        // Approximates max HP with the static base stat (`actor.stats.hp`), same limitation and
-        // same reasoning as preDebuffGateCtx above — this ctx is also built before
-        // `dmgStats`/`effectiveHp` exist in the turn (computed further down) and
-        // cannot be reordered here without reordering the whole turn, which is out of scope.
+        // Max HP is static for the fight (`maxHp`), as in preDebuffGateCtx above.
         // THIS is the ctx that matters for the subject: the per-slot timed-SELF-buff loop just
         // below (`timedSelfBySlot`, gated via `conditionsMet(status.conditions,
         // postDebuffGateCtx)`) is what fires an ON-CAST ability gated on `self-shield-full`
@@ -4431,7 +4425,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // (buildRoundContext's DPS-safe default) and such a cast-path grant would be permanently
         // suppressed regardless of the caster's real shieldPool — the same silent-failure class the
         // sibling fields in the other three contexts already guard against.
-        selfShieldFull: actor.stats.hp > 0 && actor.shieldPool >= actor.stats.hp,
+        selfShieldFull: maxHp > 0 && actor.shieldPool >= maxHp,
         // Malvex charged Barrier: the TARGET's shield-presence gate (see victimShieldGateCtx). Note
         // `selfShielded` is still absent from THIS ctx (its only consumers gate enemy debuffs /
         // modifiers / payload abilities instead) — but `selfShieldFull` above IS populated here,
@@ -4587,20 +4581,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         selfDebuffNames: selfDebuffNamesArg,
         selfDebuffCount: selfDebuffCountArg,
         selfShielded: actor.shieldPool > 0,
-        // Approximates max HP with the static base stat, same limitation as preDebuffGateCtx
-        // above — but here it is a hard dependency ordering, not just "not yet
-        // computed": this ctx is threaded into effectiveDamageStatsOf as `modifierCtx`, which
-        // gates `modifierAbilities` and folds the result into `mod.hp` → `dmgStats.hp` →
-        // `effectiveHp` (below). Reading `effectiveHp` here would be circular —
-        // exactly the self-referential-gate class the PRE-modifier `critBuffForGates` estimate
-        // above (layers 1+2+3, see the comment two above this ctx) exists to avoid for crit.
-        // Consequence: an actor under an active max-HP buff can read "full" here slightly
-        // EARLY. Inert today regardless — the only shipped consumer of `self-shield-full` is
-        // the reactive end-of-turn drain path (engine.ts's isSelfShieldFull), which reads the
-        // live recipientMaxHp value and never sees this ctx. Left in place (not deleted):
-        // dropping the field would make a future on-cast modifier gate on this subject
-        // silently never fire, which is worse than the approximation.
-        selfShieldFull: actor.stats.hp > 0 && actor.shieldPool >= actor.stats.hp,
+        // Max HP is static for the fight (`maxHp`), as in preDebuffGateCtx above. Kept so a
+        // future on-cast modifier gate on this subject fires rather than reading `false`.
+        selfShieldFull: maxHp > 0 && actor.shieldPool >= maxHp,
         // Malvex charged Barrier: the TARGET's shield-presence gate (see victimShieldGateCtx). No
         // corpus MODIFIER ability gates on this subject today; populated for the same reason its
         // `selfShielded` neighbour is — an absent field makes a future gate on this ctx silently
@@ -4914,7 +4897,6 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // scalar when no override).
     const affinityMult = 1 + effAffinityDamageModifier / 100;
     const effectiveDefence = dmgStats.defence;
-    const effectiveHp = dmgStats.hp;
     const effectiveSecurity = dmgStats.security;
 
     // Per-round condition context for the condition engine. Built once
@@ -4985,13 +4967,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // was not attempted is gated by THIS ctx, so it needs selfShielded too, or such a control
         // would stay suppressed regardless of the caster's real shieldPool.
         selfShielded: actor.shieldPool > 0,
-        // Reconciled with drain-time (engine.ts's isSelfShieldFull, which reads
-        // recipientMaxHp → lastTurnCtxByActor.get(id)?.effectiveMaxHp): `effectiveHp` (computed
-        // above this ctx) is exactly that same live, buff-inclusive max HP (it IS the value
-        // stored into effectiveMaxHp at turnCtx below) — so this reads the same value as the
-        // drain-time gate instead of the static base stat, which would disagree under an
-        // active max-HP buff.
-        selfShieldFull: effectiveHp > 0 && actor.shieldPool >= effectiveHp,
+        // Static max HP (`maxHp`), the figure the drain-time gate (engine.ts's isSelfShieldFull)
+        // reads too.
+        selfShieldFull: maxHp > 0 && actor.shieldPool >= maxHp,
         // Malvex charged Barrier: the TARGET's shield-presence gate (see victimShieldGateCtx), for
         // the payload abilities gateFiringAbilities gates just below. No corpus payload ability gates
         // on this subject today (Malvex's own charge-slot Barrier is a timed self buff, gated by
@@ -5136,7 +5114,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // #361: 'security' is a scalar MULTIPLE of the caster's security carried as pct = N*100
         // (Prophet's "50x its security" -> 5000), so it divides by 100 like every other basis.
         // Named explicitly rather than left to the trailing fall-through: this chain defaults to
-        // effectiveHp, so a basis the parser learns but this site does not would silently deal
+        // maxHp, so a basis the parser learns but this site does not would silently deal
         // HP-scaled damage with no type error to catch it — widening SecondaryDamageStat produced
         // ZERO tsc diagnostics, because nothing here is an exhaustive switch.
         const source =
@@ -5146,7 +5124,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                   ? actor.shieldPool
                   : secondary.stat === 'security'
                     ? effectiveSecurity
-                    : effectiveHp;
+                    : maxHp;
         secondaryStatValue = source * (secondary.pct / 100);
     }
 
@@ -6463,8 +6441,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         const healAmpAbilities = (passiveSkill?.abilities ?? []).filter(
             (a) => a.config.type === 'heal-amplification'
         );
-        // Recipient HP% at cast time: live ctx via recipientActor/recipientMaxHp; fall back to the
-        // engine-threaded targetHpPct for the heal target before it has a ctx, else 100.
+        // Recipient HP% at cast time: live current HP via recipientActor over recipientMaxHp; fall
+        // back to the engine-threaded targetHpPct for an unresolved heal target, else 100.
         const recipientHpPctFor = (rid: string): number => {
             const max = healing.recipientMaxHp(rid);
             const a = healing.recipientActor(rid);
@@ -6497,9 +6475,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // The ranking itself lives ONCE, in `lowestHpAllyRecipients` (supportRecipients.ts) — this
         // is only the per-turn binding of the caster id and the live HP reader. Do not hand-copy
         // it: a copy that disagrees on the lone-caster case re-creates that forbidden self-heal.
-        // `allyHpFractionOf` reads the healing ctx's buff-aware `recipientMaxHp` (requirement (b)
-        // in the helper's doc), and both id lists below arrive in fixed source order (requirement
-        // (a), the tie-break).
+        // `allyHpFractionOf` reads each ally's live HP fraction (`allyHpFraction`), and both id
+        // lists below arrive in fixed source order (requirement (a) in the helper's doc, the
+        // tie-break).
         const lowestHpAllyId = (ids: string[]): string | undefined =>
             lowestHpAllyRecipients({
                 casterId: actor.id,
@@ -6595,7 +6573,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                     );
                 case 'hp':
                 default:
-                    return effectiveHp;
+                    return maxHp;
             }
         };
 
@@ -6607,7 +6585,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // ticks on its OWN cast turn (not only on subsequent turns). The healing goldens lock
         // this behaviour; do not change it without re-validating the in-game rule.
         // The HOLDER (this acting actor) heals each of its own turns for
-        // holderEffectiveMaxHp × hotPct% × stacks, attributed to the APPLIER's hotHeal
+        // holder max HP × hotPct% × stacks, attributed to the APPLIER's hotHeal
         // bucket (mirrors DoT sourceId attribution). HoT heals NEVER crit and ignore
         // healModifier/outgoingHeal (they are the applier's standing effect, not a cast),
         // but DO get the HOLDER's incomingHeal amplification (dmgStats.totals.incomingHealBuff,
@@ -6616,7 +6594,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // (applyHealToTarget) is credited to the APPLIER's effectiveHeal/overheal — except on the
         // enemy side, which applies the HP and credits nothing (E5 §4.1).
         //
-        // The tick's basis is the HOLDER's own effective max HP (`effectiveHp`), whoever applied
+        // The tick's basis is the HOLDER's own max HP (`maxHp`), whoever applied
         // it — owner ruling R55, the game's tooltip "This Unit repairs 10% of its max HP every
         // turn". The applier only decides attribution (`creditId`), never the amount.
         //
@@ -6637,7 +6615,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             if (hotPct <= 0 || stacks <= 0) return;
             // Scheduled HoT (no caster) attributes to the holder; otherwise to the applier.
             const creditId = applierId ?? actor.id;
-            let raw = effectiveHp * (hotPct / 100) * stacks * holderIncomingFactor;
+            let raw = maxHp * (hotPct / 100) * stacks * holderIncomingFactor;
             // Recipient-side incoming-heal amplification (Exuberance) — the HoT recipient is
             // the holder (actor.id). Rolls its combat-lifetime gate ONCE per tick.
             raw *= 1 + (healing.recipientIncomingHealAmpPct?.(actor.id) ?? 0) / 100;
@@ -7059,7 +7037,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                         // Enemy shields grant a real pool to each enemy recipient and emit
                         // shield-applied, but credit NO player bucket — the symmetric counterpart to
                         // the E5 enemy-heal lift above. Routing/cap/absorb are already side-agnostic
-                        // (recipientsFor, grantShieldToTarget caps at recipientMaxHp, the absorb path).
+                        // (recipientsFor, grantShieldToTarget caps at max HP, the absorb path).
                         // No crit / no modifiers (shields aren't repairs), matching the player branch.
                         const recipients = recipientsFor(ability, fromPassive);
                         const shieldAcc = new ShieldApplyAccumulator();
@@ -7270,7 +7248,6 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         dotMult,
         affinityMult,
         effectiveDefence,
-        effectiveMaxHp: effectiveHp,
         outgoingHealPct: dmgStats.totals.outgoingHealBuff,
         incomingHealPct: dmgStats.totals.incomingHealBuff,
         // #367: republish the enemy-applied portion of the two totals above, taken from the SAME

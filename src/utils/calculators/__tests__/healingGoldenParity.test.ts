@@ -25,7 +25,7 @@
 // Heal formula reminders (see src/utils/combat/__tests__/healing.test.ts):
 //   • directHeal raw = basisStat × pct/100 × stacks, then × healModifier × outgoingHeal
 //     × incomingHeal folds (crit 0 here for the verified scenarios → no crit fold).
-//   • basis 'hp' uses the CASTER's effectiveMaxHp; 'target-hp' uses the RECIPIENT's.
+//   • basis 'hp' uses the CASTER's max HP; 'target-hp' uses the RECIPIENT's.
 //   • effectiveHealing = min(raw, deficit); overheal = raw − effectiveHealing. At full
 //     HP deficit 0 → all overheal.
 //   • The crit gate is BACK-LOADED: at rate 0.5 the first draw does NOT fire — crits
@@ -158,7 +158,7 @@ describe('healingGoldenParity', () => {
 
     // ── Scenario 3: HoT (Repair Over Time) ───────────────────────────────────
     // Active slot grants ITSELF a 2-turn Repair Over Time II buff (hotPct 15) alongside a
-    // small 5% heal. The buff fans to self; each tick scales the holder's effectiveMaxHp
+    // small 5% heal. The buff fans to self; each tick scales the holder's max HP
     // 10000 × 15% = 1500 (hotHeal), credited to the holder. Every cast is its own 2-turn copy
     // (#670), and a self copy gained on the holder's own turn keeps both turns through that
     // turn's Post-Turn, so a copy cast in round r ticks in rounds r, r+1 and r+2.
@@ -459,7 +459,7 @@ describe('healingGoldenParity', () => {
     //     — UNCHANGED by the rebase: inferno scales off the APPLIER's effective attack
     //       (engine.ts:1066, `ctx.effectiveAttack` in the inferno `tickByTier`), not the victim's
     //       HP. Corrosion is the one that reads an HP basis, and it ALREADY reads the practice
-    //       target's own max HP (`enemyHp: recipientMaxHp(actor.id)` at the per-victim positional
+    //       target's own max HP (`enemyHp: maxHpOf(actor.id)` at the per-victim positional
     //       DoT-tick branch, engine.ts:8836) — 40,000 here, not the sink's
     //       1,000,000; that branch is the one this fixture's `perTargetDealt` assertion proves runs.
     //
@@ -1590,14 +1590,14 @@ describe('healingGoldenParity', () => {
     // eventCtx.counterTargetId names the attacker — the executor routes a
     // counter-debuff to THAT enemy's per-target store. Drain-time
     // hp-threshold gates read the heal target's LIVE post-attack HP
-    // (denominator baseHpFor). Executor reactive-heal fold: healModifier ×
+    // (denominator maxHpOf). Executor reactive-heal fold: healModifier ×
     // outgoing × incoming (all 0 here → bare basis × pct), NEVER crits.
     // =========================================================================
 
     // ── Scenario 21 (A): per-hit cadence + crit-filter pair (Isha shape) ──────
     // HAND-VERIFIED. The tank (focus + heal target, hp 100000, defence 0, speed 100) carries an
     // Isha-shaped PAIR of on-attacked self-heals: pct 3 with triggerCritFilter 'non-crit' + pct 6
-    // with 'crit' (basis 'hp' → the tank's own effectiveMaxHp 100000 → 3000 / 6000 per reaction;
+    // with 'crit' (basis 'hp' → the tank's own max HP 100000 → 3000 / 6000 per reaction;
     // healModifier/outgoing/incoming all 0 → bare fold; reactive heals never crit). A ship-backed
     // enemy (attack 4000, crit 50, critDamage 100, speed 50) fires a 3-HIT active damage ability
     // (multiplier 100 → effectiveMultiplier 300) → 3 `attacked` events per round, each with its
@@ -1731,7 +1731,7 @@ describe('healingGoldenParity', () => {
     // self-heal (pct 20 → 2000) GATED on `hp-threshold self below 40%` (derivable). A bare
     // enemy hits 2000/round. The gate is evaluated at DRAIN time — AFTER the triggering hit
     // landed — against the tank's LIVE post-attack HP (Task 6: selfHpPctFor, denominator
-    // baseHpFor). Numbers are chosen so the heal lifts the tank back to EXACTLY 40% (never
+    // maxHpOf). Numbers are chosen so the heal lifts the tank back to EXACTLY 40% (never
     // above): each subsequent round re-enters at 40%, the hit drops it to 20% (< 40 at drain
     // time) → the heal re-fires EVERY round once first triggered. The steady state is the
     // documented RE-CROSSING behaviour: enter 40% → hit → 20% → heal → 40%.
@@ -1958,8 +1958,7 @@ describe('healingGoldenParity', () => {
     // per-event intent carries eventCtx.damagedAllyId; the executor routes an
     // 'ally'-target heal/buff payload to exactly THAT ally. Reactive-heal fold
     // (executor): basis × pct/100 × healModifier × outgoing × incoming (all 0
-    // here → bare), basis 'hp' = the OWNER's effectiveMaxHp from its last-turn
-    // ctx; reactive heals NEVER crit. Reactive buffs stamp casterId = the
+    // here → bare), basis 'hp' = the OWNER's max HP; reactive heals NEVER crit. Reactive buffs stamp casterId = the
     // granting owner, so a granted Repair Over Time ticks on the HOLDER's turn
     // for the APPLIER's maxHp × hotPct% (foreign-applier ctx rule: the applier
     // must have taken a turn, else the tick is skipped).
@@ -1973,7 +1972,7 @@ describe('healingGoldenParity', () => {
     // effectiveMultiplier 200) at the tank → TWO `attacked` events per round → the unfiltered
     // reaction fires TWICE per round, each routed to eventCtx.damagedAllyId = 'tank'.
     //
-    // Reactive heal per event (executor fold): owner effectiveMaxHp 10000 × 8% = 800;
+    // Reactive heal per event (executor fold): owner max HP 10000 × 8% = 800;
     // healModifier, outgoingHeal, and tank incomingHeal all 0 → fold factors 1 → bare 800
     // (reactive heals never crit). 2 events/round → directHeal 1600/round, credited to the
     // FOCUS owner; consumption
@@ -2701,7 +2700,7 @@ describe('healingGoldenParity', () => {
     // vanguard; defence 0, crit 0, neutral affinity.
     //
     // One `attacked` event per round → the unfiltered reaction fires ONCE, fanning `all-allies`
-    // over every player id (the owner included). Raw per recipient = owner effectiveMaxHp 10000
+    // over every player id (the owner included). Raw per recipient = owner max HP 10000
     // × 8% = 800; healModifier / outgoing / incoming all 0 and reactive heals never crit → bare
     // 800 × 3 recipients = 2400 gross `directHeal`/round, credited to the focus owner.
     //

@@ -1,14 +1,15 @@
 /**
- * An enemy's max HP is its EFFECTIVE (buff-folded) max HP on both sides of the board: a player
- * attacker reads the same figure an enemy attacker reads off a buffed player ship. An enemy at
- * 100,000 current HP with a +20% HP buff has a 120,000 max, so it sits at 83% — not 100%.
+ * An enemy's max HP is static for the whole fight (owner ruling D, #658): no buff moves it, so an
+ * enemy at 100,000 of 100,000 HP reads 100% whatever it carries. Lionheart and squad leaders fold
+ * into base stats before combat; `maxHpStaticTripwire.test.ts` is the census proving no in-game
+ * producer of a mid-fight HP-stat change exists.
  *
- * No in-game buff moves max HP mid-fight (Lionheart and squad leaders fold into base stats before
- * combat), so the buff here is synthetic: it pins the engine's `hp` buff channel as team-symmetric.
+ * The buff here is synthetic — an `hp` effect no real status carries — and pins that even such a
+ * status cannot move the engine's max-HP read (`maxHpOf`).
  *
  * The probe is an Akula-shape hit: damage scaled up to +30% by the target's current HP percentage.
- * The enemy is faster than the focus and buffs itself first, so its raised max is published before
- * the focus acts. Each arm builds its own input, so the comparison is between distinct boards.
+ * The enemy is faster than the focus and buffs itself first, so the status stands before the
+ * focus acts. Each arm builds its own input, so the comparison is between distinct boards.
  */
 import { describe, it, expect } from 'vitest';
 import { runCombat, CombatEngineInput } from '../engine';
@@ -86,7 +87,7 @@ const board = (enemyKit: ShipSkills | undefined): CombatEngineInput => ({
     }),
 });
 
-describe('enemy effective max HP on the player-attacks-enemy path', () => {
+describe('enemy static max HP on the player-attacks-enemy path', () => {
     const unbuffed = focusHit(board(undefined));
     const buffed = focusHit(board(selfHpBuffKit()));
 
@@ -95,8 +96,9 @@ describe('enemy effective max HP on the player-attacks-enemy path', () => {
         expect(unbuffed).toBe(13_000);
     });
 
-    it('an HP-buffed enemy at 83% takes the bonus for 83%, not for full HP', () => {
-        // current 100,000 / max 120,000 = 83.33% -> +25%.
-        expect(buffed).toBeCloseTo(12_500, 0);
+    it('an enemy carrying an hp-effect status still reads full HP and takes the full bonus', () => {
+        // current 100,000 / max 100,000 = 100% -> +30%, identical to the unbuffed arm.
+        expect(buffed).toBe(13_000);
+        expect(buffed).toBe(unbuffed);
     });
 });

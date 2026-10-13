@@ -144,7 +144,6 @@ describe('generic DoT', () => {
             dotMult: 1,
             affinityMult: 1,
             effectiveDefence: 0,
-            effectiveMaxHp: 0,
             outgoingHealPct: 0,
             incomingHealPct: 0,
         };
@@ -175,7 +174,6 @@ describe('generic DoT', () => {
             dotMult: 1,
             affinityMult: 1,
             effectiveDefence: 0,
-            effectiveMaxHp: 0,
             outgoingHealPct: 0,
             incomingHealPct: 0,
         };

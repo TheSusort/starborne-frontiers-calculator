@@ -1032,7 +1032,7 @@ describe('D-PR5 integration — Second Wind reactive self-heal on crit-received'
                 }))
                 .filter((r) => r.heal > 0);
             // directHeal = 9 fires × (ATTACKER_HP × 10%) = 9 × 1000 = 9000.
-            // basis 'hp' resolves to effectiveMaxHp (unchanged regardless of current HP).
+            // basis 'hp' resolves to the caster's max HP (unchanged regardless of current HP).
             expect(sumHeal(result, 'directHeal')).toBeCloseTo(EXPECTED_TOTAL, 6);
             expect(firedRounds).toHaveLength(EXPECTED_FIRES);
             expect(firedRounds[0].round).toBe(1);
@@ -5170,7 +5170,7 @@ describe('H3.2 integration — Adaptive Plating once-per-round shield off the da
 //     repair clips to a KNOWN overheal.
 //
 // Pinning the overheal exactly (1 round, no folds):
-//   - healer effectiveMaxHp (hp) = 10_000; repair pct 50, basis 'hp', healModifier 0, noCrit →
+//   - healer max HP (hp) = 10_000; repair pct 50, basis 'hp', healModifier 0, noCrit →
 //     raw R = 10_000 × 50/100 = 5_000.
 //   - tank maxHp = 10_000; enemy deals G = 2_000 (attack 2000 × mult 100, no defence/crit) →
 //     tank currentHp = 8_000 BEFORE the heal.
@@ -5197,7 +5197,7 @@ describe('H3.4 integration — Abundant Renewal grants overheal→shield to the 
     const EXPECTED_SHIELD = (AR_PCT / 100) * EXPECTED_OVERHEAL; // 900
 
     /** The healer's active repair, targeting an ally. basis 'hp' + noCrit so raw = healer
-     *  effectiveMaxHp × pct with no crit/heal-modifier folds.
+     *  max HP × pct with no crit/heal-modifier folds.
      *
      *  This reaches the whole own side (no support pattern narrows it), so the healer
      *  takes a share of its own alongside 'tank'. The healer's share is NOT applied and produces no

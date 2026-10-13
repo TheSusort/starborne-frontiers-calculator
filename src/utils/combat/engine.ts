@@ -3366,7 +3366,7 @@ export function runCombat(rawInput: CombatEngineInput): {
     const isSelfShieldFull = (actorId: string): boolean => {
         const a = allActorsById.get(actorId);
         if (a === undefined) return false;
-        const maxHp = recipientMaxHp(actorId);
+        const maxHp = maxHpOf(actorId);
         return maxHp > 0 && a.shieldPool >= maxHp;
     };
     const playerEnemyBuffNames = (): string[] =>
@@ -3514,15 +3514,15 @@ export function runCombat(rawInput: CombatEngineInput): {
     const passiveSuppressedFor = (ownerId: string, entry: { source?: 'equipment' }): boolean =>
         entry.source !== 'equipment' && isTurnBlocked(ownerId);
 
-    // Base-HP fallback for recipientMaxHp before an actor has taken its first turn (no ctx yet):
-    // attacker → input.hp; walked team → walk stats hp; enemy attackers → their CombatActor hp
-    // (enemy ids ARE queried as recipients — enemy heals restore HP).
-    const baseHpById = new Map<string, number>([
-        [attacker.id, hp],
-        ...teamActors.map((t) => [t.id, t.walk!.stats.hp] as const),
-        ...enemyAttackerActors.map((a) => [a.id, a.stats.hp] as const),
-    ]);
-    const baseHpFor = (id: string): number => baseHpById.get(id) ?? 0;
+    /**
+     * An actor's max HP: its post-prefight `stats.hp`, the same read for every actor on both
+     * sides. Static for the whole fight (owner ruling D, #658) — no status, modifier or gear
+     * effect moves max HP mid-fight, and Lionheart's pre-combat passive and squad leaders are
+     * already folded into `stats.hp` before the actors are built. `maxHpStaticTripwire.test.ts`
+     * is the census that keeps this true. An unknown id reads 0, and every denominator guards 0
+     * (a DPS run defaults `hp` to 0).
+     */
+    const maxHpOf = (id: string): number => allActorsById.get(id)?.stats.hp ?? 0;
 
     // ── Side-context bundle ────────────────────────────────────────────────────
     // ONE side-parameterized SideContext instead of hand-paired per-side closures.
@@ -3694,12 +3694,12 @@ export function runCombat(rawInput: CombatEngineInput): {
                 const min = Math.min(...speeds);
                 return new Set(actors.filter((_, i) => speeds[i] === min).map((a) => a.id));
             },
-            // Every owner reads its OWN live HP, whichever slot and side it is on. Same
-            // denominator as the cast-path selfHpPct (baseHpFor) so the gate flips at the same
-            // threshold at cast vs drain time. An unresolvable owner or a zero max HP reads 100.
+            // Every owner reads its OWN live HP, whichever slot and side it is on, over `maxHpOf`
+            // — the cast-path selfHpPct's denominator too, so the gate flips at the same threshold
+            // at cast vs drain time. An unresolvable owner or a zero max HP reads 100.
             selfHpPctFor: (ownerId: string): number => {
                 const owner = allActorsById.get(ownerId);
-                const maxHp = baseHpFor(ownerId);
+                const maxHp = maxHpOf(ownerId);
                 if (!owner || maxHp <= 0) return 100;
                 return Math.max(0, Math.min(100, (owner.currentHp / maxHp) * 100));
             },
@@ -3779,10 +3779,6 @@ export function runCombat(rawInput: CombatEngineInput): {
     // Empty on non-positional rounds.
     let perActorDot = new Map<string, { corrosion: number; inferno: number; generic: number }>();
 
-    // Recipient's CURRENT effective max HP: prefer the actor's last-turn ctx (live buffs),
-    // else its base HP (pre-first-turn).
-    const recipientMaxHp = (id: string): number =>
-        lastTurnCtxByActor.get(id)?.effectiveMaxHp ?? baseHpFor(id);
     // #367: the incoming-repair % of a repair's RECIPIENT, read at the moment of the repair —
     // pre-fight baseline + its own self statuses + the enemy-applied delta, all live. The
     // arithmetic lives once, in `liveHealChannelPct` (read its doc), which the reactive-heal path
@@ -3829,10 +3825,10 @@ export function runCombat(rawInput: CombatEngineInput): {
     // construction. #415 anchors `healTarget` to the focus (the attacker, absent an explicit heal
     // target) in every mode, so DPS now reads this actor's real live HP% too. Defined here so
     // every player turn dispatch (attacker + walked team) reads the same denominator
-    // (recipientMaxHp).
+    // (maxHpOf).
     const healTargetHpPctNow = (): number => {
         if (!healTarget) return 100;
-        const maxHp = recipientMaxHp(healTarget.id);
+        const maxHp = maxHpOf(healTarget.id);
         return maxHp > 0 ? (100 * Math.max(0, healTarget.currentHp)) / maxHp : 100;
     };
 
@@ -4045,7 +4041,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                       (currentRoundSourceRepair.get(sourceId) ?? 0) + amount
                   );
               },
-              recipientMaxHp,
+              recipientMaxHp: maxHpOf,
               recipientIncomingHealPct,
               recipientIncomingHealAmpPct: (rid) =>
                   incomingHealAmpForRecipient(
@@ -4241,10 +4237,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                       // — no damage, no healing, garbage statistics, green tests throughout.
                       return { reversed: true };
                   }
-                  const targetMaxHp = recipientMaxHp(victim.id);
-                  // Clamp the deficit at 0: a max-HP buff expiring can shrink effectiveMaxHp
-                  // below currentHp, making (targetMaxHp - currentHp) negative — without the
-                  // Math.max a heal would REDUCE the target's HP. Floor at 0 → consumed 0,
+                  const targetMaxHp = maxHpOf(victim.id);
+                  // The deficit is floored at 0 so a heal can never REDUCE HP, even on a target
+                  // whose currentHp somehow stands above its max. Floor at 0 → consumed 0,
                   // overheal = raw (the whole heal is wasted, which is correct in that state).
                   const consumed = Math.max(0, Math.min(raw, targetMaxHp - victim.currentHp));
                   victim.currentHp += consumed;
@@ -4267,11 +4262,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                   // shield-applied by design. Mutating this to `gross: raw` reddens nothing.
                   // See the matching note in shieldAppliedEvent.test.ts before "fixing" a test for it.
                   if (victim.currentHp <= 0) return { granted: 0, gross: 0 };
-                  const targetMaxHp = recipientMaxHp(victim.id);
-                  // Capped at the CURRENT effective max HP. Note: if a max-HP buff later expires
-                  // and shrinks targetMaxHp below an already-granted pool, the larger pool simply
-                  // persists (we never shrink an existing shield) — acceptable, as the cap is only
-                  // enforced at grant time and a shield is additive, never HP-reducing.
+                  const targetMaxHp = maxHpOf(victim.id);
+                  // Capped at the recipient's max HP (`maxHpOf`, static for the fight). The cap is
+                  // enforced at grant time only; an existing pool is never shrunk.
                   // Post-cap delta: record the REAL increase, not `raw`. A grant that
                   // exceeds the maxHP cap records only the portion that actually landed, so the
                   // surfaced `granted` matches the pool growth the UI shows.
@@ -4488,9 +4481,9 @@ export function runCombat(rawInput: CombatEngineInput): {
             // abilities, so the two layers can never disagree about who is inside the pattern.
             footprintAllyIdsFor: (ownerId: string) =>
                 bySide(isEnemySide(ownerId) ? 'enemy' : 'player').footprintAllyIdsFor(ownerId),
-            // Owner effective max HP (live ctx ?? base HP) — gates Tenacity's >25% filter.
+            // Owner max HP (`maxHpOf`, static for the fight) — gates Tenacity's >25% filter.
             // id-keyed and side-agnostic, so the same closure serves both side registrations.
-            maxHpOf: (ownerId: string) => recipientMaxHp(ownerId),
+            maxHpOf,
             // The same self-HP reading the drain gate uses, taken when a hit lands (A8).
             // Stasis/Disable when the event happens (`Intent.ownerTurnBlockedAtEvent`).
             isTurnBlockedOf: (ownerId: string) => isTurnBlocked(ownerId),
@@ -5145,7 +5138,7 @@ export function runCombat(rawInput: CombatEngineInput): {
     // actor/zero max HP (inert — no reduction).
     const selfHpPctOf = (actorId: string): number => {
         const a = allActorsById.get(actorId);
-        const maxHp = recipientMaxHp(actorId);
+        const maxHp = maxHpOf(actorId);
         if (!a || maxHp <= 0) return 100;
         return (100 * a.currentHp) / maxHp;
     };
@@ -6250,7 +6243,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         // Shared damage-intake core: the side-specific accounting bits live on `sink`, while
         // everything keyed off `victim` (Barrier full-immunity, shield
         // drain, HP decrement, hp-changed) stays inline here. Kept inside
-        // runCombat — it captures statusEngine/bus/r/recipientMaxHp/BARRIER_BUFFS/
+        // runCombat — it captures statusEngine/bus/r/maxHpOf/BARRIER_BUFFS/
         // selfBuffNamesForOwners for the Barrier check that lives in this closure. The
         // Cheat-Death intercept and recordDestroyed live in `resolveLethalHp` (lethalHp.ts);
         // this closure FORWARDS cheatDeathConsumed/cheatDeathConsumedRound/bus/statusEngine/r
@@ -6957,7 +6950,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             // the Shield Converter review): both the Shield Converter branch's cap and the
             // post-transform `maxHp` used further down need the SAME value, and this is the
             // earliest point in the funnel where it is needed.
-            const maxHp = recipientMaxHp(victim.id);
+            const maxHp = maxHpOf(victim.id);
             // Set only when the Shield Converter branch below actually fires — the PRE-deposit
             // pool, so the returned `shieldBefore` (shieldWasHit detection) reflects
             // the state this hit FOUND, not what its own nullify-and-deposit just grew (IMPORTANT 1
@@ -8298,7 +8291,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // basis instead. Otherwise attack × multiplier.
                 const basisStat =
                     hpBasisPct !== undefined
-                        ? recipientMaxHp(ownerId)
+                        ? maxHpOf(ownerId)
                         : shieldBasisPct !== undefined
                           ? owner.shieldPool
                           : ownerOutgoing.attack;
@@ -8692,7 +8685,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                             enemyBuffNames: selfBuffNamesForOwners(statusEngine, [v.id]),
                             enemyBuffCount: actorBuffCount(statusEngine, v.id),
                             enemyHpPct: (() => {
-                                const maxHp = recipientMaxHp(v.id);
+                                const maxHp = maxHpOf(v.id);
                                 return maxHp > 0
                                     ? Math.max(0, Math.min(100, (100 * v.currentHp) / maxHp))
                                     : 100;
@@ -9612,7 +9605,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         }
         const playerTurnBindings: TurnBindings = {
             opposingRoster: enemyAttackerActors,
-            victimMaxHpFor: (tgt) => recipientMaxHp(tgt.id),
+            victimMaxHpFor: (tgt) => maxHpOf(tgt.id),
             enemyTypeArg: enemyType,
             enemyBuffNamesUnion: playerEnemyBuffNames,
             stealthedEnemyCount: playerStealthedEnemyCount,
@@ -9637,7 +9630,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         };
         const enemyTurnBindings: TurnBindings = {
             opposingRoster: allPlayerActors,
-            victimMaxHpFor: (tgt) => recipientMaxHp(tgt.id),
+            victimMaxHpFor: (tgt) => maxHpOf(tgt.id),
             enemyTypeArg: undefined,
             // Opposing side from the ENEMY's view = the player team, so `enemyBuffNames` here is the
             // UNION of PLAYER self-buff names (fed to the enemy's own `enemy-buff` gates). A bare
@@ -10011,7 +10004,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         //       victim-derived spread below (`enemy`, the timed containers, victimDefenseProfile/enemyHp,
         //       targetRepairedThisRound, targetEffectiveAttack, enemyDebuffNames). Consumers must
         //       read that as "no enemy", never as "an enemy with neutral stats" (contract §B).
-        // The selfHpPct denom is runtimeFor(actor).hp (equal to baseHpFor(id) by
+        // The selfHpPct denom is runtimeFor(actor).hp (equal to maxHpOf(id) by
         // construction). The per-kind bookkeeping TAILS after each call stay inline.
         /**
          * The bound target's bucketed incoming reductions for the turn's own damage figure, read
@@ -10046,7 +10039,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             castStartSeq = statusEngine.lastAppliedSeq();
             const tb = turnBindings(a.side);
             const rt = runtimeFor(a);
-            const maxHp = rt.hp; // unified denom (baseHpFor(id) === runtimeFor(id).hp)
+            const maxHp = rt.hp; // unified denom (maxHpOf(id) === runtimeFor(id).hp)
             // AoE purge: footprint victim ids for an 'enemy'/'all-enemies' on-cast purge.
             // Computed ONLY when positional — `tgt?.position != null` is the positional
             // discriminator: when nothing positional resolved, `selectTurnTarget` returns NO victim
@@ -11153,10 +11146,8 @@ export function runCombat(rawInput: CombatEngineInput): {
             currentRoundHealing = new Map<string, ActorHealing>();
             currentRoundRecipientHealing = new Map<string, ActorHealing>();
             currentRoundSourceRepair = new Map<string, number>();
-            const targetMaxHp = recipientMaxHp(healTarget.id);
-            // Clamp to [0, 100]: a shrunk effectiveMaxHp (expired max-HP buff) can leave
-            // currentHp > targetMaxHp, pushing the ratio above 100 — cap it so the reported
-            // start % never exceeds full.
+            const targetMaxHp = maxHpOf(healTarget.id);
+            // Clamped to [0, 100] so the reported start % never reads past full or below empty.
             targetHpPctStart =
                 targetMaxHp > 0
                     ? Math.min(100, Math.max(0, 100 * (healTarget.currentHp / targetMaxHp)))
@@ -11263,7 +11254,6 @@ export function runCombat(rawInput: CombatEngineInput): {
                     dotMult: 1,
                     affinityMult: 1,
                     effectiveDefence: 0,
-                    effectiveMaxHp: 0,
                     outgoingHealPct: 0,
                     incomingHealPct: 0,
                 },
@@ -11550,10 +11540,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                     const a = allActorsById.get(id);
                     return a ? enemyDebuffNamesForTarget(a) : [];
                 },
-                // A victim's current effective max HP (the same
-                // recipientMaxHp denominator every heal/HP-basis site uses) so the
-                // per-victim hp-threshold gate (Judge's "<50% HP") reads a live HP%.
-                recipientMaxHpFor: (id) => recipientMaxHp(id),
+                // A victim's max HP (`maxHpOf`, the denominator every heal/HP-basis site uses)
+                // so the per-victim hp-threshold gate (Judge's "<50% HP") reads a live HP%.
+                recipientMaxHpFor: maxHpOf,
                 firstActivatorId: sideCtx.firstActivatorId,
                 lastStandingId: sideCtx.lastStandingId,
                 oncePerRoundConsumed: sideCtx.oncePerRoundConsumed,
@@ -12044,16 +12033,13 @@ export function runCombat(rawInput: CombatEngineInput): {
         // reported "Enemy HP: 100%" on rounds where the real enemy sat at 12%. The roster reading
         // needs no stand-in and answers a multi-enemy round with one number.
         const enteringEnemyHpPct = ((): number => {
-            const totalMaxHp = enemyAttackerActors.reduce(
-                (sum, a) => sum + recipientMaxHp(a.id),
-                0
-            );
+            const totalMaxHp = enemyAttackerActors.reduce((sum, a) => sum + maxHpOf(a.id), 0);
             // No HP anywhere to lose (an unspecified/zero-max roster) → nothing has been taken off
             // it. Unreachable on a DPS run (`normalizeRoster` floors every enemy's max HP), but this
             // expression also serves healing/battle-mode rows, which carry no such floor.
             if (totalMaxHp <= 0) return 100;
             const remaining = enemyAttackerActors.reduce(
-                (sum, a) => sum + Math.max(0, Math.min(a.currentHp, recipientMaxHp(a.id))),
+                (sum, a) => sum + Math.max(0, Math.min(a.currentHp, maxHpOf(a.id))),
                 0
             );
             return (remaining / totalMaxHp) * 100;
@@ -12300,7 +12286,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                         infernoEntries: healTarget.infernoEntries,
                         genericDoTEntries: healTarget.genericDoTEntries,
                         // Corrosion scales with the afflicted ship's HP — the tank's own max HP.
-                        enemyHp: recipientMaxHp(healTarget.id),
+                        enemyHp: maxHpOf(healTarget.id),
                         ctxFor: (sourceId) => lastTurnCtxByActor.get(sourceId),
                         emitTicked: (dotType, damage, stacks, tier) =>
                             bus.emit({
@@ -12439,7 +12425,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                             infernoEntries: actor.infernoEntries,
                             genericDoTEntries: actor.genericDoTEntries,
                             // Corrosion scales with the AFFLICTED ship's own max HP.
-                            enemyHp: recipientMaxHp(actor.id),
+                            enemyHp: maxHpOf(actor.id),
                             ctxFor: (sourceId) => lastTurnCtxByActor.get(sourceId),
                             emitTicked: (dotType, damage, stacks, tier) =>
                                 bus.emit({
@@ -13960,7 +13946,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 actorId: a.id,
                 round: r,
                 currentHp: a.currentHp,
-                maxHp: recipientMaxHp(a.id),
+                maxHp: maxHpOf(a.id),
                 shieldPool: a.shieldPool,
                 ...(healingCtx?.perRecipientApply
                     ? {

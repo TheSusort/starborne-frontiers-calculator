@@ -507,7 +507,7 @@ describe('Phase 4c PR 4 Task 5a: event-only enemy heal/cleanse emission', () => 
         expect(cleanse!.count).toBe(2);
         expect(heal).toBeDefined();
         expect(heal!.casterId).toBe('enemy1');
-        // E5: heal-performed now carries the REAL amount (effectiveHp 10000 × 20% basis 'hp');
+        // E5: heal-performed now carries the REAL amount (max HP 10000 × 20% basis 'hp');
         // no crit (noGate → false) so critHits stays absent.
         expect(heal!.amount).toBe(2000);
         expect(heal!.critHits).toBeUndefined();
@@ -774,7 +774,7 @@ describe('#369: HoT ticking applies on both sides, and only credits behind healE
         const spy = makeHealingSpy();
         runPlayerTurn(makeArgs(makeRuntime(), spy.healing, true));
 
-        // #369: the tick itself happens — effectiveHp 10,000 × hotPct 10% × 1 stack — and it
+        // #369: the tick itself happens — max HP 10,000 × hotPct 10% × 1 stack — and it
         // lands on the HOLDER, not on the heal anchor.
         expect(spy.applied).toEqual([1000]);
         expect(spy.appliedTo).toEqual(['attacker']);

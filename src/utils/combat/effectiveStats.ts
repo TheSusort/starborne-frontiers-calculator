@@ -30,8 +30,12 @@ import { selfAuraBuffs, victimOwnEnemyFamilies } from './triggers';
 //   • effectiveDamageStatsOf  (DAMAGE mode) — folds FOUR layers (the two above +
 //     gated active auras + the firing-skill modifier channel) given RESOLVED
 //     ingredients, because aura-gating/timed-application has side effects that
-//     must stay in the turn loop (it cannot re-resolve them here). `hp` IS folded
-//     (hp * (1 + hpBuff/100)); `crit` is still UNCAPPED (consumer caps it).
+//     must stay in the turn loop (it cannot re-resolve them here). `hp` is base
+//     pass-through here too; `crit` is still UNCAPPED (consumer caps it).
+//
+// Max HP is static for the whole fight in BOTH modes (owner ruling D, #658): `hpBuff` is
+// summed into the totals but never applied to `hp`. `maxHpStaticTripwire.test.ts` is the
+// census proving no status, modifier or gear effect produces an HP-stat change.
 //
 // Both share the arithmetic in calculateBuffTotals (buffTotals.ts). The
 // hacking/security fold pipeline lives here too — see `liveDebuffLandingChance`.
@@ -47,8 +51,7 @@ export interface EffectiveStats {
     /** Base only — defensePenetration BUFFS fold via toDotAndPenModifiers, NOT through
      *  foldActorBuffTotals, so a consumer must add the pen-buff term separately. */
     defensePenetration: number;
-    /** Base max HP. hpBuff IS summed in foldActorBuffTotals but deliberately dropped here —
-     *  in-fight HP changes track via currentHp, not the base stat. */
+    /** Base max HP — static for the fight (see the module header); `hpBuff` is not applied. */
     hp: number;
     speed: number;
     hacking: number; // base + hackingBuff (flat-additive)
@@ -309,7 +312,7 @@ export interface EffectiveDamageStats {
     /** crit + critBuffTotal, UNCAPPED. The consumer applies the affinity cap (cappedCrit). */
     crit: number;
     critDamage: number;
-    /** hp * (1 + hpBuff/100). Folded here (damage mode) — distinct from status-mode hp pass-through. */
+    /** Base max HP — static for the fight (see the module header); `hpBuff` is not applied. */
     hp: number;
     /** base + securityBuff, FLAT-additive and with NO affinity applied — the same fold
      *  `liveDebuffLandingChance` uses for `effSec`, so the caster's security means one thing
@@ -395,7 +398,7 @@ export function effectiveDamageStatsOf(args: {
         defence: base.defence * (1 + totals.defenceBuff / 100) + flatDefence(totals, security),
         crit: base.crit + totals.critBuff,
         critDamage: base.critDamage + totals.critDamageBuff,
-        hp: base.hp * (1 + totals.hpBuff / 100),
+        hp: base.hp,
         security,
         effectivePen:
             base.defensePenetration +

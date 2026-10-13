@@ -195,7 +195,7 @@ const selfIncomingBuff = (buffName: string, incomingHeal: number): Ability =>
  *  it can never be stale — only a reader of the owner's PUBLISHED ctx can be, and
  *  `triggers.ts`'s reactive-heal `ownerOutgoing` is the sole such reader in the engine.
  *  `basis: 'hp'` is not one of the reactive path's special bases, so it falls to the executor's
- *  default `ownerCtx?.effectiveMaxHp ?? owner.hp` — the medic's own max HP, i.e. the same RAW. */
+ *  default `owner.hp` — the medic's own max HP, i.e. the same RAW. */
 const reactiveAllyRepair = (pct: number): Ability => ({
     id: 'ab-reactive-ally-repair',
     type: 'heal',

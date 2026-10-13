@@ -65,8 +65,8 @@ const LIVE_SUBJECTS: ReadonlySet<ConditionSubject> = new Set([
     'self-shield',
     // Quixilver R2: the caster's shield pool being AT max HP is live-derivable on both paths —
     // the reactive drain reads engine.ts's `isSelfShieldFull` (live `shieldPool` vs
-    // `recipientMaxHp`) via buildDrainContext, and the cast path reads playerTurn.ts's
-    // base-HP approximation in preDebuffGateCtx/postDebuffGateCtx/modifierCtx. Without this
+    // `maxHpOf`) via buildDrainContext, and the cast path reads the same static max HP
+    // (`stats.hp`) in preDebuffGateCtx/postDebuffGateCtx/modifierCtx. Without this
     // entry the whole gate is neutralized to 'always' and Quixilver's end-of-turn passive grants
     // a team-wide Barrier on EVERY turn regardless of its shield — the `self-shield` sibling
     // directly above exists for the same reason (APEX), and this is the strictly narrower

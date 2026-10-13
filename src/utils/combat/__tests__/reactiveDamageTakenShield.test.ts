@@ -15,7 +15,7 @@
  * `grantShieldToTarget` spy and asserts the granted pool === 0.50 × D.
  *
  * PRE-FIX this fails twice over: the listener never threads `e.damage` (so triggerDamage is
- * undefined), and even if it did the `damage-taken` basis falls through to effectiveMaxHp — so
+ * undefined), and even if it did the `damage-taken` basis falls through to the owner's max HP — so
  * the grant would be 0.50 × maxHp (50,000 → 25,000), far larger than 0.50 × D (3,000 → 1,500).
  */
 import { describe, it, expect, vi } from 'vitest';
@@ -120,10 +120,7 @@ function makeShieldCtx(
         grantExtraAction: () => {},
         playerIds: [OWNER_ID],
         lastTurnCtxByActor: new Map([
-            [
-                OWNER_ID,
-                { effectiveAttack: 10000, affinityMult: 1, effectiveMaxHp: MAX_HP } as never,
-            ],
+            [OWNER_ID, { effectiveAttack: 10000, affinityMult: 1 } as never],
         ]),
         recordResisted: () => {},
         healing,

@@ -49,8 +49,7 @@
  *   - HP fraction crossings: `hp-changed` { targetId, oldPct, newPct }. This fires for BOTH
  *     sides, but with caveats that make it UNSUITABLE as a sole HP source:
  *       * Positioned enemy ATTACKERS DO emit hp-changed from round 2 onward — they walk
- *         `runPlayerTurn` and set `lastTurnCtxByActor`, so `recipientMaxHp` knows their
- *         `effectiveMaxHp` and the `maxHp > 0` gate passes. Suppression holds ONLY for
+ *         `runPlayerTurn`, and `maxHpOf` reads their `stats.hp`, so the `maxHp > 0` gate passes. Suppression holds ONLY for
  *         (a) the legacy dummy `enemy` actor and (b) round 1, before any enemy turn has run.
  *       * So enemy hp-changed events DO appear — but at integer / low granularity and with
  *         round-1-suppression timing that differs from the player side. Treat hp-changed as
