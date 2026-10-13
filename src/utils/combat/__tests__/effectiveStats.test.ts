@@ -211,10 +211,8 @@ describe('effectiveStatsOf — characterization vs piecemeal formulas', () => {
     });
 
     it('hp is a pure pass-through (never folded with buffs)', () => {
-        // hp buffs flow through parsedEffects.hp → toSimBuffs → hpBuff channel,
-        // but effectiveStatsOf intentionally returns s.hp unchanged (the fold formula
-        // is written but hp is excluded from the EffectiveStats formula; in-fight HP
-        // changes only matter as currentHp, not the base stat).
+        // Max HP is static for the fight (ruling D, #658; maxHpStaticTripwire.test.ts): an
+        // hp-carrying status sums into hpBuff but effectiveStatsOf returns s.hp unchanged.
         const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
         const hpStatus = timedStatus('HP Shield I', { hp: 25 });
         eng.registerAbilityStatuses([hpStatus], 'ship-2');
@@ -464,14 +462,14 @@ describe('effectiveDamageStatsOf — four-layer fold characterization', () => {
         const critBuff = scheduledTotals.critBuff + abilityTotals.critBuff + mod.crit;
         const critDamageBuff =
             scheduledTotals.critDamageBuff + abilityTotals.critDamageBuff + mod.critDamage;
-        const hpBuff = scheduledTotals.hpBuff + abilityTotals.hpBuff + mod.hp;
 
         expect(dmg.attack).toBe(base.attack * (1 + attackBuff / 100));
         expect(dmg.defence).toBe(base.defence * (1 + defenceBuff / 100));
         // crit: UNCAPPED (base + total crit buff)
         expect(dmg.crit).toBe(base.crit + critBuff);
         expect(dmg.critDamage).toBe(base.critDamage + critDamageBuff);
-        expect(dmg.hp).toBe(base.hp * (1 + hpBuff / 100));
+        // Max HP is static for the fight (ruling D, #658): the 'HP Up' fixture above moves nothing.
+        expect(dmg.hp).toBe(base.hp);
 
         // effectivePen = base defPen + cast pen bonus + modifier defPen + dotPen defPenBuff
         const expectedPen =

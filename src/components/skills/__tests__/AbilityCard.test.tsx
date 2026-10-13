@@ -1439,3 +1439,31 @@ describe('AbilityCard — the top-up buff-steal name accepts multi-word statuses
         });
     });
 });
+
+describe('AbilityCard — modifier channel', () => {
+    const modifier = (channel: 'attack' | 'hp'): Ability => ({
+        id: 'm1',
+        type: 'modifier',
+        target: 'self',
+        trigger: 'on-cast',
+        conditions: [],
+        config: { type: 'modifier', channel, value: 10, isMultiplicative: false },
+    });
+    const channelLabels = (ability: Ability) => {
+        render(<AbilityCard ability={ability} onChange={() => {}} onRemove={() => {}} />);
+        fireEvent.click(screen.getByLabelText('Channel'));
+        return within(screen.getByRole('listbox'))
+            .getAllByRole('option')
+            .map((o) => o.textContent);
+    };
+
+    it('does not offer HP: max HP is static all fight (#658)', () => {
+        const labels = channelLabels(modifier('attack'));
+        expect(labels).toContain('Attack');
+        expect(labels.some((l) => l?.startsWith('HP'))).toBe(false);
+    });
+
+    it('keeps a saved HP channel, labelled as having no effect', () => {
+        expect(channelLabels(modifier('hp'))).toContain('HP (no effect)');
+    });
+});

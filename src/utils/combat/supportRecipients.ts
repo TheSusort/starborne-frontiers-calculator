@@ -155,15 +155,12 @@ export function narrowByRecipientFilter(
  *
  * `hpFractionOf` returns `undefined` for an id that is not a living candidate (unknown to the
  * caller's HP source, or at/below 0 HP), so each caller can supply whichever live-HP view its
- * own scope has. Two requirements on that supplied reader, both load-bearing for callers:
+ * own scope has. The requirement on that supplied reader is load-bearing for callers:
  *  (a) the documented source-order tie-break only means anything if `candidateIds` ALSO arrives
  *      in a stable source order — this function does not sort; a caller feeding it an
  *      unordered/reshuffled id list gets a tie-break that looks deterministic but is not the
  *      documented one.
- *  (b) `hpFractionOf` must read BUFF-AWARE max HP where the caller has one available (the
- *      healing-mode `recipientMaxHp` accessor), not raw `stats.hp` — a caster with access to both
- *      must prefer the buff-aware one. `allyHpFraction` (below) is the shared reader that gets
- *      both (a) and (b) right; prefer it over a hand-rolled `hpFractionOf`.
+ * `allyHpFraction` (below) is the shared reader; prefer it over a hand-rolled `hpFractionOf`.
  */
 export function lowestHpAllyRecipients(args: {
     casterId: string;
@@ -185,21 +182,17 @@ export function lowestHpAllyRecipients(args: {
 }
 
 /**
- * Shared buff-aware live-HP-fraction reader for `lowestHpAllyRecipients.hpFractionOf`, so every
- * caller reads maxHp through the same accessor rather than each hand-rolling its own (the
- * divergence risk: a hand-rolled reader silently falling back to raw `stats.hp` and missing
- * buff-aware max HP).
+ * Shared live-HP-fraction reader for `lowestHpAllyRecipients.hpFractionOf`: current HP over max
+ * HP. Max HP is the actor's `stats.hp`, static for the fight (engine.ts's `maxHpOf`).
  *
- * Reads `healing.recipientActor`/`recipientMaxHp` (buff-aware, authoritative) when a healing
- * runtime ctx is supplied; falls back to the live `sameSideLiving` roster (raw `stats.hp`)
- * otherwise. Returns `undefined` when `id` is unknown to whichever source is in play, or the
- * resolved actor is at/below 0 HP.
+ * Resolves the actor through `healing.recipientActor` when a healing runtime ctx is supplied;
+ * falls back to the live `sameSideLiving` roster otherwise. Returns `undefined` when `id` is
+ * unknown to whichever source is in play, or the resolved actor is at/below 0 HP.
  */
 export function allyHpFraction(args: {
     id: string;
     healing?: {
         recipientActor: (id: string) => CombatActor | undefined;
-        recipientMaxHp: (id: string) => number;
     };
     sameSideLiving?: CombatActor[];
 }): number | undefined {
@@ -207,6 +200,6 @@ export function allyHpFraction(args: {
         ? args.healing.recipientActor(args.id)
         : args.sameSideLiving?.find((candidate) => candidate.id === args.id);
     if (!a || a.currentHp <= 0) return undefined;
-    const maxHp = args.healing ? args.healing.recipientMaxHp(args.id) : a.stats.hp;
+    const maxHp = a.stats.hp;
     return maxHp > 0 ? a.currentHp / maxHp : 0;
 }

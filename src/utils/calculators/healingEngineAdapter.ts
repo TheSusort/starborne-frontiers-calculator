@@ -325,13 +325,12 @@ export const PRACTICE_TARGET_ID = 'practice-target';
  * `const corrosionBaseHp = Math.min(args.enemyHp, 500_000);` (engine.ts) per 1% per stack and
  * detonation is `min(victimHp, 500_000)` (detonation.ts:14). Both already read the real VICTIM's
  * own max HP today: corrosion's per-victim positional DoT-tick branch passes
- * `enemyHp: recipientMaxHp(actor.id)` (engine.ts, that exact line) — the only site that credits a
+ * `enemyHp: maxHpOf(actor.id)` (engine.ts, that exact line) — the only site that credits a
  * DoT tick per-victim (`creditDealt(sourceId, actor.id, dealt)`) — and that is the branch the
- * practice target actually runs, since it sits in `baseHpById` via `enemyAttackerActors`
- * (`const baseHpById = new Map<string, number>([`, whose entries include
- * `...enemyAttackerActors.map((a) => [a.id, a.stats.hp])`). The
+ * practice target actually runs, since `maxHpOf` reads every roster actor's `stats.hp`, the
+ * practice target's included. The
  * bare fight-wide `enemyHp` scalar reaches `tickDoTs` on NO path any more: both of its call sites
- * pass a `recipientMaxHp(...)`, and the vestigial dummy branch that passed the bare scalar went
+ * pass a `maxHpOf(...)`, and the vestigial dummy branch that passed the bare scalar went
  * with the actor in SP-4c-2d. So inflating this HP to make the target
  * immortal would immediately multiply every corrosion tick against it by the same ratio — e.g. 40,000
  * → 500,000 is 12.5×. Inferno is unaffected either way: measured at 5,000 against a 1,000,000-HP

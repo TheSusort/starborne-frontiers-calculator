@@ -99,7 +99,7 @@ function makeCtx(opts?: {
         grantExtraAction: () => {},
         playerIds: [OWNER_ID],
         lastTurnCtxByActor: new Map([
-            [OWNER_ID, { effectiveAttack: 10000, affinityMult: 1, effectiveMaxHp: 10000 } as never],
+            [OWNER_ID, { effectiveAttack: 10000, affinityMult: 1 } as never],
         ]),
         recordResisted: () => {},
         applyReactiveDamage: opts?.applyReactiveDamage,

@@ -7,7 +7,7 @@
  * the PLAYER-side `applyIncomingToTarget` wrapper — landing real per-victim HP damage on player
  * ships (origin full, covered half) — and SUPPRESSES the legacy single `applyIncomingToTarget`
  * call for that case (else the anchor victim is double-hit). A `ship-destroyed{actorId}` fires
- * per player victim that reaches 0 HP (player victims have known max HP via recipientMaxHp), so
+ * per player victim that reaches 0 HP (player victims have known max HP via maxHpOf), so
  * the same lethality-bracket idiom pins each player victim's landed damage. The Task-9 describe
  * block below also confirms a single-target enemy attack hits ONLY its target, and that a
  * non-positional enemy (target but no pattern) keeps the legacy single-apply (heal target only).
@@ -26,8 +26,7 @@
  * attacks resolve against a real (healing-mode) heal target — the observable path pinned below.
  *
  * OBSERVABLE: the engine does not surface live enemy-actor HP, and the per-victim `hp-changed`
- * crossing is suppressed for enemy victims (their max HP is unknown to the tank-centric
- * recipientMaxHp). What IS observable is `ship-destroyed`: `applyOutgoingToEnemy` runs the full
+ * crossing is not a usable enemy HP source. What IS observable is `ship-destroyed`: `applyOutgoingToEnemy` runs the full
  * HP/death path and emits `ship-destroyed{actorId}` when a victim's HP reaches 0. So we PIN the
  * landed damage with lethality brackets — size each enemy's HP just AT or just ABOVE the expected
  * damage and assert it dies / survives accordingly. `damageLandedInRange(victimId)` runs two

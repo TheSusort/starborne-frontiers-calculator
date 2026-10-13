@@ -99,7 +99,6 @@ const MODIFIER_CHANNEL_OPTIONS: { value: ModifierChannel; label: string }[] = [
     { value: 'attack', label: 'Attack' },
     { value: 'defense', label: 'Defense' },
     { value: 'defensePenetration', label: 'Defense Penetration' },
-    { value: 'hp', label: 'HP' },
     { value: 'crit', label: 'Crit' },
     { value: 'critDamage', label: 'Crit Damage' },
     { value: 'outgoingDamage', label: 'Outgoing Damage' },
@@ -109,6 +108,13 @@ const MODIFIER_CHANNEL_OPTIONS: { value: ModifierChannel; label: string }[] = [
     { value: 'outgoingHeal', label: 'Outgoing Heal' },
     { value: 'incomingDamage', label: 'Incoming Damage' },
 ];
+
+/** `hp` is not offered: max HP is static all fight (ruling D, #658), so an hp-channel modifier
+ *  does nothing in the sim. An ability already saved with it keeps it, labelled as inert. */
+const modifierChannelOptionsFor = (current: ModifierChannel) =>
+    current === 'hp'
+        ? [...MODIFIER_CHANNEL_OPTIONS, { value: 'hp' as const, label: 'HP (no effect)' }]
+        : MODIFIER_CHANNEL_OPTIONS;
 
 const ADDITIONAL_DAMAGE_STAT_OPTIONS = [
     { value: 'hp', label: 'HP' },
@@ -242,7 +248,6 @@ const ALL_BUFF_STATS = [
     'defensePenetration',
     'dotDamage',
     'outgoingHeal',
-    'hp',
     'incomingHeal',
     'defense',
     'incomingDamage',
@@ -457,7 +462,7 @@ export const AbilityCard: React.FC<Props> = ({
                             <Select
                                 label="Channel"
                                 value={config.channel}
-                                options={MODIFIER_CHANNEL_OPTIONS}
+                                options={modifierChannelOptionsFor(config.channel)}
                                 onChange={(value) =>
                                     updateConfig({ ...config, channel: value as ModifierChannel })
                                 }

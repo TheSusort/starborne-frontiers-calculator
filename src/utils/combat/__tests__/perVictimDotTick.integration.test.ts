@@ -24,7 +24,7 @@
  * `remainingRounds` does NOT scale the per-tick value (it only governs expiry via expireStacks).
  * With neutral mults (dotMult 1, affinityMult 1, no Vortex Veil) the factors collapse cleanly.
  *   - Focus 'attacker' applier: effectiveAttack = its `attack` (no buffs), dotMult 1, affinityMult 1.
- *   - A victim's OWN max HP = recipientMaxHp(victim) → its seeded `hp` before it has acted.
+ *   - A victim's OWN max HP = maxHpOf(victim) → its seeded `hp`, static for the fight.
  * So a corrosion entry (tier 5, stacks 1) on a victim with maxHp 10000 ticks 0.05 × 10000 = 500.
  */
 import { describe, it, expect } from 'vitest';

@@ -434,7 +434,7 @@ describe('healing mode — heal consumption + heal-performed', () => {
             })
         );
         // 3 recipients (attacker + t1 + t2), each healed for the caster's hp-basis (10000×10%
-        // = 1000) since basis 'hp' uses the CASTER's effectiveHp. directHeal credited to the
+        // = 1000) since basis 'hp' uses the CASTER's max HP. directHeal credited to the
         // caster for all 3 → 3000. ONE crit draw (crit 100 → didCrit, critDamage 0 → ×1).
         expect(focusHeal(result, 'directHeal')).toBe(3000);
         const attackerPerf = perfs[0];
@@ -678,10 +678,11 @@ describe('healing mode — HoT (Repair Over Time) ticking', () => {
         expect(sumHeal(result, 'hotHeal', 'attacker')).toBe(15000);
     });
 
-    // ── Test 2: self-HoT scales with current (buffed) effectiveHp ─────────────
-    // A recurring self-buff carries hotPct 10 AND hp +50%. effectiveHp = 10000 × 1.5 = 15000;
-    // tick = 15000 × 10% = 1500/round, attributed to the holder (self). Full HP → all overheal.
-    it('self-HoT scales with current buffed effectiveHp', () => {
+    // ── Test 2: self-HoT scales with the holder's static max HP ───────────────
+    // A recurring self-buff carries hotPct 10 AND a synthetic hp +50%. Max HP is static for the
+    // fight (ruling D, #658; maxHpStaticTripwire.test.ts), so the hp effect moves nothing:
+    // tick = 10000 × 10% = 1000/round, attributed to the holder (self). Full HP → all overheal.
+    it("self-HoT scales with the holder's static max HP, never an hp-carrying status", () => {
         idCounter = 0;
         const result = runCombat(
             BASE({
@@ -701,9 +702,9 @@ describe('healing mode — HoT (Repair Over Time) ticking', () => {
                 shipSkills: { slots: [] },
             })
         );
-        // 15000 × 10% = 1500, credited to the holder (attacker) hotHeal + overheal (full HP).
-        expect(focusHeal(result, 'hotHeal')).toBe(1500);
-        expect(focusHeal(result, 'overheal')).toBe(1500);
+        // 10000 × 10% = 1000, credited to the holder (attacker) hotHeal + overheal (full HP).
+        expect(focusHeal(result, 'hotHeal')).toBe(1000);
+        expect(focusHeal(result, 'overheal')).toBe(1000);
         expect(focusHeal(result, 'effectiveHeal')).toBe(0);
     });
 
@@ -747,7 +748,7 @@ describe('healing mode — HoT (Repair Over Time) ticking', () => {
 
     // ── Test 4: scheduled HoT (no caster) → applier = the holder ──────────────
     // A manual selfBuffs entry with hotPct on the FOCUS actor (also the heal target) ticks
-    // every turn, applier = the holder itself (local effectiveHp), credited to the holder.
+    // every turn, applier = the holder itself (its own max HP), credited to the holder.
     it('scheduled HoT: applier = holder, ticks every turn, credited to the holder', () => {
         idCounter = 0;
         const result = runCombat(
@@ -1312,11 +1313,11 @@ describe('healing mode — enemy attackers and target intake', () => {
         }
     });
 
-    // ── Heal-deficit clamp under a SHRUNK max HP ──────────────────────────────
+    // ── Heal-deficit clamp when currentHp stands above max HP ─────────────────
     // applyHealToTarget computes consumed = max(0, min(raw, targetMaxHp − currentHp)). The
-    // max(0,…) guards the case where a max-HP buff expires and shrinks effectiveMaxHp below the
-    // already-filled currentHp, making (targetMaxHp − currentHp) NEGATIVE — without the floor, a
-    // heal would REDUCE the target's HP. Driving that exact ordering (buffed → healed to the
+    // max(0,…) guards a currentHp above max HP, making (targetMaxHp − currentHp) NEGATIVE —
+    // without the floor, a heal would REDUCE the target's HP. Max HP is static for the fight
+    // (ruling D, #658), so no in-game sequence reaches that state; the floor is defensive. Driving that exact ordering (buffed → healed to the
     // buffed max → buff expires next round) through the public runCombat API is not cheaply
     // reachable: it needs a timed self-HP buff on the heal target plus precise round timing, and
     // the engine's per-round ctx refresh makes the transient overshoot hard to land deterministically
