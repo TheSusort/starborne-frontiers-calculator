@@ -4489,7 +4489,7 @@ exports[`kit fingerprints > Zosimos 1`] = `
 
 exports[`suite health > pins the corpus shape so a data refresh announces itself in ONE diff 1`] = `
 {
-  "digest": 1421812171,
+  "digest": 2134739467,
   "shipCount": 150,
 }
 `;

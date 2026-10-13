@@ -309,21 +309,21 @@ export function parseCounterAbilities(
     return null;
 }
 
-/** A parsed damage-reflection consequence (epic PR12(A): Nosorog). Distinct from
- *  {@link ParsedCounterAbility} — reflect scales off the DAMAGE TAKEN, not the owner's own
- *  attack stat (the Reflect gear set's existing `damage-reflection` shape). */
+/** A parsed damage-reflection consequence (Nosorog). Distinct from {@link ParsedCounterAbility}:
+ *  reflect scales off the hit as thrown by the attacker, not the owner's own attack stat (the
+ *  Reflect gear set's `damage-reflection` shape). */
 export interface ParsedDamageReflection {
-    /** Percentage of the incoming direct damage reflected back to the attacker. */
+    /** Percentage of the incoming hit, as thrown, reflected back to the attacker. */
     pct: number;
     /** True when the trigger clause says "as a primary target" (Nosorog). */
     requirePrimaryTarget: boolean;
 }
 
 /**
- * Parses a "reflects X% of the Damage taken back to the enemy [when directly damaged as a
- * primary target]" passive clause (Nosorog — epic PR12(A)). Distinct from the counter shapes
- * above ("it deals X% damage to that enemy", scaled off the OWNER's attack) — this scales off
- * the damage the owner itself just took. Mirrors the Reflect gear set's `damage-reflection`
+ * Parses a "reflects X% of the damage [taken] back to the enemy [when directly damaged as a
+ * primary target]" passive clause (Nosorog). Distinct from the counter shapes above ("it deals
+ * X% damage to that enemy", scaled off the OWNER's attack) — this scales off the hit as thrown
+ * (#678; the rule lives in `damageReflection.ts`). Mirrors the Reflect gear set's `damage-reflection`
  * config shape (buildEquipmentAbilities.ts REFLECT), adding the optional primary-target gate
  * the gear set never carries.
  */
@@ -333,7 +333,7 @@ export function parseDamageReflection(
     if (!text) return null;
     const plain = stripUnitTags(text).replace(/<br\s*\/?>/gi, '. ');
     const m =
-        /reflects\s+(\d+(?:\.\d+)?)%\s+of\s+the\s+damage\s+taken\s+back\s+to\s+the\s+enemy(?<primary>[^.;]*?\bas\s+a\s+primary\s+target)?/i.exec(
+        /reflects\s+(\d+(?:\.\d+)?)%\s+of\s+the\s+damage\s+(?:taken\s+)?back\s+to\s+the\s+enemy(?<primary>[^.;]*?\bas\s+a\s+primary\s+target)?/i.exec(
             plain
         );
     if (!m) return null;

@@ -967,8 +967,9 @@ describe('a bounced-back hit is blocked by the attacker’s own Hit Mitigation',
 
     it('a REFLECTED hit converts and spends it', () => {
         const REFLECT_PCT = 40;
-        // reflectedDamageForHit: pct% × netHpDamage — and with the holder's defence 0, neutral
-        // affinity on both sides and no incoming-reduction ability, no other factor applies.
+        // reflectedDamageForHit: pct% of the hit as thrown (DIRECT_HIT, the 100% hit at the
+        // focus's attack) — and with the holder's defence 0, neutral affinity on both sides and no
+        // incoming-reduction ability, no other factor applies.
         expectBounceConvertedAndSpent(
             bounceFixture(reflectPassive(REFLECT_PCT)),
             (REFLECT_PCT / 100) * DIRECT_HIT

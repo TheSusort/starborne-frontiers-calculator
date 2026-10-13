@@ -241,7 +241,7 @@ describe('equipmentCoverage — gear sets', () => {
         expect(gearSetAbilityCount('REFLECT')).toBe(1);
     });
 
-    it('REFLECT produces an ability with id equip-set-REFLECT, config.type damage-reflection, config.pct 10', () => {
+    it('REFLECT produces an ability with id equip-set-REFLECT, config.type damage-reflection, config.pct 7', () => {
         const minPieces = getGearSet('REFLECT')?.minPieces ?? 2;
         const slots = ['weapon', 'hull', 'generator', 'sensor', 'software', 'thrusters'] as const;
         const equipment: Record<string, string> = {};
@@ -258,7 +258,7 @@ describe('equipmentCoverage — gear sets', () => {
         expect(reflect).toBeDefined();
         expect(reflect!.config.type).toBe('damage-reflection');
         // @ts-expect-error damage-reflection config
-        expect(reflect!.config.pct).toBe(10);
+        expect(reflect!.config.pct).toBe(7);
     });
 
     it('REVENGE produces 1 ability (outgoingDamage modifier scaling on missing HP)', () => {

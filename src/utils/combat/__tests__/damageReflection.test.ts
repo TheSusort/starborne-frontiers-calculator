@@ -1,13 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import { reflectedDamageForHit, reflectedDamageParts } from '../damageReflection';
 import { NO_INCOMING_REDUCTION } from '../victimDamage';
-import { calculateDamageReduction } from '../../autogear/priorityScore';
+import { calculateDamageReduction } from '../../autogear/statResolution';
 
 describe('reflectedDamageForHit', () => {
     it('returns 0 when reflectPct is 0', () => {
         const r = reflectedDamageForHit({
             reflectPct: 0,
-            netHpDamage: 5000,
+            reflectBase: 5000,
             affinityDamageModifier: 0,
             attackerDefenceReductionPct: 40,
             reflectVictimReduction: NO_INCOMING_REDUCTION,
@@ -15,10 +15,10 @@ describe('reflectedDamageForHit', () => {
         expect(r).toBe(0);
     });
 
-    it('returns 0 when netHpDamage is 0', () => {
+    it('returns 0 when reflectBase is 0', () => {
         const r = reflectedDamageForHit({
             reflectPct: 10,
-            netHpDamage: 0,
+            reflectBase: 0,
             affinityDamageModifier: 0,
             attackerDefenceReductionPct: 40,
             reflectVictimReduction: NO_INCOMING_REDUCTION,
@@ -26,41 +26,64 @@ describe('reflectedDamageForHit', () => {
         expect(r).toBe(0);
     });
 
-    it('matches duel 1 (def 3001 → DR ~45.8%, disadvantage -25)', () => {
-        const r = reflectedDamageForHit({
-            reflectPct: 10,
-            netHpDamage: 28056,
-            affinityDamageModifier: -25,
-            attackerDefenceReductionPct: calculateDamageReduction(3001),
+    // #678 measurement: Belladonna (attack 4598, defence 3647) hits Nosorog (16%) with her 140% active.
+    // In game Nosorog reflected 504; the model gives ~509.3. Every measured fight sits at model x 0.9895,
+    // a constant the model does not carry.
+    it('reflects 16% of the 140% hit Belladonna threw, through her own defence', () => {
+        const base = 1.4 * 4598;
+        const { damage } = reflectedDamageParts({
+            reflectPct: 16,
+            reflectBase: base,
+            affinityDamageModifier: 0,
+            attackerDefenceReductionPct: calculateDamageReduction(3647),
             reflectVictimReduction: NO_INCOMING_REDUCTION,
         });
-        expect(r).toBeGreaterThan(1100);
-        expect(r).toBeLessThan(1180); // ≈1141
+        expect(damage).toBeCloseTo(0.16 * base * (1 - calculateDamageReduction(3647) / 100), 6);
+        expect(damage).toBeGreaterThan(504 * 1.005);
+        expect(damage).toBeLessThan(504 * 1.015);
     });
 
-    it('matches duel 2 (def 4093 → DR ~53.4%, neutral affinity)', () => {
-        const r = reflectedDamageForHit({
-            reflectPct: 10,
-            netHpDamage: 48318,
+    it("scales with the reflector's Out. Damage Up (Nosorog with Out. Damage Up III: x1.45)", () => {
+        const args = {
+            reflectPct: 16,
+            reflectBase: 1000,
             affinityDamageModifier: 0,
-            attackerDefenceReductionPct: calculateDamageReduction(4093),
+            attackerDefenceReductionPct: 0,
             reflectVictimReduction: NO_INCOMING_REDUCTION,
+        };
+        const plain = reflectedDamageParts(args);
+        const buffed = reflectedDamageParts({ ...args, reflectorOutgoingPct: 45 });
+        expect(buffed.damage).toBeCloseTo(plain.damage * 1.45, 6);
+        expect(buffed.preMitigation).toBeCloseTo(plain.preMitigation * 1.45, 6);
+    });
+
+    it('reflects nothing from a zero base or a zero percentage', () => {
+        const args = {
+            affinityDamageModifier: 0,
+            attackerDefenceReductionPct: 0,
+            reflectVictimReduction: NO_INCOMING_REDUCTION,
+        };
+        expect(reflectedDamageParts({ ...args, reflectPct: 16, reflectBase: 0 })).toEqual({
+            damage: 0,
+            preMitigation: 0,
         });
-        expect(r).toBeGreaterThan(2200);
-        expect(r).toBeLessThan(2300); // ≈2252
+        expect(reflectedDamageParts({ ...args, reflectPct: 0, reflectBase: 1000 })).toEqual({
+            damage: 0,
+            preMitigation: 0,
+        });
     });
 
     it('affinity advantage (+25) increases damage vs neutral', () => {
         const neutral = reflectedDamageForHit({
             reflectPct: 10,
-            netHpDamage: 10000,
+            reflectBase: 10000,
             affinityDamageModifier: 0,
             attackerDefenceReductionPct: 40,
             reflectVictimReduction: NO_INCOMING_REDUCTION,
         });
         const advantage = reflectedDamageForHit({
             reflectPct: 10,
-            netHpDamage: 10000,
+            reflectBase: 10000,
             affinityDamageModifier: 25,
             attackerDefenceReductionPct: 40,
             reflectVictimReduction: NO_INCOMING_REDUCTION,
@@ -71,14 +94,14 @@ describe('reflectedDamageForHit', () => {
     it('affinity disadvantage (-25) decreases damage vs neutral', () => {
         const neutral = reflectedDamageForHit({
             reflectPct: 10,
-            netHpDamage: 10000,
+            reflectBase: 10000,
             affinityDamageModifier: 0,
             attackerDefenceReductionPct: 40,
             reflectVictimReduction: NO_INCOMING_REDUCTION,
         });
         const disadvantage = reflectedDamageForHit({
             reflectPct: 10,
-            netHpDamage: 10000,
+            reflectBase: 10000,
             affinityDamageModifier: -25,
             attackerDefenceReductionPct: 40,
             reflectVictimReduction: NO_INCOMING_REDUCTION,
@@ -89,14 +112,14 @@ describe('reflectedDamageForHit', () => {
     it('defence reduction of 0 applies no mitigation (factor = 1)', () => {
         const withDefence = reflectedDamageForHit({
             reflectPct: 10,
-            netHpDamage: 10000,
+            reflectBase: 10000,
             affinityDamageModifier: 0,
             attackerDefenceReductionPct: 50,
             reflectVictimReduction: NO_INCOMING_REDUCTION,
         });
         const noDefence = reflectedDamageForHit({
             reflectPct: 10,
-            netHpDamage: 10000,
+            reflectBase: 10000,
             affinityDamageModifier: 0,
             attackerDefenceReductionPct: 0,
             reflectVictimReduction: NO_INCOMING_REDUCTION,
@@ -110,14 +133,14 @@ describe('reflectedDamageForHit', () => {
     it('incoming reduction of 50% halves the result', () => {
         const base = reflectedDamageForHit({
             reflectPct: 10,
-            netHpDamage: 10000,
+            reflectBase: 10000,
             affinityDamageModifier: 0,
             attackerDefenceReductionPct: 0,
             reflectVictimReduction: NO_INCOMING_REDUCTION,
         });
         const halved = reflectedDamageForHit({
             reflectPct: 10,
-            netHpDamage: 10000,
+            reflectBase: 10000,
             affinityDamageModifier: 0,
             attackerDefenceReductionPct: 0,
             reflectVictimReduction: { passivePct: 50, separatePcts: [] },
@@ -128,7 +151,7 @@ describe('reflectedDamageForHit', () => {
     describe('composed recipient reductions (capped)', () => {
         const base = {
             reflectPct: 100,
-            netHpDamage: 1000,
+            reflectBase: 1000,
             affinityDamageModifier: 0,
             attackerDefenceReductionPct: 0,
         };

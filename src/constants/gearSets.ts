@@ -99,7 +99,7 @@ export const GEAR_SETS = {
         name: 'Reflect',
         stats: [],
         iconUrl: '/images/gear-sets/reflect.webp',
-        description: 'Reflect 10% of damage dealt',
+        description: 'Reflect 7% of the damage of each hit taken',
         color: '#0d3b2a',
     },
     REVENGE: {

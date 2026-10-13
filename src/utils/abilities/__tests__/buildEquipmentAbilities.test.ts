@@ -1000,11 +1000,11 @@ describe('complete gear sets stack', () => {
         }
     });
 
-    it('Reflect: 10% reflected per complete set (6 pieces = 30%)', () => {
+    it('Reflect: 7% reflected per complete set (6 pieces = 21%)', () => {
         for (const [pieces, sets] of PIECES_TO_SETS) {
             expect(shipWithSet('REFLECT', pieces)?.config).toEqual({
                 type: 'damage-reflection',
-                pct: 10 * sets,
+                pct: 7 * sets,
                 requirePrimaryTarget: true,
             });
         }

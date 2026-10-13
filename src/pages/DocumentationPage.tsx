@@ -3299,6 +3299,17 @@ const DocumentationPage: React.FC = () => {
                                         and Bomb explosions are not direct hits.
                                     </p>
                                     <p className="text-theme-text mb-2">
+                                        <span className="text-primary">How reflect is sized:</span>{' '}
+                                        A reflect returns a share of the hit the attacker threw
+                                        (their attack times the skill&apos;s percentage), boosted by
+                                        the reflecting ship&apos;s own Outgoing Damage Up, then
+                                        reduced by the attacker&apos;s Defense and damage
+                                        reductions. Critical hits and the attacker&apos;s own damage
+                                        buffs do not change it. A shield that absorbs the hit does
+                                        not stop the reflect, but a hit that is blocked or nullified
+                                        by a Barrier reflects nothing.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
                                         <span className="text-primary">
                                             Reflects and Protection:
                                         </span>{' '}
@@ -4898,7 +4909,7 @@ const DocumentationPage: React.FC = () => {
                                     a flat amount plus 100% of its attack, capped at max HP — before
                                     the hit lands, once per battle). Three more gear-set and implant
                                     effects are also modeled: the <strong>Reflect</strong> gear set
-                                    (reflects a portion of each incoming hit back at the attacker),
+                                    (reflects 7% per set of each incoming hit back at the attacker),
                                     the <strong>Revenge</strong> gear set (the wearer deals
                                     increasing damage as its HP drops, up to +25% per set near
                                     death), and the <strong>Smokescreen</strong> implant (a chance
@@ -4954,14 +4965,14 @@ const DocumentationPage: React.FC = () => {
                                     the blast — counter-attacks, retaliation buffs, and on-hit
                                     repairs — not just the primary target, on both teams. A few more
                                     ship passives are now modeled too: <strong>Nosorog</strong>{' '}
-                                    reflects a portion of the damage it takes back at an attacker
-                                    that hits it as its primary target, at most once per incoming
-                                    attack and its reactions (never a reflected hit, and not when it
-                                    is only splashed by an attack aimed at another ship — an
-                                    area-of-effect attack aimed at Nosorog himself still counts;
-                                    Stalwart&apos;s counter, Legion Discipline II and Malvex&apos;s
-                                    shield follow the same rule), <strong>Chakara&apos;s</strong>{' '}
-                                    charged skill bypasses part of the enemy&apos;s Defense, and{' '}
+                                    reflects 16% of the hit back at an attacker that hits it as its
+                                    primary target, at most once per incoming attack and its
+                                    reactions (never a reflected hit, and not when it is only
+                                    splashed by an attack aimed at another ship — an area-of-effect
+                                    attack aimed at Nosorog himself still counts; Stalwart&apos;s
+                                    counter, Legion Discipline II and Malvex&apos;s shield follow
+                                    the same rule), <strong>Chakara&apos;s</strong> charged skill
+                                    bypasses part of the enemy&apos;s Defense, and{' '}
                                     <strong>Anemone</strong>, <strong>Panon</strong>,{' '}
                                     <strong>Wusheng</strong>, and <strong>Tormenter</strong> each
                                     take reduced damage under their own stated conditions.{' '}

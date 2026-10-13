@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
     parseSkillDamage,
+    parseDamageReflection,
     detectFullyCharged,
     parseSkillEffects,
     parseAllSkillEffects,
@@ -5502,5 +5503,23 @@ describe("detectTopUpBuffSteal (Meatshield's charged Protection clause)", () => 
         expect(detectTopUpBuffSteal(null)).toEqual([]);
         expect(detectTopUpBuffSteal(undefined)).toEqual([]);
         expect(detectTopUpBuffSteal('')).toEqual([]);
+    });
+});
+
+describe('parseDamageReflection', () => {
+    it('parses the patched Nosorog text, which drops "taken"', () => {
+        expect(
+            parseDamageReflection(
+                'This Unit <unit-skill>reflects</unit-skill> 16% of the damage back to the enemy when directly damaged as a primary target.'
+            )
+        ).toEqual({ pct: 16, requirePrimaryTarget: true });
+    });
+
+    it('still parses the older "damage taken" wording', () => {
+        expect(
+            parseDamageReflection(
+                'This Unit reflects 40% of the damage taken back to the enemy when directly damaged as a primary target.'
+            )
+        ).toEqual({ pct: 40, requirePrimaryTarget: true });
     });
 });

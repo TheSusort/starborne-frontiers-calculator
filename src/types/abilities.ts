@@ -1215,12 +1215,12 @@ export type AbilityConfig =
           requiresAdjacentRole?: ShipRoleCategory;
       }
     // Reflect gear set (thorns): reflect `pct`% of each direct hit back to the attacker.
-    // Victim-side passive — collected into incomingAbilitiesById. Apply seam wired in Task 5.
+    // Victim-side passive — collected into incomingAbilitiesById.
     | {
           type: 'damage-reflection';
-          /** Percentage of incoming direct damage reflected back to the attacker (e.g. 10). */
+          /** Percentage of the incoming hit, as thrown, reflected back to the attacker (e.g. 7). */
           pct: number;
-          /** Nosorog: "reflects 40% of the Damage taken back to the enemy when directly damaged
+          /** Nosorog: "reflects 16% of the damage back to the enemy when directly damaged
            *  AS A PRIMARY TARGET." Mirrors counter's `requirePrimaryTarget` (Stalwart): fires only
            *  on a primary-target hit (applyVictimDamage's `cause.isPrimaryTarget`). Absent →
            *  every direct hit (Reflect gear set). */

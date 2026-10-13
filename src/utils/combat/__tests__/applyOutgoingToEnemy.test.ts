@@ -261,3 +261,53 @@ describe('applyOutgoingToEnemy (player→enemy per-victim damage apply wrapper)'
         expect(rounds[0].incomingDamage).toBe(0);
     });
 });
+
+describe('reflect tripwire through the real wrapper (#678)', () => {
+    /** The wrapper as the engine builds it: the tap's declared type stops at two params, the
+     *  closure itself forwards `reflectBase` as its seventh. */
+    type FullWrapper = (
+        damage: number,
+        victim: CombatActor,
+        isPrimaryTarget?: boolean,
+        targetMitigation?: number,
+        preMitigationDamage?: number,
+        reflectBase?: number
+    ) => unknown;
+
+    const reflectorKit = (): ShipSkills => ({
+        slots: [
+            {
+                slot: 'passive',
+                abilities: [
+                    {
+                        id: 'reflect-thorns',
+                        type: 'modifier',
+                        target: 'self',
+                        trigger: 'on-cast',
+                        conditions: [],
+                        config: { type: 'damage-reflection', pct: 40 },
+                    },
+                ],
+            },
+        ],
+    });
+
+    const capture = () => {
+        const { wrapper } = captureWrapper({
+            enemyAttackers: [enemyAttacker('reflector', reflectorKit())],
+        });
+        return wrapper as unknown as FullWrapper;
+    };
+
+    it('a direct hit on a reflector with no reflectBase throws', () => {
+        const wrapper = capture();
+        const victim = enemyVictim('reflector', 10_000);
+        expect(() => wrapper(1000, victim)).toThrow(/#678/);
+    });
+
+    it('the same hit with a reflectBase does not throw', () => {
+        const wrapper = capture();
+        const victim = enemyVictim('reflector', 10_000);
+        expect(() => wrapper(1000, victim, undefined, undefined, undefined, 1000)).not.toThrow();
+    });
+});

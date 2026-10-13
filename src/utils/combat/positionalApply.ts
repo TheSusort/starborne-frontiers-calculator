@@ -315,8 +315,8 @@ export function applyPositionalDamage(args: {
      * and returns the resolved {@link VictimDamageOutcome} (shield-before / HP-damage / barriered).
      * The third param is `isAnchor` — true when this victim IS the sub-attack's resolved anchor.
      * The trailing `isPrimary` says whether this victim is a PRIMARY TARGET of the sub-attack
-     * (see {@link SubAttackOutcome.primaryVictimIds}) — what Nosorog's "reflects damage taken … as
-     * a PRIMARY TARGET" gate reads. Both optional so a stub caller keeps compiling.
+     * (see {@link SubAttackOutcome.primaryVictimIds}) — what Nosorog's primary-target reflect
+     * gate reads. Both optional so a stub caller keeps compiling.
      */
     applyToVictim: (
         victim: CombatActor,
@@ -341,7 +341,13 @@ export function applyPositionalDamage(args: {
          */
         preMitigation?: number,
         /** This victim is a primary target of the sub-attack (`primaryVictimIds`). */
-        isPrimary?: boolean
+        isPrimary?: boolean,
+        /**
+         * The hit as THROWN (`victimHitDamageParts(...).reflectBase`), which a reflector reflects
+         * its percentage of (#678). Never scaled by `outgoingAmplificationFor`: that is the
+         * attacker's outgoing side, which reflect ignores.
+         */
+        reflectBase?: number
     ) => VictimDamageOutcome;
     emitHit?: (
         victim: CombatActor,
@@ -574,7 +580,11 @@ export function applyPositionalDamage(args: {
             // helper would repeat the whole assembly — the same profile read, the same affinity
             // resolve — on the hottest path in the engine, and would leave the two figures as
             // numbers that merely ought to agree rather than one evaluation.
-            const { damage: dmgBase, preMitigation: rawBase } = victimHitDamageParts(
+            const {
+                damage: dmgBase,
+                preMitigation: rawBase,
+                reflectBase,
+            } = victimHitDamageParts(
                 scalars,
                 defenseProfile,
                 didCrit,
@@ -593,7 +603,8 @@ export function applyPositionalDamage(args: {
                 h,
                 victimDefenceMitigation(defenseProfile, scalars.defensePenetrationPct),
                 rawDmg,
-                isPrimary
+                isPrimary,
+                reflectBase
             );
             // Credit the victim the intake the funnel actually RECORDED for it, not the hit we
             // computed. The two differ whenever the funnel altered the hit before recording it: a

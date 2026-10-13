@@ -215,7 +215,7 @@ describe.each(SIDES)('complete gear sets stack — wearer on the %s side', (side
         }
     });
 
-    it('Reflect: the reflected share of each hit is 10% per complete set', () => {
+    it('Reflect: the reflected share of each hit is 7% per complete set', () => {
         // The wearer deals nothing itself, so everything the opponent takes is reflected.
         const reflectedShare = (pieces: number) => {
             const r = run(
@@ -230,7 +230,7 @@ describe.each(SIDES)('complete gear sets stack — wearer on the %s side', (side
         for (const [pieces, sets] of PIECES_TO_SETS) {
             const { taken, reflected } = reflectedShare(pieces);
             expect(taken).toBeGreaterThan(0);
-            expect(reflected / taken).toBeCloseTo(0.1 * sets, 6);
+            expect(reflected / taken).toBeCloseTo(0.07 * sets, 6);
         }
     });
 

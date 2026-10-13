@@ -385,3 +385,41 @@ describe('victimHitDamageParts — the victim-side / attacker-side incoming spli
         expect(absent.preMitigation).toBeGreaterThan(absent.damage);
     });
 });
+
+describe('victimHitDamageParts — reflectBase (#678)', () => {
+    const scalars = (over: Partial<AttackerDamageScalars> = {}): AttackerDamageScalars => ({
+        effectiveAttack: 1500,
+        multiplierPct: 140,
+        secondaryStatValue: 30,
+        hits: 2,
+        effectiveCritDamage: 80,
+        outgoingDamageBuffPct: 0,
+        incomingDamageModifierPct: 0,
+        defensePenetrationPct: 0,
+        attackerAffinity: 'chemical',
+        ...over,
+    });
+    const victim: VictimDefenseProfile = {
+        defence: 2000,
+        defenceModifierPct: 0,
+        affinity: 'thermal',
+    };
+
+    it('is the per-hit pre-crit raw damage: no crit, outgoing, affinity, defence or incoming term', () => {
+        const s = scalars();
+        const expected = ((1500 * 1.4 + 30) / 2) * 0.5;
+        const bare = victimHitDamageParts(s, victim, false, 0.5);
+        expect(bare.reflectBase).toBeCloseTo(expected, 10);
+        // Crit, +45% outgoing, an incoming reduction and a different affinity move `damage`...
+        const loaded = victimHitDamageParts(
+            scalars({ outgoingDamageBuffPct: 45, attackerAffinity: 'thermal' }),
+            { ...victim, affinity: 'chemical', incomingDamageModifierPct: -20 },
+            true,
+            0.5,
+            parts(30)
+        );
+        expect(loaded.damage).not.toBeCloseTo(bare.damage, 3);
+        // ...and leave `reflectBase` exactly where it was.
+        expect(loaded.reflectBase).toBeCloseTo(expected, 10);
+    });
+});

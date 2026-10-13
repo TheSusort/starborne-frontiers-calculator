@@ -1320,10 +1320,9 @@ describe('damage absorbed — per-channel direction and presence (#358 addendum 
      *
      * WHY THE PARAMETER IS ON THE DEFENDER AND NOT THE ENEMY. On a reflected hit the roles swap:
      * the focus ship is the ATTACKER of the original swing and therefore the VICTIM of the
-     * bounce-back. `damageReflection`'s `reflectVictimIncomingReductionPct` is resolved from
-     * `incomingAbilitiesOf(attacker.id)` — the focus ship's own passives. Its old name
-     * (`attackerIncomingReductionPct`) made it read as attacker-side and is why this channel stayed
-     * inverted; the arm below is the fence that reading can no longer get past.
+     * bounce-back. `reflectedDamageParts`' `reflectVictimReduction` is resolved from the focus
+     * ship's own reductions (`hitReductionFor(reflector, focus)`), so it is victim-side; the arm
+     * below fences it off the thrown axis.
      */
     const reflectRun = (opts: { incomingReductionPct?: number } = {}) => {
         idCounter = 0;
@@ -1402,8 +1401,9 @@ describe('damage absorbed — per-channel direction and presence (#358 addendum 
 
     it('PRESENCE: reflected thorns land on the thrown axis PRE-defence', () => {
         const r = reflectRun();
-        // 50,000 reflected per round × 4 rounds, thrown; 20,828/round after the defender's own
-        // 5,000 defence mitigated it. The two axes being DIFFERENT is the point — reflect is one
+        // 50% of the 100,000 the defender throws (200% × 50,000 attack) = 50,000 reflected per
+        // round × 4 rounds, thrown; 20,828/round after the defender's own 5,000 defence mitigated
+        // it. The two axes being DIFFERENT is the point — reflect is one
         // of the channels that DOES fold the recipient's defence, so booking it post-mitigation
         // would have been invisible on a defence-0 fixture.
         expect(r.damageAbsorbed).toBe(200_000);
@@ -1413,12 +1413,11 @@ describe('damage absorbed — per-channel direction and presence (#358 addendum 
 
     // ── CHANNEL 8: the RECIPIENT's incoming-reduction on the REFLECT channel ───────────────────
     //
-    // THE FOURTH INVERSION, and the one a full review waved through because the parameter used to
-    // be spelled `attackerIncomingReductionPct` — "attacker" positionally, read as "attacker"
-    // causally, so it looked like a term that had no business being stripped. It is now
-    // `reflectVictimIncomingReductionPct`. MEASURED before the fix, on exactly this fixture:
-    // `0% -> 200,000` · `30% -> 140,000` · `60% -> 80,000`, all three over the same 4 rounds. A
-    // purely defensive passive quartered its owner's own headline.
+    // The recipient of a bounce-back is the ship that threw the original hit, so its own
+    // incoming-reduction is a victim-side term (`reflectVictimReduction`) and stays off the
+    // thrown axis. Folding it in reads `0% -> 200,000` · `30% -> 140,000` · `60% -> 80,000` on
+    // this fixture over the same 4 rounds: a purely defensive passive quartering its owner's own
+    // headline.
     //
     // The `gross` assertions are the LIVENESS half and are not optional: they are the only thing
     // here that separates "the reduction applied and was correctly excluded from the thrown axis"
