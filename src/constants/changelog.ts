@@ -1,49 +1,32 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '1.75.3';
+export const CURRENT_VERSION = '1.76.0';
 
 // Accumulates between releases. `npm run release` folds these into a new ChangelogEntry at the
 // top of CHANGELOG, bumps CURRENT_VERSION and empties this array — all three together, because a
 // bumped version whose entries are still unreleased shows users a what's-new dialog listing
 // nothing. Do it by hand only if that script cannot.
-export const UNRELEASED_CHANGES: string[] = [
-    'Autogear: crit damage reduction now scores defenders at its true value.',
-    'Defense calculator: incoming damage reduction now caps at 70% like in game.',
-    'Autogear: fleet buffs on the same stat now add instead of multiplying.',
-    "Combat simulator: Iridium's crit reduction and Hardened no longer stack; larger applies.",
-    'Combat simulator: Inc. DoT Damage Up now applies per victim at each tick.',
-    "Combat simulator: reflect now returns a share of the attacker's thrown hit.",
-    'Combat simulator: Nosorog reflects 16% and the Reflect set 7%, matching the patch.',
-    "Combat simulator: Nosorog's reflect is recognised again in the updated skill text.",
-    'Combat simulator: counters and reactive hits now respect gear and implant reductions.',
-    'Combat simulator: ship passive damage reductions now multiply with Inc. Damage Down.',
-    'Combat simulator: gear, implant and squad leader reductions now multiply separately.',
-    'Combat simulator: reflected damage now respects the 70% damage reduction cap.',
-    'Combat simulator: "when damaging" passives no longer fire on hits dealing no damage.',
-    'DPS calculator: a picked Repair Over Time now heals only from its applying ship.',
-    'Combat simulator: every Repair Over Time and Power Infused Nanobots grant now stacks.',
-    'Combat simulator: a buff granted twice now counts once, highest tier winning.',
-    "Combat simulator: Bayah's Stasis check now counts the enemy's Crit Power Down.",
-    "Combat simulator: Chakara's speed comparison now counts Speed buffs and debuffs.",
-    'Combat simulator: Meatshield now shares his hangar defence, ignoring his own buffs.',
-    'Combat simulator: enemy ships now use their own defence and shield penetration.',
-    'Healing and DPS calculators: enemies now take penetration and hacking from picked ships.',
-    'Combat simulator: damage reduction from non-defence sources now caps at 70%.',
-    'Damage deconstruction: incoming damage modifiers now cap at -70%.',
-    'Combat simulator: timed penetration and DoT buffs now apply only while active.',
-    'DPS calculator: penetration and DoT buffs picked on team ships now boost your ship.',
-    'DPS calculator: picked Out. Detonation Damage Up buffs now apply.',
-    'Combat simulator: leech repairs now crit with buffed crit rate and crit power.',
-    'Combat simulator: Nourishment and Vivacious Repair now boost leech repairs too.',
-    'Combat simulator: expired Inc. and Out. Repair buffs no longer boost later repairs.',
-    "DPS calculator: secondary and conditional damage now use the target's current defence.",
-    'Skill editor: an ability with only stat-scaled damage now hits its target.',
-    "Combat simulator: hit damage figures now include the target's damage reduction.",
-    'Combat simulator: hits dealing no damage no longer trigger on-attacked effects.',
-    "Defense calculator: a ship's own skill buffs no longer count twice when they fire.",
-];
+export const UNRELEASED_CHANGES: string[] = [];
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.76.0',
+        date: '2026-10-13',
+        changes: [
+            'Autogear: crit damage reduction now scores defenders at its true value.',
+            'Defense calculator: incoming damage reduction now caps at 70% like in game.',
+            'Autogear: fleet buffs on the same stat now add instead of multiplying.',
+            'DPS calculator: a picked Repair Over Time now heals only from its applying ship.',
+            'Healing and DPS calculators: enemies now take penetration and hacking from picked ships.',
+            'Damage deconstruction: incoming damage modifiers now cap at -70%.',
+            'DPS calculator: penetration and DoT buffs picked on team ships now boost your ship.',
+            'DPS calculator: picked Out. Detonation Damage Up buffs now apply.',
+            "DPS calculator: secondary and conditional damage now use the target's current defence.",
+            'Skill editor: an ability with only stat-scaled damage now hits its target.',
+            "Defense calculator: a ship's own skill buffs no longer count twice when they fire.",
+            '23 combat simulator fixes.',
+        ],
+    },
     {
         version: '1.75.3',
         date: '2026-10-09',
