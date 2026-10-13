@@ -4270,17 +4270,23 @@ export function victimAbilityEnemyBuffs(
     return [...timed, ...active];
 }
 
-/** The `Inc. DoT Damage Up` % a victim carries right now, from ability-applied statuses, one
- *  instance per family (highest tier wins). Added to the applier's `PlayerRoundCtx.dotMult` at
- *  every tick and detonation of a DoT on this victim. The scheduled (UI-picked) enemy debuffs are
- *  not read here: their store is side-wide, not per victim, so a read keyed by a player-side
- *  victim would apply the enemy-debuff picks to the player's own ships. They are baked into the
- *  applier's `dotMult` at its cast instead. */
+/** The `Inc. DoT Damage Up` % a victim carries right now, from TIMED ability-applied statuses,
+ *  one instance per family (highest tier wins). Added to the applier's `PlayerRoundCtx.dotMult` at
+ *  every tick and detonation of a DoT on this victim. A timed status was gated once, when it was
+ *  applied, so its presence in the store means it landed. Two channels are not read here and are
+ *  baked into the applier's `dotMult` at its cast instead:
+ *   - scheduled (UI-picked) enemy debuffs: their store is side-wide, not per victim, so a read
+ *     keyed by a player-side victim would apply the enemy-debuff picks to the player's own ships;
+ *   - aura/accumulating statuses: they re-roll their landing each round at the cast, and the
+ *     store does not record that outcome, so only the cast's landed fold can honour a resist. */
 export function victimIncomingDotDamagePct(
     statusEngine: StatusEngine,
     targetId: string | undefined
 ): number {
-    return toEnemyDotModifier(strongestPerFamily(victimAbilityEnemyBuffs(statusEngine, targetId)));
+    const timed = statusEngine
+        .timedAbilityStatuses('enemy', undefined, targetId)
+        .map((s) => payloadToSelectedBuff(s.payload));
+    return toEnemyDotModifier(strongestPerFamily(timed));
 }
 
 /** Friendly twin of victimEnemyBuffs: a victim's OWN self-/ally-granted buffs, across all

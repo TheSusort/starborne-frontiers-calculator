@@ -175,9 +175,10 @@ const NO_INFLICTED_NAMES: ReadonlySet<string> = new Set<string>();
 // empty, processing skipped).
 export interface PlayerRoundCtx {
     effectiveAttack: number;
-    /** The applier's DoT multiplier: 1 + (its own Out. DoT terms + the scheduled enemy picks'
-     *  Inc. DoT Damage Up)/100. The DoT's victim's ability-applied Inc. DoT Damage Up is NOT in
-     *  it — a tick or detonation adds that victim's own live value (`victimIncomingDotDamagePct`). */
+    /** The applier's DoT multiplier: 1 + (its own Out. DoT terms + the Inc. DoT Damage Up of the
+     *  scheduled enemy picks and of this round's landed aura/accumulating debuffs)/100. The DoT's
+     *  victim's TIMED ability-applied Inc. DoT Damage Up is NOT in it — a tick or detonation adds
+     *  that victim's own live value (`victimIncomingDotDamagePct`). */
     dotMult: number;
     affinityMult: number;
     /** Healing-calc seams (additive): the actor's current effective defence/max-HP, and its
@@ -4343,6 +4344,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     const landedAbilityEnemy: ActiveBuff[] = [];
     const resistedAbilityEnemy: ActiveBuff[] = [...resistedAbilityTimedEnemy];
     const abilityEnemyEffects: SelectedGameBuff[] = [];
+    // The aura/accumulating subset of `abilityEnemyEffects` that landed this round; its
+    // Inc. DoT Damage Up is baked into `dotMult` (read `victimIncomingDotDamagePct`'s doc).
+    const landedRecurringAbilityEnemy: SelectedGameBuff[] = [];
     // Timed ability statuses: unconditionally landed (gated at application in the timed
     // loop above). NO debuff-applied here — already emitted at the application site above
     // (discrete-infliction-only, not per-round while the window is active).
@@ -4377,6 +4381,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             }
             landedAbilityEnemy.push(activeWithStacks(s));
             abilityEnemyEffects.push(sb);
+            landedRecurringAbilityEnemy.push(sb);
         }
     }
 
@@ -4895,12 +4900,15 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
           })();
 
     // Step 1: Calculate direct damage
-    // Only the scheduled (UI-picked) enemy debuffs' Inc. DoT Damage Up is baked here — read
-    // `victimIncomingDotDamagePct`'s doc for why it is not read per victim. The ticking or
-    // detonated victim's ability-applied Inc. DoT Damage Up is added at the tick (`victimDotMult`
-    // in engine.ts) and at the detonation.
+    // Baked here: the Inc. DoT Damage Up of the scheduled (UI-picked) enemy debuffs and of the
+    // aura/accumulating ability debuffs that landed this round. The ticking or detonated victim's
+    // TIMED ability-applied Inc. DoT Damage Up is added at the tick (`victimDotMult` in engine.ts)
+    // and at the detonation — read `victimIncomingDotDamagePct`'s doc for the split.
     // Self Out. DoT (scheduled and ability self-buffs) arrives via dmgStats.
-    const enemyDotMod = toEnemyDotModifier(scheduledEnemy.roundEnemyDebuffs);
+    const enemyDotMod = toEnemyDotModifier([
+        ...scheduledEnemy.roundEnemyDebuffs,
+        ...landedRecurringAbilityEnemy,
+    ]);
     const dotMult = 1 + (enemyDotMod + dmgStats.selfDotDamageModifier) / 100;
     // The anchor damage mult honours the forced-affinity override (equals the runtime
     // scalar when no override).
