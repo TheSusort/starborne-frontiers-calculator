@@ -12,6 +12,8 @@ const LEAF = 'src/utils/damageComposition.ts';
 const PATTERNS: readonly RegExp[] = [
     /100 \/ \(100 -/g,
     /\(1 [+-] [^;\n]*?(?:damageReduction|incomingDamage|[Rr]eduction)[^;\n]*?\/ ?100\)/g,
+    // The same factor without its own parentheses, e.g. `const f = 1 + incomingDamage / 100;`.
+    /(?<!\()\b1 [+-] [\w.?()|]*?(?:[Dd]amageReduction|[Ii]ncomingDamage|[Rr]eduction|[Ii]ncoming)\w*\)? ?\/ ?100\b/g,
 ];
 
 interface Allowed {
@@ -46,6 +48,21 @@ const ALLOWED: readonly Allowed[] = [
         snippet: '(1 - (Damage Reduction / 100)',
         reason: 'Player-facing formula text for the defence-curve EHP, not computation.',
     },
+    {
+        file: 'src/utils/combat/damageReflection.ts',
+        snippet: '1 - args.attackerDefenceReductionPct / 100',
+        reason: "The reflect recipient's defence-curve term; non-defence reductions go through composeIncomingFactor.",
+    },
+    {
+        file: 'src/utils/combat/engine.ts',
+        snippet: '1 - shareDefenceReductionPct / 100',
+        reason: "A Protection share's defence-curve term on the protector, not a non-defence composition.",
+    },
+    {
+        file: 'src/utils/simulation/simulationCalculator.ts',
+        snippet: '1 - damageReduction / 100',
+        reason: 'Attacker damage against the reference enemy defence curve, not a victim composition.',
+    },
 ];
 
 function sourceFiles(dir: string): string[] {
@@ -62,20 +79,36 @@ function sourceFiles(dir: string): string[] {
     return out;
 }
 
+function scan(text: string): string[] {
+    return PATTERNS.flatMap((pattern) => [...text.matchAll(pattern)].map((m) => m[0]));
+}
+
 function hits(): { file: string; snippet: string }[] {
     const found: { file: string; snippet: string }[] = [];
     for (const full of sourceFiles(SRC)) {
         const file = join('src', relative(SRC, full)).split(sep).join('/');
         if (file === LEAF) continue;
         const text = readFileSync(full, 'utf8');
-        for (const pattern of PATTERNS) {
-            for (const m of text.matchAll(pattern)) found.push({ file, snippet: m[0] });
-        }
+        for (const snippet of scan(text)) found.push({ file, snippet });
     }
     return found;
 }
 
 describe('incoming damage composition tripwire (#673)', () => {
+    it.each([
+        'const factor = 1 + incomingDamage / 100;',
+        'const factor = 1 + buffs.incomingDamageBuff / 100;',
+        'ehp / (1 + incomingDamageBuff / 100)',
+        'ehp * (1 + (stats.damageReduction || 0) / 100)',
+        'hp * (100 / (100 - dr))',
+    ])('recognises a hand-rolled composition: %s', (line) => {
+        expect(scan(line)).not.toEqual([]);
+    });
+
+    it('ignores unrelated percentage arithmetic', () => {
+        expect(scan('const atk = attack * (1 + attackBuff / 100);')).toEqual([]);
+    });
+
     it('finds no hand-rolled composition outside the leaf module', () => {
         const unexpected = hits().filter(
             (h) => !ALLOWED.some((a) => a.file === h.file && a.snippet === h.snippet)
