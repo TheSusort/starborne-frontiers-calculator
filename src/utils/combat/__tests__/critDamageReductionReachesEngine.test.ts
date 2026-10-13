@@ -65,7 +65,7 @@ function hardenedShip(wearing: boolean): {
 
 /** The victim's kit: a no-op active plus whatever passive the real builder produced, plus any
  *  extra synthetic incoming-reduction entries. */
-function victimSkills(wearing: boolean, extraNonCritPct = 0): ShipSkills {
+function victimSkills(wearing: boolean, extraNonCritPct = 0, critKitPct = 0): ShipSkills {
     const { ship, getGearPiece } = hardenedShip(wearing);
     const built = buildShipAbilitiesWithEquipment(ship, getGearPiece);
     const passive: Ability[] = built.slots
@@ -84,6 +84,23 @@ function victimSkills(wearing: boolean, extraNonCritPct = 0): ShipSkills {
                 condition: 'always',
                 pct: extraNonCritPct,
                 critFamily: false,
+            },
+        });
+    }
+    if (critKitPct > 0) {
+        // Iridium's shape: a ship-kit crit-family reduction (see `buildShipAbilities`).
+        passive.push({
+            id: 'synthetic-iridium-crit-reduction',
+            type: 'incoming-reduction',
+            target: 'self',
+            trigger: 'on-cast',
+            conditions: [],
+            config: {
+                type: 'incoming-reduction',
+                scope: 'direct',
+                condition: 'incoming-crit',
+                pct: critKitPct,
+                critFamily: true,
             },
         });
     }
@@ -143,7 +160,7 @@ const BASE = (over: Partial<CombatEngineInput>): CombatEngineInput => ({
 
 /** A player victim hit by a positioned enemy attacker. */
 const playerSide =
-    (opts: { wearing: boolean; crit: boolean; extraPct?: number }) =>
+    (opts: { wearing: boolean; crit: boolean; extraPct?: number; critKitPct?: number }) =>
     (hp: number): CombatEngineInput =>
         BASE({
             teamActors: [
@@ -156,7 +173,7 @@ const playerSide =
                     enemyDebuffs: [],
                     position: 'M4',
                     walk: {
-                        shipSkills: victimSkills(opts.wearing, opts.extraPct),
+                        shipSkills: victimSkills(opts.wearing, opts.extraPct, opts.critKitPct),
                         stats: {
                             attack: 0,
                             crit: 0,
@@ -196,7 +213,7 @@ const playerSide =
 
 /** An enemy victim (built the way `useEnemyTeamRoster` builds it) hit by the player focus. */
 const enemySide =
-    (opts: { wearing: boolean; crit: boolean; extraPct?: number }) =>
+    (opts: { wearing: boolean; crit: boolean; extraPct?: number; critKitPct?: number }) =>
     (hp: number): CombatEngineInput =>
         BASE({
             attack: 5000,
@@ -216,7 +233,7 @@ const enemySide =
                     position: 'M1',
                     target: target(),
                     pattern: pattern(),
-                    shipSkills: victimSkills(opts.wearing, opts.extraPct),
+                    shipSkills: victimSkills(opts.wearing, opts.extraPct, opts.critKitPct),
                 } satisfies EnemyAttacker,
             ],
         });
@@ -261,5 +278,22 @@ describe.each(SIDES)('Hardened set crit reduction reaches damage: %s', (_name, s
     });
     it('below the cap Hardened still counts: passive 50 × Hardened separate 15 is 0.425 on a crit', () => {
         expectLanded(side({ wearing: true, crit: true, extraPct: 50 }), id, 4250);
+    });
+    it('Iridium 35 and three Hardened sets do not stack on a crit: the larger applies, 6500 (#673)', () => {
+        expectLanded(side({ wearing: true, crit: true, critKitPct: 35 }), id, 6500);
+    });
+    it('Iridium alone lands the same 6500 as Iridium plus Hardened (#673)', () => {
+        expectLanded(side({ wearing: false, crit: true, critKitPct: 35 }), id, 6500);
+    });
+    it('Hardened wins when it is the larger crit-family source: 8500 against Iridium 10 (#673)', () => {
+        expectLanded(side({ wearing: true, crit: true, critKitPct: 10 }), id, 8500);
+    });
+    it('a non-crit-family passive still multiplies with the crit-family winner (#673)', () => {
+        // Iridium 35 (winner over Hardened 15) × always-passive 25 → 0.65 × 0.75.
+        expectLanded(
+            side({ wearing: true, crit: true, critKitPct: 35, extraPct: 25 }),
+            id,
+            10000 * 0.65 * 0.75
+        );
     });
 });

@@ -120,9 +120,9 @@ export const calculateTotalStats = (
         }
     });
 
-    // damageReduction from gear doesn't stack with innate ship passives (e.g., Iridium)
-    // The Hardened set bonus stacks with itself (5% per 2pc, up to 15%), but the final
-    // value should be the max of gear bonus vs innate passive
+    // damageReduction from gear doesn't stack with innate ship passives (e.g., Iridium): the
+    // crit-reduction family keeps only the larger source (#673). The Hardened set bonus stacks
+    // with itself (5% per 2pc, up to 15), so the gear bonus is the sum of its sets.
     if (breakdown.base.damageReduction && breakdown.final.damageReduction) {
         // Calculate the gear-only contribution (final - base, since base is carried through)
         const gearDamageReduction =
