@@ -121,17 +121,71 @@ describe('incomingReductionPartsForHit (#672 buckets)', () => {
         expect(parts).toEqual({ passivePct: 0, separatePcts: [15, 20] });
         expect(composeIncomingFactor(0, parts)).toBeCloseTo(0.85 * 0.8, 6);
     });
-    it('Iridium (kit, crit) and Hardened (gear, crit) land in different buckets on a crit', () => {
+    it('Iridium (kit, crit) and Hardened (gear, crit) do not stack: only the larger applies (#673)', () => {
         const abilities = [
             red(35, { condition: 'incoming-crit', critFamily: true }),
             red(15, { condition: 'incoming-crit', critFamily: true, equipment: true }),
         ];
         expect(incomingReductionPartsForHit(abilities, ctx({ didCrit: true }))).toEqual({
-            passivePct: 35,
-            separatePcts: [15],
+            passivePct: 0,
+            separatePcts: [35],
         });
         expect(incomingReductionPartsForHit(abilities, ctx({ didCrit: false }))).toEqual({
             passivePct: 0,
+            separatePcts: [],
+        });
+    });
+    it('the larger crit-family entry wins whichever source it comes from (#673)', () => {
+        const abilities = [
+            red(20, { condition: 'incoming-crit', critFamily: true }),
+            red(35, { condition: 'incoming-crit', critFamily: true, equipment: true }),
+        ];
+        expect(incomingReductionPartsForHit(abilities, ctx({ didCrit: true }))).toEqual({
+            passivePct: 0,
+            separatePcts: [35],
+        });
+    });
+    it('two equipment crit-family entries: only the larger applies (#673)', () => {
+        const abilities = [
+            red(10, { condition: 'incoming-crit', critFamily: true, equipment: true }),
+            red(15, { condition: 'incoming-crit', critFamily: true, equipment: true }),
+        ];
+        expect(incomingReductionPartsForHit(abilities, ctx({ didCrit: true }))).toEqual({
+            passivePct: 0,
+            separatePcts: [15],
+        });
+    });
+    it('a crit-family winner leaves a non-crit-family passive in its own bucket (#673)', () => {
+        const abilities = [
+            red(35, { condition: 'incoming-crit', critFamily: true }),
+            red(15, { condition: 'incoming-crit', critFamily: true, equipment: true }),
+            red(25, { condition: 'always' }),
+        ];
+        expect(incomingReductionPartsForHit(abilities, ctx({ didCrit: true }))).toEqual({
+            passivePct: 25,
+            separatePcts: [35],
+        });
+    });
+    it('an inapplicable larger crit-family entry does not shadow an applicable smaller one (#673)', () => {
+        const abilities = [
+            red(35, { condition: 'incoming-crit-by-stealthed', critFamily: true }),
+            red(15, { condition: 'incoming-crit', critFamily: true, equipment: true }),
+        ];
+        expect(
+            incomingReductionPartsForHit(
+                abilities,
+                ctx({ didCrit: true, attackerStealthed: false })
+            )
+        ).toEqual({ passivePct: 0, separatePcts: [15] });
+    });
+    it('crit-family entries contribute nothing on a non-crit hit (#673)', () => {
+        const abilities = [
+            red(35, { condition: 'incoming-crit', critFamily: true }),
+            red(15, { condition: 'incoming-crit', critFamily: true, equipment: true }),
+            red(25, { condition: 'always' }),
+        ];
+        expect(incomingReductionPartsForHit(abilities, ctx({ didCrit: false }))).toEqual({
+            passivePct: 25,
             separatePcts: [],
         });
     });
@@ -175,10 +229,12 @@ describe('incomingReductionPartsForHit — condition gates', () => {
         expect(passiveFor([reduction('incoming-crit', 35, true)], ctx({ didCrit: false }))).toBe(0);
     });
     it('Hyperion gates on crit AND attacker-stealthed', () => {
+        // A crit-family winner lands in `separatePcts`, not the passive bucket (#673).
         const a = [reduction('incoming-crit-by-stealthed', 35, true)];
-        expect(passiveFor(a, ctx({ didCrit: true, attackerStealthed: true }))).toBe(35);
-        expect(passiveFor(a, ctx({ didCrit: true, attackerStealthed: false }))).toBe(0);
-        expect(passiveFor(a, ctx({ didCrit: false, attackerStealthed: true }))).toBe(0);
+        const sepFor = (c: IncomingHitContext) => incomingReductionPartsForHit(a, c).separatePcts;
+        expect(sepFor(ctx({ didCrit: true, attackerStealthed: true }))).toEqual([35]);
+        expect(sepFor(ctx({ didCrit: true, attackerStealthed: false }))).toEqual([]);
+        expect(sepFor(ctx({ didCrit: false, attackerStealthed: true }))).toEqual([]);
     });
     it('dot-scope reductions apply only on the dot path', () => {
         const a = [reduction('dot-inferno-corrosion', 30, false, 'dot')];

@@ -4851,7 +4851,8 @@ const DocumentationPage: React.FC = () => {
                                     Stasis or Disabled), <strong>Hyperion Gaze</strong> and the{' '}
                                     <strong>Hardened</strong> gear set (reduced incoming
                                     critical-hit damage), <strong>Iridium&apos;s</strong> passive
-                                    (reduced crit damage taken, scaling with rarity),{' '}
+                                    (reduced crit damage taken, scaling with rarity; only the larger
+                                    of Iridium&apos;s passive, Hardened and Hyperion Gaze applies),{' '}
                                     <strong>Vortex Veil</strong> (reduced Inferno and Corrosion
                                     damage), and <strong>Ironclad</strong> (a chance to block a
                                     repeated hit from the same attacker). Damage reductions combine

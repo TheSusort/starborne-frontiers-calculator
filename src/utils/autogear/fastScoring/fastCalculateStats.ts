@@ -86,7 +86,7 @@ export function fastCalculateStats(
     // Stage 7: special implant multipliers (CODE_GUARD, CIPHER_LINK) — based on final stats
     applySpecialImplants(stats, implantIds, getImplantPiece);
 
-    // Stage 8: damageReduction cap. Match the slow path guard EXACTLY:
+    // Stage 8: damageReduction cap (crit-reduction family keeps the larger source, #673). Match the slow path guard EXACTLY:
     //   slow path: if (breakdown.base.damageReduction && breakdown.final.damageReduction)
     // Both must be truthy (non-zero, non-undefined). See Invariant 3.
     const innateDR = baseStats.damageReduction;

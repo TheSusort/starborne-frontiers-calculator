@@ -1,7 +1,7 @@
 import { Ability, IncomingCondition, IncomingHitContext } from '../../types/abilities';
 import type { FactionName } from '../../constants/factions';
+import { IncomingReductionParts, NO_INCOMING_REDUCTION } from '../damageComposition';
 import { resolveSupportRecipients } from './supportRecipients';
-import { IncomingReductionParts, NO_INCOMING_REDUCTION } from './victimDamage';
 
 /**
  * #363 — which actors an ALLY-SCOPED `incoming-reduction` ability protects.
@@ -145,7 +145,9 @@ export function conditionMet(cond: IncomingCondition, ctx: IncomingHitContext): 
  * The victim's incoming reductions for one hit, in the buckets the game composes separately
  * (`IncomingReductionParts`, #672): ship-kit entries sum into `passivePct`; every
  * `source: 'equipment'` entry (gear set or implant) is its own entry in `separatePcts`.
- * `critFamily` is a condition marker only and does not change the bucket.
+ * `critFamily` entries (Iridium's passive, Hardened, Hyperion Gaze) do not stack with each other:
+ * of those that apply to this hit only the largest counts, and it is its own entry in
+ * `separatePcts` whatever its source (#673; an owner ruling, not measured in game).
  * `scope` must match the hit: 'dot' entries apply only when ctx.dotType is set; 'direct'
  * entries only when it is not.
  */
@@ -156,6 +158,7 @@ export function incomingReductionPartsForHit(
     const isDot = ctx.dotType !== undefined;
     let passivePct = 0;
     const separatePcts: number[] = [];
+    let critFamilyMax = 0;
     for (const a of victimAbilities) {
         if (a.config.type !== 'incoming-reduction') continue;
         const { scope, condition, pct, hpScaling } = a.config;
@@ -166,9 +169,11 @@ export function incomingReductionPartsForHit(
             ? Math.min(hpScaling.cap, hpScaling.perUnit * (100 - ctx.selfHpPct))
             : pct;
         if (effectivePct === 0) continue;
-        if (a.source === 'equipment') separatePcts.push(effectivePct);
+        if (a.config.critFamily) critFamilyMax = Math.max(critFamilyMax, effectivePct);
+        else if (a.source === 'equipment') separatePcts.push(effectivePct);
         else passivePct += effectivePct;
     }
+    if (critFamilyMax > 0) separatePcts.push(critFamilyMax);
     return passivePct === 0 && separatePcts.length === 0
         ? NO_INCOMING_REDUCTION
         : { passivePct, separatePcts };
