@@ -23,7 +23,11 @@ import { enemySelectorKind, type EnemySelectorKind } from '../abilities/abilityT
 import { buildRoundContext, dotReadings } from '../abilities/roundContext';
 import { drawKeyed, makeRateGate } from '../calculators/rateAccumulator';
 import { computeAffinityModifiers, getAffinityMatchup } from '../calculators/affinityUtils';
-import { toSelfDefenseModifier, toSimBuffs } from '../calculators/dpsBuffHelpers';
+import {
+    toEnemyDotModifier,
+    toSelfDefenseModifier,
+    toSimBuffs,
+} from '../calculators/dpsBuffHelpers';
 import {
     calculateBuffTotals,
     expandEnemyDebuffs,
@@ -4246,13 +4250,37 @@ export function victimEnemyBuffs(
             statusEngine.snapshot(undefined, DEFAULT_ENEMY_TARGET).activeEnemyDebuffs,
             enemyDebuffLookup
         );
+    return [...scheduled, ...victimAbilityEnemyBuffs(statusEngine, targetId)];
+}
+
+/** The ability-channel half of `victimEnemyBuffs`: the timed and aura/accumulating enemy statuses
+ *  keyed by `targetId`, from every applier. Per-victim on both teams. Read `victimEnemyBuffs`' doc
+ *  for the aura channel's NEUTRAL-ctx approximation. Undefined `targetId` reads the side-wide
+ *  `DEFAULT_ENEMY_TARGET` store, as the status engine does. */
+export function victimAbilityEnemyBuffs(
+    statusEngine: StatusEngine,
+    targetId: string | undefined
+): SelectedGameBuff[] {
     const timed = statusEngine
         .timedAbilityStatuses('enemy', undefined, targetId)
         .map((s) => payloadToSelectedBuff(s.payload));
     const active = statusEngine
         .activeAbilityStatuses('enemy', () => NEUTRAL_NAMES_CTX, undefined, targetId)
         .map((s) => payloadToSelectedBuff(s.payload));
-    return [...scheduled, ...timed, ...active];
+    return [...timed, ...active];
+}
+
+/** The `Inc. DoT Damage Up` % a victim carries right now, from ability-applied statuses, one
+ *  instance per family (highest tier wins). Added to the applier's `PlayerRoundCtx.dotMult` at
+ *  every tick and detonation of a DoT on this victim. The scheduled (UI-picked) enemy debuffs are
+ *  not read here: their store is side-wide, not per victim, so a read keyed by a player-side
+ *  victim would apply the enemy-debuff picks to the player's own ships. They are baked into the
+ *  applier's `dotMult` at its cast instead. */
+export function victimIncomingDotDamagePct(
+    statusEngine: StatusEngine,
+    targetId: string | undefined
+): number {
+    return toEnemyDotModifier(strongestPerFamily(victimAbilityEnemyBuffs(statusEngine, targetId)));
 }
 
 /** Friendly twin of victimEnemyBuffs: a victim's OWN self-/ally-granted buffs, across all

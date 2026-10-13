@@ -13,6 +13,8 @@ import type { ActiveDoTStack, PendingBomb } from './state';
 //  - inferno: Σ(stacks · tier/100 · effectiveAttack · remainingRounds) · dotMult · affinityMult · pct · detonationMult
 //  - corrosion: Σ(stacks · tier/100 · baseHp · remainingRounds) · dotMult · affinityMult · pct · detonationMult,
 //               baseHp = min(victimHp, 500_000)
+//  `dotMult` is the detonator's multiplier with the detonated victim's own live Inc. DoT Damage Up
+//  already added by the caller (`victimIncomingDotDamagePct`).
 //  - bomb: Σ(stacks · damagePerStack · b.affinityMult · (1 + b.detonationDamageModifier/100)) · pct
 //          — per-bomb snapshots ONLY (NO dotMult/affinityMult/detonationMult).
 

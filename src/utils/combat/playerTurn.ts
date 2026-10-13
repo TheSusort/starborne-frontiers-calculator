@@ -80,6 +80,7 @@ import {
     ownerHoldsSelfBuff,
     passesApplicationFilter,
     TURN_SHADOW_CHANNELS,
+    victimIncomingDotDamagePct,
     type ReactiveAbility,
 } from './triggers';
 import { STACK_STEALABLE_STATUSES } from './cheatDeathBuffs';
@@ -174,6 +175,9 @@ const NO_INFLICTED_NAMES: ReadonlySet<string> = new Set<string>();
 // empty, processing skipped).
 export interface PlayerRoundCtx {
     effectiveAttack: number;
+    /** The applier's DoT multiplier: 1 + (its own Out. DoT terms + the scheduled enemy picks'
+     *  Inc. DoT Damage Up)/100. The DoT's victim's ability-applied Inc. DoT Damage Up is NOT in
+     *  it — a tick or detonation adds that victim's own live value (`victimIncomingDotDamagePct`). */
     dotMult: number;
     affinityMult: number;
     /** Healing-calc seams (additive): the actor's current effective defence/max-HP, and its
@@ -220,9 +224,8 @@ export interface PlayerRoundCtx {
      *  aura contributes ADDITIONAL entries — one per ally aura SOURCE, each carrying that
      *  SOURCE's own `selfCritPower` (the locked rule: the bonus scales by the aura
      *  SOURCE's crit power, never the recipient's) — alongside this actor's own entry (if
-     *  any), which uses this actor's own ctx. Undefined/empty → tick math is `dotMult`
-     *  alone, which is every non-Wildfire-shaped ship (and the DPS simulator, which never
-     *  reads this field). */
+     *  any), which uses this actor's own ctx. Undefined/empty → no gated bonus, which is
+     *  every non-Wildfire-shaped ship. */
     victimGatedDotDamage?: { abilities: Ability[]; ctx: ConditionContext }[];
 }
 
@@ -4892,9 +4895,12 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
           })();
 
     // Step 1: Calculate direct damage
-    const enemyDotMod = toEnemyDotModifier(roundEnemyDebuffs);
-    // Self Out. DoT (scheduled and ability self-buffs) arrives via dmgStats. Enemy Inc. DoT is
-    // already inside enemyDotMod (roundEnemyDebuffs includes abilityEnemyEffects).
+    // Only the scheduled (UI-picked) enemy debuffs' Inc. DoT Damage Up is baked here — read
+    // `victimIncomingDotDamagePct`'s doc for why it is not read per victim. The ticking or
+    // detonated victim's ability-applied Inc. DoT Damage Up is added at the tick (`victimDotMult`
+    // in engine.ts) and at the detonation.
+    // Self Out. DoT (scheduled and ability self-buffs) arrives via dmgStats.
+    const enemyDotMod = toEnemyDotModifier(scheduledEnemy.roundEnemyDebuffs);
     const dotMult = 1 + (enemyDotMod + dmgStats.selfDotDamageModifier) / 100;
     // The anchor damage mult honours the forced-affinity override (equals the runtime
     // scalar when no override).
@@ -5618,7 +5624,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     let positionalDetonation: DetonationRecipe | undefined;
     if (positional) {
         // Positional: DO NOT detonate the anchor (no consume/credit/emit). Expose the recipe so the
-        // engine detonates each footprint victim's own containers. detonationDamage stays 0.
+        // engine detonates each footprint victim's own containers, adding each victim's own live
+        // Inc. DoT Damage Up to the recipe's `dotMult`. detonationDamage stays 0.
         //
         // OWN-STACK PROTECTION: the engine consumes this recipe at the END of the positional apply,
         // i.e. AFTER Step 3 (applyNewDoTs) below has appended this cast's own DoTs — so without a
@@ -5658,7 +5665,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             gatedSkill,
             effectiveAttack,
             enemyHp,
-            dotMult,
+            dotMult: dotMult + victimIncomingDotDamagePct(statusEngine, targetId) / 100,
             affinityMult,
             detonationMult: 1 + dmgStats.detonationDamageModifier / 100,
             corrosionEntries,
@@ -7272,8 +7279,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         ...(enemyAppliedHealDelta ?? {}),
         // Only set when this cast's own abilities OR a distributed ally aura
         // actually carry a victim-gated dotDamage ability — undefined for every ship without
-        // one (the common case), so tickDoTs' fast path (`ctx.victimGatedDotDamage` falsy →
-        // use `dotMult` unchanged) applies.
+        // one (the common case), which then gets no gated bonus at the tick.
         ...(victimGatedDotDamage.length > 0 ? { victimGatedDotDamage } : {}),
     };
 
