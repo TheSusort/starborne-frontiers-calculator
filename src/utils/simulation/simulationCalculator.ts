@@ -190,10 +190,11 @@ export function runDamageSimulation(stats: BaseStats, basis?: BasisTerm[]): Simu
 function runDefenderSimulation(stats: BaseStats): SimulationSummary {
     // Calculate damage reduction from defence stat
     const defenseReduction = calculateDamageReduction(stats.defence || 0);
-    // Calculate effective HP from HP and defence-based damage reduction
-    const effectiveHP = (stats.hp || 0) * (100 / (100 - defenseReduction));
-    // Apply damageReduction stat (from gear/refits) as a separate multiplier
-    const finalEffectiveHP = effectiveHP * (1 + (stats.damageReduction || 0) / 100);
+    const finalEffectiveHP = calculateEffectiveHP(
+        stats.hp || 0,
+        stats.defence || 0,
+        stats.damageReduction || 0
+    );
     let survivalRounds = 0;
     // Calculate average damage taken per hit, now from multiple enemies
     const damagePerRound = ENEMY_ATTACK * ENEMY_COUNT;
@@ -251,10 +252,11 @@ function runDebufferSimulation(stats: BaseStats, basis?: BasisTerm[]): Simulatio
 
 function runDefensiveDebufferSimulation(stats: BaseStats): SimulationSummary {
     const hacking = stats.hacking || 0;
-    const defenseReduction = calculateDamageReduction(stats.defence || 0);
-    const effectiveHP = (stats.hp || 0) * (100 / (100 - defenseReduction));
-    // Apply damageReduction stat (from gear/refits) as a separate multiplier
-    const finalEffectiveHP = effectiveHP * (1 + (stats.damageReduction || 0) / 100);
+    const finalEffectiveHP = calculateEffectiveHP(
+        stats.hp || 0,
+        stats.defence || 0,
+        stats.damageReduction || 0
+    );
 
     // Calculate hack success rate
     const hackSuccessRate = Math.min(100, Math.max(0, hacking - ENEMY_SECURITY));
@@ -290,10 +292,11 @@ function runDefensiveDebufferSimulation(stats: BaseStats): SimulationSummary {
 function runDefensiveSecurityDebufferSimulation(stats: BaseStats): SimulationSummary {
     const hacking = stats.hacking || 0;
     const security = stats.security || 0;
-    const defenseReduction = calculateDamageReduction(stats.defence || 0);
-    const effectiveHP = (stats.hp || 0) * (100 / (100 - defenseReduction));
-    // Apply damageReduction stat (from gear/refits) as a separate multiplier
-    const finalEffectiveHP = effectiveHP * (1 + (stats.damageReduction || 0) / 100);
+    const finalEffectiveHP = calculateEffectiveHP(
+        stats.hp || 0,
+        stats.defence || 0,
+        stats.damageReduction || 0
+    );
 
     // Calculate hack success rate
     const hackSuccessRate = Math.min(100, Math.max(0, hacking - ENEMY_SECURITY));

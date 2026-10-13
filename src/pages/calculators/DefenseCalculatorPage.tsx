@@ -617,7 +617,9 @@ const DefenseCalculatorPage: React.FC = () => {
                         <p className="mb-2">
                             Defense buffs multiply the base defense stat before calculating damage
                             reduction. Incoming damage buffs (e.g.{' '}
-                            <em>-30% Incoming Direct Damage</em>) further adjust it. No enemy ever
+                            <em>-30% Incoming Direct Damage</em>) add together and further adjust
+                            it. Reduction from anything other than defence, such as these buffs and
+                            critical damage reduction, is capped at 70% in total. No enemy ever
                             fires at it, and it cannot see shields, Barrier, self-repair or
                             conditionally-gated buffs.
                         </p>

@@ -94,7 +94,7 @@ export const STAT_GUIDE: Partial<
         group: 'offensive',
     },
     damageReduction: {
-        does: 'Reduces the extra damage a critical hit does to you.',
+        does: "Reduces the whole damage of every critical hit you take. Iridium's passive and the Hardened set do not stack: the larger one applies.",
         wants: 'Defenders, and anything being focused by a crit-built attacker.',
         group: 'defensive',
     },

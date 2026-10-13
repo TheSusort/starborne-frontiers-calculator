@@ -217,7 +217,11 @@ function calculateBufferScore(
 ): number {
     const speed = stats.speed || 0;
     const boostCount = setCount?.BOOST || 0;
-    const effectiveHP = calculateEffectiveHP(stats.hp || 0, stats.defence || 0);
+    const effectiveHP = calculateEffectiveHP(
+        stats.hp || 0,
+        stats.defence || 0,
+        stats.damageReduction || 0
+    );
     const additiveBonus = applyAdditiveBonuses(stats, statBonuses);
     const multiplierFactor = calculateMultiplierFactor(stats, statBonuses);
 

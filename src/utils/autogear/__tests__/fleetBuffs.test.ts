@@ -77,11 +77,11 @@ describe('applyFleetBuffs', () => {
         expect(result.defensePenetration).toBe(20);
     });
 
-    it('compounds multiple buffs on the same flat stat sequentially', () => {
+    it('sums multiple buffs on the same flat stat and applies them once (#673)', () => {
         const result = applyFleetBuffs(BASE, [
             { stat: 'attack', percentage: 10 },
             { stat: 'attack', percentage: 10 },
         ]);
-        expect(result.attack).toBeCloseTo(BASE.attack * 1.1 * 1.1);
+        expect(result.attack).toBeCloseTo(BASE.attack * 1.2);
     });
 });

@@ -7,6 +7,9 @@ export const CURRENT_VERSION = '1.75.3';
 // bumped version whose entries are still unreleased shows users a what's-new dialog listing
 // nothing. Do it by hand only if that script cannot.
 export const UNRELEASED_CHANGES: string[] = [
+    'Autogear: crit damage reduction now scores defenders at its true value.',
+    'Defense calculator: incoming damage reduction now caps at 70% like in game.',
+    'Autogear: fleet buffs on the same stat now add instead of multiplying.',
     "Combat simulator: Iridium's crit reduction and Hardened no longer stack; larger applies.",
     'Combat simulator: Inc. DoT Damage Up now applies per victim at each tick.',
     "Combat simulator: reflect now returns a share of the attacker's thrown hit.",
