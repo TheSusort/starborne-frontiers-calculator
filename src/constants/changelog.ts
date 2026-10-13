@@ -8,7 +8,7 @@ export const CURRENT_VERSION = '1.76.0';
 // nothing. Do it by hand only if that script cannot.
 export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: Chimei only redirects over-repair from refit 2 onwards.',
-    'Ability editor: HP is no longer offered, since max HP never changes mid-fight.',
+    'Ability editor: HP buffs and modifiers removed, since max HP never changes mid-fight.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
