@@ -7,6 +7,7 @@ export const CURRENT_VERSION = '1.75.3';
 // bumped version whose entries are still unreleased shows users a what's-new dialog listing
 // nothing. Do it by hand only if that script cannot.
 export const UNRELEASED_CHANGES: string[] = [
+    'Combat simulator: Inc. DoT Damage Up now applies per victim at each tick.',
     "Combat simulator: reflect now returns a share of the attacker's thrown hit.",
     'Combat simulator: Nosorog reflects 16% and the Reflect set 7%, matching the patch.',
     "Combat simulator: Nosorog's reflect is recognised again in the updated skill text.",

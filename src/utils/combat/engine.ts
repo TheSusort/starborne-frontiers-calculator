@@ -209,6 +209,7 @@ import {
     selfBuffNamesForOwners,
     selfBuffStacksForOwner,
     victimEnemyBuffs,
+    victimIncomingDotDamagePct,
     victimOwnEnemyFamilies,
     victimSelfBuffs,
 } from './triggers';
@@ -1326,10 +1327,10 @@ function processAccumulators(args: {
 // credited per applier via `credit`; the `dot-ticked` event carries the per-dotType SUMMED
 // damage — one event per type, however many appliers contributed.
 //
-// `dotMultFor(ctx)` replaces the bare `ctx.dotMult` read for BOTH
-// dotTypes — it re-folds any enemy-status-name-gated dotDamage modifier (Wildfire) against
-// THIS call's ticking victim, live, at tick time (see `victimDotMult`). Every call site that
-// doesn't pass it (or an applier ctx with no such modifier) is unaffected: `ctx.dotMult` alone.
+// `dotMultFor(ctx)` replaces the bare `ctx.dotMult` read for BOTH dotTypes — it adds THIS call's
+// ticking victim's own live terms (its Inc. DoT Damage Up, and any enemy-status-name-gated
+// dotDamage modifier such as Wildfire's) at tick time (see `victimDotMult`). A call that doesn't
+// pass it ticks at `ctx.dotMult` alone.
 /** DoT types `tickDoTs` handles as a per-round tick — everything except 'bomb' (bombs burst on a
  *  timed countdown via `processBombs`, a separate mechanism, never a per-round tick). Covers
  *  'generic' alongside 'corrosion'/'inferno'. */
@@ -1380,7 +1381,7 @@ export function tickDoTs(args: {
      *  ticking VICTIM (this tickDoTs call's whole entries list belongs to ONE victim, so the
      *  victim is fixed for the call; only the per-entry applier ctx varies). Defaults to the
      *  applier's `ctx.dotMult` unchanged when absent. Production call sites pass the engine's
-     *  `victimDotMult` closure. */
+     *  `victimDotMult` closure, which adds the victim's live Inc. DoT Damage Up. */
     dotMultFor?: (ctx: PlayerRoundCtx, dotType: 'corrosion' | 'inferno') => number;
 }): void {
     const dotMultFor = args.dotMultFor ?? ((ctx: PlayerRoundCtx) => ctx.dotMult);
@@ -3007,7 +3008,9 @@ export function runCombat(rawInput: CombatEngineInput): {
     // WHY IT IS INERT TODAY and therefore out of scope: the only actors whose turn can lack a real
     // victim are the ally-targeting supporters, and a no-victim turn resolves the neutral
     // `'antimatter'` matchup — so no observable value moves.
-    // The other two fields read there (`ctx.dotMult`, `ctx.effectiveAttack`) are self-derived and fine.
+    // The other two fields read there are fine: `ctx.effectiveAttack` is self-derived, and
+    // `ctx.dotMult` holds only the applier's own terms plus the side-wide scheduled enemy picks —
+    // the ticking victim's own Inc. DoT Damage Up is added at the tick (`victimDotMult`).
     const lastTurnCtxByActor = new Map<string, PlayerRoundCtx>();
     // Each actor's scheduled (input-level) enemy debuffs as its most recent turn LANDED them —
     // `PlayerTurnResult.scheduledEnemyEffects`, the gated list its own cast's damage read. A hit the
@@ -3424,14 +3427,16 @@ export function runCombat(rawInput: CombatEngineInput): {
         ...(target.genericDoTEntries.length > 0 ? ['Damage over Time'] : []),
         ...(target.pendingAccumulators.length > 0 ? ['Echoing Burst'] : []),
     ];
-    // Per-VICTIM, per-TICK resolution of an applier's dotMult.
-    // Reads `ctx.victimGatedDotDamage` (set by runPlayerTurn ONLY when the applier's cast
-    // carried an enemy-status-name-gated dotDamage modifier — Wildfire's Scorching Radiation
-    // crit-power bonus, either the applier's OWN or one distributed from an ally's "all
-    // allies deal…" aura). The fast path (no such modifier — every other ship) returns
-    // `ctx.dotMult` unchanged. When present, re-folds EACH entry's
-    // `abilities` against a ctx whose enemy-status fields are swapped to `victim`'s OWN
-    // CURRENT live status (read fresh at TICK time via
+    // Per-VICTIM, per-TICK resolution of an applier's dotMult: the applier's `ctx.dotMult`, plus
+    // the ticking victim's OWN live `Inc. DoT Damage Up` (`victimIncomingDotDamagePct`, read fresh
+    // at the tick), plus any victim-gated dotDamage bonus. Keyed by `victim.id` alone, so it reads
+    // the same way for a player-side and an enemy-side victim.
+    //
+    // The gated bonus: `ctx.victimGatedDotDamage` (set by runPlayerTurn ONLY when the applier's
+    // cast carried an enemy-status-name-gated dotDamage modifier — Wildfire's Scorching Radiation
+    // crit-power bonus, either the applier's OWN or one distributed from an ally's "all allies
+    // deal…" aura). Each entry's `abilities` re-fold against a ctx whose enemy-status fields are
+    // swapped to `victim`'s OWN CURRENT live status (read fresh at TICK time via
     // `enemyDebuffNamesForTarget`/`selfBuffNamesForOwners` — deliberately NOT a pre-turn
     // snapshot: a DoT tick is a later, separate event from the cast that applied it, so
     // there is no anti-causality concern about it seeing that SAME cast's own debuff-
@@ -3451,8 +3456,9 @@ export function runCombat(rawInput: CombatEngineInput): {
         victim: CombatActor,
         dotType: 'corrosion' | 'inferno'
     ): number => {
+        const live = ctx.dotMult + victimIncomingDotDamagePct(statusEngine, victim.id) / 100;
         const gated = ctx.victimGatedDotDamage;
-        if (!gated || gated.length === 0) return ctx.dotMult;
+        if (!gated || gated.length === 0) return live;
         let bonus = 0;
         for (const entry of gated) {
             if (entry.abilities.length === 0) continue;
@@ -3477,7 +3483,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             );
             bonus += modifierTotalsFromAbilities(forThisType, victimCtx).dotDamage;
         }
-        return ctx.dotMult + bonus / 100;
+        return live + bonus / 100;
     };
     const isStasised = (actorId: string): boolean => ownerDebuffNames(actorId).some(isStasis);
     const isDisabled = (actorId: string): boolean => ownerDebuffNames(actorId).some(isDisable);
@@ -9692,7 +9698,14 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // scratch copy; the detonated entries leave the live container afterwards.
                 const liveBombs = victim.pendingBombs;
                 const bombsLeft = liveBombs.slice();
-                const result = detonateContainers(recipe, {
+                // The recipe carries the detonator's `dotMult`; each victim adds its own live
+                // Inc. DoT Damage Up, the term a tick on it reads (`victimDotMult`).
+                const victimRecipe: DetonationRecipe = {
+                    ...recipe,
+                    dotMult:
+                        recipe.dotMult + victimIncomingDotDamagePct(statusEngine, victim.id) / 100,
+                };
+                const result = detonateContainers(victimRecipe, {
                     corrosionEntries: victim.corrosionEntries,
                     infernoEntries: victim.infernoEntries,
                     pendingBombs: bombsLeft,

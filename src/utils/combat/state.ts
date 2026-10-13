@@ -43,7 +43,8 @@ export function emptyActorHealing(): ActorHealing {
 
 /** One applied DoT application (an "entry"): N stacks of one tier, ticking down.
  *  `sourceId` is the applier (per-actor attribution): inferno ticks resolve the
- *  applier's current-round effective attack/dotMult/affinityMult, and the damage attributes
+ *  applier's current-round effective attack/dotMult/affinityMult (plus the ticking victim's own
+ *  live Inc. DoT Damage Up, read at the tick), and the damage attributes
  *  to that actor's per-round contributions (focus actor → row fields, others → teamDamage) —
  *  unless the entry carries `dealtCreditId`, which splits the display attribution off the
  *  applier. See its doc below. */

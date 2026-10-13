@@ -185,7 +185,8 @@ export function composeIncomingFactor(
 }
 
 /** The reduction factor on a DoT tick: passives sum, separate factors multiply, no cap.
- *  The tick's own `Inc. DoT Damage Up` multiplier is applied where the tick is built. */
+ *  The ticking victim's `Inc. DoT Damage Up` is not part of it: it sits additively in the tick's
+ *  dotMult (`victimDotMult` in engine.ts), and this factor multiplies that. */
 export function composeDotReductionFactor(parts: IncomingReductionParts): number {
     let factor = parts.passivePct !== 0 ? Math.max(0, 1 - parts.passivePct / 100) : 1;
     for (const pct of parts.separatePcts) factor *= Math.max(0, 1 - pct / 100);
