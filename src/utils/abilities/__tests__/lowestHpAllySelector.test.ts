@@ -153,26 +153,19 @@ describe('SP-4e: a text-named worst-HP ally recipient parses as lowest-hp-ally',
     });
 
     it('Chimei carries the selector via her #435 over-repair redirect, not her Stealth repair sentence', () => {
-        // Chimei's passive contains a FULL match for the selector regex ("the ally with the
-        // lowest current health percentage") in a THIRD sentence describing an over-repair
-        // redirect (#435). That clause has no percentage tag, so `parseHealAbilities` — the
-        // heal chain that resolves Pallas/Volk/Valkyrie above — never captures it; it is parsed
-        // as its own standalone reactive ability (`parseOverRepairRedirect`) instead. The parser's
-        // per-match sentence scoping still keeps the phrase off the SECOND sentence's real
-        // all-allies Stealth repair.
+        // From R2 Chimei's passive adds a sentence redirecting over-repair to "the ally with the
+        // lowest current health percentage" (#435); her R0 passive does not have it. That clause
+        // has no percentage tag, so `parseHealAbilities` — the heal chain that resolves
+        // Pallas/Volk/Valkyrie above — never captures it; it is parsed as its own standalone
+        // reactive ability (`parseOverRepairRedirect`) instead. The parser's per-match sentence
+        // scoping keeps the phrase off the real all-allies Stealth repair sentence.
         const rec = loadShipSkillRecords().find((r) => r.name.toLowerCase() === 'chimei')!;
-        expect(rec.passives[0]).toContain('lowest current health percentage');
+        expect(rec.passives[0]).not.toContain('lowest current health percentage');
+        expect(rec.passives[1]).toContain('lowest current health percentage');
         for (const [, text] of csvSlots(rec)) {
             expect(parseHealAbilities(text).map((h) => h.target)).not.toContain('lowest-hp-ally');
         }
-        // The over-repair clause sits in both passive1 and passive2's CSV text (both rows carry
-        // the same three sentences) — the built kit surfaces the selector on both alongside her
-        // real all-allies Stealth repair. Only the refit-active row applies at runtime
-        // (`getShipSkillRows`); both are exercised here because each is a distinct SkillSlot.
-        expect(builtHealTargets('passive1', rec.passives[0])).toEqual([
-            'all-allies',
-            'lowest-hp-ally',
-        ]);
+        expect(builtHealTargets('passive1', rec.passives[0])).toEqual(['all-allies']);
         expect(builtHealTargets('passive2', rec.passives[1])).toEqual([
             'all-allies',
             'lowest-hp-ally',
@@ -223,7 +216,6 @@ describe('SP-4e: lowest-hp-ally roster inventory gate', () => {
 
         const selected = all.filter((r) => r.target === 'lowest-hp-ally');
         expect(selected.map((r) => `${r.ship}/${r.slot}/${r.type}`).sort()).toEqual([
-            'Chimei/passive1/heal',
             'Chimei/passive2/heal',
             'Pallas/active/heal',
             'Valkyrie/passive1/heal',
@@ -239,17 +231,14 @@ describe('SP-4e: lowest-hp-ally roster inventory gate', () => {
         ]);
     });
 
-    it('carries the selector on exactly Chimei/passive1 and Chimei/passive2 (#435 over-repair redirect)', () => {
+    it('carries the selector on exactly Chimei/passive2 (#435 over-repair redirect)', () => {
         // Chimei's over-repair redirect (#435) is a standalone reactive heal ability, not an arm
-        // of the heal chain (see the paired test above) — but it legitimately carries the
-        // 'lowest-hp-ally' selector now. It appears on BOTH passive1 and passive2 because both
-        // CSV rows carry the same three sentences (normal for this data; only the refit-active
-        // row applies at runtime) — this is not a double-registration bug.
+        // of the heal chain (see the paired test above), and it carries the 'lowest-hp-ally'
+        // selector. Only her R2+ passive (passive2) has the redirect sentence.
         const chimei = sweep().filter((r) => r.ship.toLowerCase() === 'chimei');
         // Chimei is swept at all (not a dropped multi-line CSV record).
         expect(chimei.length).toBeGreaterThan(0);
         expect(chimei.filter((r) => r.target === 'lowest-hp-ally')).toEqual([
-            { ship: 'Chimei', slot: 'passive1', type: 'heal', target: 'lowest-hp-ally' },
             { ship: 'Chimei', slot: 'passive2', type: 'heal', target: 'lowest-hp-ally' },
         ]);
     });
