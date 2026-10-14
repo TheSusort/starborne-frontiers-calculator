@@ -175,12 +175,14 @@ const NO_INFLICTED_NAMES: ReadonlySet<string> = new Set<string>();
 // empty, processing skipped).
 export interface PlayerRoundCtx {
     effectiveAttack: number;
-    /** The applier's DoT multiplier: 1 + (its own Out. DoT terms + the Inc. DoT Damage Up of the
-     *  scheduled enemy picks and of this round's landed aura/accumulating debuffs)/100. The DoT's
-     *  victim's TIMED ability-applied Inc. DoT Damage Up is NOT in it — a tick or detonation adds
-     *  that victim's own live value (`victimIncomingDotDamagePct`). */
-    dotMult: number;
-    affinityMult: number;
+    /** The applier's own (dealer-side) DoT-damage %: its Out. DoT terms. The outgoing side of
+     *  `composeDotDamageFactor`. */
+    outgoingDotPct: number;
+    /** The victim-side Inc. DoT Damage Up % baked at the applier's cast: the scheduled enemy picks
+     *  and this round's landed aura/accumulating debuffs. The DoT's victim's TIMED ability-applied
+     *  Inc. DoT Damage Up is NOT in it — a tick or detonation adds that victim's own live value
+     *  (`victimIncomingDotDamagePct`) to this incoming side. */
+    incomingDotPct: number;
     /** Healing-calc seams (additive): the actor's current effective defence, and its
      *  outgoing/incoming-heal % as of its last turn — read by enemy attacks (target defence),
      *  outgoing-heal scaling, and incoming-heal amplification (corrosion applier-ctx rule). Max HP
@@ -216,7 +218,7 @@ export interface PlayerRoundCtx {
      *  name-specific enemy-status condition (Wildfire's "when an enemy has Scorching
      *  Radiation… for every N% crit power" bonus), plus the ctx used to fold each group
      *  (`partitionDotDamageAbilities` — see its jsdoc for the shape check). EXCLUDED from
-     *  `dotMult` above, which bakes only the UNCONDITIONAL dotDamage contribution (e.g.
+     *  `outgoingDotPct` above, which bakes only the UNCONDITIONAL dotDamage contribution (e.g.
      *  Decimation set gear). The engine re-folds each entry's `abilities` against a
      *  per-VICTIM, per-TICK ctx (only the enemy-status fields swapped to that victim's own
      *  CURRENT live status — see `tickDoTs`/`victimDotMult` in engine.ts) so the bonus
@@ -1719,26 +1721,26 @@ function detonate(args: {
     gatedSkill: Skill | undefined;
     effectiveAttack: number;
     enemyHp: number;
-    dotMult: number;
-    affinityMult: number;
+    outgoingDotPct: number;
+    incomingDotPct: number;
     detonationMult: number;
     corrosionEntries: ActiveDoTStack[];
     infernoEntries: ActiveDoTStack[];
     pendingBombs: PendingBomb[];
     emitBombDetonated?: (stacks: number, damage: number) => void;
 }): number {
-    // Delegate the per-type detonation MATH to the pure helper. Bombs burst with the
-    // APPLIER's affinity matchup AND detonation-damage modifier (Voidfire), both snapshotted
-    // at application (PendingBomb.affinityMult / .detonationDamageModifier) — NOT the
-    // detonating actor's — mirroring the per-entry burst on the enemy turn (engine.ts
-    // detonatePendingBombs). The helper consumes each container (`.length = 0`) in `dets`
-    // order, so a 2nd bomb det sees emptied bombs. We keep the side-effect (event emit) here.
+    // Delegate the per-type detonation MATH to the pure helper. Bombs burst with the APPLIER's
+    // detonation-damage modifier (Voidfire), snapshotted at application
+    // (PendingBomb.detonationDamageModifier) — NOT the detonating actor's — mirroring the
+    // per-entry burst on the enemy turn (engine.ts detonatePendingBombs). The helper consumes each
+    // container (`.length = 0`) in `dets` order, so a 2nd bomb det sees emptied bombs. We keep the
+    // side-effect (event emit) here.
     const result = detonateContainers(
         {
             dets: detonationsFromSkill(args.gatedSkill),
             effectiveAttack: args.effectiveAttack,
-            dotMult: args.dotMult,
-            affinityMult: args.affinityMult,
+            outgoingDotPct: args.outgoingDotPct,
+            incomingDotPct: args.incomingDotPct,
             detonationMult: args.detonationMult,
         },
         {
@@ -1817,12 +1819,10 @@ const landedStackProcs = new WeakMap<
 >();
 
 // Step 3: Apply new DoT stacks from this round's skill (subject to landing roll).
-// `sourceId` (the applier) is stamped on every appended entry for per-actor attribution;
-// bombs also snapshot the applier's `affinityMult` at application (used at burst).
+// `sourceId` (the applier) is stamped on every appended entry for per-actor attribution.
 function applyNewDoTs(args: {
     dotsConfig: DoTApplicationConfig;
     effectiveAttack: number;
-    affinityMult: number;
     detonationDamageModifier: number;
     splashModifier: number;
     sourceId: string;
@@ -1874,7 +1874,6 @@ function applyNewDoTs(args: {
                 stacks: dot.stacks,
                 tier: dot.tier,
                 sourceId: args.sourceId,
-                affinityMult: args.affinityMult,
                 detonationDamageModifier: args.detonationDamageModifier,
                 splashModifier: args.splashModifier,
                 appliedSeq,
@@ -4342,7 +4341,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     const resistedAbilityEnemy: ActiveBuff[] = [...resistedAbilityTimedEnemy];
     const abilityEnemyEffects: SelectedGameBuff[] = [];
     // The aura/accumulating subset of `abilityEnemyEffects` that landed this round; its
-    // Inc. DoT Damage Up is baked into `dotMult` (read `victimIncomingDotDamagePct`'s doc).
+    // Inc. DoT Damage Up is baked into `incomingDotPct` (read `victimIncomingDotDamagePct`'s doc).
     const landedRecurringAbilityEnemy: SelectedGameBuff[] = [];
     // Timed ability statuses: unconditionally landed (gated at application in the timed
     // loop above). NO debuff-applied here — already emitted at the application site above
@@ -4883,18 +4882,19 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
           })();
 
     // Step 1: Calculate direct damage
-    // Baked here: the Inc. DoT Damage Up of the scheduled (UI-picked) enemy debuffs and of the
-    // aura/accumulating ability debuffs that landed this round. The ticking or detonated victim's
-    // TIMED ability-applied Inc. DoT Damage Up is added at the tick (`victimDotMult` in engine.ts)
-    // and at the detonation — read `victimIncomingDotDamagePct`'s doc for the split.
-    // Self Out. DoT (scheduled and ability self-buffs) arrives via dmgStats.
-    const enemyDotMod = toEnemyDotModifier([
+    // The two sides of `composeDotDamageFactor`. Incoming, baked here: the Inc. DoT Damage Up of
+    // the scheduled (UI-picked) enemy debuffs and of the aura/accumulating ability debuffs that
+    // landed this round. The ticking or detonated victim's TIMED ability-applied Inc. DoT Damage
+    // Up is added at the tick (`victimDotMult` in engine.ts) and at the detonation — read
+    // `victimIncomingDotDamagePct`'s doc for the split. Outgoing: self Out. DoT (scheduled and
+    // ability self-buffs), via dmgStats.
+    const incomingDotPct = toEnemyDotModifier([
         ...scheduledEnemy.roundEnemyDebuffs,
         ...landedRecurringAbilityEnemy,
     ]);
-    const dotMult = 1 + (enemyDotMod + dmgStats.selfDotDamageModifier) / 100;
-    // The anchor damage mult honours the forced-affinity override (equals the runtime
-    // scalar when no override).
+    const outgoingDotPct = dmgStats.selfDotDamageModifier;
+    // The direct-hit affinity mult; it honours the forced-affinity override (equals the runtime
+    // scalar when no override). DoTs, Bombs and detonations never read it.
     const affinityMult = 1 + effAffinityDamageModifier / 100;
     const effectiveDefence = dmgStats.defence;
     const effectiveSecurity = dmgStats.security;
@@ -5611,7 +5611,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     if (positional) {
         // Positional: DO NOT detonate the anchor (no consume/credit/emit). Expose the recipe so the
         // engine detonates each footprint victim's own containers, adding each victim's own live
-        // Inc. DoT Damage Up to the recipe's `dotMult`. detonationDamage stays 0.
+        // Inc. DoT Damage Up to the recipe's `incomingDotPct`. detonationDamage stays 0.
         //
         // OWN-STACK PROTECTION: the engine consumes this recipe at the END of the positional apply,
         // i.e. AFTER Step 3 (applyNewDoTs) below has appended this cast's own DoTs — so without a
@@ -5637,8 +5637,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         positionalDetonation = {
             dets: detonationsFromSkill(gatedSkill),
             effectiveAttack,
-            dotMult,
-            affinityMult,
+            outgoingDotPct,
+            incomingDotPct,
             detonationMult: 1 + dmgStats.detonationDamageModifier / 100,
             detonatable,
         };
@@ -5651,8 +5651,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             gatedSkill,
             effectiveAttack,
             enemyHp,
-            dotMult: dotMult + victimIncomingDotDamagePct(statusEngine, targetId) / 100,
-            affinityMult,
+            outgoingDotPct,
+            incomingDotPct: incomingDotPct + victimIncomingDotDamagePct(statusEngine, targetId),
             detonationMult: 1 + dmgStats.detonationDamageModifier / 100,
             corrosionEntries,
             infernoEntries,
@@ -5739,7 +5739,6 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         applyNewDoTs({
             dotsConfig: landedPrimaryDots,
             effectiveAttack,
-            affinityMult,
             detonationDamageModifier: dmgStats.detonationDamageModifier,
             splashModifier: dmgStats.bombSplashModifier,
             sourceId: actor.id,
@@ -5944,7 +5943,6 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 applyNewDoTs({
                     dotsConfig: plan.landed,
                     effectiveAttack,
-                    affinityMult: 1 + affinityModsVsVictim(victim).damageModifier / 100,
                     detonationDamageModifier: dmgStats.detonationDamageModifier,
                     splashModifier: dmgStats.bombSplashModifier,
                     sourceId: actor.id,
@@ -7245,8 +7243,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // player always precedes the enemy. The caller stores it in lastTurnCtxByActor[actor.id].
     const turnCtx: PlayerRoundCtx = {
         effectiveAttack,
-        dotMult,
-        affinityMult,
+        outgoingDotPct,
+        incomingDotPct,
         effectiveDefence,
         outgoingHealPct: dmgStats.totals.outgoingHealBuff,
         incomingHealPct: dmgStats.totals.incomingHealBuff,

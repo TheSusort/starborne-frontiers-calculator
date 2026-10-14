@@ -64,7 +64,6 @@ const bomb = (sourceId: string): PendingBomb => ({
     stacks: 1,
     tier: 1,
     sourceId,
-    affinityMult: 1,
     detonationDamageModifier: 0,
     splashModifier: 0,
 });

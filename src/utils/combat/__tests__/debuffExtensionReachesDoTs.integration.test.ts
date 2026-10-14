@@ -114,7 +114,6 @@ function makeLoadedVictim(
         stacks: 1,
         tier: 1,
         sourceId: 'earlier-caster',
-        affinityMult: 1,
         detonationDamageModifier: 0,
         splashModifier: 0,
     });

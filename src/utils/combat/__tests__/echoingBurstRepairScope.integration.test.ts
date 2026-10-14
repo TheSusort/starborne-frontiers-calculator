@@ -91,7 +91,6 @@ const bomb = (sourceId: string, damagePerStack: number): PendingBomb => ({
     stacks: 1,
     tier: 15,
     sourceId,
-    affinityMult: 1,
     detonationDamageModifier: 0,
     splashModifier: 0,
 });

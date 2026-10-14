@@ -66,10 +66,12 @@ describe('reflectedDamageForHit', () => {
         expect(reflectedDamageParts({ ...args, reflectPct: 16, reflectBase: 0 })).toEqual({
             damage: 0,
             preMitigation: 0,
+            incomingFactor: 1,
         });
         expect(reflectedDamageParts({ ...args, reflectPct: 0, reflectBase: 1000 })).toEqual({
             damage: 0,
             preMitigation: 0,
+            incomingFactor: 1,
         });
     });
 

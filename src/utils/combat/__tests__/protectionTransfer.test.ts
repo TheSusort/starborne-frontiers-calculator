@@ -33,6 +33,21 @@ describe('protectionCascade', () => {
         expect(r.chunks[0].total).toBeCloseTo(2000, 6);
     });
 
+    it('each ship prices its own part: the target’s incoming factor divides out, the protector’s multiplies in', () => {
+        // D=1000 carries target defence 0.25 and target incoming 0.5 -> P = 1000/(0.25*0.5) = 8000.
+        // Protector mit 0.5, own incoming 0.7, 3 stacks -> chunk = 0.3 * 8000 * 0.5 * 0.7 = 840.
+        const r = protectionCascade(
+            1000,
+            0.25,
+            [{ mit: 0.5, incomingFactor: 0.7, stacks: 3 }],
+            0.5
+        );
+        expect(r.targetRemainder).toBeCloseTo(700, 6);
+        expect(r.chunks[0].total).toBeCloseTo(840, 6);
+        // Raw (thrown) axis: the inflow before every protector-side reduction, per stack.
+        expect(r.chunks[0].perStackPreMitigation).toBeCloseTo((0.3 * 8000) / 3, 6);
+    });
+
     it('no protectors: target keeps everything, no chunks', () => {
         const r = protectionCascade(1000, 0.25, []);
         expect(r.targetRemainder).toBe(1000);

@@ -12160,25 +12160,25 @@ exports[`dpsGoldenParity > walked team actor (full team-skills walk) 1`] = `
         "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
-          "incoming": 37607.22776224695,
-          "incomingRaw": 94500,
+          "incoming": 36527.22776224695,
+          "incomingRaw": 93420,
           "shieldAbsorbed": 0,
         },
       },
       "perTargetDamage": {
-        "enemy-1": 37607.22776224695,
+        "enemy-1": 36527.22776224695,
       },
       "perTargetDealt": {
         "attacker": {
           "enemy-1": 24806.932448186813,
         },
         "team-1": {
-          "enemy-1": 12800.295314060135,
+          "enemy-1": 11720.295314060135,
         },
       },
       "resistedEnemyDebuffs": [],
       "round": 1,
-      "teamDamage": 37607,
+      "teamDamage": 36527,
       "totalRoundDamage": 24807,
     },
     {
@@ -12225,25 +12225,25 @@ exports[`dpsGoldenParity > walked team actor (full team-skills walk) 1`] = `
         "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
-          "incoming": 33183.76434196923,
-          "incomingRaw": 81000,
+          "incoming": 32103.76434196923,
+          "incomingRaw": 79920,
           "shieldAbsorbed": 0,
         },
       },
       "perTargetDamage": {
-        "enemy-1": 33183.76434196923,
+        "enemy-1": 32103.76434196923,
       },
       "perTargetDealt": {
         "attacker": {
           "enemy-1": 27783.76434196923,
         },
         "team-1": {
-          "enemy-1": 5400,
+          "enemy-1": 4320,
         },
       },
       "resistedEnemyDebuffs": [],
       "round": 2,
-      "teamDamage": 33184,
+      "teamDamage": 32104,
       "totalRoundDamage": 27784,
     },
     {
@@ -12280,31 +12280,31 @@ exports[`dpsGoldenParity > walked team actor (full team-skills walk) 1`] = `
       "didCrit": false,
       "directDamage": 9923,
       "dotsLanded": true,
-      "enemyHpPct": 82,
+      "enemyHpPct": 83,
       "infernoDamage": 0,
       "perActorIncoming": {
         "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
-          "incoming": 28123.068293334858,
-          "incomingRaw": 59400,
+          "incoming": 25963.068293334858,
+          "incomingRaw": 57240,
           "shieldAbsorbed": 0,
         },
       },
       "perTargetDamage": {
-        "enemy-1": 28123.068293334858,
+        "enemy-1": 25963.068293334858,
       },
       "perTargetDealt": {
         "attacker": {
           "enemy-1": 9922.772979274725,
         },
         "team-1": {
-          "enemy-1": 18200.295314060135,
+          "enemy-1": 16040.295314060135,
         },
       },
       "resistedEnemyDebuffs": [],
       "round": 3,
-      "teamDamage": 28123,
+      "teamDamage": 25963,
       "totalRoundDamage": 9923,
     },
     {
@@ -12345,31 +12345,31 @@ exports[`dpsGoldenParity > walked team actor (full team-skills walk) 1`] = `
       "didCrit": true,
       "directDamage": 55568,
       "dotsLanded": true,
-      "enemyHpPct": 75,
+      "enemyHpPct": 76,
       "infernoDamage": 0,
       "perActorIncoming": {
         "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
-          "incoming": 60967.52868393846,
-          "incomingRaw": 156600,
+          "incoming": 59887.52868393846,
+          "incomingRaw": 155520,
           "shieldAbsorbed": 0,
         },
       },
       "perTargetDamage": {
-        "enemy-1": 60967.52868393846,
+        "enemy-1": 59887.52868393846,
       },
       "perTargetDealt": {
         "attacker": {
           "enemy-1": 55567.52868393846,
         },
         "team-1": {
-          "enemy-1": 5400,
+          "enemy-1": 4320,
         },
       },
       "resistedEnemyDebuffs": [],
       "round": 4,
-      "teamDamage": 60968,
+      "teamDamage": 59888,
       "totalRoundDamage": 55568,
     },
     {
@@ -12406,31 +12406,31 @@ exports[`dpsGoldenParity > walked team actor (full team-skills walk) 1`] = `
       "didCrit": true,
       "directDamage": 24807,
       "dotsLanded": true,
-      "enemyHpPct": 60,
+      "enemyHpPct": 61,
       "infernoDamage": 0,
       "perActorIncoming": {
         "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
-          "incoming": 43007.22776224695,
-          "incomingRaw": 99900,
+          "incoming": 40847.22776224695,
+          "incomingRaw": 97740,
           "shieldAbsorbed": 0,
         },
       },
       "perTargetDamage": {
-        "enemy-1": 43007.22776224695,
+        "enemy-1": 40847.22776224695,
       },
       "perTargetDealt": {
         "attacker": {
           "enemy-1": 24806.932448186813,
         },
         "team-1": {
-          "enemy-1": 18200.295314060135,
+          "enemy-1": 16040.295314060135,
         },
       },
       "resistedEnemyDebuffs": [],
       "round": 5,
-      "teamDamage": 43007,
+      "teamDamage": 40847,
       "totalRoundDamage": 24807,
     },
     {
@@ -12471,31 +12471,31 @@ exports[`dpsGoldenParity > walked team actor (full team-skills walk) 1`] = `
       "didCrit": false,
       "directDamage": 9923,
       "dotsLanded": true,
-      "enemyHpPct": 49,
+      "enemyHpPct": 51,
       "infernoDamage": 0,
       "perActorIncoming": {
         "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
-          "incoming": 15322.772979274725,
-          "incomingRaw": 32400,
+          "incoming": 14242.772979274725,
+          "incomingRaw": 31320,
           "shieldAbsorbed": 0,
         },
       },
       "perTargetDamage": {
-        "enemy-1": 15322.772979274725,
+        "enemy-1": 14242.772979274725,
       },
       "perTargetDealt": {
         "attacker": {
           "enemy-1": 9922.772979274725,
         },
         "team-1": {
-          "enemy-1": 5400,
+          "enemy-1": 4320,
         },
       },
       "resistedEnemyDebuffs": [],
       "round": 6,
-      "teamDamage": 15323,
+      "teamDamage": 14243,
       "totalRoundDamage": 9923,
     },
     {
@@ -12532,31 +12532,31 @@ exports[`dpsGoldenParity > walked team actor (full team-skills walk) 1`] = `
       "didCrit": false,
       "directDamage": 9923,
       "dotsLanded": true,
-      "enemyHpPct": 45,
+      "enemyHpPct": 48,
       "infernoDamage": 0,
       "perActorIncoming": {
         "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
-          "incoming": 28123.068293334858,
-          "incomingRaw": 59400,
+          "incoming": 25963.068293334858,
+          "incomingRaw": 57240,
           "shieldAbsorbed": 0,
         },
       },
       "perTargetDamage": {
-        "enemy-1": 28123.068293334858,
+        "enemy-1": 25963.068293334858,
       },
       "perTargetDealt": {
         "attacker": {
           "enemy-1": 9922.772979274725,
         },
         "team-1": {
-          "enemy-1": 18200.295314060135,
+          "enemy-1": 16040.295314060135,
         },
       },
       "resistedEnemyDebuffs": [],
       "round": 7,
-      "teamDamage": 28123,
+      "teamDamage": 25963,
       "totalRoundDamage": 9923,
     },
     {
@@ -12597,31 +12597,31 @@ exports[`dpsGoldenParity > walked team actor (full team-skills walk) 1`] = `
       "didCrit": false,
       "directDamage": 19846,
       "dotsLanded": true,
-      "enemyHpPct": 38,
+      "enemyHpPct": 41,
       "infernoDamage": 0,
       "perActorIncoming": {
         "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
-          "incoming": 25245.54595854945,
-          "incomingRaw": 59400,
+          "incoming": 24165.54595854945,
+          "incomingRaw": 58320,
           "shieldAbsorbed": 0,
         },
       },
       "perTargetDamage": {
-        "enemy-1": 25245.54595854945,
+        "enemy-1": 24165.54595854945,
       },
       "perTargetDealt": {
         "attacker": {
           "enemy-1": 19845.54595854945,
         },
         "team-1": {
-          "enemy-1": 5400,
+          "enemy-1": 4320,
         },
       },
       "resistedEnemyDebuffs": [],
       "round": 8,
-      "teamDamage": 25246,
+      "teamDamage": 24166,
       "totalRoundDamage": 19846,
     },
     {
@@ -12658,31 +12658,31 @@ exports[`dpsGoldenParity > walked team actor (full team-skills walk) 1`] = `
       "didCrit": true,
       "directDamage": 24807,
       "dotsLanded": true,
-      "enemyHpPct": 32,
+      "enemyHpPct": 35,
       "infernoDamage": 0,
       "perActorIncoming": {
         "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
-          "incoming": 43007.22776224695,
-          "incomingRaw": 99900,
+          "incoming": 40847.22776224695,
+          "incomingRaw": 97740,
           "shieldAbsorbed": 0,
         },
       },
       "perTargetDamage": {
-        "enemy-1": 43007.22776224695,
+        "enemy-1": 40847.22776224695,
       },
       "perTargetDealt": {
         "attacker": {
           "enemy-1": 24806.932448186813,
         },
         "team-1": {
-          "enemy-1": 18200.295314060135,
+          "enemy-1": 16040.295314060135,
         },
       },
       "resistedEnemyDebuffs": [],
       "round": 9,
-      "teamDamage": 43007,
+      "teamDamage": 40847,
       "totalRoundDamage": 24807,
     },
     {
@@ -12723,39 +12723,39 @@ exports[`dpsGoldenParity > walked team actor (full team-skills walk) 1`] = `
       "didCrit": false,
       "directDamage": 9923,
       "dotsLanded": true,
-      "enemyHpPct": 21,
+      "enemyHpPct": 25,
       "infernoDamage": 0,
       "perActorIncoming": {
         "enemy-1": {
           "barrierAbsorbed": 0,
           "convertedToShield": 0,
-          "incoming": 15322.772979274725,
-          "incomingRaw": 32400,
+          "incoming": 14242.772979274725,
+          "incomingRaw": 31320,
           "shieldAbsorbed": 0,
         },
       },
       "perTargetDamage": {
-        "enemy-1": 15322.772979274725,
+        "enemy-1": 14242.772979274725,
       },
       "perTargetDealt": {
         "attacker": {
           "enemy-1": 9922.772979274725,
         },
         "team-1": {
-          "enemy-1": 5400,
+          "enemy-1": 4320,
         },
       },
       "resistedEnemyDebuffs": [],
       "round": 10,
-      "teamDamage": 15323,
+      "teamDamage": 14243,
       "totalRoundDamage": 9923,
     },
   ],
   "summary": {
     "avgDamagePerRound": 21731,
-    "finalHpPct": 17.52244879589572,
+    "finalHpPct": 21.302448795895717,
     "survived": true,
-    "teamTotalDamage": 329910,
+    "teamTotalDamage": 314790,
     "totalConditionalDamage": 0,
     "totalCorrosionDamage": 0,
     "totalDamage": 217309,

@@ -8,7 +8,7 @@
  *
  * Setup: focus (speed 100, hp 1_000_000) is the heal target. An enemy attacker (speed 50,
  * attack 5000) applies a 1-stack inferno (tier 100) on each turn. Per turn:
- *   inferno tick = 1 × (100/100) × 5000 × dotMult 1 × affinityMult 1 = 5000
+ *   inferno tick = 1 × (100/100) × 5000 × dotFactor 1 = 5000
  * Vortex Veil legendary = 30% → reduced tick = 5000 × 0.70 = 3500.
  *
  * With Vortex Veil: dot-ticked damage = 3500.
@@ -226,7 +226,7 @@ function collectDotTicks(
 describe('D-PR3 Task 8 — Vortex Veil reduces enemy-applied DoT ticks on the heal target', () => {
     // ── Inferno ──────────────────────────────────────────────────────────────
     it('inferno: WITHOUT Vortex Veil the tick is the full 5000', () => {
-        // tier 100 × stacks 1 × attack 5000 × dotMult 1 × affinityMult 1 = 5000
+        // tier 100 × stacks 1 × attack 5000 × dotFactor 1 = 5000
         const ticks = collectDotTicks(false, 'inferno');
         expect(ticks.length).toBeGreaterThanOrEqual(1);
         expect(ticks[0]).toBeCloseTo(5000, 6);
@@ -244,7 +244,7 @@ describe('D-PR3 Task 8 — Vortex Veil reduces enemy-applied DoT ticks on the he
     // ── Corrosion ────────────────────────────────────────────────────────────
     it('corrosion: WITHOUT Vortex Veil the tick equals tier 1% of min(hp, 500000)', () => {
         // hp = 1_000_000 → corrosionBaseHp = 500_000
-        // tier 1 × stacks 1 × 1/100 × 500_000 × dotMult 1 × affinityMult 1 = 5000
+        // tier 1 × stacks 1 × 1/100 × 500_000 × dotFactor 1 = 5000
         const ticks = collectDotTicks(false, 'corrosion');
         expect(ticks.length).toBeGreaterThanOrEqual(1);
         expect(ticks[0]).toBeCloseTo(5000, 6);

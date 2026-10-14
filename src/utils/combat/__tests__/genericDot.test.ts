@@ -141,8 +141,8 @@ describe('generic DoT', () => {
         ];
         const ctx = {
             effectiveAttack: 100,
-            dotMult: 1,
-            affinityMult: 1,
+            outgoingDotPct: 0,
+            incomingDotPct: 0,
             effectiveDefence: 0,
             outgoingHealPct: 0,
             incomingHealPct: 0,
@@ -171,8 +171,8 @@ describe('generic DoT', () => {
     it('emits one tick per (dotType, tier) group; same-tier entries coalesce', () => {
         const ctx = {
             effectiveAttack: 100,
-            dotMult: 1,
-            affinityMult: 1,
+            outgoingDotPct: 0,
+            incomingDotPct: 0,
             effectiveDefence: 0,
             outgoingHealPct: 0,
             incomingHealPct: 0,
@@ -288,12 +288,14 @@ describe('generic DoT', () => {
             infernoEntries: [],
             genericDoTEntries: [],
             enemyHp: 100_000,
-            // A minimal applier ctx: corrosion scales off enemyHp, so dotMult/affinityMult of 1
+            // A minimal applier ctx: corrosion scales off enemyHp, so neutral DoT-damage sides
             // make the arithmetic readable (1 stack × 6% × 100,000 = 6,000).
             ctxFor: () =>
-                ({ dotMult: 1, affinityMult: 1, effectiveAttack: 0 }) as unknown as ReturnType<
-                    NonNullable<Parameters<typeof tickDoTs>[0]['ctxFor']>
-                >,
+                ({
+                    outgoingDotPct: 0,
+                    incomingDotPct: 0,
+                    effectiveAttack: 0,
+                }) as unknown as ReturnType<NonNullable<Parameters<typeof tickDoTs>[0]['ctxFor']>>,
             emitTicked: () => {},
             credit: (_s, _t, damage, preMitigation) => seen.push({ damage, preMitigation }),
             incomingDotFactor: () => 0.5,

@@ -19,11 +19,11 @@
  *
  * --- DoT-tick arithmetic (read before the cases) ---
  * Inside tickDoTs (engine.ts ~:752):
- *   corrosion tick = Σ entries:  stacks × (tier/100) × min(victimOwnMaxHp, 500_000) × dotMult × affinityMult
- *   inferno   tick = Σ entries:  stacks × (tier/100) × applierEffectiveAttack × dotMult × affinityMult
+ *   corrosion tick = Σ entries:  stacks × (tier/100) × min(victimOwnMaxHp, 500_000) × dotFactor
+ *   inferno   tick = Σ entries:  stacks × (tier/100) × applierEffectiveAttack × dotFactor
  * `remainingRounds` does NOT scale the per-tick value (it only governs expiry via expireStacks).
- * With neutral mults (dotMult 1, affinityMult 1, no Vortex Veil) the factors collapse cleanly.
- *   - Focus 'attacker' applier: effectiveAttack = its `attack` (no buffs), dotMult 1, affinityMult 1.
+ * With neutral mults (dotFactor 1, no Vortex Veil) the factors collapse cleanly.
+ *   - Focus 'attacker' applier: effectiveAttack = its `attack` (no buffs), dotFactor 1.
  *   - A victim's OWN max HP = maxHpOf(victim) → its seeded `hp`, static for the fight.
  * So a corrosion entry (tier 5, stacks 1) on a victim with maxHp 10000 ticks 0.05 × 10000 = 500.
  */
@@ -768,7 +768,7 @@ describe('per-victim DoT ticks at each positioned ship’s turn-start (PR-C C2)'
         // no turn ctx yet (`if (!ctx) continue`, engine.ts), and a `hp: 0` focus that is also
         // the heal target is skipped by the dead-target guard and never records one — measured: it
         // emits no `turn-started`, while the ally does. The ally's ctx is neutral (no DoT modifier,
-        // affinityDamageModifier 0 → dotMult 1, affinityMult 1), so it changes no factor below.
+        // affinityDamageModifier 0 → dotFactor 1), so it changes no factor below.
         let premise: { isPositional: boolean; resolvesVictim: boolean } | undefined;
         const { events, result } = collect(
             POSITIONAL_BASE({
@@ -798,7 +798,7 @@ describe('per-victim DoT ticks at each positioned ship’s turn-start (PR-C C2)'
         expect(premise).toEqual({ isPositional: true, resolvesVictim: false });
 
         // The tick fired, at the header's corrosion arithmetic:
-        //   tick = stacks × (tier/100) × min(victimOwnMaxHp, 500_000) × dotMult × affinityMult
+        //   tick = stacks × (tier/100) × min(victimOwnMaxHp, 500_000) × dotFactor
         //        = 1 × (5/100) × min(10_000, 500_000) × 1 × 1
         //        = 0.05 × 10_000 = 500
         // — drained from enemy-back's OWN HP through the per-victim enemySink at its turn-start.

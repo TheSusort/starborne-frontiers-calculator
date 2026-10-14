@@ -219,7 +219,6 @@ const bomb = (stacks: number, countdown: number): PendingBomb => ({
     stacks,
     tier: 1,
     sourceId: 'seed',
-    affinityMult: 1,
     detonationDamageModifier: 0,
     splashModifier: 0,
     appliedSeq: 0,

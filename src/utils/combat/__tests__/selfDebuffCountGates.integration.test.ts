@@ -188,7 +188,6 @@ const measure = (side: Side, cast: Cast, seed: Seed): Measured => {
                     stacks: 1,
                     tier: 1,
                     sourceId: 'seed',
-                    affinityMult: 1,
                     detonationDamageModifier: 0,
                     splashModifier: 0,
                 });

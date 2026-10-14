@@ -124,7 +124,6 @@ const expectedBomb: PendingBomb = {
     stacks: BOMB_STACKS,
     tier: BOMB_TIER,
     sourceId: 'attacker',
-    affinityMult: 1,
     detonationDamageModifier: 0,
     splashModifier: 0,
 };
@@ -191,7 +190,6 @@ describe('bomb-splash-on-death (positional core mechanic)', () => {
             stacks: 2,
             tier: 100,
             sourceId: 'attacker',
-            affinityMult: 1,
             detonationDamageModifier: 0,
             splashModifier: 0,
         };
@@ -264,7 +262,6 @@ describe('bomb-splash-on-death (positional core mechanic)', () => {
             stacks: 1,
             tier: 100,
             sourceId: 'enemy-b',
-            affinityMult: 1,
             detonationDamageModifier: 0,
             splashModifier: 0,
         };
@@ -363,16 +360,15 @@ describe('bomb-splash-on-death (positional core mechanic)', () => {
 
     // ─── (d) Multi-bomb / multi-ally ─────────────────────────────────────────
     // A dying ship has TWO pending bombs (tiers 100 and 300) and TWO living adjacent allies.
-    // Each ally takes the SUM of both bombs' splash. One bomb carries a non-neutral affinityMult
-    // (1.5) — the splash formula must ignore it (no-affinity proof, end-to-end).
-    it('(d) multi-bomb + multi-ally: each ally takes sum of all bombs; affinityMult is ignored', () => {
+    // Each ally takes the SUM of both bombs' splash.
+    it('(d) multi-bomb + multi-ally: each ally takes sum of all bombs', () => {
         idc = 0;
         // Carrier at M4 (dies to direct hit). Adjacent allies at M3 and B4.
         // M4 (q=2,r=1); M3 (q=1,r=1) Δ=(-1,0) ✓ adjacent.
         // B4 (q=2,r=2); M4 Δ=(0,1) ✓ adjacent.
-        // Bomb 1: tier=100, stacks=1, damagePerStack=1000, affinityMult=1.5 (must NOT affect splash).
+        // Bomb 1: tier=100, stacks=1, damagePerStack=1000.
         //   splash = 1×1000×0.25 = 250.
-        // Bomb 2: tier=300, stacks=1, damagePerStack=2000, affinityMult=1 (neutral).
+        // Bomb 2: tier=300, stacks=1, damagePerStack=2000.
         //   splash = 1×2000×0.75 = 1500.
         // Expected per-ally: 250 + 1500 = 1750.
         const bomb1: PendingBomb = {
@@ -381,7 +377,6 @@ describe('bomb-splash-on-death (positional core mechanic)', () => {
             stacks: 1,
             tier: 100,
             sourceId: 'attacker',
-            affinityMult: 1.5, // non-neutral — must not change splash
             detonationDamageModifier: 0,
             splashModifier: 0,
         };
@@ -391,7 +386,6 @@ describe('bomb-splash-on-death (positional core mechanic)', () => {
             stacks: 1,
             tier: 300,
             sourceId: 'attacker',
-            affinityMult: 1,
             detonationDamageModifier: 0,
             splashModifier: 0,
         };
@@ -447,7 +441,6 @@ describe('bomb-splash-on-death (positional core mechanic)', () => {
             stacks: BOMB_STACKS,
             tier: BOMB_TIER,
             sourceId: 'enemy-dead-applier',
-            affinityMult: 1,
             detonationDamageModifier: 0,
             splashModifier: 0,
         };
@@ -556,7 +549,6 @@ describe('bomb-splash-on-death (positional core mechanic)', () => {
             stacks: BOMB_STACKS,
             tier: BOMB_TIER,
             sourceId: 'enemy-carrier',
-            affinityMult: 1,
             detonationDamageModifier: 0,
             splashModifier: 50,
         };

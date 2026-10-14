@@ -198,7 +198,6 @@ const bomb = (stacks: number): PendingBomb => ({
     stacks,
     tier: 100,
     sourceId: 'seed',
-    affinityMult: 1,
     detonationDamageModifier: 0,
     splashModifier: 0,
 });

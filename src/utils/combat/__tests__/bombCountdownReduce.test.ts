@@ -8,7 +8,7 @@
  *     the bound anchor `enemy`.
  *   - Decrements each victim's PendingBomb.countdown by the ability's `turns`.
  *   - Any bomb reaching <= 0 detonates IMMEDIATELY using the EXACT `processBombs` burst formula
- *     (stacks * damagePerStack * affinityMult * (1 + detonationDamageModifier/100)), crediting
+ *     (stacks * damagePerStack * (1 + detonationDamageModifier/100)), crediting
  *     the bomb's ORIGINAL applier (`bomb.sourceId`) — NOT the caster — via a `bomb-detonated`
  *     bus emission, then routes the burst through the REAL per-victim `applyVictimDamage` sink
  *     (via `PlayerTurnArgs.forceDetonateBomb`, engine-supplied) when available, else a bare
@@ -148,7 +148,6 @@ function anchorBomb(): PendingBomb {
         stacks: 2,
         tier: 100,
         sourceId: 'ally-applier',
-        affinityMult: 1,
         detonationDamageModifier: 0,
         splashModifier: 0,
     };
@@ -163,7 +162,6 @@ function secondVictimBomb(): PendingBomb {
         stacks: 1,
         tier: 100,
         sourceId: 'ally-applier-2',
-        affinityMult: 1,
         detonationDamageModifier: 0,
         splashModifier: 0,
     };
@@ -372,7 +370,6 @@ const bomb = (
     stacks,
     tier: 100,
     sourceId,
-    affinityMult: 1,
     detonationDamageModifier: 0,
     splashModifier: 0,
 });
@@ -581,7 +578,6 @@ describe('reduceBombsOnVictim stops at a wiped container, keeps walking a dead h
         stacks: 1,
         tier: 100,
         sourceId,
-        affinityMult: 1,
         detonationDamageModifier: 0,
         splashModifier: 0,
     });
@@ -624,7 +620,6 @@ describe('reduceBombsOnVictim: Bombs driven to 0 together detonate oldest first'
         stacks: 1,
         tier: 100,
         sourceId: 'planter',
-        affinityMult: 1,
         detonationDamageModifier: 0,
         splashModifier: 0,
         appliedSeq,

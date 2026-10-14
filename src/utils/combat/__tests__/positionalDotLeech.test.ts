@@ -26,7 +26,7 @@
  * never touches `dmg()` / `roundPerTargetDamage` / `creditDealt`, so no DoT number moves.
  *
  * --- DoT-tick arithmetic (from tickDoTs) ---
- *   corrosion tick = stacks × (tier/100) × min(victimOwnMaxHp, 500_000) × dotMult × affinityMult
+ *   corrosion tick = stacks × (tier/100) × min(victimOwnMaxHp, 500_000) × dotFactor
  * With neutral mults, a tier-5 / 1-stack corrosion on a victim of maxHp 10000 ticks 500.
  * A 20% heal leech on 500 dealt → directHeal 100 (crit 0 / healModifier 0 → no fold).
  *
@@ -135,7 +135,6 @@ const timedBomb = (
     stacks,
     tier: 100,
     sourceId,
-    affinityMult: 1,
     detonationDamageModifier: 0,
     splashModifier: 0,
 });

@@ -83,7 +83,7 @@ const GEAR_SET_ABILITIES: Partial<
     CLOAKING: () =>
         mkNamedBuffGrant('Stealth', 'self', 'start-of-round', 2, { oncePerCombat: true }),
     // Decimation (2pc set): +10% DoT damage per complete set, max 3 sets (6 pieces) = +30%.
-    // Standing passive → modeled as a dotDamage modifier that folds into dotMult via
+    // Standing passive → modeled as a dotDamage modifier that folds into outgoingDotPct via
     // effectiveDamageStatsOf.selfDotDamageModifier (engine + DPS calc both honor it).
     DECIMATION: (sets) => ({
         type: 'modifier',

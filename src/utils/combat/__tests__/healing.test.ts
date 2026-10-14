@@ -1344,8 +1344,8 @@ describe('healing mode — enemy attackers and target intake', () => {
     // 1). The target (focus, speed 100) acts FIRST each round; its DoT entries tick at its
     // turn-start. No heals (hp 100000 → never dies, isolates the DoT bleed).
     //
-    // Inferno tick = stacks 1 × (tier 100/100) × applier effectiveAttack 5000 × dotMult 1 ×
-    //   affinityMult 1 = 5000. duration 1 → exactly ONE tick per application (no compounding):
+    // Inferno tick = stacks 1 × (tier 100/100) × applier effectiveAttack 5000 × dotFactor 1
+    //   = 5000. duration 1 → exactly ONE tick per application (no compounding):
     //   the entry applied on round N ticks once at round N+1's tank turn-start, then expires.
     //
     //   R1: tank tick — no entries yet → 0. enemy: direct 5000 → HP 95000; apply inferno

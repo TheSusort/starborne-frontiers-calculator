@@ -488,7 +488,6 @@ describe('Echoing Burst accumulators are debuffs in the DoT-container helpers (R
                 stacks: 1,
                 tier: 1,
                 sourceId: 's',
-                affinityMult: 1,
                 detonationDamageModifier: 0,
                 splashModifier: 0,
                 appliedSeq: 2,

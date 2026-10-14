@@ -272,10 +272,10 @@ describe('walked team actors (Task 4)', () => {
         expect(result.rounds.every((r) => r.infernoDamage === 0)).toBe(true);
 
         // Expected round-1 inferno tick from the team's attack (no buffs → effectiveAttack =
-        // team attack, dotMult = 1, neutral affinity → affinityMult = 1). The team applies a
+        // team attack, dotFactor = 1). The team applies a
         // fresh inferno entry each of its turns, so by round 2 two entries tick — assert the
         // exact single-application value on round 1, where there is exactly one entry.
-        const expectedTick = stacks * (tier / 100) * teamAttack * 1 * 1;
+        const expectedTick = stacks * (tier / 100) * teamAttack * 1;
         // Team applies on round 1 (speed 140, before attacker) → ticks on the enemy turn r1.
         // No team damage ability → team direct is 0, so the team's OWN round-1 share is the tick.
         expect(teamOwn(result.rounds[0])).toBeCloseTo(expectedTick, 0);
@@ -1233,11 +1233,10 @@ describe('reactive parity (Task 6)', () => {
     });
 });
 
-describe('per-applier bomb affinity at skill-driven detonation (PR #84 review)', () => {
-    // A bomb bursts with the APPLIER's affinity matchup snapshotted at application —
-    // not the detonating actor's. Team (thermal) applies vs a chemical enemy
-    // (advantage ×1.25); the NEUTRAL attacker detonates the pool the same round.
-    it("detonating an ally's bomb keeps the ally's affinity modifier", () => {
+describe("an ally's bomb at skill-driven detonation", () => {
+    // A bomb bursts for its applier's snapshot with no affinity: neither the applier's
+    // advantage (team thermal vs a chemical enemy) nor the NEUTRAL detonator's matchup scales it.
+    it("detonating an ally's bomb pays the ally's snapshot, unscaled by affinity", () => {
         const bombTeam = walkedTeam(
             {
                 slots: [{ slot: 'active', abilities: [dotAbility('bomb', 100, 2, 3, 'tbomb')] }],
@@ -1272,8 +1271,7 @@ describe('per-applier bomb affinity at skill-driven detonation (PR #84 review)',
         );
         // Round 1: team (speed 140) applies the bomb (damagePerStack = teamStats default
         // attack 15000 × tier 100% = 15000, 2 stacks), then the attacker's detonate consumes
-        // the pool with the TEAM's 1.25 affinity: 2 × 15000 × 1.25 = 37500. The detonating
-        // actor's neutral modifier would (wrongly) give 30000.
-        expect(result.rounds[0].detonationDamage).toBeCloseTo(37500, 0);
+        // the pool: 2 × 15000 = 30000.
+        expect(result.rounds[0].detonationDamage).toBeCloseTo(30000, 0);
     });
 });

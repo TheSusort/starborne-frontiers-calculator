@@ -69,8 +69,8 @@ const incDamageDownSelfBuff = (id: string): Ability => ({
     },
 });
 
-// A pre-seeded TIMED bomb. burst = stacks × damagePerStack × affinityMult × (1 + detMod/100).
-// With neutral mults (affinityMult 1, detMod 0): burst = stacks × damagePerStack.
+// A pre-seeded TIMED bomb. burst = stacks × damagePerStack × (1 + detMod/100).
+// With detMod 0: burst = stacks × damagePerStack.
 const timedBomb = (
     damagePerStack: number,
     stacks: number,
@@ -82,7 +82,6 @@ const timedBomb = (
     stacks,
     tier: 100,
     sourceId,
-    affinityMult: 1,
     detonationDamageModifier: 0,
     splashModifier: 0,
 });

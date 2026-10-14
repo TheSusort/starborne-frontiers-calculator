@@ -137,7 +137,6 @@ describe('Demolisher: a Bomb explosion drains only the enemy it exploded on', ()
         stacks: 1,
         tier: 100,
         sourceId: 'seed',
-        affinityMult: 1,
         detonationDamageModifier: 0,
         splashModifier: 0,
     });

@@ -83,7 +83,6 @@ const bomb = (damagePerStack: number, stacks: number, sourceId = 'attacker'): Pe
     stacks,
     tier: 100,
     sourceId,
-    affinityMult: 1,
     detonationDamageModifier: 0,
     splashModifier: 0,
 });

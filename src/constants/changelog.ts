@@ -9,6 +9,11 @@ export const CURRENT_VERSION = '1.76.0';
 export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: Chimei only redirects over-repair from refit 2 onwards.',
     'Ability editor: HP buffs and modifiers removed, since max HP never changes mid-fight.',
+    'Combat simulator: attacker and victim DoT damage buffs now multiply together.',
+    'Combat simulator: DoT ticks, bombs and detonations no longer get affinity bonuses.',
+    'DPS calculator: Out. DoT and Inc. DoT buffs now multiply together.',
+    'DPS calculator: DoT ticks, bombs and detonations no longer get affinity bonuses.',
+    "Combat simulator: Protection's redirected damage now uses the protector's own damage reductions.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

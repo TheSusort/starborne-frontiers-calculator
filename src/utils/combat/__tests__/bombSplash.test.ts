@@ -13,7 +13,6 @@ function makeBomb(overrides: Partial<PendingBomb> = {}): PendingBomb {
         stacks: 2,
         tier: 200,
         sourceId: 'src-1',
-        affinityMult: 1.3, // intentionally ≠ 1 — must NOT affect splash math
         detonationDamageModifier: 0,
         splashModifier: 0,
         ...overrides,
@@ -61,27 +60,5 @@ describe('splashDamageForBomb', () => {
     it('tier-300 bomb: 1 × 2000 × 0.75 = 1500', () => {
         const bomb = makeBomb({ stacks: 1, damagePerStack: 2000, tier: 300 });
         expect(splashDamageForBomb(bomb)).toBe(1500);
-    });
-
-    it('affinityMult (1.3) does NOT affect result — bombs are not affinity-scaled', () => {
-        // bomb has affinityMult: 1.3 baked in via makeBomb defaults.
-        // The result must be identical to a bomb with affinityMult: 1.
-        const bombHighAffinity = makeBomb({
-            stacks: 2,
-            damagePerStack: 1000,
-            tier: 200,
-            affinityMult: 1.3,
-        });
-        const bombNeutralAffinity = makeBomb({
-            stacks: 2,
-            damagePerStack: 1000,
-            tier: 200,
-            affinityMult: 1.0,
-        });
-        expect(splashDamageForBomb(bombHighAffinity)).toBe(
-            splashDamageForBomb(bombNeutralAffinity)
-        );
-        // Absolute value check as well
-        expect(splashDamageForBomb(bombHighAffinity)).toBe(1000);
     });
 });

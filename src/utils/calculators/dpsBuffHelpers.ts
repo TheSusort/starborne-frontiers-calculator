@@ -140,20 +140,22 @@ export function toSelfDefenseModifier(selected: SelectedGameBuff[]): number {
     );
 }
 
-export function toDotAndPenModifiers(
-    attacker: SelectedGameBuff[],
-    enemy: SelectedGameBuff[]
-): { defensePenetrationBuff: number; dotDamageModifier: number; detonationDamageModifier: number } {
+/** The attacker's own penetration, Out. DoT and Out. Detonation %s. Dealer-side only: a victim's
+ *  Inc. DoT Damage Up is the other factor of `composeDotDamageFactor` (`toEnemyDotModifier`). */
+export function toDotAndPenModifiers(attacker: SelectedGameBuff[]): {
+    defensePenetrationBuff: number;
+    dotDamageModifier: number;
+    detonationDamageModifier: number;
+} {
     return {
         defensePenetrationBuff: attacker.reduce(
             (sum, s) => sum + (s.parsedEffects.defensePenetration ?? 0) * s.stacks,
             0
         ),
-        dotDamageModifier:
-            attacker.reduce((sum, s) => sum + (s.parsedEffects.dotDamage ?? 0) * s.stacks, 0) +
-            enemy.reduce((sum, s) => sum + (s.parsedEffects.incomingDotDamage ?? 0) * s.stacks, 0),
-        // Outgoing-only: there is no incoming-detonation buff in the corpus, so the enemy list
-        // contributes nothing here (unlike dotDamageModifier above).
+        dotDamageModifier: attacker.reduce(
+            (sum, s) => sum + (s.parsedEffects.dotDamage ?? 0) * s.stacks,
+            0
+        ),
         detonationDamageModifier: attacker.reduce(
             (sum, s) => sum + (s.parsedEffects.detonationDamage ?? 0) * s.stacks,
             0

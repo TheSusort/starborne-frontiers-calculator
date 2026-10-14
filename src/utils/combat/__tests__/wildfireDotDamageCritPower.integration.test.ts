@@ -28,7 +28,7 @@
  * active skill firing the same debuff + dot abilities every round) — one WITH the new
  * dotDamage-scaling modifier ability, one WITHOUT. Because both runs apply the exact same
  * DoT entries each round, any difference in `infernoDamage` is attributable ONLY to the
- * modifier's dotMult delta — sidestepping cross-round DoT-stacking arithmetic entirely.
+ * modifier's DoT-factor delta — sidestepping cross-round DoT-stacking arithmetic entirely.
  */
 import { describe, it, expect } from 'vitest';
 import { runCombat, CombatEngineInput } from '../engine';
@@ -180,7 +180,7 @@ describe('Wildfire dotDamage crit-power scaling (sub-project I, PR I4a/I4b) — 
         const controlResult = runCombat(engineBase(control));
 
         // Round 1's own Scorching Radiation infliction is now pre-existing at the start of
-        // round 2 → the gate reads true → dotMult gains +15pp (critDamage 150 * perUnit 0.1).
+        // round 2 → the gate reads true → outgoingDotPct gains +15pp (critDamage 150 * perUnit 0.1).
         // Both runs apply IDENTICAL DoT entries/stacking each round, so the ratio isolates the
         // modifier's delta cleanly regardless of how many entries are actively ticking.
         expect(controlResult.rounds[1].infernoDamage).toBeGreaterThan(0);
@@ -246,10 +246,10 @@ describe('Wildfire dotDamage crit-power scaling (sub-project I, PR I4a/I4b) — 
 });
 
 // ---------------------------------------------------------------------------
-// I4b — per-VICTIM gating. The cast-time approximation (I4a) baked ONE dotMult from the
+// I4b — per-VICTIM gating. The cast-time approximation (I4a) baked ONE outgoingDotPct from the
 // PRIMARY target's gate and applied it to every tick the caster's DoTs produced, on ANY
 // victim. These tests prove the fix: the SAME applier's ctx produces a DIFFERENT effective
-// dotMult depending on which victim is ticking, based on THAT victim's own live status.
+// DoT factor depending on which victim is ticking, based on THAT victim's own live status.
 // ---------------------------------------------------------------------------
 describe('Wildfire dotDamage crit-power scaling — I4b per-victim/per-tick gating', () => {
     // A passive, high-HP, positioned enemy — reused for both the (targeted) front victim and

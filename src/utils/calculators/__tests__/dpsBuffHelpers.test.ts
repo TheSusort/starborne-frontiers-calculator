@@ -130,7 +130,7 @@ describe('toSelfDefenseModifier', () => {
 
 describe('toDotAndPenModifiers', () => {
     it('returns zeros for no buffs', () => {
-        expect(toDotAndPenModifiers([], [])).toEqual({
+        expect(toDotAndPenModifiers([])).toEqual({
             defensePenetrationBuff: 0,
             dotDamageModifier: 0,
             detonationDamageModifier: 0,
@@ -138,16 +138,16 @@ describe('toDotAndPenModifiers', () => {
     });
 
     it('sums defensePenetration from attacker buffs', () => {
-        const result = toDotAndPenModifiers([makeBuff({ defensePenetration: 20 })], []);
+        const result = toDotAndPenModifiers([makeBuff({ defensePenetration: 20 })]);
         expect(result.defensePenetrationBuff).toBe(20);
     });
 
-    it('combines attacker dotDamage and enemy incomingDotDamage', () => {
-        const result = toDotAndPenModifiers(
-            [makeBuff({ dotDamage: 30 })],
-            [makeBuff({ incomingDotDamage: 20 })]
-        );
-        expect(result.dotDamageModifier).toBe(50);
+    it('reads the attacker dotDamage only; a self incomingDotDamage is not a dealer term', () => {
+        const result = toDotAndPenModifiers([
+            makeBuff({ dotDamage: 30 }),
+            makeBuff({ incomingDotDamage: 20 }),
+        ]);
+        expect(result.dotDamageModifier).toBe(30);
     });
 });
 
@@ -285,14 +285,14 @@ describe('toDotAndPenModifiers — detonation channel', () => {
     });
 
     it('sums attacker-side detonationDamage', () => {
-        expect(toDotAndPenModifiers([buff(45)], []).detonationDamageModifier).toBe(45);
+        expect(toDotAndPenModifiers([buff(45)]).detonationDamageModifier).toBe(45);
     });
 
     it('scales by stacks', () => {
-        expect(toDotAndPenModifiers([buff(45, 2)], []).detonationDamageModifier).toBe(90);
+        expect(toDotAndPenModifiers([buff(45, 2)]).detonationDamageModifier).toBe(90);
     });
 
     it('is 0 when no buff carries the channel', () => {
-        expect(toDotAndPenModifiers([], []).detonationDamageModifier).toBe(0);
+        expect(toDotAndPenModifiers([]).detonationDamageModifier).toBe(0);
     });
 });

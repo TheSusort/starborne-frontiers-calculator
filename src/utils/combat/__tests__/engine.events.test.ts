@@ -961,8 +961,8 @@ describe('Phase 3 Task 3 — event shape and timing', () => {
             .filter((e) => e.type === 'bomb-detonated')
             .reduce((sum, e) => sum + (e.type === 'bomb-detonated' ? e.damage : 0), 0);
 
-        // With modifier 0: burst = stacks × damagePerStack × affinityMult × (1 + 0/100) = baseBurst
-        // With modifier 100: burst = stacks × damagePerStack × affinityMult × (1 + 100/100) = 2 × baseBurst
+        // With modifier 0: burst = stacks × damagePerStack × (1 + 0/100) = baseBurst
+        // With modifier 100: burst = stacks × damagePerStack × (1 + 100/100) = 2 × baseBurst
         expect(baseBurst).toBeGreaterThan(0);
         expect(modBurst).toBe(baseBurst * 2);
     });

@@ -158,7 +158,7 @@ export type { IncomingReductionParts } from '../damageComposition';
  * read the exact factor that was applied instead of re-deriving one from the victim's live stats.
  *
  * The engine's Protection cascade is that consumer: it recovers the pre-defence amount `P` from
- * an already-mitigated hit (`P = damage / targetMitigation`) so a redirected chunk can be
+ * an already-mitigated hit (`RedirectBasis.defenceMitigation`) so a redirected chunk can be
  * re-mitigated on the PROTECTOR's defence. A re-derivation there silently omitted whatever the
  * caller had folded in — the attacker's defence penetration, and the difference between the
  * victim's raw and buff-folded defence stat — and skewed every chunk. Exported so the two can
@@ -224,7 +224,7 @@ export function victimHitDamageParts(
     roleScale: number,
     reduction: IncomingReductionParts = NO_INCOMING_REDUCTION,
     attackerCritPenaltyPct = 0
-): { damage: number; preMitigation: number; reflectBase: number } {
+): { damage: number; preMitigation: number; reflectBase: number; incomingFactor: number } {
     // preCritDamage assembled exactly as the engine, then split evenly per hit.
     const multiplierPct = s.multiplierPct + (v.multiplierDeltaPct ?? 0);
     const preCritDamage = s.effectiveAttack * (multiplierPct / 100) + s.secondaryStatValue;
@@ -282,5 +282,8 @@ export function victimHitDamageParts(
         // The hit as thrown, before every multiplier: no crit, outgoing, affinity, defence or
         // incoming term. What a reflector reflects its percentage of (#678).
         reflectBase: perHitShare * roleScale,
+        // The non-defence incoming factor folded into `damage` — a Protection cascade divides by
+        // it (`RedirectBasis.incomingFactor`).
+        incomingFactor,
     };
 }

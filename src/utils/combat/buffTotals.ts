@@ -213,7 +213,7 @@ export function incomingHealFactor(pct: number): number {
 //   • `incomingHeal` / `outgoingHeal` — `victimOwnEnemyHealModifiers` vs the same named self
 //     statuses, combined in playerTurn's late fold (#367 folded them additively; #396 does not).
 // Every OTHER channel was checked and has NO meeting point: `incomingDotDamage` is read from the
-// enemy list only (`toDotAndPenModifiers`' `enemy` argument) and never from a self list;
+// enemy list only (`toEnemyDotModifier`) and never from a self list;
 // `dotDamage`, `detonationDamage`, `defensePenetration` and `hotPct` are read from the
 // self/attacker list only.
 //

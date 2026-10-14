@@ -14,6 +14,7 @@ import {
     type VictimDefenseProfile,
 } from './victimDamage';
 import type { CombatActor } from './state';
+import type { RedirectBasis } from './protectionTransfer';
 
 /**
  * One footprint cell that landed on a living opposing actor.
@@ -324,15 +325,13 @@ export function applyPositionalDamage(args: {
         isAnchor?: boolean,
         subAttackIndex?: number,
         /**
-         * The DEFENCE mitigation factor already folded into `damage` for THIS victim
-         * (`victimDefenceMitigation(defenseProfileOf(victim), scalars.defensePenetrationPct)`).
-         * Handed down rather than re-derived downstream so the engine's Protection cascade can
-         * recover the pre-defence amount by dividing by the factor that was actually applied —
-         * a re-derivation from the victim's live stats omits the attacker's penetration and
-         * reads a buff-folded defence the caller never used. Trailing and optional so existing
-         * stub callers compile unchanged.
+         * The victim-side factors already folded into `damage` for THIS victim (its defence
+         * factor `victimDefenceMitigation(...)` and incoming factor
+         * `victimHitDamageParts(...).incomingFactor`) plus the hit's crit outcome. Handed down
+         * rather than re-derived so the engine's Protection cascade divides by exactly what was
+         * applied (`RedirectBasis`). Trailing and optional so existing stub callers compile.
          */
-        targetMitigation?: number,
+        redirectBasis?: RedirectBasis,
         /**
          * #358 ADDENDUM 2: the PRE-defence-mitigation amount this hit threw at the victim — the
          * same computation as `damage` with the defence term removed. Recorded by the funnel as
@@ -584,6 +583,7 @@ export function applyPositionalDamage(args: {
                 damage: dmgBase,
                 preMitigation: rawBase,
                 reflectBase,
+                incomingFactor,
             } = victimHitDamageParts(
                 scalars,
                 defenseProfile,
@@ -601,7 +601,14 @@ export function applyPositionalDamage(args: {
                 dmg,
                 isAnchor,
                 h,
-                victimDefenceMitigation(defenseProfile, scalars.defensePenetrationPct),
+                {
+                    defenceMitigation: victimDefenceMitigation(
+                        defenseProfile,
+                        scalars.defensePenetrationPct
+                    ),
+                    incomingFactor,
+                    didCrit,
+                },
                 rawDmg,
                 isPrimary,
                 reflectBase

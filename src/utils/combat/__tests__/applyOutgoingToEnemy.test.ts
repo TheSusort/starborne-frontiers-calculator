@@ -269,7 +269,7 @@ describe('reflect tripwire through the real wrapper (#678)', () => {
         damage: number,
         victim: CombatActor,
         isPrimaryTarget?: boolean,
-        targetMitigation?: number,
+        redirectBasis?: unknown,
         preMitigationDamage?: number,
         reflectBase?: number
     ) => unknown;

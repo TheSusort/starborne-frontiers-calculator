@@ -110,7 +110,7 @@ export function modifierTotalsFromAbilities(
  * UNCONDITIONAL dotDamage source (Decimation set gear) but wrong for a per-victim-gated one
  * (Wildfire), whose gate must be re-evaluated per TICK against the ticking victim's OWN
  * live status (see `PlayerRoundCtx.victimGatedDotDamage` / `tickDoTs` in engine.ts). Callers
- * feed `unconditional` into the normal `effectiveDamageStatsOf` fold (baking `dotMult` as
+ * feed `unconditional` into the normal `effectiveDamageStatsOf` fold (baking `outgoingDotPct` as
  * before) and stash `conditional` + the cast-time ctx for later per-victim resolution.
  * Empty `conditional` (the overwhelming common case — every non-Wildfire-shaped ship) is a
  * byte-identical no-op: `unconditional` is the full original list.

@@ -487,7 +487,6 @@ describe('Shield Converter survives hits it never actually converted', () => {
             stacks: 1,
             tier: 100,
             sourceId: 'enemy-applier',
-            affinityMult: 1,
             detonationDamageModifier: 0,
             splashModifier: 0,
         });
