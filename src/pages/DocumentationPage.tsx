@@ -4998,7 +4998,8 @@ const DocumentationPage: React.FC = () => {
                                     holds intercepts 10% of the direct damage another ally would
                                     take, redirecting that share onto the protector instead — the
                                     redirected share is absorbed against the protector&apos;s own
-                                    defense rather than the original target&apos;s, so the
+                                    defense and its own damage reductions (Inc. Damage Down,
+                                    passives) rather than the original target&apos;s, so the
                                     attacker&apos;s affinity match-up against the original target is
                                     unaffected. Protection covers all living allies (not only
                                     adjacent ones), allowing any protected ship to intercept damage

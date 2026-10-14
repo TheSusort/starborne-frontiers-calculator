@@ -13,6 +13,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: DoT ticks, bombs and detonations no longer get affinity bonuses.',
     'DPS calculator: Out. DoT and Inc. DoT buffs now multiply together.',
     'DPS calculator: DoT ticks, bombs and detonations no longer get affinity bonuses.',
+    "Combat simulator: Protection's redirected damage now uses the protector's own damage reductions.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

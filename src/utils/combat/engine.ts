@@ -128,6 +128,7 @@ import {
     victimDefenceMitigation,
     victimDefenceReductionPct,
     composeDotReductionFactor,
+    composeIncomingFactor,
 } from './victimDamage';
 import {
     incomingReductionPartsForHit,
@@ -227,7 +228,7 @@ import { holdsRoguesLiberty } from './rogueLiberty';
 import { holdsToxicOverflow, toxicOverflowApplierOf } from './toxicOverflowStatus';
 import { supportFootprintAllyIds } from './supportFootprint';
 import type { PreFightCombatModifiers } from './preFight/types';
-import { protectionCascade } from './protectionTransfer';
+import { protectionCascade, type RedirectBasis } from './protectionTransfer';
 
 /** Tripwire for NON-chainable extra-action grants: a non-once-per-round grant whose conditions
  *  stay true re-fires on the extra turn it granted. Every non-chainable corpus grant is
@@ -6410,12 +6411,13 @@ export function runCombat(rawInput: CombatEngineInput): {
                  *  chunk. The transfer block skips when set → a redirected chunk's own
                  *  cascade was already precomputed, so it never re-triggers (loop-safe). */
                 isProtectionTransfer?: boolean;
-                /** The DEFENCE mitigation factor the CALLER already folded into `rawDamage` for
-                 *  this victim (`victimDefenceMitigation`). Read ONLY by the Protection transfer
-                 *  block, which must divide by the exact factor that was applied to recover the
-                 *  pre-defence amount. Absent → the block falls back to re-deriving one from the
-                 *  victim's live defence (see the fallback's note for what that misses). */
-                targetMitigation?: number;
+                /** The victim-side factors the CALLER already folded into `rawDamage` for this
+                 *  victim (defence and incoming composition) and the hit's crit outcome. Read ONLY
+                 *  by the Protection transfer block, which divides by exactly these factors and
+                 *  prices each protector's chunk on the protector's own. Absent → a hit kind that
+                 *  folds no incoming composition (bomb and accumulator bursts): the block
+                 *  re-derives the defence factor and applies no incoming factor on either ship. */
+                redirectBasis?: RedirectBasis;
                 /** #358: the amount the caller reduced to produce `rawDamage` for this
                  *  victim — pre-defence-mitigation, and pre EVERY other victim-side
                  *  reduction the caller applied: the `Inc. Damage Down` family, passive/gear
@@ -6429,7 +6431,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                  *  and must supply this — both tick sites do, and both are pinned (the heal-target
                  *  branch by `defenseSurvivabilitySim.test.ts` channel 6, the per-victim twin by
                  *  `rawIntakeAxis.test.ts` path 8).
-                 *  Never reconstructed by dividing by `targetMitigation` — that is lossy and
+                 *  Never reconstructed by dividing by `redirectBasis` — that is lossy and
                  *  undefined at a factor of 0. */
                 preMitigationDamage?: number;
                 /** The hit as THROWN, which a reflector reflects its percentage of (#678):
@@ -6559,8 +6561,8 @@ export function runCombat(rawInput: CombatEngineInput): {
             }
             // Protection damage transfer. A living ally holding Protection stacks intercepts a
             // fraction (10%/stack) of this victim's direct hit. The redirected chunk keeps the
-            // ORIGINAL target's affinity/outgoing (both baked into `damage`) and re-mitigates on
-            // the PROTECTOR's own defense — realized by the mit-ratio inside protectionCascade.
+            // ORIGINAL target's affinity/outgoing (both baked into `damage`) and is priced on the
+            // PROTECTOR's own defence and incoming reductions — read `protectionCascade`.
             // Guards: direct damage only, and never a redirected application (loop-safe), the
             // Reflect gear set's bounce, or a Bomb splash copy. Counters, reactive procs and a
             // ship's reflect are redirected (rulings 36, R162).
@@ -6590,57 +6592,69 @@ export function runCombat(rawInput: CombatEngineInput): {
             ) {
                 const protectors = protectorsFor(victim);
                 if (protectors.length > 0) {
-                    // `damage` arrives ALREADY mitigated by the caller's own defence read, and the
-                    // cascade recovers the pre-defence amount `P = damage / targetMit` so a
-                    // redirected chunk can be re-mitigated on the PROTECTOR's defence instead. So
-                    // `targetMit` must be EXACTLY the factor the caller applied — anything else
-                    // rescales `P` and skews every chunk.
+                    // `damage` arrives ALREADY reduced by the caller's victim-side factors, and the
+                    // cascade divides them back out (`P = damage / (targetMit × incoming)`) so a
+                    // redirected chunk can be priced on the PROTECTOR's own. So both factors must be
+                    // EXACTLY what the caller applied — anything else rescales `P` and skews every
+                    // chunk. Every direct-hit caller that computes them (the positional cast, the
+                    // passive-slot instance, counters, reactive procs, a direct reflect) hands them
+                    // down as `cause.redirectBasis`. Re-deriving the defence factor here instead
+                    // drops the attacker's defence PENETRATION and, per #358, an AURA-granted
+                    // self-defence buff (`effectiveStatsOf(...).defence` folds only scheduled and
+                    // timed self-buffs).
                     //
-                    // The positional apply path (every cast in the sim) therefore hands its own
-                    // factor down as `cause.targetMitigation`, computed by the same
-                    // `victimDefenceMitigation` that produced the hit. Re-deriving it here instead
-                    // drops the attacker's defence PENETRATION (a 50%-pen hit inflated the chunk by
-                    // ~7%) — always missing from the re-derivation below, pen or no pen — and,
-                    // per #358, can still diverge on an AURA-granted self-defence
-                    // buff: `victimDefenseProfileOf`'s `defenceModifierPct` folds all THREE of
-                    // `victimSelfBuffs`' self-buff channels (scheduled + timed + aura) for both a
-                    // victim's own `Defense Up`/`Overload` and an enemy's `Defense Shred`, while
-                    // `effectiveStatsOf(...).defence` below folds only the first two. A SCHEDULED or
-                    // TIMED self-defence buff therefore does NOT diverge between the two reads —
-                    // only penetration and an aura-only defence buff can skew a re-derived `P`
-                    // here.
-                    //
-                    // The fallback below still serves the non-positional direct-damage callers
-                    // (bomb/detonation applies, reactive procs), which do not compute a per-victim
-                    // profile at all: `substitutedDefenceFor` recovers a defense-substitution
-                    // victim's CARRIER defence (Meatshield R4), and is a no-op pass-through to
-                    // `victimDef` when no carrier applies. It remains blind to penetration and to
-                    // `defenceModifierPct`; closing that would mean threading a profile into those
-                    // callers too, which nothing in the corpus currently exercises.
+                    // The fallback below serves the basis-less callers (bomb and accumulator
+                    // bursts): `substitutedDefenceFor` recovers a defense-substitution victim's
+                    // CARRIER defence (Meatshield R4), and is a no-op pass-through to `victimDef`
+                    // when no carrier applies.
                     const victimDef = effectiveStatsOf(
                         statusEngine,
                         selfBuffLookup,
                         victim
                     ).defence;
                     const targetDef = substitutedDefenceFor(victim, victimDef);
+                    const basis = cause.redirectBasis;
                     const targetMit =
-                        cause.targetMitigation ??
+                        basis?.defenceMitigation ??
                         (targetDef > 0 ? 1 - calculateDamageReduction(targetDef) / 100 : 1);
+                    // Each ship prices its own part (owner-measured 2026-10-14; read
+                    // `protectionCascade`): the protector's chunk takes the protector's OWN
+                    // incoming composition — its Inc. Damage Up/Down and its passive, gear and
+                    // squad-leader reductions — for the same crit outcome, never the target's.
+                    // Exposed stays out: the chunk is not a direct hit on the protector (R139).
+                    // A basis-less hit (a bomb burst) reads no incoming composition on the
+                    // target, so it applies none on the protector either.
+                    const protectorIncomingFactor = (protectorId: string): number => {
+                        if (!basis) return 1;
+                        const channel = victimIncomingModifiers(
+                            protectorId,
+                            landedScheduledEnemyEffectsByActor.get(cause.killerId ?? '') ?? [],
+                            false
+                        ).incomingDamageModifier;
+                        return composeIncomingFactor(
+                            channel,
+                            hitReductionFor(cause.killerId ?? '', protectorId, basis.didCrit).parts
+                        );
+                    };
                     const cascade = protectionCascade(
                         damage,
                         targetMit,
-                        protectors.map((p) => ({
-                            stacks: p.stacks,
-                            mit:
-                                effectiveStatsOf(statusEngine, selfBuffLookup, p.actor).defence > 0
-                                    ? 1 -
-                                      calculateDamageReduction(
-                                          effectiveStatsOf(statusEngine, selfBuffLookup, p.actor)
-                                              .defence
-                                      ) /
-                                          100
-                                    : 1,
-                        }))
+                        protectors.map((p) => {
+                            const protectorDef = effectiveStatsOf(
+                                statusEngine,
+                                selfBuffLookup,
+                                p.actor
+                            ).defence;
+                            return {
+                                stacks: p.stacks,
+                                mit:
+                                    protectorDef > 0
+                                        ? 1 - calculateDamageReduction(protectorDef) / 100
+                                        : 1,
+                                incomingFactor: protectorIncomingFactor(p.actor.id),
+                            };
+                        }),
+                        basis?.incomingFactor ?? 1
                     );
                     protectionSplit = cascade.targetRetainedFraction < 1;
                     fullyRedirected = cascade.targetRetainedFraction <= 0;
@@ -7524,8 +7538,12 @@ export function runCombat(rawInput: CombatEngineInput): {
                                         ...(directReflect
                                             ? {
                                                   directReflect: true,
-                                                  targetMitigation:
-                                                      1 - shareDefenceReductionPct / 100,
+                                                  redirectBasis: {
+                                                      defenceMitigation:
+                                                          1 - shareDefenceReductionPct / 100,
+                                                      incomingFactor: bounce.incomingFactor,
+                                                      didCrit: false,
+                                                  },
                                               }
                                             : {}),
                                         shieldPenetrationPct: directReflect
@@ -7790,10 +7808,10 @@ export function runCombat(rawInput: CombatEngineInput): {
                 byDirectDamage?: boolean;
                 bombPortion?: number;
                 isReflected?: boolean;
-                /** The defence mitigation factor already folded into `damage` for this
-                 *  victim, supplied by the positional apply. See applyVictimDamage's
-                 *  `cause.targetMitigation`. */
-                targetMitigation?: number;
+                /** The victim-side factors already folded into `damage` for this victim,
+                 *  supplied by the positional apply. See applyVictimDamage's
+                 *  `cause.redirectBasis`. */
+                redirectBasis?: RedirectBasis;
                 /** #358 ADDENDUM 2/3 — see applyVictimDamage's `cause.preMitigationDamage`. */
                 preMitigationDamage?: number;
                 /** See applyVictimDamage's `cause.reflectBase`. */
@@ -7833,9 +7851,9 @@ export function runCombat(rawInput: CombatEngineInput): {
             // Forwarded to applyVictimDamage's cause.isPrimaryTarget (Nosorog's
             // reflect gate). Undefined ⟹ treated as primary.
             isPrimaryTarget?: boolean,
-            // The defence mitigation factor already folded into `damage` for this victim,
-            // supplied by the positional apply. See applyVictimDamage's `cause.targetMitigation`.
-            targetMitigation?: number,
+            // The victim-side factors already folded into `damage` for this victim, supplied by
+            // the positional apply. See applyVictimDamage's `cause.redirectBasis`.
+            redirectBasis?: RedirectBasis,
             /** #358 ADDENDUM 2/3 — the pre-REDUCTION twin of `damage` (pre-defence and pre every
              *  other victim-side reduction), supplied by the positional apply. See
              *  applyVictimDamage's `cause.preMitigationDamage`. */
@@ -7851,7 +7869,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 byDirectDamage: true,
                 shieldPenetrationPct: attackerShieldPenOf(actingActorId),
                 isPrimaryTarget,
-                targetMitigation,
+                redirectBasis,
                 preMitigationDamage,
                 reflectBase,
             });
@@ -8109,11 +8127,15 @@ export function runCombat(rawInput: CombatEngineInput): {
                     // `victimHitDamage`; `rawPreMit` is the same walk without it.
                     preMitigationDamage: rawPreMit,
                     reflectBase: rawParts.reflectBase,
-                    // The exact defence factor `raw` carries, for the Protection cascade.
-                    targetMitigation: victimDefenceMitigation(
-                        profile,
-                        ownerOutgoing.defensePenetration
-                    ),
+                    // The exact victim-side factors `raw` carries, for the Protection cascade.
+                    redirectBasis: {
+                        defenceMitigation: victimDefenceMitigation(
+                            profile,
+                            ownerOutgoing.defensePenetration
+                        ),
+                        incomingFactor: rawParts.incomingFactor,
+                        didCrit,
+                    },
                     shieldPenetrationPct: attackerShieldPenOf(owner.id),
                     bombPortion: 0,
                 });
@@ -8228,6 +8250,8 @@ export function runCombat(rawInput: CombatEngineInput): {
             const splashCopy = opts?.flatBasis !== undefined;
             /** The defence factor folded into `raw` (1 for a flat copy, which folds none). */
             let rawMitigation = 1;
+            /** The incoming factor folded into `raw` (1 for a flat copy, which folds none). */
+            let rawIncomingFactor = 1;
 
             let raw: number;
             /** #358 ADDENDUM 2: the pre-defence twin of `raw`. */
@@ -8324,6 +8348,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 raw = procParts.damage;
                 rawPreMit = procParts.preMitigation;
                 rawReflectBase = procParts.reflectBase;
+                rawIncomingFactor = procParts.incomingFactor;
                 rawMitigation = opts?.ignoresDefense
                     ? 1
                     : victimDefenceMitigation(profile, ownerOutgoing.defensePenetration);
@@ -8376,7 +8401,11 @@ export function runCombat(rawInput: CombatEngineInput): {
                     // defence at all) and the pre-defence walk on the attack-basis branch.
                     preMitigationDamage: rawPreMit,
                     reflectBase: rawReflectBase,
-                    targetMitigation: rawMitigation,
+                    redirectBasis: {
+                        defenceMitigation: rawMitigation,
+                        incomingFactor: rawIncomingFactor,
+                        didCrit,
+                    },
                     shieldPenetrationPct: splashCopy ? 0 : attackerShieldPenOf(ownerId),
                     // A splash copy is Bomb damage through and through: full shield drain, no
                     // reflect, no one-shot block spent.
@@ -8931,10 +8960,10 @@ export function runCombat(rawInput: CombatEngineInput): {
                 /** The victim is a primary target of the sub-attack — forwarded into
                  *  `cause.isPrimaryTarget`. */
                 isPrimary?: boolean,
-                /** The defence mitigation factor already folded into `damage` for this
-                 *  victim — forwarded into `cause.targetMitigation` so the Protection cascade
-                 *  divides by the factor that was applied instead of re-deriving one. */
-                targetMitigation?: number,
+                /** The victim-side factors already folded into `damage` for this victim —
+                 *  forwarded into `cause.redirectBasis` so the Protection cascade divides by the
+                 *  factors that were applied instead of re-deriving them. */
+                redirectBasis?: RedirectBasis,
                 /** #358 ADDENDUM 2 — the pre-defence twin of `damage`. */
                 preMitigation?: number,
                 /** The hit as thrown — forwarded into `cause.reflectBase`. */
@@ -9060,7 +9089,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                         damage,
                         _isAnchor,
                         subAttackIndex,
-                        targetMitigation,
+                        redirectBasis,
                         preMitigation,
                         isPrimary,
                         reflectBase
@@ -9074,7 +9103,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 victim,
                                 damage,
                                 isPrimary,
-                                targetMitigation,
+                                redirectBasis,
                                 preMitigation,
                                 reflectBase
                             );
@@ -9385,13 +9414,20 @@ export function runCombat(rawInput: CombatEngineInput): {
                         !castStasisStandsOn(victim.id);
                     const aim = aimReactiveHit(victim.id);
                     // 4th arg: this instance is a SECOND positional damage path into the funnel, so
-                    // it owes the Protection cascade the same mitigation factor the firing hit
-                    // hands down, or a protected victim over-transfers to the protector.
+                    // it owes the Protection cascade the same victim-side factors the firing hit
+                    // hands down, or a protected victim mis-prices its protector's chunk.
                     const outcome = tb.applyToVictim(
                         victim,
                         damage,
                         aim.isPrimary,
-                        victimDefenceMitigation(defenseProfile, hit.scalars.defensePenetrationPct),
+                        {
+                            defenceMitigation: victimDefenceMitigation(
+                                defenseProfile,
+                                hit.scalars.defensePenetrationPct
+                            ),
+                            incomingFactor: damageParts.incomingFactor,
+                            didCrit: hit.didCrit,
+                        },
                         // #358 ADDENDUM 2: the SECOND positional damage path into the funnel owes
                         // it the same pre-defence figure the firing hit hands down.
                         damageParts.preMitigation,
@@ -9575,14 +9611,14 @@ export function runCombat(rawInput: CombatEngineInput): {
             // applyIncomingToTarget, which surface it). The third
             // param forwards drivePositionalApply's isPrimary through to applyVictimDamage's
             // cause.isPrimaryTarget (the `requirePrimaryTarget` reflect gate). The fourth param
-            // forwards the defence mitigation factor the positional loop already applied, so the
-            // Protection cascade can divide by it rather than re-deriving one (see
-            // `cause.targetMitigation`).
+            // forwards the victim-side factors the positional loop already applied, so the
+            // Protection cascade can divide by them rather than re-deriving them (see
+            // `cause.redirectBasis`).
             applyToVictim: (
                 victim: CombatActor,
                 damage: number,
                 isPrimary?: boolean,
-                targetMitigation?: number,
+                redirectBasis?: RedirectBasis,
                 /** #358 ADDENDUM 2 — the pre-defence twin of `damage`. */
                 preMitigation?: number,
                 /** The hit as thrown — see applyVictimDamage's `cause.reflectBase`. */
@@ -9597,19 +9633,12 @@ export function runCombat(rawInput: CombatEngineInput): {
             stealthedEnemyCount: playerStealthedEnemyCount,
             shieldedAllyCount: playerShieldedAllyCount,
             healEventOnly: false,
-            applyToVictim: (
-                victim,
-                damage,
-                isPrimary,
-                targetMitigation,
-                preMitigation,
-                reflectBase
-            ) =>
+            applyToVictim: (victim, damage, isPrimary, redirectBasis, preMitigation, reflectBase) =>
                 applyOutgoingToEnemy(
                     damage,
                     victim,
                     isPrimary,
-                    targetMitigation,
+                    redirectBasis,
                     preMitigation,
                     reflectBase
                 ),
@@ -9629,23 +9658,16 @@ export function runCombat(rawInput: CombatEngineInput): {
             // bySide('enemy').grantAllyCharges (resolved in buildTurnArgs by side), NEVER the player
             // team. Likewise applyToVictim routes the firing hit as INCOMING damage to the struck
             // player actor (applyIncomingToTarget), not as a player damage row.
-            applyToVictim: (
-                victim,
-                damage,
-                isPrimary,
-                targetMitigation,
-                preMitigation,
-                reflectBase
-            ) =>
+            applyToVictim: (victim, damage, isPrimary, redirectBasis, preMitigation, reflectBase) =>
                 applyIncomingToTarget(
                     damage,
                     victim,
                     // The default `cause` only materializes when the arg is OMITTED, so passing
-                    // targetMitigation means restating the direct-damage defaults it carries.
+                    // redirectBasis means restating the direct-damage defaults it carries.
                     {
                         killerId: actingActorId,
                         byDirectDamage: true,
-                        targetMitigation,
+                        redirectBasis,
                         preMitigationDamage: preMitigation,
                         reflectBase,
                     },

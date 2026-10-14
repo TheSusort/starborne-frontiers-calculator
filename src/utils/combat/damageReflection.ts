@@ -102,8 +102,10 @@ export function reflectedDamageParts(args: {
     /** The victim-side slice of that channel (`VictimDefenseProfile.victimSideIncomingPct`),
      *  which `preMitigation` strips while keeping the attacker-applied rest. Default 0. */
     victimSideIncomingPct?: number;
-}): { damage: number; preMitigation: number } {
-    if (args.reflectPct <= 0 || args.reflectBase <= 0) return { damage: 0, preMitigation: 0 };
+}): { damage: number; preMitigation: number; incomingFactor: number } {
+    if (args.reflectPct <= 0 || args.reflectBase <= 0) {
+        return { damage: 0, preMitigation: 0, incomingFactor: 1 };
+    }
     const base = (args.reflectPct / 100) * args.reflectBase;
     const outgoing = 1 + (args.reflectorOutgoingPct ?? 0) / 100;
     const affinity = 1 + args.affinityDamageModifier / 100;
@@ -119,5 +121,7 @@ export function reflectedDamageParts(args: {
         // multiplies the composed, capped `incoming` factor; the exact-1 constants appear only
         // here.
         preMitigation: Math.max(0, base * outgoing * affinity * 1 * 1 * statusAsThrown),
+        // The non-defence incoming factor in `damage` (`RedirectBasis.incomingFactor`).
+        incomingFactor: incoming,
     };
 }
