@@ -455,7 +455,7 @@ describe('healingGoldenParity', () => {
     // Damage constants (effectiveAttack 5000, practice-target defence 5000 → postDefenseFactor
     // 1 − dr(5000)/100 = 0.4165593651036698; was 0.2579415898443159 at the sink's defence 10000):
     //   cast direct        = 5000 × 100% × 0.4165593651036698 = 2082.796825518349
-    //   Inferno tick       = 1 stack × (100/100) × 5000 × dotMult 1 × affinityMult 1 = 5000
+    //   Inferno tick       = 1 stack × (100/100) × 5000 × dotFactor 1 = 5000
     //     — UNCHANGED by the rebase: inferno scales off the APPLIER's effective attack
     //       (engine.ts:1066, `ctx.effectiveAttack` in the inferno `tickByTier`), not the victim's
     //       HP. Corrosion is the one that reads an HP basis, and it ALREADY reads the practice
@@ -960,7 +960,7 @@ describe('healingGoldenParity', () => {
     //   • DoT TICK (Task 11b): the enemy applies the inferno to the TARGET's DoT container, and
     //     the engine ticks the TARGET's own containers at the TARGET's turn-start (the afflicted
     //     ship's turn). The applier (the enemy) carries effectiveAttack 6000 (Attack Up folded),
-    //     so each inferno tick = 1 stack × (tier 100/100) × 6000 × dotMult 1 × affinityMult 1 =
+    //     so each inferno tick = 1 stack × (tier 100/100) × 6000 × dotFactor 1 =
     //     6000 incoming. duration 3 → an entry applied on round N ticks on rounds N+1, N+2, N+3
     //     then expires. The enemy re-applies every round, so the live entry count climbs to a
     //     steady 3 (then holds — the 4-rounds-ago entry has expired). The debuff/self-buff DO

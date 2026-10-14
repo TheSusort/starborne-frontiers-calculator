@@ -622,9 +622,9 @@ export type CombatEvent =
     | { type: 'dot-detonated'; targetId: string; round: number; damage: number }
     /** Emitted on each bomb burst, but the two paths are asymmetric:
      *  - Enemy-turn `processBombs`: ONE event PER pending bomb entry that reaches
-     *    countdown 0. `damage` = stacks × damagePerStack × affinityMult (no skill pct).
+     *    countdown 0. `damage` = `bombBurstDamage` (no skill pct).
      *  - Attacker-turn `detonate()` bomb branch: ONE AGGREGATE event summing all
-     *    consumed bomb entries. `damage` = (Σ stacks × damagePerStack) × affinityMult × pct,
+     *    consumed bomb entries. `damage` = Σ `bombBurstDamage` × pct,
      *    where pct is the detonation skill's power multiplier.
      *  In both cases `damage` is the realized payout under that path's scaling, not a
      *  normalized value. `actorId` = the bomb's ORIGINAL applier (`PendingBomb.sourceId`)

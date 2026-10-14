@@ -81,7 +81,6 @@ function makeBomb(): PendingBomb {
         stacks: 2,
         tier: 100,
         sourceId: 'attacker',
-        affinityMult: 1,
         detonationDamageModifier: 0,
         splashModifier: 0,
     };
@@ -166,8 +165,8 @@ describe('positionalDetonation recipe', () => {
         const recipe = result.positionalDetonation!;
         expect(recipe.dets).toEqual([{ dotType: 'bomb', powerPct: 100 }]);
         expect(recipe.effectiveAttack).toBeGreaterThan(0);
-        expect(recipe.dotMult).toBeGreaterThan(0);
-        expect(recipe.affinityMult).toBeGreaterThan(0);
+        expect(recipe.outgoingDotPct).toBe(0);
+        expect(recipe.incomingDotPct).toBe(0);
         expect(recipe.detonationMult).toBe(1);
 
         // Anchor's bombs UNCONSUMED.

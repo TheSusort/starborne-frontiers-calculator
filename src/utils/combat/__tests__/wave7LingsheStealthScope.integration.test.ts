@@ -97,7 +97,6 @@ const bomb = (countdown: number, sourceId: string): PendingBomb => ({
     stacks: 1,
     tier: 100,
     sourceId,
-    affinityMult: 1,
     detonationDamageModifier: 0,
     splashModifier: 0,
 });

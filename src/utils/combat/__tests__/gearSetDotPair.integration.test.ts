@@ -6,7 +6,7 @@
  * built via `buildShipAbilitiesWithEquipment(ship, getGearPiece)` with gear pieces whose
  * `setBonus` is 'BURNER' / 'DECIMATION'. The Decimation modifier is NOT hand-rolled — if
  * someone breaks the DECIMATION registry entry (e.g. zeroes its value) or the
- * `dotDamage`→`dotMult` fold (effectiveDamageStatsOf.selfDotDamageModifier), this test fails.
+ * `dotDamage`→`outgoingDotPct` fold (effectiveDamageStatsOf.selfDotDamageModifier), this test fails.
  *
  * ── BURNER (now live via on-deal-damage) ─────────────────────────────────────────────────
  * BURNER's registry entry now rides trigger `on-deal-damage` (a LIVE_TRIGGER that fires once per
@@ -20,12 +20,12 @@
  * stacks), so we assert Burner PRODUCES inferno ticks rather than that it expires after 2 turns.
  *
  * The composition test proves Burner's reactive inferno is Decimation-boosted via the shared
- * `dotMult` fold: Burner+Decimation inferno total = Burner-only total × 1.10 exactly (the per-tick
+ * `outgoingDotPct` fold: Burner+Decimation inferno total = Burner-only total × 1.10 exactly (the per-tick
  * ratio cancels attack/affinity/stacking, leaving only the fold factor).
  *
  * Inferno tick formula (engine, tickDoTs):
- *   damage = stacks × (tier/100) × applierEffectiveAttack × dotMult × affinityMult
- * affinityMult is neutral (1) here, so the Decimation ratio (boosted/control) is exactly the
+ *   damage = stacks × (tier/100) × applierEffectiveAttack × dotFactor
+ * The DoT factor is the only difference here, so the Decimation ratio (boosted/control) is exactly the
  * fold factor and cancels attack/affinity.
  */
 import { describe, it, expect } from 'vitest';
@@ -305,7 +305,7 @@ describe('Gear-set DoT pair — Burner applies Inferno on attack (real registry)
             expect(appliesByRound[r]).toBe(1);
             expect(tickDmgByRound[r]).toBeGreaterThan(0);
         }
-        // Per-tick stack damage = 5000 × (15/100) × 1 stack × dotMult(1) = 750. Round 1 = one
+        // Per-tick stack damage = 5000 × (15/100) × 1 stack × dotFactor(1) = 750. Round 1 = one
         // fresh stack (750); round 2 onward = two overlapping 2-turn stacks (1500). This is the
         // re-application signature — load-bearing: zeroing BURNER's stacks/tier collapses both.
         expect(tickDmgByRound[1]).toBeCloseTo(750, 6);
@@ -318,8 +318,8 @@ describe('Gear-set DoT pair — Burner applies Inferno on attack (real registry)
 // ---------------------------------------------------------------------------
 
 describe('Gear-set DoT pair — composition (Burner + Decimation)', () => {
-    it('Burner+Decimation inferno total = Burner-only control × 1.10 (shared dotMult fold)', () => {
-        // Control: 4 BURNER only (no Decimation) — Burner's reactive inferno, dotMult 1.0.
+    it('Burner+Decimation inferno total = Burner-only control × 1.10 (shared outgoingDotPct fold)', () => {
+        // Control: 4 BURNER only (no Decimation) — Burner's reactive inferno, dotFactor 1.0.
         const burnerOnly = skillsWithActive(plainAttack, BURNER_4PC);
         // Boosted: identical 4 BURNER + 2 DECIMATION (1 set → +10% DoT damage) via the REAL registry.
         const burnerDecim = skillsWithActive(plainAttack, [...BURNER_4PC, ...DECIMATION_2PC]);
@@ -335,7 +335,7 @@ describe('Gear-set DoT pair — composition (Burner + Decimation)', () => {
         const boosted = runWithInfernoCapture(BASE({ ...env, shipSkills: burnerDecim.shipSkills }));
 
         // Burner fires identically in both runs (same attack cadence) → the only difference is the
-        // Decimation dotMult fold. Both totals share the same overlapping-stack pattern, so the
+        // Decimation outgoingDotPct fold. Both totals share the same overlapping-stack pattern, so the
         // ratio is exactly the fold factor.
         expect(control.infernoTick).toBeGreaterThan(0);
         expect(boosted.infernoTick).toBeCloseTo(control.infernoTick * 1.1, 3);
@@ -363,8 +363,8 @@ describe('Gear-set DoT pair — Decimation scales DoT ticks (real registry + eng
         const boostedInferno = totalInferno(BASE({ ...env, shipSkills: boosted.shipSkills }));
 
         expect(controlInferno).toBeGreaterThan(0);
-        // Decimation 2pc → +10% dotDamage → dotMult 1.0→1.1 → boosted = control × 1.10 exactly.
-        // (affinityMult is neutral so the ratio cancels attack/affinity.)
+        // Decimation 2pc → +10% dotDamage → dotFactor 1.0→1.1 → boosted = control × 1.10 exactly.
+        // (the ratio cancels attack.)
         expect(boostedInferno).toBeCloseTo(controlInferno * 1.1, 3);
     });
 });

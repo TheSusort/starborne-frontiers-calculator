@@ -85,7 +85,6 @@ const timedBomb = (sourceId: string): PendingBomb => ({
     stacks: 1,
     tier: 100,
     sourceId,
-    affinityMult: 1,
     detonationDamageModifier: 0,
     splashModifier: 0,
 });
@@ -334,7 +333,6 @@ const detonatableBomb = (): PendingBomb => ({
     stacks: 1,
     tier: 100,
     sourceId: 'attacker',
-    affinityMult: 1,
     detonationDamageModifier: 0,
     splashModifier: 0,
 });

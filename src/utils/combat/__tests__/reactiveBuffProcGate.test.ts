@@ -137,7 +137,6 @@ function makeCtx(opts?: {
                 OWNER_ID,
                 {
                     effectiveAttack: 10000,
-                    affinityMult: 1,
                 } as never,
             ],
         ]),
@@ -199,9 +198,7 @@ function makeAdjacentCtx(opts?: {
         grantAllyCharges: () => {},
         grantExtraAction: () => {},
         playerIds: allPlayerIds,
-        lastTurnCtxByActor: new Map([
-            [OWNER_ID, { effectiveAttack: 10000, affinityMult: 1 } as never],
-        ]),
+        lastTurnCtxByActor: new Map([[OWNER_ID, { effectiveAttack: 10000 } as never]]),
         recordResisted: () => {},
         ...(opts?.includeAdjacentDelegate
             ? {

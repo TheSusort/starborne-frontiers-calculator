@@ -5,7 +5,7 @@
  * This test routes through the PUBLIC DPS calculator entry point `simulateDPS`
  * (src/utils/calculators/dpsSimulator.ts), which the DPS page uses. `simulateDPS` calls
  * `runCombat` and walks the SAME `runPlayerTurn` as the battle sim, so the
- * `dotDamage` → `dotMult` fold (effectiveDamageStatsOf.selfDotDamageModifier) applies
+ * `dotDamage` → `outgoingDotPct` fold (effectiveDamageStatsOf.selfDotDamageModifier) applies
  * here too with no extra wiring.
  *
  * The Decimation modifier is NOT hand-rolled: the ship's abilities are built via the REAL
@@ -159,7 +159,7 @@ describe('DPS calculator — Decimation scales DoT damage (real registry + share
         expect(boostedResult.summary.totalDirectDamage).toBe(0);
 
         expect(controlInferno).toBeGreaterThan(0);
-        // Decimation 2pc → +10% dotDamage → dotMult 1.0→1.1 → boosted = control × 1.10 exactly.
+        // Decimation 2pc → +10% dotDamage → dotFactor 1.0→1.1 → boosted = control × 1.10 exactly.
         // (affinity neutral so the ratio cancels attack/affinity.) Allow rounding tolerance.
         expect(boostedInferno).toBeCloseTo(controlInferno * 1.1, 3);
     });

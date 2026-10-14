@@ -138,7 +138,6 @@ const bomb = (damagePerStack: number, stacks: number, sourceId = 'enemy-det'): P
     stacks,
     tier: 100,
     sourceId,
-    affinityMult: 1,
     detonationDamageModifier: 0,
     splashModifier: 0,
 });
@@ -284,8 +283,8 @@ describe('per-victim skill-triggered detonation (positional ENEMY → player)', 
     it("dot-detonated emits per victim carrying that victim's id (inferno bypass)", () => {
         idc = 0;
         // pl-mid carries an inferno entry; the detonate skill detonates inferno. Inferno payout =
-        // stacks × (tier/100) × effectiveAttack × remainingRounds × dotMult × affinityMult × pct ×
-        // detonationMult. With dotMult/affinityMult/detonationMult = 1, effectiveAttack = enemy
+        // stacks × (tier/100) × effectiveAttack × remainingRounds × dotFactor × pct ×
+        // detonationMult. With dotFactor/detonationMult = 1, effectiveAttack = enemy
         // attack 100: 1 × (100/100) × 100 × 1 = 100.
         const { events, result } = collect(
             BASE({

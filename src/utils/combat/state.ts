@@ -43,7 +43,7 @@ export function emptyActorHealing(): ActorHealing {
 
 /** One applied DoT application (an "entry"): N stacks of one tier, ticking down.
  *  `sourceId` is the applier (per-actor attribution): inferno ticks resolve the
- *  applier's current-round effective attack/dotMult/affinityMult (plus the ticking victim's own
+ *  applier's current-round effective attack and DoT-damage %s (plus the ticking victim's own
  *  live Inc. DoT Damage Up, read at the tick), and the damage attributes
  *  to that actor's per-round contributions (focus actor → row fields, others → teamDamage) —
  *  unless the entry carries `dealtCreditId`, which splits the display attribution off the
@@ -413,14 +413,11 @@ export interface PendingBomb {
     tier: number;
     /** The applier (per-actor attribution). */
     sourceId: string;
-    /** Affinity multiplier snapshotted at application from the applier's affinity matchup,
-     *  so the burst on detonation uses the APPLIER's affinity, not the focus actor's. */
-    affinityMult: number;
-    /** The applier's detonation-damage modifier (%), snapshotted at application like affinityMult.
-     *  Scales the timed-expiry burst in processBombs and (later) skill detonation. Default 0. */
+    /** The applier's detonation-damage modifier (%), snapshotted at application. Scales the
+     *  timed-expiry burst in processBombs and skill detonation. Default 0. */
     detonationDamageModifier: number;
     /** The applier's bomb-splash-damage modifier (%), snapshotted at application like
-     *  affinityMult/detonationDamageModifier. Scales splash-on-death. Default 0. */
+     *  detonationDamageModifier. Scales splash-on-death. Default 0. */
     splashModifier: number;
     /** When this Bomb was applied — see `ActiveDoTStack.appliedSeq`. */
     appliedSeq?: number;
@@ -474,16 +471,13 @@ export function gatherDirectHitIntoAccumulators(
     }
 }
 
-/** What a Bomb pays when it detonates on its own: stacks × damage per stack × the applier's
- *  affinity and detonation-damage modifier, snapshotted at application. The one formula for its
- *  natural expiry (`processBombs`) and a cut to 0 (`reduceBombsOnVictim`). */
+/** What a Bomb pays when it detonates: stacks × damage per stack × the applier's
+ *  detonation-damage modifier, snapshotted at application. No affinity (owner-measured
+ *  2026-10-14) and no victim Inc. Damage Down (`bombModifierExclusion.test.ts`). The one formula
+ *  for its natural expiry (`processBombs`), a cut to 0 (`reduceBombsOnVictim`) and a skill
+ *  detonation (`detonateContainers`). */
 export function bombBurstDamage(bomb: PendingBomb): number {
-    return (
-        bomb.stacks *
-        bomb.damagePerStack *
-        bomb.affinityMult *
-        (1 + bomb.detonationDamageModifier / 100)
-    );
+    return bomb.stacks * bomb.damagePerStack * (1 + bomb.detonationDamageModifier / 100);
 }
 
 export interface ActorStats {

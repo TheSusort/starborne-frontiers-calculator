@@ -518,7 +518,6 @@ describe('the count primitives sum stacks', () => {
                     stacks: 3,
                     tier: 1,
                     sourceId: 'lingshe',
-                    affinityMult: 1,
                     detonationDamageModifier: 0,
                     splashModifier: 0,
                 },

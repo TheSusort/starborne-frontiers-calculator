@@ -264,7 +264,7 @@ export function effectiveOutgoingStatsOf(
         crit: s.crit + t.critBuff,
         critDamage: s.critDamage + t.critDamageBuff,
         defensePenetration:
-            s.defensePenetration + toDotAndPenModifiers(selfLists, []).defensePenetrationBuff,
+            s.defensePenetration + toDotAndPenModifiers(selfLists).defensePenetrationBuff,
     };
 }
 
@@ -321,7 +321,7 @@ export interface EffectiveDamageStats {
     security: number;
     /** base pen + castPenBonus + modifier pen + pen from scheduled and ability self-buffs. */
     effectivePen: number;
-    /** Self Out. DoT from scheduled and ability self-buffs plus `mod.dotDamage`, for dotMult. */
+    /** Self Out. DoT from scheduled and ability self-buffs plus `mod.dotDamage`: the ctx's `outgoingDotPct`. */
     selfDotDamageModifier: number;
     /** mod.detonationDamage (stat-modifier abilities) + dotPen.detonationDamageModifier
      *  ("Out. Detonation Damage Up" scheduled and ability self-buffs) — outgoing detonation-burst multiplier delta
@@ -373,7 +373,7 @@ export function effectiveDamageStatsOf(args: {
     const named = strongestPerFamily(selfNamedBuffs);
     const own = calculateBuffTotals(toSimBuffs(named));
     const mod = modifierTotalsFromAbilities(modifierAbilities, modifierCtx);
-    const dotPen = toDotAndPenModifiers(named, []);
+    const dotPen = toDotAndPenModifiers(named);
 
     const totals: ReturnType<typeof calculateBuffTotals> = {
         attackBuff: own.attackBuff + extras.attackBuff + mod.attack,

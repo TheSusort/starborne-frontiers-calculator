@@ -53,6 +53,7 @@ import {
     type EnemySelectorKind,
 } from '../abilities/abilityTargetSide';
 import { TITANITE_PLATING } from '../../constants/persistentStackingBuffs';
+import { composeDotDamageFactor } from '../damageComposition';
 import { dotResistLabel, isBlockDebuff, targetCarriesBlockDebuff } from './debuffImmunity';
 import { recipientCarriesBlockBuff } from './blockBuffBuffs';
 import {
@@ -1263,8 +1264,8 @@ function expireStacks(entries: ActiveDoTStack[]): void {
 // Step 6: one Bomb's step at its holder's turn start — its burst is detonation damage (same
 // category as Step 2.95). The countdown drops by 1; at <= 0 it bursts: `emitBombDetonated` once
 // per burst so reactive triggers observe its actorId, round, stacks and damage, then
-// `creditDetonation`. Per-actor attribution: the burst uses the APPLIER's affinityMult
-// (snapshotted at application) and is credited to that applier.
+// `creditDetonation`. Per-actor attribution: the burst (`bombBurstDamage`) is credited to the
+// applier.
 function processBombs(args: {
     bomb: PendingBomb;
     /** The container the walk bound; a burst splices the Bomb out of it. */
@@ -1322,15 +1323,15 @@ function processAccumulators(args: {
 // inferno (scales with the APPLIER's effective attack, no outgoing buff), then expire both
 // stack sets. Per-actor attribution: each entry ticks with its applier's ctx (looked
 // up via `ctxFor(entry.sourceId)`) — inferno uses the applier's effectiveAttack, both use the
-// applier's dotMult/affinityMult; corrosion stays enemy-HP-based. An entry whose applier has
-// no ctx yet (faster-enemy round 1) is skipped this tick (its applier acts later). Damage is
-// credited per applier via `credit`; the `dot-ticked` event carries the per-dotType SUMMED
-// damage — one event per type, however many appliers contributed.
+// DoT-damage factor `dotMultFor` resolves from it; corrosion stays enemy-HP-based. No affinity:
+// a tick is not a direct hit. An entry whose applier has no ctx yet (faster-enemy round 1) is
+// skipped this tick (its applier acts later). Damage is credited per applier via `credit`; the
+// `dot-ticked` event carries the per-dotType SUMMED damage — one event per type, however many
+// appliers contributed.
 //
-// `dotMultFor(ctx)` replaces the bare `ctx.dotMult` read for BOTH dotTypes — it adds THIS call's
-// ticking victim's own live terms (its Inc. DoT Damage Up, and any enemy-status-name-gated
-// dotDamage modifier such as Wildfire's) at tick time (see `victimDotMult`). A call that doesn't
-// pass it ticks at `ctx.dotMult` alone.
+// `dotMultFor(ctx)` adds THIS call's ticking victim's own live terms (its Inc. DoT Damage Up, and
+// any enemy-status-name-gated dotDamage modifier such as Wildfire's) at tick time (see
+// `victimDotMult`). A call that doesn't pass it ticks at the ctx's own two sides alone.
 /** DoT types `tickDoTs` handles as a per-round tick — everything except 'bomb' (bombs burst on a
  *  timed countdown via `processBombs`, a separate mechanism, never a per-round tick). Covers
  *  'generic' alongside 'corrosion'/'inferno'. */
@@ -1377,14 +1378,16 @@ export function tickDoTs(args: {
     /** Multiplier on this carrier's DoT ticks of the given type; the composition rule lives in
      *  `composeDotReductionFactor`. Absent → 1. */
     incomingDotFactor?: (dotType: TickableDoTType) => number;
-    /** Resolves the EFFECTIVE dotMult for one applier's ctx, given the
+    /** Resolves the EFFECTIVE DoT-damage factor for one applier's ctx, given the
      *  ticking VICTIM (this tickDoTs call's whole entries list belongs to ONE victim, so the
-     *  victim is fixed for the call; only the per-entry applier ctx varies). Defaults to the
-     *  applier's `ctx.dotMult` unchanged when absent. Production call sites pass the engine's
-     *  `victimDotMult` closure, which adds the victim's live Inc. DoT Damage Up. */
+     *  victim is fixed for the call; only the per-entry applier ctx varies). Defaults to
+     *  `composeDotDamageFactor` over the ctx's own two sides when absent. Production call sites
+     *  pass the engine's `victimDotMult` closure, which adds the victim's live terms. */
     dotMultFor?: (ctx: PlayerRoundCtx, dotType: 'corrosion' | 'inferno') => number;
 }): void {
-    const dotMultFor = args.dotMultFor ?? ((ctx: PlayerRoundCtx) => ctx.dotMult);
+    const dotMultFor =
+        args.dotMultFor ??
+        ((ctx: PlayerRoundCtx) => composeDotDamageFactor(ctx.outgoingDotPct, ctx.incomingDotPct));
     // Per-(dotType,tier) tick group — the combat log shows each tier on its own line, so a mix of
     // e.g. Corrosion I and Corrosion III does not collapse into one summed line. `credits` keeps
     // the per-entry credit list IN ENTRY ORDER, so the grouping changes only the log-facing
@@ -1440,24 +1443,14 @@ export function tickDoTs(args: {
     tickByTier(
         'corrosion',
         args.corrosionEntries,
-        (e, ctx) =>
-            e.stacks *
-            (e.tier / 100) *
-            corrosionBaseHp *
-            dotMultFor(ctx, 'corrosion') *
-            ctx.affinityMult
+        (e, ctx) => e.stacks * (e.tier / 100) * corrosionBaseHp * dotMultFor(ctx, 'corrosion')
     );
 
     // Step 5: Tick inferno (scales with the applier's effective attack, no outgoing buff)
     tickByTier(
         'inferno',
         args.infernoEntries,
-        (e, ctx) =>
-            e.stacks *
-            (e.tier / 100) *
-            ctx.effectiveAttack *
-            dotMultFor(ctx, 'inferno') *
-            ctx.affinityMult
+        (e, ctx) => e.stacks * (e.tier / 100) * ctx.effectiveAttack * dotMultFor(ctx, 'inferno')
     );
 
     // Tick generic DoTs — an ABSOLUTE per-tick amount, independent of stats/HP (no ctxFor
@@ -2993,24 +2986,12 @@ export function runCombat(rawInput: CombatEngineInput): {
 
     // Per-actor round-scoped context the enemy's DoT processing reads. Keyed by actor id;
     // every player turn sets its entry after runPlayerTurn. A DoT entry's tick resolves the
-    // APPLIER's ctx (effectiveAttack for inferno; dotMult/affinityMult for both) via this map.
+    // APPLIER's ctx (effectiveAttack for inferno; the two DoT-damage sides for both) via this map.
     // The focus actor's ctx feeds the row exactly as the old single `lastAttackerCtx` did. An
     // entry whose applier has not yet acted this run (faster-enemy round 1) has no ctx → skip.
-    //
-    // ⚠️ KNOWN INSTANCE of the CROSS-TURN-CACHE class, recorded here so it is findable, and
-    // deliberately NOT fixed. This map is a per-turn snapshot that outlives its turn,
-    // and `tickDoTs` reads `ctx.affinityMult` off it to scale a DoT ticking on a victim that is
-    // usually NOT the victim that ctx was computed against. That is structurally the same mistake as
-    // `PlayerActorRuntime.liveDebuffLandingChance` (see its own doc, and the reactive-landing fix in
-    // `reactiveLandingChanceFor`): a value derived from THIS turn's target, later applied to a
-    // DIFFERENT target. The honest reading would resolve the applier-vs-TICKING-VICTIM matchup, the
-    // way `dotMultFor` already resolves the per-victim dotMult.
-    // WHY IT IS INERT TODAY and therefore out of scope: the only actors whose turn can lack a real
-    // victim are the ally-targeting supporters, and a no-victim turn resolves the neutral
-    // `'antimatter'` matchup — so no observable value moves.
-    // The other two fields read there are fine: `ctx.effectiveAttack` is self-derived, and
-    // `ctx.dotMult` holds only the applier's own terms plus the side-wide scheduled enemy picks —
-    // the ticking victim's own Inc. DoT Damage Up is added at the tick (`victimDotMult`).
+    // `ctx.effectiveAttack` and `ctx.outgoingDotPct` are self-derived; `ctx.incomingDotPct` holds
+    // only the side-wide scheduled enemy picks and the cast's landed auras — the ticking victim's
+    // own Inc. DoT Damage Up is added at the tick (`victimDotMult`).
     const lastTurnCtxByActor = new Map<string, PlayerRoundCtx>();
     // Each actor's scheduled (input-level) enemy debuffs as its most recent turn LANDED them —
     // `PlayerTurnResult.scheduledEnemyEffects`, the gated list its own cast's damage read. A hit the
@@ -3427,10 +3408,12 @@ export function runCombat(rawInput: CombatEngineInput): {
         ...(target.genericDoTEntries.length > 0 ? ['Damage over Time'] : []),
         ...(target.pendingAccumulators.length > 0 ? ['Echoing Burst'] : []),
     ];
-    // Per-VICTIM, per-TICK resolution of an applier's dotMult: the applier's `ctx.dotMult`, plus
-    // the ticking victim's OWN live `Inc. DoT Damage Up` (`victimIncomingDotDamagePct`, read fresh
-    // at the tick), plus any victim-gated dotDamage bonus. Keyed by `victim.id` alone, so it reads
-    // the same way for a player-side and an enemy-side victim.
+    // Per-VICTIM, per-TICK resolution of an applier's DoT-damage factor, through
+    // `composeDotDamageFactor`. Outgoing side: the applier's `ctx.outgoingDotPct` plus any
+    // victim-gated dotDamage bonus (a dealer-side "deals additional damage" modifier). Incoming
+    // side: `ctx.incomingDotPct` plus the ticking victim's OWN live `Inc. DoT Damage Up`
+    // (`victimIncomingDotDamagePct`, read fresh at the tick). Keyed by `victim.id` alone, so it
+    // reads the same way for a player-side and an enemy-side victim.
     //
     // The gated bonus: `ctx.victimGatedDotDamage` (set by runPlayerTurn ONLY when the applier's
     // cast carried an enemy-status-name-gated dotDamage modifier — Wildfire's Scorching Radiation
@@ -3447,7 +3430,7 @@ export function runCombat(rawInput: CombatEngineInput): {
     // team aura). Each entry's `enemyDebuffNames`/`enemyBuffNames` are independently
     // re-pointed at `victim` here, so every entry gates on the SAME victim's live status
     // regardless of whose ctx it originated from. Since the abilities were EXCLUDED from
-    // the cast-time `dotMult` bake (see `partitionDotDamageAbilities`), each fresh fold is
+    // the cast-time `outgoingDotPct` bake (see `partitionDotDamageAbilities`), each fresh fold is
     // ADDED directly — no base-ctx subtraction needed (contrast
     // `perVictimOutgoingDeltaPct`, which must subtract because its abilities stay baked
     // into the aggregate).
@@ -3456,9 +3439,12 @@ export function runCombat(rawInput: CombatEngineInput): {
         victim: CombatActor,
         dotType: 'corrosion' | 'inferno'
     ): number => {
-        const live = ctx.dotMult + victimIncomingDotDamagePct(statusEngine, victim.id) / 100;
+        const incomingPct =
+            ctx.incomingDotPct + victimIncomingDotDamagePct(statusEngine, victim.id);
         const gated = ctx.victimGatedDotDamage;
-        if (!gated || gated.length === 0) return live;
+        if (!gated || gated.length === 0) {
+            return composeDotDamageFactor(ctx.outgoingDotPct, incomingPct);
+        }
         let bonus = 0;
         for (const entry of gated) {
             if (entry.abilities.length === 0) continue;
@@ -3483,7 +3469,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             );
             bonus += modifierTotalsFromAbilities(forThisType, victimCtx).dotDamage;
         }
-        return live + bonus / 100;
+        return composeDotDamageFactor(ctx.outgoingDotPct + bonus, incomingPct);
     };
     const isStasised = (actorId: string): boolean => ownerDebuffNames(actorId).some(isStasis);
     const isDisabled = (actorId: string): boolean => ownerDebuffNames(actorId).some(isDisable);
@@ -9691,12 +9677,13 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // scratch copy; the detonated entries leave the live container afterwards.
                 const liveBombs = victim.pendingBombs;
                 const bombsLeft = liveBombs.slice();
-                // The recipe carries the detonator's `dotMult`; each victim adds its own live
-                // Inc. DoT Damage Up, the term a tick on it reads (`victimDotMult`).
+                // The recipe carries the detonator's two DoT-damage sides; each victim adds its own
+                // live Inc. DoT Damage Up to the incoming side, the term a tick on it reads
+                // (`victimDotMult`).
                 const victimRecipe: DetonationRecipe = {
                     ...recipe,
-                    dotMult:
-                        recipe.dotMult + victimIncomingDotDamagePct(statusEngine, victim.id) / 100,
+                    incomingDotPct:
+                        recipe.incomingDotPct + victimIncomingDotDamagePct(statusEngine, victim.id),
                 };
                 const result = detonateContainers(victimRecipe, {
                     corrosionEntries: victim.corrosionEntries,
@@ -11251,8 +11238,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                 rollVictimCrit: () => false,
                 turnCtx: lastKnownCtx ?? {
                     effectiveAttack: 0,
-                    dotMult: 1,
-                    affinityMult: 1,
+                    outgoingDotPct: 0,
+                    incomingDotPct: 0,
                     effectiveDefence: 0,
                     outgoingHealPct: 0,
                     incomingHealPct: 0,
@@ -11419,9 +11406,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // drain side, so no per-side threading through `sideCtx` is needed.
                 addShieldPenBonus,
                 armNextCritPower,
-                // Bomb damagePerStack/affinity resolve per OWNER inside the executor
+                // Bomb damagePerStack resolves per OWNER inside the executor
                 // (lastTurnCtxByActor.get(intent.ownerId)) — there is no global
-                // effectiveAttack/affinityMult on this ctx.
+                // effectiveAttack on this ctx.
                 recordResisted: (resisted) => {
                     const lastTurn = focusTurns[focusTurns.length - 1];
                     // After an attacker turn this round → append to its resisted list;
@@ -12241,7 +12228,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // The HEAL-TARGET branch additionally snapshots for display and routes the ticked
                 // damage into the INCOMING-damage accounting (shield-first → HP → ship-destroyed →
                 // the victim's per-actor intake bucket) — NOT the player→enemy damage path. Both
-                // branches reuse tickDoTs: the applier's effectiveAttack/dotMult/affinityMult come
+                // branches reuse tickDoTs: the applier's effectiveAttack and DoT-damage sides come
                 // from the entry's sourceId via lastTurnCtxByActor, and corrosion scales with the
                 // AFFLICTED ship's own max HP. The dead-target guard above already skipped a
                 // destroyed heal target, so it is alive here. Empty containers → a no-op.
@@ -13144,7 +13131,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                             }
 
                             // Record this team actor's ctx for the enemy's per-entry DoT-tick attribution
-                            // (its inferno entries tick with ITS effectiveAttack/dotMult/affinityMult).
+                            // (its inferno entries tick with ITS effectiveAttack and DoT-damage sides).
                             lastTurnCtxByActor.set(actor.id, teamTurn.turnCtx);
                             // Record this cast's footprint size (mirrors the focus site, including
                             // the `tgt`-gated 0-vs-1 fallback — see its note).

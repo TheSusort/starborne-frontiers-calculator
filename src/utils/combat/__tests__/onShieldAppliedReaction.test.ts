@@ -128,9 +128,7 @@ function makeBuffCtx(): IntentExecContext & { appliedActorIds: string[] } {
         grantAllyCharges: () => {},
         grantExtraAction: () => {},
         playerIds: [GRANTER_ID, ALLY1_ID, ALLY2_ID],
-        lastTurnCtxByActor: new Map([
-            [GRANTER_ID, { effectiveAttack: 10000, affinityMult: 1 } as never],
-        ]),
+        lastTurnCtxByActor: new Map([[GRANTER_ID, { effectiveAttack: 10000 } as never]]),
         recordResisted: () => {},
     } as unknown as IntentExecContext & { appliedActorIds: string[] };
 

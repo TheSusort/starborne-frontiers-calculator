@@ -60,14 +60,13 @@ const enemyAt = (
 });
 
 // A bomb pre-seeded with countdown 1 — bursts on the holder's OWN very first turn (round 1).
-// burst = damagePerStack × stacks × affinityMult (neutral mults) = 1000 × 2 = 2000.
+// burst = damagePerStack × stacks (neutral modifiers) = 1000 × 2 = 2000.
 const bomb = (sourceId: string): PendingBomb => ({
     countdown: 1,
     damagePerStack: 1000,
     stacks: 2,
     tier: 300,
     sourceId,
-    affinityMult: 1,
     detonationDamageModifier: 0,
     splashModifier: 0,
 });

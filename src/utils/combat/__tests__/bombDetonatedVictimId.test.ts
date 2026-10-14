@@ -175,7 +175,6 @@ function makeBomb(): PendingBomb {
         stacks: 2,
         tier: 100,
         sourceId: 'ally-applier',
-        affinityMult: 1,
         detonationDamageModifier: 0,
         splashModifier: 0,
     };

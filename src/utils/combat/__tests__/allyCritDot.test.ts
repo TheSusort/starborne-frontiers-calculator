@@ -232,7 +232,7 @@ describe('allyCritDot – Task 2: on-ally-crit-dot reactive listener', () => {
 // whose crit is 100 (every cast crits → viaCrit: true on every team-applied dot-applied event).
 // Speed order: team (130) → attacker (100) → enemy (50). Both actors' debuffLandingChance = 1.0
 // (hacking 100, enemySecurity 0) so every DoT always lands. Corrosion tick formula:
-//   stacks × (tier/100) × min(enemyHp, 500_000) × dotMult × affinityMult
+//   stacks × (tier/100) × min(enemyHp, 500_000) × dotFactor
 // With tier=5, stacks=1, enemyHp=10_000_000 (stays ≫ 500_000), neutral affinity:
 //   1 × 0.05 × 500_000 × 1.0 × 1.0 = 25_000 per entry per tick.
 

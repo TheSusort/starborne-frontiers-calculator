@@ -95,7 +95,6 @@ function makeCtx(opts?: {
                 OWNER_ID,
                 {
                     effectiveAttack: 10000,
-                    affinityMult: 1,
                 } as never,
             ],
         ]),

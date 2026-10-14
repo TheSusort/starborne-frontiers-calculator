@@ -20,7 +20,6 @@ const holder = () => ({
             stacks: 1,
             tier: 1,
             sourceId: 's',
-            affinityMult: 1,
             detonationDamageModifier: 0,
             splashModifier: 0,
         },

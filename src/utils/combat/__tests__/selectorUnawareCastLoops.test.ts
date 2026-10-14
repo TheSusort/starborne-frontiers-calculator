@@ -196,7 +196,6 @@ describe('#407: the three selector-unaware on-cast loops now resolve selectors',
             stacks: 1,
             tier: 3,
             sourceId: 'seeder',
-            affinityMult: 1,
             detonationDamageModifier: 0,
             splashModifier: 0,
         });

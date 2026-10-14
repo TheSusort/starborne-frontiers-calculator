@@ -7,7 +7,7 @@ import {
 import type { ActiveDoTStack, PendingBomb } from '../state';
 
 // Crit-free, exact-integer assertions. These pin the EXACT detonation math lifted from
-// playerTurn.ts detonate(): bomb uses per-bomb snapshots only (NO dotMult/affinityMult/
+// playerTurn.ts detonate(): bomb uses per-bomb snapshots only (NO DoT-damage factor/
 // detonationMult); inferno scales on effectiveAttack; corrosion clamps baseHp at 500k.
 
 const bomb = (over: Partial<PendingBomb> = {}): PendingBomb => ({
@@ -16,7 +16,6 @@ const bomb = (over: Partial<PendingBomb> = {}): PendingBomb => ({
     stacks: 1,
     tier: 100,
     sourceId: 's',
-    affinityMult: 1,
     detonationDamageModifier: 0,
     splashModifier: 0,
     ...over,
@@ -41,8 +40,8 @@ const emptyContainers = (over: Partial<DetonationContainers> = {}): DetonationCo
 const baseRecipe = (over: Partial<DetonationRecipe> = {}): DetonationRecipe => ({
     dets: [],
     effectiveAttack: 1000,
-    dotMult: 1,
-    affinityMult: 1,
+    outgoingDotPct: 0,
+    incomingDotPct: 0,
     detonationMult: 1,
     ...over,
 });
@@ -65,21 +64,19 @@ describe('detonateContainers', () => {
         expect(res).toEqual({ bomb: 0, inferno: 0, corrosion: 0, bombStacks: 0, total: 0 });
     });
 
-    it('computes bomb payout from per-bomb snapshots only (no dotMult/affinity/detonationMult)', () => {
-        // Two bombs: (2 stacks * 50 dps * 2 affinity * (1+50/100)) + (3 * 100 * 1 * 1) = 300 + 300 = 600
-        // powerPct 100 → *1. Recipe dotMult/affinityMult/detonationMult are 5/7/9 — MUST be ignored.
+    it('computes bomb payout from per-bomb snapshots only (no DoT factor/detonationMult)', () => {
+        // Two bombs: (2 stacks * 50 dps * (1+50/100)) + (3 * 100 * 1) = 150 + 300 = 450
+        // powerPct 100 → *1. Recipe DoT sides 400%/600% and detonationMult 9 — MUST be ignored.
         const c = emptyContainers({
             pendingBombs: [
                 bomb({
                     stacks: 2,
                     damagePerStack: 50,
-                    affinityMult: 2,
                     detonationDamageModifier: 50,
                 }),
                 bomb({
                     stacks: 3,
                     damagePerStack: 100,
-                    affinityMult: 1,
                     detonationDamageModifier: 0,
                 }),
             ],
@@ -87,15 +84,15 @@ describe('detonateContainers', () => {
         const res = detonateContainers(
             baseRecipe({
                 dets: [{ dotType: 'bomb', powerPct: 100 }],
-                dotMult: 5,
-                affinityMult: 7,
+                outgoingDotPct: 400,
+                incomingDotPct: 600,
                 detonationMult: 9,
             }),
             c
         );
-        expect(res.bomb).toBe(600);
+        expect(res.bomb).toBe(450);
         expect(res.bombStacks).toBe(5);
-        expect(res.total).toBe(600);
+        expect(res.total).toBe(450);
         expect(c.pendingBombs.length).toBe(0);
     });
 
@@ -110,8 +107,9 @@ describe('detonateContainers', () => {
         expect(res.bombStacks).toBe(4);
     });
 
-    it('computes inferno payout scaling on effectiveAttack (with dotMult/affinity/detonationMult)', () => {
-        // sum: 2 stacks * (50/100) * 1000 attack * 3 rounds = 3000; *dotMult2 *affinity3 *pct1 *det2 = 36000
+    it('computes inferno payout scaling on effectiveAttack (with the DoT factor/detonationMult)', () => {
+        // sum: 2 stacks * (50/100) * 1000 attack * 3 rounds = 3000;
+        // DoT factor (1 + 100%) * (1 + 50%) = 3 (the two sides multiply); *pct1 *det2 = 18000
         const c = emptyContainers({
             infernoEntries: [dot({ stacks: 2, tier: 50, remainingRounds: 3 })],
         });
@@ -119,14 +117,14 @@ describe('detonateContainers', () => {
             baseRecipe({
                 dets: [{ dotType: 'inferno', powerPct: 100 }],
                 effectiveAttack: 1000,
-                dotMult: 2,
-                affinityMult: 3,
+                outgoingDotPct: 100,
+                incomingDotPct: 50,
                 detonationMult: 2,
             }),
             c
         );
-        expect(res.inferno).toBe(36000);
-        expect(res.total).toBe(36000);
+        expect(res.inferno).toBe(18000);
+        expect(res.total).toBe(18000);
         expect(c.infernoEntries.length).toBe(0);
     });
 

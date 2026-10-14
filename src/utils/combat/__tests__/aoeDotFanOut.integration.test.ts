@@ -24,7 +24,7 @@ import type { Ability, ShipSkills } from '../../../types/abilities';
 import type { ParsedPattern, ParsedTarget } from '../../targetingParser';
 import type { Position } from '../../../types/encounters';
 import type { AffinityName } from '../../../types/ship';
-import type { CombatActor } from '../state';
+import { bombBurstDamage, type CombatActor } from '../state';
 
 beforeAll(() => {
     if (!csvAvailable() || !shipDataAvailable()) {
@@ -328,10 +328,10 @@ describe("Ravager's Inferno reaches every enemy his pattern strikes", () => {
     });
 });
 
-describe("a Bomb on each struck enemy snapshots the caster's affinity against THAT enemy", () => {
+describe('a Bomb on each struck enemy bursts for the same amount whatever its affinity', () => {
     // Thermal holds the advantage over chemical: a chemical caster is at a disadvantage against
-    // a thermal enemy (-25%) and neutral against an antimatter one.
-    it('player chemical Demolisher on Cone; B thermal → B’s bomb carries 0.75, A’s and C’s 1', () => {
+    // a thermal enemy. A Bomb is not affinity-scaled, so B's burst equals A's and C's.
+    it('player chemical Demolisher on Cone; B thermal → every bomb bursts alike', () => {
         const m = measure(
             playerCasting(
                 'Demolisher',
@@ -343,14 +343,15 @@ describe("a Bomb on each struck enemy snapshots the caster's affinity against TH
             'attacker'
         );
         expect(m.dots['bomb']).toEqual(['enemy-a', 'enemy-b', 'enemy-c']);
-        const snap = (id: string) => m.actors.get(id)!.pendingBombs.map((b) => b.affinityMult);
-        expect(snap('enemy-a')).toEqual([1]);
-        expect(snap('enemy-b')).toEqual([0.75]);
-        expect(snap('enemy-c')).toEqual([1]);
+        const snap = (id: string) => m.actors.get(id)!.pendingBombs.map(bombBurstDamage);
+        const [burst] = snap('enemy-a');
+        expect(burst).toBeGreaterThan(0);
+        expect(snap('enemy-b')).toEqual([burst]);
+        expect(snap('enemy-c')).toEqual([burst]);
         expect(snap('enemy-out')).toEqual([]);
     });
 
-    it('enemy-side chemical Demolisher; ally-b thermal → ally-b’s bomb carries 0.75', () => {
+    it('enemy-side chemical Demolisher; ally-b thermal → every bomb bursts alike', () => {
         const m = measure(
             enemyCasting(
                 'Demolisher',
@@ -362,10 +363,11 @@ describe("a Bomb on each struck enemy snapshots the caster's affinity against TH
             'enemy-caster'
         );
         expect(m.dots['bomb']).toEqual(['ally-b', 'ally-c', 'attacker']);
-        const snap = (id: string) => m.actors.get(id)!.pendingBombs.map((b) => b.affinityMult);
-        expect(snap('attacker')).toEqual([1]);
-        expect(snap('ally-b')).toEqual([0.75]);
-        expect(snap('ally-c')).toEqual([1]);
+        const snap = (id: string) => m.actors.get(id)!.pendingBombs.map(bombBurstDamage);
+        const [burst] = snap('attacker');
+        expect(burst).toBeGreaterThan(0);
+        expect(snap('ally-b')).toEqual([burst]);
+        expect(snap('ally-c')).toEqual([burst]);
     });
 });
 

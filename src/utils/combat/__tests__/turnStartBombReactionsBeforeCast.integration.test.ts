@@ -82,7 +82,6 @@ const run = (placement: Placement, demolisherKit: ShipSkills): Measured => {
                 stacks: 1,
                 tier: 300,
                 sourceId: id(demolisher),
-                affinityMult: 1,
                 detonationDamageModifier: 0,
                 splashModifier: 0,
                 appliedSeq: 1,

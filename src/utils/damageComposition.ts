@@ -72,9 +72,22 @@ export function expectedIncomingFactor(
     return (1 - w) * nonCrit + w * crit;
 }
 
+/**
+ * THE DoT-damage-buff factor of an Inferno/Corrosion tick or detonation (owner-measured
+ * 2026-10-14): the dealer's side and the victim's side are SEPARATE factors,
+ *   (1 + outgoingPct/100) × (1 + incomingPct/100).
+ * `outgoingPct` sums every dealer-side DoT-damage modifier (Out. DoT Damage Up, gear sets, Wildfire's
+ * gated bonus); `incomingPct` sums the victim's Inc. DoT Damage Up/Down. Sources within one side add.
+ * Affinity is never part of a DoT, Bomb or detonation (`dotCompositionAffinity.integration.test.ts`).
+ * Each side floors at 0 so a deep Down never makes a tick negative.
+ */
+export function composeDotDamageFactor(outgoingPct: number, incomingPct: number): number {
+    return Math.max(0, 1 + outgoingPct / 100) * Math.max(0, 1 + incomingPct / 100);
+}
+
 /** The reduction factor on a DoT tick: passives sum, separate factors multiply, no cap.
- *  The ticking victim's `Inc. DoT Damage Up` is not part of it: it sits additively in the tick's
- *  dotMult (`victimDotMult` in engine.ts), and this factor multiplies that. */
+ *  The ticking victim's `Inc. DoT Damage Up` is not part of it: it is the incoming side of
+ *  {@link composeDotDamageFactor}, and this factor multiplies that. */
 export function composeDotReductionFactor(parts: IncomingReductionParts): number {
     let factor = parts.passivePct !== 0 ? Math.max(0, 1 - parts.passivePct / 100) : 1;
     for (const pct of parts.separatePcts) factor *= Math.max(0, 1 - pct / 100);

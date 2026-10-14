@@ -22,7 +22,7 @@ import { conditionsMet, groupConditions } from '../abilities/evaluateConditions'
 import { enemySelectorKind, type EnemySelectorKind } from '../abilities/abilityTargetSide';
 import { buildRoundContext, dotReadings } from '../abilities/roundContext';
 import { drawKeyed, makeRateGate } from '../calculators/rateAccumulator';
-import { computeAffinityModifiers, getAffinityMatchup } from '../calculators/affinityUtils';
+import { getAffinityMatchup } from '../calculators/affinityUtils';
 import {
     toEnemyDotModifier,
     toSelfDefenseModifier,
@@ -2814,7 +2814,7 @@ export interface IntentExecContext {
      *  DPS / healing / any caller without ship names) → `ally-on-team` keeps its manual
      *  assume-met fallback. */
     nameByActorId?: Map<string, string>;
-    /** Per-actor last-turn ctx (effectiveAttack/affinityMult for bombs). Undefined for an
+    /** Per-actor last-turn ctx (effectiveAttack for bombs). Undefined for an
      *  owner that has not acted this run (faster enemy, round 1) → bomb follow-ups skip. */
     lastTurnCtxByActor: Map<string, PlayerRoundCtx>;
     /** #396: an actor's OWN named self-sourced statuses (`victimSelfBuffs`) — the own half of the
@@ -4271,10 +4271,10 @@ export function victimAbilityEnemyBuffs(
 }
 
 /** The `Inc. DoT Damage Up` % a victim carries right now, from TIMED ability-applied statuses,
- *  one instance per family (highest tier wins). Added to the applier's `PlayerRoundCtx.dotMult` at
+ *  one instance per family (highest tier wins). Added to the applier's `PlayerRoundCtx.incomingDotPct` at
  *  every tick and detonation of a DoT on this victim. A timed status was gated once, when it was
  *  applied, so its presence in the store means it landed. Two channels are not read here and are
- *  baked into the applier's `dotMult` at its cast instead:
+ *  baked into the applier's `incomingDotPct` at its cast instead:
  *   - scheduled (UI-picked) enemy debuffs: their store is side-wide, not per victim, so a read
  *     keyed by a player-side victim would apply the enemy-debuff picks to the player's own ships;
  *   - aura/accumulating statuses: they re-roll their landing each round at the cast, and the
@@ -6177,37 +6177,21 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
                     appliedSeq: (appliedSeq = ctx.statusEngine.nextAppliedSeq()),
                 });
             } else if (cfg.dotType === 'bomb') {
-                // A bomb SNAPSHOTS the owner's effective attack + affinity at application (unlike
-                // corrosion/inferno, which resolve the applier's ctx at each tick), so it needs
-                // both up front. The owner's last-turn ctx is the preferred source — it carries
-                // the real per-cast affinity resolution, including forced-affinity overrides.
-                //
-                // Before the owner's FIRST turn of the run there is no such ctx (a faster enemy
-                // healing in round 1 — the common case for enemy healers). Fall back to
-                // the owner's LIVE effective attack plus the raw affinity matchup against this
-                // victim. Documented approximation, same class as the `detonationDamageModifier`
-                // note below: the matchup omits gear/buff affinity modifiers and any forced-
-                // affinity override, both of which only a resolved cast can supply. A bomb at the
-                // plain matchup beats no bomb at all.
+                // A bomb SNAPSHOTS the owner's effective attack at application (unlike
+                // corrosion/inferno, which resolve the applier's ctx at each tick). The owner's
+                // last-turn ctx is the preferred source; before the owner's FIRST turn of the run
+                // there is no such ctx (a faster enemy healing in round 1 — the common case for
+                // enemy healers), so fall back to the owner's LIVE effective attack.
                 const ownerCtx = ctx.lastTurnCtxByActor.get(intent.ownerId);
                 const effectiveAttack =
                     ownerCtx?.effectiveAttack ?? ctx.effectiveAttackFor?.(intent.ownerId);
                 if (effectiveAttack === undefined) return;
-                const affinityMult =
-                    ownerCtx?.affinityMult ??
-                    1 +
-                        computeAffinityModifiers(
-                            ctx.actorById?.(intent.ownerId)?.affinity,
-                            victim?.affinity ?? ctx.affinityOf?.(victimId)
-                        ).damageModifier /
-                            100;
                 (victim?.pendingBombs ?? ctx.pendingBombs).push({
                     countdown: Math.max(1, cfg.duration),
                     damagePerStack: effectiveAttack * (cfg.tier / 100),
                     stacks,
                     tier: cfg.tier,
                     sourceId: intent.ownerId,
-                    affinityMult,
                     // Reactive-applied bombs default the detonation modifier to 0: the reactive ctx
                     // does not carry the owner's live detonation modifier; documented approximation —
                     // no shipped reactive bomb applier also wears Voidfire.

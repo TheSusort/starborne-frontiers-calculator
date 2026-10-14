@@ -2814,12 +2814,13 @@ const DocumentationPage: React.FC = () => {
                                         Select buffs or debuffs that affect the enemy — for example
                                         Defense Down (reduces enemy defense before penetration is
                                         applied) or Incoming Direct Damage Up (multiplies all direct
-                                        hits the enemy receives). Out. DoT and Inc. DoT modifiers
-                                        from both sections are combined and applied as a single
-                                        multiplier on corrosion and inferno damage. These are
-                                        debuffs your side puts on the enemy: the enemy never lands
-                                        them on your ship, and they never boost its attacks or
-                                        counter-attacks on you.
+                                        hits the enemy receives). Out. DoT modifiers (yours) and
+                                        Inc. DoT modifiers (the enemy&apos;s) are separate
+                                        multipliers on corrosion and inferno damage, so +20% of each
+                                        gives ×1.44. DoTs, bombs and detonations get no affinity
+                                        bonus. These are debuffs your side puts on the enemy: the
+                                        enemy never lands them on your ship, and they never boost
+                                        its attacks or counter-attacks on you.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         Buffs and debuffs only apply during the rounds they are
@@ -3250,12 +3251,11 @@ const DocumentationPage: React.FC = () => {
                                         skill cast however many enemies it debuffs. A Stasis the
                                         skill lands is not shortened by that same hit. Damage over
                                         time (Corrosion, Inferno) and Bombs spread the same way:
-                                        every enemy hit gets its own stacks, and a Bomb uses the
-                                        attacker&apos;s affinity against that enemy. Crits are per
-                                        enemy too: Wisteria&apos;s crit Inferno and Valerian&apos;s
-                                        crit extension land only on the enemies the hit critted, and
-                                        Crucialis&apos;s extra damage on a critical hit is added
-                                        only to the enemies she critted.
+                                        every enemy hit gets its own stacks, none of them scaled by
+                                        affinity. Crits are per enemy too: Wisteria&apos;s crit
+                                        Inferno and Valerian&apos;s crit extension land only on the
+                                        enemies the hit critted, and Crucialis&apos;s extra damage
+                                        on a critical hit is added only to the enemies she critted.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Stasis:</span> Every direct

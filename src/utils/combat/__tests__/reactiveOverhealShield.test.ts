@@ -155,9 +155,7 @@ function makeShieldCtx(
         removeChargesFrom: () => {},
         grantExtraAction: () => {},
         playerIds: [OWNER_ID, ALLY_ID],
-        lastTurnCtxByActor: new Map([
-            [OWNER_ID, { effectiveAttack: 10000, affinityMult: 1 } as never],
-        ]),
+        lastTurnCtxByActor: new Map([[OWNER_ID, { effectiveAttack: 10000 } as never]]),
         recordResisted: () => {},
         healing,
         // FIX 3: now required — this suite has no lowest-hp-ally consumer, so "nobody" is the

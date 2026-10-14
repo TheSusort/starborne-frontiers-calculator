@@ -94,7 +94,6 @@ const run = (
                 stacks: 1,
                 tier: 300,
                 sourceId: id(demo),
-                affinityMult: 1,
                 detonationDamageModifier: 0,
                 splashModifier: 0,
                 appliedSeq: 1,

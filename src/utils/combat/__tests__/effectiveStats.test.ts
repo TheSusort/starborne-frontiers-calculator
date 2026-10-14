@@ -455,7 +455,7 @@ describe('effectiveDamageStatsOf — four-layer fold characterization', () => {
         // --- Compute expectations inline exactly as playerTurn.ts does ---
         const abilityTotals = calculateBuffTotals(toSimBuffs(abilitySelfEffects));
         const mod = modifierTotalsFromAbilities(modifierAbilities, modifierCtx);
-        const dotPen = toDotAndPenModifiers([...scheduledBuffs, ...abilitySelfEffects], []);
+        const dotPen = toDotAndPenModifiers([...scheduledBuffs, ...abilitySelfEffects]);
 
         const attackBuff = scheduledTotals.attackBuff + abilityTotals.attackBuff + mod.attack;
         const defenceBuff = scheduledTotals.defenceBuff + abilityTotals.defenceBuff + mod.defence;
@@ -558,7 +558,7 @@ describe('effectiveDamageStatsOf — dotDamage modifier folds into selfDotDamage
         castPenBonus: 5,
     };
 
-    it('a dotDamage modifier ability raises selfDotDamageModifier (feeds dotMult)', () => {
+    it('a dotDamage modifier ability raises selfDotDamageModifier (feeds outgoingDotPct)', () => {
         const modifierAbilities: Ability[] = [
             {
                 id: 'decimation',

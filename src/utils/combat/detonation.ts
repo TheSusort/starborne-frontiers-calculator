@@ -1,4 +1,5 @@
 import type { DoTType } from '../../types/calculator';
+import { composeDotDamageFactor } from '../damageComposition';
 import { bombBurstDamage } from './state';
 import type { ActiveDoTStack, PendingBomb } from './state';
 
@@ -10,13 +11,14 @@ import type { ActiveDoTStack, PendingBomb } from './state';
 // protection on the deferred positional path — see the field's doc).
 //
 // Precedence is preserved EXACTLY:
-//  - inferno: Σ(stacks · tier/100 · effectiveAttack · remainingRounds) · dotMult · affinityMult · pct · detonationMult
-//  - corrosion: Σ(stacks · tier/100 · baseHp · remainingRounds) · dotMult · affinityMult · pct · detonationMult,
+//  - inferno: Σ(stacks · tier/100 · effectiveAttack · remainingRounds) · dotFactor · pct · detonationMult
+//  - corrosion: Σ(stacks · tier/100 · baseHp · remainingRounds) · dotFactor · pct · detonationMult,
 //               baseHp = min(victimHp, 500_000)
-//  `dotMult` is the detonator's multiplier with the detonated victim's own live Inc. DoT Damage Up
-//  already added by the caller (`victimIncomingDotDamagePct`).
-//  - bomb: Σ(stacks · damagePerStack · b.affinityMult · (1 + b.detonationDamageModifier/100)) · pct
-//          — per-bomb snapshots ONLY (NO dotMult/affinityMult/detonationMult).
+//  dotFactor = composeDotDamageFactor(outgoingDotPct, incomingDotPct); `incomingDotPct` already
+//  carries the detonated victim's own live Inc. DoT Damage Up, added by the caller
+//  (`victimIncomingDotDamagePct`). No affinity: a detonation is not a direct hit.
+//  - bomb: Σ(stacks · damagePerStack · (1 + b.detonationDamageModifier/100)) · pct
+//          — per-bomb snapshots ONLY (`bombBurstDamage`; NO dotFactor/detonationMult).
 
 export interface DetonationRecipe {
     // Widened to the full DoTType (generic never enters `dets` — no detonation ability
@@ -25,8 +27,10 @@ export interface DetonationRecipe {
     // dotType it doesn't explicitly branch on).
     dets: { dotType: DoTType; powerPct: number }[];
     effectiveAttack: number;
-    dotMult: number;
-    affinityMult: number;
+    /** The detonator's dealer-side DoT-damage %. */
+    outgoingDotPct: number;
+    /** The detonated victim's Inc. DoT Damage Up %. */
+    incomingDotPct: number;
     detonationMult: number;
     /**
      * OWN-STACK PROTECTION (positional path only): the exact container entries this cast is
@@ -90,6 +94,7 @@ export function detonateContainers(
     let inferno = 0;
     let corrosion = 0;
     let bombStacks = 0;
+    const dotFactor = composeDotDamageFactor(recipe.outgoingDotPct, recipe.incomingDotPct);
 
     for (const det of recipe.dets) {
         const pct = det.powerPct / 100;
@@ -101,8 +106,7 @@ export function detonateContainers(
                         e.stacks * (e.tier / 100) * recipe.effectiveAttack * e.remainingRounds,
                     0
                 ) *
-                recipe.dotMult *
-                recipe.affinityMult *
+                dotFactor *
                 pct *
                 recipe.detonationMult;
         } else if (det.dotType === 'corrosion') {
@@ -112,8 +116,7 @@ export function detonateContainers(
                     (sum, e) => sum + e.stacks * (e.tier / 100) * baseHp * e.remainingRounds,
                     0
                 ) *
-                recipe.dotMult *
-                recipe.affinityMult *
+                dotFactor *
                 pct *
                 recipe.detonationMult;
         } else if (det.dotType === 'bomb') {

@@ -114,7 +114,6 @@ const timedBomb = (): PendingBomb => ({
     stacks: 1,
     tier: 100,
     sourceId: 'enemy-1',
-    affinityMult: 1,
     detonationDamageModifier: 0,
     splashModifier: 0,
 });

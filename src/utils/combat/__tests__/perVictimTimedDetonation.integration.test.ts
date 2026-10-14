@@ -87,7 +87,7 @@ const enemyAt = (id: string, position: Position, hp: number): EnemyAttacker => (
     shipSkills: { slots: [] },
 });
 
-// A pre-seeded TIMED bomb. burst = stacks × damagePerStack × affinityMult × (1 + detMod/100).
+// A pre-seeded TIMED bomb. burst = stacks × damagePerStack × (1 + detMod/100).
 // With neutral mults: burst = stacks × damagePerStack. countdown drives the timed expiry.
 const timedBomb = (
     damagePerStack: number,
@@ -100,7 +100,6 @@ const timedBomb = (
     stacks,
     tier: 100,
     sourceId,
-    affinityMult: 1,
     detonationDamageModifier: 0,
     splashModifier: 0,
 });
