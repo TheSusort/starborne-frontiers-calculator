@@ -2,7 +2,7 @@
  * The round limit is a defeat (owner ruling 61; docs/combat-system.md §1, "Round limit exceeded →
  * Defeat"): when the last round ends with both sides still holding a living ship, the enemy wins.
  * A wipe before the limit still decides the fight the ordinary way, and a same-round mutual wipe
- * is also an enemy win. There is no draw.
+ * goes to the side that dealt the final killing damage. There is no draw.
  *
  * Real kits through `simulateBattle`, the Simulator page's path.
  */
@@ -104,7 +104,7 @@ describe('round limit: both sides alive at the last round → the enemy wins', (
     });
 });
 
-describe('a same-round mutual wipe → the enemy wins', () => {
+describe('a same-round mutual wipe → the side that landed the final kill wins', () => {
     // The wearer of two Reflect pieces (10% reflected) is one-shot by a faster enemy; the bounce of
     // the killing hit is enough to destroy that 1-HP-scale enemy too, inside the same turn.
     const reflectWearer = (id: string, speed: number): BattlePlacement => ({
@@ -147,19 +147,19 @@ describe('a same-round mutual wipe → the enemy wins', () => {
         return { outcome: result.outcome, deaths: deaths.length };
     };
 
-    it('wearer on the player side: both ships die in round 1, the enemy wins', () => {
+    it('wearer on the player side: both ships die in round 1, the bounce wins it for the player', () => {
         const { outcome, deaths } = mutual('player');
         expect(deaths).toBe(2);
-        expect(outcome).toEqual({ winner: 'enemy', lastRound: 1 });
+        expect(outcome).toEqual({ winner: 'player', lastRound: 1 });
     });
 
-    it('enemy-side twin (wearer on the enemy side): still the enemy wins', () => {
+    it('enemy-side twin (wearer on the enemy side): the bounce wins it for the enemy', () => {
         const { outcome, deaths } = mutual('enemy');
         expect(deaths).toBe(2);
         expect(outcome).toEqual({ winner: 'enemy', lastRound: 1 });
     });
 
-    it('the assembler itself: both sides destroyed in the same round is an enemy win', () => {
+    it('the assembler itself: the side whose ship was destroyed last loses', () => {
         const roster = [
             {
                 actorId: 'attacker',
@@ -170,16 +170,19 @@ describe('a same-round mutual wipe → the enemy wins', () => {
             },
             { actorId: 'e1', side: 'enemy' as const, name: 'E', position: 'M4' as const, maxHp: 1 },
         ];
-        const result = assembleBattleResult({
-            events: [
-                { type: 'ship-destroyed', actorId: 'attacker', round: 2 },
-                { type: 'ship-destroyed', actorId: 'e1', round: 2 },
-            ],
-            perRoundPerTarget: {},
-            roster,
-            numRounds: 5,
-        });
-        expect(result.outcome).toEqual({ winner: 'enemy', lastRound: 2 });
+        const outcomeFor = (order: string[]) =>
+            assembleBattleResult({
+                events: order.map((actorId) => ({
+                    type: 'ship-destroyed' as const,
+                    actorId,
+                    round: 2,
+                })),
+                perRoundPerTarget: {},
+                roster,
+                numRounds: 5,
+            }).outcome;
+        expect(outcomeFor(['attacker', 'e1'])).toEqual({ winner: 'player', lastRound: 2 });
+        expect(outcomeFor(['e1', 'attacker'])).toEqual({ winner: 'enemy', lastRound: 2 });
     });
 
     it('a roster missing a side is refused rather than given a winner', () => {

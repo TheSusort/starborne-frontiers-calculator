@@ -2951,6 +2951,16 @@ const DocumentationPage: React.FC = () => {
                                         Works for both teams.
                                     </p>
                                     <p className="text-theme-text mb-2">
+                                        <span className="text-primary">Taunt and Protection:</span>{' '}
+                                        When several enemy ships hold Taunt, the attacker picks
+                                        among them by its normal targeting order: its own row first,
+                                        then the next rows, front to back. Two protectors at the
+                                        same speed soak in board position order, top row first.
+                                        Lionheart&apos;s start-of-round Protection refills him to 10
+                                        stacks, so a stolen stack is restored the next round. Works
+                                        for both teams.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
                                         <span className="text-primary">Own-HP Conditions:</span> A
                                         passive that depends on the ship&apos;s own HP reads that
                                         ship&apos;s live HP wherever it is placed, on either team:
@@ -4501,9 +4511,11 @@ const DocumentationPage: React.FC = () => {
                                     <li>
                                         A fight lasts at most 30 rounds. If both teams still have a
                                         ship standing when the last round ends, the enemy wins, as a
-                                        timeout is a defeat in the game. The enemy also wins when
-                                        both teams lose their last ship in the same round, so every
-                                        fight has a winner
+                                        timeout is a defeat in the game. When both teams lose their
+                                        last ship in the same round, the side that dealt the final
+                                        killing blow wins (a dying ship&apos;s counter or reaction
+                                        that kills the last opposing ship wins it for that side), so
+                                        every fight has a winner
                                     </li>
                                     <li>
                                         Raise the run count to repeat the fight over that many
