@@ -261,8 +261,8 @@ export type BattleWinner = 'player' | 'enemy';
 export interface BattleResult {
     /** Trimmed at termination (no rounds after outcome.lastRound). */
     rounds: BattleRound[];
-    /** There is no draw: a same-round mutual wipe and the round limit are both `enemy` wins.
-     *  See `assembleBattleResult`. */
+    /** There is no draw: a same-round mutual wipe goes to the side that dealt the final killing
+     *  damage, and the round limit is an `enemy` win. See `assembleBattleResult`. */
     outcome: { winner: BattleWinner; lastRound: number };
     roster: Array<{ actorId: string; side: 'player' | 'enemy'; name: string; position: Position }>;
     /**
