@@ -14,6 +14,11 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: the Reflect gear set now reflects as direct damage, so reactions answer it.',
     "Combat simulator: the Reflect gear set's bounce now respects the attacker's Inc. Damage Down.",
     "Combat simulator: the Leech set now repairs from the Reflect gear set's bounce.",
+    "Combat simulator: Hemlock's Toxic Overflow spread now resolves in turn order.",
+    "Combat simulator: Lionheart's Protection now refills fully each round after a theft.",
+    'Combat simulator: same-speed protectors now soak damage in board position order.',
+    'Combat simulator: with several taunters, attackers pick by their normal targeting order.',
+    'Combat simulator: a mutual wipe is now won by the side that landed the final kill.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

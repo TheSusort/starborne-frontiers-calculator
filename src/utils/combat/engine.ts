@@ -5026,7 +5026,11 @@ export function runCombat(rawInput: CombatEngineInput): {
         out.sort((a, b) => {
             const sa = effectiveStatsOf(statusEngine, selfBuffLookup, a.actor).speed;
             const sb = effectiveStatsOf(statusEngine, selfBuffLookup, b.actor).speed;
-            return sb - sa !== 0 ? sb - sa : a.actor.id.localeCompare(b.actor.id);
+            if (sb !== sa) return sb - sa;
+            // A position-less pair ranks equal (both Infinity); the stable sort keeps roster order.
+            const pa = positionTurnRank(a.actor.position);
+            const pb = positionTurnRank(b.actor.position);
+            return pa === pb ? 0 : pa - pb;
         });
         return out;
     };
@@ -13814,7 +13818,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         // guard against the fixed round-end state first, then applying from that snapshot, makes the
         // spread order-independent: a holder spreads this round only if it already carried Corrosion
         // when the round ended (a stack received THIS round spreads only the FOLLOWING round).
-        const toxicSpreaders: CombatActor[] = [];
+        const toxicHolders: CombatActor[] = [];
         for (const holder of allActors) {
             if (holder.destroyedRound !== undefined) continue;
             // TIMED per-victim channel only — deliberately NOT `ownerDebuffNames`, the broad
@@ -13833,8 +13837,18 @@ export function runCombat(rawInput: CombatEngineInput): {
             // non-expiring, by construction — see constants/toxicOverflow.ts.
             if (!holdsToxicOverflow(statusEngine, holder.id)) continue;
             if (dotStackCount(holder.corrosionEntries) < 1) continue;
-            toxicSpreaders.push(holder);
+            toxicHolders.push(holder);
         }
+        // The holders spread in TURN ORDER, both sides (each spread rolls the applier's landing
+        // gate, so the order decides which ally gets which roll); never roster order.
+        const toxicSpreaders = orderByTurnPriority(
+            toxicHolders.map((holder) => ({
+                holder,
+                side: isEnemySide(holder.id) ? 'enemy' : 'player',
+                speed: effectiveSpeedOf(holder),
+                position: holder.position,
+            }))
+        ).map((entry) => entry.holder);
         // Every spread of this pass carries ONE reaction firing id: together they are one root
         // cast (`rootCastKey`, triggers.ts).
         const spreadFiringId = toxicSpreaders.length > 0 ? ++reactionFiringSeq : 0;
