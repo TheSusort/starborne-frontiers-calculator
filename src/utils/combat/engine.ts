@@ -6454,8 +6454,11 @@ export function runCombat(rawInput: CombatEngineInput): {
             // `incomingBooked`, so the booking sites below read it without a fallback.
         ): AppliedVictimDamage => {
             // TRIPWIRE: a direct hit that reaches a reflector without `cause.reflectBase` is a
-            // damage path that skipped threading it, and throws rather than reflecting 0.
+            // damage path that skipped threading it, and throws rather than reflecting 0. A
+            // zero-damage apply is no hit (a burst that gathered nothing stamps `bombPortion: 0`
+            // like a direct hit does) and nothing reflects it.
             if (
+                rawDamage > 0 &&
                 cause?.byDirectDamage !== false &&
                 !cause?.isReflected &&
                 !cause?.isProtectionTransfer &&
