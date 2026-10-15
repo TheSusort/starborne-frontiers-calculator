@@ -6415,8 +6415,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                  *  victim (defence and incoming composition) and the hit's crit outcome. Read ONLY
                  *  by the Protection transfer block, which divides by exactly these factors and
                  *  prices each protector's chunk on the protector's own. Absent → a hit kind that
-                 *  folds no incoming composition (bomb and accumulator bursts): the block
-                 *  re-derives the defence factor and applies no incoming factor on either ship. */
+                 *  folds no incoming composition: the block re-derives the defence factor and
+                 *  applies no incoming factor on either ship. */
                 redirectBasis?: RedirectBasis;
                 /** #358: the amount the caller reduced to produce `rawDamage` for this
                  *  victim — pre-defence-mitigation, and pre EVERY other victim-side
@@ -6568,7 +6568,9 @@ export function runCombat(rawInput: CombatEngineInput): {
             // PROTECTOR's own defence and incoming reductions — read `protectionCascade`.
             // Guards: direct damage only, and never a redirected application (loop-safe), the
             // Reflect gear set's bounce, or a Bomb splash copy. Counters, reactive procs and a
-            // ship's reflect are redirected (rulings 36, R162).
+            // ship's reflect are redirected (rulings 36, R162). A Bomb is never redirected, nor a
+            // DoT tick (R181): every Bomb burst, detonation burst, Echoing Burst and Bomb death
+            // splash arrives stamped `bombPortion > 0`, so the holder takes it whole.
             // !carriesBarrier: Barrier sits strictly in front of every incoming-effect mechanism
             // (matches the incoming-block step and the transform step) — an invulnerable target
             // has no incoming hit for allies to soak.
@@ -6590,6 +6592,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 !cause.isProtectionTransfer &&
                 (!cause.isReflected || cause.directReflect) &&
                 !cause.isSplashCopy &&
+                (cause.bombPortion ?? 0) === 0 &&
                 !wholeBattlefieldHit &&
                 damage > 0
             ) {
@@ -6606,10 +6609,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                     // self-defence buff (`effectiveStatsOf(...).defence` folds only scheduled and
                     // timed self-buffs).
                     //
-                    // The fallback below serves the basis-less callers (bomb and accumulator
-                    // bursts): `substitutedDefenceFor` recovers a defense-substitution victim's
-                    // CARRIER defence (Meatshield R4), and is a no-op pass-through to `victimDef`
-                    // when no carrier applies.
+                    // The fallback below serves a basis-less direct hit: `substitutedDefenceFor`
+                    // recovers a defense-substitution victim's CARRIER defence (Meatshield R4), and
+                    // is a no-op pass-through to `victimDef` when no carrier applies.
                     const victimDef = effectiveStatsOf(
                         statusEngine,
                         selfBuffLookup,
@@ -6625,8 +6627,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                     // incoming composition — its Inc. Damage Up/Down and its passive, gear and
                     // squad-leader reductions — for the same crit outcome, never the target's.
                     // Exposed stays out: the chunk is not a direct hit on the protector (R139).
-                    // A basis-less hit (a bomb burst) reads no incoming composition on the
-                    // target, so it applies none on the protector either.
+                    // A basis-less hit reads no incoming composition on the target, so it
+                    // applies none on the protector either.
                     const protectorIncomingFactor = (protectorId: string): number => {
                         if (!basis) return 1;
                         const channel = victimIncomingModifiers(
@@ -7769,12 +7771,11 @@ export function runCombat(rawInput: CombatEngineInput): {
         // WHY THE CALLERS CANNOT JUST BOOK THE AMOUNT THEY PASSED IN. A burst arrives at
         // `applyVictimDamage` stamped `byDirectDamage: true` with the whole amount in
         // `bombPortion`, and only the two CONSUMABLE steps (Hit Mitigation, Shield Converter) carry
-        // a `bombPortion === 0` guard. The incoming-block step, the Protection cascade and the
-        // standing Voron/Orel transform have no such guard, so all three fire on a burst and all
-        // three make the funnel record something OTHER than what the caller passed in. #293 swept
-        // every direct-damage caller onto `incomingBooked` for exactly this reason; the detonation
-        // sites were left behind and double-counted every redirected chunk (Meatshield/Lionheart
-        // Protection is live corpus kit, so this was reachable, not theoretical).
+        // a `bombPortion === 0` guard. The incoming-block step has no such guard, so it fires on a
+        // burst and makes the funnel record something OTHER than what the caller passed in. A
+        // Protection cascade never touches a burst (R181), so the redirected term below is 0 for
+        // every burst today; it stays on the shared accessor so a caller cannot drift from the
+        // funnel's own figures.
         //
         // The two terms, and why the split is not arbitrary:
         //  • `incomingBooked` — the victim's OWN booked intake, so a blocked or DoT-transformed

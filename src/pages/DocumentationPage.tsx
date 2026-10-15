@@ -5006,7 +5006,9 @@ const DocumentationPage: React.FC = () => {
                                     for any teammate. When more than one ally holds Protection, the
                                     faster protector intercepts first and only its unabsorbed
                                     remainder cascades to the next. A skill that targets the whole
-                                    battlefield (<strong>Curator</strong>) is never redirected.{' '}
+                                    battlefield (<strong>Curator</strong>) is never redirected, and
+                                    neither are Bombs, Echoing Bursts, Bomb death splashes or damage
+                                    over time: the ship they land on takes all of it.{' '}
                                     <strong>Lionheart</strong> uses a once-per-round variant: it
                                     gains 10 stacks of Protection at the start of each round, and
                                     after it absorbs the first hit redirected from an ally, it loses

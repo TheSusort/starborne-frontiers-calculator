@@ -8,6 +8,7 @@ export const CURRENT_VERSION = '1.76.1';
 // nothing. Do it by hand only if that script cannot.
 export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator: Valkyrie's Echoing Burst no longer crashes the simulation against Nosorog.",
+    'Combat simulator: Protection no longer redirects Bombs, Echoing Bursts or death splashes.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
