@@ -8,6 +8,7 @@ export const CURRENT_VERSION = '1.76.1';
 // nothing. Do it by hand only if that script cannot.
 export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator: Hemlock's Toxic Overflow spread now resolves in turn order.",
+    "Combat simulator: Lionheart's Protection now refills to 10 every round after thefts.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
