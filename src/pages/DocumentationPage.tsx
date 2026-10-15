@@ -3325,9 +3325,11 @@ const DocumentationPage: React.FC = () => {
                                         attacker&apos;s protector&apos;s Protection, uses
                                         Nosorog&apos;s shield penetration, and is boosted by and
                                         spends the attacker&apos;s Exposed, and spends a Titanite
-                                        Plating stack. It is damage Nosorog dealt, so his own
-                                        damage-dealt leech (the Leech set) repairs off it, as it
-                                        does off a counter-attack. The Reflect gear set&apos;s
+                                        Plating stack. A stealthed attacker takes it reduced by its
+                                        stealth-conditional damage reductions (Voidshade, Wusheng),
+                                        as it does a counter-attack. It is damage Nosorog dealt, so
+                                        his own damage-dealt leech (the Leech set) repairs off it,
+                                        as it does off a counter-attack. The Reflect gear set&apos;s
                                         bounce is not direct damage and does none of this. A hit
                                         that Protection moves entirely onto the protector
                                         (Lionheart&apos;s 10 stacks) is not direct damage to the

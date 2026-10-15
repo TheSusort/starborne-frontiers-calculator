@@ -7459,18 +7459,24 @@ export function runCombat(rawInput: CombatEngineInput): {
                         const attackerDefenceReductionPct =
                             attackerDefence > 0 ? calculateDamageReduction(attackerDefence) : 0;
                         // The reflected hit's attacker is the reflector (`victim`, outer scope) and
-                        // its victim is `attacker`, who receives the bounce-back.
-                        const reflectVictimReduction = hitReductionFor(
-                            victim.id,
-                            attacker.id,
-                            false,
-                            {
-                                attackerStealthed: false,
-                                victimStealthed: false,
-                                victimTurnBlocked: false,
-                                attackerTauntedOrProvoked: false,
-                            }
-                        ).parts;
+                        // its victim is `attacker`, who receives the bounce-back. A ship's bounce
+                        // reads the recipient's reductions through the counter's own context, so a
+                        // stealth-conditional one (Voidshade, Wusheng) applies; the gear set's
+                        // bounce keeps the context-free reading.
+                        const reflectVictimReductionFor = (directReflect: boolean) =>
+                            hitReductionFor(
+                                victim.id,
+                                attacker.id,
+                                false,
+                                directReflect
+                                    ? {}
+                                    : {
+                                          attackerStealthed: false,
+                                          victimStealthed: false,
+                                          victimTurnBlocked: false,
+                                          attackerTauntedOrProvoked: false,
+                                      }
+                            ).parts;
                         // The REFLECTOR's Out. Damage Up scales both shares: it is a property of
                         // reflect itself, not of the ship's direct share (#678).
                         const reflectorOutgoingPct = effectiveOutgoingStatsOf(
@@ -7509,7 +7515,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 reflectorOutgoingPct,
                                 affinityDamageModifier,
                                 attackerDefenceReductionPct: shareDefenceReductionPct,
-                                reflectVictimReduction,
+                                reflectVictimReduction: reflectVictimReductionFor(directReflect),
                                 incomingDamageModifierPct: directProfile?.incomingDamageModifierPct,
                                 victimSideIncomingPct: directProfile?.victimSideIncomingPct,
                             });
