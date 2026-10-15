@@ -14,8 +14,6 @@ export interface ActorTargetingStatus {
     taunting: boolean;
     /** Enemy-debuff 'Concentrate Fire' on this actor — force-targeted, bypasses stealth. */
     concentrated: boolean;
-    /** Round the Taunt was applied (most-recent-wins tiebreak). Unset today → front-most. */
-    tauntAppliedRound?: number;
 }
 
 /**
@@ -124,7 +122,9 @@ export interface PositionalActing {
  * AND `target.side === 'enemy'`, forced targeting and stealth run before `selectTargets`:
  *   1. Concentrate Fire (bypasses stealth, never skipped) — force the marked actor (one picked at
  *      random when several are marked; a pick the cast already made stays while it lives).
- *   2. Taunt (before stealth) — force the taunting actor (latest tauntAppliedRound else front-most).
+ *   2. Taunt (before stealth) — force a taunting actor. Several taunters are ordered by the
+ *      attacker's NORMAL targeting over the taunters' cells (its own row first, then the next
+ *      rows; front to back for a `front` target), never by roster or application order.
  *      Skipped when `acting.ignoresForcedTargeting` is true.
  *   3. Provoke — attacker must target the actor whose id matches `acting.provokedBy`.
  *      Bypasses stealth (forced-targeting override). Falls through if the provoker is dead/absent.
@@ -166,11 +166,6 @@ export function resolvePositionalTarget(
 
     if (statusOf) {
         const actors = [...byCell.values()];
-        // Front-most among candidates: highest column first (col 4 = front).
-        // Precondition: callers must guarantee cands is non-empty (returns undefined on []).
-        const frontMost = (cands: CombatActor[]): CombatActor =>
-            [...cands].sort((x, y) => colOf(y.position!) - colOf(x.position!))[0];
-
         const ignore = acting?.ignoresForcedTargeting;
 
         // 1. Concentrate Fire — bypasses stealth, never skipped (even when ignore is true).
@@ -195,12 +190,11 @@ export function resolvePositionalTarget(
         if (!ignore) {
             const taunting = actors.filter((a) => statusOf(a.id)?.taunting);
             if (taunting.length) {
-                // -Infinity sentinel: when all taunters lack tauntAppliedRound, every round(a) is -Infinity,
-                // they all tie at maxRound, and frontMost resolves the tie (roundless multi-taunt → front-most).
-                const round = (a: CombatActor) => statusOf(a.id)?.tauntAppliedRound ?? -Infinity;
-                const maxRound = Math.max(...taunting.map(round));
-                const latest = taunting.filter((a) => round(a) === maxRound);
-                return frontMost(latest);
+                const { anchor } = selectTargets(target, {
+                    casterPosition: actorPosition,
+                    enemyOccupied: taunting.map((a) => a.position!),
+                });
+                return anchor ? (byCell.get(anchor) ?? taunting[0]) : taunting[0];
             }
         }
 
