@@ -19,6 +19,11 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: same-speed protectors now soak damage in board position order.',
     'Combat simulator: with several taunters, attackers pick by their normal targeting order.',
     'Combat simulator: a mutual wipe is now won by the side that landed the final kill.',
+    "Combat simulator: detonations now honour the target's own DoT reductions.",
+    "Combat simulator: Wildfire's Scorching Radiation bonus now raises Inferno detonations.",
+    "Combat simulator: Inferno stacks now keep their applier's attack from when applied.",
+    'Combat simulator: Inc. DoT Damage Up now raises damage converted into a DoT.',
+    "Combat simulator: Tycho's Cheat Death now expires after its stated turns.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
