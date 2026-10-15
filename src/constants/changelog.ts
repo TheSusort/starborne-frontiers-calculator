@@ -11,6 +11,9 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: Protection no longer redirects Bombs, Echoing Bursts or death splashes.',
     "Combat simulator: Nosorog's reflect now respects the attacker's stealth-conditional damage reductions.",
     'Combat simulator: Ironclad and Shadowguard no longer trigger on Protection damage shares.',
+    'Combat simulator: the Reflect gear set now reflects as direct damage, so reactions answer it.',
+    "Combat simulator: the Reflect gear set's bounce now respects the attacker's Inc. Damage Down.",
+    "Combat simulator: the Leech set now repairs from the Reflect gear set's bounce.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

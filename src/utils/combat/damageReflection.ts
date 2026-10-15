@@ -22,8 +22,9 @@ import { composeIncomingFactor, type IncomingReductionParts } from './victimDama
  * measured fight sits at model × 0.9895, a constant the model does not carry. The affinity
  * term is kept but has not been measured.
  *
- * The last factor is the same capped composition a direct hit takes. A ship's reflect also reads
- * the attacker's incoming-damage status channel; the gear set's bounce leaves it at 0.
+ * The last factor is the same capped composition a direct hit takes. Both bounces read the
+ * attacker's incoming-damage status channel (Inc. Damage Up/Down); only a ship's reflect also reads
+ * Exposed.
  *
  * Affinity argument order convention:
  *   The WEARER is the source of the reflected hit. Call
@@ -95,8 +96,8 @@ export function reflectedDamageParts(args: {
     /**
      * The bounce-back recipient's incoming-damage STATUS channel
      * (`VictimDefenseProfile.incomingDamageModifierPct`): Inc. Damage Up/Down, Exposed and the
-     * rest, signed (negative = takes less). Nosorog's bounce reads it like a counter (R176); the
-     * Reflect gear set's leaves it at the default 0.
+     * rest, signed (negative = takes less). Nosorog's bounce reads it like a counter (R176) and the
+     * Reflect gear set's reads it without Exposed (R195). Default 0.
      */
     incomingDamageModifierPct?: number;
     /** The victim-side slice of that channel (`VictimDefenseProfile.victimSideIncomingPct`),

@@ -3330,7 +3330,12 @@ const DocumentationPage: React.FC = () => {
                                         as it does a counter-attack. It is damage Nosorog dealt, so
                                         his own damage-dealt leech (the Leech set) repairs off it,
                                         as it does off a counter-attack. The Reflect gear set&apos;s
-                                        bounce is not direct damage and does none of this. A hit
+                                        bounce is direct damage too: the same reactions answer it
+                                        (Warden, Isha, every counter-attacker), the attacker&apos;s
+                                        Inc. Damage Up and Down change it, and the wearer&apos;s
+                                        Leech set repairs off it. It is not redirected by Protection
+                                        and does not read or spend Exposed or Titanite Plating. A
+                                        ship with both reflects twice, one bounce per source. A hit
                                         that Protection moves entirely onto the protector
                                         (Lionheart&apos;s 10 stacks) is not direct damage to the
                                         ship it was aimed at: that ship does not counter or react,

@@ -6400,9 +6400,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                  *  set). The reflection block skips when set → no ping-pong (a reflected hit never
                  *  reflects). */
                 isReflected?: boolean;
-                /** With `isReflected`: the bounce of a ship's reflect, which is a direct hit in full
-                 *  (R137, R162) — Protection redirects it, and it spends Exposed and Titanite
-                 *  Plating like any direct hit. Absent for the Reflect gear set's bounce. */
+                /** With `isReflected`: the bounce of a ship's reflect — Protection redirects it,
+                 *  and it spends Exposed and Titanite Plating like any direct hit (R137, R162).
+                 *  Absent for the Reflect gear set's bounce, which does neither. */
                 directReflect?: boolean;
                 /** True for a FLAT copy of an already-resolved burst (Demolisher's Bomb splash):
                  *  Bomb damage, not a direct hit, so no Protection redirect and no Exposed spend. */
@@ -7365,12 +7365,15 @@ export function runCombat(rawInput: CombatEngineInput): {
             // reflected kill records the destroy + fires on-death FOR FREE — recordDestroyed
             // above), and (c) does NOT itself reflect (the isReflected guard below skips).
             //
-            // A SHIP's reflect (Nosorog) is direct damage on the attacker (R137): it lands like a
+            // Every bounce is direct damage on the attacker (R137, R196): it lands like a
             // counter through `landReactiveHit`, so the attacker's "when directly damaged"
-            // reactions answer it (every counter included, R160), its Stasis drops and its
-            // damage-taken shields fire. The Reflect GEAR SET's bounce (`source: 'equipment'`) is
-            // not direct damage and raises none of that. A reflector carrying both sends one
-            // bounce, direct when any part of it is.
+            // reactions answer it (every counter included, R160), its Stasis drops, its
+            // damage-taken shields fire, and the reflector's standing leech pays on it (R165,
+            // R197). A reflector carrying both a ship reflect and the Reflect gear set
+            // (`source: 'equipment'`) lands two separate bounces. The ship's share also reads the
+            // attacker's Exposed and Protection, and uses the reflector's penetration; the gear
+            // set's share reads the rest of the attacker's incoming-damage channel (R195) but none
+            // of those.
             //
             // GATE (owner rulings, #678): the hit must have landed. A hit the reflector's shield
             // soaks whole still reflects in full; a hit that does nothing reflects nothing —
@@ -7428,9 +7431,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                                     : 0),
                             0
                         );
-                    // A ship's reflect is a direct hit on the attacker (R137, R162); the Reflect
-                    // gear set's is not. A wearer carrying both bounces each share separately off
-                    // the same hit: the ship's share first, then the set's.
+                    // A wearer carrying both bounces each share separately off the same hit: the
+                    // ship's share first, then the set's.
                     const shares = [
                         { reflectPct: reflectPctOf(false), directReflect: true },
                         { reflectPct: reflectPctOf(true), directReflect: false },
@@ -7478,6 +7480,14 @@ export function runCombat(rawInput: CombatEngineInput): {
                                           attackerTauntedOrProvoked: false,
                                       }
                             ).parts;
+                        // The gear set's share reads the recipient's incoming-damage status channel
+                        // (Inc. Damage Up/Down, R195) without Exposed, which only a bounce that
+                        // spends it may read.
+                        const setStatusChannel = victimIncomingModifiers(
+                            attacker.id,
+                            landedScheduledEnemyEffectsByActor.get(victim.id) ?? [],
+                            false
+                        );
                         // The REFLECTOR's Out. Damage Up scales both shares: it is a property of
                         // reflect itself, not of the ship's direct share (#678).
                         const reflectorOutgoingPct = effectiveOutgoingStatsOf(
@@ -7493,7 +7503,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // the incoming-damage status channel — Inc. Damage Up/Down and Exposed,
                             // which the funnel then spends. The gear set's share takes its defence
                             // from `effectiveStatsOf(attacker)` — the attacker's own self-sourced
-                            // buffs only, no enemy-applied Defense Down — and has no status channel.
+                            // buffs only, no enemy-applied Defense Down — and the status channel
+                            // without Exposed.
                             const directInputs = directReflect
                                 ? reactiveHitInputs(victim, attacker)
                                 : undefined;
@@ -7517,21 +7528,21 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 affinityDamageModifier,
                                 attackerDefenceReductionPct: shareDefenceReductionPct,
                                 reflectVictimReduction: reflectVictimReductionFor(directReflect),
-                                incomingDamageModifierPct: directProfile?.incomingDamageModifierPct,
-                                victimSideIncomingPct: directProfile?.victimSideIncomingPct,
+                                incomingDamageModifierPct:
+                                    directProfile?.incomingDamageModifierPct ??
+                                    setStatusChannel.incomingDamageModifier,
+                                victimSideIncomingPct:
+                                    directProfile?.victimSideIncomingPct ??
+                                    setStatusChannel.victimSideIncomingModifier,
                             });
                             const reflected = bounce.damage;
                             const reflectedPreMit = bounce.preMitigation;
                             if (reflected > 0) {
                                 // Aimed at the attacker like a counter (R137); the aim and the
                                 // Stasis gate are read at impact, before the bounce lands.
-                                const reflectAim = directReflect
-                                    ? aimReactiveHit(attacker.id)
-                                    : undefined;
+                                const reflectAim = aimReactiveHit(attacker.id);
                                 const reflectStasisAtImpact =
-                                    directReflect &&
-                                    attackBreaksStasis(victim) &&
-                                    isStasised(attacker.id);
+                                    attackBreaksStasis(victim) && isStasised(attacker.id);
                                 // `sink` accumulates the attacker's incoming into the unified
                                 // perActorIncoming/intakeFor map under its own id (ids are globally
                                 // unique across sides — no per-side selection needed).
@@ -7543,7 +7554,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                         killerId: victim.id,
                                         byDirectDamage: true,
                                         isReflected: true,
-                                        // A direct bounce is redirected by the attacker's
+                                        // A ship's bounce is redirected by the attacker's
                                         // Protection, spends its Titanite/Exposed and uses the
                                         // reflector's shield penetration (R162); the gear set's
                                         // bounce does none of that.
@@ -7635,22 +7646,20 @@ export function runCombat(rawInput: CombatEngineInput): {
                                         triggerActorId: actingActorId,
                                     });
                                 }
-                                if (reflectAim) {
-                                    landReactiveHit(
-                                        victim,
-                                        attacker,
-                                        reflected,
-                                        false,
-                                        reflectOutcome,
-                                        reflectStasisAtImpact,
-                                        false,
-                                        reflectAim,
-                                        true
-                                    );
-                                    // Damage the reflector dealt, so his standing leech pays on it
-                                    // like a counter's (R165).
-                                    payReactiveHitLeech(victim, reflectOutcome);
-                                }
+                                landReactiveHit(
+                                    victim,
+                                    attacker,
+                                    reflected,
+                                    false,
+                                    reflectOutcome,
+                                    reflectStasisAtImpact,
+                                    false,
+                                    reflectAim,
+                                    true
+                                );
+                                // Damage the reflector dealt, so his standing leech pays on it
+                                // like a counter's (R165, R197).
+                                payReactiveHitLeech(victim, reflectOutcome);
                             }
                         }
                     }
@@ -7675,7 +7684,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             //  - DoT-tick batches and bomb/detonation portions (`byDirectDamage: false` / a
             //    non-zero `bombPortion`);
             //  - the Reflect gear set's bounce (`isReflected` without `directReflect`) —
-            //    `reflectedDamageParts` gets status channel 0 for it;
+            //    `reflectedDamageParts` gets its status channel without Exposed;
             //  - a Protection transfer (`isProtectionTransfer`) — the redirected chunk comes off
             //    the ORIGINAL victim's cascade;
             //  - a Bomb splash copy (`isSplashCopy`).
