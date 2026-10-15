@@ -3194,19 +3194,19 @@ const DocumentationPage: React.FC = () => {
                                         by Wildfire&apos;s Scorching Radiation bonus exactly as a
                                         tick is, and Inc. DoT Damage Up increases the damage dealt
                                         by each tick of a hit converted into a damage-over-time
-                                        effect. Tycho&apos;s start-of-combat Cheat Death expires
-                                        after the turns its text states. Reactions to an enemy
-                                        cleansing a debuff (Pestilence, Larkspur, Grif, Arum,
-                                        Yarrow) also hear the cleanses an enemy&apos;s passive
-                                        performs (Nuqtu, Purifier, AEGIS, Hermes, Howler), but not a
-                                        duration cut; a cleanse that such a reaction provoked
-                                        triggers them again. Pestilence&apos;s Corrosion lands on
-                                        the enemy that cleansed. A count written after an infliction
-                                        in the same skill includes what that skill landed, enemy by
-                                        enemy: Crocus&apos;s Corrosion II counts toward her own
-                                        &ldquo;3 or more debuffs&rdquo; Stasis (Asphyxiator&apos;s
-                                        and Anemone&apos;s gates likewise), and a resisted one does
-                                        not. A passive reacting to the hit (Bayah) counts only the
+                                        effect. Cheat Death never expires on a timer: it stays until
+                                        a lethal hit uses it. Reactions to an enemy cleansing a
+                                        debuff (Pestilence, Larkspur, Grif, Arum, Yarrow) also hear
+                                        the cleanses an enemy&apos;s passive performs (Nuqtu,
+                                        Purifier, AEGIS, Hermes, Howler), but not a duration cut; a
+                                        cleanse that such a reaction provoked triggers them again.
+                                        Pestilence&apos;s Corrosion lands on the enemy that
+                                        cleansed. A count written after an infliction in the same
+                                        skill includes what that skill landed, enemy by enemy:
+                                        Crocus&apos;s Corrosion II counts toward her own &ldquo;3 or
+                                        more debuffs&rdquo; Stasis (Asphyxiator&apos;s and
+                                        Anemone&apos;s gates likewise), and a resisted one does not.
+                                        A passive reacting to the hit (Bayah) counts only the
                                         debuffs from before the skill. APEX&apos;s passive shield
                                         arrives as the skill&apos;s first debuff lands, so her
                                         charged skill&apos;s &ldquo;If this Unit has an active
@@ -3326,10 +3326,13 @@ const DocumentationPage: React.FC = () => {
                                         (their attack times the skill&apos;s percentage), boosted by
                                         the reflecting ship&apos;s own Outgoing Damage Up, then
                                         reduced by the attacker&apos;s Defense and damage
-                                        reductions. Critical hits and the attacker&apos;s own damage
-                                        buffs do not change it. A shield that absorbs the hit does
-                                        not stop the reflect, but a hit that is blocked or nullified
-                                        by a Barrier reflects nothing.
+                                        reductions. The attacker&apos;s attack as its buffs and
+                                        debuffs leave it counts (Attack Up II raises the reflect by
+                                        30%), and so does the affinity matchup between the two
+                                        ships. Critical hits and the attacker&apos;s own Outgoing
+                                        Damage Up do not change it. A shield that absorbs the hit
+                                        does not stop the reflect, but a hit that is blocked or
+                                        nullified by a Barrier reflects nothing.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">
@@ -4774,14 +4777,19 @@ const DocumentationPage: React.FC = () => {
                                         <strong>Area-of-effect attacks and heals:</strong> Every
                                         affected ship is listed individually with its own damage or
                                         heal amount and resulting HP percentage — not just the
-                                        primary target.
+                                        primary target. When several rows land on one ship at the
+                                        same moment (a ship&apos;s Damage over Time ticks), only the
+                                        last of them shows the HP percentage.
                                     </li>
                                     <li>
                                         <strong>Reactions shown in context:</strong> Counterattacks,
                                         on-crit heals, reflects, reactive shields, and other
                                         triggered effects appear nested under the action that caused
                                         them, in the correct turn — not attributed to the reacting
-                                        ship&apos;s own turn.
+                                        ship&apos;s own turn. A share of a hit that Protection moves
+                                        onto a protector is labelled Protection and nests under the
+                                        hit it came from, with the protector&apos;s own HP after
+                                        each share.
                                     </li>
                                     <li>
                                         <strong>Accurate per-ally heals:</strong> When a ship heals
@@ -4795,7 +4803,12 @@ const DocumentationPage: React.FC = () => {
                                         enemy hit alike, and before any shield absorbs it (a row
                                         whose hit met a shield says &quot;shield hit&quot;). Extra
                                         damage a passive adds to the same hit is included in that
-                                        row.
+                                        row. Where Protection moves part of a hit, the target&apos;s
+                                        row shows the share it kept and each protector&apos;s share
+                                        has its own row. A hit that Voron, Orel or Hit Mitigation
+                                        turns into a Damage over Time effect shows &quot;converted
+                                        to DoT&quot; and no number or HP: it landed no direct
+                                        damage, and the ticks that follow carry it.
                                     </li>
                                     <li>
                                         <strong>Ticks, strips and splashes have rows:</strong>{' '}
@@ -4803,9 +4816,9 @@ const DocumentationPage: React.FC = () => {
                                         the start of their holder&apos;s turn, before the ship acts.
                                         A shield strip (APEX, Laika, Malvex) shows how much shield
                                         it removed, and a bomb carrier&apos;s death splash shows the
-                                        damage each neighbour took. A ship killed by a DoT tick has
-                                        no killer named; a Bomb kill names the ship that planted the
-                                        Bomb.
+                                        damage each neighbour took. A ship killed by a DoT tick or a
+                                        DoT detonation has no killer named; a Bomb kill names the
+                                        ship that planted the Bomb.
                                     </li>
                                     <li>
                                         <strong>Wasted repairs and shields are named:</strong> Heal

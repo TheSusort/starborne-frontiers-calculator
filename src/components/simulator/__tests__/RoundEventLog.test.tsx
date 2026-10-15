@@ -594,3 +594,45 @@ describe('RoundEventLog', () => {
         expect(screen.getByText(/Nova heals → Graphite: 1,400 \(crit\)/)).toBeInTheDocument();
     });
 });
+
+describe('RoundEventLog: converted hits and Protection shares', () => {
+    const oneEntry = (
+        entry: CombatLogRound['turns'][number]['entries'][number]
+    ): CombatLogRound => ({
+        round: 1,
+        startOfRound: [],
+        turns: [{ actorId: 'nova', chargeBefore: 0, chargeMax: 0, entries: [entry] }],
+        endOfRound: [],
+    });
+
+    it('a hit turned into a DoT reads "converted to DoT" with no number and no HP', () => {
+        render(
+            <RoundEventLog
+                round={oneEntry({
+                    kind: 'attack',
+                    actorId: 'nova',
+                    targets: [{ targetId: 'hexa', didHit: true, convertedToDot: true }],
+                    reactions: [],
+                })}
+                roster={roster}
+            />
+        );
+        expect(screen.getByText(/Nova → Enemy Hexa: converted to DoT/)).toBeInTheDocument();
+    });
+
+    it('a protector share row is labelled Protection', () => {
+        render(
+            <RoundEventLog
+                round={oneEntry({
+                    kind: 'attack',
+                    actorId: 'graphite',
+                    note: 'Protection',
+                    targets: [{ targetId: 'nova', amount: 1000, didHit: true, resultingHpPct: 95 }],
+                    reactions: [],
+                })}
+                roster={roster}
+            />
+        );
+        expect(screen.getByText(/Graphite \(Protection\) → Nova: 1,000 → 95%/)).toBeInTheDocument();
+    });
+});

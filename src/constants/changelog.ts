@@ -23,7 +23,12 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator: Wildfire's Scorching Radiation bonus now raises Inferno detonations.",
     "Combat simulator: Inferno stacks now keep their applier's attack from when applied.",
     'Combat simulator: Inc. DoT Damage Up now raises damage converted into a DoT.',
-    "Combat simulator: Tycho's Cheat Death now expires after its stated turns.",
+    'Combat log: Bomb and Echoing Burst rows now show only what the ship took.',
+    "Combat log: Nosorog's reflect row now shows only what the attacker took.",
+    'Combat log: hits turned into a DoT now read "converted to DoT", with no damage number.',
+    'Combat log: Protection shares now nest under the hit they came from.',
+    "Combat log: Protection shares are labelled and show the protector's HP after each.",
+    "Combat log: Echoing Burst rows now show the target's HP afterwards.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

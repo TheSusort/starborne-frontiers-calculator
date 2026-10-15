@@ -399,6 +399,16 @@ export type CombatEvent =
           round: number;
           amount: number;
           didCrit?: boolean;
+          /** The row is one protector's share of a hit Protection moved off `sourceId` (the ship
+           *  the hit was aimed at) onto `targetId`. Log-only: it labels the row and tells the
+           *  builder which burst row, if any, the share came out of. */
+          protectionShare?: true;
+          /** The target's HP percentage right after this row, when the emitter has it per row
+           *  (a protector's N per-stack shares share one `hp-changed` stream). */
+          resultingHpPct?: number;
+          /** The hit was turned into a damage-over-time effect on its victim and landed no direct
+           *  damage: the row shows no damage number (`amount` is 0). */
+          convertedToDot?: true;
       } & ReactiveStamp)
     /** A drain-time REACTIVE heal resolved (executeIntent heal branch). A reactive heal credits
      *  `directHeal` but emits NO `heal-performed` (chain guard — it must not re-trigger the
@@ -1054,6 +1064,10 @@ export type CombatEvent =
            *  Protection moved all of it onto protectors, R139). The event exists so the combat log
            *  keeps the target's row; no "when directly damaged" reaction answers it. */
           notDirectDamage?: true;
+          /** The hit was turned into a damage-over-time effect on this victim (Voron, Orel, Hit
+           *  Mitigation) and landed no direct damage. Always carried with `notDirectDamage`; the
+           *  combat log rows the target as converted instead of showing a number. */
+          convertedToDot?: true;
       };
 
 export type CombatEventType = CombatEvent['type'];

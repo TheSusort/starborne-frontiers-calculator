@@ -3016,7 +3016,7 @@ describe('buildShipAbilities', () => {
                 (a) => a.config.type === 'buff' && a.config.buffName === 'Cheat Death'
             )!;
             expect(cheatDeath).toMatchObject({ trigger: 'pre-combat', conditions: [] });
-            expect(cheatDeath.config).toMatchObject({ duration: 9 });
+            expect(cheatDeath.config).toMatchObject({ duration: 'recurring' });
             const everliving = passive.abilities.find(
                 (a) =>
                     a.config.type === 'buff' && a.config.buffName === 'Everliving Regeneration II'
@@ -5098,7 +5098,7 @@ describe('buildShipAbilities — PR5 Finding 2 duration misattachment across mul
         expect(hitMit.config).toMatchObject({ duration: 3 });
     });
 
-    it('Tycho first passive: "gains Cheat Death and Everliving Regeneration I for 6 turns" — both buffs get the 6-turn duration', () => {
+    it('Tycho first passive: "gains Cheat Death and Everliving Regeneration I for 6 turns" — Everliving Regeneration I gets the 6-turn duration (Cheat Death stays untimed)', () => {
         // docs/ship-skills.csv Tycho first_passive_skill_text (exact clause, routed through the
         // real passive slot). Only the duration attachment is in question here — the
         // start-of-combat trigger itself was already fixed in epic PR4 (pre-combat seeding).
@@ -5112,7 +5112,7 @@ describe('buildShipAbilities — PR5 Finding 2 duration misattachment across mul
             (a) => a.config.type === 'buff' && a.config.buffName === 'Cheat Death'
         )!;
         expect(cheatDeath).toBeDefined();
-        expect(cheatDeath.config).toMatchObject({ duration: 6 });
+        expect(cheatDeath.config).toMatchObject({ duration: 'recurring' });
         const everliving = passive.abilities.find(
             (a) => a.config.type === 'buff' && a.config.buffName === 'Everliving Regeneration I'
         )!;
