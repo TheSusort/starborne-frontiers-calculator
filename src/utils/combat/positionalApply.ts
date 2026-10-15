@@ -113,6 +113,21 @@ export function directlyDamagesVictim(
     return (outcome.transformedToDot ?? 0) <= 0 && outcome.fullyRedirected !== true;
 }
 
+/**
+ * What a combat-log row for a reactive hit (a counter, a proc, a reflect) shows for its victim:
+ * the hit as thrown, the share the victim kept when Protection split it, or no damage at all for
+ * a hit converted into a DoT (`convertedToDot`, `amount` 0).
+ */
+export function loggedHitFigures(
+    outcome: Pick<VictimDamageOutcome, 'transformedToDot' | 'protectionSplit'> & {
+        incomingBooked: number;
+    },
+    thrown: number
+): { amount: number; convertedToDot?: true } {
+    if ((outcome.transformedToDot ?? 0) > 0) return { amount: 0, convertedToDot: true };
+    return { amount: outcome.protectionSplit ? outcome.incomingBooked : thrown };
+}
+
 /** Whether a hit DID DAMAGE to the ship it struck, for "when damaging X" gains (owner ruling
  *  2026-10-11, #655): direct damage ({@link directlyDamagesVictim}) that was not nullified by
  *  Barrier and booked more than 0. A shield-soaked hit counts — the shield took direct damage —

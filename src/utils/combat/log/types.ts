@@ -102,6 +102,9 @@ export interface CombatLogTarget {
     didHit?: boolean; // false = miss/dodge
     resultingHpPct?: number;
     shieldWasHit?: boolean;
+    /** The hit struck this target and was turned into a damage-over-time effect on it, so it landed
+     *  no damage: `amount` and `resultingHpPct` are absent and the later ticks carry the damage. */
+    convertedToDot?: boolean;
     /** The #418 follow-up, `heal` entries only: the portion of this repair wasted on an HP bar
      *  that was already full (`heal-performed` / `reactive-heal-performed`'s `perTarget.overheal`).
      *  Present only when > 0.

@@ -159,6 +159,9 @@ interface BuildContext {
      *  (an enemy caster's emit order). That `attacked` adds its damage to the row instead of
      *  being read as a repeat hit on the same victim. */
     passiveOnlyTargets: WeakSet<CombatLogTarget>;
+    /** The burst row just opened, while the rows its own funnel raises (a Protection share) may
+     *  still follow. Those shares came out of the burst, so they are taken off its amount. */
+    openBurst: { victimId: string; target: CombatLogTarget } | undefined;
 
     /** Push a new round and set it as current. */
     openRound(round: number): void;
@@ -239,6 +242,7 @@ function createBuildContext(
         currentStamp: undefined,
         reactiveEntries: new WeakSet<CombatLogEntry>(),
         passiveOnlyTargets: new WeakSet<CombatLogTarget>(),
+        openBurst: undefined,
 
         openRound(round: number) {
             ctx.closeOpenAttack();
@@ -485,6 +489,25 @@ function createBuildContext(
     return ctx;
 }
 
+/** The label on a protector's share row. */
+const PROTECTION_SHARE_NOTE = 'Protection';
+
+/** Events a burst's own funnel raises right after the burst is announced: the protectors' shares
+ *  and the HP, shield and death consequences of landing it. Anything else ends the burst. */
+function keepsBurstOpen(event: CombatEvent): boolean {
+    switch (event.type) {
+        case 'reactive-damage-performed':
+            return event.protectionShare === true;
+        case 'hp-changed':
+        case 'ship-destroyed':
+        case 'shield-destroyed-log':
+        case 'cheat-death-log':
+            return true;
+        default:
+            return false;
+    }
+}
+
 type Handler<T extends CombatEventType> = (
     e: Extract<CombatEvent, { type: T }>,
     ctx: BuildContext
@@ -586,7 +609,23 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
         const rowDamage = e.protectionSplit ? (e.takenDamage ?? e.damage) : e.damage;
         // Find-or-create the target for this victim (dedup by targetId).
         const existing = ctx.openAttackEntry.targets.find((t) => t.targetId === e.targetId);
+        // A hit turned into a DoT landed nothing: the row shows no number and no HP, only that it
+        // was converted (the DoT's ticks carry the damage).
+        if (e.convertedToDot) {
+            if (existing) return;
+            ctx.openAttackEntry.targets.push({
+                targetId: e.targetId,
+                didCrit: e.didCrit,
+                didHit: true,
+                convertedToDot: true,
+            });
+            return;
+        }
         if (existing) {
+            if (existing.convertedToDot) {
+                delete existing.convertedToDot;
+                existing.amount = rowDamage ?? 0;
+            }
             // The firing hit landing after its own passive-slot instance was logged: add it.
             if (ctx.passiveOnlyTargets.has(existing)) {
                 ctx.passiveOnlyTargets.delete(existing);
@@ -787,15 +826,37 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
     // `attacked` event fills them in. Both nest under the trigger turn via `currentStamp`.
     'reactive-damage-performed': (e, ctx) => {
         if (!ctx.currentTurn && !ctx.currentRound) return;
-        const target: CombatLogTarget = { targetId: e.targetId, amount: e.amount, didHit: true };
+        const target: CombatLogTarget = { targetId: e.targetId, didHit: true };
+        if (e.convertedToDot) target.convertedToDot = true;
+        else target.amount = e.amount;
         if (e.didCrit) target.didCrit = true;
         const entry: CombatLogEntry = {
             kind: 'attack',
             actorId: e.sourceId,
             targets: [target],
             reactions: [],
+            ...(e.protectionShare ? { note: PROTECTION_SHARE_NOTE } : {}),
         };
         ctx.attachEntry(entry);
+        if (e.convertedToDot) return;
+        if (e.protectionShare) {
+            // The protector's rows carry their own HP: its `hp-changed` events all arrived before
+            // the first row, so pairing them here would give every row the last figure.
+            if (e.resultingHpPct !== undefined) {
+                target.resultingHpPct = e.resultingHpPct;
+                ctx.pendingHp.delete(e.targetId);
+                ctx.awaitingHp.delete(e.targetId);
+            } else {
+                ctx.claimHp(target);
+            }
+            // The share left the ship the hit was aimed at: a burst row opened for it shows only
+            // what that ship kept.
+            const burst = ctx.openBurst;
+            if (burst && burst.victimId === e.sourceId && burst.target.amount !== undefined) {
+                burst.target.amount = Math.max(0, burst.target.amount - e.amount);
+            }
+            return;
+        }
         ctx.claimHp(target);
     },
 
@@ -950,6 +1011,7 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
         };
         ctx.attachEntry(entry);
         ctx.claimHp(entry.targets[0]);
+        ctx.openBurst = { victimId: e.victimId, target: entry.targets[0] };
     },
 
     // The splash a dying bomb carrier threw at an adjacent ally. Booked to the bomb's APPLIER, the
@@ -965,6 +1027,7 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
         };
         ctx.attachEntry(entry);
         ctx.claimHp(entry.targets[0]);
+        ctx.openBurst = { victimId: e.victimId, target: entry.targets[0] };
     },
 
     /** An Echoing Burst going off. `actorId` is the applier who is credited, the target is the
@@ -979,6 +1042,8 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
             note: 'Echoing Burst detonated',
         };
         ctx.attachEntry(entry);
+        ctx.claimHp(entry.targets[0]);
+        ctx.openBurst = { victimId: e.victimId, target: entry.targets[0] };
     },
 
     'control-applied': (e, ctx) => {
@@ -1089,6 +1154,8 @@ export function buildCombatLog(
             'duringTurnOf' in event && event.duringTurnOf
                 ? { duringTurnOf: event.duringTurnOf, triggerActorId: event.triggerActorId }
                 : undefined;
+
+        if (!keepsBurstOpen(event)) ctx.openBurst = undefined;
 
         const handler = (handlers as Record<string, Handler<CombatEventType> | undefined>)[
             event.type

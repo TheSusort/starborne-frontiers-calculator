@@ -5043,6 +5043,8 @@ export interface ReactiveHitOutcome {
     didCrit: boolean;
     protectionSplit?: true;
     taken?: number;
+    /** The hit became a DoT on its victim and landed nothing directly. */
+    convertedToDot?: true;
 }
 
 /** Emit the `reactive-damage-performed` event for a proc that actually dealt damage.
@@ -5062,8 +5064,13 @@ function emitReactiveDamageLog(
             sourceId: ownerId,
             targetId: victimId,
             round: ctx.round,
-            amount: outcome.protectionSplit ? (outcome.taken ?? outcome.dealt) : outcome.dealt,
+            amount: outcome.convertedToDot
+                ? 0
+                : outcome.protectionSplit
+                  ? (outcome.taken ?? outcome.dealt)
+                  : outcome.dealt,
             didCrit: outcome.didCrit,
+            ...(outcome.convertedToDot ? { convertedToDot: true as const } : {}),
         });
     }
     // The attack row now exists (or the proc was guarded and buffered nothing) — release any

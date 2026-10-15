@@ -341,11 +341,18 @@ describe('a sub-attack whose damage is fully diverted still emits its own event'
         const control = run(false);
 
         // Fixture self-check: the block really did swallow sub-attack 0 and nothing else. A
-        // fully-transformed hit suppresses its `attacked` signal (it dealt no direct damage), so
-        // the blocked run shows 2 where the control shows 3. Without this the test could pass
-        // vacuously against a fixture where Hit Mitigation never fired.
+        // fully-transformed hit signals `attacked` stamped `notDirectDamage` and `convertedToDot`
+        // (it dealt no direct damage), so the blocked run shows exactly one such event where the
+        // control shows none. Without this the test could pass vacuously against a fixture where
+        // Hit Mitigation never fired.
         expect(control.attacked).toHaveLength(3);
-        expect(blockedRun.attacked).toHaveLength(2);
+        expect(control.attacked.filter((e) => e.notDirectDamage)).toHaveLength(0);
+        expect(blockedRun.attacked).toHaveLength(3);
+        expect(
+            blockedRun.attacked.filter(
+                (e) => e.notDirectDamage === true && e.convertedToDot === true
+            )
+        ).toHaveLength(1);
 
         // THE cardinality claim: a diverted sub-attack is still an attack.
         expect(blockedRun.perf).toHaveLength(3);

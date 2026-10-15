@@ -57,6 +57,8 @@ export function emitAttacked(args: {
     notDirectDamage?: boolean;
     /** See `attacked.fromCounter`. */
     fromCounter?: boolean;
+    /** See `attacked.convertedToDot`. */
+    convertedToDot?: boolean;
 }): void {
     const {
         bus,
@@ -73,6 +75,7 @@ export function emitAttacked(args: {
         reactiveHitId,
         fromCounter,
         notDirectDamage,
+        convertedToDot,
     } = args;
     hitOutcomes.forEach((hitCrit, hitIndex) => {
         bus.emit({
@@ -90,6 +93,7 @@ export function emitAttacked(args: {
             ...(reactiveHitId !== undefined ? { reactiveHitId } : {}),
             ...(fromCounter ? { fromCounter: true as const } : {}),
             ...(notDirectDamage ? { notDirectDamage: true as const } : {}),
+            ...(convertedToDot ? { convertedToDot: true as const } : {}),
         });
     });
 }

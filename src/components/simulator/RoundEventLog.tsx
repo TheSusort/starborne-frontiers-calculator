@@ -77,6 +77,9 @@ const colorForKind = (kind: CombatLogEntryKind): string => {
  */
 const targetOutcome = (t: CombatLogTarget): string => {
     if (t.didHit === false) return 'miss';
+    // A hit turned into a damage-over-time effect lands no damage: no number, no HP. The DoT's
+    // own tick rows show what it does.
+    if (t.convertedToDot) return t.didCrit ? 'converted to DoT (crit)' : 'converted to DoT';
     const parts: string[] = [];
     // ONE normalized number drives both the display and the "did anything land" test. `fmt`
     // rounds, so gating on the raw `t.amount` let a fractional 0.3 HP render as a bare, unexplained
@@ -171,6 +174,9 @@ const formatters: Record<
         const bits = [ctx.nameOf(entry.actorId)];
         if (entry.skillName) bits.push(entry.skillName);
         if (entry.slot) bits.push(`[${entry.slot}]`);
+        // A protector's share of a redirected hit is labelled, or it reads as a ship attacking
+        // its own ally.
+        if (entry.note) bits.push(`(${entry.note})`);
         return renderTargets(entry, ctx, bits.join(' '));
     },
     heal: (entry, ctx) => renderTargets(entry, ctx, `${ctx.nameOf(entry.actorId)} heals`),

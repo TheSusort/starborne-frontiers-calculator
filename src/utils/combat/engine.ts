@@ -109,6 +109,7 @@ import {
     applyPositionalDamage,
     damagedVictim,
     directlyDamagesVictim,
+    loggedHitFigures,
     footprintVictims,
     isWholeBattlefieldPattern,
     type SubAttackBoundary,
@@ -6274,6 +6275,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             sourceId: string;
             targetId: string;
             amount: number;
+            convertedToDot?: true;
             subAttack?: number;
         }[] = [];
         // Shared LOG-ONLY consequence-event buffer. Carries the log-only twins
@@ -6343,6 +6345,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                     targetId: row.targetId,
                     round: r,
                     amount: row.amount,
+                    ...(row.convertedToDot ? { convertedToDot: true as const } : {}),
                     reactive: true,
                     duringTurnOf: actingActorId,
                     triggerActorId: actingActorId,
@@ -6675,6 +6678,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                         // shield-destroyed, ship-destroyed, a deferred DoT application).
                         let intakeTotal = 0;
                         const perStackIntake: number[] = [];
+                        // The protector's HP right after each sub-hit: its own `hp-changed` events
+                        // all precede the rows, so a row cannot pair with one afterwards.
+                        const perStackHpPct: (number | undefined)[] = [];
                         for (let s = 0; s < chunk.stacks; s++) {
                             const outcome = applyVictimDamage(chunk.perStack, p.actor, sink, {
                                 killerId: cause.killerId,
@@ -6692,6 +6698,14 @@ export function runCombat(rawInput: CombatEngineInput): {
                             });
                             intakeTotal += outcome.incomingBooked;
                             perStackIntake.push(outcome.incomingBooked);
+                            const protectorMaxHp = maxHpOf(p.actor.id);
+                            perStackHpPct.push(
+                                p.actor.currentHp <= 0
+                                    ? 0
+                                    : protectorMaxHp > 0
+                                      ? (100 * p.actor.currentHp) / protectorMaxHp
+                                      : undefined
+                            );
                         }
                         // We sum the intake the funnel RECORDED per sub-hit (`incomingBooked`) rather
                         // than `chunk.total − transformedToDot` — that subtraction wrongly counts a
@@ -6754,19 +6768,25 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // (battleSimulator's LOG_EVENT_TYPES subscription, triggers.ts's
                             // reactive-stamping set, buildCombatLog's handler, and the audit
                             // fingerprint, which reduces entries to a de-duplicated SET of kinds).
-                            for (const perStack of perStackIntake) {
-                                if (perStack <= 1e-9) continue;
-                                bus.emit({
+                            //
+                            // Routed through `emitConsequenceLog`, so on a deferred path the rows wait
+                            // for the attack row they belong to and nest under it.
+                            perStackIntake.forEach((perStack, stack) => {
+                                if (perStack <= 1e-9) return;
+                                const hpPct = perStackHpPct[stack];
+                                emitConsequenceLog({
                                     type: 'reactive-damage-performed',
                                     sourceId: victim.id,
                                     targetId: p.actor.id,
                                     round: r,
                                     amount: perStack,
+                                    protectionShare: true,
+                                    ...(hpPct !== undefined ? { resultingHpPct: hpPct } : {}),
                                     reactive: true,
                                     duringTurnOf: actingActorId,
                                     triggerActorId: actingActorId,
                                 });
-                            }
+                            });
                         }
                     });
                     // Lionheart R4: a consumable protector loses ALL Protection after it
@@ -7604,11 +7624,12 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 // ability-performed already exists → emit inline. Stamp
                                 // duringTurnOf with the acting attacker either way; didCrit omitted
                                 // (reflects don't crit).
+                                const reflectRow = loggedHitFigures(reflectOutcome, reflected);
                                 if (deferReflectLogs) {
                                     pendingReflectLogs.push({
                                         sourceId: victim.id,
                                         targetId: attacker.id,
-                                        amount: reflected,
+                                        ...reflectRow,
                                         subAttack: currentSubAttackIndex,
                                     });
                                 } else {
@@ -7617,7 +7638,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                         sourceId: victim.id,
                                         targetId: attacker.id,
                                         round: r,
-                                        amount: reflected,
+                                        ...reflectRow,
                                         reactive: true,
                                         duringTurnOf: actingActorId,
                                         triggerActorId: actingActorId,
@@ -7947,12 +7968,20 @@ export function runCombat(rawInput: CombatEngineInput): {
         };
 
         /** A Protection-split reactive hit also reports what its victim took, so the log rows the
-         *  victim at that rather than the hit as thrown. */
+         *  victim at that rather than the hit as thrown; a hit converted into a DoT is flagged so
+         *  the log shows no damage number for it. */
         const splitFigures = (
             outcome: AppliedVictimDamage | undefined
-        ): { protectionSplit: true; taken: number } | undefined =>
-            outcome?.protectionSplit
-                ? { protectionSplit: true, taken: outcome.incomingBooked }
+        ): { protectionSplit?: true; taken?: number; convertedToDot?: true } | undefined =>
+            outcome
+                ? {
+                      ...(outcome.protectionSplit
+                          ? { protectionSplit: true as const, taken: outcome.incomingBooked }
+                          : {}),
+                      ...((outcome.transformedToDot ?? 0) > 0
+                          ? { convertedToDot: true as const }
+                          : {}),
+                  }
                 : undefined;
 
         /** Pays the owner's standing damage-dealt leech for one landed reactive hit (a counter or a
@@ -9716,13 +9745,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                 const detonatedBombs = liveBombs.filter((b) => !bombsLeft.includes(b));
                 let bombDelivered = 0;
                 if (result.bomb > 0) {
-                    const bombOutcome = applyVictimDamage(result.bomb, victim, sink, {
-                        killerId: actorId,
-                        byDirectDamage: true,
-                        bombPortion: result.bomb, // full shield drain, no pen
-                        shieldPenetrationPct: 0,
-                    });
-                    bombDelivered = detonationDelivered(bombOutcome);
+                    // Announced before the funnel lands it, like every other burst: the
+                    // combat log reads the rows the funnel raises (Protection shares) against it.
                     bus.emit({
                         type: 'bomb-detonated',
                         actorId,
@@ -9738,6 +9762,13 @@ export function runCombat(rawInput: CombatEngineInput): {
                         // the bomb was worth, the same way `attacked` reports a hit's pre-transfer
                         // value. Only the numeric channels below move to the delivered amount.
                     });
+                    const bombOutcome = applyVictimDamage(result.bomb, victim, sink, {
+                        killerId: actorId,
+                        byDirectDamage: true,
+                        bombPortion: result.bomb, // full shield drain, no pen
+                        shieldPenetrationPct: 0,
+                    });
+                    bombDelivered = detonationDelivered(bombOutcome);
                     // #355 B1: the victim's own row gets its OWN booked intake — a Protection
                     // cascade already booked the redirected chunk on each protector's row, so
                     // adding it here too counted it twice.
@@ -10547,6 +10578,8 @@ export function runCombat(rawInput: CombatEngineInput): {
             protectionSplit: boolean;
             /** The hit was no direct damage on this victim — `attacked.notDirectDamage`. */
             notDirectDamage: boolean;
+            /** The hit became a DoT on this victim — `attacked.convertedToDot`. */
+            convertedToDot: boolean;
             shieldWasHit: boolean;
             hitOutcomes: boolean[];
         }
@@ -10885,10 +10918,11 @@ export function runCombat(rawInput: CombatEngineInput): {
                     detonationTargets.set(victim.id, victim);
                     // A hit that was no direct damage on this victim (`directlyDamagesVictim`) wakes
                     // no "directly damaged" reaction (counters, Cultivator's on-ally-attacked
-                    // repair, Tenacity). A hit fully transformed into a DoT raises no `attacked` at
-                    // all; a hit Protection moved wholly onto protectors raises one stamped
-                    // `notDirectDamage`, so the combat log still rows the attack against its target.
-                    if (direct || outcome.fullyRedirected) {
+                    // repair, Tenacity). A hit fully transformed into a DoT, or moved wholly onto
+                    // protectors, raises an `attacked` stamped `notDirectDamage` all the same, so
+                    // the combat log still rows the attack against its target.
+                    const converted = (outcome.transformedToDot ?? 0) > 0;
+                    if (direct || outcome.fullyRedirected || converted) {
                         // Bucket by sub-attack first. `subAttackIndex` is OPTIONAL on the callback
                         // contract; applyPositionalDamage always supplies it, and `?? 0` degrades
                         // to a single bucket for any caller that does not.
@@ -10903,10 +10937,12 @@ export function runCombat(rawInput: CombatEngineInput): {
                             takenDamage: 0,
                             protectionSplit: false,
                             notDirectDamage: false,
+                            convertedToDot: false,
                             shieldWasHit: false,
                             hitOutcomes: [],
                         };
                         prev.damage += damage;
+                        prev.convertedToDot ||= converted;
                         prev.protectionSplit ||= outcome.protectionSplit === true;
                         prev.notDirectDamage ||= !direct;
                         // The funnel's own figure for this victim, accumulated beside the thrown
