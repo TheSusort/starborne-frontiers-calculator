@@ -6500,8 +6500,9 @@ export function runCombat(rawInput: CombatEngineInput): {
             // Proc block on DIRECT damage only, when not fully Barrier-immune. Reduces the
             // hit before it is recorded/absorbed (silent reduction — no separate surface this PR).
             // Fully inert (no counter touch, no roll) when the victim has no incoming-block
-            // ability.
-            if (cause?.byDirectDamage && !carriesBarrier) {
+            // ability. A Protection share is not direct damage to the protector (R139b), so it
+            // rolls no block and does not advance the nth-hit counter.
+            if (cause?.byDirectDamage && !cause.isProtectionTransfer && !carriesBarrier) {
                 const blockAbilities = incomingAbilitiesOf(victim.id).filter(
                     (a) => a.config.type === 'incoming-block'
                 );

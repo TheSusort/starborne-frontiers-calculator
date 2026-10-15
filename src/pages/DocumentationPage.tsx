@@ -4863,13 +4863,15 @@ const DocumentationPage: React.FC = () => {
                                     of Iridium&apos;s passive, Hardened and Hyperion Gaze applies),{' '}
                                     <strong>Vortex Veil</strong> (reduced Inferno and Corrosion
                                     damage), and <strong>Ironclad</strong> (a chance to block a
-                                    repeated hit from the same attacker). Damage reductions combine
-                                    the way the game combines them: buffs and debuffs such as Inc.
-                                    Damage Down add together; ship passive reductions add together
-                                    and then multiply with those buffs; each gear set, implant and
-                                    squad leader reduction multiplies on its own; and all of it
-                                    together can cut a hit by at most 70%, not counting Defense.
-                                    Outgoing-damage amplification is also modeled:{' '}
+                                    repeated hit from the same attacker). Neither Ironclad nor
+                                    Shadowguard rolls on a share of damage taken through Protection,
+                                    and that share does not count as a hit for Ironclad. Damage
+                                    reductions combine the way the game combines them: buffs and
+                                    debuffs such as Inc. Damage Down add together; ship passive
+                                    reductions add together and then multiply with those buffs; each
+                                    gear set, implant and squad leader reduction multiplies on its
+                                    own; and all of it together can cut a hit by at most 70%, not
+                                    counting Defense. Outgoing-damage amplification is also modeled:{' '}
                                     <strong>Menace</strong> (chance to amplify a hit&apos;s damage
                                     on a critical hit), <strong>Giant Slayer</strong> (chance to
                                     amplify a hit&apos;s damage against an enemy with higher

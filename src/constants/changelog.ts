@@ -10,6 +10,7 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator: Valkyrie's Echoing Burst no longer crashes the simulation against Nosorog.",
     'Combat simulator: Protection no longer redirects Bombs, Echoing Bursts or death splashes.',
     "Combat simulator: Nosorog's reflect now respects the attacker's stealth-conditional damage reductions.",
+    'Combat simulator: Ironclad and Shadowguard no longer trigger on Protection damage shares.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
