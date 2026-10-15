@@ -6869,10 +6869,9 @@ export function parseSkillEffects(
         effects.push({
             buffName: canonical,
             target: 'self',
-            // Cheat Death never expires on a timer (see segment-loop note above); keep the
-            // conjoined path consistent so a trailing "and Cheat Death for N turns" can't stamp
-            // a finite window either.
-            duration: CHEAT_DEATH_BUFFS.has(canonical) ? 'recurring' : parseInt(conjoined[2], 10),
+            // The construct always states "for N turns" on this buff's own clause, so a Cheat Death
+            // here keeps that window like any other buff (R190; see the segment-loop note above).
+            duration: parseInt(conjoined[2], 10),
             source,
         });
     }
