@@ -4376,8 +4376,8 @@ export function provokerOf(statusEngine: StatusEngine, actorId: string): string 
 /** Per-actor forced-targeting/stealth status, read from the status engine for the given
  *  actor ids. Stealth/Taunt are self-buffs (selfBuffNamesForOwners); Concentrate Fire is a
  *  debuff on the focus target (ownerDebuffNamesFor). Read-half only — no applier wiring this
- *  phase. `tauntAppliedRound` is left unset (the query layer exposes no application round →
- *  callers degrade to front-most board order). */
+ *  phase. Several taunters are ordered by the attacker's normal targeting
+ *  (`resolvePositionalTarget`), not by when each taunt landed. */
 export function buildForcedTargetingStatus(
     statusEngine: StatusEngine,
     actorIds: string[]

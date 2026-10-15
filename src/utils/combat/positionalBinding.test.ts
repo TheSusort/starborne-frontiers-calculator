@@ -178,12 +178,17 @@ describe('resolvePositionalTarget — stealth + forced targeting (statusOf)', ()
             'front'
         );
     });
-    it('multi-taunt honours tauntAppliedRound when present (later round wins over front-most)', () => {
-        const so = statusFrom({
-            front: { taunting: true, tauntAppliedRound: 1 },
-            back: { taunting: true, tauntAppliedRound: 2 },
-        });
-        expect(resolvePositionalTarget('M4', enemyTarget('front'), enemies, so)?.id).toBe('back');
+    it("multi-taunt follows the attacker's normal targeting order over the taunters", () => {
+        // Attacker at M4 scans its own row (M) first, then B, then T: the B-row taunter beats
+        // the T-row one although the T-row cell is the higher column, and roster order is moot.
+        const board = [actor('top', 'T4'), actor('bottom', 'B2')];
+        const so = statusFrom({ top: { taunting: true }, bottom: { taunting: true } });
+        expect(resolvePositionalTarget('M4', enemyTarget('front'), board, so)?.id).toBe('bottom');
+        expect(
+            resolvePositionalTarget('M4', enemyTarget('front'), [...board].reverse(), so)?.id
+        ).toBe('bottom');
+        // From the top row the same two taunters resolve the other way round.
+        expect(resolvePositionalTarget('T1', enemyTarget('front'), board, so)?.id).toBe('top');
     });
     it('ally-side selection ignores statusOf (no stealth/forced targeting)', () => {
         const allyTarget: ParsedTarget = { raw: 'ally', side: 'ally', selection: 'self' };
