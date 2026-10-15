@@ -261,8 +261,8 @@ export type BattleWinner = 'player' | 'enemy';
 export interface BattleResult {
     /** Trimmed at termination (no rounds after outcome.lastRound). */
     rounds: BattleRound[];
-    /** There is no draw: a same-round mutual wipe and the round limit are both `enemy` wins.
-     *  See `assembleBattleResult`. */
+    /** There is no draw: a same-round mutual wipe goes to the side that dealt the final killing
+     *  damage, and the round limit is an `enemy` win. See `assembleBattleResult`. */
     outcome: { winner: BattleWinner; lastRound: number };
     roster: Array<{ actorId: string; side: 'player' | 'enemy'; name: string; position: Position }>;
     /**
@@ -400,10 +400,12 @@ const _checkLogSuperset: _AssertLogSupersetOfAssembled = true;
  * Precondition: BOTH sides of `roster` are non-empty; a roster missing a side throws, since such
  * a fight has nobody to win or lose (`simulateBattle` refuses an empty team before this runs).
  *
- * Outcome: the first round that wipes a side decides it. The player wins only by wiping the enemy
- * while keeping a ship alive: both sides wiped in the same round, and reaching `numRounds` with
- * both still alive, are ENEMY wins — a timeout is a defeat (docs/combat-system.md §1, "Round limit
- * exceeded → Defeat"), and so is losing your whole team.
+ * Outcome: the first round that wipes a side decides it. A side that wipes the other while keeping a
+ * ship alive wins. When both sides are wiped in the same round, the side that dealt the final
+ * killing damage wins: the side whose ship was destroyed last loses (a dying ship's counter or
+ * reaction that kills the last opposing ship wins it). Reaching `numRounds` with both still alive
+ * is an ENEMY win — a timeout is a defeat (docs/combat-system.md §1, "Round limit exceeded →
+ * Defeat").
  */
 export function assembleBattleResult(args: {
     events: CombatEvent[];
@@ -493,8 +495,8 @@ export function assembleBattleResult(args: {
     if (!roster.some((r) => r.side === 'player') || !roster.some((r) => r.side === 'enemy')) {
         throw new Error('assembleBattleResult: the roster must field both sides');
     }
-    // Overwritten only by a player wipe of the enemy below; standing at the loop's end means the
-    // round limit ran out with both sides alive, which the enemy wins.
+    // Overwritten by the wipe check below; standing at the loop's end means the round limit ran
+    // out with both sides alive, which the enemy wins.
     let winner: BattleWinner = 'enemy';
 
     for (let round = 1; round <= numRounds; round++) {
@@ -750,8 +752,19 @@ export function assembleBattleResult(args: {
 
         if (playerWiped || enemyWiped) {
             lastRound = round;
-            // Both wiped in the same round: the player has no ship left, so the enemy wins.
-            winner = playerWiped ? 'enemy' : 'player';
+            if (playerWiped && enemyWiped) {
+                // Both wiped this round: the side that dealt the final killing damage wins, so
+                // the side whose ship was destroyed LAST loses.
+                let lastSide: 'player' | 'enemy' | undefined;
+                for (const e of roundEvents) {
+                    if (e.type !== 'ship-destroyed') continue;
+                    const side = roster.find((r) => r.actorId === e.actorId)?.side;
+                    if (side) lastSide = side;
+                }
+                winner = lastSide === 'enemy' ? 'player' : 'enemy';
+            } else {
+                winner = playerWiped ? 'enemy' : 'player';
+            }
             break;
         }
     }

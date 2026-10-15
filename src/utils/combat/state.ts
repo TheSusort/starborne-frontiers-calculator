@@ -112,6 +112,12 @@ export interface ActiveDoTStack {
      *  named debuffs, newest first. Its stacks share it. Absent (a hand-seeded entry) reads as
      *  older than anything stamped. Every engine push site sets it (`dotAppliedSeqTripwire`). */
     appliedSeq?: number;
+    /** An Inferno stack's size is its APPLIER's effective attack when the stack was laid, kept per
+     *  stack: a tick and a detonation, by anyone, both read it, so a later change to the applier's
+     *  attack never resizes a stack already on the board. Absent (a hand-seeded entry, or a reactive
+     *  apply before the owner's first turn) reads the applier's latest turn attack at the tick and
+     *  the detonator's attack at a detonation. Meaningless on every other DoT type. */
+    appliedAttack?: number;
 }
 
 /** How many debuffs — and how many damage-over-time effects — a list of DoT entries (or pending

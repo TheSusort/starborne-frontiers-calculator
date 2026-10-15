@@ -2951,6 +2951,16 @@ const DocumentationPage: React.FC = () => {
                                         Works for both teams.
                                     </p>
                                     <p className="text-theme-text mb-2">
+                                        <span className="text-primary">Taunt and Protection:</span>{' '}
+                                        When several enemy ships hold Taunt, the attacker picks
+                                        among them by its normal targeting order: its own row first,
+                                        then the next rows, front to back. Two protectors at the
+                                        same speed soak in board position order, top row first.
+                                        Lionheart&apos;s start-of-round Protection refills him to 10
+                                        stacks, so a stolen stack is restored the next round. Works
+                                        for both teams.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
                                         <span className="text-primary">Own-HP Conditions:</span> A
                                         passive that depends on the ship&apos;s own HP reads that
                                         ship&apos;s live HP wherever it is placed, on either team:
@@ -3177,18 +3187,26 @@ const DocumentationPage: React.FC = () => {
                                         detonate. If the first destroys the ship instead, the rest
                                         still detonate, and every Bomb on a destroyed ship splashes
                                         its neighbours once, including Bombs a skill detonated in
-                                        the lethal blow. Reactions to an enemy cleansing a debuff
-                                        (Pestilence, Larkspur, Grif, Arum, Yarrow) also hear the
-                                        cleanses an enemy&apos;s passive performs (Nuqtu, Purifier,
-                                        AEGIS, Hermes, Howler), but not a duration cut; a cleanse
-                                        that such a reaction provoked triggers them again.
-                                        Pestilence&apos;s Corrosion lands on the enemy that
-                                        cleansed. A count written after an infliction in the same
-                                        skill includes what that skill landed, enemy by enemy:
-                                        Crocus&apos;s Corrosion II counts toward her own &ldquo;3 or
-                                        more debuffs&rdquo; Stasis (Asphyxiator&apos;s and
-                                        Anemone&apos;s gates likewise), and a resisted one does not.
-                                        A passive reacting to the hit (Bayah) counts only the
+                                        the lethal blow. Each Inferno stack is sized on its
+                                        applier&apos;s attack when it was applied, whoever ticks or
+                                        detonates it. A detonation is cut by the victim&apos;s own
+                                        damage-over-time reductions (Voron, Vortex Veil) and raised
+                                        by Wildfire&apos;s Scorching Radiation bonus exactly as a
+                                        tick is, and Inc. DoT Damage Up increases the damage dealt
+                                        by each tick of a hit converted into a damage-over-time
+                                        effect. Tycho&apos;s start-of-combat Cheat Death expires
+                                        after the turns its text states. Reactions to an enemy
+                                        cleansing a debuff (Pestilence, Larkspur, Grif, Arum,
+                                        Yarrow) also hear the cleanses an enemy&apos;s passive
+                                        performs (Nuqtu, Purifier, AEGIS, Hermes, Howler), but not a
+                                        duration cut; a cleanse that such a reaction provoked
+                                        triggers them again. Pestilence&apos;s Corrosion lands on
+                                        the enemy that cleansed. A count written after an infliction
+                                        in the same skill includes what that skill landed, enemy by
+                                        enemy: Crocus&apos;s Corrosion II counts toward her own
+                                        &ldquo;3 or more debuffs&rdquo; Stasis (Asphyxiator&apos;s
+                                        and Anemone&apos;s gates likewise), and a resisted one does
+                                        not. A passive reacting to the hit (Bayah) counts only the
                                         debuffs from before the skill. APEX&apos;s passive shield
                                         arrives as the skill&apos;s first debuff lands, so her
                                         charged skill&apos;s &ldquo;If this Unit has an active
@@ -4511,9 +4529,11 @@ const DocumentationPage: React.FC = () => {
                                     <li>
                                         A fight lasts at most 30 rounds. If both teams still have a
                                         ship standing when the last round ends, the enemy wins, as a
-                                        timeout is a defeat in the game. The enemy also wins when
-                                        both teams lose their last ship in the same round, so every
-                                        fight has a winner
+                                        timeout is a defeat in the game. When both teams lose their
+                                        last ship in the same round, the side that dealt the final
+                                        killing blow wins (a dying ship&apos;s counter or reaction
+                                        that kills the last opposing ship wins it for that side), so
+                                        every fight has a winner
                                     </li>
                                     <li>
                                         Raise the run count to repeat the fight over that many
