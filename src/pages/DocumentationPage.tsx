@@ -3333,10 +3333,17 @@ const DocumentationPage: React.FC = () => {
                                         attacker&apos;s protector&apos;s Protection, uses
                                         Nosorog&apos;s shield penetration, and is boosted by and
                                         spends the attacker&apos;s Exposed, and spends a Titanite
-                                        Plating stack. It is damage Nosorog dealt, so his own
-                                        damage-dealt leech (the Leech set) repairs off it, as it
-                                        does off a counter-attack. The Reflect gear set&apos;s
-                                        bounce is not direct damage and does none of this. A hit
+                                        Plating stack. A stealthed attacker takes it reduced by its
+                                        stealth-conditional damage reductions (Voidshade, Wusheng),
+                                        as it does a counter-attack. It is damage Nosorog dealt, so
+                                        his own damage-dealt leech (the Leech set) repairs off it,
+                                        as it does off a counter-attack. The Reflect gear set&apos;s
+                                        bounce is direct damage too: the same reactions answer it
+                                        (Warden, Isha, every counter-attacker), the attacker&apos;s
+                                        Inc. Damage Up and Down change it, and the wearer&apos;s
+                                        Leech set repairs off it. It is not redirected by Protection
+                                        and does not read or spend Exposed or Titanite Plating. A
+                                        ship with both reflects twice, one bounce per source. A hit
                                         that Protection moves entirely onto the protector
                                         (Lionheart&apos;s 10 stacks) is not direct damage to the
                                         ship it was aimed at: that ship does not counter or react,
@@ -4869,13 +4876,15 @@ const DocumentationPage: React.FC = () => {
                                     of Iridium&apos;s passive, Hardened and Hyperion Gaze applies),{' '}
                                     <strong>Vortex Veil</strong> (reduced Inferno and Corrosion
                                     damage), and <strong>Ironclad</strong> (a chance to block a
-                                    repeated hit from the same attacker). Damage reductions combine
-                                    the way the game combines them: buffs and debuffs such as Inc.
-                                    Damage Down add together; ship passive reductions add together
-                                    and then multiply with those buffs; each gear set, implant and
-                                    squad leader reduction multiplies on its own; and all of it
-                                    together can cut a hit by at most 70%, not counting Defense.
-                                    Outgoing-damage amplification is also modeled:{' '}
+                                    repeated hit from the same attacker). Neither Ironclad nor
+                                    Shadowguard rolls on a share of damage taken through Protection,
+                                    and that share does not count as a hit for Ironclad. Damage
+                                    reductions combine the way the game combines them: buffs and
+                                    debuffs such as Inc. Damage Down add together; ship passive
+                                    reductions add together and then multiply with those buffs; each
+                                    gear set, implant and squad leader reduction multiplies on its
+                                    own; and all of it together can cut a hit by at most 70%, not
+                                    counting Defense. Outgoing-damage amplification is also modeled:{' '}
                                     <strong>Menace</strong> (chance to amplify a hit&apos;s damage
                                     on a critical hit), <strong>Giant Slayer</strong> (chance to
                                     amplify a hit&apos;s damage against an enemy with higher
@@ -5014,7 +5023,9 @@ const DocumentationPage: React.FC = () => {
                                     for any teammate. When more than one ally holds Protection, the
                                     faster protector intercepts first and only its unabsorbed
                                     remainder cascades to the next. A skill that targets the whole
-                                    battlefield (<strong>Curator</strong>) is never redirected.{' '}
+                                    battlefield (<strong>Curator</strong>) is never redirected, and
+                                    neither are Bombs, Echoing Bursts, Bomb death splashes or damage
+                                    over time: the ship they land on takes all of it.{' '}
                                     <strong>Lionheart</strong> uses a once-per-round variant: it
                                     gains 10 stacks of Protection at the start of each round, and
                                     after it absorbs the first hit redirected from an ally, it loses

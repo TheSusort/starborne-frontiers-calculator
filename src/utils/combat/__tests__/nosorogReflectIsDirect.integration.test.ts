@@ -2,8 +2,8 @@
  * Owner ruling R137 (in game 2026-10-08): Nosorog's reflect IS direct damage to the attacker. It
  * behaves like a counter-attack, so the attacker's "when directly damaged" reactions answer it:
  * Warden inflicts Corrosion I and repairs, Isha repairs, and every counter answers it — Stalwart,
- * Centurion and Nyxen alike (R160). The Reflect GEAR SET's bounce is NOT direct damage, so nothing
- * answers it.
+ * Centurion and Nyxen alike (R160). The Reflect GEAR SET's bounce is direct damage too (R196), so
+ * the same reactions answer it.
  *
  * Chain rule (R92 + lineage): Stalwart hits Nosorog → Nosorog reflects → that bounce is the first
  * aimed hit on Stalwart in the chain, so he counters → his counter hits Nosorog, whose
@@ -223,11 +223,27 @@ describe.each(SIDES)('Nosorog on the %s side', (placement) => {
         expect(obs.attackerSelfRepairs).toBe(0);
     });
 
-    it('the Reflect gear set bounces damage at Warden, but that is not direct damage', () => {
+    it('the Reflect gear set bounces direct damage at Warden: Corrosion I on the wearer and a repair (R196)', () => {
         const obs = run(placement, unit('warden', hitterWith('Warden')), reflectSetWearer());
         expect(obs.reflectedOntoAttacker).toBeGreaterThan(0);
-        expect(obs.corrosionOnReflector).toBe(0);
-        expect(obs.attackerSelfRepairs).toBe(0);
+        expect(obs.corrosionOnReflector).toBe(1);
+        expect(obs.attackerSelfRepairs).toBe(1);
+    });
+
+    it("the set bounce raises one 'attacked' for the hitter; a hit that bounces nothing raises none", () => {
+        const attackedOnHitter = (reflector: BoardUnit): number => {
+            const hitter = unit('hitter', hitKit(100));
+            const { input, id } = boardInput(placement, reflector, [], [hitter], 1);
+            const bus = createEventBus();
+            let n = 0;
+            bus.on('attacked', (e) => {
+                if (e.targetId === id(hitter) && e.attackerId === id(reflector)) n++;
+            });
+            runCombat({ ...input, bus });
+            return n;
+        };
+        expect(attackedOnHitter(reflectSetWearer())).toBe(1);
+        expect(attackedOnHitter(nosorog(false))).toBe(0);
     });
 
     it('Isha hits Nosorog → she repairs once off the reflect', () => {
@@ -301,10 +317,10 @@ describe.each(SIDES)('Nosorog on the %s side', (placement) => {
         expect(order).toEqual(['nosorog-corrosion', 'stalwart-counter', 'nosorog-corrosion']);
     });
 
-    it('control: Stalwart against the Reflect gear set → the bounce draws no counter', () => {
+    it('Stalwart against the Reflect gear set → the direct bounce draws his counter (R196)', () => {
         const obs = run(placement, unit('stalwart', hitterWith('Stalwart')), reflectSetWearer());
         expect(obs.reflectedOntoAttacker).toBeGreaterThan(0);
-        expect(obs.counters).toEqual([]);
+        expect(obs.counters).toEqual(['stalwart>nosorog']);
     });
 
     it('Malvex hits Nosorog → the reflect is a primary-target hit on Malvex, so he shields', () => {
@@ -321,7 +337,9 @@ describe.each(SIDES)('Nosorog on the %s side', (placement) => {
  * Owner ruling R162 (in game 2026-10-08): Nosorog's bounce is a direct hit in full — the
  * attacker's protector's Protection redirects it, it spends the attacker's Titanite Plating and
  * Exposed (and, per Exposed's own text, is amplified by it), and it uses Nosorog's shield
- * penetration. The Reflect gear set's bounce keeps none of that.
+ * penetration. The Reflect gear set's bounce keeps none of that: it is direct damage for the
+ * attacker's reactions (R196) and leeches (R197), but takes no Protection, Exposed, Titanite or
+ * penetration.
  */
 describe.each(SIDES)('the bounce as a direct hit, reflector on the %s side', (placement) => {
     /** Runs `reflector` against `opponents`; opponents[0] is the ship that hits him. */
@@ -447,7 +465,7 @@ describe.each(SIDES)('the bounce as a direct hit, reflector on the %s side', (pl
         expect(gear.shieldAbsorbed).toBeCloseTo(gear.incoming, 6);
     });
 
-    it("a Leech-set Nosorog repairs 15% of the bounce it dealt (R165); the gear set's bounce does not leech", () => {
+    it('a Leech-set Nosorog repairs 15% of the bounce it dealt (R165); so does a Leech-set Reflect wearer (R197)', () => {
         const leechRepair = (reflectPassives: ShipSkills['slots'], gearSets: string[]) => {
             const reflector: BoardUnit = {
                 ...nosorog(false),
@@ -472,11 +490,11 @@ describe.each(SIDES)('the bounce as a direct hit, reflector on the %s side', (pl
         const leeching = leechRepair(passives('Nosorog'), ['LEECH']);
         expect(leeching.reflected).toBeGreaterThan(0);
         expect(leeching.repaired).toBeCloseTo(leeching.reflected * 0.15, 6);
-        // Controls: no reflect → nothing dealt; the gear set's bounce is not direct → no leech.
+        // Control: no reflect → nothing dealt, nothing repaired.
         expect(leechRepair([], ['LEECH']).repaired).toBe(0);
         const gear = leechRepair([], ['LEECH', 'REFLECT']);
         expect(gear.reflected).toBeGreaterThan(0);
-        expect(gear.repaired).toBe(0);
+        expect(gear.repaired).toBeCloseTo(gear.reflected * 0.15, 6);
     });
 });
 
@@ -590,9 +608,8 @@ const bounceOf = (
 };
 
 /**
- * R137: Nosorog's bounce is direct damage and the Reflect gear set's is not, so a Nosorog wearing
- * the set reflects one hit as TWO bounces — his own share as a direct hit (Exposed, Protection,
- * leech, counters), then the set's share as a plain bounce.
+ * A Nosorog wearing the Reflect set reflects one hit as TWO bounces, both direct damage (R137,
+ * R196) — his own share first (Exposed, Protection, penetration), then the set's share.
  */
 describe.each(SIDES)('Nosorog wearing the Reflect set, on the %s side', (placement) => {
     it('the two shares land as separate bounces; only his own share reads and spends Exposed', () => {
@@ -626,7 +643,7 @@ describe.each(SIDES)('Nosorog wearing the Reflect set, on the %s side', (placeme
         expect(both.redirected).toBeCloseTo(shipOnly.redirected, 6);
     });
 
-    it('a Leech-set Nosorog repairs 15% of his own share only (R165)', () => {
+    it('a Leech-set Nosorog repairs 15% of both shares (R165, R197)', () => {
         const reflector: BoardUnit = {
             ...nosorog(false),
             kit: {
@@ -640,10 +657,10 @@ describe.each(SIDES)('Nosorog wearing the Reflect set, on the %s side', (placeme
         const obs = bounceOf(placement, reflector);
         expect(obs.rows).toHaveLength(2);
         expect(obs.rows[1]).toBeGreaterThan(0);
-        expect(obs.repaired).toBeCloseTo(obs.rows[0] * 0.15, 6);
+        expect(obs.repaired).toBeCloseTo((obs.rows[0] + obs.rows[1]) * 0.15, 6);
     });
 
-    it('Stalwart counters his own share once and never the set share', () => {
+    it('Stalwart counters the first share once; the chain spent his primary-target allowance', () => {
         const obs = bounceOf(placement, nosorogWithReflectSet(), {
             hitter: unit('hitter', hitterWith('Stalwart')),
         });
@@ -684,7 +701,8 @@ const wardenSelfBuffed = (buff: string, parsedEffects: Record<string, number>): 
 /**
  * Owner ruling R176 (2026-10-09): Nosorog's bounce reads the attacker's buffs and debuffs the way a
  * counter-attack does — Inc. Damage Up/Down and Exposed share one incoming channel. The Reflect gear
- * set's bounce reads none of them.
+ * set's bounce reads that channel too (R195: the attacker's Inc. Damage Down II cuts it by 30%), but
+ * not Exposed.
  */
 describe.each(SIDES)(
     "the bounce reads the hitter's incoming modifiers, reflector on the %s side",
@@ -742,7 +760,7 @@ describe.each(SIDES)(
             );
         });
 
-        it("the Reflect gear set's bounce ignores Inc. Damage Up II", () => {
+        it("the Reflect gear set's bounce reads Inc. Damage Up II (R195)", () => {
             const control = bounceOf(placement, reflectSetWearer(), { hitter: warden() });
             const up = bounceOf(placement, reflectSetWearer(), {
                 hitter: warden(),
@@ -750,7 +768,31 @@ describe.each(SIDES)(
                 parsedEffects: { incomingDamage: 30 },
             });
             expect(control.rows[0]).toBeGreaterThan(0);
-            expect(up.rows[0]).toBeCloseTo(control.rows[0], 6);
+            expect(up.rows[0]).toBeCloseTo(control.rows[0] * 1.3, 6);
+        });
+
+        it("the Reflect gear set's bounce is cut 30% by the hitter's Inc. Damage Down II (R195)", () => {
+            const control = bounceOf(placement, reflectSetWearer(), {
+                hitter: wardenSelfBuffed('Inert Buff', {}),
+            });
+            const down = bounceOf(placement, reflectSetWearer(), {
+                hitter: wardenSelfBuffed('Inc. Damage Down II', { incomingDamage: -30 }),
+            });
+            expect(control.rows).toHaveLength(1);
+            expect(control.rows[0]).toBeGreaterThan(0);
+            expect(down.rows[0]).toBeCloseTo(control.rows[0] * 0.7, 6);
+        });
+
+        it("the Reflect gear set's bounce neither reads nor spends Exposed alongside Inc. Damage Up II", () => {
+            const control = bounceOf(placement, reflectSetWearer(), { hitter: warden() });
+            const both = bounceOf(placement, reflectSetWearer(), {
+                hitter: warden(),
+                status: 'Exposed',
+                parsedEffects: { incomingDamage: 30 },
+            });
+            // Inc. Damage Up II's +30% applies; Exposed's +100% does not, and it stays on.
+            expect(both.rows[0]).toBeCloseTo(control.rows[0] * 1.3, 6);
+            expect(both.exposedLeft).toBeGreaterThan(0);
         });
     }
 );

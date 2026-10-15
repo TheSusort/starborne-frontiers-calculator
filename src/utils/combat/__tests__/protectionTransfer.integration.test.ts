@@ -580,23 +580,12 @@ describe('Protection damage transfer (integration)', () => {
         expect(round1.perActorIncoming?.['ally-1']?.barrierAbsorbed).toBeCloseTo(ENEMY_ATTACK, 6);
     });
 
-    it('a PROTECTOR that also carries a full incoming-block ability credits ZERO damage taken for the blocked redirected chunk (the funnel\u2019s recorded intake, not chunk.total \u2212 transformedToDot)', () => {
-        // Same aura-protector harness as the "PRODUCTION PATH" test above ('prot-1' grants ITSELF
-        // 3 Protection stacks via an aura passive; 'ally-1' is the direct-hit victim) — but the
-        // PROTECTOR additionally carries an always-active, 100%-chance, 100%-block
-        // 'incoming-block' ability on ITSELF (granted the same aura way Protection/Barrier are
-        // granted elsewhere in this file, so it is visible to the protector's OWN block check at
-        // the applyVictimDamage funnel for its redirected sub-hit).
-        //
-        // The redirected chunk still leaves the target (cascade math is computed from the
-        // protector's Protection stacks, independent of its block ability) — 'ally-1' keeps 70%
-        // exactly like the PRODUCTION PATH test. But the protector's OWN incoming-block ability
-        // then fully blocks its post-redirect sub-hit: the protector takes ZERO real damage and
-        // transforms nothing into a DoT. The buggy accounting (`chunk.total − transformedToDot`)
-        // would still credit the FULL chunk as damage taken by the protector, because
-        // transformedToDot stays 0 for a pure block (no transform ability involved) — the fixed
-        // accounting (summed `incomingBooked`, the intake applyVictimDamage recorded after its own
-        // block and transform steps) must read 0 instead.
+    it('a PROTECTOR that also carries a full incoming-block ability still takes its whole Protection share (R139b: the share is not a direct hit on it)', () => {
+        // The aura protector 'prot-1' grants ITSELF 3 Protection stacks; 'ally-1' is the direct-hit
+        // victim. The PROTECTOR additionally carries an always-active, 100%-chance, 100%-block
+        // 'incoming-block' ability on itself. A block answers a direct hit on its owner, and the
+        // protector is not directly damaged by its share, so the share lands in full and books as
+        // real intake and a reactive row per sub-hit.
         const blockAuraPassive = (): ShipSkills['slots'][number] => {
             const ability: Ability = {
                 id: 'full-block-self-aura',
@@ -633,24 +622,14 @@ describe('Protection damage transfer (integration)', () => {
         const round1 = result.rounds[0];
         const reactiveHitsOnProtector = reactiveEventsTargeting(input, 'prot-1');
 
-        // The target still keeps 70% — the redirect itself is unaffected by the protector's OWN
-        // block ability (that ability only gates what the PROTECTOR takes from its own chunk).
+        // The target keeps 70%.
         expect(victim).toBeCloseTo(0.7 * ENEMY_ATTACK, 6);
-        // The protector's `.incoming` bucket shows ZERO — the redirected chunk was fully blocked
-        // before it ever landed as real intake.
-        expect(protector).toBe(0);
-        // THE CORE ASSERTION: the protector's credited round damage must NOT include the (fully
-        // blocked) chunk. `perTargetDamage` is set ONLY when non-empty (RoundData's "absent when
-        // empty" rule), so a wrongly-credited chunk would show up as a truthy, non-zero entry —
-        // the fixed accounting must leave this key ABSENT entirely.
-        expect(round1.perTargetDamage?.['prot-1']).toBeUndefined();
-        // No reactive-damage-performed event should have fired for the protector either — the
-        // `intakeTotal > 1e-9` guard must suppress emission for a fully-blocked chunk exactly like
-        // it does for a fully DoT-transformed one. (NOT for a Barrier-nullified chunk: Barrier
-        // leaves the intake recorded and nets it out via `barrierAbsorbed`, so that one is booked
-        // and logged like any other barriered hit — pinned in the accounting block at the bottom
-        // of this file.)
-        expect(reactiveHitsOnProtector).toBe(0);
+        // The protector's chunk is the redirected 30% re-priced on its own defence, unblocked.
+        const chunk = 0.1 * 3 * ENEMY_ATTACK * (mit(PROTECTOR_DEFENCE) / mit(0));
+        expect(protector).toBeCloseTo(chunk, 6);
+        expect(round1.perTargetDamage?.['prot-1']).toBeCloseTo(chunk, 6);
+        // One reactive row per redirected sub-hit.
+        expect(reactiveHitsOnProtector).toBe(3);
     });
 
     it('positional mode: Protection covers a NON-adjacent ally (all-allies, not hex-neighbours)', () => {
@@ -1617,17 +1596,16 @@ describe('per-victim damage accounting under a Protection redirect (positional)'
         );
     });
 
-    it('still books nothing for a chunk the protector’s own block ability fully absorbed', () => {
-        // The counterpart the fix must NOT break (pinned non-positionally above too): a fully
-        // proc-blocked chunk never became intake at all — `.incoming` is 0 — so both display
-        // channels must stay silent for it. This is what makes `immediateDamage`'s replacement
-        // safe: the funnel's recorded intake already excludes a blocked portion.
+    it('books the whole chunk when the protector carries a full incoming-block ability (R139b)', () => {
+        // A block answers a direct hit on its owner and the share is not one, so the protector's
+        // own block never absorbs a redirected chunk: both display channels book it in full.
         const c = channels(fixture([fullBlockAuraPassive()]));
+        const chunk = 0.1 * PROT_STACKS * ENEMY_ATTACK * (mit(PROTECTOR_DEFENCE) / mit(0));
 
-        expect(c.incoming['prot-1']?.incoming ?? 0).toBe(0);
-        expect(c.taken['prot-1']).toBeUndefined();
-        expect(c.dealt['prot-1']).toBeUndefined();
-        // The victim's row is untouched by the protector's block — it still keeps only 70%.
+        expect(c.incoming['prot-1'].incoming).toBeCloseTo(chunk, 6);
+        expect(c.taken['prot-1']).toBeCloseTo(chunk, 6);
+        expect(c.dealt['prot-1']).toBeCloseTo(chunk, 6);
+        // The victim keeps 70%.
         expect(c.taken['ally-1']).toBeCloseTo(0.7 * ENEMY_ATTACK, 6);
     });
 });

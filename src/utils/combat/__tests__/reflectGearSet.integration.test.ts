@@ -8,7 +8,8 @@
  * engine's `incomingAbilitiesById`. When a Reflect wearer takes a DIRECT hit, the engine reflects
  * `Σpct%` of the hit as thrown back at the attacker — the rule lives in `damageReflection.ts`
  * (#678) — via a recursive `applyVictimDamage` against the attacker (drains shield→HP, can kill,
- * fires on-death, no ping-pong, no `attacked`/reaction events). The exact magnitude is pinned
+ * fires on-death, no ping-pong; the bounce is direct damage, so it raises an `attacked` for the
+ * attacker's reactions, R196). The exact magnitude is pinned
  * end-to-end in `reflectThrownHit.integration.test.ts`.
  *
  * Battles are driven through `simulateBattle` (the full bySide path) so a real ENEMY attacker
