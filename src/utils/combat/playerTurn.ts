@@ -1865,6 +1865,7 @@ function applyNewDoTs(args: {
                 remainingRounds: dot.duration,
                 sourceId: args.sourceId,
                 appliedSeq,
+                appliedAttack: args.effectiveAttack,
             });
             args.emitDotApplied('inferno', dot.stacks, dot.tier, appliedSeq, procs);
         } else if (dot.type === 'bomb') {
@@ -5639,6 +5640,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             effectiveAttack,
             outgoingDotPct,
             incomingDotPct,
+            ...(victimGatedDotDamage.length > 0 ? { victimGatedDotDamage } : {}),
             detonationMult: 1 + dmgStats.detonationDamageModifier / 100,
             detonatable,
         };

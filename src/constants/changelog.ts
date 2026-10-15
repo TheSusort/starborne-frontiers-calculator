@@ -6,7 +6,13 @@ export const CURRENT_VERSION = '1.76.1';
 // top of CHANGELOG, bumps CURRENT_VERSION and empties this array — all three together, because a
 // bumped version whose entries are still unreleased shows users a what's-new dialog listing
 // nothing. Do it by hand only if that script cannot.
-export const UNRELEASED_CHANGES: string[] = [];
+export const UNRELEASED_CHANGES: string[] = [
+    "Combat simulator: detonations now honour the target's own DoT reductions.",
+    "Combat simulator: Wildfire's Scorching Radiation bonus now raises Inferno detonations.",
+    "Combat simulator: Inferno stacks now keep their applier's attack from when applied.",
+    'Combat simulator: Inc. DoT Damage Up now raises damage converted into a DoT.',
+    "Combat simulator: Tycho's Cheat Death now expires after its stated turns.",
+];
 
 export const CHANGELOG: ChangelogEntry[] = [
     {

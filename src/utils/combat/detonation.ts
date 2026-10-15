@@ -1,4 +1,6 @@
 import type { DoTType } from '../../types/calculator';
+import type { Ability } from '../../types/abilities';
+import type { ConditionContext } from '../abilities/evaluateConditions';
 import { composeDotDamageFactor } from '../damageComposition';
 import { bombBurstDamage } from './state';
 import type { ActiveDoTStack, PendingBomb } from './state';
@@ -11,12 +13,15 @@ import type { ActiveDoTStack, PendingBomb } from './state';
 // protection on the deferred positional path — see the field's doc).
 //
 // Precedence is preserved EXACTLY:
-//  - inferno: Σ(stacks · tier/100 · effectiveAttack · remainingRounds) · dotFactor · pct · detonationMult
+//  - inferno: Σ(stacks · tier/100 · stackAttack · remainingRounds) · dotFactor · pct · detonationMult,
+//             stackAttack = the stack's own `appliedAttack` (its applier's attack when laid), else
+//             `recipe.effectiveAttack`
 //  - corrosion: Σ(stacks · tier/100 · baseHp · remainingRounds) · dotFactor · pct · detonationMult,
 //               baseHp = min(victimHp, 500_000)
-//  dotFactor = composeDotDamageFactor(outgoingDotPct, incomingDotPct); `incomingDotPct` already
-//  carries the detonated victim's own live Inc. DoT Damage Up, added by the caller
-//  (`victimIncomingDotDamagePct`). No affinity: a detonation is not a direct hit.
+//  dotFactor = `recipe.dotFactorFor(dotType)` when the caller resolves the victim's factors (the
+//  engine does, through the same `victimDotMult` and DoT-reduction a tick reads), else
+//  composeDotDamageFactor(outgoingDotPct, incomingDotPct). No affinity: a detonation is not a
+//  direct hit.
 //  - bomb: Σ(stacks · damagePerStack · (1 + b.detonationDamageModifier/100)) · pct
 //          — per-bomb snapshots ONLY (`bombBurstDamage`; NO dotFactor/detonationMult).
 
@@ -31,7 +36,17 @@ export interface DetonationRecipe {
     outgoingDotPct: number;
     /** The detonated victim's Inc. DoT Damage Up %. */
     incomingDotPct: number;
+    /** The detonator's victim-gated DoT-damage modifiers (Wildfire's Scorching Radiation), re-folded
+     *  per victim by the engine's `dotFactorFor`. Read the field of the same name on
+     *  `PlayerRoundCtx`. */
+    victimGatedDotDamage?: { abilities: Ability[]; ctx: ConditionContext }[];
     detonationMult: number;
+    /**
+     * The whole DoT-damage factor for one detonated victim and DoT type: both sides of
+     * `composeDotDamageFactor`, the dealer's gated bonuses, and the victim's own DoT reductions.
+     * Absent ⇒ the two flat percentages above, with no per-victim terms.
+     */
+    dotFactorFor?: (dotType: 'inferno' | 'corrosion') => number;
     /**
      * OWN-STACK PROTECTION (positional path only): the exact container entries this cast is
      * allowed to detonate, captured BEFORE the cast applied its own new DoTs. Entries missing
@@ -94,7 +109,9 @@ export function detonateContainers(
     let inferno = 0;
     let corrosion = 0;
     let bombStacks = 0;
-    const dotFactor = composeDotDamageFactor(recipe.outgoingDotPct, recipe.incomingDotPct);
+    const dotFactorFor =
+        recipe.dotFactorFor ??
+        (() => composeDotDamageFactor(recipe.outgoingDotPct, recipe.incomingDotPct));
 
     for (const det of recipe.dets) {
         const pct = det.powerPct / 100;
@@ -103,10 +120,13 @@ export function detonateContainers(
                 consumeDetonatable(c.infernoEntries, recipe.detonatable).reduce(
                     (sum, e) =>
                         sum +
-                        e.stacks * (e.tier / 100) * recipe.effectiveAttack * e.remainingRounds,
+                        e.stacks *
+                            (e.tier / 100) *
+                            (e.appliedAttack ?? recipe.effectiveAttack) *
+                            e.remainingRounds,
                     0
                 ) *
-                dotFactor *
+                dotFactorFor('inferno') *
                 pct *
                 recipe.detonationMult;
         } else if (det.dotType === 'corrosion') {
@@ -116,7 +136,7 @@ export function detonateContainers(
                     (sum, e) => sum + e.stacks * (e.tier / 100) * baseHp * e.remainingRounds,
                     0
                 ) *
-                dotFactor *
+                dotFactorFor('corrosion') *
                 pct *
                 recipe.detonationMult;
         } else if (det.dotType === 'bomb') {

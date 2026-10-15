@@ -3177,11 +3177,19 @@ const DocumentationPage: React.FC = () => {
                                         detonate. If the first destroys the ship instead, the rest
                                         still detonate, and every Bomb on a destroyed ship splashes
                                         its neighbours once, including Bombs a skill detonated in
-                                        the lethal blow. Reactions to an enemy cleansing a debuff
-                                        (Pestilence, Larkspur, Grif, Arum, Yarrow) also hear the
-                                        cleanses an enemy&apos;s passive performs (Nuqtu, Purifier,
-                                        AEGIS, Hermes, Howler), but not a duration cut; a cleanse
-                                        that such a reaction provoked triggers them again.
+                                        the lethal blow. Each Inferno stack is sized on its
+                                        applier&apos;s attack when it was applied, whoever ticks or
+                                        detonates it. A detonation is cut by the victim&apos;s own
+                                        damage-over-time reductions (Voron, Vortex Veil) and raised
+                                        by Wildfire&apos;s Scorching Radiation bonus exactly as a
+                                        tick is, and Inc. DoT Damage Up raises a hit a ship
+                                        converted into a damage-over-time effect at each tick.
+                                        Tycho&apos;s start-of-combat Cheat Death expires after the
+                                        turns its text states. Reactions to an enemy cleansing a
+                                        debuff (Pestilence, Larkspur, Grif, Arum, Yarrow) also hear
+                                        the cleanses an enemy&apos;s passive performs (Nuqtu,
+                                        Purifier, AEGIS, Hermes, Howler), but not a duration cut; a
+                                        cleanse that such a reaction provoked triggers them again.
                                         Pestilence&apos;s Corrosion lands on the enemy that
                                         cleansed. A count written after an infliction in the same
                                         skill includes what that skill landed, enemy by enemy:
