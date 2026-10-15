@@ -6,7 +6,9 @@ export const CURRENT_VERSION = '1.76.1';
 // top of CHANGELOG, bumps CURRENT_VERSION and empties this array — all three together, because a
 // bumped version whose entries are still unreleased shows users a what's-new dialog listing
 // nothing. Do it by hand only if that script cannot.
-export const UNRELEASED_CHANGES: string[] = [];
+export const UNRELEASED_CHANGES: string[] = [
+    "Combat simulator: Hemlock's Toxic Overflow spread now resolves in turn order.",
+];
 
 export const CHANGELOG: ChangelogEntry[] = [
     {
