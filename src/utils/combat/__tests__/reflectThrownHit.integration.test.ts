@@ -298,5 +298,21 @@ describe.each(SIDES)(
             expect(base.rows[0]).toBeGreaterThan(0);
             expect(buffed.rows[0]).toBeCloseTo(base.rows[0] * 1.45, 6);
         });
+
+        it('a crit grows the hit but not the reflect', () => {
+            const base = plain();
+            const crit = fight(placement, wearer(), belladonna({ crit: true }));
+            expect(crit.hitIncoming).toBeCloseTo(base.hitIncoming * 1.5, 6);
+            expect(crit.rows).toHaveLength(1);
+            expect(crit.rows[0]).toBeGreaterThan(0);
+            expect(crit.rows[0]).toBeCloseTo(base.rows[0], 6);
+        });
+
+        it("the attacker's Out. Damage Up grows the hit but not the reflect", () => {
+            const base = plain();
+            const buffed = fight(placement, wearer(), belladonna({ outgoing: 45 }));
+            expect(buffed.hitIncoming).toBeCloseTo(base.hitIncoming * 1.45, 6);
+            expect(buffed.rows[0]).toBeCloseTo(base.rows[0], 6);
+        });
     }
 );

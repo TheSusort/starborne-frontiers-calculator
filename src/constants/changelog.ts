@@ -7,6 +7,13 @@ export const CURRENT_VERSION = '1.76.1';
 // bumped version whose entries are still unreleased shows users a what's-new dialog listing
 // nothing. Do it by hand only if that script cannot.
 export const UNRELEASED_CHANGES: string[] = [
+    "Combat simulator: Valkyrie's Echoing Burst no longer crashes the simulation against Nosorog.",
+    'Combat simulator: Protection no longer redirects Bombs, Echoing Bursts or death splashes.',
+    "Combat simulator: Nosorog's reflect now respects the attacker's stealth-conditional damage reductions.",
+    'Combat simulator: Ironclad and Shadowguard no longer trigger on Protection damage shares.',
+    'Combat simulator: the Reflect gear set now reflects as direct damage, so reactions answer it.',
+    "Combat simulator: the Reflect gear set's bounce now respects the attacker's Inc. Damage Down.",
+    "Combat simulator: the Leech set now repairs from the Reflect gear set's bounce.",
     "Combat simulator: Hemlock's Toxic Overflow spread now resolves in turn order.",
     "Combat simulator: Lionheart's Protection now refills fully each round after a theft.",
     'Combat simulator: same-speed protectors now soak damage in board position order.',
