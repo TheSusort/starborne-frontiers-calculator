@@ -23,15 +23,14 @@
  *   4. `applyPositionedTimedBurst` — `processBombs` creditDetonation
  *   5. `applyPositionedTimedBurst` — `processAccumulators` creditDetonation
  *
- * #355 predicted "only the proc-block path can diverge, so the expected outcome is a tripwire, not
- * a fix". That premise is WRONG for the FOUR `byDirectDamage: true` sites (every one but 2). A bomb burst arrives
- * stamped `byDirectDamage: true` with the whole amount in `bombPortion`, and only the two
- * CONSUMABLE steps (Hit Mitigation, Shield Converter) carry a `bombPortion === 0` guard. The
- * incoming-block step, the Protection cascade, and the standing Voron/Orel transform have no such
- * guard, so all three fire on a burst and all three diverge. Protection in particular is live
- * corpus kit (Meatshield / Lionheart), which makes this a real double-count, not a tripwire.
+ * A burst arrives at the funnel stamped `byDirectDamage: true` with the whole amount in
+ * `bombPortion`, and only the two CONSUMABLE steps (Hit Mitigation, Shield Converter) carry a
+ * `bombPortion === 0` guard, so the incoming-block step fires on a burst and diverges the funnel's
+ * recorded intake from the amount passed in. Protection never touches a Bomb or a burst (R181): the
+ * holder books the whole amount and the protector's row stays empty, which the Protection cases
+ * below pin.
  *
- * Site 2 (`byDirectDamage: false`) IS the predicted tripwire: every divergence step in the funnel
+ * Site 2 (`byDirectDamage: false`) is the tripwire: every divergence step in the funnel
  * is gated on `byDirectDamage`, so `incomingBooked === total` there by construction. The DoT-batch
  * case below pins that and fails the day one of those gates loosens.
  *
@@ -240,21 +239,18 @@ describe('timed bomb burst booking reconciles with what the funnel recorded', ()
         expect(c.takenSum).toBeCloseTo(c.incomingSum, 6);
     });
 
-    it('books only the non-redirected remainder on the victim when an ally holds Protection', () => {
+    it('books the whole burst on the victim when an ally holds Protection (R181)', () => {
         const c = channels(fixture([protectionAuraPassive(PROT_STACKS)], PROTECTOR_DEFENCE));
 
-        // Still one real burst of the full amount — Protection moves intake between rows, it does
-        // not change what the bomb was worth.
+        // One real burst of the full amount.
         expect(c.bursts).toHaveLength(1);
         expect(c.bursts[0]).toMatchObject({ victimId: 'victim-1', damage: BOMB_DAMAGE });
 
-        // The protector genuinely took a chunk: the divergence source is armed, not inert.
-        expect(c.incoming['helper-1']?.incoming ?? 0).toBeGreaterThan(0);
-
-        // The victim's row must read what the funnel recorded for the victim, not the pre-cascade
-        // burst. Pre-fix this read the full BOMB_DAMAGE with the chunk ALSO on the protector's row.
-        expect(c.taken['victim-1']).toBeCloseTo(c.incoming['victim-1'].incoming, 6);
-        expect(c.taken['helper-1']).toBeCloseTo(c.incoming['helper-1'].incoming, 6);
+        // A Bomb is never redirected: the holder takes all of it and the protector nothing, so the
+        // protector is armed (it holds Protection) yet its row stays empty.
+        expect(c.taken['victim-1']).toBeCloseTo(BOMB_DAMAGE, 6);
+        expect(c.incoming['victim-1'].incoming).toBeCloseTo(BOMB_DAMAGE, 6);
+        expect(c.incoming['helper-1']?.incoming ?? 0).toBe(0);
         expect(c.dealtSum).toBeCloseTo(c.incomingSum, 6);
         expect(c.takenSum).toBeCloseTo(c.incomingSum, 6);
     });
@@ -397,47 +393,38 @@ const detonateChannels = (input: CombatEngineInput) => {
 };
 
 describe('skill-triggered per-victim detonation booking (applyPerVictimDetonation)', () => {
-    it('books the BOMB portion post-cascade when an enemy ally holds Protection', () => {
+    it('books the whole BOMB portion on the carrier when an enemy ally holds Protection (R181)', () => {
         dbrIdc = 0;
         const c = detonateChannels(
             detonateFixture('bomb', (v) => v.pendingBombs.push(detonatableBomb()))
         );
+        const firingOnly = detonateChannels(detonateFixture('bomb', () => {}));
+        expect(firingOnly.bombEvents).toHaveLength(0); // control really has no burst
 
-        // The detonation happened, for the full pre-funnel amount, on the carrier.
+        // The detonation happened, for the full amount, on the carrier.
         expect(c.bombEvents).toHaveLength(1);
         expect(c.bombEvents[0]).toMatchObject({
             victimId: 'enemy-front',
             damage: BOMB_DAMAGE,
         });
-        // The protector is armed: it took intake that is NOT its own covered firing hit.
-        expect(c.incoming['enemy-mid'].incoming).toBeGreaterThan(0.5 * FOCUS_ATTACK);
 
-        // Every caller-booked row equals what the funnel recorded for that actor, and the whole
-        // board reconciles. Pre-fix the carrier's row carried the full burst while the redirected
-        // slice ALSO sat on the protector's row.
+        // The protector still redirects the firing hit (the control's protector row is its
+        // share), but the burst adds nothing to it: the carrier alone takes the whole Bomb.
+        expect(firingOnly.incoming['enemy-mid'].incoming).toBeGreaterThan(0);
+        expect(c.incoming['enemy-mid'].incoming).toBeCloseTo(
+            firingOnly.incoming['enemy-mid'].incoming,
+            6
+        );
+        expect(
+            c.incoming['enemy-front'].incoming - firingOnly.incoming['enemy-front'].incoming
+        ).toBeCloseTo(BOMB_DAMAGE, 6);
+
         expect(c.taken['enemy-front']).toBeCloseTo(c.incoming['enemy-front'].incoming, 6);
         expect(c.taken['enemy-mid']).toBeCloseTo(c.incoming['enemy-mid'].incoming, 6);
         expect(c.dealtSum).toBeCloseTo(c.incomingSum, 6);
         expect(c.takenSum).toBeCloseTo(c.incomingSum, 6);
-
-        // The detonation tally stays on the same basis as `perTargetDealt` — the DPS page derives
-        // `direct = dealt - detonation - dots`, so the two folds must not drift. The redirected
-        // slice IS detonation damage the caster delivered, so it counts here even though it landed
-        // on the protector's row.
-        //
-        // Pinned as a DIFFERENTIAL against an otherwise-identical run with no bomb seeded, not
-        // against BOMB_DAMAGE. The tally is what the burst DELIVERED, and a redirected chunk is
-        // re-mitigated on the PROTECTOR's defence, so the delivered total is legitimately below the
-        // pre-funnel 1000 (here ~977: the victim keeps 70% unmitigated and the protector's 30%
-        // shrinks on its own 300 defence). Re-deriving that factor in the test would just duplicate
-        // `protectionCascade`; the differential measures it instead.
-        const firingOnly = detonateChannels(detonateFixture('bomb', () => {}));
-        expect(firingOnly.bombEvents).toHaveLength(0); // control really has no burst
-        expect(c.detonation['attacker']).toBeCloseTo(c.incomingSum - firingOnly.incomingSum, 6);
-        // And it is a real, large share of the burst — not a rounding sliver that would let a
-        // tally stuck near zero pass the differential above.
-        expect(c.detonation['attacker']).toBeGreaterThan(0.9 * BOMB_DAMAGE);
-        expect(c.detonation['attacker']).toBeLessThan(BOMB_DAMAGE);
+        // The detonation tally is the whole Bomb, on the same basis as `perTargetDealt`.
+        expect(c.detonation['attacker']).toBeCloseTo(BOMB_DAMAGE, 6);
     });
 
     it('TRIPWIRE: the inferno/corrosion bypass never redirects, so the victim books it whole', () => {
@@ -490,7 +477,7 @@ const timedAccumulator = (): PendingAccumulator => ({
 });
 
 describe('accumulator burst booking (processAccumulators creditDetonation)', () => {
-    it('books the post-cascade remainder on the victim when an ally holds Protection', () => {
+    it('books the whole burst on the victim when an ally holds Protection (R181)', () => {
         const run = (withProtector: boolean) => {
             const bus = createEventBus();
             const bursts: CombatEvent[] = [];
@@ -528,19 +515,16 @@ describe('accumulator burst booking (processAccumulators creditDetonation)', () 
         expect(ctl.takenSum).toBeCloseTo(BURST, 6);
         expect(ctl.dealtSum).toBeCloseTo(ctl.incomingSum, 6);
 
-        // WITH a protector: same burst, but the victim's row must read only what it kept.
+        // WITH a protector: the same burst lands whole on the holder (R181).
         const c = run(true);
         expect(c.bursts).toHaveLength(1);
         expect(c.bursts[0]).toMatchObject({ victimId: 'victim-1', damage: BURST });
-        expect(c.incoming['helper-1'].incoming).toBeGreaterThan(0); // divergence source armed
+        expect(c.incoming['helper-1']?.incoming ?? 0).toBe(0);
+        expect(c.taken['victim-1']).toBeCloseTo(BURST, 6);
         expect(c.taken['victim-1']).toBeCloseTo(c.incoming['victim-1'].incoming, 6);
-        expect(c.taken['victim-1']).toBeLessThan(BURST); // a chunk really left the victim's row
         expect(c.dealtSum).toBeCloseTo(c.incomingSum, 6);
         expect(c.takenSum).toBeCloseTo(c.incomingSum, 6);
-        // The tally is what the burst DELIVERED across both rows (below the pre-funnel BURST
-        // because the redirected chunk re-mitigates on the protector's own defence).
-        expect(c.detonation['enemy-1']).toBeCloseTo(c.incomingSum, 6);
-        expect(c.detonation['enemy-1']).toBeLessThan(BURST);
+        expect(c.detonation['enemy-1']).toBeCloseTo(BURST, 6);
     });
 });
 
@@ -558,7 +542,7 @@ const countdownReduceCharged = (): ShipSkills['slots'][number] => ({
 });
 
 describe('forced bomb detonation booking (forceDetonateBombOnVictim)', () => {
-    it('books the post-cascade remainder when the forced victim has a Protection-holding ally', () => {
+    it('books the whole burst when the forced victim has a Protection-holding ally (R181)', () => {
         dbrIdc = 0;
         const run = (withProtector: boolean) => {
             const bus = createEventBus();
@@ -618,12 +602,12 @@ describe('forced bomb detonation booking (forceDetonateBombOnVictim)', () => {
         expect(ctl.takenSum).toBeCloseTo(BOMB_DAMAGE, 6);
         expect(ctl.dealtSum).toBeCloseTo(ctl.incomingSum, 6);
 
-        // WITH a protector: the victim keeps only the remainder, and the board reconciles.
+        // WITH a protector: the forced burst still lands whole on the holder (R181).
         const c = run(true);
         expect(c.bursts).toHaveLength(1);
-        expect(c.incoming['enemy-mid'].incoming).toBeGreaterThan(0); // divergence source armed
+        expect(c.incoming['enemy-mid']?.incoming ?? 0).toBe(0);
+        expect(c.taken['enemy-front']).toBeCloseTo(BOMB_DAMAGE, 6);
         expect(c.taken['enemy-front']).toBeCloseTo(c.incoming['enemy-front'].incoming, 6);
-        expect(c.taken['enemy-front']).toBeLessThan(BOMB_DAMAGE);
         expect(c.dealtSum).toBeCloseTo(c.incomingSum, 6);
         expect(c.takenSum).toBeCloseTo(c.incomingSum, 6);
     });
