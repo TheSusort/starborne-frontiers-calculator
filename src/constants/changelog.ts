@@ -6,7 +6,14 @@ export const CURRENT_VERSION = '1.76.1';
 // top of CHANGELOG, bumps CURRENT_VERSION and empties this array — all three together, because a
 // bumped version whose entries are still unreleased shows users a what's-new dialog listing
 // nothing. Do it by hand only if that script cannot.
-export const UNRELEASED_CHANGES: string[] = [];
+export const UNRELEASED_CHANGES: string[] = [
+    'Combat log: Bomb and Echoing Burst rows now show only what the ship took.',
+    "Combat log: Nosorog's reflect row now shows only what the attacker took.",
+    'Combat log: hits turned into a DoT now read "converted to DoT", with no damage number.',
+    'Combat log: Protection shares now nest under the hit they came from.',
+    "Combat log: Protection shares are labelled and show the protector's HP after each.",
+    "Combat log: Echoing Burst rows now show the target's HP afterwards.",
+];
 
 export const CHANGELOG: ChangelogEntry[] = [
     {
