@@ -9,6 +9,7 @@ export const CURRENT_VERSION = '1.76.1';
 export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator: Hemlock's Toxic Overflow spread now resolves in turn order.",
     "Combat simulator: Lionheart's Protection now refills to 10 every round after thefts.",
+    'Combat simulator: same-speed protectors now soak damage in board position order.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

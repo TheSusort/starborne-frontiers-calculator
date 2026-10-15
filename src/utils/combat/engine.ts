@@ -5026,7 +5026,11 @@ export function runCombat(rawInput: CombatEngineInput): {
         out.sort((a, b) => {
             const sa = effectiveStatsOf(statusEngine, selfBuffLookup, a.actor).speed;
             const sb = effectiveStatsOf(statusEngine, selfBuffLookup, b.actor).speed;
-            return sb - sa !== 0 ? sb - sa : a.actor.id.localeCompare(b.actor.id);
+            if (sb !== sa) return sb - sa;
+            // A position-less pair ranks equal (both Infinity); the stable sort keeps roster order.
+            const pa = positionTurnRank(a.actor.position);
+            const pb = positionTurnRank(b.actor.position);
+            return pa === pb ? 0 : pa - pb;
         });
         return out;
     };
