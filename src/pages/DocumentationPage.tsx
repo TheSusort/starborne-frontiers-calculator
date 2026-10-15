@@ -3194,19 +3194,19 @@ const DocumentationPage: React.FC = () => {
                                         by Wildfire&apos;s Scorching Radiation bonus exactly as a
                                         tick is, and Inc. DoT Damage Up increases the damage dealt
                                         by each tick of a hit converted into a damage-over-time
-                                        effect. Tycho&apos;s start-of-combat Cheat Death expires
-                                        after the turns its text states. Reactions to an enemy
-                                        cleansing a debuff (Pestilence, Larkspur, Grif, Arum,
-                                        Yarrow) also hear the cleanses an enemy&apos;s passive
-                                        performs (Nuqtu, Purifier, AEGIS, Hermes, Howler), but not a
-                                        duration cut; a cleanse that such a reaction provoked
-                                        triggers them again. Pestilence&apos;s Corrosion lands on
-                                        the enemy that cleansed. A count written after an infliction
-                                        in the same skill includes what that skill landed, enemy by
-                                        enemy: Crocus&apos;s Corrosion II counts toward her own
-                                        &ldquo;3 or more debuffs&rdquo; Stasis (Asphyxiator&apos;s
-                                        and Anemone&apos;s gates likewise), and a resisted one does
-                                        not. A passive reacting to the hit (Bayah) counts only the
+                                        effect. Cheat Death never expires on a timer: it stays until
+                                        a lethal hit uses it. Reactions to an enemy cleansing a
+                                        debuff (Pestilence, Larkspur, Grif, Arum, Yarrow) also hear
+                                        the cleanses an enemy&apos;s passive performs (Nuqtu,
+                                        Purifier, AEGIS, Hermes, Howler), but not a duration cut; a
+                                        cleanse that such a reaction provoked triggers them again.
+                                        Pestilence&apos;s Corrosion lands on the enemy that
+                                        cleansed. A count written after an infliction in the same
+                                        skill includes what that skill landed, enemy by enemy:
+                                        Crocus&apos;s Corrosion II counts toward her own &ldquo;3 or
+                                        more debuffs&rdquo; Stasis (Asphyxiator&apos;s and
+                                        Anemone&apos;s gates likewise), and a resisted one does not.
+                                        A passive reacting to the hit (Bayah) counts only the
                                         debuffs from before the skill. APEX&apos;s passive shield
                                         arrives as the skill&apos;s first debuff lands, so her
                                         charged skill&apos;s &ldquo;If this Unit has an active

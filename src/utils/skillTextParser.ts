@@ -6751,7 +6751,6 @@ export function parseSkillEffects(
 
         // Step 3: Duration from immediately following text segment
         let duration: number | 'recurring' | null = null;
-        let durationFromLeadingText = false;
         const durationMatch = DURATION_RE.exec(nextText);
         if (durationMatch) {
             duration = parseInt(durationMatch[1], 10);
@@ -6766,7 +6765,6 @@ export function parseSkillEffects(
             // the tag, not ahead of it.
             if (duration === null) {
                 duration = findLeadingDuration(segments, i);
-                durationFromLeadingText = duration !== null;
             }
         }
 
@@ -6784,12 +6782,11 @@ export function parseSkillEffects(
         }
 
         // Cheat Death (and any CHEAT_DEATH_BUFFS member) is an until-triggered, no-payload
-        // named buff. It lasts exactly as long as the grant states: a duration stated AFTER it
-        // ("gains Cheat Death and Everliving Regeneration II for 9 turns") is its own and it
-        // expires on the normal timed lifecycle, while a grant with none, or one whose only "for N
-        // turns" precedes it and belongs to another buff ("gains Everliving Regeneration II for 9
-        // turns and Cheat Death"), has no window and is consumed only by a lethal hit.
-        if (CHEAT_DEATH_BUFFS.has(buffName) && (duration === null || durationFromLeadingText)) {
+        // named buff: it is consumed only on a lethal hit, never by the StatusEngine's per-turn
+        // decrement. Force a non-decrementing 'recurring' duration regardless of any nearby
+        // "for N turns" text — e.g. Tycho's "gains Cheat Death and Everliving Regeneration I for
+        // 6 turns" must NOT leak the 6-turn window onto Cheat Death via the shared-duration scan.
+        if (CHEAT_DEATH_BUFFS.has(buffName)) {
             duration = 'recurring';
         }
 
@@ -6869,9 +6866,10 @@ export function parseSkillEffects(
         effects.push({
             buffName: canonical,
             target: 'self',
-            // The construct always states "for N turns" on this buff's own clause, so a Cheat Death
-            // here keeps that window like any other buff (R190; see the segment-loop note above).
-            duration: parseInt(conjoined[2], 10),
+            // Cheat Death never expires on a timer (see segment-loop note above); keep the
+            // conjoined path consistent so a trailing "and Cheat Death for N turns" can't stamp
+            // a finite window either.
+            duration: CHEAT_DEATH_BUFFS.has(canonical) ? 'recurring' : parseInt(conjoined[2], 10),
             source,
         });
     }

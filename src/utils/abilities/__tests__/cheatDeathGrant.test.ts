@@ -74,7 +74,7 @@ describe('Cheat Death grant parsing', () => {
         if (elr.config.type === 'buff') expect(elr.config.duration).toBe(9);
     });
 
-    it('Tycho passive: Cheat Death shares the stated "for 6 turns" window of the conjoined buff', () => {
+    it('Tycho 2nd passive: Cheat Death duration must NOT leak the "for 6 turns" of the conjoined buff', () => {
         const s = ship({
             secondPassiveSkillText:
                 'At the start of combat, this Unit gains <unit-skill>Cheat Death</unit-skill> and <unit-skill>Everliving Regeneration I</unit-skill> for 6 turns.',
@@ -85,8 +85,8 @@ describe('Cheat Death grant parsing', () => {
         expect(cd.target).toBe('self');
         if (cd.config.type === 'buff') {
             expect(cd.config.parsedEffects).toEqual({});
-            // "gains Cheat Death and Everliving Regeneration I for 6 turns": one window for both.
-            expect(cd.config.duration).toBe(6);
+            // Regression guard: the shared-duration scan would otherwise stamp 6 here.
+            expect(cd.config.duration).toBe('recurring');
         }
         // Everliving Regeneration I keeps its own 6-turn window.
         const elr = passive.abilities.find(
