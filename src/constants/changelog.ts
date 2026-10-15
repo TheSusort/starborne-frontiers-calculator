@@ -8,7 +8,7 @@ export const CURRENT_VERSION = '1.76.1';
 // nothing. Do it by hand only if that script cannot.
 export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator: Hemlock's Toxic Overflow spread now resolves in turn order.",
-    "Combat simulator: Lionheart's Protection now refills to 10 every round after thefts.",
+    "Combat simulator: Lionheart's Protection now refills fully each round after a theft.",
     'Combat simulator: same-speed protectors now soak damage in board position order.',
     'Combat simulator: with several taunters, attackers pick by their normal targeting order.',
     'Combat simulator: a mutual wipe is now won by the side that landed the final kill.',
