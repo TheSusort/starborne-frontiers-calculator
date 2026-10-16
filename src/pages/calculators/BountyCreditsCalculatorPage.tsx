@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { PageLayout } from '../../components/ui';
 import { Input } from '../../components/ui/Input';
 import { Select } from '../../components/ui/Select';
-import { CheckboxGroup } from '../../components/ui/CheckboxGroup';
+import { ToggleChipGroup } from '../../components/ui/ToggleChipGroup';
 import { InlineNumberEdit } from '../../components/ui/InlineNumberEdit';
 import { DataTable, Column } from '../../components/ui/tables/DataTable';
 import Seo from '../../components/seo/Seo';
@@ -104,7 +104,34 @@ const TIER_OPTIONS = BACKGROUND_TIERS.map((t) => ({
 }));
 
 const STAR_OPTIONS = [1, 2, 3, 4, 5, 6].map((s) => ({ value: String(s), label: `${s}★` }));
-const RARITY_OPTIONS = Object.values(RARITIES).map((r) => ({ value: r.value, label: r.label }));
+const RARITY_CHIP_CLASSES: Record<RarityName, { active: string; swatch: string }> = {
+    common: {
+        active: 'border-rarity-common bg-rarity-common/15 text-rarity-common',
+        swatch: 'bg-rarity-common',
+    },
+    uncommon: {
+        active: 'border-rarity-uncommon bg-rarity-uncommon/15 text-rarity-uncommon',
+        swatch: 'bg-rarity-uncommon',
+    },
+    rare: {
+        active: 'border-rarity-rare bg-rarity-rare/20 text-rarity-rare',
+        swatch: 'bg-rarity-rare',
+    },
+    epic: {
+        active: 'border-rarity-epic bg-rarity-epic/20 text-rarity-epic',
+        swatch: 'bg-rarity-epic',
+    },
+    legendary: {
+        active: 'border-rarity-legendary bg-rarity-legendary/20 text-rarity-legendary',
+        swatch: 'bg-rarity-legendary',
+    },
+};
+const RARITY_OPTIONS = Object.values(RARITIES).map((r) => ({
+    value: r.value,
+    label: r.label,
+    activeClassName: RARITY_CHIP_CLASSES[r.value as RarityName].active,
+    swatchClassName: RARITY_CHIP_CLASSES[r.value as RarityName].swatch,
+}));
 
 const fmt = (n: number) => Math.round(n).toLocaleString();
 const fmtEnergy = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
@@ -413,24 +440,33 @@ const BountyCreditsCalculatorPage: React.FC = () => {
                         />
                     </section>
 
-                    <section className="card grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <h2 className="md:col-span-3 text-lg text-theme-text">Auto-sell</h2>
-                        <CheckboxGroup
-                            label="Auto-sell star ranks"
-                            helpLabel="Same as the in-game filter: a piece is sold if its star rank OR its rarity is ticked."
+                    <section className="card grid grid-cols-1 lg:grid-cols-3 gap-x-8 gap-y-5">
+                        <div className="lg:col-span-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+                            <h2 className="text-lg text-theme-text">Auto-sell</h2>
+                            <p className="text-sm text-theme-text-secondary">
+                                A piece is sold if its star rank OR its rarity is picked, like the
+                                in-game filter.
+                            </p>
+                        </div>
+                        <ToggleChipGroup
+                            label="Star ranks"
                             options={STAR_OPTIONS}
                             values={settings.stars.map(String)}
                             onChange={(v) => update({ stars: v.map(Number) })}
                         />
-                        <CheckboxGroup
-                            label="Auto-sell rarities"
+                        <ToggleChipGroup
+                            label="Rarities"
                             options={RARITY_OPTIONS}
                             values={settings.rarities}
                             onChange={(v) => update({ rarities: v as RarityName[] })}
                         />
-                        <CheckboxGroup
+                        <ToggleChipGroup
                             label="Always sell sets"
-                            options={bountySets.map((s) => ({ value: s, label: s }))}
+                            helpLabel="Sets you dump whatever their rank. Every set a level drops is equally likely; the abyssal set only drops on level 33."
+                            options={bountySets.map((s) => ({
+                                value: s,
+                                label: s === bounty.abyssalSet ? `${s} (L33)` : s,
+                            }))}
                             values={settings.sets}
                             onChange={(v) => update({ sets: v })}
                         />
@@ -438,10 +474,15 @@ const BountyCreditsCalculatorPage: React.FC = () => {
 
                     {best && (
                         <section
-                            className="card clip-1-corner border-primary/50 bg-gradient-to-br from-primary/15 via-dark to-dark flex flex-wrap items-center gap-x-10 gap-y-5 tabular-nums"
+                            className="card clip-1-corner relative border-primary/50 bg-gradient-to-br from-primary/15 via-dark to-dark flex flex-wrap items-center gap-x-10 gap-y-5 tabular-nums"
                             data-testid="bounty-best"
                             aria-live="polite"
                         >
+                            {/* Draws the border along clip-1-corner's 10px diagonal cut. */}
+                            <span
+                                aria-hidden="true"
+                                className="absolute left-0 top-[10px] h-px w-[15px] origin-top-left -rotate-45 bg-primary/50"
+                            />
                             <h2 className="flex items-baseline gap-3 leading-none">
                                 <span className="text-xl text-theme-text-secondary">Level</span>{' '}
                                 <span className="text-7xl font-bold text-primary">
