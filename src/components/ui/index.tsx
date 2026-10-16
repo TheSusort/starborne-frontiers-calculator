@@ -31,4 +31,5 @@ export * from './RoleSelector';
 export * from './StatCard';
 export * from './tables';
 export * from './Textarea';
+export * from './ToggleChipGroup';
 export * from './charts';

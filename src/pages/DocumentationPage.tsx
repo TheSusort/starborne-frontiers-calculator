@@ -4062,6 +4062,45 @@ const DocumentationPage: React.FC = () => {
                                         list — relevant speed buffs are surfaced at the top.
                                     </p>
                                 </div>
+
+                                <div className="card">
+                                    <h4 className="font-semibold text-primary mb-2">
+                                        Bounty Credits
+                                    </h4>
+                                    <p className="text-theme-text mb-2">
+                                        Ranks every bounty level by credits earned per run, per
+                                        energy or per minute. Each win pays fixed credits plus one
+                                        gear piece; the calculator adds the expected value of the
+                                        gear you sell.
+                                    </p>
+                                    <ul className="text-theme-text list-disc pl-4 space-y-1">
+                                        <li>
+                                            <strong>Auto-sell filter:</strong> works like the
+                                            in-game one — a piece is sold if its star rank OR its
+                                            rarity is ticked.
+                                        </li>
+                                        <li>
+                                            <strong>Always sell sets:</strong> sets you dump
+                                            regardless of rank. Every set a level can drop has the
+                                            same chance; level 33 adds the abyssal set.
+                                        </li>
+                                        <li>
+                                            <strong>Extra credits %:</strong> Credit License, VIP
+                                            and other bonuses added together. They boost the bounty
+                                            reward, not gear sales.
+                                        </li>
+                                        <li>
+                                            <strong>Seconds per fight:</strong> needed for credits
+                                            per minute; override single levels in the table.
+                                        </li>
+                                        <li>
+                                            <strong>Background battles:</strong> 10% cheaper energy;
+                                            time per battle comes from the tier you earned on that
+                                            level, and the fastest three tiers add a bonus gear drop
+                                            every 20/15/10 battles.
+                                        </li>
+                                    </ul>
+                                </div>
                             </div>
 
                             <div className="mt-4 p-4 bg-blue-900/50 border border-blue-700">

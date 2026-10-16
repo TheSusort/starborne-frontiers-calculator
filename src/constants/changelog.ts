@@ -29,6 +29,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat log: Protection shares now nest under the hit they came from.',
     "Combat log: Protection shares are labelled and show the protector's HP after each.",
     "Combat log: Echoing Burst rows now show the target's HP afterwards.",
+    'Bounty Credits calculator: compare bounty levels for credits, including background battles.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

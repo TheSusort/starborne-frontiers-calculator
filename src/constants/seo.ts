@@ -145,6 +145,13 @@ export const SEO_CONFIG = {
         keywords:
             'chrono reaver, implant calculator, charge mechanics, ultimate implant, starborne frontiers',
     },
+    bountyCredits: {
+        title: 'Bounty Credits Calculator',
+        description:
+            'Find the bounty level that earns the most credits per run, per energy or per minute in Starborne Frontiers, including gear you auto-sell.',
+        keywords:
+            'bounty calculator, credits farming, gear sell price, auto-sell, starborne frontiers',
+    },
     shipLore: {
         title: 'Ship Lore',
         description:
