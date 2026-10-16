@@ -26,17 +26,26 @@ export interface PreFightStatBlock {
 
 /**
  * Pre-fight combat-modifier channels beyond raw stats. All values are ADDITIVE
- * percentage points (0 = inert): outgoing/incoming damage, crit-damage and heal
+ * percentage points (0 = inert): attack, outgoing/incoming damage, crit-damage and heal
  * scaling, plus `startingShieldPctOfHp` (starting shield pool as % of max HP).
  *
- * The squad-leader pass accumulates these (F1); the battle simulator attaches the
- * block to each unit's engine actor (`CombatActor.preFight`) and the engine folds
- * every channel at its consumption site (F3): outgoingDamage/outgoingHeal/incomingHeal
- * into the self-buff totals, incomingDamage as a separate factor composed in `hitReductionFor`,
- * incoming/outgoingCritDamage at the crit-family damage sites (crit-conditional damage
- * modifiers — NOT the Crit Power stat), startingShieldPctOfHp as the starting shieldPool.
+ * The squad-leader pass accumulates these; the battle simulator attaches the block to each
+ * unit's engine actor (`CombatActor.preFight`) and the engine folds every channel at its
+ * consumption site:
+ *   - attackPct: into the additive attack-buff term of every effective-attack fold (R200), so
+ *     it adds with Attack Up/Down rather than pre-multiplying the base. A reader that wants the
+ *     pre-buff attack sheet reads `leaderScaledAttack`.
+ *   - outgoingDamage: its own `(1 + x/100)` factor on direct hits, outside the Out. Damage
+ *     buff sum (R199).
+ *   - outgoingHeal/incomingHeal: into the heal-buff totals.
+ *   - incomingDamage: a separate factor composed in `hitReductionFor`.
+ *   - incoming/outgoingCritDamage: at the crit-family damage sites (crit-conditional damage
+ *     modifiers — NOT the Crit Power stat).
+ *   - startingShieldPctOfHp: the starting shieldPool.
  */
 export interface PreFightCombatModifiers {
+    /** Squad-leader attack %, summed over both leaders (own buff, opposing debuff). */
+    attackPct: number;
     outgoingDamage: number;
     outgoingCritDamage: number;
     incomingDamage: number;
@@ -49,6 +58,7 @@ export interface PreFightCombatModifiers {
 /** A fresh all-zero (inert) modifier block. */
 export function emptyPreFightModifiers(): PreFightCombatModifiers {
     return {
+        attackPct: 0,
         outgoingDamage: 0,
         outgoingCritDamage: 0,
         incomingDamage: 0,
@@ -61,9 +71,24 @@ export function emptyPreFightModifiers(): PreFightCombatModifiers {
 
 /** True when at least one modifier channel is non-zero. The battle simulator attaches a
  *  unit's block to its engine actor ONLY in that case, so an all-zero block never rides
- *  along (keeps stat-only-leader runs structurally identical to no-modifier runs). */
+ *  along (a leader whose effects are all stat effects other than attack % leaves the run
+ *  structurally identical to a no-leader run). */
 export function hasAnyPreFightModifier(m: PreFightCombatModifiers): boolean {
     return Object.values(m).some((v) => v !== 0);
+}
+
+/**
+ * The pre-fight attack sheet: base attack with the squad-leader attack % applied, floored at 0.
+ * `stats.attack` itself stays the un-scaled base, because the effective-attack folds add the
+ * leader % to the attack buffs (R200). Every reader that is not one of those folds and wants
+ * "attack before any buff" — pre-combat stat grants, a pre-first-turn attack basis — reads
+ * this instead of `stats.attack`.
+ */
+export function leaderScaledAttack(
+    attack: number,
+    modifiers: Pick<PreFightCombatModifiers, 'attackPct'> | undefined
+): number {
+    return Math.max(0, attack * (1 + (modifiers?.attackPct ?? 0) / 100));
 }
 
 /** One placed unit as the pre-fight passes see it. */

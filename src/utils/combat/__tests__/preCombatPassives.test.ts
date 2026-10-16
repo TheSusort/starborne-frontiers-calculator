@@ -10,6 +10,13 @@
 import { describe, it, expect } from 'vitest';
 import { applyPreCombatShipPassives, type PreCombatPlanLike } from '../preCombatPassives';
 import type { PreFightStatBlock } from '../preFight/types';
+import {
+    emptyPreFightModifiers,
+    leaderScaledAttack,
+    runPreFight,
+    squadLeaderPass,
+    type PreFightUnit,
+} from '../preFight';
 import { buildShipAbilities } from '../../abilities/buildShipAbilities';
 import type { Ship } from '../../../types/ship';
 import type { ShipTypeName } from '../../../constants/shipTypes';
@@ -23,6 +30,8 @@ const LIONHEART_TEXT =
 const CENTURION_TEXT = 'At the start of combat, this Unit gains 500 attack per adjacent ally.';
 const ENFORCER_TEXT =
     'At the start of combat this Unit gains +15% crit rate and +10% hacking if adjacent to a supporter.';
+const STALWART_ATTACK_TEXT =
+    'At the start of combat this Unit gains 20% attack if its adjacent to a supporter.';
 const DEFIANT_TEXT =
     'At the start of combat this Unit gains 20% HP if its adjacent to a supporter.';
 
@@ -114,6 +123,45 @@ describe('applyPreCombatShipPassives — count-scaling (Centurion)', () => {
         const centurion = makePlan('cent', 'M2', { passiveText: CENTURION_TEXT });
         const far = makePlan('far', 'M4');
         expect(applyPreCombatShipPassives([centurion, far])).toEqual([]);
+    });
+});
+
+describe('applyPreCombatShipPassives — squad-leader attack % (R200)', () => {
+    // Midas stage 1: +10% attack (and HP) to MPL allies. The leader pass leaves `stats.attack`
+    // at the base; the pre-buff sheet is `leaderScaledAttack`. The sheet after the grants must be
+    // the one a leader-folded base produced: base × 1.10, plus the grant computed off that.
+    const leaderThenGrants = (plans: PreCombatPlanLike[]): PreFightUnit[] => {
+        const units: PreFightUnit[] = plans.map((plan) => ({
+            id: plan.id,
+            side: 'player',
+            faction: 'MPL',
+            stats: plan.stats,
+            modifiers: emptyPreFightModifiers(),
+            unsimulated: [],
+        }));
+        runPreFight({ player: units, enemy: [] }, [
+            squadLeaderPass({ player: { faction: 'MPL', name: 'Midas', stage: 1 } }),
+        ]);
+        const byId = new Map(units.map((u) => [u.id, u]));
+        applyPreCombatShipPassives(plans, (id) => byId.get(id)?.modifiers.attackPct ?? 0);
+        return units;
+    };
+    const sheet = (u: PreFightUnit) => leaderScaledAttack(u.stats.attack, u.modifiers);
+
+    it('Centurion (+500 flat per adjacent ally): 1000 × 1.10 + 500', () => {
+        const [centurion] = leaderThenGrants([
+            makePlan('cent', 'M2', { passiveText: CENTURION_TEXT }),
+            makePlan('ally', 'M3'),
+        ]);
+        expect(sheet(centurion)).toBeCloseTo(1000 * 1.1 + 500, 9);
+    });
+
+    it('a +20% own-attack grant reads the leader-scaled sheet: 1000 × 1.10 × 1.20', () => {
+        const [stalwart] = leaderThenGrants([
+            makePlan('stal', 'M2', { passiveText: STALWART_ATTACK_TEXT }),
+            makePlan('sup', 'M3', { role: 'SUPPORTER_BUFFER' }),
+        ]);
+        expect(sheet(stalwart)).toBeCloseTo(1000 * 1.1 * 1.2, 9);
     });
 });
 

@@ -130,6 +130,7 @@ import {
     victimDefenceReductionPct,
     composeDotReductionFactor,
     composeIncomingFactor,
+    composeIncomingFactorWithBlock,
 } from './victimDamage';
 import {
     incomingReductionPartsForHit,
@@ -6532,6 +6533,9 @@ export function runCombat(rawInput: CombatEngineInput): {
             const carriesBarrier = selfBuffNamesForOwners(statusEngine, [victim.id]).some((n) =>
                 BARRIER_BUFFS.has(n)
             );
+            // The victim-side factors in `damage`, as the Protection cascade reads them: the
+            // caller's `cause.redirectBasis`, with a partial block folded into `incomingFactor`.
+            let redirectBasis = cause?.redirectBasis;
             // Proc block on DIRECT damage only, when not fully Barrier-immune. Reduces the
             // hit before it is recorded/absorbed (silent reduction — no separate surface this PR).
             // Fully inert (no counter touch, no roll) when the victim has no incoming-block
@@ -6587,14 +6591,27 @@ export function runCombat(rawInput: CombatEngineInput): {
                             return proc;
                         }
                     );
-                    damage = damage * (1 - blocked);
-                    // #358 ADDENDUM 3 (C2): `damageRaw` is DELIBERATELY NOT scaled here. An
-                    // incoming-block proc is a VICTIM-SIDE reduction — the attack was thrown in
-                    // full and the defender's ability ate part of it — so it must not shrink the
-                    // "damage absorbed" axis. It used to be scaled in lockstep with `damage`,
-                    // which made the block ability lower its own owner's headline figure: the same
-                    // inversion the defence term and the `Inc. Damage Down` term were each fixed
-                    // for, on a third channel. Pinned by the per-channel direction test in
+                    if (blocked >= 1) {
+                        // A FULL block (Shadowguard) is outside the 70% cap: the hit deals 0.
+                        damage = 0;
+                    } else if (blocked > 0) {
+                        // A PARTIAL block (Ironclad) composes inside the cap (R202; read
+                        // `composeIncomingFactorWithBlock`). `damage` carries the caller's composed
+                        // factor, so it is rescaled from that factor to the blocked one, and the
+                        // Protection cascade below divides by the blocked one. A basis-less hit
+                        // folded no incoming composition: its factor reads as 1.
+                        const before = redirectBasis?.incomingFactor ?? 1;
+                        const after = composeIncomingFactorWithBlock(before, blocked);
+                        damage = damage * (after / before);
+                        if (redirectBasis) {
+                            redirectBasis = { ...redirectBasis, incomingFactor: after };
+                        }
+                    }
+                    // #358 ADDENDUM 3 (C2): `damageRaw` is NOT scaled by a block. An incoming-block
+                    // proc is a VICTIM-SIDE reduction — the attack was thrown in full and the
+                    // defender's ability ate part of it — so it does not shrink the "damage
+                    // absorbed" axis, exactly like the defence term and the `Inc. Damage Down`
+                    // term. Pinned by the per-channel direction test in
                     // `defenseSurvivabilitySim.test.ts`.
                 }
             }
@@ -6654,7 +6671,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                         victim
                     ).defence;
                     const targetDef = substitutedDefenceFor(victim, victimDef);
-                    const basis = cause.redirectBasis;
+                    const basis = redirectBasis;
                     const targetMit =
                         basis?.defenceMitigation ??
                         (targetDef > 0 ? 1 - calculateDamageReduction(targetDef) / 100 : 1);
@@ -10443,8 +10460,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                 activePattern: parsedPatternFor(a),
                 chargedPattern: parsedChargedPatternFor(a),
                 sameSideLiving: sameSideLivingFor(a),
-                // The acting actor's pre-fight modifier baseline (outgoingDamage / outgoingHeal /
-                // incomingHeal fold into its self-buff totals inside runPlayerTurn).
+                // The acting actor's pre-fight modifier baseline (runPlayerTurn's `preFight` doc
+                // says where each channel folds).
                 // Side-agnostic — enemy attackers walk the same path. Conditional spread → an
                 // actor with no pre-fight modifiers omits the key.
                 ...(a.preFight ? { preFight: a.preFight } : {}),

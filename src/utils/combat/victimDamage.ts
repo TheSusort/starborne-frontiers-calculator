@@ -49,7 +49,15 @@ export interface AttackerDamageScalars {
     hits: number;
     /** critDamage + critDamageBuff, percent. */
     effectiveCritDamage: number;
+    /** The Out. Damage buff sum, percent: buffs/debuffs and outgoing-damage modifiers. A Menace
+     *  or Giant Slayer proc adds into this same sum (R198), through `outgoingDamageDeltaPct`. */
     outgoingDamageBuffPct: number;
+    /**
+     * Product of the attacker's outgoing factors that multiply OUTSIDE the buff sum: the
+     * squad-leader outgoing bonus (R199) and Arcane Siege (R201), each `(1 + x/100)`.
+     * Absent → 1: a counter or reactive proc carries neither.
+     */
+    outgoingSeparateFactor?: number;
     incomingDamageModifierPct: number;
     defensePenetrationPct: number;
     /** Attacker affinity; matched against the victim's affinity via
@@ -106,9 +114,10 @@ export interface VictimDefenseProfile {
     victimSideIncomingPct?: number;
     /**
      * This victim's outgoing-damage-modifier DELTA vs the
-     * attacker-fixed `s.outgoingDamageBuffPct`. `s.outgoingDamageBuffPct` is folded ONCE per
-     * turn against the primary (bound) target's enemy-status; an enemy-status-gated modifier
-     * (Tygr's "+30% to enemies with Stasis/Disable", Incinerator's "+30% to Inferno enemies",
+     * attacker-fixed `s.outgoingDamageBuffPct`. The per-hit Menace/Giant Slayer proc % also rides
+     * here (`applyPositionalDamage` adds it), because a proc joins the buff sum (R198).
+     * `s.outgoingDamageBuffPct` is folded ONCE per turn against the primary (bound) target's
+     * enemy-status; an enemy-status-gated modifier (Tygr's "+30% to enemies with Stasis/Disable", Incinerator's "+30% to Inferno enemies",
      * Lodolite's "+15% to enemies with Concentrate Fire") must instead vary PER FOOTPRINT
      * VICTIM in an AoE. Rather than re-deriving the full outgoing term per victim, the engine
      * computes ONLY the delta between that victim's own enemy-status ctx and the primary
@@ -148,6 +157,7 @@ export {
     NO_INCOMING_REDUCTION,
     mergeIncomingReductionParts,
     composeIncomingFactor,
+    composeIncomingFactorWithBlock,
     composeDotReductionFactor,
 } from '../damageComposition';
 export type { IncomingReductionParts } from '../damageComposition';
@@ -255,23 +265,17 @@ export function victimHitDamageParts(
     // amplification (`Out. Damage Up`, `Exposed`) and the attacker's crit penalty stay on.
     const incomingAsThrown = incomingChannel - (v.victimSideIncomingPct ?? 0);
 
-    // The per-victim enemy-status-gated delta and the attacker-fixed outgoing buff are additive
-    // contributions to the SAME `(1 + x/100)` multiplier.
+    // The per-victim delta (enemy-status-gated modifiers, a Menace/Giant Slayer proc) and the
+    // attacker-fixed outgoing buff are additive contributions to the SAME `(1 + x/100)`
+    // multiplier; the squad-leader and Arcane Siege factors multiply outside it.
     const outgoingPct = s.outgoingDamageBuffPct + (v.outgoingDamageDeltaPct ?? 0);
+    const outgoingFactor = (1 + outgoingPct / 100) * (s.outgoingSeparateFactor ?? 1);
     const nonCritFactor =
-        defenceMitigation *
-        (1 + outgoingPct / 100) *
-        incomingFactor *
-        attackerCritFactor *
-        affinityMult;
+        defenceMitigation * outgoingFactor * incomingFactor * attackerCritFactor * affinityMult;
     // The same product with every victim-side reduction removed: the defence term is an exact 1
     // and the incoming term is re-based on `incomingAsThrown`.
     const nonCritFactorPreDefence =
-        1 *
-        (1 + outgoingPct / 100) *
-        (1 + incomingAsThrown / 100) *
-        attackerCritFactor *
-        affinityMult;
+        1 * outgoingFactor * (1 + incomingAsThrown / 100) * attackerCritFactor * affinityMult;
 
     const hitCritMultiplier =
         1 + (didCrit ? 1 : 0) * ((s.effectiveCritDamage + (v.critDamageDeltaPct ?? 0)) / 100);

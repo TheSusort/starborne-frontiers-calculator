@@ -166,7 +166,10 @@ export function effectiveStatsOf(
     const s = actor.stats;
     const security = (s.security ?? 0) + t.securityBuff;
     return {
-        attack: s.attack * (1 + t.attackBuff / 100) + t.attackFlatBuff, // base × (1+%) + attackFlatBuff (absolute units)
+        // base × (1 + (attack buffs + squad-leader attack %)/100) + attackFlatBuff (R200).
+        attack:
+            s.attack * (1 + (t.attackBuff + (actor.preFight?.attackPct ?? 0)) / 100) +
+            t.attackFlatBuff,
         defence: s.defence * (1 + t.defenceBuff / 100) + flatDefence(t, security),
         crit: s.crit + t.critBuff,
         critDamage: s.critDamage + t.critDamageBuff,
@@ -259,7 +262,9 @@ export function effectiveOutgoingStatsOf(
         // Same shape as `effectiveStatsOf.attack`, with the delta added to the SAME additive
         // percentage term — mirroring the turn loop's `extras.attackBuff += delta.attack` rather
         // than post-multiplying, which would compound instead of adding.
-        attack: s.attack * (1 + (t.attackBuff + attackPct) / 100) + t.attackFlatBuff,
+        attack:
+            s.attack * (1 + (t.attackBuff + attackPct + (actor.preFight?.attackPct ?? 0)) / 100) +
+            t.attackFlatBuff,
         outgoingDamageBuffPct: t.outgoingDamageBuff + outgoingDamagePct,
         crit: s.crit + t.critBuff,
         critDamage: s.critDamage + t.critDamageBuff,
@@ -329,6 +334,10 @@ export interface EffectiveDamageStats {
     detonationDamageModifier: number;
     /** mod.bombSplashDamage — outgoing bomb-splash multiplier delta (percentage points). */
     bombSplashModifier: number;
+    /** `mod.outgoingDamageSeparateFactor`: the direct-hit multiplier from `outgoingDamageSeparate`
+     *  modifiers (Arcane Siege, R201), outside the buff sum `totals.outgoingDamageBuff`. 1 when
+     *  none applies. */
+    outgoingSeparateFactor: number;
     /** Full summed buff totals (named layers, extras and layer 4) — exposes outgoingDamage/heal channels for the turn loop. */
     totals: ReturnType<typeof calculateBuffTotals>;
 }
@@ -339,7 +348,8 @@ export interface EffectiveDamageStats {
  *   layers 1+2+3 = selfNamedBuffs (scheduled self-buffs + timed and gated ability statuses),
  *     reduced to one instance per named family — highest tier wins; only DoTs and bombs stack
  *     (#667, `strongestPerFamily`)
- *   extras = non-named additive terms (squad-leader `preFight`, enemy-applied shadowing delta)
+ *   extras = non-named additive terms (squad-leader `preFight` attack % and heal channels,
+ *     enemy-applied shadowing delta)
  *   layer 4 = modifierAbilities gated by modifierCtx
  */
 export function effectiveDamageStatsOf(args: {
@@ -408,6 +418,7 @@ export function effectiveDamageStatsOf(args: {
         selfDotDamageModifier: dotPen.dotDamageModifier + mod.dotDamage,
         detonationDamageModifier: mod.detonationDamage + dotPen.detonationDamageModifier,
         bombSplashModifier: mod.bombSplashDamage,
+        outgoingSeparateFactor: mod.outgoingDamageSeparateFactor,
         totals,
     };
 }

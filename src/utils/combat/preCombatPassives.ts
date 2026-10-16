@@ -6,6 +6,12 @@
  * construction. Ordering rule (spec, Architecture): the squad-leader pass runs FIRST, this
  * pass SECOND — so every grant here computes from the frozen POST-LEADER stats.
  *
+ * Attack is the one stat the leader pass leaves un-scaled (`stats.attack` is the base and the
+ * leader % rides `modifiers.attackPct`, R200). So the snapshot reads attack as
+ * `leaderScaledAttack`, and an attack grant lands on the base divided by the leader factor:
+ * the post-grant sheet `leaderScaledAttack(stats.attack)` is then base × (1 + leader%) + grant,
+ * the same sheet a leader-folded base produced.
+ *
  * Simultaneity: all grants are computed against a snapshot taken before ANY grant is
  * applied, so no grant ever sees another grant's output — Lionheart's "10% of its HP"
  * reads HIS post-leader hp, and a Defiant standing next to Lionheart computes its own
@@ -19,7 +25,7 @@
 import { matchesRoleCategory, type ShipTypeName } from '../../constants/shipTypes';
 import type { ShipSkills } from '../../types/abilities';
 import type { Position } from '../../types/encounters';
-import type { PreFightStatBlock } from './preFight/types';
+import { leaderScaledAttack, type PreFightStatBlock } from './preFight/types';
 import { adjacentAllyIds } from './adjacency';
 
 /** Structural slice of the battle simulator's private `PlacementPlan` — exactly the
@@ -52,11 +58,24 @@ export interface AppliedPreCombatGrant {
  * text happens to match (defensive — no slot gate there), but only the refit-resolved
  * passive row is a real pre-fight passive in-game.
  */
-export function applyPreCombatShipPassives(plans: PreCombatPlanLike[]): AppliedPreCombatGrant[] {
+export function applyPreCombatShipPassives(
+    plans: PreCombatPlanLike[],
+    /** Each plan's squad-leader attack % (`PreFightCombatModifiers.attackPct`). Absent → 0. */
+    leaderAttackPctOf: (planId: string) => number = () => 0
+): AppliedPreCombatGrant[] {
     // Frozen post-squad-leader snapshot: EVERY grant amount below reads from here, never
     // from the live (possibly already-granted) stats — simultaneity, no cascading.
     const snapshot = new Map<string, PreFightStatBlock>(
-        plans.map((plan) => [plan.id, { ...plan.stats }])
+        plans.map((plan) => [
+            plan.id,
+            {
+                ...plan.stats,
+                // eslint-disable-next-line no-restricted-syntax -- pre-fight: no buff exists yet; the leader % is applied here
+                attack: leaderScaledAttack(plan.stats.attack, {
+                    attackPct: leaderAttackPctOf(plan.id),
+                }),
+            },
+        ])
     );
     const byId = new Map<string, PreCombatPlanLike>(plans.map((plan) => [plan.id, plan]));
 
@@ -163,8 +182,10 @@ export function applyPreCombatShipPassives(plans: PreCombatPlanLike[]): AppliedP
     for (const [id, bucket] of deltas) {
         const plan = byId.get(id);
         if (!plan) continue;
+        const leaderAttackFactor = 1 + leaderAttackPctOf(id) / 100;
         for (const [stat, delta] of Object.entries(bucket)) {
-            plan.stats[stat as AppliedPreCombatGrant['stat']] += delta;
+            plan.stats[stat as AppliedPreCombatGrant['stat']] +=
+                stat === 'attack' && leaderAttackFactor > 0 ? delta / leaderAttackFactor : delta;
         }
     }
     return applied;

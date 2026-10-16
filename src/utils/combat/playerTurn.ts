@@ -1087,12 +1087,13 @@ export interface PlayerTurnArgs {
     /** Living same-side roster for support footprint resolution (positional mode). */
     sameSideLiving?: CombatActor[];
     /** Pre-fight combat-modifier baseline for THIS acting actor.
-     *  outgoingDamage/outgoingHeal/incomingHeal fold additively into the scheduled self-buff
-     *  totals right after resolveSelfBuffTotals, flowing through effectiveDamageStatsOf into
-     *  every existing damage/heal consumer (incl. turnCtx + positionalScalars). NOTE:
-     *  outgoingCritDamage is NOT folded here — "outgoing crit damage" is a crit-conditional
-     *  DAMAGE modifier (not the Crit Power stat), consumed at the engine's crit-family
-     *  damage sites. Absent → no pre-fight baseline is folded. */
+     *  attackPct/outgoingHeal/incomingHeal fold additively into the `extras` totals right after
+     *  resolveSelfBuffTotals, flowing through effectiveDamageStatsOf into every existing
+     *  damage/heal consumer (incl. turnCtx + positionalScalars) — attack % adds with the attack
+     *  buffs (R200). outgoingDamage is its own direct-hit factor outside the Out. Damage buff
+     *  sum (R199): see `outgoingSeparateFactor`. outgoingCritDamage is NOT folded here — "outgoing
+     *  crit damage" is a crit-conditional DAMAGE modifier (not the Crit Power stat), consumed at
+     *  the engine's crit-family damage sites. Absent → no pre-fight baseline is folded. */
     preFight?: PreFightCombatModifiers;
 
     /** #389/#396: the named families THIS acting actor carries in its own per-victim ENEMY store
@@ -3111,15 +3112,16 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     const scheduledTotals = resolveSelfBuffTotals(scheduledSelfBuffs);
     // Non-named additive terms for the final fold (`effectiveDamageStatsOf`'s `extras`): the
     // squad-leader baseline here, the enemy-applied shadowing delta at the late fold.
-    // preFight: outgoingDamage → outgoing-damage buff, outgoingHeal/incomingHeal → the heal
-    // buffs. All three flow through effectiveDamageStatsOf into the existing consumers
-    // (damage assembly, heal block, turnCtx, positionalScalars) with buff-channel semantics
-    // (direct damage only; additive pct points). outgoingCritDamage is deliberately NOT
-    // folded (crit-conditional damage modifier — consumed at the engine's crit-family
-    // sites, never via critDamageBuff/effectiveDamageStatsOf). Absent → nothing is folded.
+    // preFight: attackPct → the attack buff (it adds with Attack Up/Down, R200),
+    // outgoingHeal/incomingHeal → the heal buffs. All three flow through effectiveDamageStatsOf
+    // into the existing consumers (damage assembly, heal block, turnCtx, positionalScalars) as
+    // additive pct points. preFight.outgoingDamage is NOT a buff: it is its own factor
+    // (`outgoingSeparateFactor`, R199). outgoingCritDamage is deliberately NOT folded
+    // (crit-conditional damage modifier — consumed at the engine's crit-family sites, never via
+    // critDamageBuff/effectiveDamageStatsOf). Absent → nothing is folded.
     const extras = calculateBuffTotals([]);
     if (args.preFight) {
-        extras.outgoingDamageBuff += args.preFight.outgoingDamage;
+        extras.attackBuff += args.preFight.attackPct;
         extras.outgoingHealBuff += args.preFight.outgoingHeal;
         extras.incomingHealBuff += args.preFight.incomingHeal;
     }
@@ -4740,6 +4742,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         modifierCtx,
     });
     const effectiveAttack = dmgStats.attack;
+    // The direct-hit outgoing factors that multiply OUTSIDE the Out. Damage buff sum: the
+    // squad-leader outgoing bonus (R199) and Arcane Siege (R201).
+    const outgoingSeparateFactor =
+        (1 + (args.preFight?.outgoingDamage ?? 0) / 100) * dmgStats.outgoingSeparateFactor;
     // Full buff total at the final fold (named layers, extras and layer 4).
     const effectiveCrit =
         args.deferAbilityPerformedToEngine === true
@@ -4797,7 +4803,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // Per-hit outgoing amplification (Menace/Giant Slayer) on the firing hit only.
     // Sourced from the always-active passive slot. With no amplification ability OR no
     // engine-supplied proc gate, the loop never calls outgoingAmplificationForHit and the
-    // weighted sums collapse to (nonCritHits, critHits).
+    // weighted sums collapse to (nonCritHits, critHits). A proc's % joins the Out. Damage buff
+    // sum (R198), so an amplified hit weighs (1 + Out + amp) / (1 + Out) against the
+    // `nonCritFactor` that already carries (1 + Out).
+    const outgoingBuffFactor = 1 + dmgStats.totals.outgoingDamageBuff / 100;
     const ampAbilities = (passiveSkill?.abilities ?? []).filter(
         (a) => a.config.type === 'outgoing-amplification'
     );
@@ -4860,8 +4869,16 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                       rollOutgoingProc
                   ) / 100
                 : 0;
-        if (didCritHit) ampCritWeight += 1 + amp;
-        else ampNonCritWeight += 1 + amp;
+        // A buff sum at exactly −100% zeroes the hit whatever the proc adds to it; the ratio
+        // is undefined there, so fall back to the bare proc factor.
+        const weight =
+            amp === 0
+                ? 1
+                : outgoingBuffFactor !== 0
+                  ? (outgoingBuffFactor + amp) / outgoingBuffFactor
+                  : 1 + amp;
+        if (didCritHit) ampCritWeight += weight;
+        else ampNonCritWeight += weight;
     }
     // Any-hit binary: feeds ctx self-crit gates, the RoundData row, and didCrit.
     // on-crit triggers consume critHits (per-critting-hit), NOT this binary — see
@@ -5307,7 +5324,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // by the firing hit and the passive hit, which may differ in crit treatment (noCrit).
     const nonCritFactor =
         (1 - damageReduction / 100) *
-        (1 + dmgStats.totals.outgoingDamageBuff / 100) *
+        outgoingBuffFactor *
+        outgoingSeparateFactor *
         incomingNonCrit *
         affinityMult;
     // Per-hit outgoing amplification (Menace/Giant Slayer), firing hit only. Collapses to
@@ -7284,6 +7302,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
               hits,
               effectiveCritDamage,
               outgoingDamageBuffPct: dmgStats.totals.outgoingDamageBuff,
+              outgoingSeparateFactor,
               incomingDamageModifierPct: incomingDamageModifier,
               defensePenetrationPct: effectivePen,
               attackerAffinity: attackerAffinity ?? actor.affinity ?? 'antimatter',
@@ -7371,6 +7390,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                       hits: 1,
                       effectiveCritDamage,
                       outgoingDamageBuffPct: dmgStats.totals.outgoingDamageBuff,
+                      outgoingSeparateFactor,
                       incomingDamageModifierPct: incomingDamageModifier,
                       defensePenetrationPct: effectivePen,
                       attackerAffinity: attackerAffinity ?? actor.affinity ?? 'antimatter',

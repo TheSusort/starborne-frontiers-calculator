@@ -5,7 +5,6 @@ import { EquipmentSlotName, ShipTypeName } from '../../constants';
 import { Ship } from '../../types/ship';
 import { calculateTotalStats } from '../ship/statsCalculator';
 import { GearPiece } from '../../types/gear';
-import { RarityName } from '../../constants/rarities';
 import { performanceTracker } from './performanceTimer';
 import { applyArenaModifiers } from './arenaModifiers';
 import { applyFleetBuffs } from './fleetBuffs';
@@ -23,6 +22,7 @@ import {
     previewStatBonus,
 } from './priorityScore';
 import { sanitizeRoleBasis } from './customFormula';
+import { ARCANE_SIEGE_MULTIPLIERS } from './arcaneSiegeUtils';
 
 // Re-export calculatePriorityScore so existing imports from this module continue to work
 export {
@@ -64,15 +64,6 @@ const equipmentKeyCache = new Map<string, string>();
 
 // Cache for implants key per ship (implants don't change during gear optimization)
 const implantsKeyCache = new Map<string, string>();
-
-// Arcane Siege multiplier values by rarity
-const ARCANE_SIEGE_MULTIPLIERS: Record<RarityName, number> = {
-    common: 3,
-    uncommon: 5,
-    rare: 10,
-    epic: 15,
-    legendary: 20,
-};
 
 // Cache for Arcane Siege implant info per ship (implants don't change during gear optimization)
 const arcaneSiegeCache = new Map<string, number | null>(); // ship.id -> multiplier or null if no implant

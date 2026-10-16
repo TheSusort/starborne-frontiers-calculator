@@ -14,9 +14,8 @@
  *   - outgoingHeal/incomingHeal → engine-level tests (preFightModifiersEngine.test.ts) — no
  *     battle-sim fixture ship carries a parseable heal skill.
  *
- * Plus the F3 inertness proof: a STAT-ONLY leader run is deep-equal to a no-leader run
- * with the same stats pre-multiplied by hand (the modifier plumbing attaches nothing when
- * every channel is zero).
+ * Plus the leader attack % (R200): with no attack buff in the fight it deals exactly what a
+ * hand-scaled attack deals, and with Attack Up III it ADDS to the buff rather than compounding.
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { setRateGateRng, resetRateGateRng } from '../rateAccumulator';
@@ -32,7 +31,7 @@ const makeShip = (
     id: string,
     name: string,
     faction: FactionName,
-    opts: { activeTarget: string; activePattern: string }
+    opts: { activeTarget: string; activePattern: string; activeSkillText?: string }
 ): Ship => ({
     id,
     name,
@@ -53,7 +52,8 @@ const makeShip = (
     implants: {},
     refits: [],
     affinity: 'antimatter',
-    activeSkillText: 'This Unit deals <unit-damage>100% damage</unit-damage>.',
+    activeSkillText:
+        opts.activeSkillText ?? 'This Unit deals <unit-damage>100% damage</unit-damage>.',
     chargeSkillCharge: 0,
     activeTarget: opts.activeTarget,
     activePattern: opts.activePattern,
@@ -260,17 +260,19 @@ describe('simulateBattle pre-fight modifiers — starting shield (Broker III)', 
     });
 });
 
-describe('simulateBattle pre-fight modifiers — inertness (stat-only leader)', () => {
-    it('a stat-only leader run is deep-equal to a no-leader run with the stats pre-multiplied by hand', () => {
-        // Midas stage 1 = +10% HP & +10% attack on MPL allies, NO modifier effects. The F3
-        // plumbing must attach nothing (hasAnyPreFightModifier false everywhere), so the run
-        // is IDENTICAL to applying the same multipliers directly to the placement stats.
-        const withLeader = simulateBattle({
+describe('simulateBattle pre-fight modifiers — leader attack % (R200)', () => {
+    // Midas stage 1 = +10% HP & +10% attack on MPL allies.
+    const run = (opts: { leader: boolean; attack: number; hp: number; skill?: string }) =>
+        simulateBattle({
             playerTeam: [
-                placement(makeShip('p1', 'Player Front', 'MPL', FRONT), 'M4', {
-                    attack: 5000,
-                    hp: 100_000,
-                }),
+                placement(
+                    makeShip('p1', 'Player Front', 'MPL', {
+                        ...FRONT,
+                        activeSkillText: opts.skill,
+                    }),
+                    'M4',
+                    { attack: opts.attack, hp: opts.hp }
+                ),
             ],
             enemyTeam: [
                 placement(makeShip('e1', 'Enemy Front', 'MPL', FRONT), 'M4', {
@@ -279,24 +281,37 @@ describe('simulateBattle pre-fight modifiers — inertness (stat-only leader)', 
                 }),
             ],
             rounds: 3,
-            playerSquadLeader: { faction: 'MPL', name: 'Midas', stage: 1 },
+            ...(opts.leader
+                ? {
+                      playerSquadLeader: {
+                          faction: 'MPL' as const,
+                          name: 'Midas',
+                          stage: 1 as const,
+                      },
+                  }
+                : {}),
         });
-        const handScaled = simulateBattle({
-            playerTeam: [
-                placement(makeShip('p1', 'Player Front', 'MPL', FRONT), 'M4', {
-                    attack: 5000 * 1.1,
-                    hp: 100_000 * 1.1,
-                }),
-            ],
-            enemyTeam: [
-                placement(makeShip('e1', 'Enemy Front', 'MPL', FRONT), 'M4', {
-                    attack: 2000,
-                    hp: 100_000,
-                }),
-            ],
-            rounds: 3,
-        });
+
+    it('with no attack buff in the fight, the run is deep-equal to a hand-scaled attack', () => {
+        const withLeader = run({ leader: true, attack: 5000, hp: 100_000 });
+        const handScaled = run({ leader: false, attack: 5000 * 1.1, hp: 100_000 * 1.1 });
         expect(withLeader).toEqual(handScaled);
         expect('preFight' in withLeader).toBe(false);
+    });
+
+    it('with Attack Up III, the leader % adds to the buff: 5000 × 1.55, not 5500 × 1.45', () => {
+        const buffing =
+            'This Unit gains <unit-skill>Attack Up III</unit-skill> for 2 turns and deals ' +
+            '<unit-damage>100% damage</unit-damage>.';
+        const withLeader = run({ leader: true, attack: 5000, hp: 100_000, skill: buffing });
+        const handScaled = run({
+            leader: false,
+            attack: 5000 * 1.1,
+            hp: 100_000 * 1.1,
+            skill: buffing,
+        });
+        const dealt = (r: ReturnType<typeof simulateBattle>) => round1(r, 'attacker').damageDealt;
+        expect(dealt(handScaled)).toBeCloseTo(5000 * 1.1 * 1.45, 6);
+        expect(dealt(withLeader)).toBeCloseTo(5000 * 1.55, 6);
     });
 });

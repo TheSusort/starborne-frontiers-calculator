@@ -21,6 +21,7 @@ import { createStatusEngine } from '../statusEngine';
 import { createEventBus } from '../events';
 import { makeRateGate } from '../../calculators/rateAccumulator';
 import { Ability, ShipSkills } from '../../../types/abilities';
+import { emptyPreFightModifiers } from '../preFight';
 
 function makeRuntime(
     critAlwaysFires: boolean,
@@ -209,5 +210,31 @@ describe('aggregate-path outgoing amplification fold (firing hit only)', () => {
             })
         );
         expect(absent.directDamage).toBe(60000);
+    });
+});
+
+describe('aggregate path — amplification joins the Out. Damage sum; the leader is its own factor', () => {
+    // R198 + R199: Out. Damage Up III (+45) and a +30% Menace proc share ONE (1 + Σ) term;
+    // the squad leader's +10% outgoing multiplies outside it.
+    it('Out. Damage Up III + Menace 30% + leader 10% → baseline × 1.75 × 1.10', () => {
+        const outDamageUp = {
+            id: 'odu3',
+            buffName: 'Out. Damage Up III',
+            stacks: 1,
+            isStackable: false,
+            parsedEffects: { outgoingDamage: 45 },
+        };
+        const statusEngine = createStatusEngine({ selfBuffs: [outDamageUp], enemyDebuffs: [] });
+        statusEngine.beginRound(1);
+        const runtime = makeRuntime(true, [menaceAbility(30, 0.5)]);
+        runtime.selfBuffLookup.set(outDamageUp.buffName, [outDamageUp]);
+        const out = runPlayerTurn(
+            makeArgs(runtime, {
+                rollOutgoingProc: () => true,
+                statusEngine,
+                preFight: { ...emptyPreFightModifiers(), outgoingDamage: 10 },
+            })
+        );
+        expect(out.directDamage).toBeCloseTo(60000 * 1.75 * 1.1, 6);
     });
 });

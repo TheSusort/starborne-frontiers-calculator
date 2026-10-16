@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { composeIncomingFactor, expectedIncomingFactor } from '../damageComposition';
+import {
+    composeIncomingFactor,
+    composeIncomingFactorWithBlock,
+    expectedIncomingFactor,
+} from '../damageComposition';
 
 describe('expectedIncomingFactor', () => {
     it('is the plain buff channel when there is no crit reduction', () => {
@@ -30,5 +34,29 @@ describe('expectedIncomingFactor', () => {
         expect(expectedIncomingFactor(-20, 35, 100)).toBe(
             composeIncomingFactor(-20, { passivePct: 0, separatePcts: [35] })
         );
+    });
+});
+
+describe('composeIncomingFactorWithBlock (R202)', () => {
+    it('equals the block as one more separate factor of the composition', () => {
+        for (const parts of [
+            { passivePct: 0, separatePcts: [20] },
+            { passivePct: 65, separatePcts: [15] },
+            { passivePct: 30, separatePcts: [] },
+        ]) {
+            expect(
+                composeIncomingFactorWithBlock(composeIncomingFactor(-10, parts), 0.5)
+            ).toBeCloseTo(
+                composeIncomingFactor(-10, {
+                    passivePct: parts.passivePct,
+                    separatePcts: [...parts.separatePcts, 50],
+                }),
+                12
+            );
+        }
+    });
+
+    it('leaves a capped factor at the cap', () => {
+        expect(composeIncomingFactorWithBlock(0.3, 0.5)).toBeCloseTo(0.3, 12);
     });
 });

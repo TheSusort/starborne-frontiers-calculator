@@ -793,6 +793,9 @@ export type ModifierChannel =
     | 'crit'
     | 'critDamage'
     | 'outgoingDamage'
+    // Outgoing direct damage that multiplies as its OWN `(1 + x/100)` factor instead of joining
+    // the Out. Damage buff sum (R201, Arcane Siege).
+    | 'outgoingDamageSeparate'
     | 'dotDamage'
     | 'detonationDamage'
     | 'bombSplashDamage'

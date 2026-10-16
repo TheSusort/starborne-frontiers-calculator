@@ -233,9 +233,13 @@ describe('Intrusion implant', () => {
 // Case 8: Arcane Siege implant
 // ---------------------------------------------------------------------------
 describe('Arcane Siege implant', () => {
-    it('emits a flat outgoingDamage modifier gated on self-shield (epic = 15)', () => {
+    it('emits a flat own-factor outgoing modifier gated on self-shield (epic = 15, R201)', () => {
         const a = buildForImplant('ARCANE_SIEGE', 'epic')[0];
-        expect(a.config).toMatchObject({ type: 'modifier', channel: 'outgoingDamage', value: 15 });
+        expect(a.config).toMatchObject({
+            type: 'modifier',
+            channel: 'outgoingDamageSeparate',
+            value: 15,
+        });
         expect(a.scaling).toBeUndefined();
         expect(a.conditions).toEqual([{ subject: 'self-shield', derivable: true }]);
     });

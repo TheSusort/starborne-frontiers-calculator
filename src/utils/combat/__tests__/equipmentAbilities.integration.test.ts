@@ -514,8 +514,9 @@ describe('D-PR2 integration — ARCANE_SIEGE fold (modifier-level)', () => {
     /**
      * ARCANE_SIEGE epic: flat value:15, condition: self-shield (derivable). The self-shield
      * condition returns selfShielded ? 1 : 0. With countComparator absent it gates on count > 0.
+     * Its own multiplier (R201): it never enters the `outgoingDamage` buff sum.
      */
-    it('outgoingDamage === 15 when selfShielded:true (epic, +15% while shielded)', () => {
+    it('a ×1.15 own factor and NO outgoingDamage when selfShielded:true (epic, +15% while shielded)', () => {
         const ship = makeShip({ implants: { implant_minor_alpha: 'arcane-siege-epic' } });
         const getGearPiece = makeGetGearPiece({ 'arcane-siege-epic': arcaneSiegePiece });
         const abilities = buildEquipmentAbilities(ship, getGearPiece);
@@ -526,10 +527,11 @@ describe('D-PR2 integration — ARCANE_SIEGE fold (modifier-level)', () => {
             [arcaneSiege!],
             makeConditionContext({ selfShielded: true })
         );
-        expect(totals.outgoingDamage).toBe(15);
+        expect(totals.outgoingDamageSeparateFactor).toBeCloseTo(1.15, 12);
+        expect(totals.outgoingDamage).toBe(0);
     });
 
-    it('outgoingDamage === 0 when selfShielded:false (gate fails — dormant without shield)', () => {
+    it('factor 1 and outgoingDamage 0 when selfShielded:false (gate fails — dormant without shield)', () => {
         const ship = makeShip({ implants: { implant_minor_alpha: 'arcane-siege-epic' } });
         const getGearPiece = makeGetGearPiece({ 'arcane-siege-epic': arcaneSiegePiece });
         const abilities = buildEquipmentAbilities(ship, getGearPiece);
@@ -539,6 +541,7 @@ describe('D-PR2 integration — ARCANE_SIEGE fold (modifier-level)', () => {
             [arcaneSiege!],
             makeConditionContext({ selfShielded: false })
         );
+        expect(totals.outgoingDamageSeparateFactor).toBe(1);
         expect(totals.outgoingDamage).toBe(0);
     });
 });

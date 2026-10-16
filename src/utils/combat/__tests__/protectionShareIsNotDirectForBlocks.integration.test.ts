@@ -102,4 +102,52 @@ describe.each(SIDES)('with the protector on the %s side', (side) => {
         const incoming = run(side, [hitter('b', 40, 'back'), hitter('c', 30, 'back')]);
         expect(incoming('protector')).toBeCloseTo(HIT + HIT * 0.5, 6);
     });
+
+    // The TARGET's partial block is the target's own incoming factor (R202), so it prices only
+    // the part the target keeps: the target takes 70% × 0.5 and the protector its whole 30%.
+    it("prices the target's own partial block on the target's part only", () => {
+        const { input, idOf } = mirrorBoard(
+            {
+                caster: [
+                    { id: 'victim', position: 'M4', speed: 1, skills: blockingTargetKit() },
+                    { id: 'protector', position: 'M1', speed: 1, skills: protectorKit() },
+                ],
+                other: [hitter('a', 50, 'front')],
+            },
+            side
+        );
+        const rounds = runCombat(input).rounds;
+        const incoming = (id: string) =>
+            rounds.reduce((sum, rd) => sum + (rd.perActorIncoming?.[idOf(id)]?.incoming ?? 0), 0);
+        expect(incoming('victim')).toBeCloseTo(HIT * 0.7 * 0.5, 6);
+        expect(incoming('protector')).toBeCloseTo(HIT * 0.3, 6);
+    });
 });
+
+/** A target whose every direct hit meets a forced 50% block. */
+function blockingTargetKit(): ShipSkills {
+    return {
+        slots: [
+            { slot: 'active', abilities: [] },
+            {
+                slot: 'passive',
+                abilities: [
+                    {
+                        id: 'block-always',
+                        type: 'incoming-block',
+                        target: 'self',
+                        trigger: 'on-cast',
+                        conditions: [],
+                        config: {
+                            type: 'incoming-block',
+                            condition: 'always',
+                            procChance: 1,
+                            blockPct: 0.5,
+                            oncePerRound: false,
+                        },
+                    },
+                ],
+            },
+        ],
+    };
+}
