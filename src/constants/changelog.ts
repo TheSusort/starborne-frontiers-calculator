@@ -1,38 +1,22 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '1.76.1';
+export const CURRENT_VERSION = '1.77.0';
 
 // Accumulates between releases. `npm run release` folds these into a new ChangelogEntry at the
 // top of CHANGELOG, bumps CURRENT_VERSION and empties this array — all three together, because a
 // bumped version whose entries are still unreleased shows users a what's-new dialog listing
 // nothing. Do it by hand only if that script cannot.
-export const UNRELEASED_CHANGES: string[] = [
-    "Combat simulator: Valkyrie's Echoing Burst no longer crashes the simulation against Nosorog.",
-    'Combat simulator: Protection no longer redirects Bombs, Echoing Bursts or death splashes.',
-    "Combat simulator: Nosorog's reflect now respects the attacker's stealth-conditional damage reductions.",
-    'Combat simulator: Ironclad and Shadowguard no longer trigger on Protection damage shares.',
-    'Combat simulator: the Reflect gear set now reflects as direct damage, so reactions answer it.',
-    "Combat simulator: the Reflect gear set's bounce now respects the attacker's Inc. Damage Down.",
-    "Combat simulator: the Leech set now repairs from the Reflect gear set's bounce.",
-    "Combat simulator: Hemlock's Toxic Overflow spread now resolves in turn order.",
-    "Combat simulator: Lionheart's Protection now refills fully each round after a theft.",
-    'Combat simulator: same-speed protectors now soak damage in board position order.',
-    'Combat simulator: with several taunters, attackers pick by their normal targeting order.',
-    'Combat simulator: a mutual wipe is now won by the side that landed the final kill.',
-    "Combat simulator: detonations now honour the target's own DoT reductions.",
-    "Combat simulator: Wildfire's Scorching Radiation bonus now raises Inferno detonations.",
-    "Combat simulator: Inferno stacks now keep their applier's attack from when applied.",
-    'Combat simulator: Inc. DoT Damage Up now raises damage converted into a DoT.',
-    'Combat log: Bomb and Echoing Burst rows now show only what the ship took.',
-    "Combat log: Nosorog's reflect row now shows only what the attacker took.",
-    'Combat log: hits turned into a DoT now read "converted to DoT", with no damage number.',
-    'Combat log: Protection shares now nest under the hit they came from.',
-    "Combat log: Protection shares are labelled and show the protector's HP after each.",
-    "Combat log: Echoing Burst rows now show the target's HP afterwards.",
-    'Bounty Credits calculator: compare bounty levels for credits, including background battles.',
-];
+export const UNRELEASED_CHANGES: string[] = [];
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.77.0',
+        date: '2026-10-16',
+        changes: [
+            'Bounty Credits calculator: compare bounty levels for credits, including background battles.',
+            '22 combat simulator fixes.',
+        ],
+    },
     {
         version: '1.76.1',
         date: '2026-10-14',
