@@ -326,6 +326,7 @@ export const Sidebar: React.FC = () => {
                     { path: '/recruitment', label: 'Beacon Calculator' },
                     { path: '/speed', label: 'Speed Calculator' },
                     { path: '/chrono-reaver', label: 'Chrono Reaver' },
+                    { path: '/bounty-credits', label: 'Bounty Credits' },
                     { path: '/simulator', label: 'Combat Simulator' },
                 ],
             },
