@@ -348,3 +348,105 @@ describe('D-PR3 Task 7 — Shadowguard full block (self-stealth, once-per-round)
         expect(diesAt(build, 1000, 'victim')).toBe(true); // full 2000 > 1000
     });
 });
+
+/** A synthetic `incoming-reduction` (direct, always on). `equipment` → its own separate factor;
+ *  otherwise a ship-kit passive, which sums into the passive bucket. */
+const reductionAbility = (id: string, pct: number, equipment: boolean): Ability => ({
+    id,
+    type: 'incoming-reduction',
+    target: 'self',
+    trigger: 'on-cast',
+    conditions: [],
+    config: {
+        type: 'incoming-reduction',
+        scope: 'direct',
+        condition: 'always',
+        pct,
+        critFamily: false,
+    },
+    ...(equipment ? { source: 'equipment' as const } : {}),
+});
+
+/** One passive slot carrying the victim's reductions and, optionally, a forced block. */
+const reductionsAndBlockSlot = (
+    reductions: Ability[],
+    block?: { condition: 'nth-hit-2plus' | 'self-stealth'; blockPct: number; oncePerRound: boolean }
+): ShipSkills['slots'][number] => ({
+    slot: 'passive',
+    abilities: [...reductions, ...(block ? blockPassiveSlot('block-test', block).abilities : [])],
+});
+
+describe('R202 — a partial block composes INSIDE the 70% non-defence cap', () => {
+    // Two enemies hit the victim for 1000 each (defence 0). The 2nd intake meets a forced 50%
+    // Ironclad-style block; the 1st never does (nth-hit-2plus).
+    const run = (hp: number, reductions: Ability[], block: boolean): CombatEngineInput =>
+        BASE({
+            teamActors: [
+                playerVictim('victim', 'M4', hp, {
+                    passive: reductionsAndBlockSlot(
+                        reductions,
+                        block
+                            ? { condition: 'nth-hit-2plus', blockPct: 0.5, oncePerRound: false }
+                            : undefined
+                    ),
+                }),
+            ],
+            enemyAttackers: [
+                offensiveEnemy('enemy-1', 'M1', 'front', 1000),
+                offensiveEnemy('enemy-2', 'M2', 'front', 1000),
+            ],
+        });
+
+    // Passive 65% × Hardened-style separate 15% = 0.35 × 0.85 = 0.2975 → floored at 0.30.
+    const capped = [reductionAbility('kit-65', 65, false), reductionAbility('gear-15', 15, true)];
+
+    it('capped victim: the block changes nothing → 300 + 300 = 600', () => {
+        const build = (hp: number) => run(hp, capped, true);
+        expect(diesAt(build, 600, 'victim')).toBe(true);
+        expect(diesAt(build, 601, 'victim')).toBe(false);
+    });
+
+    it('control: the same capped victim without the block also takes 600', () => {
+        const build = (hp: number) => run(hp, capped, false);
+        expect(diesAt(build, 600, 'victim')).toBe(true);
+        expect(diesAt(build, 601, 'victim')).toBe(false);
+    });
+
+    // Uncapped: the block is ASSUMED to be its own factor (R202 cannot tell separate-factor from
+    // buff-sum). Separate 20% → 0.8; with the block 0.8 × 0.5 = 0.4 → 800 + 400 = 1200.
+    it('uncapped victim: the block is its own factor → 800 + 400 = 1200', () => {
+        const build = (hp: number) => run(hp, [reductionAbility('gear-20', 20, true)], true);
+        expect(diesAt(build, 1200, 'victim')).toBe(true);
+        expect(diesAt(build, 1201, 'victim')).toBe(false);
+    });
+
+    // Separate 50% → 0.5; with the block 0.25 → floored at 0.30 → 500 + 300 = 800.
+    it('a block that pushes the victim past the cap is floored → 500 + 300 = 800', () => {
+        const build = (hp: number) => run(hp, [reductionAbility('gear-50', 50, true)], true);
+        expect(diesAt(build, 800, 'victim')).toBe(true);
+        expect(diesAt(build, 801, 'victim')).toBe(false);
+    });
+
+    // A FULL block (Shadowguard) stays OUTSIDE the cap: the blocked hit deals 0, not 30%.
+    it('capped victim: a full block still zeroes the hit → 0 + 300 = 300', () => {
+        const build = (hp: number) =>
+            BASE({
+                teamActors: [
+                    playerVictim('victim', 'M4', hp, {
+                        stealth: true,
+                        passive: reductionsAndBlockSlot(capped, {
+                            condition: 'self-stealth',
+                            blockPct: 1,
+                            oncePerRound: true,
+                        }),
+                    }),
+                ],
+                enemyAttackers: [
+                    offensiveEnemy('enemy-1', 'M1', 'front', 1000),
+                    offensiveEnemy('enemy-2', 'M2', 'front', 1000),
+                ],
+            });
+        expect(diesAt(build, 300, 'victim')).toBe(true);
+        expect(diesAt(build, 301, 'victim')).toBe(false);
+    });
+});

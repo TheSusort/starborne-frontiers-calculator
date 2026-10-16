@@ -51,6 +51,26 @@ export function composeIncomingFactor(
 }
 
 /**
+ * A direct hit's incoming factor once a PARTIAL incoming-block proc (Ironclad) joins it: the
+ * blocked fraction is one more separate factor of {@link composeIncomingFactor}, floored at the
+ * same 70% reduction (R202, owner-measured on a capped victim). On an UNCAPPED victim the block is
+ * ASSUMED to be its own factor rather than part of a bucket sum — the measurement cannot tell the
+ * two apart; implant reductions (Voidshade, Hardened) are separate factors, and this follows them.
+ * Exact from the composed factor alone: a floored factor stays floored, and an unfloored one is
+ * the unfloored product. A FULL block (`blockedFraction` 1, Shadowguard) is not a reduction and
+ * never comes here — the funnel zeroes that hit outside the cap.
+ */
+export function composeIncomingFactorWithBlock(
+    incomingFactor: number,
+    blockedFraction: number
+): number {
+    return Math.max(
+        incomingFactor * Math.max(0, 1 - blockedFraction),
+        1 - NON_DEFENCE_REDUCTION_CAP_PCT / 100
+    );
+}
+
+/**
  * The expected incoming factor of one hit from an enemy that crits `critRatePct`% of the time.
  * `critReductionPct` is the victim's `damageReduction` stat (Iridium's passive / the Hardened set),
  * which reduces CRITICAL hits only; the non-crit branch sees the buff channel alone. Each branch

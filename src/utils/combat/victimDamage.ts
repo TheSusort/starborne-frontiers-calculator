@@ -148,6 +148,7 @@ export {
     NO_INCOMING_REDUCTION,
     mergeIncomingReductionParts,
     composeIncomingFactor,
+    composeIncomingFactorWithBlock,
     composeDotReductionFactor,
 } from '../damageComposition';
 export type { IncomingReductionParts } from '../damageComposition';

@@ -4948,10 +4948,12 @@ const DocumentationPage: React.FC = () => {
                                     reductions add together and then multiply with those buffs; each
                                     gear set, implant and squad leader reduction multiplies on its
                                     own; and all of it together can cut a hit by at most 70%, not
-                                    counting Defense. Outgoing-damage amplification is also modeled:{' '}
-                                    <strong>Menace</strong> (chance to amplify a hit&apos;s damage
-                                    on a critical hit), <strong>Giant Slayer</strong> (chance to
-                                    amplify a hit&apos;s damage against an enemy with higher
+                                    counting Defense. Ironclad&apos;s partial block counts toward
+                                    that 70% limit; Shadowguard&apos;s full block does not, and
+                                    still stops the whole hit. Outgoing-damage amplification is also
+                                    modeled: <strong>Menace</strong> (chance to amplify a hit&apos;s
+                                    damage on a critical hit), <strong>Giant Slayer</strong> (chance
+                                    to amplify a hit&apos;s damage against an enemy with higher
                                     attack), and <strong>Insidiousness</strong> (chance to deal
                                     bonus damage when you inflict a debuff on an enemy. It rolls
                                     once for every debuff you inflict, whether your skill or one of

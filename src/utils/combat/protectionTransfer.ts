@@ -34,7 +34,9 @@ export interface ProtectorInput {
 export interface RedirectBasis {
     /** The target's defence factor in the hit (`victimDefenceMitigation`). */
     defenceMitigation: number;
-    /** The target's non-defence incoming factor in the hit (`composeIncomingFactor`). */
+    /** The target's non-defence incoming factor in the hit (`composeIncomingFactor`). The funnel
+     *  folds the target's partial incoming block into it (`composeIncomingFactorWithBlock`), so
+     *  that block prices the target's part only. */
     incomingFactor: number;
     /** The hit's crit outcome — the protector's crit-only reductions read it. */
     didCrit: boolean;
