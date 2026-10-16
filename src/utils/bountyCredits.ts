@@ -82,7 +82,7 @@ export function evaluateLevel(
     for (const drop of level.drops) {
         const pSold =
             sets.reduce((s, set) => s + (isAutoSold(drop, set, rules) ? 1 : generalSell), 0) /
-            sets.length;
+            (sets.length || 1);
         const pDrop = drop.chance / 100;
         saleCredits += pDrop * pSold * gearSellPrice(drop.stars, drop.rarity);
         keptGearPerRun += pDrop * (1 - pSold);

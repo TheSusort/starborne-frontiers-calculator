@@ -33,7 +33,7 @@ interface BountySettings {
     metric: RankMetric;
 }
 
-const DEFAULT_SETTINGS: BountySettings = {
+export const DEFAULT_SETTINGS: BountySettings = {
     bountyId: 'fenri',
     stars: [],
     rarities: [],
@@ -46,20 +46,28 @@ const DEFAULT_SETTINGS: BountySettings = {
     metric: 'energy',
 };
 
-const isSettings = (v: unknown): v is BountySettings => {
+const isFiniteNumber = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+
+export const isSettings = (v: unknown): v is BountySettings => {
     if (!v || typeof v !== 'object') return false;
     const s = v as Record<string, unknown>;
+    const overrides = s.secondsOverrides;
     return (
         BOUNTIES.some((b) => b.id === s.bountyId) &&
         Array.isArray(s.stars) &&
+        s.stars.every((x) => Number.isInteger(x) && x >= 1 && x <= 6) &&
         Array.isArray(s.rarities) &&
+        s.rarities.every((x) => typeof x === 'string' && Object.hasOwn(RARITIES, x)) &&
         Array.isArray(s.sets) &&
-        typeof s.generalSellPct === 'number' &&
-        typeof s.extraCreditsPct === 'number' &&
-        (s.secondsPerFight === null || typeof s.secondsPerFight === 'number') &&
-        typeof s.overheadSeconds === 'number' &&
-        !!s.secondsOverrides &&
-        typeof s.secondsOverrides === 'object' &&
+        s.sets.every((x) => typeof x === 'string') &&
+        isFiniteNumber(s.generalSellPct) &&
+        isFiniteNumber(s.extraCreditsPct) &&
+        (s.secondsPerFight === null || isFiniteNumber(s.secondsPerFight)) &&
+        isFiniteNumber(s.overheadSeconds) &&
+        !!overrides &&
+        typeof overrides === 'object' &&
+        !Array.isArray(overrides) &&
+        Object.values(overrides).every(isFiniteNumber) &&
         (s.metric === 'run' || s.metric === 'energy' || s.metric === 'minute')
     );
 };
@@ -76,6 +84,8 @@ const RARITY_OPTIONS = Object.values(RARITIES).map((r) => ({ value: r.value, lab
 const fmt = (n: number) => Math.round(n).toLocaleString();
 const clampPct = (n: number) => Math.min(100, Math.max(0, n));
 const parseNum = (raw: string) => (raw === '' || Number.isNaN(Number(raw)) ? null : Number(raw));
+
+const positiveOrNull = (n: number | null) => (n !== null && n > 0 ? n : null);
 
 const BountyCreditsCalculatorPage: React.FC = () => {
     const [settings, setSettings] = usePersistedPreference<BountySettings>(
@@ -141,11 +151,18 @@ const BountyCreditsCalculatorPage: React.FC = () => {
                         value={seconds ?? undefined}
                         allowEmpty
                         min={1}
+                        className={
+                            settings.secondsOverrides[r.level] !== undefined ? 'text-primary' : ''
+                        }
                         label={`Seconds per fight, level ${r.level}`}
                         onSave={(v) => {
                             const next = { ...settings.secondsOverrides };
-                            if (v === undefined) delete next[r.level];
-                            else next[r.level] = v;
+                            // An unchanged, cleared or non-positive value falls back to the default.
+                            if (v === undefined || v <= 0 || v === settings.secondsPerFight) {
+                                delete next[r.level];
+                            } else {
+                                next[r.level] = v;
+                            }
                             update({ secondsOverrides: next });
                         }}
                     >
@@ -209,7 +226,11 @@ const BountyCreditsCalculatorPage: React.FC = () => {
                             type="number"
                             min={1}
                             value={settings.secondsPerFight ?? ''}
-                            onChange={(e) => update({ secondsPerFight: parseNum(e.target.value) })}
+                            onChange={(e) =>
+                                update({
+                                    secondsPerFight: positiveOrNull(parseNum(e.target.value)),
+                                })
+                            }
                         />
                         <Input
                             label="Seconds between fights"
