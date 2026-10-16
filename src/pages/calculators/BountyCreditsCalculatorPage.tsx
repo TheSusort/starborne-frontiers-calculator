@@ -98,10 +98,9 @@ const MODE_OPTIONS = [
     { value: 'background', label: 'Background' },
 ];
 
-const formatMinutes = (m: number) => String(m);
 const TIER_OPTIONS = BACKGROUND_TIERS.map((t) => ({
     value: t.id,
-    label: `${t.label} (${formatMinutes(t.minutes)} min)`,
+    label: `${t.label} (${t.minutes} min)`,
 }));
 
 const STAR_OPTIONS = [1, 2, 3, 4, 5, 6].map((s) => ({ value: String(s), label: `${s}★` }));
@@ -186,6 +185,7 @@ const BountyCreditsCalculatorPage: React.FC = () => {
             ? {
                   key: 'tier',
                   label: 'Tier',
+                  align: 'center',
                   render: (r) => {
                       const overridden = settings.tierOverrides[r.level] !== undefined;
                       return (

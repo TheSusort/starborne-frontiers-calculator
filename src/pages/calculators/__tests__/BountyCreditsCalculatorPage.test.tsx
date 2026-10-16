@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import BountyCreditsCalculatorPage, {
     DEFAULT_SETTINGS,
@@ -56,6 +56,38 @@ describe('BountyCreditsCalculatorPage', () => {
         expect(screen.queryByText('Seconds per fight')).not.toBeInTheDocument();
         expect(screen.getByText('Default tier')).toBeInTheDocument();
         expect(rowFor('33')).toHaveTextContent('9.9');
+    });
+
+    it('a per-level tier override changes that row and clears when set back to the default', () => {
+        render(
+            <MemoryRouter>
+                <BountyCreditsCalculatorPage />
+            </MemoryRouter>
+        );
+        const rowFor = (level: string) =>
+            screen
+                .getAllByTestId('bounty-level-row')
+                .find((el) => el.textContent === level)!
+                .closest('tr')!;
+        const pickTier = (optionName: string) => {
+            fireEvent.click(within(rowFor('33')).getByLabelText('Tier, level 33'));
+            fireEvent.click(screen.getByRole('option', { name: optionName }));
+        };
+        fireEvent.click(screen.getByText('Normal'));
+        fireEvent.click(screen.getByText('Background'));
+        expect(within(rowFor('33')).getByLabelText('Tier, level 33')).not.toHaveClass(
+            'text-primary'
+        );
+
+        pickTier('Win in 1 round (1 min)');
+        expect(rowFor('33')).toHaveTextContent('17,000');
+        expect(within(rowFor('33')).getByLabelText('Tier, level 33')).toHaveClass('text-primary');
+
+        pickTier('Win the battle (6 min)');
+        expect(rowFor('33')).toHaveTextContent('2,833');
+        expect(within(rowFor('33')).getByLabelText('Tier, level 33')).not.toHaveClass(
+            'text-primary'
+        );
     });
 });
 
