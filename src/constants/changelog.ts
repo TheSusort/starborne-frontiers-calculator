@@ -12,6 +12,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: squad-leader attack bonuses now add together with Attack Up buffs.',
     'Combat simulator: Arcane Siege now multiplies damage as its own separate factor.',
     'Autogear: uncommon Arcane Siege now scores at 6%, matching the implant.',
+    "Combat simulator: Ironclad's partial block now counts toward the 70% reduction cap.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
