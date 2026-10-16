@@ -15,6 +15,7 @@ import { toSimBuffs, toDotAndPenModifiers } from '../../calculators/dpsBuffHelpe
 import { modifierTotalsFromAbilities } from '../../abilities/applyAbilities';
 import { Ability } from '../../../types/abilities';
 import type { ConditionContext } from '../../abilities/evaluateConditions';
+import { emptyPreFightModifiers } from '../preFight';
 
 // Helper: build a timed status (mirrors effectiveSpeed.test.ts pattern)
 const timedStatus = (
@@ -1011,5 +1012,42 @@ describe('effectiveOutgoingStatsOf — the two outgoing-damage channels', () => 
         expect(asPlayer.outgoingDamageBuffPct).toBe(30);
         expect(asEnemy.attack).toBeCloseTo(asPlayer.attack);
         expect(asEnemy.outgoingDamageBuffPct).toBe(asPlayer.outgoingDamageBuffPct);
+    });
+});
+
+describe('squad-leader attack % in the status and outgoing folds (R200)', () => {
+    it('adds to Attack Up III in both folds: base × 1.55, never 1.10 × 1.45', () => {
+        const attackUp: SelectedGameBuff = {
+            id: 'b-attack-up-3',
+            buffName: 'Attack Up III',
+            stacks: 1,
+            parsedEffects: { attack: 45 },
+            isStackable: false,
+        };
+        const eng = createStatusEngine({ selfBuffs: [attackUp], enemyDebuffs: [] });
+        eng.beginRound(1);
+        const selfBuffLookup = new Map([[attackUp.buffName, [attackUp]]]);
+        const actor = {
+            id: 'attacker',
+            side: 'player',
+            kind: 'attacker',
+            stats: {
+                attack: 10_000,
+                crit: 0,
+                critDamage: 0,
+                defensePenetration: 0,
+                shieldPenetration: 0,
+                defence: 0,
+                hp: 1_000,
+                speed: 100,
+                hacking: 0,
+                security: 0,
+            },
+            currentHp: 1_000,
+            shieldPool: 0,
+            preFight: { ...emptyPreFightModifiers(), attackPct: 10 },
+        } as unknown as CombatActor;
+        expect(effectiveStatsOf(eng, selfBuffLookup, actor).attack).toBeCloseTo(15_500, 6);
+        expect(effectiveOutgoingStatsOf(eng, selfBuffLookup, actor).attack).toBeCloseTo(15_500, 6);
     });
 });

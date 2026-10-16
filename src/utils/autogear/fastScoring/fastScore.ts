@@ -1,6 +1,7 @@
 import type { BaseStats } from '../../../types/stats';
 import type { StatPriority, SetPriority, StatBonus, FleetBuff } from '../../../types/autogear';
 import { applyArenaModifiers } from '../arenaModifiers';
+import { ARCANE_SIEGE_MULTIPLIERS } from '../arcaneSiegeUtils';
 import { applyFleetBuffs } from '../fleetBuffs';
 import { calculatePriorityScore } from '../priorityScore';
 import { roleBasisKeyPart } from '../scoring';
@@ -8,15 +9,6 @@ import { buildFastCacheKey } from '../../fastScoring/fastCache';
 import { statVectorToBaseStats } from '../../fastScoring/statVector';
 import { fastCalculateStats } from './fastCalculateStats';
 import type { FastScoringContext } from './context';
-
-// Arcane Siege multipliers by rarity — mirrors scoring.ts
-const ARCANE_SIEGE_MULTIPLIERS: Record<string, number> = {
-    common: 3,
-    uncommon: 5,
-    rare: 10,
-    epic: 15,
-    legendary: 20,
-};
 
 export interface FastScoreResult {
     fitness: number;

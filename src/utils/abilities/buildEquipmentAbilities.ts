@@ -689,8 +689,9 @@ const IMPLANT_ABILITIES: Partial<Record<string, ImplantAbilityBuilder>> = {
             autoFilled: true,
         };
     },
-    // Arcane Siege: +X% outgoing direct damage while shielded. Flat value gated on the new
-    // self-shield condition; dormant until sub-project H grants shields in the sim.
+    // Arcane Siege: +X% outgoing direct damage while shielded, gated on the self-shield
+    // condition. Its own multiplier, outside the Out. Damage buff sum and the squad-leader
+    // outgoing factor (R201) — hence the `outgoingDamageSeparate` channel.
     ARCANE_SIEGE: (rarity) => {
         const value = ARCANE_SIEGE_PCT[rarity];
         if (value === undefined) return undefined;
@@ -699,7 +700,12 @@ const IMPLANT_ABILITIES: Partial<Record<string, ImplantAbilityBuilder>> = {
             target: 'self',
             trigger: 'on-cast',
             conditions: [{ subject: 'self-shield', derivable: true }],
-            config: { type: 'modifier', channel: 'outgoingDamage', value, isMultiplicative: false },
+            config: {
+                type: 'modifier',
+                channel: 'outgoingDamageSeparate',
+                value,
+                isMultiplicative: false,
+            },
             autoFilled: true,
         };
     },

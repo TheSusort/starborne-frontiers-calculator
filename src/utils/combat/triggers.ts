@@ -70,6 +70,7 @@ import {
     shortenTimedBurstsOnVictim,
 } from './bombCountdown';
 import { liveGateConditions } from './abilityStatusGating';
+import { leaderScaledAttack } from './preFight/types';
 import { CombatEvent, CombatEventBus, CombatEventType, ShieldApplyAccumulator } from './events';
 import {
     CombatActor,
@@ -5761,7 +5762,9 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
         let buffCfg = cfg;
         if (pinPct !== undefined) {
             const ownerCtx = ctx.lastTurnCtxByActor.get(intent.ownerId);
-            const casterAttack = ownerCtx?.effectiveAttack ?? owner.attack;
+            // Before the caster's first turn there is no ctx: its pre-buff attack sheet.
+            const casterAttack =
+                ownerCtx?.effectiveAttack ?? leaderScaledAttack(owner.attack, owner.actor.preFight);
             buffCfg = {
                 ...cfg,
                 parsedEffects: {
@@ -6627,7 +6630,8 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // for the target-hp case.
         const nonTargetHpBasis =
             cfg.basis === 'attack'
-                ? (ownerCtx?.effectiveAttack ?? owner.attack)
+                ? (ownerCtx?.effectiveAttack ??
+                  leaderScaledAttack(owner.attack, owner.actor.preFight))
                 : cfg.basis === 'defense'
                   ? (ownerCtx?.effectiveDefence ?? owner.defence)
                   : cfg.basis === 'damage-dealt' || cfg.basis === 'damage-taken'

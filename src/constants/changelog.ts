@@ -6,7 +6,13 @@ export const CURRENT_VERSION = '1.77.0';
 // top of CHANGELOG, bumps CURRENT_VERSION and empties this array — all three together, because a
 // bumped version whose entries are still unreleased shows users a what's-new dialog listing
 // nothing. Do it by hand only if that script cannot.
-export const UNRELEASED_CHANGES: string[] = [];
+export const UNRELEASED_CHANGES: string[] = [
+    'Combat simulator: Menace and Giant Slayer procs now add to Out. Damage buffs.',
+    'Combat simulator: squad-leader outgoing damage bonuses now multiply separately from buffs.',
+    'Combat simulator: squad-leader attack bonuses now add together with Attack Up buffs.',
+    'Combat simulator: Arcane Siege now multiplies damage as its own separate factor.',
+    'Autogear: uncommon Arcane Siege now scores at 6%, matching the implant.',
+];
 
 export const CHANGELOG: ChangelogEntry[] = [
     {

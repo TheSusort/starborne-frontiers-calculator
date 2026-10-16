@@ -426,8 +426,8 @@ export function applyPositionalDamage(args: {
     /**
      * OPTIONAL per-hit attacker-side outgoing amplification % hook (Menace/Giant Slayer).
      * Invoked per footprint victim with that victim's per-hit crit outcome; the returned percentage
-     * is applied multiplicatively on the resolved hit BEFORE {@link applyToVictim}. Unsupplied → 0
-     * (inert for attackers without an outgoing-amplification ability).
+     * joins the hit's Out. Damage buff sum (R198) via the profile's `outgoingDamageDeltaPct`.
+     * Unsupplied → 0 (inert for attackers without an outgoing-amplification ability).
      */
     outgoingAmplificationFor?: (
         victim: CombatActor,
@@ -582,12 +582,15 @@ export function applyPositionalDamage(args: {
             // the factor handed to `applyToVictim` is provably the one baked into `dmg`.
             const profileBase = defenseProfileOf(victim, didCrit);
             const critPowerBonus = critPowerBonusFor?.(victim, didCrit, h) ?? 0;
+            const ampPct = outgoingAmplificationFor?.(victim, didCrit, h) ?? 0;
             const defenseProfile =
-                critPowerBonus !== 0
+                critPowerBonus !== 0 || ampPct !== 0
                     ? {
                           ...profileBase,
                           critDamageDeltaPct:
                               (profileBase.critDamageDeltaPct ?? 0) + critPowerBonus,
+                          outgoingDamageDeltaPct:
+                              (profileBase.outgoingDamageDeltaPct ?? 0) + ampPct,
                       }
                     : profileBase;
             // ONE call, both figures. Calling `victimHitDamage` and a separate pre-mitigation
@@ -595,8 +598,8 @@ export function applyPositionalDamage(args: {
             // resolve — on the hottest path in the engine, and would leave the two figures as
             // numbers that merely ought to agree rather than one evaluation.
             const {
-                damage: dmgBase,
-                preMitigation: rawBase,
+                damage: dmg,
+                preMitigation: rawDmg,
                 reflectBase,
                 incomingFactor,
             } = victimHitDamageParts(
@@ -607,9 +610,6 @@ export function applyPositionalDamage(args: {
                 reduction?.parts,
                 reduction?.attackerCritPenaltyPct
             );
-            const ampPct = outgoingAmplificationFor?.(victim, didCrit, h) ?? 0;
-            const dmg = ampPct !== 0 ? dmgBase * (1 + ampPct / 100) : dmgBase;
-            const rawDmg = ampPct !== 0 ? rawBase * (1 + ampPct / 100) : rawBase;
             onVictimPreImpact?.(victim, isAnchor, h, isPrimary);
             const outcome = applyToVictim(
                 victim,

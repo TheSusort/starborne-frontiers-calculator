@@ -4692,6 +4692,11 @@ const DocumentationPage: React.FC = () => {
                                         cleansed, or reset on death
                                     </li>
                                     <li>
+                                        A leader&apos;s attack bonus adds together with attack buffs
+                                        such as Attack Up, and its outgoing direct damage bonus
+                                        multiplies on its own instead of adding to Out. Damage buffs
+                                    </li>
+                                    <li>
                                         Effects the simulator cannot model yet (conditional bonuses,
                                         per-round effects, and damage/heal/shield modifiers) are
                                         marked &quot;Not simulated&quot; in the picker preview and
@@ -4929,7 +4934,10 @@ const DocumentationPage: React.FC = () => {
                                     on the target), <strong>Arcane Siege</strong> (more outgoing
                                     damage while the ship is shielded), and{' '}
                                     <strong>Warpstrike</strong> (more outgoing damage while the ship
-                                    is debuffed). Incoming-damage reduction is also modeled:{' '}
+                                    is debuffed). Intrusion and Warpstrike add to Out. Damage buffs;
+                                    Arcane Siege multiplies on its own, separately from both those
+                                    buffs and the squad leader&apos;s outgoing bonus.
+                                    Incoming-damage reduction is also modeled:{' '}
                                     <strong>Voidshade</strong> and <strong>Shadowguard</strong>{' '}
                                     (reduced damage while stealthed),{' '}
                                     <strong>Nebula Nullifier</strong> (reduced damage while in
@@ -4951,44 +4959,45 @@ const DocumentationPage: React.FC = () => {
                                     counting Defense. Outgoing-damage amplification is also modeled:{' '}
                                     <strong>Menace</strong> (chance to amplify a hit&apos;s damage
                                     on a critical hit), <strong>Giant Slayer</strong> (chance to
-                                    amplify a hit&apos;s damage against an enemy with higher
-                                    attack), and <strong>Insidiousness</strong> (chance to deal
-                                    bonus damage when you inflict a debuff on an enemy. It rolls
-                                    once for every debuff you inflict, whether your skill or one of
-                                    your reactions lands it, and a damage-over-time stack counts as
-                                    a debuff. Applied debuffs, such as Provoke, Concentrate Fire or
-                                    the Burner set&apos;s Inferno, never roll. At most one roll
-                                    succeeds per skill cast, counting reactions to an enemy&apos;s
-                                    skill as part of that skill, and a success hits every enemy that
-                                    skill debuffed). <strong>Synaptic Resonance</strong> gains Speed
-                                    Up III when an enemy is repaired and adds its crit power points
-                                    to the next critical hit only, whether a skill, a
-                                    counter-attack, a reactive hit or a passive hit (90% crit power
-                                    plus 10 is 100%). Three heal implants are also modeled:{' '}
-                                    <strong>Second Wind</strong> (chance to repair itself when it
-                                    takes a critical hit), <strong>Nourishment</strong> (stronger
-                                    repairs on allies with less HP than the healer), and{' '}
-                                    <strong>Vivacious Repair</strong> (chance to double a repair on
-                                    an ally below 25% HP), and <strong>Exuberance</strong> (chance
-                                    to increase the amount of a repair this unit receives). Charge
-                                    manipulation is also modeled: <strong>Chrono Reaver</strong>{' '}
-                                    (grants a bonus charge to the carrier&apos;s charged skill every
-                                    2nd turn at legendary rarity or every 3rd turn at epic; a unit
-                                    in Stasis or Disabled still gets this bonus, but not its usual
-                                    charge for the skipped turn). Two damage-over-time gear sets are
-                                    also modeled: <strong>Burner</strong> (applies Inferno for 2
-                                    turns on every primary target when the ship attacks, so a
-                                    whole-battlefield attack such as Curator&apos;s active applies
-                                    it on every enemy; an applied Inferno lands without a hacking
-                                    roll, failing only when the ship is at an affinity disadvantage
-                                    against the target) and <strong>Decimation</strong> (+10% DoT
-                                    damage per equipped set, up to +30%, boosting your Inferno and
-                                    Corrosion ticks in both the combat simulator and the DPS
-                                    calculator). Five shield sources are also modeled: the{' '}
-                                    <strong>Shield</strong> gear set (grants the equipped ship a
-                                    shield each turn, 4% of its max HP per set),{' '}
-                                    <strong>Adaptive Plating</strong> (grants the ship a shield from
-                                    the damage it takes, once per round),{' '}
+                                    amplify a hit&apos;s damage against an enemy with higher attack)
+                                    — a Menace or Giant Slayer proc adds to Out. Damage buffs rather
+                                    than multiplying them — and <strong>Insidiousness</strong>{' '}
+                                    (chance to deal bonus damage when you inflict a debuff on an
+                                    enemy. It rolls once for every debuff you inflict, whether your
+                                    skill or one of your reactions lands it, and a damage-over-time
+                                    stack counts as a debuff. Applied debuffs, such as Provoke,
+                                    Concentrate Fire or the Burner set&apos;s Inferno, never roll.
+                                    At most one roll succeeds per skill cast, counting reactions to
+                                    an enemy&apos;s skill as part of that skill, and a success hits
+                                    every enemy that skill debuffed).{' '}
+                                    <strong>Synaptic Resonance</strong> gains Speed Up III when an
+                                    enemy is repaired and adds its crit power points to the next
+                                    critical hit only, whether a skill, a counter-attack, a reactive
+                                    hit or a passive hit (90% crit power plus 10 is 100%). Three
+                                    heal implants are also modeled: <strong>Second Wind</strong>{' '}
+                                    (chance to repair itself when it takes a critical hit),{' '}
+                                    <strong>Nourishment</strong> (stronger repairs on allies with
+                                    less HP than the healer), and <strong>Vivacious Repair</strong>{' '}
+                                    (chance to double a repair on an ally below 25% HP), and{' '}
+                                    <strong>Exuberance</strong> (chance to increase the amount of a
+                                    repair this unit receives). Charge manipulation is also modeled:{' '}
+                                    <strong>Chrono Reaver</strong> (grants a bonus charge to the
+                                    carrier&apos;s charged skill every 2nd turn at legendary rarity
+                                    or every 3rd turn at epic; a unit in Stasis or Disabled still
+                                    gets this bonus, but not its usual charge for the skipped turn).
+                                    Two damage-over-time gear sets are also modeled:{' '}
+                                    <strong>Burner</strong> (applies Inferno for 2 turns on every
+                                    primary target when the ship attacks, so a whole-battlefield
+                                    attack such as Curator&apos;s active applies it on every enemy;
+                                    an applied Inferno lands without a hacking roll, failing only
+                                    when the ship is at an affinity disadvantage against the target)
+                                    and <strong>Decimation</strong> (+10% DoT damage per equipped
+                                    set, up to +30%, boosting your Inferno and Corrosion ticks in
+                                    both the combat simulator and the DPS calculator). Five shield
+                                    sources are also modeled: the <strong>Shield</strong> gear set
+                                    (grants the equipped ship a shield each turn, 4% of its max HP
+                                    per set), <strong>Adaptive Plating</strong> (grants the ship a
+                                    shield from the damage it takes, once per round),{' '}
                                     <strong>Abundant Renewal</strong> (turns over-healing on an ally
                                     into a shield for that ally), and{' '}
                                     <strong>Resonating Fury</strong> (a chance to grant Crit Power

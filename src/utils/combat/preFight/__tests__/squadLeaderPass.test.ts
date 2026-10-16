@@ -9,7 +9,7 @@
  * vi.importActual so it stays a pure real-data audit.
  */
 import { describe, it, expect, vi } from 'vitest';
-import { squadLeaderPass, emptyPreFightModifiers, runPreFight } from '../index';
+import { squadLeaderPass, emptyPreFightModifiers, leaderScaledAttack, runPreFight } from '../index';
 import type { PreFightUnit } from '../index';
 import { FACTION_NAMES, type FactionName } from '../../../../constants/factions';
 import { SQUAD_LEADERS } from '../../../../constants/squadLeaders';
@@ -128,6 +128,10 @@ const makeUnit = (
     unsimulated: [],
 });
 
+/** The unit's pre-buff attack sheet: base × (1 + leader attack %). The pass leaves
+ *  `stats.attack` at the base and accumulates the % in `modifiers.attackPct` (R200). */
+const attackSheet = (u: PreFightUnit): number => leaderScaledAttack(u.stats.attack, u.modifiers);
+
 const runPass = (
     player: PreFightUnit[],
     enemy: PreFightUnit[],
@@ -176,7 +180,7 @@ describe('squadLeaderPass — stage additivity (ATLAS_SYNDICATE "Intern")', () =
         runPass(player, [], {
             player: { faction: 'ATLAS_SYNDICATE', name: 'Intern', stage: 1 },
         });
-        expect(player[0].stats.attack).toBeCloseTo(1000 * 1.03);
+        expect(attackSheet(player[0])).toBeCloseTo(1000 * 1.03);
         expect(player[0].stats.critDamage).toBe(100);
     });
 
@@ -186,8 +190,9 @@ describe('squadLeaderPass — stage additivity (ATLAS_SYNDICATE "Intern")', () =
             player: { faction: 'ATLAS_SYNDICATE', name: 'Intern', stage: 3 },
         });
         // attack: 3% + 2% sum to one ×1.05 (NOT sequential ×1.03×1.02 = ×1.0506).
-        expect(player[0].stats.attack).toBeCloseTo(1050);
-        expect(player[0].stats.attack).not.toBeCloseTo(1000 * 1.03 * 1.02, 10);
+        expect(player[0].modifiers.attackPct).toBe(5);
+        expect(attackSheet(player[0])).toBeCloseTo(1050);
+        expect(attackSheet(player[0])).not.toBeCloseTo(1000 * 1.03 * 1.02, 10);
         // critDamage: 2% + 3% → ×1.05.
         expect(player[0].stats.critDamage).toBeCloseTo(105);
     });
@@ -203,10 +208,10 @@ describe('squadLeaderPass — faction gating & targeting', () => {
         runPass(player, enemy, {
             player: { faction: 'ATLAS_SYNDICATE', name: 'Intern', stage: 1 },
         });
-        expect(player[0].stats.attack).toBeCloseTo(1030);
+        expect(attackSheet(player[0])).toBeCloseTo(1030);
         // Off-faction teammate and SAME-faction opponents untouched.
-        expect(player[1].stats.attack).toBe(1000);
-        expect(enemy[0].stats.attack).toBe(1000);
+        expect(attackSheet(player[1])).toBe(1000);
+        expect(attackSheet(enemy[0])).toBe(1000);
     });
 
     it('all-enemies lands on ALL opposing units when a leader-faction ship is on the own team', () => {
@@ -222,8 +227,8 @@ describe('squadLeaderPass — faction gating & targeting', () => {
             expect(e.stats.defence).toBeCloseTo(500 * 0.9);
         }
         // Ally effects (stage I: +10% attack & +10% critDamage) hit only the Marauder.
-        expect(player[0].stats.attack).toBeCloseTo(1100);
-        expect(player[1].stats.attack).toBe(1000);
+        expect(attackSheet(player[0])).toBeCloseTo(1100);
+        expect(attackSheet(player[1])).toBe(1000);
     });
 
     it('all-enemies gate: no leader-faction ship on the own team → zero enemy deltas, nothing recorded', () => {
@@ -241,6 +246,16 @@ describe('squadLeaderPass — faction gating & targeting', () => {
 });
 
 describe('squadLeaderPass — stat math', () => {
+    it('leaves stats.attack at the base and accumulates leader attack % in modifiers (R200)', () => {
+        // Viper stage 1: +10% HP & +10% attack to XAOC allies.
+        const player = [makeUnit('p1', 'player', 'XAOC')];
+        runPass(player, [], { player: { faction: 'XAOC', name: 'Viper', stage: 1 } });
+        expect(player[0].stats.attack).toBe(1000);
+        expect(player[0].modifiers.attackPct).toBe(10);
+        // Every other stat keeps the single base×(1+Σpct/100)+Σflat apply.
+        expect(player[0].stats.hp).toBeCloseTo(10000 * 1.1);
+    });
+
     it('applies base×(1+Σpct/100)+Σflat (Malachi stage 1: +10% HP and +25 flat security)', () => {
         const player = [makeUnit('p1', 'player', 'EVERLIVING')];
         runPass(player, [], {
@@ -298,15 +313,16 @@ describe('squadLeaderPass — dual leaders (both sides selected)', () => {
         });
 
         // attack: +10 (own leader) − 15 (opposing leader) = Σ −5 → ×0.95 exactly …
-        expect(player[0].stats.attack).toBeCloseTo(1000 * 0.95);
+        expect(player[0].modifiers.attackPct).toBe(-5);
+        expect(attackSheet(player[0])).toBeCloseTo(1000 * 0.95);
         // … NOT ×1.10×0.85 = ×0.935 (sequential per-side application).
-        expect(player[0].stats.attack).not.toBeCloseTo(1000 * 1.1 * 0.85, 5);
+        expect(attackSheet(player[0])).not.toBeCloseTo(1000 * 1.1 * 0.85, 5);
         // hp only sees the own leader's +10%.
         expect(player[0].stats.hp).toBeCloseTo(10000 * 1.1);
         // The Legion foe gets its own leader's ally boosts (stage I +10% + stage II
         // +7.5% attack, summed before the single multiply); Midas stage 1 has no
         // enemy-facing effects.
-        expect(enemy[0].stats.attack).toBeCloseTo(1000 * 1.175);
+        expect(attackSheet(enemy[0])).toBeCloseTo(1000 * 1.175);
     });
 });
 

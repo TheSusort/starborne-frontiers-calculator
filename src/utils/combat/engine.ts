@@ -10443,8 +10443,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                 activePattern: parsedPatternFor(a),
                 chargedPattern: parsedChargedPatternFor(a),
                 sameSideLiving: sameSideLivingFor(a),
-                // The acting actor's pre-fight modifier baseline (outgoingDamage / outgoingHeal /
-                // incomingHeal fold into its self-buff totals inside runPlayerTurn).
+                // The acting actor's pre-fight modifier baseline (runPlayerTurn's `preFight` doc
+                // says where each channel folds).
                 // Side-agnostic — enemy attackers walk the same path. Conditional spread → an
                 // actor with no pre-fight modifiers omits the key.
                 ...(a.preFight ? { preFight: a.preFight } : {}),

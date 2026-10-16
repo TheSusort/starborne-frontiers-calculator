@@ -1097,12 +1097,15 @@ export function simulateBattle(
     // ordering rule: each grant computes from the frozen POST-LEADER snapshot (simultaneous —
     // no grant sees another's output). Mutates the same by-reference plan stats; a squad with
     // no pre-combat passives is an exact no-op (golden safety).
-    applyPreCombatShipPassives(playerPlans);
-    applyPreCombatShipPassives(enemyPlans);
-    // Kept for the modifier attachment below (F3) and the result's `preFight.unsimulated` block.
+    // Kept for the leader attack % below, the modifier attachment (F3) and the result's
+    // `preFight.unsimulated` block.
     const preFightById = new Map<string, PreFightUnit>(
         [...preFightPlayer, ...preFightEnemy].map((u) => [u.id, u])
     );
+    const leaderAttackPctOf = (id: string): number =>
+        preFightById.get(id)?.modifiers.attackPct ?? 0;
+    applyPreCombatShipPassives(playerPlans, leaderAttackPctOf);
+    applyPreCombatShipPassives(enemyPlans, leaderAttackPctOf);
     // F3: a unit's accumulated modifier channels ride onto its engine actor as the
     // `preFight` baseline — but ONLY when at least one channel is non-zero, so a no-leader
     // or stat-only-leader run passes NO preFight key anywhere (all engine folds inert →

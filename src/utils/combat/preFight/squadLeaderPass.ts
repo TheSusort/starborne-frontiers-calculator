@@ -18,6 +18,11 @@
  * buff AND the opposing leader's debuff therefore folds them additively
  * (base×(1+(a+b)/100)), never as sequential multiplies — and no intermediate clamp can
  * break side symmetry.
+ *
+ * Attack % is the exception to the stat apply: it accumulates into `modifiers.attackPct`
+ * (same Σ over both leaders) and `stats.attack` keeps the base, because the engine adds the
+ * leader % to the attack buffs instead of pre-multiplying (R200). `leaderScaledAttack` gives
+ * the pre-buff sheet.
  */
 import { SQUAD_LEADERS } from '../../../constants/squadLeaders';
 import type {
@@ -184,6 +189,10 @@ function applyLeaderForSide(
                 continue;
             }
             for (const unit of recipients) {
+                if (effect.stat === 'attack' && effect.valueType === 'percentage') {
+                    unit.modifiers.attackPct += effect.value;
+                    continue;
+                }
                 let perStat = statAcc.get(unit);
                 if (!perStat) {
                     perStat = new Map();
