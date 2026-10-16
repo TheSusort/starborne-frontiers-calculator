@@ -159,12 +159,46 @@ const BountyCreditsCalculatorPage: React.FC = () => {
     const ranked = bestLevels(results, settings.metric);
     const best = ranked[0];
     const runnerUp = ranked[1];
+    const bestValue = best ? (metricValue(best, settings.metric) as number) : 0;
+
+    /** The ranked metric's cell: its value over a bar scaled to the best level's value. */
+    const rankedCell = (r: LevelResult) => {
+        const value = metricValue(r, settings.metric);
+        if (value === null) return '—';
+        const isBest = best?.level === r.level;
+        const share = bestValue > 0 ? Math.max(0, Math.min(1, value / bestValue)) : 0;
+        return (
+            <div className="relative ml-3 min-w-[7rem] px-2 py-1">
+                <div
+                    aria-hidden="true"
+                    className={`absolute inset-y-0 right-0 transition-[width] duration-500 ease-out motion-reduce:transition-none ${
+                        isBest ? 'bg-primary/40' : 'bg-primary/15'
+                    }`}
+                    style={{ width: `${share * 100}%` }}
+                />
+                <span className={`relative ${isBest ? 'font-semibold text-primary' : ''}`}>
+                    {fmt(value)}
+                </span>
+            </div>
+        );
+    };
+    const rankedKey = { run: 'total', energy: 'perEnergy', minute: 'perMinute' }[settings.metric];
+    // DataTable applies a column's className to its header and body cells; the `th` variant
+    // limits the highlight to the header.
+    const rankedHeader = (key: string) => (key === rankedKey ? '[th&]:text-primary' : '');
 
     const columns: Column<LevelResult>[] = [
         {
             key: 'level',
             label: 'Level',
-            render: (r) => <span data-testid="bounty-level-row">{r.level}</span>,
+            render: (r) => (
+                <span
+                    data-testid="bounty-level-row"
+                    className={best?.level === r.level ? 'font-semibold text-primary' : ''}
+                >
+                    {r.level}
+                </span>
+            ),
         },
         {
             key: 'energy',
@@ -179,8 +213,20 @@ const BountyCreditsCalculatorPage: React.FC = () => {
             render: (r) => fmt(r.fixedCredits),
         },
         { key: 'sale', label: 'Gear sales', align: 'right', render: (r) => fmt(r.saleCredits) },
-        { key: 'total', label: 'Per run', align: 'right', render: (r) => fmt(r.total) },
-        { key: 'perEnergy', label: 'Per energy', align: 'right', render: (r) => fmt(r.perEnergy) },
+        {
+            key: 'total',
+            label: 'Per run',
+            align: 'right',
+            className: rankedHeader('total'),
+            render: (r) => (rankedKey === 'total' ? rankedCell(r) : fmt(r.total)),
+        },
+        {
+            key: 'perEnergy',
+            label: 'Per energy',
+            align: 'right',
+            className: rankedHeader('perEnergy'),
+            render: (r) => (rankedKey === 'perEnergy' ? rankedCell(r) : fmt(r.perEnergy)),
+        },
         settings.mode === 'background'
             ? {
                   key: 'tier',
@@ -246,7 +292,13 @@ const BountyCreditsCalculatorPage: React.FC = () => {
             key: 'perMinute',
             label: 'Per minute',
             align: 'right',
-            render: (r) => (r.perMinute === null ? '—' : fmt(r.perMinute)),
+            className: rankedHeader('perMinute'),
+            render: (r) =>
+                rankedKey === 'perMinute'
+                    ? rankedCell(r)
+                    : r.perMinute === null
+                      ? '—'
+                      : fmt(r.perMinute),
         },
         {
             key: 'kept',
@@ -266,7 +318,8 @@ const BountyCreditsCalculatorPage: React.FC = () => {
                 description="Find the bounty level that earns the most credits, counting the gear you sell."
             >
                 <div className="space-y-4">
-                    <div className="card grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <section className="card grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <h2 className="md:col-span-3 text-lg text-theme-text">Run setup</h2>
                         <Select
                             label="Bounty"
                             options={BOUNTIES.map((b) => ({ value: b.id, label: b.name }))}
@@ -358,9 +411,10 @@ const BountyCreditsCalculatorPage: React.FC = () => {
                                 update({ generalSellPct: clampPct(parseNum(e.target.value) ?? 0) })
                             }
                         />
-                    </div>
+                    </section>
 
-                    <div className="card grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <section className="card grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <h2 className="md:col-span-3 text-lg text-theme-text">Auto-sell</h2>
                         <CheckboxGroup
                             label="Auto-sell star ranks"
                             helpLabel="Same as the in-game filter: a piece is sold if its star rank OR its rarity is ticked."
@@ -380,27 +434,77 @@ const BountyCreditsCalculatorPage: React.FC = () => {
                             values={settings.sets}
                             onChange={(v) => update({ sets: v })}
                         />
-                    </div>
+                    </section>
 
                     {best && (
-                        <div className="card" data-testid="bounty-best">
-                            Best: <strong>Level {best.level}</strong> at{' '}
-                            {fmt(metricValue(best, settings.metric) as number)}{' '}
-                            {metricLabel.toLowerCase()}
-                            {runnerUp && (
-                                <>
-                                    {' '}
-                                    —{' '}
-                                    {(
-                                        ((metricValue(best, settings.metric) as number) /
-                                            (metricValue(runnerUp, settings.metric) as number) -
-                                            1) *
-                                        100
-                                    ).toFixed(1)}
-                                    % ahead of level {runnerUp.level}.
-                                </>
-                            )}
-                        </div>
+                        <section
+                            className="card clip-1-corner border-primary/50 bg-gradient-to-br from-primary/15 via-dark to-dark flex flex-wrap items-center gap-x-10 gap-y-5 tabular-nums"
+                            data-testid="bounty-best"
+                            aria-live="polite"
+                        >
+                            <h2 className="flex items-baseline gap-3 leading-none">
+                                <span className="text-xl text-theme-text-secondary">Level</span>{' '}
+                                <span className="text-7xl font-bold text-primary">
+                                    {best.level}
+                                </span>
+                            </h2>
+                            <div className="flex-1 min-w-[16rem] space-y-3">
+                                <p className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                                    <span className="text-3xl font-semibold text-theme-text">
+                                        {fmt(bestValue)}
+                                    </span>
+                                    <span className="text-theme-text-secondary">
+                                        {metricLabel.toLowerCase()}
+                                    </span>
+                                    {runnerUp && (
+                                        <span className="text-primary">
+                                            +
+                                            {(
+                                                (bestValue /
+                                                    (metricValue(
+                                                        runnerUp,
+                                                        settings.metric
+                                                    ) as number) -
+                                                    1) *
+                                                100
+                                            ).toFixed(1)}
+                                            % ahead of level {runnerUp.level}
+                                        </span>
+                                    )}
+                                </p>
+                                <div
+                                    aria-hidden="true"
+                                    className="flex h-2.5 w-full max-w-xl overflow-hidden bg-dark-border"
+                                >
+                                    <div
+                                        className="bg-primary transition-[width] duration-500 ease-out motion-reduce:transition-none"
+                                        style={{
+                                            width: `${(best.fixedCredits / best.total) * 100}%`,
+                                        }}
+                                    />
+                                    <div
+                                        className="bg-primary-hover/50 transition-[width] duration-500 ease-out motion-reduce:transition-none"
+                                        style={{
+                                            width: `${(best.saleCredits / best.total) * 100}%`,
+                                        }}
+                                    />
+                                </div>
+                                <p className="flex flex-wrap gap-x-5 gap-y-1 text-sm text-theme-text-secondary">
+                                    <span>
+                                        <span className="mr-1.5 inline-block h-2.5 w-2.5 bg-primary align-middle" />
+                                        Bounty reward {fmt(best.fixedCredits)}
+                                    </span>
+                                    <span>
+                                        <span className="mr-1.5 inline-block h-2.5 w-2.5 bg-primary-hover/50 align-middle" />
+                                        Gear sales {fmt(best.saleCredits)}
+                                    </span>
+                                    <span>
+                                        {fmtEnergy(best.energy)} energy ·{' '}
+                                        {best.keptGearPerRun.toFixed(2)} gear kept per run
+                                    </span>
+                                </p>
+                            </div>
+                        </section>
                     )}
                     {!best && settings.metric === 'minute' && (
                         <div className="card">
@@ -409,6 +513,7 @@ const BountyCreditsCalculatorPage: React.FC = () => {
                     )}
 
                     <DataTable
+                        className="tabular-nums"
                         data={results}
                         columns={columns}
                         getRowKey={(r) => String(r.level)}
