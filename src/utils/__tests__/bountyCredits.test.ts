@@ -78,13 +78,21 @@ describe('evaluateLevel', () => {
     };
 
     it('scales fixed credits only by the extra credits %', () => {
-        const r = evaluateLevel(fixture, fenri, { ...keepAll, generalSellPct: 100 }, 40, null, 5);
+        const r = evaluateLevel(fixture, fenri, { ...keepAll, generalSellPct: 100 }, 40, {
+            mode: 'normal',
+            secondsPerFight: null,
+            overheadSeconds: 5,
+        });
         expect(r.fixedCredits).toBe(21000);
         expect(r.saleCredits).toBeCloseTo(0.5 * 4950);
     });
 
     it('keeping everything earns only the fixed credits', () => {
-        const r = evaluateLevel(fixture, fenri, keepAll, 0, null, 5);
+        const r = evaluateLevel(fixture, fenri, keepAll, 0, {
+            mode: 'normal',
+            secondsPerFight: null,
+            overheadSeconds: 5,
+        });
         expect(r.saleCredits).toBe(0);
         expect(r.total).toBe(15000);
         expect(r.keptGearPerRun).toBeCloseTo(0.5);
@@ -96,8 +104,7 @@ describe('evaluateLevel', () => {
             fenri,
             { ...keepAll, sets: ['Speed'], generalSellPct: 50 },
             0,
-            null,
-            5
+            { mode: 'normal', secondsPerFight: null, overheadSeconds: 5 }
         );
         // P(sold) = 1/3 * 1 + 2/3 * 0.5 = 2/3
         expect(r.saleCredits).toBeCloseTo(0.5 * (2 / 3) * 4950);
@@ -106,20 +113,38 @@ describe('evaluateLevel', () => {
 
     it('a sold set counts for 1/4 of drops at L33', () => {
         const l33 = { ...fixture, level: 33 };
-        const r = evaluateLevel(l33, fenri, { ...keepAll, sets: ['Burner'] }, 0, null, 5);
+        const r = evaluateLevel(l33, fenri, { ...keepAll, sets: ['Burner'] }, 0, {
+            mode: 'normal',
+            secondsPerFight: null,
+            overheadSeconds: 5,
+        });
         expect(r.saleCredits).toBeCloseTo(0.5 * 0.25 * 4950);
     });
 
     it('derives per-energy and per-minute', () => {
-        const r = evaluateLevel(fixture, fenri, keepAll, 0, 55, 5);
+        const r = evaluateLevel(fixture, fenri, keepAll, 0, {
+            mode: 'normal',
+            secondsPerFight: 55,
+            overheadSeconds: 5,
+        });
         expect(r.perEnergy).toBe(1500);
         expect(r.perMinute).toBe(15000); // one 60 s cycle per minute
-        expect(evaluateLevel(fixture, fenri, keepAll, 0, null, 5).perMinute).toBeNull();
+        expect(
+            evaluateLevel(fixture, fenri, keepAll, 0, {
+                mode: 'normal',
+                secondsPerFight: null,
+                overheadSeconds: 5,
+            }).perMinute
+        ).toBeNull();
     });
 
     it('sells everything on real L33 data', () => {
         const l33 = BOUNTY_LEVELS[32];
-        const r = evaluateLevel(l33, fenri, { ...keepAll, generalSellPct: 100 }, 0, null, 5);
+        const r = evaluateLevel(l33, fenri, { ...keepAll, generalSellPct: 100 }, 0, {
+            mode: 'normal',
+            secondsPerFight: null,
+            overheadSeconds: 5,
+        });
         expect(r.keptGearPerRun).toBeCloseTo(0);
         expect(r.saleCredits).toBeGreaterThan(4000);
     });
@@ -127,9 +152,68 @@ describe('evaluateLevel', () => {
 
 describe('bestLevels', () => {
     it('ranks best-first and drops levels without a per-minute value', () => {
-        const a = evaluateLevel(BOUNTY_LEVELS[31], fenri, keepAll, 0, 60, 5);
-        const b = evaluateLevel(BOUNTY_LEVELS[32], fenri, keepAll, 0, null, 5);
+        const a = evaluateLevel(BOUNTY_LEVELS[31], fenri, keepAll, 0, {
+            mode: 'normal',
+            secondsPerFight: 60,
+            overheadSeconds: 5,
+        });
+        const b = evaluateLevel(BOUNTY_LEVELS[32], fenri, keepAll, 0, {
+            mode: 'normal',
+            secondsPerFight: null,
+            overheadSeconds: 5,
+        });
         expect(bestLevels([a, b], 'run').map((r) => r.level)).toEqual([33, 32]);
         expect(bestLevels([a, b], 'minute').map((r) => r.level)).toEqual([32]);
+    });
+});
+
+describe('evaluateLevel — background', () => {
+    const fixture: BountyLevel = {
+        level: 32,
+        credits: 15000,
+        energy: 10,
+        totalGearChance: 50,
+        drops: [{ stars: 5, rarity: 'rare', chance: 50 }],
+    };
+
+    it('pays 90% energy and earns per tier minute', () => {
+        const r = evaluateLevel(fixture, fenri, keepAll, 0, { mode: 'background', tier: 'win' });
+        expect(r.energy).toBeCloseTo(9);
+        expect(r.perEnergy).toBeCloseTo(15000 / 9);
+        expect(r.perMinute).toBeCloseTo(15000 / 6);
+    });
+
+    it('adds one normalized bonus gear per 10 battles at the 1-round tier', () => {
+        const sellAll = { ...keepAll, generalSellPct: 100 };
+        const r = evaluateLevel(fixture, fenri, sellAll, 0, { mode: 'background', tier: 'r1' });
+        // regular 0.5 × 4950 + bonus 0.1 × 4950 (the extra drop is always a gear)
+        expect(r.saleCredits).toBeCloseTo(0.6 * 4950);
+        expect(r.perMinute).toBeCloseTo(r.total);
+        const kept = evaluateLevel(fixture, fenri, keepAll, 0, { mode: 'background', tier: 'r1' });
+        expect(kept.keptGearPerRun).toBeCloseTo(0.6);
+    });
+
+    it('bonus rates follow the tier', () => {
+        const sellAll = { ...keepAll, generalSellPct: 100 };
+        const sale = (tier: 'r3' | 'r5' | 'r10') =>
+            evaluateLevel(fixture, fenri, sellAll, 0, { mode: 'background', tier }).saleCredits;
+        expect(sale('r3')).toBeCloseTo((0.5 + 1 / 15) * 4950);
+        expect(sale('r5')).toBeCloseTo((0.5 + 1 / 20) * 4950);
+        expect(sale('r10')).toBeCloseTo(0.5 * 4950);
+    });
+
+    it('real L33 background energy is 9.9', () => {
+        const r = evaluateLevel(BOUNTY_LEVELS[32], fenri, keepAll, 0, {
+            mode: 'background',
+            tier: 'win',
+        });
+        expect(r.energy).toBeCloseTo(9.9);
+    });
+
+    it('skips the bonus gear when the level has no gear drops', () => {
+        const noGear: BountyLevel = { ...fixture, totalGearChance: 0, drops: [] };
+        const r = evaluateLevel(noGear, fenri, keepAll, 0, { mode: 'background', tier: 'r1' });
+        expect(r.saleCredits).toBe(0);
+        expect(r.keptGearPerRun).toBe(0);
     });
 });

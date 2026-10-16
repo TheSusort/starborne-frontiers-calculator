@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { BOUNTIES, BOUNTY_LEVELS, ABYSSAL_LEVEL, parseDrops } from '../bounties';
+import {
+    BOUNTIES,
+    BOUNTY_LEVELS,
+    ABYSSAL_LEVEL,
+    BACKGROUND_TIERS,
+    BACKGROUND_ENERGY_FACTOR,
+    parseDrops,
+} from '../bounties';
 
 describe('parseDrops', () => {
     it('parses star, rarity letter and percent', () => {
@@ -51,5 +58,18 @@ describe('BOUNTIES', () => {
     it('Eelun abyssal is not yet available', () => {
         expect(BOUNTIES.find((b) => b.id === 'eelun')?.abyssalAvailable).toBe(false);
         expect(ABYSSAL_LEVEL).toBe(33);
+    });
+});
+
+describe('BACKGROUND_TIERS', () => {
+    it('matches the in-game Auto-Battle table', () => {
+        expect(BACKGROUND_TIERS.map((t) => [t.id, t.minutes, t.bonusGearEvery])).toEqual([
+            ['r1', 1, 10],
+            ['r3', 1.5, 15],
+            ['r5', 3, 20],
+            ['r10', 4, null],
+            ['win', 6, null],
+        ]);
+        expect(BACKGROUND_ENERGY_FACTOR).toBe(0.9);
     });
 });

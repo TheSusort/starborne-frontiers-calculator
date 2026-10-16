@@ -112,8 +112,12 @@ const BountyCreditsCalculatorPage: React.FC = () => {
                             generalSellPct: settings.generalSellPct,
                         },
                         settings.extraCreditsPct,
-                        settings.secondsOverrides[lvl.level] ?? settings.secondsPerFight,
-                        settings.overheadSeconds
+                        {
+                            mode: 'normal',
+                            secondsPerFight:
+                                settings.secondsOverrides[lvl.level] ?? settings.secondsPerFight,
+                            overheadSeconds: settings.overheadSeconds,
+                        }
                     )
                 )
                 .reverse(),

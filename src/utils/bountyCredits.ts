@@ -1,6 +1,9 @@
 import type { RarityName } from '../constants/rarities';
 import {
     ABYSSAL_LEVEL,
+    BACKGROUND_ENERGY_FACTOR,
+    BACKGROUND_TIERS,
+    BackgroundTierId,
     BOUNTY_LEVELS,
     Bounty,
     BountyDrop,
@@ -66,39 +69,65 @@ export interface LevelResult {
     keptGearPerRun: number;
 }
 
-/** Credit bonuses (`extraCreditsPct`) scale the fixed bounty credits only, never gear sales. */
+export type BattleTiming =
+    | { mode: 'normal'; secondsPerFight: number | null; overheadSeconds: number }
+    | { mode: 'background'; tier: BackgroundTierId };
+
+/**
+ * Credit bonuses (`extraCreditsPct`) scale the fixed bounty credits only, never gear sales.
+ * `energy` in the result is the per-battle energy actually paid. A background tier's bonus gear
+ * is one extra drop per N battles, drawn from the level's table but always a gear, with the same
+ * auto-sell rules.
+ */
 export function evaluateLevel(
     level: BountyLevel,
     bounty: Bounty,
     rules: SellRules,
     extraCreditsPct: number,
-    secondsPerFight: number | null,
-    overheadSeconds: number
+    timing: BattleTiming
 ): LevelResult {
     const sets = setsAtLevel(bounty, level.level);
     const generalSell = rules.generalSellPct / 100;
     let saleCredits = 0;
     let keptGearPerRun = 0;
+    let gearProbability = 0;
     for (const drop of level.drops) {
         const pSold =
             sets.reduce((s, set) => s + (isAutoSold(drop, set, rules) ? 1 : generalSell), 0) /
             (sets.length || 1);
         const pDrop = drop.chance / 100;
+        gearProbability += pDrop;
         saleCredits += pDrop * pSold * gearSellPrice(drop.stars, drop.rarity);
         keptGearPerRun += pDrop * (1 - pSold);
     }
+
+    let energy = level.energy;
+    let cycleMinutes: number | null = null;
+    if (timing.mode === 'background') {
+        energy = level.energy * BACKGROUND_ENERGY_FACTOR;
+        const tier = BACKGROUND_TIERS.find((t) => t.id === timing.tier);
+        if (tier) {
+            cycleMinutes = tier.minutes;
+            if (tier.bonusGearEvery && gearProbability > 0) {
+                const bonusDrops = 1 / tier.bonusGearEvery;
+                saleCredits += (saleCredits / gearProbability) * bonusDrops;
+                keptGearPerRun += (keptGearPerRun / gearProbability) * bonusDrops;
+            }
+        }
+    } else if (timing.secondsPerFight && timing.secondsPerFight > 0) {
+        cycleMinutes = (timing.secondsPerFight + timing.overheadSeconds) / 60;
+    }
+
     const fixedCredits = Math.round(level.credits * (1 + extraCreditsPct / 100));
     const total = fixedCredits + saleCredits;
-    const cycleSeconds =
-        secondsPerFight && secondsPerFight > 0 ? secondsPerFight + overheadSeconds : 0;
     return {
         level: level.level,
-        energy: level.energy,
+        energy,
         fixedCredits,
         saleCredits,
         total,
-        perEnergy: total / level.energy,
-        perMinute: cycleSeconds > 0 ? (total * 60) / cycleSeconds : null,
+        perEnergy: total / energy,
+        perMinute: cycleMinutes && cycleMinutes > 0 ? total / cycleMinutes : null,
         keptGearPerRun,
     };
 }

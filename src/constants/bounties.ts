@@ -38,6 +38,28 @@ export interface BountyLevel {
 
 export const ABYSSAL_LEVEL = 33;
 
+export type BackgroundTierId = 'r1' | 'r3' | 'r5' | 'r10' | 'win';
+
+/** An in-game Auto-Battle tier: minutes per battle and the bonus-gear cadence it earns. */
+export interface BackgroundTier {
+    id: BackgroundTierId;
+    label: string;
+    minutes: number;
+    /** One extra gear drop per this many battles; null when the tier earns none. */
+    bonusGearEvery: number | null;
+}
+
+export const BACKGROUND_TIERS: BackgroundTier[] = [
+    { id: 'r1', label: 'Win in 1 round', minutes: 1, bonusGearEvery: 10 },
+    { id: 'r3', label: 'Win in 3 rounds', minutes: 1.5, bonusGearEvery: 15 },
+    { id: 'r5', label: 'Win in 5 rounds', minutes: 3, bonusGearEvery: 20 },
+    { id: 'r10', label: 'Win in 10 rounds', minutes: 4, bonusGearEvery: null },
+    { id: 'win', label: 'Win the battle', minutes: 6, bonusGearEvery: null },
+];
+
+/** Background battles cost this share of the normal energy, unrounded. */
+export const BACKGROUND_ENERGY_FACTOR = 0.9;
+
 export const BOUNTIES: Bounty[] = [
     {
         id: 'fenri',
