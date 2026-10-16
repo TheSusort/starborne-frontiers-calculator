@@ -4376,8 +4376,8 @@ export function provokerOf(statusEngine: StatusEngine, actorId: string): string 
 /** Per-actor forced-targeting/stealth status, read from the status engine for the given
  *  actor ids. Stealth/Taunt are self-buffs (selfBuffNamesForOwners); Concentrate Fire is a
  *  debuff on the focus target (ownerDebuffNamesFor). Read-half only — no applier wiring this
- *  phase. `tauntAppliedRound` is left unset (the query layer exposes no application round →
- *  callers degrade to front-most board order). */
+ *  phase. Several taunters are ordered by the attacker's normal targeting
+ *  (`resolvePositionalTarget`), not by when each taunt landed. */
 export function buildForcedTargetingStatus(
     statusEngine: StatusEngine,
     actorIds: string[]
@@ -5043,6 +5043,8 @@ export interface ReactiveHitOutcome {
     didCrit: boolean;
     protectionSplit?: true;
     taken?: number;
+    /** The hit became a DoT on its victim and landed nothing directly. */
+    convertedToDot?: true;
 }
 
 /** Emit the `reactive-damage-performed` event for a proc that actually dealt damage.
@@ -5062,8 +5064,13 @@ function emitReactiveDamageLog(
             sourceId: ownerId,
             targetId: victimId,
             round: ctx.round,
-            amount: outcome.protectionSplit ? (outcome.taken ?? outcome.dealt) : outcome.dealt,
+            amount: outcome.convertedToDot
+                ? 0
+                : outcome.protectionSplit
+                  ? (outcome.taken ?? outcome.dealt)
+                  : outcome.dealt,
             didCrit: outcome.didCrit,
+            ...(outcome.convertedToDot ? { convertedToDot: true as const } : {}),
         });
     }
     // The attack row now exists (or the proc was guarded and buffered nothing) — release any
@@ -6169,16 +6176,20 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
                     appliedSeq: (appliedSeq = ctx.statusEngine.nextAppliedSeq()),
                 });
             } else if (cfg.dotType === 'inferno') {
+                const appliedAttack =
+                    ctx.lastTurnCtxByActor.get(intent.ownerId)?.effectiveAttack ??
+                    ctx.effectiveAttackFor?.(intent.ownerId);
                 (victim?.infernoEntries ?? ctx.infernoEntries).push({
                     stacks,
                     tier: cfg.tier,
                     remainingRounds: cfg.duration,
                     sourceId: intent.ownerId,
                     appliedSeq: (appliedSeq = ctx.statusEngine.nextAppliedSeq()),
+                    ...(appliedAttack !== undefined ? { appliedAttack } : {}),
                 });
             } else if (cfg.dotType === 'bomb') {
-                // A bomb SNAPSHOTS the owner's effective attack at application (unlike
-                // corrosion/inferno, which resolve the applier's ctx at each tick). The owner's
+                // A bomb SNAPSHOTS the owner's effective attack at application, as an Inferno
+                // stack does (`ActiveDoTStack.appliedAttack`); Corrosion scales with HP. The owner's
                 // last-turn ctx is the preferred source; before the owner's FIRST turn of the run
                 // there is no such ctx (a faster enemy healing in round 1 — the common case for
                 // enemy healers), so fall back to the owner's LIVE effective attack.

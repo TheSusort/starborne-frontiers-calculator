@@ -1238,6 +1238,20 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         if (before === 0 && state.stacks > 0) state.appliedSeq = nextAppliedSeq();
     };
 
+    /** `addAccumStacks` for a SELF carrier, then reconcile the owner's stolen-stack ledger: a
+     *  capped grant adds to what the owner actually HOLDS (store plus negative ledger), up to the
+     *  cap, so a stack stolen since the last grant is refilled rather than staying missing
+     *  (Lionheart's "gains 10 stacks" restores 10, never leaves 9). An uncapped grant adds to the
+     *  store and the ledger keeps bending the count as before. */
+    const addAccumStacksFor = (ownerId: string, state: AccumulatingState, amount: number): void => {
+        const stolen = stackAdjustments.get(ownerId)?.get(state.buffName) ?? 0;
+        const heldBefore = Math.max(0, state.stacks + stolen);
+        addAccumStacks(state, amount);
+        if (amount <= 0 || stolen >= 0 || state.maxStacks === undefined) return;
+        const refilled = Math.min(state.maxStacks, heldBefore + amount);
+        stackAdjustments.get(ownerId)!.set(state.buffName, Math.min(0, refilled - state.stacks));
+    };
+
     // Cadence gains awaiting announcement (`takeAccumGains`).
     const accumGains: AccumGain[] = [];
     let accumTickSeq = 0;
@@ -1287,7 +1301,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         let total = 0;
         for (const n of shares.values()) total += n;
         const before = state.stacks;
-        addAccumStacks(state, total);
+        addAccumStacksFor(ownerId, state, total);
         if (state.payload === undefined || state.stacks === before) return;
         for (const [granterId, n] of shares) {
             if (n <= 0) continue;
@@ -1872,7 +1886,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
             };
             map.set(payload.buffName, state);
         }
-        addAccumStacks(state, amount);
+        addAccumStacksFor(ownerId, state, amount);
     };
 
     /** Move ONE stack of `buffName` off `sourceId` and onto EVERY id in `recipientIds`.

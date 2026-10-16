@@ -109,6 +109,7 @@ import {
     applyPositionalDamage,
     damagedVictim,
     directlyDamagesVictim,
+    loggedHitFigures,
     footprintVictims,
     isWholeBattlefieldPattern,
     type SubAttackBoundary,
@@ -1379,6 +1380,9 @@ export function tickDoTs(args: {
     /** Multiplier on this carrier's DoT ticks of the given type; the composition rule lives in
      *  `composeDotReductionFactor`. Absent → 1. */
     incomingDotFactor?: (dotType: TickableDoTType) => number;
+    /** Multiplier on this carrier's generic (hit-converted) DoT ticks for its live Inc. DoT Damage
+     *  Up, applied once at each tick like any DoT's incoming side. Absent → 1. */
+    convertedDotDamageFactor?: () => number;
     /** Resolves the EFFECTIVE DoT-damage factor for one applier's ctx, given the
      *  ticking VICTIM (this tickDoTs call's whole entries list belongs to ONE victim, so the
      *  victim is fixed for the call; only the per-entry applier ctx varies). Defaults to
@@ -1447,11 +1451,15 @@ export function tickDoTs(args: {
         (e, ctx) => e.stacks * (e.tier / 100) * corrosionBaseHp * dotMultFor(ctx, 'corrosion')
     );
 
-    // Step 5: Tick inferno (scales with the applier's effective attack, no outgoing buff)
+    // Step 5: Tick inferno (scales with each stack's own applier attack, `appliedAttack`)
     tickByTier(
         'inferno',
         args.infernoEntries,
-        (e, ctx) => e.stacks * (e.tier / 100) * ctx.effectiveAttack * dotMultFor(ctx, 'inferno')
+        (e, ctx) =>
+            e.stacks *
+            (e.tier / 100) *
+            (e.appliedAttack ?? ctx.effectiveAttack) *
+            dotMultFor(ctx, 'inferno')
     );
 
     // Tick generic DoTs — an ABSOLUTE per-tick amount, independent of stats/HP (no ctxFor
@@ -1466,13 +1474,15 @@ export function tickDoTs(args: {
         dealtCreditId?: string;
         convertedFromHit?: boolean;
     }> = [];
+    const genericUp =
+        args.genericDoTEntries.length > 0 ? (args.convertedDotDamageFactor?.() ?? 1) : 1;
     for (const e of args.genericDoTEntries) {
-        const d = (e.perTickAmount ?? 0) * e.stacks;
+        const d = (e.perTickAmount ?? 0) * e.stacks * genericUp;
         // #358 ADDENDUM 3 (C4): a generic entry created by `convertHitToSelfDot` carries the
         // PRE-mitigation slice of the direct hit it deferred. `?? e.perTickAmount` covers every
         // other generic DoT (Acidic Decay and friends), which folds no defence and so ticks the
         // same amount on both axes.
-        const pre = (e.perTickPreMitigation ?? e.perTickAmount ?? 0) * e.stacks;
+        const pre = (e.perTickPreMitigation ?? e.perTickAmount ?? 0) * e.stacks * genericUp;
         genericCredits.push({
             sourceId: e.sourceId,
             d,
@@ -3436,7 +3446,7 @@ export function runCombat(rawInput: CombatEngineInput): {
     // `perVictimOutgoingDeltaPct`, which must subtract because its abilities stay baked
     // into the aggregate).
     const victimDotMult = (
-        ctx: PlayerRoundCtx,
+        ctx: Pick<PlayerRoundCtx, 'outgoingDotPct' | 'incomingDotPct' | 'victimGatedDotDamage'>,
         victim: CombatActor,
         dotType: 'corrosion' | 'inferno'
     ): number => {
@@ -5026,7 +5036,11 @@ export function runCombat(rawInput: CombatEngineInput): {
         out.sort((a, b) => {
             const sa = effectiveStatsOf(statusEngine, selfBuffLookup, a.actor).speed;
             const sb = effectiveStatsOf(statusEngine, selfBuffLookup, b.actor).speed;
-            return sb - sa !== 0 ? sb - sa : a.actor.id.localeCompare(b.actor.id);
+            if (sb !== sa) return sb - sa;
+            // A position-less pair ranks equal (both Infinity); the stable sort keeps roster order.
+            const pa = positionTurnRank(a.actor.position);
+            const pb = positionTurnRank(b.actor.position);
+            return pa === pb ? 0 : pa - pb;
         });
         return out;
     };
@@ -5129,6 +5143,25 @@ export function runCombat(rawInput: CombatEngineInput): {
         if (!a || maxHp <= 0) return 100;
         return (100 * a.currentHp) / maxHp;
     };
+    // The victim's own DoT reductions (Vortex Veil, Voron's passive) as one multiplier on a DoT
+    // tick or detonation landing on it; the composition rule lives in `composeDotReductionFactor`.
+    // A DoT has no single attacker, so the attacker-gated conditions read as unmet.
+    const incomingDotReductionFor = (victimId: string, dotType: TickableDoTType): number =>
+        composeDotReductionFactor(
+            incomingReductionPartsForHit(incomingAbilitiesOf(victimId), {
+                didCrit: false,
+                attackerStealthed: false,
+                victimStealthed: isStealthed(victimId),
+                victimTurnBlocked: isTurnBlocked(victimId),
+                hitIndexThisRound: 0,
+                dotType,
+                attackerHasDot: false,
+                victimHasBarrierRecharging: hasBarrierRecharging(victimId),
+                victimHasShield: hasShield(victimId),
+                selfHpPct: selfHpPctOf(victimId),
+                attackerTauntedOrProvoked: false,
+            })
+        );
     // Orel: does the given actor (the ATTACKER of an incoming hit) currently carry Taunt
     // (a self-buff it granted itself) or Provoke (a debuff placed on it by someone else)? Sibling
     // to attackerHasDot — same "evaluated against the attacker" shape, different status family.
@@ -6274,6 +6307,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             sourceId: string;
             targetId: string;
             amount: number;
+            convertedToDot?: true;
             subAttack?: number;
         }[] = [];
         // Shared LOG-ONLY consequence-event buffer. Carries the log-only twins
@@ -6343,6 +6377,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                     targetId: row.targetId,
                     round: r,
                     amount: row.amount,
+                    ...(row.convertedToDot ? { convertedToDot: true as const } : {}),
                     reactive: true,
                     duringTurnOf: actingActorId,
                     triggerActorId: actingActorId,
@@ -6400,9 +6435,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                  *  set). The reflection block skips when set → no ping-pong (a reflected hit never
                  *  reflects). */
                 isReflected?: boolean;
-                /** With `isReflected`: the bounce of a ship's reflect, which is a direct hit in full
-                 *  (R137, R162) — Protection redirects it, and it spends Exposed and Titanite
-                 *  Plating like any direct hit. Absent for the Reflect gear set's bounce. */
+                /** With `isReflected`: the bounce of a ship's reflect — Protection redirects it,
+                 *  and it spends Exposed and Titanite Plating like any direct hit (R137, R162).
+                 *  Absent for the Reflect gear set's bounce, which does neither. */
                 directReflect?: boolean;
                 /** True for a FLAT copy of an already-resolved burst (Demolisher's Bomb splash):
                  *  Bomb damage, not a direct hit, so no Protection redirect and no Exposed spend. */
@@ -6415,8 +6450,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                  *  victim (defence and incoming composition) and the hit's crit outcome. Read ONLY
                  *  by the Protection transfer block, which divides by exactly these factors and
                  *  prices each protector's chunk on the protector's own. Absent → a hit kind that
-                 *  folds no incoming composition (bomb and accumulator bursts): the block
-                 *  re-derives the defence factor and applies no incoming factor on either ship. */
+                 *  folds no incoming composition: the block re-derives the defence factor and
+                 *  applies no incoming factor on either ship. */
                 redirectBasis?: RedirectBasis;
                 /** #358: the amount the caller reduced to produce `rawDamage` for this
                  *  victim — pre-defence-mitigation, and pre EVERY other victim-side
@@ -6454,8 +6489,11 @@ export function runCombat(rawInput: CombatEngineInput): {
             // `incomingBooked`, so the booking sites below read it without a fallback.
         ): AppliedVictimDamage => {
             // TRIPWIRE: a direct hit that reaches a reflector without `cause.reflectBase` is a
-            // damage path that skipped threading it, and throws rather than reflecting 0.
+            // damage path that skipped threading it, and throws rather than reflecting 0. A
+            // zero-damage apply is no hit (a burst that gathered nothing stamps `bombPortion: 0`
+            // like a direct hit does) and nothing reflects it.
             if (
+                rawDamage > 0 &&
                 cause?.byDirectDamage !== false &&
                 !cause?.isReflected &&
                 !cause?.isProtectionTransfer &&
@@ -6497,8 +6535,9 @@ export function runCombat(rawInput: CombatEngineInput): {
             // Proc block on DIRECT damage only, when not fully Barrier-immune. Reduces the
             // hit before it is recorded/absorbed (silent reduction — no separate surface this PR).
             // Fully inert (no counter touch, no roll) when the victim has no incoming-block
-            // ability.
-            if (cause?.byDirectDamage && !carriesBarrier) {
+            // ability. A Protection share is not direct damage to the protector (R139b), so it
+            // rolls no block and does not advance the nth-hit counter.
+            if (cause?.byDirectDamage && !cause.isProtectionTransfer && !carriesBarrier) {
                 const blockAbilities = incomingAbilitiesOf(victim.id).filter(
                     (a) => a.config.type === 'incoming-block'
                 );
@@ -6565,7 +6604,9 @@ export function runCombat(rawInput: CombatEngineInput): {
             // PROTECTOR's own defence and incoming reductions — read `protectionCascade`.
             // Guards: direct damage only, and never a redirected application (loop-safe), the
             // Reflect gear set's bounce, or a Bomb splash copy. Counters, reactive procs and a
-            // ship's reflect are redirected (rulings 36, R162).
+            // ship's reflect are redirected (rulings 36, R162). A Bomb is never redirected, nor a
+            // DoT tick (R181): every Bomb burst, detonation burst, Echoing Burst and Bomb death
+            // splash arrives stamped `bombPortion > 0`, so the holder takes it whole.
             // !carriesBarrier: Barrier sits strictly in front of every incoming-effect mechanism
             // (matches the incoming-block step and the transform step) — an invulnerable target
             // has no incoming hit for allies to soak.
@@ -6587,6 +6628,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 !cause.isProtectionTransfer &&
                 (!cause.isReflected || cause.directReflect) &&
                 !cause.isSplashCopy &&
+                (cause.bombPortion ?? 0) === 0 &&
                 !wholeBattlefieldHit &&
                 damage > 0
             ) {
@@ -6603,10 +6645,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                     // self-defence buff (`effectiveStatsOf(...).defence` folds only scheduled and
                     // timed self-buffs).
                     //
-                    // The fallback below serves the basis-less callers (bomb and accumulator
-                    // bursts): `substitutedDefenceFor` recovers a defense-substitution victim's
-                    // CARRIER defence (Meatshield R4), and is a no-op pass-through to `victimDef`
-                    // when no carrier applies.
+                    // The fallback below serves a basis-less direct hit: `substitutedDefenceFor`
+                    // recovers a defense-substitution victim's CARRIER defence (Meatshield R4), and
+                    // is a no-op pass-through to `victimDef` when no carrier applies.
                     const victimDef = effectiveStatsOf(
                         statusEngine,
                         selfBuffLookup,
@@ -6622,8 +6663,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                     // incoming composition — its Inc. Damage Up/Down and its passive, gear and
                     // squad-leader reductions — for the same crit outcome, never the target's.
                     // Exposed stays out: the chunk is not a direct hit on the protector (R139).
-                    // A basis-less hit (a bomb burst) reads no incoming composition on the
-                    // target, so it applies none on the protector either.
+                    // A basis-less hit reads no incoming composition on the target, so it
+                    // applies none on the protector either.
                     const protectorIncomingFactor = (protectorId: string): number => {
                         if (!basis) return 1;
                         const channel = victimIncomingModifiers(
@@ -6675,6 +6716,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                         // shield-destroyed, ship-destroyed, a deferred DoT application).
                         let intakeTotal = 0;
                         const perStackIntake: number[] = [];
+                        // The protector's HP right after each sub-hit: its own `hp-changed` events
+                        // all precede the rows, so a row cannot pair with one afterwards.
+                        const perStackHpPct: (number | undefined)[] = [];
                         for (let s = 0; s < chunk.stacks; s++) {
                             const outcome = applyVictimDamage(chunk.perStack, p.actor, sink, {
                                 killerId: cause.killerId,
@@ -6692,6 +6736,14 @@ export function runCombat(rawInput: CombatEngineInput): {
                             });
                             intakeTotal += outcome.incomingBooked;
                             perStackIntake.push(outcome.incomingBooked);
+                            const protectorMaxHp = maxHpOf(p.actor.id);
+                            perStackHpPct.push(
+                                p.actor.currentHp <= 0
+                                    ? 0
+                                    : protectorMaxHp > 0
+                                      ? (100 * p.actor.currentHp) / protectorMaxHp
+                                      : undefined
+                            );
                         }
                         // We sum the intake the funnel RECORDED per sub-hit (`incomingBooked`) rather
                         // than `chunk.total − transformedToDot` — that subtraction wrongly counts a
@@ -6754,19 +6806,25 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // (battleSimulator's LOG_EVENT_TYPES subscription, triggers.ts's
                             // reactive-stamping set, buildCombatLog's handler, and the audit
                             // fingerprint, which reduces entries to a de-duplicated SET of kinds).
-                            for (const perStack of perStackIntake) {
-                                if (perStack <= 1e-9) continue;
-                                bus.emit({
+                            //
+                            // Routed through `emitConsequenceLog`, so on a deferred path the rows wait
+                            // for the attack row they belong to and nest under it.
+                            perStackIntake.forEach((perStack, stack) => {
+                                if (perStack <= 1e-9) return;
+                                const hpPct = perStackHpPct[stack];
+                                emitConsequenceLog({
                                     type: 'reactive-damage-performed',
                                     sourceId: victim.id,
                                     targetId: p.actor.id,
                                     round: r,
                                     amount: perStack,
+                                    protectionShare: true,
+                                    ...(hpPct !== undefined ? { resultingHpPct: hpPct } : {}),
                                     reactive: true,
                                     duringTurnOf: actingActorId,
                                     triggerActorId: actingActorId,
                                 });
-                            }
+                            });
                         }
                     });
                     // Lionheart R4: a consumable protector loses ALL Protection after it
@@ -7359,12 +7417,15 @@ export function runCombat(rawInput: CombatEngineInput): {
             // reflected kill records the destroy + fires on-death FOR FREE — recordDestroyed
             // above), and (c) does NOT itself reflect (the isReflected guard below skips).
             //
-            // A SHIP's reflect (Nosorog) is direct damage on the attacker (R137): it lands like a
+            // Every bounce is direct damage on the attacker (R137, R196): it lands like a
             // counter through `landReactiveHit`, so the attacker's "when directly damaged"
-            // reactions answer it (every counter included, R160), its Stasis drops and its
-            // damage-taken shields fire. The Reflect GEAR SET's bounce (`source: 'equipment'`) is
-            // not direct damage and raises none of that. A reflector carrying both sends one
-            // bounce, direct when any part of it is.
+            // reactions answer it (every counter included, R160), its Stasis drops, its
+            // damage-taken shields fire, and the reflector's standing leech pays on it (R165,
+            // R197). A reflector carrying both a ship reflect and the Reflect gear set
+            // (`source: 'equipment'`) lands two separate bounces. The ship's share also reads the
+            // attacker's Exposed and Protection, and uses the reflector's penetration; the gear
+            // set's share reads the rest of the attacker's incoming-damage channel (R195) but none
+            // of those.
             //
             // GATE (owner rulings, #678): the hit must have landed. A hit the reflector's shield
             // soaks whole still reflects in full; a hit that does nothing reflects nothing —
@@ -7422,9 +7483,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                                     : 0),
                             0
                         );
-                    // A ship's reflect is a direct hit on the attacker (R137, R162); the Reflect
-                    // gear set's is not. A wearer carrying both bounces each share separately off
-                    // the same hit: the ship's share first, then the set's.
+                    // A wearer carrying both bounces each share separately off the same hit: the
+                    // ship's share first, then the set's.
                     const shares = [
                         { reflectPct: reflectPctOf(false), directReflect: true },
                         { reflectPct: reflectPctOf(true), directReflect: false },
@@ -7454,18 +7514,32 @@ export function runCombat(rawInput: CombatEngineInput): {
                         const attackerDefenceReductionPct =
                             attackerDefence > 0 ? calculateDamageReduction(attackerDefence) : 0;
                         // The reflected hit's attacker is the reflector (`victim`, outer scope) and
-                        // its victim is `attacker`, who receives the bounce-back.
-                        const reflectVictimReduction = hitReductionFor(
-                            victim.id,
+                        // its victim is `attacker`, who receives the bounce-back. A ship's bounce
+                        // reads the recipient's reductions through the counter's own context, so a
+                        // stealth-conditional one (Voidshade, Wusheng) applies; the gear set's
+                        // bounce keeps the context-free reading.
+                        const reflectVictimReductionFor = (directReflect: boolean) =>
+                            hitReductionFor(
+                                victim.id,
+                                attacker.id,
+                                false,
+                                directReflect
+                                    ? {}
+                                    : {
+                                          attackerStealthed: false,
+                                          victimStealthed: false,
+                                          victimTurnBlocked: false,
+                                          attackerTauntedOrProvoked: false,
+                                      }
+                            ).parts;
+                        // The gear set's share reads the recipient's incoming-damage status channel
+                        // (Inc. Damage Up/Down, R195) without Exposed, which only a bounce that
+                        // spends it may read.
+                        const setStatusChannel = victimIncomingModifiers(
                             attacker.id,
-                            false,
-                            {
-                                attackerStealthed: false,
-                                victimStealthed: false,
-                                victimTurnBlocked: false,
-                                attackerTauntedOrProvoked: false,
-                            }
-                        ).parts;
+                            landedScheduledEnemyEffectsByActor.get(victim.id) ?? [],
+                            false
+                        );
                         // The REFLECTOR's Out. Damage Up scales both shares: it is a property of
                         // reflect itself, not of the ship's direct share (#678).
                         const reflectorOutgoingPct = effectiveOutgoingStatsOf(
@@ -7481,7 +7555,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // the incoming-damage status channel — Inc. Damage Up/Down and Exposed,
                             // which the funnel then spends. The gear set's share takes its defence
                             // from `effectiveStatsOf(attacker)` — the attacker's own self-sourced
-                            // buffs only, no enemy-applied Defense Down — and has no status channel.
+                            // buffs only, no enemy-applied Defense Down — and the status channel
+                            // without Exposed.
                             const directInputs = directReflect
                                 ? reactiveHitInputs(victim, attacker)
                                 : undefined;
@@ -7504,22 +7579,22 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 reflectorOutgoingPct,
                                 affinityDamageModifier,
                                 attackerDefenceReductionPct: shareDefenceReductionPct,
-                                reflectVictimReduction,
-                                incomingDamageModifierPct: directProfile?.incomingDamageModifierPct,
-                                victimSideIncomingPct: directProfile?.victimSideIncomingPct,
+                                reflectVictimReduction: reflectVictimReductionFor(directReflect),
+                                incomingDamageModifierPct:
+                                    directProfile?.incomingDamageModifierPct ??
+                                    setStatusChannel.incomingDamageModifier,
+                                victimSideIncomingPct:
+                                    directProfile?.victimSideIncomingPct ??
+                                    setStatusChannel.victimSideIncomingModifier,
                             });
                             const reflected = bounce.damage;
                             const reflectedPreMit = bounce.preMitigation;
                             if (reflected > 0) {
                                 // Aimed at the attacker like a counter (R137); the aim and the
                                 // Stasis gate are read at impact, before the bounce lands.
-                                const reflectAim = directReflect
-                                    ? aimReactiveHit(attacker.id)
-                                    : undefined;
+                                const reflectAim = aimReactiveHit(attacker.id);
                                 const reflectStasisAtImpact =
-                                    directReflect &&
-                                    attackBreaksStasis(victim) &&
-                                    isStasised(attacker.id);
+                                    attackBreaksStasis(victim) && isStasised(attacker.id);
                                 // `sink` accumulates the attacker's incoming into the unified
                                 // perActorIncoming/intakeFor map under its own id (ids are globally
                                 // unique across sides — no per-side selection needed).
@@ -7531,7 +7606,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                         killerId: victim.id,
                                         byDirectDamage: true,
                                         isReflected: true,
-                                        // A direct bounce is redirected by the attacker's
+                                        // A ship's bounce is redirected by the attacker's
                                         // Protection, spends its Titanite/Exposed and uses the
                                         // reflector's shield penetration (R162); the gear set's
                                         // bounce does none of that.
@@ -7604,11 +7679,12 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 // ability-performed already exists → emit inline. Stamp
                                 // duringTurnOf with the acting attacker either way; didCrit omitted
                                 // (reflects don't crit).
+                                const reflectRow = loggedHitFigures(reflectOutcome, reflected);
                                 if (deferReflectLogs) {
                                     pendingReflectLogs.push({
                                         sourceId: victim.id,
                                         targetId: attacker.id,
-                                        amount: reflected,
+                                        ...reflectRow,
                                         subAttack: currentSubAttackIndex,
                                     });
                                 } else {
@@ -7617,28 +7693,26 @@ export function runCombat(rawInput: CombatEngineInput): {
                                         sourceId: victim.id,
                                         targetId: attacker.id,
                                         round: r,
-                                        amount: reflected,
+                                        ...reflectRow,
                                         reactive: true,
                                         duringTurnOf: actingActorId,
                                         triggerActorId: actingActorId,
                                     });
                                 }
-                                if (reflectAim) {
-                                    landReactiveHit(
-                                        victim,
-                                        attacker,
-                                        reflected,
-                                        false,
-                                        reflectOutcome,
-                                        reflectStasisAtImpact,
-                                        false,
-                                        reflectAim,
-                                        true
-                                    );
-                                    // Damage the reflector dealt, so his standing leech pays on it
-                                    // like a counter's (R165).
-                                    payReactiveHitLeech(victim, reflectOutcome);
-                                }
+                                landReactiveHit(
+                                    victim,
+                                    attacker,
+                                    reflected,
+                                    false,
+                                    reflectOutcome,
+                                    reflectStasisAtImpact,
+                                    false,
+                                    reflectAim,
+                                    true
+                                );
+                                // Damage the reflector dealt, so his standing leech pays on it
+                                // like a counter's (R165, R197).
+                                payReactiveHitLeech(victim, reflectOutcome);
                             }
                         }
                     }
@@ -7663,7 +7737,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             //  - DoT-tick batches and bomb/detonation portions (`byDirectDamage: false` / a
             //    non-zero `bombPortion`);
             //  - the Reflect gear set's bounce (`isReflected` without `directReflect`) —
-            //    `reflectedDamageParts` gets status channel 0 for it;
+            //    `reflectedDamageParts` gets its status channel without Exposed;
             //  - a Protection transfer (`isProtectionTransfer`) — the redirected chunk comes off
             //    the ORIGINAL victim's cascade;
             //  - a Bomb splash copy (`isSplashCopy`).
@@ -7766,12 +7840,11 @@ export function runCombat(rawInput: CombatEngineInput): {
         // WHY THE CALLERS CANNOT JUST BOOK THE AMOUNT THEY PASSED IN. A burst arrives at
         // `applyVictimDamage` stamped `byDirectDamage: true` with the whole amount in
         // `bombPortion`, and only the two CONSUMABLE steps (Hit Mitigation, Shield Converter) carry
-        // a `bombPortion === 0` guard. The incoming-block step, the Protection cascade and the
-        // standing Voron/Orel transform have no such guard, so all three fire on a burst and all
-        // three make the funnel record something OTHER than what the caller passed in. #293 swept
-        // every direct-damage caller onto `incomingBooked` for exactly this reason; the detonation
-        // sites were left behind and double-counted every redirected chunk (Meatshield/Lionheart
-        // Protection is live corpus kit, so this was reachable, not theoretical).
+        // a `bombPortion === 0` guard. The incoming-block step has no such guard, so it fires on a
+        // burst and makes the funnel record something OTHER than what the caller passed in. A
+        // Protection cascade never touches a burst (R181), so the redirected term below is 0 for
+        // every burst today; it stays on the shared accessor so a caller cannot drift from the
+        // funnel's own figures.
         //
         // The two terms, and why the split is not arbitrary:
         //  • `incomingBooked` — the victim's OWN booked intake, so a blocked or DoT-transformed
@@ -7947,12 +8020,20 @@ export function runCombat(rawInput: CombatEngineInput): {
         };
 
         /** A Protection-split reactive hit also reports what its victim took, so the log rows the
-         *  victim at that rather than the hit as thrown. */
+         *  victim at that rather than the hit as thrown; a hit converted into a DoT is flagged so
+         *  the log shows no damage number for it. */
         const splitFigures = (
             outcome: AppliedVictimDamage | undefined
-        ): { protectionSplit: true; taken: number } | undefined =>
-            outcome?.protectionSplit
-                ? { protectionSplit: true, taken: outcome.incomingBooked }
+        ): { protectionSplit?: true; taken?: number; convertedToDot?: true } | undefined =>
+            outcome
+                ? {
+                      ...(outcome.protectionSplit
+                          ? { protectionSplit: true as const, taken: outcome.incomingBooked }
+                          : {}),
+                      ...((outcome.transformedToDot ?? 0) > 0
+                          ? { convertedToDot: true as const }
+                          : {}),
+                  }
                 : undefined;
 
         /** Pays the owner's standing damage-dealt leech for one landed reactive hit (a counter or a
@@ -9699,13 +9780,14 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // scratch copy; the detonated entries leave the live container afterwards.
                 const liveBombs = victim.pendingBombs;
                 const bombsLeft = liveBombs.slice();
-                // The recipe carries the detonator's two DoT-damage sides; each victim adds its own
-                // live Inc. DoT Damage Up to the incoming side, the term a tick on it reads
-                // (`victimDotMult`).
+                // The detonator's recipe, resolved per victim through the factors a tick on that
+                // victim reads: `victimDotMult` (both sides of `composeDotDamageFactor`, the
+                // gated dealer bonuses) and the victim's own DoT reductions.
                 const victimRecipe: DetonationRecipe = {
                     ...recipe,
-                    incomingDotPct:
-                        recipe.incomingDotPct + victimIncomingDotDamagePct(statusEngine, victim.id),
+                    dotFactorFor: (dotType) =>
+                        victimDotMult(recipe, victim, dotType) *
+                        incomingDotReductionFor(victim.id, dotType),
                 };
                 const result = detonateContainers(victimRecipe, {
                     corrosionEntries: victim.corrosionEntries,
@@ -9716,13 +9798,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                 const detonatedBombs = liveBombs.filter((b) => !bombsLeft.includes(b));
                 let bombDelivered = 0;
                 if (result.bomb > 0) {
-                    const bombOutcome = applyVictimDamage(result.bomb, victim, sink, {
-                        killerId: actorId,
-                        byDirectDamage: true,
-                        bombPortion: result.bomb, // full shield drain, no pen
-                        shieldPenetrationPct: 0,
-                    });
-                    bombDelivered = detonationDelivered(bombOutcome);
+                    // Announced before the funnel lands it, like every other burst: the
+                    // combat log reads the rows the funnel raises (Protection shares) against it.
                     bus.emit({
                         type: 'bomb-detonated',
                         actorId,
@@ -9738,6 +9815,13 @@ export function runCombat(rawInput: CombatEngineInput): {
                         // the bomb was worth, the same way `attacked` reports a hit's pre-transfer
                         // value. Only the numeric channels below move to the delivered amount.
                     });
+                    const bombOutcome = applyVictimDamage(result.bomb, victim, sink, {
+                        killerId: actorId,
+                        byDirectDamage: true,
+                        bombPortion: result.bomb, // full shield drain, no pen
+                        shieldPenetrationPct: 0,
+                    });
+                    bombDelivered = detonationDelivered(bombOutcome);
                     // #355 B1: the victim's own row gets its OWN booked intake — a Protection
                     // cascade already booked the redirected chunk on each protector's row, so
                     // adding it here too counted it twice.
@@ -10547,6 +10631,8 @@ export function runCombat(rawInput: CombatEngineInput): {
             protectionSplit: boolean;
             /** The hit was no direct damage on this victim — `attacked.notDirectDamage`. */
             notDirectDamage: boolean;
+            /** The hit became a DoT on this victim — `attacked.convertedToDot`. */
+            convertedToDot: boolean;
             shieldWasHit: boolean;
             hitOutcomes: boolean[];
         }
@@ -10885,10 +10971,11 @@ export function runCombat(rawInput: CombatEngineInput): {
                     detonationTargets.set(victim.id, victim);
                     // A hit that was no direct damage on this victim (`directlyDamagesVictim`) wakes
                     // no "directly damaged" reaction (counters, Cultivator's on-ally-attacked
-                    // repair, Tenacity). A hit fully transformed into a DoT raises no `attacked` at
-                    // all; a hit Protection moved wholly onto protectors raises one stamped
-                    // `notDirectDamage`, so the combat log still rows the attack against its target.
-                    if (direct || outcome.fullyRedirected) {
+                    // repair, Tenacity). A hit fully transformed into a DoT, or moved wholly onto
+                    // protectors, raises an `attacked` stamped `notDirectDamage` all the same, so
+                    // the combat log still rows the attack against its target.
+                    const converted = (outcome.transformedToDot ?? 0) > 0;
+                    if (direct || outcome.fullyRedirected || converted) {
                         // Bucket by sub-attack first. `subAttackIndex` is OPTIONAL on the callback
                         // contract; applyPositionalDamage always supplies it, and `?? 0` degrades
                         // to a single bucket for any caller that does not.
@@ -10903,10 +10990,12 @@ export function runCombat(rawInput: CombatEngineInput): {
                             takenDamage: 0,
                             protectionSplit: false,
                             notDirectDamage: false,
+                            convertedToDot: false,
                             shieldWasHit: false,
                             hitOutcomes: [],
                         };
                         prev.damage += damage;
+                        prev.convertedToDot ||= converted;
                         prev.protectionSplit ||= outcome.protectionSplit === true;
                         prev.notDirectDamage ||= !direct;
                         // The funnel's own figure for this victim, accumulated beside the thrown
@@ -12344,31 +12433,14 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 procStandingLeechesPerVictim(sourceId, damage, dotType);
                             }
                         },
-                        // Vortex Veil: reduce the carrier's incoming DoT ticks when the tank
-                        // equips it. The condition 'dot-inferno-corrosion' gates on dotType being
-                        // set, so querying with either dotType returns the same %. Absent → 0.
+                        // The tank's own DoT reductions (Vortex Veil, Voron's passive).
                         incomingDotFactor: (dotType) =>
-                            composeDotReductionFactor(
-                                incomingReductionPartsForHit(incomingAbilitiesOf(healTarget.id), {
-                                    didCrit: false,
-                                    attackerStealthed: false,
-                                    victimStealthed: isStealthed(healTarget.id),
-                                    victimTurnBlocked: isTurnBlocked(healTarget.id),
-                                    hitIndexThisRound: 0,
-                                    dotType,
-                                    // A DoT tick has no single attacker (aggregate of appliers) —
-                                    // 'attacker-has-dot' abilities are scope:'direct' only, so this
-                                    // never matters (scope-filtered before conditionMet reads it).
-                                    attackerHasDot: false,
-                                    victimHasBarrierRecharging: hasBarrierRecharging(healTarget.id),
-                                    victimHasShield: hasShield(healTarget.id),
-                                    selfHpPct: selfHpPctOf(healTarget.id),
-                                    // Same no-single-attacker reasoning as attackerHasDot above —
-                                    // 'attacker-taunted-or-provoke' abilities are 'transform-
-                                    // incoming-to-dot' (direct-only, gated inside applyVictimDamage
-                                    // itself), so this reduction-path ctx never reads it.
-                                    attackerTauntedOrProvoked: false,
-                                })
+                            incomingDotReductionFor(healTarget.id, dotType),
+                        // Its live Inc. DoT Damage Up raises a hit it converted into a DoT.
+                        convertedDotDamageFactor: () =>
+                            composeDotDamageFactor(
+                                0,
+                                victimIncomingDotDamagePct(statusEngine, healTarget.id)
                             ),
                         // The tank is the ticking victim.
                         dotMultFor: (ctx, dotType) => victimDotMult(ctx, healTarget, dotType),
@@ -12505,24 +12577,14 @@ export function runCombat(rawInput: CombatEngineInput): {
                                     procStandingLeechesPerVictim(sourceId, damage, dotType);
                                 }
                             },
-                            // Vortex Veil: reduce this carrier's incoming DoT ticks.
+                            // This actor's own DoT reductions (Vortex Veil, Voron's passive).
                             incomingDotFactor: (dotType) =>
-                                composeDotReductionFactor(
-                                    incomingReductionPartsForHit(incomingAbilitiesOf(actor.id), {
-                                        didCrit: false,
-                                        attackerStealthed: false,
-                                        victimStealthed: isStealthed(actor.id),
-                                        victimTurnBlocked: isTurnBlocked(actor.id),
-                                        hitIndexThisRound: 0,
-                                        dotType,
-                                        // See the sibling tank-path call above: no single attacker
-                                        // on a DoT tick; harmless (scope:'direct'-only condition).
-                                        attackerHasDot: false,
-                                        victimHasBarrierRecharging: hasBarrierRecharging(actor.id),
-                                        victimHasShield: hasShield(actor.id),
-                                        selfHpPct: selfHpPctOf(actor.id),
-                                        attackerTauntedOrProvoked: false,
-                                    })
+                                incomingDotReductionFor(actor.id, dotType),
+                            // Its live Inc. DoT Damage Up raises a hit it converted into a DoT.
+                            convertedDotDamageFactor: () =>
+                                composeDotDamageFactor(
+                                    0,
+                                    victimIncomingDotDamagePct(statusEngine, actor.id)
                                 ),
                             // This actor IS the ticking victim.
                             dotMultFor: (ctx, dotType) => victimDotMult(ctx, actor, dotType),
@@ -13794,7 +13856,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         // guard against the fixed round-end state first, then applying from that snapshot, makes the
         // spread order-independent: a holder spreads this round only if it already carried Corrosion
         // when the round ended (a stack received THIS round spreads only the FOLLOWING round).
-        const toxicSpreaders: CombatActor[] = [];
+        const toxicHolders: CombatActor[] = [];
         for (const holder of allActors) {
             if (holder.destroyedRound !== undefined) continue;
             // TIMED per-victim channel only — deliberately NOT `ownerDebuffNames`, the broad
@@ -13813,8 +13875,18 @@ export function runCombat(rawInput: CombatEngineInput): {
             // non-expiring, by construction — see constants/toxicOverflow.ts.
             if (!holdsToxicOverflow(statusEngine, holder.id)) continue;
             if (dotStackCount(holder.corrosionEntries) < 1) continue;
-            toxicSpreaders.push(holder);
+            toxicHolders.push(holder);
         }
+        // The holders spread in TURN ORDER, both sides (each spread rolls the applier's landing
+        // gate, so the order decides which ally gets which roll); never roster order.
+        const toxicSpreaders = orderByTurnPriority(
+            toxicHolders.map((holder) => ({
+                holder,
+                side: isEnemySide(holder.id) ? 'enemy' : 'player',
+                speed: effectiveSpeedOf(holder),
+                position: holder.position,
+            }))
+        ).map((entry) => entry.holder);
         // Every spread of this pass carries ONE reaction firing id: together they are one root
         // cast (`rootCastKey`, triggers.ts).
         const spreadFiringId = toxicSpreaders.length > 0 ? ++reactionFiringSeq : 0;

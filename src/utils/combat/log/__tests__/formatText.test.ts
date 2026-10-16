@@ -177,4 +177,52 @@ describe('formatCombatLogText', () => {
             ].join('\n')
         );
     });
+
+    it('names a converted hit and a Protection share', () => {
+        const text = formatCombatLogText(
+            [
+                {
+                    round: 1,
+                    startOfRound: [],
+                    turns: [
+                        {
+                            actorId: 'p1',
+                            chargeBefore: 0,
+                            chargeMax: 0,
+                            entries: [
+                                {
+                                    kind: 'attack',
+                                    actorId: 'p1',
+                                    targets: [
+                                        { targetId: 'e1', didHit: true, convertedToDot: true },
+                                    ],
+                                    reactions: [
+                                        {
+                                            kind: 'attack',
+                                            actorId: 'e1',
+                                            note: 'Protection',
+                                            targets: [{ targetId: 'p1', amount: 100.4 }],
+                                            reactions: [],
+                                        },
+                                    ],
+                                },
+                            ],
+                        },
+                    ],
+                    endOfRound: [],
+                },
+            ],
+            roster
+        );
+
+        expect(text).toBe(
+            [
+                '=== ROUND 1',
+                '-- TURN P.Alpha@T1',
+                '  attack P.Alpha@T1 -> E.Beta@M2 converted to DoT',
+                '    attack E.Beta@M2 {Protection} -> P.Alpha@T1 100',
+                '',
+            ].join('\n')
+        );
+    });
 });

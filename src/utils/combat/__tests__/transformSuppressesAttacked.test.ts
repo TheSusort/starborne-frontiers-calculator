@@ -2,8 +2,8 @@
  * Bug: when Voron transforms an incoming direct hit into a DoT (no direct damage lands), the
  * engine still emits an `attacked` event carrying the raw pre-transform damage. Downstream
  * "directly damaged" reactions (Cultivator's on-ally-attacked 8% repair) then fire even though
- * NO direct damage occurred. A fully-transformed hit is not a direct hit, so it must emit no
- * `attacked` event.
+ * NO direct damage occurred. A fully-transformed hit is not a direct hit, so its `attacked` event
+ * is stamped `notDirectDamage` (and `convertedToDot`) and no such reaction answers it.
  *
  * ⚠️ "When Voron is stasised the transform passive doesn't run" IS THE GAME RULE (owner,
  * 2026-09-15: EVERY passive is disabled while its owner is stasised OR disabled, so the hit
@@ -205,8 +205,8 @@ function attackedFor(input: CombatEngineInput, targetId: string) {
     return attacked;
 }
 
-describe('a fully DoT-transformed hit emits no `attacked` event', () => {
-    it('Voron (transform active) is hit → NO attacked event fires', () => {
+describe('a fully DoT-transformed hit emits only a not-direct `attacked` event', () => {
+    it('Voron (transform active) is hit → the `attacked` is stamped notDirectDamage + convertedToDot', () => {
         const attacked = attackedFor(
             BASE({
                 numRounds: 1,
@@ -215,7 +215,14 @@ describe('a fully DoT-transformed hit emits no `attacked` event', () => {
             }),
             'voron'
         );
-        expect(attacked).toHaveLength(0);
+        // The event exists so the combat log rows the converted hit; every "directly damaged"
+        // listener returns on `notDirectDamage` (`protectionConversionRows.integration.test.ts`
+        // pins that against Cultivator's repair).
+        expect(attacked.length).toBeGreaterThan(0);
+        for (const e of attacked) {
+            expect(e.notDirectDamage).toBe(true);
+            expect(e.convertedToDot).toBe(true);
+        }
     });
 
     it('control: transform gate CLOSED (stasis/disabled analogue) → hit lands, attacked FIRES', () => {

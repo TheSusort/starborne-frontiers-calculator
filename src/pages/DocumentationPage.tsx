@@ -2951,6 +2951,16 @@ const DocumentationPage: React.FC = () => {
                                         Works for both teams.
                                     </p>
                                     <p className="text-theme-text mb-2">
+                                        <span className="text-primary">Taunt and Protection:</span>{' '}
+                                        When several enemy ships hold Taunt, the attacker picks
+                                        among them by its normal targeting order: its own row first,
+                                        then the next rows, front to back. Two protectors at the
+                                        same speed soak in board position order, top row first.
+                                        Lionheart&apos;s start-of-round Protection refills him to 10
+                                        stacks, so a stolen stack is restored the next round. Works
+                                        for both teams.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
                                         <span className="text-primary">Own-HP Conditions:</span> A
                                         passive that depends on the ship&apos;s own HP reads that
                                         ship&apos;s live HP wherever it is placed, on either team:
@@ -3177,11 +3187,19 @@ const DocumentationPage: React.FC = () => {
                                         detonate. If the first destroys the ship instead, the rest
                                         still detonate, and every Bomb on a destroyed ship splashes
                                         its neighbours once, including Bombs a skill detonated in
-                                        the lethal blow. Reactions to an enemy cleansing a debuff
-                                        (Pestilence, Larkspur, Grif, Arum, Yarrow) also hear the
-                                        cleanses an enemy&apos;s passive performs (Nuqtu, Purifier,
-                                        AEGIS, Hermes, Howler), but not a duration cut; a cleanse
-                                        that such a reaction provoked triggers them again.
+                                        the lethal blow. Each Inferno stack is sized on its
+                                        applier&apos;s attack when it was applied, whoever ticks or
+                                        detonates it. A detonation is cut by the victim&apos;s own
+                                        damage-over-time reductions (Voron, Vortex Veil) and raised
+                                        by Wildfire&apos;s Scorching Radiation bonus exactly as a
+                                        tick is, and Inc. DoT Damage Up increases the damage dealt
+                                        by each tick of a hit converted into a damage-over-time
+                                        effect. Cheat Death never expires on a timer: it stays until
+                                        a lethal hit uses it. Reactions to an enemy cleansing a
+                                        debuff (Pestilence, Larkspur, Grif, Arum, Yarrow) also hear
+                                        the cleanses an enemy&apos;s passive performs (Nuqtu,
+                                        Purifier, AEGIS, Hermes, Howler), but not a duration cut; a
+                                        cleanse that such a reaction provoked triggers them again.
                                         Pestilence&apos;s Corrosion lands on the enemy that
                                         cleansed. A count written after an infliction in the same
                                         skill includes what that skill landed, enemy by enemy:
@@ -3308,10 +3326,13 @@ const DocumentationPage: React.FC = () => {
                                         (their attack times the skill&apos;s percentage), boosted by
                                         the reflecting ship&apos;s own Outgoing Damage Up, then
                                         reduced by the attacker&apos;s Defense and damage
-                                        reductions. Critical hits and the attacker&apos;s own damage
-                                        buffs do not change it. A shield that absorbs the hit does
-                                        not stop the reflect, but a hit that is blocked or nullified
-                                        by a Barrier reflects nothing.
+                                        reductions. The attacker&apos;s attack as its buffs and
+                                        debuffs leave it counts (Attack Up II raises the reflect by
+                                        30%), and so does the affinity matchup between the two
+                                        ships. Critical hits and the attacker&apos;s own Outgoing
+                                        Damage Up do not change it. A shield that absorbs the hit
+                                        does not stop the reflect, but a hit that is blocked or
+                                        nullified by a Barrier reflects nothing.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">
@@ -3325,10 +3346,17 @@ const DocumentationPage: React.FC = () => {
                                         attacker&apos;s protector&apos;s Protection, uses
                                         Nosorog&apos;s shield penetration, and is boosted by and
                                         spends the attacker&apos;s Exposed, and spends a Titanite
-                                        Plating stack. It is damage Nosorog dealt, so his own
-                                        damage-dealt leech (the Leech set) repairs off it, as it
-                                        does off a counter-attack. The Reflect gear set&apos;s
-                                        bounce is not direct damage and does none of this. A hit
+                                        Plating stack. A stealthed attacker takes it reduced by its
+                                        stealth-conditional damage reductions (Voidshade, Wusheng),
+                                        as it does a counter-attack. It is damage Nosorog dealt, so
+                                        his own damage-dealt leech (the Leech set) repairs off it,
+                                        as it does off a counter-attack. The Reflect gear set&apos;s
+                                        bounce is direct damage too: the same reactions answer it
+                                        (Warden, Isha, every counter-attacker), the attacker&apos;s
+                                        Inc. Damage Up and Down change it, and the wearer&apos;s
+                                        Leech set repairs off it. It is not redirected by Protection
+                                        and does not read or spend Exposed or Titanite Plating. A
+                                        ship with both reflects twice, one bounce per source. A hit
                                         that Protection moves entirely onto the protector
                                         (Lionheart&apos;s 10 stacks) is not direct damage to the
                                         ship it was aimed at: that ship does not counter or react,
@@ -4540,9 +4568,11 @@ const DocumentationPage: React.FC = () => {
                                     <li>
                                         A fight lasts at most 30 rounds. If both teams still have a
                                         ship standing when the last round ends, the enemy wins, as a
-                                        timeout is a defeat in the game. The enemy also wins when
-                                        both teams lose their last ship in the same round, so every
-                                        fight has a winner
+                                        timeout is a defeat in the game. When both teams lose their
+                                        last ship in the same round, the side that dealt the final
+                                        killing blow wins (a dying ship&apos;s counter or reaction
+                                        that kills the last opposing ship wins it for that side), so
+                                        every fight has a winner
                                     </li>
                                     <li>
                                         Raise the run count to repeat the fight over that many
@@ -4786,14 +4816,19 @@ const DocumentationPage: React.FC = () => {
                                         <strong>Area-of-effect attacks and heals:</strong> Every
                                         affected ship is listed individually with its own damage or
                                         heal amount and resulting HP percentage — not just the
-                                        primary target.
+                                        primary target. When several rows land on one ship at the
+                                        same moment (a ship&apos;s Damage over Time ticks), only the
+                                        last of them shows the HP percentage.
                                     </li>
                                     <li>
                                         <strong>Reactions shown in context:</strong> Counterattacks,
                                         on-crit heals, reflects, reactive shields, and other
                                         triggered effects appear nested under the action that caused
                                         them, in the correct turn — not attributed to the reacting
-                                        ship&apos;s own turn.
+                                        ship&apos;s own turn. A share of a hit that Protection moves
+                                        onto a protector is labelled Protection and nests under the
+                                        hit it came from, with the protector&apos;s own HP after
+                                        each share.
                                     </li>
                                     <li>
                                         <strong>Accurate per-ally heals:</strong> When a ship heals
@@ -4807,7 +4842,12 @@ const DocumentationPage: React.FC = () => {
                                         enemy hit alike, and before any shield absorbs it (a row
                                         whose hit met a shield says &quot;shield hit&quot;). Extra
                                         damage a passive adds to the same hit is included in that
-                                        row.
+                                        row. Where Protection moves part of a hit, the target&apos;s
+                                        row shows the share it kept and each protector&apos;s share
+                                        has its own row. A hit that Voron, Orel or Hit Mitigation
+                                        turns into a Damage over Time effect shows &quot;converted
+                                        to DoT&quot; and no number or HP: it landed no direct
+                                        damage, and the ticks that follow carry it.
                                     </li>
                                     <li>
                                         <strong>Ticks, strips and splashes have rows:</strong>{' '}
@@ -4815,9 +4855,9 @@ const DocumentationPage: React.FC = () => {
                                         the start of their holder&apos;s turn, before the ship acts.
                                         A shield strip (APEX, Laika, Malvex) shows how much shield
                                         it removed, and a bomb carrier&apos;s death splash shows the
-                                        damage each neighbour took. A ship killed by a DoT tick has
-                                        no killer named; a Bomb kill names the ship that planted the
-                                        Bomb.
+                                        damage each neighbour took. A ship killed by a DoT tick or a
+                                        DoT detonation has no killer named; a Bomb kill names the
+                                        ship that planted the Bomb.
                                     </li>
                                     <li>
                                         <strong>Wasted repairs and shields are named:</strong> Heal
@@ -4900,13 +4940,15 @@ const DocumentationPage: React.FC = () => {
                                     of Iridium&apos;s passive, Hardened and Hyperion Gaze applies),{' '}
                                     <strong>Vortex Veil</strong> (reduced Inferno and Corrosion
                                     damage), and <strong>Ironclad</strong> (a chance to block a
-                                    repeated hit from the same attacker). Damage reductions combine
-                                    the way the game combines them: buffs and debuffs such as Inc.
-                                    Damage Down add together; ship passive reductions add together
-                                    and then multiply with those buffs; each gear set, implant and
-                                    squad leader reduction multiplies on its own; and all of it
-                                    together can cut a hit by at most 70%, not counting Defense.
-                                    Outgoing-damage amplification is also modeled:{' '}
+                                    repeated hit from the same attacker). Neither Ironclad nor
+                                    Shadowguard rolls on a share of damage taken through Protection,
+                                    and that share does not count as a hit for Ironclad. Damage
+                                    reductions combine the way the game combines them: buffs and
+                                    debuffs such as Inc. Damage Down add together; ship passive
+                                    reductions add together and then multiply with those buffs; each
+                                    gear set, implant and squad leader reduction multiplies on its
+                                    own; and all of it together can cut a hit by at most 70%, not
+                                    counting Defense. Outgoing-damage amplification is also modeled:{' '}
                                     <strong>Menace</strong> (chance to amplify a hit&apos;s damage
                                     on a critical hit), <strong>Giant Slayer</strong> (chance to
                                     amplify a hit&apos;s damage against an enemy with higher
@@ -5045,7 +5087,9 @@ const DocumentationPage: React.FC = () => {
                                     for any teammate. When more than one ally holds Protection, the
                                     faster protector intercepts first and only its unabsorbed
                                     remainder cascades to the next. A skill that targets the whole
-                                    battlefield (<strong>Curator</strong>) is never redirected.{' '}
+                                    battlefield (<strong>Curator</strong>) is never redirected, and
+                                    neither are Bombs, Echoing Bursts, Bomb death splashes or damage
+                                    over time: the ship they land on takes all of it.{' '}
                                     <strong>Lionheart</strong> uses a once-per-round variant: it
                                     gains 10 stacks of Protection at the start of each round, and
                                     after it absorbs the first hit redirected from an ally, it loses
