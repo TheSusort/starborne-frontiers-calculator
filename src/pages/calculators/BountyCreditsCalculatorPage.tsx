@@ -8,7 +8,7 @@ import { DataTable, Column } from '../../components/ui/tables/DataTable';
 import Seo from '../../components/seo/Seo';
 import { SEO_CONFIG } from '../../constants/seo';
 import { RARITIES, RarityName } from '../../constants/rarities';
-import { BOUNTIES, BountyId } from '../../constants/bounties';
+import { BACKGROUND_TIERS, BOUNTIES, BackgroundTierId, BountyId } from '../../constants/bounties';
 import {
     availableLevels,
     bestLevels,
@@ -31,6 +31,9 @@ interface BountySettings {
     overheadSeconds: number;
     secondsOverrides: Record<string, number>;
     metric: RankMetric;
+    mode: 'normal' | 'background';
+    defaultTier: BackgroundTierId;
+    tierOverrides: Record<string, BackgroundTierId>;
 }
 
 export const DEFAULT_SETTINGS: BountySettings = {
@@ -44,7 +47,12 @@ export const DEFAULT_SETTINGS: BountySettings = {
     overheadSeconds: 5,
     secondsOverrides: {},
     metric: 'energy',
+    mode: 'normal',
+    defaultTier: 'win',
+    tierOverrides: {},
 };
+
+const isTierId = (v: unknown): v is BackgroundTierId => BACKGROUND_TIERS.some((t) => t.id === v);
 
 const isFiniteNumber = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 
@@ -52,6 +60,7 @@ export const isSettings = (v: unknown): v is BountySettings => {
     if (!v || typeof v !== 'object') return false;
     const s = v as Record<string, unknown>;
     const overrides = s.secondsOverrides;
+    const tierOverrides = s.tierOverrides;
     return (
         BOUNTIES.some((b) => b.id === s.bountyId) &&
         Array.isArray(s.stars) &&
@@ -68,7 +77,13 @@ export const isSettings = (v: unknown): v is BountySettings => {
         typeof overrides === 'object' &&
         !Array.isArray(overrides) &&
         Object.values(overrides).every(isFiniteNumber) &&
-        (s.metric === 'run' || s.metric === 'energy' || s.metric === 'minute')
+        (s.metric === 'run' || s.metric === 'energy' || s.metric === 'minute') &&
+        (s.mode === 'normal' || s.mode === 'background') &&
+        isTierId(s.defaultTier) &&
+        !!tierOverrides &&
+        typeof tierOverrides === 'object' &&
+        !Array.isArray(tierOverrides) &&
+        Object.values(tierOverrides).every(isTierId)
     );
 };
 
@@ -78,10 +93,22 @@ const METRIC_OPTIONS = [
     { value: 'minute', label: 'Credits per minute' },
 ];
 
+const MODE_OPTIONS = [
+    { value: 'normal', label: 'Normal' },
+    { value: 'background', label: 'Background' },
+];
+
+const formatMinutes = (m: number) => String(m);
+const TIER_OPTIONS = BACKGROUND_TIERS.map((t) => ({
+    value: t.id,
+    label: `${t.label} (${formatMinutes(t.minutes)} min)`,
+}));
+
 const STAR_OPTIONS = [1, 2, 3, 4, 5, 6].map((s) => ({ value: String(s), label: `${s}★` }));
 const RARITY_OPTIONS = Object.values(RARITIES).map((r) => ({ value: r.value, label: r.label }));
 
 const fmt = (n: number) => Math.round(n).toLocaleString();
+const fmtEnergy = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
 const clampPct = (n: number) => Math.min(100, Math.max(0, n));
 const parseNum = (raw: string) => (raw === '' || Number.isNaN(Number(raw)) ? null : Number(raw));
 
@@ -112,12 +139,18 @@ const BountyCreditsCalculatorPage: React.FC = () => {
                             generalSellPct: settings.generalSellPct,
                         },
                         settings.extraCreditsPct,
-                        {
-                            mode: 'normal',
-                            secondsPerFight:
-                                settings.secondsOverrides[lvl.level] ?? settings.secondsPerFight,
-                            overheadSeconds: settings.overheadSeconds,
-                        }
+                        settings.mode === 'background'
+                            ? {
+                                  mode: 'background',
+                                  tier: settings.tierOverrides[lvl.level] ?? settings.defaultTier,
+                              }
+                            : {
+                                  mode: 'normal',
+                                  secondsPerFight:
+                                      settings.secondsOverrides[lvl.level] ??
+                                      settings.secondsPerFight,
+                                  overheadSeconds: settings.overheadSeconds,
+                              }
                     )
                 )
                 .reverse(),
@@ -134,7 +167,12 @@ const BountyCreditsCalculatorPage: React.FC = () => {
             label: 'Level',
             render: (r) => <span data-testid="bounty-level-row">{r.level}</span>,
         },
-        { key: 'energy', label: 'Energy', align: 'right' },
+        {
+            key: 'energy',
+            label: 'Energy',
+            align: 'right',
+            render: (r) => fmtEnergy(r.energy),
+        },
         {
             key: 'fixed',
             label: 'Bounty credits',
@@ -144,37 +182,66 @@ const BountyCreditsCalculatorPage: React.FC = () => {
         { key: 'sale', label: 'Gear sales', align: 'right', render: (r) => fmt(r.saleCredits) },
         { key: 'total', label: 'Per run', align: 'right', render: (r) => fmt(r.total) },
         { key: 'perEnergy', label: 'Per energy', align: 'right', render: (r) => fmt(r.perEnergy) },
-        {
-            key: 'seconds',
-            label: 'Sec / fight',
-            align: 'right',
-            render: (r) => {
-                const seconds = settings.secondsOverrides[r.level] ?? settings.secondsPerFight;
-                return (
-                    <InlineNumberEdit
-                        value={seconds ?? undefined}
-                        allowEmpty
-                        min={1}
-                        className={
-                            settings.secondsOverrides[r.level] !== undefined ? 'text-primary' : ''
-                        }
-                        label={`Seconds per fight, level ${r.level}`}
-                        onSave={(v) => {
-                            const next = { ...settings.secondsOverrides };
-                            // An unchanged, cleared or non-positive value falls back to the default.
-                            if (v === undefined || v <= 0 || v === settings.secondsPerFight) {
-                                delete next[r.level];
-                            } else {
-                                next[r.level] = v;
-                            }
-                            update({ secondsOverrides: next });
-                        }}
-                    >
-                        {seconds ?? '—'}
-                    </InlineNumberEdit>
-                );
-            },
-        },
+        settings.mode === 'background'
+            ? {
+                  key: 'tier',
+                  label: 'Tier',
+                  render: (r) => {
+                      const overridden = settings.tierOverrides[r.level] !== undefined;
+                      return (
+                          <Select
+                              aria-label={`Tier, level ${r.level}`}
+                              className={overridden ? 'text-primary' : ''}
+                              options={TIER_OPTIONS}
+                              value={settings.tierOverrides[r.level] ?? settings.defaultTier}
+                              onChange={(v) => {
+                                  const next = { ...settings.tierOverrides };
+                                  // Choosing the default tier clears the row's override.
+                                  if (v === settings.defaultTier) {
+                                      delete next[r.level];
+                                  } else {
+                                      next[r.level] = v as BackgroundTierId;
+                                  }
+                                  update({ tierOverrides: next });
+                              }}
+                          />
+                      );
+                  },
+              }
+            : {
+                  key: 'seconds',
+                  label: 'Sec / fight',
+                  align: 'right',
+                  render: (r) => {
+                      const seconds =
+                          settings.secondsOverrides[r.level] ?? settings.secondsPerFight;
+                      return (
+                          <InlineNumberEdit
+                              value={seconds ?? undefined}
+                              allowEmpty
+                              min={1}
+                              className={
+                                  settings.secondsOverrides[r.level] !== undefined
+                                      ? 'text-primary'
+                                      : ''
+                              }
+                              label={`Seconds per fight, level ${r.level}`}
+                              onSave={(v) => {
+                                  const next = { ...settings.secondsOverrides };
+                                  // An unchanged, cleared or non-positive value falls back to the default.
+                                  if (v === undefined || v <= 0 || v === settings.secondsPerFight) {
+                                      delete next[r.level];
+                                  } else {
+                                      next[r.level] = v;
+                                  }
+                                  update({ secondsOverrides: next });
+                              }}
+                          >
+                              {seconds ?? '—'}
+                          </InlineNumberEdit>
+                      );
+                  },
+              },
         {
             key: 'perMinute',
             label: 'Per minute',
@@ -224,29 +291,62 @@ const BountyCreditsCalculatorPage: React.FC = () => {
                                 })
                             }
                         />
-                        <Input
-                            label="Seconds per fight"
-                            helpLabel="Default for every level. Override a single level in the table."
-                            type="number"
-                            min={1}
-                            value={settings.secondsPerFight ?? ''}
-                            onChange={(e) =>
-                                update({
-                                    secondsPerFight: positiveOrNull(parseNum(e.target.value)),
-                                })
-                            }
+                        <Select
+                            label="Battle mode"
+                            helpLabel="Background battles cost 10% less energy; their time comes from the tier you earned on each level."
+                            options={MODE_OPTIONS}
+                            value={settings.mode}
+                            onChange={(v) => update({ mode: v as BountySettings['mode'] })}
                         />
-                        <Input
-                            label="Seconds between fights"
-                            type="number"
-                            min={0}
-                            value={settings.overheadSeconds}
-                            onChange={(e) =>
-                                update({
-                                    overheadSeconds: Math.max(0, parseNum(e.target.value) ?? 0),
-                                })
-                            }
-                        />
+                        {settings.mode === 'background' ? (
+                            <Select
+                                label="Default tier"
+                                helpLabel="Default for every level. Override a single level in the table."
+                                options={TIER_OPTIONS}
+                                value={settings.defaultTier}
+                                onChange={(v) => {
+                                    const tier = v as BackgroundTierId;
+                                    // Rows already on the new default no longer differ from it.
+                                    const next = Object.fromEntries(
+                                        Object.entries(settings.tierOverrides).filter(
+                                            ([, t]) => t !== tier
+                                        )
+                                    );
+                                    update({ defaultTier: tier, tierOverrides: next });
+                                }}
+                            />
+                        ) : (
+                            <>
+                                <Input
+                                    label="Seconds per fight"
+                                    helpLabel="Default for every level. Override a single level in the table."
+                                    type="number"
+                                    min={1}
+                                    value={settings.secondsPerFight ?? ''}
+                                    onChange={(e) =>
+                                        update({
+                                            secondsPerFight: positiveOrNull(
+                                                parseNum(e.target.value)
+                                            ),
+                                        })
+                                    }
+                                />
+                                <Input
+                                    label="Seconds between fights"
+                                    type="number"
+                                    min={0}
+                                    value={settings.overheadSeconds}
+                                    onChange={(e) =>
+                                        update({
+                                            overheadSeconds: Math.max(
+                                                0,
+                                                parseNum(e.target.value) ?? 0
+                                            ),
+                                        })
+                                    }
+                                />
+                            </>
+                        )}
                         <Input
                             label="Sell % of remaining gear"
                             helpLabel="Share of the gear the auto-sell filter keeps that you still end up selling."

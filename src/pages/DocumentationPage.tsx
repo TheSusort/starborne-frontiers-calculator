@@ -4065,6 +4065,12 @@ const DocumentationPage: React.FC = () => {
                                             <strong>Seconds per fight:</strong> needed for credits
                                             per minute; override single levels in the table.
                                         </li>
+                                        <li>
+                                            <strong>Background battles:</strong> 10% cheaper energy;
+                                            time per battle comes from the tier you earned on that
+                                            level, and the fastest three tiers add a bonus gear drop
+                                            every 20/15/10 battles.
+                                        </li>
                                     </ul>
                                 </div>
                             </div>

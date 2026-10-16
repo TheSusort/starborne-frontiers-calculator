@@ -7,7 +7,7 @@ export const CURRENT_VERSION = '1.76.1';
 // bumped version whose entries are still unreleased shows users a what's-new dialog listing
 // nothing. Do it by hand only if that script cannot.
 export const UNRELEASED_CHANGES: string[] = [
-    'Bounty Credits calculator: find the bounty level that earns the most credits.',
+    'Bounty Credits calculator: compare bounty levels for credits, including background battles.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

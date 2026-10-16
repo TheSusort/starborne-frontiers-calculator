@@ -37,6 +37,26 @@ describe('BountyCreditsCalculatorPage', () => {
         fireEvent.click(screen.getByText('Eelun Naphula'));
         expect(screen.getAllByTestId('bounty-level-row')).toHaveLength(32);
     });
+
+    it('background mode pays 90% energy and hides the fight-time inputs', () => {
+        render(
+            <MemoryRouter>
+                <BountyCreditsCalculatorPage />
+            </MemoryRouter>
+        );
+        expect(screen.getByText('Seconds per fight')).toBeInTheDocument();
+        const rowFor = (level: string) =>
+            screen
+                .getAllByTestId('bounty-level-row')
+                .find((el) => el.textContent === level)!
+                .closest('tr')!;
+        expect(rowFor('33')).not.toHaveTextContent('9.9');
+        fireEvent.click(screen.getByText('Normal'));
+        fireEvent.click(screen.getByText('Background'));
+        expect(screen.queryByText('Seconds per fight')).not.toBeInTheDocument();
+        expect(screen.getByText('Default tier')).toBeInTheDocument();
+        expect(rowFor('33')).toHaveTextContent('9.9');
+    });
 });
 
 describe('isSettings', () => {
@@ -52,6 +72,9 @@ describe('isSettings', () => {
         ['string override value', { secondsOverrides: { '30': '30' } }],
         ['array overrides', { secondsOverrides: [] }],
         ['NaN extra credits', { extraCreditsPct: NaN }],
+        ['unknown mode', { mode: 'idle' }],
+        ['unknown default tier', { defaultTier: 'r2' }],
+        ['unknown override tier', { tierOverrides: { '33': 'fast' } }],
         ['infinite seconds', { secondsPerFight: Infinity }],
     ])('rejects %s', (_name, patch) => {
         expect(isSettings({ ...DEFAULT_SETTINGS, ...patch })).toBe(false);
