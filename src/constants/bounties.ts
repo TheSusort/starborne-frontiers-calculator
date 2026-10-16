@@ -3,7 +3,7 @@ import type { RarityName } from './rarities';
 /**
  * Bounty reward data, transcribed from the in-game "Briefing - Rewards" screens (2026-10-16).
  * Drop tables are identical across all four bounties; only the set pool differs. Every set
- * available at a level has an equal roll chance. Full source table: the bounty-credits spec.
+ * available at a level has an equal roll chance.
  */
 
 export type BountyId = 'fenri' | 'colosso' | 'eelun' | 'maglienza';
@@ -69,7 +69,7 @@ export const BOUNTIES: Bounty[] = [
     },
 ];
 
-const RARITY_LETTERS: Record<string, RarityName> = {
+const RARITY_LETTERS: Record<'c' | 'u' | 'r' | 'e' | 'l', RarityName> = {
     c: 'common',
     u: 'uncommon',
     r: 'rare',
@@ -87,7 +87,7 @@ export function parseDrops(spec: string): BountyDrop[] {
             if (!m) throw new Error(`Bad drop token: ${token}`);
             return {
                 stars: Number(m[1]) as StarRank,
-                rarity: RARITY_LETTERS[m[2]],
+                rarity: RARITY_LETTERS[m[2] as keyof typeof RARITY_LETTERS],
                 chance: Number(m[3]),
             };
         });
