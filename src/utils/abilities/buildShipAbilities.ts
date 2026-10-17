@@ -1067,6 +1067,26 @@ function markPatternScoped(positioned: PositionedAbility[], text: string): Posit
 }
 
 /**
+ * Marks every debuff and purge whose own sentence names "all enemies" as the recipients — the
+ * literal "on all enemies" / "from all enemies". See `Ability.boardWide`. "deals damage TO all
+ * enemies" is a damage pattern, not a recipient phrase, and stays footprint-scoped.
+ */
+const BOARD_WIDE_RECIPIENT_RE = /\b(?:on|from) all enemies\b/i;
+function markBoardWide(positioned: PositionedAbility[], text: string): void {
+    if (!BOARD_WIDE_RECIPIENT_RE.test(text)) return;
+    // "Inc. Repair Down II" is a status name, not a sentence end (Amartya's own debuff list): mask
+    // the abbreviation dot, length-preserving, so the clause stays one sentence.
+    const masked = maskTagsPreservingLength(text).replace(/\b(Out|Inc)\./g, '$1 ');
+    for (const p of positioned) {
+        if (p.ability.type !== 'debuff' && p.ability.type !== 'purge') continue;
+        if (p.pos < 0 || p.pos >= masked.length) continue;
+        if (BOARD_WIDE_RECIPIENT_RE.test(sentenceContaining(masked, p.pos))) {
+            p.ability.boardWide = true;
+        }
+    }
+}
+
+/**
  * Stamps `triggerKillerScope: 'owner'` on every on-kill reaction whose clause makes this Unit the
  * killer — "upon destroying an enemy", "When this Unit destroys an enemy" (owner ruling R18; see
  * `killSentenceScope`). The ability's own sentence decides. An ability anchored outside any kill
@@ -4271,6 +4291,7 @@ export function buildShipAbilities(rawShip: Ship): ShipSkills {
         // slot's anchors index that slot's own row text.
         markPatternScoped(positioned, getSkillRowForSlot(ship, slot)?.text ?? '');
         markKillerScope(positioned, getSkillRowForSlot(ship, slot)?.text ?? '');
+        markBoardWide(positioned, getSkillRowForSlot(ship, slot)?.text ?? '');
         positioned.sort((a, b) => a.pos - b.pos);
         slots.push({ slot, abilities: positioned.map((p) => p.ability) });
     }

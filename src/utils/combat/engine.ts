@@ -10417,6 +10417,11 @@ export function runCombat(rawInput: CombatEngineInput): {
                 selfDebuffCount: actorDebuffCount(statusEngine, a),
                 ...(aoeVictimIds ? { aoeVictimIds } : {}),
                 ...(opposingVictimById ? { opposingVictimById } : {}),
+                // Board-wide clauses (`Ability.boardWide`): the same positional discriminator as
+                // `opposingVictimById`, and the same unmemoized aliveness thunk as the selectors.
+                ...(opposingVictimById
+                    ? { aliveOpposingIds: () => aliveOpposing().map((v) => v.id) }
+                    : {}),
                 // Forced bomb-detonation sink (Lingshe's countdown-reduce-to-0). `sink` serves
                 // both directions — ids are globally unique across sides — so no per-side
                 // selection is needed.

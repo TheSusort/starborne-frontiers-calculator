@@ -10,6 +10,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: Reflect set bounces now interact with Protection, Exposed and penetration.',
     'Combat simulator: Affinity Overrides now apply to reflected damage.',
     "Combat simulator: Quixilver's charged skill now grants a working Shield Converter.",
+    "Combat simulator: Amartya's debuffs and purge now reach every enemy on the board.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
