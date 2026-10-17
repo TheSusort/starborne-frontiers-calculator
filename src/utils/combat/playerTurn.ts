@@ -4201,6 +4201,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     const perSubAttackDebuffRecipes: {
         status: TimedStatus;
         abTarget: Ability['target'] | undefined;
+        boardWide: boolean;
     }[] = [];
 
     for (const status of timedEnemyBySlot) {
@@ -4256,7 +4257,12 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         });
 
         landStatusOnRecipients(status, recipientIds);
-        if (positionalLanding) perSubAttackDebuffRecipes.push({ status, abTarget });
+        if (positionalLanding)
+            perSubAttackDebuffRecipes.push({
+                status,
+                abTarget,
+                boardWide: matchingAbility?.boardWide === true,
+            });
     }
 
     /** Sub-attacks ≥ 1 re-roll every gated clause against their own anchor + footprint. */
@@ -4265,7 +4271,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         phase: 'before-damage' | 'after-damage'
     ): DeferredEnemyApplication[] => {
         const collected: DeferredEnemyApplication[] = [];
-        for (const { status, abTarget } of perSubAttackDebuffRecipes) {
+        for (const { status, abTarget, boardWide } of perSubAttackDebuffRecipes) {
             const isAfter = status.afterDamageClause === true;
             if (isAfter !== (phase === 'after-damage')) continue;
             const before = collected.length;
@@ -4276,7 +4282,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                     anchorId: sub.anchorId,
                     // THIS sub-attack's real footprint, not the cast's — so an `all-enemies` or
                     // `enemy` clause fans over who it actually struck and a killed victim drops out.
-                    aoeVictimIds: sub.victimIds,
+                    // A board-wide clause reads the living roster instead (`Ability.boardWide`).
+                    aoeVictimIds:
+                        boardWide && aliveOpposingIds ? aliveOpposingIds() : sub.victimIds,
                     adjacentEnemyIdsFor,
                     positionalLanding: true,
                     firingClause: true,

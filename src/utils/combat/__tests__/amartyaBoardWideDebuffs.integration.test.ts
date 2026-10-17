@@ -17,6 +17,7 @@ import { shipDataAvailable } from '../../../../scripts/lib/shipDataSnapshot';
 import { buildTraceShip } from '../../../../scripts/lib/traceShipFactory';
 import { buildShipAbilities } from '../../abilities/buildShipAbilities';
 import type { Ability } from '../../../types/abilities';
+import type { Ship } from '../../../types/ship';
 import { mirrorBoard, realSlots, ShipSpec, MirrorTeams } from './__fixtures__/mirrorBoard';
 
 beforeAll(() => {
@@ -123,6 +124,25 @@ describe.each(['player', 'enemy'] as const)('Amartya on the %s side', (side) => 
         });
         runCombat({ ...input, bus });
         expect([...purged].sort()).toEqual(ENEMY_IDS.map(idOf).sort());
+    });
+});
+
+describe('the parser flags a clause by ITS OWN recipient', () => {
+    const debuffsFor = (text: string) =>
+        (
+            buildShipAbilities({ refits: [], activeSkillText: text } as unknown as Ship).slots.find(
+                (s) => s.slot === 'active'
+            )?.abilities ?? []
+        ).filter((a) => a.config.type === 'debuff');
+
+    it('flags only the clause aimed at all enemies when the sentence names two recipients', () => {
+        const flags = debuffsFor(
+            'This Unit deals <unit-damage>100% damage</unit-damage>, inflicts <unit-skill>Speed Down II</unit-skill> on the target for 2 turns and <unit-skill>Defense Down II</unit-skill> on all enemies for 2 turns.'
+        ).map((a) => [a.config.type === 'debuff' && a.config.buffName, a.boardWide === true]);
+        expect(flags).toEqual([
+            ['Speed Down II', false],
+            ['Defense Down II', true],
+        ]);
     });
 });
 

@@ -1067,11 +1067,16 @@ function markPatternScoped(positioned: PositionedAbility[], text: string): Posit
 }
 
 /**
- * Marks every debuff and purge whose own sentence names "all enemies" as the recipients — the
- * literal "on all enemies" / "from all enemies". See `Ability.boardWide`. "deals damage TO all
- * enemies" is a damage pattern, not a recipient phrase, and stays footprint-scoped.
+ * Marks every debuff and purge whose OWN recipient is "all enemies" — the first recipient phrase
+ * after the ability's anchor, within its sentence, is the literal "on all enemies" / "from all
+ * enemies". See `Ability.boardWide`. Reading the first phrase after the anchor (not the whole
+ * sentence) keeps a clause with its own recipient ("inflicts X on the target and Y on all enemies")
+ * off the flag while a shared one ("inflicts X and Y on all enemies") flags both. "deals damage TO
+ * all enemies" is a damage pattern, not a debuff's recipient, and stays footprint-scoped.
  */
 const BOARD_WIDE_RECIPIENT_RE = /\b(?:on|from) all enemies\b/i;
+const RECIPIENT_PHRASE_RE =
+    /\b(?:on|to|from)\s+(?:the|that|this|its|itself|an?|each|every|all|adjacent|any)\b/i;
 function markBoardWide(positioned: PositionedAbility[], text: string): void {
     if (!BOARD_WIDE_RECIPIENT_RE.test(text)) return;
     // "Inc. Repair Down II" is a status name, not a sentence end (Amartya's own debuff list): mask
@@ -1080,7 +1085,10 @@ function markBoardWide(positioned: PositionedAbility[], text: string): void {
     for (const p of positioned) {
         if (p.ability.type !== 'debuff' && p.ability.type !== 'purge') continue;
         if (p.pos < 0 || p.pos >= masked.length) continue;
-        if (BOARD_WIDE_RECIPIENT_RE.test(sentenceContaining(masked, p.pos))) {
+        const end = masked.slice(p.pos).search(/[.;](?=\s|$)/);
+        const rest = masked.slice(p.pos, end < 0 ? masked.length : p.pos + end);
+        const at = rest.search(RECIPIENT_PHRASE_RE);
+        if (at >= 0 && /^(?:on|from) all enemies\b/i.test(rest.slice(at))) {
             p.ability.boardWide = true;
         }
     }
