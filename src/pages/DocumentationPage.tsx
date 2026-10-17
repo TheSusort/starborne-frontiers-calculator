@@ -4936,7 +4936,9 @@ const DocumentationPage: React.FC = () => {
                                     <strong>Warpstrike</strong> (more outgoing damage while the ship
                                     is debuffed). Intrusion and Warpstrike add to Out. Damage buffs;
                                     Arcane Siege multiplies on its own, separately from both those
-                                    buffs and the squad leader&apos;s outgoing bonus.
+                                    buffs and the squad leader&apos;s outgoing bonus. Arcane Siege
+                                    and the squad leader&apos;s outgoing bonus also apply to
+                                    counter-attacks, reactive hits and reflected damage.
                                     Incoming-damage reduction is also modeled:{' '}
                                     <strong>Voidshade</strong> and <strong>Shadowguard</strong>{' '}
                                     (reduced damage while stealthed),{' '}

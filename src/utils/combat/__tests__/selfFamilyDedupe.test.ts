@@ -99,7 +99,7 @@ describe('own buff families count once', () => {
         const eng = engineWith([scheduled], [timedStatus('Attack Up III', { attack: 45 })]);
         const lookup = new Map([['Attack Up III', [scheduled]]]);
         expect(foldActorBuffTotals(eng, lookup, 'attacker').attackBuff).toBe(45);
-        expect(effectiveOutgoingStatsOf(eng, lookup, actor()).attack).toBeCloseTo(1000 * 1.45);
+        expect(effectiveOutgoingStatsOf(eng, lookup, actor(), []).attack).toBeCloseTo(1000 * 1.45);
     });
 
     it('every channel: defence, speed and the victim fold', () => {

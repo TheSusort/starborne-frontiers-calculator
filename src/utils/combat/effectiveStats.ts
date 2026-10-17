@@ -1,4 +1,5 @@
-import { Ability } from '../../types/abilities';
+import { Ability, ShipSkills } from '../../types/abilities';
+import { buildRoundContext } from '../abilities/roundContext';
 import { SelectedGameBuff } from '../../types/calculator';
 import { modifierTotalsFromAbilities } from '../abilities/applyAbilities';
 import type { ConditionContext } from '../abilities/evaluateConditions';
@@ -198,13 +199,19 @@ export interface EffectiveOutgoingStats {
     /** base defence penetration + every self-sourced penetration buff (Core Charge's +1% per
      *  stack), i.e. the effective penetration a hit carries. */
     defensePenetration: number;
+    /** The direct-hit factors that multiply OUTSIDE the Out. Damage buff sum, as the cast path's
+     *  `outgoingSeparateFactor` (playerTurn.ts): the squad-leader outgoing bonus (R199) times the
+     *  owner's `outgoingDamageSeparate` modifiers (Arcane Siege, R201), gated on the owner's LIVE
+     *  shield pool. 1 when neither applies. */
+    outgoingSeparateFactor: number;
 }
 
 /**
  * #395 — DAMAGE-mode outgoing stats for an attack thrown OUTSIDE the turn loop: a counter-attack
  * and a reactive proc (`applyCounterAttack` / `applyReactiveDamage` in engine.ts). It is the ONE
  * owner-side read those hits take — attack, outgoing channel, crit, crit power and penetration
- * all come from the same three self lists.
+ * all come from the same three self lists; the separate outgoing factor comes from the owner's
+ * `preFight` and its `separateModifiers`.
  *
  * THREE self channels, not the status-mode two: scheduled, timed AND the aura/accumulating
  * statuses (`selfAuraBuffs`), because the cast path folds all three (`abilitySelfEffects`) and a
@@ -245,7 +252,9 @@ export interface EffectiveOutgoingStats {
 export function effectiveOutgoingStatsOf(
     statusEngine: StatusEngine,
     selfBuffLookup: Map<string, SelectedGameBuff[]>,
-    actor: CombatActor
+    actor: CombatActor,
+    /** The owner's own `outgoingDamageSeparate` modifiers (`separateOutgoingModifiersOf`). */
+    separateModifiers: readonly Ability[]
 ): EffectiveOutgoingStats {
     const t = foldActorBuffTotals(statusEngine, selfBuffLookup, actor.id, { includeAuras: true });
     const selfLists = allSelfSourced(
@@ -270,7 +279,45 @@ export function effectiveOutgoingStatsOf(
         critDamage: s.critDamage + t.critDamageBuff,
         defensePenetration:
             s.defensePenetration + toDotAndPenModifiers(selfLists).defensePenetrationBuff,
+        outgoingSeparateFactor:
+            (1 + (actor.preFight?.outgoingDamage ?? 0) / 100) *
+            separateOutgoingFactor(separateModifiers, actor),
     };
+}
+
+/** The owner's PASSIVE-slot self modifiers on the `outgoingDamageSeparate` channel — where
+ *  `buildShipAbilitiesWithEquipment` puts implant abilities (Arcane Siege). Only this channel:
+ *  `effectiveOutgoingStatsOf` folds no other modifier channel. */
+export function separateOutgoingModifiersOf(skills: ShipSkills | undefined): Ability[] {
+    return (skills?.slots.find((sl) => sl.slot === 'passive')?.abilities ?? []).filter(
+        (a) =>
+            a.type === 'modifier' &&
+            a.target === 'self' &&
+            a.config.type === 'modifier' &&
+            a.config.channel === 'outgoingDamageSeparate'
+    );
+}
+
+/** The product of `separateModifiers` gated at a ctx that is NEUTRAL apart from the owner's live
+ *  shield state — a hit thrown outside the turn loop has no cast to gate against, and Arcane
+ *  Siege's only condition is `self-shield`. `reactiveSeparateOutgoingSubjects.test.ts` fails over
+ *  the corpus the day an `outgoingDamageSeparate` modifier gates on another subject. */
+function separateOutgoingFactor(separateModifiers: readonly Ability[], actor: CombatActor): number {
+    if (separateModifiers.length === 0) return 1;
+    return modifierTotalsFromAbilities(
+        [...separateModifiers],
+        buildRoundContext({
+            selfBuffNames: [],
+            landedEnemyDebuffCount: 0,
+            corrosionStacks: 0,
+            infernoStacks: 0,
+            bombStacks: 0,
+            effectiveCritRate: 0,
+            noOpposingVictim: true,
+            selfShielded: actor.shieldPool > 0,
+            selfShieldFull: actor.stats.hp > 0 && actor.shieldPool >= actor.stats.hp,
+        })
+    ).outgoingDamageSeparateFactor;
 }
 
 /**

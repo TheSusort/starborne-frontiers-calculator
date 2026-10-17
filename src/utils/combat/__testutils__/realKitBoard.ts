@@ -12,6 +12,7 @@
  * The focus actor always runs under `FOCUS_ID`, so read ids through the returned `id(unit)`.
  */
 import type { CombatEngineInput } from '../engine';
+import type { PreFightCombatModifiers } from '../preFight';
 import type { ShipSkills } from '../../../types/abilities';
 import type { Position } from '../../../types/encounters';
 import type { AffinityName } from '../../../types/ship';
@@ -45,6 +46,8 @@ export interface BoardUnit {
     affinity?: AffinityName;
     pattern?: ParsedPattern;
     target?: ParsedTarget;
+    /** Squad-leader / pre-fight modifiers carried onto the unit's engine actor. */
+    preFight?: PreFightCombatModifiers;
 }
 
 export const NO_KIT: ShipSkills = { slots: [{ slot: 'active', abilities: [] }] };
@@ -116,6 +119,7 @@ export function boardInput(
         security: focus.security ?? 0,
         speed: focus.speed,
         mode: 'battle',
+        ...(focus.preFight ? { preFight: focus.preFight } : {}),
         affinity: focus.affinity,
         position: focus.position,
         target: target(focus),
@@ -126,6 +130,7 @@ export function boardInput(
             speed: u.speed,
             chargeCount: u.chargeCount ?? 0,
             startCharged: u.startCharged ?? false,
+            ...(u.preFight ? { preFight: u.preFight } : {}),
             selfBuffs: [],
             enemyDebuffs: [],
             position: u.position,
@@ -171,6 +176,7 @@ export function boardInput(
             target: target(u),
             pattern: pattern(u),
             shipSkills: u.kit,
+            ...(u.preFight ? { preFight: u.preFight } : {}),
         })),
     };
     return { input, id };
