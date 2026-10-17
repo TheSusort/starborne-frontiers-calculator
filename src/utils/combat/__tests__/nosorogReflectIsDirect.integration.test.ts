@@ -928,3 +928,96 @@ describe('the bounce recipient takes its squad-leader incoming baseline', () => 
         expect(reflectedWith(-5) / plain).toBeCloseTo(0.95, 6);
     });
 });
+
+/**
+ * Owner ruling R205 (2026-10-17): a bounce applies the Affinity Overrides exactly as a counter does
+ * — the attacker's Defensive Affinity Override as the bounce's recipient, the reflector's Offensive
+ * Affinity Override as its source. Every unit here has no affinity, so the real matchup is neutral
+ * and only an override can move the bounce off ×1.
+ */
+describe.each(SIDES)(
+    'the bounce applies the Affinity Overrides, reflector on the %s side',
+    (placement) => {
+        /** A self-buff granted on cast, ahead of `rest`. */
+        const selfBuff = (buffName: string): ShipSkills['slots'][number]['abilities'][number] => ({
+            id: `self-${buffName}`,
+            type: 'buff',
+            target: 'self',
+            trigger: 'on-cast',
+            conditions: [],
+            config: {
+                type: 'buff',
+                buffName,
+                parsedEffects: {},
+                stacks: 1,
+                isStackable: false,
+                duration: 5,
+            },
+        });
+        /** The reflector, acting first to grant itself `buffName` (or an inert buff). */
+        const reflectorWith = (reflector: BoardUnit, buffName: string): BoardUnit => ({
+            ...reflector,
+            speed: 1_000,
+            kit: {
+                slots: [
+                    { slot: 'active', abilities: [selfBuff(buffName)] },
+                    ...reflector.kit.slots.filter((s) => s.slot !== 'active'),
+                ],
+            },
+        });
+        /** A 100% hitter that grants itself `buffName` before it hits. */
+        const hitterWithBuff = (buffName: string): BoardUnit =>
+            unit('hitter', {
+                slots: [
+                    {
+                        slot: 'active',
+                        abilities: [selfBuff(buffName), ...hitKit(100).slots[0].abilities],
+                    },
+                ],
+            });
+        const sources: [string, () => BoardUnit][] = [
+            ["Nosorog's reflect", () => nosorog(true)],
+            ['the Reflect gear set', reflectSetWearer],
+        ];
+
+        describe.each(sources)('%s', (_label, reflector) => {
+            it("the hitter's Defensive Affinity Override puts the bounce at disadvantage (x0.75)", () => {
+                const control = bounceOf(placement, reflector(), {
+                    hitter: hitterWithBuff('Inert Buff'),
+                });
+                const guarded = bounceOf(placement, reflector(), {
+                    hitter: hitterWithBuff('Defensive Affinity Override'),
+                });
+                expect(control.rows).toHaveLength(1);
+                expect(control.rows[0]).toBeGreaterThan(0);
+                expect(guarded.rows).toHaveLength(1);
+                expect(guarded.rows[0]).toBeCloseTo(control.rows[0] * 0.75, 6);
+            });
+
+            it("the reflector's Offensive Affinity Override puts the bounce at advantage (x1.25)", () => {
+                const control = bounceOf(placement, reflectorWith(reflector(), 'Inert Buff'));
+                const forced = bounceOf(
+                    placement,
+                    reflectorWith(reflector(), 'Offensive Affinity Override')
+                );
+                expect(control.rows).toHaveLength(1);
+                expect(control.rows[0]).toBeGreaterThan(0);
+                expect(forced.rows).toHaveLength(1);
+                expect(forced.rows[0]).toBeCloseTo(control.rows[0] * 1.25, 6);
+            });
+
+            it("with both overrides up, the reflector's Offensive Override wins, as on a counter", () => {
+                const control = bounceOf(placement, reflectorWith(reflector(), 'Inert Buff'), {
+                    hitter: hitterWithBuff('Inert Buff'),
+                });
+                const both = bounceOf(
+                    placement,
+                    reflectorWith(reflector(), 'Offensive Affinity Override'),
+                    { hitter: hitterWithBuff('Defensive Affinity Override') }
+                );
+                expect(control.rows[0]).toBeGreaterThan(0);
+                expect(both.rows[0]).toBeCloseTo(control.rows[0] * 1.25, 6);
+            });
+        });
+    }
+);

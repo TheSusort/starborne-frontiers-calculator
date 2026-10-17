@@ -8,6 +8,7 @@ export const CURRENT_VERSION = '1.78.0';
 // nothing. Do it by hand only if that script cannot.
 export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: Reflect set bounces now interact with Protection, Exposed and penetration.',
+    'Combat simulator: Affinity Overrides now apply to reflected damage.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

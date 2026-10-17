@@ -3329,10 +3329,13 @@ const DocumentationPage: React.FC = () => {
                                         reductions. The attacker&apos;s attack as its buffs and
                                         debuffs leave it counts (Attack Up II raises the reflect by
                                         30%), and so does the affinity matchup between the two
-                                        ships. Critical hits and the attacker&apos;s own Outgoing
-                                        Damage Up do not change it. A shield that absorbs the hit
-                                        does not stop the reflect, but a hit that is blocked or
-                                        nullified by a Barrier reflects nothing.
+                                        ships, Affinity Overrides included as on a counter-attack:
+                                        the reflecting ship&apos;s Offensive Override and the
+                                        attacker&apos;s Defensive Override both apply. Critical hits
+                                        and the attacker&apos;s own Outgoing Damage Up do not change
+                                        it. A shield that absorbs the hit does not stop the reflect,
+                                        but a hit that is blocked or nullified by a Barrier reflects
+                                        nothing.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">

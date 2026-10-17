@@ -7530,15 +7530,6 @@ export function runCombat(rawInput: CombatEngineInput): {
                         attacker.id !== victim.id &&
                         attacker.destroyedRound === undefined
                     ) {
-                        // The WEARER (victim) is the source of the reflected hit → affinity is
-                        // resolved wearer→attacker (computeAffinityModifiers(victim, attacker)).
-                        // OPEN OWNER QUESTION: a bounce applies neither the attacker's
-                        // Defensive Affinity Override nor the wearer's Offensive Affinity Override
-                        // (a counter applies both). Not to be aligned with the counter without a ruling.
-                        const affinityDamageModifier = computeAffinityModifiers(
-                            victim.affinity,
-                            attacker.affinity
-                        ).damageModifier;
                         // The REFLECTOR's Out. Damage Up and its separate outgoing factor
                         // (squad-leader bonus, Arcane Siege) scale every share (#678).
                         const reflectorOutgoing = effectiveOutgoingStatsOf(
@@ -7561,6 +7552,19 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // outgoing defence penetration applies as a counter's does (R179).
                             const directInputs = reactiveHitInputs(victim, attacker);
                             const directProfile = directInputs.profile;
+                            // The reflector is the bounce's source and the attacker its recipient,
+                            // so the matchup resolves reflector→attacker with both Affinity
+                            // Overrides exactly as on a counter (R205): the reflector's Offensive
+                            // and the attacker's Defensive, in `affinityModifiersWithOverrides`'
+                            // precedence.
+                            const affinityDamageModifier = affinityModifiersWithOverrides(
+                                victim.affinity ?? 'antimatter',
+                                directProfile.affinity,
+                                {
+                                    forceAdvantage: directInputs.forceAffinityAdvantage,
+                                    forceDisadvantage: directProfile.forceAffinityDisadvantage,
+                                }
+                            ).damageModifier;
                             const shareDefenceReductionPct = victimDefenceReductionPct(
                                 directProfile,
                                 directInputs.ownerOutgoing.defensePenetration
