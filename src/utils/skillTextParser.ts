@@ -1642,6 +1642,18 @@ const APPLYING_DEBUFF_RE = /\b(?:upon|on|after|when)\s+(?:inflicting|applying)\s
 // different reaction with its own parse.
 // Consumed by detectReactiveTrigger and parseDebuffDurationReduction's on-debuff gate.
 const SELF_INFLICTS_DEBUFF_RE = /\b(?:when\s+this\s+unit|after\s+it)\s+inflicts\s+(?:a\s+)?debuff/i;
+
+/**
+ * True when `sentence` carries this Unit's own debuff-infliction trigger — the same two
+ * phrasings `detectReactiveTrigger` maps to 'on-debuff-inflicted' (APPLYING_DEBUFF_RE,
+ * SELF_INFLICTS_DEBUFF_RE). For a nameless effect (an extension) that has no buff name to
+ * resolve a clause on, so the caller passes the effect's own sentence.
+ */
+export function detectSelfDebuffInflictionTrigger(sentence: string | null | undefined): boolean {
+    if (!sentence) return false;
+    const plain = stripUnitTags(sentence);
+    return APPLYING_DEBUFF_RE.test(plain) || SELF_INFLICTS_DEBUFF_RE.test(plain);
+}
 // SELF-subject "When this Unit inflicts a Bomb" (Lingshe) → on-debuff-inflicted narrowed to the
 // named DoT family (`Ability.triggerStatusFilter`, via detectInflictedStatusFilter). The article
 // is required: Wisteria's "When this Unit inflicts Corrosion with a critical hit" (no article) is
@@ -1770,7 +1782,15 @@ export function detectReactiveTrigger(
     occurrenceIndex = 0
 ): AbilityTrigger | undefined {
     if (!skillText || !buffName) return undefined;
-    const clause = resolveBuffClause(skillText, buffName, occurrenceIndex);
+    const at = resolveBuffClauseAt(skillText, buffName, occurrenceIndex);
+    const buffPos = findNthOccurrencePos(
+        at.clause.toLowerCase(),
+        buffName.toLowerCase(),
+        at.localIndex
+    );
+    // A trigger opening a LATER "and upon/when/after/if …" clause does not govern this grant
+    // (clauseUpToTrailingTrigger) — the same scoping detectExtraActionCoTrigger applies.
+    const clause = buffPos >= 0 ? clauseUpToTrailingTrigger(at.clause, buffPos) : at.clause;
     // "when an ally critically hits" → on-ally-crit (Hermes's Everliving Regeneration buff grant).
     // Checked BEFORE the self-crit rule: matchesActiveSelfCrit would also match "critically hits"
     // here, but the ally subject makes this an ally-scoped trigger, not a self-crit.
@@ -2089,7 +2109,8 @@ export function parseExtendDoT(text: string | null | undefined): number | null {
 // Generic buff/debuff DURATION EXTENSION — the inverse of parseDebuffDurationReduction, and a
 // sibling of EXTEND_ALL_DOT_PASSIVE_RE (which is DoT-tick-store-only and requires the literal
 // "Damage Over Time" phrase). Surface form: "<buffs|debuffs> [are] extended by N turn(s)" (Lev,
-// Ripper). A negative lookahead for "damage over time" keeps a DoT-extend clause in the same
+// Ripper); the active-voice "extends active debuffs by N turn(s)" is EXTEND_STATUS_ACTIVE_RE.
+// A negative lookahead for "damage over time" keeps a DoT-extend clause in the same
 // period-scoped segment from also matching here (mirrors the audit rule's own DoT exclusion).
 const EXTEND_STATUS_PASSIVE_RE =
     /\b(buffs|debuffs)\b(?![^.]*\bdamage over time\b)[^.]*?\bextended\b[^.]*?\bby\s+(\d+)\s+turns?/i;
@@ -2110,6 +2131,11 @@ const EXTEND_STATUS_PASSIVE_RE =
 // extend-status and a chance-gated extend-dot for one clause.
 const EXTEND_STATUS_INFLICTED_RE =
     /\bnewly\s+inflicted\s+(buff|debuff)s?\b(?![^.]*\b(?:damage over time|crit(?:ical)?\s*power)\b)[^.]*?\bextended\b[^.]*?\bby\s+(\d+)\s+turns?/i;
+// Active voice, verb before the noun: "extends active debuffs by 1 turn" (Sokol charged). The
+// same standing-status scope as EXTEND_STATUS_PASSIVE_RE, only the word order differs. The
+// "damage over time" exclusion keeps a DoT-extend clause with EXTEND_ALL_DOT_PASSIVE_RE.
+const EXTEND_STATUS_ACTIVE_RE =
+    /\bextends?\s+(?:all\s+)?(?:(?:currently\s+)?active\s+)?(buffs|debuffs)\b(?![^.]*\bdamage over time\b)\s+by\s+(\d+)\s+turns?/i;
 
 // #363 (Fuying): "extends <unit-skill>Stealth</unit-skill> by 1 turn" — a NAMED status, where the
 // generic arms above require a literal 'buffs'/'debuffs' token. Matched against the TAGGED text so the
@@ -2163,7 +2189,7 @@ export function parseExtendStatus(text: string | null | undefined): {
     // generic debuff one.
     const passiveIsDoT =
         passive !== null && /\bdamage over time\s+$/i.test(plain.slice(0, passive.index));
-    const m = inflicted ?? (passiveIsDoT ? null : passive);
+    const m = inflicted ?? (passiveIsDoT ? null : passive) ?? EXTEND_STATUS_ACTIVE_RE.exec(plain);
     if (!m) return null;
     const kind: 'buff' | 'debuff' = m[1].toLowerCase().startsWith('debuff') ? 'debuff' : 'buff';
     return {
@@ -3141,6 +3167,15 @@ function phrasePosTrigger(
 // raw (masked) string — no replacement — so anchorPos stays valid. Variable-length matches
 // (<br /> vs '.') use m[0].length for the boundary end. Lookbehind-free.
 function rawSentenceAround(text: string, anchorPos: number): string | undefined {
+    return rawSentenceBoundsAround(text, anchorPos)?.sentence;
+}
+
+/** `rawSentenceAround` plus the sentence's start offset in `text`, so a caller can locate the
+ *  anchor inside the returned sentence. */
+function rawSentenceBoundsAround(
+    text: string,
+    anchorPos: number
+): { sentence: string; start: number } | undefined {
     if (anchorPos < 0) return undefined;
     const masked = maskAbbrev(text);
     const boundary = /[.;](?=\s|$)|<br\s*\/?>/gi;
@@ -3149,12 +3184,32 @@ function rawSentenceAround(text: string, anchorPos: number): string | undefined 
     while ((m = boundary.exec(masked)) !== null) {
         const end = m.index + m[0].length;
         if (anchorPos < end) {
-            return anchorPos >= start ? masked.slice(start, end) : undefined;
+            return anchorPos >= start ? { sentence: masked.slice(start, end), start } : undefined;
         }
         start = end;
     }
     // Anchor is in the final (unterminated) sentence.
-    return anchorPos >= start ? masked.slice(start) : undefined;
+    return anchorPos >= start ? { sentence: masked.slice(start), start } : undefined;
+}
+
+// A conjunction that opens a NEW trigger-led clause: "gains 1 stack of Blast every turn and upon
+// destroying an enemy, once per round, this Unit gains 1 extra end of round action" (Sokol). The
+// trigger after it governs what follows, never the clause before the conjunction.
+const TRIGGER_LED_CONJUNCTION_RE = /,?\s+and,?\s+(?=(?:upon|when|after|if)\b)/gi;
+
+/**
+ * `sentence` cut at the first trigger-led conjunction (TRIGGER_LED_CONJUNCTION_RE) at or after
+ * `localPos`, so an effect anchored before that conjunction does not inherit the later clause's
+ * trigger. Text before the anchor is kept: a sentence-leading trigger ("When an ally is
+ * destroyed, … and Speed Up I") still governs everything after it.
+ */
+function clauseUpToTrailingTrigger(sentence: string, localPos: number): string {
+    TRIGGER_LED_CONJUNCTION_RE.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = TRIGGER_LED_CONJUNCTION_RE.exec(sentence)) !== null) {
+        if (m.index >= localPos) return sentence.slice(0, m.index);
+    }
+    return sentence;
 }
 
 // detectDamageReactionTrigger rules (Phase 4c PR 1 Task 8 + PR 2 Task 7). Ally-subject
@@ -4540,8 +4595,11 @@ export function parseExtraAction(text: string | null | undefined): ExtraActionPa
  * Requiring the extra-action phrase in the SAME sentence scopes this to genuine
  * extra-action-adjacent buffs (Harvester) only.
  *
- * Position/sentence-scoped via rawSentenceAround (same raw-text sentence bounds as
- * phrasePosTrigger) so an unrelated buff sitting in a DIFFERENT sentence is never co-triggered.
+ * Position/sentence-scoped via rawSentenceBoundsAround (same raw-text sentence bounds as
+ * phrasePosTrigger) so an unrelated buff sitting in a DIFFERENT sentence is never co-triggered,
+ * and clause-scoped by clauseUpToTrailingTrigger: Sokol's "gains 1 stack of Blast every turn and
+ * upon destroying an enemy, once per round, this Unit gains 1 extra end of round action" keeps
+ * Blast unconditional, since the kill trigger opens a later clause.
  * Reference data: docs/ship-skills.csv.
  */
 export function detectExtraActionCoTrigger(
@@ -4549,8 +4607,10 @@ export function detectExtraActionCoTrigger(
     anchorPos: number
 ): AbilityTrigger | undefined {
     if (!text) return undefined;
-    const sentence = rawSentenceAround(text, anchorPos);
-    if (!sentence || !EXTRA_ACTION_RE.test(sentence)) return undefined;
+    const bounds = rawSentenceBoundsAround(text, anchorPos);
+    if (!bounds) return undefined;
+    const sentence = clauseUpToTrailingTrigger(bounds.sentence, anchorPos - bounds.start);
+    if (!EXTRA_ACTION_RE.test(sentence)) return undefined;
     return EXTRA_ACTION_ENEMY_DESTROYED_RE.test(sentence)
         ? 'on-enemy-destroyed'
         : EXTRA_ACTION_ALLY_DESTROYED_RE.test(sentence)

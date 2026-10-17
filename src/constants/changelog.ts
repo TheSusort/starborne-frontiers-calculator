@@ -15,6 +15,7 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator: Ironclad's partial block now counts toward the 70% reduction cap.",
     'Combat simulator: squad-leader outgoing bonuses now boost counter-attacks, reactive hits and reflects.',
     'Combat simulator: Arcane Siege now boosts counter-attacks, reactive hits and reflects.',
+    'Combat simulator: Ripper and Sokol now follow their updated in-game skills.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

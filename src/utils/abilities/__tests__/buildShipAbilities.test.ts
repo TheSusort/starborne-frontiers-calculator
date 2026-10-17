@@ -5639,3 +5639,101 @@ describe('buildShipAbilities — round-start self shields', () => {
         ).toMatchObject({ trigger: 'pre-combat', config: { pct: 20, basis: 'hp' } });
     });
 });
+
+// Game 3.23 catalogue texts (verbatim, tagged). Owner rulings: Ripper's R2 buff extension rides
+// "after it inflicts a debuff", once per cast; Sokol's charged extends every active debuff on the
+// enemies it hits; Sokol's Blast every turn is unconditional — only the extra end-of-round action
+// waits on a kill.
+describe('game 3.23 catalogue texts', () => {
+    const RIPPER_R2 =
+        'This Unit gains <unit-skill>Marauder Rage II</unit-skill> for 3 turns after it inflicts a <unit-aid>debuff</unit-aid> and all allies active <unit-skill>buffs are extended by 1 turn</unit-skill>.';
+    const SOKOL_CHARGED =
+        'This Unit deals <unit-damage>150% damage</unit-damage> and <unit-skill>extends active debuffs by 1 turn</unit-skill>.';
+    const SOKOL_R2 =
+        'This Unit gains 1 stack of <unit-skill>Blast</unit-skill> every turn and upon destroying an enemy, once per round, this Unit <unit-skill>gains 1 extra end of round action</unit-skill>.';
+    const passiveR2 = (text: string) =>
+        slot(
+            buildShipAbilities(
+                ship({ refits: [{}, {}] as Ship['refits'], secondPassiveSkillText: text })
+            ).slots,
+            'passive'
+        )!.abilities;
+
+    it('Ripper R2: the ally buff extension rides the debuff-infliction trigger, once per cast, no slot filter', () => {
+        const ext = abilityOfType(passiveR2(RIPPER_R2), 'extend-status')!;
+        expect(ext).toMatchObject({
+            target: 'all-allies',
+            trigger: 'on-debuff-inflicted',
+            triggerApplicationFilter: 'inflict',
+            oncePerCast: 'cast',
+            config: { type: 'extend-status', statusKind: 'buff', turns: 1 },
+        });
+        expect(ext).not.toHaveProperty('triggerSourceSlotFilter');
+    });
+
+    it('an extension worded "after applying a debuff" reacts to applied debuffs, not inflicted ones', () => {
+        const ext = abilityOfType(
+            passiveR2(
+                'This Unit gains <unit-skill>Marauder Rage II</unit-skill> for 3 turns after applying a <unit-aid>debuff</unit-aid> and all allies active <unit-skill>buffs are extended by 1 turn</unit-skill>.'
+            ),
+            'extend-status'
+        )!;
+        expect(ext).toMatchObject({
+            trigger: 'on-debuff-inflicted',
+            triggerApplicationFilter: 'apply',
+        });
+    });
+
+    it('Ripper R2: Marauder Rage II rides the same trigger', () => {
+        const rage = passiveR2(RIPPER_R2).find(
+            (a) => a.config.type === 'buff' && a.config.buffName === 'Marauder Rage II'
+        );
+        expect(rage).toMatchObject({ target: 'self', trigger: 'on-debuff-inflicted' });
+    });
+
+    it('Sokol charged: extends every active debuff on the enemies this cast hits', () => {
+        const charged = slot(
+            buildShipAbilities(
+                ship({ refits: [], chargeSkillText: SOKOL_CHARGED, chargeSkillCharge: 3 })
+            ).slots,
+            'charged'
+        )!;
+        const ext = abilityOfType(charged.abilities, 'extend-status');
+        expect(ext).toMatchObject({
+            target: 'all-enemies',
+            trigger: 'on-cast',
+            conditions: [],
+            config: { type: 'extend-status', statusKind: 'debuff', turns: 1 },
+        });
+        expect(ext!.config).not.toHaveProperty('scope');
+        expect(ext!.config).not.toHaveProperty('buffName');
+    });
+
+    it('Sokol R2: Blast every turn stays unconditional', () => {
+        const blast = passiveR2(SOKOL_R2).find(
+            (a) => a.config.type === 'buff' && a.config.buffName === 'Blast'
+        )!;
+        expect(blast.trigger).toBe('on-cast');
+        expect(blast).not.toHaveProperty('triggerKillerScope');
+    });
+
+    it('Sokol R2: the extra END-OF-ROUND action waits on his kill, once per round', () => {
+        const extra = abilityOfType(passiveR2(SOKOL_R2), 'extra-action')!;
+        expect(extra).toMatchObject({
+            target: 'self',
+            trigger: 'on-enemy-destroyed',
+            triggerKillerScope: 'owner',
+            config: { type: 'extra-action', oncePerRound: true, endOfRound: true },
+        });
+    });
+
+    it('a trigger opening a later "and upon …" clause does not govern an earlier finite grant', () => {
+        const abilities = passiveR2(
+            'This Unit gains <unit-skill>Attack Up II</unit-skill> for 2 turns and upon destroying an enemy, this Unit gains <unit-skill>Defense Up II</unit-skill> for 2 turns.'
+        );
+        const byName = (name: string) =>
+            abilities.find((a) => a.config.type === 'buff' && a.config.buffName === name);
+        expect(byName('Attack Up II')!.trigger).toBe('on-cast');
+        expect(byName('Defense Up II')!.trigger).toBe('on-enemy-destroyed');
+    });
+});
