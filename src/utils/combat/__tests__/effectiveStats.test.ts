@@ -933,7 +933,7 @@ describe('effectiveOutgoingStatsOf — the two outgoing-damage channels', () => 
 
     it('with neither store populated it equals the status-mode attack and a zero channel', () => {
         const { eng, selfBuffLookup, actor } = outgoingHarness({ attack: 10_000 });
-        const out = effectiveOutgoingStatsOf(eng, selfBuffLookup, actor);
+        const out = effectiveOutgoingStatsOf(eng, selfBuffLookup, actor, []);
         expect(out.attack).toBeCloseTo(effectiveStatsOf(eng, selfBuffLookup, actor).attack);
         expect(out.attack).toBeCloseTo(10_000);
         expect(out.outgoingDamageBuffPct).toBe(0);
@@ -944,7 +944,9 @@ describe('effectiveOutgoingStatsOf — the two outgoing-damage channels', () => 
             attack: 10_000,
             selfBuffs: [buff('Out. Damage Up III', { outgoingDamage: 30 })],
         });
-        expect(effectiveOutgoingStatsOf(eng, selfBuffLookup, actor).outgoingDamageBuffPct).toBe(30);
+        expect(effectiveOutgoingStatsOf(eng, selfBuffLookup, actor, []).outgoingDamageBuffPct).toBe(
+            30
+        );
     });
 
     it('folds an enemy-APPLIED Attack Down into the same additive term, not as a second factor', () => {
@@ -955,7 +957,7 @@ describe('effectiveOutgoingStatsOf — the two outgoing-damage channels', () => 
         });
         // ADDITIVE: 10,000 × (1 + (30 − 60)/100) = 7,000. Post-multiplying the delta instead
         // (10,000 × 1.30 × 0.40) would give 5,200 — a compounding that the turn loop does not do.
-        expect(effectiveOutgoingStatsOf(eng, selfBuffLookup, actor).attack).toBeCloseTo(7_000);
+        expect(effectiveOutgoingStatsOf(eng, selfBuffLookup, actor, []).attack).toBeCloseTo(7_000);
     });
 
     it('keeps attackFlat OUTSIDE the percentage term', () => {
@@ -966,7 +968,7 @@ describe('effectiveOutgoingStatsOf — the two outgoing-damage channels', () => 
         });
         // 1,000 × (1 − 0.50) + 300 = 800. Folding the flat term inside the multiplier would
         // give (1,000 + 300) × 0.50 = 650.
-        expect(effectiveOutgoingStatsOf(eng, selfBuffLookup, actor).attack).toBeCloseTo(800);
+        expect(effectiveOutgoingStatsOf(eng, selfBuffLookup, actor, []).attack).toBeCloseTo(800);
     });
 
     it('SHADOWS same-family halves across the store boundary (highest tier wins, never sums)', () => {
@@ -976,7 +978,7 @@ describe('effectiveOutgoingStatsOf — the two outgoing-damage channels', () => 
             enemyApplied: [buff('Attack Down III', { attack: -60 })],
         });
         // -60 wins outright: 4,000. A sum (-80) gives 2,000; own-wins (-20) gives 8,000.
-        expect(effectiveOutgoingStatsOf(eng, selfBuffLookup, actor).attack).toBeCloseTo(4_000);
+        expect(effectiveOutgoingStatsOf(eng, selfBuffLookup, actor, []).attack).toBeCloseTo(4_000);
     });
 
     it('a WEAKER enemy tier does not raise the owner past its own instance', () => {
@@ -987,7 +989,7 @@ describe('effectiveOutgoingStatsOf — the two outgoing-damage channels', () => 
         });
         // The owner's own III already stands; the enemy's I loses, so the channel stays at -60.
         expect(
-            effectiveOutgoingStatsOf(eng, selfBuffLookup, actor).outgoingDamageBuffPct
+            effectiveOutgoingStatsOf(eng, selfBuffLookup, actor, []).outgoingDamageBuffPct
         ).toBeCloseTo(-60);
     });
 
@@ -1001,11 +1003,16 @@ describe('effectiveOutgoingStatsOf — the two outgoing-damage channels', () => 
             selfBuffs: [buff('Out. Damage Up III', { outgoingDamage: 30 })],
             enemyApplied: [buff('Attack Down III', { attack: -60 })],
         });
-        const asPlayer = effectiveOutgoingStatsOf(eng, selfBuffLookup, actor);
-        const asEnemy = effectiveOutgoingStatsOf(eng, selfBuffLookup, {
-            ...actor,
-            side: 'enemy',
-        } as unknown as CombatActor);
+        const asPlayer = effectiveOutgoingStatsOf(eng, selfBuffLookup, actor, []);
+        const asEnemy = effectiveOutgoingStatsOf(
+            eng,
+            selfBuffLookup,
+            {
+                ...actor,
+                side: 'enemy',
+            } as unknown as CombatActor,
+            []
+        );
         // Non-vacuous: both stores are populated and both channels moved off their defaults, so
         // this is not 10,000 === 10,000 with a zero channel on each side.
         expect(asPlayer.attack).toBeCloseTo(4_000);
@@ -1048,6 +1055,9 @@ describe('squad-leader attack % in the status and outgoing folds (R200)', () => 
             preFight: { ...emptyPreFightModifiers(), attackPct: 10 },
         } as unknown as CombatActor;
         expect(effectiveStatsOf(eng, selfBuffLookup, actor).attack).toBeCloseTo(15_500, 6);
-        expect(effectiveOutgoingStatsOf(eng, selfBuffLookup, actor).attack).toBeCloseTo(15_500, 6);
+        expect(effectiveOutgoingStatsOf(eng, selfBuffLookup, actor, []).attack).toBeCloseTo(
+            15_500,
+            6
+        );
     });
 });

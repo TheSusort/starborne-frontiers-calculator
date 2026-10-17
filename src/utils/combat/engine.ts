@@ -66,6 +66,7 @@ import {
     foldActorBuffTotals,
     effectiveStatsOf,
     effectiveOutgoingStatsOf,
+    separateOutgoingModifiersOf,
     liveDebuffLandingChance,
 } from './effectiveStats';
 import {
@@ -2723,6 +2724,17 @@ export function runCombat(rawInput: CombatEngineInput): {
         ].map(({ id, shipSkills }) => [id, allAlliesModifierAbilitiesOf(shipSkills)] as const)
     );
 
+    // Per-actor-id map of each actor's own `outgoingDamageSeparate` modifiers (Arcane Siege), for
+    // the hits thrown outside the turn loop (`effectiveOutgoingStatsOf`). Same actor set as the
+    // aura map above, both sides.
+    const separateOutgoingModifiersById = new Map<string, Ability[]>(
+        [
+            { id: 'attacker', shipSkills: input.shipSkills },
+            ...teamActors.map((t) => ({ id: t.id, shipSkills: t.walk?.shipSkills })),
+            ...(input.enemyAttackers ?? []).map((e) => ({ id: e.id, shipSkills: e.shipSkills })),
+        ].map(({ id, shipSkills }) => [id, separateOutgoingModifiersOf(shipSkills)] as const)
+    );
+
     // Incremental status machine — replaces the precomputed computeBuffTimeline array.
     const statusEngine = createStatusEngine({
         selfBuffs,
@@ -3511,6 +3523,10 @@ export function runCombat(rawInput: CombatEngineInput): {
      *  reach for `livePassiveEntries` (one read for the list) wherever one owner covers it. */
     const passiveSuppressedFor = (ownerId: string, entry: { source?: 'equipment' }): boolean =>
         entry.source !== 'equipment' && isTurnBlocked(ownerId);
+    /** An owner's `outgoingDamageSeparate` modifiers for a hit thrown outside the turn loop, with
+     *  ship-passive entries dropped while it is turn-blocked (implants keep working). */
+    const liveSeparateOutgoingModifiers = (ownerId: string): Ability[] =>
+        livePassiveEntries(ownerId, separateOutgoingModifiersById.get(ownerId) ?? []);
 
     /**
      * An actor's max HP: its post-prefight `stats.hp`, the same read for every actor on both
@@ -5291,7 +5307,12 @@ export function runCombat(rawInput: CombatEngineInput): {
     const healCritStatsOf = (
         actor: CombatActor
     ): { crit: number; critDamage: number; alwaysCrits: boolean } => {
-        const o = effectiveOutgoingStatsOf(statusEngine, selfBuffLookup, actor);
+        const o = effectiveOutgoingStatsOf(
+            statusEngine,
+            selfBuffLookup,
+            actor,
+            liveSeparateOutgoingModifiers(actor.id)
+        );
         return { crit: o.crit, critDamage: o.critDamage, alwaysCrits: actor.alwaysCrits === true };
     };
     const procStandingLeechesPerVictim = (
@@ -7557,13 +7578,18 @@ export function runCombat(rawInput: CombatEngineInput): {
                             landedScheduledEnemyEffectsByActor.get(victim.id) ?? [],
                             false
                         );
-                        // The REFLECTOR's Out. Damage Up scales both shares: it is a property of
-                        // reflect itself, not of the ship's direct share (#678).
-                        const reflectorOutgoingPct = effectiveOutgoingStatsOf(
+                        // The REFLECTOR's Out. Damage Up and its separate outgoing factor
+                        // (squad-leader bonus, Arcane Siege) scale both shares: they are a property
+                        // of reflect itself, not of the ship's direct share (#678).
+                        const reflectorOutgoing = effectiveOutgoingStatsOf(
                             statusEngine,
                             selfBuffLookup,
-                            victim
-                        ).outgoingDamageBuffPct;
+                            victim,
+                            liveSeparateOutgoingModifiers(victim.id)
+                        );
+                        const reflectorOutgoingPct = reflectorOutgoing.outgoingDamageBuffPct;
+                        const reflectorOutgoingSeparateFactor =
+                            reflectorOutgoing.outgoingSeparateFactor;
                         for (const { reflectPct, directReflect } of shares) {
                             // The ship's share can destroy the attacker before the set's lands.
                             if (attacker.destroyedRound !== undefined) break;
@@ -7594,6 +7620,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 reflectPct,
                                 reflectBase,
                                 reflectorOutgoingPct,
+                                reflectorOutgoingSeparateFactor,
                                 affinityDamageModifier,
                                 attackerDefenceReductionPct: shareDefenceReductionPct,
                                 reflectVictimReduction: reflectVictimReductionFor(directReflect),
@@ -7998,7 +8025,12 @@ export function runCombat(rawInput: CombatEngineInput): {
             forceAffinityAdvantage: boolean;
             critRate: number;
         } => {
-            const ownerOutgoing = effectiveOutgoingStatsOf(statusEngine, selfBuffLookup, owner);
+            const ownerOutgoing = effectiveOutgoingStatsOf(
+                statusEngine,
+                selfBuffLookup,
+                owner,
+                liveSeparateOutgoingModifiers(owner.id)
+            );
             const profile = victimDefenseProfileOf(victim, {
                 scheduledEnemyEffects: landedScheduledEnemyEffectsByActor.get(owner.id) ?? [],
                 includeExposed: true,
@@ -8178,6 +8210,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                     // No ship kit in the corpus produces a suppressed counter owner, so
                     // `reactiveOutgoingFold.test.ts` hand-authors that shape.
                     outgoingDamageBuffPct: ownerOutgoing.outgoingDamageBuffPct,
+                    outgoingSeparateFactor: ownerOutgoing.outgoingSeparateFactor,
                     // Unread: the profile below carries the victim's own incoming channel.
                     incomingDamageModifierPct: 0,
                     defensePenetrationPct: ownerOutgoing.defensePenetration,
@@ -8429,6 +8462,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                         // (it never reaches `victimHitDamageParts`, being a copy of an
                         // already-resolved number rather than a new attack).
                         outgoingDamageBuffPct: ownerOutgoing.outgoingDamageBuffPct,
+                        outgoingSeparateFactor: ownerOutgoing.outgoingSeparateFactor,
                         // Unread: the profile below carries the victim's own incoming channel.
                         incomingDamageModifierPct: 0,
                         defensePenetrationPct: ownerOutgoing.defensePenetration,

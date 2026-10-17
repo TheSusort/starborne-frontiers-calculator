@@ -38,6 +38,9 @@ export function reflectedDamageForHit(args: {
     reflectBase: number;
     /** The REFLECTOR's outgoing damage buff (Out. Damage Up), signed %. Default 0. */
     reflectorOutgoingPct?: number;
+    /** The REFLECTOR's separate outgoing factor (squad-leader outgoing bonus × Arcane Siege,
+     *  `EffectiveOutgoingStats.outgoingSeparateFactor`). Default 1. */
+    reflectorOutgoingSeparateFactor?: number;
     /** From computeAffinityModifiers(wearer, attacker).damageModifier — one of -25 | 0 | 25 */
     affinityDamageModifier: number;
     /** calculateDamageReduction(attacker effective defence), range 0..~88 */
@@ -88,6 +91,9 @@ export function reflectedDamageParts(args: {
     reflectBase: number;
     /** The REFLECTOR's outgoing damage buff (Out. Damage Up), signed %. Default 0. */
     reflectorOutgoingPct?: number;
+    /** The REFLECTOR's separate outgoing factor (squad-leader outgoing bonus × Arcane Siege,
+     *  `EffectiveOutgoingStats.outgoingSeparateFactor`). Default 1. */
+    reflectorOutgoingSeparateFactor?: number;
     affinityDamageModifier: number;
     /** calculateDamageReduction(attacker effective defence), range 0..~88 */
     attackerDefenceReductionPct: number;
@@ -108,7 +114,8 @@ export function reflectedDamageParts(args: {
         return { damage: 0, preMitigation: 0, incomingFactor: 1 };
     }
     const base = (args.reflectPct / 100) * args.reflectBase;
-    const outgoing = 1 + (args.reflectorOutgoingPct ?? 0) / 100;
+    const outgoing =
+        (1 + (args.reflectorOutgoingPct ?? 0) / 100) * (args.reflectorOutgoingSeparateFactor ?? 1);
     const affinity = 1 + args.affinityDamageModifier / 100;
     const defence = 1 - args.attackerDefenceReductionPct / 100;
     const statusChannel = args.incomingDamageModifierPct ?? 0;
