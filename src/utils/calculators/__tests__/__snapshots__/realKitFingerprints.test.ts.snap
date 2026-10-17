@@ -95,24 +95,28 @@ exports[`kit fingerprints > Amartya 1`] = `
     "attack:charged",
     "charge-changed",
     "debuff",
+    "debuff-resisted",
   ],
   "richEnemy": [
     "attack:active",
     "attack:charged",
     "charge-changed",
     "debuff",
+    "debuff-resisted",
   ],
   "statusRich": [
     "attack:active",
     "attack:charged",
     "charge-changed",
     "debuff",
+    "debuff-resisted",
   ],
   "wounded": [
     "attack:active",
     "attack:charged",
     "charge-changed",
     "debuff",
+    "debuff-resisted",
   ],
 }
 `;
@@ -2910,20 +2914,23 @@ exports[`kit fingerprints > Purifier 1`] = `
 exports[`kit fingerprints > Quixilver 1`] = `
 {
   "plain": [
+    "attack",
     "attack:active",
-    "attack:charged",
+    "buff:charged",
     "charge-changed",
     "shield",
   ],
   "richEnemy": [
+    "attack",
     "attack:active",
-    "attack:charged",
+    "buff:charged",
     "charge-changed",
     "shield",
   ],
   "wounded": [
+    "attack",
     "attack:active",
-    "attack:charged",
+    "buff:charged",
     "charge-changed",
     "shield",
   ],
