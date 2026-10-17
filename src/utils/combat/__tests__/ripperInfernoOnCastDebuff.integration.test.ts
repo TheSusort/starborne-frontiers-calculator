@@ -482,6 +482,81 @@ describe('Ripper R2 — allies’ buffs extended once per cast that lands a debu
     });
 });
 
+// Game 3.23 text: the extension now rides "after it inflicts a debuff" with no slot qualifier.
+// Owner ruling: once per cast however many debuffs land; a cast landing none extends nothing.
+describe('Ripper R2 (3.23 text) — allies’ buffs extended once per debuff-landing cast', () => {
+    const RIPPER_PASSIVE_R2_323 =
+        'This Unit gains <unit-skill>Marauder Rage II</unit-skill> for 3 turns after it inflicts a <unit-aid>debuff</unit-aid> and all allies active <unit-skill>buffs are extended by 1 turn</unit-skill>.';
+    // One parse, so the extension and the Rage keep the ids a real ship carries.
+    const parsed323 = () => parsedSlot('passive', RIPPER_PASSIVE_R2_323).abilities;
+    const rage323 = () => parsed323().filter((a) => a.config.type !== 'extend-status');
+    const extension323 = (): Ability => {
+        const a = parsed323().find((x) => x.config.type === 'extend-status');
+        if (!a) throw new Error('Ripper 3.23 extend-status missing');
+        return a;
+    };
+    const boardFor = (
+        passive: Ability[],
+        hacking: number,
+        security: number,
+        opts: { charged?: boolean } = {}
+    ) =>
+        BASE({
+            numRounds: 6,
+            chargeCount: 10,
+            hacking,
+            hasChargedSkill: opts.charged ?? true,
+            startCharged: opts.charged ?? true,
+            shipSkills: kit(passive, { active: [plainHit()] }),
+            enemyAttackers: [victimAt('victim', security)],
+            teamActors: [allyBuffer()],
+        });
+    const baselineExpiry = () => expiryRound(run(boardFor(rage323(), 200, 0)), 'ally-buffer');
+
+    it('baseline: without the extension the ally buff expires inside the fight', () => {
+        expect(baselineExpiry()).toBeDefined();
+    });
+
+    it('the charged landing two debuffs extends the ally buff by exactly 1 turn', () => {
+        const base = baselineExpiry() as number;
+        const events = run(boardFor([...rage323(), extension323()], 200, 0));
+        expect(debuffLandingRounds(events, 'attacker', 'victim')).toEqual([1, 1]);
+        expect(expiryRound(events, 'ally-buffer')).toBe(base + 1);
+    });
+
+    it('control: with the per-cast cap stripped the same cast extends by 2 (one per debuff)', () => {
+        const base = baselineExpiry() as number;
+        const uncapped: Ability = { ...extension323(), oncePerCast: undefined };
+        const events = run(boardFor([...rage323(), uncapped], 200, 0));
+        expect(expiryRound(events, 'ally-buffer')).toBe(base + 2);
+    });
+
+    it('the charged fully resisted → no extension', () => {
+        const base = baselineExpiry() as number;
+        const events = run(boardFor([...rage323(), extension323()], 0, 100));
+        expect(resistedRounds(events, 'attacker')).toEqual([1, 1]);
+        expect(expiryRound(events, 'ally-buffer')).toBe(base);
+    });
+
+    it('casts that inflict no debuff at all → no extension', () => {
+        const board = (passive: Ability[]) => boardFor(passive, 200, 0, { charged: false });
+        const base = expiryRound(run(board(rage323())), 'ally-buffer') as number;
+        expect(base).toBeDefined();
+        const events = run(board([...rage323(), extension323()]));
+        expect(debuffLandingRounds(events, 'attacker', 'victim')).toEqual([]);
+        expect(expiryRound(events, 'ally-buffer')).toBe(base);
+        // Control: the same board with the extension on every cast does move the buff (it may
+        // then outlast the fight, so the expiry is only required to differ).
+        const everyCast: Ability = {
+            ...extension323(),
+            trigger: 'on-cast',
+            triggerApplicationFilter: undefined,
+            oncePerCast: undefined,
+        };
+        expect(expiryRound(run(board([...rage323(), everyCast])), 'ally-buffer')).not.toBe(base);
+    });
+});
+
 describe('Ripper — team symmetry (enemy-side Ripper)', () => {
     const enemyRipper = (hacking: number, passive: Ability[] = [inferno()]): EnemyAttacker => ({
         id: 'ripper-enemy',

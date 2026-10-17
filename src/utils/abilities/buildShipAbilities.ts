@@ -65,6 +65,7 @@ import {
     parseSelfCritDotFamily,
     detectSelfCritDotTrigger,
     detectInflictSourceSlotFilter,
+    detectSelfDebuffInflictionTrigger,
     parseSlotReactionDotEffect,
     detectBombDetonatedTrigger,
     detectEchoingBurstDetonatedTrigger,
@@ -1936,20 +1937,26 @@ function abilitiesFromText(
             /\bcritical\s+hit\s+occurs\b/i.test(extendSentence) ||
             /\bwith\s+a\s+critical\s+hit\b/i.test(extendSentence);
         const extendStatusPos = text.search(/extend/i);
-        // Ripper (catalogue R2): an extension in the same sentence as "When this Unit inflicts a
-        // debuff with its active or charged skills" rides that reaction — once per cast, however
-        // many debuffs the cast lands. Every other extension is on-cast.
+        // Ripper (R2): an extension whose sentence carries this Unit's own debuff-infliction
+        // trigger ("after it inflicts a debuff") rides that reaction — once per cast, however
+        // many debuffs the cast lands; a cast that lands none extends nothing. A "with its active
+        // or charged skills" qualifier narrows it to those slots. Every other extension is
+        // on-cast.
         const extendSlotFilter = detectInflictSourceSlotFilter(extendSentence);
+        const extendOnInfliction =
+            extendSlotFilter !== undefined || detectSelfDebuffInflictionTrigger(extendSentence);
         out.push({
             ability: {
                 id: nextId(),
                 type: 'extend-status',
                 target: extendTarget,
-                trigger: extendSlotFilter ? 'on-debuff-inflicted' : 'on-cast',
-                ...(extendSlotFilter
+                trigger: extendOnInfliction ? 'on-debuff-inflicted' : 'on-cast',
+                ...(extendOnInfliction
                     ? {
                           triggerApplicationFilter: 'inflict' as const,
-                          triggerSourceSlotFilter: extendSlotFilter,
+                          ...(extendSlotFilter
+                              ? { triggerSourceSlotFilter: extendSlotFilter }
+                              : {}),
                           oncePerCast: 'cast' as const,
                       }
                     : {}),
@@ -3687,11 +3694,10 @@ export function buildShipAbilities(rawShip: Ship): ShipSkills {
             : undefined;
         // Overload lifecycle guard: a kill never GRANTS a recurring/accumulating buff — it only
         // REMOVES it (the kill phrasing belongs to the remove-self-buff path, parsed separately by
-        // parseSelfBuffRemovals). The Marauder "gains 1 stack of Overload every turn and, upon
-        // destroying an enemy, removes Overload" shape makes Overload's name appear in BOTH the
-        // per-turn grant clause and the kill-removal clause; resolveBuffClause can pick up the
-        // kill phrasing and mis-trigger the accumulating GRANT on on-enemy-destroyed
-        // (Mangler/Ravager), which would gate the every-turn accrual behind a kill. Strip a kill
+        // parseSelfBuffRemovals). In the Marauder "gains 1 stack of Overload every turn and, upon
+        // destroying an enemy, removes Overload" shape, detectReactiveTrigger's clause cut already
+        // keeps the later kill clause off the grant; this guard covers any kill phrasing that cut
+        // does not separate, so the every-turn accrual is never gated behind a kill. Strip a kill
         // trigger from an accumulating (recurring) grant so it keeps its per-round accumulation;
         // the legitimate recurring-grant triggers (Asphyxiator start-of-round, Ruiner
         // on-enemy-repaired) are unaffected, and finite grants (Marauder Rage on-kill) keep their
