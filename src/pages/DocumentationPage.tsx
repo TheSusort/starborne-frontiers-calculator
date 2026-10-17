@@ -2881,7 +2881,8 @@ const DocumentationPage: React.FC = () => {
                                         debuffs, and one that says &quot;applying a debuff&quot;
                                         only to applied ones, such as Provoke, Concentrate Fire or
                                         the Burner set&apos;s Inferno (applied to every primary
-                                        target of the attack).
+                                        target of the attack). Every debuff an implant lands counts
+                                        as applied, whatever the implant&apos;s text says.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Clause Order:</span> A
@@ -3329,10 +3330,13 @@ const DocumentationPage: React.FC = () => {
                                         reductions. The attacker&apos;s attack as its buffs and
                                         debuffs leave it counts (Attack Up II raises the reflect by
                                         30%), and so does the affinity matchup between the two
-                                        ships. Critical hits and the attacker&apos;s own Outgoing
-                                        Damage Up do not change it. A shield that absorbs the hit
-                                        does not stop the reflect, but a hit that is blocked or
-                                        nullified by a Barrier reflects nothing.
+                                        ships, Affinity Overrides included as on a counter-attack:
+                                        the reflecting ship&apos;s Offensive Override and the
+                                        attacker&apos;s Defensive Override both apply. Critical hits
+                                        and the attacker&apos;s own Outgoing Damage Up do not change
+                                        it. A shield that absorbs the hit does not stop the reflect,
+                                        but a hit that is blocked or nullified by a Barrier reflects
+                                        nothing.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">
@@ -3351,19 +3355,20 @@ const DocumentationPage: React.FC = () => {
                                         as it does a counter-attack. It is damage Nosorog dealt, so
                                         his own damage-dealt leech (the Leech set) repairs off it,
                                         as it does off a counter-attack. The Reflect gear set&apos;s
-                                        bounce is direct damage too: the same reactions answer it
-                                        (Warden, Isha, every counter-attacker), the attacker&apos;s
-                                        Inc. Damage Up and Down change it, and the wearer&apos;s
-                                        Leech set repairs off it. It is not redirected by Protection
-                                        and does not read or spend Exposed or Titanite Plating. A
-                                        ship with both reflects twice, one bounce per source. A hit
-                                        that Protection moves entirely onto the protector
-                                        (Lionheart&apos;s 10 stacks) is not direct damage to the
-                                        ship it was aimed at: that ship does not counter or react,
-                                        and its Stasis does not drop, but the skill&apos;s debuffs
-                                        and other effects still land on it. When only part of the
-                                        hit is moved (Meatshield&apos;s 30%), the share it keeps is
-                                        still direct damage.
+                                        bounce works the same way in every respect: the same
+                                        reactions answer it (Warden, Isha, every counter-attacker),
+                                        the attacker&apos;s Inc. Damage Up and Down, Defense Down
+                                        and Exposed change it, Protection redirects it, it uses the
+                                        wearer&apos;s defence and shield penetration, it spends
+                                        Exposed and Titanite Plating, and the wearer&apos;s Leech
+                                        set repairs off it. A ship with both reflects twice, one
+                                        bounce per source. A hit that Protection moves entirely onto
+                                        the protector (Lionheart&apos;s 10 stacks) is not direct
+                                        damage to the ship it was aimed at: that ship does not
+                                        counter or react, and its Stasis does not drop, but the
+                                        skill&apos;s debuffs and other effects still land on it.
+                                        When only part of the hit is moved (Meatshield&apos;s 30%),
+                                        the share it keeps is still direct damage.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">

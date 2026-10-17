@@ -22,9 +22,10 @@ import { composeIncomingFactor, type IncomingReductionParts } from './victimDama
  * measured fight sits at model × 0.9895, a constant the model does not carry. The affinity
  * term is kept but has not been measured.
  *
- * The last factor is the same capped composition a direct hit takes. Both bounces read the
- * attacker's incoming-damage status channel (Inc. Damage Up/Down); only a ship's reflect also reads
- * Exposed.
+ * The last factor is the same capped composition a direct hit takes. Both bounces — a ship's
+ * reflect and the Reflect gear set's — read the attacker's whole incoming-damage status channel
+ * (Inc. Damage Up/Down and Exposed), its defence after Defense Up/Down and the reflector's defence
+ * penetration, exactly as a counter does (R176, R195, R204).
  *
  * Affinity argument order convention:
  *   The WEARER is the source of the reflected hit. Call
@@ -43,7 +44,8 @@ export function reflectedDamageForHit(args: {
     reflectorOutgoingSeparateFactor?: number;
     /** From computeAffinityModifiers(wearer, attacker).damageModifier — one of -25 | 0 | 25 */
     affinityDamageModifier: number;
-    /** calculateDamageReduction(attacker effective defence), range 0..~88 */
+    /** The attacker's defence reduction against the bounce, after the reflector's defence
+     *  penetration (`victimDefenceReductionPct`), range 0..~88 */
     attackerDefenceReductionPct: number;
     /**
      * The RECIPIENT's reductions against the bounce-back — i.e. the ship that threw the original
@@ -95,15 +97,15 @@ export function reflectedDamageParts(args: {
      *  `EffectiveOutgoingStats.outgoingSeparateFactor`). Default 1. */
     reflectorOutgoingSeparateFactor?: number;
     affinityDamageModifier: number;
-    /** calculateDamageReduction(attacker effective defence), range 0..~88 */
+    /** The attacker's defence reduction against the bounce. See the overload above. */
     attackerDefenceReductionPct: number;
     /** The bounce-back RECIPIENT's own reductions — victim-side. See the overload above. */
     reflectVictimReduction: IncomingReductionParts;
     /**
      * The bounce-back recipient's incoming-damage STATUS channel
      * (`VictimDefenseProfile.incomingDamageModifierPct`): Inc. Damage Up/Down, Exposed and the
-     * rest, signed (negative = takes less). Nosorog's bounce reads it like a counter (R176) and the
-     * Reflect gear set's reads it without Exposed (R195). Default 0.
+     * rest, signed (negative = takes less). Every bounce reads it like a counter (R176, R204).
+     * Default 0.
      */
     incomingDamageModifierPct?: number;
     /** The victim-side slice of that channel (`VictimDefenseProfile.victimSideIncomingPct`),

@@ -20,6 +20,7 @@ import { buildShipAbilities } from '../../abilities/buildShipAbilities';
 import { parsePattern, parseTarget } from '../../targetingParser';
 import type { Ability, ShipSkills } from '../../../types/abilities';
 import type { Position } from '../../../types/encounters';
+import type { Ship } from '../../../types/ship';
 import type { CombatActor } from '../state';
 
 beforeAll(() => {
@@ -354,7 +355,28 @@ describe('Xcellence: damage per enemy that resists', () => {
     });
 });
 
-describe('Ripper: one Inferno II per enemy his cast debuffs, however many debuffs it lands there', () => {
+/**
+ * "When this Unit inflicts a debuff with its active or charged skills, it also inflicts Inferno II"
+ * no longer appears on any corpus ship, so the passive is parsed from that wording inline. The
+ * charged slot is Ripper's real one: two debuffs (Inc. Repair Down III, Inc. DoT Damage Up II) on
+ * every enemy it strikes.
+ */
+const INFERNO_ON_DEBUFF_PASSIVE =
+    'When this Unit inflicts a <unit-aid>debuff</unit-aid> with its active or charged skills, it also inflicts <unit-skill>Inferno II</unit-skill> for 2 turns.';
+const inlinePassive = (text: string): Ability[] => {
+    const ship = { refits: [], firstPassiveSkillText: text } as unknown as Ship;
+    const found = buildShipAbilities(ship).slots.find((s) => s.slot === 'passive');
+    if (!found) throw new Error('inline passive did not parse');
+    return found.abilities;
+};
+const ripperWithInfernoPassive = (): ShipSkills => ({
+    slots: [
+        { slot: 'charged', abilities: realSlot('Ripper', 'charged') },
+        { slot: 'passive', abilities: inlinePassive(INFERNO_ON_DEBUFF_PASSIVE) },
+    ],
+});
+
+describe('Inferno-on-debuff passive (Ripper charged): one Inferno II per enemy the cast debuffs, however many debuffs it lands there', () => {
     /** Target ids of `casterId`'s round-1 Inferno applications. */
     const infernoTargets = (input: CombatEngineInput, casterId: string): string[] => {
         const bus = createEventBus();
@@ -368,7 +390,7 @@ describe('Ripper: one Inferno II per enemy his cast debuffs, however many debuff
     };
 
     it('player Ripper charged on Circle → two debuffs on each of A, B and C → one Inferno on each', () => {
-        expect(infernoTargets(playerCasting(kit('Ripper', 'charged')), 'attacker')).toEqual([
+        expect(infernoTargets(playerCasting(ripperWithInfernoPassive()), 'attacker')).toEqual([
             'enemy-a',
             'enemy-b',
             'enemy-c',
@@ -376,7 +398,7 @@ describe('Ripper: one Inferno II per enemy his cast debuffs, however many debuff
     });
 
     it('enemy-side Ripper charged on Circle → one Inferno on each player ship', () => {
-        expect(infernoTargets(enemyCasting(kit('Ripper', 'charged')), 'enemy-caster')).toEqual([
+        expect(infernoTargets(enemyCasting(ripperWithInfernoPassive()), 'enemy-caster')).toEqual([
             'ally-b',
             'ally-c',
             'attacker',

@@ -6455,12 +6455,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                 bombPortion?: number;
                 /** True when THIS application is itself reflected thorns (Nosorog, the Reflect gear
                  *  set). The reflection block skips when set → no ping-pong (a reflected hit never
-                 *  reflects). */
+                 *  reflects). Otherwise a bounce is a direct hit like any other: Protection
+                 *  redirects it and it spends Exposed and Titanite Plating (R162, R204). */
                 isReflected?: boolean;
-                /** With `isReflected`: the bounce of a ship's reflect — Protection redirects it,
-                 *  and it spends Exposed and Titanite Plating like any direct hit (R137, R162).
-                 *  Absent for the Reflect gear set's bounce, which does neither. */
-                directReflect?: boolean;
                 /** True for a FLAT copy of an already-resolved burst (Demolisher's Bomb splash):
                  *  Bomb damage, not a direct hit, so no Protection redirect and no Exposed spend. */
                 isSplashCopy?: boolean;
@@ -6640,9 +6637,9 @@ export function runCombat(rawInput: CombatEngineInput): {
             // fraction (10%/stack) of this victim's direct hit. The redirected chunk keeps the
             // ORIGINAL target's affinity/outgoing (both baked into `damage`) and is priced on the
             // PROTECTOR's own defence and incoming reductions — read `protectionCascade`.
-            // Guards: direct damage only, and never a redirected application (loop-safe), the
-            // Reflect gear set's bounce, or a Bomb splash copy. Counters, reactive procs and a
-            // ship's reflect are redirected (rulings 36, R162). A Bomb is never redirected, nor a
+            // Guards: direct damage only, and never a redirected application (loop-safe) or a Bomb
+            // splash copy. Counters, reactive procs and every reflect bounce — a ship's and the
+            // Reflect gear set's — are redirected (rulings 36, R162, R204). A Bomb is never redirected, nor a
             // DoT tick (R181): every Bomb burst, detonation burst, Echoing Burst and Bomb death
             // splash arrives stamped `bombPortion > 0`, so the holder takes it whole.
             // !carriesBarrier: Barrier sits strictly in front of every incoming-effect mechanism
@@ -6664,7 +6661,6 @@ export function runCombat(rawInput: CombatEngineInput): {
                 cause?.byDirectDamage &&
                 !carriesBarrier &&
                 !cause.isProtectionTransfer &&
-                (!cause.isReflected || cause.directReflect) &&
                 !cause.isSplashCopy &&
                 (cause.bombPortion ?? 0) === 0 &&
                 !wholeBattlefieldHit &&
@@ -7459,11 +7455,11 @@ export function runCombat(rawInput: CombatEngineInput): {
             // counter through `landReactiveHit`, so the attacker's "when directly damaged"
             // reactions answer it (every counter included, R160), its Stasis drops, its
             // damage-taken shields fire, and the reflector's standing leech pays on it (R165,
-            // R197). A reflector carrying both a ship reflect and the Reflect gear set
-            // (`source: 'equipment'`) lands two separate bounces. The ship's share also reads the
-            // attacker's Exposed and Protection, and uses the reflector's penetration; the gear
-            // set's share reads the rest of the attacker's incoming-damage channel (R195) but none
-            // of those.
+            // R197). Each bounce is priced like a counter's hit on Protection, Exposed and the
+            // reflector's defence and shield penetration (R162, R204); the Reflect gear set's
+            // bounce works like a ship's reflect in every facet (R186). A reflector carrying both a
+            // ship reflect and the Reflect gear set (`source: 'equipment'`) still lands two
+            // separate bounces.
             //
             // GATE (owner rulings, #678): the hit must have landed. A hit the reflector's shield
             // soaks whole still reflects in full; a hit that does nothing reflects nothing —
@@ -7523,10 +7519,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                         );
                     // A wearer carrying both bounces each share separately off the same hit: the
                     // ship's share first, then the set's.
-                    const shares = [
-                        { reflectPct: reflectPctOf(false), directReflect: true },
-                        { reflectPct: reflectPctOf(true), directReflect: false },
-                    ].filter((share) => share.reflectPct > 0);
+                    const shares = [reflectPctOf(false), reflectPctOf(true)].filter(
+                        (reflectPct) => reflectPct > 0
+                    );
                     const attacker = allActorsById.get(cause?.killerId ?? '');
                     // Skip a missing attacker, self-damage (victim === attacker), and an
                     // already-destroyed attacker (no posthumous reflection).
@@ -7535,52 +7530,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                         attacker.id !== victim.id &&
                         attacker.destroyedRound === undefined
                     ) {
-                        // The WEARER (victim) is the source of the reflected hit → affinity is
-                        // resolved wearer→attacker (computeAffinityModifiers(victim, attacker)).
-                        // OPEN OWNER QUESTION: a ship's bounce applies neither the attacker's
-                        // Defensive Affinity Override nor the wearer's Offensive Affinity Override
-                        // (a counter applies both). Not to be aligned with the counter without a ruling.
-                        const affinityDamageModifier = computeAffinityModifiers(
-                            victim.affinity,
-                            attacker.affinity
-                        ).damageModifier;
-                        const attackerDefence = effectiveStatsOf(
-                            statusEngine,
-                            selfBuffLookup,
-                            attacker
-                        ).defence;
-                        const attackerDefenceReductionPct =
-                            attackerDefence > 0 ? calculateDamageReduction(attackerDefence) : 0;
-                        // The reflected hit's attacker is the reflector (`victim`, outer scope) and
-                        // its victim is `attacker`, who receives the bounce-back. A ship's bounce
-                        // reads the recipient's reductions through the counter's own context, so a
-                        // stealth-conditional one (Voidshade, Wusheng) applies; the gear set's
-                        // bounce keeps the context-free reading.
-                        const reflectVictimReductionFor = (directReflect: boolean) =>
-                            hitReductionFor(
-                                victim.id,
-                                attacker.id,
-                                false,
-                                directReflect
-                                    ? {}
-                                    : {
-                                          attackerStealthed: false,
-                                          victimStealthed: false,
-                                          victimTurnBlocked: false,
-                                          attackerTauntedOrProvoked: false,
-                                      }
-                            ).parts;
-                        // The gear set's share reads the recipient's incoming-damage status channel
-                        // (Inc. Damage Up/Down, R195) without Exposed, which only a bounce that
-                        // spends it may read.
-                        const setStatusChannel = victimIncomingModifiers(
-                            attacker.id,
-                            landedScheduledEnemyEffectsByActor.get(victim.id) ?? [],
-                            false
-                        );
                         // The REFLECTOR's Out. Damage Up and its separate outgoing factor
-                        // (squad-leader bonus, Arcane Siege) scale both shares: they are a property
-                        // of reflect itself, not of the ship's direct share (#678).
+                        // (squad-leader bonus, Arcane Siege) scale every share (#678).
                         const reflectorOutgoing = effectiveOutgoingStatsOf(
                             statusEngine,
                             selfBuffLookup,
@@ -7590,30 +7541,34 @@ export function runCombat(rawInput: CombatEngineInput): {
                         const reflectorOutgoingPct = reflectorOutgoing.outgoingDamageBuffPct;
                         const reflectorOutgoingSeparateFactor =
                             reflectorOutgoing.outgoingSeparateFactor;
-                        for (const { reflectPct, directReflect } of shares) {
+                        for (const reflectPct of shares) {
                             // The ship's share can destroy the attacker before the set's lands.
                             if (attacker.destroyedRound !== undefined) break;
-                            // A ship's bounce reads the attacker's buffs and debuffs through the
-                            // counter's own profile (R176): its defence with Defense Up/Down, and
-                            // the incoming-damage status channel — Inc. Damage Up/Down and Exposed,
-                            // which the funnel then spends. The gear set's share takes its defence
-                            // from `effectiveStatsOf(attacker)` — the attacker's own self-sourced
-                            // buffs only, no enemy-applied Defense Down — and the status channel
-                            // without Exposed.
-                            const directInputs = directReflect
-                                ? reactiveHitInputs(victim, attacker)
-                                : undefined;
-                            const directProfile = directInputs?.profile;
-                            // R179: the ship's own share applies the reflector's outgoing defence
-                            // penetration, exactly as a counter does; the gear set's share reads
-                            // the attacker's plain defence and applies none.
-                            const shareDefenceReductionPct =
-                                directProfile && directInputs
-                                    ? victimDefenceReductionPct(
-                                          directProfile,
-                                          directInputs.ownerOutgoing.defensePenetration
-                                      )
-                                    : attackerDefenceReductionPct;
+                            // Every bounce reads the attacker's buffs and debuffs through the
+                            // counter's own profile (R176, R204): its defence with Defense Up/Down,
+                            // and the incoming-damage status channel — Inc. Damage Up/Down and
+                            // Exposed, which the funnel then spends. Read per share, so a share
+                            // sees the Exposed stack the share before it spent. The reflector's
+                            // outgoing defence penetration applies as a counter's does (R179).
+                            const directInputs = reactiveHitInputs(victim, attacker);
+                            const directProfile = directInputs.profile;
+                            // The reflector is the bounce's source and the attacker its recipient,
+                            // so the matchup resolves reflector→attacker with both Affinity
+                            // Overrides exactly as on a counter (R205): the reflector's Offensive
+                            // and the attacker's Defensive, in `affinityModifiersWithOverrides`'
+                            // precedence.
+                            const affinityDamageModifier = affinityModifiersWithOverrides(
+                                victim.affinity ?? 'antimatter',
+                                directProfile.affinity,
+                                {
+                                    forceAdvantage: directInputs.forceAffinityAdvantage,
+                                    forceDisadvantage: directProfile.forceAffinityDisadvantage,
+                                }
+                            ).damageModifier;
+                            const shareDefenceReductionPct = victimDefenceReductionPct(
+                                directProfile,
+                                directInputs.ownerOutgoing.defensePenetration
+                            );
                             // ONE evaluation, both axes (#358): `reflectedDamageParts` returns the
                             // mitigated amount and its pre-defence twin from a single walk.
                             const bounce = reflectedDamageParts({
@@ -7623,13 +7578,17 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 reflectorOutgoingSeparateFactor,
                                 affinityDamageModifier,
                                 attackerDefenceReductionPct: shareDefenceReductionPct,
-                                reflectVictimReduction: reflectVictimReductionFor(directReflect),
-                                incomingDamageModifierPct:
-                                    directProfile?.incomingDamageModifierPct ??
-                                    setStatusChannel.incomingDamageModifier,
-                                victimSideIncomingPct:
-                                    directProfile?.victimSideIncomingPct ??
-                                    setStatusChannel.victimSideIncomingModifier,
+                                // The reflected hit's attacker is the reflector (`victim`, outer
+                                // scope) and its victim is `attacker`. Read through the counter's
+                                // own context, so a stealth-conditional reduction (Voidshade,
+                                // Wusheng) applies.
+                                reflectVictimReduction: hitReductionFor(
+                                    victim.id,
+                                    attacker.id,
+                                    false
+                                ).parts,
+                                incomingDamageModifierPct: directProfile.incomingDamageModifierPct,
+                                victimSideIncomingPct: directProfile.victimSideIncomingPct,
                             });
                             const reflected = bounce.damage;
                             const reflectedPreMit = bounce.preMitigation;
@@ -7650,24 +7609,15 @@ export function runCombat(rawInput: CombatEngineInput): {
                                         killerId: victim.id,
                                         byDirectDamage: true,
                                         isReflected: true,
-                                        // A ship's bounce is redirected by the attacker's
-                                        // Protection, spends its Titanite/Exposed and uses the
-                                        // reflector's shield penetration (R162); the gear set's
-                                        // bounce does none of that.
-                                        ...(directReflect
-                                            ? {
-                                                  directReflect: true,
-                                                  redirectBasis: {
-                                                      defenceMitigation:
-                                                          1 - shareDefenceReductionPct / 100,
-                                                      incomingFactor: bounce.incomingFactor,
-                                                      didCrit: false,
-                                                  },
-                                              }
-                                            : {}),
-                                        shieldPenetrationPct: directReflect
-                                            ? attackerShieldPenOf(victim.id)
-                                            : 0,
+                                        // Redirected by the attacker's Protection, spends its
+                                        // Titanite/Exposed and uses the reflector's shield
+                                        // penetration (R162, R204).
+                                        redirectBasis: {
+                                            defenceMitigation: 1 - shareDefenceReductionPct / 100,
+                                            incomingFactor: bounce.incomingFactor,
+                                            didCrit: false,
+                                        },
+                                        shieldPenetrationPct: attackerShieldPenOf(victim.id),
                                         bombPortion: 0,
                                         // #358 ADDENDUM 2: the same reflected hit without the
                                         // reflect victim's (the original attacker's) defence term.
@@ -7776,12 +7726,11 @@ export function runCombat(rawInput: CombatEngineInput): {
             // they spend here:
             //  - a cast hit, through `defenseProfileOf` (`victimDefenseProfileOf`);
             //  - a counter-attack or reactive damage proc, through `reactiveHitInputs`' profile;
-            //  - a ship's reflect (`cause.directReflect`, R162), through that same profile (R176).
+            //  - every reflect bounce (`cause.isReflected`) — a ship's and the Reflect gear set's
+            //    (R162, R204) — through that same profile (R176).
             // These do NOT read it, so they must not spend (PR #289):
             //  - DoT-tick batches and bomb/detonation portions (`byDirectDamage: false` / a
             //    non-zero `bombPortion`);
-            //  - the Reflect gear set's bounce (`isReflected` without `directReflect`) —
-            //    `reflectedDamageParts` gets its status channel without Exposed;
             //  - a Protection transfer (`isProtectionTransfer`) — the redirected chunk comes off
             //    the ORIGINAL victim's cascade;
             //  - a Bomb splash copy (`isSplashCopy`).
@@ -7822,7 +7771,6 @@ export function runCombat(rawInput: CombatEngineInput): {
                 cause?.byDirectDamage === true &&
                 (cause.bombPortion ?? 0) === 0 &&
                 !cause.isProtectionTransfer &&
-                (!cause.isReflected || cause.directReflect) &&
                 !cause.isSplashCopy &&
                 immediateDamage - transformedToDot > 0
             ) {

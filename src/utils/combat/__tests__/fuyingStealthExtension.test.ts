@@ -130,7 +130,7 @@ describe('parseExtendStatus — corpus sweep (non-vacuity + non-disturbance)', (
         expect(named).toEqual(['Fuying:Stealth']);
     });
 
-    it('every OTHER extend-status match in the corpus still has no buffName (Ripper/Lev/Asphyxiator unmoved)', () => {
+    it('every OTHER extend-status match in the corpus has no buffName (Ripper/Lev/Asphyxiator/Sokol)', () => {
         const generic: { name: string; result: ReturnType<typeof parseExtendStatus> }[] = [];
         for (const record of loadShipSkillRecords()) {
             for (const text of [record.active, record.charge, ...record.passives]) {
@@ -139,9 +139,14 @@ describe('parseExtendStatus — corpus sweep (non-vacuity + non-disturbance)', (
                 if (r && r.buffName === undefined) generic.push({ name: record.name, result: r });
             }
         }
-        // Ripper (passive buff), Lev (charged debuff) and Asphyxiator (refit passive, the
-        // INFLICTED-scope arm).
-        expect(generic.map((g) => g.name).sort()).toEqual(['Asphyxiator', 'Lev', 'Ripper']);
+        // Ripper (passive buff), Lev (charged debuff), Sokol (charged debuff, the active-voice
+        // "extends active debuffs" arm) and Asphyxiator (refit passive, the INFLICTED-scope arm).
+        expect(generic.map((g) => g.name).sort()).toEqual([
+            'Asphyxiator',
+            'Lev',
+            'Ripper',
+            'Sokol',
+        ]);
         for (const g of generic) expect(g.result?.buffName).toBeUndefined();
     });
 

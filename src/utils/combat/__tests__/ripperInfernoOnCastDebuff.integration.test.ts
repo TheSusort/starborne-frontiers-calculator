@@ -524,6 +524,22 @@ describe('Ripper R2 (3.23 text) — allies’ buffs extended once per debuff-lan
         expect(expiryRound(events, 'ally-buffer')).toBe(base + 1);
     });
 
+    // Owner ruling 2026-10-17: "all allies" includes Ripper, and the extension resolves after the
+    // gain (written order), so the Marauder Rage II he gains on that same cast is extended too.
+    it('the extension also extends the Marauder Rage II Ripper gains on that cast', () => {
+        const rageExpiry = (events: CombatEvent[]) =>
+            events.find(
+                (e) =>
+                    e.type === 'buff-expired' &&
+                    e.actorId === 'attacker' &&
+                    e.buffName === 'Marauder Rage II'
+            )?.round;
+        const base = rageExpiry(run(boardFor(rage323(), 200, 0)));
+        expect(base).toBeDefined();
+        const events = run(boardFor([...rage323(), extension323()], 200, 0));
+        expect(rageExpiry(events)).toBe((base as number) + 1);
+    });
+
     it('control: with the per-cast cap stripped the same cast extends by 2 (one per debuff)', () => {
         const base = baselineExpiry() as number;
         const uncapped: Ability = { ...extension323(), oncePerCast: undefined };

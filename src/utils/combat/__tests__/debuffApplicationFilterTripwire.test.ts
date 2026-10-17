@@ -14,8 +14,9 @@
  * "inflict"/"apply" verb carries a `triggerApplicationFilter` — catching a future ship whose text
  * uses one of these verbs but whose parser path forgot to call the verb detector, which would
  * silently leave the ability firing on BOTH landing kinds (the pre-#593 default). The equipment
- * half pins the same rule for implants and gear sets: an equipment debuff/DoT carries the verb its
- * description states, and Insidiousness reacts to inflicted debuffs only (user ruling, 2026-10-02).
+ * half pins the same rule for gear sets (a set's debuff/DoT carries the verb its description
+ * states), that every implant debuff/DoT is an apply whatever its text says (R206), and that
+ * Insidiousness reacts to inflicted debuffs only (user ruling, 2026-10-02).
  * The ship-DoT half pins that no ship DoT clause in either corpus is worded "applies <DoT>": the
  * parser never stamps `application` on a ship DoT, so every one lands and reacts as an inflict —
  * an apply-worded one would need that stamp, and this test is where it would surface.
@@ -232,9 +233,11 @@ describe.skipIf(!CATALOGUE_PRESENT)(
 );
 
 // ---------------------------------------------------------------------------------------------
-// Equipment: implants and gear sets carry the verb their own description states.
+// Equipment: a gear set carries the verb its own description states; an implant always applies
+// (R206), whatever verb its description uses.
 // ---------------------------------------------------------------------------------------------
 type EquipmentSource = {
+    kind: 'implant' | 'set';
     label: string;
     description: string;
     build: () => ReturnType<typeof buildEquipmentAbilities>;
@@ -250,6 +253,7 @@ function equipmentSources(): EquipmentSource[] {
                 setBonus: key,
             } as unknown as GearPiece;
             out.push({
+                kind: 'implant',
                 label: `${key}/${variant.rarity}`,
                 description: (variant as { description?: string }).description ?? '',
                 build: () =>
@@ -274,6 +278,7 @@ function equipmentSources(): EquipmentSource[] {
             } as unknown as GearPiece;
         });
         out.push({
+            kind: 'set',
             label: key,
             description: (set as { description?: string }).description ?? '',
             build: () =>
@@ -287,10 +292,10 @@ function equipmentSources(): EquipmentSource[] {
 }
 
 describe('equipment — the landing verb its description states', () => {
-    it('every equipment debuff/DoT whose description names a verb carries it as `application`', () => {
+    it('every gear-set debuff/DoT whose description names a verb carries it as `application`', () => {
         const mismatches: string[] = [];
         let checked = 0;
-        for (const src of equipmentSources()) {
+        for (const src of equipmentSources().filter((s) => s.kind === 'set')) {
             const m = VERB_RE.exec(src.description);
             if (!m) continue;
             const verb = /^inflict/i.test(m[0]) ? 'inflict' : 'apply';
@@ -304,8 +309,28 @@ describe('equipment — the landing verb its description states', () => {
                     mismatches.push(`${src.label}: text ${verb}, carries ${carried}`);
             }
         }
-        // Not vacuous: Burner, Martyrdom, Bulwark and Doomsayer all state "applies".
+        // Not vacuous: Burner states "applies".
         expect(checked).toBeGreaterThan(0);
+        expect(mismatches).toEqual([]);
+    });
+
+    it('every implant debuff/DoT is an apply, whatever its description says (R206)', () => {
+        const mismatches: string[] = [];
+        const checked = new Set<string>();
+        for (const src of equipmentSources().filter((s) => s.kind === 'implant')) {
+            for (const ability of src.build()) {
+                const config = ability.config as { type: string; application?: string };
+                if (config.type !== 'debuff' && config.type !== 'dot') continue;
+                checked.add(src.label.split('/')[0]);
+                // An absent verb reads as an inflict (`passesApplicationFilter`'s doc).
+                if (config.application !== 'apply')
+                    mismatches.push(`${src.label}: carries ${config.application ?? 'inflict'}`);
+            }
+        }
+        // Not vacuous: the implants that land a debuff today.
+        expect([...checked].sort()).toEqual(
+            expect.arrayContaining(['BULWARK', 'DOOMSAYER', 'MARTYRDOM'])
+        );
         expect(mismatches).toEqual([]);
     });
 

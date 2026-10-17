@@ -2,7 +2,8 @@
  * Nosorog's reflect bounce is direct damage that lands like a counter (R137, R176), so it reads
  * the attacker's stealth-conditional reductions the way a counter does: a stealthed hitter under
  * "takes X% less direct damage while Stealth is active" (Voidshade, Wusheng) takes the reduced
- * bounce, and an unstealthed one takes it whole.
+ * bounce, and an unstealthed one takes it whole. The Reflect gear set's bounce reads them the same
+ * way (R204, R186).
  *
  * Every case runs with Nosorog on the player side and on the enemy side.
  */
@@ -20,6 +21,10 @@ import {
     type Placement,
 } from '../__testutils__/realKitBoard';
 import type { Ability, ShipSkills } from '../../../types/abilities';
+import type { Ship } from '../../../types/ship';
+import type { GearPiece } from '../../../types/gear';
+import { buildShipAbilitiesWithEquipment } from '../../abilities/buildShipAbilitiesWithEquipment';
+import { getGearSet } from '../../../constants/gearSets';
 
 beforeAll(() => {
     if (!csvAvailable() || !shipDataAvailable())
@@ -80,6 +85,46 @@ const nosorog = (): BoardUnit => ({
     defence: 5_000,
 });
 
+/** The passive slot the Reflect gear set builds (its damage-reflection ability). */
+const reflectSetPassive = (): ShipSkills['slots'][number] => {
+    const slots = ['weapon', 'hull', 'generator', 'sensor'] as const;
+    const pieces: GearPiece[] = slots
+        .slice(0, getGearSet('REFLECT')?.minPieces ?? 2)
+        .map((slot, i) => ({
+            id: `reflect-${i}`,
+            slot,
+            level: 16,
+            stars: 6,
+            rarity: 'legendary',
+            mainStat: null,
+            subStats: [],
+            setBonus: 'REFLECT',
+        }));
+    const ship = {
+        id: 'wearer-ship',
+        name: 'Wearer',
+        rarity: 'legendary',
+        faction: 'AURELIAN_SOVEREIGNTY',
+        type: 'DEFENDER',
+        baseStats: {},
+        equipment: Object.fromEntries(pieces.map((p) => [p.slot, p.id])),
+        implants: {},
+        refits: [],
+    } as unknown as Ship;
+    const built = buildShipAbilitiesWithEquipment(ship, (id) => pieces.find((p) => p.id === id));
+    const slot = built.slots.find((s) => s.slot === 'passive');
+    if (!slot?.abilities.some((a) => a.config.type === 'damage-reflection'))
+        throw new Error('Reflect set did not build a damage-reflection passive');
+    return slot;
+};
+
+/** A hull wearing the Reflect gear set and nothing else. */
+const reflectSetWearer = (): BoardUnit => ({
+    ...nosorog(),
+    id: 'wearer',
+    kit: { slots: [{ slot: 'active', abilities: [] }, reflectSetPassive()] },
+});
+
 const hitter = (extra: ShipSkills['slots']): BoardUnit => ({
     id: 'hitter',
     kit: { slots: [...hitKit(100).slots, ...extra] },
@@ -90,8 +135,11 @@ const hitter = (extra: ShipSkills['slots']): BoardUnit => ({
 });
 
 /** The bounce Nosorog lands on the hitter in round 1. */
-const bounce = (placement: Placement, extra: ShipSkills['slots']): number => {
-    const reflector = nosorog();
+const bounce = (
+    placement: Placement,
+    extra: ShipSkills['slots'],
+    reflector: BoardUnit = nosorog()
+): number => {
     const attacker = hitter(extra);
     const { input, id } = boardInput(placement, reflector, [], [attacker], 1);
     const bus = createEventBus();
@@ -115,6 +163,22 @@ describe.each(SIDES)('Nosorog on the %s side', (placement) => {
     it('an unstealthed hitter with the same reduction takes the bounce whole', () => {
         const bare = bounce(placement, []);
         const withReduction = bounce(placement, [stealthReduction]);
+        expect(withReduction).toBeCloseTo(bare, 6);
+    });
+});
+
+describe.each(SIDES)('a Reflect gear set wearer on the %s side (R204)', (placement) => {
+    it('a stealthed hitter under a stealth-conditional reduction takes the reduced bounce', () => {
+        const bare = bounce(placement, [stealthAura], reflectSetWearer());
+        const reduced = bounce(placement, [stealthAura, stealthReduction], reflectSetWearer());
+        expect(bare).toBeGreaterThan(0);
+        expect(reduced).toBeCloseTo(bare * 0.8, 6);
+    });
+
+    it('an unstealthed hitter with the same reduction takes the bounce whole', () => {
+        const bare = bounce(placement, [], reflectSetWearer());
+        const withReduction = bounce(placement, [stealthReduction], reflectSetWearer());
+        expect(bare).toBeGreaterThan(0);
         expect(withReduction).toBeCloseTo(bare, 6);
     });
 });

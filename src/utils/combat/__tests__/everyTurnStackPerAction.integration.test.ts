@@ -1,15 +1,15 @@
 /**
  * "This Unit gains 1 stack of Blast every turn" counts every ACTION the unit takes, extra actions
  * included (owner ruling R58, 2026-10-05). Round 1: Sokol holds 1 Blast stack, kills an enemy and
- * takes his extra action straight away — that extra action is a turn, so he holds 2 stacks on it,
- * and 3 on his round-2 turn.
+ * takes his extra action at the end of the round — that extra action is a turn, so he holds 2
+ * stacks on it, and 3 on his round-2 turn.
  *
- * Blast is +15% outgoing damage per stack, so Sokol's 80% active on an enemy with no defence deals
- * 800 × (1 + 0.15 × stacks) at attack 1000: 920 at 1 stack, 1040 at 2, 1160 at 3.
+ * Blast is +15% outgoing damage per stack, so Sokol's 130% active on an enemy with no defence deals
+ * 1300 × (1 + 0.15 × stacks) at attack 1000: 1495 at 1 stack, 1690 at 2, 1885 at 3.
  *
  * Real parsed kits (buildTraceShip on docs/ship-skills.csv). Sokol at refit 4 carries the extra
- * action ("When an enemy is destroyed, once per round, this Unit gains 1 extra action"); at refit 0
- * his passive is the Blast clause alone.
+ * action ("upon destroying an enemy, once per round, this Unit gains 1 extra end of round action");
+ * at refit 0 his passive is the Blast clause alone.
  */
 import { describe, it, expect, beforeEach, beforeAll } from 'vitest';
 import { runCombat, CombatEngineInput } from '../engine';
@@ -172,7 +172,7 @@ describe("Sokol's 'gains 1 stack of Blast every turn' counts his extra action (R
                 position: 'M4',
                 enemyAttackers: [enemyAt('enemy-a', 'M4', FRAGILE), enemyAt('enemy-b', 'M3', BIG)],
             });
-            expect(hitsBy(input, 'attacker', 'enemy-a')).toEqual(['1:1040', '2:1160']);
+            expect(hitsBy(input, 'attacker', 'enemy-a')).toEqual(['1:1690', '2:1885']);
         });
         it(`enemy Sokol, ${order}: kill → extra action at 2 stacks, round 2 at 3`, () => {
             const input = base({
@@ -181,7 +181,7 @@ describe("Sokol's 'gains 1 stack of Blast every turn' counts his extra action (R
                 teamActors: [teamAt('ally-front', 'M4', FRAGILE)],
                 enemyAttackers: [enemyAt('enemy-sokol', 'M4', BIG, sokol(4), sokolSpeed)],
             });
-            expect(hitsBy(input, 'enemy-sokol', 'ally-front')).toEqual(['1:1040', '2:1160']);
+            expect(hitsBy(input, 'enemy-sokol', 'ally-front')).toEqual(['1:1690', '2:1885']);
         });
         it(`player Sokol, ${order}: no kill → no extra action, one stack per round`, () => {
             const input = base({
@@ -191,7 +191,7 @@ describe("Sokol's 'gains 1 stack of Blast every turn' counts his extra action (R
                 position: 'M4',
                 enemyAttackers: [enemyAt('enemy-a', 'M4', BIG)],
             });
-            expect(hitsBy(input, 'attacker', 'none')).toEqual(['1:920', '2:1040']);
+            expect(hitsBy(input, 'attacker', 'none')).toEqual(['1:1495', '2:1690']);
         });
         it(`enemy Sokol, ${order}: no kill → no extra action, one stack per round`, () => {
             const input = base({
@@ -199,7 +199,7 @@ describe("Sokol's 'gains 1 stack of Blast every turn' counts his extra action (R
                 position: 'M4',
                 enemyAttackers: [enemyAt('enemy-sokol', 'M4', BIG, sokol(4), sokolSpeed)],
             });
-            expect(hitsBy(input, 'enemy-sokol', 'none')).toEqual(['1:920', '2:1040']);
+            expect(hitsBy(input, 'enemy-sokol', 'none')).toEqual(['1:1495', '2:1690']);
         });
     }
 
@@ -214,9 +214,9 @@ describe("Sokol's 'gains 1 stack of Blast every turn' counts his extra action (R
             teamActors: [teamAt('ally-sokol', 'M4', BIG, sokol(4), 200)],
             enemyAttackers: [enemyAt('enemy-a', 'M4', FRAGILE), enemyAt('enemy-b', 'M3', BIG)],
         });
-        expect(hitsBy(input, 'attacker', 'none')).toEqual(['1:920', '2:1040']);
+        expect(hitsBy(input, 'attacker', 'none')).toEqual(['1:1495', '2:1690']);
         // The instrument: the ally really did take an extra action at 2 stacks.
-        expect(hitsBy(input, 'ally-sokol', 'enemy-a')).toEqual(['1:1040', '2:1160']);
+        expect(hitsBy(input, 'ally-sokol', 'enemy-a')).toEqual(['1:1690', '2:1885']);
     });
 
     it("an enemy ally's extra action does not add a stack to the enemy Sokol", () => {
@@ -229,7 +229,7 @@ describe("Sokol's 'gains 1 stack of Blast every turn' counts his extra action (R
                 enemyAt('enemy-sokol-r0', 'M3', BIG, sokol(0), 10),
             ],
         });
-        expect(hitsBy(input, 'enemy-sokol-r0', 'none')).toEqual(['1:920', '2:1040']);
-        expect(hitsBy(input, 'enemy-sokol-r4', 'ally-front')).toEqual(['1:1040', '2:1160']);
+        expect(hitsBy(input, 'enemy-sokol-r0', 'none')).toEqual(['1:1495', '2:1690']);
+        expect(hitsBy(input, 'enemy-sokol-r4', 'ally-front')).toEqual(['1:1690', '2:1885']);
     });
 });
