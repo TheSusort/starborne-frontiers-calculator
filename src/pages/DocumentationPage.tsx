@@ -2881,7 +2881,8 @@ const DocumentationPage: React.FC = () => {
                                         debuffs, and one that says &quot;applying a debuff&quot;
                                         only to applied ones, such as Provoke, Concentrate Fire or
                                         the Burner set&apos;s Inferno (applied to every primary
-                                        target of the attack).
+                                        target of the attack). Every debuff an implant lands counts
+                                        as applied, whatever the implant&apos;s text says.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Clause Order:</span> A
