@@ -189,3 +189,19 @@ describe('buildInertAllyBaseline', () => {
         expect(input.playerTeam[SUBJECT_INDEX].position).toBe('T1');
     });
 });
+
+describe('buildStandardScenario reviewedBack', () => {
+    const reviewed = ship('subject', 'Subject');
+    const seatOf = (back: boolean) =>
+        buildStandardScenario(reviewed, back ? { reviewedBack: true } : {}).playerTeam.map(
+            (p) => `${p.ship.name}@${p.position}`
+        );
+
+    it('seats the reviewed ship at M4 by default', () => {
+        expect(seatOf(false)).toEqual(['Subject@M4', 'PlainAlly@M1', 'CounterAlly@B4']);
+    });
+
+    it('swaps the reviewed ship and the plain ally, keeping the reviewed ship first', () => {
+        expect(seatOf(true)).toEqual(['Subject@M1', 'PlainAlly@M4', 'CounterAlly@B4']);
+    });
+});

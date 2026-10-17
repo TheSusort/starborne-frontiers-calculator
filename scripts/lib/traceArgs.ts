@@ -9,7 +9,7 @@ export interface TraceArgs {
 
 // Flags: --all | --hp-scale <n> | --crit <n> | --enemy-attack-scale <n>
 //        | --enemy-affinity <chemical|electric|thermal|antimatter> | --fragile-ally
-//        | --refit <0|2|4> | --rounds <n> | --out-suffix <str>
+//        | --refit <0|2|4> | --rounds <n> | --out-suffix <str> | --focus-back
 // Bare tokens (not starting with --) are ship names.
 export function parseTraceArgs(argv: string[]): TraceArgs {
     const out: TraceArgs = { all: false, names: [], overrides: {} };
@@ -40,6 +40,9 @@ export function parseTraceArgs(argv: string[]): TraceArgs {
                 break;
             case '--rounds':
                 out.overrides.rounds = Number(next());
+                break;
+            case '--focus-back':
+                out.overrides.reviewedBack = true;
                 break;
             case '--out-suffix':
                 out.outSuffix = next();
