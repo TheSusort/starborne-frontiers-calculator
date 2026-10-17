@@ -1,10 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import BountyCreditsCalculatorPage, {
-    DEFAULT_SETTINGS,
-    isSettings,
-} from '../BountyCreditsCalculatorPage';
+import BountyCreditsCalculatorPage from '../BountyCreditsCalculatorPage';
+import { DEFAULT_SETTINGS, isSettings } from '../bountyCreditsSettings';
 
 vi.mock('../../../contexts/AuthProvider', () => ({
     useAuth: () => ({ user: null, loading: false }),
