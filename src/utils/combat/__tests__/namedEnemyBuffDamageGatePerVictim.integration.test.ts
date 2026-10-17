@@ -6,12 +6,12 @@
  * An ally's hit on enemy A (no Stealth) takes no bonus while enemy B holds Stealth; A holding
  * Stealth itself does.
  * Rikra: "deals 140% damage with an additional 60% damage to enemies affected by Taunt or
- * Provoke." Her hit on A (no Taunt) takes no bonus while B Taunts; A Taunting itself does. Sokol's
- * "if the target is affected by a control effect, deals an additional 130% damage" reads Taunt the
- * same way.
+ * Provoke." Her hit on A (no Taunt) takes no bonus while B Taunts; A Taunting itself does. "If the
+ * target is affected by a control effect, deals an additional 130% damage" reads Taunt the same way.
  *
- * Real parsed Lodolite passive and Rikra / Sokol actives (buildTraceShip, refit 4). The statuses are self
- * buffs the enemies cast on their own (earlier) turns.
+ * Real parsed Lodolite passive and Rikra active (buildTraceShip, refit 4); the control-effect active
+ * is parsed from inline text. The statuses are self buffs the enemies cast on their own (earlier)
+ * turns.
  */
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { runCombat, CombatEngineInput } from '../engine';
@@ -24,6 +24,7 @@ import { buildShipAbilities } from '../../abilities/buildShipAbilities';
 import { parsePattern, parseTarget } from '../../targetingParser';
 import type { Ability, ShipSkills } from '../../../types/abilities';
 import type { Position } from '../../../types/encounters';
+import type { Ship } from '../../../types/ship';
 
 beforeAll(() => {
     if (!csvAvailable() || !shipDataAvailable()) {
@@ -71,9 +72,16 @@ const lodolitePassive = (): ShipSkills => ({
 const rikraActive = (): ShipSkills => ({
     slots: [{ slot: 'active', abilities: realSlot('Rikra', 'active') }],
 });
-const sokolActive = (): ShipSkills => ({
-    slots: [{ slot: 'active', abilities: realSlot('Sokol', 'active') }],
-});
+/** No corpus ship carries a control-effect damage gate, so this active is parsed from that wording
+ *  inline. */
+const CONTROL_GATED_ACTIVE =
+    'This Unit deals <unit-damage>80% damage</unit-damage> and, if the target is affected by a <unit-skill>control</unit-skill> effect, deals an additional <unit-damage>130% damage</unit-damage>.';
+const controlGatedActive = (): ShipSkills => {
+    const ship = { refits: [], activeSkillText: CONTROL_GATED_ACTIVE } as unknown as Ship;
+    const found = buildShipAbilities(ship).slots.find((s) => s.slot === 'active');
+    if (!found) throw new Error('inline active did not parse');
+    return { slots: [found] };
+};
 /** A cast that only grants the caster `buffName` for 3 turns. */
 const selfGrant = (buffName: string): ShipSkills => ({
     slots: [
@@ -310,10 +318,10 @@ describe('Rikra: "additional damage to enemies affected by Taunt" reads the stru
     });
 });
 
-describe('Sokol: "if the target is affected by a control effect" reads the struck enemy', () => {
+describe('"if the target is affected by a control effect" reads the struck enemy', () => {
     const board = (aSkills: ShipSkills, bSkills?: ShipSkills): CombatEngineInput =>
         base({
-            shipSkills: sokolActive(),
+            shipSkills: controlGatedActive(),
             ignoresForcedTargeting: true,
             enemyAttackers: [
                 enemyAt('e-a', 'M4', aSkills),
@@ -323,10 +331,32 @@ describe('Sokol: "if the target is affected by a control effect" reads the struc
 
     it('player: A clean while B Taunts → no bonus on A; A Taunting itself → bonus', () => {
         const plain = hitsBy(board(NONE, NONE), 'attacker');
-        expect(plain).toHaveLength(1);
-        expect(plain[0].startsWith('e-a:')).toBe(true);
+        expect(plain).toEqual(['e-a:800']);
         expect(hitsBy(board(NONE, selfGrant('Taunt')), 'attacker')).toEqual(plain);
-        const taunting = hitsBy(board(selfGrant('Taunt')), 'attacker');
-        expect(Number(taunting[0].split(':')[1])).toBeGreaterThan(Number(plain[0].split(':')[1]));
+        expect(hitsBy(board(selfGrant('Taunt')), 'attacker')).toEqual(['e-a:2100']);
+    });
+
+    /** Enemy hitter (ignores forced targeting) aiming the player focus A at M4; player ship B at
+     *  M3. */
+    const enemyBoard = (aSkills: ShipSkills, bSkills?: ShipSkills): CombatEngineInput => {
+        const hitterShip = enemyAt('e-gated', 'M4', controlGatedActive(), {
+            attack: 1000,
+            speed: 100,
+        });
+        hitterShip.ignoresForcedTargeting = true;
+        return base({
+            attack: 0,
+            speed: 300,
+            shipSkills: aSkills,
+            teamActors: bSkills ? [playerShip('p-b', 'M3', bSkills, 300)] : [],
+            enemyAttackers: [hitterShip],
+        });
+    };
+
+    it('enemy: A clean while B Taunts → no bonus on A; A Taunting itself → bonus', () => {
+        const plain = hitsBy(enemyBoard(NONE, NONE), 'e-gated');
+        expect(plain).toEqual(['attacker:800']);
+        expect(hitsBy(enemyBoard(NONE, selfGrant('Taunt')), 'e-gated')).toEqual(plain);
+        expect(hitsBy(enemyBoard(selfGrant('Taunt')), 'e-gated')).toEqual(['attacker:2100']);
     });
 });
