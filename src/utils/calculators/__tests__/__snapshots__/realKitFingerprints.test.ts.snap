@@ -2910,20 +2910,23 @@ exports[`kit fingerprints > Purifier 1`] = `
 exports[`kit fingerprints > Quixilver 1`] = `
 {
   "plain": [
+    "attack",
     "attack:active",
-    "attack:charged",
+    "buff:charged",
     "charge-changed",
     "shield",
   ],
   "richEnemy": [
+    "attack",
     "attack:active",
-    "attack:charged",
+    "buff:charged",
     "charge-changed",
     "shield",
   ],
   "wounded": [
+    "attack",
     "attack:active",
-    "attack:charged",
+    "buff:charged",
     "charge-changed",
     "shield",
   ],
