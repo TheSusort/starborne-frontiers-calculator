@@ -1,24 +1,22 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '1.77.0';
+export const CURRENT_VERSION = '1.78.0';
 
 // Accumulates between releases. `npm run release` folds these into a new ChangelogEntry at the
 // top of CHANGELOG, bumps CURRENT_VERSION and empties this array — all three together, because a
 // bumped version whose entries are still unreleased shows users a what's-new dialog listing
 // nothing. Do it by hand only if that script cannot.
-export const UNRELEASED_CHANGES: string[] = [
-    'Combat simulator: Menace and Giant Slayer procs now add to Out. Damage buffs.',
-    'Combat simulator: squad-leader outgoing damage bonuses now multiply separately from buffs.',
-    'Combat simulator: squad-leader attack bonuses now add together with Attack Up buffs.',
-    'Combat simulator: Arcane Siege now multiplies damage as its own separate factor.',
-    'Autogear: uncommon Arcane Siege now scores at 6%, matching the implant.',
-    "Combat simulator: Ironclad's partial block now counts toward the 70% reduction cap.",
-    'Combat simulator: squad-leader outgoing bonuses now boost counter-attacks, reactive hits and reflects.',
-    'Combat simulator: Arcane Siege now boosts counter-attacks, reactive hits and reflects.',
-    'Combat simulator: Ripper and Sokol now follow their updated in-game skills.',
-];
+export const UNRELEASED_CHANGES: string[] = [];
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.78.0',
+        date: '2026-10-17',
+        changes: [
+            'Autogear: uncommon Arcane Siege now scores at 6%, matching the implant.',
+            '8 combat simulator fixes.',
+        ],
+    },
     {
         version: '1.77.0',
         date: '2026-10-16',
