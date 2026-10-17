@@ -5671,6 +5671,19 @@ describe('game 3.23 catalogue texts', () => {
         expect(ext).not.toHaveProperty('triggerSourceSlotFilter');
     });
 
+    it('an extension worded "after applying a debuff" reacts to applied debuffs, not inflicted ones', () => {
+        const ext = abilityOfType(
+            passiveR2(
+                'This Unit gains <unit-skill>Marauder Rage II</unit-skill> for 3 turns after applying a <unit-aid>debuff</unit-aid> and all allies active <unit-skill>buffs are extended by 1 turn</unit-skill>.'
+            ),
+            'extend-status'
+        )!;
+        expect(ext).toMatchObject({
+            trigger: 'on-debuff-inflicted',
+            triggerApplicationFilter: 'apply',
+        });
+    });
+
     it('Ripper R2: Marauder Rage II rides the same trigger', () => {
         const rage = passiveR2(RIPPER_R2).find(
             (a) => a.config.type === 'buff' && a.config.buffName === 'Marauder Rage II'

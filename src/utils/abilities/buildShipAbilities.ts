@@ -1953,7 +1953,8 @@ function abilitiesFromText(
                 trigger: extendOnInfliction ? 'on-debuff-inflicted' : 'on-cast',
                 ...(extendOnInfliction
                     ? {
-                          triggerApplicationFilter: 'inflict' as const,
+                          triggerApplicationFilter:
+                              debuffTriggerVerb(extendSentence) ?? ('inflict' as const),
                           ...(extendSlotFilter
                               ? { triggerSourceSlotFilter: extendSlotFilter }
                               : {}),
