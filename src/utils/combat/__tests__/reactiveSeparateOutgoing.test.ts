@@ -7,9 +7,11 @@
  *
  * Arcane Siege gates on the owner's LIVE shield pool at the moment the reactive hit is thrown.
  *
+ * Only the Nosorog arms read the gitignored reference data; `realKit` throws when it is absent.
+ *
  * No RNG draws: every owner has `crit: 0` (or the hit cannot crit).
  */
-import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { runCombat, CombatEngineInput } from '../engine';
 import { createEventBus, CombatEvent } from '../events';
 import { setupKeyedRng } from '../../calculators/rateAccumulator';
@@ -23,8 +25,6 @@ import {
     type BoardUnit,
     type Placement,
 } from '../__testutils__/realKitBoard';
-import { csvAvailable } from '../../../../scripts/lib/shipSkillCsv';
-import { shipDataAvailable } from '../../../../scripts/lib/shipDataSnapshot';
 import type { Ability, ShipSkills } from '../../../types/abilities';
 import type { Ship } from '../../../types/ship';
 import type { GearPiece } from '../../../types/gear';
@@ -33,10 +33,6 @@ import { buildShipAbilitiesWithEquipment } from '../../abilities/buildShipAbilit
 import { getGearSet } from '../../../constants/gearSets';
 import IMPLANTS from '../../../constants/implants';
 
-beforeAll(() => {
-    if (!csvAvailable() || !shipDataAvailable())
-        throw new Error('docs/ship-skills.csv and docs/ship-data.json are required');
-});
 beforeEach(() => setupKeyedRng(703));
 
 const OWNER_ID = 'attacker';
@@ -321,12 +317,14 @@ const inertActive: Ability = {
 const reflector = (
     reflect: () => ShipSkills['slots'],
     pf: PreFightCombatModifiers | undefined,
-    withSiege: boolean
+    withSiege: boolean,
+    extraPassives: Ability[] = []
 ): BoardUnit => {
-    const passives = reflect();
-    const slots: ShipSkills['slots'] = withSiege
-        ? [...passives.map((s) => ({ ...s, abilities: [...s.abilities, arcaneSiege()] }))]
-        : passives;
+    const added = [...(withSiege ? [arcaneSiege()] : []), ...extraPassives];
+    const slots: ShipSkills['slots'] = reflect().map((s) => ({
+        ...s,
+        abilities: [...s.abilities, ...added],
+    }));
     return {
         id: 'reflector',
         kit: { slots: [{ slot: 'active', abilities: [inertActive] }, ...slots] },
@@ -348,10 +346,42 @@ const hitter: BoardUnit = {
     defence: 0,
 };
 
-const reflected = (placement: Placement, unit: BoardUnit): number => {
-    const { input, id } = boardInput(placement, unit, [], [hitter], 1);
+/** The hitter Disables the reflector (always lands), then hits it. */
+const disablingHitter: BoardUnit = {
+    ...hitter,
+    id: 'disabler',
+    kit: {
+        slots: [
+            {
+                slot: 'active',
+                abilities: [
+                    {
+                        id: 'disable',
+                        type: 'debuff',
+                        target: 'enemy',
+                        trigger: 'on-cast',
+                        conditions: [],
+                        config: {
+                            type: 'debuff',
+                            buffName: 'Disable',
+                            parsedEffects: {},
+                            stacks: 1,
+                            isStackable: false,
+                            duration: 2,
+                            application: 'apply',
+                        },
+                    },
+                    ...hitKit(140).slots[0].abilities,
+                ],
+            },
+        ],
+    },
+};
+
+const reflected = (placement: Placement, unit: BoardUnit, by: BoardUnit = hitter): number => {
+    const { input, id } = boardInput(placement, unit, [], [by], 1);
     const ref = id(unit);
-    const hit = id(hitter);
+    const hit = id(by);
     const bus = createEventBus();
     const rows: number[] = [];
     bus.on('reactive-damage-performed', (e) => {
@@ -384,3 +414,58 @@ describe.each(SIDES)('reflects on the %s side carry the separate outgoing factor
         });
     });
 });
+
+/** A ship's OWN passive on the separate channel (no `source`), ungated: what the ability editor
+ *  can author. */
+const shipPassiveSeparate: Ability = {
+    id: 'ship-separate',
+    type: 'modifier',
+    target: 'self',
+    trigger: 'on-cast',
+    conditions: [],
+    config: {
+        type: 'modifier',
+        channel: 'outgoingDamageSeparate',
+        value: 20,
+        isMultiplicative: false,
+    },
+};
+
+describe.each(SIDES)(
+    'a turn-blocked reflector on the %s side keeps implants but loses ship passives',
+    (side) => {
+        it('control: undisabled, a ship-passive separate modifier scales the reflect by 1.20', () => {
+            const base = reflected(side, reflector(reflectSetPassives, undefined, false));
+            expect(
+                reflected(
+                    side,
+                    reflector(reflectSetPassives, undefined, false, [shipPassiveSeparate])
+                )
+            ).toBeCloseTo(base * 1.2, 6);
+        });
+        it('Disabled, the ship-passive modifier is suppressed', () => {
+            const base = reflected(
+                side,
+                reflector(reflectSetPassives, undefined, false),
+                disablingHitter
+            );
+            expect(
+                reflected(
+                    side,
+                    reflector(reflectSetPassives, undefined, false, [shipPassiveSeparate]),
+                    disablingHitter
+                )
+            ).toBeCloseTo(base, 6);
+        });
+        it('Disabled, shielded Arcane Siege (an implant) still scales it by 1.20', () => {
+            const base = reflected(
+                side,
+                reflector(reflectSetPassives, undefined, false),
+                disablingHitter
+            );
+            expect(
+                reflected(side, reflector(reflectSetPassives, SHIELDED, true), disablingHitter)
+            ).toBeCloseTo(base * 1.2, 6);
+        });
+    }
+);

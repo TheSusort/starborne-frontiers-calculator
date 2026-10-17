@@ -3523,6 +3523,10 @@ export function runCombat(rawInput: CombatEngineInput): {
      *  reach for `livePassiveEntries` (one read for the list) wherever one owner covers it. */
     const passiveSuppressedFor = (ownerId: string, entry: { source?: 'equipment' }): boolean =>
         entry.source !== 'equipment' && isTurnBlocked(ownerId);
+    /** An owner's `outgoingDamageSeparate` modifiers for a hit thrown outside the turn loop, with
+     *  ship-passive entries dropped while it is turn-blocked (implants keep working). */
+    const liveSeparateOutgoingModifiers = (ownerId: string): Ability[] =>
+        livePassiveEntries(ownerId, separateOutgoingModifiersById.get(ownerId) ?? []);
 
     /**
      * An actor's max HP: its post-prefight `stats.hp`, the same read for every actor on both
@@ -5307,7 +5311,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             statusEngine,
             selfBuffLookup,
             actor,
-            separateOutgoingModifiersById.get(actor.id) ?? []
+            liveSeparateOutgoingModifiers(actor.id)
         );
         return { crit: o.crit, critDamage: o.critDamage, alwaysCrits: actor.alwaysCrits === true };
     };
@@ -7581,7 +7585,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                             statusEngine,
                             selfBuffLookup,
                             victim,
-                            separateOutgoingModifiersById.get(victim.id) ?? []
+                            liveSeparateOutgoingModifiers(victim.id)
                         );
                         const reflectorOutgoingPct = reflectorOutgoing.outgoingDamageBuffPct;
                         const reflectorOutgoingSeparateFactor =
@@ -8025,7 +8029,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 statusEngine,
                 selfBuffLookup,
                 owner,
-                separateOutgoingModifiersById.get(owner.id) ?? []
+                liveSeparateOutgoingModifiers(owner.id)
             );
             const profile = victimDefenseProfileOf(victim, {
                 scheduledEnemyEffects: landedScheduledEnemyEffectsByActor.get(owner.id) ?? [],
