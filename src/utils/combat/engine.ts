@@ -54,6 +54,7 @@ import {
 } from '../abilities/abilityTargetSide';
 import { TITANITE_PLATING } from '../../constants/persistentStackingBuffs';
 import { composeDotDamageFactor } from '../damageComposition';
+import { ONE_SHOT_PERSISTENT_BUFFS } from '../../constants/oneShotPersistentBuffs';
 import { dotResistLabel, isBlockDebuff, targetCarriesBlockDebuff } from './debuffImmunity';
 import { recipientCarriesBlockBuff } from './blockBuffBuffs';
 import {
@@ -298,6 +299,10 @@ export function foldSpeedBuffPct(
  *  - `stackTrigger` + `isStackable` → `accumulating`;
  *  - a Cheat-Death-family grant from a FIRING slot is `timed` (a cast-path persistent grant,
  *    duration Infinity — `castPathCheatDeath`);
+ *  - a one-shot persistent name (`ONE_SHOT_PERSISTENT_BUFFS`: Quixilver's "gains Shield
+ *    Converter", which states no duration) is `timed`, whatever its duration — its readers
+ *    (`holdsShieldConverter`, `holdsChargedOverdriveII`) see the timed + persistent channel only,
+ *    so an aura would be armed forever and never spent;
  *  - a `recurring`/absent duration → `aura`; a finite duration → `timed`.
  */
 export function classifyCastStatus(
@@ -310,10 +315,12 @@ export function classifyCastStatus(
         !accumulating &&
         CHEAT_DEATH_BUFFS.has(cfg.buffName) &&
         (slot === 'active' || slot === 'charged');
+    const oneShotPersistent = !accumulating && ONE_SHOT_PERSISTENT_BUFFS.has(cfg.buffName);
     const isAura =
         !accumulating &&
         !castPathCheatDeath &&
         !hitCounted &&
+        !oneShotPersistent &&
         (cfg.duration === 'recurring' || cfg.duration === undefined);
     return {
         kind: accumulating ? 'accumulating' : isAura ? 'aura' : 'timed',
@@ -639,10 +646,10 @@ function registerActorAbilityStatuses(
                 // re-rolled aura and silently lose persistence — see persistentStackingBuffs.ts.
                 status = { ...base, kind: 'aura' };
             } else {
-                // timed: cfg.duration is a number here (NOT accumulating, NOT aura — i.e.
-                // not recurring/undefined duration). A finite-duration passive buff lands here
-                // too (seeded at combat start by the round-1 loop). The classification branches
-                // above exhaustively exclude non-numeric durations from reaching this arm.
+                // timed: NOT accumulating, NOT aura. cfg.duration is a number here except for the
+                // non-aura shapes `classifyCastStatus` lets through without one (Cheat-Death
+                // family, hit-counted, one-shot persistent), each resolved below. A finite-duration
+                // passive buff lands here too (seeded at combat start by the round-1 loop).
                 // Cheat-Death-family firing-slot grants take Infinity (never decrements to 0:
                 // Infinity − 1 === Infinity; expiry compares <= 0) → persists like Cheat Death;
                 // clearRemovable on the intercept still wipes it (it's consumed anyway).
@@ -651,12 +658,13 @@ function registerActorAbilityStatuses(
                     kind: 'timed',
                     duration: castPathCheatDeath
                         ? Infinity
-                        : hitCounted && typeof cfg.duration !== 'number'
-                          ? // Hit-counted with no stated turn window: never tick out, expire on
-                            // the hit count alone. Same non-expiring-but-removable shape as
-                            // TOXIC_OVERFLOW_DURATION.
+                        : typeof cfg.duration !== 'number'
+                          ? // No stated turn window, which reaches this arm only for a hit-counted
+                            // grant (expires on the hit count alone) or a one-shot persistent name
+                            // (the persistent store ignores duration — see `classifyCastStatus`).
+                            // Same non-expiring-but-removable shape as TOXIC_OVERFLOW_DURATION.
                             Infinity
-                          : (cfg.duration as number),
+                          : cfg.duration,
                     ...(hitCount !== undefined ? { hits: hitCount } : {}),
                     // Clause-order stamp, both sides: a debuff written after the damage clause
                     // misses that cast's hit, and so does a self/ally buff ("deals 300% damage.
@@ -10409,6 +10417,11 @@ export function runCombat(rawInput: CombatEngineInput): {
                 selfDebuffCount: actorDebuffCount(statusEngine, a),
                 ...(aoeVictimIds ? { aoeVictimIds } : {}),
                 ...(opposingVictimById ? { opposingVictimById } : {}),
+                // Board-wide clauses (`Ability.boardWide`): the same positional discriminator as
+                // `opposingVictimById`, and the same unmemoized aliveness thunk as the selectors.
+                ...(opposingVictimById
+                    ? { aliveOpposingIds: () => aliveOpposing().map((v) => v.id) }
+                    : {}),
                 // Forced bomb-detonation sink (Lingshe's countdown-reduce-to-0). `sink` serves
                 // both directions — ids are globally unique across sides — so no per-side
                 // selection is needed.

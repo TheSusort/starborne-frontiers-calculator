@@ -1503,6 +1503,13 @@ export interface Ability {
      *  passives that name the pattern themselves; cast-slot support is footprint-scoped
      *  regardless of the flag. Set by buildShipAbilities from the ability's own sentence. */
     patternScoped?: boolean;
+    /** An on-cast enemy clause whose own sentence names its recipients as "all enemies"
+     *  ("inflicts … on all enemies", "purges 1 buff from all enemies") reaches every LIVING enemy
+     *  on the board, not only the enemies the cast strikes (owner ruling R207, Amartya: her damage
+     *  is single-target, her debuffs and purge are board-wide). Without it a positional on-cast
+     *  'all-enemies' clause fans over the cast's footprint. Read by playerTurn.ts's cast-path debuff
+     *  landing and its purge loop. Set by buildShipAbilities from the ability's own sentence. */
+    boardWide?: boolean;
     /** D-PR14 Bulwark: an on-ally-attacked reactive fires only when the DAMAGED ally is
      *  adjacent to this owner (board neighbours; non-positional → any living same-side ally).
      *  Filtered in the listener via registerReactiveListeners' adjacentAllyIdsFor. Absent →

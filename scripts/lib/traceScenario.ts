@@ -10,6 +10,10 @@ export interface ScenarioOverrides {
     enemyAttackScale?: number;
     enemyAffinity?: AffinityName;
     includeFragileAlly?: boolean;
+    /** Reviewed ship at M1 (the back of its row) and the plain ally at M4. A forward-extending
+     *  support pattern cast from M4 — the default seat, the front column — covers only the caster,
+     *  so ally-scoped cast support is unobservable there. */
+    reviewedBack?: boolean;
 }
 
 const placement = (
@@ -216,11 +220,11 @@ export function buildStandardScenario(reviewed: Ship, overrides: ScenarioOverrid
     const enemyAff = overrides.enemyAffinity ?? 'chemical';
 
     const playerTeam: BattlePlacement[] = [
-        placement(reviewed, 'M4', {
+        placement(reviewed, overrides.reviewedBack ? 'M1' : 'M4', {
             hp: Math.round(reviewed.baseStats.hp * hpScale),
             crit: overrides.reviewedCrit ?? reviewed.baseStats.crit,
         }),
-        placement(plainAlly(), 'M1'),
+        placement(plainAlly(), overrides.reviewedBack ? 'M4' : 'M1'),
         placement(counterAlly(), 'B4'),
     ];
     if (overrides.includeFragileAlly) playerTeam.push(placement(fragileAlly(), 'B1'));

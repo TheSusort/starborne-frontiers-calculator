@@ -1042,6 +1042,9 @@ export interface PlayerTurnArgs {
     /** Living opposing actors keyed by id — per-victim debuff landing/application in
      *  positional mode. Supplied from the side's opposing roster. Absent → anchor-only path. */
     opposingVictimById?: Map<string, CombatActor>;
+    /** Every LIVING opposing actor's id, read at call time — the recipients of a board-wide clause
+     *  (`Ability.boardWide`) in place of `aoeVictimIds`. Supplied with `opposingVictimById`. */
+    aliveOpposingIds?: () => string[];
     /** Every living opposing actor's engine-derived gate readings, keyed by id, read before the
      *  cast together with the bound target's own (`enemyHp`, `targetRepairedThisRound`,
      *  `enemyDebuffNames`, `enemyBuffCount` come from the same derivation). Positional runs only;
@@ -2122,6 +2125,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         healEventOnly = false,
         aoeVictimIds,
         opposingVictimById,
+        aliveOpposingIds,
         recipientGateReadings,
         positional,
         activePattern,
@@ -2761,6 +2765,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
      * (owner rule; `aoeNarrowingPhraseTripwire.test.ts` holds the ruled phrases). A caller without
      * a footprint (non-positional) stays on the single anchor `targetId`. Each victim emits its
      * own purge-performed (Salvation/Sefuba are victim-scoped). The purge count is per victim.
+     * A board-wide purge (`Ability.boardWide`) reaches every living enemy instead of the footprint.
      *
      * An 'enemy-most-buffs' purge (Lodolite's charged skill) resolves to the engine-supplied
      * enemyMostBuffsId instead of the normal positional anchor (targetId) — the reactive
@@ -2786,12 +2791,14 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     const purgeStruck = (
         abTarget: Ability['target'],
         count: number | 'all',
-        stripsShield: boolean | undefined
+        stripsShield: boolean | undefined,
+        boardWide: boolean | undefined
     ): { waveTotal: number; emit: () => void } => {
         if (targetId === undefined) return { waveTotal: 0, emit: () => {} };
+        const footprint = boardWide && aliveOpposingIds ? aliveOpposingIds() : aoeVictimIds;
         const recipients =
-            (abTarget === 'all-enemies' || abTarget === 'enemy') && aoeVictimIds
-                ? aoeVictimIds
+            (abTarget === 'all-enemies' || abTarget === 'enemy') && footprint
+                ? footprint
                 : abTarget === 'enemy-most-buffs' && enemyMostBuffsId !== undefined
                   ? [enemyMostBuffsId]
                   : [targetId];
@@ -2861,7 +2868,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 cfg.grantAdjacentAllies ? [actor.id, ...(adjacentAllyIds ?? [])] : [actor.id]
             )();
         } else if (cfg.type === 'purge') {
-            const wave = purgeStruck(ab.target, cfg.count, cfg.stripsShield);
+            const wave = purgeStruck(ab.target, cfg.count, cfg.stripsShield, ab.boardWide);
             buffsPurgedThisCast += wave.waveTotal;
             wave.emit();
         } else if (cfg.type === 'cleanse') {
@@ -4194,6 +4201,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     const perSubAttackDebuffRecipes: {
         status: TimedStatus;
         abTarget: Ability['target'] | undefined;
+        boardWide: boolean;
     }[] = [];
 
     for (const status of timedEnemyBySlot) {
@@ -4238,7 +4246,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         const recipientIds: (string | undefined)[] = resolveDebuffRecipientIds({
             abTarget,
             anchorId: targetId,
-            aoeVictimIds,
+            aoeVictimIds:
+                matchingAbility?.boardWide && aliveOpposingIds ? aliveOpposingIds() : aoeVictimIds,
             adjacentEnemyIdsFor,
             positionalLanding,
             // Filtered to the slot this cast fired, plus the passive statuses riding its hits —
@@ -4248,7 +4257,12 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         });
 
         landStatusOnRecipients(status, recipientIds);
-        if (positionalLanding) perSubAttackDebuffRecipes.push({ status, abTarget });
+        if (positionalLanding)
+            perSubAttackDebuffRecipes.push({
+                status,
+                abTarget,
+                boardWide: matchingAbility?.boardWide === true,
+            });
     }
 
     /** Sub-attacks ≥ 1 re-roll every gated clause against their own anchor + footprint. */
@@ -4257,7 +4271,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         phase: 'before-damage' | 'after-damage'
     ): DeferredEnemyApplication[] => {
         const collected: DeferredEnemyApplication[] = [];
-        for (const { status, abTarget } of perSubAttackDebuffRecipes) {
+        for (const { status, abTarget, boardWide } of perSubAttackDebuffRecipes) {
             const isAfter = status.afterDamageClause === true;
             if (isAfter !== (phase === 'after-damage')) continue;
             const before = collected.length;
@@ -4268,7 +4282,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                     anchorId: sub.anchorId,
                     // THIS sub-attack's real footprint, not the cast's — so an `all-enemies` or
                     // `enemy` clause fans over who it actually struck and a killed victim drops out.
-                    aoeVictimIds: sub.victimIds,
+                    // A board-wide clause reads the living roster instead (`Ability.boardWide`).
+                    aoeVictimIds:
+                        boardWide && aliveOpposingIds ? aliveOpposingIds() : sub.victimIds,
                     adjacentEnemyIdsFor,
                     positionalLanding: true,
                     firingClause: true,
@@ -6180,9 +6196,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                     effectiveCritDamage
                 );
                 const { stripsShield } = ab.config;
-                const purge = () => purgeStruck(ab.target, purgeCount, stripsShield).emit;
+                const purge = () =>
+                    purgeStruck(ab.target, purgeCount, stripsShield, ab.boardWide).emit;
                 if (deferAfterDamage(ab, purge)) continue;
-                const wave = purgeStruck(ab.target, purgeCount, stripsShield);
+                const wave = purgeStruck(ab.target, purgeCount, stripsShield, ab.boardWide);
                 buffsPurgedThisCast += wave.waveTotal;
                 wave.emit();
             }
