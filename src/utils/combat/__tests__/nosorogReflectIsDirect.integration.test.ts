@@ -337,9 +337,8 @@ describe.each(SIDES)('Nosorog on the %s side', (placement) => {
  * Owner ruling R162 (in game 2026-10-08): Nosorog's bounce is a direct hit in full — the
  * attacker's protector's Protection redirects it, it spends the attacker's Titanite Plating and
  * Exposed (and, per Exposed's own text, is amplified by it), and it uses Nosorog's shield
- * penetration. The Reflect gear set's bounce keeps none of that: it is direct damage for the
- * attacker's reactions (R196) and leeches (R197), but takes no Protection, Exposed, Titanite or
- * penetration.
+ * penetration. R204 (owner, 2026-10-17) prices the Reflect gear set's bounce the same way on
+ * every one of those facets (R186: the set works like Nosorog's reflect "in every facet").
  */
 describe.each(SIDES)('the bounce as a direct hit, reflector on the %s side', (placement) => {
     /** Runs `reflector` against `opponents`; opponents[0] is the ship that hits him. */
@@ -376,7 +375,9 @@ describe.each(SIDES)('the bounce as a direct hit, reflector on the %s side', (pl
             return rows;
         };
         expect(redirectedOntoLionheart(nosorog(true))).toBeGreaterThan(0);
-        expect(redirectedOntoLionheart(reflectSetWearer())).toBe(0);
+        // R204: the gear set's bounce is redirected too.
+        expect(redirectedOntoLionheart(reflectSetWearer())).toBeGreaterThan(0);
+        expect(redirectedOntoLionheart(nosorog(false))).toBe(0);
     });
 
     it("the bounce spends one of Isha's Titanite Plating stacks", () => {
@@ -392,7 +393,7 @@ describe.each(SIDES)('the bounce as a direct hit, reflector on the %s side', (pl
             return selfBuffStacksForOwner(engine!, id(isha), 'Titanite Plating');
         };
         expect(platingAfter(nosorog(false))).toBe(3);
-        expect(platingAfter(reflectSetWearer())).toBe(3);
+        expect(platingAfter(reflectSetWearer())).toBe(2);
         expect(platingAfter(nosorog(true))).toBe(2);
     });
 
@@ -429,11 +430,12 @@ describe.each(SIDES)('the bounce as a direct hit, reflector on the %s side', (pl
         expect(control.reflected).toBeGreaterThan(0);
         expect(exposed.reflected).toBeCloseTo(control.reflected * 2, 6);
         expect(exposed.exposedLeft).toBe(0);
-        // The gear set's bounce neither reads nor spends it.
+        // R204: the gear set's bounce reads and spends it the same way.
         const gear = measure(reflectSetWearer(), 'Exposed');
         const gearControl = measure(reflectSetWearer(), 'Inert Mark');
-        expect(gear.reflected).toBeCloseTo(gearControl.reflected, 6);
-        expect(gear.exposedLeft).toBeGreaterThan(0);
+        expect(gearControl.reflected).toBeGreaterThan(0);
+        expect(gear.reflected).toBeCloseTo(gearControl.reflected * 2, 6);
+        expect(gear.exposedLeft).toBe(0);
     });
 
     it("the bounce uses Nosorog's shield penetration against a shielded hitter", () => {
@@ -460,9 +462,13 @@ describe.each(SIDES)('the bounce as a direct hit, reflector on the %s side', (pl
         const penetrated = intake(nosorog(true), 100);
         expect(penetrated.incoming).toBeGreaterThan(0);
         expect(penetrated.shieldAbsorbed).toBe(0);
-        // The gear set's bounce ignores the wearer's penetration.
+        // R204: the gear set's bounce uses the wearer's shield penetration too.
+        const gearUnpenetrated = intake(reflectSetWearer(), 0);
+        expect(gearUnpenetrated.incoming).toBeGreaterThan(0);
+        expect(gearUnpenetrated.shieldAbsorbed).toBeCloseTo(gearUnpenetrated.incoming, 6);
         const gear = intake(reflectSetWearer(), 100);
-        expect(gear.shieldAbsorbed).toBeCloseTo(gear.incoming, 6);
+        expect(gear.incoming).toBeGreaterThan(0);
+        expect(gear.shieldAbsorbed).toBe(0);
     });
 
     it('a Leech-set Nosorog repairs 15% of the bounce it dealt (R165); so does a Leech-set Reflect wearer (R197)', () => {
@@ -609,10 +615,10 @@ const bounceOf = (
 
 /**
  * A Nosorog wearing the Reflect set reflects one hit as TWO bounces, both direct damage (R137,
- * R196) — his own share first (Exposed, Protection, penetration), then the set's share.
+ * R196) and both priced like a normal hit (R204) — his own share first, then the set's share.
  */
 describe.each(SIDES)('Nosorog wearing the Reflect set, on the %s side', (placement) => {
-    it('the two shares land as separate bounces; only his own share reads and spends Exposed', () => {
+    it('the two shares land as separate bounces; the first spends the only Exposed stack before the second', () => {
         const ship = bounceOf(placement, nosorog(true)).rows;
         const gear = bounceOf(placement, reflectSetWearer()).rows;
         expect(ship).toHaveLength(1);
@@ -634,13 +640,22 @@ describe.each(SIDES)('Nosorog wearing the Reflect set, on the %s side', (placeme
         expect(exposed.exposedLeft).toBe(0);
     });
 
-    it("the hitter's Lionheart takes only Nosorog's own share through Protection", () => {
+    it("the hitter's Lionheart redirects whichever share reaches him first, then drops his Protection (R204)", () => {
+        // Alone, each share is redirected whole onto Lionheart (10 stacks).
         const shipOnly = bounceOf(placement, nosorog(true), { lionheart: true });
         expect(shipOnly.redirected).toBeGreaterThan(0);
+        expect(shipOnly.rows).toEqual([0]);
+        const setOnly = bounceOf(placement, reflectSetWearer(), { lionheart: true });
+        expect(setOnly.redirected).toBeGreaterThan(0);
+        expect(setOnly.rows).toEqual([0]);
+        // Together: Nosorog's share lands first and is redirected; Lionheart then removes all his
+        // Protection ("after taking damage redirected through Protection"), so the set's share
+        // lands whole on the hitter.
         const both = bounceOf(placement, nosorogWithReflectSet(), { lionheart: true });
         expect(both.rows).toHaveLength(2);
-        expect(both.rows[1]).toBeGreaterThan(0);
+        expect(both.rows[0]).toBe(0);
         expect(both.redirected).toBeCloseTo(shipOnly.redirected, 6);
+        expect(both.rows[1]).toBeCloseTo(setOnly.redirected, 6);
     });
 
     it('a Leech-set Nosorog repairs 15% of both shares (R165, R197)', () => {
@@ -701,8 +716,8 @@ const wardenSelfBuffed = (buff: string, parsedEffects: Record<string, number>): 
 /**
  * Owner ruling R176 (2026-10-09): Nosorog's bounce reads the attacker's buffs and debuffs the way a
  * counter-attack does — Inc. Damage Up/Down and Exposed share one incoming channel. The Reflect gear
- * set's bounce reads that channel too (R195: the attacker's Inc. Damage Down II cuts it by 30%), but
- * not Exposed.
+ * set's bounce reads that same channel (R195: the attacker's Inc. Damage Down II cuts it by 30%;
+ * R204: Exposed included) and the same defence, Defense Down included.
  */
 describe.each(SIDES)(
     "the bounce reads the hitter's incoming modifiers, reflector on the %s side",
@@ -783,24 +798,40 @@ describe.each(SIDES)(
             expect(down.rows[0]).toBeCloseTo(control.rows[0] * 0.7, 6);
         });
 
-        it("the Reflect gear set's bounce neither reads nor spends Exposed alongside Inc. Damage Up II", () => {
+        it("the Reflect gear set's bounce adds Exposed and Inc. Damage Up II in one channel and spends Exposed (R204)", () => {
             const control = bounceOf(placement, reflectSetWearer(), { hitter: warden() });
             const both = bounceOf(placement, reflectSetWearer(), {
                 hitter: warden(),
                 status: 'Exposed',
                 parsedEffects: { incomingDamage: 30 },
             });
-            // Inc. Damage Up II's +30% applies; Exposed's +100% does not, and it stays on.
-            expect(both.rows[0]).toBeCloseTo(control.rows[0] * 1.3, 6);
-            expect(both.exposedLeft).toBeGreaterThan(0);
+            expect(control.rows[0]).toBeGreaterThan(0);
+            expect(both.rows[0]).toBeCloseTo(control.rows[0] * 2.3, 6);
+            expect(both.exposedLeft).toBe(0);
+        });
+
+        it("Defense Down II on an armoured Warden lowers his defence against the Reflect gear set's bounce (R204)", () => {
+            const armoured = () => unit('warden', hitterWith('Warden'), { defence: 5_000 });
+            const control = bounceOf(placement, reflectSetWearer(), { hitter: armoured() });
+            const shredded = bounceOf(placement, reflectSetWearer(), {
+                hitter: armoured(),
+                status: 'Defense Down II',
+                parsedEffects: { defense: -30 },
+            });
+            const factor = (defence: number) => 1 - calculateDamageReduction(defence) / 100;
+            expect(control.rows[0]).toBeGreaterThan(0);
+            expect(shredded.rows[0]).toBeCloseTo(
+                (control.rows[0] * factor(3_500)) / factor(5_000),
+                6
+            );
+            expect(shredded.rows[0]).toBeGreaterThan(control.rows[0]);
         });
     }
 );
 
 /**
- * Owner ruling R179 (2026-10-09): Nosorog's own defence penetration applies to his bounce, the
- * ship's share only — exactly as a counter applies its owner's. The Reflect gear set's share
- * ignores it.
+ * Owner ruling R179 (2026-10-09): Nosorog's own defence penetration applies to his bounce, exactly
+ * as a counter applies its owner's. R204: the Reflect gear set's share applies the wearer's too.
  */
 describe.each(SIDES)(
     "the bounce applies the reflector's defence penetration, reflector on the %s side",
@@ -851,15 +882,21 @@ describe.each(SIDES)(
             expect(pen.rows[0]).toBeGreaterThan(control.rows[0]);
         });
 
-        it("the Reflect gear set's share ignores the wearer's penetration", () => {
+        it("the Reflect gear set's share is computed against the hitter's defence reduced by the wearer's penetration (R204)", () => {
             const control = bounceOf(placement, withPen(reflectSetWearer(), 0), {
                 hitter: armoured(),
             });
             const pen = bounceOf(placement, withPen(reflectSetWearer(), 40), {
                 hitter: armoured(),
             });
+            expect(control.rows).toHaveLength(1);
             expect(control.rows[0]).toBeGreaterThan(0);
-            expect(pen.rows[0]).toBeCloseTo(control.rows[0], 6);
+            expect(pen.rows).toHaveLength(1);
+            expect(pen.rows[0]).toBeCloseTo(
+                (control.rows[0] * factor(5_000 * 0.6)) / factor(5_000),
+                6
+            );
+            expect(pen.rows[0]).toBeGreaterThan(control.rows[0]);
         });
     }
 );
