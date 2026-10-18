@@ -24,6 +24,8 @@ interface FighterSelectProps {
     onQuit: () => void;
     /** Draws the selected ship; defaults to its portrait. */
     renderShip?: (ship: Ship, visual: ShipVisual) => React.ReactNode;
+    /** Called with the shown ship whenever it changes. */
+    onFocusShip?: (ship: Ship) => void;
 }
 
 export const PortraitView: React.FC<{ ship: Ship; visual: ShipVisual }> = ({ ship, visual }) =>
@@ -58,6 +60,7 @@ export const FighterSelect: React.FC<FighterSelectProps> = ({
     onLaunch,
     onQuit,
     renderShip,
+    onFocusShip,
 }) => {
     const visualOf = useShipVisuals();
     const [query, setQuery] = useState('');
@@ -72,6 +75,12 @@ export const FighterSelect: React.FC<FighterSelectProps> = ({
     useEffect(() => {
         setIndex(0);
     }, [query, faction]);
+
+    const onFocusShipRef = useRef(onFocusShip);
+    onFocusShipRef.current = onFocusShip;
+    useEffect(() => {
+        if (current) onFocusShipRef.current?.(current);
+    }, [current]);
 
     const browse = (delta: number) => {
         if (visible.length === 0) return;

@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { useMediaQuery } from '../../../hooks/useMediaQuery';
 import { loadShipModel } from './shipModelLoader';
 import { addShipLights } from './shipLighting';
+import { pinModel } from './modelPins';
 
 interface ShipModelViewProps {
     visualKey: string;
@@ -24,6 +25,9 @@ const ShipModelView: React.FC<ShipModelViewProps> = ({ visualKey, fallback }) =>
     const containerRef = useRef<HTMLDivElement>(null);
     const [state, setState] = useState<'loading' | 'ready' | 'failed'>('loading');
     const reducedMotion = useMediaQuery('(prefers-reduced-motion: reduce)');
+
+    // The shown model stays in the model cache.
+    useEffect(() => pinModel(visualKey), [visualKey]);
 
     useEffect(() => {
         const container = containerRef.current;

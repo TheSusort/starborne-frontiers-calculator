@@ -57,8 +57,8 @@ export interface GateArt {
     name: string;
     level: number | undefined;
     portraitUrl: string | null;
-    /** Rendered 3D sprite (a data URL); preferred over the portrait once it has loaded. */
-    spriteUrl?: string | null;
+    /** Rendered 3D sprite; preferred over the portrait once it is set. */
+    sprite?: HTMLCanvasElement | null;
 }
 
 export interface FlightView {
@@ -214,7 +214,7 @@ function drawGate(
     const cx = p.x;
     const cy = shoulder + 0.05 * u;
     const r = 0.3 * u;
-    const sprite = art.spriteUrl ? cachedPortrait(art.spriteUrl) : null;
+    const sprite = art.sprite ?? null;
     const img = sprite ? null : art.portraitUrl ? cachedPortrait(art.portraitUrl) : null;
     ctx.save();
     ctx.beginPath();

@@ -25,17 +25,9 @@ import {
     FlightView,
     GateArt,
     INTRO_SECONDS,
-    PlayerFrames,
     renderFlight,
 } from './flightRenderer';
-import {
-    BANK_ANGLES_DEG,
-    LEVEL_BANK,
-    LEVEL_PITCH_ROW,
-    PITCH_ANGLES_DEG,
-    SweepRef,
-} from './ships/spritePoses';
-import { whenIdle } from './idle';
+import { runWhenIdle, whenIdle } from './idle';
 import { isSelectDropdownOpen, keyToAction, swipeToAction } from './flightInput';
 import { readLocalBest, writeLocalBest } from './localBest';
 import { GameOverPanel } from './GameOverPanel';
@@ -51,9 +43,20 @@ import { loadPortrait } from './ships/portraitSprite';
 import { useShipVisuals } from './ships/useShipVisuals';
 import { readLastShipId, writeLastShipId } from './ships/fleetOrder';
 import { FighterSelect, PortraitView } from './FighterSelect';
-import { shipModelsEnabled } from './ships/arcadeFlags';
+import { loadShipModelView, shipModelsEnabled } from './ships/arcadeFlags';
 import type { ShipVisual } from './ships/shipVisuals';
-import { evictOldest } from './ships/viewerCache';
+import {
+    anySignal,
+    cachedGateSprite,
+    cachedPlayerFrames,
+    cachedViewerSprite,
+    endArcadeSession,
+    Facing,
+    requestGateSprite,
+    requestPlayerFrames,
+    requestViewerSprite,
+    setArcadePins,
+} from './ships/arcadeSprites';
 
 type Phase = 'select' | 'intro' | 'running' | 'paused' | 'countdown' | 'duel' | 'over';
 
@@ -64,16 +67,16 @@ const HUD_INTERVAL_SECONDS = 0.1;
 const NO_INPUT: readonly InputAction[] = [];
 
 const newSeed = () => Math.floor(Math.random() * 2 ** 32) >>> 0;
-/** Duel renders kept at once: the flown ship's own (never evicted), the pair at the open
- *  checkpoint and the pre-picked next pair, with room to spare. */
-const VIEWER_CACHE_SIZE = 6;
+/** How long a ship stays focused on the select screen before its sprites start rendering. */
+const FOCUS_PREWARM_MS = 400;
+/** Stands in for the session signal outside a mounted arcade: nothing started under it runs. */
+const ABORTED_SIGNAL = (() => {
+    const c = new AbortController();
+    c.abort();
+    return c.signal;
+})();
 
-// three.js and the official models are only reachable through these dynamic imports, and
-// every caller checks `shipModelsEnabled()` first, so a build without the flag never loads them.
-const ShipModelView = React.lazy(() => import('./ships/ShipModelView'));
-const shipSprites = () => import('./ships/shipSprites');
-
-type Facing = 'left' | 'right';
+const ShipModelView = React.lazy(loadShipModelView);
 
 const renderShipModel = (ship: Ship, visual: ShipVisual): React.ReactNode => {
     const portrait = <PortraitView ship={ship} visual={visual} />;
@@ -185,19 +188,18 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
     /** The pair for the next checkpoint to appear, picked while the game is not being flown so
      *  their sprites render before the gates are on screen; null → picked when it appears. */
     const nextOpponentsRef = useRef<[Ship, Ship] | null>(null);
-    /** Bumped whenever a run is replaced or the game unmounts; a duel simulation that finishes
-     *  under an older generation is discarded. */
+    /** The flown ship whose opponents `nextOpponentsRef` holds. */
+    const nextOpponentsForRef = useRef<string | null>(null);
+    /** Bumped whenever a run is replaced; a duel simulation that finishes under an older
+     *  generation is discarded. */
     const runGenerationRef = useRef(0);
-    /** The flown ship's rendered frame grid; `frames` is null until its level row is ready,
-     *  and the other rows fill in later. */
-    const playerFramesRef = useRef<{ shipId: string; frames: PlayerFrames | null } | null>(null);
-    /** Gate sprites by visual key, as data URLs: in flight, and finished. */
-    const spriteRequestsRef = useRef(new Map<string, Promise<string>>());
-    /** Duel-summary renders by `${visualKey}:${facing}`, as data URLs: in flight, and finished. */
-    const viewerRequestsRef = useRef(new Map<string, Promise<string>>());
-    const viewerUrlsRef = useRef(new Map<string, string>());
-    /** The flown ship's duel render id, kept when the viewer caches are bounded. */
-    const playerViewerIdRef = useRef<string | null>(null);
+    /** Aborted when the arcade unmounts: work started under it is dropped, and its results never
+     *  reach state or the view. Created by the mount effect, so each mount has its own. */
+    const sessionRef = useRef<AbortController | null>(null);
+    /** The select screen's focused ship, while its sprites wait to start or render ahead. */
+    const focusRef = useRef<{ key: string; controller: AbortController; timer: number } | null>(
+        null
+    );
     const duelSeqRef = useRef(0);
 
     const [phase, setPhaseState] = useState<Phase>(phaseRef.current);
@@ -237,154 +239,170 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
         else resume();
     }, [resume, setPhase]);
 
-    /** A ship at the official viewer's angle, bow toward `facing`, as a data URL; rendered once
-     *  per visual key and facing. */
-    const requestViewerSprite = useCallback((key: string, facing: Facing): Promise<string> => {
-        const id = `${key}:${facing}`;
-        const isPinned = (k: string) => k === playerViewerIdRef.current;
-        let p = viewerRequestsRef.current.get(id);
-        if (!p) {
-            p = shipSprites()
-                .then((m) => m.renderViewerSprite(key, facing))
-                .then((canvas) => {
-                    const url = canvas.toDataURL();
-                    viewerUrlsRef.current.set(id, url);
-                    evictOldest(viewerUrlsRef.current, VIEWER_CACHE_SIZE, isPinned);
-                    return url;
-                });
-            p.catch(() => viewerRequestsRef.current.delete(id));
-            viewerRequestsRef.current.set(id, p);
-            evictOldest(viewerRequestsRef.current, VIEWER_CACHE_SIZE, isPinned);
-        }
-        return p;
+    // The session lives from mount to unmount; see `sessionRef`.
+    useEffect(() => {
+        const session = new AbortController();
+        sessionRef.current = session;
+        return () => {
+            session.abort();
+            const focus = focusRef.current;
+            if (focus) window.clearTimeout(focus.timer);
+            focusRef.current = null;
+            endArcadeSession();
+        };
     }, []);
 
-    /** Renders the flown ship's frame grid once per ship: the level heading sweep first, then
-     *  its duel render and the banked, pitched and pitched-banked sweeps, each in idle time. A
-     *  sweep that fails to render is skipped. The run keeps the neon fighter until the level
-     *  sweep is ready, and for good if it fails. */
-    const requestPlayerFrames = useCallback(
-        (ship: Ship) => {
-            const key = shipModelsEnabled() ? visualOfRef.current(ship).visualKey : null;
-            if (!key || playerFramesRef.current?.shipId === ship.id) return;
-            playerFramesRef.current = { shipId: ship.id, frames: null };
-            playerViewerIdRef.current = `${key}:right`;
-            const isCurrent = () => playerFramesRef.current?.shipId === ship.id;
-            const pitches = PITCH_ANGLES_DEG.map((_, i) => i);
-            const banks = BANK_ANGLES_DEG.map((_, i) => i);
-            const pitched = pitches.filter((p) => p !== LEVEL_PITCH_ROW);
-            const banked = banks.filter((b) => b !== LEVEL_BANK);
-            const idleBatches: SweepRef[][] = [
-                banked.map((bank) => ({ pitch: LEVEL_PITCH_ROW, bank })),
-                pitched.map((pitch) => ({ pitch, bank: LEVEL_BANK })),
-                ...pitched.map((pitch) => banked.map((bank) => ({ pitch, bank }))),
-            ];
-            shipSprites()
-                .then(async (m) => {
-                    const level = { pitch: LEVEL_PITCH_ROW, bank: LEVEL_BANK };
-                    const [levelSweep] = await m.renderChaseSweeps(key, [level]);
-                    if (!isCurrent()) return;
-                    const frames: PlayerFrames = pitches.map(() => banks.map(() => null));
-                    frames[level.pitch][level.bank] = levelSweep;
-                    playerFramesRef.current = { shipId: ship.id, frames };
-                    if (flownRef.current?.id === ship.id) viewRef.current.playerFrames = frames;
-                    void requestViewerSprite(key, 'right').catch(() => {});
-                    // The view holds `frames` itself, so sweeps filled in here show up next frame.
-                    for (const batch of idleBatches) {
-                        let sweeps: HTMLCanvasElement[][];
-                        try {
-                            sweeps = await m.renderChaseSweeps(key, batch);
-                        } catch {
-                            continue;
-                        }
-                        if (!isCurrent()) return;
-                        batch.forEach(({ pitch, bank }, i) => (frames[pitch][bank] = sweeps[i]));
-                    }
-                })
-                .catch(() => {
-                    if (isCurrent() && !playerFramesRef.current?.frames) {
-                        playerFramesRef.current = null;
-                    }
-                });
-        },
-        [requestViewerSprite]
+    const sessionSignal = () => sessionRef.current?.signal ?? ABORTED_SIGNAL;
+
+    /** A ship's official render key, or null while models are off or it has none. */
+    const keyOf = useCallback(
+        (ship: Ship) => (shipModelsEnabled() ? visualOfRef.current(ship).visualKey : null),
+        []
     );
 
-    /** A ship's gate sprite as a data URL, rendered once per visual key. */
-    const requestSprite = useCallback((key: string): Promise<string> => {
-        let p = spriteRequestsRef.current.get(key);
-        if (!p) {
-            p = shipSprites()
-                .then((m) => m.renderGateSprite(key))
-                .then((canvas) => canvas.toDataURL());
-            p.catch(() => spriteRequestsRef.current.delete(key));
-            spriteRequestsRef.current.set(key, p);
-        }
-        return p;
+    /** Pins the models and renders of the flown ship and of every opponent still ahead. */
+    const refreshPins = useCallback(() => {
+        const ahead = gameRef.current.checkpoints
+            .filter((c) => !c.resolved)
+            .flatMap((c) => opponentsRef.current.get(c.id) ?? []);
+        const opponents = [...ahead, ...(nextOpponentsRef.current ?? [])];
+        const flown = flownRef.current;
+        setArcadePins(flown && keyOf(flown), opponents.map(keyOf));
+    }, [keyOf]);
+
+    /** Starts rendering a ship's frame grid and its duel render, under `signal`. */
+    const warmPlayerSprites = useCallback((key: string, signal: AbortSignal) => {
+        void requestPlayerFrames(key, signal).catch(() => {});
+        void requestViewerSprite(key, 'right', signal).catch(() => {});
     }, []);
+
+    /** Gives the flown ship's frame grid to the run once its level sweep is ready: the level
+     *  sweep first, then the banked, pitched and pitched-banked sweeps fill in during idle
+     *  time. The run keeps the neon fighter until the level sweep is ready, and for good if it
+     *  fails. */
+    const requestFlownFrames = useCallback(
+        (ship: Ship) => {
+            const key = keyOf(ship);
+            if (!key) return;
+            const session = sessionSignal();
+            warmPlayerSprites(key, session);
+            requestPlayerFrames(key, session)
+                .then((frames) => {
+                    const flown = flownRef.current;
+                    if (session.aborted || !flown || keyOf(flown) !== key) return;
+                    viewRef.current.playerFrames = frames;
+                })
+                .catch(() => {});
+        },
+        [keyOf, warmPlayerSprites]
+    );
 
     /** Starts loading a ship's gate art: its portrait and, with models on, its sprite. */
     const warmGateArt = useCallback(
         (ship: Ship) => {
-            const { portraitUrl, visualKey } = visualOfRef.current(ship);
+            const { portraitUrl } = visualOfRef.current(ship);
             if (portraitUrl) void loadPortrait(portraitUrl).catch(() => {});
-            if (shipModelsEnabled() && visualKey) {
-                void requestSprite(visualKey).catch(() => {});
-                void requestViewerSprite(visualKey, 'left').catch(() => {});
-            }
+            const key = keyOf(ship);
+            if (!key) return;
+            const signal = sessionSignal();
+            void requestGateSprite(key, signal).catch(() => {});
+            void requestViewerSprite(key, 'left', signal).catch(() => {});
         },
-        [requestSprite, requestViewerSprite]
+        [keyOf]
     );
 
-    /** Picks the next checkpoint's opponents now and starts rendering their art. */
-    const prepareNextOpponents = useCallback(() => {
+    /** Picks the next checkpoint's opponents for `flown` now and starts rendering their art. */
+    const prepareNextOpponents = useCallback(
+        (flown: Ship | null = flownRef.current) => {
+            const pick =
+                flown && canDuel(shipsRef.current, flown.id)
+                    ? pickOpponents(shipsRef.current, flown.id, Math.random)
+                    : null;
+            nextOpponentsRef.current = pick;
+            nextOpponentsForRef.current = flown?.id ?? null;
+            pick?.forEach(warmGateArt);
+            refreshPins();
+        },
+        [warmGateArt, refreshPins]
+    );
+
+    /** On the select screen, a ship that stays focused has its sprites and its first opponents
+     *  rendered ahead, so a run launched with it starts with them ready. */
+    const onFocusShip = useCallback(
+        (ship: Ship) => {
+            const key = keyOf(ship);
+            const previous = focusRef.current;
+            if (previous && previous.key === key) return;
+            if (previous) {
+                window.clearTimeout(previous.timer);
+                previous.controller.abort();
+            }
+            focusRef.current = null;
+            if (!key) return;
+            const controller = new AbortController();
+            const signal = anySignal(sessionSignal(), controller.signal);
+            const timer = window.setTimeout(() => {
+                if (signal.aborted) return;
+                warmPlayerSprites(key, signal);
+                prepareNextOpponents(ship);
+            }, FOCUS_PREWARM_MS);
+            focusRef.current = { key, controller, timer };
+        },
+        [keyOf, warmPlayerSprites, prepareNextOpponents]
+    );
+
+    // Visual keys need the ship templates, which may arrive after mount. A run that starts
+    // without the select screen also picks its first opponents here, after the flown ship's
+    // own sprites are queued.
+    useEffect(() => {
         const flown = flownRef.current;
-        const pick =
-            flown && duelsRef.current
-                ? pickOpponents(shipsRef.current, flown.id, Math.random)
-                : null;
-        nextOpponentsRef.current = pick;
-        pick?.forEach(warmGateArt);
-    }, [warmGateArt]);
+        if (flown) requestFlownFrames(flown);
+        if (flown && nextOpponentsForRef.current !== flown.id) prepareNextOpponents(flown);
+        else nextOpponentsRef.current?.forEach(warmGateArt);
+        refreshPins();
+    }, [visualOf, requestFlownFrames, prepareNextOpponents, warmGateArt, refreshPins]);
 
-    // A run that starts without the select screen picks its first opponents on mount.
+    // Heavy idle work (model parses) waits while the ship is flying.
     useEffect(() => {
-        if (initial.flown) prepareNextOpponents();
-    }, [initial.flown, prepareNextOpponents]);
+        runWhenIdle.hold(phase === 'intro' || phase === 'running');
+    }, [phase]);
 
-    // Visual keys need the ship templates, which may arrive after mount.
-    useEffect(() => {
-        if (flownRef.current) requestPlayerFrames(flownRef.current);
-        nextOpponentsRef.current?.forEach(warmGateArt);
-    }, [visualOf, requestPlayerFrames, warmGateArt]);
-
-    /** Starts a fresh run with the flown ship and duel setting already in the refs. */
+    /** Starts a fresh run with the flown ship and duel setting already in the refs. Opponents
+     *  already picked for this ship are kept. */
     const restart = useCallback(() => {
         const flown = flownRef.current;
         runGenerationRef.current++;
         opponentsRef.current.clear();
-        prepareNextOpponents();
+        if (!flown || nextOpponentsForRef.current !== flown.id) prepareNextOpponents();
         setDuel(null);
         gameRef.current = createGame(newSeed(), { duels: duelsRef.current });
         viewRef.current = createFlightView(undefined, flown ? factionAccent(flown.faction) : null);
-        const rendered = playerFramesRef.current;
-        viewRef.current.playerFrames =
-            flown && rendered?.shipId === flown.id ? rendered.frames : null;
+        const key = flown && keyOf(flown);
+        viewRef.current.playerFrames = key ? cachedPlayerFrames(key) : null;
+        refreshPins();
         inputsRef.current = [];
         setResult(null);
         setHud({ score: 0, credits: 0, shield: false, magnet: 0 });
         setPhase('running');
-    }, [setPhase, prepareNextOpponents]);
+    }, [setPhase, prepareNextOpponents, keyOf, refreshPins]);
 
     const launch = useCallback(
         (ship: Ship) => {
             writeLastShipId(ship.id);
+            const focus = focusRef.current;
+            if (focus) {
+                window.clearTimeout(focus.timer);
+                // A focused ship's sprites keep rendering if it is the one launched.
+                if (focus.key !== keyOf(ship)) focus.controller.abort();
+                focusRef.current = null;
+            }
             flownRef.current = ship;
             duelsRef.current = canDuel(ships, ship.id);
-            requestPlayerFrames(ship);
+            refreshPins();
+            requestFlownFrames(ship);
             restart();
         },
-        [ships, restart, requestPlayerFrames]
+        [ships, restart, requestFlownFrames, keyOf, refreshPins]
     );
 
     const finishRun = useCallback(() => {
@@ -400,18 +418,18 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
     const toSide = useCallback(
         (ship: Ship, facing: Facing): { side: DuelSide; pending: Promise<string> | null } => {
             const visual = visualOfRef.current(ship);
-            const key = shipModelsEnabled() ? visual.visualKey : null;
-            const render = key ? viewerUrlsRef.current.get(`${key}:${facing}`) : undefined;
+            const key = keyOf(ship);
+            const render = key ? cachedViewerSprite(key, facing) : null;
             if (render) {
                 const side = { name: ship.name, level: ship.level, imageUrl: render };
                 return { side: { ...side, facesOpponent: true }, pending: null };
             }
             return {
                 side: { name: ship.name, level: ship.level, imageUrl: visual.portraitUrl },
-                pending: key ? requestViewerSprite(key, facing) : null,
+                pending: key ? requestViewerSprite(key, facing, sessionSignal()) : null,
             };
         },
-        [requestViewerSprite]
+        [keyOf]
     );
 
     /** Opens the summary for the game's pending duel and simulates it off the frame. */
@@ -432,7 +450,9 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
             return;
         }
         setPhase('duel');
+        const session = sessionSignal();
         const generation = runGenerationRef.current;
+        const current = () => !session.aborted && generation === runGenerationRef.current;
         const id = ++duelSeqRef.current;
         const player = toSide(flown, 'right');
         const rival = toSide(opponent, 'left');
@@ -450,7 +470,7 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
             render
                 ?.then((imageUrl) =>
                     setDuel((d) =>
-                        d && d.id === id && generation === runGenerationRef.current
+                        d && d.id === id && current()
                             ? { ...d, [which]: { ...d[which], imageUrl, facesOpponent: true } }
                             : d
                     )
@@ -465,12 +485,12 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
             let r: DuelResult;
             try {
                 const { runDuel } = await import('./duel/runDuel');
-                if (generation !== runGenerationRef.current) return;
+                if (!current()) return;
                 r = runDuel(flown, opponent, statsDepsRef.current, newSeed());
             } catch {
                 r = { outcome: 'skipped', timeline: [] };
             }
-            if (generation !== runGenerationRef.current) return;
+            if (!current()) return;
             const effect = resolveDuel(gameRef.current, r.outcome);
             setDuel((d) => d && { ...d, result: r, effect });
         };
@@ -517,7 +537,7 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
         let last = performance.now();
         let acc = 0;
         let hudTimer = 0;
-        const generation = runGenerationRef;
+        const session = sessionSignal();
         /** Checkpoints whose gates have been passed and handled. */
         const passed = new WeakSet<object>();
 
@@ -526,6 +546,7 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
         const takePrepared = (flownId: string): [Ship, Ship] | null => {
             const prepared = nextOpponentsRef.current;
             nextOpponentsRef.current = null;
+            nextOpponentsForRef.current = null;
             if (!prepared) return null;
             const current = prepared.map((p) =>
                 shipsRef.current.find((s) => s.id === p.id && s.id !== flownId)
@@ -533,15 +554,21 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
             return current[0] && current[1] ? [current[0], current[1]] : null;
         };
 
+        /** A gate's art: the portrait, and the sprite as soon as it has rendered. */
         const toGateArt = (ship: Ship): GateArt => {
-            const { portraitUrl, visualKey } = visualOfRef.current(ship);
+            const { portraitUrl } = visualOfRef.current(ship);
             if (portraitUrl) void loadPortrait(portraitUrl).catch(() => {});
-            const art: GateArt = { name: ship.name, level: ship.level, portraitUrl };
-            if (shipModelsEnabled() && visualKey) {
-                requestSprite(visualKey)
-                    .then((url) => loadPortrait(url))
-                    .then((img) => {
-                        art.spriteUrl = img.src;
+            const key = keyOf(ship);
+            const art: GateArt = {
+                name: ship.name,
+                level: ship.level,
+                portraitUrl,
+                sprite: key ? cachedGateSprite(key) : null,
+            };
+            if (key && !art.sprite) {
+                requestGateSprite(key, session)
+                    .then((sprite) => {
+                        if (!session.aborted) art.sprite = sprite;
                     })
                     .catch(() => {});
             }
@@ -582,6 +609,7 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
                     }
                     opponentsRef.current.set(c.id, pick);
                     view.gateArt.set(c.id, [toGateArt(pick[0]), toGateArt(pick[1])]);
+                    refreshPins();
                 }
 
                 if (game.status === 'over') finishRun();
@@ -591,9 +619,11 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
                 for (const c of game.checkpoints) {
                     if (!c.resolved || passed.has(c) || !view.gateArt.has(c.id)) continue;
                     passed.add(c);
+                    refreshPins();
                     if (game.status === 'running' && !nextOpponentsRef.current) {
                         const run = runGenerationRef.current;
                         void whenIdle().then(() => {
+                            if (session.aborted) return;
                             if (run === runGenerationRef.current && !nextOpponentsRef.current) {
                                 prepareNextOpponents();
                             }
@@ -622,9 +652,8 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
         return () => {
             cancelAnimationFrame(raf);
             window.removeEventListener('resize', resize);
-            generation.current++;
         };
-    }, [setPhase, finishRun, startDuel, requestSprite, prepareNextOpponents]);
+    }, [setPhase, finishRun, startDuel, prepareNextOpponents, keyOf, refreshPins]);
 
     // Focus moves into the overlay so keyboard input never lands on the page underneath.
     useEffect(() => {
@@ -756,6 +785,7 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
                     onLaunch={launch}
                     onQuit={onClose}
                     renderShip={shipModelsEnabled() ? renderShipModel : undefined}
+                    onFocusShip={onFocusShip}
                 />
             )}
             {phase === 'paused' && (
