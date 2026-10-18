@@ -18,6 +18,7 @@ import type { GameState, Obstacle, Pickup } from '../../utils/arcade/types';
 import { gridOffsetDelta, laneWidthAtPlayer, project } from './projection';
 import type { FlightOrigin } from './flightEvents';
 import { drawNeonFighter } from './neonFighter';
+import type { NeonAccent } from './ships/factionTint';
 
 export const INTRO_SECONDS = 1.2;
 const LANE_SLIDE_RATE = 14;
@@ -31,9 +32,14 @@ export interface FlightView {
     sun: SunCache;
     intro: FlightOrigin | null;
     introElapsed: number;
+    /** Player hull outline colour; `null` keeps the default neon pink. */
+    playerAccent: NeonAccent | null;
 }
 
-export function createFlightView(origin?: FlightOrigin): FlightView {
+export function createFlightView(
+    origin?: FlightOrigin,
+    accent: NeonAccent | null = null
+): FlightView {
     return {
         gridOffset: 0,
         playerX: 0,
@@ -41,6 +47,7 @@ export function createFlightView(origin?: FlightOrigin): FlightView {
         sun: createSunCache(),
         intro: origin ?? null,
         introElapsed: 0,
+        playerAccent: accent,
     };
 }
 
@@ -176,7 +183,13 @@ function drawPlayer(
     }
     const bank = Math.max(-1, Math.min(1, (laneOffset(game.player.lane) - view.playerX) * 2));
     ctx.globalAlpha = e;
-    drawNeonFighter(ctx, s, { timeMs, bank, squash, thrust: 1 });
+    drawNeonFighter(ctx, s, {
+        timeMs,
+        bank,
+        squash,
+        thrust: 1,
+        accent: view.playerAccent ?? undefined,
+    });
     ctx.restore();
 
     if (game.player.shield) {

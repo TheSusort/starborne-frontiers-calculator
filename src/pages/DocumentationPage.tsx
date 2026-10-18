@@ -2530,6 +2530,17 @@ const DocumentationPage: React.FC = () => {
                                 take control of it from any page.
                             </p>
                             <div className="card">
+                                <h4 className="font-semibold text-primary mb-2">Choosing a ship</h4>
+                                <p className="text-theme-text">
+                                    If you have ships in your fleet, a run starts on a ship select
+                                    screen. Search by name or filter by faction, browse with
+                                    Previous / Next, the Left / Right keys or a sideways swipe, and
+                                    press Launch or Enter. Your fighter is tinted in the ship&apos;s
+                                    faction colour. Your last choice is listed first next time, and
+                                    Retry keeps the same ship.
+                                </p>
+                            </div>
+                            <div className="card">
                                 <h4 className="font-semibold text-primary mb-2">Controls</h4>
                                 <ul className="text-theme-text space-y-1 list-disc list-inside">
                                     <li>

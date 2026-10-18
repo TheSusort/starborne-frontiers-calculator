@@ -7,6 +7,8 @@ import { STEP_SECONDS } from '../../utils/arcade/constants';
 import { computeScore, runResult } from '../../utils/arcade/scoring';
 import type { GameState, InputAction, RunResult } from '../../utils/arcade/types';
 import { useAuth } from '../../contexts/AuthProvider';
+import { useShips } from '../../contexts/ShipsContext';
+import type { Ship } from '../../types/ship';
 import {
     advanceView,
     createFlightView,
@@ -21,8 +23,12 @@ import { useArcadeSubmission, SubmissionStatus } from './useArcadeSubmission';
 import { ArcadeUsernameModal } from './ArcadeUsernameModal';
 import { ArcadeLeaderboard } from './ArcadeLeaderboard';
 import type { FlightOrigin } from './flightEvents';
+import { canDuel } from './duel/pickOpponents';
+import { factionAccent } from './ships/factionTint';
+import { readLastShipId, writeLastShipId } from './ships/fleetOrder';
+import { FighterSelect } from './FighterSelect';
 
-type Phase = 'intro' | 'running' | 'paused' | 'countdown' | 'over';
+type Phase = 'select' | 'intro' | 'running' | 'paused' | 'countdown' | 'duel' | 'over';
 
 const COUNTDOWN_SECONDS = 3;
 /** A long frame (tab switch, GC pause) is clamped so the game never jumps ahead. */
@@ -78,16 +84,31 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
     const reducedMotion = useMediaQuery('(prefers-reduced-motion: reduce)');
     const startOrigin = reducedMotion ? undefined : origin;
 
+    const { ships } = useShips();
     const canvasRef = useRef<HTMLCanvasElement>(null);
-    const [initial] = useState(() => ({
-        game: createGame(newSeed()),
-        view: createFlightView(startOrigin),
-    }));
+    // The background easter egg skips the select screen and flies the last chosen ship, if
+    // it is still owned; otherwise a fleet opens on the select screen.
+    const [initial] = useState(() => {
+        const lastShipId = readLastShipId();
+        const flown = startOrigin ? (ships.find((s) => s.id === lastShipId) ?? null) : null;
+        const duels = canDuel(ships, flown?.id ?? null);
+        const phase: Phase = startOrigin ? 'intro' : ships.length > 0 ? 'select' : 'running';
+        return {
+            lastShipId,
+            flown,
+            duels,
+            phase,
+            game: createGame(newSeed(), { duels }),
+            view: createFlightView(startOrigin, flown ? factionAccent(flown.faction) : null),
+        };
+    });
     const gameRef = useRef<GameState>(initial.game);
     const viewRef = useRef<FlightView>(initial.view);
+    const flownRef = useRef<Ship | null>(initial.flown);
+    const duelsRef = useRef(initial.duels);
     const rootRef = useRef<HTMLDivElement>(null);
     const inputsRef = useRef<InputAction[]>([]);
-    const phaseRef = useRef<Phase>(startOrigin ? 'intro' : 'running');
+    const phaseRef = useRef<Phase>(initial.phase);
     const escapeBlockedRef = useRef(false);
     const swipeStartRef = useRef<{ x: number; y: number } | null>(null);
 
@@ -127,14 +148,26 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
         else resume();
     }, [resume, setPhase]);
 
+    /** Starts a fresh run with the flown ship and duel setting already in the refs. */
     const restart = useCallback(() => {
-        gameRef.current = createGame(newSeed());
-        viewRef.current = createFlightView();
+        const flown = flownRef.current;
+        gameRef.current = createGame(newSeed(), { duels: duelsRef.current });
+        viewRef.current = createFlightView(undefined, flown ? factionAccent(flown.faction) : null);
         inputsRef.current = [];
         setResult(null);
         setHud({ score: 0, credits: 0, shield: false, magnet: 0 });
         setPhase('running');
     }, [setPhase]);
+
+    const launch = useCallback(
+        (ship: Ship) => {
+            writeLastShipId(ship.id);
+            flownRef.current = ship;
+            duelsRef.current = canDuel(ships, ship.id);
+            restart();
+        },
+        [ships, restart]
+    );
 
     // Game loop: fixed-step simulation, render every frame.
     useEffect(() => {
@@ -250,7 +283,7 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
                 return;
             }
             const p = phaseRef.current;
-            if (p === 'over') return;
+            if (p === 'over' || p === 'select') return;
             if (e.key === 'p' || e.key === 'P') {
                 if (!e.repeat) togglePause();
                 return;
@@ -305,10 +338,14 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
                 onPointerCancel={onPointerCancel}
             />
             <div className="absolute top-0 inset-x-0 flex justify-between items-start p-4 pointer-events-none text-white font-mono">
-                <div>
-                    <div className="text-2xl">{hud.score.toLocaleString()}</div>
-                    <div className="text-sm text-yellow-300">{hud.credits} credits</div>
-                </div>
+                {phase === 'select' ? (
+                    <div />
+                ) : (
+                    <div>
+                        <div className="text-2xl">{hud.score.toLocaleString()}</div>
+                        <div className="text-sm text-yellow-300">{hud.credits} credits</div>
+                    </div>
+                )}
                 <div className="flex gap-2 items-center pointer-events-auto">
                     {hud.shield && <span className="text-cyan-300 text-sm">SHIELD</span>}
                     {hud.magnet > 0 && (
@@ -316,7 +353,7 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
                             MAGNET {Math.ceil(hud.magnet)}
                         </span>
                     )}
-                    {phase !== 'over' && (
+                    {phase !== 'over' && phase !== 'select' && (
                         <Button variant="secondary" size="sm" onClick={togglePause}>
                             {phase === 'paused' ? 'Resume' : 'Pause'}
                         </Button>
@@ -326,6 +363,14 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
                     </Button>
                 </div>
             </div>
+            {phase === 'select' && (
+                <FighterSelect
+                    ships={ships}
+                    initialShipId={initial.lastShipId}
+                    onLaunch={launch}
+                    onQuit={onClose}
+                />
+            )}
             {phase === 'paused' && (
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                     <div className="card text-center space-y-3 pointer-events-auto">

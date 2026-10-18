@@ -1,3 +1,5 @@
+import type { NeonAccent } from './ships/factionTint';
+
 /**
  * The arcade player ship: a neon wireframe fighter seen from behind. Every coordinate is a
  * multiple of `s`; the footprint spans x ±2.2s and y -0.8s..+0.6s (flames extend below), which
@@ -11,6 +13,8 @@ export interface NeonFighterPose {
     squash: number;
     /** 0..1 engine intensity. */
     thrust: number;
+    /** Hull outline colour; defaults to the neon pink. */
+    accent?: NeonAccent;
 }
 
 const HULL_FILL_TOP = 'rgba(42, 12, 70, 0.88)';
@@ -86,6 +90,8 @@ export function drawNeonFighter(
     const thrust = Math.max(0, Math.min(1, pose.thrust));
     const alpha = ctx.globalAlpha;
     const t = pose.timeMs;
+    const pink = pose.accent?.core ?? NEON_PINK;
+    const pinkGlow = pose.accent?.glow ?? NEON_PINK_GLOW;
 
     // The wing dipping toward the ground turns away from the camera, so it reads shorter.
     const kRight = 1 - LOWER_WING_FORESHORTEN * Math.max(0, bank);
@@ -134,7 +140,7 @@ export function drawNeonFighter(
         path(fin, true);
         ctx.fillStyle = hullGrad;
         ctx.fill();
-        neonStroke(NEON_PINK, NEON_PINK_GLOW, 0.045);
+        neonStroke(pink, pinkGlow, 0.045);
     }
 
     // Hull: one closed outline from both mirrored halves.
@@ -142,7 +148,7 @@ export function drawNeonFighter(
     path(hull, true);
     ctx.fillStyle = hullGrad;
     ctx.fill();
-    neonStroke(NEON_PINK, NEON_PINK_GLOW, 0.055);
+    neonStroke(pink, pinkGlow, 0.055);
 
     // Cyan panel lines: wings plus the fuselage spine.
     for (const line of [...WING_LINES_RIGHT, ...WING_LINES_RIGHT.map(mirror)]) {
