@@ -342,10 +342,57 @@ export function drawGround(ctx: CanvasRenderingContext2D, g: SceneGeometry): voi
     ctx.fillRect(0, horizonY - 8, w, 23);
 }
 
+/**
+ * The fan of vertical grid lines: line `i` of `count + 1` sits at `t = i / count` and runs
+ * straight from `vanishX + (t - 0.5) * topSpread` on the horizon to
+ * `bottomLeft + t * bottomSpread` on the near plane (the bottom of the screen).
+ */
+export interface GridColumns {
+    count: number;
+    topSpread: number;
+    bottomSpread: number;
+    bottomLeft: number;
+}
+
+/** The page background's fan: off-centre at the bottom, denser on wide screens. */
+export function defaultGridColumns(g: SceneGeometry): GridColumns {
+    const spreadBottom = Math.max(g.w * 10, g.h * 12);
+    return {
+        count: g.w / g.h > 1.2 ? 40 : 20,
+        topSpread: Math.max(g.h * 0.2, g.w * 0.15),
+        bottomSpread: spreadBottom,
+        bottomLeft: -spreadBottom * 0.3,
+    };
+}
+
+export function gridLineEnds(
+    g: SceneGeometry,
+    columns: GridColumns,
+    t: number
+): { topX: number; bottomX: number } {
+    return {
+        topX: g.vanishX + (t - 0.5) * columns.topSpread,
+        bottomX: columns.bottomLeft + t * columns.bottomSpread,
+    };
+}
+
+/** Screen x of the grid line at fan position `t` (fractional between lines) at a grid depth;
+ *  the lines are straight, so this is exact for every point `drawGrid` draws. */
+export function gridLineX(
+    g: SceneGeometry,
+    columns: GridColumns,
+    t: number,
+    depth: number
+): number {
+    const { topX, bottomX } = gridLineEnds(g, columns, t);
+    return topX + (bottomX - topX) * (GRID_NEAR_PLANE / depth);
+}
+
 export function drawGrid(
     ctx: CanvasRenderingContext2D,
     g: SceneGeometry,
-    gridOffset: number
+    gridOffset: number,
+    gridColumns?: GridColumns
 ): void {
     const { w, h, horizonY, gridHeight, vanishX } = g;
     const gridBottom = h;
@@ -398,17 +445,14 @@ export function drawGrid(
     }
 
     // Vertical grid lines — NO shadowBlur, double-draw for glow
-    const aspectRatio = w / h;
-    const numVLines = aspectRatio > 1.2 ? 40 : 20; // reduced from 60/30
-    const spreadBottom = Math.max(w * 10, h * 12);
-    const horizonSpread = Math.max(h * 0.2, w * 0.15);
+    const columns = gridColumns ?? defaultGridColumns(g);
+    const numVLines = columns.count;
 
     // Glow pass
     for (let i = 0; i <= numVLines; i++) {
         const t = i / numVLines;
-        const bottomX = -spreadBottom * 0.3 + t * spreadBottom;
+        const { topX, bottomX } = gridLineEnds(g, columns, t);
         const distFromCenter = t - 0.5;
-        const topX = vanishX + distFromCenter * horizonSpread;
         const absFromCenter = Math.abs(distFromCenter);
         const bottomW = Math.max(14 - absFromCenter * 20, 0.8);
         const topW = 0.6;
@@ -426,9 +470,8 @@ export function drawGrid(
     // Core pass
     for (let i = 0; i <= numVLines; i++) {
         const t = i / numVLines;
-        const bottomX = -spreadBottom * 0.3 + t * spreadBottom;
+        const { topX, bottomX } = gridLineEnds(g, columns, t);
         const distFromCenter = t - 0.5;
-        const topX = vanishX + distFromCenter * horizonSpread;
         const absFromCenter = Math.abs(distFromCenter);
         const bottomW = Math.max(4 - absFromCenter * 6, 0.2);
         const topW = 0.15;

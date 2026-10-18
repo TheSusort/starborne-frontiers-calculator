@@ -15,7 +15,7 @@ import {
 } from '../theme/synthwaveScene';
 import { JUMP_SECONDS, SHIELD_BREAK_FLASH, SPAWN_Z } from '../../utils/arcade/constants';
 import type { Checkpoint, GameState, Obstacle, Pickup } from '../../utils/arcade/types';
-import { gridOffsetDelta, laneWidthAtPlayer, project } from './projection';
+import { arcadeGridColumns, gridOffsetDelta, laneWidthAtPlayer, project } from './projection';
 import type { FlightOrigin } from './flightEvents';
 import { drawEngineGlow, drawNeonFighter } from './neonFighter';
 import type { NeonAccent } from './ships/factionTint';
@@ -79,22 +79,9 @@ export function advanceView(view: FlightView, travelUnits: number): void {
 
 const laneOffset = (lane: number) => lane - 1;
 
-function drawLaneRails(ctx: CanvasRenderingContext2D, g: SceneGeometry): void {
-    ctx.strokeStyle = 'rgba(255, 120, 220, 0.35)';
-    ctx.lineWidth = 2;
-    for (const x of [-1.5, -0.5, 0.5, 1.5]) {
-        const a = project(g, x, -2);
-        const b = project(g, x, SPAWN_Z);
-        ctx.beginPath();
-        ctx.moveTo(a.x, a.y);
-        ctx.lineTo(b.x, b.y);
-        ctx.stroke();
-    }
-}
-
 function drawObstacle(ctx: CanvasRenderingContext2D, g: SceneGeometry, o: Obstacle): void {
     const p = project(g, laneOffset(o.lane), o.z);
-    const u = laneWidthAtPlayer(g) * p.scale;
+    const u = p.width;
     ctx.globalAlpha = Math.min(1, Math.max(0, (SPAWN_Z - o.z) / FADE_IN_UNITS));
     if (o.kind === 'wall') {
         ctx.fillStyle = 'rgba(255, 40, 140, 0.85)';
@@ -126,7 +113,7 @@ function drawGate(
     art: GateArt
 ): void {
     const p = project(g, laneOffset(lane), z);
-    const u = laneWidthAtPlayer(g) * p.scale;
+    const u = p.width;
     const half = 0.42 * u;
     const shoulder = p.y - 0.9 * u;
 
@@ -195,7 +182,7 @@ function drawCheckpoint(
     drawGate(ctx, g, c.gates[1], c.z, art[1]);
 
     const centre = project(g, 0, c.z);
-    const u = laneWidthAtPlayer(g) * centre.scale;
+    const u = centre.width;
     const fontPx = 0.11 * u;
     if (fontPx >= MIN_TEXT_PX) {
         ctx.font = `bold ${fontPx}px sans-serif`;
@@ -216,7 +203,7 @@ function drawPickup(
     timeMs: number
 ): void {
     const p = project(g, laneOffset(pk.lane), pk.z);
-    const u = laneWidthAtPlayer(g) * p.scale;
+    const u = p.width;
     const bob = Math.sin(timeMs * 0.006 + pk.id) * 0.04 * u;
     const cx = p.x;
     const cy = p.y - 0.3 * u + bob;
@@ -353,8 +340,7 @@ export function renderFlight(
     drawSun(ctx, g, view.sun, timeMs, true);
     drawMountains(ctx, g);
     drawGround(ctx, g);
-    drawGrid(ctx, g, view.gridOffset);
-    drawLaneRails(ctx, g);
+    drawGrid(ctx, g, view.gridOffset, arcadeGridColumns(g));
 
     const items: ({ z: number } & (
         { obstacle: Obstacle } | { pickup: Pickup } | { checkpoint: Checkpoint }
