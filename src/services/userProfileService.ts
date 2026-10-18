@@ -87,13 +87,19 @@ export async function updateUserProfile(
     return data;
 }
 
+const USERNAME_PATTERN = /^[a-zA-Z0-9 _-]{3,20}$/;
+
+/** Mirrors the `users.username` CHECK constraint. */
+export function isValidUsername(value: string): boolean {
+    return USERNAME_PATTERN.test(value);
+}
+
 /**
  * Check if username is available
  */
 export async function checkUsernameAvailability(username: string): Promise<boolean> {
     // Validate format first
-    const usernameRegex = /^[a-zA-Z0-9 _-]{3,20}$/;
-    if (!usernameRegex.test(username)) {
+    if (!isValidUsername(username)) {
         return false;
     }
 

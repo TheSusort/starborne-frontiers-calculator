@@ -1,0 +1,150 @@
+import React, { useEffect, useMemo, useState } from 'react';
+import { DataTable, Column } from '../ui/tables/DataTable';
+import { Button } from '../ui/Button';
+import { Chip } from '../ui/Chip';
+import { PodiumCard } from '../ui/PodiumCard';
+import { useAuth } from '../../contexts/AuthProvider';
+import { getArcadeLeaderboard } from '../../services/arcadeService';
+import type { ArcadeLeaderboardEntry } from '../../utils/arcade/leaderboardRows';
+import { isGapRow, splitPodium, withGapRows, type LeaderboardViewRow } from './leaderboardRowsView';
+
+const MEDAL_COLORS: Record<number, string> = {
+    1: '#facc15', // gold (yellow-400)
+    2: '#d1d5db', // silver (gray-300)
+    3: '#d97706', // bronze (amber-600)
+};
+
+/** Podium slots left to right, as indexes into the podium entries: #2, #1, #3. */
+const PODIUM_SLOT_ORDER = [1, 0, 2];
+
+const YouChip: React.FC = () => <Chip variant="accent">YOU</Chip>;
+
+const Podium: React.FC<{ entries: ArcadeLeaderboardEntry[] }> = ({ entries }) => (
+    <div className="mx-auto grid w-full max-w-2xl grid-cols-3 items-end gap-2 sm:gap-3">
+        {PODIUM_SLOT_ORDER.map((index) => {
+            const entry = entries[index];
+            if (!entry) return <div key={`empty-${index}`} aria-hidden="true" />;
+            return (
+                <PodiumCard
+                    key={`${entry.rank}-${entry.username}`}
+                    rank={entry.rank}
+                    title={entry.username}
+                    value={entry.bestScore.toLocaleString()}
+                    accentColor={MEDAL_COLORS[entry.rank] ?? MEDAL_COLORS[index + 1]}
+                    raised={index === 0}
+                    badge={entry.isMe ? <YouChip /> : undefined}
+                />
+            );
+        })}
+    </div>
+);
+
+const COLUMNS: Column<LeaderboardViewRow>[] = [
+    {
+        key: 'rank',
+        label: '#',
+        render: (r) => (isGapRow(r) ? '\u2026' : <span className="tabular-nums">#{r.rank}</span>),
+    },
+    {
+        key: 'username',
+        label: 'Pilot',
+        render: (r) => {
+            if (isGapRow(r)) return '';
+            return (
+                <span className="inline-flex min-w-0 max-w-full items-center gap-2">
+                    <span className={`truncate ${r.isMe ? 'font-semibold' : ''}`}>
+                        {r.username}
+                    </span>
+                    {r.isMe && <YouChip />}
+                </span>
+            );
+        },
+    },
+    {
+        key: 'bestScore',
+        label: 'Score',
+        align: 'right',
+        render: (r) =>
+            isGapRow(r) ? '' : <span className="tabular-nums">{r.bestScore.toLocaleString()}</span>,
+    },
+];
+
+const OWN_ROW_CLASSES =
+    'border-b-transparent [&>td]:bg-primary/15 [&>td:first-child]:rounded-l-md [&>td:last-child]:rounded-r-md';
+
+const rowClassName = (r: LeaderboardViewRow): string => {
+    if (isGapRow(r)) return 'text-theme-text-secondary hover:!bg-transparent';
+    return r.isMe ? OWN_ROW_CLASSES : '';
+};
+
+interface Props {
+    limit?: number;
+    refreshKey?: number;
+}
+
+export const ArcadeLeaderboard: React.FC<Props> = ({ limit = 20, refreshKey = 0 }) => {
+    const { user } = useAuth();
+    const [rows, setRows] = useState<ArcadeLeaderboardEntry[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [failed, setFailed] = useState(false);
+    const [attempt, setAttempt] = useState(0);
+
+    useEffect(() => {
+        let cancelled = false;
+        setLoading(true);
+        setFailed(false);
+        getArcadeLeaderboard(limit)
+            .then((data) => {
+                if (!cancelled) setRows(data);
+            })
+            .catch((error) => {
+                console.error('Error loading arcade leaderboard:', error);
+                if (!cancelled) setFailed(true);
+            })
+            .finally(() => {
+                if (!cancelled) setLoading(false);
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [limit, refreshKey, user?.id, attempt]);
+
+    const { podium, tableRows } = useMemo(() => {
+        const split = splitPodium(rows);
+        return {
+            podium: split.podium,
+            tableRows: withGapRows(split.rest, split.podium[split.podium.length - 1]?.rank),
+        };
+    }, [rows]);
+
+    if (failed) {
+        return (
+            <div className="space-y-2">
+                <p className="text-sm text-red-400">Could not load the leaderboard.</p>
+                <Button variant="secondary" size="sm" onClick={() => setAttempt((a) => a + 1)}>
+                    Retry
+                </Button>
+            </div>
+        );
+    }
+
+    const table = (
+        <DataTable
+            data={tableRows}
+            columns={COLUMNS}
+            loading={loading && rows.length === 0}
+            emptyMessage="No scores yet. Be the first."
+            getRowKey={(r, i) => (isGapRow(r) ? `gap-${i}` : `${r.rank}-${r.username}`)}
+            rowClassName={rowClassName}
+        />
+    );
+
+    if (rows.length === 0) return table;
+
+    return (
+        <div className="space-y-3">
+            <Podium entries={podium} />
+            {tableRows.length > 0 && table}
+        </div>
+    );
+};

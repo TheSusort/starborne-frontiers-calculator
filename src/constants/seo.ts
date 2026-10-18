@@ -152,6 +152,12 @@ export const SEO_CONFIG = {
         keywords:
             'bounty calculator, credits farming, gear sell price, auto-sell, starborne frontiers',
     },
+    arcade: {
+        title: 'Arcade',
+        description:
+            'Fly the synthwave fighter in a lane-runner mini game: dodge walls, jump lasers, duck arches and collect credits.',
+        keywords: 'starborne frontiers, mini game, arcade, synthwave',
+    },
     shipLore: {
         title: 'Ship Lore',
         description:
