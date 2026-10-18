@@ -34,6 +34,22 @@ function withPickup(kind: PickupKind, lane: Lane, playerLane: Lane, magnet: numb
     return step(g, [], STEP_SECONDS);
 }
 
+function withPickupAction(kind: PickupKind, action: PlayerAction, magnet: number): GameState {
+    const g = quietGame();
+    g.player.action = action;
+    g.player.actionTime = action === 'run' ? 0 : 10;
+    g.player.magnetTime = magnet;
+    g.pickups.push({
+        id: 98,
+        kind,
+        lane: g.player.lane,
+        z: 0.01,
+        resolved: false,
+        collected: false,
+    });
+    return step(g, [], STEP_SECONDS);
+}
+
 describe('lane changes', () => {
     it('starts in the middle lane and clamps at both edges', () => {
         const g = quietGame();
@@ -117,6 +133,18 @@ describe('pickups', () => {
     });
     it('a magnet does not pull power-ups from other lanes', () => {
         expect(withPickup('shield', 2, 1, 3).player.shield).toBe(false);
+    });
+    it('jumping over a credit in your lane misses it', () => {
+        expect(withPickupAction('credit', 'jump', 0).credits).toBe(0);
+    });
+    it('jumping over a shield in your lane misses it', () => {
+        expect(withPickupAction('shield', 'jump', 0).player.shield).toBe(false);
+    });
+    it('an active magnet still collects a credit in your lane while jumping', () => {
+        expect(withPickupAction('credit', 'jump', 3).credits).toBe(1);
+    });
+    it('ducking over a credit in your lane collects it', () => {
+        expect(withPickupAction('credit', 'duck', 0).credits).toBe(1);
     });
     it('a shield pickup arms the shield', () => {
         expect(withPickup('shield', 1, 1, 0).player.shield).toBe(true);

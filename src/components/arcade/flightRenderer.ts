@@ -79,9 +79,11 @@ function drawObstacle(ctx: CanvasRenderingContext2D, g: SceneGeometry, o: Obstac
         ctx.fillRect(p.x + 0.43 * u, p.y - 0.26 * u, 0.04 * u, 0.26 * u);
     } else {
         ctx.fillStyle = '#ffb040';
-        ctx.fillRect(p.x - 0.47 * u, p.y - 0.95 * u, 0.94 * u, 0.14 * u);
-        ctx.fillRect(p.x - 0.47 * u, p.y - 0.95 * u, 0.05 * u, 0.95 * u);
-        ctx.fillRect(p.x + 0.42 * u, p.y - 0.95 * u, 0.05 * u, 0.95 * u);
+        // The bar's bottom edge (-0.30u) sits between the ducking ship's top (about -0.24u)
+        // and the running ship's top (about -0.38u), so only a duck visibly clears it.
+        ctx.fillRect(p.x - 0.47 * u, p.y - 0.62 * u, 0.94 * u, 0.32 * u);
+        ctx.fillRect(p.x - 0.47 * u, p.y - 0.62 * u, 0.05 * u, 0.62 * u);
+        ctx.fillRect(p.x + 0.42 * u, p.y - 0.62 * u, 0.05 * u, 0.62 * u);
     }
     ctx.globalAlpha = 1;
 }

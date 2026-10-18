@@ -2552,8 +2552,10 @@ const DocumentationPage: React.FC = () => {
                                 <p className="text-theme-text">
                                     Score is metres flown plus 10 points per credit. Walls can only
                                     be dodged by changing lane. A shield absorbs one hit; a magnet
-                                    collects credits from the neighbouring lanes for 8 seconds. Your
-                                    personal best is saved in this browser.
+                                    collects credits from the neighbouring lanes for 8 seconds.
+                                    Jumping carries you over credits and power-ups, so you miss them
+                                    unless a magnet is active. Your personal best is saved in this
+                                    browser.
                                 </p>
                             </div>
                         </div>
