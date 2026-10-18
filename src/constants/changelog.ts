@@ -1,17 +1,22 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '1.78.1';
+export const CURRENT_VERSION = '1.79.0';
 
 // Accumulates between releases. `npm run release` folds these into a new ChangelogEntry at the
 // top of CHANGELOG, bumps CURRENT_VERSION and empties this array — all three together, because a
 // bumped version whose entries are still unreleased shows users a what's-new dialog listing
 // nothing. Do it by hand only if that script cannot.
-export const UNRELEASED_CHANGES: string[] = [
-    'Arcade: fly the synthwave fighter in a new lane-runner mini game.',
-    'Arcade: submit your best score to a new global leaderboard.',
-];
+export const UNRELEASED_CHANGES: string[] = [];
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.79.0',
+        date: '2026-10-18',
+        changes: [
+            'Arcade: fly the synthwave fighter in a new lane-runner mini game.',
+            'Arcade: submit your best score to a new global leaderboard.',
+        ],
+    },
     {
         version: '1.78.1',
         date: '2026-10-17',
