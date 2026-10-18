@@ -4,6 +4,7 @@ import {
     GRID_FAR_PLANE,
     GRID_NEAR_PLANE,
     GridColumns,
+    GridLayer,
     gridLineX,
     SceneGeometry,
 } from '../theme/synthwaveScene';
@@ -35,6 +36,29 @@ export function arcadeGridColumns(g: SceneGeometry): GridColumns {
     const pitch = laneWidthAtPlayer(g) / COLUMNS_PER_LANE;
     const bottomSpread = (pitch * count - topSpread * (1 - f)) / f;
     return { count, topSpread, bottomSpread, bottomLeft: g.vanishX - bottomSpread / 2 };
+}
+
+/**
+ * The vertical grid while the intro flies the ship in from the page background, `k` running
+ * 0..1: both fans' spreads and bottom edge move linearly from the page's to the arcade's, and
+ * since the two have different line counts, the page's lines fade out on that moving fan while
+ * the arcade's fade in. `k` = 0 is exactly the page grid and `k` >= 1 exactly the arcade's.
+ */
+export function introGridLayers(g: SceneGeometry, k: number): GridLayer[] {
+    const page = defaultGridColumns(g);
+    const arcade = arcadeGridColumns(g);
+    if (k <= 0) return [{ columns: page, alpha: 1 }];
+    if (k >= 1) return [{ columns: arcade, alpha: 1 }];
+    const lerp = (a: number, b: number) => a + (b - a) * k;
+    const fan = {
+        topSpread: lerp(page.topSpread, arcade.topSpread),
+        bottomSpread: lerp(page.bottomSpread, arcade.bottomSpread),
+        bottomLeft: lerp(page.bottomLeft, arcade.bottomLeft),
+    };
+    return [
+        { columns: { count: page.count, ...fan }, alpha: 1 - k },
+        { columns: { count: arcade.count, ...fan }, alpha: k },
+    ];
 }
 
 /** Fan position of a lane offset: lane 0 is the middle column, one lane is `COLUMNS_PER_LANE`. */

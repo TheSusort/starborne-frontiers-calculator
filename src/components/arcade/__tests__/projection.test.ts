@@ -6,10 +6,12 @@ import {
     project,
     PLAYER_DEPTH,
     gridOffsetDelta,
+    introGridLayers,
     laneWidthAtPlayer,
     screenHeadingDeg,
 } from '../projection';
 import {
+    defaultGridColumns,
     sceneGeometry,
     depthToScreenY,
     gridLineEnds,
@@ -165,4 +167,52 @@ describe('screenHeadingDeg', () => {
             screenHeadingDeg(portrait, -1)
         );
     });
+});
+
+describe('introGridLayers', () => {
+    const screens = [
+        [1200, 800],
+        [390, 844],
+    ] as const;
+
+    for (const [w, h] of screens) {
+        const g = sceneGeometry(w, h);
+        const page = defaultGridColumns(g);
+        const arcade = arcadeGridColumns(g);
+
+        it(`starts as the page background's grid at ${w}x${h}`, () => {
+            expect(introGridLayers(g, 0)).toEqual([{ columns: page, alpha: 1 }]);
+        });
+        it(`ends as the arcade's grid at ${w}x${h}`, () => {
+            expect(introGridLayers(g, 1)).toEqual([{ columns: arcade, alpha: 1 }]);
+            expect(introGridLayers(g, 1.5)).toEqual([{ columns: arcade, alpha: 1 }]);
+        });
+        it(`morphs the fan and cross-fades the line sets in between at ${w}x${h}`, () => {
+            const layers = introGridLayers(g, 0.5);
+            expect(layers.map((l) => [l.columns.count, l.alpha])).toEqual([
+                [page.count, 0.5],
+                [arcade.count, 0.5],
+            ]);
+            for (const { columns } of layers) {
+                expect(columns.topSpread).toBeCloseTo((page.topSpread + arcade.topSpread) / 2, 9);
+                expect(columns.bottomSpread).toBeCloseTo(
+                    (page.bottomSpread + arcade.bottomSpread) / 2,
+                    9
+                );
+                expect(columns.bottomLeft).toBeCloseTo(
+                    (page.bottomLeft + arcade.bottomLeft) / 2,
+                    9
+                );
+            }
+        });
+        it(`moves every line monotonically from page to arcade at ${w}x${h}`, () => {
+            const ends = (k: number) => {
+                const [layer] = introGridLayers(g, k);
+                return gridLineEnds(g, layer.columns, 0).bottomX;
+            };
+            const steps = [0, 0.25, 0.5, 0.75, 0.99].map(ends);
+            const rising = steps[1] > steps[0];
+            for (let i = 1; i < steps.length; i++) expect(steps[i] > steps[i - 1]).toBe(rising);
+        });
+    }
 });

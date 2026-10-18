@@ -354,6 +354,12 @@ export interface GridColumns {
     bottomLeft: number;
 }
 
+/** A fan of vertical lines drawn at `alpha` (multiplied into the context's own alpha). */
+export interface GridLayer {
+    columns: GridColumns;
+    alpha: number;
+}
+
 /** The page background's fan: off-centre at the bottom, denser on wide screens. */
 export function defaultGridColumns(g: SceneGeometry): GridColumns {
     const spreadBottom = Math.max(g.w * 10, g.h * 12);
@@ -388,14 +394,65 @@ export function gridLineX(
     return topX + (bottomX - topX) * (GRID_NEAR_PLANE / depth);
 }
 
+function drawGridColumns(
+    ctx: CanvasRenderingContext2D,
+    g: SceneGeometry,
+    columns: GridColumns
+): void {
+    // Vertical grid lines — NO shadowBlur, double-draw for glow
+    const { horizonY, h } = g;
+    const gridBottom = h;
+    const numVLines = columns.count;
+
+    // Glow pass
+    for (let i = 0; i <= numVLines; i++) {
+        const t = i / numVLines;
+        const { topX, bottomX } = gridLineEnds(g, columns, t);
+        const distFromCenter = t - 0.5;
+        const absFromCenter = Math.abs(distFromCenter);
+        const bottomW = Math.max(14 - absFromCenter * 20, 0.8);
+        const topW = 0.6;
+        const alpha = 0.35 - absFromCenter * 0.35;
+
+        ctx.fillStyle = `rgba(180, 80, 255, ${Math.max(alpha, 0.02)})`;
+        ctx.beginPath();
+        ctx.moveTo(topX - topW / 2, horizonY);
+        ctx.lineTo(topX + topW / 2, horizonY);
+        ctx.lineTo(bottomX + bottomW / 2, gridBottom);
+        ctx.lineTo(bottomX - bottomW / 2, gridBottom);
+        ctx.closePath();
+        ctx.fill();
+    }
+    // Core pass
+    for (let i = 0; i <= numVLines; i++) {
+        const t = i / numVLines;
+        const { topX, bottomX } = gridLineEnds(g, columns, t);
+        const distFromCenter = t - 0.5;
+        const absFromCenter = Math.abs(distFromCenter);
+        const bottomW = Math.max(4 - absFromCenter * 6, 0.2);
+        const topW = 0.15;
+        const alpha = 0.55 - absFromCenter * 0.5;
+
+        ctx.fillStyle = `rgba(180, 80, 255, ${Math.max(alpha, 0.05)})`;
+        ctx.beginPath();
+        ctx.moveTo(topX - topW / 2, horizonY);
+        ctx.lineTo(topX + topW / 2, horizonY);
+        ctx.lineTo(bottomX + bottomW / 2, gridBottom);
+        ctx.lineTo(bottomX - bottomW / 2, gridBottom);
+        ctx.closePath();
+        ctx.fill();
+    }
+}
+
+/** Draws the floor grid: the horizontal lines, then the vertical fan of each layer (or the one
+ *  `GridColumns` given, or the page background's), then the centre glow. */
 export function drawGrid(
     ctx: CanvasRenderingContext2D,
     g: SceneGeometry,
     gridOffset: number,
-    gridColumns?: GridColumns
+    gridColumns?: GridColumns | readonly GridLayer[]
 ): void {
-    const { w, h, horizonY, gridHeight, vanishX } = g;
-    const gridBottom = h;
+    const { w, horizonY, gridHeight, vanishX } = g;
 
     // Horizontal grid lines — NO shadowBlur, use double-draw for glow
     const numHLines = 20;
@@ -444,47 +501,20 @@ export function drawGrid(
         ctx.stroke();
     }
 
-    // Vertical grid lines — NO shadowBlur, double-draw for glow
-    const columns = gridColumns ?? defaultGridColumns(g);
-    const numVLines = columns.count;
-
-    // Glow pass
-    for (let i = 0; i <= numVLines; i++) {
-        const t = i / numVLines;
-        const { topX, bottomX } = gridLineEnds(g, columns, t);
-        const distFromCenter = t - 0.5;
-        const absFromCenter = Math.abs(distFromCenter);
-        const bottomW = Math.max(14 - absFromCenter * 20, 0.8);
-        const topW = 0.6;
-        const alpha = 0.35 - absFromCenter * 0.35;
-
-        ctx.fillStyle = `rgba(180, 80, 255, ${Math.max(alpha, 0.02)})`;
-        ctx.beginPath();
-        ctx.moveTo(topX - topW / 2, horizonY);
-        ctx.lineTo(topX + topW / 2, horizonY);
-        ctx.lineTo(bottomX + bottomW / 2, gridBottom);
-        ctx.lineTo(bottomX - bottomW / 2, gridBottom);
-        ctx.closePath();
-        ctx.fill();
-    }
-    // Core pass
-    for (let i = 0; i <= numVLines; i++) {
-        const t = i / numVLines;
-        const { topX, bottomX } = gridLineEnds(g, columns, t);
-        const distFromCenter = t - 0.5;
-        const absFromCenter = Math.abs(distFromCenter);
-        const bottomW = Math.max(4 - absFromCenter * 6, 0.2);
-        const topW = 0.15;
-        const alpha = 0.55 - absFromCenter * 0.5;
-
-        ctx.fillStyle = `rgba(180, 80, 255, ${Math.max(alpha, 0.05)})`;
-        ctx.beginPath();
-        ctx.moveTo(topX - topW / 2, horizonY);
-        ctx.lineTo(topX + topW / 2, horizonY);
-        ctx.lineTo(bottomX + bottomW / 2, gridBottom);
-        ctx.lineTo(bottomX - bottomW / 2, gridBottom);
-        ctx.closePath();
-        ctx.fill();
+    const layers: readonly GridLayer[] = Array.isArray(gridColumns)
+        ? gridColumns
+        : [
+              {
+                  columns: (gridColumns as GridColumns | undefined) ?? defaultGridColumns(g),
+                  alpha: 1,
+              },
+          ];
+    for (const { columns, alpha } of layers) {
+        if (alpha <= 0) continue;
+        ctx.save();
+        ctx.globalAlpha *= alpha;
+        drawGridColumns(ctx, g, columns);
+        ctx.restore();
     }
 
     // Center glow on grid

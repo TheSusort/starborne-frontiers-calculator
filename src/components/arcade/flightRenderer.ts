@@ -16,8 +16,8 @@ import {
 import { JUMP_SECONDS, SHIELD_BREAK_FLASH, SPAWN_Z } from '../../utils/arcade/constants';
 import type { Checkpoint, GameState, Obstacle, Pickup } from '../../utils/arcade/types';
 import {
-    arcadeGridColumns,
     gridOffsetDelta,
+    introGridLayers,
     laneWidthAtPlayer,
     project,
     screenHeadingDeg,
@@ -104,6 +104,14 @@ export function advanceView(view: FlightView, travelUnits: number): void {
 }
 
 const laneOffset = (lane: number) => lane - 1;
+
+/** How far the intro has flown the ship in from the page background, eased out: 0 at the start,
+ *  1 once it is over or when the run did not start from the background. */
+function introProgress(view: FlightView): number {
+    if (!view.intro || view.introElapsed >= INTRO_SECONDS) return 1;
+    const t = view.introElapsed / INTRO_SECONDS;
+    return 1 - (1 - t) * (1 - t);
+}
 
 /** The pose the player ship eases toward: the nose aims at the vanishing point from wherever the
  *  ship is in its slide (within `MAX_HEADING_DEG`), the bank follows the slide and levels out
@@ -330,10 +338,8 @@ function drawPlayer(
     const squash = 1 - (1 - DUCK_SQUASH) * pose.duck;
     y += u * 0.08 * pose.duck;
 
-    let e = 1;
-    if (view.intro && view.introElapsed < INTRO_SECONDS) {
-        const t = view.introElapsed / INTRO_SECONDS;
-        e = 1 - (1 - t) * (1 - t);
+    const e = introProgress(view);
+    if (view.intro && e < 1) {
         x = view.intro.x + (x - view.intro.x) * e;
         y = view.intro.y + (y - view.intro.y) * e;
         s = view.intro.size + (s - view.intro.size) * e;
@@ -417,7 +423,7 @@ export function renderFlight(
     drawSun(ctx, g, view.sun, timeMs, true);
     drawMountains(ctx, g);
     drawGround(ctx, g);
-    drawGrid(ctx, g, view.gridOffset, arcadeGridColumns(g));
+    drawGrid(ctx, g, view.gridOffset, introGridLayers(g, introProgress(view)));
 
     const items: ({ z: number } & (
         { obstacle: Obstacle } | { pickup: Pickup } | { checkpoint: Checkpoint }
