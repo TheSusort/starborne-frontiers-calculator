@@ -15,6 +15,9 @@ import PuppeteerRenderer from '@prerenderer/renderer-puppeteer';
 // build.target, it always uses Vite's own default list.
 const BROWSER_TARGET = ['es2020', 'edge88', 'firefox78', 'chrome87', 'safari15'];
 
+/** three.js and its loaders, reached only through the arcade's ship-model `import()`s. */
+const THREE_CHUNK = 'three-vendor';
+
 // https://vitejs.dev/config/
 export default defineConfig({
     base: '/',
@@ -31,8 +34,14 @@ export default defineConfig({
                 clientsClaim: true,
                 // Inject redirect logic before workbox's own handlers
                 importScripts: ['sw-redirect.js'],
-                // Exclude the imported script from precaching (it has no content hash)
-                globIgnores: ['**/node_modules/**/*', 'sw-redirect.js'],
+                // Exclude the imported script from precaching (it has no content hash), and the
+                // arcade's three.js and ship-model chunks, which only arcade players download.
+                globIgnores: [
+                    '**/node_modules/**/*',
+                    'sw-redirect.js',
+                    `**/${THREE_CHUNK}-*.js`,
+                    '**/{shipSprites,shipModelLoader,shipLighting,ShipModelView}-*.js',
+                ],
                 // Precache all built assets
                 globPatterns: ['**/*.{js,css,html,ico,png,svg,webp,woff,woff2}'],
                 runtimeCaching: [
@@ -429,6 +438,11 @@ export default defineConfig({
             output: {
                 manualChunks: {
                     'router-vendor': ['react-router-dom'],
+                    [THREE_CHUNK]: [
+                        'three',
+                        'three/examples/jsm/loaders/FBXLoader.js',
+                        'three/examples/jsm/environments/RoomEnvironment.js',
+                    ],
                 },
             },
         },
