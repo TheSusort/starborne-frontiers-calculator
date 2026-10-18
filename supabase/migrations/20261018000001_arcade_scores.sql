@@ -1,12 +1,16 @@
 -- Arcade leaderboard: one best score per main account.
 --
--- Scores are written only through submit_arcade_score, which keys the row on auth.uid() (the
--- main account; alt profiles never get a row) and keeps the higher score. Other players' rows
--- are read only through get_arcade_leaderboard, which exposes username and score and nothing
--- else. The score bound is a sanity check, not anti-cheat.
+-- The client writes through submit_arcade_score, which keys the row on auth.uid() (the main
+-- account; alt profiles never get a row) and keeps the higher score. The own-row policies also
+-- permit direct writes of one's own row; that is accepted because the score bound is a sanity
+-- check, not anti-cheat. Other players' rows are read only through get_arcade_leaderboard,
+-- which exposes username and score and nothing else.
 --
--- ON DELETE CASCADE: admin_delete_account deletes public.users rows; without the cascade a
--- player with a score could not be deleted.
+-- best_credits and best_distance are the values of the best-score run, not independent maxima.
+--
+-- ON DELETE CASCADE: the handle_auth_user_delete trigger
+-- (20260424000002_alt_accounts_triggers.sql) deletes public.users rows when an auth user is
+-- deleted, and the cascade lets that account deletion remove the player's score.
 
 CREATE TABLE public.arcade_scores (
   user_id uuid PRIMARY KEY REFERENCES public.users(id) ON DELETE CASCADE,

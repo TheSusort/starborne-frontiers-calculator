@@ -102,8 +102,8 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
 
     // While the username modal is open, Escape belongs to the modal.
     useEffect(() => {
-        escapeBlockedRef.current = submission.status === 'needs-username';
-    }, [submission.status]);
+        escapeBlockedRef.current = phase === 'over' && submission.status === 'needs-username';
+    }, [phase, submission.status]);
 
     useBodyScrollLock(true);
 
@@ -359,7 +359,7 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
             )}
             {user && (
                 <ArcadeUsernameModal
-                    isOpen={submission.status === 'needs-username'}
+                    isOpen={phase === 'over' && submission.status === 'needs-username'}
                     userId={user.id}
                     onSaved={submission.onUsernameSaved}
                     onCancel={submission.skip}

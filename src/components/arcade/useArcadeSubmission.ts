@@ -19,7 +19,14 @@ export function useArcadeSubmission(result: RunResult | null) {
     const [status, setStatus] = useState<SubmissionStatus>(userId ? 'checking' : 'signed-out');
     const [rank, setRank] = useState<number | null>(null);
     const [leaderboardVersion, setLeaderboardVersion] = useState(0);
+    const [profileAttempt, setProfileAttempt] = useState(0);
     const liveResultRef = useRef<RunResult | null>(null);
+    const statusRef = useRef<SubmissionStatus>(status);
+    const errorSourceRef = useRef<'profile' | 'submit'>('submit');
+
+    useEffect(() => {
+        statusRef.current = status;
+    }, [status]);
 
     useEffect(() => {
         liveResultRef.current = result;
@@ -39,13 +46,19 @@ export function useArcadeSubmission(result: RunResult | null) {
             setLeaderboardVersion((v) => v + 1);
         } catch (error) {
             console.error('Error submitting arcade score:', error);
-            if (liveResultRef.current === result) setStatus('error');
+            if (liveResultRef.current === result) {
+                errorSourceRef.current = 'submit';
+                setStatus('error');
+            }
         }
     }, [result]);
 
     useEffect(() => {
         setRank(null);
-        if (!result) return;
+        if (!result) {
+            setStatus(userId ? 'checking' : 'signed-out');
+            return;
+        }
         if (!userId) {
             setStatus('signed-out');
             return;
@@ -61,15 +74,23 @@ export function useArcadeSubmission(result: RunResult | null) {
             .catch((error) => {
                 if (cancelled) return;
                 console.error('Error loading profile for arcade score:', error);
+                errorSourceRef.current = 'profile';
                 setStatus('error');
             });
         return () => {
             cancelled = true;
         };
-    }, [result, userId, submit]);
+    }, [result, userId, submit, profileAttempt]);
 
-    const retry = useCallback(() => void submit(), [submit]);
-    const onUsernameSaved = useCallback(() => void submit(), [submit]);
+    // A failed profile load re-runs the profile check, so a username-less account still gets the prompt.
+    const retry = useCallback(() => {
+        if (errorSourceRef.current === 'profile') setProfileAttempt((n) => n + 1);
+        else void submit();
+    }, [submit]);
+    // A save that settles after Skip leaves the status alone.
+    const onUsernameSaved = useCallback(() => {
+        if (statusRef.current === 'needs-username') void submit();
+    }, [submit]);
     const skip = useCallback(() => setStatus('skipped'), []);
 
     return { status, rank, leaderboardVersion, retry, onUsernameSaved, skip };

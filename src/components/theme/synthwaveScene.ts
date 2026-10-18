@@ -358,7 +358,7 @@ export function drawGrid(
     for (let i = 0; i < numHLines; i++) {
         const depth =
             GRID_FAR_PLANE - ((i / numHLines + gridSpeed) % 1) * (GRID_FAR_PLANE - GRID_NEAR_PLANE);
-        const screenY = horizonY + gridHeight * (GRID_NEAR_PLANE / depth);
+        const screenY = depthToScreenY(g, depth);
         const closeness = 1 - (depth - GRID_NEAR_PLANE) / (GRID_FAR_PLANE - GRID_NEAR_PLANE);
         const alpha = Math.min(closeness * 0.15, 0.12);
         const lineWidth = 2 + closeness * 6;
@@ -379,7 +379,7 @@ export function drawGrid(
     for (let i = 0; i < numHLines; i++) {
         const depth =
             GRID_FAR_PLANE - ((i / numHLines + gridSpeed) % 1) * (GRID_FAR_PLANE - GRID_NEAR_PLANE);
-        const screenY = horizonY + gridHeight * (GRID_NEAR_PLANE / depth);
+        const screenY = depthToScreenY(g, depth);
         const closeness = 1 - (depth - GRID_NEAR_PLANE) / (GRID_FAR_PLANE - GRID_NEAR_PLANE);
         const alpha = Math.min(closeness * 0.8, 0.7);
         const lineWidth = 0.3 + closeness * 2;

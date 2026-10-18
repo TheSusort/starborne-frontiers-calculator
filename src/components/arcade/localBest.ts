@@ -12,7 +12,7 @@ export function readLocalBest(): number {
 
 /** Stores max(previous, score) and returns it; storage failures keep the best for this session only. */
 export function writeLocalBest(score: number): number {
-    const best = Math.max(readLocalBest(), Math.floor(score));
+    const best = Math.max(readLocalBest(), Number.isFinite(score) ? Math.floor(score) : 0);
     try {
         localStorage.setItem(ARCADE_BEST_KEY, String(best));
     } catch {

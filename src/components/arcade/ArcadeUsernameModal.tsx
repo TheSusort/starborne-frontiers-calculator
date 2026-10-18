@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Modal } from '../ui/layout/Modal';
 import { Input } from '../ui/Input';
 import { Button } from '../ui/Button';
@@ -20,7 +20,14 @@ export const ArcadeUsernameModal: React.FC<Props> = ({ isOpen, userId, onSaved, 
     const [error, setError] = useState<string | null>(null);
     const [saving, setSaving] = useState(false);
 
+    useEffect(() => {
+        if (!isOpen) return;
+        setValue('');
+        setError(null);
+    }, [isOpen]);
+
     const save = async () => {
+        if (saving) return;
         const name = value.trim();
         if (!isValidUsername(name)) {
             setError('3-20 characters: letters, numbers, spaces, dashes and underscores');
@@ -36,6 +43,10 @@ export const ArcadeUsernameModal: React.FC<Props> = ({ isOpen, userId, onSaved, 
             await updateUserProfile(userId, { username: name });
             onSaved();
         } catch (e) {
+            if ((e as { code?: string } | null)?.code === '23505') {
+                setError('Username is already taken');
+                return;
+            }
             console.error('Error saving arcade username:', e);
             setError('Could not save the username, please try again');
         } finally {
