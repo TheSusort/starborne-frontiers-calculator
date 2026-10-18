@@ -14,15 +14,26 @@ import {
     SunCache,
 } from '../theme/synthwaveScene';
 import { JUMP_SECONDS, SHIELD_BREAK_FLASH, SPAWN_Z } from '../../utils/arcade/constants';
-import type { GameState, Obstacle, Pickup } from '../../utils/arcade/types';
+import type { Checkpoint, GameState, Obstacle, Pickup } from '../../utils/arcade/types';
 import { gridOffsetDelta, laneWidthAtPlayer, project } from './projection';
 import type { FlightOrigin } from './flightEvents';
 import { drawNeonFighter } from './neonFighter';
 import type { NeonAccent } from './ships/factionTint';
+import { cachedPortrait } from './ships/portraitSprite';
+import { stakesBanner } from './duel/stakesText';
 
 export const INTRO_SECONDS = 1.2;
 const LANE_SLIDE_RATE = 14;
 const FADE_IN_UNITS = 10;
+const GATE_COLOUR = '#b06cff';
+const MIN_TEXT_PX = 8;
+
+/** What a duel gate shows: the opponent waiting behind it. */
+export interface GateArt {
+    name: string;
+    level: number | undefined;
+    portraitUrl: string | null;
+}
 
 export interface FlightView {
     gridOffset: number;
@@ -34,6 +45,8 @@ export interface FlightView {
     introElapsed: number;
     /** Player hull outline colour; `null` keeps the default neon pink. */
     playerAccent: NeonAccent | null;
+    /** Opponents per checkpoint id, in gate-slot order; a checkpoint without art is not drawn. */
+    gateArt: Map<number, [GateArt, GateArt]>;
 }
 
 export function createFlightView(
@@ -48,6 +61,7 @@ export function createFlightView(
         intro: origin ?? null,
         introElapsed: 0,
         playerAccent: accent,
+        gateArt: new Map(),
     };
 }
 
@@ -94,6 +108,93 @@ function drawObstacle(ctx: CanvasRenderingContext2D, g: SceneGeometry, o: Obstac
         ctx.fillRect(p.x + 0.42 * u, p.y - 0.62 * u, 0.05 * u, 0.62 * u);
     }
     ctx.globalAlpha = 1;
+}
+
+function drawGate(
+    ctx: CanvasRenderingContext2D,
+    g: SceneGeometry,
+    lane: number,
+    z: number,
+    art: GateArt
+): void {
+    const p = project(g, laneOffset(lane), z);
+    const u = laneWidthAtPlayer(g) * p.scale;
+    const half = 0.42 * u;
+    const shoulder = p.y - 0.9 * u;
+
+    ctx.save();
+    ctx.strokeStyle = GATE_COLOUR;
+    ctx.shadowColor = GATE_COLOUR;
+    ctx.shadowBlur = 12 * p.scale;
+    ctx.lineWidth = Math.max(1, 4 * p.scale);
+    ctx.beginPath();
+    ctx.moveTo(p.x - half, p.y);
+    ctx.lineTo(p.x - half, shoulder);
+    ctx.arc(p.x, shoulder, half, Math.PI, 0);
+    ctx.lineTo(p.x + half, p.y);
+    ctx.stroke();
+    ctx.restore();
+
+    const cx = p.x;
+    const cy = shoulder + 0.05 * u;
+    const r = 0.3 * u;
+    const img = art.portraitUrl ? cachedPortrait(art.portraitUrl) : null;
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.closePath();
+    if (img) {
+        ctx.clip();
+        const fit = Math.max((2 * r) / img.naturalWidth, (2 * r) / img.naturalHeight);
+        const w = img.naturalWidth * fit;
+        const h = img.naturalHeight * fit;
+        ctx.drawImage(img, cx - w / 2, cy - h / 2, w, h);
+    } else {
+        ctx.fillStyle = GATE_COLOUR;
+        ctx.globalAlpha *= 0.6;
+        ctx.fill();
+    }
+    ctx.restore();
+
+    const fontPx = 0.075 * u;
+    if (fontPx < MIN_TEXT_PX) return;
+    ctx.fillStyle = '#ffffff';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    ctx.font = `600 ${fontPx}px sans-serif`;
+    const textTop = cy + r + 0.04 * u;
+    ctx.fillText(art.name, cx, textTop, 2 * half - 4);
+    if (art.level !== undefined) {
+        ctx.font = `${fontPx * 0.85}px sans-serif`;
+        ctx.fillText(`Lv ${art.level}`, cx, textTop + fontPx * 1.15, 2 * half - 4);
+    }
+}
+
+function drawCheckpoint(
+    ctx: CanvasRenderingContext2D,
+    g: SceneGeometry,
+    c: Checkpoint,
+    art: [GateArt, GateArt] | undefined
+): void {
+    if (!art) return;
+    ctx.save();
+    ctx.globalAlpha = Math.min(1, Math.max(0, (SPAWN_Z - c.z) / FADE_IN_UNITS));
+    drawGate(ctx, g, c.gates[0], c.z, art[0]);
+    drawGate(ctx, g, c.gates[1], c.z, art[1]);
+
+    const centre = project(g, 0, c.z);
+    const u = laneWidthAtPlayer(g) * centre.scale;
+    const fontPx = 0.11 * u;
+    if (fontPx >= MIN_TEXT_PX) {
+        ctx.font = `bold ${fontPx}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'bottom';
+        ctx.fillStyle = GATE_COLOUR;
+        ctx.shadowColor = GATE_COLOUR;
+        ctx.shadowBlur = 10 * centre.scale;
+        ctx.fillText(stakesBanner(c.stakes), centre.x, centre.y - 1.42 * u);
+    }
+    ctx.restore();
 }
 
 function drawPickup(
@@ -233,14 +334,20 @@ export function renderFlight(
     drawGrid(ctx, g, view.gridOffset);
     drawLaneRails(ctx, g);
 
-    const items: ({ z: number } & ({ obstacle: Obstacle } | { pickup: Pickup }))[] = [
+    const items: ({ z: number } & (
+        { obstacle: Obstacle } | { pickup: Pickup } | { checkpoint: Checkpoint }
+    ))[] = [
         ...game.obstacles.map((o) => ({ z: o.z, obstacle: o })),
         ...game.pickups.filter((p) => !p.collected).map((p) => ({ z: p.z, pickup: p })),
+        // A checkpoint stops drawing once it reaches the player, so the gate just flown through
+        // never covers the ship during the post-duel countdown.
+        ...game.checkpoints.filter((c) => c.z > 0).map((c) => ({ z: c.z, checkpoint: c })),
     ];
     items.sort((a, b) => b.z - a.z);
     const drawItem = (item: (typeof items)[number]) => {
         if ('obstacle' in item) drawObstacle(ctx, g, item.obstacle);
-        else drawPickup(ctx, g, item.pickup, timeMs);
+        else if ('pickup' in item) drawPickup(ctx, g, item.pickup, timeMs);
+        else drawCheckpoint(ctx, g, item.checkpoint, view.gateArt.get(item.checkpoint.id));
     };
     // Items already past the player are nearer the camera, so they draw over it.
     for (const item of items) if (item.z >= 0) drawItem(item);

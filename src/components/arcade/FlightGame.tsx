@@ -5,14 +5,24 @@ import { useMediaQuery } from '../../hooks/useMediaQuery';
 import { createGame, step } from '../../utils/arcade/engine';
 import { STEP_SECONDS } from '../../utils/arcade/constants';
 import { computeScore, runResult } from '../../utils/arcade/scoring';
-import type { GameState, InputAction, RunResult } from '../../utils/arcade/types';
+import { resolveDuel } from '../../utils/arcade/checkpoints';
+import type {
+    DuelEffect,
+    DuelStakes,
+    GameState,
+    InputAction,
+    RunResult,
+} from '../../utils/arcade/types';
 import { useAuth } from '../../contexts/AuthProvider';
 import { useShips } from '../../contexts/ShipsContext';
+import { useInventory } from '../../contexts/InventoryProvider';
+import { useEngineeringStats } from '../../hooks/useEngineeringStats';
 import type { Ship } from '../../types/ship';
 import {
     advanceView,
     createFlightView,
     FlightView,
+    GateArt,
     INTRO_SECONDS,
     renderFlight,
 } from './flightRenderer';
@@ -23,8 +33,12 @@ import { useArcadeSubmission, SubmissionStatus } from './useArcadeSubmission';
 import { ArcadeUsernameModal } from './ArcadeUsernameModal';
 import { ArcadeLeaderboard } from './ArcadeLeaderboard';
 import type { FlightOrigin } from './flightEvents';
-import { canDuel } from './duel/pickOpponents';
+import { canDuel, pickOpponents } from './duel/pickOpponents';
+import type { DuelResult } from './duel/runDuel';
+import { DuelSummary, type DuelSide } from './duel/DuelSummary';
 import { factionAccent } from './ships/factionTint';
+import { loadPortrait } from './ships/portraitSprite';
+import { useShipVisuals } from './ships/useShipVisuals';
 import { readLastShipId, writeLastShipId } from './ships/fleetOrder';
 import { FighterSelect } from './FighterSelect';
 
@@ -37,6 +51,14 @@ const HUD_INTERVAL_SECONDS = 0.1;
 const NO_INPUT: readonly InputAction[] = [];
 
 const newSeed = () => Math.floor(Math.random() * 2 ** 32) >>> 0;
+
+interface DuelState {
+    player: DuelSide;
+    opponent: DuelSide;
+    stakes: DuelStakes;
+    result: DuelResult | null;
+    effect: DuelEffect | null;
+}
 
 const SubmissionLine: React.FC<{
     status: SubmissionStatus;
@@ -85,6 +107,16 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
     const startOrigin = reducedMotion ? undefined : origin;
 
     const { ships } = useShips();
+    const { getGearPiece } = useInventory();
+    const { getEngineeringStatsForShipType } = useEngineeringStats();
+    const visualOf = useShipVisuals();
+    // The game loop reads these through refs so a fleet, gear or template update never restarts it.
+    const shipsRef = useRef(ships);
+    shipsRef.current = ships;
+    const visualOfRef = useRef(visualOf);
+    visualOfRef.current = visualOf;
+    const statsDepsRef = useRef({ getGearPiece, getEngineeringStatsForShipType });
+    statsDepsRef.current = { getGearPiece, getEngineeringStatsForShipType };
     const canvasRef = useRef<HTMLCanvasElement>(null);
     // The background easter egg skips the select screen and flies the last chosen ship, if
     // it is still owned; otherwise a fleet opens on the select screen.
@@ -111,6 +143,11 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
     const phaseRef = useRef<Phase>(initial.phase);
     const escapeBlockedRef = useRef(false);
     const swipeStartRef = useRef<{ x: number; y: number } | null>(null);
+    /** The two opponents behind each checkpoint's gates, in gate-slot order. */
+    const opponentsRef = useRef(new Map<number, [Ship, Ship]>());
+    /** Bumped whenever a run is replaced or the game unmounts; a duel simulation that finishes
+     *  under an older generation is discarded. */
+    const runGenerationRef = useRef(0);
 
     const [phase, setPhaseState] = useState<Phase>(phaseRef.current);
     const [hud, setHud] = useState({ score: 0, credits: 0, shield: false, magnet: 0 });
@@ -118,6 +155,7 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
     const [result, setResult] = useState<RunResult | null>(null);
     const [localBest, setLocalBest] = useState(readLocalBest);
     const [previousBest, setPreviousBest] = useState(0);
+    const [duel, setDuel] = useState<DuelState | null>(null);
     const { user } = useAuth();
     const submission = useArcadeSubmission(result);
 
@@ -151,6 +189,9 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
     /** Starts a fresh run with the flown ship and duel setting already in the refs. */
     const restart = useCallback(() => {
         const flown = flownRef.current;
+        runGenerationRef.current++;
+        opponentsRef.current.clear();
+        setDuel(null);
         gameRef.current = createGame(newSeed(), { duels: duelsRef.current });
         viewRef.current = createFlightView(undefined, flown ? factionAccent(flown.faction) : null);
         inputsRef.current = [];
@@ -168,6 +209,83 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
         },
         [ships, restart]
     );
+
+    const finishRun = useCallback(() => {
+        const r = runResult(gameRef.current);
+        setResult(r);
+        setPreviousBest(readLocalBest());
+        setLocalBest(writeLocalBest(r.score));
+        setPhase('over');
+    }, [setPhase]);
+
+    const toSide = useCallback(
+        (ship: Ship): DuelSide => ({
+            name: ship.name,
+            level: ship.level,
+            imageUrl: visualOfRef.current(ship).portraitUrl,
+        }),
+        []
+    );
+
+    /** Opens the summary for the game's pending duel and simulates it off the frame. */
+    const startDuel = useCallback(() => {
+        const game = gameRef.current;
+        const pending = game.pendingDuel;
+        const flown = flownRef.current;
+        const opponent = pending
+            ? opponentsRef.current.get(pending.checkpointId)?.[pending.slot]
+            : undefined;
+        if (!pending || !flown || !opponent) {
+            resolveDuel(game, 'skipped');
+            setCountdown(COUNTDOWN_SECONDS);
+            setPhase('countdown');
+            return;
+        }
+        setPhase('duel');
+        setDuel({
+            player: toSide(flown),
+            opponent: toSide(opponent),
+            stakes: pending.stakes,
+            result: null,
+            effect: null,
+        });
+        const generation = runGenerationRef.current;
+        // Deferred so "Simulating…" paints before the synchronous battle simulation runs.
+        const simulate = async () => {
+            let r: DuelResult;
+            try {
+                const { runDuel } = await import('./duel/runDuel');
+                if (generation !== runGenerationRef.current) return;
+                r = runDuel(flown, opponent, statsDepsRef.current, newSeed());
+            } catch {
+                r = { outcome: 'skipped', timeline: [] };
+            }
+            if (generation !== runGenerationRef.current) return;
+            const effect = resolveDuel(gameRef.current, r.outcome);
+            setDuel((d) => d && { ...d, result: r, effect });
+        };
+        window.setTimeout(() => void simulate(), 0);
+    }, [setPhase, toSide]);
+
+    const onDuelDone = useCallback(() => {
+        if (phaseRef.current !== 'duel') return;
+        const game = gameRef.current;
+        // A duel still being simulated has not been resolved yet.
+        if (game.status === 'duel') return;
+        setDuel(null);
+        setHud({
+            score: computeScore(game),
+            credits: game.credits,
+            shield: game.player.shield,
+            magnet: game.player.magnetTime,
+        });
+        if (game.status === 'over') {
+            finishRun();
+            return;
+        }
+        setCountdown(COUNTDOWN_SECONDS);
+        setPhase('countdown');
+    }, [finishRun, setPhase]);
 
     // Game loop: fixed-step simulation, render every frame.
     useEffect(() => {
@@ -189,6 +307,13 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
         let last = performance.now();
         let acc = 0;
         let hudTimer = 0;
+        const generation = runGenerationRef;
+
+        const toGateArt = (ship: Ship): GateArt => {
+            const portraitUrl = visualOfRef.current(ship).portraitUrl;
+            if (portraitUrl) void loadPortrait(portraitUrl).catch(() => {});
+            return { name: ship.name, level: ship.level, portraitUrl };
+        };
 
         const frame = (now: number) => {
             const dt = Math.min((now - last) / 1000, MAX_FRAME_SECONDS);
@@ -211,13 +336,17 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
                 }
                 if (inputs.length > 0) inputsRef.current.unshift(...inputs);
 
-                if (game.status === 'over') {
-                    const r = runResult(game);
-                    setResult(r);
-                    setPreviousBest(readLocalBest());
-                    setLocalBest(writeLocalBest(r.score));
-                    setPhase('over');
+                const flown = flownRef.current;
+                for (const c of game.checkpoints) {
+                    if (view.gateArt.has(c.id) || !flown) continue;
+                    const pick = pickOpponents(shipsRef.current, flown.id, Math.random);
+                    if (!pick) continue;
+                    opponentsRef.current.set(c.id, pick);
+                    view.gateArt.set(c.id, [toGateArt(pick[0]), toGateArt(pick[1])]);
                 }
+
+                if (game.status === 'over') finishRun();
+                else if (game.status === 'duel') startDuel();
                 hudTimer += dt;
                 if (hudTimer >= HUD_INTERVAL_SECONDS) {
                     hudTimer = 0;
@@ -240,8 +369,9 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
         return () => {
             cancelAnimationFrame(raf);
             window.removeEventListener('resize', resize);
+            generation.current++;
         };
-    }, [setPhase]);
+    }, [setPhase, finishRun, startDuel]);
 
     // Focus moves into the overlay so keyboard input never lands on the page underneath.
     useEffect(() => {
@@ -356,7 +486,7 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
                             MAGNET {Math.ceil(hud.magnet)}
                         </span>
                     )}
-                    {phase !== 'over' && phase !== 'select' && (
+                    {phase !== 'over' && phase !== 'select' && phase !== 'duel' && (
                         <Button variant="secondary" size="sm" onClick={togglePause}>
                             {phase === 'paused' ? 'Resume' : 'Pause'}
                         </Button>
@@ -386,6 +516,16 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-6xl font-bold text-white">
                     {countdown}
                 </div>
+            )}
+            {phase === 'duel' && duel && (
+                <DuelSummary
+                    player={duel.player}
+                    opponent={duel.opponent}
+                    stakes={duel.stakes}
+                    result={duel.result}
+                    effect={duel.effect}
+                    onDone={onDuelDone}
+                />
             )}
             {phase === 'over' && result && (
                 <GameOverPanel
