@@ -53,7 +53,9 @@ const ArcadePage: React.FC = () => {
                     <p className="text-theme-text">
                         Dodge walls, jump over lasers, duck under arches and collect credits. The
                         speed keeps rising. Shields absorb one hit; magnets pull in credits from the
-                        next lane.
+                        next lane. Pick a ship from your fleet to fly, and fly through a duel gate
+                        at a checkpoint to fight one of your other ships for points, credits or a
+                        power-up.
                     </p>
                     <ul className="text-theme-text space-y-1 list-disc list-inside">
                         <li>

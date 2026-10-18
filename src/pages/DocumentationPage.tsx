@@ -2536,8 +2536,8 @@ const DocumentationPage: React.FC = () => {
                                     screen. Search by name or filter by faction, browse with
                                     Previous / Next, the Left / Right keys or a sideways swipe, and
                                     press Launch or Enter. Your fighter is tinted in the ship&apos;s
-                                    faction colour. Your last choice is listed first next time, and
-                                    Retry keeps the same ship.
+                                    faction colour, which is purely cosmetic. Your last choice is
+                                    listed first next time, and Retry keeps the same ship.
                                 </p>
                             </div>
                             <div className="card">
@@ -2546,15 +2546,15 @@ const DocumentationPage: React.FC = () => {
                                     With at least two other ships in your fleet, checkpoints appear
                                     on the track every 600 to 1,400 metres. Two of the three lanes
                                     hold a gate with a random ship from your hangar; the third lane
-                                    is free. Flying through a gate starts a one-on-one simulator
-                                    duel between your ship and that opponent, with full gear and
-                                    engineering on both sides. The banner above the gates shows what
-                                    is at stake: <strong>Win or die</strong> (a win adds 500 points,
-                                    a loss ends the run unless a shield absorbs it),{' '}
-                                    <strong>Credits on the line</strong> (win 25 credits, or lose a
-                                    quarter of yours) or <strong>Power-up</strong> (a win grants a
-                                    shield or a magnet). Press Space or click to skip the replay;
-                                    the run resumes after a 3-2-1 countdown.
+                                    is free and skips the duel. Flying through a gate starts a
+                                    one-on-one simulator duel between your ship and that opponent,
+                                    with full gear and engineering on both sides. The banner above
+                                    the gates shows what is at stake: <strong>Win or die</strong> (a
+                                    win adds 500 points, a loss ends the run unless a shield absorbs
+                                    it), <strong>Credits on the line</strong> (win 25 credits, or
+                                    lose a quarter of yours) or <strong>Power-up</strong> (a win
+                                    grants a shield or a magnet). Press Space or click to skip the
+                                    replay; the run resumes after a 3-2-1 countdown.
                                 </p>
                             </div>
                             <div className="card">
