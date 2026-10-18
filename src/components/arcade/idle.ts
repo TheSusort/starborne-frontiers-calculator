@@ -11,3 +11,21 @@ export function whenIdle(timeoutMs = 1000): Promise<void> {
         }
     });
 }
+
+/**
+ * A queue of heavy tasks for idle time. Each task waits for every task queued before it to
+ * settle, then for a fresh `whenIdle`, so at most one runs per idle period however the browser
+ * batches idle callbacks or fires their timeouts. A task that throws rejects its own promise
+ * only; the queue carries on.
+ */
+export function createIdleQueue(timeoutMs?: number) {
+    let tail: Promise<unknown> = Promise.resolve();
+    return <T>(task: () => T | Promise<T>): Promise<T> => {
+        const run = tail.then(() => whenIdle(timeoutMs)).then(task);
+        tail = run.catch(() => undefined);
+        return run;
+    };
+}
+
+/** The page-wide idle queue the ship sprite renders share. */
+export const runWhenIdle = createIdleQueue();

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { whenIdle } from '../idle';
+import { runWhenIdle } from '../idle';
 import { loadShipModel } from './shipModelLoader';
 import { addShipLights } from './shipLighting';
 import {
@@ -106,7 +106,8 @@ interface RenderOptions {
     framing?: readonly ShipPose[];
     width: number;
     height: number;
-    /** Wait for idle time between loading the model and the synchronous render. */
+    /** Run the synchronous render through the shared idle queue (`runWhenIdle`) once the model
+     *  has loaded, one render per idle period. */
     idle?: boolean;
 }
 
@@ -120,7 +121,10 @@ const zoomCache = new Map<string, number>();
  */
 async function renderPoses(key: string, o: RenderOptions): Promise<HTMLCanvasElement[]> {
     const model = await loadShipModel(key);
-    if (o.idle) await whenIdle();
+    return o.idle ? runWhenIdle(() => renderModel(key, model, o)) : renderModel(key, model, o);
+}
+
+function renderModel(key: string, model: THREE.Object3D, o: RenderOptions): HTMLCanvasElement[] {
     const camera = new THREE.PerspectiveCamera(o.camera.fov, o.width / o.height, 0.1, 20);
     camera.position.set(...o.camera.position);
     camera.lookAt(0, 0, 0);
@@ -169,8 +173,7 @@ async function renderPoses(key: string, o: RenderOptions): Promise<HTMLCanvasEle
 export function renderChaseSweeps(
     key: string,
     sweeps: readonly SweepRef[],
-    size = 256,
-    idle = false
+    { size = 256, idle = false }: { size?: number; idle?: boolean } = {}
 ): Promise<HTMLCanvasElement[][]> {
     const perSweep = sweeps.map(({ pitch, bank }) => sweepPoses(pitch, bank));
     return renderPoses(key, {

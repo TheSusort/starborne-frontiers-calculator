@@ -53,6 +53,7 @@ import { readLastShipId, writeLastShipId } from './ships/fleetOrder';
 import { FighterSelect, PortraitView } from './FighterSelect';
 import { shipModelsEnabled } from './ships/arcadeFlags';
 import type { ShipVisual } from './ships/shipVisuals';
+import { evictOldest } from './ships/viewerCache';
 
 type Phase = 'select' | 'intro' | 'running' | 'paused' | 'countdown' | 'duel' | 'over';
 
@@ -63,6 +64,9 @@ const HUD_INTERVAL_SECONDS = 0.1;
 const NO_INPUT: readonly InputAction[] = [];
 
 const newSeed = () => Math.floor(Math.random() * 2 ** 32) >>> 0;
+/** Duel renders kept at once: the flown ship's own (never evicted), the pair at the open
+ *  checkpoint and the pre-picked next pair, with room to spare. */
+const VIEWER_CACHE_SIZE = 6;
 
 // three.js and the official models are only reachable through these dynamic imports, and
 // every caller checks `shipModelsEnabled()` first, so a build without the flag never loads them.
@@ -84,6 +88,8 @@ const renderShipModel = (ship: Ship, visual: ShipVisual): React.ReactNode => {
 };
 
 interface DuelState {
+    /** Distinguishes this duel from later ones, so a late render lands only in its own. */
+    id: number;
     player: DuelSide;
     opponent: DuelSide;
     stakes: DuelStakes;
@@ -190,6 +196,9 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
     /** Duel-summary renders by `${visualKey}:${facing}`, as data URLs: in flight, and finished. */
     const viewerRequestsRef = useRef(new Map<string, Promise<string>>());
     const viewerUrlsRef = useRef(new Map<string, string>());
+    /** The flown ship's duel render id, kept when the viewer caches are bounded. */
+    const playerViewerIdRef = useRef<string | null>(null);
+    const duelSeqRef = useRef(0);
 
     const [phase, setPhaseState] = useState<Phase>(phaseRef.current);
     const [hud, setHud] = useState({ score: 0, credits: 0, shield: false, magnet: 0 });
@@ -232,6 +241,7 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
      *  per visual key and facing. */
     const requestViewerSprite = useCallback((key: string, facing: Facing): Promise<string> => {
         const id = `${key}:${facing}`;
+        const isPinned = (k: string) => k === playerViewerIdRef.current;
         let p = viewerRequestsRef.current.get(id);
         if (!p) {
             p = shipSprites()
@@ -239,22 +249,26 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
                 .then((canvas) => {
                     const url = canvas.toDataURL();
                     viewerUrlsRef.current.set(id, url);
+                    evictOldest(viewerUrlsRef.current, VIEWER_CACHE_SIZE, isPinned);
                     return url;
                 });
             p.catch(() => viewerRequestsRef.current.delete(id));
             viewerRequestsRef.current.set(id, p);
+            evictOldest(viewerRequestsRef.current, VIEWER_CACHE_SIZE, isPinned);
         }
         return p;
     }, []);
 
     /** Renders the flown ship's frame grid once per ship: the level heading sweep first, then
-     *  the banked, pitched and pitched-banked sweeps and its duel render, each in idle time. The
-     *  run keeps the neon fighter until the level sweep is ready, and for good if it fails. */
+     *  its duel render and the banked, pitched and pitched-banked sweeps, each in idle time. A
+     *  sweep that fails to render is skipped. The run keeps the neon fighter until the level
+     *  sweep is ready, and for good if it fails. */
     const requestPlayerFrames = useCallback(
         (ship: Ship) => {
             const key = shipModelsEnabled() ? visualOfRef.current(ship).visualKey : null;
             if (!key || playerFramesRef.current?.shipId === ship.id) return;
             playerFramesRef.current = { shipId: ship.id, frames: null };
+            playerViewerIdRef.current = `${key}:right`;
             const isCurrent = () => playerFramesRef.current?.shipId === ship.id;
             const pitches = PITCH_ANGLES_DEG.map((_, i) => i);
             const banks = BANK_ANGLES_DEG.map((_, i) => i);
@@ -274,13 +288,18 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
                     frames[level.pitch][level.bank] = levelSweep;
                     playerFramesRef.current = { shipId: ship.id, frames };
                     if (flownRef.current?.id === ship.id) viewRef.current.playerFrames = frames;
+                    void requestViewerSprite(key, 'right').catch(() => {});
                     // The view holds `frames` itself, so sweeps filled in here show up next frame.
                     for (const batch of idleBatches) {
-                        const sweeps = await m.renderChaseSweeps(key, batch, undefined, true);
+                        let sweeps: HTMLCanvasElement[][];
+                        try {
+                            sweeps = await m.renderChaseSweeps(key, batch, { idle: true });
+                        } catch {
+                            continue;
+                        }
                         if (!isCurrent()) return;
                         batch.forEach(({ pitch, bank }, i) => (frames[pitch][bank] = sweeps[i]));
                     }
-                    void requestViewerSprite(key, 'right').catch(() => {});
                 })
                 .catch(() => {
                     if (isCurrent() && !playerFramesRef.current?.frames) {
@@ -376,17 +395,24 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
         setPhase('over');
     }, [setPhase]);
 
-    /** A duel side: the official-angle render facing `facing` if it is ready, else the portrait. */
-    const toSide = useCallback((ship: Ship, facing: Facing): DuelSide => {
-        const visual = visualOfRef.current(ship);
-        const render =
-            shipModelsEnabled() && visual.visualKey
-                ? viewerUrlsRef.current.get(`${visual.visualKey}:${facing}`)
-                : undefined;
-        return render
-            ? { name: ship.name, level: ship.level, imageUrl: render, facesOpponent: true }
-            : { name: ship.name, level: ship.level, imageUrl: visual.portraitUrl };
-    }, []);
+    /** A duel side: the official-angle render facing `facing` if it is ready, else the portrait.
+     *  `pending` resolves to the render when the side shows the portrait while models are on. */
+    const toSide = useCallback(
+        (ship: Ship, facing: Facing): { side: DuelSide; pending: Promise<string> | null } => {
+            const visual = visualOfRef.current(ship);
+            const key = shipModelsEnabled() ? visual.visualKey : null;
+            const render = key ? viewerUrlsRef.current.get(`${key}:${facing}`) : undefined;
+            if (render) {
+                const side = { name: ship.name, level: ship.level, imageUrl: render };
+                return { side: { ...side, facesOpponent: true }, pending: null };
+            }
+            return {
+                side: { name: ship.name, level: ship.level, imageUrl: visual.portraitUrl },
+                pending: key ? requestViewerSprite(key, facing) : null,
+            };
+        },
+        [requestViewerSprite]
+    );
 
     /** Opens the summary for the game's pending duel and simulates it off the frame. */
     const startDuel = useCallback(() => {
@@ -406,15 +432,33 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
             return;
         }
         setPhase('duel');
+        const generation = runGenerationRef.current;
+        const id = ++duelSeqRef.current;
+        const player = toSide(flown, 'right');
+        const rival = toSide(opponent, 'left');
         setDuel({
-            player: toSide(flown, 'right'),
-            opponent: toSide(opponent, 'left'),
+            id,
+            player: player.side,
+            opponent: rival.side,
             stakes: pending.stakes,
             result: null,
             effect: null,
         });
+        // A side showing the portrait switches to its render if it arrives while this duel is
+        // still open; the duel never waits for it.
+        const swapIn = (which: 'player' | 'opponent', render: Promise<string> | null) =>
+            render
+                ?.then((imageUrl) =>
+                    setDuel((d) =>
+                        d && d.id === id && generation === runGenerationRef.current
+                            ? { ...d, [which]: { ...d[which], imageUrl, facesOpponent: true } }
+                            : d
+                    )
+                )
+                .catch(() => {});
+        void swapIn('player', player.pending);
+        void swapIn('opponent', rival.pending);
         prepareNextOpponents();
-        const generation = runGenerationRef.current;
         // The animation frame commits the "Simulating…" state; the timeout then runs the
         // synchronous simulation after that frame has been painted.
         const simulate = async () => {
