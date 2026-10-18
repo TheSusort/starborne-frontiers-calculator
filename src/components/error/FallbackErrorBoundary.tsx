@@ -10,7 +10,8 @@ interface State {
     failed: boolean;
 }
 
-/** Contains a failure to its own subtree. Give it a new `key` to try the children again. */
+/** Contains a failure to its own subtree. A `React.lazy` chunk that failed stays failed until
+ *  the page reloads, so a remount shows the fallback again. */
 class FallbackErrorBoundary extends Component<Props, State> {
     state: State = { failed: false };
 
