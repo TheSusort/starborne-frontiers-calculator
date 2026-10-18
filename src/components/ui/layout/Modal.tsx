@@ -56,6 +56,27 @@ const releaseScrollLock = () => {
     }
 };
 
+/**
+ * Locks body scroll while `active`; reference-counted, so nested locks compose.
+ *
+ * The effect is keyed on `[active]` only, so a parent re-render that hands down a fresh inline
+ * callback closure can't re-run it. If it were combined with an effect
+ * that also depends on a callback, React 18's
+ * "all destroys before all creates" batching would let a commit that
+ * re-runs every open Modal's effect (e.g. a confirm action that both
+ * updates parent state and closes a nested modal) drop the reference
+ * count to 0 mid-flush — clearing the lock and re-stashing `scrollY`
+ * after the fixed-position paint already clamped it to 0.
+ */
+export function useBodyScrollLock(active: boolean): void {
+    useEffect(() => {
+        if (!active) return;
+        acquireScrollLock();
+        // Runs on deactivation and on unmount, so every acquire has exactly one matching release.
+        return () => releaseScrollLock();
+    }, [active]);
+}
+
 interface Props {
     isOpen: boolean;
     onClose: () => void;
@@ -80,31 +101,7 @@ export const Modal: React.FC<Props> = ({
     highZIndex = false,
     maxWidth = 'max-w-4xl',
 }) => {
-    // Scroll lock lives in its own effect keyed on `[isOpen]` only — NOT
-    // `onClose` — so a parent re-render that hands down a fresh inline
-    // `onClose` closure can't re-run this effect. If it were combined with
-    // the Escape-key effect below (keyed on `[isOpen, onClose]`), React 18's
-    // "all destroys before all creates" batching would let a commit that
-    // re-runs every open Modal's effect (e.g. a confirm action that both
-    // updates parent state and closes a nested modal) drop the reference
-    // count to 0 mid-flush — clearing the lock and re-stashing `scrollY`
-    // after the fixed-position paint already clamped it to 0.
-    useEffect(() => {
-        if (!isOpen) return;
-
-        acquireScrollLock();
-
-        return () => {
-            // This cleanup fires both when `isOpen` flips false and when
-            // the Modal unmounts while still open (e.g. a parent stops
-            // rendering it instead of toggling `isOpen`) — React always
-            // runs the last effect's cleanup on unmount, so every
-            // acquireScrollLock() above is guaranteed exactly one
-            // matching releaseScrollLock() here. That's what keeps the
-            // counter from leaking.
-            releaseScrollLock();
-        };
-    }, [isOpen]);
+    useBodyScrollLock(isOpen);
 
     useEffect(() => {
         if (!isOpen) return;
