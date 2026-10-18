@@ -1,4 +1,4 @@
-import React, { useEffect, useState, Suspense, lazy } from 'react';
+import React, { useCallback, useEffect, useState, Suspense, lazy } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { HelmetProvider } from 'react-helmet-async';
 import { Sidebar } from './components/ui';
@@ -23,7 +23,14 @@ import { Loader } from './components/ui/Loader';
 import ChunkErrorBoundary from './components/error/ChunkErrorBoundary';
 import { startHeartbeat } from './services/heartbeatService';
 import { SynthwaveCanvas } from './components/theme/SynthwaveCanvas';
+import {
+    FLIGHT_START_EVENT,
+    type FlightStartDetail,
+    announceFlightEnd,
+} from './components/arcade/flightEvents';
 // Lazy load components and pages
+const FlightGame = lazy(() => import('./components/arcade/FlightGame'));
+const ArcadePage = lazy(() => import('./pages/ArcadePage'));
 const ChangelogModal = lazy(() => import('./components/changelog/ChangelogModal'));
 const JokeCorner = lazy(() => import('./components/home/JokeCorner'));
 const ShipsPage = lazy(() => import('./pages/manager/ShipsPage'));
@@ -74,6 +81,21 @@ const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
 const App: React.FC = () => {
     const [showChangelog, setShowChangelog] = useState(false);
     const [lastSeenVersion, setLastSeenVersion] = useState(CURRENT_VERSION);
+    const [flight, setFlight] = useState<FlightStartDetail | null>(null);
+
+    useEffect(() => {
+        const onStart = (e: Event) => {
+            const detail = (e as CustomEvent<FlightStartDetail>).detail ?? {};
+            setFlight((current) => current ?? detail);
+        };
+        window.addEventListener(FLIGHT_START_EVENT, onStart);
+        return () => window.removeEventListener(FLIGHT_START_EVENT, onStart);
+    }, []);
+
+    const closeFlight = useCallback(() => {
+        setFlight(null);
+        announceFlightEnd();
+    }, []);
 
     useEffect(() => {
         const savedState = localStorage.getItem(StorageKey.CHANGELOG_STATE);
@@ -131,8 +153,16 @@ const App: React.FC = () => {
                                                                 alt=""
                                                                 aria-hidden="true"
                                                             />
-                                                            <SynthwaveCanvas />
+                                                            <SynthwaveCanvas animate={!flight} />
                                                         </div>
+                                                        {flight && (
+                                                            <Suspense fallback={null}>
+                                                                <FlightGame
+                                                                    origin={flight.origin}
+                                                                    onClose={closeFlight}
+                                                                />
+                                                            </Suspense>
+                                                        )}
                                                         <main className="flex">
                                                             <Sidebar />
                                                             <div className="flex-1 lg:pl-64 max-w-full">
@@ -269,6 +299,12 @@ const App: React.FC = () => {
                                                                                         path="/bounty-credits"
                                                                                         element={
                                                                                             <BountyCreditsCalculatorPage />
+                                                                                        }
+                                                                                    />
+                                                                                    <Route
+                                                                                        path="/arcade"
+                                                                                        element={
+                                                                                            <ArcadePage />
                                                                                         }
                                                                                     />
                                                                                     <Route

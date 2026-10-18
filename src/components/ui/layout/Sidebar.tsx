@@ -342,6 +342,7 @@ export const Sidebar: React.FC = () => {
                 ],
             },
             { path: '/shared-encounters', label: 'Shared Encounters' },
+            { path: '/arcade', label: 'Arcade' },
             { path: '/documentation', label: 'Help' },
         ];
 

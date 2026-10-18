@@ -1,4 +1,5 @@
 import { useEffect, useRef, memo } from 'react';
+import { requestFlight } from '../arcade/flightEvents';
 import {
     createStars,
     createSunCache,
@@ -12,10 +13,15 @@ import {
     drawSky,
     drawStars,
     drawSun,
+    hitTestOverheadShip,
     sceneGeometry,
+    type OverheadShipHit,
     type Star,
     type SunCache,
 } from './synthwaveScene';
+
+const INTERACTIVE_SELECTOR =
+    'a, button, input, select, textarea, label, [role="button"], [contenteditable="true"]';
 
 interface ShootingStar {
     x: number;
@@ -66,6 +72,7 @@ export const SynthwaveCanvas = memo(({ animate = true }: { animate?: boolean }) 
     const spaceshipsRef = useRef<Spaceship[]>([]);
     const lastSpaceshipRef = useRef(0);
     const overheadShipsRef = useRef<OverheadShip[]>([]);
+    const overheadHitRef = useRef<OverheadShipHit | null>(null);
     const lastOverheadRef = useRef(0);
     const particlesRef = useRef<Particle[]>([]);
     const lightningRef = useRef(0);
@@ -209,6 +216,10 @@ export const SynthwaveCanvas = memo(({ animate = true }: { animate?: boolean }) 
                     const screenY = (os.startY + (1.0 - os.startY) * t) * horizonY;
                     const shipScale = Math.max(1 - t * 0.85, 0.1);
                     const s = 5 * shipScale;
+                    overheadHitRef.current =
+                        t < 1.0 && s > 0.4
+                            ? { x: screenX, y: screenY, size: s, progress: t }
+                            : null;
 
                     // Only add trail points while still flying
                     if (t < 1.0) {
@@ -242,6 +253,7 @@ export const SynthwaveCanvas = memo(({ animate = true }: { animate?: boolean }) 
 
                     return os.trailPoints.length > 0 || t < 1.0;
                 });
+                if (overheadShipsRef.current.length === 0) overheadHitRef.current = null;
             }
 
             // === DISTANT LIGHTNING (behind mountains) ===
@@ -435,6 +447,27 @@ export const SynthwaveCanvas = memo(({ animate = true }: { animate?: boolean }) 
                 cancelAnimationFrame(animationRef.current);
             }
         };
+    }, [animate]);
+
+    // The background sits under the page (pointer-events: none), so clicks are read at the
+    // document and matched against the overhead fighter's last drawn position.
+    useEffect(() => {
+        if (!animate) return;
+        const onPointerDown = (e: PointerEvent) => {
+            const canvas = canvasRef.current;
+            if (!canvas || canvas.offsetWidth === 0) return;
+            if ((e.target as Element | null)?.closest(INTERACTIVE_SELECTOR)) return;
+            const rect = canvas.getBoundingClientRect();
+            const ship = overheadHitRef.current;
+            if (!ship || !hitTestOverheadShip(ship, e.clientX - rect.left, e.clientY - rect.top))
+                return;
+            const flying = overheadShipsRef.current[0];
+            if (flying) flying.progress = 1;
+            overheadHitRef.current = null;
+            requestFlight({ x: ship.x + rect.left, y: ship.y + rect.top, size: ship.size });
+        };
+        document.addEventListener('pointerdown', onPointerDown);
+        return () => document.removeEventListener('pointerdown', onPointerDown);
     }, [animate]);
 
     return <canvas ref={canvasRef} />;
