@@ -5,11 +5,13 @@ import { Button } from '../components/ui/Button';
 import Seo from '../components/seo/Seo';
 import { SEO_CONFIG } from '../constants/seo';
 import { FLIGHT_END_EVENT, requestFlight } from '../components/arcade/flightEvents';
+import { ArcadeLeaderboard } from '../components/arcade/ArcadeLeaderboard';
 import { readLocalBest } from '../components/arcade/localBest';
 
 const ArcadePage: React.FC = () => {
     const [searchParams, setSearchParams] = useSearchParams();
     const [best, setBest] = useState(readLocalBest);
+    const [boardVersion, setBoardVersion] = useState(0);
 
     useEffect(() => {
         if (searchParams.get('play') !== '1') return;
@@ -20,7 +22,10 @@ const ArcadePage: React.FC = () => {
     }, [searchParams, setSearchParams]);
 
     useEffect(() => {
-        const onEnd = () => setBest(readLocalBest());
+        const onEnd = () => {
+            setBest(readLocalBest());
+            setBoardVersion((v) => v + 1);
+        };
         window.addEventListener(FLIGHT_END_EVENT, onEnd);
         return () => window.removeEventListener(FLIGHT_END_EVENT, onEnd);
     }, []);
@@ -56,6 +61,10 @@ const ArcadePage: React.FC = () => {
                         Personal best: {best.toLocaleString()}
                     </p>
                     <Button onClick={() => requestFlight()}>Start</Button>
+                </div>
+                <div className="card space-y-2">
+                    <h2 className="text-xl font-semibold">Leaderboard</h2>
+                    <ArcadeLeaderboard refreshKey={boardVersion} />
                 </div>
             </PageLayout>
         </>

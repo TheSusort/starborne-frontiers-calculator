@@ -6,6 +6,7 @@ import { createGame, step } from '../../utils/arcade/engine';
 import { STEP_SECONDS } from '../../utils/arcade/constants';
 import { computeScore, runResult } from '../../utils/arcade/scoring';
 import type { GameState, InputAction, RunResult } from '../../utils/arcade/types';
+import { useAuth } from '../../contexts/AuthProvider';
 import {
     advanceView,
     createFlightView,
@@ -16,6 +17,9 @@ import {
 import { keyToAction, swipeToAction } from './flightInput';
 import { readLocalBest, writeLocalBest } from './localBest';
 import { GameOverPanel } from './GameOverPanel';
+import { useArcadeSubmission, SubmissionStatus } from './useArcadeSubmission';
+import { ArcadeUsernameModal } from './ArcadeUsernameModal';
+import { ArcadeLeaderboard } from './ArcadeLeaderboard';
 import type { FlightOrigin } from './flightEvents';
 
 type Phase = 'intro' | 'running' | 'paused' | 'countdown' | 'over';
@@ -27,6 +31,43 @@ const HUD_INTERVAL_SECONDS = 0.1;
 const NO_INPUT: readonly InputAction[] = [];
 
 const newSeed = () => Math.floor(Math.random() * 2 ** 32) >>> 0;
+
+const SubmissionLine: React.FC<{
+    status: SubmissionStatus;
+    rank: number | null;
+    onRetry: () => void;
+}> = ({ status, rank, onRetry }) => {
+    switch (status) {
+        case 'signed-out':
+            return (
+                <p className="text-sm text-theme-text-secondary">
+                    Sign in to join the leaderboard.
+                </p>
+            );
+        case 'checking':
+        case 'submitting':
+            return <p className="text-sm text-theme-text-secondary">Saving score...</p>;
+        case 'submitted':
+            return (
+                <p className="text-sm text-theme-text-secondary">
+                    {rank ? `Leaderboard rank #${rank}` : 'Score saved'}
+                </p>
+            );
+        case 'skipped':
+            return <p className="text-sm text-theme-text-secondary">Score not submitted.</p>;
+        case 'error':
+            return (
+                <div className="space-y-2">
+                    <p className="text-sm text-red-400">Could not save your score.</p>
+                    <Button variant="secondary" size="sm" onClick={onRetry}>
+                        Retry
+                    </Button>
+                </div>
+            );
+        default:
+            return null;
+    }
+};
 
 interface FlightGameProps {
     origin?: FlightOrigin;
@@ -56,6 +97,13 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
     const [result, setResult] = useState<RunResult | null>(null);
     const [localBest, setLocalBest] = useState(readLocalBest);
     const [previousBest, setPreviousBest] = useState(0);
+    const { user } = useAuth();
+    const submission = useArcadeSubmission(result);
+
+    // While the username modal is open, Escape belongs to the modal.
+    useEffect(() => {
+        escapeBlockedRef.current = submission.status === 'needs-username';
+    }, [submission.status]);
 
     useBodyScrollLock(true);
 
@@ -215,8 +263,10 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
             if (p === 'running') inputsRef.current.push(action);
             else resume();
         };
-        window.addEventListener('keydown', onKey);
-        return () => window.removeEventListener('keydown', onKey);
+        // Capture phase: the handler reads escapeBlockedRef before the modal's own Escape
+        // handler can change the status.
+        window.addEventListener('keydown', onKey, true);
+        return () => window.removeEventListener('keydown', onKey, true);
     }, [onClose, resume, togglePause]);
 
     const onPointerDown = (e: React.PointerEvent) => {
@@ -296,6 +346,23 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
                     previousBest={previousBest}
                     onRetry={restart}
                     onQuit={onClose}
+                >
+                    <SubmissionLine
+                        status={submission.status}
+                        rank={submission.rank}
+                        onRetry={submission.retry}
+                    />
+                    <div className="max-h-64 overflow-y-auto text-left">
+                        <ArcadeLeaderboard refreshKey={submission.leaderboardVersion} />
+                    </div>
+                </GameOverPanel>
+            )}
+            {user && (
+                <ArcadeUsernameModal
+                    isOpen={submission.status === 'needs-username'}
+                    userId={user.id}
+                    onSaved={submission.onUsernameSaved}
+                    onCancel={submission.skip}
                 />
             )}
         </div>

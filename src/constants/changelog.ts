@@ -8,6 +8,7 @@ export const CURRENT_VERSION = '1.78.1';
 // nothing. Do it by hand only if that script cannot.
 export const UNRELEASED_CHANGES: string[] = [
     'Arcade: fly the synthwave fighter in a new lane-runner mini game.',
+    'Arcade: submit your best score to a new global leaderboard.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
