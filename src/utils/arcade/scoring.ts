@@ -6,7 +6,7 @@ export function metersTravelled(distanceUnits: number): number {
 }
 
 export function computeScore(state: GameState): number {
-    return metersTravelled(state.distance) + state.credits * CREDIT_POINTS;
+    return metersTravelled(state.distance) + state.credits * CREDIT_POINTS + state.bonus;
 }
 
 export function runResult(state: GameState): RunResult {

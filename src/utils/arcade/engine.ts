@@ -13,24 +13,35 @@ import {
     SPAWN_Z,
     START_SPEED,
 } from './constants';
-import { spawnRow } from './spawner';
+import { drawCheckpointRows, spawnTrackRow } from './checkpoints';
 import type { GameState, InputAction, Lane, PlayerState } from './types';
 
-export function createGame(seed: number): GameState {
-    return {
+export interface GameOptions {
+    /** Schedules duel checkpoints. Off unless the caller has two opponents to offer. */
+    duels?: boolean;
+}
+
+export function createGame(seed: number, options: GameOptions = {}): GameState {
+    const state: GameState = {
         rngState: seed >>> 0,
         time: 0,
         speed: START_SPEED,
         distance: 0,
         credits: 0,
+        bonus: 0,
         player: { lane: 1, action: 'run', actionTime: 0, shield: false, magnetTime: 0 },
         obstacles: [],
         pickups: [],
+        checkpoints: [],
+        rowsUntilCheckpoint: null,
+        pendingDuel: null,
         untilNextRow: FIRST_ROW_DELAY,
         nextId: 1,
         status: 'running',
         shieldBreakTime: 0,
     };
+    if (options.duels) state.rowsUntilCheckpoint = drawCheckpointRows(state);
+    return state;
 }
 
 /** A jump or duck cannot start until the current one ends; lane changes are always allowed. */
@@ -62,7 +73,7 @@ function applyInput(player: PlayerState, action: InputAction): void {
  * `STEP_SECONDS`, so behaviour does not depend on the display's frame rate.
  */
 export function step(state: GameState, inputs: readonly InputAction[], dt: number): GameState {
-    if (state.status === 'over') return state;
+    if (state.status !== 'running') return state;
     const player = state.player;
     for (const input of inputs) applyInput(player, input);
 
@@ -82,10 +93,11 @@ export function step(state: GameState, inputs: readonly InputAction[], dt: numbe
     state.distance += travel;
     for (const o of state.obstacles) o.z -= travel;
     for (const p of state.pickups) p.z -= travel;
+    for (const c of state.checkpoints) c.z -= travel;
 
     state.untilNextRow -= travel;
     while (state.untilNextRow <= 0) {
-        spawnRow(state, SPAWN_Z + state.untilNextRow);
+        spawnTrackRow(state, SPAWN_Z + state.untilNextRow);
         state.untilNextRow += ROW_GAP;
     }
 
@@ -113,7 +125,17 @@ export function step(state: GameState, inputs: readonly InputAction[], dt: numbe
         else player.magnetTime = MAGNET_SECONDS;
     }
 
+    for (const c of state.checkpoints) {
+        if (c.resolved || c.z > 0) continue;
+        c.resolved = true;
+        const slot = c.gates.indexOf(player.lane);
+        if (slot === -1) continue;
+        state.status = 'duel';
+        state.pendingDuel = { checkpointId: c.id, slot: slot as 0 | 1, stakes: c.stakes };
+    }
+
     state.obstacles = state.obstacles.filter((o) => o.z > DESPAWN_Z);
     state.pickups = state.pickups.filter((p) => p.z > DESPAWN_Z && !p.collected);
+    state.checkpoints = state.checkpoints.filter((c) => c.z > DESPAWN_Z);
     return state;
 }
