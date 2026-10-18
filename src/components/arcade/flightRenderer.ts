@@ -17,6 +17,7 @@ import { JUMP_SECONDS, SHIELD_BREAK_FLASH, SPAWN_Z } from '../../utils/arcade/co
 import type { GameState, Obstacle, Pickup } from '../../utils/arcade/types';
 import { gridOffsetDelta, laneWidthAtPlayer, project } from './projection';
 import type { FlightOrigin } from './flightEvents';
+import { drawNeonFighter } from './neonFighter';
 
 export const INTRO_SECONDS = 1.2;
 const LANE_SLIDE_RATE = 14;
@@ -129,7 +130,8 @@ function drawPlayer(
     ctx: CanvasRenderingContext2D,
     g: SceneGeometry,
     game: GameState,
-    view: FlightView
+    view: FlightView,
+    timeMs: number
 ): void {
     const base = project(g, view.playerX, 0);
     const u = laneWidthAtPlayer(g);
@@ -149,9 +151,10 @@ function drawPlayer(
         y += u * 0.08;
     }
 
+    let e = 1;
     if (view.intro && view.introElapsed < INTRO_SECONDS) {
         const t = view.introElapsed / INTRO_SECONDS;
-        const e = 1 - (1 - t) * (1 - t);
+        e = 1 - (1 - t) * (1 - t);
         x = view.intro.x + (x - view.intro.x) * e;
         y = view.intro.y + (y - view.intro.y) * e;
         s = view.intro.size + (s - view.intro.size) * e;
@@ -159,17 +162,21 @@ function drawPlayer(
 
     ctx.save();
     ctx.translate(x, y);
-    ctx.scale(1, squash);
-    const glow = ctx.createRadialGradient(0, s * 0.6, 0, 0, s * 0.6, s * 2);
-    glow.addColorStop(0, 'rgba(220, 180, 255, 0.8)');
-    glow.addColorStop(1, 'rgba(0, 0, 0, 0)');
-    ctx.fillStyle = glow;
-    ctx.fillRect(-s * 2, -s * 1.4, s * 4, s * 4);
-    ctx.fillStyle = '#0d0620';
-    ctx.strokeStyle = '#e070ff';
-    ctx.lineWidth = 1.5;
-    drawFighterRear(ctx, s);
-    ctx.stroke();
+    // The clicked background silhouette cross-fades into the neon fighter during the intro.
+    if (e < 1) {
+        ctx.save();
+        ctx.globalAlpha = 1 - e;
+        ctx.scale(1, squash);
+        ctx.fillStyle = '#0d0620';
+        ctx.strokeStyle = '#e070ff';
+        ctx.lineWidth = 1.5;
+        drawFighterRear(ctx, s);
+        ctx.stroke();
+        ctx.restore();
+    }
+    const bank = Math.max(-1, Math.min(1, (laneOffset(game.player.lane) - view.playerX) * 2));
+    ctx.globalAlpha = e;
+    drawNeonFighter(ctx, s, { timeMs, bank, squash, thrust: 1 });
     ctx.restore();
 
     if (game.player.shield) {
@@ -224,6 +231,6 @@ export function renderFlight(
     };
     // Items already past the player are nearer the camera, so they draw over it.
     for (const item of items) if (item.z >= 0) drawItem(item);
-    drawPlayer(ctx, g, game, view);
+    drawPlayer(ctx, g, game, view, timeMs);
     for (const item of items) if (item.z < 0) drawItem(item);
 }
