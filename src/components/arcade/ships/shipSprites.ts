@@ -5,13 +5,13 @@ import { addShipLights } from './shipLighting';
 import {
     CHASE_CAMERA,
     FRAME_GRID_POSES,
-    LEVEL_BANK_COLUMN,
-    LEVEL_PITCH_ROW,
+    LEVEL_CHASE_POSE,
     officialViewerCamera,
     poseRotation,
-    rowPoses,
     ShipPose,
     SpriteCamera,
+    sweepPoses,
+    SweepRef,
 } from './spritePoses';
 
 /** Share of the frame, edge to edge, that the widest framing pose's bounding box fills. */
@@ -162,34 +162,36 @@ async function renderPoses(key: string, o: RenderOptions): Promise<HTMLCanvasEle
 }
 
 /**
- * The run's chase-camera frames for the given rows of the frame grid (`PITCH_ANGLES_DEG` ×
- * `BANK_ANGLES_DEG`), one array of bank frames per requested row, as square canvases. All rows
- * share the zoom fitted to the whole grid, so rows rendered by separate calls match.
+ * The run's chase-camera frames for the given sweeps of the frame grid, one array of heading
+ * frames (`HEADING_ANGLES_DEG` order) per requested sweep, as square canvases. Every sweep shares
+ * the zoom fitted to the whole grid, so sweeps rendered by separate calls match.
  */
-export function renderChaseFrames(
+export function renderChaseSweeps(
     key: string,
-    rows: readonly number[],
+    sweeps: readonly SweepRef[],
     size = 256,
     idle = false
 ): Promise<HTMLCanvasElement[][]> {
-    const n = rowPoses(0).length;
+    const perSweep = sweeps.map(({ pitch, bank }) => sweepPoses(pitch, bank));
     return renderPoses(key, {
         camera: CHASE_CAMERA,
-        poses: rows.flatMap(rowPoses),
+        poses: perSweep.flat(),
         framing: FRAME_GRID_POSES,
         width: size,
         height: size,
         idle,
-    }).then((frames) => rows.map((_, i) => frames.slice(i * n, (i + 1) * n)));
+    }).then((frames) => {
+        let at = 0;
+        return perSweep.map((poses) => frames.slice(at, (at += poses.length)));
+    });
 }
 
-/** The level chase-camera frame alone, framed like the run's grid so it sits inside a gate's
- *  circle; rendered in idle time. */
+/** The level chase-camera frame alone (nose straight up the screen), framed like the run's grid
+ *  so it sits inside a gate's circle; rendered in idle time. */
 export function renderGateSprite(key: string, size = 128): Promise<HTMLCanvasElement> {
-    const level = rowPoses(LEVEL_PITCH_ROW)[LEVEL_BANK_COLUMN];
     return renderPoses(key, {
         camera: CHASE_CAMERA,
-        poses: [level],
+        poses: [LEVEL_CHASE_POSE],
         framing: FRAME_GRID_POSES,
         width: size,
         height: size,
@@ -206,7 +208,7 @@ export function renderViewerSprite(
 ): Promise<HTMLCanvasElement> {
     return renderPoses(key, {
         camera: officialViewerCamera(facing),
-        poses: [{ bankDeg: 0, pitchDeg: 0 }],
+        poses: [{ yawDeg: 0, bankDeg: 0, pitchDeg: 0 }],
         width,
         height,
         idle: true,

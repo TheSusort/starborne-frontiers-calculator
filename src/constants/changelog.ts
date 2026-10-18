@@ -11,6 +11,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Arcade: duel ships from your hangar at random checkpoints.',
     'Arcade: your ships now appear as their official 3D models.',
     'Arcade: lanes now follow the background grid.',
+    'Arcade: your ship now turns toward the horizon as you change lanes.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

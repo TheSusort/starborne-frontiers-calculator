@@ -15,13 +15,26 @@ import {
 } from '../theme/synthwaveScene';
 import { JUMP_SECONDS, SHIELD_BREAK_FLASH, SPAWN_Z } from '../../utils/arcade/constants';
 import type { Checkpoint, GameState, Obstacle, Pickup } from '../../utils/arcade/types';
-import { arcadeGridColumns, gridOffsetDelta, laneWidthAtPlayer, project } from './projection';
+import {
+    arcadeGridColumns,
+    gridOffsetDelta,
+    laneWidthAtPlayer,
+    project,
+    screenHeadingDeg,
+} from './projection';
 import type { FlightOrigin } from './flightEvents';
 import { drawEngineGlow, drawNeonFighter } from './neonFighter';
 import type { NeonAccent } from './ships/factionTint';
 import { cachedPortrait } from './ships/portraitSprite';
 import { stakesBanner } from './duel/stakesText';
-import { actionPitchDeg, frameIndex, LEVEL_PITCH_ROW } from './ships/spritePoses';
+import {
+    actionPitchDeg,
+    FrameSweeps,
+    frameIndex,
+    HEADING_ANGLES_DEG,
+    pickSweep,
+    slideBank,
+} from './ships/spritePoses';
 
 export const INTRO_SECONDS = 1.2;
 const LANE_SLIDE_RATE = 14;
@@ -31,7 +44,7 @@ const MIN_TEXT_PX = 8;
 /** Width of the player sprite in fighter units: the neon fighter spans x ±2.2s. */
 const SPRITE_FOOTPRINT = 4.4;
 
-export type PlayerFrames = (HTMLCanvasElement[] | null)[];
+export type PlayerFrames = FrameSweeps<HTMLCanvasElement>;
 
 /** What a duel gate shows: the opponent waiting behind it. */
 export interface GateArt {
@@ -54,9 +67,9 @@ export interface FlightView {
     playerAccent: NeonAccent | null;
     /** Opponents per checkpoint id, in gate-slot order; a checkpoint without art is not drawn. */
     gateArt: Map<number, [GateArt, GateArt]>;
-    /** Rendered player ship: one row of bank frames per `PITCH_ANGLES_DEG` entry (see
-     *  `spritePoses`); a row still rendering is `null` and the level row stands in for it.
-     *  `null` draws the neon fighter. */
+    /** Rendered player ship: heading sweeps by pitch and bank (see `spritePoses`); a sweep
+     *  still rendering is `null` and `pickSweep` stands another in for it. `null` draws the
+     *  neon fighter. */
     playerFrames: PlayerFrames | null;
 }
 
@@ -285,14 +298,16 @@ function drawPlayer(
         ctx.stroke();
         ctx.restore();
     }
-    const bank = Math.max(-1, Math.min(1, (laneOffset(game.player.lane) - view.playerX) * 2));
+    // The nose aims at the vanishing point from wherever the ship is in its slide; the bank
+    // follows the slide itself and levels out once the ship settles in its lane.
+    const headingDeg = screenHeadingDeg(g, view.playerX);
+    const bank = slideBank(laneOffset(game.player.lane), view.playerX);
     ctx.globalAlpha = e;
-    const { row, column } = frameIndex(bank, actionPitchDeg(action, actionTime));
-    const frames = view.playerFrames;
-    const frameRow = frames?.[row] ?? frames?.[LEVEL_PITCH_ROW];
-    if (frameRow) {
+    const index = frameIndex(headingDeg, bank, actionPitchDeg(action, actionTime));
+    const sweep = view.playerFrames ? pickSweep(view.playerFrames, index) : null;
+    if (sweep) {
         // The sprite spans the fighter's footprint.
-        const frame = frameRow[column];
+        const frame = sweep[index.heading];
         const size = s * SPRITE_FOOTPRINT;
         drawEngineGlow(ctx, s, { timeMs, bank, squash, thrust: 1 });
         ctx.scale(1, squash);
@@ -301,6 +316,7 @@ function drawPlayer(
         drawNeonFighter(ctx, s, {
             timeMs,
             bank,
+            yaw: headingDeg / Math.max(...HEADING_ANGLES_DEG),
             squash,
             thrust: 1,
             accent: view.playerAccent ?? undefined,

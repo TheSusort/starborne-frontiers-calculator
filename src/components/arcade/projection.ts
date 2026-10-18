@@ -63,3 +63,13 @@ export function project(g: SceneGeometry, laneX: number, z: number) {
 export function gridOffsetDelta(travelUnits: number): number {
     return (travelUnits * DEPTH_PER_UNIT) / (GRID_FAR_PLANE - GRID_NEAR_PLANE);
 }
+
+/**
+ * Screen angle, in degrees, from the ship's spot on the player row to the vanishing point
+ * (`vanishX`, `horizonY`): 0 points straight up the screen, positive leans toward screen right.
+ * `laneX` is the rendered lane offset, so the angle turns continuously while the ship slides.
+ */
+export function screenHeadingDeg(g: SceneGeometry, laneX: number): number {
+    const p = project(g, laneX, 0);
+    return (Math.atan2(g.vanishX - p.x, p.y - g.horizonY) * 180) / Math.PI;
+}

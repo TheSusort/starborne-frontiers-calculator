@@ -7,6 +7,7 @@ import {
     PLAYER_DEPTH,
     gridOffsetDelta,
     laneWidthAtPlayer,
+    screenHeadingDeg,
 } from '../projection';
 import {
     sceneGeometry,
@@ -115,5 +116,47 @@ describe('lanes on the arcade grid', () => {
         const perspective =
             (laneWidthAtPlayer(g) * PLAYER_DEPTH) / (PLAYER_DEPTH + SPAWN_Z * DEPTH_PER_UNIT);
         expect(Math.abs(far - perspective)).toBeLessThan(6);
+    });
+});
+
+describe('screenHeadingDeg', () => {
+    const screens = [
+        [1200, 800],
+        [1920, 1080],
+        [800, 800],
+        [390, 844],
+    ] as const;
+
+    for (const [w, h] of screens) {
+        const g = sceneGeometry(w, h);
+        it(`aims the ship at the vanishing point at ${w}x${h}`, () => {
+            for (const laneX of [-1, -0.4, 0, 0.7, 1]) {
+                const p = project(g, laneX, 0);
+                const a = (screenHeadingDeg(g, laneX) * Math.PI) / 180;
+                // Walking from the ship along the heading reaches the horizon at vanishX.
+                const reach = p.y - g.horizonY;
+                expect(p.x + Math.tan(a) * reach).toBeCloseTo(g.vanishX, 6);
+            }
+        });
+        it(`points the left lane right, the centre straight and the right lane left at ${w}x${h}`, () => {
+            expect(screenHeadingDeg(g, -1)).toBeGreaterThan(0);
+            expect(screenHeadingDeg(g, 0)).toBe(0);
+            expect(screenHeadingDeg(g, 1)).toBeLessThan(0);
+            expect(screenHeadingDeg(g, 1)).toBeCloseTo(-screenHeadingDeg(g, -1), 9);
+        });
+        it(`turns smoothly with the slide at ${w}x${h}`, () => {
+            let last = Infinity;
+            for (let x = -1; x <= 1.0001; x += 0.1) {
+                const a = screenHeadingDeg(g, x);
+                expect(a).toBeLessThan(last);
+                last = a;
+            }
+        });
+    }
+
+    it('stays within the frame grid on any screen', () => {
+        for (const [w, h] of screens) {
+            expect(Math.abs(screenHeadingDeg(sceneGeometry(w, h), 1))).toBeLessThanOrEqual(47);
+        }
     });
 });

@@ -9,19 +9,23 @@ import type { PlayerAction } from '../../../utils/arcade/types';
  * centred on the origin.
  */
 
-/** Roll angles of the frame columns, left bank to right bank; the middle column is level.
- *  A positive angle dips the ship's right wing. */
-export const BANK_ANGLES_DEG = [-30, -15, 0, 15, 30] as const;
-/** Pitch angles of the frame rows: nose down, level, nose up. */
+/** Screen headings of the frame grid's sweeps, in degrees: 0 points the nose straight up the
+ *  screen, positive leans it toward screen right. ±45 covers the outer lanes on any screen
+ *  (`screenHeadingDeg` peaks just under 46 at the widest lane-to-height ratio). */
+export const HEADING_ANGLES_DEG = [-45, -22.5, 0, 22.5, 45] as const;
+/** Roll angles, left bank to right bank; a positive angle dips the ship's right wing. */
+export const BANK_ANGLES_DEG = [-25, 0, 25] as const;
+/** Pitch angles: nose down, level, nose up. */
 export const PITCH_ANGLES_DEG = [-8, 0, 10] as const;
-export const LEVEL_BANK_COLUMN = BANK_ANGLES_DEG.indexOf(0);
+export const LEVEL_HEADING = HEADING_ANGLES_DEG.indexOf(0);
+export const LEVEL_BANK = BANK_ANGLES_DEG.indexOf(0);
 export const LEVEL_PITCH_ROW = PITCH_ANGLES_DEG.indexOf(0);
-/** Yaw toward the banked side at full bank; it scales linearly with the roll. */
-export const MAX_YAW_DEG = 8;
 /** Nose pitch while ducking. */
 export const DUCK_PITCH_DEG = -8;
 
 export interface ShipPose {
+    /** Turn of the nose about the vertical axis; positive turns it toward the ship's right. */
+    yawDeg: number;
     bankDeg: number;
     pitchDeg: number;
 }
@@ -32,41 +36,117 @@ export interface EulerYXZ {
     z: number;
 }
 
-const rad = (deg: number) => (deg * Math.PI) / 180;
-const maxBank = Math.max(...BANK_ANGLES_DEG.map(Math.abs));
-
-/**
- * Model rotation for a pose, applied in three's `'YXZ'` order: yaw toward the banked side,
- * then pitch, then roll about the nose. Positive pitch raises the nose; positive bank dips the
- * right wing and turns the nose to the ship's right (-X).
- */
-export function poseRotation({ bankDeg, pitchDeg }: ShipPose): EulerYXZ {
-    return {
-        y: -rad((bankDeg / maxBank) * MAX_YAW_DEG),
-        x: -rad(pitchDeg),
-        z: rad(bankDeg),
-    };
+export interface SpriteCamera {
+    fov: number;
+    /** Camera position in the model frame; the camera looks at the origin. */
+    position: readonly [number, number, number];
 }
 
-/** Every pose of the run's frame grid, row-major by `PITCH_ANGLES_DEG` then `BANK_ANGLES_DEG`. */
-export const FRAME_GRID_POSES: readonly ShipPose[] = PITCH_ANGLES_DEG.flatMap((pitchDeg) =>
-    BANK_ANGLES_DEG.map((bankDeg) => ({ bankDeg, pitchDeg }))
+const rad = (deg: number) => (deg * Math.PI) / 180;
+const deg = (r: number) => (r * 180) / Math.PI;
+
+/**
+ * Model rotation for a pose, applied in three's `'YXZ'` order: yaw, then pitch, then roll about
+ * the nose. Positive yaw turns the nose to the ship's right (-X), positive pitch raises it and
+ * positive bank dips the right wing.
+ */
+export function poseRotation({ yawDeg, bankDeg, pitchDeg }: ShipPose): EulerYXZ {
+    return { y: -rad(yawDeg), x: -rad(pitchDeg), z: rad(bankDeg) };
+}
+
+/**
+ * The yaw that makes the nose, seen through `camera`, point along `headingDeg` on screen.
+ *
+ * The camera sits at P looking at the origin with +Y up, so its screen axes are
+ * right R = normalise((P.z, 0, -P.x)) and up U = normalise(P) × R. A nose turned by yaw ψ toward
+ * the ship's right is d = (-sin ψ, 0, cos ψ), and at the ship's centre it points along
+ * (d·R, d·U) on screen. Setting d·R / d·U = tan(heading) = T and solving for ψ gives
+ * tan ψ = (R.z - T·U.z) / (R.x - T·U.x). For a camera straight behind at elevation e this is
+ * tan ψ = tan(heading) · sin(e); a camera off to one side adds the yaw that cancels its azimuth.
+ */
+export function yawForScreenHeading(headingDeg: number, camera: SpriteCamera): number {
+    const [px, py, pz] = camera.position;
+    const len = Math.hypot(px, py, pz);
+    const b = [px / len, py / len, pz / len];
+    const rLen = Math.hypot(b[2], b[0]);
+    const r = [b[2] / rLen, 0, -b[0] / rLen];
+    const u = [b[1] * r[2] - b[2] * r[1], b[2] * r[0] - b[0] * r[2], b[0] * r[1] - b[1] * r[0]];
+    const t = Math.tan(rad(headingDeg));
+    return deg(Math.atan((r[2] - t * u[2]) / (r[0] - t * u[0])));
+}
+
+/** Behind, above and slightly to the ship's right: a chase view that still reads as flying
+ *  away from the camera. */
+export const CHASE_CAMERA: SpriteCamera = { fov: 30, position: [-0.55, 1.05, -2.4] };
+
+/** A run pose: the nose along `headingDeg` on screen under the chase camera, then banked and
+ *  pitched. */
+export function chasePose(headingDeg: number, bankDeg: number, pitchDeg: number): ShipPose {
+    return { yawDeg: yawForScreenHeading(headingDeg, CHASE_CAMERA), bankDeg, pitchDeg };
+}
+
+/** One sweep of the run's frame grid, by index into `PITCH_ANGLES_DEG` and `BANK_ANGLES_DEG`. */
+export interface SweepRef {
+    pitch: number;
+    bank: number;
+}
+
+/** One sweep of the frame grid: every heading at one pitch row and bank. */
+export const sweepPoses = (pitch: number, bank: number): ShipPose[] =>
+    HEADING_ANGLES_DEG.map((h) => chasePose(h, BANK_ANGLES_DEG[bank], PITCH_ANGLES_DEG[pitch]));
+
+/** Every pose of the run's frame grid. */
+export const FRAME_GRID_POSES: readonly ShipPose[] = PITCH_ANGLES_DEG.flatMap((_, pitch) =>
+    BANK_ANGLES_DEG.flatMap((_, bank) => sweepPoses(pitch, bank))
 );
 
-/** The poses of one frame row. */
-export const rowPoses = (row: number): ShipPose[] =>
-    BANK_ANGLES_DEG.map((bankDeg) => ({ bankDeg, pitchDeg: PITCH_ANGLES_DEG[row] }));
+/** The chase pose with the nose straight up the screen, wings level. */
+export const LEVEL_CHASE_POSE: ShipPose = chasePose(0, 0, 0);
+
+/** Rendered player frames: `[pitch row][bank]` holds one canvas per heading, or `null` while that
+ *  sweep is still rendering. */
+export type FrameSweeps<T> = (T[] | null)[][];
+
+export interface FrameIndex {
+    heading: number;
+    bank: number;
+    pitch: number;
+}
 
 const nearestIndex = (values: readonly number[], v: number) =>
     values.reduce((best, x, i) => (Math.abs(x - v) < Math.abs(values[best] - v) ? i : best), 0);
 
-/** Frame for a bank in -1..1 (full left to full right) and a nose pitch in degrees. */
-export function frameIndex(bank: number, pitchDeg: number): { row: number; column: number } {
+const maxBank = Math.max(...BANK_ANGLES_DEG);
+
+/** Frame for a screen heading in degrees, a bank in -1..1 (full left to full right) and a nose
+ *  pitch in degrees; each axis picks its nearest rendered angle. */
+export function frameIndex(headingDeg: number, bank: number, pitchDeg: number): FrameIndex {
     const b = Math.max(-1, Math.min(1, bank));
     return {
-        row: nearestIndex(PITCH_ANGLES_DEG, pitchDeg),
-        column: Math.round(((b + 1) / 2) * (BANK_ANGLES_DEG.length - 1)),
+        heading: nearestIndex(HEADING_ANGLES_DEG, headingDeg),
+        bank: nearestIndex(BANK_ANGLES_DEG, b * maxBank),
+        pitch: nearestIndex(PITCH_ANGLES_DEG, pitchDeg),
     };
+}
+
+/** The heading sweep to draw: the exact one if rendered, else the same pitch wings level, else
+ *  the level sweep; `null` until the level sweep exists. */
+export function pickSweep<T>(frames: FrameSweeps<T>, i: FrameIndex): T[] | null {
+    return (
+        frames[i.pitch]?.[i.bank] ??
+        frames[i.pitch]?.[LEVEL_BANK] ??
+        frames[LEVEL_PITCH_ROW]?.[LEVEL_BANK] ??
+        null
+    );
+}
+
+/**
+ * Bank for a lane slide, -1..1 (positive banks right): proportional to the distance left to the
+ * target lane, which under the run's exponential lane easing is proportional to the lateral
+ * speed, so the ship rolls into the slide and returns to wings level as it settles.
+ */
+export function slideBank(targetLaneX: number, playerX: number): number {
+    return Math.max(-1, Math.min(1, (targetLaneX - playerX) * 2));
 }
 
 /**
@@ -81,16 +161,6 @@ export function actionPitchDeg(action: PlayerAction, actionTime: number): number
     const top = PITCH_ANGLES_DEG[PITCH_ANGLES_DEG.length - 1];
     return climb >= 0 ? climb * top : climb * -PITCH_ANGLES_DEG[0];
 }
-
-export interface SpriteCamera {
-    fov: number;
-    /** Camera position in the model frame; the camera looks at the origin. */
-    position: readonly [number, number, number];
-}
-
-/** Behind, above and slightly to the ship's right: a chase view that still reads as flying
- *  away from the camera. */
-export const CHASE_CAMERA: SpriteCamera = { fov: 30, position: [-0.55, 1.05, -2.4] };
 
 /**
  * The default camera of the official unit viewer (starborne.com/ship-viewer.html, embedded on

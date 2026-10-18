@@ -9,6 +9,8 @@ export interface NeonFighterPose {
     timeMs: number;
     /** -1..1, positive = banking right. */
     bank: number;
+    /** -1..1, positive = nose turned toward screen right; 0 when omitted. */
+    yaw?: number;
     /** Vertical scale: 1 normal, 0.55 ducking. */
     squash: number;
     /** 0..1 engine intensity. */
@@ -28,6 +30,10 @@ const NAV_RIGHT = '64, 255, 170';
 
 const BANK_ROTATION = 0.25;
 const LOWER_WING_FORESHORTEN = 0.2;
+/** At full yaw the wing swinging toward the camera reads this much longer, the other shorter. */
+const YAW_WING_SCALE = 0.12;
+/** At full yaw the top of the fighter leans this far (in units of its height) toward the nose. */
+const YAW_SKEW = 0.3;
 const NAV_BLINK_MS = 1100;
 
 type Pt = readonly [number, number];
@@ -183,9 +189,11 @@ export function drawNeonFighter(
     const pink = pose.accent?.core ?? NEON_PINK;
     const pinkGlow = pose.accent?.glow ?? NEON_PINK_GLOW;
 
-    // The wing dipping toward the ground turns away from the camera, so it reads shorter.
-    const kRight = 1 - LOWER_WING_FORESHORTEN * Math.max(0, bank);
-    const kLeft = 1 - LOWER_WING_FORESHORTEN * Math.max(0, -bank);
+    const yaw = Math.max(-1, Math.min(1, pose.yaw ?? 0));
+    // The wing dipping toward the ground turns away from the camera, so it reads shorter; a yaw
+    // swings the wing opposite the nose toward the camera, so that one reads longer.
+    const kRight = (1 - LOWER_WING_FORESHORTEN * Math.max(0, bank)) * (1 - YAW_WING_SCALE * yaw);
+    const kLeft = (1 - LOWER_WING_FORESHORTEN * Math.max(0, -bank)) * (1 + YAW_WING_SCALE * yaw);
     const X = (x: number) => s * x * (x >= 0 ? kRight : kLeft);
     const Y = (y: number) => s * y;
     const mirror = (pts: readonly Pt[]): Pt[] => pts.map(([x, y]) => [-x, y]);
@@ -207,6 +215,8 @@ export function drawNeonFighter(
 
     ctx.save();
     ctx.rotate(bank * BANK_ROTATION);
+    // Leaning the top toward the nose's side reads as the nose pointing there.
+    ctx.transform(1, 0, -YAW_SKEW * yaw, 1, 0, 0);
     ctx.scale(1, pose.squash);
     ctx.lineJoin = 'round';
     ctx.lineCap = 'round';

@@ -28,7 +28,13 @@ import {
     PlayerFrames,
     renderFlight,
 } from './flightRenderer';
-import { LEVEL_PITCH_ROW, PITCH_ANGLES_DEG } from './ships/spritePoses';
+import {
+    BANK_ANGLES_DEG,
+    LEVEL_BANK,
+    LEVEL_PITCH_ROW,
+    PITCH_ANGLES_DEG,
+    SweepRef,
+} from './ships/spritePoses';
 import { whenIdle } from './idle';
 import { isSelectDropdownOpen, keyToAction, swipeToAction } from './flightInput';
 import { readLocalBest, writeLocalBest } from './localBest';
@@ -241,31 +247,39 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
         return p;
     }, []);
 
-    /** Renders the flown ship's frame grid once per ship: the level row first, then the pitched
-     *  rows and its duel render in idle time. The run keeps the neon fighter until the level row
-     *  is ready, and for good if it fails. */
+    /** Renders the flown ship's frame grid once per ship: the level heading sweep first, then
+     *  the banked, pitched and pitched-banked sweeps and its duel render, each in idle time. The
+     *  run keeps the neon fighter until the level sweep is ready, and for good if it fails. */
     const requestPlayerFrames = useCallback(
         (ship: Ship) => {
             const key = shipModelsEnabled() ? visualOfRef.current(ship).visualKey : null;
             if (!key || playerFramesRef.current?.shipId === ship.id) return;
             playerFramesRef.current = { shipId: ship.id, frames: null };
             const isCurrent = () => playerFramesRef.current?.shipId === ship.id;
-            const pitchedRows = PITCH_ANGLES_DEG.map((_, i) => i).filter(
-                (i) => i !== LEVEL_PITCH_ROW
-            );
+            const pitches = PITCH_ANGLES_DEG.map((_, i) => i);
+            const banks = BANK_ANGLES_DEG.map((_, i) => i);
+            const pitched = pitches.filter((p) => p !== LEVEL_PITCH_ROW);
+            const banked = banks.filter((b) => b !== LEVEL_BANK);
+            const idleBatches: SweepRef[][] = [
+                banked.map((bank) => ({ pitch: LEVEL_PITCH_ROW, bank })),
+                pitched.map((pitch) => ({ pitch, bank: LEVEL_BANK })),
+                ...pitched.map((pitch) => banked.map((bank) => ({ pitch, bank }))),
+            ];
             shipSprites()
                 .then(async (m) => {
-                    const [level] = await m.renderChaseFrames(key, [LEVEL_PITCH_ROW]);
+                    const level = { pitch: LEVEL_PITCH_ROW, bank: LEVEL_BANK };
+                    const [levelSweep] = await m.renderChaseSweeps(key, [level]);
                     if (!isCurrent()) return;
-                    const frames: PlayerFrames = PITCH_ANGLES_DEG.map((_, i) =>
-                        i === LEVEL_PITCH_ROW ? level : null
-                    );
+                    const frames: PlayerFrames = pitches.map(() => banks.map(() => null));
+                    frames[level.pitch][level.bank] = levelSweep;
                     playerFramesRef.current = { shipId: ship.id, frames };
                     if (flownRef.current?.id === ship.id) viewRef.current.playerFrames = frames;
-                    // The view holds `frames` itself, so rows filled in here show up next frame.
-                    const rows = await m.renderChaseFrames(key, pitchedRows, undefined, true);
-                    if (!isCurrent()) return;
-                    pitchedRows.forEach((row, i) => (frames[row] = rows[i]));
+                    // The view holds `frames` itself, so sweeps filled in here show up next frame.
+                    for (const batch of idleBatches) {
+                        const sweeps = await m.renderChaseSweeps(key, batch, undefined, true);
+                        if (!isCurrent()) return;
+                        batch.forEach(({ pitch, bank }, i) => (frames[pitch][bank] = sweeps[i]));
+                    }
                     void requestViewerSprite(key, 'right').catch(() => {});
                 })
                 .catch(() => {
