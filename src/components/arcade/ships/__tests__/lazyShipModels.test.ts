@@ -25,24 +25,33 @@ const isLazyModule = (path: string) =>
         (m) => path === join(LAZY_DIR, `${m}.ts`) || path === join(LAZY_DIR, `${m}.tsx`)
     );
 
-/** Module specifiers of static `import … from` and `export … from` statements. */
+/**
+ * Module specifiers of static `import … from`, `export … from` and side-effect `import '…'`
+ * statements, wherever they sit on a line. `import(…)` and `import.meta` are not static imports.
+ */
 function staticSpecifiers(code: string): string[] {
-    return [...code.matchAll(/^\s*(?:import|export)\b[^;]*?\bfrom\s+['"]([^'"]+)['"]/gm)].map(
-        (m) => m[1]
-    );
+    return [
+        ...code.matchAll(
+            /(?:^|[^\w$.])(?:import|export)\s*(?:[^;'"()]*?\bfrom\s*)?['"]([^'"]+)['"]/g
+        ),
+    ].map((m) => m[1]);
 }
+
+const isRestricted = (spec: string) => {
+    const bare = spec.replace(/\.(?:tsx?|jsx?|mjs)$/, '');
+    return (
+        spec === 'three' ||
+        spec.startsWith('three/') ||
+        LAZY_MODULES.some((m) => bare.endsWith(`/${m}`))
+    );
+};
 
 describe('ship models stay behind dynamic imports', () => {
     const offenders = sourceFiles(SRC)
         .filter((path) => !isLazyModule(path))
         .flatMap((path) =>
             staticSpecifiers(readFileSync(path, 'utf8'))
-                .filter(
-                    (spec) =>
-                        spec === 'three' ||
-                        spec.startsWith('three/') ||
-                        LAZY_MODULES.some((m) => spec.endsWith(`/${m}`))
-                )
+                .filter(isRestricted)
                 .map((spec) => `${relative(SRC, path).split(sep).join('/')} -> ${spec}`)
         );
 
@@ -61,6 +70,25 @@ describe('ship models stay behind dynamic imports', () => {
         expect(
             staticSpecifiers("import { loadShipModel } from './ships/shipModelLoader';")
         ).toEqual(['./ships/shipModelLoader']);
+        expect(staticSpecifiers("import 'three';")).toEqual(['three']);
+        expect(staticSpecifiers("import { a } from './ships/shipSprites.ts';")).toEqual([
+            './ships/shipSprites.ts',
+        ]);
+        expect(staticSpecifiers("const x = 1; import { a } from 'three/addons/x.js';")).toEqual([
+            'three/addons/x.js',
+        ]);
+        expect(staticSpecifiers("export * from './ships/ShipModelView';")).toEqual([
+            './ships/ShipModelView',
+        ]);
+        expect(staticSpecifiers("import {\n    a,\n    b,\n} from 'three';")).toEqual(['three']);
         expect(staticSpecifiers("const m = import('./ships/shipSprites');")).toEqual([]);
+        expect(staticSpecifiers('const flag = import.meta.env.X;')).toEqual([]);
+    });
+
+    it('treats a specifier with an extension like one without', () => {
+        expect(isRestricted('./ships/shipSprites.ts')).toBe(true);
+        expect(isRestricted('../ships/ShipModelView.tsx')).toBe(true);
+        expect(isRestricted('three/examples/jsm/loaders/FBXLoader.js')).toBe(true);
+        expect(isRestricted('./ships/shipVisuals')).toBe(false);
     });
 });

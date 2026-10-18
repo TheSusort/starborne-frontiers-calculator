@@ -1,5 +1,6 @@
 import React, { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '../ui/Button';
+import FallbackErrorBoundary from '../error/FallbackErrorBoundary';
 import { useBodyScrollLock } from '../ui/layout/useBodyScrollLock';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
 import { createGame, step } from '../../utils/arcade/engine';
@@ -68,13 +69,11 @@ const renderShipModel = (ship: Ship, visual: ShipVisual): React.ReactNode => {
     const portrait = <PortraitView ship={ship} visual={visual} />;
     if (!visual.visualKey) return portrait;
     return (
-        <Suspense fallback={portrait}>
-            <ShipModelView
-                key={visual.visualKey}
-                visualKey={visual.visualKey}
-                fallback={portrait}
-            />
-        </Suspense>
+        <FallbackErrorBoundary key={visual.visualKey} fallback={portrait}>
+            <Suspense fallback={portrait}>
+                <ShipModelView visualKey={visual.visualKey} fallback={portrait} />
+            </Suspense>
+        </FallbackErrorBoundary>
     );
 };
 
@@ -171,6 +170,9 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
     const swipeStartRef = useRef<{ x: number; y: number } | null>(null);
     /** The two opponents behind each checkpoint's gates, in gate-slot order. */
     const opponentsRef = useRef(new Map<number, [Ship, Ship]>());
+    /** The pair for the next checkpoint to appear, picked while the game is not being flown so
+     *  their sprites render before the gates are on screen; null → picked when it appears. */
+    const nextOpponentsRef = useRef<[Ship, Ship] | null>(null);
     /** Bumped whenever a run is replaced or the game unmounts; a duel simulation that finishes
      *  under an older generation is discarded. */
     const runGenerationRef = useRef(0);
@@ -252,16 +254,44 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
         return p;
     }, []);
 
-    // The flown ship's visual key needs the ship templates, which may arrive after mount.
+    /** Starts loading a ship's gate art: its portrait and, with models on, its sprite. */
+    const warmGateArt = useCallback(
+        (ship: Ship) => {
+            const { portraitUrl, visualKey } = visualOfRef.current(ship);
+            if (portraitUrl) void loadPortrait(portraitUrl).catch(() => {});
+            if (shipModelsEnabled() && visualKey) void requestSprite(visualKey).catch(() => {});
+        },
+        [requestSprite]
+    );
+
+    /** Picks the next checkpoint's opponents now and starts rendering their art. */
+    const prepareNextOpponents = useCallback(() => {
+        const flown = flownRef.current;
+        const pick =
+            flown && duelsRef.current
+                ? pickOpponents(shipsRef.current, flown.id, Math.random)
+                : null;
+        nextOpponentsRef.current = pick;
+        pick?.forEach(warmGateArt);
+    }, [warmGateArt]);
+
+    // A run that starts without the select screen picks its first opponents on mount.
+    useEffect(() => {
+        if (initial.flown) prepareNextOpponents();
+    }, [initial.flown, prepareNextOpponents]);
+
+    // Visual keys need the ship templates, which may arrive after mount.
     useEffect(() => {
         if (flownRef.current) requestPlayerFrames(flownRef.current);
-    }, [visualOf, requestPlayerFrames]);
+        nextOpponentsRef.current?.forEach(warmGateArt);
+    }, [visualOf, requestPlayerFrames, warmGateArt]);
 
     /** Starts a fresh run with the flown ship and duel setting already in the refs. */
     const restart = useCallback(() => {
         const flown = flownRef.current;
         runGenerationRef.current++;
         opponentsRef.current.clear();
+        prepareNextOpponents();
         setDuel(null);
         gameRef.current = createGame(newSeed(), { duels: duelsRef.current });
         viewRef.current = createFlightView(undefined, flown ? factionAccent(flown.faction) : null);
@@ -272,15 +302,15 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
         setResult(null);
         setHud({ score: 0, credits: 0, shield: false, magnet: 0 });
         setPhase('running');
-    }, [setPhase]);
+    }, [setPhase, prepareNextOpponents]);
 
     const launch = useCallback(
         (ship: Ship) => {
             writeLastShipId(ship.id);
             flownRef.current = ship;
             duelsRef.current = canDuel(ships, ship.id);
-            restart();
             requestPlayerFrames(ship);
+            restart();
         },
         [ships, restart, requestPlayerFrames]
     );
@@ -314,6 +344,7 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
             : undefined;
         if (!pending || !flown || !opponent) {
             resolveDuel(game, 'skipped');
+            prepareNextOpponents();
             setCountdown(COUNTDOWN_SECONDS);
             setPhase('countdown');
             return;
@@ -326,6 +357,7 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
             result: null,
             effect: null,
         });
+        prepareNextOpponents();
         const generation = runGenerationRef.current;
         // The animation frame commits the "Simulating…" state; the timeout then runs the
         // synchronous simulation after that frame has been painted.
@@ -343,7 +375,7 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
             setDuel((d) => d && { ...d, result: r, effect });
         };
         requestAnimationFrame(() => window.setTimeout(() => void simulate(), 0));
-    }, [setPhase, toSide]);
+    }, [setPhase, toSide, prepareNextOpponents]);
 
     const onDuelDone = useCallback(() => {
         if (phaseRef.current !== 'duel') return;
@@ -386,6 +418,20 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
         let acc = 0;
         let hudTimer = 0;
         const generation = runGenerationRef;
+        /** Checkpoints whose gates have been passed and handled. */
+        const passed = new WeakSet<object>();
+
+        /** The pre-picked pair, re-resolved against the current fleet; null if a ship has left
+         *  the fleet or is now the flown one. */
+        const takePrepared = (flownId: string): [Ship, Ship] | null => {
+            const prepared = nextOpponentsRef.current;
+            nextOpponentsRef.current = null;
+            if (!prepared) return null;
+            const current = prepared.map((p) =>
+                shipsRef.current.find((s) => s.id === p.id && s.id !== flownId)
+            );
+            return current[0] && current[1] ? [current[0], current[1]] : null;
+        };
 
         const toGateArt = (ship: Ship): GateArt => {
             const { portraitUrl, visualKey } = visualOfRef.current(ship);
@@ -426,7 +472,9 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
                 const flown = flownRef.current;
                 for (const c of game.checkpoints) {
                     if (view.gateArt.has(c.id) || c.resolved || !flown) continue;
-                    const pick = pickOpponents(shipsRef.current, flown.id, Math.random);
+                    const pick =
+                        takePrepared(flown.id) ??
+                        pickOpponents(shipsRef.current, flown.id, Math.random);
                     if (!pick) {
                         // No opponents to show: the engine ignores a resolved checkpoint.
                         c.resolved = true;
@@ -438,6 +486,15 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
 
                 if (game.status === 'over') finishRun();
                 else if (game.status === 'duel') startDuel();
+                // Passing a checkpoint through the free lane starts no duel, so the next pair
+                // is picked here, as far as possible from the next checkpoint's lane choice.
+                for (const c of game.checkpoints) {
+                    if (!c.resolved || passed.has(c) || !view.gateArt.has(c.id)) continue;
+                    passed.add(c);
+                    if (game.status === 'running' && !nextOpponentsRef.current) {
+                        prepareNextOpponents();
+                    }
+                }
                 hudTimer += dt;
                 if (hudTimer >= HUD_INTERVAL_SECONDS) {
                     hudTimer = 0;
@@ -462,7 +519,7 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
             window.removeEventListener('resize', resize);
             generation.current++;
         };
-    }, [setPhase, finishRun, startDuel, requestSprite]);
+    }, [setPhase, finishRun, startDuel, requestSprite, prepareNextOpponents]);
 
     // Focus moves into the overlay so keyboard input never lands on the page underneath.
     useEffect(() => {

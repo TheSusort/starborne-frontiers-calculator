@@ -104,9 +104,11 @@ async function load(key: string): Promise<THREE.Group> {
     // up +Y, bounding-box diagonal 2.
     const raw = new THREE.Box3().setFromObject(object);
     const engines = engineCentroid(object);
-    object.rotation.x = noseUpCorrection(
-        raw.getSize(new THREE.Vector3()),
-        engines && engines.sub(raw.getCenter(new THREE.Vector3()))
+    object.rotateX(
+        noseUpCorrection(
+            raw.getSize(new THREE.Vector3()),
+            engines && engines.sub(raw.getCenter(new THREE.Vector3()))
+        )
     );
     object.updateMatrixWorld(true);
     const box = new THREE.Box3().setFromObject(object);
