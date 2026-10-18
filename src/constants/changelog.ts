@@ -10,7 +10,8 @@ export const UNRELEASED_CHANGES: string[] = [
     'Arcade: choose a ship from your fleet to fly.',
     'Arcade: duel ships from your hangar at random checkpoints.',
     'Arcade: your ships now appear as their official 3D models.',
-    'Arcade: lanes follow the grid, and your ship smoothly banks and tilts.',
+    'Arcade: lanes now line up with the background grid lines.',
+    'Arcade: your ship smoothly banks, tilts and aims at the horizon.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

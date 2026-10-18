@@ -140,3 +140,16 @@ Everything except model loading ships normally, behind no flag.
 - Turning the model flag on in production (owner's call after approval).
 - Stat effects of the chosen ship on the runner.
 - Skins.
+
+## Amendments (2026-10-18)
+- **Rollout.** Solid Clouds approved using the official models. They are ON in production:
+  `netlify.toml` sets `VITE_ARCADE_SHIP_MODELS = "1"`, and the CSP allows `https://starborne.com`
+  in `connect-src` (FBX download) and `img-src` (textures). The flag stays as the off switch, and
+  the assets are still loaded live, never copied.
+- **Run sprites.** The player ship is a 45-frame chase-camera grid: 5 headings × 3 banks ×
+  3 pitches. The nose aims at the horizon's vanishing point, clamped to ±25°. Pose changes are
+  eased, and in-between poses cross-fade neighbouring frames.
+- **Duels.** Both sides use renders at the official viewer's default angle, turned to face each
+  other.
+- **Lanes.** The lane rails are gone: lanes sit on the background grid's columns, and the intro
+  morphs the page grid into the arcade grid.
