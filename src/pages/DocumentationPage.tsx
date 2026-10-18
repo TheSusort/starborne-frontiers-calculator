@@ -2564,7 +2564,9 @@ const DocumentationPage: React.FC = () => {
                                     Signed-in players are ranked by their best score. The first time
                                     you finish a run without a username you are asked to choose one;
                                     it is shared with your profile. Scores always count for your
-                                    main account, even while an alt profile is active.
+                                    main account, even while an alt profile is active. The top three
+                                    pilots stand on a podium above the table, and your own place is
+                                    tagged YOU.
                                 </p>
                             </div>
                         </div>

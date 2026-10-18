@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { DataTable, Column } from '../ui/tables/DataTable';
 import { Button } from '../ui/Button';
-import { TrophyIcon } from '../ui/icons';
+import { Chip } from '../ui/Chip';
+import { PodiumCard } from '../ui/PodiumCard';
 import { useAuth } from '../../contexts/AuthProvider';
 import { getArcadeLeaderboard } from '../../services/arcadeService';
 import type { ArcadeLeaderboardEntry } from '../../utils/arcade/leaderboardRows';
-import { isGapRow, withGapRows, type LeaderboardViewRow } from './leaderboardRowsView';
+import { isGapRow, splitPodium, withGapRows, type LeaderboardViewRow } from './leaderboardRowsView';
 
 const MEDAL_COLORS: Record<number, string> = {
     1: '#facc15', // gold (yellow-400)
@@ -13,26 +14,36 @@ const MEDAL_COLORS: Record<number, string> = {
     3: '#d97706', // bronze (amber-600)
 };
 
-const medalColor = (r: ArcadeLeaderboardEntry): string | undefined => MEDAL_COLORS[r.rank];
+/** Podium slots left to right, as indexes into the podium entries: #2, #1, #3. */
+const PODIUM_SLOT_ORDER = [1, 0, 2];
 
-const textSize = (r: ArcadeLeaderboardEntry) => (medalColor(r) ? 'text-lg font-bold' : 'text-base');
+const YouChip: React.FC = () => <Chip variant="accent">YOU</Chip>;
+
+const Podium: React.FC<{ entries: ArcadeLeaderboardEntry[] }> = ({ entries }) => (
+    <div className="mx-auto grid w-full max-w-2xl grid-cols-3 items-end gap-2 sm:gap-3">
+        {PODIUM_SLOT_ORDER.map((index) => {
+            const entry = entries[index];
+            if (!entry) return <div key={`empty-${index}`} aria-hidden="true" />;
+            return (
+                <PodiumCard
+                    key={`${entry.rank}-${entry.username}`}
+                    rank={entry.rank}
+                    title={entry.username}
+                    value={entry.bestScore.toLocaleString()}
+                    accentColor={MEDAL_COLORS[entry.rank] ?? MEDAL_COLORS[index + 1]}
+                    raised={index === 0}
+                    badge={entry.isMe ? <YouChip /> : undefined}
+                />
+            );
+        })}
+    </div>
+);
 
 const COLUMNS: Column<LeaderboardViewRow>[] = [
     {
         key: 'rank',
         label: '#',
-        render: (r) => {
-            if (isGapRow(r)) return '\u2026';
-            const color = medalColor(r);
-            return (
-                <span
-                    className={`inline-flex items-center gap-1.5 ${textSize(r)}`}
-                    style={color ? { color } : undefined}
-                >
-                    {color && <TrophyIcon className="w-4 h-4" />}#{r.rank}
-                </span>
-            );
-        },
+        render: (r) => (isGapRow(r) ? '\u2026' : <span className="tabular-nums">#{r.rank}</span>),
     },
     {
         key: 'username',
@@ -40,8 +51,11 @@ const COLUMNS: Column<LeaderboardViewRow>[] = [
         render: (r) => {
             if (isGapRow(r)) return '';
             return (
-                <span className={`${textSize(r)} ${r.isMe ? 'font-bold' : ''}`}>
-                    {r.isMe ? `${r.username} (You)` : r.username}
+                <span className="inline-flex min-w-0 max-w-full items-center gap-2">
+                    <span className={`truncate ${r.isMe ? 'font-semibold' : ''}`}>
+                        {r.username}
+                    </span>
+                    {r.isMe && <YouChip />}
                 </span>
             );
         },
@@ -51,19 +65,16 @@ const COLUMNS: Column<LeaderboardViewRow>[] = [
         label: 'Score',
         align: 'right',
         render: (r) =>
-            isGapRow(r) ? '' : <span className={textSize(r)}>{r.bestScore.toLocaleString()}</span>,
+            isGapRow(r) ? '' : <span className="tabular-nums">{r.bestScore.toLocaleString()}</span>,
     },
 ];
 
+const OWN_ROW_CLASSES =
+    'border-b-transparent [&>td]:bg-primary/15 [&>td:first-child]:rounded-l-md [&>td:last-child]:rounded-r-md';
+
 const rowClassName = (r: LeaderboardViewRow): string => {
     if (isGapRow(r)) return 'text-theme-text-secondary hover:!bg-transparent';
-    const classes: string[] = [];
-    if (r.isMe) {
-        classes.push('border-l-4 border-primary bg-primary/20 font-bold');
-    } else if (r.rank === 1) {
-        classes.push('border-l-4 border-yellow-400 bg-yellow-400/10');
-    }
-    return classes.join(' ');
+    return r.isMe ? OWN_ROW_CLASSES : '';
 };
 
 interface Props {
@@ -98,7 +109,13 @@ export const ArcadeLeaderboard: React.FC<Props> = ({ limit = 20, refreshKey = 0 
         };
     }, [limit, refreshKey, user?.id, attempt]);
 
-    const viewRows = useMemo(() => withGapRows(rows), [rows]);
+    const { podium, tableRows } = useMemo(() => {
+        const split = splitPodium(rows);
+        return {
+            podium: split.podium,
+            tableRows: withGapRows(split.rest, split.podium[split.podium.length - 1]?.rank),
+        };
+    }, [rows]);
 
     if (failed) {
         return (
@@ -111,14 +128,23 @@ export const ArcadeLeaderboard: React.FC<Props> = ({ limit = 20, refreshKey = 0 
         );
     }
 
-    return (
+    const table = (
         <DataTable
-            data={viewRows}
+            data={tableRows}
             columns={COLUMNS}
             loading={loading}
             emptyMessage="No scores yet. Be the first."
             getRowKey={(r, i) => (isGapRow(r) ? `gap-${i}` : `${r.rank}-${r.username}`)}
             rowClassName={rowClassName}
         />
+    );
+
+    if (loading || rows.length === 0) return table;
+
+    return (
+        <div className="space-y-3">
+            <Podium entries={podium} />
+            {tableRows.length > 0 && table}
+        </div>
     );
 };
