@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '../ui/Button';
-import { useBodyScrollLock } from '../ui/layout/Modal';
+import { useBodyScrollLock } from '../ui/layout/useBodyScrollLock';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
 import { createGame, step } from '../../utils/arcade/engine';
 import { STEP_SECONDS } from '../../utils/arcade/constants';
@@ -38,8 +38,13 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
     const startOrigin = reducedMotion ? undefined : origin;
 
     const canvasRef = useRef<HTMLCanvasElement>(null);
-    const gameRef = useRef<GameState>(createGame(newSeed()));
-    const viewRef = useRef<FlightView>(createFlightView(startOrigin));
+    const [initial] = useState(() => ({
+        game: createGame(newSeed()),
+        view: createFlightView(startOrigin),
+    }));
+    const gameRef = useRef<GameState>(initial.game);
+    const viewRef = useRef<FlightView>(initial.view);
+    const rootRef = useRef<HTMLDivElement>(null);
     const inputsRef = useRef<InputAction[]>([]);
     const phaseRef = useRef<Phase>(startOrigin ? 'intro' : 'running');
     const escapeBlockedRef = useRef(false);
@@ -50,6 +55,7 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
     const [countdown, setCountdown] = useState(0);
     const [result, setResult] = useState<RunResult | null>(null);
     const [localBest, setLocalBest] = useState(readLocalBest);
+    const [previousBest, setPreviousBest] = useState(0);
 
     useBodyScrollLock(true);
 
@@ -60,12 +66,16 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
 
     const resume = useCallback(() => {
         if (phaseRef.current !== 'paused') return;
+        // A run paused during the intro skips the rest of it and resumes through the countdown.
+        viewRef.current.introElapsed = Math.max(viewRef.current.introElapsed, INTRO_SECONDS);
         setCountdown(COUNTDOWN_SECONDS);
         setPhase('countdown');
     }, [setPhase]);
 
+    const isPausable = (p: Phase) => p === 'intro' || p === 'running' || p === 'countdown';
+
     const togglePause = useCallback(() => {
-        if (phaseRef.current === 'running' || phaseRef.current === 'countdown') setPhase('paused');
+        if (isPausable(phaseRef.current)) setPhase('paused');
         else resume();
     }, [resume, setPhase]);
 
@@ -123,6 +133,7 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
                 if (game.status === 'over') {
                     const r = runResult(game);
                     setResult(r);
+                    setPreviousBest(readLocalBest());
                     setLocalBest(writeLocalBest(r.score));
                     setPhase('over');
                 }
@@ -151,6 +162,11 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
         };
     }, [setPhase]);
 
+    // Focus moves into the overlay so keyboard input never lands on the page underneath.
+    useEffect(() => {
+        rootRef.current?.focus();
+    }, []);
+
     // Resume countdown.
     useEffect(() => {
         if (phase !== 'countdown') return;
@@ -165,8 +181,7 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
     // Auto-pause when the tab is hidden or the window loses focus.
     useEffect(() => {
         const pause = () => {
-            if (phaseRef.current === 'running' || phaseRef.current === 'countdown')
-                setPhase('paused');
+            if (isPausable(phaseRef.current)) setPhase('paused');
         };
         const onVisibility = () => {
             if (document.hidden) pause();
@@ -187,14 +202,16 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
                 return;
             }
             const p = phaseRef.current;
-            if (p !== 'running' && p !== 'paused') return;
+            if (p === 'over') return;
             if (e.key === 'p' || e.key === 'P') {
-                togglePause();
+                if (!e.repeat) togglePause();
                 return;
             }
+            if (p !== 'running' && p !== 'paused') return;
             const action = keyToAction(e.key);
             if (!action) return;
             e.preventDefault();
+            if (e.repeat) return;
             if (p === 'running') inputsRef.current.push(action);
             else resume();
         };
@@ -203,7 +220,11 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
     }, [onClose, resume, togglePause]);
 
     const onPointerDown = (e: React.PointerEvent) => {
+        e.currentTarget.setPointerCapture(e.pointerId);
         swipeStartRef.current = { x: e.clientX, y: e.clientY };
+    };
+    const onPointerCancel = () => {
+        swipeStartRef.current = null;
     };
     const onPointerUp = (e: React.PointerEvent) => {
         const start = swipeStartRef.current;
@@ -219,7 +240,9 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
 
     return (
         <div
-            className="fixed inset-0 z-50 bg-black select-none"
+            ref={rootRef}
+            tabIndex={-1}
+            className="fixed inset-0 z-50 bg-black select-none outline-none"
             role="dialog"
             aria-modal="true"
             aria-label="Synthwave arcade"
@@ -229,6 +252,7 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
                 className="absolute inset-0 w-full h-full touch-none"
                 onPointerDown={onPointerDown}
                 onPointerUp={onPointerUp}
+                onPointerCancel={onPointerCancel}
             />
             <div className="absolute top-0 inset-x-0 flex justify-between items-start p-4 pointer-events-none text-white font-mono">
                 <div>
@@ -269,6 +293,7 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
                 <GameOverPanel
                     result={result}
                     localBest={localBest}
+                    previousBest={previousBest}
                     onRetry={restart}
                     onQuit={onClose}
                 />

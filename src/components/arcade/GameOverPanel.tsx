@@ -5,6 +5,8 @@ import type { RunResult } from '../../utils/arcade/types';
 interface GameOverPanelProps {
     result: RunResult;
     localBest: number;
+    /** The best before this run; only a run that beats it is a new best. */
+    previousBest: number;
     onRetry: () => void;
     onQuit: () => void;
     children?: React.ReactNode;
@@ -13,11 +15,12 @@ interface GameOverPanelProps {
 export const GameOverPanel: React.FC<GameOverPanelProps> = ({
     result,
     localBest,
+    previousBest,
     onRetry,
     onQuit,
     children,
 }) => {
-    const isBest = result.score > 0 && result.score >= localBest;
+    const isBest = result.score > 0 && result.score > previousBest;
     return (
         <div className="absolute inset-0 flex items-center justify-center p-4 bg-black/50">
             <div className="card w-full max-w-md space-y-4 text-center max-h-full overflow-y-auto">

@@ -216,10 +216,12 @@ export function renderFlight(
         ...game.pickups.filter((p) => !p.collected).map((p) => ({ z: p.z, pickup: p })),
     ];
     items.sort((a, b) => b.z - a.z);
-    for (const item of items) {
+    const drawItem = (item: (typeof items)[number]) => {
         if ('obstacle' in item) drawObstacle(ctx, g, item.obstacle);
         else drawPickup(ctx, g, item.pickup, timeMs);
-    }
-
+    };
+    // Items already past the player are nearer the camera, so they draw over it.
+    for (const item of items) if (item.z >= 0) drawItem(item);
     drawPlayer(ctx, g, game, view);
+    for (const item of items) if (item.z < 0) drawItem(item);
 }
