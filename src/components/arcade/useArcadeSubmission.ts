@@ -10,8 +10,8 @@ export type SubmissionStatus =
 /**
  * Submits every finished run for a signed-in player; the RPC keeps the higher score, so the
  * client never compares against a stored best. A main account without a username is asked
- * for one first. A submission that settles after its run was replaced or the hook unmounted
- * is dropped.
+ * for one first. A run whose overlay closed or was replaced mid-check is still saved; only its
+ * UI updates are dropped.
  */
 export function useArcadeSubmission(result: RunResult | null) {
     const { user } = useAuth();
@@ -37,7 +37,7 @@ export function useArcadeSubmission(result: RunResult | null) {
 
     const submit = useCallback(async () => {
         if (!result) return;
-        setStatus('submitting');
+        if (liveResultRef.current === result) setStatus('submitting');
         try {
             const saved = await submitArcadeScore(result);
             if (liveResultRef.current !== result) return;
@@ -67,9 +67,11 @@ export function useArcadeSubmission(result: RunResult | null) {
         setStatus('checking');
         getUserProfile(userId)
             .then((profile) => {
-                if (cancelled) return;
-                if (profile?.username) void submit();
-                else setStatus('needs-username');
+                if (profile?.username) {
+                    void submit();
+                    return;
+                }
+                if (!cancelled) setStatus('needs-username');
             })
             .catch((error) => {
                 if (cancelled) return;
