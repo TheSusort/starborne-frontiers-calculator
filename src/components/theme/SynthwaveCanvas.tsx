@@ -456,7 +456,7 @@ export const SynthwaveCanvas = memo(({ animate = true }: { animate?: boolean }) 
         const onPointerDown = (e: PointerEvent) => {
             const canvas = canvasRef.current;
             if (!canvas || canvas.offsetWidth === 0) return;
-            if ((e.target as Element | null)?.closest(INTERACTIVE_SELECTOR)) return;
+            if (e.target instanceof Element && e.target.closest(INTERACTIVE_SELECTOR)) return;
             const rect = canvas.getBoundingClientRect();
             const ship = overheadHitRef.current;
             if (!ship || !hitTestOverheadShip(ship, e.clientX - rect.left, e.clientY - rect.top))

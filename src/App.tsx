@@ -156,12 +156,14 @@ const App: React.FC = () => {
                                                             <SynthwaveCanvas animate={!flight} />
                                                         </div>
                                                         {flight && (
-                                                            <Suspense fallback={null}>
-                                                                <FlightGame
-                                                                    origin={flight.origin}
-                                                                    onClose={closeFlight}
-                                                                />
-                                                            </Suspense>
+                                                            <ChunkErrorBoundary>
+                                                                <Suspense fallback={null}>
+                                                                    <FlightGame
+                                                                        origin={flight.origin}
+                                                                        onClose={closeFlight}
+                                                                    />
+                                                                </Suspense>
+                                                            </ChunkErrorBoundary>
                                                         )}
                                                         <main className="flex">
                                                             <Sidebar />
