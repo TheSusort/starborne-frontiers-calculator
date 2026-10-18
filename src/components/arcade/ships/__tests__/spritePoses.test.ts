@@ -5,16 +5,24 @@ import {
     BANK_ANGLES_DEG,
     CHASE_CAMERA,
     chasePose,
+    advancePose,
+    clampHeadingDeg,
+    DUCK_PITCH_DEG,
+    easeToward,
     FRAME_GRID_POSES,
-    frameIndex,
+    frameBlend,
+    FrameWeight,
     HEADING_ANGLES_DEG,
     LEVEL_BANK,
     LEVEL_HEADING,
     LEVEL_PITCH_ROW,
+    MAX_HEADING_DEG,
     officialViewerCamera,
     PITCH_ANGLES_DEG,
     pickSweep,
     poseRotation,
+    POSE_EASE_SECONDS,
+    restingPose,
     slideBank,
     SpriteCamera,
     yawForScreenHeading,
@@ -65,9 +73,9 @@ describe('frame grid', () => {
             HEADING_ANGLES_DEG.length * BANK_ANGLES_DEG.length * PITCH_ANGLES_DEG.length
         );
     });
-    it('covers the outer lanes on a wide screen', () => {
-        expect(Math.max(...HEADING_ANGLES_DEG)).toBeGreaterThanOrEqual(45);
-        expect(Math.min(...HEADING_ANGLES_DEG)).toBeLessThanOrEqual(-45);
+    it('spans exactly the clamped heading range', () => {
+        expect(Math.max(...HEADING_ANGLES_DEG)).toBe(MAX_HEADING_DEG);
+        expect(Math.min(...HEADING_ANGLES_DEG)).toBe(-MAX_HEADING_DEG);
     });
 });
 
@@ -129,26 +137,125 @@ describe('slideBank', () => {
     });
 });
 
-describe('frameIndex', () => {
-    it('picks the nearest heading column', () => {
-        expect(frameIndex(0, 0, 0).heading).toBe(LEVEL_HEADING);
-        expect(HEADING_ANGLES_DEG[frameIndex(44, 0, 0).heading]).toBe(45);
-        expect(HEADING_ANGLES_DEG[frameIndex(-16, 0, 0).heading]).toBe(-22.5);
-        expect(HEADING_ANGLES_DEG[frameIndex(10, 0, 0).heading]).toBe(0);
-        expect(HEADING_ANGLES_DEG[frameIndex(90, 0, 0).heading]).toBe(45);
+/** The blend's weighted mean along one axis, in that axis's angles. */
+const blendedAngle = (
+    blend: FrameWeight[],
+    axis: 'heading' | 'bank' | 'pitch',
+    values: readonly number[]
+) => blend.reduce((sum, f) => sum + f.weight * values[f[axis]], 0);
+
+describe('frameBlend', () => {
+    const total = (blend: FrameWeight[]) => blend.reduce((sum, f) => sum + f.weight, 0);
+
+    it('draws one frame at full weight when the pose sits on the grid', () => {
+        expect(frameBlend(0, 0, 0)).toEqual([
+            { heading: LEVEL_HEADING, bank: LEVEL_BANK, pitch: LEVEL_PITCH_ROW, weight: 1 },
+        ]);
+        const outer = frameBlend(MAX_HEADING_DEG, 1, PITCH_ANGLES_DEG[0]);
+        expect(outer).toHaveLength(1);
+        expect(HEADING_ANGLES_DEG[outer[0].heading]).toBe(MAX_HEADING_DEG);
+        expect(BANK_ANGLES_DEG[outer[0].bank]).toBe(Math.max(...BANK_ANGLES_DEG));
+        expect(PITCH_ANGLES_DEG[outer[0].pitch]).toBe(PITCH_ANGLES_DEG[0]);
     });
-    it('maps bank -1..1 onto the nearest bank', () => {
-        expect(frameIndex(0, 0, 0).bank).toBe(LEVEL_BANK);
-        expect(frameIndex(0, 0.3, 0).bank).toBe(LEVEL_BANK);
-        expect(BANK_ANGLES_DEG[frameIndex(0, 0.7, 0).bank]).toBeGreaterThan(0);
-        expect(BANK_ANGLES_DEG[frameIndex(0, -1, 0).bank]).toBeLessThan(0);
-        expect(BANK_ANGLES_DEG[frameIndex(0, 4, 0).bank]).toBe(Math.max(...BANK_ANGLES_DEG));
+    it('splits evenly halfway between two headings', () => {
+        const mid = (HEADING_ANGLES_DEG[LEVEL_HEADING] + HEADING_ANGLES_DEG[LEVEL_HEADING + 1]) / 2;
+        const blend = frameBlend(mid, 0, 0);
+        expect(blend.map((f) => [f.heading, f.weight])).toEqual([
+            [LEVEL_HEADING, 0.5],
+            [LEVEL_HEADING + 1, 0.5],
+        ]);
     });
-    it('picks the nearest pitch row', () => {
-        expect(frameIndex(0, 0, 0).pitch).toBe(LEVEL_PITCH_ROW);
-        expect(PITCH_ANGLES_DEG[frameIndex(0, 0, 9).pitch]).toBe(10);
-        expect(PITCH_ANGLES_DEG[frameIndex(0, 0, -6).pitch]).toBe(-8);
-        expect(PITCH_ANGLES_DEG[frameIndex(0, 0, 3).pitch]).toBe(0);
+    it('reproduces any in-range pose as the weighted mean of its frames', () => {
+        for (const heading of [-24, -16, -3.3, 7, 16, 21.9]) {
+            for (const bank of [-1, -0.37, 0, 0.6]) {
+                for (const pitch of [-8, -2.5, 0, 4, 10]) {
+                    const blend = frameBlend(heading, bank, pitch);
+                    expect(total(blend)).toBeCloseTo(1, 12);
+                    expect(blend.length).toBeLessThanOrEqual(8);
+                    for (const f of blend) expect(f.weight).toBeGreaterThan(0);
+                    expect(blendedAngle(blend, 'heading', HEADING_ANGLES_DEG)).toBeCloseTo(
+                        heading,
+                        9
+                    );
+                    expect(blendedAngle(blend, 'bank', BANK_ANGLES_DEG)).toBeCloseTo(
+                        bank * Math.max(...BANK_ANGLES_DEG),
+                        9
+                    );
+                    expect(blendedAngle(blend, 'pitch', PITCH_ANGLES_DEG)).toBeCloseTo(pitch, 9);
+                }
+            }
+        }
+    });
+    it('holds the outermost frame beyond the grid', () => {
+        expect(frameBlend(90, 4, 30)).toEqual(frameBlend(MAX_HEADING_DEG, 1, 10));
+        expect(frameBlend(-90, -4, -30)).toEqual(frameBlend(-MAX_HEADING_DEG, -1, -8));
+    });
+});
+
+describe('clampHeadingDeg', () => {
+    it('leaves headings inside the limit alone and clamps the rest', () => {
+        expect(clampHeadingDeg(16)).toBe(16);
+        expect(clampHeadingDeg(-16)).toBe(-16);
+        expect(clampHeadingDeg(46)).toBe(MAX_HEADING_DEG);
+        expect(clampHeadingDeg(-46)).toBe(-MAX_HEADING_DEG);
+    });
+});
+
+describe('easeToward', () => {
+    it('closes 1 - 1/e of the gap per time constant', () => {
+        expect(easeToward(0, 1, 0.1, 0.1)).toBeCloseTo(1 - Math.exp(-1), 12);
+        expect(easeToward(5, 5, 0.3, 0.1)).toBe(5);
+    });
+    it('lands in the same place whatever the frame rate', () => {
+        const run = (fps: number) => {
+            let v = 0;
+            for (let i = 0; i < Math.round(fps * 0.2); i++) v = easeToward(v, 10, 1 / fps, 0.08);
+            return v;
+        };
+        expect(run(30)).toBeCloseTo(run(150), 9);
+        expect(run(60)).toBeCloseTo(run(150), 9);
+    });
+    it('never overshoots, even on a long frame', () => {
+        expect(easeToward(0, 1, 5, 0.05)).toBeLessThanOrEqual(1);
+        expect(easeToward(0, 1, 5, 0.05)).toBeCloseTo(1, 9);
+    });
+    it('holds still for a zero frame and snaps for a zero time constant', () => {
+        expect(easeToward(2, 7, 0, 0.1)).toBe(2);
+        expect(easeToward(2, 7, 0.016, 0)).toBe(7);
+    });
+});
+
+describe('advancePose', () => {
+    const target = { headingDeg: 20, bank: 1, pitchDeg: 10, duck: 1 };
+
+    it('moves every axis toward its target by its own time constant', () => {
+        const pose = advancePose(restingPose(), target, 0.03);
+        expect(pose.headingDeg).toBeCloseTo(easeToward(0, 20, 0.03, POSE_EASE_SECONDS.heading), 12);
+        expect(pose.bank).toBeCloseTo(easeToward(0, 1, 0.03, POSE_EASE_SECONDS.bank), 12);
+        expect(pose.pitchDeg).toBeCloseTo(easeToward(0, 10, 0.03, POSE_EASE_SECONDS.pitch), 12);
+        expect(pose.duck).toBeCloseTo(easeToward(0, 1, 0.03, POSE_EASE_SECONDS.duck), 12);
+    });
+    it('glides in and out instead of snapping', () => {
+        let pose = restingPose();
+        pose = advancePose(pose, { ...restingPose(), pitchDeg: DUCK_PITCH_DEG, duck: 1 }, 1 / 60);
+        expect(pose.duck).toBeGreaterThan(0);
+        expect(pose.duck).toBeLessThan(0.5);
+        expect(pose.pitchDeg).toBeLessThan(0);
+        expect(pose.pitchDeg).toBeGreaterThan(DUCK_PITCH_DEG / 2);
+    });
+    it('settles within a quarter second, quick enough for a reflex game', () => {
+        let pose = restingPose();
+        for (let i = 0; i < 15; i++) pose = advancePose(pose, target, 1 / 60);
+        expect(pose.headingDeg).toBeGreaterThan(0.95 * 20);
+        expect(pose.bank).toBeGreaterThan(0.95);
+        expect(pose.pitchDeg).toBeGreaterThan(0.95 * 10);
+        expect(pose.duck).toBeGreaterThan(0.95);
+    });
+    it('keeps every time constant between 30 and 150 ms', () => {
+        for (const tau of Object.values(POSE_EASE_SECONDS)) {
+            expect(tau).toBeGreaterThanOrEqual(0.03);
+            expect(tau).toBeLessThanOrEqual(0.15);
+        }
     });
 });
 
@@ -196,9 +303,15 @@ describe('actionPitchDeg', () => {
         expect(jumpAt(0)).toBeCloseTo(10);
         expect(jumpAt(0.5)).toBeCloseTo(0);
         expect(jumpAt(1)).toBeCloseTo(-8);
-        expect(PITCH_ANGLES_DEG[frameIndex(0, 0, jumpAt(0.1)).pitch]).toBe(10);
-        expect(PITCH_ANGLES_DEG[frameIndex(0, 0, jumpAt(0.5)).pitch]).toBe(0);
-        expect(PITCH_ANGLES_DEG[frameIndex(0, 0, jumpAt(0.9)).pitch]).toBe(-8);
+        expect(
+            blendedAngle(frameBlend(0, 0, jumpAt(0.1)), 'pitch', PITCH_ANGLES_DEG)
+        ).toBeGreaterThan(8);
+        expect(blendedAngle(frameBlend(0, 0, jumpAt(0.5)), 'pitch', PITCH_ANGLES_DEG)).toBeCloseTo(
+            0
+        );
+        expect(blendedAngle(frameBlend(0, 0, jumpAt(0.9)), 'pitch', PITCH_ANGLES_DEG)).toBeLessThan(
+            -6
+        );
     });
     it('only falls while descending', () => {
         for (let t = 0; t <= 1; t += 0.05) {

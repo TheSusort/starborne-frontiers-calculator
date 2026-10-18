@@ -29,10 +29,14 @@ import { cachedPortrait } from './ships/portraitSprite';
 import { stakesBanner } from './duel/stakesText';
 import {
     actionPitchDeg,
+    advancePose,
+    clampHeadingDeg,
     FrameSweeps,
-    frameIndex,
-    HEADING_ANGLES_DEG,
+    frameBlend,
+    MAX_HEADING_DEG,
     pickSweep,
+    PlayerPose,
+    restingPose,
     slideBank,
 } from './ships/spritePoses';
 
@@ -43,6 +47,8 @@ const GATE_COLOUR = '#b06cff';
 const MIN_TEXT_PX = 8;
 /** Width of the player sprite in fighter units: the neon fighter spans x ±2.2s. */
 const SPRITE_FOOTPRINT = 4.4;
+/** Vertical scale of the ship at the bottom of a duck. */
+const DUCK_SQUASH = 0.55;
 
 export type PlayerFrames = FrameSweeps<HTMLCanvasElement>;
 
@@ -71,6 +77,8 @@ export interface FlightView {
      *  still rendering is `null` and `pickSweep` stands another in for it. `null` draws the
      *  neon fighter. */
     playerFrames: PlayerFrames | null;
+    /** The player ship's drawn pose, eased toward the lane, slide and action every frame. */
+    pose: PlayerPose;
 }
 
 export function createFlightView(
@@ -87,6 +95,7 @@ export function createFlightView(
         playerAccent: accent,
         gateArt: new Map(),
         playerFrames: null,
+        pose: restingPose(),
     };
 }
 
@@ -95,6 +104,53 @@ export function advanceView(view: FlightView, travelUnits: number): void {
 }
 
 const laneOffset = (lane: number) => lane - 1;
+
+/** The pose the player ship eases toward: the nose aims at the vanishing point from wherever the
+ *  ship is in its slide (within `MAX_HEADING_DEG`), the bank follows the slide and levels out
+ *  once the ship settles, and the action sets pitch and duck. */
+function targetPose(g: SceneGeometry, game: GameState, view: FlightView): PlayerPose {
+    const { action, actionTime, lane } = game.player;
+    return {
+        headingDeg: clampHeadingDeg(screenHeadingDeg(g, view.playerX)),
+        bank: slideBank(laneOffset(lane), view.playerX),
+        pitchDeg: actionPitchDeg(action, actionTime),
+        duck: action === 'duck' ? 1 : 0,
+    };
+}
+
+let blendCanvas: HTMLCanvasElement | null = null;
+
+/**
+ * Draws the weighted frames centred on the origin at `size`. Several frames are summed with
+ * additive compositing into an offscreen canvas first: on premultiplied pixels that gives exactly
+ * Σ weight × frame, so the hull stays fully opaque mid-blend, where stacking translucent frames
+ * on the scene would let the grid show through it.
+ */
+function drawBlendedFrames(
+    ctx: CanvasRenderingContext2D,
+    frames: { frame: HTMLCanvasElement; weight: number }[],
+    size: number
+): void {
+    if (frames.length === 1) {
+        ctx.drawImage(frames[0].frame, -size / 2, -size / 2, size, size);
+        return;
+    }
+    const { width, height } = frames[0].frame;
+    blendCanvas ??= document.createElement('canvas');
+    if (blendCanvas.width !== width || blendCanvas.height !== height) {
+        blendCanvas.width = width;
+        blendCanvas.height = height;
+    }
+    const blend = blendCanvas.getContext('2d');
+    if (!blend) return;
+    blend.clearRect(0, 0, width, height);
+    blend.globalCompositeOperation = 'lighter';
+    for (const { frame, weight } of frames) {
+        blend.globalAlpha = weight;
+        blend.drawImage(frame, 0, 0);
+    }
+    ctx.drawImage(blendCanvas, -size / 2, -size / 2, size, size);
+}
 
 function drawObstacle(ctx: CanvasRenderingContext2D, g: SceneGeometry, o: Obstacle): void {
     const p = project(g, laneOffset(o.lane), o.z);
@@ -262,7 +318,6 @@ function drawPlayer(
     let s = u * 0.16;
     let x = base.x;
     let y = base.y - u * 0.25;
-    let squash = 1;
 
     const { action, actionTime } = game.player;
     if (action === 'jump') {
@@ -270,10 +325,10 @@ function drawPlayer(
         const arc = Math.sin(Math.PI * t);
         y -= arc * u * 0.6;
         s *= 1 + arc * 0.25;
-    } else if (action === 'duck') {
-        squash = 0.55;
-        y += u * 0.08;
     }
+    const { pose } = view;
+    const squash = 1 - (1 - DUCK_SQUASH) * pose.duck;
+    y += u * 0.08 * pose.duck;
 
     let e = 1;
     if (view.intro && view.introElapsed < INTRO_SECONDS) {
@@ -298,25 +353,24 @@ function drawPlayer(
         ctx.stroke();
         ctx.restore();
     }
-    // The nose aims at the vanishing point from wherever the ship is in its slide; the bank
-    // follows the slide itself and levels out once the ship settles in its lane.
-    const headingDeg = screenHeadingDeg(g, view.playerX);
-    const bank = slideBank(laneOffset(game.player.lane), view.playerX);
+    const { headingDeg, bank } = pose;
     ctx.globalAlpha = e;
-    const index = frameIndex(headingDeg, bank, actionPitchDeg(action, actionTime));
-    const sweep = view.playerFrames ? pickSweep(view.playerFrames, index) : null;
-    if (sweep) {
+    const blend = view.playerFrames ? frameBlend(headingDeg, bank, pose.pitchDeg) : [];
+    const frames = blend.flatMap(({ weight, ...index }) => {
+        const sweep = view.playerFrames ? pickSweep(view.playerFrames, index) : null;
+        return sweep ? [{ frame: sweep[index.heading], weight }] : [];
+    });
+    if (frames.length > 0) {
         // The sprite spans the fighter's footprint.
-        const frame = sweep[index.heading];
         const size = s * SPRITE_FOOTPRINT;
         drawEngineGlow(ctx, s, { timeMs, bank, squash, thrust: 1 });
         ctx.scale(1, squash);
-        ctx.drawImage(frame, -size / 2, -size / 2, size, size);
+        drawBlendedFrames(ctx, frames, size);
     } else {
         drawNeonFighter(ctx, s, {
             timeMs,
             bank,
-            yaw: headingDeg / Math.max(...HEADING_ANGLES_DEG),
+            yaw: headingDeg / MAX_HEADING_DEG,
             squash,
             thrust: 1,
             accent: view.playerAccent ?? undefined,
@@ -355,6 +409,7 @@ export function renderFlight(
 
     const target = laneOffset(game.player.lane);
     view.playerX += (target - view.playerX) * Math.min(1, dt * LANE_SLIDE_RATE);
+    view.pose = advancePose(view.pose, targetPose(g, game, view), dt);
 
     ctx.clearRect(0, 0, w, h);
     drawSky(ctx, g);

@@ -17,6 +17,7 @@ import {
     GRID_NEAR_PLANE,
 } from '../../theme/synthwaveScene';
 import { SPAWN_Z } from '../../../utils/arcade/constants';
+import { clampHeadingDeg, HEADING_ANGLES_DEG } from '../ships/spritePoses';
 
 const g = sceneGeometry(1200, 800);
 
@@ -154,9 +155,14 @@ describe('screenHeadingDeg', () => {
         });
     }
 
-    it('stays within the frame grid on any screen', () => {
+    it('clamps onto the frame grid on any screen, and leaves narrow screens exact', () => {
         for (const [w, h] of screens) {
-            expect(Math.abs(screenHeadingDeg(sceneGeometry(w, h), 1))).toBeLessThanOrEqual(47);
+            const outer = clampHeadingDeg(screenHeadingDeg(sceneGeometry(w, h), -1));
+            expect(outer).toBeLessThanOrEqual(Math.max(...HEADING_ANGLES_DEG));
         }
+        const portrait = sceneGeometry(390, 844);
+        expect(clampHeadingDeg(screenHeadingDeg(portrait, -1))).toBe(
+            screenHeadingDeg(portrait, -1)
+        );
     });
 });

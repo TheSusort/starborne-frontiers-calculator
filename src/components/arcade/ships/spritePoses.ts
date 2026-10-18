@@ -9,10 +9,18 @@ import type { PlayerAction } from '../../../utils/arcade/types';
  * centred on the origin.
  */
 
+/** Largest screen heading the player ship turns to, in degrees. Narrow screens aim the outer
+ *  lanes at the vanishing point within it; wider ones (up to about 46°) are held at it. */
+export const MAX_HEADING_DEG = 25;
 /** Screen headings of the frame grid's sweeps, in degrees: 0 points the nose straight up the
- *  screen, positive leans it toward screen right. ±45 covers the outer lanes on any screen
- *  (`screenHeadingDeg` peaks just under 46 at the widest lane-to-height ratio). */
-export const HEADING_ANGLES_DEG = [-45, -22.5, 0, 22.5, 45] as const;
+ *  screen, positive leans it toward screen right. They span ±`MAX_HEADING_DEG`. */
+export const HEADING_ANGLES_DEG = [
+    -MAX_HEADING_DEG,
+    -MAX_HEADING_DEG / 2,
+    0,
+    MAX_HEADING_DEG / 2,
+    MAX_HEADING_DEG,
+] as const;
 /** Roll angles, left bank to right bank; a positive angle dips the ship's right wing. */
 export const BANK_ANGLES_DEG = [-25, 0, 25] as const;
 /** Pitch angles: nose down, level, nose up. */
@@ -113,21 +121,47 @@ export interface FrameIndex {
     pitch: number;
 }
 
-const nearestIndex = (values: readonly number[], v: number) =>
-    values.reduce((best, x, i) => (Math.abs(x - v) < Math.abs(values[best] - v) ? i : best), 0);
+/** One frame of a blend and its share of the drawn sprite. */
+export interface FrameWeight extends FrameIndex {
+    weight: number;
+}
+
+/** The one or two grid angles around `v` and their linear weights; beyond either end, the end
+ *  angle alone. */
+function axisBlend(values: readonly number[], v: number): { i: number; w: number }[] {
+    const last = values.length - 1;
+    if (v <= values[0]) return [{ i: 0, w: 1 }];
+    if (v >= values[last]) return [{ i: last, w: 1 }];
+    const hi = values.findIndex((x) => x >= v);
+    if (values[hi] === v) return [{ i: hi, w: 1 }];
+    const w = (v - values[hi - 1]) / (values[hi] - values[hi - 1]);
+    return [
+        { i: hi - 1, w: 1 - w },
+        { i: hi, w },
+    ];
+}
 
 const maxBank = Math.max(...BANK_ANGLES_DEG);
 
-/** Frame for a screen heading in degrees, a bank in -1..1 (full left to full right) and a nose
- *  pitch in degrees; each axis picks its nearest rendered angle. */
-export function frameIndex(headingDeg: number, bank: number, pitchDeg: number): FrameIndex {
-    const b = Math.max(-1, Math.min(1, bank));
-    return {
-        heading: nearestIndex(HEADING_ANGLES_DEG, headingDeg),
-        bank: nearestIndex(BANK_ANGLES_DEG, b * maxBank),
-        pitch: nearestIndex(PITCH_ANGLES_DEG, pitchDeg),
-    };
+/**
+ * The frames to cross-fade for a screen heading in degrees, a bank in -1..1 (full left to full
+ * right) and a nose pitch in degrees: linear weights on each axis, multiplied, so the weighted
+ * mean of the frames' angles is the pose itself. A pose on the grid is one frame at weight 1.
+ */
+export function frameBlend(headingDeg: number, bank: number, pitchDeg: number): FrameWeight[] {
+    const blend: FrameWeight[] = [];
+    for (const p of axisBlend(PITCH_ANGLES_DEG, pitchDeg)) {
+        for (const b of axisBlend(BANK_ANGLES_DEG, bank * maxBank)) {
+            for (const h of axisBlend(HEADING_ANGLES_DEG, headingDeg)) {
+                blend.push({ heading: h.i, bank: b.i, pitch: p.i, weight: p.w * b.w * h.w });
+            }
+        }
+    }
+    return blend;
 }
+
+export const clampHeadingDeg = (headingDeg: number): number =>
+    Math.max(-MAX_HEADING_DEG, Math.min(MAX_HEADING_DEG, headingDeg));
 
 /** The heading sweep to draw: the exact one if rendered, else the same pitch wings level, else
  *  the level sweep; `null` until the level sweep exists. */
@@ -147,6 +181,53 @@ export function pickSweep<T>(frames: FrameSweeps<T>, i: FrameIndex): T[] | null 
  */
 export function slideBank(targetLaneX: number, playerX: number): number {
     return Math.max(-1, Math.min(1, (targetLaneX - playerX) * 2));
+}
+
+/**
+ * Moves `current` toward `target` by exponential approach with time constant `tauSeconds`: each
+ * `tauSeconds` closes 1 - 1/e (63%) of the gap, and 2.3 time constants close 90%. The result
+ * depends only on elapsed time, never on how it is split into frames, and never overshoots.
+ */
+export function easeToward(
+    current: number,
+    target: number,
+    dtSeconds: number,
+    tauSeconds: number
+): number {
+    if (tauSeconds <= 0) return target;
+    return target + (current - target) * Math.exp(-dtSeconds / tauSeconds);
+}
+
+/** The player ship's drawn pose: screen heading in degrees, bank -1..1, nose pitch in degrees and
+ *  duck 0..1 (how far into the duck's squash the ship is). */
+export interface PlayerPose {
+    headingDeg: number;
+    bank: number;
+    pitchDeg: number;
+    duck: number;
+}
+
+export const restingPose = (): PlayerPose => ({ headingDeg: 0, bank: 0, pitchDeg: 0, duck: 0 });
+
+/** Time constant of each pose axis's easing, in seconds (90% settled in 2.3×). The heading's
+ *  target already turns continuously with the eased lane slide, so it only smooths frame steps;
+ *  bank, pitch and duck have targets that jump when a slide, jump or duck starts or ends. */
+export const POSE_EASE_SECONDS = {
+    heading: 0.035,
+    bank: 0.06,
+    pitch: 0.05,
+    duck: 0.045,
+} as const;
+
+/** The pose `dtSeconds` later, each axis eased toward `target`. */
+export function advancePose(pose: PlayerPose, target: PlayerPose, dtSeconds: number): PlayerPose {
+    const ease = (from: number, to: number, tau: number) => easeToward(from, to, dtSeconds, tau);
+    return {
+        headingDeg: ease(pose.headingDeg, target.headingDeg, POSE_EASE_SECONDS.heading),
+        bank: ease(pose.bank, target.bank, POSE_EASE_SECONDS.bank),
+        pitchDeg: ease(pose.pitchDeg, target.pitchDeg, POSE_EASE_SECONDS.pitch),
+        duck: ease(pose.duck, target.duck, POSE_EASE_SECONDS.duck),
+    };
 }
 
 /**
