@@ -17,7 +17,7 @@ import { JUMP_SECONDS, SHIELD_BREAK_FLASH, SPAWN_Z } from '../../utils/arcade/co
 import type { Checkpoint, GameState, Obstacle, Pickup } from '../../utils/arcade/types';
 import { gridOffsetDelta, laneWidthAtPlayer, project } from './projection';
 import type { FlightOrigin } from './flightEvents';
-import { drawNeonFighter } from './neonFighter';
+import { drawEngineGlow, drawNeonFighter } from './neonFighter';
 import type { NeonAccent } from './ships/factionTint';
 import { cachedPortrait } from './ships/portraitSprite';
 import { stakesBanner } from './duel/stakesText';
@@ -27,12 +27,16 @@ const LANE_SLIDE_RATE = 14;
 const FADE_IN_UNITS = 10;
 const GATE_COLOUR = '#b06cff';
 const MIN_TEXT_PX = 8;
+/** Width of the player sprite in fighter units: the neon fighter spans x ±2.2s. */
+const SPRITE_FOOTPRINT = 4.4;
 
 /** What a duel gate shows: the opponent waiting behind it. */
 export interface GateArt {
     name: string;
     level: number | undefined;
     portraitUrl: string | null;
+    /** Rendered 3D sprite (a data URL); preferred over the portrait once it has loaded. */
+    spriteUrl?: string | null;
 }
 
 export interface FlightView {
@@ -47,6 +51,9 @@ export interface FlightView {
     playerAccent: NeonAccent | null;
     /** Opponents per checkpoint id, in gate-slot order; a checkpoint without art is not drawn. */
     gateArt: Map<number, [GateArt, GateArt]>;
+    /** Rendered player ship, one frame per `BANK_ANGLES_DEG` entry (left bank to right);
+     *  `null` draws the neon fighter. */
+    playerFrames: HTMLCanvasElement[] | null;
 }
 
 export function createFlightView(
@@ -62,6 +69,7 @@ export function createFlightView(
         introElapsed: 0,
         playerAccent: accent,
         gateArt: new Map(),
+        playerFrames: null,
     };
 }
 
@@ -138,12 +146,16 @@ function drawGate(
     const cx = p.x;
     const cy = shoulder + 0.05 * u;
     const r = 0.3 * u;
-    const img = art.portraitUrl ? cachedPortrait(art.portraitUrl) : null;
+    const sprite = art.spriteUrl ? cachedPortrait(art.spriteUrl) : null;
+    const img = sprite ? null : art.portraitUrl ? cachedPortrait(art.portraitUrl) : null;
     ctx.save();
     ctx.beginPath();
     ctx.arc(cx, cy, r, 0, Math.PI * 2);
     ctx.closePath();
-    if (img) {
+    if (sprite) {
+        // The sprite's frame is square with the ship centred, so it fits the circle unclipped.
+        ctx.drawImage(sprite, cx - r * 1.2, cy - r * 1.2, r * 2.4, r * 2.4);
+    } else if (img) {
         ctx.clip();
         const fit = Math.max((2 * r) / img.naturalWidth, (2 * r) / img.naturalHeight);
         const w = img.naturalWidth * fit;
@@ -284,13 +296,23 @@ function drawPlayer(
     }
     const bank = Math.max(-1, Math.min(1, (laneOffset(game.player.lane) - view.playerX) * 2));
     ctx.globalAlpha = e;
-    drawNeonFighter(ctx, s, {
-        timeMs,
-        bank,
-        squash,
-        thrust: 1,
-        accent: view.playerAccent ?? undefined,
-    });
+    const frames = view.playerFrames;
+    if (frames && frames.length > 0) {
+        // bank -1..1 picks the left-to-right bank frames; the sprite spans the fighter's footprint.
+        const frame = frames[Math.round(((bank + 1) / 2) * (frames.length - 1))];
+        const size = s * SPRITE_FOOTPRINT;
+        drawEngineGlow(ctx, s, { timeMs, bank, squash, thrust: 1 });
+        ctx.scale(1, squash);
+        ctx.drawImage(frame, -size / 2, -size / 2, size, size);
+    } else {
+        drawNeonFighter(ctx, s, {
+            timeMs,
+            bank,
+            squash,
+            thrust: 1,
+            accent: view.playerAccent ?? undefined,
+        });
+    }
     ctx.restore();
 
     if (game.player.shield) {

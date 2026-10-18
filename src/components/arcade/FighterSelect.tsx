@@ -26,7 +26,7 @@ interface FighterSelectProps {
     renderShip?: (ship: Ship, visual: ShipVisual) => React.ReactNode;
 }
 
-const PortraitView: React.FC<{ ship: Ship; visual: ShipVisual }> = ({ ship, visual }) =>
+export const PortraitView: React.FC<{ ship: Ship; visual: ShipVisual }> = ({ ship, visual }) =>
     visual.portraitUrl ? (
         <img
             src={visual.portraitUrl}

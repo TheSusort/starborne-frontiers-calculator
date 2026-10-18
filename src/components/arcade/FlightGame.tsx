@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '../ui/Button';
 import { useBodyScrollLock } from '../ui/layout/useBodyScrollLock';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
@@ -40,7 +40,9 @@ import { factionAccent } from './ships/factionTint';
 import { loadPortrait } from './ships/portraitSprite';
 import { useShipVisuals } from './ships/useShipVisuals';
 import { readLastShipId, writeLastShipId } from './ships/fleetOrder';
-import { FighterSelect } from './FighterSelect';
+import { FighterSelect, PortraitView } from './FighterSelect';
+import { shipModelsEnabled } from './ships/arcadeFlags';
+import type { ShipVisual } from './ships/shipVisuals';
 
 type Phase = 'select' | 'intro' | 'running' | 'paused' | 'countdown' | 'duel' | 'over';
 
@@ -51,6 +53,30 @@ const HUD_INTERVAL_SECONDS = 0.1;
 const NO_INPUT: readonly InputAction[] = [];
 
 const newSeed = () => Math.floor(Math.random() * 2 ** 32) >>> 0;
+
+// three.js and the official models are only reachable through these dynamic imports, and
+// every caller checks `shipModelsEnabled()` first, so a build without the flag never loads them.
+const ShipModelView = React.lazy(() => import('./ships/ShipModelView'));
+const loadShipSprites = (key: string, size?: number) =>
+    import('./ships/shipSprites').then((m) => m.renderShipSprites(key, size));
+
+const GATE_SPRITE_PX = 128;
+/** Index of the level (0°) frame in `BANK_ANGLES_DEG`. */
+const LEVEL_FRAME = 2;
+
+const renderShipModel = (ship: Ship, visual: ShipVisual): React.ReactNode => {
+    const portrait = <PortraitView ship={ship} visual={visual} />;
+    if (!visual.visualKey) return portrait;
+    return (
+        <Suspense fallback={portrait}>
+            <ShipModelView
+                key={visual.visualKey}
+                visualKey={visual.visualKey}
+                fallback={portrait}
+            />
+        </Suspense>
+    );
+};
 
 interface DuelState {
     player: DuelSide;
@@ -148,6 +174,13 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
     /** Bumped whenever a run is replaced or the game unmounts; a duel simulation that finishes
      *  under an older generation is discarded. */
     const runGenerationRef = useRef(0);
+    /** The flown ship's rendered bank frames; `frames` is null while they render. */
+    const playerFramesRef = useRef<{ shipId: string; frames: HTMLCanvasElement[] | null } | null>(
+        null
+    );
+    /** Level-frame sprites by visual key, as data URLs: in flight, and finished. */
+    const spriteRequestsRef = useRef(new Map<string, Promise<string>>());
+    const spriteUrlsRef = useRef(new Map<string, string>());
 
     const [phase, setPhaseState] = useState<Phase>(phaseRef.current);
     const [hud, setHud] = useState({ score: 0, credits: 0, shield: false, magnet: 0 });
@@ -186,6 +219,44 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
         else resume();
     }, [resume, setPhase]);
 
+    /** Renders the flown ship's sprites once per ship; the run keeps the neon fighter until
+     *  they are ready, and for good if they fail. */
+    const requestPlayerFrames = useCallback((ship: Ship) => {
+        const key = shipModelsEnabled() ? visualOfRef.current(ship).visualKey : null;
+        if (!key || playerFramesRef.current?.shipId === ship.id) return;
+        playerFramesRef.current = { shipId: ship.id, frames: null };
+        loadShipSprites(key)
+            .then((frames) => {
+                if (playerFramesRef.current?.shipId !== ship.id) return;
+                playerFramesRef.current = { shipId: ship.id, frames };
+                spriteUrlsRef.current.set(key, frames[LEVEL_FRAME].toDataURL());
+                if (flownRef.current?.id === ship.id) viewRef.current.playerFrames = frames;
+            })
+            .catch(() => {
+                if (playerFramesRef.current?.shipId === ship.id) playerFramesRef.current = null;
+            });
+    }, []);
+
+    /** A ship's level-frame sprite as a data URL, rendered once per visual key. */
+    const requestSprite = useCallback((key: string): Promise<string> => {
+        let p = spriteRequestsRef.current.get(key);
+        if (!p) {
+            p = loadShipSprites(key, GATE_SPRITE_PX).then((frames) => {
+                const url = frames[LEVEL_FRAME].toDataURL();
+                if (!spriteUrlsRef.current.has(key)) spriteUrlsRef.current.set(key, url);
+                return url;
+            });
+            p.catch(() => spriteRequestsRef.current.delete(key));
+            spriteRequestsRef.current.set(key, p);
+        }
+        return p;
+    }, []);
+
+    // The flown ship's visual key needs the ship templates, which may arrive after mount.
+    useEffect(() => {
+        if (flownRef.current) requestPlayerFrames(flownRef.current);
+    }, [visualOf, requestPlayerFrames]);
+
     /** Starts a fresh run with the flown ship and duel setting already in the refs. */
     const restart = useCallback(() => {
         const flown = flownRef.current;
@@ -194,6 +265,9 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
         setDuel(null);
         gameRef.current = createGame(newSeed(), { duels: duelsRef.current });
         viewRef.current = createFlightView(undefined, flown ? factionAccent(flown.faction) : null);
+        const rendered = playerFramesRef.current;
+        viewRef.current.playerFrames =
+            flown && rendered?.shipId === flown.id ? rendered.frames : null;
         inputsRef.current = [];
         setResult(null);
         setHud({ score: 0, credits: 0, shield: false, magnet: 0 });
@@ -206,8 +280,9 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
             flownRef.current = ship;
             duelsRef.current = canDuel(ships, ship.id);
             restart();
+            requestPlayerFrames(ship);
         },
-        [ships, restart]
+        [ships, restart, requestPlayerFrames]
     );
 
     const finishRun = useCallback(() => {
@@ -218,14 +293,14 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
         setPhase('over');
     }, [setPhase]);
 
-    const toSide = useCallback(
-        (ship: Ship): DuelSide => ({
-            name: ship.name,
-            level: ship.level,
-            imageUrl: visualOfRef.current(ship).portraitUrl,
-        }),
-        []
-    );
+    const toSide = useCallback((ship: Ship): DuelSide => {
+        const visual = visualOfRef.current(ship);
+        const sprite =
+            shipModelsEnabled() && visual.visualKey
+                ? spriteUrlsRef.current.get(visual.visualKey)
+                : undefined;
+        return { name: ship.name, level: ship.level, imageUrl: sprite ?? visual.portraitUrl };
+    }, []);
 
     /** Opens the summary for the game's pending duel and simulates it off the frame. */
     const startDuel = useCallback(() => {
@@ -313,9 +388,18 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
         const generation = runGenerationRef;
 
         const toGateArt = (ship: Ship): GateArt => {
-            const portraitUrl = visualOfRef.current(ship).portraitUrl;
+            const { portraitUrl, visualKey } = visualOfRef.current(ship);
             if (portraitUrl) void loadPortrait(portraitUrl).catch(() => {});
-            return { name: ship.name, level: ship.level, portraitUrl };
+            const art: GateArt = { name: ship.name, level: ship.level, portraitUrl };
+            if (shipModelsEnabled() && visualKey) {
+                requestSprite(visualKey)
+                    .then((url) => loadPortrait(url))
+                    .then((img) => {
+                        art.spriteUrl = img.src;
+                    })
+                    .catch(() => {});
+            }
+            return art;
         };
 
         const frame = (now: number) => {
@@ -378,7 +462,7 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
             window.removeEventListener('resize', resize);
             generation.current++;
         };
-    }, [setPhase, finishRun, startDuel]);
+    }, [setPhase, finishRun, startDuel, requestSprite]);
 
     // Focus moves into the overlay so keyboard input never lands on the page underneath.
     useEffect(() => {
@@ -509,6 +593,7 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
                     initialShipId={initial.lastShipId}
                     onLaunch={launch}
                     onQuit={onClose}
+                    renderShip={shipModelsEnabled() ? renderShipModel : undefined}
                 />
             )}
             {phase === 'paused' && (

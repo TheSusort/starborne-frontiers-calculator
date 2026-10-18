@@ -76,6 +76,96 @@ const WING_LINES_RIGHT: readonly (readonly Pt[])[] = [
 
 const ENGINE_X = 0.32;
 const ENGINE_Y = 0.5;
+const NOZZLE_RX = 0.14;
+
+/** Engine bloom behind the hull, centred on the engines. */
+function drawBloom(ctx: CanvasRenderingContext2D, s: number, t: number, thrust: number): void {
+    const y = s * ENGINE_Y;
+    ctx.globalCompositeOperation = 'lighter';
+    const bloomPulse = 0.85 + 0.15 * Math.sin(t * 0.02);
+    const bloom = ctx.createRadialGradient(0, y, 0, 0, y, s * 1.6);
+    bloom.addColorStop(0, `rgba(255, 90, 220, ${0.45 * thrust * bloomPulse})`);
+    bloom.addColorStop(0.5, `rgba(140, 60, 255, ${0.16 * thrust * bloomPulse})`);
+    bloom.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = bloom;
+    ctx.fillRect(-s * 1.6, y - s * 1.6, s * 3.2, s * 3.2);
+    ctx.globalCompositeOperation = 'source-over';
+}
+
+/** One flickering exhaust flame streaming down from the nozzle at (`nx`, `ny`). */
+function drawFlame(
+    ctx: CanvasRenderingContext2D,
+    s: number,
+    nx: number,
+    ny: number,
+    rx: number,
+    side: number,
+    t: number,
+    thrust: number
+): void {
+    const phase = side * 1.7;
+    const flicker =
+        0.75 + 0.15 * Math.sin(t * 0.031 + phase) + 0.1 * Math.sin(t * 0.097 + phase * 2.3);
+    const len = s * (0.5 + 0.75 * flicker) * thrust;
+    if (len <= 0) return;
+
+    ctx.globalCompositeOperation = 'lighter';
+    const outer = ctx.createLinearGradient(0, ny, 0, ny + len);
+    outer.addColorStop(0, `rgba(255, 80, 210, ${0.85 * flicker})`);
+    outer.addColorStop(0.6, `rgba(150, 60, 255, ${0.45 * flicker})`);
+    outer.addColorStop(1, 'rgba(80, 40, 255, 0)');
+    ctx.fillStyle = outer;
+    ctx.beginPath();
+    ctx.moveTo(nx - rx * 1.05, ny);
+    ctx.quadraticCurveTo(nx - rx * 0.6, ny + len * 0.6, nx, ny + len);
+    ctx.quadraticCurveTo(nx + rx * 0.6, ny + len * 0.6, nx + rx * 1.05, ny);
+    ctx.closePath();
+    ctx.fill();
+
+    const coreLen = len * 0.55;
+    const core = ctx.createLinearGradient(0, ny, 0, ny + coreLen);
+    core.addColorStop(0, `rgba(255, 255, 255, ${0.95 * flicker})`);
+    core.addColorStop(0.5, `rgba(120, 250, 255, ${0.7 * flicker})`);
+    core.addColorStop(1, 'rgba(64, 240, 255, 0)');
+    ctx.fillStyle = core;
+    ctx.beginPath();
+    ctx.moveTo(nx - rx * 0.5, ny);
+    ctx.quadraticCurveTo(nx - rx * 0.25, ny + coreLen * 0.6, nx, ny + coreLen);
+    ctx.quadraticCurveTo(nx + rx * 0.25, ny + coreLen * 0.6, nx + rx * 0.5, ny);
+    ctx.closePath();
+    ctx.fill();
+    ctx.globalCompositeOperation = 'source-over';
+}
+
+/**
+ * The fighter's engine bloom and exhaust flames alone, posed like `drawNeonFighter`, for a
+ * ship drawn from another source (a rendered sprite) on top of it.
+ */
+export function drawEngineGlow(
+    ctx: CanvasRenderingContext2D,
+    s: number,
+    pose: Omit<NeonFighterPose, 'accent'>
+): void {
+    const bank = Math.max(-1, Math.min(1, pose.bank));
+    const thrust = Math.max(0, Math.min(1, pose.thrust));
+    ctx.save();
+    ctx.rotate(bank * BANK_ROTATION);
+    ctx.scale(1, pose.squash);
+    drawBloom(ctx, s, pose.timeMs, thrust);
+    for (const side of [-1, 1]) {
+        drawFlame(
+            ctx,
+            s,
+            s * side * ENGINE_X,
+            s * ENGINE_Y,
+            s * NOZZLE_RX,
+            side,
+            pose.timeMs,
+            thrust
+        );
+    }
+    ctx.restore();
+}
 
 /**
  * Draws the fighter centred at the current origin. The caller's `globalAlpha` scales the
@@ -121,16 +211,7 @@ export function drawNeonFighter(
     ctx.lineJoin = 'round';
     ctx.lineCap = 'round';
 
-    // Engine bloom behind the hull.
-    ctx.globalCompositeOperation = 'lighter';
-    const bloomPulse = 0.85 + 0.15 * Math.sin(t * 0.02);
-    const bloom = ctx.createRadialGradient(0, Y(ENGINE_Y), 0, 0, Y(ENGINE_Y), s * 1.6);
-    bloom.addColorStop(0, `rgba(255, 90, 220, ${0.45 * thrust * bloomPulse})`);
-    bloom.addColorStop(0.5, `rgba(140, 60, 255, ${0.16 * thrust * bloomPulse})`);
-    bloom.addColorStop(1, 'rgba(0, 0, 0, 0)');
-    ctx.fillStyle = bloom;
-    ctx.fillRect(-s * 1.6, Y(ENGINE_Y) - s * 1.6, s * 3.2, s * 3.2);
-    ctx.globalCompositeOperation = 'source-over';
+    drawBloom(ctx, s, t, thrust);
 
     // Tail fins sit behind the fuselage.
     const hullGrad = ctx.createLinearGradient(0, Y(-0.8), 0, Y(0.6));
@@ -202,41 +283,9 @@ export function drawNeonFighter(
     for (const side of [-1, 1]) {
         const nx = X(side * ENGINE_X);
         const ny = Y(ENGINE_Y);
-        const rx = Math.abs(X(side * 0.14));
+        const rx = Math.abs(X(side * NOZZLE_RX));
         const ry = s * 0.1;
-        const phase = side * 1.7;
-        const flicker =
-            0.75 + 0.15 * Math.sin(t * 0.031 + phase) + 0.1 * Math.sin(t * 0.097 + phase * 2.3);
-        const len = s * (0.5 + 0.75 * flicker) * thrust;
-
-        ctx.globalCompositeOperation = 'lighter';
-        if (len > 0) {
-            const outer = ctx.createLinearGradient(0, ny, 0, ny + len);
-            outer.addColorStop(0, `rgba(255, 80, 210, ${0.85 * flicker})`);
-            outer.addColorStop(0.6, `rgba(150, 60, 255, ${0.45 * flicker})`);
-            outer.addColorStop(1, 'rgba(80, 40, 255, 0)');
-            ctx.fillStyle = outer;
-            ctx.beginPath();
-            ctx.moveTo(nx - rx * 1.05, ny);
-            ctx.quadraticCurveTo(nx - rx * 0.6, ny + len * 0.6, nx, ny + len);
-            ctx.quadraticCurveTo(nx + rx * 0.6, ny + len * 0.6, nx + rx * 1.05, ny);
-            ctx.closePath();
-            ctx.fill();
-
-            const coreLen = len * 0.55;
-            const core = ctx.createLinearGradient(0, ny, 0, ny + coreLen);
-            core.addColorStop(0, `rgba(255, 255, 255, ${0.95 * flicker})`);
-            core.addColorStop(0.5, `rgba(120, 250, 255, ${0.7 * flicker})`);
-            core.addColorStop(1, 'rgba(64, 240, 255, 0)');
-            ctx.fillStyle = core;
-            ctx.beginPath();
-            ctx.moveTo(nx - rx * 0.5, ny);
-            ctx.quadraticCurveTo(nx - rx * 0.25, ny + coreLen * 0.6, nx, ny + coreLen);
-            ctx.quadraticCurveTo(nx + rx * 0.25, ny + coreLen * 0.6, nx + rx * 0.5, ny);
-            ctx.closePath();
-            ctx.fill();
-        }
-        ctx.globalCompositeOperation = 'source-over';
+        drawFlame(ctx, s, nx, ny, rx, side, t, thrust);
 
         // Nozzle ring with a hot glowing throat.
         ctx.beginPath();
