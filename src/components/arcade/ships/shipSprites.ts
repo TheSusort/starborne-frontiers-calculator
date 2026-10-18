@@ -183,12 +183,14 @@ export function renderChaseFrames(
     }).then((frames) => rows.map((_, i) => frames.slice(i * n, (i + 1) * n)));
 }
 
-/** The level chase-camera frame alone, for a duel gate; rendered in idle time. */
+/** The level chase-camera frame alone, framed like the run's grid so it sits inside a gate's
+ *  circle; rendered in idle time. */
 export function renderGateSprite(key: string, size = 128): Promise<HTMLCanvasElement> {
     const level = rowPoses(LEVEL_PITCH_ROW)[LEVEL_BANK_COLUMN];
     return renderPoses(key, {
         camera: CHASE_CAMERA,
         poses: [level],
+        framing: FRAME_GRID_POSES,
         width: size,
         height: size,
         idle: true,
