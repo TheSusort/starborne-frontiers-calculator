@@ -25,8 +25,11 @@ import {
     FlightView,
     GateArt,
     INTRO_SECONDS,
+    PlayerFrames,
     renderFlight,
 } from './flightRenderer';
+import { LEVEL_PITCH_ROW, PITCH_ANGLES_DEG } from './ships/spritePoses';
+import { whenIdle } from './idle';
 import { isSelectDropdownOpen, keyToAction, swipeToAction } from './flightInput';
 import { readLocalBest, writeLocalBest } from './localBest';
 import { GameOverPanel } from './GameOverPanel';
@@ -58,12 +61,9 @@ const newSeed = () => Math.floor(Math.random() * 2 ** 32) >>> 0;
 // three.js and the official models are only reachable through these dynamic imports, and
 // every caller checks `shipModelsEnabled()` first, so a build without the flag never loads them.
 const ShipModelView = React.lazy(() => import('./ships/ShipModelView'));
-const loadShipSprites = (key: string, size?: number) =>
-    import('./ships/shipSprites').then((m) => m.renderShipSprites(key, size));
+const shipSprites = () => import('./ships/shipSprites');
 
-const GATE_SPRITE_PX = 128;
-/** Index of the level (0°) frame in `BANK_ANGLES_DEG`. */
-const LEVEL_FRAME = 2;
+type Facing = 'left' | 'right';
 
 const renderShipModel = (ship: Ship, visual: ShipVisual): React.ReactNode => {
     const portrait = <PortraitView ship={ship} visual={visual} />;
@@ -176,13 +176,14 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
     /** Bumped whenever a run is replaced or the game unmounts; a duel simulation that finishes
      *  under an older generation is discarded. */
     const runGenerationRef = useRef(0);
-    /** The flown ship's rendered bank frames; `frames` is null while they render. */
-    const playerFramesRef = useRef<{ shipId: string; frames: HTMLCanvasElement[] | null } | null>(
-        null
-    );
-    /** Level-frame sprites by visual key, as data URLs: in flight, and finished. */
+    /** The flown ship's rendered frame grid; `frames` is null until its level row is ready,
+     *  and the other rows fill in later. */
+    const playerFramesRef = useRef<{ shipId: string; frames: PlayerFrames | null } | null>(null);
+    /** Gate sprites by visual key, as data URLs: in flight, and finished. */
     const spriteRequestsRef = useRef(new Map<string, Promise<string>>());
-    const spriteUrlsRef = useRef(new Map<string, string>());
+    /** Duel-summary renders by `${visualKey}:${facing}`, as data URLs: in flight, and finished. */
+    const viewerRequestsRef = useRef(new Map<string, Promise<string>>());
+    const viewerUrlsRef = useRef(new Map<string, string>());
 
     const [phase, setPhaseState] = useState<Phase>(phaseRef.current);
     const [hud, setHud] = useState({ score: 0, credits: 0, shield: false, magnet: 0 });
@@ -221,33 +222,68 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
         else resume();
     }, [resume, setPhase]);
 
-    /** Renders the flown ship's sprites once per ship; the run keeps the neon fighter until
-     *  they are ready, and for good if they fail. */
-    const requestPlayerFrames = useCallback((ship: Ship) => {
-        const key = shipModelsEnabled() ? visualOfRef.current(ship).visualKey : null;
-        if (!key || playerFramesRef.current?.shipId === ship.id) return;
-        playerFramesRef.current = { shipId: ship.id, frames: null };
-        loadShipSprites(key)
-            .then((frames) => {
-                if (playerFramesRef.current?.shipId !== ship.id) return;
-                playerFramesRef.current = { shipId: ship.id, frames };
-                spriteUrlsRef.current.set(key, frames[LEVEL_FRAME].toDataURL());
-                if (flownRef.current?.id === ship.id) viewRef.current.playerFrames = frames;
-            })
-            .catch(() => {
-                if (playerFramesRef.current?.shipId === ship.id) playerFramesRef.current = null;
-            });
+    /** A ship at the official viewer's angle, bow toward `facing`, as a data URL; rendered once
+     *  per visual key and facing. */
+    const requestViewerSprite = useCallback((key: string, facing: Facing): Promise<string> => {
+        const id = `${key}:${facing}`;
+        let p = viewerRequestsRef.current.get(id);
+        if (!p) {
+            p = shipSprites()
+                .then((m) => m.renderViewerSprite(key, facing))
+                .then((canvas) => {
+                    const url = canvas.toDataURL();
+                    viewerUrlsRef.current.set(id, url);
+                    return url;
+                });
+            p.catch(() => viewerRequestsRef.current.delete(id));
+            viewerRequestsRef.current.set(id, p);
+        }
+        return p;
     }, []);
 
-    /** A ship's level-frame sprite as a data URL, rendered once per visual key. */
+    /** Renders the flown ship's frame grid once per ship: the level row first, then the pitched
+     *  rows and its duel render in idle time. The run keeps the neon fighter until the level row
+     *  is ready, and for good if it fails. */
+    const requestPlayerFrames = useCallback(
+        (ship: Ship) => {
+            const key = shipModelsEnabled() ? visualOfRef.current(ship).visualKey : null;
+            if (!key || playerFramesRef.current?.shipId === ship.id) return;
+            playerFramesRef.current = { shipId: ship.id, frames: null };
+            const isCurrent = () => playerFramesRef.current?.shipId === ship.id;
+            const pitchedRows = PITCH_ANGLES_DEG.map((_, i) => i).filter(
+                (i) => i !== LEVEL_PITCH_ROW
+            );
+            shipSprites()
+                .then(async (m) => {
+                    const [level] = await m.renderChaseFrames(key, [LEVEL_PITCH_ROW]);
+                    if (!isCurrent()) return;
+                    const frames: PlayerFrames = PITCH_ANGLES_DEG.map((_, i) =>
+                        i === LEVEL_PITCH_ROW ? level : null
+                    );
+                    playerFramesRef.current = { shipId: ship.id, frames };
+                    if (flownRef.current?.id === ship.id) viewRef.current.playerFrames = frames;
+                    // The view holds `frames` itself, so rows filled in here show up next frame.
+                    const rows = await m.renderChaseFrames(key, pitchedRows, undefined, true);
+                    if (!isCurrent()) return;
+                    pitchedRows.forEach((row, i) => (frames[row] = rows[i]));
+                    void requestViewerSprite(key, 'right').catch(() => {});
+                })
+                .catch(() => {
+                    if (isCurrent() && !playerFramesRef.current?.frames) {
+                        playerFramesRef.current = null;
+                    }
+                });
+        },
+        [requestViewerSprite]
+    );
+
+    /** A ship's gate sprite as a data URL, rendered once per visual key. */
     const requestSprite = useCallback((key: string): Promise<string> => {
         let p = spriteRequestsRef.current.get(key);
         if (!p) {
-            p = loadShipSprites(key, GATE_SPRITE_PX).then((frames) => {
-                const url = frames[LEVEL_FRAME].toDataURL();
-                if (!spriteUrlsRef.current.has(key)) spriteUrlsRef.current.set(key, url);
-                return url;
-            });
+            p = shipSprites()
+                .then((m) => m.renderGateSprite(key))
+                .then((canvas) => canvas.toDataURL());
             p.catch(() => spriteRequestsRef.current.delete(key));
             spriteRequestsRef.current.set(key, p);
         }
@@ -259,9 +295,12 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
         (ship: Ship) => {
             const { portraitUrl, visualKey } = visualOfRef.current(ship);
             if (portraitUrl) void loadPortrait(portraitUrl).catch(() => {});
-            if (shipModelsEnabled() && visualKey) void requestSprite(visualKey).catch(() => {});
+            if (shipModelsEnabled() && visualKey) {
+                void requestSprite(visualKey).catch(() => {});
+                void requestViewerSprite(visualKey, 'left').catch(() => {});
+            }
         },
-        [requestSprite]
+        [requestSprite, requestViewerSprite]
     );
 
     /** Picks the next checkpoint's opponents now and starts rendering their art. */
@@ -323,13 +362,16 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
         setPhase('over');
     }, [setPhase]);
 
-    const toSide = useCallback((ship: Ship): DuelSide => {
+    /** A duel side: the official-angle render facing `facing` if it is ready, else the portrait. */
+    const toSide = useCallback((ship: Ship, facing: Facing): DuelSide => {
         const visual = visualOfRef.current(ship);
-        const sprite =
+        const render =
             shipModelsEnabled() && visual.visualKey
-                ? spriteUrlsRef.current.get(visual.visualKey)
+                ? viewerUrlsRef.current.get(`${visual.visualKey}:${facing}`)
                 : undefined;
-        return { name: ship.name, level: ship.level, imageUrl: sprite ?? visual.portraitUrl };
+        return render
+            ? { name: ship.name, level: ship.level, imageUrl: render, facesOpponent: true }
+            : { name: ship.name, level: ship.level, imageUrl: visual.portraitUrl };
     }, []);
 
     /** Opens the summary for the game's pending duel and simulates it off the frame. */
@@ -351,8 +393,8 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
         }
         setPhase('duel');
         setDuel({
-            player: toSide(flown),
-            opponent: toSide(opponent),
+            player: toSide(flown, 'right'),
+            opponent: toSide(opponent, 'left'),
             stakes: pending.stakes,
             result: null,
             effect: null,
@@ -487,12 +529,17 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
                 if (game.status === 'over') finishRun();
                 else if (game.status === 'duel') startDuel();
                 // Passing a checkpoint through the free lane starts no duel, so the next pair
-                // is picked here, as far as possible from the next checkpoint's lane choice.
+                // is picked in the next idle time, as far as possible from the next lane choice.
                 for (const c of game.checkpoints) {
                     if (!c.resolved || passed.has(c) || !view.gateArt.has(c.id)) continue;
                     passed.add(c);
                     if (game.status === 'running' && !nextOpponentsRef.current) {
-                        prepareNextOpponents();
+                        const run = runGenerationRef.current;
+                        void whenIdle().then(() => {
+                            if (run === runGenerationRef.current && !nextOpponentsRef.current) {
+                                prepareNextOpponents();
+                            }
+                        });
                     }
                 }
                 hudTimer += dt;

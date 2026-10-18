@@ -12,6 +12,8 @@ export interface DuelSide {
     name: string;
     level: number | undefined;
     imageUrl: string | null;
+    /** The image already shows the ship facing the other side, so it is never mirrored. */
+    facesOpponent?: boolean;
 }
 
 interface DuelSummaryProps {
@@ -26,6 +28,7 @@ interface DuelSummaryProps {
 
 const hpFill = (hp: number) => (hp < 30 ? 'bg-red-500' : 'bg-green-500');
 
+/** `mirrored` flips an image that does not already face the opponent (a portrait). */
 const Side: React.FC<{ side: DuelSide; hp: number; mirrored?: boolean }> = ({
     side,
     hp,
@@ -37,7 +40,7 @@ const Side: React.FC<{ side: DuelSide; hp: number; mirrored?: boolean }> = ({
                 <img
                     src={side.imageUrl}
                     alt={side.name}
-                    className={`max-h-full max-w-full object-contain ${mirrored ? '-scale-x-100' : ''}`}
+                    className={`max-h-full max-w-full object-contain ${mirrored && !side.facesOpponent ? '-scale-x-100' : ''}`}
                 />
             ) : (
                 <span className="text-lg font-semibold text-theme-text-secondary">{side.name}</span>
