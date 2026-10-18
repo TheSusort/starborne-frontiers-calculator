@@ -3,11 +3,14 @@ import { loadShipModel, modelUrls, noseUpCorrection } from '../shipModelLoader';
 
 vi.mock('three/examples/jsm/loaders/FBXLoader.js', () => ({
     FBXLoader: class {
-        loadAsync = vi.fn(() => new Promise(() => {}));
+        parse = vi.fn();
     },
 }));
 
-afterEach(() => vi.useRealTimers());
+afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+});
 
 describe('shipModelLoader', () => {
     it('builds the official render URLs', () => {
@@ -20,9 +23,16 @@ describe('shipModelLoader', () => {
         });
     });
 
-    it('rejects after the timeout', async () => {
+    it('escapes the key in the URLs', () => {
+        expect(modelUrls('a/../b').fbx).toBe(
+            'https://starborne.com/ship-renders/a%2F..%2Fb/a%2F..%2Fb_LOD0.fbx'
+        );
+    });
+
+    it('rejects when the download outlasts the timeout', async () => {
+        vi.stubGlobal('fetch', () => new Promise(() => {}));
         vi.useFakeTimers();
-        const p = loadShipModel('Slow_1', 10_000);
+        const p = loadShipModel('Slow_1');
         const assertion = expect(p).rejects.toThrow(/timed out/);
         await vi.advanceTimersByTimeAsync(10_000);
         await assertion;

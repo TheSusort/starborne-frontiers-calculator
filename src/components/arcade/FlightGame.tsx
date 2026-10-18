@@ -293,7 +293,7 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
                     for (const batch of idleBatches) {
                         let sweeps: HTMLCanvasElement[][];
                         try {
-                            sweeps = await m.renderChaseSweeps(key, batch, { idle: true });
+                            sweeps = await m.renderChaseSweeps(key, batch);
                         } catch {
                             continue;
                         }

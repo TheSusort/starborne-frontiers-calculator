@@ -1,14 +1,20 @@
 import * as THREE from 'three';
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
+import { runWhenIdle } from '../idle';
+import { createLoadCache } from './loadCache';
+import { isModelPinned, isModelUrgent } from './modelPins';
 
 const BASE = 'https://starborne.com/ship-renders';
 const TIMEOUT_MS = 10_000;
+/** Decoded models kept at once (each holds roughly 10 MB of textures); pinned ones are extra. */
+export const MODEL_CACHE_SIZE = 8;
 /** The FBX's own texture references are replaced below, so its requests resolve to nothing. */
 const EMPTY_PIXEL =
     'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
 
 export function modelUrls(key: string) {
-    const at = (suffix: string) => `${BASE}/${key}/${key}_${suffix}`;
+    const k = encodeURIComponent(key);
+    const at = (suffix: string) => `${BASE}/${k}/${k}_${suffix}`;
     return {
         fbx: at('LOD0.fbx'),
         albedo: at('A.webp'),
@@ -52,8 +58,6 @@ function engineCentroid(object: THREE.Object3D): THREE.Vector3 | null {
     return n > 0 ? sum.divideScalar(n) : null;
 }
 
-const cache = new Map<string, Promise<THREE.Group>>();
-
 function withTimeout<T>(p: Promise<T>, ms: number, what: string): Promise<T> {
     return new Promise((resolve, reject) => {
         const id = setTimeout(() => reject(new Error(`${what} timed out`)), ms);
@@ -76,13 +80,23 @@ async function load(key: string): Promise<THREE.Group> {
     manager.setURLModifier((url) => (url === urls.fbx ? url : EMPTY_PIXEL));
     const textures = new THREE.TextureLoader();
     textures.setCrossOrigin('anonymous');
-    const [object, albedo, emissive, normal, orm] = await Promise.all([
-        new FBXLoader(manager).loadAsync(urls.fbx),
-        textures.loadAsync(urls.albedo),
-        textures.loadAsync(urls.emissive),
-        textures.loadAsync(urls.normal),
-        textures.loadAsync(urls.orm),
-    ]);
+    const fbx = new THREE.FileLoader(manager).setResponseType('arraybuffer');
+    const [buffer, albedo, emissive, normal, orm] = await withTimeout(
+        Promise.all([
+            fbx.loadAsync(urls.fbx) as Promise<ArrayBuffer>,
+            textures.loadAsync(urls.albedo),
+            textures.loadAsync(urls.emissive),
+            textures.loadAsync(urls.normal),
+            textures.loadAsync(urls.orm),
+        ]),
+        TIMEOUT_MS,
+        `ship model ${key}`
+    );
+    // The parse is one long synchronous block, so it waits for idle time, and while the queue
+    // holds heavy work back (mid-run) for any ship but the one being flown.
+    const object = await runWhenIdle(() => new FBXLoader(manager).parse(buffer, ''), {
+        heavy: () => !isModelUrgent(key),
+    });
     albedo.colorSpace = THREE.SRGBColorSpace;
     emissive.colorSpace = THREE.SRGBColorSpace;
     normal.colorSpace = THREE.NoColorSpace;
@@ -120,14 +134,49 @@ async function load(key: string): Promise<THREE.Group> {
     return wrapper;
 }
 
-/** Session-cached; a failed or timed-out load is evicted so a later call retries. Callers fall back
- *  to the portrait on rejection. */
-export function loadShipModel(key: string, timeoutMs = TIMEOUT_MS): Promise<THREE.Group> {
-    let p = cache.get(key);
-    if (!p) {
-        p = withTimeout(load(key), timeoutMs, `ship model ${key}`);
-        p.catch(() => cache.delete(key));
-        cache.set(key, p);
+/** Frees the GPU copies of `model`'s geometry, materials and textures in every renderer; a
+ *  renderer that draws the model again uploads them afresh. */
+export function releaseGpu(model: THREE.Object3D): void {
+    const materials = new Set<THREE.Material>();
+    model.traverse((child) => {
+        const mesh = child as THREE.Mesh;
+        mesh.geometry?.dispose();
+        const material = mesh.material;
+        if (!material) return;
+        for (const m of Array.isArray(material) ? material : [material]) materials.add(m);
+    });
+    for (const material of materials) {
+        for (const value of Object.values(material)) {
+            if (value instanceof THREE.Texture) value.dispose();
+        }
+        material.dispose();
     }
-    return p;
+}
+
+const evictionListeners = new Set<(model: THREE.Group, key: string) => void>();
+
+/** Calls `listener` with every model the cache evicts, after its GPU copies are released. */
+export function onShipModelEvicted(listener: (model: THREE.Group, key: string) => void) {
+    evictionListeners.add(listener);
+    return () => evictionListeners.delete(listener);
+}
+
+const cache = createLoadCache<THREE.Group>({
+    size: MODEL_CACHE_SIZE,
+    load,
+    isPinned: isModelPinned,
+    onEvict: (model, key) => {
+        releaseGpu(model);
+        for (const listener of evictionListeners) listener(model, key);
+    },
+});
+
+/**
+ * Cached by key, the least recently used evicted beyond `MODEL_CACHE_SIZE` unless pinned (see
+ * `modelPins`); a failed or timed-out load is dropped so a later call retries. `TIMEOUT_MS`
+ * bounds the download, not the wait for idle time to parse it. Callers fall back to the
+ * portrait on rejection.
+ */
+export function loadShipModel(key: string): Promise<THREE.Group> {
+    return cache.get(key);
 }
