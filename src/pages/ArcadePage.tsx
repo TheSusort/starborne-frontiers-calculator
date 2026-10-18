@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { PageLayout } from '../components/ui';
 import { Button } from '../components/ui/Button';
@@ -8,10 +8,14 @@ import { FLIGHT_END_EVENT, requestFlight } from '../components/arcade/flightEven
 import { ArcadeLeaderboard } from '../components/arcade/ArcadeLeaderboard';
 import { readLocalBest } from '../components/arcade/localBest';
 
+/** A score submit can still be in flight when the flight-end event fires; a second refetch picks it up. */
+const LEADERBOARD_RECHECK_MS = 1500;
+
 const ArcadePage: React.FC = () => {
     const [searchParams, setSearchParams] = useSearchParams();
     const [best, setBest] = useState(readLocalBest);
     const [boardVersion, setBoardVersion] = useState(0);
+    const recheckTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     useEffect(() => {
         if (searchParams.get('play') !== '1') return;
@@ -25,9 +29,17 @@ const ArcadePage: React.FC = () => {
         const onEnd = () => {
             setBest(readLocalBest());
             setBoardVersion((v) => v + 1);
+            if (recheckTimer.current) clearTimeout(recheckTimer.current);
+            recheckTimer.current = setTimeout(
+                () => setBoardVersion((v) => v + 1),
+                LEADERBOARD_RECHECK_MS
+            );
         };
         window.addEventListener(FLIGHT_END_EVENT, onEnd);
-        return () => window.removeEventListener(FLIGHT_END_EVENT, onEnd);
+        return () => {
+            window.removeEventListener(FLIGHT_END_EVENT, onEnd);
+            if (recheckTimer.current) clearTimeout(recheckTimer.current);
+        };
     }, []);
 
     return (

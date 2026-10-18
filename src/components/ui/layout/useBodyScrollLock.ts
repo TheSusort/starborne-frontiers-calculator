@@ -20,18 +20,12 @@ const acquireScrollLock = () => {
 };
 
 const releaseScrollLock = () => {
-    // Guard against a release firing without a matching acquire (shouldn't
-    // happen, but would otherwise drive the counter negative and make every
-    // future modal think a lock is already held).
+    // A release without a matching acquire is ignored, so the count never goes negative.
     if (scrollLockCount === 0) return;
 
     scrollLockCount--;
     if (scrollLockCount === 0) {
-        // Matches the pre-existing single-modal cleanup exactly: clear the
-        // lock styles and nothing else — there was no explicit scroll
-        // restore call before this fix, so none is added now (out of scope:
-        // see the reentrancy fix's report for the verified single-modal
-        // scroll behaviour this preserves).
+        // Clears the lock styles only; scroll position is not restored.
         document.body.style.position = '';
         document.body.style.top = '';
         document.body.style.width = '';

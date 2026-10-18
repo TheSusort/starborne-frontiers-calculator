@@ -132,14 +132,14 @@ export const ArcadeLeaderboard: React.FC<Props> = ({ limit = 20, refreshKey = 0 
         <DataTable
             data={tableRows}
             columns={COLUMNS}
-            loading={loading}
+            loading={loading && rows.length === 0}
             emptyMessage="No scores yet. Be the first."
             getRowKey={(r, i) => (isGapRow(r) ? `gap-${i}` : `${r.rank}-${r.username}`)}
             rowClassName={rowClassName}
         />
     );
 
-    if (loading || rows.length === 0) return table;
+    if (rows.length === 0) return table;
 
     return (
         <div className="space-y-3">
