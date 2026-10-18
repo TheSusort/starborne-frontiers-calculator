@@ -2558,6 +2558,15 @@ const DocumentationPage: React.FC = () => {
                                     browser.
                                 </p>
                             </div>
+                            <div className="card">
+                                <h4 className="font-semibold text-primary mb-2">Leaderboard</h4>
+                                <p className="text-theme-text">
+                                    Signed-in players are ranked by their best score. The first time
+                                    you finish a run without a username you are asked to choose one;
+                                    it is shared with your profile. Scores always count for your
+                                    main account, even while an alt profile is active.
+                                </p>
+                            </div>
                         </div>
                     </section>
 
