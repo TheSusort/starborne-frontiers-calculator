@@ -54,7 +54,8 @@ export function runDuel(
             enemyTeam: buildTeam({ M2: { ship: opponent } }, deps),
         };
         return duelOutcome(runSeededBattle(input, seed, deps.getGearPiece));
-    } catch {
+    } catch (error) {
+        if (import.meta.env.DEV) console.warn('arcade duel skipped: the simulation threw', error);
         return { outcome: 'skipped', timeline: [] };
     }
 }

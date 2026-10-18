@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { duelOutcome, runDuel } from '../runDuel';
 import type { Ship } from '../../../../types/ship';
 import type { BattleResult } from '../../../../utils/calculators/battleSimulator';
@@ -112,7 +112,8 @@ describe('runDuel', () => {
         expect(r.outcome).toBe('win');
     });
 
-    it('a thrown error skips the duel', () => {
+    it('a thrown error skips the duel and leaves a warning in development', () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
         let called = false;
         const broken: CombatStatsDeps = {
             getGearPiece: () => {
@@ -127,5 +128,10 @@ describe('runDuel', () => {
             timeline: [],
         });
         expect(called).toBe(true);
+        expect(warn).toHaveBeenCalledWith(
+            expect.stringContaining('duel skipped'),
+            expect.objectContaining({ message: 'boom' })
+        );
+        warn.mockRestore();
     });
 });

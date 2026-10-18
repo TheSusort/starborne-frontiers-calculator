@@ -3,9 +3,10 @@ import { join, relative, sep } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 /**
- * three.js and the modules built on it may only be reached through `import()` from code that
- * has checked `shipModelsEnabled()`, so a build without `VITE_ARCADE_SHIP_MODELS` never loads
- * them. Only these modules may import three, or one another, statically.
+ * three.js and the modules built on it may only be reached through the `import()`s in
+ * `arcadeFlags` (`loadShipSprites`, `loadShipModelView`), which reject while models are off, so a
+ * build without `VITE_ARCADE_SHIP_MODELS` never loads them. Only these modules may import three,
+ * or one another, statically.
  */
 const LAZY_MODULES = ['shipModelLoader', 'shipSprites', 'ShipModelView', 'shipLighting'];
 
