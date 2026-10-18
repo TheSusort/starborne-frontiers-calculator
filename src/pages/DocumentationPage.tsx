@@ -2518,6 +2518,47 @@ const DocumentationPage: React.FC = () => {
                         </div>
                     </section>
 
+                    <section id="arcade" className="space-y-4 [counter-increment:section]">
+                        <h2 className="text-2xl font-bold before:content-[counter(section)'.'] before:mr-2">
+                            Arcade
+                        </h2>
+                        <div className="card space-y-4">
+                            <p className="text-theme-text">
+                                The Arcade (<code>/arcade</code>) is a lane-runner mini game in
+                                which you fly the synthwave fighter over the grid. In the synthwave
+                                theme you can also click the fighter flying over the background to
+                                take control of it from any page.
+                            </p>
+                            <div className="card">
+                                <h4 className="font-semibold text-primary mb-2">Controls</h4>
+                                <ul className="text-theme-text space-y-1 list-disc list-inside">
+                                    <li>
+                                        <strong>Left / Right, A / D, swipe sideways</strong> —
+                                        change lane
+                                    </li>
+                                    <li>
+                                        <strong>Up, W, Space, swipe up</strong> — jump over lasers
+                                    </li>
+                                    <li>
+                                        <strong>Down, S, swipe down</strong> — duck under arches
+                                    </li>
+                                    <li>
+                                        <strong>P</strong> — pause; <strong>Esc</strong> — quit
+                                    </li>
+                                </ul>
+                            </div>
+                            <div className="card">
+                                <h4 className="font-semibold text-primary mb-2">Scoring</h4>
+                                <p className="text-theme-text">
+                                    Score is metres flown plus 10 points per credit. Walls can only
+                                    be dodged by changing lane. A shield absorbs one hit; a magnet
+                                    collects credits from the neighbouring lanes for 8 seconds. Your
+                                    personal best is saved in this browser.
+                                </p>
+                            </div>
+                        </div>
+                    </section>
+
                     {/* Calculators Section */}
                     <section id="calculators" className="space-y-4 [counter-increment:section]">
                         <h2 className="text-2xl font-bold before:content-[counter(section)'.'] before:mr-2">
