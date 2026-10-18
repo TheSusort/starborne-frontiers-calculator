@@ -216,3 +216,22 @@ describe('introGridLayers', () => {
         });
     }
 });
+
+describe('arcadeGridColumns memo', () => {
+    it('returns the same columns for the same geometry and fresh ones after a resize', () => {
+        const a = arcadeGridColumns(sceneGeometry(1200, 800));
+        expect(arcadeGridColumns(sceneGeometry(1200, 800))).toBe(a);
+        const b = arcadeGridColumns(sceneGeometry(390, 844));
+        expect(b).not.toBe(a);
+        expect(b.bottomSpread).not.toBe(a.bottomSpread);
+        // Back to the first size gives the first size's numbers again.
+        expect(arcadeGridColumns(sceneGeometry(1200, 800))).toEqual(a);
+    });
+    it('places objects identically whether or not the columns were remembered', () => {
+        const g = sceneGeometry(1000, 700);
+        const first = project(g, 0.4, 37);
+        arcadeGridColumns(sceneGeometry(640, 480));
+        expect(project(g, 0.4, 37)).toEqual(first);
+        expect(project(g, 0.4, 37)).toEqual(first);
+    });
+});

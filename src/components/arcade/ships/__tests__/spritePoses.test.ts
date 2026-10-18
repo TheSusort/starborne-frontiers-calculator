@@ -23,6 +23,8 @@ import {
     poseRotation,
     POSE_EASE_SECONDS,
     restingPose,
+    settle,
+    SETTLE_EPSILON,
     slideBank,
     SpriteCamera,
     yawForScreenHeading,
@@ -222,6 +224,27 @@ describe('easeToward', () => {
     it('holds still for a zero frame and snaps for a zero time constant', () => {
         expect(easeToward(2, 7, 0, 0.1)).toBe(2);
         expect(easeToward(2, 7, 0.016, 0)).toBe(7);
+    });
+});
+
+describe('settled poses', () => {
+    it('treats an angle within a hair of a grid angle as on it', () => {
+        expect(frameBlend(1e-12, -1e-9, 1e-10)).toEqual([
+            { heading: LEVEL_HEADING, bank: LEVEL_BANK, pitch: LEVEL_PITCH_ROW, weight: 1 },
+        ]);
+        expect(frameBlend(MAX_HEADING_DEG / 2 - 1e-9, 0, 0)).toHaveLength(1);
+    });
+    it('a pose eased onto a resting target draws a single frame', () => {
+        // Mid-slide toward the centre lane, whose computed heading is a rounding error off 0.
+        let pose = { headingDeg: 9, bank: 0.6, pitchDeg: 4, duck: 0.3 };
+        const target = { headingDeg: 3e-14, bank: 0, pitchDeg: 0, duck: 0 };
+        for (let i = 0; i < 30; i++) pose = advancePose(pose, target, 1 / 60);
+        expect(pose).toEqual(target);
+        expect(frameBlend(pose.headingDeg, pose.bank, pose.pitchDeg)).toHaveLength(1);
+    });
+    it('snaps only within SETTLE_EPSILON', () => {
+        expect(settle(1 - SETTLE_EPSILON / 2, 1)).toBe(1);
+        expect(settle(1 - SETTLE_EPSILON * 2, 1)).toBe(1 - SETTLE_EPSILON * 2);
     });
 });
 

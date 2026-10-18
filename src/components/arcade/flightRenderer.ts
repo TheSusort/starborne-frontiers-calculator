@@ -37,6 +37,7 @@ import {
     pickSweep,
     PlayerPose,
     restingPose,
+    settle,
     slideBank,
 } from './ships/spritePoses';
 
@@ -362,10 +363,16 @@ function drawPlayer(
     const { headingDeg, bank } = pose;
     ctx.globalAlpha = e;
     const blend = view.playerFrames ? frameBlend(headingDeg, bank, pose.pitchDeg) : [];
-    const frames = blend.flatMap(({ weight, ...index }) => {
+    // Blend corners whose sweeps fall back to the same frame are drawn as that one frame.
+    const frames: { frame: HTMLCanvasElement; weight: number }[] = [];
+    for (const { weight, ...index } of blend) {
         const sweep = view.playerFrames ? pickSweep(view.playerFrames, index) : null;
-        return sweep ? [{ frame: sweep[index.heading], weight }] : [];
-    });
+        const frame = sweep?.[index.heading];
+        if (!frame) continue;
+        const same = frames.find((f) => f.frame === frame);
+        if (same) same.weight += weight;
+        else frames.push({ frame, weight });
+    }
     if (frames.length > 0) {
         // The sprite spans the fighter's footprint.
         const size = s * SPRITE_FOOTPRINT;
@@ -414,7 +421,10 @@ export function renderFlight(
     const g = sceneGeometry(w, h);
 
     const target = laneOffset(game.player.lane);
-    view.playerX += (target - view.playerX) * Math.min(1, dt * LANE_SLIDE_RATE);
+    view.playerX = settle(
+        view.playerX + (target - view.playerX) * Math.min(1, dt * LANE_SLIDE_RATE),
+        target
+    );
     view.pose = advancePose(view.pose, targetPose(g, game, view), dt);
 
     ctx.clearRect(0, 0, w, h);

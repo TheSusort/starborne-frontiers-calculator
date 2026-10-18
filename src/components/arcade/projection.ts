@@ -24,18 +24,32 @@ export function laneWidthAtPlayer(g: SceneGeometry): number {
     return Math.min(g.w * 0.26, g.h * 0.42);
 }
 
+let columnsMemo: { g: SceneGeometry; columns: Readonly<GridColumns> } | null = null;
+
+const sameGeometry = (a: SceneGeometry, b: SceneGeometry) =>
+    a.w === b.w && a.h === b.h && a.horizonY === b.horizonY && a.vanishX === b.vanishX;
+
 /**
  * The arcade's grid fan: the background's horizon spread, centred on the vanishing point at the
  * bottom too, with the bottom spread chosen so a lane is exactly `COLUMNS_PER_LANE` columns wide
- * at the player row. Lanes and every object on them are placed on these columns.
+ * at the player row. Lanes and every object on them are placed on these columns. Remembered for
+ * the last geometry, since every `project` call of a frame asks for the same one.
  */
-export function arcadeGridColumns(g: SceneGeometry): GridColumns {
+export function arcadeGridColumns(g: SceneGeometry): Readonly<GridColumns> {
+    if (columnsMemo && sameGeometry(columnsMemo.g, g)) return columnsMemo.columns;
     const count = ARCADE_GRID_COLUMNS;
     const topSpread = defaultGridColumns(g).topSpread;
     const f = GRID_NEAR_PLANE / PLAYER_DEPTH;
     const pitch = laneWidthAtPlayer(g) / COLUMNS_PER_LANE;
     const bottomSpread = (pitch * count - topSpread * (1 - f)) / f;
-    return { count, topSpread, bottomSpread, bottomLeft: g.vanishX - bottomSpread / 2 };
+    const columns = Object.freeze({
+        count,
+        topSpread,
+        bottomSpread,
+        bottomLeft: g.vanishX - bottomSpread / 2,
+    });
+    columnsMemo = { g: { ...g }, columns };
+    return columns;
 }
 
 /**

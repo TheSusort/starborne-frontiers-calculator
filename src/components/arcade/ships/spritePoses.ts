@@ -126,14 +126,18 @@ export interface FrameWeight extends FrameIndex {
     weight: number;
 }
 
+/** How close, in degrees, an angle must be to a grid angle to count as on it. */
+const ON_GRID_DEG = 1e-6;
+
 /** The one or two grid angles around `v` and their linear weights; beyond either end, the end
- *  angle alone. */
+ *  angle alone, and within `ON_GRID_DEG` of a grid angle, that angle alone. */
 function axisBlend(values: readonly number[], v: number): { i: number; w: number }[] {
     const last = values.length - 1;
     if (v <= values[0]) return [{ i: 0, w: 1 }];
     if (v >= values[last]) return [{ i: last, w: 1 }];
+    const on = values.findIndex((x) => Math.abs(x - v) < ON_GRID_DEG);
+    if (on >= 0) return [{ i: on, w: 1 }];
     const hi = values.findIndex((x) => x >= v);
-    if (values[hi] === v) return [{ i: hi, w: 1 }];
     const w = (v - values[hi - 1]) / (values[hi] - values[hi - 1]);
     return [
         { i: hi - 1, w: 1 - w },
@@ -198,6 +202,15 @@ export function easeToward(
     return target + (current - target) * Math.exp(-dtSeconds / tauSeconds);
 }
 
+/**
+ * Distance from its target at which an eased value snaps onto it: far below a visible step, and
+ * it lets a settled pose land exactly on its target instead of approaching it forever.
+ */
+export const SETTLE_EPSILON = 1e-3;
+
+export const settle = (value: number, target: number): number =>
+    Math.abs(value - target) < SETTLE_EPSILON ? target : value;
+
 /** The player ship's drawn pose: screen heading in degrees, bank -1..1, nose pitch in degrees and
  *  duck 0..1 (how far into the duck's squash the ship is). */
 export interface PlayerPose {
@@ -219,9 +232,11 @@ export const POSE_EASE_SECONDS = {
     duck: 0.045,
 } as const;
 
-/** The pose `dtSeconds` later, each axis eased toward `target`. */
+/** The pose `dtSeconds` later, each axis eased toward `target` and snapped onto it once within
+ *  `SETTLE_EPSILON`. */
 export function advancePose(pose: PlayerPose, target: PlayerPose, dtSeconds: number): PlayerPose {
-    const ease = (from: number, to: number, tau: number) => easeToward(from, to, dtSeconds, tau);
+    const ease = (from: number, to: number, tau: number) =>
+        settle(easeToward(from, to, dtSeconds, tau), to);
     return {
         headingDeg: ease(pose.headingDeg, target.headingDeg, POSE_EASE_SECONDS.heading),
         bank: ease(pose.bank, target.bank, POSE_EASE_SECONDS.bank),
