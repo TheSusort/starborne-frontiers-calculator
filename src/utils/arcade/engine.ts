@@ -101,6 +101,8 @@ export function step(state: GameState, inputs: readonly InputAction[], dt: numbe
         }
     }
 
+    if (state.status === 'over') return state;
+
     for (const p of state.pickups) {
         if (p.resolved || p.z > 0) continue;
         p.resolved = true;

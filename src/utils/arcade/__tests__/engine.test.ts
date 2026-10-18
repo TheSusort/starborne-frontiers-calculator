@@ -126,6 +126,58 @@ describe('pickups', () => {
     });
 });
 
+describe('resolve once', () => {
+    it('an obstacle cleared mid-jump does not hit once the jump ends', () => {
+        const g = quietGame();
+        g.player.action = 'jump';
+        g.player.actionTime = STEP_SECONDS * 3;
+        g.obstacles.push({ id: 5, kind: 'low', lane: 1, z: 0.01, resolved: false });
+        step(g, [], STEP_SECONDS);
+        expect(g.obstacles[0].resolved).toBe(true);
+        for (let i = 0; i < 6; i++) step(g, [], STEP_SECONDS);
+        expect(g.player.action).toBe('run');
+        expect(g.obstacles).toHaveLength(1);
+        expect(g.status).toBe('running');
+    });
+
+    it('a missed credit is not collected by changing lane afterwards', () => {
+        const g = quietGame();
+        g.pickups.push({
+            id: 6,
+            kind: 'credit',
+            lane: 2,
+            z: 0.01,
+            resolved: false,
+            collected: false,
+        });
+        step(g, [], STEP_SECONDS);
+        step(g, ['right'], STEP_SECONDS);
+        expect(g.player.lane).toBe(2);
+        expect(g.credits).toBe(0);
+    });
+
+    it('a credit crossing on the fatal step does not count', () => {
+        const g = quietGame();
+        g.obstacles.push({ id: 7, kind: 'wall', lane: 1, z: 0.01, resolved: false });
+        g.pickups.push({
+            id: 8,
+            kind: 'credit',
+            lane: 1,
+            z: 0.01,
+            resolved: false,
+            collected: false,
+        });
+        step(g, [], STEP_SECONDS);
+        expect(g.status).toBe('over');
+        expect(g.credits).toBe(0);
+    });
+
+    it('an active magnet does not pull a magnet pickup from the next lane', () => {
+        const g = withPickup('magnet', 2, 1, 3);
+        expect(g.player.magnetTime).toBeCloseTo(3 - STEP_SECONDS, 5);
+    });
+});
+
 describe('speed and score', () => {
     it('accelerates and caps at MAX_SPEED', () => {
         const g = quietGame();
