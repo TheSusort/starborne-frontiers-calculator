@@ -16,7 +16,7 @@ import {
     INTRO_SECONDS,
     renderFlight,
 } from './flightRenderer';
-import { keyToAction, swipeToAction } from './flightInput';
+import { isSelectDropdownOpen, keyToAction, swipeToAction } from './flightInput';
 import { readLocalBest, writeLocalBest } from './localBest';
 import { GameOverPanel } from './GameOverPanel';
 import { useArcadeSubmission, SubmissionStatus } from './useArcadeSubmission';
@@ -279,6 +279,9 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
     useEffect(() => {
         const onKey = (e: KeyboardEvent) => {
             if (e.key === 'Escape') {
+                // On the select screen an open dropdown owns Escape: the Select closes itself
+                // (React handler, too late for this capture listener to defer to).
+                if (phaseRef.current === 'select' && isSelectDropdownOpen()) return;
                 if (!escapeBlockedRef.current) onClose();
                 return;
             }

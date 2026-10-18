@@ -119,7 +119,7 @@ export const FighterSelect: React.FC<FighterSelectProps> = ({
 
     return (
         <div className="absolute inset-0 flex items-center justify-center p-4 pointer-events-none">
-            <div className="card w-full max-w-md max-h-full overflow-y-auto space-y-4 pointer-events-auto">
+            <div className="card hover:bg-dark w-full max-w-md max-h-full overflow-y-auto space-y-4 pointer-events-auto">
                 <h2 className="text-xl font-semibold text-center">Choose your ship</h2>
                 <SearchInput value={query} onChange={setQuery} placeholder="Search ships..." />
                 <Select

@@ -1,5 +1,35 @@
-import { describe, it, expect } from 'vitest';
-import { keyToAction, swipeToAction, SWIPE_THRESHOLD_PX } from '../flightInput';
+import { describe, it, expect, afterEach } from 'vitest';
+import {
+    isSelectDropdownOpen,
+    keyToAction,
+    swipeToAction,
+    SWIPE_THRESHOLD_PX,
+} from '../flightInput';
+
+describe('isSelectDropdownOpen', () => {
+    afterEach(() => {
+        document.body.innerHTML = '';
+    });
+
+    it('is false with nothing open', () => {
+        document.body.innerHTML = '<button aria-expanded="false" id="t">x</button>';
+        document.getElementById('t')!.focus();
+        expect(isSelectDropdownOpen()).toBe(false);
+    });
+
+    it('is true when focus sits on an expanded trigger', () => {
+        document.body.innerHTML = '<button aria-expanded="true" id="t">x</button>';
+        document.getElementById('t')!.focus();
+        expect(isSelectDropdownOpen()).toBe(true);
+    });
+
+    it('is true when the portalled listbox is open and focus is inside it', () => {
+        document.body.innerHTML =
+            '<div id="select-root"><div role="listbox"><input id="s" /></div></div>';
+        document.getElementById('s')!.focus();
+        expect(isSelectDropdownOpen()).toBe(true);
+    });
+});
 
 describe('keyToAction', () => {
     it.each([

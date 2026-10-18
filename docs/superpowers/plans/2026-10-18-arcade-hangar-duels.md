@@ -891,6 +891,8 @@ source ~/.nvm/nvm.sh && nvm use 22 >/dev/null && git add src/components/arcade/d
 
 ### Task 3: Ship visual data (portraits, visual keys, flag, tint)
 
+> **Amended during execution:** `imageKey` is a Cloudinary public id, not a URL. `resolveShipVisual` builds `portraitUrl` with `@cloudinary/url-gen` (`cld.image(`${imageKey}_BigPortrait.jpg`).toURL()`), as `ui/Image` does — the string-concat code below is superseded (commit 060df0f53).
+
 **Files:**
 - Modify: `scripts/lib/catalogueSchema.ts`, `src/utils/ship/shipTemplate.ts`, `src/hooks/useShipsData.ts`
 - Create: `scripts/fetch-ship-visual-keys.ts`, `src/components/arcade/ships/shipVisualKeys.ts` (generated), `src/components/arcade/ships/shipVisuals.ts`, `src/components/arcade/ships/useShipVisuals.ts`, `src/components/arcade/ships/arcadeFlags.ts`, `src/components/arcade/ships/factionTint.ts`, `src/components/arcade/ships/portraitSprite.ts`
