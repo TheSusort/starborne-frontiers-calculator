@@ -2535,9 +2535,12 @@ const DocumentationPage: React.FC = () => {
                                     If you have ships in your fleet, a run starts on a ship select
                                     screen. Search by name or filter by faction, browse with
                                     Previous / Next, the Left / Right keys or a sideways swipe, and
-                                    press Launch or Enter. Your fighter is tinted in the ship&apos;s
-                                    faction colour, which is purely cosmetic. Your last choice is
-                                    listed first next time, and Retry keeps the same ship.
+                                    press Launch or Enter. The select screen and duels show each
+                                    ship&apos;s official 3D model, with its portrait while the model
+                                    loads or if it cannot be shown. In flight you fly that model;
+                                    until it is ready you fly the neon fighter tinted in the
+                                    ship&apos;s faction colour. Your last choice is listed first
+                                    next time, and Retry keeps the same ship.
                                 </p>
                             </div>
                             <div className="card">

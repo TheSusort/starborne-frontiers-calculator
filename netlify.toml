@@ -26,6 +26,9 @@
   # in the build command — it is what repopulates the cache after a cleared-cache build.
   PUPPETEER_CACHE_DIR = "./node_modules/.cache/puppeteer"
 
+  # Shows the official 3D ship models (loaded live from starborne.com) in the arcade; remove to turn them off.
+  VITE_ARCADE_SHIP_MODELS = "1"
+
 # Security headers
 [[headers]]
   for = "/*"
@@ -35,7 +38,7 @@
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "strict-origin-when-cross-origin"
     Permissions-Policy = "camera=(), microphone=(), geolocation=()"
-    Content-Security-Policy = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' https://res.cloudinary.com https://*.googleusercontent.com https://www.google.com https://cdn.discordapp.com data: blob:; media-src 'self' https://res.cloudinary.com; connect-src 'self' https://*.supabase.co https://res.cloudinary.com https://cdn.discordapp.com; worker-src 'self'; frame-ancestors 'none'"
+    Content-Security-Policy = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' https://res.cloudinary.com https://*.googleusercontent.com https://www.google.com https://cdn.discordapp.com https://starborne.com data: blob:; media-src 'self' https://res.cloudinary.com; connect-src 'self' https://*.supabase.co https://res.cloudinary.com https://cdn.discordapp.com https://starborne.com; worker-src 'self'; frame-ancestors 'none'"
 
 # NOTE: No server-side redirect for starborne-planner.netlify.app here.
 # A netlify.toml cross-domain redirect (regardless of force setting) intercepts sw.js

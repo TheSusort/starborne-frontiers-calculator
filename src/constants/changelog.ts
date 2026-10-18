@@ -9,6 +9,7 @@ export const CURRENT_VERSION = '1.79.0';
 export const UNRELEASED_CHANGES: string[] = [
     'Arcade: choose a ship from your fleet to fly.',
     'Arcade: duel ships from your hangar at random checkpoints.',
+    'Arcade: your ships now appear as their official 3D models.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

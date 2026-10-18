@@ -14,15 +14,16 @@ import { FACTIONS } from '../../constants/factions';
 
 const NETLIFY_TOML = readFileSync(resolve(__dirname, '../../../netlify.toml'), 'utf8');
 
-const connectSrc = (): string[] => {
+const sources = (name: string): string[] => {
     const csp = NETLIFY_TOML.match(/Content-Security-Policy\s*=\s*"([^"]+)"/)?.[1];
     const directive = csp
         ?.split(';')
         .map((d) => d.trim())
-        .find((d) => d.startsWith('connect-src '));
-    if (!directive) throw new Error('connect-src not found in netlify.toml CSP');
+        .find((d) => d.startsWith(`${name} `));
+    if (!directive) throw new Error(`${name} not found in netlify.toml CSP`);
     return directive.split(/\s+/).slice(1);
 };
+const connectSrc = () => sources('connect-src');
 
 describe('netlify.toml CSP connect-src', () => {
     const captureImageOrigins = [
@@ -32,5 +33,12 @@ describe('netlify.toml CSP connect-src', () => {
 
     it.each([...new Set(captureImageOrigins)])('allows fetching %s', (origin) => {
         expect(connectSrc()).toContain(origin);
+    });
+});
+
+describe('netlify.toml CSP for the arcade ship models', () => {
+    // The FBX is fetched; its textures load as images.
+    it.each(['connect-src', 'img-src'])('%s allows https://starborne.com', (name) => {
+        expect(sources(name)).toContain('https://starborne.com');
     });
 });
