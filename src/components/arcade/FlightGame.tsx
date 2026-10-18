@@ -67,8 +67,10 @@ const HUD_INTERVAL_SECONDS = 0.1;
 const NO_INPUT: readonly InputAction[] = [];
 
 const newSeed = () => Math.floor(Math.random() * 2 ** 32) >>> 0;
-/** How long a ship stays focused on the select screen before its sprites start rendering. */
+/** How long a ship stays focused on the select screen before its own sprites start rendering. */
 const FOCUS_PREWARM_MS = 400;
+/** How long it stays focused before its first opponents are picked and their art loads too. */
+const FOCUS_OPPONENTS_MS = 1500;
 /** Stands in for the session signal outside a mounted arcade: nothing started under it runs. */
 const ABORTED_SIGNAL = (() => {
     const c = new AbortController();
@@ -197,7 +199,7 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
      *  reach state or the view. Created by the mount effect, so each mount has its own. */
     const sessionRef = useRef<AbortController | null>(null);
     /** The select screen's focused ship, while its sprites wait to start or render ahead. */
-    const focusRef = useRef<{ key: string; controller: AbortController; timer: number } | null>(
+    const focusRef = useRef<{ key: string; controller: AbortController; timers: number[] } | null>(
         null
     );
     const duelSeqRef = useRef(0);
@@ -245,8 +247,7 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
         sessionRef.current = session;
         return () => {
             session.abort();
-            const focus = focusRef.current;
-            if (focus) window.clearTimeout(focus.timer);
+            focusRef.current?.timers.forEach((t) => window.clearTimeout(t));
             focusRef.current = null;
             endArcadeSession();
         };
@@ -297,56 +298,61 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
         [keyOf, warmPlayerSprites]
     );
 
-    /** Starts loading a ship's gate art: its portrait and, with models on, its sprite. */
+    /** Starts loading a ship's gate art under `signal`: its portrait and, with models on, its
+     *  sprite and duel render. */
     const warmGateArt = useCallback(
-        (ship: Ship) => {
+        (ship: Ship, signal: AbortSignal = sessionSignal()) => {
             const { portraitUrl } = visualOfRef.current(ship);
             if (portraitUrl) void loadPortrait(portraitUrl).catch(() => {});
             const key = keyOf(ship);
             if (!key) return;
-            const signal = sessionSignal();
             void requestGateSprite(key, signal).catch(() => {});
             void requestViewerSprite(key, 'left', signal).catch(() => {});
         },
         [keyOf]
     );
 
-    /** Picks the next checkpoint's opponents for `flown` now and starts rendering their art. */
+    /** Picks the next checkpoint's opponents for `flown` now and starts rendering their art
+     *  under `signal`. */
     const prepareNextOpponents = useCallback(
-        (flown: Ship | null = flownRef.current) => {
+        (flown: Ship | null = flownRef.current, signal: AbortSignal = sessionSignal()) => {
             const pick =
                 flown && canDuel(shipsRef.current, flown.id)
                     ? pickOpponents(shipsRef.current, flown.id, Math.random)
                     : null;
             nextOpponentsRef.current = pick;
             nextOpponentsForRef.current = flown?.id ?? null;
-            pick?.forEach(warmGateArt);
+            pick?.forEach((ship) => warmGateArt(ship, signal));
             refreshPins();
         },
         [warmGateArt, refreshPins]
     );
 
-    /** On the select screen, a ship that stays focused has its sprites and its first opponents
-     *  rendered ahead, so a run launched with it starts with them ready. */
+    /** On the select screen, a ship that stays focused has its own sprites rendered ahead and,
+     *  after a longer dwell, its first opponents picked and their art loaded, so a run launched
+     *  with it starts with them ready. Moving focus on drops that ship's queued work. */
     const onFocusShip = useCallback(
         (ship: Ship) => {
             const key = keyOf(ship);
             const previous = focusRef.current;
             if (previous && previous.key === key) return;
             if (previous) {
-                window.clearTimeout(previous.timer);
+                previous.timers.forEach((t) => window.clearTimeout(t));
                 previous.controller.abort();
             }
             focusRef.current = null;
             if (!key) return;
             const controller = new AbortController();
             const signal = anySignal(sessionSignal(), controller.signal);
-            const timer = window.setTimeout(() => {
-                if (signal.aborted) return;
-                warmPlayerSprites(key, signal);
-                prepareNextOpponents(ship);
-            }, FOCUS_PREWARM_MS);
-            focusRef.current = { key, controller, timer };
+            const timers = [
+                window.setTimeout(() => {
+                    if (!signal.aborted) warmPlayerSprites(key, signal);
+                }, FOCUS_PREWARM_MS),
+                window.setTimeout(() => {
+                    if (!signal.aborted) prepareNextOpponents(ship, signal);
+                }, FOCUS_OPPONENTS_MS),
+            ];
+            focusRef.current = { key, controller, timers };
         },
         [keyOf, warmPlayerSprites, prepareNextOpponents]
     );
@@ -358,7 +364,7 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
         const flown = flownRef.current;
         if (flown) requestFlownFrames(flown);
         if (flown && nextOpponentsForRef.current !== flown.id) prepareNextOpponents(flown);
-        else nextOpponentsRef.current?.forEach(warmGateArt);
+        else nextOpponentsRef.current?.forEach((ship) => warmGateArt(ship));
         refreshPins();
     }, [visualOf, requestFlownFrames, prepareNextOpponents, warmGateArt, refreshPins]);
 
@@ -391,7 +397,7 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
             writeLastShipId(ship.id);
             const focus = focusRef.current;
             if (focus) {
-                window.clearTimeout(focus.timer);
+                focus.timers.forEach((t) => window.clearTimeout(t));
                 // A focused ship's sprites keep rendering if it is the one launched.
                 if (focus.key !== keyOf(ship)) focus.controller.abort();
                 focusRef.current = null;

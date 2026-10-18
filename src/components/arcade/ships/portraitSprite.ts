@@ -1,3 +1,7 @@
+import { evictOldest } from './viewerCache';
+
+/** Portraits kept at once; opponents are picked at random, so a long session meets many. */
+const PORTRAITS_KEPT = 32;
 const cache = new Map<string, Promise<HTMLImageElement>>();
 const loaded = new Map<string, HTMLImageElement>();
 
@@ -9,6 +13,7 @@ export function loadPortrait(url: string): Promise<HTMLImageElement> {
             const img = new Image();
             img.onload = () => {
                 loaded.set(url, img);
+                evictOldest(loaded, PORTRAITS_KEPT, () => false);
                 resolve(img);
             };
             img.onerror = () => {
@@ -18,6 +23,7 @@ export function loadPortrait(url: string): Promise<HTMLImageElement> {
             img.src = url;
         });
         cache.set(url, p);
+        evictOldest(cache, PORTRAITS_KEPT, () => false);
     }
     return p;
 }
