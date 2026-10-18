@@ -6,23 +6,31 @@ const keys = { Atlas_Supporter_Legendary_1: 'Atlas_4' };
 const fleetShip = (imageKey?: string) => ({ id: 'f1', name: 'Aegis', imageKey }) as Ship;
 const template = (imageKey?: string) => ({ id: 't1', name: 'Aegis', imageKey }) as Ship;
 
+/** `imageKey` is a Cloudinary public id (e.g. `Terran_16`); the portrait is an absolute URL. */
+const cloudinaryPortrait = (publicId: string) =>
+    new RegExp(
+        `^https://res\\.cloudinary\\.com/[^/]+/image/upload/.*${publicId}_BigPortrait\\.jpg(\\?.*)?$`
+    );
+
 describe('resolveShipVisual', () => {
     it('resolves the visual key through the template definition id', () => {
         expect(
             resolveShipVisual(
                 fleetShip(),
-                template('https://img/aegis'),
+                template('Terran_16'),
                 'Atlas_Supporter_Legendary_1',
                 keys
             )
-        ).toEqual({ portraitUrl: 'https://img/aegis_BigPortrait.jpg', visualKey: 'Atlas_4' });
+        ).toEqual({
+            portraitUrl: expect.stringMatching(cloudinaryPortrait('Terran_16')),
+            visualKey: 'Atlas_4',
+        });
     });
 
     it("prefers the fleet ship's own image key", () => {
         expect(
-            resolveShipVisual(fleetShip('https://own'), template('https://tpl'), null, keys)
-                .portraitUrl
-        ).toBe('https://own_BigPortrait.jpg');
+            resolveShipVisual(fleetShip('Own_1'), template('Tpl_2'), null, keys).portraitUrl
+        ).toMatch(cloudinaryPortrait('Own_1'));
     });
 
     it('falls back to nulls on every miss', () => {
