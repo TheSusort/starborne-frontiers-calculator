@@ -4,19 +4,24 @@ import {
     anySignal,
     cachedPlayerFrames,
     createRequestCache,
+    endArcadeSession,
     fillFrameGrid,
     PlayerFrames,
     requestPlayerFrames,
+    setArcadePins,
     SWEEP_ORDER,
 } from '../arcadeSprites';
+import { isArcadeOpen } from '../modelPins';
 import { LEVEL_BANK, LEVEL_PITCH_ROW } from '../spritePoses';
 
 const sweepRender = vi.fn();
+const trimCaches = vi.fn();
 vi.mock('../arcadeFlags', () => ({
     loadShipSprites: () =>
         Promise.resolve({
             renderChaseSweeps: (...args: unknown[]) => sweepRender(...args),
             disposeSpriteStage: () => {},
+            trimSpriteCaches: (...args: unknown[]) => trimCaches(...args),
         }),
 }));
 
@@ -201,5 +206,29 @@ describe('requestPlayerFrames', () => {
         await settle();
         expect(sweepRender).toHaveBeenCalledTimes(SWEEP_ORDER.length);
         expect(frames.every((row) => row.every(Boolean))).toBe(true);
+    });
+});
+
+describe('endArcadeSession', () => {
+    it('closes the arcade and keeps only the last flown ship in its caches', async () => {
+        sweepRender.mockReset();
+        sweepRender.mockImplementation(async () => [[canvas()]]);
+        trimCaches.mockReset();
+        const session = new AbortController();
+        setArcadePins('Close_A', []);
+        await requestPlayerFrames('Close_A', session.signal);
+        await requestPlayerFrames('Close_B', session.signal);
+        expect(cachedPlayerFrames('Close_B')).not.toBeNull();
+
+        endArcadeSession();
+        await settle();
+        expect(isArcadeOpen()).toBe(false);
+        expect(cachedPlayerFrames('Close_A')).not.toBeNull();
+        expect(cachedPlayerFrames('Close_B')).toBeNull();
+        expect(trimCaches).toHaveBeenCalledWith('Close_A');
+
+        // A live request reopens it.
+        void requestPlayerFrames('Close_A', new AbortController().signal);
+        expect(isArcadeOpen()).toBe(true);
     });
 });

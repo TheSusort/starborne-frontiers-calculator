@@ -1,6 +1,11 @@
 import * as THREE from 'three';
 import { IdleSlice, runWhenIdle } from '../idle';
-import { loadShipModel, onShipModelEvicted, releaseGpu } from './shipModelLoader';
+import {
+    loadShipModel,
+    onShipModelEvicted,
+    releaseGpu,
+    trimShipModelsToClosedSize,
+} from './shipModelLoader';
 import { addShipLights } from './shipLighting';
 import {
     CHASE_CAMERA,
@@ -83,7 +88,23 @@ const zoomCache = new Map<string, Map<string, number>>();
 /** Each model's vertices in its own frame (x, y, z triples), for fitting the zoom. */
 const vertexCache = new WeakMap<THREE.Object3D, Float32Array>();
 
+/** Models the cache has evicted: their GPU copies are released and must not be counted
+ *  resident again by a render that was still running. */
+const evicted = new WeakSet<THREE.Object3D>();
+
+/** Records that `model` is uploaded to `stage`, unless the cache has evicted it. */
+export function markResident(s: Pick<SpriteStage, 'resident'>, model: THREE.Object3D): void {
+    if (!evicted.has(model)) s.resident.add(model);
+}
+
+/** Drops the zoom fits of every model but `keep`'s; the models stay in their own cache. */
+export function trimSpriteCaches(keep?: string | null): void {
+    for (const key of [...zoomCache.keys()]) if (key !== keep) zoomCache.delete(key);
+    trimShipModelsToClosedSize(keep);
+}
+
 onShipModelEvicted((model, key) => {
+    evicted.add(model);
     stage?.resident.delete(model);
     zoomCache.delete(key);
 });
@@ -239,15 +260,16 @@ async function renderModel(
             await slice.next(FRAME_UNIT_MS);
             s.renderer.initTexture(texture);
         }
-        s.resident.add(model);
+        markResident(s, model);
     }
 
     const frames: HTMLCanvasElement[] = [];
     for (const pose of o.poses) {
         await slice.next(FRAME_UNIT_MS);
         // A stage dropped while this render waited is replaced; the model is uploaded again.
-        const { renderer, scene, resident } = spriteStage();
-        resident.add(model);
+        const current = spriteStage();
+        const { renderer, scene } = current;
+        markResident(current, model);
         setPose(ship, pose);
         // The shared canvas is resized, drawn and read back within this synchronous block, so
         // other renders never see each other's frames.

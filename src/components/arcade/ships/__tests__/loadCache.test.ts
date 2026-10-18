@@ -84,4 +84,13 @@ describe('createLoadCache', () => {
         await expect(cache.get('a')).resolves.toBe('ok');
         expect(load).toHaveBeenCalledTimes(2);
     });
+
+    it('trims to a smaller bound, keeping the named entry', async () => {
+        const { cache, evicted } = setup(4);
+        for (const k of ['a', 'b', 'c', 'd']) await cache.get(k);
+        await settle();
+        cache.trim(2, 'a'); // a is the least recently used, yet kept
+        expect(evicted).toEqual(['b=model:b', 'c=model:c']);
+        expect(cache.keys()).toEqual(['a', 'd']);
+    });
 });

@@ -137,7 +137,7 @@ Everything except model loading ships normally, behind no flag.
   `Arcade: duel ships from your hangar at random checkpoints.`
 
 ## Out of scope
-- Turning the model flag on in production (owner's call after approval).
+- ~~Turning the model flag on in production (owner's call after approval).~~ Superseded: see Amendments, the models are on in production.
 - Stat effects of the chosen ship on the runner.
 - Skins.
 

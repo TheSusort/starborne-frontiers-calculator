@@ -1,13 +1,15 @@
 import * as THREE from 'three';
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
-import { runWhenIdle } from '../idle';
+import { abortError, runWhenIdle } from '../idle';
 import { createLoadCache } from './loadCache';
-import { isModelPinned, isModelUrgent } from './modelPins';
+import { isArcadeOpen, isModelPinned, isModelUrgent } from './modelPins';
 
 const BASE = 'https://starborne.com/ship-renders';
 const TIMEOUT_MS = 10_000;
 /** Decoded models kept at once (each holds roughly 10 MB of textures); pinned ones are extra. */
 export const MODEL_CACHE_SIZE = 8;
+/** Decoded models kept while the arcade is closed. */
+export const MODEL_CACHE_CLOSED_SIZE = 2;
 /** The FBX's own texture references are replaced below, so its requests resolve to nothing. */
 const EMPTY_PIXEL =
     'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
@@ -93,10 +95,15 @@ async function load(key: string): Promise<THREE.Group> {
         `ship model ${key}`
     );
     // The parse is one long synchronous block, so it waits for idle time, and while the queue
-    // holds heavy work back (mid-run) for any ship but the one being flown.
-    const object = await runWhenIdle(() => new FBXLoader(manager).parse(buffer, ''), {
-        heavy: () => !isModelUrgent(key),
-    });
+    // holds heavy work back (mid-run) for any ship but the one being flown. A parse still
+    // queued when the arcade closes is dropped unless the model is pinned.
+    const object = await runWhenIdle(
+        () => {
+            if (!isArcadeOpen() && !isModelPinned(key)) throw abortError();
+            return new FBXLoader(manager).parse(buffer, '');
+        },
+        { heavy: () => !isModelUrgent(key) }
+    );
     albedo.colorSpace = THREE.SRGBColorSpace;
     emissive.colorSpace = THREE.SRGBColorSpace;
     normal.colorSpace = THREE.NoColorSpace;
@@ -179,4 +186,9 @@ const cache = createLoadCache<THREE.Group>({
  */
 export function loadShipModel(key: string): Promise<THREE.Group> {
     return cache.get(key);
+}
+
+/** Evicts unpinned models down to `MODEL_CACHE_CLOSED_SIZE`, `keep`'s among them. */
+export function trimShipModelsToClosedSize(keep?: string | null): void {
+    cache.trim(MODEL_CACHE_CLOSED_SIZE, keep ?? undefined);
 }

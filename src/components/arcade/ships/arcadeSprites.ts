@@ -1,6 +1,6 @@
 import { abortError, isAbortError, runWhenIdle } from '../idle';
 import { loadShipSprites, ShipSpritesModule } from './arcadeFlags';
-import { createPinSet } from './modelPins';
+import { createPinSet, setArcadeOpen } from './modelPins';
 import {
     BANK_ANGLES_DEG,
     FrameSweeps,
@@ -52,23 +52,41 @@ const spritesModule = () =>
     });
 
 let flownKey: string | null = null;
+/** The most recent ship flown, kept after the arcade closes. */
+let lastFlownKey: string | null = null;
 const flownPins = createPinSet({ urgent: true });
 const opponentPins = createPinSet();
 
 /** Keeps the flown ship's sprites and the models of it and its pending opponents cached; the
  *  flown ship's model is parsed even while heavy idle work is held. */
 export function setArcadePins(flown: string | null, opponents: Iterable<string | null>): void {
+    if (flown) {
+        setArcadeOpen(true);
+        lastFlownKey = flown;
+    }
     flownKey = flown;
     flownPins.set([flown]);
     opponentPins.set(opponents);
 }
 
-/** The arcade has closed: releases its pins, stops holding heavy idle work and frees the sprite
- *  renderer's GPU resources. The caches of finished sprites stay. */
+/** The arcade has closed: releases its pins, stops holding heavy idle work, frees the sprite
+ *  renderer's GPU resources and trims the caches to the most recent flown ship's frame grid,
+ *  viewer render and model (see `trimSpriteCaches`). Queued model parses for unpinned ships are
+ *  dropped. The next pin or sprite request reopens the arcade. */
 export function endArcadeSession(): void {
+    setArcadeOpen(false);
     setArcadePins(null, []);
     runWhenIdle.hold(false);
+    const keep = lastFlownKey;
+    for (const k of [...grids.keys()]) if (k !== keep) grids.delete(k);
+    viewerSprites.retain((id) => keep !== null && id === viewerId(keep, 'right'));
     sprites?.disposeSpriteStage();
+    sprites?.trimSpriteCaches(keep);
+}
+
+/** A sprite request from a live session reopens the arcade. */
+function reopenFor(signal: AbortSignal): void {
+    if (!signal.aborted) setArcadeOpen(true);
 }
 
 interface Request<T> {
@@ -115,6 +133,10 @@ export function createRequestCache<T>(
             );
             return entry.promise;
         },
+        /** Drops every entry `keep` does not accept. */
+        retain(keep: (id: string) => boolean): void {
+            for (const id of [...entries.keys()]) if (!keep(id)) entries.delete(id);
+        },
         /** The finished value, for drawing without waiting. */
         cached(id: string): T | null {
             return entries.get(id)?.value ?? null;
@@ -129,7 +151,10 @@ const gateSprites = createRequestCache<HTMLCanvasElement>(
 );
 
 /** A ship's gate sprite: its level chase-camera frame. */
-export const requestGateSprite = (key: string, signal: AbortSignal) => gateSprites.get(key, signal);
+export const requestGateSprite = (key: string, signal: AbortSignal) => {
+    reopenFor(signal);
+    return gateSprites.get(key, signal);
+};
 export const cachedGateSprite = (key: string) => gateSprites.cached(key);
 
 const viewerId = (key: string, facing: Facing) => `${key}:${facing}`;
@@ -147,8 +172,10 @@ const viewerSprites = createRequestCache<string>(
 
 /** A ship at the official viewer's angle, bow toward `facing`, as a data URL for the duel
  *  summary. */
-export const requestViewerSprite = (key: string, facing: Facing, signal: AbortSignal) =>
-    viewerSprites.get(viewerId(key, facing), signal);
+export const requestViewerSprite = (key: string, facing: Facing, signal: AbortSignal) => {
+    reopenFor(signal);
+    return viewerSprites.get(viewerId(key, facing), signal);
+};
 export const cachedViewerSprite = (key: string, facing: Facing) =>
     viewerSprites.cached(viewerId(key, facing));
 
@@ -202,6 +229,7 @@ export async function fillFrameGrid(
  * sweeps fill into the same arrays afterwards, so a view holding them shows each as it lands.
  */
 export function requestPlayerFrames(key: string, signal: AbortSignal): Promise<PlayerFrames> {
+    reopenFor(signal);
     let grid = grids.get(key);
     if (grid) {
         grids.delete(key);

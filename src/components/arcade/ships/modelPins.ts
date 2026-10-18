@@ -22,6 +22,14 @@ export function pinModel(key: string, { urgent = false } = {}): () => void {
     };
 }
 
+let arcadeOpen = true;
+/** Whether the arcade is open. While it is closed, a queued model parse for an unpinned key is
+ *  dropped instead of run. */
+export const setArcadeOpen = (open: boolean): void => {
+    arcadeOpen = open;
+};
+export const isArcadeOpen = (): boolean => arcadeOpen;
+
 export const isModelPinned = (key: string): boolean => pins.has(key);
 export const isModelUrgent = (key: string): boolean => (pins.get(key)?.urgent ?? 0) > 0;
 

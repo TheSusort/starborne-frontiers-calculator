@@ -22,9 +22,15 @@ export function createLoadCache<T>({ size, load, isPinned, onEvict }: LoadCacheO
     /** Most recently used last. */
     const entries = new Map<string, Entry>();
 
-    const trim = () => {
-        const evictable = [...entries].filter(([key, e]) => e.done && !isPinned?.(key));
-        for (const [key, entry] of evictable.slice(0, Math.max(0, evictable.length - size))) {
+    const trim = (max = size, keep?: string) => {
+        const evictable = [...entries].filter(
+            ([key, e]) => e.done && key !== keep && !isPinned?.(key)
+        );
+        const kept = keep !== undefined && entries.get(keep)?.done ? 1 : 0;
+        for (const [key, entry] of evictable.slice(
+            0,
+            Math.max(0, evictable.length - (max - kept))
+        )) {
             entries.delete(key);
             onEvict?.(entry.value as T, key);
         }
@@ -53,8 +59,9 @@ export function createLoadCache<T>({ size, load, isPinned, onEvict }: LoadCacheO
             );
             return entry.promise;
         },
-        /** Evicts what the bound allows now, e.g. after pins were released. */
-        trim,
+        /** Evicts down to `max` finished, unpinned entries (default `size`), counting `keep`'s
+         *  entry among them and never evicting it; e.g. after pins were released. */
+        trim: (max?: number, keep?: string) => trim(max, keep),
         keys: () => [...entries.keys()],
     };
 }
