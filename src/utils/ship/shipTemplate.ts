@@ -13,6 +13,7 @@ export interface ShipTemplate {
     // `ship_templates.affinity` is nullable; coerced by `toAffinityName` below.
     affinity: string | null;
     image_key: string;
+    definition_id?: string | null;
     active_skill_text?: string;
     charge_skill_text?: string;
     charge_skill_charge?: number;

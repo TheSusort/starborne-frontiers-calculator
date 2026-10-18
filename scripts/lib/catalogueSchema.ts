@@ -57,6 +57,7 @@ export const catalogueUnitSchema = z.object({
     ascensionStats: z.array(ascensionStatSchema),
     skills: z.array(skillSchema).min(1),
     ascensionSkills: z.array(skillSchema),
+    shipVisualKey: z.string().optional(),
 });
 export type CatalogueUnit = z.infer<typeof catalogueUnitSchema>;
 
