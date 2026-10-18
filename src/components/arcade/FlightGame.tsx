@@ -231,7 +231,9 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
     const startDuel = useCallback(() => {
         const game = gameRef.current;
         const pending = game.pendingDuel;
-        const flown = flownRef.current;
+        // Re-resolved so the duel uses the ship as ShipsContext currently enriches it.
+        const flown =
+            shipsRef.current.find((s) => s.id === flownRef.current?.id) ?? flownRef.current;
         const opponent = pending
             ? opponentsRef.current.get(pending.checkpointId)?.[pending.slot]
             : undefined;
@@ -250,7 +252,8 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
             effect: null,
         });
         const generation = runGenerationRef.current;
-        // Deferred so "Simulating…" paints before the synchronous battle simulation runs.
+        // The animation frame commits the "Simulating…" state; the timeout then runs the
+        // synchronous simulation after that frame has been painted.
         const simulate = async () => {
             let r: DuelResult;
             try {
@@ -264,7 +267,7 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
             const effect = resolveDuel(gameRef.current, r.outcome);
             setDuel((d) => d && { ...d, result: r, effect });
         };
-        window.setTimeout(() => void simulate(), 0);
+        requestAnimationFrame(() => window.setTimeout(() => void simulate(), 0));
     }, [setPhase, toSide]);
 
     const onDuelDone = useCallback(() => {
@@ -338,9 +341,13 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
 
                 const flown = flownRef.current;
                 for (const c of game.checkpoints) {
-                    if (view.gateArt.has(c.id) || !flown) continue;
+                    if (view.gateArt.has(c.id) || c.resolved || !flown) continue;
                     const pick = pickOpponents(shipsRef.current, flown.id, Math.random);
-                    if (!pick) continue;
+                    if (!pick) {
+                        // No opponents to show: the engine ignores a resolved checkpoint.
+                        c.resolved = true;
+                        continue;
+                    }
                     opponentsRef.current.set(c.id, pick);
                     view.gateArt.set(c.id, [toGateArt(pick[0]), toGateArt(pick[1])]);
                 }
