@@ -144,36 +144,6 @@ function drawFlame(
 }
 
 /**
- * The fighter's engine bloom and exhaust flames alone, posed like `drawNeonFighter`, for a
- * ship drawn from another source (a rendered sprite) on top of it.
- */
-export function drawEngineGlow(
-    ctx: CanvasRenderingContext2D,
-    s: number,
-    pose: Omit<NeonFighterPose, 'accent'>
-): void {
-    const bank = Math.max(-1, Math.min(1, pose.bank));
-    const thrust = Math.max(0, Math.min(1, pose.thrust));
-    ctx.save();
-    ctx.rotate(bank * BANK_ROTATION);
-    ctx.scale(1, pose.squash);
-    drawBloom(ctx, s, pose.timeMs, thrust);
-    for (const side of [-1, 1]) {
-        drawFlame(
-            ctx,
-            s,
-            s * side * ENGINE_X,
-            s * ENGINE_Y,
-            s * NOZZLE_RX,
-            side,
-            pose.timeMs,
-            thrust
-        );
-    }
-    ctx.restore();
-}
-
-/**
  * Draws the fighter centred at the current origin. The caller's `globalAlpha` scales the
  * whole drawing (the intro cross-fade relies on that); canvas state is restored on return.
  */

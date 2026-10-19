@@ -36,6 +36,7 @@ import { ArcadeUsernameModal } from './ArcadeUsernameModal';
 import { ArcadeLeaderboard } from './ArcadeLeaderboard';
 import type { FlightOrigin } from './flightEvents';
 import { canDuel, pickOpponents } from './duel/pickOpponents';
+import { createSpeedLines } from './speedLines';
 import type { DuelResult } from './duel/runDuel';
 import { DuelSummary, type DuelSide } from './duel/DuelSummary';
 import { factionAccent } from './ships/factionTint';
@@ -147,6 +148,8 @@ interface FlightGameProps {
 const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
     const reducedMotion = useMediaQuery('(prefers-reduced-motion: reduce)');
     const startOrigin = reducedMotion ? undefined : origin;
+    const reducedMotionRef = useRef(reducedMotion);
+    reducedMotionRef.current = reducedMotion;
 
     const { ships } = useShips();
     const { getGearPiece } = useInventory();
@@ -173,7 +176,11 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
             duels,
             phase,
             game: createGame(newSeed(), { duels }),
-            view: createFlightView(startOrigin, flown ? factionAccent(flown.faction) : null),
+            view: createFlightView(
+                startOrigin,
+                flown ? factionAccent(flown.faction) : null,
+                reducedMotion
+            ),
         };
     });
     const gameRef = useRef<GameState>(initial.game);
@@ -368,6 +375,13 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
         refreshPins();
     }, [visualOf, requestFlownFrames, prepareNextOpponents, warmGateArt, refreshPins]);
 
+    // Speed lines follow a reduced-motion change mid-run.
+    useEffect(() => {
+        const view = viewRef.current;
+        if (reducedMotion) view.speedLines = null;
+        else view.speedLines ??= createSpeedLines(view.laneWedge);
+    }, [reducedMotion]);
+
     // Heavy idle work (model parses) waits while the ship is flying.
     useEffect(() => {
         runWhenIdle.hold(phase === 'intro' || phase === 'running');
@@ -382,7 +396,11 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
         if (!flown || nextOpponentsForRef.current !== flown.id) prepareNextOpponents();
         setDuel(null);
         gameRef.current = createGame(newSeed(), { duels: duelsRef.current });
-        viewRef.current = createFlightView(undefined, flown ? factionAccent(flown.faction) : null);
+        viewRef.current = createFlightView(
+            undefined,
+            flown ? factionAccent(flown.faction) : null,
+            reducedMotionRef.current
+        );
         const key = flown && keyOf(flown);
         viewRef.current.playerFrames = key ? cachedPlayerFrames(key) : null;
         refreshPins();

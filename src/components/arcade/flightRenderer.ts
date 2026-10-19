@@ -23,7 +23,14 @@ import {
     screenHeadingDeg,
 } from './projection';
 import type { FlightOrigin } from './flightEvents';
-import { drawEngineGlow, drawNeonFighter } from './neonFighter';
+import { drawNeonFighter } from './neonFighter';
+import {
+    advanceSpeedLines,
+    createSpeedLines,
+    drawSpeedLines,
+    laneWedge,
+    SpeedLinePool,
+} from './speedLines';
 import type { NeonAccent } from './ships/factionTint';
 import { cachedPortrait } from './ships/portraitSprite';
 import { stakesBanner } from './duel/stakesText';
@@ -80,11 +87,19 @@ export interface FlightView {
     playerFrames: PlayerFrames | null;
     /** The player ship's drawn pose, eased toward the lane, slide and action every frame. */
     pose: PlayerPose;
+    /** Streaks rushing out of the vanishing point; `null` under reduced motion. */
+    speedLines: SpeedLinePool | null;
+    /** The lane wedge new speed lines keep out of, from the last drawn frame's geometry. */
+    laneWedge: number;
 }
+
+/** Lane wedge used before the first frame has measured the screen. */
+const DEFAULT_LANE_WEDGE = 0.8;
 
 export function createFlightView(
     origin?: FlightOrigin,
-    accent: NeonAccent | null = null
+    accent: NeonAccent | null = null,
+    reducedMotion = false
 ): FlightView {
     return {
         gridOffset: 0,
@@ -97,11 +112,16 @@ export function createFlightView(
         gateArt: new Map(),
         playerFrames: null,
         pose: restingPose(),
+        speedLines: reducedMotion ? null : createSpeedLines(DEFAULT_LANE_WEDGE),
+        laneWedge: DEFAULT_LANE_WEDGE,
     };
 }
 
+/** Scrolls the grid and the speed lines by world travel, so both hold still while the game
+ *  does not step (paused, countdown, duel). */
 export function advanceView(view: FlightView, travelUnits: number): void {
     view.gridOffset = (view.gridOffset + gridOffsetDelta(travelUnits)) % 1;
+    if (view.speedLines) advanceSpeedLines(view.speedLines, travelUnits, view.laneWedge);
 }
 
 const laneOffset = (lane: number) => lane - 1;
@@ -375,8 +395,8 @@ function drawPlayer(
     }
     if (frames.length > 0) {
         // The sprite spans the fighter's footprint.
+        // A model's engines sit in different places per ship, so it draws without exhaust.
         const size = s * SPRITE_FOOTPRINT;
-        drawEngineGlow(ctx, s, { timeMs, bank, squash, thrust: 1 });
         ctx.scale(1, squash);
         drawBlendedFrames(ctx, frames, size);
     } else {
@@ -434,6 +454,8 @@ export function renderFlight(
     drawMountains(ctx, g);
     drawGround(ctx, g);
     drawGrid(ctx, g, view.gridOffset, introGridLayers(g, introProgress(view)));
+    view.laneWedge = laneWedge(g);
+    if (view.speedLines) drawSpeedLines(ctx, g, view.speedLines, game.speed);
 
     const items: ({ z: number } & (
         { obstacle: Obstacle } | { pickup: Pickup } | { checkpoint: Checkpoint }
