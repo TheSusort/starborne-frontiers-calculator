@@ -249,7 +249,7 @@ export function advancePose(pose: PlayerPose, target: PlayerPose, dtSeconds: num
 }
 
 /** The share of a duck spent diving, and again climbing back; it holds its depth between. */
-export const DUCK_EDGE = 0.2;
+export const DUCK_EDGE = 0.13;
 
 /**
  * How deep a duck is, 0 level to 1 at its bottom: the jump's `sin(πt)` arc (see `jumpArc`) upside
