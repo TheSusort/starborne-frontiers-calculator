@@ -25,7 +25,9 @@
  *   origin, so they start in flight.
  *   Both run with the neon fighter and with a 3D frame grid (synthetic 256 px frames); the
  *   sprite runs also without the ship's trails (`-notrail`) and with its explosion always
- *   playing (`-explode`, the ship then not drawn).
+ *   playing (`-explode`, the ship then not drawn). The `-magnet` runs keep a magnet active,
+ *   re-granted as it runs out so its expiry flicker is in the mix: credits pulled in, tractor
+ *   beams and the ship's field.
  * - `scene`: each background layer alone (raster mode), to attribute the background's cost.
  * - `alloc`: bytes allocated per `renderFlight` frame (sampling heap profiler, collected objects
  *   included) and the top allocating functions. JS heap only: canvas backing stores and other
@@ -134,6 +136,7 @@ await page.evaluate(async (DPR) => {
             now += 1000 * dt;
             const inputs = n % 45 === 0 ? [moves[(n / 45) % moves.length]] : [];
             game.player.shield = true;
+            if (opts.magnet && game.player.magnetTime < 0.1) game.player.magnetTime = 8;
             const before = game.distance;
             for (let i = 0; i < 2; i++) E.step(game, i === 0 ? inputs : [], dt / 2);
             R.advanceView(view, game.distance - before);
@@ -276,6 +279,17 @@ for (const mode of ['record', 'raster']) {
         mode === 'raster' ? Math.min(frames, 600) : frames
     );
 }
+// With a magnet always active, to attribute its pull, beams and field.
+for (const mode of ['record', 'raster']) {
+    for (const sprite of [false, true]) {
+        report.flight[`${mode}-${sprite ? 'sprite' : 'neon'}-magnet`] = await page.evaluate(
+            (m, s, n) => window.__bench.flight(m, s, n, 200, { magnet: true }),
+            mode,
+            sprite,
+            mode === 'raster' ? Math.min(frames, 600) : frames
+        );
+    }
+}
 // A mid-range phone's main thread, roughly: the same runs under 6x CPU throttling.
 await cdp.send('Emulation.setCPUThrottlingRate', { rate: 6 });
 report.flight['record-sprite-cpu6x'] = await page.evaluate(() =>
@@ -284,21 +298,24 @@ report.flight['record-sprite-cpu6x'] = await page.evaluate(() =>
 await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 });
 report.scene = await page.evaluate(() => window.__bench.scene(120));
 
-// Allocation: the sampling heap profiler with collected objects kept, over a sprite run (and
-// one with the explosion always playing).
+// Allocation: the sampling heap profiler with collected objects kept, over a sprite run, one
+// with the explosion always playing and one with a magnet always active.
 await cdp.send('HeapProfiler.enable');
-for (const explode of [false, true]) {
-    await page.evaluate((explode) => {
+for (const variant of ['alloc', 'allocExplode', 'allocMagnet']) {
+    await page.evaluate((variant) => {
         const b = window.__bench;
         const { c, ctx } = b.makeCanvas();
-        const advance = b.scriptedRun(true, { explode });
+        const advance = b.scriptedRun(true, {
+            explode: variant === 'allocExplode',
+            magnet: variant === 'allocMagnet',
+        });
         for (let i = 0; i < 200; i++) advance((g, v, n, d) => b.R.renderFlight(ctx, g, v, n, d));
         window.__allocRun = () => {
             for (let i = 0; i < 2000; i++)
                 advance((g, v, n, d) => b.R.renderFlight(ctx, g, v, n, d));
             c.remove();
         };
-    }, explode);
+    }, variant);
     await cdp.send('HeapProfiler.startSampling', {
         samplingInterval: 256,
         includeObjectsCollectedByMajorGC: true,
@@ -316,7 +333,7 @@ for (const explode of [false, true]) {
             node.children.forEach(walk);
         };
         walk(heap.head);
-        report[explode ? 'allocExplode' : 'alloc'] = {
+        report[variant] = {
             note: '2000 frames incl. 2 engine steps each; bytes include the engine; JS heap only, canvas memory excluded',
             bytesPerFrame: Math.round(total / 2000),
             top: [...byFn.entries()]
