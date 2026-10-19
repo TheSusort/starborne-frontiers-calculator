@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseLeaderboardRows, parseSubmitResult } from '../leaderboardRows';
+import { isValidGuestName, parseLeaderboardRows, parseSubmitResult } from '../leaderboardRows';
 
 describe('parseLeaderboardRows', () => {
     it('maps RPC rows', () => {
@@ -9,8 +9,8 @@ describe('parseLeaderboardRows', () => {
                 { player_rank: 7, username: 'Me', best_score: 100, is_me: true },
             ])
         ).toEqual([
-            { rank: 1, username: 'Ace', bestScore: 900, isMe: false, ship: null },
-            { rank: 7, username: 'Me', bestScore: 100, isMe: true, ship: null },
+            { rank: 1, username: 'Ace', bestScore: 900, isMe: false, ship: null, isGuest: false },
+            { rank: 7, username: 'Me', bestScore: 100, isMe: true, ship: null, isGuest: false },
         ]);
     });
     it('drops malformed rows and tolerates non-arrays', () => {
@@ -53,12 +53,33 @@ describe('parseLeaderboardRows ship', () => {
                 bestScore: 9,
                 isMe: false,
                 ship: null,
+                isGuest: false,
             });
         }
     });
     it('counts characters as the database does, not UTF-16 units', () => {
         const astral = '\u{1F680}'.repeat(64);
         expect(row(astral).ship).toBe(astral);
+    });
+});
+
+describe('parseLeaderboardRows is_guest', () => {
+    const row = { player_rank: 1, username: 'Ace', best_score: 10, is_me: false, best_ship: null };
+    it('reads is_guest', () => {
+        expect(parseLeaderboardRows([{ ...row, is_guest: true }])[0].isGuest).toBe(true);
+    });
+    it('treats a missing or non-boolean is_guest as an account', () => {
+        expect(parseLeaderboardRows([row])[0].isGuest).toBe(false);
+        expect(parseLeaderboardRows([{ ...row, is_guest: 'yes' }])[0].isGuest).toBe(false);
+    });
+});
+
+describe('isValidGuestName', () => {
+    it('accepts the username alphabet at 3-20 characters', () => {
+        expect(isValidGuestName('Ace Pilot_1')).toBe(true);
+        expect(isValidGuestName('ab')).toBe(false);
+        expect(isValidGuestName('a'.repeat(21))).toBe(false);
+        expect(isValidGuestName('bad!')).toBe(false);
     });
 });
 
