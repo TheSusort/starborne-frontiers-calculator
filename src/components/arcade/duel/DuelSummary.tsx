@@ -55,6 +55,10 @@ const Side: React.FC<{ side: DuelSide; hp: number; mirrored?: boolean }> = ({
     </div>
 );
 
+/** The timeline point shown `t` seconds into the playback of `rounds` points. */
+const playbackIndex = (t: number, rounds: number) =>
+    Math.min(rounds - 1, Math.floor((t / ANIM_SECONDS) * rounds));
+
 const outcomeTitle = (outcome: DuelResult['outcome']) =>
     outcome === 'win' ? 'Victory' : outcome === 'lose' ? 'Defeat' : 'Duel skipped';
 
@@ -84,6 +88,9 @@ export const DuelSummary: React.FC<DuelSummaryProps> = ({
         }
         let raf = 0;
         let start: number | null = null;
+        let shown = -1;
+        const rounds = result.timeline.length;
+        // Re-renders only when the shown round changes, not on every animation frame.
         const tick = (now: number) => {
             start ??= now;
             const elapsed = (now - start) / 1000;
@@ -92,7 +99,11 @@ export const DuelSummary: React.FC<DuelSummaryProps> = ({
                 setFinished(true);
                 return;
             }
-            setT(elapsed);
+            const round = playbackIndex(elapsed, rounds);
+            if (round !== shown) {
+                shown = round;
+                setT(elapsed);
+            }
             raf = requestAnimationFrame(tick);
         };
         raf = requestAnimationFrame(tick);
@@ -126,9 +137,7 @@ export const DuelSummary: React.FC<DuelSummaryProps> = ({
         return () => window.removeEventListener('keydown', onKey, true);
     }, []);
 
-    const index = finished
-        ? timeline.length - 1
-        : Math.min(timeline.length - 1, Math.floor((t / ANIM_SECONDS) * timeline.length));
+    const index = finished ? timeline.length - 1 : playbackIndex(t, timeline.length);
     const point = index >= 0 ? timeline[index] : null;
     const playerHp = point?.playerHpPct ?? 100;
     const enemyHp = point?.enemyHpPct ?? 100;
