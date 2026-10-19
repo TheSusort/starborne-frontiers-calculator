@@ -3,134 +3,318 @@ import { projectInto, type Projected } from './projection';
 import { speedFraction } from './speedLines';
 
 /**
- * Neon contrails streaming from the player ship toward the camera. The ship's recent lane
- * position, height and bank are kept in a fixed ring buffer, sampled by game time (so they hold
- * still whenever the game does not step); each sample is drawn further toward the camera the
- * older it is, so a lane slide leaves a trail that bends after the ship. The streaks come from
- * fixed points on the ship's footprint (wingtips and under the hull), not from a model's
- * engines, so they suit every ship. Nothing here allocates per frame.
+ * The player ship's trails, in two layers:
+ * - a light-cycle wake: two thin cyan lines on the track surface, starting a little behind the
+ *   ship and running toward the camera, so a lane change leaves two smooth parallel curves;
+ * - air-flow streaks: hair-thin dashes in a narrow cone just outside the drawn ship's silhouette,
+ *   drifting toward the camera and locked to the ship (a slide only skews them a little).
+ *
+ * Where the ship was is a lag buffer rather than a history: point `k` follows the ship's lane
+ * offset with a time constant that grows with its age (`lagTau`), so the head tracks the ship
+ * closely and the tail swings over slowly, and a slide bends the whole trail at once. The buffer
+ * and the streaks' drift advance by game time only, so the trails hold still whenever the game
+ * does not step. Nothing here allocates per frame.
  */
 
-/** The trails are off until a design is chosen: no view creates a trail while this is false. */
-export const SHIP_TRAILS_ENABLED = false;
+/** Points in the lag buffer, spread evenly over `LAG_MAX_AGE` seconds of age. */
+export const LAG_POINTS = 61;
+export const LAG_MAX_AGE = 0.6;
+/** How slowly a trail point `age` seconds back follows the ship, in seconds. */
+export const lagTau = (age: number): number => 0.015 + 0.6 * age;
 
-/** Samples kept: comfortably more than `MAX_TRAIL_SECONDS` of samples. */
-export const TRAIL_SAMPLES = 40;
-/** Game time between samples. */
-export const TRAIL_SAMPLE_SECONDS = 1 / 60;
-/** How much game time the trail shows, at START_SPEED and at MAX_SPEED. */
-export const MIN_TRAIL_SECONDS = 0.14;
-export const MAX_TRAIL_SECONDS = 0.3;
-/** World distance behind the ship that the oldest drawn sample reaches, at START_SPEED and at
- *  MAX_SPEED; past about 2 units it is below the bottom of the screen. A sample's distance grows
- *  with the square root of its age, so a slide bends the trail near the ship and it straightens
- *  toward the camera. */
-const MIN_REACH = 1.4;
-const MAX_REACH = 2.4;
+const TAUS = Float64Array.from({ length: LAG_POINTS }, (_, k) =>
+    lagTau((k / (LAG_POINTS - 1)) * LAG_MAX_AGE)
+);
 
 export interface ShipTrail {
-    laneX: Float64Array;
-    lift: Float64Array;
-    bank: Float64Array;
-    /** Index the next sample is written to. */
-    head: number;
-    /** Samples written so far, up to `TRAIL_SAMPLES`. */
-    count: number;
-    /** Game time since the last sample. */
-    sinceSample: number;
+    /** Lane offset of each lag point, youngest first. */
+    lag: Float64Array;
+    /** False until the first `advanceTrail`, which places every point on the ship. */
+    primed: boolean;
+    /** Game seconds the trail has advanced, which drifts the air-flow streaks. */
+    clock: number;
 }
 
 export function createShipTrail(): ShipTrail {
-    return {
-        laneX: new Float64Array(TRAIL_SAMPLES),
-        lift: new Float64Array(TRAIL_SAMPLES),
-        bank: new Float64Array(TRAIL_SAMPLES),
-        head: 0,
-        count: 0,
-        sinceSample: 0,
-    };
+    return { lag: new Float64Array(LAG_POINTS), primed: false, clock: 0 };
 }
+
+/** Moves every lag point toward the ship's lane offset `laneX` over `seconds` of game time. The
+ *  first call places them all on the ship. No time, no movement. */
+export function advanceTrail(trail: ShipTrail, seconds: number, laneX: number): void {
+    if (!trail.primed) {
+        trail.lag.fill(laneX);
+        trail.primed = true;
+    }
+    if (!(seconds > 0)) return;
+    trail.clock += seconds;
+    for (let k = 0; k < LAG_POINTS; k++) {
+        trail.lag[k] += (laneX - trail.lag[k]) * (1 - Math.exp(-seconds / TAUS[k]));
+    }
+}
+
+/** The trail's lane offset `age` game seconds back, interpolated between lag points and held at
+ *  the oldest past `LAG_MAX_AGE`. */
+export function trailLaneX(trail: ShipTrail, age: number): number {
+    const f = Math.min(LAG_POINTS - 1, (Math.max(0, age) / LAG_MAX_AGE) * (LAG_POINTS - 1));
+    const i = Math.floor(f);
+    const j = Math.min(LAG_POINTS - 1, i + 1);
+    return trail.lag[i] + (trail.lag[j] - trail.lag[i]) * (f - i);
+}
+
+/** World depth (negative: toward the camera) of a trail point `age` seconds old over a trail of
+ *  `span` seconds running from `z0` to `z1` behind the ship. Concave, so a slide bends the trail
+ *  near the ship and it straightens toward the camera. */
+const ageToZ = (age: number, span: number, z0: number, z1: number, curve: number): number =>
+    -(z0 + (z1 - z0) * Math.pow(Math.min(1, age / span), curve));
+
+/** The drawn ship's on-screen box (px): its centre, its visible half-width and the top and bottom
+ *  of its visible pixels, and the track point under it. */
+export interface ShipBox {
+    x: number;
+    y: number;
+    halfWidth: number;
+    top: number;
+    bottom: number;
+    /** Screen x and y of the track surface under the ship (`project` at the ship's lane, z = 0). */
+    baseX: number;
+    baseY: number;
+}
+
+const CYAN = 'rgb(64, 240, 255)';
+const CYAN_CORE = 'rgb(188, 250, 255)';
+const CYAN_STREAK = 'rgb(198, 251, 255)';
+const ACCENT = 'rgb(255, 79, 216)';
+const ACCENT_STREAK = 'rgb(255, 202, 244)';
+
+const WAKE_POINTS = 48;
+const WAKE_SPAN = 0.45;
+/** Half the spacing of the two wake lines, in lane widths. */
+const WAKE_GAP = 0.08;
+const WAKE_ALPHA = 0.95;
+
+const STREAK_POINTS = 20;
+const STREAK_SPAN = 0.4;
+/** A streak's length as a share of the span, at the mockup's speed (see `streakLength`). */
+const STREAK_LENGTH = 0.55;
+/** The cone opens this many lane widths outward over the span. */
+const STREAK_SPREAD = 0.1;
+/** The streaks' opacity against the wake. */
+const STREAK_STRENGTH = 0.55;
+/** The share of the wake's lag a streak follows: it stays locked to the ship and a slide only
+ *  shears it a little, so it never crosses the hull. */
+const STREAK_LAG = 0.25;
+
+interface Streak {
+    side: -1 | 1;
+    /** Height on the silhouette where it leaves: 0 its bottom, 1 its top. */
+    height: number;
+    /** Outward margin from the silhouette, in lane widths. */
+    margin: number;
+    phase: number;
+    passes: readonly Pass[];
+}
+
+/** In pairs, most prominent first: `streakPairs` turns on more of them as speed rises. */
+const CYAN_PASSES = streakPasses(CYAN, CYAN_STREAK);
+const ACCENT_PASSES = streakPasses(ACCENT, ACCENT_STREAK);
+const STREAKS: readonly Streak[] = [
+    { side: -1, height: 0.55, margin: 0.015, phase: 0.0, passes: CYAN_PASSES },
+    { side: 1, height: 0.55, margin: 0.015, phase: 0.52, passes: CYAN_PASSES },
+    { side: -1, height: 0.3, margin: 0.035, phase: 0.37, passes: ACCENT_PASSES },
+    { side: 1, height: 0.3, margin: 0.035, phase: 0.09, passes: ACCENT_PASSES },
+    { side: -1, height: 0.8, margin: 0.03, phase: 0.71, passes: CYAN_PASSES },
+    { side: 1, height: 0.8, margin: 0.03, phase: 0.83, passes: CYAN_PASSES },
+];
+
+/** Streak pairs shown at `speed`: one at the start speed, all of them near the top speed. */
+export const streakPairs = (speed: number): number => {
+    const f = speedFraction(speed);
+    return f < 0.3 ? 1 : f < 0.6 ? 2 : STREAKS.length / 2;
+};
+
+/** A streak's length as a share of the span at `speed`. */
+export const streakLength = (speed: number): number =>
+    STREAK_LENGTH * (0.6 + 0.45 * speedFraction(speed));
+
+/** Segments merged into one stroke: a run shares its middle's width and opacity. */
+const RUN = 3;
+
+/** Samples of the streaks' track rows over their age span, interpolated between. */
+const STREAK_ROWS = 64;
 
 /**
- * Records the ship at lane offset `laneX`, `lift` lane widths above the track and banked `bank`
- * (-1..1) after `seconds` of game time. A sample is written each time `TRAIL_SAMPLE_SECONDS` has
- * gathered; a longer gap writes one sample, not several. No time, no sample.
+ * Track rows at fixed depths: per row, the screen x of the track's centre line, one lane's width
+ * (screen x is affine in the lane offset at a fixed depth: centre + laneX × width) and the
+ * surface's screen y. They depend only on the screen size, so they are rebuilt only when it
+ * changes, and a trail point costs no projection.
  */
-export function recordTrail(
-    trail: ShipTrail,
-    seconds: number,
-    laneX: number,
-    lift: number,
-    bank: number
-): void {
-    if (!(seconds > 0)) return;
-    trail.sinceSample += seconds;
-    if (trail.count > 0 && trail.sinceSample < TRAIL_SAMPLE_SECONDS) return;
-    trail.sinceSample = trail.count > 0 ? trail.sinceSample % TRAIL_SAMPLE_SECONDS : 0;
-    const i = trail.head;
-    trail.laneX[i] = laneX;
-    trail.lift[i] = lift;
-    trail.bank[i] = bank;
-    trail.head = (i + 1) % TRAIL_SAMPLES;
-    trail.count = Math.min(TRAIL_SAMPLES, trail.count + 1);
+interface Rows {
+    centre: Float64Array;
+    width: Float64Array;
+    y: Float64Array;
 }
-
-/** Buffer index of the `age`-th newest sample (0 = newest); `age` must be below `count`. */
-export const sampleIndex = (trail: ShipTrail, age: number): number =>
-    (trail.head - 1 - age + 2 * TRAIL_SAMPLES) % TRAIL_SAMPLES;
-
-/** Game time since point `n` of a drawn streak: point 0 is the live ship, point `n` the
- *  (`n` - 1)-th newest sample. */
-export const pointAge = (trail: ShipTrail, n: number): number =>
-    n === 0 ? 0 : (n - 1) * TRAIL_SAMPLE_SECONDS + trail.sinceSample;
-
-/** How long the trail is, in game seconds, at `speed`. */
-export const trailSeconds = (speed: number): number =>
-    MIN_TRAIL_SECONDS + (MAX_TRAIL_SECONDS - MIN_TRAIL_SECONDS) * speedFraction(speed);
-
-interface Emitter {
-    /** Lane offset from the ship's centre. */
-    dx: number;
-    /** Height below the ship's centre, in lane widths. */
-    dy: number;
-    glow: string;
-    core: string;
-    /** Width of the glow at the player row, in lane widths. */
-    width: number;
-}
-
-/** Wingtip streaks in cyan, a pair under the hull in pink. */
-const EMITTERS: readonly Emitter[] = [
-    { dx: -0.24, dy: 0, glow: 'rgba(64, 240, 255, 0.3)', core: 'rgb(190, 252, 255)', width: 0.014 },
-    { dx: 0.24, dy: 0, glow: 'rgba(64, 240, 255, 0.3)', core: 'rgb(190, 252, 255)', width: 0.014 },
-    {
-        dx: -0.07,
-        dy: 0.05,
-        glow: 'rgba(255, 79, 216, 0.22)',
-        core: 'rgb(255, 150, 230)',
-        width: 0.018,
-    },
-    {
-        dx: 0.07,
-        dy: 0.05,
-        glow: 'rgba(255, 79, 216, 0.22)',
-        core: 'rgb(255, 150, 230)',
-        width: 0.018,
-    },
-];
-/** A wingtip drops by this share of its offset at full bank, like the hull's roll. */
-const BANK_DROP = 0.25;
-/** Segments a streak is drawn in, each with its own width and opacity. */
-const BUCKETS = 5;
-
-const xs = new Float64Array(TRAIL_SAMPLES + 1);
-const ys = new Float64Array(TRAIL_SAMPLES + 1);
-const ws = new Float64Array(TRAIL_SAMPLES + 1);
+const rows = (n: number): Rows => ({
+    centre: new Float64Array(n),
+    width: new Float64Array(n),
+    y: new Float64Array(n),
+});
+const wakeRows = rows(WAKE_POINTS);
+const streakRows = rows(STREAK_ROWS);
+let rowsFor = { w: 0, h: 0 };
 const at: Projected = { x: 0, y: 0, scale: 0, width: 0 };
 
+function fillRows(g: SceneGeometry, out: Rows, n: number, zAt: (k: number) => number): void {
+    for (let i = 0; i < n; i++) {
+        projectInto(g, 0, zAt(i / (n - 1)), at);
+        out.centre[i] = at.x;
+        out.width[i] = at.width;
+        out.y[i] = at.y;
+    }
+}
+
+const wakeZ = (k: number) => ageToZ(k * WAKE_SPAN, WAKE_SPAN, 0.25, 2.3, 0.7);
+const streakZ = (k: number) => ageToZ(k * STREAK_SPAN, STREAK_SPAN, 0.05, 2.2, 0.8);
+
+function ensureRows(g: SceneGeometry): void {
+    if (rowsFor.w === g.w && rowsFor.h === g.h) return;
+    fillRows(g, wakeRows, WAKE_POINTS, wakeZ);
+    fillRows(g, streakRows, STREAK_ROWS, streakZ);
+    rowsFor = { w: g.w, h: g.h };
+}
+
+/** The streak rows' values at `age`, interpolated, written to `row`. */
+const row = { centre: 0, width: 0, y: 0 };
+function streakRowAt(age: number): void {
+    const f = Math.min(STREAK_ROWS - 1, (Math.max(0, age) / STREAK_SPAN) * (STREAK_ROWS - 1));
+    const i = Math.floor(f);
+    const j = Math.min(STREAK_ROWS - 1, i + 1);
+    const t = f - i;
+    row.centre = streakRows.centre[i] + (streakRows.centre[j] - streakRows.centre[i]) * t;
+    row.width = streakRows.width[i] + (streakRows.width[j] - streakRows.width[i]) * t;
+    row.y = streakRows.y[i] + (streakRows.y[j] - streakRows.y[i]) * t;
+}
+
+const xs = new Float64Array(WAKE_POINTS);
+const ys = new Float64Array(WAKE_POINTS);
+const ws = new Float64Array(WAKE_POINTS);
+
+type Shape = (k: number) => number;
+type Width = (k: number, w: number) => number;
+
+/** One stroke of a neon line: its colour, opacity gain and width. */
+interface Pass {
+    colour: string;
+    gain: number;
+    width: Width;
+}
+
 /**
- * Draws the streaks from the ship's current spot (`laneX`, `lift`, `bank`) back through the
- * recorded samples, fading toward the camera. `opacity` scales them (the intro fades them in).
+ * Strokes the polyline in `xs`/`ys` (`n` points) in runs of `RUN` segments, each with the opacity
+ * `gain × alpha(k)` and width `width(k, w)` of its middle (`k` 0..1 along the line, `w` its lane
+ * width). Each run's path is built once and stroked once per pass; under additive compositing
+ * the order of the strokes does not change the result.
+ */
+function strokeRuns(
+    ctx: CanvasRenderingContext2D,
+    n: number,
+    opacity: number,
+    alpha: Shape,
+    passes: readonly Pass[]
+): void {
+    for (let from = 0; from < n - 1; from += RUN) {
+        const to = Math.min(n - 1, from + RUN);
+        const k = (from + to) / 2 / (n - 1);
+        const a = opacity * alpha(k);
+        if (a <= 0.003) continue;
+        const w = (ws[from] + ws[to]) / 2;
+        ctx.beginPath();
+        ctx.moveTo(xs[from], ys[from]);
+        for (let i = from + 1; i <= to; i++) ctx.lineTo(xs[i], ys[i]);
+        for (let p = 0; p < passes.length; p++) {
+            const pass = passes[p];
+            const passAlpha = a * pass.gain;
+            if (passAlpha <= 0.003) continue;
+            ctx.strokeStyle = pass.colour;
+            ctx.globalAlpha = passAlpha;
+            ctx.lineWidth = pass.width(k, w);
+            ctx.stroke();
+        }
+    }
+}
+
+const wakeFade: Shape = (k) => Math.min(1, k / 0.12) * Math.pow(1 - k, 1.2);
+const wakeCore: Width = (_k, w) => Math.max(0.8, w * 0.0045);
+/** A wide faint glow, a mid halo and a hair-thin hot core. */
+const WAKE_PASSES: readonly Pass[] = [
+    { colour: CYAN, gain: 0.12, width: (k, w) => wakeCore(k, w) * 7 },
+    { colour: CYAN, gain: 0.35, width: (k, w) => wakeCore(k, w) * 2.6 },
+    { colour: CYAN_CORE, gain: 1, width: wakeCore },
+];
+const streakFade: Shape = (k) => Math.sin(Math.PI * k);
+/** A faint glow and a hair-thin core. */
+function streakPasses(glow: string, core: string): readonly Pass[] {
+    return [
+        { colour: glow, gain: 0.18, width: (_k, w) => Math.max(1.6, w * 0.008) },
+        { colour: core, gain: 1, width: (_k, w) => Math.max(0.6, w * 0.0022) },
+    ];
+}
+
+/** The light-cycle wake: two neon lines (glow, halo, hot core) on the track. */
+function drawWake(ctx: CanvasRenderingContext2D, trail: ShipTrail, opacity: number): void {
+    for (let side = -1; side <= 1; side += 2) {
+        for (let i = 0; i < WAKE_POINTS; i++) {
+            const age = (i / (WAKE_POINTS - 1)) * WAKE_SPAN;
+            const width = wakeRows.width[i];
+            xs[i] = wakeRows.centre[i] + (trailLaneX(trail, age) + side * WAKE_GAP) * width;
+            ys[i] = wakeRows.y[i];
+            ws[i] = width;
+        }
+        strokeRuns(ctx, WAKE_POINTS, opacity * WAKE_ALPHA, wakeFade, WAKE_PASSES);
+    }
+}
+
+/** The air-flow streaks in a cone just outside the ship's silhouette `box`. */
+function drawAirflow(
+    ctx: CanvasRenderingContext2D,
+    trail: ShipTrail,
+    speed: number,
+    laneX: number,
+    box: ShipBox,
+    u: number,
+    opacity: number
+): void {
+    const count = 2 * streakPairs(speed);
+    const length = streakLength(speed);
+    for (let s = 0; s < count; s++) {
+        const { side, height, margin, phase, passes } = STREAKS[s];
+        const edge = box.x + side * box.halfWidth;
+        const dx0 = (edge - box.baseX) / u + side * margin;
+        const leaveY = box.y + box.bottom + (box.top - box.bottom) * height;
+        // Height of the leaving point above the track, and above the ship's centre.
+        const h0 = (box.baseY - leaveY) / u;
+        const dh0 = (box.y - leaveY) / u;
+        const head = (trail.clock * 1.6 + phase) % 1;
+        const a0 = head * (1 - length) * STREAK_SPAN;
+        for (let i = 0; i < STREAK_POINTS; i++) {
+            const k = i / (STREAK_POINTS - 1);
+            const age = a0 + k * length * STREAK_SPAN;
+            const x = laneX + (trailLaneX(trail, age) - laneX) * STREAK_LAG;
+            const open = Math.pow(age / STREAK_SPAN, 0.8);
+            streakRowAt(age);
+            xs[i] = row.centre + (x + dx0 + side * STREAK_SPREAD * open) * row.width;
+            ys[i] = row.y - (h0 - 0.4 * open * dh0) * row.width;
+            ws[i] = row.width;
+        }
+        const strength = opacity * STREAK_STRENGTH * 0.85 * Math.sqrt(Math.sin(Math.PI * head));
+        strokeRuns(ctx, STREAK_POINTS, strength, streakFade, passes);
+    }
+}
+
+/**
+ * Draws the wake and the air-flow streaks for the ship at lane offset `laneX`, drawn in `box`,
+ * with `u` the lane width at the player row. `opacity` scales both (the intro fades them in).
+ * Drawn before the ship, so the hull covers them.
  */
 export function drawShipTrails(
     ctx: CanvasRenderingContext2D,
@@ -138,55 +322,20 @@ export function drawShipTrails(
     trail: ShipTrail,
     speed: number,
     laneX: number,
-    lift: number,
-    bank: number,
+    box: ShipBox,
+    u: number,
     opacity: number
 ): void {
-    const seconds = trailSeconds(speed);
-    const f = speedFraction(speed);
-    const reach = MIN_REACH + (MAX_REACH - MIN_REACH) * f;
-    const strength = opacity * (0.45 + 0.55 * f);
-    if (strength <= 0 || trail.count === 0) return;
-    // Samples within the trail's time, plus the live point.
-    let points = 1;
-    while (points <= trail.count && pointAge(trail, points) <= seconds) points++;
-    if (points < 2) return;
-
+    if (opacity <= 0 || !trail.primed) return;
     const alpha = ctx.globalAlpha;
     const cap = ctx.lineCap;
+    const op = ctx.globalCompositeOperation;
+    ensureRows(g);
+    ctx.globalCompositeOperation = 'lighter';
     ctx.lineCap = 'round';
-    for (let k = 0; k < EMITTERS.length; k++) {
-        const e = EMITTERS[k];
-        for (let n = 0; n < points; n++) {
-            const i = n === 0 ? -1 : sampleIndex(trail, n - 1);
-            const sx = i < 0 ? laneX : trail.laneX[i];
-            const sl = i < 0 ? lift : trail.lift[i];
-            const sb = i < 0 ? bank : trail.bank[i];
-            const z = -Math.sqrt(pointAge(trail, n) / seconds) * reach;
-            projectInto(g, sx + e.dx, z, at);
-            xs[n] = at.x;
-            ys[n] = at.y - (sl - e.dy - e.dx * sb * BANK_DROP) * at.width;
-            ws[n] = at.width;
-        }
-        const per = Math.ceil((points - 1) / BUCKETS);
-        for (let b = 0; b * per < points - 1; b++) {
-            const from = b * per;
-            const to = Math.min(points - 1, from + per);
-            const mid = (from + to) / 2 / (points - 1);
-            const fade = strength * (1 - mid * mid);
-            const width = ws[Math.round((from + to) / 2)] * e.width;
-            ctx.beginPath();
-            ctx.moveTo(xs[from], ys[from]);
-            for (let n = from + 1; n <= to; n++) ctx.lineTo(xs[n], ys[n]);
-            ctx.globalAlpha = alpha * fade;
-            ctx.strokeStyle = e.glow;
-            ctx.lineWidth = Math.max(2, width * 3);
-            ctx.stroke();
-            ctx.strokeStyle = e.core;
-            ctx.lineWidth = Math.max(1, width * 0.7);
-            ctx.stroke();
-        }
-    }
+    drawWake(ctx, trail, opacity);
+    drawAirflow(ctx, trail, speed, laneX, box, u, opacity);
     ctx.globalAlpha = alpha;
     ctx.lineCap = cap;
+    ctx.globalCompositeOperation = op;
 }

@@ -27,6 +27,8 @@ import {
     introGridLayers,
     laneWidthAtPlayer,
     project,
+    projectInto,
+    Projected,
     screenHeadingDeg,
 } from './projection';
 import type { FlightOrigin } from './flightEvents';
@@ -55,13 +57,7 @@ import {
     laneWedge,
     SpeedLinePool,
 } from './speedLines';
-import {
-    createShipTrail,
-    drawShipTrails,
-    recordTrail,
-    SHIP_TRAILS_ENABLED,
-    ShipTrail,
-} from './shipTrails';
+import { advanceTrail, createShipTrail, drawShipTrails, ShipBox, ShipTrail } from './shipTrails';
 import type { NeonAccent } from './ships/factionTint';
 import { cachedPortrait } from './ships/portraitSprite';
 import { stakesBanner } from './duel/stakesText';
@@ -133,8 +129,7 @@ export interface FlightView {
     speedLines: SpeedLinePool | null;
     /** The lane wedge new speed lines keep out of, from the last drawn frame's geometry. */
     laneWedge: number;
-    /** Contrails behind the player ship; `null` under reduced motion or while
-     *  `SHIP_TRAILS_ENABLED` is off. */
+    /** The player ship's wake and air-flow streaks; `null` under reduced motion. */
     trail: ShipTrail | null;
     /** World travel since the last drawn frame, which the trail turns into game time. */
     trailTravel: number;
@@ -165,7 +160,7 @@ export function createFlightView(
         pose: restingPose(),
         speedLines: reducedMotion ? null : createSpeedLines(DEFAULT_LANE_WEDGE),
         laneWedge: DEFAULT_LANE_WEDGE,
-        trail: reducedMotion || !SHIP_TRAILS_ENABLED ? null : createShipTrail(),
+        trail: reducedMotion ? null : createShipTrail(),
         trailTravel: 0,
         dpr: 0,
     };
@@ -396,47 +391,36 @@ const NEON_HALF_WIDTH = 2.2;
 const NEON_TOP = -0.8;
 const NEON_BOTTOM = 0.6;
 
-/**
- * Fits the shield around the ship drawn at (`x`, `y`) with ship unit `s`: around the visible
- * pixels of the 3D sprite's level frame (so it does not wobble as frames blend), or the neon
- * fighter's outline.
- */
-function placeShield(
-    out: ShieldPlacement,
-    view: FlightView,
-    x: number,
-    y: number,
-    s: number,
-    squash: number,
-    dpr: number
-): void {
-    const level = view.playerFrames?.[LEVEL_PITCH_ROW]?.[LEVEL_BANK]?.[LEVEL_HEADING];
-    const fp = level ? frameFootprint(level) : null;
-    let halfWidth = NEON_HALF_WIDTH * s;
-    let top = NEON_TOP * s * squash;
-    let bottom = NEON_BOTTOM * s * squash;
-    if (fp) {
-        const size = s * SPRITE_FOOTPRINT;
-        halfWidth = fp.halfWidth * size;
-        top = fp.top * size;
-        bottom = fp.bottom * size;
-    }
-    fitShield(out, halfWidth, (bottom - top) / 2);
-    out.x = x;
-    out.y = y + (top + bottom) / 2;
-    out.dpr = dpr;
-    out.bank = view.pose.bank;
+/** Where the player ship is drawn this frame: its `ShipBox`, its ship unit `s` (see
+ *  `neonFighter`), the neon fighter's duck squash and the intro's progress. */
+interface ShipPlacement extends ShipBox {
+    s: number;
+    squash: number;
+    intro: number;
 }
 
-function drawPlayer(
-    ctx: CanvasRenderingContext2D,
-    g: SceneGeometry,
-    game: GameState,
-    view: FlightView,
-    timeMs: number,
-    dpr: number
-): void {
-    const base = project(g, view.playerX, 0);
+/** The ship's placement, rewritten every frame rather than allocated. */
+const shipAt: ShipPlacement = {
+    x: 0,
+    y: 0,
+    halfWidth: 0,
+    top: 0,
+    bottom: 0,
+    baseX: 0,
+    baseY: 0,
+    s: 0,
+    squash: 1,
+    intro: 1,
+};
+const baseAt: Projected = { x: 0, y: 0, scale: 0, width: 0 };
+
+/**
+ * Places the player ship: on its lane at its lift, flown in from the page background during the
+ * intro, with its visible extent from the 3D sprite's level frame (so it does not wobble as
+ * frames blend) or the neon fighter's outline.
+ */
+function placeShip(out: ShipPlacement, g: SceneGeometry, game: GameState, view: FlightView): void {
+    const base = projectInto(g, view.playerX, 0, baseAt);
     const u = laneWidthAtPlayer(g);
     let s = u * 0.16;
     let x = base.x;
@@ -444,8 +428,7 @@ function drawPlayer(
 
     const { action, actionTime } = game.player;
     if (action === 'jump') s *= 1 + jumpArc(actionTime) * JUMP_SCALE_GAIN;
-    const { pose } = view;
-    const squash = showsSprite(view) ? 1 : 1 - (1 - DUCK_SQUASH) * pose.duck;
+    const squash = showsSprite(view) ? 1 : 1 - (1 - DUCK_SQUASH) * view.pose.duck;
 
     const e = introProgress(view);
     if (view.intro && e < 1) {
@@ -454,8 +437,53 @@ function drawPlayer(
         s = view.intro.size + (s - view.intro.size) * e;
     }
 
+    const level = view.playerFrames?.[LEVEL_PITCH_ROW]?.[LEVEL_BANK]?.[LEVEL_HEADING];
+    const fp = level ? frameFootprint(level) : null;
+    if (fp) {
+        const size = s * SPRITE_FOOTPRINT;
+        out.halfWidth = fp.halfWidth * size;
+        out.top = fp.top * size;
+        out.bottom = fp.bottom * size;
+    } else {
+        out.halfWidth = NEON_HALF_WIDTH * s;
+        out.top = NEON_TOP * s * squash;
+        out.bottom = NEON_BOTTOM * s * squash;
+    }
+    out.x = x;
+    out.y = y;
+    out.baseX = base.x;
+    out.baseY = base.y;
+    out.s = s;
+    out.squash = squash;
+    out.intro = e;
+}
+
+/** Fits the shield around the placed ship's visible extent. */
+function placeShield(
+    out: ShieldPlacement,
+    ship: ShipPlacement,
+    view: FlightView,
+    dpr: number
+): void {
+    fitShield(out, ship.halfWidth, (ship.bottom - ship.top) / 2);
+    out.x = ship.x;
+    out.y = ship.y + (ship.top + ship.bottom) / 2;
+    out.dpr = dpr;
+    out.bank = view.pose.bank;
+}
+
+function drawPlayer(
+    ctx: CanvasRenderingContext2D,
+    ship: ShipPlacement,
+    game: GameState,
+    view: FlightView,
+    timeMs: number,
+    dpr: number
+): void {
+    const { x, y, s, squash, intro: e } = ship;
+    const { pose } = view;
     const shield = shieldAt;
-    placeShield(shield, view, x, y, s, squash, dpr);
+    placeShield(shield, ship, view, dpr);
     if (game.player.shield) drawShieldBack(ctx, shield, timeMs);
 
     ctx.save();
@@ -557,14 +585,16 @@ export function renderFlight(
     };
     // Items already past the player are nearer the camera, so they draw over it.
     for (const item of items) if (item.z >= 0) drawItem(item);
+    const ship = shipAt;
+    placeShip(ship, g, game, view);
     if (view.trail) {
-        const lift = shipLift(game, view);
         const seconds = game.speed > 0 ? view.trailTravel / game.speed : 0;
-        recordTrail(view.trail, seconds, view.playerX, lift, view.pose.bank);
-        const e = introProgress(view);
-        drawShipTrails(ctx, g, view.trail, game.speed, view.playerX, lift, view.pose.bank, e * e);
+        advanceTrail(view.trail, seconds, view.playerX);
+        const u = laneWidthAtPlayer(g);
+        const e = ship.intro;
+        drawShipTrails(ctx, g, view.trail, game.speed, view.playerX, ship, u, e * e);
     }
     view.trailTravel = 0;
-    drawPlayer(ctx, g, game, view, timeMs, dpr);
+    drawPlayer(ctx, ship, game, view, timeMs, dpr);
     for (const item of items) if (item.z < 0) drawItem(item);
 }

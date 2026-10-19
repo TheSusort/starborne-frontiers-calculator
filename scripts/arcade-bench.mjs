@@ -104,11 +104,12 @@ await page.evaluate(async (DPR) => {
     const gateSprite = shipFrame(128, 200);
 
     /** A scripted run: a fresh game and view, advanced one display frame per call. */
-    const scriptedRun = (sprite) => {
+    const scriptedRun = (sprite, opts = {}) => {
         const game = E.createGame(7, { duels: true });
         game.speed = 48;
         const view = R.createFlightView(undefined, null, false);
         if (sprite) view.playerFrames = frameGrid();
+        if (opts.trail === false) view.trail = null;
         const moves = ['left', 'jump', 'right', 'right', 'duck', 'left'];
         let n = 0;
         let now = 1000;
@@ -148,9 +149,9 @@ await page.evaluate(async (DPR) => {
         return { mean: r(mean), p50: r(q(0.5)), p95: r(q(0.95)), max: r(s[s.length - 1]) };
     };
 
-    const flight = (mode, sprite, count, warmup = 200) => {
+    const flight = (mode, sprite, count, warmup = 200, opts = {}) => {
         const { c, ctx } = makeCanvas();
-        const advance = scriptedRun(sprite);
+        const advance = scriptedRun(sprite, opts);
         const times = [];
         for (let i = 0; i < warmup + count; i++) {
             advance((game, view, now, dt) => {
@@ -230,6 +231,14 @@ for (const mode of ['record', 'raster']) {
             mode === 'raster' ? Math.min(frames, 600) : frames
         );
     }
+}
+// The same sprite runs without the ship's trails, to attribute their cost.
+for (const mode of ['record', 'raster']) {
+    report.flight[`${mode}-sprite-notrail`] = await page.evaluate(
+        (m, n) => window.__bench.flight(m, true, n, 200, { trail: false }),
+        mode,
+        mode === 'raster' ? Math.min(frames, 600) : frames
+    );
 }
 // A mid-range phone's main thread, roughly: the same runs under 6x CPU throttling.
 await cdp.send('Emulation.setCPUThrottlingRate', { rate: 6 });
