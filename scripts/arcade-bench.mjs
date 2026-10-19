@@ -18,12 +18,18 @@
  *     frame to be rasterised. Repeated read backs make Chrome move the canvas to software
  *     rendering (the same numbers as a browser started with accelerated 2D canvas off), so this
  *     is the CPU raster cost: what a device without GPU canvas pays, and a proxy for fill cost.
+ *   Each reports mean, p50, p95, p99, max, the number of frames over 1 ms and 8 ms, and
+ *   `canvasesBuilt`, the canvases created during the measured frames: a cache rebuilt mid-run
+ *   shows there even when it is too quick to show as a spike.
+ *   The intro (its live grid fan and fly-in) is not measured: the runs' views have no intro
+ *   origin, so they start in flight.
  *   Both run with the neon fighter and with a 3D frame grid (synthetic 256 px frames); the
  *   sprite runs also without the ship's trails (`-notrail`) and with its explosion always
  *   playing (`-explode`, the ship then not drawn).
  * - `scene`: each background layer alone (raster mode), to attribute the background's cost.
  * - `alloc`: bytes allocated per `renderFlight` frame (sampling heap profiler, collected objects
- *   included) and the top allocating functions.
+ *   included) and the top allocating functions. JS heap only: canvas backing stores and other
+ *   native memory are not counted, so a canvas built mid-run shows in the spike counts instead.
  * - `profile`: the top self-time functions over the record run.
  * - `step`: the engine's fixed step.
  * - `model` (with --model): the select screen's `ShipModelView` scene (official lighting, its
@@ -72,6 +78,13 @@ await page.evaluate(async (DPR) => {
 
     const W = 1280;
     const H = 720;
+    // Counts canvases created, so a cache rebuilt mid-run shows however fast the rebuild is.
+    window.__canvases = 0;
+    const createElement = document.createElement.bind(document);
+    document.createElement = (tag, opts) => {
+        if (tag === 'canvas') window.__canvases++;
+        return createElement(tag, opts);
+    };
     const makeCanvas = (opts) => {
         const c = document.createElement('canvas');
         c.style.cssText = `position:fixed;left:0;top:0;width:${W}px;height:${H}px`;
@@ -150,14 +163,25 @@ await page.evaluate(async (DPR) => {
         const mean = s.reduce((a, b) => a + b, 0) / s.length;
         const q = (p) => s[Math.min(s.length - 1, Math.floor(p * s.length))];
         const r = (v) => Math.round(v * 1000) / 1000;
-        return { mean: r(mean), p50: r(q(0.5)), p95: r(q(0.95)), max: r(s[s.length - 1]) };
+        // Spikes: a cache rebuilt mid-run shows as a long frame, not in the mean.
+        return {
+            mean: r(mean),
+            p50: r(q(0.5)),
+            p95: r(q(0.95)),
+            p99: r(q(0.99)),
+            max: r(s[s.length - 1]),
+            over1ms: s.filter((v) => v > 1).length,
+            over8ms: s.filter((v) => v > 8).length,
+        };
     };
 
     const flight = (mode, sprite, count, warmup = 200, opts = {}) => {
         const { c, ctx } = makeCanvas();
         const advance = scriptedRun(sprite, opts);
         const times = [];
+        let canvasesBefore = 0;
         for (let i = 0; i < warmup + count; i++) {
+            if (i === warmup) canvasesBefore = window.__canvases;
             advance((game, view, now, dt) => {
                 const t0 = performance.now();
                 R.renderFlight(ctx, game, view, now, dt);
@@ -167,7 +191,7 @@ await page.evaluate(async (DPR) => {
             });
         }
         c.remove();
-        return stats(times);
+        return { ...stats(times), canvasesBuilt: window.__canvases - canvasesBefore };
     };
 
     const scene = (count) => {
@@ -293,7 +317,7 @@ for (const explode of [false, true]) {
         };
         walk(heap.head);
         report[explode ? 'allocExplode' : 'alloc'] = {
-            note: '2000 frames incl. 2 engine steps each; bytes include the engine',
+            note: '2000 frames incl. 2 engine steps each; bytes include the engine; JS heap only, canvas memory excluded',
             bytesPerFrame: Math.round(total / 2000),
             top: [...byFn.entries()]
                 .sort((a, b) => b[1] - a[1])

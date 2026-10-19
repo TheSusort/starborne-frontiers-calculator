@@ -52,7 +52,10 @@ export interface SunCache {
     frame: number;
     left: number;
     top: number;
-    key: string;
+    /** The geometry and pixel ratio the canvas was sized for. */
+    w: number;
+    h: number;
+    dpr: number;
 }
 
 export const createSunCache = (): SunCache => ({
@@ -60,7 +63,9 @@ export const createSunCache = (): SunCache => ({
     frame: -1,
     left: 0,
     top: 0,
-    key: '',
+    w: 0,
+    h: 0,
+    dpr: 0,
 });
 
 export interface OverheadShipHit {
@@ -201,8 +206,8 @@ export function drawSky(ctx: CanvasRenderingContext2D, g: SceneGeometry): void {
     ctx.fillRect(w * 0.6, 0, w * 0.4, horizonY);
 }
 
-/** Star opacities are drawn in this many steps (a step is under 1/255 of a channel at most
- *  twice), so stars of one step share a fill style and a path. */
+/** Star opacities are drawn in this many steps, so stars of one step share a fill style and a
+ *  path. Rounding to the nearest step is off by at most 0.5/64 of full opacity, about 2/255. */
 const STAR_ALPHA_STEPS = 64;
 const STAR_FILLS = Array.from(
     { length: STAR_ALPHA_STEPS + 1 },
@@ -311,14 +316,15 @@ export function drawSunDisc(
     const top = Math.floor((sunY - sunR) * dpr);
     const width = Math.ceil((sunX + sunR) * dpr) - left;
     const height = Math.ceil((sunY + sunR) * dpr) - top;
-    const key = `${w}x${h}@${dpr}`;
-    if (!cache.canvas || cache.key !== key) {
+    if (!cache.canvas || cache.w !== w || cache.h !== h || cache.dpr !== dpr) {
         cache.canvas ??= document.createElement('canvas');
         cache.canvas.width = width;
         cache.canvas.height = height;
         cache.left = left;
         cache.top = top;
-        cache.key = key;
+        cache.w = w;
+        cache.h = h;
+        cache.dpr = dpr;
         cache.frame = -1;
     }
     if (sunFrame !== cache.frame) {
