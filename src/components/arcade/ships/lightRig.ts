@@ -1,3 +1,4 @@
+import { ARCADE_ACCENT } from './arcadeAccent';
 import { officialViewerCamera } from './spritePoses';
 
 /**
@@ -6,7 +7,7 @@ import { officialViewerCamera } from './spritePoses';
  */
 
 /** Colour of the accent lights (the viewer's `accent` query parameter): the neon fighter's pink. */
-export const ARCADE_LIGHT_ACCENT = 0xff4fd8;
+export const ARCADE_LIGHT_ACCENT = ARCADE_ACCENT;
 
 /** Renderer, environment and shadow settings, verbatim from the viewer. */
 export const VIEWER_RENDERER = {

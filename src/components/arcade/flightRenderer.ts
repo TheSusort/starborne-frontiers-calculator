@@ -15,7 +15,9 @@ import {
 } from '../theme/synthwaveScene';
 import {
     JUMP_PEAK,
+    JUMP_SCALE_GAIN,
     PICKUP_HEIGHT,
+    PICKUP_RADIUS,
     SHIELD_BREAK_FLASH,
     SHIP_RIDE_HEIGHT,
     SPAWN_Z,
@@ -303,7 +305,7 @@ function drawPickup(
     const bob = Math.sin(timeMs * 0.006 + pk.id) * 0.04 * u;
     const cx = p.x;
     const cy = p.y - PICKUP_HEIGHT * u + bob;
-    const r = 0.12 * u;
+    const r = PICKUP_RADIUS * u;
     ctx.globalAlpha = Math.min(1, Math.max(0, (SPAWN_Z - pk.z) / FADE_IN_UNITS));
     ctx.lineWidth = Math.max(1, 2 * p.scale);
     if (pk.kind === 'credit') {
@@ -346,7 +348,7 @@ function drawPlayer(
     if (action === 'jump') {
         const arc = jumpArc(actionTime);
         y -= arc * u * JUMP_PEAK;
-        s *= 1 + arc * 0.25;
+        s *= 1 + arc * JUMP_SCALE_GAIN;
     }
     const { pose } = view;
     const squash = 1 - (1 - DUCK_SQUASH) * pose.duck;

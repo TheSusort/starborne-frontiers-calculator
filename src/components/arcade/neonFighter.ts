@@ -1,3 +1,4 @@
+import { ARCADE_ACCENT_CSS } from './ships/arcadeAccent';
 import type { NeonAccent } from './ships/factionTint';
 
 /**
@@ -21,7 +22,7 @@ export interface NeonFighterPose {
 
 const HULL_FILL_TOP = 'rgba(42, 12, 70, 0.88)';
 const HULL_FILL_BOTTOM = 'rgba(10, 4, 26, 0.92)';
-const NEON_PINK = '#ff4fd8';
+const NEON_PINK = ARCADE_ACCENT_CSS;
 const NEON_PINK_GLOW = 'rgba(255, 79, 216, 0.28)';
 const NEON_CYAN = '#40f0ff';
 const NEON_CYAN_GLOW = 'rgba(64, 240, 255, 0.25)';

@@ -60,8 +60,9 @@ Everything except model loading ships normally, behind no flag.
 - Flag off: `portraitSprite.ts` returns the portrait image (no banking frames; the renderer tilts
   the image instead).
 - The 2D renderer draws the sprite for the player instead of `drawNeonFighter`, picking the frame
-  by bank; jump / duck squash / shield ring / intro cross-fade keep working. Engine-glow and flames
-  stay drawn by the renderer at the sprite's rear.
+  by bank; jump / duck squash / shield ring / intro cross-fade keep working. 3D sprites draw no
+  exhaust (engines sit in different places per model); speed lines convey motion instead. The neon
+  fighter keeps its flames.
 
 ### Gameplay
 - The chosen ship is cosmetic for the runner (no stat effects). Its stats/gear matter only in duels.
@@ -159,3 +160,12 @@ Everything except model loading ships normally, behind no flag.
   The first checkpoint is now drawn uniformly from **200–400 m**, and each later one **300–700 m**
   after the previous (was 600–1400 m throughout). Empty rows before and after a checkpoint and
   seeded determinism are unchanged.
+- **Thrusters removed, speed lines added.** 3D ship sprites draw no engine glow or flames; speed
+  lines carry the sense of speed. The neon fighter keeps its flames.
+- **Neon barriers.** Obstacles are synthwave neon barriers; the duck block is as tall as a wall.
+- **Jump pickup windows.** A jump collects pickups in its lane in its first and last ~0.133 s,
+  while the ship still overlaps them (pickup radius plus the ship's half-height, which grows with
+  the jump's scale).
+- **Speed ramp.** Speed climbs 0.4/s up to 48, then 0.15/s up to 72.
+- **Ship lighting.** The 3D ship scene copies the official ship viewer's lighting, with the accent
+  colour #ff4fd8.

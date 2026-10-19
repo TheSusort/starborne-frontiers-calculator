@@ -94,6 +94,22 @@ function scanlines(
     }
 }
 
+/** A dark, outlined barrier post whose top-left corner is at (x, y), `h` tall. */
+function drawNeonPost(
+    ctx: CanvasRenderingContext2D,
+    palette: Palette,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    scale: number,
+    pulse: number
+): void {
+    ctx.fillStyle = POST_FILL;
+    ctx.fillRect(x, y, w, h);
+    neonOutline(ctx, palette, x, y, w, h, scale * 0.6, pulse);
+}
+
 /** The double-stroke neon outline `drawGrid` uses for its glow: a wide faint stroke under a thin
  *  bright one, with no shadowBlur. `pulse` scales the glow's opacity. */
 function neonOutline(
@@ -175,11 +191,10 @@ export function drawBarrier(
         const half = LOW.halfWidth * u;
         const post = LOW.post * u;
         const postTop = y + LOW.postTop * u;
-        for (const px of [x - half - post / 2, x + half - post / 2]) {
-            ctx.fillStyle = POST_FILL;
-            ctx.fillRect(px, postTop, post, -LOW.postTop * u);
-            neonOutline(ctx, CYAN, px, postTop, post, -LOW.postTop * u, scale * 0.6, pulse);
-        }
+        const drawPost = (px: number) =>
+            drawNeonPost(ctx, CYAN, px, postTop, post, u * -LOW.postTop, scale, pulse);
+        drawPost(x - half - post / 2);
+        drawPost(x + half - post / 2);
         const barTop = y + LOW.barTop * u;
         const barH = (LOW.barTop - LOW.barBottom) * -u;
         fillGradientRect(ctx, CYAN, x - half, barTop, 2 * half, barH);
@@ -199,11 +214,10 @@ export function drawBarrier(
         const post = HIGH.post * u;
         const barTop = y + HIGH.barTop * u;
         const barH = (HIGH.barBottom - HIGH.barTop) * u;
-        for (const px of [x - half, x + half - post]) {
-            ctx.fillStyle = POST_FILL;
-            ctx.fillRect(px, barTop, post, -HIGH.barTop * u);
-            neonOutline(ctx, SUNSET, px, barTop, post, -HIGH.barTop * u, scale * 0.6, pulse);
-        }
+        const drawPost = (px: number) =>
+            drawNeonPost(ctx, SUNSET, px, barTop, post, u * -HIGH.barTop, scale, pulse);
+        drawPost(x - half);
+        drawPost(x + half - post);
         fillGradientRect(ctx, SUNSET, x - half, barTop, 2 * half, barH);
         scanlines(ctx, x - half, barTop, 2 * half, barH, u);
         neonOutline(ctx, SUNSET, x - half, barTop, 2 * half, barH, scale, pulse);
