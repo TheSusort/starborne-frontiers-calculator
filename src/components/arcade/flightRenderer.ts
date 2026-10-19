@@ -138,6 +138,9 @@ export interface FlightView {
     trail: ShipTrail | null;
     /** World travel since the last drawn frame, which the trail turns into game time. */
     trailTravel: number;
+    /** The canvas's device pixel ratio, as its owner set the transform; 0 reads it back from
+     *  the canvas size. */
+    dpr: number;
 }
 
 /** Lane wedge used before the first frame has measured the screen. */
@@ -164,6 +167,7 @@ export function createFlightView(
         laneWedge: DEFAULT_LANE_WEDGE,
         trail: reducedMotion || !SHIP_TRAILS_ENABLED ? null : createShipTrail(),
         trailTravel: 0,
+        dpr: 0,
     };
 }
 
@@ -515,7 +519,7 @@ export function renderFlight(
     const h = ctx.canvas.offsetHeight;
     if (w === 0 || h === 0) return;
     const g = sceneGeometry(w, h);
-    const dpr = ctx.canvas.width / w;
+    const dpr = view.dpr > 0 ? view.dpr : ctx.canvas.width / w;
 
     const target = laneOffset(game.player.lane);
     view.playerX = settle(

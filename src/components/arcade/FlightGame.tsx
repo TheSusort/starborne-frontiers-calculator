@@ -556,10 +556,12 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
         const ctx = canvas?.getContext('2d');
         if (!canvas || !ctx) return;
 
+        /** The ratio the transform uses; the renderer draws its caches at it too. */
+        let dpr = 1;
         const resize = () => {
-            const dpr = Math.min(window.devicePixelRatio || 1, ARCADE_MAX_DPR);
-            canvas.width = canvas.offsetWidth * dpr;
-            canvas.height = canvas.offsetHeight * dpr;
+            dpr = Math.min(window.devicePixelRatio || 1, ARCADE_MAX_DPR);
+            canvas.width = Math.round(canvas.offsetWidth * dpr);
+            canvas.height = Math.round(canvas.offsetHeight * dpr);
             ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
             viewRef.current.sun.canvas = null;
         };
@@ -677,6 +679,7 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
                 acc = 0;
             }
 
+            view.dpr = dpr;
             renderFlight(ctx, game, view, now, dt);
             raf = requestAnimationFrame(frame);
         };
