@@ -28,8 +28,8 @@ interface ShipsContextType {
     ships: Ship[];
     loading: boolean;
     /** Whether `ships` is the active profile's fleet: true for a signed-out player (whose fleet
-     *  is local storage) and, for a signed-in profile, once its first fetch has finished,
-     *  failed or not. False in between, when `ships` may be empty only because it has not
+     *  is local storage) and, for a signed-in profile, once a fetch for the active profile
+     *  has finished, failed or not. False in between, when `ships` may be empty only because it has not
      *  arrived yet. It does not cover auth itself: a session still resolving reads as signed
      *  out here. */
     fleetLoaded: boolean;
@@ -92,6 +92,12 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const { activeProfileId, profilesLoading } = useActiveProfile();
     const [isMigrating, setIsMigrating] = useState(false);
     const [fetchedForProfileId, setFetchedForProfileId] = useState<string | null>(null);
+    // A fetch that finishes after the active profile changed is stale: it neither writes ships nor
+    // settles `fetchedForProfileId`.
+    const activeProfileIdRef = useRef(activeProfileId);
+    useEffect(() => {
+        activeProfileIdRef.current = activeProfileId;
+    }, [activeProfileId]);
     const [localShips, setLocalShips] = useState<Ship[]>([]);
     // Every writer reads and writes the ships array through this ref instead of the `localShips`
     // render closure. Two writers called back-to-back with no render in between (e.g. one
@@ -225,6 +231,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             setLoading(true);
             if (activeProfileId) {
                 const transformedShips = await fetchShips(supabase, activeProfileId);
+                if (activeProfileIdRef.current !== activeProfileId) return;
 
                 setShips(transformedShips);
                 // Update storage directly instead of using syncToStorage
@@ -235,8 +242,10 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             addNotification('error', 'Failed to load ships');
             setError(error instanceof Error ? error.message : 'Failed to load ships');
         } finally {
-            setLoading(false);
-            setFetchedForProfileId(activeProfileId);
+            if (activeProfileIdRef.current === activeProfileId) {
+                setLoading(false);
+                setFetchedForProfileId(activeProfileId);
+            }
         }
     }, [activeProfileId, addNotification, setShips, setStorageShips, isMigrating]);
 

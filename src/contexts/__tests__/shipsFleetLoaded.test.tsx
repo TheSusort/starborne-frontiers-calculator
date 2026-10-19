@@ -1,5 +1,5 @@
 import React from 'react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { ShipsProvider, useShips } from '../ShipsContext';
 import { fetchShips } from '../../services/fleetReads';
@@ -35,6 +35,10 @@ describe('ShipsContext fleetLoaded', () => {
     beforeEach(() => {
         localStorage.clear();
         vi.mocked(fetchShips).mockReset();
+    });
+
+    afterEach(() => {
+        vi.restoreAllMocks();
     });
 
     it('is true at once for a signed-out player', () => {
@@ -74,5 +78,22 @@ describe('ShipsContext fleetLoaded', () => {
         expect(result.current.fleetLoaded).toBe(false);
         await act(async () => finish([]));
         await waitFor(() => expect(result.current.fleetLoaded).toBe(true));
+    });
+
+    it('stays true when a stale fetch for the previous profile finishes last', async () => {
+        const resolvers: Record<string, (ships: Ship[]) => void> = {};
+        vi.mocked(fetchShips).mockImplementation(
+            (_client, id) => new Promise<Ship[]>((r) => (resolvers[id] = r))
+        );
+        profile.id = 'p1';
+        const { result, rerender } = renderHook(() => useShips(), { wrapper });
+        await waitFor(() => expect(resolvers.p1).toBeDefined());
+        profile.id = 'p2';
+        rerender();
+        await waitFor(() => expect(resolvers.p2).toBeDefined());
+        await act(async () => resolvers.p2([]));
+        await waitFor(() => expect(result.current.fleetLoaded).toBe(true));
+        await act(async () => resolvers.p1([]));
+        expect(result.current.fleetLoaded).toBe(true);
     });
 });
