@@ -41,7 +41,7 @@ import {
     drawBackdropGround,
     drawBackdropSky,
 } from './backdrop';
-import { barrierPulse, drawBarrier } from './barriers';
+import { barrierPulse, drawBarrier, duckDepth } from './barriers';
 import {
     drawShieldBack,
     drawShieldBreak,
@@ -71,6 +71,7 @@ import { cachedPortrait } from './ships/portraitSprite';
 import { stakesBanner } from './duel/stakesText';
 import {
     actionPitchDeg,
+    duckDip,
     advancePose,
     clampHeadingDeg,
     FrameSweeps,
@@ -95,14 +96,11 @@ const MIN_TEXT_PX = 8;
 const SHIELD_PICKUP_SIZE = 1.2;
 /** Width of the player sprite in fighter units: the neon fighter spans x ±2.2s. */
 const SPRITE_FOOTPRINT = 4.4;
-/** Vertical scale of the neon fighter at the bottom of a duck; it has no pitched frames, so a
- *  duck flattens it. A 3D sprite is not squashed: it pitches its nose down instead. */
+/** Vertical scale of the neon fighter at the bottom of a duck; it has no pitched frames, so it
+ *  flattens as it dips. A 3D sprite is not squashed: it pitches instead (see `actionPitchDeg`). */
 const DUCK_SQUASH = 0.55;
-/** How far a duck lowers the ship, in lane widths at the player row: the neon fighter, and the
- *  3D sprite, which drops further to make up for not being squashed. Either way the ducking
- *  ship's top stays under a high block's gap (see `barriers`). */
-const DUCK_DROP = 0.08;
-const SPRITE_DUCK_DROP = 0.13;
+/** The ship's unit (see `neonFighter`) on the ground, in lane widths at the player row. */
+const SHIP_UNIT = 0.16;
 
 export type PlayerFrames = FrameSweeps<HTMLCanvasElement>;
 
@@ -224,7 +222,7 @@ function targetPose(g: SceneGeometry, game: GameState, view: FlightView): Player
         headingDeg: clampHeadingDeg(screenHeadingDeg(g, view.playerX)),
         bank: slideBank(laneOffset(lane), view.playerX),
         pitchDeg: actionPitchDeg(action, actionTime),
-        duck: action === 'duck' ? 1 : 0,
+        duck: action === 'duck' ? duckDip(actionTime) : 0,
     };
 }
 
@@ -408,12 +406,11 @@ const showsSprite = (view: FlightView): boolean =>
     !!view.playerFrames?.[LEVEL_PITCH_ROW]?.[LEVEL_BANK];
 
 /** The ship's height above the track, in lane widths at the player row: its ride height, raised
- *  by a jump's arc and lowered by a duck. */
-function shipLift(game: GameState, view: FlightView): number {
+ *  by a jump's arc and lowered by a duck's dip, `duckDepth` deep at its bottom. */
+function shipLift(game: GameState, view: FlightView, duckDepthU: number): number {
     const { action, actionTime } = game.player;
     const arc = action === 'jump' ? jumpArc(actionTime) : 0;
-    const drop = showsSprite(view) ? SPRITE_DUCK_DROP : DUCK_DROP;
-    return SHIP_RIDE_HEIGHT + arc * JUMP_PEAK - drop * view.pose.duck;
+    return SHIP_RIDE_HEIGHT + arc * JUMP_PEAK - duckDepthU * view.pose.duck;
 }
 
 /** The shield's placement, rewritten every frame rather than allocated. */
@@ -455,9 +452,18 @@ const baseAt: Projected = { x: 0, y: 0, scale: 0, width: 0 };
 function placeShip(out: ShipPlacement, g: SceneGeometry, game: GameState, view: FlightView): void {
     const base = projectInto(g, view.playerX, 0, baseAt);
     const u = laneWidthAtPlayer(g);
-    let s = u * 0.16;
+    const level = view.playerFrames?.[LEVEL_PITCH_ROW]?.[LEVEL_BANK]?.[LEVEL_HEADING];
+    const fp = level ? frameFootprint(level) : null;
+    // The duck's depth, from the ship's unsquashed extent on the ground.
+    const depth = fp
+        ? duckDepth(
+              -fp.top * SPRITE_FOOTPRINT * SHIP_UNIT,
+              fp.bottom * SPRITE_FOOTPRINT * SHIP_UNIT
+          )
+        : duckDepth(-NEON_TOP * SHIP_UNIT, NEON_BOTTOM * SHIP_UNIT);
+    let s = u * SHIP_UNIT;
     let x = base.x;
-    let y = base.y - u * shipLift(game, view);
+    let y = base.y - u * shipLift(game, view, depth);
 
     const { action, actionTime } = game.player;
     if (action === 'jump') s *= 1 + jumpArc(actionTime) * JUMP_SCALE_GAIN;
@@ -470,8 +476,6 @@ function placeShip(out: ShipPlacement, g: SceneGeometry, game: GameState, view: 
         s = view.intro.size + (s - view.intro.size) * e;
     }
 
-    const level = view.playerFrames?.[LEVEL_PITCH_ROW]?.[LEVEL_BANK]?.[LEVEL_HEADING];
-    const fp = level ? frameFootprint(level) : null;
     if (fp) {
         const size = s * SPRITE_FOOTPRINT;
         out.halfWidth = fp.halfWidth * size;

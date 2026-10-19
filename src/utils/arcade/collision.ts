@@ -1,11 +1,14 @@
 import { JUMP_SECONDS, PICKUP_CATCH_ARC } from './constants';
 import type { ObstacleKind, Pickup, PlayerAction, PlayerState } from './types';
 
+/** How far through an action of `seconds` the player is, 0..1, from its `actionTime` left. */
+export const actionProgress = (actionTime: number, seconds: number): number =>
+    Math.min(1, Math.max(0, 1 - actionTime / seconds));
+
 /** How high a jump is, 0 on the ground to 1 at its peak: `sin(πt)` over the jump's progress `t`.
  *  The renderer draws the jump with this arc. */
 export function jumpArc(actionTime: number): number {
-    const t = 1 - actionTime / JUMP_SECONDS;
-    return Math.max(0, Math.sin(Math.PI * Math.min(1, Math.max(0, t))));
+    return Math.max(0, Math.sin(Math.PI * actionProgress(actionTime, JUMP_SECONDS)));
 }
 
 /** wall: only a lane change avoids it. low: jump over. high: duck under. */

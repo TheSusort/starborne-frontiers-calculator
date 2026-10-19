@@ -1,4 +1,5 @@
-import { JUMP_SECONDS } from '../../../utils/arcade/constants';
+import { DUCK_SECONDS, JUMP_SECONDS } from '../../../utils/arcade/constants';
+import { actionProgress } from '../../../utils/arcade/collision';
 import type { PlayerAction } from '../../../utils/arcade/types';
 
 /**
@@ -23,11 +24,11 @@ export const HEADING_ANGLES_DEG = [
 ] as const;
 /** Roll angles, left bank to right bank; a positive angle dips the ship's right wing. */
 export const BANK_ANGLES_DEG = [-25, 0, 25] as const;
-/** Nose pitch while ducking: the ship tips its nose down toward the track. */
+/** Nose pitch as a duck dives: the ship tips its nose down toward the track. */
 export const DUCK_PITCH_DEG = -14;
 /** Nose pitch as a jump lands. */
 export const JUMP_DIVE_DEG = -8;
-/** Pitch angles: nose down (the duck, so a duck draws unblended frames), level, nose up. */
+/** Pitch angles: nose down (a duck's dive, so it draws unblended frames), level, nose up. */
 export const PITCH_ANGLES_DEG = [DUCK_PITCH_DEG, 0, 10] as const;
 export const LEVEL_HEADING = HEADING_ANGLES_DEG.indexOf(0);
 export const LEVEL_BANK = BANK_ANGLES_DEG.indexOf(0);
@@ -214,7 +215,7 @@ export const settle = (value: number, target: number): number =>
     Math.abs(value - target) < SETTLE_EPSILON ? target : value;
 
 /** The player ship's drawn pose: screen heading in degrees, bank -1..1, nose pitch in degrees and
- *  duck 0..1 (how far into the duck's squash the ship is). */
+ *  duck 0..1 (how deep into a duck's dip the ship is, see `duckDip`). */
 export interface PlayerPose {
     headingDeg: number;
     bank: number;
@@ -247,17 +248,42 @@ export function advancePose(pose: PlayerPose, target: PlayerPose, dtSeconds: num
     };
 }
 
+/** The share of a duck spent diving, and again climbing back; it holds its depth between. */
+export const DUCK_EDGE = 0.2;
+
 /**
- * Nose pitch for the player's action: a jump follows its arc's vertical speed (nose up while
- * rising, level at the top, down while falling), a duck dips the nose for its whole duration.
+ * How deep a duck is, 0 level to 1 at its bottom: the jump's `sin(πt)` arc (see `jumpArc`) upside
+ * down and split at its peak, the halves taking `DUCK_EDGE` of the duck each with the full depth
+ * held between them. The plateau keeps the ship low for most of the duck, since a duck clears a
+ * high block at any point of it.
+ */
+export function duckDip(actionTime: number): number {
+    if (!(actionTime > 0)) return 0;
+    const t = actionProgress(actionTime, DUCK_SECONDS);
+    return Math.sin((Math.PI / 2) * Math.min(1, Math.min(t, 1 - t) / DUCK_EDGE));
+}
+
+/** An action's vertical speed scaled to -1..1, positive rising: a jump's `cos(πt)`, and a
+ *  duck's, falling into its dip, 0 at the bottom and rising back out of it. */
+function actionClimb(action: PlayerAction, actionTime: number): number {
+    if (action === 'jump') return Math.cos(Math.PI * actionProgress(actionTime, JUMP_SECONDS));
+    if (action !== 'duck') return 0;
+    const t = actionProgress(actionTime, DUCK_SECONDS);
+    if (t < DUCK_EDGE) return -Math.cos((Math.PI / 2) * (t / DUCK_EDGE));
+    if (t > 1 - DUCK_EDGE) return Math.cos((Math.PI / 2) * ((1 - t) / DUCK_EDGE));
+    return 0;
+}
+
+/**
+ * Nose pitch for the player's action, following its vertical speed: nose up while rising, level
+ * at the top or bottom, down while falling. A jump rises then falls, landing at
+ * `JUMP_DIVE_DEG`; a duck mirrors it, diving at `DUCK_PITCH_DEG` and climbing back nose up.
  */
 export function actionPitchDeg(action: PlayerAction, actionTime: number): number {
-    if (action === 'duck') return DUCK_PITCH_DEG;
-    if (action !== 'jump') return 0;
-    const t = 1 - actionTime / JUMP_SECONDS;
-    const climb = Math.cos(Math.PI * t);
+    const climb = actionClimb(action, actionTime);
     const top = PITCH_ANGLES_DEG[PITCH_ANGLES_DEG.length - 1];
-    return climb >= 0 ? climb * top : climb * -JUMP_DIVE_DEG;
+    const down = action === 'duck' ? DUCK_PITCH_DEG : JUMP_DIVE_DEG;
+    return climb >= 0 ? climb * top : -climb * down;
 }
 
 /**

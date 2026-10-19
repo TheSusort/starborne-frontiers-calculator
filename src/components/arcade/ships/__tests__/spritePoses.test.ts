@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { JUMP_SECONDS } from '../../../../utils/arcade/constants';
+import { DUCK_SECONDS, JUMP_SECONDS } from '../../../../utils/arcade/constants';
+import { jumpArc } from '../../../../utils/arcade/collision';
 import {
     actionPitchDeg,
     BANK_ANGLES_DEG,
@@ -7,7 +8,9 @@ import {
     chasePose,
     advancePose,
     clampHeadingDeg,
+    DUCK_EDGE,
     DUCK_PITCH_DEG,
+    duckDip,
     easeToward,
     FRAME_GRID_POSES,
     frameBlend,
@@ -319,13 +322,37 @@ describe('actionPitchDeg', () => {
     it('is level while running', () => {
         expect(actionPitchDeg('run', 0)).toBe(0);
     });
-    it('dips the nose for a whole duck, onto the nose-down row of the grid', () => {
-        expect(actionPitchDeg('duck', 0.7)).toBe(DUCK_PITCH_DEG);
-        expect(actionPitchDeg('duck', 0.01)).toBe(DUCK_PITCH_DEG);
+    const duckAt = (t: number) => actionPitchDeg('duck', (1 - t) * DUCK_SECONDS);
+
+    it('mirrors the jump in a duck: nose down diving, level at the bottom, up climbing back', () => {
+        expect(duckAt(0)).toBeCloseTo(DUCK_PITCH_DEG);
+        expect(duckAt(0.5)).toBeCloseTo(0);
+        expect(duckAt(1)).toBeCloseTo(PITCH_ANGLES_DEG[PITCH_ANGLES_DEG.length - 1]);
+        for (let t = 0; t < DUCK_EDGE; t += 0.02) expect(duckAt(t)).toBeLessThan(0);
+        for (let t = DUCK_EDGE; t <= 1 - DUCK_EDGE; t += 0.02) expect(duckAt(t)).toBeCloseTo(0);
+        for (let t = 1 - DUCK_EDGE + 0.01; t <= 1; t += 0.02) expect(duckAt(t)).toBeGreaterThan(0);
+    });
+    it('dives onto the nose-down row of the grid and climbs on the nose-up row', () => {
         expect(DUCK_PITCH_DEG).toBeLessThanOrEqual(-12);
-        expect(frameBlend(0, 0, DUCK_PITCH_DEG)).toEqual([
+        expect(frameBlend(0, 0, duckAt(0))).toEqual([
             { heading: LEVEL_HEADING, bank: LEVEL_BANK, pitch: 0, weight: 1 },
         ]);
+        expect(
+            blendedAngle(frameBlend(0, 0, duckAt(0.05)), 'pitch', PITCH_ANGLES_DEG)
+        ).toBeLessThan(-10);
+        expect(
+            blendedAngle(frameBlend(0, 0, duckAt(0.95)), 'pitch', PITCH_ANGLES_DEG)
+        ).toBeGreaterThan(7);
+    });
+    it('pitches with the dip: never nose up while it deepens, nor down while it rises', () => {
+        const dt = DUCK_SECONDS / 400;
+        for (let a = DUCK_SECONDS - dt; a > dt; a -= dt) {
+            const deeper = duckDip(a - dt) - duckDip(a + dt);
+            const pitch = actionPitchDeg('duck', a);
+            if (deeper > 1e-6) expect(pitch).toBeLessThanOrEqual(0);
+            else if (deeper < -1e-6) expect(pitch).toBeGreaterThanOrEqual(0);
+            else expect(pitch).toBeCloseTo(0);
+        }
     });
     it('raises the nose on take-off, levels at the top and dips on the way down', () => {
         expect(jumpAt(0)).toBeCloseTo(10);
@@ -400,5 +427,28 @@ describe('cameras', () => {
             const [x] = officialViewerCamera(facing).position;
             expect(Math.sign(-x)).toBe(facing === 'right' ? 1 : -1);
         }
+    });
+});
+
+describe('duckDip', () => {
+    const at = (t: number) => duckDip((1 - t) * DUCK_SECONDS);
+
+    it('is level at both ends and holds its full depth through the middle', () => {
+        expect(at(0)).toBeCloseTo(0);
+        expect(at(1)).toBeCloseTo(0);
+        for (let t = DUCK_EDGE; t <= 1 - DUCK_EDGE; t += 0.02) expect(at(t)).toBeCloseTo(1);
+        expect(DUCK_EDGE).toBeLessThanOrEqual(0.25);
+    });
+    it("eases in and out like the jump's arc, split at its peak", () => {
+        for (let k = 0; k <= 1; k += 0.1) {
+            const jump = jumpArc((1 - k / 2) * JUMP_SECONDS);
+            expect(at(k * DUCK_EDGE)).toBeCloseTo(jump);
+            expect(at(1 - k * DUCK_EDGE)).toBeCloseTo(jump);
+        }
+    });
+    it('is level outside a duck', () => {
+        expect(duckDip(0)).toBe(0);
+        expect(duckDip(DUCK_SECONDS * 2)).toBe(0);
+        expect(duckDip(-1)).toBe(0);
     });
 });

@@ -1,15 +1,34 @@
 import type { ObstacleKind } from '../../utils/arcade/types';
+import { SHIP_RIDE_HEIGHT } from '../../utils/arcade/constants';
 
 /**
  * Obstacle silhouettes, in lane widths `u` above the obstacle's ground point (negative is up).
  * A wall fills the lane; a low laser is a bar near the ground to jump over; a high block is as
  * tall as a wall, so it plainly cannot be jumped, with one gap at the bottom to duck under. The
- * block's bottom edge (-0.30u) sits between the ducking ship's top (about -0.24u) and the running
- * ship's top (about -0.38u), so only a duck visibly clears it.
+ * block's bottom edge (`HIGH_GAP` up) sits under the running ship's top and over the ducking
+ * ship's (see `duckDepth`), so only a duck visibly clears it.
  */
 const WALL = { halfWidth: 0.42, top: -0.9 };
 const LOW = { halfWidth: 0.45, barTop: -0.22, barBottom: -0.14, postTop: -0.26, post: 0.04 };
-const HIGH = { halfWidth: 0.47, barTop: WALL.top, barBottom: -0.3, post: 0.05 };
+/** Height of the gap under a high block, in lane widths at its row. */
+export const HIGH_GAP = 0.3;
+const HIGH = { halfWidth: 0.47, barTop: WALL.top, barBottom: -HIGH_GAP, post: 0.05 };
+
+/** What a ducking ship keeps clear, in lane widths: the track under it and the high block's
+ *  bar over it. */
+const DUCK_TRACK_CLEARANCE = 0.03;
+const DUCK_BAR_CLEARANCE = 0.01;
+
+/**
+ * How far the bottom of a duck lowers a ship whose visible pixels reach `top` above and `bottom`
+ * below its centre (lane widths at the player row): as deep as keeps it `DUCK_TRACK_CLEARANCE`
+ * over the track, and never less than brings its top under the high block's bar.
+ */
+export function duckDepth(top: number, bottom: number): number {
+    const overTrack = SHIP_RIDE_HEIGHT - bottom - DUCK_TRACK_CLEARANCE;
+    const underBar = SHIP_RIDE_HEIGHT + top - HIGH_GAP + DUCK_BAR_CLEARANCE;
+    return Math.max(0, overTrack, underBar);
+}
 
 interface Palette {
     /** Gradient fill, top to bottom. */
