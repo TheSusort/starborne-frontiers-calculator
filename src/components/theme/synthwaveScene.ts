@@ -221,6 +221,23 @@ export function drawStars(
     }
 }
 
+function sunCircle(g: SceneGeometry): { sunX: number; sunY: number; sunR: number } {
+    const sunR = g.h * 0.18;
+    return { sunX: g.w / 2, sunY: g.horizonY - sunR * 0.6, sunR };
+}
+
+/** The sun's outer glow; it changes only with the geometry. */
+export function drawSunGlow(ctx: CanvasRenderingContext2D, g: SceneGeometry): void {
+    const { sunX, sunY, sunR } = sunCircle(g);
+    const outerGlow = ctx.createRadialGradient(sunX, sunY, sunR, sunX, sunY, sunR * 4);
+    outerGlow.addColorStop(0, 'rgba(255, 150, 180, 0.25)');
+    outerGlow.addColorStop(0.3, 'rgba(200, 80, 150, 0.1)');
+    outerGlow.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = outerGlow;
+    ctx.fillRect(0, 0, g.w, g.horizonY + sunR);
+}
+
+/** The sun: its outer glow, then its striped disc. */
 export function drawSun(
     ctx: CanvasRenderingContext2D,
     g: SceneGeometry,
@@ -228,20 +245,22 @@ export function drawSun(
     timeMs: number,
     animate: boolean
 ): void {
-    const { w, h, horizonY } = g;
+    drawSunGlow(ctx, g);
+    drawSunDisc(ctx, g, cache, timeMs, animate);
+}
+
+/** The striped sun disc, through `cache`; the stripes scroll when `animate`. */
+export function drawSunDisc(
+    ctx: CanvasRenderingContext2D,
+    g: SceneGeometry,
+    cache: SunCache,
+    timeMs: number,
+    animate: boolean
+): void {
+    const { w, h } = g;
     const time = timeMs;
     const canvas = ctx.canvas;
-    const sunR = h * 0.18;
-    const sunX = w / 2;
-    const sunY = horizonY - sunR * 0.6;
-
-    // Sun outer glow
-    const outerGlow = ctx.createRadialGradient(sunX, sunY, sunR, sunX, sunY, sunR * 4);
-    outerGlow.addColorStop(0, 'rgba(255, 150, 180, 0.25)');
-    outerGlow.addColorStop(0.3, 'rgba(200, 80, 150, 0.1)');
-    outerGlow.addColorStop(1, 'rgba(0, 0, 0, 0)');
-    ctx.fillStyle = outerGlow;
-    ctx.fillRect(0, 0, w, horizonY + sunR);
+    const { sunX, sunY, sunR } = sunCircle(g);
 
     const sunFrame = Math.floor(time / 50); // ~20fps for sun stripes
     if (canvas.width === 0 || canvas.height === 0) return;
@@ -299,12 +318,20 @@ export function drawSun(
     ctx.drawImage(cache.canvas, 0, 0, cw, ch, left / dpr, top / dpr, cw / dpr, ch / dpr);
 }
 
+const mountainScale = ({ w, h }: SceneGeometry) => Math.max(h * 0.012, Math.min(h, w) * 0.015);
+/** The tallest mountain peak, in units of `mountainScale`. */
+const MAX_PEAK = 5.5;
+
+/** Screen y of the highest point the mountains and the horizon glow line reach. */
+export const mountainsTop = (g: SceneGeometry): number =>
+    Math.min(g.horizonY - MAX_PEAK * mountainScale(g), g.horizonY - HORIZON_GLOW_ABOVE);
+
 export function drawMountains(ctx: CanvasRenderingContext2D, g: SceneGeometry): void {
-    const { w, h, horizonY } = g;
+    const { w, horizonY } = g;
     ctx.fillStyle = '#0d0620';
     ctx.beginPath();
     ctx.moveTo(-10, horizonY);
-    const mountainScale = Math.max(h * 0.012, Math.min(h, w) * 0.015);
+    const scale = mountainScale(g);
     const peakHeights = [
         [-0.05, 1.5],
         [0.0, 3],
@@ -335,7 +362,7 @@ export function drawMountains(ctx: CanvasRenderingContext2D, g: SceneGeometry): 
         [1.05, 1],
     ];
     for (const [px, peakH] of peakHeights) {
-        ctx.lineTo(px * w, horizonY - peakH * mountainScale);
+        ctx.lineTo(px * w, horizonY - peakH * scale);
     }
     ctx.lineTo(w + 10, horizonY);
     ctx.closePath();
@@ -344,6 +371,9 @@ export function drawMountains(ctx: CanvasRenderingContext2D, g: SceneGeometry): 
     ctx.fillStyle = 'rgba(80, 30, 80, 0.15)';
     ctx.fill();
 }
+
+/** How far above the horizon the horizon glow line starts. */
+const HORIZON_GLOW_ABOVE = 8;
 
 export function drawGround(ctx: CanvasRenderingContext2D, g: SceneGeometry): void {
     const { w, h, horizonY } = g;
@@ -355,14 +385,14 @@ export function drawGround(ctx: CanvasRenderingContext2D, g: SceneGeometry): voi
     ctx.fillRect(0, horizonY, w, h - horizonY);
 
     // === HORIZON GLOW LINE ===
-    const horizGlow = ctx.createLinearGradient(0, horizonY - 8, 0, horizonY + 15);
+    const horizGlow = ctx.createLinearGradient(0, horizonY - HORIZON_GLOW_ABOVE, 0, horizonY + 15);
     horizGlow.addColorStop(0, 'rgba(200, 100, 255, 0)');
     horizGlow.addColorStop(0.4, 'rgba(200, 100, 255, 0.6)');
     horizGlow.addColorStop(0.5, 'rgba(220, 120, 255, 0.9)');
     horizGlow.addColorStop(0.6, 'rgba(200, 100, 255, 0.6)');
     horizGlow.addColorStop(1, 'rgba(200, 100, 255, 0)');
     ctx.fillStyle = horizGlow;
-    ctx.fillRect(0, horizonY - 8, w, 23);
+    ctx.fillRect(0, horizonY - HORIZON_GLOW_ABOVE, w, HORIZON_GLOW_ABOVE + 15);
 }
 
 /**

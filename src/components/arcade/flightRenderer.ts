@@ -3,11 +3,8 @@ import {
     createSunCache,
     drawFighterRear,
     drawGrid,
-    drawGround,
-    drawMountains,
-    drawSky,
     drawStars,
-    drawSun,
+    drawSunDisc,
     sceneGeometry,
     SceneGeometry,
     Star,
@@ -33,6 +30,7 @@ import {
 } from './projection';
 import type { FlightOrigin } from './flightEvents';
 import { drawNeonFighter } from './neonFighter';
+import { Backdrop, createBackdrop, drawBackdropGround, drawBackdropSky } from './backdrop';
 import { barrierPulse, drawBarrier } from './barriers';
 import {
     drawShieldBack,
@@ -101,6 +99,8 @@ export interface FlightView {
     playerX: number;
     stars: Star[];
     sun: SunCache;
+    /** The static sky and ground, cached per screen size. */
+    backdrop: Backdrop;
     intro: FlightOrigin | null;
     introElapsed: number;
     /** Player hull outline colour; `null` keeps the default neon pink. */
@@ -136,6 +136,7 @@ export function createFlightView(
         playerX: 0,
         stars: createStars(150),
         sun: createSunCache(),
+        backdrop: createBackdrop(),
         intro: origin ?? null,
         introElapsed: 0,
         playerAccent: accent,
@@ -475,11 +476,10 @@ export function renderFlight(
     view.pose = advancePose(view.pose, targetPose(g, game, view), dt);
 
     ctx.clearRect(0, 0, w, h);
-    drawSky(ctx, g);
+    drawBackdropSky(ctx, g, view.backdrop, dpr);
     drawStars(ctx, g, view.stars, timeMs, true);
-    drawSun(ctx, g, view.sun, timeMs, true);
-    drawMountains(ctx, g);
-    drawGround(ctx, g);
+    drawSunDisc(ctx, g, view.sun, timeMs, true);
+    drawBackdropGround(ctx, g, view.backdrop, dpr);
     drawGrid(ctx, g, view.gridOffset, introGridLayers(g, introProgress(view)));
     view.laneWedge = laneWedge(g);
     if (view.speedLines) drawSpeedLines(ctx, g, view.speedLines, game.speed);
