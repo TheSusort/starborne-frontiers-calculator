@@ -408,14 +408,17 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
         runWhenIdle.hold(phase === 'intro' || phase === 'running' || phase === 'dying');
     }, [phase]);
 
-    /** Starts a fresh run with the flown ship and duel setting already in the refs. Opponents
-     *  already picked for this ship are kept. */
+    /** Starts a fresh run with the flown ship already in its ref; whether it gets duels is
+     *  decided again from the current fleet. Opponents already picked for this ship are kept. */
     const restart = useCallback(() => {
         const flown = flownRef.current;
         runGenerationRef.current++;
         opponentsRef.current.clear();
         if (!flown || nextOpponentsForRef.current !== flown.id) prepareNextOpponents();
         setDuel(null);
+        // Re-checked against the current fleet and inventory, which may have loaded since.
+        duelsRef.current =
+            !!flown && canDuel(shipsRef.current, flown.id, statsDepsRef.current.getGearPiece);
         gameRef.current = createGame(newSeed(), { duels: duelsRef.current });
         viewRef.current = createFlightView(
             undefined,
