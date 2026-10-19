@@ -1,11 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import {
+    beginPulls,
+    createPullMemory,
     CreditPull,
+    endPulls,
+    FLICKER_MAX_HZ,
     MAGNET_EXPIRY_SECONDS,
     MAGNET_PULL_Z,
     magnetVisibility,
     nearestPulled,
     pullCredit,
+    releasePull,
+    RELEASE_SECONDS,
+    rememberPull,
+    restingPull,
 } from '../magnetFx';
 import { canCollect } from '../../../utils/arcade/collision';
 import { PICKUP_HEIGHT } from '../../../utils/arcade/constants';
@@ -156,10 +164,104 @@ describe('magnetVisibility', () => {
         expect(Math.min(...seen)).toBeLessThan(0.5);
     });
 
+    it('never flickers faster than the strobing limit', () => {
+        expect(FLICKER_MAX_HZ).toBeLessThanOrEqual(8);
+        for (const left of [1.4, 0.7, 0.01]) {
+            let flips = 0;
+            let was = magnetVisibility(left, 0, false);
+            for (let time = 0.001; time <= 1; time += 0.001) {
+                const now = magnetVisibility(left, time, false);
+                if (now !== was) flips++;
+                was = now;
+            }
+            // Each flicker cycle flips twice.
+            expect(flips / 2).toBeLessThanOrEqual(FLICKER_MAX_HZ + 1);
+        }
+    });
+
     it('fades steadily under reduced motion, whatever the time', () => {
         const a = magnetVisibility(1.2, 0, true);
         expect(magnetVisibility(1.2, 0.73, true)).toBe(a);
         expect(magnetVisibility(0.3, 0, true)).toBeLessThan(a);
         expect(a).toBeLessThan(1);
+    });
+});
+
+describe('releasing a pulled credit', () => {
+    const pulled = (z: number) => {
+        const pk = credit(2, z);
+        const pull = out();
+        pullCredit(pull, pk, player(1), 0, 0.25);
+        return { pk, pull };
+    };
+
+    it('eases back to its lane over RELEASE_SECONDS instead of snapping', () => {
+        const m = createPullMemory();
+        const { pk, pull } = pulled(4);
+        beginPulls(m);
+        rememberPull(m, pk, pull, 0.66, true, 1);
+        endPulls(m);
+        const drawn = { ...pull };
+
+        const xs: number[] = [];
+        for (const dt of [0, 0.03, 0.06, 0.09, 0.12, 0.15]) {
+            beginPulls(m);
+            const now = out();
+            restingPull(now, pk);
+            const rec = releasePull(m, pk, now, 10 + dt);
+            endPulls(m);
+            xs.push(now.laneX);
+            if (dt === 0) {
+                // The first released frame is where it was last drawn, and fully visible.
+                expect(now.laneX).toBeCloseTo(drawn.laneX);
+                expect(now.height).toBeCloseTo(drawn.height);
+                expect(rec?.fade).toBe(1);
+            }
+            if (dt === RELEASE_SECONDS) expect(rec).toBeNull();
+        }
+        const lane = pk.lane - 1;
+        for (let i = 1; i < xs.length; i++) {
+            expect(Math.abs(xs[i] - lane)).toBeLessThan(Math.abs(xs[i - 1] - lane) + 1e-9);
+        }
+        expect(xs[xs.length - 1]).toBeCloseTo(lane);
+        expect(xs[1]).not.toBeCloseTo(lane);
+    });
+
+    it('fades the beam out as it eases', () => {
+        const m = createPullMemory();
+        const { pk, pull } = pulled(4);
+        beginPulls(m);
+        rememberPull(m, pk, pull, 0.66, true, 0.8);
+        endPulls(m);
+        const fades = [0, 0.05, 0.1].map((dt) => {
+            beginPulls(m);
+            const now = out();
+            restingPull(now, pk);
+            const rec = releasePull(m, pk, now, 3 + dt);
+            endPulls(m);
+            return rec?.fade ?? -1;
+        });
+        expect(fades[0]).toBe(1);
+        expect(fades[1]).toBeLessThan(fades[0]);
+        expect(fades[2]).toBeLessThan(fades[1]);
+        expect(fades[2]).toBeGreaterThan(0);
+    });
+
+    it('ignores a pickup that was never pulled, and forgets one that is gone', () => {
+        const m = createPullMemory();
+        const pk = credit(0, 5);
+        const now = out();
+        restingPull(now, pk);
+        expect(releasePull(m, pk, now, 1)).toBeNull();
+        expect(now.laneX).toBe(-1);
+
+        const { pk: gone, pull } = pulled(3);
+        beginPulls(m);
+        rememberPull(m, gone, pull, 0.7, false, 1);
+        endPulls(m);
+        expect(m.count).toBe(1);
+        beginPulls(m);
+        endPulls(m);
+        expect(m.count).toBe(0);
     });
 });

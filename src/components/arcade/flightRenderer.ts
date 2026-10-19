@@ -51,14 +51,20 @@ import {
 } from './shield';
 import { frameFootprint } from './spriteFootprint';
 import {
+    beginPulls,
+    createPullMemory,
     CreditPull,
+    endPulls,
     drawMagnetAura,
     drawTractorBeam,
     magnetVisibility,
     MAGNET_PULL_Z,
     MAX_BEAMS,
     nearestPulled,
+    PullMemory,
     pullCredit,
+    releasePull,
+    rememberPull,
     restingPull,
 } from './magnetFx';
 import {
@@ -159,6 +165,8 @@ export interface FlightView {
     explosion: Explosion;
     /** `prefers-reduced-motion`: the magnet's beams and field hold still. */
     reducedMotion: boolean;
+    /** The credits the magnet pulled lately, to ease back to their lanes if let go. */
+    pulls: PullMemory;
 }
 
 /** Lane wedge used before the first frame has measured the screen. */
@@ -189,6 +197,7 @@ export function createFlightView(
         dying: false,
         explosion: createExplosion(),
         reducedMotion,
+        pulls: createPullMemory(),
     };
 }
 
@@ -689,6 +698,7 @@ export function renderFlight(
         ? magnetVisibility(game.player.magnetTime, game.time, view.reducedMotion)
         : 0;
     const beams = magnetOn ? nearestPulled(game.pickups, game.player, MAX_BEAMS, beamScratch) : 0;
+    beginPulls(view.pulls);
     const wreckFade = Math.max(0, 1 - view.explosion.elapsed / WRECK_FADE_SECONDS);
     const drawItem = (item: (typeof items)[number]) => {
         if ('obstacle' in item) {
@@ -696,16 +706,23 @@ export function renderFlight(
             drawObstacle(ctx, g, o, timeMs, view.dying && o.z <= 0 ? wreckFade : 1);
         } else if ('pickup' in item) {
             const pk = item.pickup;
-            if (!magnetOn) restingPull(pullAt, pk);
-            else pullCredit(pullAt, pk, game.player, view.playerX, shipHeight);
+            const pulled =
+                magnetOn && pullCredit(pullAt, pk, game.player, view.playerX, shipHeight);
+            if (!pulled) restingPull(pullAt, pk);
+            const slot = pulled ? beamScratch.indexOf(pk) : -1;
+            const beamed = slot >= 0 && slot < beams;
+            const t = 1 - pk.z / MAGNET_PULL_Z;
+            if (pulled) rememberPull(view.pulls, pk, pullAt, t, beamed, magnet);
+            // A credit the pull let go of eases back to its lane, its beam fading out.
+            const released = pulled ? null : releasePull(view.pulls, pk, pullAt, game.time);
             const c = pickupCentre(pickupAt, g, pk, pullAt, timeMs);
             // A beam draws under its credit, so the credit stays solid on top of it.
-            const beam = beamScratch.indexOf(pk);
-            if (beam >= 0 && beam < beams) {
-                const t = 1 - pk.z / MAGNET_PULL_Z;
+            const vis = released ? released.visibility * released.fade : magnet;
+            if (beamed || (released && released.beamed)) {
                 const half = BEAM_WIDTH * PICKUP_RADIUS * c.width;
                 const reduced = view.reducedMotion;
-                drawTractorBeam(ctx, ship.x, shipY, c.x, c.y, half, t, magnet, game.time, reduced);
+                const bt = released ? released.t : t;
+                drawTractorBeam(ctx, ship.x, shipY, c.x, c.y, half, bt, vis, game.time, reduced);
             }
             drawPickup(ctx, g, pk, c, pullAt, dpr);
         } else drawCheckpoint(ctx, g, item.checkpoint, view.gateArt.get(item.checkpoint.id));
@@ -730,5 +747,6 @@ export function renderFlight(
     view.trailTravel = 0;
     if (!view.dying) drawPlayer(ctx, ship, game, view, timeMs, dpr, magnet);
     for (const item of items) if (item.z < 0) drawItem(item);
+    endPulls(view.pulls);
     if (view.dying) drawExplosion(ctx, g, boom, w, h);
 }

@@ -19,6 +19,12 @@ export const MAGNET_PULL_Z = 12;
 export const MAX_BEAMS = 4;
 /** The ripples and beams flicker through the magnet's last seconds. */
 export const MAGNET_EXPIRY_SECONDS = 1.5;
+/** The flicker's rate as the expiry starts and as it ends; the top rate stays at or under the
+ *  8 Hz strobing limit. */
+export const FLICKER_MIN_HZ = 5;
+export const FLICKER_MAX_HZ = 8;
+/** A credit the magnet stops pulling eases back to its lane over this long (game seconds). */
+export const RELEASE_SECONDS = 0.15;
 /** How small a pulled credit is drawn as it reaches the ship, against its usual size. */
 const LANDING_SCALE = 0.2;
 
@@ -76,6 +82,125 @@ export function pullCredit(
     return true;
 }
 
+/** What the renderer remembers of a credit the magnet pulled, to ease it back to its lane if the
+ *  pull ends before the credit is collected. `releasedAt` is -1 while it is being pulled. */
+export interface PullRecord {
+    id: number;
+    laneX: number;
+    height: number;
+    scale: number;
+    glow: number;
+    /** Pull progress and beam strength when last pulled, for the beam's fade out. */
+    t: number;
+    visibility: number;
+    beamed: boolean;
+    releasedAt: number;
+    /** The frame (`PullMemory.frame`) that last touched it. */
+    seen: number;
+    /** Written by `releasePull`: how much of the release is left, 1 down to 0. */
+    fade: number;
+}
+
+/** The pulled credits of a view; records are reused, so a frame allocates none once it is warm. */
+export interface PullMemory {
+    records: PullRecord[];
+    count: number;
+    frame: number;
+}
+
+export const createPullMemory = (): PullMemory => ({ records: [], count: 0, frame: 0 });
+
+const findRecord = (m: PullMemory, id: number): PullRecord | null => {
+    for (let i = 0; i < m.count; i++) if (m.records[i].id === id) return m.records[i];
+    return null;
+};
+
+/** Starts a frame's pass over the pickups: `rememberPull` or `releasePull` for each, then
+ *  `endPulls`. */
+export function beginPulls(m: PullMemory): void {
+    m.frame++;
+}
+
+/** Records that `pickup` is drawn at `pull` this frame, `t` through its pull, in a beam or not,
+ *  with the magnet at `visibility`. */
+export function rememberPull(
+    m: PullMemory,
+    pickup: Pickup,
+    pull: CreditPull,
+    t: number,
+    beamed: boolean,
+    visibility: number
+): void {
+    let r = findRecord(m, pickup.id);
+    if (!r) {
+        if (m.count === m.records.length) {
+            m.records.push({
+                id: 0,
+                laneX: 0,
+                height: 0,
+                scale: 1,
+                glow: 0,
+                t: 0,
+                visibility: 0,
+                beamed: false,
+                releasedAt: -1,
+                seen: 0,
+                fade: 0,
+            });
+        }
+        r = m.records[m.count++];
+        r.id = pickup.id;
+    }
+    r.laneX = pull.laneX;
+    r.height = pull.height;
+    r.scale = pull.scale;
+    r.glow = pull.glow;
+    r.t = t;
+    r.visibility = visibility;
+    r.beamed = beamed;
+    r.releasedAt = -1;
+    r.seen = m.frame;
+}
+
+/**
+ * For a pickup the magnet is not pulling this frame (`pull` holds where it rests): if it was
+ * pulled, eases `pull` from where it was drawn back to its lane over `RELEASE_SECONDS` of game
+ * `time`, and returns its record with `fade` set (1 as the release starts, 0 when it is over);
+ * otherwise returns null and leaves `pull` alone.
+ */
+export function releasePull(
+    m: PullMemory,
+    pickup: Pickup,
+    pull: CreditPull,
+    time: number
+): PullRecord | null {
+    const r = findRecord(m, pickup.id);
+    if (!r) return null;
+    r.seen = m.frame;
+    if (r.releasedAt < 0) r.releasedAt = time;
+    const p = Math.min(1, Math.max(0, (time - r.releasedAt) / RELEASE_SECONDS));
+    if (p >= 1) return null;
+    const rest = 1 - (1 - p) * (1 - p);
+    const k = 1 - rest;
+    pull.laneX += (r.laneX - pull.laneX) * k;
+    pull.height += (r.height - pull.height) * k;
+    pull.scale += (r.scale - pull.scale) * k;
+    pull.glow += (r.glow - pull.glow) * k;
+    r.fade = 1 - p;
+    return r;
+}
+
+/** Ends the pass: forgets every credit this frame did not touch. */
+export function endPulls(m: PullMemory): void {
+    for (let i = m.count - 1; i >= 0; i--) {
+        if (m.records[i].seen === m.frame) continue;
+        const last = --m.count;
+        const gone = m.records[i];
+        m.records[i] = m.records[last];
+        m.records[last] = gone;
+    }
+}
+
 /** Fills `scratch` with up to `max` of the credits the magnet is pulling, nearest first, and
  *  returns how many. Entries past the count are stale. */
 export function nearestPulled(
@@ -108,7 +233,7 @@ export function magnetVisibility(magnetTime: number, time: number, reducedMotion
     if (magnetTime <= 0) return 0;
     const left = magnetTime / MAGNET_EXPIRY_SECONDS;
     if (reducedMotion) return 0.25 + 0.75 * left;
-    const rate = 5 + 9 * (1 - left);
+    const rate = FLICKER_MIN_HZ + (FLICKER_MAX_HZ - FLICKER_MIN_HZ) * (1 - left);
     return Math.sin(2 * Math.PI * rate * time) > -0.3 ? 1 : 0.2;
 }
 
