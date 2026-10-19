@@ -78,9 +78,9 @@ Helper: `public.is_anonymous_session()` → `coalesce((auth.jwt()->>'is_anonymou
   returns `username` = `coalesce(u.username, g.name)` and a new column `is_guest boolean`
   (`g.user_id IS NOT NULL`). The filter is "display name is not null". The deployed parser
   ignores the extra column.
-- **Admin counts** exclude anonymous users: the total-users count, `get_top_active_users`, and
-  the system-health `total_users` snapshot. The plan enumerates the sites by grepping for reads
-  of `public.users` counts, rather than trusting this list.
+- **Admin counts:** `getTotalUserCount` excludes guests. A guest's `users` row has no email and no
+  owner. Guests generate no heartbeat or usage activity, because the client guard keeps `user`
+  null. Server-only admin RPCs whose bodies are not in the repo are left as they are.
 - **Cleanup:**
   - `public.cleanup_arcade_guests()`, SECURITY DEFINER, deletes anonymous `auth.users` rows
     when either their score's `updated_at` is older than 90 days, or they are more than 1 day
@@ -139,11 +139,10 @@ select polname, pg_get_expr(polqual, polrelid), pg_get_expr(polwithcheck, polrel
 - **Fleetless** means the player's fleet is empty, whether or not they are signed in. Players
   with a fleet are unchanged.
 - **Fighter select:** instead of skipping to the neon fighter, it lists every `ship_templates`
-  row (via `useShipsData`). Because the list is long, `FighterSelect` gains a name filter in this
-  mode. The neon fighter stays available.
-- **Building the ship:** `templateToBareShip(template)` returns a `Ship` with the template's base
-  stats, no equipment, implants, refits or engineering, and a stable synthetic id. It is a pure
-  function and is unit-tested.
+  row (via `useShipsData`). `FighterSelect` already has search and a faction filter. The neon fighter stays available.
+- **Building the ship:** `useShipsData` already yields bare ships. `transformShipTemplate` sets
+  no equipment, refits or implants, so no conversion is needed. An `arcadeFleet(owned, loading,
+  templates)` helper picks the fleet. Bare duels use a no-op engineering lookup.
 - **Duels:** in template mode the opponent pool is the bare templates other than the flown one.
   `canDuel` and `pickOpponents` take the pool and a template-mode flag; that flag waives the
   gear requirement that `isDuelCandidate` imposes. `runDuel` is unchanged, since bare ships
@@ -153,7 +152,7 @@ select polname, pg_get_expr(polqual, polrelid), pg_get_expr(polwithcheck, polrel
 ## Testing
 
 - **Unit:**
-  - `templateToBareShip`;
+  - `arcadeFleet`;
   - the template-mode branches of `pickOpponents` and `canDuel`;
   - `parseLeaderboardRows` with and without `is_guest`;
   - the `useArcadeSubmission` state transitions: guest invite, sign-in-then-submit,
