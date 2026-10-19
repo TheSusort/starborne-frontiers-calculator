@@ -2557,8 +2557,10 @@ const DocumentationPage: React.FC = () => {
                                     500 points, a loss ends the run unless a shield absorbs it),{' '}
                                     <strong>Credits on the line</strong> (win 25 credits, or lose a
                                     quarter of yours) or <strong>Power-up</strong> (a win grants a
-                                    shield or a magnet). Press Space or click to skip the replay;
-                                    the run resumes after a 3-2-1 countdown.
+                                    shield or a magnet). Press Space or click to skip the replay.
+                                    The result shows briefly (Space or a click moves on at once),
+                                    then the run resumes after a 3-2-1 countdown. A duel that ends
+                                    the run closes as soon as its replay does.
                                 </p>
                             </div>
                             <div className="card">

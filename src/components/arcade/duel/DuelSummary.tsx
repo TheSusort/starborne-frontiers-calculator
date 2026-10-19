@@ -1,9 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Button } from '../../ui/Button';
 import { MeterBar } from '../../ui/MeterBar';
 import type { DuelEffect, DuelStakes } from '../../../utils/arcade/types';
 import type { DuelResult } from './runDuel';
-import { effectText, stakesBanner } from './stakesText';
+import { afterPlayback, DUEL_RESULT_HOLD_MS, effectText, stakesBanner } from './stakesText';
 
 /** The duel's playback length; the whole timeline plays in this time whatever its round count. */
 const ANIM_SECONDS = 5;
@@ -64,8 +63,10 @@ const outcomeTitle = (outcome: DuelResult['outcome']) =>
 
 /**
  * In-game duel overlay: "Simulating…" until `result` arrives, then the HP timeline plays back
- * over `ANIM_SECONDS` and the outcome and its effect are shown. Space or a click skips the
- * playback; once the outcome is shown, Space, a click or Continue calls `onDone`.
+ * over `ANIM_SECONDS` and the outcome and its effect are shown for `DUEL_RESULT_HOLD_MS` before
+ * `onDone` is called (see `afterPlayback`: a loss that ends the run calls it as soon as the
+ * playback ends, with no outcome shown). Space or a click skips the playback, and on the outcome
+ * calls `onDone` at once. The hold only counts while the page is visible and focused.
  */
 export const DuelSummary: React.FC<DuelSummaryProps> = ({
     player,
@@ -122,6 +123,35 @@ export const DuelSummary: React.FC<DuelSummaryProps> = ({
         if (finishedRef.current) onDoneRef.current();
         else setFinished(true);
     };
+
+    const closes = finished && !!result && afterPlayback(effect) === 'close';
+    // After the playback, the outcome holds and then moves on; the hold restarts from the
+    // beginning when the page comes back after being hidden or blurred.
+    useEffect(() => {
+        if (!finished || !result) return;
+        if (afterPlayback(effect) === 'close') {
+            onDoneRef.current();
+            return;
+        }
+        let timer = 0;
+        const start = () => {
+            window.clearTimeout(timer);
+            if (document.hidden || !document.hasFocus()) return;
+            timer = window.setTimeout(() => onDoneRef.current(), DUEL_RESULT_HOLD_MS);
+        };
+        const stop = () => window.clearTimeout(timer);
+        const onVisibility = () => (document.hidden ? stop() : start());
+        start();
+        document.addEventListener('visibilitychange', onVisibility);
+        window.addEventListener('blur', stop);
+        window.addEventListener('focus', start);
+        return () => {
+            stop();
+            document.removeEventListener('visibilitychange', onVisibility);
+            window.removeEventListener('blur', stop);
+            window.removeEventListener('focus', start);
+        };
+    }, [finished, result, effect]);
     const advanceRef = useRef(advance);
     advanceRef.current = advance;
 
@@ -162,18 +192,10 @@ export const DuelSummary: React.FC<DuelSummaryProps> = ({
                     <p className="text-theme-text-secondary">Simulating…</p>
                 ) : !finished ? (
                     <p className="text-theme-text-secondary">Round {point?.round ?? 0}</p>
-                ) : (
+                ) : closes ? null : (
                     <div className="space-y-3">
                         <h2 className="text-2xl font-bold">{outcomeTitle(result.outcome)}</h2>
                         {effect && <p className="text-lg">{effectText(effect)}</p>}
-                        <Button
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                onDone();
-                            }}
-                        >
-                            Continue
-                        </Button>
                     </div>
                 )}
             </div>

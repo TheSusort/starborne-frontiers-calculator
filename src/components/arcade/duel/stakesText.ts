@@ -31,3 +31,11 @@ export function effectText(effect: DuelEffect): string {
             return 'No reward';
     }
 }
+
+/** How long the outcome stays up before the run moves on by itself. */
+export const DUEL_RESULT_HOLD_MS = 1500;
+
+/** What follows the playback: the outcome held for `DUEL_RESULT_HOLD_MS`, or, for a loss that ends
+ *  the run, no outcome card at all (the summary closes straight into the ship's explosion). */
+export const afterPlayback = (effect: DuelEffect | null): 'hold' | 'close' =>
+    effect?.kind === 'game-over' ? 'close' : 'hold';

@@ -19,6 +19,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Arcade: duel opponents are now only ships with gear equipped.',
     "Arcade: your ship's magenta accent lighting now glows brighter in flight.",
     'Arcade: your ship now leaves a neon wake and air-flow streaks.',
+    'Arcade: duel results now continue on their own after a moment.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

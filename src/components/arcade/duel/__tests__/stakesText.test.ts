@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { effectText, stakesBanner } from '../stakesText';
+import { afterPlayback, DUEL_RESULT_HOLD_MS, effectText, stakesBanner } from '../stakesText';
 
 describe('stakesText', () => {
     it('labels every stakes kind', () => {
@@ -18,5 +18,26 @@ describe('stakesText', () => {
         expect(effectText({ kind: 'shield-absorbed' })).toBe('Shield absorbed the defeat');
         expect(effectText({ kind: 'game-over' })).toBe('Destroyed');
         expect(effectText({ kind: 'none' })).toBe('No reward');
+    });
+});
+
+describe('afterPlayback', () => {
+    it('holds every outcome but a run-ending loss', () => {
+        expect(afterPlayback({ kind: 'game-over' })).toBe('close');
+        for (const effect of [
+            { kind: 'bonus', amount: 500 },
+            { kind: 'credits', delta: -3 },
+            { kind: 'credits', delta: 0 },
+            { kind: 'shield' },
+            { kind: 'magnet' },
+            { kind: 'shield-absorbed' },
+            { kind: 'none' },
+        ] as const) {
+            expect(afterPlayback(effect)).toBe('hold');
+        }
+        // A skipped duel has no effect.
+        expect(afterPlayback(null)).toBe('hold');
+        expect(DUEL_RESULT_HOLD_MS).toBeGreaterThanOrEqual(1000);
+        expect(DUEL_RESULT_HOLD_MS).toBeLessThanOrEqual(2000);
     });
 });
