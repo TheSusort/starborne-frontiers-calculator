@@ -6,7 +6,7 @@ import { ArcadeLeaderboard } from '../ArcadeLeaderboard';
 const { rows, guestRows } = vi.hoisted(() => ({
     guestRows: [
         { rank: 1, username: 'Ace', bestScore: 900, isMe: false, ship: null, isGuest: false },
-        { rank: 2, username: 'Ace', bestScore: 800, isMe: false, ship: null, isGuest: true },
+        { rank: 1, username: 'Ace', bestScore: 900, isMe: false, ship: null, isGuest: true },
         { rank: 3, username: 'Bo', bestScore: 700, isMe: false, ship: null, isGuest: false },
         { rank: 4, username: 'Cy', bestScore: 600, isMe: false, ship: null, isGuest: true },
     ] as ArcadeLeaderboardEntry[],

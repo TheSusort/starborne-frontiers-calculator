@@ -154,6 +154,12 @@ BEGIN
   END IF;
 
   IF guest THEN
+    -- A still-valid guest JWT outlives its auth user once cleanup deletes it; public.users has no
+    -- FK to auth.users, so without this the insert below would recreate an orphan row.
+    IF NOT EXISTS (SELECT 1 FROM auth.users WHERE id = uid) THEN
+      RAISE EXCEPTION 'not authenticated';
+    END IF;
+
     INSERT INTO public.users (id) VALUES (uid) ON CONFLICT (id) DO NOTHING;
 
     IF guest_name IS NOT NULL THEN

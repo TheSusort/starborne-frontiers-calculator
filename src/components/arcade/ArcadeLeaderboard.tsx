@@ -82,10 +82,10 @@ const Podium: React.FC<{ entries: ArcadeLeaderboardEntry[]; portraitFor: Portrai
                         raised={index === 0}
                         badge={
                             entry.isMe || entry.isGuest ? (
-                                <>
+                                <span className="flex items-center gap-1">
                                     {entry.isGuest && <GuestTag />}
                                     {entry.isMe && <YouChip />}
-                                </>
+                                </span>
                             ) : undefined
                         }
                         subtitle={

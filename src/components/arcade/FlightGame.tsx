@@ -163,21 +163,45 @@ interface FlightGameProps {
     onClose: () => void;
 }
 
-const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
+/** The fleet the arcade flies, and whether it is still being resolved. */
+function useArcadeFleet() {
+    const { loading: authLoading } = useAuth();
+    const { ships: ownedShips, fleetLoaded } = useShips();
+    const { ships: templateShips, loading: templatesLoading } = useShipsData();
+    // `fleetLoaded` reads a session still resolving as signed out, so auth must settle too.
+    const ownedLoading = authLoading || !fleetLoaded;
+    return useMemo(
+        () => arcadeFleet(ownedShips, ownedLoading, templateShips, templatesLoading),
+        [ownedShips, ownedLoading, templateShips, templatesLoading]
+    );
+}
+
+/** Holds the arcade closed until its fleet is resolved: the opening phase is chosen once, from
+ *  the fleet present at mount. */
+const FlightGame: React.FC<FlightGameProps> = (props) => {
+    const { loading } = useArcadeFleet();
+    if (loading) {
+        return (
+            <div
+                className="fixed inset-0 z-50 bg-black"
+                role="dialog"
+                aria-modal="true"
+                aria-label="Synthwave arcade"
+                aria-busy="true"
+            />
+        );
+    }
+    return <FlightGameRun {...props} />;
+};
+
+const FlightGameRun: React.FC<FlightGameProps> = ({ origin, onClose }) => {
     const reducedMotion = useMediaQuery('(prefers-reduced-motion: reduce)');
     const startOrigin = reducedMotion ? undefined : origin;
     const reducedMotionRef = useRef(reducedMotion);
     reducedMotionRef.current = reducedMotion;
 
-    const { loading: authLoading, user } = useAuth();
-    const { ships: ownedShips, fleetLoaded } = useShips();
-    const { ships: templateShips } = useShipsData();
-    // `fleetLoaded` reads a session still resolving as signed out, so auth must settle too.
-    const ownedLoading = authLoading || !fleetLoaded;
-    const { fleet: ships, bare } = useMemo(
-        () => arcadeFleet(ownedShips, ownedLoading, templateShips),
-        [ownedShips, ownedLoading, templateShips]
-    );
+    const { user } = useAuth();
+    const { fleet: ships, bare } = useArcadeFleet();
     const { getGearPiece } = useInventory();
     const { getEngineeringStatsForShipType } = useEngineeringStats();
     // Bare templates fly without engineering.

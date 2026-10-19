@@ -15,6 +15,10 @@ import {
     buildReferencesCritMultiplier,
 } from '../utils/communityBuild';
 
+/** An anonymous session is an arcade guest, not a voter. */
+const isVoter = <U extends { is_anonymous?: boolean }>(user: U | null): user is U =>
+    !!user && !user.is_anonymous;
+
 /**
  * Thrown by createRecommendation when the shared config fails schema
  * validation, so callers can tell this apart from a not-signed-in / RLS
@@ -208,8 +212,7 @@ export class CommunityRecommendationService {
             data: { user },
         } = await supabase.auth.getUser();
 
-        // An anonymous session is an arcade guest, not a voter.
-        if (!user || user.is_anonymous) {
+        if (!isVoter(user)) {
             return false;
         }
 
@@ -239,8 +242,7 @@ export class CommunityRecommendationService {
             data: { user },
         } = await supabase.auth.getUser();
 
-        // An anonymous session is an arcade guest, not a voter.
-        if (!user || user.is_anonymous) {
+        if (!isVoter(user)) {
             return null;
         }
 
@@ -264,8 +266,7 @@ export class CommunityRecommendationService {
             data: { user },
         } = await supabase.auth.getUser();
 
-        // An anonymous session is an arcade guest, not a voter.
-        if (!user || user.is_anonymous) {
+        if (!isVoter(user)) {
             return false;
         }
 
