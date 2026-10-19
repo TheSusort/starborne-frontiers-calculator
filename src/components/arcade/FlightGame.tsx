@@ -1,4 +1,5 @@
 import React, { Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { Volume2, VolumeX, SkipForward } from 'lucide-react';
 import { Button } from '../ui/Button';
 import FallbackErrorBoundary from '../error/FallbackErrorBoundary';
 import { useBodyScrollLock } from '../ui/layout/useBodyScrollLock';
@@ -19,6 +20,7 @@ import { useShips } from '../../contexts/ShipsContext';
 import { useInventory } from '../../contexts/InventoryProvider';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';
 import type { Ship } from '../../types/ship';
+import { useSynthwaveMusic } from '../../utils/music/useSynthwaveMusic';
 import {
     advanceView,
     createFlightView,
@@ -29,8 +31,9 @@ import {
     renderFlight,
 } from './flightRenderer';
 import { runWhenIdle, whenIdle } from './idle';
-import { isSelectDropdownOpen, keyToAction, swipeToAction } from './flightInput';
+import { isSelectDropdownOpen, isTextTarget, keyToAction, swipeToAction } from './flightInput';
 import { readLocalBest, writeLocalBest } from './localBest';
+import { readMusicPref, writeMusicPref } from './musicPref';
 import { GameOverPanel } from './GameOverPanel';
 import { YouDiedOverlay } from './YouDiedOverlay';
 import { canSkipDeath, deathStage } from './deathSequence';
@@ -200,6 +203,9 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
     const inputsRef = useRef<InputAction[]>([]);
     const phaseRef = useRef<Phase>(initial.phase);
     const escapeBlockedRef = useRef(false);
+    const music = useSynthwaveMusic();
+    const musicRef = useRef(music);
+    musicRef.current = music;
     const swipeStartRef = useRef<{ x: number; y: number } | null>(null);
     /** The two opponents behind each checkpoint's gates, in gate-slot order. */
     const opponentsRef = useRef(new Map<number, [Ship, Ship]>());
@@ -448,8 +454,16 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
         setPhase('running');
     }, [setPhase, prepareNextOpponents, keyOf, refreshPins]);
 
+    /** Play/pause from the HUD or `M`; the arcade remembers the choice for the next launch. */
+    const toggleMusic = useCallback(() => {
+        const m = musicRef.current;
+        m.toggle();
+        writeMusicPref(!m.isPlaying);
+    }, []);
+
     const launch = useCallback(
         (ship: Ship) => {
+            if (readMusicPref()) musicRef.current.play();
             writeLastShipId(ship.id);
             const focus = focusRef.current;
             if (focus) {
@@ -802,6 +816,10 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
                 return;
             }
             const p = phaseRef.current;
+            if ((e.key === 'm' || e.key === 'M') && !isTextTarget(e.target)) {
+                if (!e.repeat) toggleMusic();
+                return;
+            }
             if (p === 'dying') {
                 if (e.key === ' ' || e.key === 'Enter') {
                     e.preventDefault();
@@ -826,7 +844,7 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
         // handler can change the status.
         window.addEventListener('keydown', onKey, true);
         return () => window.removeEventListener('keydown', onKey, true);
-    }, [onClose, resume, togglePause, skipDeath]);
+    }, [onClose, resume, togglePause, skipDeath, toggleMusic]);
 
     const onPointerDown = (e: React.PointerEvent) => {
         e.currentTarget.setPointerCapture(e.pointerId);
@@ -883,6 +901,27 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
                             MAGNET {Math.ceil(hud.magnet)}
                         </span>
                     )}
+                    <span className="hidden sm:inline text-xs text-white/60">
+                        {music.trackTitle}
+                    </span>
+                    <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={toggleMusic}
+                        aria-label={music.isPlaying ? 'Pause music' : 'Play music'}
+                        title={music.isPlaying ? 'Pause music (M)' : 'Play music (M)'}
+                    >
+                        {music.isPlaying ? <Volume2 size={14} /> : <VolumeX size={14} />}
+                    </Button>
+                    <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={music.next}
+                        aria-label="Next track"
+                        title="Next track"
+                    >
+                        <SkipForward size={14} />
+                    </Button>
                     {phase !== 'over' &&
                         phase !== 'select' &&
                         phase !== 'duel' &&

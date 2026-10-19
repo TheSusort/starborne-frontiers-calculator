@@ -68,7 +68,8 @@ const ArcadePage: React.FC = () => {
                             <strong>Down, S, swipe down</strong> duck
                         </li>
                         <li>
-                            <strong>P</strong> pauses, <strong>Esc</strong> quits
+                            <strong>P</strong> pauses, <strong>M</strong> toggles music,{' '}
+                            <strong>Esc</strong> quits
                         </li>
                     </ul>
                     <p className="text-theme-text-secondary">

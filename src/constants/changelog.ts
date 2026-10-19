@@ -7,6 +7,7 @@ export const CURRENT_VERSION = '1.79.0';
 // bumped version whose entries are still unreleased shows users a what's-new dialog listing
 // nothing. Do it by hand only if that script cannot.
 export const UNRELEASED_CHANGES: string[] = [
+    'Arcade: play the synthwave soundtrack while you fly, toggle with M.',
     'Arcade: choose a ship from your fleet to fly.',
     'Arcade: duel ships from your hangar at random checkpoints.',
     'Arcade: your ships now appear as their official 3D models.',

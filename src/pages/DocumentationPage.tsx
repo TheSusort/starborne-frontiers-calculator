@@ -2579,7 +2579,9 @@ const DocumentationPage: React.FC = () => {
                                         under raised blocks
                                     </li>
                                     <li>
-                                        <strong>P</strong> — pause; <strong>Esc</strong> — quit
+                                        <strong>P</strong> — pause; <strong>M</strong> — toggle the
+                                        synthwave music (your choice is remembered);{' '}
+                                        <strong>Esc</strong> — quit
                                     </li>
                                 </ul>
                             </div>
