@@ -447,6 +447,26 @@ export function gridLineX(
     return topX + (bottomX - topX) * (GRID_NEAR_PLANE / depth);
 }
 
+/** Fill colours of the fan's lines, glow and core, by line index: they depend only on the line
+ *  count, so they are built once per count. */
+const fanColours = new Map<number, { glow: string[]; core: string[] }>();
+
+function fanColoursFor(count: number): { glow: string[]; core: string[] } {
+    let colours = fanColours.get(count);
+    if (!colours) {
+        colours = { glow: [], core: [] };
+        for (let i = 0; i <= count; i++) {
+            const absFromCenter = Math.abs(i / count - 0.5);
+            const glow = Math.max(0.35 - absFromCenter * 0.35, 0.02);
+            const core = Math.max(0.55 - absFromCenter * 0.5, 0.05);
+            colours.glow.push(`rgba(180, 80, 255, ${glow})`);
+            colours.core.push(`rgba(180, 80, 255, ${core})`);
+        }
+        fanColours.set(count, colours);
+    }
+    return colours;
+}
+
 function drawGridColumns(
     ctx: CanvasRenderingContext2D,
     g: SceneGeometry,
@@ -456,18 +476,18 @@ function drawGridColumns(
     const { horizonY, h } = g;
     const gridBottom = h;
     const numVLines = columns.count;
+    const colours = fanColoursFor(numVLines);
 
     // Glow pass
     for (let i = 0; i <= numVLines; i++) {
         const t = i / numVLines;
-        const { topX, bottomX } = gridLineEnds(g, columns, t);
-        const distFromCenter = t - 0.5;
-        const absFromCenter = Math.abs(distFromCenter);
+        const topX = g.vanishX + (t - 0.5) * columns.topSpread;
+        const bottomX = columns.bottomLeft + t * columns.bottomSpread;
+        const absFromCenter = Math.abs(t - 0.5);
         const bottomW = Math.max(14 - absFromCenter * 20, 0.8);
         const topW = 0.6;
-        const alpha = 0.35 - absFromCenter * 0.35;
 
-        ctx.fillStyle = `rgba(180, 80, 255, ${Math.max(alpha, 0.02)})`;
+        ctx.fillStyle = colours.glow[i];
         ctx.beginPath();
         ctx.moveTo(topX - topW / 2, horizonY);
         ctx.lineTo(topX + topW / 2, horizonY);
@@ -479,14 +499,13 @@ function drawGridColumns(
     // Core pass
     for (let i = 0; i <= numVLines; i++) {
         const t = i / numVLines;
-        const { topX, bottomX } = gridLineEnds(g, columns, t);
-        const distFromCenter = t - 0.5;
-        const absFromCenter = Math.abs(distFromCenter);
+        const topX = g.vanishX + (t - 0.5) * columns.topSpread;
+        const bottomX = columns.bottomLeft + t * columns.bottomSpread;
+        const absFromCenter = Math.abs(t - 0.5);
         const bottomW = Math.max(4 - absFromCenter * 6, 0.2);
         const topW = 0.15;
-        const alpha = 0.55 - absFromCenter * 0.5;
 
-        ctx.fillStyle = `rgba(180, 80, 255, ${Math.max(alpha, 0.05)})`;
+        ctx.fillStyle = colours.core[i];
         ctx.beginPath();
         ctx.moveTo(topX - topW / 2, horizonY);
         ctx.lineTo(topX + topW / 2, horizonY);
@@ -497,77 +516,98 @@ function drawGridColumns(
     }
 }
 
-/** Draws the floor grid: the horizontal lines, then the vertical fan of each layer (or the one
- *  `GridColumns` given, or the page background's), then the centre glow. */
-export function drawGrid(
+/** The horizontal lines' edge-fading gradients for a screen `w` wide, at full opacity: a line
+ *  is stroked with one under `globalAlpha` set to its own opacity. A horizontal gradient is the
+ *  same at every y, so one per pass serves every line. Built once per context and width. */
+const lineGradients = new WeakMap<
+    CanvasRenderingContext2D,
+    { w: number; glow: CanvasGradient; core: CanvasGradient }
+>();
+
+function lineGradientsFor(
+    ctx: CanvasRenderingContext2D,
+    w: number
+): { glow: CanvasGradient; core: CanvasGradient } {
+    let cached = lineGradients.get(ctx);
+    if (!cached || cached.w !== w) {
+        const glow = ctx.createLinearGradient(0, 0, w, 0);
+        glow.addColorStop(0, 'rgba(180, 80, 255, 0)');
+        glow.addColorStop(0.3, 'rgba(180, 80, 255, 1)');
+        glow.addColorStop(0.7, 'rgba(180, 80, 255, 1)');
+        glow.addColorStop(1, 'rgba(180, 80, 255, 0)');
+        const core = ctx.createLinearGradient(0, 0, w, 0);
+        core.addColorStop(0, 'rgba(180, 80, 255, 0)');
+        core.addColorStop(0.25, 'rgba(180, 80, 255, 1)');
+        core.addColorStop(0.75, 'rgba(180, 80, 255, 1)');
+        core.addColorStop(1, 'rgba(180, 80, 255, 0)');
+        cached = { w, glow, core };
+        lineGradients.set(ctx, cached);
+    }
+    return cached;
+}
+
+/** The floor grid's horizontal lines, scrolled by `gridOffset` (0..1). */
+export function drawGridLines(
     ctx: CanvasRenderingContext2D,
     g: SceneGeometry,
-    gridOffset: number,
-    gridColumns?: GridColumns | readonly GridLayer[]
+    gridOffset: number
 ): void {
-    const { w, horizonY, gridHeight, vanishX } = g;
-
+    const { w } = g;
     // Horizontal grid lines — NO shadowBlur, use double-draw for glow
     const numHLines = 20;
     const gridSpeed = gridOffset;
+    const gradients = lineGradientsFor(ctx, w);
+    const alpha = ctx.globalAlpha;
 
     // First pass: wide faint "glow" lines — fade toward edges
+    ctx.strokeStyle = gradients.glow;
     for (let i = 0; i < numHLines; i++) {
         const depth =
             GRID_FAR_PLANE - ((i / numHLines + gridSpeed) % 1) * (GRID_FAR_PLANE - GRID_NEAR_PLANE);
         const screenY = depthToScreenY(g, depth);
         const closeness = 1 - (depth - GRID_NEAR_PLANE) / (GRID_FAR_PLANE - GRID_NEAR_PLANE);
-        const alpha = Math.min(closeness * 0.15, 0.12);
-        const lineWidth = 2 + closeness * 6;
-
-        const hGlowGrad = ctx.createLinearGradient(0, screenY, w, screenY);
-        hGlowGrad.addColorStop(0, 'rgba(180, 80, 255, 0)');
-        hGlowGrad.addColorStop(0.3, `rgba(180, 80, 255, ${alpha})`);
-        hGlowGrad.addColorStop(0.7, `rgba(180, 80, 255, ${alpha})`);
-        hGlowGrad.addColorStop(1, 'rgba(180, 80, 255, 0)');
-        ctx.strokeStyle = hGlowGrad;
-        ctx.lineWidth = lineWidth;
+        ctx.globalAlpha = alpha * Math.min(closeness * 0.15, 0.12);
+        ctx.lineWidth = 2 + closeness * 6;
         ctx.beginPath();
         ctx.moveTo(0, screenY);
         ctx.lineTo(w, screenY);
         ctx.stroke();
     }
     // Second pass: thin bright core lines — fade toward edges
+    ctx.strokeStyle = gradients.core;
     for (let i = 0; i < numHLines; i++) {
         const depth =
             GRID_FAR_PLANE - ((i / numHLines + gridSpeed) % 1) * (GRID_FAR_PLANE - GRID_NEAR_PLANE);
         const screenY = depthToScreenY(g, depth);
         const closeness = 1 - (depth - GRID_NEAR_PLANE) / (GRID_FAR_PLANE - GRID_NEAR_PLANE);
-        const alpha = Math.min(closeness * 0.8, 0.7);
-        const lineWidth = 0.3 + closeness * 2;
-
-        const hCoreGrad = ctx.createLinearGradient(0, screenY, w, screenY);
-        hCoreGrad.addColorStop(0, 'rgba(180, 80, 255, 0)');
-        hCoreGrad.addColorStop(0.25, `rgba(180, 80, 255, ${alpha})`);
-        hCoreGrad.addColorStop(0.75, `rgba(180, 80, 255, ${alpha})`);
-        hCoreGrad.addColorStop(1, 'rgba(180, 80, 255, 0)');
-        ctx.strokeStyle = hCoreGrad;
-        ctx.lineWidth = lineWidth;
+        ctx.globalAlpha = alpha * Math.min(closeness * 0.8, 0.7);
+        ctx.lineWidth = 0.3 + closeness * 2;
         ctx.beginPath();
         ctx.moveTo(0, screenY);
         ctx.lineTo(w, screenY);
         ctx.stroke();
     }
+    ctx.globalAlpha = alpha;
+}
 
-    const layers: readonly GridLayer[] = Array.isArray(gridColumns)
-        ? gridColumns
-        : [
-              {
-                  columns: (gridColumns as GridColumns | undefined) ?? defaultGridColumns(g),
-                  alpha: 1,
-              },
-          ];
-    for (const { columns, alpha } of layers) {
-        if (alpha <= 0) continue;
-        ctx.save();
-        ctx.globalAlpha *= alpha;
-        drawGridColumns(ctx, g, columns);
-        ctx.restore();
+/** The floor grid's vertical fan (each layer's, or the one `GridColumns` given, or the page
+ *  background's) and the glow over the grid's centre. Nothing here moves. */
+export function drawGridFan(
+    ctx: CanvasRenderingContext2D,
+    g: SceneGeometry,
+    gridColumns?: GridColumns | readonly GridLayer[]
+): void {
+    const { w, horizonY, gridHeight, vanishX } = g;
+    if (Array.isArray(gridColumns)) {
+        for (const { columns, alpha } of gridColumns as readonly GridLayer[]) {
+            if (alpha <= 0) continue;
+            ctx.save();
+            ctx.globalAlpha *= alpha;
+            drawGridColumns(ctx, g, columns);
+            ctx.restore();
+        }
+    } else {
+        drawGridColumns(ctx, g, (gridColumns as GridColumns | undefined) ?? defaultGridColumns(g));
     }
 
     // Center glow on grid
@@ -583,6 +623,18 @@ export function drawGrid(
     centerGlow.addColorStop(1, 'rgba(0, 0, 0, 0)');
     ctx.fillStyle = centerGlow;
     ctx.fillRect(0, horizonY, w, gridHeight);
+}
+
+/** Draws the floor grid: the horizontal lines, then the vertical fan of each layer (or the one
+ *  `GridColumns` given, or the page background's), then the centre glow. */
+export function drawGrid(
+    ctx: CanvasRenderingContext2D,
+    g: SceneGeometry,
+    gridOffset: number,
+    gridColumns?: GridColumns | readonly GridLayer[]
+): void {
+    drawGridLines(ctx, g, gridOffset);
+    drawGridFan(ctx, g, gridColumns);
 }
 
 export function drawFadeOverlay(ctx: CanvasRenderingContext2D, g: SceneGeometry): void {
