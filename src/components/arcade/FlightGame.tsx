@@ -391,6 +391,17 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
         refreshPins();
     }, [visualOf, requestFlownFrames, prepareNextOpponents, warmGateArt, refreshPins]);
 
+    // A run started from the background can begin before the fleet's gear has loaded. The intro
+    // never steps the game, so until it ends a fresh game with duels replaces one decided
+    // without them once the fleet and gear allow duels.
+    useEffect(() => {
+        const flown = flownRef.current;
+        if (phaseRef.current !== 'intro' || duelsRef.current || !flown) return;
+        if (!canDuel(ships, flown.id, getGearPiece)) return;
+        duelsRef.current = true;
+        gameRef.current = createGame(newSeed(), { duels: true });
+    }, [ships, getGearPiece]);
+
     // Speed lines and the ship's trail follow a reduced-motion change mid-run.
     useEffect(() => {
         const view = viewRef.current;
@@ -447,12 +458,11 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
                 focusRef.current = null;
             }
             flownRef.current = ship;
-            duelsRef.current = canDuel(ships, ship.id, getGearPiece);
             refreshPins();
             requestFlownFrames(ship);
             restart();
         },
-        [ships, getGearPiece, restart, requestFlownFrames, keyOf, refreshPins]
+        [restart, requestFlownFrames, keyOf, refreshPins]
     );
 
     /** Ends the run: the result is recorded and submitted now, while the ship explodes and the
