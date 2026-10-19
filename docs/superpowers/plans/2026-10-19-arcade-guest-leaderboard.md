@@ -23,6 +23,7 @@
 - **GUEST tag:** plain text with a colour class. No emoji, no `border-l-*` side accent.
 - **UI primitives:** use the ones in `src/components/ui/` (`Button`, `Modal`, `Input`, `Chip`). No raw `<button>`.
 - **Code comments:** present-tense behaviour only. No task numbers and no change history. See CLAUDE.md "Code Comments".
+- **Pre-commit:** the hook runs the full vitest suite. Never use `--no-verify` for code commits. A timeout in the kit-fingerprint test file alone is contention, not your diff; re-run it.
 - **Changelog:** one entry per user-visible change, area prefix plus 8–12 words.
 
 ---
@@ -297,6 +298,8 @@ select pg_get_functiondef('public.has_profile_access'::regproc);
 select polname, pg_get_expr(polqual, polrelid), pg_get_expr(polwithcheck, polrelid)
   from pg_policy where polrelid = 'public.users'::regclass;
 ```
+Also: `select has_table_privilege('postgres', 'auth.users', 'DELETE');` must be true, or the cleanup fails silently under cron.
+
 Expected: `has_profile_access` is the `20260424000003_alt_accounts_rls.sql` body. The policies
 "Users can update own profile or owned alts" and "Users can insert alt profiles they own" match
 that file.
@@ -563,6 +566,16 @@ Expected: PASS.
 Run: `PATH="$HOME/.nvm/versions/node/v22.19.0/bin:$PATH" npx tsc --noEmit`
 Expected: no errors. Any test mock of `useAuth` that is typed against `AuthContextType` may need `guestUserId: null`. Fix each one the compiler names.
 
+**Session census.** The guard only covers code that goes through `useAuth().user`. Find code that reads the Supabase session directly:
+
+`git ls-files 'src/**' | xargs grep -n "auth.getSession\|auth.getUser\|onAuthStateChange\|session?.user\|session.user"`
+
+Look first at `useStorage`, `ActiveProfileProvider`, `heartbeatService` and `OAuthConsentPage` (including its approve path). For each hit outside `AuthProvider.tsx` and `supabaseAuth.ts` that decides persistence, sync, token use or "is signed in" from session presence, do one of two things:
+- add an anonymous check, reading `session.user.is_anonymous`;
+- or list it in your report with the reason it is inert for a guest.
+
+`OAuthConsentPage` must refuse to show Approve for an anonymous session, and gets a test for it if it reads the session directly. If it gates only on `user`, say so in the report.
+
 - [ ] **Step 9: Commit**
 
 ```bash
@@ -824,6 +837,7 @@ describe('useArcadeSubmission (guests)', () => {
             outcome = await result.current.saveGuestName('Ace');
         });
         expect(outcome).toBe('taken');
+        // The status never left 'needs-guest-name', so the modal stayed open with the typed name.
         expect(result.current.status).toBe('needs-guest-name');
 
         submit.mockResolvedValue({ bestScore: 10, rank: 1 });
@@ -895,7 +909,9 @@ Replace every `userId ? 'checking' : 'signed-out'` with `identity ? 'checking' :
         async (guestName?: string): Promise<'saved' | 'taken' | 'failed'> => {
             if (!finished) return 'failed';
             const { result } = finished;
-            if (liveResultRef.current === result) setStatus('submitting');
+            // A guest-name save keeps 'needs-guest-name' while in flight: the modal shows its own
+            // saving state, and closing it would reset the typed name on a taken-name retry.
+            if (liveResultRef.current === result && !guestName) setStatus('submitting');
             try {
                 const saved = guestName
                     ? await submitArcadeScore(result, finished.shipName, guestName)
@@ -1365,7 +1381,9 @@ Check how `statsDepsRef.current` is passed to `runDuel`. If it is spread or pass
    - `canDuel(shipsRef.current, flown.id, statsDepsRef.current.getGearPiece)` in `restart` → `... statsDepsRef.current.isCandidate)`;
    - `isDuelCandidate(s, statsDepsRef.current.getGearPiece)` in `takePrepared` → `statsDepsRef.current.isCandidate(s)`. Drop the now-unused `isDuelCandidate` import if nothing else uses it.
 
-4. The initial phase stays `startOrigin ? 'intro' : ships.length > 0 ? 'select' : 'running'`. A fleetless player with cached templates therefore opens on the select screen. If templates are not cached yet at mount, the run starts with the neon fighter, exactly as a fleetless player does today. Add no loading gate.
+4. **Check the loading guard.** Read `ShipsContext.tsx`: `loading` starts `false` (around line 82). Find where `setLoading(true)` fires. If a signed-in user can render with `ships=[]` and `loading=false` before the fetch starts, `arcadeFleet` would lock that user into bare mode. In that case add an `ownedLoaded` signal: true once a load has completed, or immediately when signed out. Use it as `ownedLoading = !ownedLoaded`, and add a test for it.
+
+4b. The initial phase stays `startOrigin ? 'intro' : ships.length > 0 ? 'select' : 'running'`. A fleetless player with cached templates therefore opens on the select screen. If templates are not cached yet at mount, the run starts with the neon fighter, exactly as a fleetless player does today. Add no loading gate.
 
 5. `FighterSelect` already has search and a faction filter, so it needs no change. It shows `Level ?` for a template, which has no level. Pass the level as-is.
 
