@@ -4,6 +4,13 @@ import { getUserProfile } from '../../services/userProfileService';
 import { submitArcadeScore } from '../../services/arcadeService';
 import type { RunResult } from '../../utils/arcade/types';
 
+/** A finished run and the fleet ship it was flown with (null for the neon fighter). They are
+ *  one object so a submission is keyed by the run alone: the ship cannot change by itself. */
+export interface FinishedRun {
+    result: RunResult;
+    shipName: string | null;
+}
+
 export type SubmissionStatus =
     'signed-out' | 'checking' | 'needs-username' | 'submitting' | 'submitted' | 'skipped' | 'error';
 
@@ -11,12 +18,12 @@ export type SubmissionStatus =
  * Submits every finished run for a signed-in player; the RPC keeps the higher score, so the
  * client never compares against a stored best. A main account without a username is asked
  * for one first. A run whose overlay closed or was replaced mid-check is still saved; only its
- * UI updates are dropped. `shipName` is the fleet ship the run was flown with (null for the
- * neon fighter) and is sent with the score.
+ * UI updates are dropped. The run's ship is sent with the score.
  */
-export function useArcadeSubmission(result: RunResult | null, shipName: string | null = null) {
+export function useArcadeSubmission(finished: FinishedRun | null) {
     const { user } = useAuth();
     const userId = user?.id ?? null;
+    const result = finished?.result ?? null;
     const [status, setStatus] = useState<SubmissionStatus>(userId ? 'checking' : 'signed-out');
     const [rank, setRank] = useState<number | null>(null);
     const [leaderboardVersion, setLeaderboardVersion] = useState(0);
@@ -37,10 +44,11 @@ export function useArcadeSubmission(result: RunResult | null, shipName: string |
     }, [result]);
 
     const submit = useCallback(async () => {
-        if (!result) return;
+        if (!finished) return;
+        const { result } = finished;
         if (liveResultRef.current === result) setStatus('submitting');
         try {
-            const saved = await submitArcadeScore(result, shipName);
+            const saved = await submitArcadeScore(result, finished.shipName);
             if (liveResultRef.current !== result) return;
             setRank(saved?.rank ?? null);
             setStatus('submitted');
@@ -52,7 +60,7 @@ export function useArcadeSubmission(result: RunResult | null, shipName: string |
                 setStatus('error');
             }
         }
-    }, [result, shipName]);
+    }, [finished]);
 
     useEffect(() => {
         setRank(null);

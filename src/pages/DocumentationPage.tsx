@@ -2610,7 +2610,7 @@ const DocumentationPage: React.FC = () => {
                                     pilots stand on a podium above the table, and your own place is
                                     tagged YOU. Each best score shows the ship it was flown with,
                                     its pilot portrait beside the name; runs in the neon fighter
-                                    show no ship.
+                                    show no ship, and neither do scores set before this update.
                                 </p>
                             </div>
                         </div>

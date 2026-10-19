@@ -41,6 +41,20 @@ describe('submitArcadeScore', () => {
         }
     });
 
+    it('retries without p_ship when the database has no p_ship parameter yet', async () => {
+        rpc.mockResolvedValueOnce({ data: null, error: { code: 'PGRST202', message: 'nf' } });
+        const result = await submitArcadeScore(run, 'Nayra');
+        expect(rpc).toHaveBeenCalledTimes(2);
+        expect(rpc.mock.calls[1][1]).not.toHaveProperty('p_ship');
+        expect(result).toEqual({ bestScore: 1200, rank: 4 });
+    });
+
+    it('does not retry other RPC errors', async () => {
+        rpc.mockResolvedValue({ data: null, error: { code: '42501', message: 'no' } });
+        await expect(submitArcadeScore(run, 'Nayra')).rejects.toBeTruthy();
+        expect(rpc).toHaveBeenCalledTimes(1);
+    });
+
     it('throws the RPC error', async () => {
         rpc.mockResolvedValue({ data: null, error: new Error('boom') });
         await expect(submitArcadeScore(run, 'Nayra')).rejects.toThrow('boom');

@@ -37,7 +37,8 @@ const ShipTag: React.FC<{ ship: string; portraitFor: PortraitFor; className?: st
             {portrait && (
                 <Image
                     src={portrait}
-                    alt={ship}
+                    alt=""
+                    fallback={null}
                     className="h-5 w-5 shrink-0 overflow-hidden rounded-full border border-dark-border"
                     imageClassName="h-full w-full object-cover"
                 />
@@ -52,34 +53,40 @@ const ShipTag: React.FC<{ ship: string; portraitFor: PortraitFor; className?: st
 const Podium: React.FC<{ entries: ArcadeLeaderboardEntry[]; portraitFor: PortraitFor }> = ({
     entries,
     portraitFor,
-}) => (
-    <div className="mx-auto grid w-full max-w-2xl grid-cols-3 items-end gap-2 sm:gap-3">
-        {PODIUM_SLOT_ORDER.map((index) => {
-            const entry = entries[index];
-            if (!entry) return <div key={`empty-${index}`} aria-hidden="true" />;
-            return (
-                <PodiumCard
-                    key={`${entry.rank}-${entry.username}`}
-                    rank={entry.rank}
-                    title={entry.username}
-                    value={entry.bestScore.toLocaleString()}
-                    accentColor={MEDAL_COLORS[entry.rank] ?? MEDAL_COLORS[index + 1]}
-                    raised={index === 0}
-                    badge={entry.isMe ? <YouChip /> : undefined}
-                    subtitle={
-                        entry.ship ? (
-                            <ShipTag
-                                ship={entry.ship}
-                                portraitFor={portraitFor}
-                                className="justify-center"
-                            />
-                        ) : undefined
-                    }
-                />
-            );
-        })}
-    </div>
-);
+}) => {
+    // One ship on the podium reserves the subtitle slot on every card so the tops stay level.
+    const anyShip = entries.some((e) => e.ship);
+    return (
+        <div className="mx-auto grid w-full max-w-2xl grid-cols-3 items-end gap-2 sm:gap-3">
+            {PODIUM_SLOT_ORDER.map((index) => {
+                const entry = entries[index];
+                if (!entry) return <div key={`empty-${index}`} aria-hidden="true" />;
+                return (
+                    <PodiumCard
+                        key={`${entry.rank}-${entry.username}`}
+                        rank={entry.rank}
+                        title={entry.username}
+                        value={entry.bestScore.toLocaleString()}
+                        accentColor={MEDAL_COLORS[entry.rank] ?? MEDAL_COLORS[index + 1]}
+                        raised={index === 0}
+                        badge={entry.isMe ? <YouChip /> : undefined}
+                        subtitle={
+                            anyShip ? (
+                                entry.ship ? (
+                                    <ShipTag
+                                        ship={entry.ship}
+                                        portraitFor={portraitFor}
+                                        className="justify-center"
+                                    />
+                                ) : null
+                            ) : undefined
+                        }
+                    />
+                );
+            })}
+        </div>
+    );
+};
 
 const columnsFor = (portraitFor: PortraitFor): Column<LeaderboardViewRow>[] => [
     {

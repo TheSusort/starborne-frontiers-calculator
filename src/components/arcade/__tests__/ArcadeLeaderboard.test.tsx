@@ -33,14 +33,16 @@ describe('ArcadeLeaderboard ship', () => {
         await screen.findByText('Dee');
         const row = within(rowOf('Dee'));
         expect(row.getByText('Nayra')).toBeTruthy();
-        expect(row.getByRole('img').getAttribute('src')).toBe('nayra_key_Portrait.jpg');
+        expect(
+            row.getByText('Nayra').closest('tr')!.querySelector('img')!.getAttribute('src')
+        ).toBe('nayra_key_Portrait.jpg');
     });
 
     it('shows nothing extra for a neon-fighter row', async () => {
         render(<ArcadeLeaderboard />);
         await screen.findByText('Eve');
         const row = rowOf('Eve');
-        expect(within(row).queryByRole('img')).toBeNull();
+        expect(row.querySelector('img')).toBeNull();
         expect(row.textContent).toBe('#5Eve500');
     });
 
@@ -49,8 +51,10 @@ describe('ArcadeLeaderboard ship', () => {
         await screen.findByText('Ace');
         const card = within(podiumOf('Ace'));
         expect(card.getByText('Nayra')).toBeTruthy();
-        expect(card.getByRole('img').getAttribute('src')).toBe('nayra_key_Portrait.jpg');
-        expect(within(podiumOf('Bee')).queryByRole('img')).toBeNull();
+        expect(podiumOf('Ace').querySelector('img')!.getAttribute('src')).toBe(
+            'nayra_key_Portrait.jpg'
+        );
+        expect(podiumOf('Bee').querySelector('img')).toBeNull();
     });
 
     it('shows the name only when the ship does not resolve to a template', async () => {
@@ -58,6 +62,16 @@ describe('ArcadeLeaderboard ship', () => {
         await screen.findByText('Cee');
         const card = within(podiumOf('Cee'));
         expect(card.getByText('Unknown Ship')).toBeTruthy();
-        expect(card.queryByRole('img')).toBeNull();
+        expect(podiumOf('Cee').querySelector('img')).toBeNull();
+    });
+
+    it('gives every podium card the same subtitle slot, filled or empty', async () => {
+        render(<ArcadeLeaderboard />);
+        await screen.findByText('Bee');
+        const slots = ['Ace', 'Bee', 'Cee'].map((n) =>
+            podiumOf(n).querySelector('span.h-5.w-full')
+        );
+        expect(slots.every((s) => s !== null)).toBe(true);
+        expect(slots[1]!.textContent).toBe('');
     });
 });

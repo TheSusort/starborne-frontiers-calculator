@@ -5,16 +5,15 @@
 -- best_distance it belongs to the best-score run: it changes only when the score improves.
 -- The client resolves the portrait from the name (name -> ship template -> imageKey).
 --
--- Compatibility with the deployed client (1.79), which calls
---   rpc('submit_arcade_score', { p_score, p_credits, p_distance })
--- and reads get_arcade_leaderboard rows field by field:
+-- Compatibility with clients that send only `p_score`, `p_credits`, `p_distance`
+-- (rpc('submit_arcade_score', { p_score, p_credits, p_distance })) and read get_arcade_leaderboard rows field by field:
 --   * submit_arcade_score gains p_ship text DEFAULT NULL. PostgREST resolves an RPC by the
 --     argument NAMES it is sent and calls the function with named notation
 --     (p_score := ..., p_credits := ..., p_distance := ...), so a call that omits a defaulted
 --     parameter still matches the single 4-argument function and p_ship takes its default.
 --     The old 3-argument function is dropped first: if both overloads existed, a 3-name call
 --     would match both and PostgREST would reject it as ambiguous (PGRST203).
---   * get_arcade_leaderboard returns one more column, best_ship. The deployed parser
+--   * get_arcade_leaderboard returns one more column, best_ship. The older parser
 --     (parseLeaderboardRows) destructures the fields it knows and ignores the rest.
 -- The drops and creates run in one transaction, so no request sees either function missing.
 --
@@ -49,7 +48,7 @@ BEGIN
 
   INSERT INTO public.arcade_scores AS a
     (user_id, best_score, best_credits, best_distance, best_ship, updated_at)
-  VALUES (uid, p_score, p_credits, p_distance, p_ship, now())
+  VALUES (uid, p_score, p_credits, p_distance, NULLIF(p_ship, ''), now())
   ON CONFLICT (user_id) DO UPDATE
     SET best_score = EXCLUDED.best_score,
         best_credits = EXCLUDED.best_credits,

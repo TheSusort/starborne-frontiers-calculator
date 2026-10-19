@@ -17,12 +17,17 @@ export async function submitArcadeScore(
     run: RunResult,
     shipName?: string | null
 ): Promise<ArcadeSubmitResult | null> {
-    const { data, error } = await supabase.rpc('submit_arcade_score', {
-        p_score: run.score,
-        p_credits: run.credits,
-        p_distance: run.distance,
-        ...(isValidShipName(shipName) ? { p_ship: shipName } : {}),
-    });
+    const base = { p_score: run.score, p_credits: run.credits, p_distance: run.distance };
+    const withShip = isValidShipName(shipName);
+    let { data, error } = await supabase.rpc(
+        'submit_arcade_score',
+        withShip ? { ...base, p_ship: shipName } : base
+    );
+    // PGRST202: no function matches the sent argument names, i.e. the database has not
+    // gained `p_ship` yet. The score still saves, without its ship.
+    if (error?.code === 'PGRST202' && withShip) {
+        ({ data, error } = await supabase.rpc('submit_arcade_score', base));
+    }
     if (error) throw error;
     return parseSubmitResult(data);
 }

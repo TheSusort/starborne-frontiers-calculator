@@ -13,7 +13,8 @@ interface PodiumCardProps {
     accentColor: string;
     raised?: boolean;
     badge?: React.ReactNode;
-    /** Shown under the title. */
+    /** Shown under the title in a fixed-height slot. Pass null to hold the slot empty so a
+     *  card without one still lines up with its neighbours; undefined omits the slot. */
     subtitle?: React.ReactNode;
 }
 
@@ -52,7 +53,9 @@ export const PodiumCard: React.FC<PodiumCardProps> = ({
         >
             {title}
         </span>
-        {subtitle}
+        {subtitle !== undefined && (
+            <span className="flex h-5 w-full min-w-0 items-center justify-center">{subtitle}</span>
+        )}
         <span className="text-sm tabular-nums text-theme-text-secondary">{value}</span>
         <span className="flex h-5 items-center">{badge}</span>
     </div>

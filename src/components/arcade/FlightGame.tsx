@@ -8,13 +8,7 @@ import { createGame, step } from '../../utils/arcade/engine';
 import { STEP_SECONDS } from '../../utils/arcade/constants';
 import { computeScore, runResult } from '../../utils/arcade/scoring';
 import { resolveDuel } from '../../utils/arcade/checkpoints';
-import type {
-    DuelEffect,
-    DuelStakes,
-    GameState,
-    InputAction,
-    RunResult,
-} from '../../utils/arcade/types';
+import type { DuelEffect, DuelStakes, GameState, InputAction } from '../../utils/arcade/types';
 import { useAuth } from '../../contexts/AuthProvider';
 import { useShips } from '../../contexts/ShipsContext';
 import { useInventory } from '../../contexts/InventoryProvider';
@@ -41,7 +35,7 @@ import { GameOverPanel } from './GameOverPanel';
 import { YouDiedOverlay } from './YouDiedOverlay';
 import { canSkipDeath, deathStage } from './deathSequence';
 import { slowMotion } from './explosion';
-import { useArcadeSubmission, SubmissionStatus } from './useArcadeSubmission';
+import { useArcadeSubmission, SubmissionStatus, type FinishedRun } from './useArcadeSubmission';
 import { ArcadeUsernameModal } from './ArcadeUsernameModal';
 import { ArcadeLeaderboard } from './ArcadeLeaderboard';
 import type { FlightOrigin } from './flightEvents';
@@ -238,7 +232,8 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
     const [phase, setPhaseState] = useState<Phase>(phaseRef.current);
     const [hud, setHud] = useState({ score: 0, credits: 0, shield: false, magnet: 0 });
     const [countdown, setCountdown] = useState(0);
-    const [result, setResult] = useState<RunResult | null>(null);
+    const [finished, setFinished] = useState<FinishedRun | null>(null);
+    const result = finished?.result ?? null;
     const [localBest, setLocalBest] = useState(readLocalBest);
     const [previousBest, setPreviousBest] = useState(0);
     const [duel, setDuel] = useState<DuelState | null>(null);
@@ -246,9 +241,7 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
     const [youDied, setYouDied] = useState(false);
     const youDiedRef = useRef(false);
     const { user } = useAuth();
-    /** The fleet ship the finished run was flown with, captured with the result. */
-    const [resultShip, setResultShip] = useState<string | null>(null);
-    const submission = useArcadeSubmission(result, resultShip);
+    const submission = useArcadeSubmission(finished);
 
     // While the username modal is open, Escape belongs to the modal.
     useEffect(() => {
@@ -458,7 +451,7 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
         viewRef.current.playerFrames = key ? cachedPlayerFrames(key) : null;
         refreshPins();
         inputsRef.current = [];
-        setResult(null);
+        setFinished(null);
         youDiedRef.current = false;
         setYouDied(false);
         setHud({ score: 0, credits: 0, shield: false, magnet: 0 });
@@ -494,8 +487,7 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
      *  death screen plays before the game-over panel shows it. */
     const finishRun = useCallback(() => {
         const r = runResult(gameRef.current);
-        setResult(r);
-        setResultShip(flownRef.current?.name ?? null);
+        setFinished({ result: r, shipName: flownRef.current?.name ?? null });
         setPreviousBest(readLocalBest());
         setLocalBest(writeLocalBest(r.score));
         explodeShip(viewRef.current, reducedMotionRef.current);
