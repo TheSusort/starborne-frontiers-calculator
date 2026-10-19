@@ -2580,8 +2580,8 @@ const DocumentationPage: React.FC = () => {
                                     </li>
                                     <li>
                                         <strong>P</strong> — pause; <strong>M</strong> — toggle the
-                                        synthwave music (your choice is remembered);{' '}
-                                        <strong>Esc</strong> — quit
+                                        synthwave music, which starts on by default (your choice is
+                                        remembered); <strong>Esc</strong> — quit
                                     </li>
                                 </ul>
                             </div>

@@ -78,6 +78,19 @@ describe('synthwave music controller', () => {
         expect(audio.play).toHaveBeenCalledTimes(2);
     });
 
+    it('makes one Audio and registers one ended handler across play, pause, play and next', () => {
+        const f = fakeAudio();
+        const addSpy = vi.spyOn(f.audio, 'addEventListener');
+        const makeAudio = vi.fn(() => f.audio);
+        const c = createMusicController(makeAudio, inOrder);
+        c.play();
+        c.pause();
+        c.play();
+        c.next();
+        expect(makeAudio).toHaveBeenCalledTimes(1);
+        expect(addSpy).toHaveBeenCalledTimes(1);
+    });
+
     it('a refused play reverts to paused', async () => {
         const f = fakeAudio();
         f.audio.play.mockReturnValueOnce(Promise.reject(new Error('NotAllowedError')));

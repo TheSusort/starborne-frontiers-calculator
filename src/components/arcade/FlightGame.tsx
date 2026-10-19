@@ -20,7 +20,10 @@ import { useShips } from '../../contexts/ShipsContext';
 import { useInventory } from '../../contexts/InventoryProvider';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';
 import type { Ship } from '../../types/ship';
+import { getSynthwaveMusic } from '../../utils/music/synthwaveMusic';
 import { useSynthwaveMusic } from '../../utils/music/useSynthwaveMusic';
+import { usePauseMusicOnUnmountOffTheme } from '../../utils/music/usePauseMusicOffTheme';
+import { useTheme } from '../../contexts/ThemeContext';
 import {
     advanceView,
     createFlightView,
@@ -33,7 +36,7 @@ import {
 import { runWhenIdle, whenIdle } from './idle';
 import { isSelectDropdownOpen, isTextTarget, keyToAction, swipeToAction } from './flightInput';
 import { readLocalBest, writeLocalBest } from './localBest';
-import { readMusicPref, writeMusicPref } from './musicPref';
+import { resumeArcadeMusic, writeMusicPref } from './musicPref';
 import { GameOverPanel } from './GameOverPanel';
 import { YouDiedOverlay } from './YouDiedOverlay';
 import { canSkipDeath, deathStage } from './deathSequence';
@@ -206,6 +209,12 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
     const music = useSynthwaveMusic();
     const musicRef = useRef(music);
     musicRef.current = music;
+    usePauseMusicOnUnmountOffTheme(useTheme().theme === 'synthwave');
+    // The click that opens the game from the background is the gesture that lets audio start.
+    const openedFromOrigin = startOrigin !== undefined;
+    useEffect(() => {
+        if (openedFromOrigin) resumeArcadeMusic(musicRef.current);
+    }, [openedFromOrigin]);
     const swipeStartRef = useRef<{ x: number; y: number } | null>(null);
     /** The two opponents behind each checkpoint's gates, in gate-slot order. */
     const opponentsRef = useRef(new Map<number, [Ship, Ship]>());
@@ -456,14 +465,13 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
 
     /** Play/pause from the HUD or `M`; the arcade remembers the choice for the next launch. */
     const toggleMusic = useCallback(() => {
-        const m = musicRef.current;
-        m.toggle();
-        writeMusicPref(!m.isPlaying);
+        musicRef.current.toggle();
+        writeMusicPref(getSynthwaveMusic().getSnapshot().isPlaying);
     }, []);
 
     const launch = useCallback(
         (ship: Ship) => {
-            if (readMusicPref()) musicRef.current.play();
+            resumeArcadeMusic(musicRef.current);
             writeLastShipId(ship.id);
             const focus = focusRef.current;
             if (focus) {
@@ -816,7 +824,8 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
                 return;
             }
             const p = phaseRef.current;
-            if ((e.key === 'm' || e.key === 'M') && !isTextTarget(e.target)) {
+            const chord = e.ctrlKey || e.metaKey;
+            if ((e.key === 'm' || e.key === 'M') && !chord && !isTextTarget(e.target)) {
                 if (!e.repeat) toggleMusic();
                 return;
             }
@@ -828,7 +837,7 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
                 return;
             }
             if (p === 'over' || p === 'select') return;
-            if (e.key === 'p' || e.key === 'P') {
+            if ((e.key === 'p' || e.key === 'P') && !chord) {
                 if (!e.repeat) togglePause();
                 return;
             }

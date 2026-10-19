@@ -13,6 +13,7 @@ import { useTheme } from '../../../contexts/ThemeContext';
 import { isDemoDataLoaded, clearDemoData } from '../../../utils/demoData';
 import { Button } from '../Button';
 import { useSynthwaveMusic } from '../../../utils/music/useSynthwaveMusic';
+import { usePauseMusicOffTheme } from '../../../utils/music/usePauseMusicOffTheme';
 import { ConfirmModal } from './ConfirmModal';
 import { Offcanvas } from './Offcanvas';
 import { Tooltip } from './Tooltip';
@@ -215,7 +216,7 @@ export const Sidebar: React.FC = () => {
     const { user } = useAuth();
     const { theme, setTheme } = useTheme();
     const isSynthwave = theme === 'synthwave';
-    const { isPlaying, toggle: toggleMusic, pause: pauseMusic } = useSynthwaveMusic();
+    const { isPlaying, toggle: toggleMusic } = useSynthwaveMusic();
     const [showThemeTooltip, setShowThemeTooltip] = useState(false);
     const [showMobileThemeTooltip, setShowMobileThemeTooltip] = useState(false);
     const themeButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -224,11 +225,7 @@ export const Sidebar: React.FC = () => {
     const [showClearDemoConfirm, setShowClearDemoConfirm] = useState(false);
     const demoDataActive = !user && isDemoDataLoaded();
 
-    // Pause music when leaving synthwave
-    useEffect(() => {
-        if (!isSynthwave) pauseMusic();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isSynthwave]);
+    usePauseMusicOffTheme(isSynthwave);
 
     // Check if user is admin
     useEffect(() => {
