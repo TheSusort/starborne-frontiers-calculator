@@ -189,8 +189,9 @@ describe('frameBlend', () => {
         }
     });
     it('holds the outermost frame beyond the grid', () => {
-        expect(frameBlend(90, 4, 30)).toEqual(frameBlend(MAX_HEADING_DEG, 1, 10));
-        expect(frameBlend(-90, -4, -30)).toEqual(frameBlend(-MAX_HEADING_DEG, -1, -8));
+        const [low, , high] = PITCH_ANGLES_DEG;
+        expect(frameBlend(90, 4, 30)).toEqual(frameBlend(MAX_HEADING_DEG, 1, high));
+        expect(frameBlend(-90, -4, -30)).toEqual(frameBlend(-MAX_HEADING_DEG, -1, low));
     });
 });
 
@@ -318,9 +319,13 @@ describe('actionPitchDeg', () => {
     it('is level while running', () => {
         expect(actionPitchDeg('run', 0)).toBe(0);
     });
-    it('dips the nose for a whole duck', () => {
-        expect(actionPitchDeg('duck', 0.7)).toBe(-8);
-        expect(actionPitchDeg('duck', 0.01)).toBe(-8);
+    it('dips the nose for a whole duck, onto the nose-down row of the grid', () => {
+        expect(actionPitchDeg('duck', 0.7)).toBe(DUCK_PITCH_DEG);
+        expect(actionPitchDeg('duck', 0.01)).toBe(DUCK_PITCH_DEG);
+        expect(DUCK_PITCH_DEG).toBeLessThanOrEqual(-12);
+        expect(frameBlend(0, 0, DUCK_PITCH_DEG)).toEqual([
+            { heading: LEVEL_HEADING, bank: LEVEL_BANK, pitch: 0, weight: 1 },
+        ]);
     });
     it('raises the nose on take-off, levels at the top and dips on the way down', () => {
         expect(jumpAt(0)).toBeCloseTo(10);

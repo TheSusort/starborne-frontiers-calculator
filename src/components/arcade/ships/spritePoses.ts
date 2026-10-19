@@ -23,13 +23,15 @@ export const HEADING_ANGLES_DEG = [
 ] as const;
 /** Roll angles, left bank to right bank; a positive angle dips the ship's right wing. */
 export const BANK_ANGLES_DEG = [-25, 0, 25] as const;
-/** Pitch angles: nose down, level, nose up. */
-export const PITCH_ANGLES_DEG = [-8, 0, 10] as const;
+/** Nose pitch while ducking: the ship tips its nose down toward the track. */
+export const DUCK_PITCH_DEG = -14;
+/** Nose pitch as a jump lands. */
+export const JUMP_DIVE_DEG = -8;
+/** Pitch angles: nose down (the duck, so a duck draws unblended frames), level, nose up. */
+export const PITCH_ANGLES_DEG = [DUCK_PITCH_DEG, 0, 10] as const;
 export const LEVEL_HEADING = HEADING_ANGLES_DEG.indexOf(0);
 export const LEVEL_BANK = BANK_ANGLES_DEG.indexOf(0);
 export const LEVEL_PITCH_ROW = PITCH_ANGLES_DEG.indexOf(0);
-/** Nose pitch while ducking. */
-export const DUCK_PITCH_DEG = -8;
 
 export interface ShipPose {
     /** Turn of the nose about the vertical axis; positive turns it toward the ship's right. */
@@ -255,7 +257,7 @@ export function actionPitchDeg(action: PlayerAction, actionTime: number): number
     const t = 1 - actionTime / JUMP_SECONDS;
     const climb = Math.cos(Math.PI * t);
     const top = PITCH_ANGLES_DEG[PITCH_ANGLES_DEG.length - 1];
-    return climb >= 0 ? climb * top : climb * -PITCH_ANGLES_DEG[0];
+    return climb >= 0 ? climb * top : climb * -JUMP_DIVE_DEG;
 }
 
 /**

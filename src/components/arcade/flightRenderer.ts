@@ -58,6 +58,8 @@ import {
     clampHeadingDeg,
     FrameSweeps,
     frameBlend,
+    LEVEL_BANK,
+    LEVEL_PITCH_ROW,
     MAX_HEADING_DEG,
     pickSweep,
     PlayerPose,
@@ -73,10 +75,14 @@ const GATE_COLOUR = '#b06cff';
 const MIN_TEXT_PX = 8;
 /** Width of the player sprite in fighter units: the neon fighter spans x ±2.2s. */
 const SPRITE_FOOTPRINT = 4.4;
-/** Vertical scale of the ship at the bottom of a duck. */
+/** Vertical scale of the neon fighter at the bottom of a duck; it has no pitched frames, so a
+ *  duck flattens it. A 3D sprite is not squashed: it pitches its nose down instead. */
 const DUCK_SQUASH = 0.55;
-/** How far a duck lowers the ship, in lane widths at the player row. */
+/** How far a duck lowers the ship, in lane widths at the player row: the neon fighter, and the
+ *  3D sprite, which drops further to make up for not being squashed. Either way the ducking
+ *  ship's top stays under a high block's gap (see `barriers`). */
 const DUCK_DROP = 0.08;
+const SPRITE_DUCK_DROP = 0.13;
 
 export type PlayerFrames = FrameSweeps<HTMLCanvasElement>;
 
@@ -346,12 +352,18 @@ function drawPickup(
     ctx.globalAlpha = 1;
 }
 
+/** Whether the player ship draws as a 3D sprite: its level sweep has rendered, and `pickSweep`
+ *  stands it in for any sweep still rendering. */
+const showsSprite = (view: FlightView): boolean =>
+    !!view.playerFrames?.[LEVEL_PITCH_ROW]?.[LEVEL_BANK];
+
 /** The ship's height above the track, in lane widths at the player row: its ride height, raised
  *  by a jump's arc and lowered by a duck. */
 function shipLift(game: GameState, view: FlightView): number {
     const { action, actionTime } = game.player;
     const arc = action === 'jump' ? jumpArc(actionTime) : 0;
-    return SHIP_RIDE_HEIGHT + arc * JUMP_PEAK - DUCK_DROP * view.pose.duck;
+    const drop = showsSprite(view) ? SPRITE_DUCK_DROP : DUCK_DROP;
+    return SHIP_RIDE_HEIGHT + arc * JUMP_PEAK - drop * view.pose.duck;
 }
 
 /** The shield's placement, rewritten every frame rather than allocated. */
@@ -374,7 +386,7 @@ function drawPlayer(
     const { action, actionTime } = game.player;
     if (action === 'jump') s *= 1 + jumpArc(actionTime) * JUMP_SCALE_GAIN;
     const { pose } = view;
-    const squash = 1 - (1 - DUCK_SQUASH) * pose.duck;
+    const squash = showsSprite(view) ? 1 : 1 - (1 - DUCK_SQUASH) * pose.duck;
 
     const e = introProgress(view);
     if (view.intro && e < 1) {
@@ -423,7 +435,6 @@ function drawPlayer(
         // The sprite spans the fighter's footprint.
         // A model's engines sit in different places per ship, so it draws without exhaust.
         const size = s * SPRITE_FOOTPRINT;
-        ctx.scale(1, squash);
         drawBlendedFrames(ctx, frames, size);
     } else {
         drawNeonFighter(ctx, s, {
