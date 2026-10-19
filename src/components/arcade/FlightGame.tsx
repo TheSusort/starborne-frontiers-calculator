@@ -66,6 +66,9 @@ const COUNTDOWN_SECONDS = 3;
 /** A long frame (tab switch, GC pause) is clamped so the game never jumps ahead. */
 const MAX_FRAME_SECONDS = 0.1;
 const HUD_INTERVAL_SECONDS = 0.1;
+/** The game canvas's device-pixel-ratio cap. The renderer and its caches read the effective
+ *  ratio back from the canvas size, so they follow it; the DOM overlays stay at full resolution. */
+const ARCADE_MAX_DPR = 1;
 const NO_INPUT: readonly InputAction[] = [];
 
 const newSeed = () => Math.floor(Math.random() * 2 ** 32) >>> 0;
@@ -554,7 +557,7 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
         if (!canvas || !ctx) return;
 
         const resize = () => {
-            const dpr = Math.min(window.devicePixelRatio || 1, 2);
+            const dpr = Math.min(window.devicePixelRatio || 1, ARCADE_MAX_DPR);
             canvas.width = canvas.offsetWidth * dpr;
             canvas.height = canvas.offsetHeight * dpr;
             ctx.setTransform(dpr, 0, 0, dpr, 0, 0);

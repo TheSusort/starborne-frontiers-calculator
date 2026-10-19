@@ -6,8 +6,8 @@
  *   npx vite --port 3011 &                       # VITE_ARCADE_SHIP_MODELS=1 for --model
  *   node scripts/arcade-bench.mjs --port 3011 [--frames 3000] [--model Terran_7] [--out file.json]
  *
- * What it measures, all at a 1280×720 CSS viewport and devicePixelRatio 2 (the arcade's DPR cap;
- * --dpr overrides it):
+ * What it measures, all at a 1280×720 CSS viewport and devicePixelRatio 1 (`ARCADE_MAX_DPR`
+ * in `FlightGame`; --dpr overrides it):
  * - `flight.*`: `renderFlight` per frame over a scripted mid-run (speed 48, obstacles, pickups,
  *   duel checkpoints with gate sprites, lane slides, jumps and ducks, the shield always up). The
  *   game advances through the real `step` every frame; the player never dies (shield re-granted,
@@ -47,7 +47,7 @@ const args = Object.fromEntries(
 const port = Number(args.port ?? 3011);
 const frames = Number(args.frames ?? 3000);
 const model = args.model ?? null;
-const dpr = Number(args.dpr ?? 2);
+const dpr = Number(args.dpr ?? 1);
 
 const browser = await puppeteer.launch({
     headless: true,
