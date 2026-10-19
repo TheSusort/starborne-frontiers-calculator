@@ -497,11 +497,8 @@ function placeShip(out: ShipPlacement, g: SceneGeometry, game: GameState, view: 
     const fp = level ? frameFootprint(level) : null;
     // The duck's depth, from the ship's unsquashed extent on the ground.
     const depth = fp
-        ? duckDepth(
-              -fp.top * SPRITE_FOOTPRINT * SHIP_UNIT,
-              fp.bottom * SPRITE_FOOTPRINT * SHIP_UNIT
-          )
-        : duckDepth(-NEON_TOP * SHIP_UNIT, NEON_BOTTOM * SHIP_UNIT);
+        ? duckDepth(fp.bottom * SPRITE_FOOTPRINT * SHIP_UNIT)
+        : duckDepth(NEON_BOTTOM * SHIP_UNIT);
     let s = u * SHIP_UNIT;
     let x = base.x;
     let y = base.y - u * shipLift(game, view, depth);

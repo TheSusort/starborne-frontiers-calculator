@@ -6,7 +6,7 @@ import { SHIP_RIDE_HEIGHT } from '../../utils/arcade/constants';
  * A wall fills the lane; a low laser is a bar near the ground to jump over; a high block is as
  * tall as a wall, so it plainly cannot be jumped, with one gap at the bottom to duck under. The
  * block's bottom edge (`HIGH_GAP` up) sits under the running ship's top and over the ducking
- * ship's (see `duckDepth`), so only a duck visibly clears it.
+ * ship's (see `duckDepth`), so only a duck clears it for ships that fit under it.
  */
 const WALL = { halfWidth: 0.42, top: -0.9 };
 const LOW = { halfWidth: 0.45, barTop: -0.22, barBottom: -0.14, postTop: -0.26, post: 0.04 };
@@ -14,20 +14,18 @@ const LOW = { halfWidth: 0.45, barTop: -0.22, barBottom: -0.14, postTop: -0.26, 
 export const HIGH_GAP = 0.3;
 const HIGH = { halfWidth: 0.47, barTop: WALL.top, barBottom: -HIGH_GAP, post: 0.05 };
 
-/** What a ducking ship keeps clear, in lane widths: the track under it and the high block's
- *  bar over it. */
+/** What a ducking ship keeps over the track, in lane widths. */
 const DUCK_TRACK_CLEARANCE = 0.03;
-const DUCK_BAR_CLEARANCE = 0.01;
 
 /**
- * How far the bottom of a duck lowers a ship whose visible pixels reach `top` above and `bottom`
- * below its centre (lane widths at the player row): as deep as keeps it `DUCK_TRACK_CLEARANCE`
- * over the track, and never less than brings its top under the high block's bar.
+ * How far the bottom of a duck lowers a ship whose visible pixels reach `bottom` lane widths
+ * below its centre at the player row: as deep as keeps it `DUCK_TRACK_CLEARANCE` over the track.
+ * A ship taller than the gap (`HIGH_GAP` less the track clearance) cannot also clear the bar;
+ * the track wins and its clearance under the bar shrinks, going negative for the tallest,
+ * rather than the ship sinking into the track.
  */
-export function duckDepth(top: number, bottom: number): number {
-    const overTrack = SHIP_RIDE_HEIGHT - bottom - DUCK_TRACK_CLEARANCE;
-    const underBar = SHIP_RIDE_HEIGHT + top - HIGH_GAP + DUCK_BAR_CLEARANCE;
-    return Math.max(0, overTrack, underBar);
+export function duckDepth(bottom: number): number {
+    return Math.max(0, SHIP_RIDE_HEIGHT - bottom - DUCK_TRACK_CLEARANCE);
 }
 
 interface Palette {
