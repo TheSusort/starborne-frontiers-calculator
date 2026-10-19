@@ -48,6 +48,7 @@ import {
     laneWedge,
     SpeedLinePool,
 } from './speedLines';
+import { createShipTrail, drawShipTrails, recordTrail, ShipTrail } from './shipTrails';
 import type { NeonAccent } from './ships/factionTint';
 import { cachedPortrait } from './ships/portraitSprite';
 import { stakesBanner } from './duel/stakesText';
@@ -74,6 +75,8 @@ const MIN_TEXT_PX = 8;
 const SPRITE_FOOTPRINT = 4.4;
 /** Vertical scale of the ship at the bottom of a duck. */
 const DUCK_SQUASH = 0.55;
+/** How far a duck lowers the ship, in lane widths at the player row. */
+const DUCK_DROP = 0.08;
 
 export type PlayerFrames = FrameSweeps<HTMLCanvasElement>;
 
@@ -108,6 +111,10 @@ export interface FlightView {
     speedLines: SpeedLinePool | null;
     /** The lane wedge new speed lines keep out of, from the last drawn frame's geometry. */
     laneWedge: number;
+    /** Contrails behind the player ship; `null` under reduced motion. */
+    trail: ShipTrail | null;
+    /** World travel since the last drawn frame, which the trail turns into game time. */
+    trailTravel: number;
 }
 
 /** Lane wedge used before the first frame has measured the screen. */
@@ -131,13 +138,16 @@ export function createFlightView(
         pose: restingPose(),
         speedLines: reducedMotion ? null : createSpeedLines(DEFAULT_LANE_WEDGE),
         laneWedge: DEFAULT_LANE_WEDGE,
+        trail: reducedMotion ? null : createShipTrail(),
+        trailTravel: 0,
     };
 }
 
-/** Scrolls the grid and the speed lines by world travel, so both hold still while the game
- *  does not step (paused, countdown, duel). */
+/** Scrolls the grid and the speed lines and ages the ship's trail by world travel, so all hold
+ *  still while the game does not step (paused, countdown, duel). */
 export function advanceView(view: FlightView, travelUnits: number): void {
     view.gridOffset = (view.gridOffset + gridOffsetDelta(travelUnits)) % 1;
+    view.trailTravel += travelUnits;
     if (view.speedLines) advanceSpeedLines(view.speedLines, travelUnits, view.laneWedge);
 }
 
@@ -336,6 +346,14 @@ function drawPickup(
     ctx.globalAlpha = 1;
 }
 
+/** The ship's height above the track, in lane widths at the player row: its ride height, raised
+ *  by a jump's arc and lowered by a duck. */
+function shipLift(game: GameState, view: FlightView): number {
+    const { action, actionTime } = game.player;
+    const arc = action === 'jump' ? jumpArc(actionTime) : 0;
+    return SHIP_RIDE_HEIGHT + arc * JUMP_PEAK - DUCK_DROP * view.pose.duck;
+}
+
 /** The shield's placement, rewritten every frame rather than allocated. */
 const shieldAt: ShieldPlacement = { x: 0, y: 0, s: 0, dpr: 1, bank: 0, flatten: 0 };
 
@@ -351,17 +369,12 @@ function drawPlayer(
     const u = laneWidthAtPlayer(g);
     let s = u * 0.16;
     let x = base.x;
-    let y = base.y - u * SHIP_RIDE_HEIGHT;
+    let y = base.y - u * shipLift(game, view);
 
     const { action, actionTime } = game.player;
-    if (action === 'jump') {
-        const arc = jumpArc(actionTime);
-        y -= arc * u * JUMP_PEAK;
-        s *= 1 + arc * JUMP_SCALE_GAIN;
-    }
+    if (action === 'jump') s *= 1 + jumpArc(actionTime) * JUMP_SCALE_GAIN;
     const { pose } = view;
     const squash = 1 - (1 - DUCK_SQUASH) * pose.duck;
-    y += u * 0.08 * pose.duck;
 
     const e = introProgress(view);
     if (view.intro && e < 1) {
@@ -477,6 +490,14 @@ export function renderFlight(
     };
     // Items already past the player are nearer the camera, so they draw over it.
     for (const item of items) if (item.z >= 0) drawItem(item);
+    if (view.trail) {
+        const lift = shipLift(game, view);
+        const seconds = game.speed > 0 ? view.trailTravel / game.speed : 0;
+        recordTrail(view.trail, seconds, view.playerX, lift, view.pose.bank);
+        const e = introProgress(view);
+        drawShipTrails(ctx, g, view.trail, game.speed, view.playerX, lift, view.pose.bank, e * e);
+    }
+    view.trailTravel = 0;
     drawPlayer(ctx, g, game, view, timeMs, dpr);
     for (const item of items) if (item.z < 0) drawItem(item);
 }

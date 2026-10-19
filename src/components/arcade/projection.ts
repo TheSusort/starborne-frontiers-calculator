@@ -82,19 +82,34 @@ export function laneToGridT(laneX: number): number {
 
 const depthAt = (z: number) => Math.max(MIN_DEPTH, PLAYER_DEPTH + z * DEPTH_PER_UNIT);
 
+/** A projected point; see `project`. */
+export interface Projected {
+    x: number;
+    y: number;
+    scale: number;
+    width: number;
+}
+
 /**
  * `laneX` is the lane offset from the centre (-1, 0, 1, or fractional while sliding). `x` follows
  * the arcade grid's columns at every depth, `width` is one lane's width at that depth, and
  * `scale` is the perspective scale relative to the player row.
  */
-export function project(g: SceneGeometry, laneX: number, z: number) {
+export function project(g: SceneGeometry, laneX: number, z: number): Projected {
+    return projectInto(g, laneX, z, { x: 0, y: 0, scale: 0, width: 0 });
+}
+
+/** `project` written into `out` and returned, for per-frame loops that must not allocate. */
+export function projectInto(g: SceneGeometry, laneX: number, z: number, out: Projected): Projected {
     const depth = depthAt(z);
     const columns = arcadeGridColumns(g);
-    const x = gridLineX(g, columns, laneToGridT(laneX), depth);
-    const width =
+    out.x = gridLineX(g, columns, laneToGridT(laneX), depth);
+    out.width =
         gridLineX(g, columns, laneToGridT(laneX + 0.5), depth) -
         gridLineX(g, columns, laneToGridT(laneX - 0.5), depth);
-    return { x, y: depthToScreenY(g, depth), scale: PLAYER_DEPTH / depth, width };
+    out.y = depthToScreenY(g, depth);
+    out.scale = PLAYER_DEPTH / depth;
+    return out;
 }
 
 /** Grid scroll (in `drawGrid`'s 0..1 offset units) that matches `travelUnits` of world travel. */

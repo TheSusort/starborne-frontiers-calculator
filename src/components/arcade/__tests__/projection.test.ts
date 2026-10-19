@@ -4,6 +4,7 @@ import {
     COLUMNS_PER_LANE,
     DEPTH_PER_UNIT,
     project,
+    projectInto,
     PLAYER_DEPTH,
     gridOffsetDelta,
     introGridLayers,
@@ -233,5 +234,20 @@ describe('arcadeGridColumns memo', () => {
         arcadeGridColumns(sceneGeometry(640, 480));
         expect(project(g, 0.4, 37)).toEqual(first);
         expect(project(g, 0.4, 37)).toEqual(first);
+    });
+});
+
+describe('projectInto', () => {
+    it('writes exactly what project returns into the given object', () => {
+        const g = sceneGeometry(1280, 720);
+        const out = { x: 0, y: 0, scale: 0, width: 0 };
+        for (const [laneX, z] of [
+            [0, 0],
+            [-1.3, -2],
+            [0.7, 40],
+        ]) {
+            expect(projectInto(g, laneX, z, out)).toBe(out);
+            expect(out).toEqual(project(g, laneX, z));
+        }
     });
 });

@@ -37,6 +37,7 @@ import { ArcadeLeaderboard } from './ArcadeLeaderboard';
 import type { FlightOrigin } from './flightEvents';
 import { canDuel, pickOpponents } from './duel/pickOpponents';
 import { createSpeedLines } from './speedLines';
+import { createShipTrail } from './shipTrails';
 import type { DuelResult } from './duel/runDuel';
 import { DuelSummary, type DuelSide } from './duel/DuelSummary';
 import { factionAccent } from './ships/factionTint';
@@ -375,11 +376,16 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
         refreshPins();
     }, [visualOf, requestFlownFrames, prepareNextOpponents, warmGateArt, refreshPins]);
 
-    // Speed lines follow a reduced-motion change mid-run.
+    // Speed lines and the ship's trail follow a reduced-motion change mid-run.
     useEffect(() => {
         const view = viewRef.current;
-        if (reducedMotion) view.speedLines = null;
-        else view.speedLines ??= createSpeedLines(view.laneWedge);
+        if (reducedMotion) {
+            view.speedLines = null;
+            view.trail = null;
+        } else {
+            view.speedLines ??= createSpeedLines(view.laneWedge);
+            view.trail ??= createShipTrail();
+        }
     }, [reducedMotion]);
 
     // Heavy idle work (model parses) waits while the ship is flying.
