@@ -46,7 +46,13 @@ import {
     laneWedge,
     SpeedLinePool,
 } from './speedLines';
-import { createShipTrail, drawShipTrails, recordTrail, ShipTrail } from './shipTrails';
+import {
+    createShipTrail,
+    drawShipTrails,
+    recordTrail,
+    SHIP_TRAILS_ENABLED,
+    ShipTrail,
+} from './shipTrails';
 import type { NeonAccent } from './ships/factionTint';
 import { cachedPortrait } from './ships/portraitSprite';
 import { stakesBanner } from './duel/stakesText';
@@ -117,7 +123,8 @@ export interface FlightView {
     speedLines: SpeedLinePool | null;
     /** The lane wedge new speed lines keep out of, from the last drawn frame's geometry. */
     laneWedge: number;
-    /** Contrails behind the player ship; `null` under reduced motion. */
+    /** Contrails behind the player ship; `null` under reduced motion or while
+     *  `SHIP_TRAILS_ENABLED` is off. */
     trail: ShipTrail | null;
     /** World travel since the last drawn frame, which the trail turns into game time. */
     trailTravel: number;
@@ -145,7 +152,7 @@ export function createFlightView(
         pose: restingPose(),
         speedLines: reducedMotion ? null : createSpeedLines(DEFAULT_LANE_WEDGE),
         laneWedge: DEFAULT_LANE_WEDGE,
-        trail: reducedMotion ? null : createShipTrail(),
+        trail: reducedMotion || !SHIP_TRAILS_ENABLED ? null : createShipTrail(),
         trailTravel: 0,
     };
 }

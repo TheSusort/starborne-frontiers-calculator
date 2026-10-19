@@ -15,7 +15,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Arcade: neon barriers and speed lines give the track more synthwave flair.',
     'Arcade: jumps now collect pickups right after take-off and when landing.',
     'Arcade: speed now keeps climbing in long runs, to a higher top speed.',
-    'Arcade: a neon bubble shield and contrails trailing behind your ship.',
+    'Arcade: your shield is now a subtle energy bubble around the ship.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

@@ -37,7 +37,7 @@ import { ArcadeLeaderboard } from './ArcadeLeaderboard';
 import type { FlightOrigin } from './flightEvents';
 import { canDuel, pickOpponents } from './duel/pickOpponents';
 import { createSpeedLines } from './speedLines';
-import { createShipTrail } from './shipTrails';
+import { createShipTrail, SHIP_TRAILS_ENABLED } from './shipTrails';
 import type { DuelResult } from './duel/runDuel';
 import { DuelSummary, type DuelSide } from './duel/DuelSummary';
 import { factionAccent } from './ships/factionTint';
@@ -384,7 +384,7 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
             view.trail = null;
         } else {
             view.speedLines ??= createSpeedLines(view.laneWedge);
-            view.trail ??= createShipTrail();
+            if (SHIP_TRAILS_ENABLED) view.trail ??= createShipTrail();
         }
     }, [reducedMotion]);
 

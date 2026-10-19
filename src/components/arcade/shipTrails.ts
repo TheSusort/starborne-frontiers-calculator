@@ -11,6 +11,9 @@ import { speedFraction } from './speedLines';
  * engines, so they suit every ship. Nothing here allocates per frame.
  */
 
+/** The trails are off until a design is chosen: no view creates a trail while this is false. */
+export const SHIP_TRAILS_ENABLED = false;
+
 /** Samples kept: comfortably more than `MAX_TRAIL_SECONDS` of samples. */
 export const TRAIL_SAMPLES = 40;
 /** Game time between samples. */
