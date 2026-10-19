@@ -1,4 +1,4 @@
-import React, { Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Volume2, VolumeX, SkipForward } from 'lucide-react';
 import { Button } from '../ui/Button';
 import FallbackErrorBoundary from '../error/FallbackErrorBoundary';
@@ -8,17 +8,12 @@ import { createGame, step } from '../../utils/arcade/engine';
 import { STEP_SECONDS } from '../../utils/arcade/constants';
 import { computeScore, runResult } from '../../utils/arcade/scoring';
 import { resolveDuel } from '../../utils/arcade/checkpoints';
-import type {
-    DuelEffect,
-    DuelStakes,
-    GameState,
-    InputAction,
-    RunResult,
-} from '../../utils/arcade/types';
+import type { DuelEffect, DuelStakes, GameState, InputAction } from '../../utils/arcade/types';
 import { useAuth } from '../../contexts/AuthProvider';
 import { useShips } from '../../contexts/ShipsContext';
 import { useInventory } from '../../contexts/InventoryProvider';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';
+import { useShipsData } from '../../hooks/useShipsData';
 import type { Ship } from '../../types/ship';
 import { getSynthwaveMusic } from '../../utils/music/synthwaveMusic';
 import { useSynthwaveMusic } from '../../utils/music/useSynthwaveMusic';
@@ -41,16 +36,18 @@ import { GameOverPanel } from './GameOverPanel';
 import { YouDiedOverlay } from './YouDiedOverlay';
 import { canSkipDeath, deathStage } from './deathSequence';
 import { slowMotion } from './explosion';
-import { useArcadeSubmission, SubmissionStatus } from './useArcadeSubmission';
+import { useArcadeSubmission, SubmissionStatus, type FinishedRun } from './useArcadeSubmission';
 import { ArcadeUsernameModal } from './ArcadeUsernameModal';
+import { GuestNameModal } from './GuestNameModal';
 import { ArcadeLeaderboard } from './ArcadeLeaderboard';
 import type { FlightOrigin } from './flightEvents';
-import { canDuel, isDuelCandidate, pickOpponents } from './duel/pickOpponents';
+import { anyCandidate, canDuel, gearedCandidate, pickOpponents } from './duel/pickOpponents';
 import { createSpeedLines } from './speedLines';
 import { createShipTrail } from './shipTrails';
 import type { DuelResult } from './duel/runDuel';
 import { DuelSummary, type DuelSide } from './duel/DuelSummary';
 import { factionAccent } from './ships/factionTint';
+import { arcadeFleet } from './ships/arcadeFleet';
 import { loadPortrait } from './ships/portraitSprite';
 import { useShipVisuals } from './ships/useShipVisuals';
 import { readLastShipId, writeLastShipId } from './ships/fleetOrder';
@@ -122,13 +119,19 @@ const SubmissionLine: React.FC<{
     status: SubmissionStatus;
     rank: number | null;
     onRetry: () => void;
-}> = ({ status, rank, onRetry }) => {
+    onJoinGuest: () => void;
+}> = ({ status, rank, onRetry, onJoinGuest }) => {
     switch (status) {
-        case 'signed-out':
+        case 'guest-invite':
             return (
-                <p className="text-sm text-theme-text-secondary">
-                    Sign in to join the leaderboard.
-                </p>
+                <div className="space-y-2">
+                    <Button size="sm" onClick={onJoinGuest}>
+                        Join the leaderboard as a guest
+                    </Button>
+                    <p className="text-xs text-theme-text-secondary">
+                        or sign in to use your account name.
+                    </p>
+                </div>
             );
         case 'checking':
         case 'submitting':
@@ -160,30 +163,78 @@ interface FlightGameProps {
     onClose: () => void;
 }
 
-const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
+/** The fleet the arcade flies, and whether it is still being resolved. */
+function useArcadeFleet() {
+    const { loading: authLoading } = useAuth();
+    const { ships: ownedShips, fleetLoaded } = useShips();
+    const { ships: templateShips, loading: templatesLoading } = useShipsData();
+    // `fleetLoaded` reads a session still resolving as signed out, so auth must settle too.
+    const ownedLoading = authLoading || !fleetLoaded;
+    return useMemo(
+        () => arcadeFleet(ownedShips, ownedLoading, templateShips, templatesLoading),
+        [ownedShips, ownedLoading, templateShips, templatesLoading]
+    );
+}
+
+/** Holds the arcade closed until its fleet is resolved: the opening phase is chosen once, from
+ *  the fleet present at mount. Once resolved it stays open, so a later reload never ends a run. */
+const FlightGame: React.FC<FlightGameProps> = (props) => {
+    const { loading } = useArcadeFleet();
+    const resolvedRef = useRef(false);
+    if (!loading) resolvedRef.current = true;
+    if (!resolvedRef.current) {
+        return (
+            <div
+                className="fixed inset-0 z-50 bg-black"
+                role="dialog"
+                aria-modal="true"
+                aria-label="Synthwave arcade"
+                aria-busy="true"
+            />
+        );
+    }
+    return <FlightGameRun {...props} />;
+};
+
+const FlightGameRun: React.FC<FlightGameProps> = ({ origin, onClose }) => {
     const reducedMotion = useMediaQuery('(prefers-reduced-motion: reduce)');
     const startOrigin = reducedMotion ? undefined : origin;
     const reducedMotionRef = useRef(reducedMotion);
     reducedMotionRef.current = reducedMotion;
 
-    const { ships } = useShips();
+    const { user } = useAuth();
+    const { fleet: ships, bare } = useArcadeFleet();
     const { getGearPiece } = useInventory();
     const { getEngineeringStatsForShipType } = useEngineeringStats();
+    // Bare templates fly without engineering.
+    const noEngineering = useCallback(() => undefined, []);
+    const isCandidate = useMemo(
+        () => (bare ? anyCandidate : gearedCandidate(getGearPiece)),
+        [bare, getGearPiece]
+    );
     const visualOf = useShipVisuals();
     // The game loop reads these through refs so a fleet, gear or template update never restarts it.
     const shipsRef = useRef(ships);
     shipsRef.current = ships;
     const visualOfRef = useRef(visualOf);
     visualOfRef.current = visualOf;
-    const statsDepsRef = useRef({ getGearPiece, getEngineeringStatsForShipType });
-    statsDepsRef.current = { getGearPiece, getEngineeringStatsForShipType };
+    const statsDepsRef = useRef({
+        getGearPiece,
+        getEngineeringStatsForShipType: bare ? noEngineering : getEngineeringStatsForShipType,
+        isCandidate,
+    });
+    statsDepsRef.current = {
+        getGearPiece,
+        getEngineeringStatsForShipType: bare ? noEngineering : getEngineeringStatsForShipType,
+        isCandidate,
+    };
     const canvasRef = useRef<HTMLCanvasElement>(null);
     // The background easter egg skips the select screen and flies the last chosen ship, if
     // it is still owned; otherwise a fleet opens on the select screen.
     const [initial] = useState(() => {
         const lastShipId = readLastShipId();
         const flown = startOrigin ? (ships.find((s) => s.id === lastShipId) ?? null) : null;
-        const duels = canDuel(ships, flown?.id ?? null, getGearPiece);
+        const duels = canDuel(ships, flown?.id ?? null, isCandidate);
         const phase: Phase = startOrigin ? 'intro' : ships.length > 0 ? 'select' : 'running';
         return {
             lastShipId,
@@ -238,19 +289,21 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
     const [phase, setPhaseState] = useState<Phase>(phaseRef.current);
     const [hud, setHud] = useState({ score: 0, credits: 0, shield: false, magnet: 0 });
     const [countdown, setCountdown] = useState(0);
-    const [result, setResult] = useState<RunResult | null>(null);
+    const [finished, setFinished] = useState<FinishedRun | null>(null);
+    const result = finished?.result ?? null;
     const [localBest, setLocalBest] = useState(readLocalBest);
     const [previousBest, setPreviousBest] = useState(0);
     const [duel, setDuel] = useState<DuelState | null>(null);
     /** Whether the dying run shows the "YOU DIED" screen yet (see `deathStage`). */
     const [youDied, setYouDied] = useState(false);
     const youDiedRef = useRef(false);
-    const { user } = useAuth();
-    const submission = useArcadeSubmission(result);
+    const submission = useArcadeSubmission(finished);
 
-    // While the username modal is open, Escape belongs to the modal.
+    // While a name modal is open, Escape belongs to the modal.
     useEffect(() => {
-        escapeBlockedRef.current = phase === 'over' && submission.status === 'needs-username';
+        escapeBlockedRef.current =
+            phase === 'over' &&
+            (submission.status === 'needs-username' || submission.status === 'needs-guest-name');
     }, [phase, submission.status]);
 
     useBodyScrollLock(true);
@@ -355,7 +408,7 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
                       shipsRef.current,
                       flown.id,
                       Math.random,
-                      statsDepsRef.current.getGearPiece
+                      statsDepsRef.current.isCandidate
                   )
                 : null;
             nextOpponentsRef.current = pick;
@@ -412,10 +465,10 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
     useEffect(() => {
         const flown = flownRef.current;
         if (phaseRef.current !== 'intro' || duelsRef.current || !flown) return;
-        if (!canDuel(ships, flown.id, getGearPiece)) return;
+        if (!canDuel(ships, flown.id, isCandidate)) return;
         duelsRef.current = true;
         gameRef.current = createGame(newSeed(), { duels: true });
-    }, [ships, getGearPiece]);
+    }, [ships, isCandidate]);
 
     // Speed lines, the ship's trail and the magnet's motion follow a reduced-motion change.
     useEffect(() => {
@@ -445,7 +498,7 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
         setDuel(null);
         // Re-checked against the current fleet and inventory, which may have loaded since.
         duelsRef.current =
-            !!flown && canDuel(shipsRef.current, flown.id, statsDepsRef.current.getGearPiece);
+            !!flown && canDuel(shipsRef.current, flown.id, statsDepsRef.current.isCandidate);
         gameRef.current = createGame(newSeed(), { duels: duelsRef.current });
         viewRef.current = createFlightView(
             undefined,
@@ -456,7 +509,7 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
         viewRef.current.playerFrames = key ? cachedPlayerFrames(key) : null;
         refreshPins();
         inputsRef.current = [];
-        setResult(null);
+        setFinished(null);
         youDiedRef.current = false;
         setYouDied(false);
         setHud({ score: 0, credits: 0, shield: false, magnet: 0 });
@@ -492,7 +545,7 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
      *  death screen plays before the game-over panel shows it. */
     const finishRun = useCallback(() => {
         const r = runResult(gameRef.current);
-        setResult(r);
+        setFinished({ result: r, shipName: flownRef.current?.name ?? null });
         setPreviousBest(readLocalBest());
         setLocalBest(writeLocalBest(r.score));
         explodeShip(viewRef.current, reducedMotionRef.current);
@@ -646,10 +699,7 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
             if (!prepared) return null;
             const current = prepared.map((p) =>
                 shipsRef.current.find(
-                    (s) =>
-                        s.id === p.id &&
-                        s.id !== flownId &&
-                        isDuelCandidate(s, statsDepsRef.current.getGearPiece)
+                    (s) => s.id === p.id && s.id !== flownId && statsDepsRef.current.isCandidate(s)
                 )
             );
             return current[0] && current[1] ? [current[0], current[1]] : null;
@@ -706,7 +756,7 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
                             shipsRef.current,
                             flown.id,
                             Math.random,
-                            statsDepsRef.current.getGearPiece
+                            statsDepsRef.current.isCandidate
                         );
                     if (!pick) {
                         // No opponents to show: the engine ignores a resolved checkpoint.
@@ -990,6 +1040,7 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
                         status={submission.status}
                         rank={submission.rank}
                         onRetry={submission.retry}
+                        onJoinGuest={submission.joinAsGuest}
                     />
                     <div className="max-h-64 overflow-y-auto text-left">
                         <ArcadeLeaderboard refreshKey={submission.leaderboardVersion} />
@@ -1001,6 +1052,13 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
                     isOpen={phase === 'over' && submission.status === 'needs-username'}
                     userId={user.id}
                     onSaved={submission.onUsernameSaved}
+                    onCancel={submission.skip}
+                />
+            )}
+            {!user && (
+                <GuestNameModal
+                    isOpen={phase === 'over' && submission.status === 'needs-guest-name'}
+                    onSave={submission.saveGuestName}
                     onCancel={submission.skip}
                 />
             )}

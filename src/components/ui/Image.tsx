@@ -15,16 +15,27 @@ interface ImageProps {
     /** Aspect ratio as "width/height" (e.g., "16/9", "389/518") to prevent layout shift */
     aspectRatio?: string;
     style?: React.CSSProperties;
+    /** Rendered in place of the "No image available" placeholder when there is no src or it fails to load. */
+    fallback?: React.ReactNode;
 }
 
 export const Image = memo(
-    ({ src, alt = '', className = '', imageClassName = '', aspectRatio, style }: ImageProps) => {
+    ({
+        src,
+        alt = '',
+        className = '',
+        imageClassName = '',
+        aspectRatio,
+        style,
+        fallback,
+    }: ImageProps) => {
         const [imageError, setImageError] = useState(false);
         const [isLoading, setIsLoading] = useState(true);
 
         const aspectStyle = { ...(aspectRatio ? { aspectRatio } : {}), ...style };
 
         if (!src || src === '' || imageError) {
+            if (fallback !== undefined) return <>{fallback}</>;
             return (
                 <div className={`bg-dark-lighter ${className}`} style={aspectStyle}>
                     <div className="flex items-center justify-center h-full">

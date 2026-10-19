@@ -93,9 +93,11 @@ export async function getDailyUsageStats(daysBack: number = 30): Promise<DailyUs
  */
 export async function getTotalUserCount(): Promise<number> {
     try {
+        // Arcade guests (anonymous sessions) have a users row with neither an email nor an owner.
         const { count, error } = await supabase
             .from('users')
-            .select('*', { count: 'exact', head: true });
+            .select('*', { count: 'exact', head: true })
+            .or('email.not.is.null,owner_auth_user_id.not.is.null');
 
         if (error) {
             console.error('Error fetching user count:', error);

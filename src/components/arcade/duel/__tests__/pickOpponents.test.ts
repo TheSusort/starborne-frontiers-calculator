@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { canDuel, isDuelCandidate, pickOpponents } from '../pickOpponents';
+import {
+    anyCandidate,
+    canDuel,
+    gearedCandidate,
+    isDuelCandidate,
+    pickOpponents,
+} from '../pickOpponents';
 import type { Ship } from '../../../../types/ship';
 import type { GearPiece } from '../../../../types/gear';
 
@@ -34,7 +40,7 @@ describe('isDuelCandidate', () => {
 describe('pickOpponents', () => {
     it('never picks the flown ship and returns two distinct ships', () => {
         for (let k = 0; k < 50; k++) {
-            const pick = pickOpponents(fleet, 'b', Math.random, getGearPiece)!;
+            const pick = pickOpponents(fleet, 'b', Math.random, gearedCandidate(getGearPiece))!;
             expect(pick).not.toBeNull();
             expect(pick.map((s) => s.id)).not.toContain('b');
             expect(pick[0].id).not.toBe(pick[1].id);
@@ -44,7 +50,8 @@ describe('pickOpponents', () => {
     it('can reach every candidate', () => {
         const seen = new Set<string>();
         for (let k = 0; k < 200; k++) {
-            for (const s of pickOpponents(fleet, 'a', Math.random, getGearPiece)!) seen.add(s.id);
+            for (const s of pickOpponents(fleet, 'a', Math.random, gearedCandidate(getGearPiece))!)
+                seen.add(s.id);
         }
         expect(seen).toEqual(new Set(['b', 'c', 'd']));
     });
@@ -52,41 +59,63 @@ describe('pickOpponents', () => {
     it('never picks an ungeared ship or one whose only gear id is stale', () => {
         const mixed = [ship('a'), ship('b'), ship('c', []), ship('d', ['gone']), ship('e')];
         for (let k = 0; k < 200; k++) {
-            const pick = pickOpponents(mixed, 'a', Math.random, getGearPiece)!;
+            const pick = pickOpponents(mixed, 'a', Math.random, gearedCandidate(getGearPiece))!;
             expect(pick.map((s) => s.id).sort()).toEqual(['b', 'e']);
         }
     });
 
     it('uses the injected random', () => {
         const pick = (r: () => number) =>
-            pickOpponents(fleet, 'a', r, getGearPiece)!.map((s) => s.id);
+            pickOpponents(fleet, 'a', r, gearedCandidate(getGearPiece))!.map((s) => s.id);
         expect(pick(seq(0, 0))).toEqual(['b', 'c']);
         expect(pick(seq(0.99, 0.99))).toEqual(['d', 'c']);
     });
 
     it('returns null with fewer than two candidates', () => {
-        expect(pickOpponents([ship('a'), ship('b')], 'a', Math.random, getGearPiece)).toBeNull();
-        expect(pickOpponents([], 'a', Math.random, getGearPiece)).toBeNull();
+        expect(
+            pickOpponents([ship('a'), ship('b')], 'a', Math.random, gearedCandidate(getGearPiece))
+        ).toBeNull();
+        expect(pickOpponents([], 'a', Math.random, gearedCandidate(getGearPiece))).toBeNull();
         const oneGeared = [ship('a'), ship('b'), ship('c', [])];
-        expect(pickOpponents(oneGeared, 'a', Math.random, getGearPiece)).toBeNull();
+        expect(
+            pickOpponents(oneGeared, 'a', Math.random, gearedCandidate(getGearPiece))
+        ).toBeNull();
     });
 });
 
 describe('canDuel', () => {
     it('needs a flown ship and two candidates', () => {
-        expect(canDuel(fleet, 'a', getGearPiece)).toBe(true);
-        expect(canDuel(fleet, null, getGearPiece)).toBe(false);
-        expect(canDuel([ship('a'), ship('b')], 'a', getGearPiece)).toBe(false);
+        expect(canDuel(fleet, 'a', gearedCandidate(getGearPiece))).toBe(true);
+        expect(canDuel(fleet, null, gearedCandidate(getGearPiece))).toBe(false);
+        expect(canDuel([ship('a'), ship('b')], 'a', gearedCandidate(getGearPiece))).toBe(false);
     });
 
     it('is false with one geared candidate and true with two', () => {
         const flown = ship('a', []);
         const ungeared = ship('c', ['gone']);
-        expect(canDuel([flown, ship('b'), ungeared], 'a', getGearPiece)).toBe(false);
-        expect(canDuel([flown, ship('b'), ungeared, ship('e')], 'a', getGearPiece)).toBe(true);
+        expect(canDuel([flown, ship('b'), ungeared], 'a', gearedCandidate(getGearPiece))).toBe(
+            false
+        );
+        expect(
+            canDuel([flown, ship('b'), ungeared, ship('e')], 'a', gearedCandidate(getGearPiece))
+        ).toBe(true);
     });
 
     it('does not need the flown ship to have gear', () => {
-        expect(canDuel([ship('a', []), ship('b'), ship('c')], 'a', getGearPiece)).toBe(true);
+        expect(
+            canDuel([ship('a', []), ship('b'), ship('c')], 'a', gearedCandidate(getGearPiece))
+        ).toBe(true);
+    });
+});
+
+describe('anyCandidate (bare templates)', () => {
+    const bare = ['a', 'b', 'c'].map((id) => ship(id, []));
+    it('lets gearless ships duel', () => {
+        expect(canDuel(bare, 'a', anyCandidate)).toBe(true);
+        const pick = pickOpponents(bare, 'a', seq(0, 0), anyCandidate)!;
+        expect(pick.map((p) => p.id).sort()).toEqual(['b', 'c']);
+    });
+    it('still needs two ships besides the flown one', () => {
+        expect(canDuel(bare.slice(0, 2), 'a', anyCandidate)).toBe(false);
     });
 });

@@ -2540,7 +2540,9 @@ const DocumentationPage: React.FC = () => {
                                     loads or if it cannot be shown. In flight you fly that model;
                                     until it is ready you fly the neon fighter tinted in the
                                     ship&apos;s faction colour. Your last choice is listed first
-                                    next time, and Retry keeps the same ship.
+                                    next time, and Retry keeps the same ship. With an empty fleet,
+                                    signed in or not, the select screen offers every ship in the
+                                    game, flown bare: no gear, implants, refits or engineering.
                                 </p>
                             </div>
                             <div className="card">
@@ -2561,7 +2563,9 @@ const DocumentationPage: React.FC = () => {
                                     The result shows briefly (Space or a click moves on at once),
                                     then the run resumes after a 3-2-1 countdown. A duel that ends
                                     the run closes as soon as its replay does, and your ship
-                                    explodes.
+                                    explodes. Flying a bare ship from an empty fleet, the gates hold
+                                    random bare ships instead, and both sides duel with base stats
+                                    only.
                                 </p>
                             </div>
                             <div className="card">
@@ -2603,12 +2607,18 @@ const DocumentationPage: React.FC = () => {
                             <div className="card">
                                 <h4 className="font-semibold text-primary mb-2">Leaderboard</h4>
                                 <p className="text-theme-text">
-                                    Signed-in players are ranked by their best score. The first time
-                                    you finish a run without a username you are asked to choose one;
-                                    it is shared with your profile. Scores always count for your
-                                    main account, even while an alt profile is active. The top three
-                                    pilots stand on a podium above the table, and your own place is
-                                    tagged YOU.
+                                    Anyone can join the leaderboard. Signed-in players are ranked by
+                                    their best score. Without an account, choose Join as a guest
+                                    after a run and pick a name; guest scores carry a GUEST tag and
+                                    stay tied to that browser, and signing in lets you use your
+                                    account name instead. The first time you finish a run without a
+                                    username you are asked to choose one; it is shared with your
+                                    profile. Scores always count for your main account, even while
+                                    an alt profile is active. The top three pilots stand on a podium
+                                    above the table, and your own place is tagged YOU. Each best
+                                    score shows the ship it was flown with, its pilot portrait
+                                    beside the name; runs in the neon fighter show no ship, and
+                                    neither do scores set before this update.
                                 </p>
                             </div>
                         </div>

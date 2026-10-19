@@ -6,7 +6,11 @@ export const CURRENT_VERSION = '1.80.0';
 // top of CHANGELOG, bumps CURRENT_VERSION and empties this array — all three together, because a
 // bumped version whose entries are still unreleased shows users a what's-new dialog listing
 // nothing. Do it by hand only if that script cannot.
-export const UNRELEASED_CHANGES: string[] = [];
+export const UNRELEASED_CHANGES: string[] = [
+    'Arcade: the leaderboard now shows which ship each best score used.',
+    'Arcade: pilots without a fleet now fly and duel any ship, bare.',
+    'Arcade: guests can now join the leaderboard without an account.',
+];
 
 export const CHANGELOG: ChangelogEntry[] = [
     {

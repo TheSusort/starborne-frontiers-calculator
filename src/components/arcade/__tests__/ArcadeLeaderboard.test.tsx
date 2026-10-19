@@ -1,0 +1,101 @@
+import { render, screen, within } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
+import type { ArcadeLeaderboardEntry } from '../../../utils/arcade/leaderboardRows';
+import { ArcadeLeaderboard } from '../ArcadeLeaderboard';
+
+const { rows, guestRows } = vi.hoisted(() => ({
+    guestRows: [
+        { rank: 1, username: 'Ace', bestScore: 900, isMe: false, ship: null, isGuest: false },
+        { rank: 1, username: 'Ace', bestScore: 900, isMe: false, ship: null, isGuest: true },
+        { rank: 3, username: 'Bo', bestScore: 700, isMe: false, ship: null, isGuest: false },
+        { rank: 4, username: 'Cy', bestScore: 600, isMe: false, ship: null, isGuest: true },
+    ] as ArcadeLeaderboardEntry[],
+    rows: [
+        { rank: 1, username: 'Ace', bestScore: 900, isMe: false, ship: 'Nayra' },
+        { rank: 2, username: 'Bee', bestScore: 800, isMe: false, ship: null },
+        { rank: 3, username: 'Cee', bestScore: 700, isMe: false, ship: 'Unknown Ship' },
+        { rank: 4, username: 'Dee', bestScore: 600, isMe: false, ship: 'Nayra' },
+        { rank: 5, username: 'Eve', bestScore: 500, isMe: false, ship: null },
+    ] as ArcadeLeaderboardEntry[],
+}));
+
+vi.mock('../../../services/arcadeService', () => ({
+    getArcadeLeaderboard: (limit: number) => Promise.resolve(limit === 4 ? guestRows : rows),
+}));
+vi.mock('../../../contexts/AuthProvider', () => ({
+    useAuth: () => ({ user: null, guestUserId: null }),
+}));
+vi.mock('../../../hooks/useShipsData', () => ({
+    useShipsData: () => ({ ships: [{ name: 'Nayra', imageKey: 'nayra_key' }] }),
+}));
+vi.mock('../../ui/Image', () => ({
+    Image: ({ src, alt }: { src: string; alt?: string }) => <img src={src} alt={alt} />,
+}));
+
+const rowOf = (username: string) => screen.getByText(username).closest('tr') as HTMLElement;
+const podiumOf = (username: string) => screen.getByText(username).closest('.card') as HTMLElement;
+
+describe('ArcadeLeaderboard ship', () => {
+    it('shows the pilot portrait and name of a resolved ship in the list', async () => {
+        render(<ArcadeLeaderboard />);
+        await screen.findByText('Dee');
+        const row = within(rowOf('Dee'));
+        expect(row.getByText('Nayra')).toBeTruthy();
+        expect(
+            row.getByText('Nayra').closest('tr')!.querySelector('img')!.getAttribute('src')
+        ).toBe('nayra_key_Portrait.jpg');
+    });
+
+    it('shows nothing extra for a neon-fighter row', async () => {
+        render(<ArcadeLeaderboard />);
+        await screen.findByText('Eve');
+        const row = rowOf('Eve');
+        expect(row.querySelector('img')).toBeNull();
+        expect(row.textContent).toBe('#5Eve500');
+    });
+
+    it('shows the ship on the podium', async () => {
+        render(<ArcadeLeaderboard />);
+        await screen.findByText('Ace');
+        const card = within(podiumOf('Ace'));
+        expect(card.getByText('Nayra')).toBeTruthy();
+        expect(podiumOf('Ace').querySelector('img')!.getAttribute('src')).toBe(
+            'nayra_key_Portrait.jpg'
+        );
+        expect(podiumOf('Bee').querySelector('img')).toBeNull();
+    });
+
+    it('shows the name only when the ship does not resolve to a template', async () => {
+        render(<ArcadeLeaderboard />);
+        await screen.findByText('Cee');
+        const card = within(podiumOf('Cee'));
+        expect(card.getByText('Unknown Ship')).toBeTruthy();
+        expect(podiumOf('Cee').querySelector('img')).toBeNull();
+    });
+
+    it('gives every podium card the same subtitle slot, filled or empty', async () => {
+        render(<ArcadeLeaderboard />);
+        await screen.findByText('Bee');
+        const slots = ['Ace', 'Bee', 'Cee'].map((n) =>
+            podiumOf(n).querySelector('span.h-5.w-full')
+        );
+        expect(slots.every((s) => s !== null)).toBe(true);
+        expect(slots[1]!.textContent).toBe('');
+    });
+});
+
+describe('ArcadeLeaderboard guests', () => {
+    it('tags guest rows on the podium and in the table without duplicate keys', async () => {
+        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+        render(<ArcadeLeaderboard limit={4} />);
+        const tags = await screen.findAllByText('GUEST');
+        expect(tags).toHaveLength(2);
+        expect(tags.filter((t) => !t.closest('tr'))).toHaveLength(1);
+        expect(tags.filter((t) => t.closest('tr'))).toHaveLength(1);
+        const keyWarnings = errorSpy.mock.calls.filter((call) =>
+            call.some((arg) => typeof arg === 'string' && arg.includes('same key'))
+        );
+        expect(keyWarnings).toHaveLength(0);
+        errorSpy.mockRestore();
+    });
+});

@@ -4,6 +4,8 @@ export interface AuthUser {
     displayName: string | null;
     photoURL: string | null;
     isAdmin?: boolean;
+    /** An anonymous Supabase session (an arcade guest). Never exposed as `useAuth().user`. */
+    isAnonymous?: boolean;
 }
 
 export interface AuthService {
@@ -13,5 +15,6 @@ export interface AuthService {
     signInWithEmail: (email: string, password: string) => Promise<void>;
     signUpWithEmail: (email: string, password: string) => Promise<void>;
     signOut: () => Promise<void>;
+    signInAnonymously: () => Promise<AuthUser>;
     onAuthStateChanged: (callback: (user: AuthUser | null) => void) => () => void;
 }
