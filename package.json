@@ -8,7 +8,7 @@
         "@cloudinary/react": "^1.14.4",
         "@cloudinary/url-gen": "^1.22.0",
         "@modelcontextprotocol/sdk": "1.32.1",
-        "@supabase/supabase-js": "^2.117.3",
+        "@supabase/supabase-js": "^2.118.0",
         "canvas-confetti": "^1.9.4",
         "html-to-image": "^1.11.13",
         "jose": "^6.2.12",
@@ -19,9 +19,9 @@
         "react-router-dom": "^7.18.4",
         "recharts": "^2.15.1",
         "three": "0.186.1",
-        "uuid": "^14.0.1",
+        "uuid": "^14.0.3",
         "web-vitals": "^2.1.4",
-        "zod": "^4.6.5"
+        "zod": "^4.6.7"
     },
     "scripts": {
         "start": "vite",
