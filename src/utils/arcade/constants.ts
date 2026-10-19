@@ -8,6 +8,17 @@ export const ROW_GAP = 22;
 export const FIRST_ROW_DELAY = 40;
 export const DESPAWN_Z = -6;
 export const JUMP_SECONDS = 0.75;
+/** Drawn heights, in lane widths at the player row: the ship's centre above the ground while
+ *  running, the jump's peak above that, and a pickup's centre above the ground. */
+export const SHIP_RIDE_HEIGHT = 0.25;
+export const JUMP_PEAK = 0.6;
+export const PICKUP_HEIGHT = 0.3;
+/** Vertical distance between the ship's and a pickup's centres at which they still overlap: the
+ *  pickup's drawn radius (0.12) plus the ship's drawn half-height (about 0.13). */
+export const PICKUP_CATCH_REACH = 0.25;
+/** The jump arc (`sin(πt)`, 0 on the ground, 1 at the peak) up to which a jumping ship still
+ *  passes through a pickup in its lane, from the heights above. */
+export const PICKUP_CATCH_ARC = (PICKUP_HEIGHT - SHIP_RIDE_HEIGHT + PICKUP_CATCH_REACH) / JUMP_PEAK;
 export const DUCK_SECONDS = 0.75;
 export const MAGNET_SECONDS = 8;
 export const SHIELD_BREAK_FLASH = 0.5;

@@ -7,6 +7,7 @@ import {
     MAX_SPEED,
     MAGNET_SECONDS,
     METERS_PER_UNIT,
+    PICKUP_CATCH_ARC,
     CREDIT_POINTS,
 } from '../constants';
 import type { GameState, ObstacleKind, PickupKind, PlayerAction, Lane } from '../types';
@@ -34,10 +35,16 @@ function withPickup(kind: PickupKind, lane: Lane, playerLane: Lane, magnet: numb
     return step(g, [], STEP_SECONDS);
 }
 
-function withPickupAction(kind: PickupKind, action: PlayerAction, magnet: number): GameState {
+/** `actionTime` defaults to mid-action: the top of a jump. */
+function withPickupAction(
+    kind: PickupKind,
+    action: PlayerAction,
+    magnet: number,
+    actionTime = action === 'run' ? 0 : JUMP_SECONDS / 2
+): GameState {
     const g = quietGame();
     g.player.action = action;
-    g.player.actionTime = action === 'run' ? 0 : 10;
+    g.player.actionTime = actionTime;
     g.player.magnetTime = magnet;
     g.pickups.push({
         id: 98,
@@ -134,11 +141,56 @@ describe('pickups', () => {
     it('a magnet does not pull power-ups from other lanes', () => {
         expect(withPickup('shield', 2, 1, 3).player.shield).toBe(false);
     });
-    it('jumping over a credit in your lane misses it', () => {
+    it('jumping over a credit in your lane misses it at the top of the jump', () => {
         expect(withPickupAction('credit', 'jump', 0).credits).toBe(0);
     });
-    it('jumping over a shield in your lane misses it', () => {
+    it('jumping over a shield in your lane misses it at the top of the jump', () => {
         expect(withPickupAction('shield', 'jump', 0).player.shield).toBe(false);
+    });
+    it('a jump that has only just left the ground collects a credit and a shield', () => {
+        const early = JUMP_SECONDS * 0.95;
+        expect(withPickupAction('credit', 'jump', 0, early).credits).toBe(1);
+        expect(withPickupAction('shield', 'jump', 0, early).player.shield).toBe(true);
+    });
+    it('a jump coming in to land collects a credit and a magnet', () => {
+        const landing = JUMP_SECONDS * 0.05;
+        expect(withPickupAction('credit', 'jump', 0, landing).credits).toBe(1);
+        expect(withPickupAction('magnet', 'jump', 0, landing).player.magnetTime).toBeGreaterThan(0);
+    });
+    it('collects exactly while the jump is low enough to pass through the pickup', () => {
+        const window = (timeLeft: number) =>
+            withPickupAction('credit', 'jump', 0, timeLeft).credits === 1;
+        // The catch height is reached at sin(pi t) = PICKUP_CATCH_ARC.
+        const edge = Math.asin(PICKUP_CATCH_ARC) / Math.PI;
+        expect(window(JUMP_SECONDS * (1 - edge) + 0.01)).toBe(true);
+        expect(window(JUMP_SECONDS * (1 - edge) - 0.02)).toBe(false);
+        expect(window(JUMP_SECONDS * edge - 0.01)).toBe(true);
+        expect(window(JUMP_SECONDS * edge + 0.02)).toBe(false);
+    });
+    it('a magnet still reaches the next lane mid-jump, for credits only', () => {
+        const g = quietGame();
+        g.player.action = 'jump';
+        g.player.actionTime = JUMP_SECONDS / 2;
+        g.player.magnetTime = 3;
+        g.pickups.push({
+            id: 1,
+            kind: 'credit',
+            lane: 2,
+            z: 0.01,
+            resolved: false,
+            collected: false,
+        });
+        g.pickups.push({
+            id: 2,
+            kind: 'shield',
+            lane: 2,
+            z: 0.01,
+            resolved: false,
+            collected: false,
+        });
+        step(g, [], STEP_SECONDS);
+        expect(g.credits).toBe(1);
+        expect(g.player.shield).toBe(false);
     });
     it('an active magnet still collects a credit in your lane while jumping', () => {
         expect(withPickupAction('credit', 'jump', 3).credits).toBe(1);

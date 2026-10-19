@@ -13,6 +13,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Arcade: lanes now line up with the background grid lines.',
     'Arcade: your ship smoothly banks, tilts and aims at the horizon.',
     'Arcade: neon barriers and speed lines give the track more synthwave flair.',
+    'Arcade: jumps now collect pickups right after take-off and when landing.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

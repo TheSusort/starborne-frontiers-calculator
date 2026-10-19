@@ -13,7 +13,14 @@ import {
     Star,
     SunCache,
 } from '../theme/synthwaveScene';
-import { JUMP_SECONDS, SHIELD_BREAK_FLASH, SPAWN_Z } from '../../utils/arcade/constants';
+import {
+    JUMP_PEAK,
+    PICKUP_HEIGHT,
+    SHIELD_BREAK_FLASH,
+    SHIP_RIDE_HEIGHT,
+    SPAWN_Z,
+} from '../../utils/arcade/constants';
+import { jumpArc } from '../../utils/arcade/collision';
 import type { Checkpoint, GameState, Obstacle, Pickup } from '../../utils/arcade/types';
 import {
     gridOffsetDelta,
@@ -295,7 +302,7 @@ function drawPickup(
     const u = p.width;
     const bob = Math.sin(timeMs * 0.006 + pk.id) * 0.04 * u;
     const cx = p.x;
-    const cy = p.y - 0.3 * u + bob;
+    const cy = p.y - PICKUP_HEIGHT * u + bob;
     const r = 0.12 * u;
     ctx.globalAlpha = Math.min(1, Math.max(0, (SPAWN_Z - pk.z) / FADE_IN_UNITS));
     ctx.lineWidth = Math.max(1, 2 * p.scale);
@@ -333,13 +340,12 @@ function drawPlayer(
     const u = laneWidthAtPlayer(g);
     let s = u * 0.16;
     let x = base.x;
-    let y = base.y - u * 0.25;
+    let y = base.y - u * SHIP_RIDE_HEIGHT;
 
     const { action, actionTime } = game.player;
     if (action === 'jump') {
-        const t = 1 - actionTime / JUMP_SECONDS;
-        const arc = Math.sin(Math.PI * t);
-        y -= arc * u * 0.6;
+        const arc = jumpArc(actionTime);
+        y -= arc * u * JUMP_PEAK;
         s *= 1 + arc * 0.25;
     }
     const { pose } = view;

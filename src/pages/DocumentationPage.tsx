@@ -2586,9 +2586,11 @@ const DocumentationPage: React.FC = () => {
                                     Score is metres flown plus 10 points per credit. Walls can only
                                     be dodged by changing lane, and raised blocks are too tall to
                                     jump. A shield absorbs one hit; a magnet collects credits from
-                                    the neighbouring lanes for 8 seconds. Jumping carries you over
-                                    credits and power-ups, so you miss them; an active magnet still
-                                    pulls in credits. Your personal best is saved in this browser.
+                                    the neighbouring lanes for 8 seconds. A jump carries you over
+                                    credits and power-ups at its height, but you still collect them
+                                    just after take-off and as you land; an active magnet pulls in
+                                    credits at any height. Your personal best is saved in this
+                                    browser.
                                 </p>
                             </div>
                             <div className="card">
