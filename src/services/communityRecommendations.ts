@@ -208,7 +208,8 @@ export class CommunityRecommendationService {
             data: { user },
         } = await supabase.auth.getUser();
 
-        if (!user) {
+        // An anonymous session is an arcade guest, not a voter.
+        if (!user || user.is_anonymous) {
             return false;
         }
 
@@ -238,7 +239,8 @@ export class CommunityRecommendationService {
             data: { user },
         } = await supabase.auth.getUser();
 
-        if (!user) {
+        // An anonymous session is an arcade guest, not a voter.
+        if (!user || user.is_anonymous) {
             return null;
         }
 
@@ -262,7 +264,8 @@ export class CommunityRecommendationService {
             data: { user },
         } = await supabase.auth.getUser();
 
-        if (!user) {
+        // An anonymous session is an arcade guest, not a voter.
+        if (!user || user.is_anonymous) {
             return false;
         }
 

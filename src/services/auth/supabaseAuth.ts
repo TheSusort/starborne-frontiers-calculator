@@ -11,6 +11,7 @@ export class SupabaseAuthService implements AuthService {
             email: user.email ?? null,
             displayName: user.user_metadata?.full_name ?? null,
             photoURL: user.user_metadata?.avatar_url ?? null,
+            isAnonymous: user.is_anonymous === true,
         };
     }
 
@@ -19,6 +20,14 @@ export class SupabaseAuthService implements AuthService {
             data: { user },
         } = await supabase.auth.getUser();
         return this.convertSupabaseUser(user);
+    }
+
+    async signInAnonymously(): Promise<AuthUser> {
+        const { data, error } = await supabase.auth.signInAnonymously();
+        if (error) throw error;
+        const user = this.convertSupabaseUser(data.user);
+        if (!user) throw new Error('Anonymous sign-in returned no user');
+        return user;
     }
 
     async signInWithGoogle(redirectTo: string = window.location.origin): Promise<void> {
