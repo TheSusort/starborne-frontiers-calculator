@@ -46,7 +46,6 @@ describe('fitShield', () => {
         for (const [hw, hh] of [
             [20, 8],
             [35, 14],
-            [10, 12],
         ]) {
             const { rx, ry } = fit(hw, hh);
             expect(rx).toBeGreaterThan(hw);
@@ -63,6 +62,19 @@ describe('fitShield', () => {
     it('is never flatter than two to one', () => {
         const { rx, ry } = fit(40, 2);
         expect(ry).toBeGreaterThanOrEqual(rx / 2);
+    });
+
+    it('is never taller than it is wide, widening rather than clipping the ship', () => {
+        for (const [hw, hh] of [
+            [10, 12],
+            [10, 30],
+            [6, 40],
+        ]) {
+            const { rx, ry } = fit(hw, hh);
+            expect(ry).toBeLessThanOrEqual(rx);
+            expect(ry).toBeGreaterThan(hh);
+            expect(rx).toBeGreaterThan(hw);
+        }
     });
 });
 

@@ -166,10 +166,12 @@ export interface ShieldPlacement {
 }
 
 /** Sizes `out` around a ship whose visible pixels reach `halfWidth` either side of its centre
- *  and `halfHeight` above and below: a close fit with a little air, never flatter than 2:1. */
+ *  and `halfHeight` above and below: a close fit with a little air, never flatter than 2:1 and
+ *  never taller than wide. A tall ship widens the field rather than having its height cut. */
 export function fitShield(out: ShieldPlacement, halfWidth: number, halfHeight: number): void {
-    out.rx = halfWidth * 1.15 + halfHeight * 0.15;
-    out.ry = Math.max(halfHeight * 1.2 + halfWidth * 0.08, out.rx * 0.5);
+    const rx = halfWidth * 1.15 + halfHeight * 0.15;
+    out.ry = Math.max(halfHeight * 1.2 + halfWidth * 0.08, rx * 0.5);
+    out.rx = Math.max(rx, out.ry);
 }
 
 /** Half of the equator hairline: the far half (`back`) or the near one. */
