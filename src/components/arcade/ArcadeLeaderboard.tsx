@@ -21,6 +21,17 @@ const PODIUM_SLOT_ORDER = [1, 0, 2];
 
 const YouChip: React.FC = () => <Chip variant="accent">YOU</Chip>;
 
+/** Marks a guest (anonymous) player's row; guest names are a separate namespace from usernames. */
+const GuestTag: React.FC = () => (
+    <span className="text-[10px] font-semibold tracking-wider text-theme-text-secondary">
+        GUEST
+    </span>
+);
+
+/** Row identity: a guest name may equal an account username. */
+const entryKey = (e: ArcadeLeaderboardEntry): string =>
+    `${e.rank}-${e.isGuest ? 'g' : 'u'}-${e.username}`;
+
 type PortraitFor = (name: string) => string | null;
 
 /** The ship of a best-score run: a round pilot portrait when the name resolves, and the name. */
@@ -63,13 +74,20 @@ const Podium: React.FC<{ entries: ArcadeLeaderboardEntry[]; portraitFor: Portrai
                 if (!entry) return <div key={`empty-${index}`} aria-hidden="true" />;
                 return (
                     <PodiumCard
-                        key={`${entry.rank}-${entry.username}`}
+                        key={entryKey(entry)}
                         rank={entry.rank}
                         title={entry.username}
                         value={entry.bestScore.toLocaleString()}
                         accentColor={MEDAL_COLORS[entry.rank] ?? MEDAL_COLORS[index + 1]}
                         raised={index === 0}
-                        badge={entry.isMe ? <YouChip /> : undefined}
+                        badge={
+                            entry.isMe || entry.isGuest ? (
+                                <>
+                                    {entry.isGuest && <GuestTag />}
+                                    {entry.isMe && <YouChip />}
+                                </>
+                            ) : undefined
+                        }
                         subtitle={
                             anyShip ? (
                                 entry.ship ? (
@@ -105,6 +123,7 @@ const columnsFor = (portraitFor: PortraitFor): Column<LeaderboardViewRow>[] => [
                         <span className={`truncate ${r.isMe ? 'font-semibold' : ''}`}>
                             {r.username}
                         </span>
+                        {r.isGuest && <GuestTag />}
                         {r.isMe && <YouChip />}
                     </span>
                     {r.ship && <ShipTag ship={r.ship} portraitFor={portraitFor} />}
@@ -135,7 +154,8 @@ interface Props {
 }
 
 export const ArcadeLeaderboard: React.FC<Props> = ({ limit = 20, refreshKey = 0 }) => {
-    const { user } = useAuth();
+    const { user, guestUserId } = useAuth();
+    const viewerId = user?.id ?? guestUserId;
     const portraitFor = useShipPortraits();
     const columns = useMemo(() => columnsFor(portraitFor), [portraitFor]);
     const [rows, setRows] = useState<ArcadeLeaderboardEntry[]>([]);
@@ -161,7 +181,7 @@ export const ArcadeLeaderboard: React.FC<Props> = ({ limit = 20, refreshKey = 0 
         return () => {
             cancelled = true;
         };
-    }, [limit, refreshKey, user?.id, attempt]);
+    }, [limit, refreshKey, viewerId, attempt]);
 
     const { podium, tableRows } = useMemo(() => {
         const split = splitPodium(rows);
@@ -188,7 +208,7 @@ export const ArcadeLeaderboard: React.FC<Props> = ({ limit = 20, refreshKey = 0 
             columns={columns}
             loading={loading && rows.length === 0}
             emptyMessage="No scores yet. Be the first."
-            getRowKey={(r, i) => (isGapRow(r) ? `gap-${i}` : `${r.rank}-${r.username}`)}
+            getRowKey={(r, i) => (isGapRow(r) ? `gap-${i}` : entryKey(r))}
             rowClassName={rowClassName}
         />
     );

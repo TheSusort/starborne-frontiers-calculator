@@ -3,7 +3,13 @@ import { describe, expect, it, vi } from 'vitest';
 import type { ArcadeLeaderboardEntry } from '../../../utils/arcade/leaderboardRows';
 import { ArcadeLeaderboard } from '../ArcadeLeaderboard';
 
-const { rows } = vi.hoisted(() => ({
+const { rows, guestRows } = vi.hoisted(() => ({
+    guestRows: [
+        { rank: 1, username: 'Ace', bestScore: 900, isMe: false, ship: null, isGuest: false },
+        { rank: 2, username: 'Ace', bestScore: 800, isMe: false, ship: null, isGuest: true },
+        { rank: 3, username: 'Bo', bestScore: 700, isMe: false, ship: null, isGuest: false },
+        { rank: 4, username: 'Cy', bestScore: 600, isMe: false, ship: null, isGuest: true },
+    ] as ArcadeLeaderboardEntry[],
     rows: [
         { rank: 1, username: 'Ace', bestScore: 900, isMe: false, ship: 'Nayra' },
         { rank: 2, username: 'Bee', bestScore: 800, isMe: false, ship: null },
@@ -14,9 +20,11 @@ const { rows } = vi.hoisted(() => ({
 }));
 
 vi.mock('../../../services/arcadeService', () => ({
-    getArcadeLeaderboard: () => Promise.resolve(rows),
+    getArcadeLeaderboard: (limit: number) => Promise.resolve(limit === 4 ? guestRows : rows),
 }));
-vi.mock('../../../contexts/AuthProvider', () => ({ useAuth: () => ({ user: null }) }));
+vi.mock('../../../contexts/AuthProvider', () => ({
+    useAuth: () => ({ user: null, guestUserId: null }),
+}));
 vi.mock('../../../hooks/useShipsData', () => ({
     useShipsData: () => ({ ships: [{ name: 'Nayra', imageKey: 'nayra_key' }] }),
 }));
@@ -73,5 +81,21 @@ describe('ArcadeLeaderboard ship', () => {
         );
         expect(slots.every((s) => s !== null)).toBe(true);
         expect(slots[1]!.textContent).toBe('');
+    });
+});
+
+describe('ArcadeLeaderboard guests', () => {
+    it('tags guest rows on the podium and in the table without duplicate keys', async () => {
+        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+        render(<ArcadeLeaderboard limit={4} />);
+        const tags = await screen.findAllByText('GUEST');
+        expect(tags).toHaveLength(2);
+        expect(tags.filter((t) => !t.closest('tr'))).toHaveLength(1);
+        expect(tags.filter((t) => t.closest('tr'))).toHaveLength(1);
+        const keyWarnings = errorSpy.mock.calls.filter((call) =>
+            call.some((arg) => typeof arg === 'string' && arg.includes('same key'))
+        );
+        expect(keyWarnings).toHaveLength(0);
+        errorSpy.mockRestore();
     });
 });
