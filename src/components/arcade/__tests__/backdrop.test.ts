@@ -72,9 +72,8 @@ describe('backdrop', () => {
             drawSunGlow(ctx, g);
             expect(sunGlowBottom(g)).toBeGreaterThanOrEqual(bottom);
             for (const dpr of [1, 1.5, 2]) {
-                const { glow } = backdropRows(g, dpr);
+                const { glow, sky } = backdropRows(g, dpr);
                 expect(glow[0]).toBe(0);
-                const { sky } = backdropRows(g, dpr);
                 // The ground covers everything below the sky layer, so the glow stops there.
                 expect(glow[1]).toBeGreaterThanOrEqual(Math.min(h, bottom, g.horizonY) * dpr);
                 expect(glow[1]).toBeLessThanOrEqual(sky[1]);

@@ -225,16 +225,21 @@ export function nearestPulled(
 
 /**
  * How visible the magnet's ripples and beams are, 0..1: fully until its last
- * `MAGNET_EXPIRY_SECONDS`, then a flicker that quickens as it runs out (`time` in game seconds),
- * or under reduced motion a steady fade.
+ * `MAGNET_EXPIRY_SECONDS`, then a flicker that quickens from `FLICKER_MIN_HZ` to `FLICKER_MAX_HZ`
+ * as it runs out, or under reduced motion a steady fade. The flicker's phase is the integral of
+ * that rate over the time since expiry began, so it never exceeds `FLICKER_MAX_HZ` however far
+ * into the run the expiry falls.
  */
-export function magnetVisibility(magnetTime: number, time: number, reducedMotion: boolean): number {
+export function magnetVisibility(magnetTime: number, reducedMotion: boolean): number {
     if (magnetTime >= MAGNET_EXPIRY_SECONDS) return 1;
     if (magnetTime <= 0) return 0;
     const left = magnetTime / MAGNET_EXPIRY_SECONDS;
     if (reducedMotion) return 0.25 + 0.75 * left;
-    const rate = FLICKER_MIN_HZ + (FLICKER_MAX_HZ - FLICKER_MIN_HZ) * (1 - left);
-    return Math.sin(2 * Math.PI * rate * time) > -0.3 ? 1 : 0.2;
+    const e = MAGNET_EXPIRY_SECONDS - magnetTime;
+    const cycles =
+        FLICKER_MIN_HZ * e +
+        ((FLICKER_MAX_HZ - FLICKER_MIN_HZ) * e * e) / (2 * MAGNET_EXPIRY_SECONDS);
+    return Math.sin(2 * Math.PI * cycles) > -0.3 ? 1 : 0.2;
 }
 
 const CORE = '150, 240, 255';

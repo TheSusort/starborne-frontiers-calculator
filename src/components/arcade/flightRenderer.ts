@@ -694,9 +694,7 @@ export function renderFlight(
     const shipY = ship.y + (ship.top + ship.bottom) / 2;
     const shipHeight = (ship.baseY - shipY) / u;
     const magnetOn = game.player.magnetTime > 0 && !view.dying && ship.intro === 1;
-    const magnet = magnetOn
-        ? magnetVisibility(game.player.magnetTime, game.time, view.reducedMotion)
-        : 0;
+    const magnet = magnetOn ? magnetVisibility(game.player.magnetTime, view.reducedMotion) : 0;
     const beams = magnetOn ? nearestPulled(game.pickups, game.player, MAX_BEAMS, beamScratch) : 0;
     beginPulls(view.pulls);
     const wreckFade = Math.max(0, 1 - view.explosion.elapsed / WRECK_FADE_SECONDS);

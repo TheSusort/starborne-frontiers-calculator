@@ -150,39 +150,43 @@ describe('nearestPulled', () => {
 
 describe('magnetVisibility', () => {
     it('is full until the last seconds and off once the magnet has run out', () => {
-        for (const time of [0, 0.37, 5.1]) {
-            expect(magnetVisibility(8, time, false)).toBe(1);
-            expect(magnetVisibility(MAGNET_EXPIRY_SECONDS, time, false)).toBe(1);
-            expect(magnetVisibility(0, time, false)).toBe(0);
-        }
+        expect(magnetVisibility(8, false)).toBe(1);
+        expect(magnetVisibility(MAGNET_EXPIRY_SECONDS, false)).toBe(1);
+        expect(magnetVisibility(0, false)).toBe(0);
     });
 
     it('flickers through the last seconds', () => {
         const seen = new Set<number>();
-        for (let time = 0; time < 1; time += 0.01) seen.add(magnetVisibility(0.8, time, false));
+        for (let t = 0; t < MAGNET_EXPIRY_SECONDS; t += 0.01) {
+            seen.add(magnetVisibility(MAGNET_EXPIRY_SECONDS - t, false));
+        }
         expect(Math.max(...seen)).toBe(1);
         expect(Math.min(...seen)).toBeLessThan(0.5);
     });
 
     it('never flickers faster than the strobing limit', () => {
         expect(FLICKER_MAX_HZ).toBeLessThanOrEqual(8);
-        for (const left of [1.4, 0.7, 0.01]) {
-            let flips = 0;
-            let was = magnetVisibility(left, 0, false);
-            for (let time = 0.001; time <= 1; time += 0.001) {
-                const now = magnetVisibility(left, time, false);
-                if (now !== was) flips++;
-                was = now;
-            }
-            // Each flicker cycle flips twice.
-            expect(flips / 2).toBeLessThanOrEqual(FLICKER_MAX_HZ + 1);
+        const fps = 60;
+        const flips: number[] = [];
+        let was = 1;
+        for (let f = 0; f < MAGNET_EXPIRY_SECONDS * fps; f++) {
+            const t = f / fps;
+            const now = magnetVisibility(MAGNET_EXPIRY_SECONDS - t, false);
+            if (f > 0 && now !== was) flips.push(t);
+            was = now;
         }
+        // Each flicker cycle flips twice: no one-second window holds more than the cap.
+        for (const from of flips) {
+            const inWindow = flips.filter((x) => x >= from && x < from + 1).length;
+            expect(inWindow / 2).toBeLessThanOrEqual(FLICKER_MAX_HZ);
+        }
+        expect(flips.length).toBeGreaterThan(4);
     });
 
-    it('fades steadily under reduced motion, whatever the time', () => {
-        const a = magnetVisibility(1.2, 0, true);
-        expect(magnetVisibility(1.2, 0.73, true)).toBe(a);
-        expect(magnetVisibility(0.3, 0, true)).toBeLessThan(a);
+    it('fades steadily under reduced motion', () => {
+        const a = magnetVisibility(1.2, true);
+        expect(magnetVisibility(1.2, true)).toBe(a);
+        expect(magnetVisibility(0.3, true)).toBeLessThan(a);
         expect(a).toBeLessThan(1);
     });
 });
