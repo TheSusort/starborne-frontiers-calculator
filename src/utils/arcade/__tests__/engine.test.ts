@@ -5,6 +5,10 @@ import {
     STEP_SECONDS,
     JUMP_SECONDS,
     MAX_SPEED,
+    ACCELERATION,
+    LATE_ACCELERATION,
+    RAMP_SPEED,
+    START_SPEED,
     MAGNET_SECONDS,
     METERS_PER_UNIT,
     PICKUP_CATCH_ARC,
@@ -266,6 +270,37 @@ describe('speed and score', () => {
         expect(g.speed).toBeGreaterThan(start);
         for (let i = 0; i < 1000; i++) step(g, [], 1);
         expect(g.speed).toBe(MAX_SPEED);
+    });
+
+    it('ramps at ACCELERATION up to RAMP_SPEED, then at LATE_ACCELERATION up to MAX_SPEED', () => {
+        expect([START_SPEED, RAMP_SPEED, MAX_SPEED]).toEqual([20, 48, 72]);
+        expect(LATE_ACCELERATION).toBeLessThan(ACCELERATION);
+        const g = quietGame();
+        step(g, [], 10);
+        expect(g.speed).toBeCloseTo(START_SPEED + ACCELERATION * 10, 6);
+        g.speed = RAMP_SPEED - ACCELERATION;
+        step(g, [], 2);
+        // One second of the early ramp reaches RAMP_SPEED; the second runs at the late rate.
+        expect(g.speed).toBeCloseTo(RAMP_SPEED + LATE_ACCELERATION, 6);
+        step(g, [], 10);
+        expect(g.speed).toBeCloseTo(RAMP_SPEED + LATE_ACCELERATION * 11, 6);
+        g.speed = MAX_SPEED - 0.01;
+        step(g, [], 1);
+        expect(g.speed).toBe(MAX_SPEED);
+    });
+
+    it('reaches RAMP_SPEED and MAX_SPEED at the planned times in fixed steps', () => {
+        const g = quietGame();
+        let t = 0;
+        let rampAt = 0;
+        while (g.speed < MAX_SPEED) {
+            step(g, [], STEP_SECONDS);
+            t += STEP_SECONDS;
+            if (!rampAt && g.speed >= RAMP_SPEED) rampAt = t;
+        }
+        const ramp = (RAMP_SPEED - START_SPEED) / ACCELERATION;
+        expect(rampAt).toBeCloseTo(ramp, 1);
+        expect(t).toBeCloseTo(ramp + (MAX_SPEED - RAMP_SPEED) / LATE_ACCELERATION, 1);
     });
 
     it('score = metres + credits × CREDIT_POINTS', () => {

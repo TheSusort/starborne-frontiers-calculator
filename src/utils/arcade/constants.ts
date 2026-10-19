@@ -1,8 +1,12 @@
 export const LANE_COUNT = 3;
 export const STEP_SECONDS = 1 / 120;
+/** Speed, in units per second, climbs at ACCELERATION from START_SPEED to RAMP_SPEED, then at
+ *  LATE_ACCELERATION up to MAX_SPEED. Duels and countdowns leave it as it is. */
 export const START_SPEED = 20;
-export const MAX_SPEED = 48;
+export const RAMP_SPEED = 48;
+export const MAX_SPEED = 72;
 export const ACCELERATION = 0.4;
+export const LATE_ACCELERATION = 0.15;
 export const SPAWN_Z = 80;
 export const ROW_GAP = 22;
 export const FIRST_ROW_DELAY = 40;

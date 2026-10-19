@@ -1,6 +1,7 @@
 import { blocks, canCollect } from './collision';
 import {
     ACCELERATION,
+    LATE_ACCELERATION,
     DESPAWN_Z,
     DUCK_SECONDS,
     FIRST_ROW_DELAY,
@@ -8,6 +9,7 @@ import {
     LANE_COUNT,
     MAGNET_SECONDS,
     MAX_SPEED,
+    RAMP_SPEED,
     ROW_GAP,
     SHIELD_BREAK_FLASH,
     SPAWN_Z,
@@ -42,6 +44,17 @@ export function createGame(seed: number, options: GameOptions = {}): GameState {
     };
     if (options.duels) state.rowsUntilCheckpoint = drawFirstCheckpointRows(state);
     return state;
+}
+
+/** Speed after `dt` seconds of the two-phase ramp described at RAMP_SPEED. */
+export function nextSpeed(speed: number, dt: number): number {
+    let left = dt;
+    if (speed < RAMP_SPEED) {
+        const early = Math.min(left, (RAMP_SPEED - speed) / ACCELERATION);
+        speed += ACCELERATION * early;
+        left -= early;
+    }
+    return Math.min(MAX_SPEED, speed + LATE_ACCELERATION * left);
 }
 
 /** A jump or duck cannot start until the current one ends; lane changes are always allowed. */
@@ -88,7 +101,7 @@ export function step(state: GameState, inputs: readonly InputAction[], dt: numbe
     state.shieldBreakTime = Math.max(0, state.shieldBreakTime - dt);
 
     state.time += dt;
-    state.speed = Math.min(MAX_SPEED, state.speed + ACCELERATION * dt);
+    state.speed = nextSpeed(state.speed, dt);
     const travel = state.speed * dt;
     state.distance += travel;
     for (const o of state.obstacles) o.z -= travel;
