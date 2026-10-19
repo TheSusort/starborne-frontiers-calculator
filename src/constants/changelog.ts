@@ -17,6 +17,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Arcade: speed now keeps climbing in long runs, to a higher top speed.',
     'Arcade: your shield is now a subtle energy bubble around the ship.',
     'Arcade: duel opponents are now only ships with gear equipped.',
+    "Arcade: your ship's magenta accent lighting now glows brighter in flight.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

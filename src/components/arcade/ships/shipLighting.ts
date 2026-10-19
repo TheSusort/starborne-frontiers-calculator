@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
-import { ARCADE_LIGHT_ACCENT, lightRig, Vec3, VIEWER_RENDERER } from './lightRig';
+import { ARCADE_LIGHT_ACCENT, lightRig, LightRigOptions, Vec3, VIEWER_RENDERER } from './lightRig';
 import { officialViewerCamera } from './spritePoses';
 
 /** Shadow map sizes for the key and rim lights. The viewer uses these for its thumbnails. */
@@ -9,8 +9,9 @@ export const SPRITE_SHADOW_MAPS = { key: 512, rim: 256 } as const;
 export const VIEW_SHADOW_MAPS = { key: 2048, rim: 1024 } as const;
 
 export interface ShipLights {
-    /** Turns the rig for a camera at `camera` (see `lightRig`); call before rendering with it. */
-    aim(camera: Vec3): void;
+    /** Turns the rig for a camera at `camera` and sets its accent boost (see `lightRig`; the
+     *  boost defaults to none); call before rendering with it. */
+    aim(camera: Vec3, options?: LightRigOptions): void;
     /** Frees the environment map and shadow maps; call before disposing the renderer. */
     dispose(): void;
 }
@@ -66,14 +67,15 @@ export function lightShipScene(
     });
     scene.add(new THREE.AmbientLight(rig.ambient.color, rig.ambient.intensity));
 
-    let aimedAt = officialViewerCamera('left').position.join();
+    let aimedAt = `${officialViewerCamera('left').position.join()}@1@`;
     return {
-        aim(camera) {
-            const id = camera.join();
+        aim(camera, options = {}) {
+            const id = `${camera.join()}@${options.accentBoost ?? 1}@${options.accentHeight ?? ''}`;
             if (id === aimedAt) return;
             aimedAt = id;
-            lightRig(camera, accent).directional.forEach((spec, i) => {
+            lightRig(camera, accent, options).directional.forEach((spec, i) => {
                 lights[i].position.set(...spec.position);
+                lights[i].intensity = spec.intensity;
                 lights[i].updateMatrixWorld();
             });
         },

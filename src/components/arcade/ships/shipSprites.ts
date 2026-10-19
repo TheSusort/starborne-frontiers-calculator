@@ -7,6 +7,7 @@ import {
     trimShipModelsToClosedSize,
 } from './shipModelLoader';
 import { lightShipScene, ShipLights, SPRITE_SHADOW_MAPS } from './shipLighting';
+import { LightRigOptions, PILOT_LIGHTING } from './lightRig';
 import {
     CHASE_CAMERA,
     FRAME_GRID_POSES,
@@ -190,6 +191,8 @@ interface RenderOptions {
     height: number;
     /** Aborting drops the render; its promise rejects with an `AbortError`. */
     signal?: AbortSignal;
+    /** The viewer's rig when unset. */
+    lighting?: LightRigOptions;
 }
 
 /**
@@ -270,7 +273,7 @@ async function renderModel(
         const current = spriteStage();
         const { renderer, scene } = current;
         markResident(current, model);
-        current.lights.aim(o.camera.position);
+        current.lights.aim(o.camera.position, o.lighting);
         setPose(ship, pose);
         // The shared canvas is resized, drawn and read back within this synchronous block, so
         // other renders never see each other's frames.
@@ -293,7 +296,8 @@ async function renderModel(
 /**
  * The run's chase-camera frames for the given sweeps of the frame grid, one array of heading
  * frames (`HEADING_ANGLES_DEG` order) per requested sweep, as square canvases. Every sweep shares
- * the zoom fitted to the whole grid, so sweeps rendered by separate calls match.
+ * the zoom fitted to the whole grid, so sweeps rendered by separate calls match. They are the
+ * player's own ship, lit with `PILOT_LIGHTING`.
  */
 export function renderChaseSweeps(
     key: string,
@@ -308,6 +312,7 @@ export function renderChaseSweeps(
         width: size,
         height: size,
         signal,
+        lighting: PILOT_LIGHTING,
     }).then((frames) => {
         let at = 0;
         return perSweep.map((poses) => frames.slice(at, (at += poses.length)));

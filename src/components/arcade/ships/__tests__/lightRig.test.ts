@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { ARCADE_LIGHT_ACCENT, lightRig, VIEWER_RENDERER } from '../lightRig';
+import {
+    ARCADE_LIGHT_ACCENT,
+    lightRig,
+    PILOT_ACCENT_BOOST,
+    PILOT_LIGHTING,
+    VIEWER_RENDERER,
+} from '../lightRig';
 import { CHASE_CAMERA, officialViewerCamera } from '../spritePoses';
 
 const OFFICIAL = officialViewerCamera('left').position;
@@ -85,5 +91,44 @@ describe('lightRig', () => {
         // The chase camera sits behind the ship (-z), so the key must come from -z too.
         expect(key.position[2]).toBeLessThan(0);
         expect(lightRig(OFFICIAL).directional[0].position[2]).toBeGreaterThan(0);
+    });
+});
+
+describe('lightRig accent boost', () => {
+    const camera = OFFICIAL;
+    it('leaves the rig unchanged by default', () => {
+        expect(lightRig(camera, ARCADE_LIGHT_ACCENT, {})).toEqual(lightRig(camera));
+        expect(lightRig(camera, ARCADE_LIGHT_ACCENT, { accentBoost: 1 })).toEqual(lightRig(camera));
+    });
+
+    it('multiplies only the accent-coloured lights', () => {
+        const base = lightRig(camera, 0x123456);
+        const boosted = lightRig(camera, 0x123456, { accentBoost: PILOT_ACCENT_BOOST });
+        boosted.directional.forEach((light, i) => {
+            const was = base.directional[i];
+            expect(light.position).toEqual(was.position);
+            expect(light.color).toBe(was.color);
+            expect(light.intensity).toBeCloseTo(
+                was.color === 0x123456 ? was.intensity * PILOT_ACCENT_BOOST : was.intensity
+            );
+        });
+        const accentRoles = boosted.directional.filter((l) => l.color === 0x123456);
+        expect(accentRoles.map((l) => l.role)).toEqual(['rim', 'accent']);
+        expect(boosted.ambient).toEqual(base.ambient);
+    });
+
+    it('raises only the accent-coloured lights to accentHeight', () => {
+        const base = lightRig(camera, 0x123456);
+        const raised = lightRig(camera, 0x123456, { accentHeight: 0 });
+        raised.directional.forEach((light, i) => {
+            const [x, y, z] = base.directional[i].position;
+            expect(light.intensity).toBe(base.directional[i].intensity);
+            expect(light.position).toEqual(light.color === 0x123456 ? [x, 0, z] : [x, y, z]);
+        });
+    });
+
+    it('lights the pilot with a visible boost', () => {
+        expect(PILOT_ACCENT_BOOST).toBeGreaterThanOrEqual(2);
+        expect(PILOT_LIGHTING.accentBoost).toBe(PILOT_ACCENT_BOOST);
     });
 });
