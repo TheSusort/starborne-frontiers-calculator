@@ -35,6 +35,13 @@ import type { FlightOrigin } from './flightEvents';
 import { drawNeonFighter } from './neonFighter';
 import { barrierPulse, drawBarrier } from './barriers';
 import {
+    drawShieldBack,
+    drawShieldBreak,
+    drawShieldFront,
+    drawShieldPickup,
+    ShieldPlacement,
+} from './shield';
+import {
     advanceSpeedLines,
     createSpeedLines,
     drawSpeedLines,
@@ -298,7 +305,8 @@ function drawPickup(
     ctx: CanvasRenderingContext2D,
     g: SceneGeometry,
     pk: Pickup,
-    timeMs: number
+    timeMs: number,
+    dpr: number
 ): void {
     const p = project(g, laneOffset(pk.lane), pk.z);
     const u = p.width;
@@ -318,10 +326,7 @@ function drawPickup(
         ctx.closePath();
         ctx.fill();
     } else if (pk.kind === 'shield') {
-        ctx.strokeStyle = '#40f0ff';
-        ctx.beginPath();
-        ctx.arc(cx, cy, r * 1.2, 0, Math.PI * 2);
-        ctx.stroke();
+        drawShieldPickup(ctx, cx, cy, r * 1.2, dpr, p.scale);
     } else {
         ctx.strokeStyle = '#ff60c0';
         ctx.beginPath();
@@ -331,12 +336,16 @@ function drawPickup(
     ctx.globalAlpha = 1;
 }
 
+/** The shield's placement, rewritten every frame rather than allocated. */
+const shieldAt: ShieldPlacement = { x: 0, y: 0, s: 0, dpr: 1, bank: 0, flatten: 0 };
+
 function drawPlayer(
     ctx: CanvasRenderingContext2D,
     g: SceneGeometry,
     game: GameState,
     view: FlightView,
-    timeMs: number
+    timeMs: number,
+    dpr: number
 ): void {
     const base = project(g, view.playerX, 0);
     const u = laneWidthAtPlayer(g);
@@ -360,6 +369,15 @@ function drawPlayer(
         y = view.intro.y + (y - view.intro.y) * e;
         s = view.intro.size + (s - view.intro.size) * e;
     }
+
+    const shield = shieldAt;
+    shield.x = x;
+    shield.y = y;
+    shield.s = s;
+    shield.dpr = dpr;
+    shield.bank = pose.bank;
+    shield.flatten = pose.duck;
+    if (game.player.shield) drawShieldBack(ctx, shield, timeMs);
 
     ctx.save();
     ctx.translate(x, y);
@@ -406,20 +424,9 @@ function drawPlayer(
     }
     ctx.restore();
 
-    if (game.player.shield) {
-        ctx.strokeStyle = 'rgba(64, 240, 255, 0.7)';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.arc(x, y, s * 3, 0, Math.PI * 2);
-        ctx.stroke();
-    }
+    if (game.player.shield) drawShieldFront(ctx, shield, timeMs);
     if (game.shieldBreakTime > 0) {
-        const k = 1 - game.shieldBreakTime / SHIELD_BREAK_FLASH;
-        ctx.strokeStyle = `rgba(255, 255, 255, ${1 - k})`;
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.arc(x, y, s * (3 + k * 3), 0, Math.PI * 2);
-        ctx.stroke();
+        drawShieldBreak(ctx, shield, 1 - game.shieldBreakTime / SHIELD_BREAK_FLASH);
     }
 }
 
@@ -434,6 +441,7 @@ export function renderFlight(
     const h = ctx.canvas.offsetHeight;
     if (w === 0 || h === 0) return;
     const g = sceneGeometry(w, h);
+    const dpr = ctx.canvas.width / w;
 
     const target = laneOffset(game.player.lane);
     view.playerX = settle(
@@ -464,11 +472,11 @@ export function renderFlight(
     items.sort((a, b) => b.z - a.z);
     const drawItem = (item: (typeof items)[number]) => {
         if ('obstacle' in item) drawObstacle(ctx, g, item.obstacle, timeMs);
-        else if ('pickup' in item) drawPickup(ctx, g, item.pickup, timeMs);
+        else if ('pickup' in item) drawPickup(ctx, g, item.pickup, timeMs, dpr);
         else drawCheckpoint(ctx, g, item.checkpoint, view.gateArt.get(item.checkpoint.id));
     };
     // Items already past the player are nearer the camera, so they draw over it.
     for (const item of items) if (item.z >= 0) drawItem(item);
-    drawPlayer(ctx, g, game, view, timeMs);
+    drawPlayer(ctx, g, game, view, timeMs, dpr);
     for (const item of items) if (item.z < 0) drawItem(item);
 }
