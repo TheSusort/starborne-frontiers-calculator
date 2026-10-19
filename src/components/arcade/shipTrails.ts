@@ -13,7 +13,12 @@ import { speedFraction } from './speedLines';
  * offset with a time constant that grows with its age (`lagTau`), so the head tracks the ship
  * closely and the tail swings over slowly, and a slide bends the whole trail at once. The buffer
  * and the streaks' drift advance by game time only, so the trails hold still whenever the game
- * does not step. Nothing here allocates per frame.
+ * does not step.
+ *
+ * Nothing here allocates per frame. A fractional number handed to a canvas call, or returned from
+ * a call V8 does not inline, is boxed on the heap; so points and widths reach the canvas as whole
+ * numbers of 1/`SUB` px under a 1/`SUB` scale, and helpers write their results to typed scratch
+ * arrays rather than returning them.
  */
 
 /** Points in the lag buffer, spread evenly over `LAG_MAX_AGE` seconds of age. */
@@ -53,13 +58,26 @@ export function advanceTrail(trail: ShipTrail, seconds: number, laneX: number): 
     }
 }
 
-/** The trail's lane offset `age` game seconds back, interpolated between lag points and held at
- *  the oldest past `LAG_MAX_AGE`. */
-export function trailLaneX(trail: ShipTrail, age: number): number {
+/** Results of the per-point helpers, written here rather than returned (see the header). */
+const scratch = new Float64Array(4);
+const LANE = 0;
+const ROW_CENTRE = 1;
+const ROW_WIDTH = 2;
+const ROW_Y = 3;
+
+/** Writes the trail's lane offset `age` game seconds back to `scratch[LANE]`: interpolated
+ *  between lag points and held at the oldest past `LAG_MAX_AGE`. */
+function laneAt(trail: ShipTrail, age: number): void {
     const f = Math.min(LAG_POINTS - 1, (Math.max(0, age) / LAG_MAX_AGE) * (LAG_POINTS - 1));
     const i = Math.floor(f);
     const j = Math.min(LAG_POINTS - 1, i + 1);
-    return trail.lag[i] + (trail.lag[j] - trail.lag[i]) * (f - i);
+    scratch[LANE] = trail.lag[i] + (trail.lag[j] - trail.lag[i]) * (f - i);
+}
+
+/** The trail's lane offset `age` game seconds back (see `laneAt`). */
+export function trailLaneX(trail: ShipTrail, age: number): number {
+    laneAt(trail, age);
+    return scratch[LANE];
 }
 
 /** World depth (negative: toward the camera) of a trail point `age` seconds old over a trail of
@@ -161,7 +179,7 @@ const rows = (n: number): Rows => ({
 });
 const wakeRows = rows(WAKE_POINTS);
 const streakRows = rows(STREAK_ROWS);
-let rowsFor = { w: 0, h: 0 };
+const rowsFor = { w: 0, h: 0 };
 const at: Projected = { x: 0, y: 0, scale: 0, width: 0 };
 
 function fillRows(g: SceneGeometry, out: Rows, n: number, zAt: (k: number) => number): void {
@@ -180,83 +198,93 @@ function ensureRows(g: SceneGeometry): void {
     if (rowsFor.w === g.w && rowsFor.h === g.h) return;
     fillRows(g, wakeRows, WAKE_POINTS, wakeZ);
     fillRows(g, streakRows, STREAK_ROWS, streakZ);
-    rowsFor = { w: g.w, h: g.h };
+    rowsFor.w = g.w;
+    rowsFor.h = g.h;
 }
 
-/** The streak rows' values at `age`, interpolated, written to `row`. */
-const row = { centre: 0, width: 0, y: 0 };
+/** The streak rows' values at `age`, interpolated, written to `scratch`. */
 function streakRowAt(age: number): void {
     const f = Math.min(STREAK_ROWS - 1, (Math.max(0, age) / STREAK_SPAN) * (STREAK_ROWS - 1));
     const i = Math.floor(f);
     const j = Math.min(STREAK_ROWS - 1, i + 1);
     const t = f - i;
-    row.centre = streakRows.centre[i] + (streakRows.centre[j] - streakRows.centre[i]) * t;
-    row.width = streakRows.width[i] + (streakRows.width[j] - streakRows.width[i]) * t;
-    row.y = streakRows.y[i] + (streakRows.y[j] - streakRows.y[i]) * t;
+    const { centre, width, y } = streakRows;
+    scratch[ROW_CENTRE] = centre[i] + (centre[j] - centre[i]) * t;
+    scratch[ROW_WIDTH] = width[i] + (width[j] - width[i]) * t;
+    scratch[ROW_Y] = y[i] + (y[j] - y[i]) * t;
 }
 
 const xs = new Float64Array(WAKE_POINTS);
 const ys = new Float64Array(WAKE_POINTS);
 const ws = new Float64Array(WAKE_POINTS);
 
-type Shape = (k: number) => number;
-type Width = (k: number, w: number) => number;
+/** Canvas units per px while the trails draw (see the header). */
+export const SUB = 16;
+const toSub = (v: number): number => Math.round(v * SUB) | 0;
 
-/** One stroke of a neon line: its colour, opacity gain and width. */
+/** One stroke of a neon line: its colour, opacity gain and width, `max(min, w × scale)` px for
+ *  `w` the line's lane width. */
 interface Pass {
     colour: string;
     gain: number;
-    width: Width;
+    min: number;
+    scale: number;
 }
 
 /**
- * Strokes the polyline in `xs`/`ys` (`n` points) in runs of `RUN` segments, each with the opacity
- * `gain × alpha(k)` and width `width(k, w)` of its middle (`k` 0..1 along the line, `w` its lane
- * width). Each run's path is built once and stroked once per pass; under additive compositing
- * the order of the strokes does not change the result.
+ * Strokes the polyline in `xs`/`ys` (`n` points, px) in runs of `RUN` segments, each with the
+ * opacity `opacity × gain × fade(k)` and width of its middle (`k` 0..1 along the line). The fade
+ * is the wake's (in quickly, out slowly) when `wake`, else the streaks' (a sine). Each run's path
+ * is built once and stroked once per pass; under additive compositing the order of the strokes
+ * does not change the result. Draws in 1/`SUB` px units.
  */
 function strokeRuns(
     ctx: CanvasRenderingContext2D,
     n: number,
     opacity: number,
-    alpha: Shape,
+    wake: boolean,
     passes: readonly Pass[]
 ): void {
     for (let from = 0; from < n - 1; from += RUN) {
         const to = Math.min(n - 1, from + RUN);
         const k = (from + to) / 2 / (n - 1);
-        const a = opacity * alpha(k);
+        const fade = wake ? Math.min(1, k / 0.12) * Math.pow(1 - k, 1.2) : Math.sin(Math.PI * k);
+        const a = opacity * fade;
         if (a <= 0.003) continue;
         const w = (ws[from] + ws[to]) / 2;
         ctx.beginPath();
-        ctx.moveTo(xs[from], ys[from]);
-        for (let i = from + 1; i <= to; i++) ctx.lineTo(xs[i], ys[i]);
+        ctx.moveTo(toSub(xs[from]), toSub(ys[from]));
+        for (let i = from + 1; i <= to; i++) ctx.lineTo(toSub(xs[i]), toSub(ys[i]));
         for (let p = 0; p < passes.length; p++) {
             const pass = passes[p];
             const passAlpha = a * pass.gain;
             if (passAlpha <= 0.003) continue;
             ctx.strokeStyle = pass.colour;
             ctx.globalAlpha = passAlpha;
-            ctx.lineWidth = pass.width(k, w);
+            ctx.lineWidth = toSub(Math.max(pass.min, w * pass.scale));
             ctx.stroke();
         }
     }
 }
 
-const wakeFade: Shape = (k) => Math.min(1, k / 0.12) * Math.pow(1 - k, 1.2);
-const wakeCore: Width = (_k, w) => Math.max(0.8, w * 0.0045);
+/** The wake's hot core is `max(0.8, w × 0.0045)` px; its halo and glow are multiples of it. */
+const wakePass = (colour: string, gain: number, times: number): Pass => ({
+    colour,
+    gain,
+    min: 0.8 * times,
+    scale: 0.0045 * times,
+});
 /** A wide faint glow, a mid halo and a hair-thin hot core. */
 const WAKE_PASSES: readonly Pass[] = [
-    { colour: CYAN, gain: 0.12, width: (k, w) => wakeCore(k, w) * 7 },
-    { colour: CYAN, gain: 0.35, width: (k, w) => wakeCore(k, w) * 2.6 },
-    { colour: CYAN_CORE, gain: 1, width: wakeCore },
+    wakePass(CYAN, 0.12, 7),
+    wakePass(CYAN, 0.35, 2.6),
+    wakePass(CYAN_CORE, 1, 1),
 ];
-const streakFade: Shape = (k) => Math.sin(Math.PI * k);
 /** A faint glow and a hair-thin core. */
 function streakPasses(glow: string, core: string): readonly Pass[] {
     return [
-        { colour: glow, gain: 0.18, width: (_k, w) => Math.max(1.6, w * 0.008) },
-        { colour: core, gain: 1, width: (_k, w) => Math.max(0.6, w * 0.0022) },
+        { colour: glow, gain: 0.18, min: 1.6, scale: 0.008 },
+        { colour: core, gain: 1, min: 0.6, scale: 0.0022 },
     ];
 }
 
@@ -266,11 +294,12 @@ function drawWake(ctx: CanvasRenderingContext2D, trail: ShipTrail, opacity: numb
         for (let i = 0; i < WAKE_POINTS; i++) {
             const age = (i / (WAKE_POINTS - 1)) * WAKE_SPAN;
             const width = wakeRows.width[i];
-            xs[i] = wakeRows.centre[i] + (trailLaneX(trail, age) + side * WAKE_GAP) * width;
+            laneAt(trail, age);
+            xs[i] = wakeRows.centre[i] + (scratch[LANE] + side * WAKE_GAP) * width;
             ys[i] = wakeRows.y[i];
             ws[i] = width;
         }
-        strokeRuns(ctx, WAKE_POINTS, opacity * WAKE_ALPHA, wakeFade, WAKE_PASSES);
+        strokeRuns(ctx, WAKE_POINTS, opacity * WAKE_ALPHA, true, WAKE_PASSES);
     }
 }
 
@@ -299,15 +328,17 @@ function drawAirflow(
         for (let i = 0; i < STREAK_POINTS; i++) {
             const k = i / (STREAK_POINTS - 1);
             const age = a0 + k * length * STREAK_SPAN;
-            const x = laneX + (trailLaneX(trail, age) - laneX) * STREAK_LAG;
+            laneAt(trail, age);
+            const x = laneX + (scratch[LANE] - laneX) * STREAK_LAG;
             const open = Math.pow(age / STREAK_SPAN, 0.8);
             streakRowAt(age);
-            xs[i] = row.centre + (x + dx0 + side * STREAK_SPREAD * open) * row.width;
-            ys[i] = row.y - (h0 - 0.4 * open * dh0) * row.width;
-            ws[i] = row.width;
+            const width = scratch[ROW_WIDTH];
+            xs[i] = scratch[ROW_CENTRE] + (x + dx0 + side * STREAK_SPREAD * open) * width;
+            ys[i] = scratch[ROW_Y] - (h0 - 0.4 * open * dh0) * width;
+            ws[i] = width;
         }
         const strength = opacity * STREAK_STRENGTH * 0.85 * Math.sqrt(Math.sin(Math.PI * head));
-        strokeRuns(ctx, STREAK_POINTS, strength, streakFade, passes);
+        strokeRuns(ctx, STREAK_POINTS, strength, false, passes);
     }
 }
 
@@ -333,8 +364,10 @@ export function drawShipTrails(
     ensureRows(g);
     ctx.globalCompositeOperation = 'lighter';
     ctx.lineCap = 'round';
+    ctx.scale(1 / SUB, 1 / SUB);
     drawWake(ctx, trail, opacity);
     drawAirflow(ctx, trail, speed, laneX, box, u, opacity);
+    ctx.scale(SUB, SUB);
     ctx.globalAlpha = alpha;
     ctx.lineCap = cap;
     ctx.globalCompositeOperation = op;

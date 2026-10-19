@@ -2,11 +2,13 @@ import { describe, expect, it } from 'vitest';
 import {
     advanceTrail,
     createShipTrail,
+    drawShipTrails,
     LAG_MAX_AGE,
     LAG_POINTS,
     lagTau,
     streakLength,
     streakPairs,
+    SUB,
     trailLaneX,
 } from '../shipTrails';
 import { MAX_SPEED, START_SPEED } from '../../../utils/arcade/constants';
@@ -119,5 +121,55 @@ describe('trail track rows', () => {
                 }
             }
         }
+    });
+});
+
+describe('drawShipTrails', () => {
+    /** Draws a sliding ship's trails at top speed into a recorder; returns every number handed
+     *  to `moveTo`, `lineTo` and `lineWidth`, the scale they were drawn under, and the
+     *  transform's state afterwards. */
+    function record() {
+        const numbers: number[] = [];
+        const scales: number[] = [];
+        let scale = 1;
+        const ctx = {
+            globalAlpha: 1,
+            lineCap: 'butt',
+            globalCompositeOperation: 'source-over',
+            strokeStyle: '',
+            set lineWidth(v: number) {
+                numbers.push(v);
+                scales.push(scale);
+            },
+            scale: (x: number) => (scale *= x),
+            beginPath() {},
+            stroke() {},
+            moveTo: (x: number, y: number) => numbers.push(x, y) && scales.push(scale),
+            lineTo: (x: number, y: number) => numbers.push(x, y) && scales.push(scale),
+        } as unknown as CanvasRenderingContext2D;
+        const g = sceneGeometry(1280, 720);
+        const trail = createShipTrail();
+        for (let i = 0; i < 30; i++) advanceTrail(trail, FRAME, i / 30);
+        const box = { x: 640, y: 600, halfWidth: 60, top: -20, bottom: 15, baseX: 640, baseY: 680 };
+        drawShipTrails(ctx, g, trail, MAX_SPEED, 1, box, 300, 1);
+        return { numbers, scales, after: scale, ctx };
+    }
+
+    it('hands the canvas whole numbers of 1/SUB px, so no call boxes a fraction', () => {
+        const { numbers, scales } = record();
+        expect(numbers.length).toBeGreaterThan(100);
+        expect(numbers.every(Number.isInteger)).toBe(true);
+        expect(scales.every((s) => s === 1 / SUB)).toBe(true);
+        // Points are px × SUB, not px: on screen once scaled back.
+        expect(Math.max(...numbers) / SUB).toBeLessThan(2 * 1280);
+        expect(Math.max(...numbers)).toBeGreaterThan(100 * SUB);
+    });
+
+    it('leaves the transform and drawing state as it found them', () => {
+        const { after, ctx } = record();
+        expect(after).toBe(1);
+        expect(ctx.globalAlpha).toBe(1);
+        expect(ctx.lineCap).toBe('butt');
+        expect(ctx.globalCompositeOperation).toBe('source-over');
     });
 });
