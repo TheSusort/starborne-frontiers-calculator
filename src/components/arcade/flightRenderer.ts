@@ -57,6 +57,13 @@ import {
     laneWedge,
     SpeedLinePool,
 } from './speedLines';
+import {
+    advanceExplosion,
+    createExplosion,
+    drawExplosion,
+    Explosion,
+    startExplosion,
+} from './explosion';
 import { advanceTrail, createShipTrail, drawShipTrails, ShipBox, ShipTrail } from './shipTrails';
 import type { NeonAccent } from './ships/factionTint';
 import { cachedPortrait } from './ships/portraitSprite';
@@ -136,6 +143,9 @@ export interface FlightView {
     /** The canvas's device pixel ratio, as its owner set the transform; 0 reads it back from
      *  the canvas size. */
     dpr: number;
+    /** Set by `explodeShip`: the ship is gone and its explosion plays where it was. */
+    dying: boolean;
+    explosion: Explosion;
 }
 
 /** Lane wedge used before the first frame has measured the screen. */
@@ -163,8 +173,26 @@ export function createFlightView(
         trail: reducedMotion ? null : createShipTrail(),
         trailTravel: 0,
         dpr: 0,
+        dying: false,
+        explosion: createExplosion(),
     };
 }
+
+/** Ends the ship: from the next frame it is not drawn and explodes where it was (a short flash
+ *  under reduced motion); `view.explosion.elapsed` times the death sequence. */
+export function explodeShip(view: FlightView, reducedMotion: boolean): void {
+    view.dying = true;
+    view.explosion.started = false;
+    view.explosion.elapsed = 0;
+    view.explosion.reducedMotion = reducedMotion;
+}
+
+/** How long the barriers already at or past the ship (the one it hit among them) take to
+ *  vanish once it has exploded, so the explosion is not hidden behind the barrier it hit. */
+const WRECK_FADE_SECONDS = 0.3;
+
+/** How long the ship's trails take to fade once it has exploded. */
+const TRAIL_DEATH_FADE_SECONDS = 0.25;
 
 /** Scrolls the grid and the speed lines and ages the ship's trail by world travel, so all hold
  *  still while the game does not step (paused, countdown, duel). */
@@ -235,10 +263,11 @@ function drawObstacle(
     ctx: CanvasRenderingContext2D,
     g: SceneGeometry,
     o: Obstacle,
-    timeMs: number
+    timeMs: number,
+    fade: number
 ): void {
     const p = project(g, laneOffset(o.lane), o.z);
-    ctx.globalAlpha = Math.min(1, Math.max(0, (SPAWN_Z - o.z) / FADE_IN_UNITS));
+    ctx.globalAlpha = fade * Math.min(1, Math.max(0, (SPAWN_Z - o.z) / FADE_IN_UNITS));
     drawBarrier(ctx, o.kind, p.x, p.y, p.width, p.scale, barrierPulse(timeMs, o.id));
     ctx.globalAlpha = 1;
 }
@@ -578,23 +607,36 @@ export function renderFlight(
         ...game.checkpoints.filter((c) => c.z > 0).map((c) => ({ z: c.z, checkpoint: c })),
     ];
     items.sort((a, b) => b.z - a.z);
+    const wreckFade = Math.max(0, 1 - view.explosion.elapsed / WRECK_FADE_SECONDS);
     const drawItem = (item: (typeof items)[number]) => {
-        if ('obstacle' in item) drawObstacle(ctx, g, item.obstacle, timeMs);
-        else if ('pickup' in item) drawPickup(ctx, g, item.pickup, timeMs, dpr);
+        if ('obstacle' in item) {
+            const o = item.obstacle;
+            drawObstacle(ctx, g, o, timeMs, view.dying && o.z <= 0 ? wreckFade : 1);
+        } else if ('pickup' in item) drawPickup(ctx, g, item.pickup, timeMs, dpr);
         else drawCheckpoint(ctx, g, item.checkpoint, view.gateArt.get(item.checkpoint.id));
     };
     // Items already past the player are nearer the camera, so they draw over it.
     for (const item of items) if (item.z >= 0) drawItem(item);
     const ship = shipAt;
     placeShip(ship, g, game, view);
+    const u = laneWidthAtPlayer(g);
+    const boom = view.explosion;
+    if (view.dying) {
+        if (!boom.started) {
+            startExplosion(boom, ship.x, ship.y, u, view.playerX, boom.reducedMotion, Math.random);
+        } else {
+            advanceExplosion(boom, dt);
+        }
+    }
     if (view.trail) {
         const seconds = game.speed > 0 ? view.trailTravel / game.speed : 0;
         advanceTrail(view.trail, seconds, view.playerX);
-        const u = laneWidthAtPlayer(g);
         const e = ship.intro;
-        drawShipTrails(ctx, g, view.trail, game.speed, view.playerX, ship, u, e * e);
+        const fade = view.dying ? Math.max(0, 1 - boom.elapsed / TRAIL_DEATH_FADE_SECONDS) : 1;
+        drawShipTrails(ctx, g, view.trail, game.speed, view.playerX, ship, u, e * e * fade);
     }
     view.trailTravel = 0;
-    drawPlayer(ctx, ship, game, view, timeMs, dpr);
+    if (!view.dying) drawPlayer(ctx, ship, game, view, timeMs, dpr);
     for (const item of items) if (item.z < 0) drawItem(item);
+    if (view.dying) drawExplosion(ctx, g, boom, w, h);
 }

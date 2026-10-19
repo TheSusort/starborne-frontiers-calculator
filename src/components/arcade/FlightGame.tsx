@@ -22,6 +22,7 @@ import type { Ship } from '../../types/ship';
 import {
     advanceView,
     createFlightView,
+    explodeShip,
     FlightView,
     GateArt,
     INTRO_SECONDS,
@@ -31,6 +32,9 @@ import { runWhenIdle, whenIdle } from './idle';
 import { isSelectDropdownOpen, keyToAction, swipeToAction } from './flightInput';
 import { readLocalBest, writeLocalBest } from './localBest';
 import { GameOverPanel } from './GameOverPanel';
+import { YouDiedOverlay } from './YouDiedOverlay';
+import { canSkipDeath, deathStage } from './deathSequence';
+import { slowMotion } from './explosion';
 import { useArcadeSubmission, SubmissionStatus } from './useArcadeSubmission';
 import { ArcadeUsernameModal } from './ArcadeUsernameModal';
 import { ArcadeLeaderboard } from './ArcadeLeaderboard';
@@ -60,7 +64,8 @@ import {
     setArcadePins,
 } from './ships/arcadeSprites';
 
-type Phase = 'select' | 'intro' | 'running' | 'paused' | 'countdown' | 'duel' | 'over';
+/** `'dying'`: the run has ended and its explosion and "YOU DIED" screen play before `'over'`. */
+type Phase = 'select' | 'intro' | 'running' | 'paused' | 'countdown' | 'duel' | 'dying' | 'over';
 
 const COUNTDOWN_SECONDS = 3;
 /** A long frame (tab switch, GC pause) is clamped so the game never jumps ahead. */
@@ -222,6 +227,9 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
     const [localBest, setLocalBest] = useState(readLocalBest);
     const [previousBest, setPreviousBest] = useState(0);
     const [duel, setDuel] = useState<DuelState | null>(null);
+    /** Whether the dying run shows the "YOU DIED" screen yet (see `deathStage`). */
+    const [youDied, setYouDied] = useState(false);
+    const youDiedRef = useRef(false);
     const { user } = useAuth();
     const submission = useArcadeSubmission(result);
 
@@ -395,9 +403,9 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
         }
     }, [reducedMotion]);
 
-    // Heavy idle work (model parses) waits while the ship is flying.
+    // Heavy idle work (model parses) waits while the ship is flying or exploding.
     useEffect(() => {
-        runWhenIdle.hold(phase === 'intro' || phase === 'running');
+        runWhenIdle.hold(phase === 'intro' || phase === 'running' || phase === 'dying');
     }, [phase]);
 
     /** Starts a fresh run with the flown ship and duel setting already in the refs. Opponents
@@ -419,6 +427,8 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
         refreshPins();
         inputsRef.current = [];
         setResult(null);
+        youDiedRef.current = false;
+        setYouDied(false);
         setHud({ score: 0, credits: 0, shield: false, magnet: 0 });
         setPhase('running');
     }, [setPhase, prepareNextOpponents, keyOf, refreshPins]);
@@ -442,12 +452,23 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
         [ships, getGearPiece, restart, requestFlownFrames, keyOf, refreshPins]
     );
 
+    /** Ends the run: the result is recorded and submitted now, while the ship explodes and the
+     *  death screen plays before the game-over panel shows it. */
     const finishRun = useCallback(() => {
         const r = runResult(gameRef.current);
         setResult(r);
         setPreviousBest(readLocalBest());
         setLocalBest(writeLocalBest(r.score));
-        setPhase('over');
+        explodeShip(viewRef.current, reducedMotionRef.current);
+        youDiedRef.current = false;
+        setYouDied(false);
+        setPhase('dying');
+    }, [setPhase]);
+
+    /** Skips the rest of the death sequence to the game-over panel. */
+    const skipDeath = useCallback(() => {
+        if (phaseRef.current !== 'dying') return;
+        if (canSkipDeath(viewRef.current.explosion.elapsed)) setPhase('over');
     }, [setPhase]);
 
     /** A duel side: the official-angle render facing `facing` if it is ready, else the portrait.
@@ -689,6 +710,25 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
                         magnet: game.player.magnetTime,
                     });
                 }
+            } else if (phaseRef.current === 'dying') {
+                acc = 0;
+                // The world slows to a stop around the explosion. Only what is drawn moves: the
+                // run's result was taken at the crash.
+                const reduced = view.explosion.reducedMotion;
+                const elapsed = view.explosion.elapsed;
+                const travel = game.speed * dt * slowMotion(elapsed, reduced);
+                if (travel > 0) {
+                    for (const o of game.obstacles) o.z -= travel;
+                    for (const p of game.pickups) p.z -= travel;
+                    for (const c of game.checkpoints) c.z -= travel;
+                    advanceView(view, travel);
+                }
+                const stage = deathStage(elapsed, reduced);
+                if (stage !== 'explosion' && !youDiedRef.current) {
+                    youDiedRef.current = true;
+                    setYouDied(true);
+                }
+                if (stage === 'panel') setPhase('over');
             } else {
                 acc = 0;
             }
@@ -748,6 +788,13 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
                 return;
             }
             const p = phaseRef.current;
+            if (p === 'dying') {
+                if (e.key === ' ' || e.key === 'Enter') {
+                    e.preventDefault();
+                    if (!e.repeat) skipDeath();
+                }
+                return;
+            }
             if (p === 'over' || p === 'select') return;
             if (e.key === 'p' || e.key === 'P') {
                 if (!e.repeat) togglePause();
@@ -765,7 +812,7 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
         // handler can change the status.
         window.addEventListener('keydown', onKey, true);
         return () => window.removeEventListener('keydown', onKey, true);
-    }, [onClose, resume, togglePause]);
+    }, [onClose, resume, togglePause, skipDeath]);
 
     const onPointerDown = (e: React.PointerEvent) => {
         e.currentTarget.setPointerCapture(e.pointerId);
@@ -778,6 +825,10 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
         const start = swipeStartRef.current;
         swipeStartRef.current = null;
         if (!start) return;
+        if (phaseRef.current === 'dying') {
+            skipDeath();
+            return;
+        }
         if (phaseRef.current === 'paused') {
             resume();
             return;
@@ -818,11 +869,14 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
                             MAGNET {Math.ceil(hud.magnet)}
                         </span>
                     )}
-                    {phase !== 'over' && phase !== 'select' && phase !== 'duel' && (
-                        <Button variant="secondary" size="sm" onClick={togglePause}>
-                            {phase === 'paused' ? 'Resume' : 'Pause'}
-                        </Button>
-                    )}
+                    {phase !== 'over' &&
+                        phase !== 'select' &&
+                        phase !== 'duel' &&
+                        phase !== 'dying' && (
+                            <Button variant="secondary" size="sm" onClick={togglePause}>
+                                {phase === 'paused' ? 'Resume' : 'Pause'}
+                            </Button>
+                        )}
                     <Button variant="secondary" size="sm" onClick={onClose}>
                         Quit
                     </Button>
@@ -861,6 +915,7 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
                     onDone={onDuelDone}
                 />
             )}
+            {phase === 'dying' && youDied && <YouDiedOverlay />}
             {phase === 'over' && result && (
                 <GameOverPanel
                     result={result}

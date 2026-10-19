@@ -20,6 +20,7 @@ export const UNRELEASED_CHANGES: string[] = [
     "Arcade: your ship's magenta accent lighting now glows brighter in flight.",
     'Arcade: your ship now leaves a neon wake and air-flow streaks.',
     'Arcade: duel results now continue on their own after a moment.',
+    'Arcade: your ship now explodes, followed by a YOU DIED screen.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

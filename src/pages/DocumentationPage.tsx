@@ -2560,7 +2560,8 @@ const DocumentationPage: React.FC = () => {
                                     shield or a magnet). Press Space or click to skip the replay.
                                     The result shows briefly (Space or a click moves on at once),
                                     then the run resumes after a 3-2-1 countdown. A duel that ends
-                                    the run closes as soon as its replay does.
+                                    the run closes as soon as its replay does, and your ship
+                                    explodes.
                                 </p>
                             </div>
                             <div className="card">
@@ -2592,7 +2593,9 @@ const DocumentationPage: React.FC = () => {
                                     credits and power-ups at its height, but you still collect them
                                     just after take-off and as you land; an active magnet pulls in
                                     credits at any height. Your personal best is saved in this
-                                    browser.
+                                    browser. When a run ends your ship explodes and a YOU DIED
+                                    screen shows before your score; press Space, Enter or click to
+                                    go straight to the score.
                                 </p>
                             </div>
                             <div className="card">
