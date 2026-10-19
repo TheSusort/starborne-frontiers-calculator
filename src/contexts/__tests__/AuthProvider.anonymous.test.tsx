@@ -16,8 +16,12 @@ vi.mock('../../services/auth/supabaseAuth', () => ({
     },
 }));
 const usersSelect = vi.fn();
+const getSession = vi.fn();
 vi.mock('../../config/supabase', () => ({
-    supabase: { from: () => ({ select: () => ({ eq: () => ({ single: usersSelect }) }) }) },
+    supabase: {
+        from: () => ({ select: () => ({ eq: () => ({ single: usersSelect }) }) }),
+        auth: { getSession: () => getSession() },
+    },
 }));
 const heartbeat = vi.fn();
 vi.mock('../../services/heartbeatService', () => ({
@@ -53,6 +57,8 @@ describe('AuthProvider with an anonymous session', () => {
         heartbeat.mockClear();
         migrate.mockClear();
         usersSelect.mockReset();
+        getSession.mockReset();
+        getSession.mockResolvedValue({ data: { session: null } });
     });
 
     afterEach(() => {
@@ -102,6 +108,33 @@ describe('AuthProvider with an anonymous session', () => {
         );
         await waitFor(() => expect(screen.getByText('user=u1 guest=none')).toBeTruthy());
         await expect(guestSignIn()).rejects.toThrow();
+        expect(signInAnonymously).not.toHaveBeenCalled();
+    });
+
+    it('refuses a guest sign-in when the stored session is an account the UI has not loaded yet', async () => {
+        getSession.mockResolvedValue({
+            data: { session: { user: { id: 'u1', is_anonymous: false } } },
+        });
+        signInAnonymously.mockResolvedValue({ id: 'g2' });
+        render(
+            <AuthProvider>
+                <Probe />
+            </AuthProvider>
+        );
+        await expect(guestSignIn()).rejects.toThrow();
+        expect(signInAnonymously).not.toHaveBeenCalled();
+    });
+
+    it('reuses an existing anonymous session instead of minting another', async () => {
+        getSession.mockResolvedValue({
+            data: { session: { user: { id: 'g9', is_anonymous: true } } },
+        });
+        render(
+            <AuthProvider>
+                <Probe />
+            </AuthProvider>
+        );
+        await expect(guestSignIn()).resolves.toBe('g9');
         expect(signInAnonymously).not.toHaveBeenCalled();
     });
 });

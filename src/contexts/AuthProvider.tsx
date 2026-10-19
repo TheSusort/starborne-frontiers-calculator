@@ -156,9 +156,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
     };
 
-    // An anonymous sign-in replaces the current session, so it never runs over an account.
+    // An anonymous sign-in replaces the current session, so it never runs over an account. The
+    // stored session is authoritative: `user` is still null while auth is loading.
     const signInAsGuest = async () => {
         if (user) throw new Error('An account is signed in; a guest session would replace it');
+        const { data } = await supabase.auth.getSession();
+        const existing = data.session?.user;
+        if (existing && !existing.is_anonymous) {
+            throw new Error('An account is signed in; a guest session would replace it');
+        }
+        if (existing) {
+            setGuestUserId(existing.id);
+            return existing.id;
+        }
         const guest = await authService.signInAnonymously();
         setGuestUserId(guest.id);
         return guest.id;

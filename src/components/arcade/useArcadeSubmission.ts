@@ -34,11 +34,13 @@ export type SubmissionStatus =
  * UI updates are dropped. The run's ship is sent with the score.
  */
 export function useArcadeSubmission(finished: FinishedRun | null) {
-    const { user, guestUserId, signInAsGuest } = useAuth();
+    const { user, loading, guestUserId, signInAsGuest } = useAuth();
     const userId = user?.id ?? null;
     const identity = userId ?? guestUserId;
     const result = finished?.result ?? null;
-    const [status, setStatus] = useState<SubmissionStatus>(identity ? 'checking' : 'guest-invite');
+    const [status, setStatus] = useState<SubmissionStatus>(
+        loading || identity ? 'checking' : 'guest-invite'
+    );
     const [rank, setRank] = useState<number | null>(null);
     const [leaderboardVersion, setLeaderboardVersion] = useState(0);
     const [profileAttempt, setProfileAttempt] = useState(0);
@@ -79,12 +81,17 @@ export function useArcadeSubmission(finished: FinishedRun | null) {
                 setLeaderboardVersion((v) => v + 1);
                 return 'saved';
             } catch (error) {
+                // A reply that lands after Skip leaves the dismissed modal closed.
                 if (error instanceof GuestNameTakenError) {
-                    if (liveResultRef.current === result) setStatus('needs-guest-name');
+                    if (liveResultRef.current === result && statusRef.current !== 'skipped') {
+                        setStatus('needs-guest-name');
+                    }
                     return 'taken';
                 }
                 if (error instanceof GuestNameRequiredError) {
-                    if (liveResultRef.current === result) setStatus('needs-guest-name');
+                    if (liveResultRef.current === result && statusRef.current !== 'skipped') {
+                        setStatus('needs-guest-name');
+                    }
                     return 'failed';
                 }
                 console.error('Error submitting arcade score:', error);
@@ -99,7 +106,18 @@ export function useArcadeSubmission(finished: FinishedRun | null) {
     );
 
     useEffect(() => {
+        if (!guestUserId) signedInGuestRef.current = null;
+    }, [guestUserId]);
+
+    useEffect(() => {
+        // While `saveGuestName` is signing in and submitting, an identity change is not a new check.
+        if (joiningRef.current) return;
         setRank(null);
+        // A still-resolving session is not a missing one: no guest invite until auth settles.
+        if (loading) {
+            setStatus('checking');
+            return;
+        }
         if (!result) {
             setStatus(identity ? 'checking' : 'guest-invite');
             return;
@@ -108,7 +126,6 @@ export function useArcadeSubmission(finished: FinishedRun | null) {
             setStatus('guest-invite');
             return;
         }
-        if (joiningRef.current) return;
         let cancelled = false;
         setStatus('checking');
         const check: Promise<'ready' | 'needs-username' | 'needs-guest-name'> = userId
@@ -131,7 +148,7 @@ export function useArcadeSubmission(finished: FinishedRun | null) {
         return () => {
             cancelled = true;
         };
-    }, [result, userId, identity, submit, profileAttempt]);
+    }, [result, loading, userId, identity, submit, profileAttempt]);
 
     // A failed profile load re-runs the profile check, so a username-less account still gets the prompt.
     const retry = useCallback(() => {

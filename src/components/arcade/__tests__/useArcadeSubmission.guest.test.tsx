@@ -5,6 +5,7 @@ import { GuestNameTakenError } from '../../../services/arcadeService';
 
 const auth = {
     user: null as null | { id: string },
+    loading: false,
     guestUserId: null as string | null,
     signInAsGuest: vi.fn(),
 };
@@ -28,6 +29,7 @@ const finished = { result: { score: 10, credits: 1, distance: 5 } as never, ship
 describe('useArcadeSubmission (guests)', () => {
     beforeEach(() => {
         auth.user = null;
+        auth.loading = false;
         auth.guestUserId = null;
         auth.signInAsGuest.mockReset();
         submit.mockReset();
@@ -103,5 +105,55 @@ describe('useArcadeSubmission (guests)', () => {
         });
         expect(auth.signInAsGuest).not.toHaveBeenCalled();
         expect(submit).not.toHaveBeenCalled();
+    });
+
+    it('reports checking, not the guest invite, while auth is still loading', async () => {
+        auth.loading = true;
+        const { result, rerender } = renderHook(() => useArcadeSubmission(finished));
+        expect(result.current.status).toBe('checking');
+        auth.loading = false;
+        rerender();
+        await waitFor(() => expect(result.current.status).toBe('guest-invite'));
+    });
+
+    it('does not reopen the modal when a taken-name reply lands after Skip', async () => {
+        const { result } = renderHook(() => useArcadeSubmission(finished));
+        act(() => result.current.joinAsGuest());
+        auth.signInAsGuest.mockResolvedValue('g1');
+        let reject: (e: unknown) => void = () => {};
+        submit.mockReturnValue(new Promise((_, r) => (reject = r)));
+        let pending: Promise<string> | undefined;
+        act(() => {
+            pending = result.current.saveGuestName('Ace');
+        });
+        await waitFor(() => expect(submit).toHaveBeenCalled());
+        act(() => result.current.skip());
+        await act(async () => {
+            reject(new GuestNameTakenError('guest_name_taken'));
+            await pending;
+        });
+        expect(result.current.status).toBe('skipped');
+    });
+
+    it('is a no-op for the identity change a join causes', async () => {
+        const { result, rerender } = renderHook(() => useArcadeSubmission(finished));
+        act(() => result.current.joinAsGuest());
+        auth.signInAsGuest.mockResolvedValue('g1');
+        let resolve: (v: unknown) => void = () => {};
+        submit.mockReturnValue(new Promise((r) => (resolve = r)));
+        let pending: Promise<string> | undefined;
+        act(() => {
+            pending = result.current.saveGuestName('Ace');
+        });
+        await waitFor(() => expect(submit).toHaveBeenCalledTimes(1));
+        auth.guestUserId = 'g1';
+        rerender();
+        await act(async () => {
+            resolve({ bestScore: 10, rank: 3 });
+            await pending;
+        });
+        expect(submit).toHaveBeenCalledTimes(1);
+        expect(ownName).not.toHaveBeenCalled();
+        expect(result.current.status).toBe('submitted');
     });
 });
