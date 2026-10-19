@@ -2546,15 +2546,15 @@ const DocumentationPage: React.FC = () => {
                             <div className="card">
                                 <h4 className="font-semibold text-primary mb-2">Duels</h4>
                                 <p className="text-theme-text">
-                                    With at least two other ships in your fleet, the first
-                                    checkpoint appears 200 to 400 metres in, then one every 300 to
-                                    700 metres. Two of the three lanes hold a gate with a random
-                                    ship from your hangar; the third lane is free and skips the
-                                    duel. Flying through a gate starts a one-on-one simulator duel
-                                    between your ship and that opponent, with full gear and
-                                    engineering on both sides. The banner above the gates shows what
-                                    is at stake: <strong>Win or die</strong> (a win adds 500 points,
-                                    a loss ends the run unless a shield absorbs it),{' '}
+                                    With at least two other ships with gear equipped in your fleet,
+                                    the first checkpoint appears 200 to 400 metres in, then one
+                                    every 300 to 700 metres. Two of the three lanes hold a gate with
+                                    a random geared ship from your hangar; the third lane is free
+                                    and skips the duel. Flying through a gate starts a one-on-one
+                                    simulator duel between your ship and that opponent, with full
+                                    gear and engineering on both sides. The banner above the gates
+                                    shows what is at stake: <strong>Win or die</strong> (a win adds
+                                    500 points, a loss ends the run unless a shield absorbs it),{' '}
                                     <strong>Credits on the line</strong> (win 25 credits, or lose a
                                     quarter of yours) or <strong>Power-up</strong> (a win grants a
                                     shield or a magnet). Press Space or click to skip the replay;

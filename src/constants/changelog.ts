@@ -16,6 +16,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Arcade: jumps now collect pickups right after take-off and when landing.',
     'Arcade: speed now keeps climbing in long runs, to a higher top speed.',
     'Arcade: your shield is now a subtle energy bubble around the ship.',
+    'Arcade: duel opponents are now only ships with gear equipped.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

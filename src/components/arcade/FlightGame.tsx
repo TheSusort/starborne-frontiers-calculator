@@ -35,7 +35,7 @@ import { useArcadeSubmission, SubmissionStatus } from './useArcadeSubmission';
 import { ArcadeUsernameModal } from './ArcadeUsernameModal';
 import { ArcadeLeaderboard } from './ArcadeLeaderboard';
 import type { FlightOrigin } from './flightEvents';
-import { canDuel, pickOpponents } from './duel/pickOpponents';
+import { canDuel, isDuelCandidate, pickOpponents } from './duel/pickOpponents';
 import { createSpeedLines } from './speedLines';
 import { createShipTrail, SHIP_TRAILS_ENABLED } from './shipTrails';
 import type { DuelResult } from './duel/runDuel';
@@ -172,7 +172,7 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
     const [initial] = useState(() => {
         const lastShipId = readLastShipId();
         const flown = startOrigin ? (ships.find((s) => s.id === lastShipId) ?? null) : null;
-        const duels = canDuel(ships, flown?.id ?? null);
+        const duels = canDuel(ships, flown?.id ?? null, getGearPiece);
         const phase: Phase = startOrigin ? 'intro' : ships.length > 0 ? 'select' : 'running';
         return {
             lastShipId,
@@ -327,10 +327,14 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
      *  under `signal`. */
     const prepareNextOpponents = useCallback(
         (flown: Ship | null = flownRef.current, signal: AbortSignal = sessionSignal()) => {
-            const pick =
-                flown && canDuel(shipsRef.current, flown.id)
-                    ? pickOpponents(shipsRef.current, flown.id, Math.random)
-                    : null;
+            const pick = flown
+                ? pickOpponents(
+                      shipsRef.current,
+                      flown.id,
+                      Math.random,
+                      statsDepsRef.current.getGearPiece
+                  )
+                : null;
             nextOpponentsRef.current = pick;
             nextOpponentsForRef.current = flown?.id ?? null;
             pick?.forEach((ship) => warmGateArt(ship, signal));
@@ -430,12 +434,12 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
                 focusRef.current = null;
             }
             flownRef.current = ship;
-            duelsRef.current = canDuel(ships, ship.id);
+            duelsRef.current = canDuel(ships, ship.id, getGearPiece);
             refreshPins();
             requestFlownFrames(ship);
             restart();
         },
-        [ships, restart, requestFlownFrames, keyOf, refreshPins]
+        [ships, getGearPiece, restart, requestFlownFrames, keyOf, refreshPins]
     );
 
     const finishRun = useCallback(() => {
@@ -577,14 +581,19 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
         const passed = new WeakSet<object>();
 
         /** The pre-picked pair, re-resolved against the current fleet; null if a ship has left
-         *  the fleet or is now the flown one. */
+         *  the fleet, is now the flown one or is no longer a duel candidate. */
         const takePrepared = (flownId: string): [Ship, Ship] | null => {
             const prepared = nextOpponentsRef.current;
             nextOpponentsRef.current = null;
             nextOpponentsForRef.current = null;
             if (!prepared) return null;
             const current = prepared.map((p) =>
-                shipsRef.current.find((s) => s.id === p.id && s.id !== flownId)
+                shipsRef.current.find(
+                    (s) =>
+                        s.id === p.id &&
+                        s.id !== flownId &&
+                        isDuelCandidate(s, statsDepsRef.current.getGearPiece)
+                )
             );
             return current[0] && current[1] ? [current[0], current[1]] : null;
         };
@@ -636,7 +645,12 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
                     if (view.gateArt.has(c.id) || c.resolved || !flown) continue;
                     const pick =
                         takePrepared(flown.id) ??
-                        pickOpponents(shipsRef.current, flown.id, Math.random);
+                        pickOpponents(
+                            shipsRef.current,
+                            flown.id,
+                            Math.random,
+                            statsDepsRef.current.getGearPiece
+                        );
                     if (!pick) {
                         // No opponents to show: the engine ignores a resolved checkpoint.
                         c.resolved = true;
