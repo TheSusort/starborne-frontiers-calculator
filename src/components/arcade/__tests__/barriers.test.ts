@@ -2,11 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { duckDepth, HIGH_GAP } from '../barriers';
 import { blocks } from '../../../utils/arcade/collision';
 import { SHIP_RIDE_HEIGHT } from '../../../utils/arcade/constants';
+import { NEON_BOTTOM, NEON_TOP, SHIP_UNIT } from '../flightRenderer';
 
 /** Visible extents above and below the ship's centre, in lane widths at the player row: the
- *  neon fighter's outline, and the level frames of rendered sprites of a few builds. */
+ *  neon fighter's outline, and synthetic level frames of sprites of a few builds. */
 const SHIPS = {
-    neon: { top: 0.128, bottom: 0.096 },
+    neon: { top: -NEON_TOP * SHIP_UNIT, bottom: NEON_BOTTOM * SHIP_UNIT },
     flat: { top: 0.07, bottom: 0.06 },
     typical: { top: 0.12, bottom: 0.085 },
     tall: { top: 0.15, bottom: 0.11 },

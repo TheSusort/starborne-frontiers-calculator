@@ -100,7 +100,7 @@ const SPRITE_FOOTPRINT = 4.4;
  *  flattens as it dips. A 3D sprite is not squashed: it pitches instead (see `actionPitchDeg`). */
 const DUCK_SQUASH = 0.55;
 /** The ship's unit (see `neonFighter`) on the ground, in lane widths at the player row. */
-const SHIP_UNIT = 0.16;
+export const SHIP_UNIT = 0.16;
 
 export type PlayerFrames = FrameSweeps<HTMLCanvasElement>;
 
@@ -418,8 +418,8 @@ const shieldAt: ShieldPlacement = { x: 0, y: 0, rx: 0, ry: 0, dpr: 1, bank: 0 };
 
 /** The neon fighter's outline from its centre, in ship units (see `neonFighter`). */
 const NEON_HALF_WIDTH = 2.2;
-const NEON_TOP = -0.8;
-const NEON_BOTTOM = 0.6;
+export const NEON_TOP = -0.8;
+export const NEON_BOTTOM = 0.6;
 
 /** Where the player ship is drawn this frame: its `ShipBox`, its ship unit `s` (see
  *  `neonFighter`), the neon fighter's duck squash and the intro's progress. */
