@@ -8,6 +8,7 @@ export const CURRENT_VERSION = '1.80.0';
 // nothing. Do it by hand only if that script cannot.
 export const UNRELEASED_CHANGES: string[] = [
     'Arcade: the leaderboard now shows which ship each best score used.',
+    'Arcade: pilots without a fleet now fly and duel any ship, bare.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

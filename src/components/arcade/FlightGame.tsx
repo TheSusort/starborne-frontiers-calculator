@@ -1,4 +1,4 @@
-import React, { Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Volume2, VolumeX, SkipForward } from 'lucide-react';
 import { Button } from '../ui/Button';
 import FallbackErrorBoundary from '../error/FallbackErrorBoundary';
@@ -13,6 +13,7 @@ import { useAuth } from '../../contexts/AuthProvider';
 import { useShips } from '../../contexts/ShipsContext';
 import { useInventory } from '../../contexts/InventoryProvider';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';
+import { useShipsData } from '../../hooks/useShipsData';
 import type { Ship } from '../../types/ship';
 import { getSynthwaveMusic } from '../../utils/music/synthwaveMusic';
 import { useSynthwaveMusic } from '../../utils/music/useSynthwaveMusic';
@@ -39,12 +40,13 @@ import { useArcadeSubmission, SubmissionStatus, type FinishedRun } from './useAr
 import { ArcadeUsernameModal } from './ArcadeUsernameModal';
 import { ArcadeLeaderboard } from './ArcadeLeaderboard';
 import type { FlightOrigin } from './flightEvents';
-import { canDuel, isDuelCandidate, pickOpponents } from './duel/pickOpponents';
+import { anyCandidate, canDuel, gearedCandidate, pickOpponents } from './duel/pickOpponents';
 import { createSpeedLines } from './speedLines';
 import { createShipTrail } from './shipTrails';
 import type { DuelResult } from './duel/runDuel';
 import { DuelSummary, type DuelSide } from './duel/DuelSummary';
 import { factionAccent } from './ships/factionTint';
+import { arcadeFleet } from './ships/arcadeFleet';
 import { loadPortrait } from './ships/portraitSprite';
 import { useShipVisuals } from './ships/useShipVisuals';
 import { readLastShipId, writeLastShipId } from './ships/fleetOrder';
@@ -160,24 +162,46 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
     const reducedMotionRef = useRef(reducedMotion);
     reducedMotionRef.current = reducedMotion;
 
-    const { ships } = useShips();
+    const { loading: authLoading } = useAuth();
+    const { ships: ownedShips, fleetLoaded } = useShips();
+    const { ships: templateShips } = useShipsData();
+    // `fleetLoaded` reads a session still resolving as signed out, so auth must settle too.
+    const ownedLoading = authLoading || !fleetLoaded;
+    const { fleet: ships, bare } = useMemo(
+        () => arcadeFleet(ownedShips, ownedLoading, templateShips),
+        [ownedShips, ownedLoading, templateShips]
+    );
     const { getGearPiece } = useInventory();
     const { getEngineeringStatsForShipType } = useEngineeringStats();
+    // Bare templates fly without engineering.
+    const noEngineering = useCallback(() => undefined, []);
+    const isCandidate = useMemo(
+        () => (bare ? anyCandidate : gearedCandidate(getGearPiece)),
+        [bare, getGearPiece]
+    );
     const visualOf = useShipVisuals();
     // The game loop reads these through refs so a fleet, gear or template update never restarts it.
     const shipsRef = useRef(ships);
     shipsRef.current = ships;
     const visualOfRef = useRef(visualOf);
     visualOfRef.current = visualOf;
-    const statsDepsRef = useRef({ getGearPiece, getEngineeringStatsForShipType });
-    statsDepsRef.current = { getGearPiece, getEngineeringStatsForShipType };
+    const statsDepsRef = useRef({
+        getGearPiece,
+        getEngineeringStatsForShipType: bare ? noEngineering : getEngineeringStatsForShipType,
+        isCandidate,
+    });
+    statsDepsRef.current = {
+        getGearPiece,
+        getEngineeringStatsForShipType: bare ? noEngineering : getEngineeringStatsForShipType,
+        isCandidate,
+    };
     const canvasRef = useRef<HTMLCanvasElement>(null);
     // The background easter egg skips the select screen and flies the last chosen ship, if
     // it is still owned; otherwise a fleet opens on the select screen.
     const [initial] = useState(() => {
         const lastShipId = readLastShipId();
         const flown = startOrigin ? (ships.find((s) => s.id === lastShipId) ?? null) : null;
-        const duels = canDuel(ships, flown?.id ?? null, getGearPiece);
+        const duels = canDuel(ships, flown?.id ?? null, isCandidate);
         const phase: Phase = startOrigin ? 'intro' : ships.length > 0 ? 'select' : 'running';
         return {
             lastShipId,
@@ -350,7 +374,7 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
                       shipsRef.current,
                       flown.id,
                       Math.random,
-                      statsDepsRef.current.getGearPiece
+                      statsDepsRef.current.isCandidate
                   )
                 : null;
             nextOpponentsRef.current = pick;
@@ -407,10 +431,10 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
     useEffect(() => {
         const flown = flownRef.current;
         if (phaseRef.current !== 'intro' || duelsRef.current || !flown) return;
-        if (!canDuel(ships, flown.id, getGearPiece)) return;
+        if (!canDuel(ships, flown.id, isCandidate)) return;
         duelsRef.current = true;
         gameRef.current = createGame(newSeed(), { duels: true });
-    }, [ships, getGearPiece]);
+    }, [ships, isCandidate]);
 
     // Speed lines, the ship's trail and the magnet's motion follow a reduced-motion change.
     useEffect(() => {
@@ -440,7 +464,7 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
         setDuel(null);
         // Re-checked against the current fleet and inventory, which may have loaded since.
         duelsRef.current =
-            !!flown && canDuel(shipsRef.current, flown.id, statsDepsRef.current.getGearPiece);
+            !!flown && canDuel(shipsRef.current, flown.id, statsDepsRef.current.isCandidate);
         gameRef.current = createGame(newSeed(), { duels: duelsRef.current });
         viewRef.current = createFlightView(
             undefined,
@@ -641,10 +665,7 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
             if (!prepared) return null;
             const current = prepared.map((p) =>
                 shipsRef.current.find(
-                    (s) =>
-                        s.id === p.id &&
-                        s.id !== flownId &&
-                        isDuelCandidate(s, statsDepsRef.current.getGearPiece)
+                    (s) => s.id === p.id && s.id !== flownId && statsDepsRef.current.isCandidate(s)
                 )
             );
             return current[0] && current[1] ? [current[0], current[1]] : null;
@@ -701,7 +722,7 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
                             shipsRef.current,
                             flown.id,
                             Math.random,
-                            statsDepsRef.current.getGearPiece
+                            statsDepsRef.current.isCandidate
                         );
                     if (!pick) {
                         // No opponents to show: the engine ignores a resolved checkpoint.

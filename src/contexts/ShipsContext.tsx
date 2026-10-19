@@ -27,6 +27,12 @@ import { useActiveProfile, PROFILE_SWITCH_EVENT } from './ActiveProfileProvider'
 interface ShipsContextType {
     ships: Ship[];
     loading: boolean;
+    /** Whether `ships` is the active profile's fleet: true for a signed-out player (whose fleet
+     *  is local storage) and, for a signed-in profile, once its first fetch has finished,
+     *  failed or not. False in between, when `ships` may be empty only because it has not
+     *  arrived yet. It does not cover auth itself: a session still resolving reads as signed
+     *  out here. */
+    fleetLoaded: boolean;
     error: string | null;
     editingShip: Ship | undefined;
     setEditingShip: (ship: Ship | undefined) => void;
@@ -85,6 +91,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const { addNotification } = useNotification();
     const { activeProfileId, profilesLoading } = useActiveProfile();
     const [isMigrating, setIsMigrating] = useState(false);
+    const [fetchedForProfileId, setFetchedForProfileId] = useState<string | null>(null);
     const [localShips, setLocalShips] = useState<Ship[]>([]);
     // Every writer reads and writes the ships array through this ref instead of the `localShips`
     // render closure. Two writers called back-to-back with no render in between (e.g. one
@@ -229,6 +236,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             setError(error instanceof Error ? error.message : 'Failed to load ships');
         } finally {
             setLoading(false);
+            setFetchedForProfileId(activeProfileId);
         }
     }, [activeProfileId, addNotification, setShips, setStorageShips, isMigrating]);
 
@@ -1058,6 +1066,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             value={{
                 ships: localShips,
                 loading,
+                fleetLoaded: activeProfileId === null || fetchedForProfileId === activeProfileId,
                 error,
                 editingShip,
                 setEditingShip,
