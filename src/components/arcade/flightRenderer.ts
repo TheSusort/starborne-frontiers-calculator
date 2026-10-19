@@ -2,7 +2,8 @@ import {
     createStars,
     createSunCache,
     drawFighterRear,
-    drawGrid,
+    drawGridFan,
+    drawGridLines,
     drawStars,
     drawSunDisc,
     sceneGeometry,
@@ -30,7 +31,13 @@ import {
 } from './projection';
 import type { FlightOrigin } from './flightEvents';
 import { drawNeonFighter } from './neonFighter';
-import { Backdrop, createBackdrop, drawBackdropGround, drawBackdropSky } from './backdrop';
+import {
+    Backdrop,
+    createBackdrop,
+    drawBackdropFan,
+    drawBackdropGround,
+    drawBackdropSky,
+} from './backdrop';
 import { barrierPulse, drawBarrier } from './barriers';
 import {
     drawShieldBack,
@@ -522,7 +529,10 @@ export function renderFlight(
     drawStars(ctx, g, view.stars, timeMs, true);
     drawSunDisc(ctx, g, view.sun, timeMs, true);
     drawBackdropGround(ctx, g, view.backdrop, dpr);
-    drawGrid(ctx, g, view.gridOffset, introGridLayers(g, introProgress(view)));
+    drawGridLines(ctx, g, view.gridOffset);
+    const intro = introProgress(view);
+    if (intro < 1) drawGridFan(ctx, g, introGridLayers(g, intro));
+    else drawBackdropFan(ctx, g, view.backdrop, dpr);
     view.laneWedge = laneWedge(g);
     if (view.speedLines) drawSpeedLines(ctx, g, view.speedLines, game.speed);
 

@@ -38,7 +38,9 @@ describe('backdrop', () => {
     it('covers every device row between the two layers', () => {
         for (const dpr of [1, 1.5, 2, 3]) {
             const g = sceneGeometry(1013, 677);
-            const { sky, ground } = backdropRows(g, dpr);
+            const { sky, ground, fan } = backdropRows(g, dpr);
+            expect(fan[0]).toBeLessThan(g.horizonY * dpr);
+            expect(fan[1]).toBe(Math.round(g.h * dpr));
             expect(sky[0]).toBe(0);
             expect(ground[1]).toBe(Math.round(g.h * dpr));
             expect(ground[0]).toBeLessThan(sky[1]);
