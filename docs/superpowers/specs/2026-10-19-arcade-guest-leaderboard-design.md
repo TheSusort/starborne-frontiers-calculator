@@ -83,7 +83,7 @@ Helper: `public.is_anonymous_session()` → `coalesce((auth.jwt()->>'is_anonymou
   null. Server-only admin RPCs whose bodies are not in the repo are left as they are.
 - **Cleanup:**
   - `public.cleanup_arcade_guests()`, SECURITY DEFINER, deletes anonymous `auth.users` rows
-    when either their score's `updated_at` is older than 90 days, or they are more than 1 day
+    when they are more than 1 day
     old with no `arcade_guest_names` row.
   - The existing `handle_auth_user_delete` trigger and the FK cascades remove the
     `public.users`, name and score rows.
