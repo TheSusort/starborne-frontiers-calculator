@@ -1,16 +1,18 @@
 -- Arcade guests: anyone can join the arcade leaderboard through Supabase anonymous sign-in.
 --
 -- A guest is an anonymous auth user. Guest-ness is read from the JWT claim (is_anonymous) and
--- from auth.users.is_anonymous; it is never stored. The insert_user trigger on auth.users still
--- gives a guest a public.users row (email and username NULL); submit_arcade_score also inserts
--- that row if it is missing, so the foreign keys below hold either way.
+-- from auth.users.is_anonymous; it is never stored. The insert_user trigger on auth.users, when
+-- present, gives a guest a public.users row (email and username NULL); submit_arcade_score inserts
+-- it if missing, so the foreign keys hold either way.
 --
 -- A guest's display name lives in arcade_guest_names, unique among guests (case-insensitive) and
 -- separate from users.username, which stays reserved for accounts. The leaderboard shows
 -- coalesce(username, guest name) and flags guest rows with is_guest.
 --
 -- Guests are shut out of user data: has_profile_access, the users self-update policy and the
--- alt-insert policy all reject an anonymous session.
+-- alt-insert policy all reject an anonymous session. Tables whose write policies do not go through
+-- has_profile_access carry RESTRICTIVE write policies that reject an anonymous session, so a guest
+-- writes only through the SECURITY DEFINER arcade RPCs.
 --
 -- Compatibility with the deployed client:
 --   * submit_arcade_score gains p_guest_name text DEFAULT NULL. The 4-argument function is dropped
@@ -83,6 +85,47 @@ CREATE POLICY "Users can insert alt profiles they own" ON public.users
     AND NOT public.is_anonymous_session()
   );
 
+-- Restrictive policies AND with every permissive policy on the table, including live ones not in
+-- this repo, so a guest cannot INSERT, UPDATE or DELETE these tables through the REST API whatever
+-- the permissive policies say. Reads are untouched: a guest browses public data like anyone else.
+-- Votes are one per auth user, and every anonymous sign-in is a new auth user, so guest votes
+-- would be ballot-stuffing. arcade_scores is written by submit_arcade_score (SECURITY DEFINER,
+-- which bypasses RLS), never directly.
+DO $$
+DECLARE
+  t text;
+BEGIN
+  FOREACH t IN ARRAY ARRAY[
+    'users',
+    'arcade_scores',
+    'encounter_votes',
+    'community_recommendation_votes',
+    'community_recommendations',
+    'encounter_notes',
+    'encounter_formations',
+    'ship_template_proposals',
+    'ship_templates',
+    'user_activity_log',
+    'statistics_snapshots',
+    'system_health_snapshots',
+    'system_alerts'
+  ] LOOP
+    EXECUTE format('DROP POLICY IF EXISTS "No guest inserts" ON public.%I', t);
+    EXECUTE format(
+      'CREATE POLICY "No guest inserts" ON public.%I AS RESTRICTIVE FOR INSERT TO authenticated '
+      'WITH CHECK (NOT public.is_anonymous_session())', t);
+    EXECUTE format('DROP POLICY IF EXISTS "No guest updates" ON public.%I', t);
+    EXECUTE format(
+      'CREATE POLICY "No guest updates" ON public.%I AS RESTRICTIVE FOR UPDATE TO authenticated '
+      'USING (NOT public.is_anonymous_session()) WITH CHECK (NOT public.is_anonymous_session())', t);
+    EXECUTE format('DROP POLICY IF EXISTS "No guest deletes" ON public.%I', t);
+    EXECUTE format(
+      'CREATE POLICY "No guest deletes" ON public.%I AS RESTRICTIVE FOR DELETE TO authenticated '
+      'USING (NOT public.is_anonymous_session())', t);
+  END LOOP;
+END;
+$$;
+
 -- ---------------------------------------------------------------------------------------------
 -- Leaderboard RPCs
 -- ---------------------------------------------------------------------------------------------
@@ -120,9 +163,15 @@ BEGIN
       ) THEN
         RAISE EXCEPTION 'guest_name_taken' USING ERRCODE = '23505';
       END IF;
-      INSERT INTO public.arcade_guest_names (user_id, name)
-      VALUES (uid, guest_name)
-      ON CONFLICT (user_id) DO UPDATE SET name = EXCLUDED.name;
+      -- A concurrent claim of the same name passes the check above and trips the lower(name)
+      -- unique index here.
+      BEGIN
+        INSERT INTO public.arcade_guest_names (user_id, name)
+        VALUES (uid, guest_name)
+        ON CONFLICT (user_id) DO UPDATE SET name = EXCLUDED.name;
+      EXCEPTION WHEN unique_violation THEN
+        RAISE EXCEPTION 'guest_name_taken' USING ERRCODE = '23505';
+      END;
     ELSIF NOT EXISTS (SELECT 1 FROM public.arcade_guest_names WHERE user_id = uid) THEN
       RAISE EXCEPTION 'guest_name_required';
     END IF;
@@ -228,6 +277,7 @@ END;
 $$;
 
 REVOKE ALL ON FUNCTION public.cleanup_arcade_guests() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.cleanup_arcade_guests() TO service_role;
 
 COMMIT;
 
