@@ -9,6 +9,7 @@ export const CURRENT_VERSION = '1.80.0';
 export const UNRELEASED_CHANGES: string[] = [
     'Arcade: the leaderboard now shows which ship each best score used.',
     'Arcade: pilots without a fleet now fly and duel any ship, bare.',
+    'Arcade: guests can now join the leaderboard without an account.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

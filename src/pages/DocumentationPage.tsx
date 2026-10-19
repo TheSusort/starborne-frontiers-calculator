@@ -2607,14 +2607,18 @@ const DocumentationPage: React.FC = () => {
                             <div className="card">
                                 <h4 className="font-semibold text-primary mb-2">Leaderboard</h4>
                                 <p className="text-theme-text">
-                                    Signed-in players are ranked by their best score. The first time
-                                    you finish a run without a username you are asked to choose one;
-                                    it is shared with your profile. Scores always count for your
-                                    main account, even while an alt profile is active. The top three
-                                    pilots stand on a podium above the table, and your own place is
-                                    tagged YOU. Each best score shows the ship it was flown with,
-                                    its pilot portrait beside the name; runs in the neon fighter
-                                    show no ship, and neither do scores set before this update.
+                                    Anyone can join the leaderboard. Signed-in players are ranked by
+                                    their best score. Without an account, choose Join as a guest
+                                    after a run and pick a name; guest scores carry a GUEST tag and
+                                    stay tied to that browser, and signing in lets you use your
+                                    account name instead. The first time you finish a run without a
+                                    username you are asked to choose one; it is shared with your
+                                    profile. Scores always count for your main account, even while
+                                    an alt profile is active. The top three pilots stand on a podium
+                                    above the table, and your own place is tagged YOU. Each best
+                                    score shows the ship it was flown with, its pilot portrait
+                                    beside the name; runs in the neon fighter show no ship, and
+                                    neither do scores set before this update.
                                 </p>
                             </div>
                         </div>
