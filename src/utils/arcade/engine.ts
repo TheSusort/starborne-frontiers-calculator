@@ -13,7 +13,7 @@ import {
     SPAWN_Z,
     START_SPEED,
 } from './constants';
-import { drawCheckpointRows, spawnTrackRow } from './checkpoints';
+import { drawFirstCheckpointRows, spawnTrackRow } from './checkpoints';
 import type { GameState, InputAction, Lane, PlayerState } from './types';
 
 export interface GameOptions {
@@ -40,7 +40,7 @@ export function createGame(seed: number, options: GameOptions = {}): GameState {
         status: 'running',
         shieldBreakTime: 0,
     };
-    if (options.duels) state.rowsUntilCheckpoint = drawCheckpointRows(state);
+    if (options.duels) state.rowsUntilCheckpoint = drawFirstCheckpointRows(state);
     return state;
 }
 

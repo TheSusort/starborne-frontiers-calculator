@@ -1,10 +1,17 @@
 import { describe, it, expect } from 'vitest';
 import { createGame, step } from '../engine';
-import { drawCheckpointRows, resolveDuel, spawnTrackRow } from '../checkpoints';
+import {
+    drawCheckpointRows,
+    drawFirstCheckpointRows,
+    resolveDuel,
+    spawnTrackRow,
+} from '../checkpoints';
 import { computeScore } from '../scoring';
 import {
     CHECKPOINT_MAX_METERS,
     CHECKPOINT_MIN_METERS,
+    FIRST_CHECKPOINT_MAX_METERS,
+    FIRST_CHECKPOINT_MIN_METERS,
     MAGNET_SECONDS,
     METERS_PER_UNIT,
     ROW_GAP,
@@ -40,14 +47,17 @@ function gameAtDuel(stakes: DuelStakes): GameState {
 }
 
 describe('checkpoint scheduling', () => {
-    it('spaces checkpoints 600–1400 m apart, measured in metres', () => {
+    it('places the first checkpoint 200–400 m in, then spaces them 300–700 m apart', () => {
+        expect([FIRST_CHECKPOINT_MIN_METERS, FIRST_CHECKPOINT_MAX_METERS]).toEqual([200, 400]);
+        expect([CHECKPOINT_MIN_METERS, CHECKPOINT_MAX_METERS]).toEqual([300, 700]);
         for (let seed = 1; seed <= 40; seed++) {
             const g = createGame(seed, { duels: true });
             const log = spawnRows(g, 2000);
             const at = log.filter((r) => r.checkpoint).map((r) => r.index);
-            expect(at.length).toBeGreaterThan(3);
-            // First checkpoint is drawn from the start of the track.
-            expect(at[0] * ROW_METERS).toBeGreaterThanOrEqual(CHECKPOINT_MIN_METERS);
+            expect(at.length).toBeGreaterThan(10);
+            // The first checkpoint's distance is measured from the start of the track.
+            expect(at[0] * ROW_METERS).toBeGreaterThanOrEqual(FIRST_CHECKPOINT_MIN_METERS);
+            expect(at[0] * ROW_METERS).toBeLessThanOrEqual(FIRST_CHECKPOINT_MAX_METERS);
             for (let i = 1; i < at.length; i++) {
                 const metres = (at[i] - at[i - 1]) * ROW_METERS;
                 expect(metres).toBeGreaterThanOrEqual(CHECKPOINT_MIN_METERS);
@@ -56,11 +66,24 @@ describe('checkpoint scheduling', () => {
         }
     });
 
-    it('draws row counts across the whole range', () => {
+    it('draws first-checkpoint row counts across the whole first range', () => {
+        const g = createGame(3, { duels: true });
+        const draws = Array.from({ length: 2000 }, () => drawFirstCheckpointRows(g));
+        expect(Math.min(...draws)).toBe(Math.ceil(FIRST_CHECKPOINT_MIN_METERS / ROW_METERS));
+        expect(Math.max(...draws)).toBe(Math.floor(FIRST_CHECKPOINT_MAX_METERS / ROW_METERS));
+    });
+
+    it('draws later row counts across the whole range', () => {
         const g = createGame(3, { duels: true });
         const draws = Array.from({ length: 2000 }, () => drawCheckpointRows(g));
         expect(Math.min(...draws)).toBe(Math.ceil(CHECKPOINT_MIN_METERS / ROW_METERS));
         expect(Math.max(...draws)).toBe(Math.floor(CHECKPOINT_MAX_METERS / ROW_METERS));
+    });
+
+    it('starts a duel run with the first-checkpoint draw', () => {
+        const rows = createGame(3, { duels: true }).rowsUntilCheckpoint ?? 0;
+        expect(rows * ROW_METERS).toBeGreaterThanOrEqual(FIRST_CHECKPOINT_MIN_METERS);
+        expect(rows * ROW_METERS).toBeLessThanOrEqual(FIRST_CHECKPOINT_MAX_METERS);
     });
 
     it('leaves the rows before and after a checkpoint empty', () => {

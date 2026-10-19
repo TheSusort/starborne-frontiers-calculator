@@ -23,8 +23,12 @@ export const DOUBLE_ROW_MAX_CHANCE = 0.6;
 /** Rows before this many metres always carry a single obstacle. */
 export const SINGLE_ROW_METERS = 100;
 
-export const CHECKPOINT_MIN_METERS = 600;
-export const CHECKPOINT_MAX_METERS = 1400;
+/** Distance range from the start of the track to the first checkpoint. */
+export const FIRST_CHECKPOINT_MIN_METERS = 200;
+export const FIRST_CHECKPOINT_MAX_METERS = 400;
+/** Distance range from one checkpoint to the next. */
+export const CHECKPOINT_MIN_METERS = 300;
+export const CHECKPOINT_MAX_METERS = 700;
 export const DUEL_WIN_BONUS = 500;
 export const DUEL_CREDIT_REWARD = 25;
 /** Share of credits a lost bonus-or-penalty duel takes, rounded down. */

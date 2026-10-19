@@ -69,8 +69,8 @@ Everything except model loading ships normally, behind no flag.
 ## B. Checkpoint duels
 
 ### Engine (pure, seeded — `src/utils/arcade/`)
-- `checkpoints.ts`: the next checkpoint distance is drawn uniformly from **600–1400 m** after each
-  checkpoint (and from the start), using the game's seeded RNG.
+- `checkpoints.ts`: the first checkpoint is drawn uniformly **200–400 m** from the start, and each
+  next one **300–700 m** after the previous, using the game's seeded RNG (see Amendments, 2026-10-19).
 - A checkpoint row: two **duel gates** in two random lanes, the third lane empty; no obstacles in
   the row immediately before and after it. Each checkpoint carries `stakes`:
   `'win-or-die' | 'bonus-or-penalty' | 'power-up'`, uniformly random.
@@ -120,7 +120,7 @@ Everything except model loading ships normally, behind no flag.
 - Leaderboard: duel bonuses count toward the score (owner accepted that fleet strength now matters).
 
 ## Testing
-- Engine: checkpoint spacing within 600–1400 m; the empty lane is always free; no obstacles
+- Engine: first checkpoint within 200–400 m, later spacing within 300–700 m; the empty lane is always free; no obstacles
   adjacent to a checkpoint row; a duel requested only on hitting a gate; empty lane gives nothing;
   every stakes × outcome cell incl. the shield case; score includes `bonus`; determinism by seed;
   `duels: false` schedules nothing.
@@ -153,3 +153,9 @@ Everything except model loading ships normally, behind no flag.
   other.
 - **Lanes.** The lane rails are gone: lanes sit on the background grid's columns, and the intro
   morphs the page grid into the arcade grid.
+
+## Amendments (2026-10-19, playtest)
+- **Duel spacing.** The best playtest score was about 6,000, so most runs met one duel at most.
+  The first checkpoint is now drawn uniformly from **200–400 m**, and each later one **300–700 m**
+  after the previous (was 600–1400 m throughout). Empty rows before and after a checkpoint and
+  seeded determinism are unchanged.

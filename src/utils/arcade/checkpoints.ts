@@ -4,6 +4,8 @@ import {
     DUEL_CREDIT_PENALTY,
     DUEL_CREDIT_REWARD,
     DUEL_WIN_BONUS,
+    FIRST_CHECKPOINT_MAX_METERS,
+    FIRST_CHECKPOINT_MIN_METERS,
     MAGNET_SECONDS,
     METERS_PER_UNIT,
     ROW_GAP,
@@ -14,14 +16,24 @@ import { shuffledLanes, spawnRow } from './spawner';
 import type { DuelEffect, DuelOutcome, DuelStakes, GameState } from './types';
 
 const ROW_METERS = ROW_GAP * METERS_PER_UNIT;
-const MIN_ROWS = Math.ceil(CHECKPOINT_MIN_METERS / ROW_METERS);
-const MAX_ROWS = Math.floor(CHECKPOINT_MAX_METERS / ROW_METERS);
 const STAKES: readonly DuelStakes[] = ['win-or-die', 'bonus-or-penalty', 'power-up'];
 
-/** Rows from one checkpoint row to the next: uniform over the rows that keep the spacing
- *  inside CHECKPOINT_MIN_METERS..CHECKPOINT_MAX_METERS. */
+/** A uniform draw over the whole row counts whose length lies inside `minMeters..maxMeters`. */
+function drawRows(state: GameState, minMeters: number, maxMeters: number): number {
+    const min = Math.ceil(minMeters / ROW_METERS);
+    const max = Math.floor(maxMeters / ROW_METERS);
+    return min + Math.floor(nextRandom(state) * (max - min + 1));
+}
+
+/** Rows from the start of the track to the first checkpoint row
+ *  (FIRST_CHECKPOINT_MIN_METERS..FIRST_CHECKPOINT_MAX_METERS). */
+export function drawFirstCheckpointRows(state: GameState): number {
+    return drawRows(state, FIRST_CHECKPOINT_MIN_METERS, FIRST_CHECKPOINT_MAX_METERS);
+}
+
+/** Rows from one checkpoint row to the next (CHECKPOINT_MIN_METERS..CHECKPOINT_MAX_METERS). */
 export function drawCheckpointRows(state: GameState): number {
-    return MIN_ROWS + Math.floor(nextRandom(state) * (MAX_ROWS - MIN_ROWS + 1));
+    return drawRows(state, CHECKPOINT_MIN_METERS, CHECKPOINT_MAX_METERS);
 }
 
 function spawnCheckpoint(state: GameState, z: number): void {
