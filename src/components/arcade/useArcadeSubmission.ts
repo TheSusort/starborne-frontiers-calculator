@@ -11,9 +11,10 @@ export type SubmissionStatus =
  * Submits every finished run for a signed-in player; the RPC keeps the higher score, so the
  * client never compares against a stored best. A main account without a username is asked
  * for one first. A run whose overlay closed or was replaced mid-check is still saved; only its
- * UI updates are dropped.
+ * UI updates are dropped. `shipName` is the fleet ship the run was flown with (null for the
+ * neon fighter) and is sent with the score.
  */
-export function useArcadeSubmission(result: RunResult | null) {
+export function useArcadeSubmission(result: RunResult | null, shipName: string | null = null) {
     const { user } = useAuth();
     const userId = user?.id ?? null;
     const [status, setStatus] = useState<SubmissionStatus>(userId ? 'checking' : 'signed-out');
@@ -39,7 +40,7 @@ export function useArcadeSubmission(result: RunResult | null) {
         if (!result) return;
         if (liveResultRef.current === result) setStatus('submitting');
         try {
-            const saved = await submitArcadeScore(result);
+            const saved = await submitArcadeScore(result, shipName);
             if (liveResultRef.current !== result) return;
             setRank(saved?.rank ?? null);
             setStatus('submitted');
@@ -51,7 +52,7 @@ export function useArcadeSubmission(result: RunResult | null) {
                 setStatus('error');
             }
         }
-    }, [result]);
+    }, [result, shipName]);
 
     useEffect(() => {
         setRank(null);

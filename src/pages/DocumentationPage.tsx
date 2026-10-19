@@ -2608,7 +2608,9 @@ const DocumentationPage: React.FC = () => {
                                     it is shared with your profile. Scores always count for your
                                     main account, even while an alt profile is active. The top three
                                     pilots stand on a podium above the table, and your own place is
-                                    tagged YOU.
+                                    tagged YOU. Each best score shows the ship it was flown with,
+                                    its pilot portrait beside the name; runs in the neon fighter
+                                    show no ship.
                                 </p>
                             </div>
                         </div>

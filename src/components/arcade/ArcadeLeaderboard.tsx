@@ -3,9 +3,11 @@ import { DataTable, Column } from '../ui/tables/DataTable';
 import { Button } from '../ui/Button';
 import { Chip } from '../ui/Chip';
 import { PodiumCard } from '../ui/PodiumCard';
+import { Image } from '../ui/Image';
 import { useAuth } from '../../contexts/AuthProvider';
 import { getArcadeLeaderboard } from '../../services/arcadeService';
 import type { ArcadeLeaderboardEntry } from '../../utils/arcade/leaderboardRows';
+import { useShipPortraits } from './ships/useShipPortraits';
 import { isGapRow, splitPodium, withGapRows, type LeaderboardViewRow } from './leaderboardRowsView';
 
 const MEDAL_COLORS: Record<number, string> = {
@@ -19,7 +21,38 @@ const PODIUM_SLOT_ORDER = [1, 0, 2];
 
 const YouChip: React.FC = () => <Chip variant="accent">YOU</Chip>;
 
-const Podium: React.FC<{ entries: ArcadeLeaderboardEntry[] }> = ({ entries }) => (
+type PortraitFor = (name: string) => string | null;
+
+/** The ship of a best-score run: a round pilot portrait when the name resolves, and the name. */
+const ShipTag: React.FC<{ ship: string; portraitFor: PortraitFor; className?: string }> = ({
+    ship,
+    portraitFor,
+    className = '',
+}) => {
+    const portrait = portraitFor(ship);
+    return (
+        <span
+            className={`inline-flex min-w-0 max-w-full items-center gap-1.5 text-xs text-theme-text-secondary ${className}`}
+        >
+            {portrait && (
+                <Image
+                    src={portrait}
+                    alt={ship}
+                    className="h-5 w-5 shrink-0 overflow-hidden rounded-full border border-dark-border"
+                    imageClassName="h-full w-full object-cover"
+                />
+            )}
+            <span className="truncate" title={ship}>
+                {ship}
+            </span>
+        </span>
+    );
+};
+
+const Podium: React.FC<{ entries: ArcadeLeaderboardEntry[]; portraitFor: PortraitFor }> = ({
+    entries,
+    portraitFor,
+}) => (
     <div className="mx-auto grid w-full max-w-2xl grid-cols-3 items-end gap-2 sm:gap-3">
         {PODIUM_SLOT_ORDER.map((index) => {
             const entry = entries[index];
@@ -33,13 +66,22 @@ const Podium: React.FC<{ entries: ArcadeLeaderboardEntry[] }> = ({ entries }) =>
                     accentColor={MEDAL_COLORS[entry.rank] ?? MEDAL_COLORS[index + 1]}
                     raised={index === 0}
                     badge={entry.isMe ? <YouChip /> : undefined}
+                    subtitle={
+                        entry.ship ? (
+                            <ShipTag
+                                ship={entry.ship}
+                                portraitFor={portraitFor}
+                                className="justify-center"
+                            />
+                        ) : undefined
+                    }
                 />
             );
         })}
     </div>
 );
 
-const COLUMNS: Column<LeaderboardViewRow>[] = [
+const columnsFor = (portraitFor: PortraitFor): Column<LeaderboardViewRow>[] => [
     {
         key: 'rank',
         label: '#',
@@ -51,11 +93,14 @@ const COLUMNS: Column<LeaderboardViewRow>[] = [
         render: (r) => {
             if (isGapRow(r)) return '';
             return (
-                <span className="inline-flex min-w-0 max-w-full items-center gap-2">
-                    <span className={`truncate ${r.isMe ? 'font-semibold' : ''}`}>
-                        {r.username}
+                <span className="flex min-w-0 max-w-full flex-col items-start gap-0.5">
+                    <span className="inline-flex min-w-0 max-w-full items-center gap-2">
+                        <span className={`truncate ${r.isMe ? 'font-semibold' : ''}`}>
+                            {r.username}
+                        </span>
+                        {r.isMe && <YouChip />}
                     </span>
-                    {r.isMe && <YouChip />}
+                    {r.ship && <ShipTag ship={r.ship} portraitFor={portraitFor} />}
                 </span>
             );
         },
@@ -84,6 +129,8 @@ interface Props {
 
 export const ArcadeLeaderboard: React.FC<Props> = ({ limit = 20, refreshKey = 0 }) => {
     const { user } = useAuth();
+    const portraitFor = useShipPortraits();
+    const columns = useMemo(() => columnsFor(portraitFor), [portraitFor]);
     const [rows, setRows] = useState<ArcadeLeaderboardEntry[]>([]);
     const [loading, setLoading] = useState(true);
     const [failed, setFailed] = useState(false);
@@ -131,7 +178,7 @@ export const ArcadeLeaderboard: React.FC<Props> = ({ limit = 20, refreshKey = 0 
     const table = (
         <DataTable
             data={tableRows}
-            columns={COLUMNS}
+            columns={columns}
             loading={loading && rows.length === 0}
             emptyMessage="No scores yet. Be the first."
             getRowKey={(r, i) => (isGapRow(r) ? `gap-${i}` : `${r.rank}-${r.username}`)}
@@ -143,7 +190,7 @@ export const ArcadeLeaderboard: React.FC<Props> = ({ limit = 20, refreshKey = 0 
 
     return (
         <div className="space-y-3">
-            <Podium entries={podium} />
+            <Podium entries={podium} portraitFor={portraitFor} />
             {tableRows.length > 0 && table}
         </div>
     );

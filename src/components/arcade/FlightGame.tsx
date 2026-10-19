@@ -246,7 +246,9 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
     const [youDied, setYouDied] = useState(false);
     const youDiedRef = useRef(false);
     const { user } = useAuth();
-    const submission = useArcadeSubmission(result);
+    /** The fleet ship the finished run was flown with, captured with the result. */
+    const [resultShip, setResultShip] = useState<string | null>(null);
+    const submission = useArcadeSubmission(result, resultShip);
 
     // While the username modal is open, Escape belongs to the modal.
     useEffect(() => {
@@ -493,6 +495,7 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
     const finishRun = useCallback(() => {
         const r = runResult(gameRef.current);
         setResult(r);
+        setResultShip(flownRef.current?.name ?? null);
         setPreviousBest(readLocalBest());
         setLocalBest(writeLocalBest(r.score));
         explodeShip(viewRef.current, reducedMotionRef.current);

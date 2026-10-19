@@ -13,6 +13,8 @@ interface PodiumCardProps {
     accentColor: string;
     raised?: boolean;
     badge?: React.ReactNode;
+    /** Shown under the title. */
+    subtitle?: React.ReactNode;
 }
 
 export const PodiumCard: React.FC<PodiumCardProps> = ({
@@ -22,6 +24,7 @@ export const PodiumCard: React.FC<PodiumCardProps> = ({
     accentColor,
     raised = false,
     badge,
+    subtitle,
 }) => (
     <div
         className={`card flex min-w-0 flex-col items-center justify-end gap-1 px-2 text-center ${
@@ -49,6 +52,7 @@ export const PodiumCard: React.FC<PodiumCardProps> = ({
         >
             {title}
         </span>
+        {subtitle}
         <span className="text-sm tabular-nums text-theme-text-secondary">{value}</span>
         <span className="flex h-5 items-center">{badge}</span>
     </div>

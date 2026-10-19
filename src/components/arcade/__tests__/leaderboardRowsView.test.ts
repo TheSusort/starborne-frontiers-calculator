@@ -7,6 +7,7 @@ const row = (rank: number, isMe = false): ArcadeLeaderboardEntry => ({
     username: `p${rank}`,
     bestScore: 1000 - rank,
     isMe,
+    ship: null,
 });
 
 describe('withGapRows', () => {
