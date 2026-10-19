@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BUCKET_RATIO, bucketRadiusPx, MIN_BUCKET_PX, shieldBucket } from '../shield';
+import { BUCKET_RATIO, bucketRadiusPx, fitShield, MIN_BUCKET_PX, shieldBucket } from '../shield';
 
 describe('shield body buckets', () => {
     it('picks the smallest ladder step at or above the radius', () => {
@@ -24,5 +24,36 @@ describe('shield body buckets', () => {
         expect(shieldBucket(0)).toBe(0);
         expect(shieldBucket(2)).toBe(0);
         expect(shieldBucket(Number.NaN)).toBe(0);
+    });
+});
+
+describe('fitShield', () => {
+    const fit = (hw: number, hh: number) => {
+        const p = { x: 0, y: 0, rx: 0, ry: 0, dpr: 1, bank: 0 };
+        fitShield(p, hw, hh);
+        return p;
+    };
+
+    it('hugs the ship with a little air on every side', () => {
+        for (const [hw, hh] of [
+            [20, 8],
+            [35, 14],
+            [10, 12],
+        ]) {
+            const { rx, ry } = fit(hw, hh);
+            expect(rx).toBeGreaterThan(hw);
+            expect(rx).toBeLessThan(hw * 1.5);
+            expect(ry).toBeGreaterThan(hh);
+        }
+    });
+
+    it('scales with the ship, so a narrow model gets a narrow field', () => {
+        expect(fit(10, 5).rx * 2).toBeCloseTo(fit(20, 10).rx);
+        expect(fit(10, 5).rx).toBeLessThan(fit(20, 5).rx);
+    });
+
+    it('is never flatter than two to one', () => {
+        const { rx, ry } = fit(40, 2);
+        expect(ry).toBeGreaterThanOrEqual(rx / 2);
     });
 });

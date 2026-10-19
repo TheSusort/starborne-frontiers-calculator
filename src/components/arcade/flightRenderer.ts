@@ -38,7 +38,9 @@ import {
     drawShieldFront,
     drawShieldPickup,
     ShieldPlacement,
+    fitShield,
 } from './shield';
+import { frameFootprint } from './spriteFootprint';
 import {
     advanceSpeedLines,
     createSpeedLines,
@@ -63,6 +65,7 @@ import {
     FrameSweeps,
     frameBlend,
     LEVEL_BANK,
+    LEVEL_HEADING,
     LEVEL_PITCH_ROW,
     MAX_HEADING_DEG,
     pickSweep,
@@ -375,7 +378,44 @@ function shipLift(game: GameState, view: FlightView): number {
 }
 
 /** The shield's placement, rewritten every frame rather than allocated. */
-const shieldAt: ShieldPlacement = { x: 0, y: 0, s: 0, dpr: 1, bank: 0, flatten: 0 };
+const shieldAt: ShieldPlacement = { x: 0, y: 0, rx: 0, ry: 0, dpr: 1, bank: 0 };
+
+/** The neon fighter's outline from its centre, in ship units (see `neonFighter`). */
+const NEON_HALF_WIDTH = 2.2;
+const NEON_TOP = -0.8;
+const NEON_BOTTOM = 0.6;
+
+/**
+ * Fits the shield around the ship drawn at (`x`, `y`) with ship unit `s`: around the visible
+ * pixels of the 3D sprite's level frame (so it does not wobble as frames blend), or the neon
+ * fighter's outline.
+ */
+function placeShield(
+    out: ShieldPlacement,
+    view: FlightView,
+    x: number,
+    y: number,
+    s: number,
+    squash: number,
+    dpr: number
+): void {
+    const level = view.playerFrames?.[LEVEL_PITCH_ROW]?.[LEVEL_BANK]?.[LEVEL_HEADING];
+    const fp = level ? frameFootprint(level) : null;
+    let halfWidth = NEON_HALF_WIDTH * s;
+    let top = NEON_TOP * s * squash;
+    let bottom = NEON_BOTTOM * s * squash;
+    if (fp) {
+        const size = s * SPRITE_FOOTPRINT;
+        halfWidth = fp.halfWidth * size;
+        top = fp.top * size;
+        bottom = fp.bottom * size;
+    }
+    fitShield(out, halfWidth, (bottom - top) / 2);
+    out.x = x;
+    out.y = y + (top + bottom) / 2;
+    out.dpr = dpr;
+    out.bank = view.pose.bank;
+}
 
 function drawPlayer(
     ctx: CanvasRenderingContext2D,
@@ -404,12 +444,7 @@ function drawPlayer(
     }
 
     const shield = shieldAt;
-    shield.x = x;
-    shield.y = y;
-    shield.s = s;
-    shield.dpr = dpr;
-    shield.bank = pose.bank;
-    shield.flatten = pose.duck;
+    placeShield(shield, view, x, y, s, squash, dpr);
     if (game.player.shield) drawShieldBack(ctx, shield, timeMs);
 
     ctx.save();
