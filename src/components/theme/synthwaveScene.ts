@@ -201,6 +201,19 @@ export function drawSky(ctx: CanvasRenderingContext2D, g: SceneGeometry): void {
     ctx.fillRect(w * 0.6, 0, w * 0.4, horizonY);
 }
 
+/** Star opacities are drawn in this many steps (a step is under 1/255 of a channel at most
+ *  twice), so stars of one step share a fill style and a path. */
+const STAR_ALPHA_STEPS = 64;
+const STAR_FILLS = Array.from(
+    { length: STAR_ALPHA_STEPS + 1 },
+    (_, i) => `rgba(255, 255, 255, ${i / STAR_ALPHA_STEPS})`
+);
+/** Scratch for the per-frame counting sort of stars by opacity step; grown, never shrunk. */
+let starStep = new Int32Array(0);
+let starOrder = new Int32Array(0);
+const stepStart = new Int32Array(STAR_ALPHA_STEPS + 2);
+
+/** Draws the stars, twinkling when `animate`: one path per opacity step, without allocating. */
 export function drawStars(
     ctx: CanvasRenderingContext2D,
     g: SceneGeometry,
@@ -209,15 +222,40 @@ export function drawStars(
     animate: boolean
 ): void {
     const { w, h } = g;
-    for (const star of stars) {
+    const n = stars.length;
+    if (starStep.length < n) {
+        starStep = new Int32Array(n);
+        starOrder = new Int32Array(n);
+    }
+    stepStart.fill(0);
+    for (let i = 0; i < n; i++) {
+        const star = stars[i];
         const twinkle = animate
             ? Math.sin(timeMs * 0.001 * star.twinkleSpeed + star.twinkleOffset) * 0.3 + 0.7
             : 1;
-        const alpha = star.brightness * twinkle;
-        ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
+        const alpha = Math.max(0, Math.min(1, star.brightness * twinkle));
+        const step = Math.round(alpha * STAR_ALPHA_STEPS);
+        starStep[i] = step;
+        stepStart[step + 1]++;
+    }
+    for (let k = 0; k <= STAR_ALPHA_STEPS; k++) stepStart[k + 1] += stepStart[k];
+    for (let i = 0; i < n; i++) starOrder[stepStart[starStep[i]]++] = i;
+    // stepStart[k] now marks the end of step k's run.
+    let from = 0;
+    for (let k = 0; k <= STAR_ALPHA_STEPS; k++) {
+        const to = stepStart[k];
+        if (to === from) continue;
+        ctx.fillStyle = STAR_FILLS[k];
         ctx.beginPath();
-        ctx.arc(star.x * w, star.y * h, star.size, 0, Math.PI * 2);
+        for (let j = from; j < to; j++) {
+            const star = stars[starOrder[j]];
+            const x = star.x * w;
+            const y = star.y * h;
+            ctx.moveTo(x + star.size, y);
+            ctx.arc(x, y, star.size, 0, Math.PI * 2);
+        }
         ctx.fill();
+        from = to;
     }
 }
 
