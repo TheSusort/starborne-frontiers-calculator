@@ -24,6 +24,7 @@ import {
 } from './projection';
 import type { FlightOrigin } from './flightEvents';
 import { drawNeonFighter } from './neonFighter';
+import { barrierPulse, drawBarrier } from './barriers';
 import {
     advanceSpeedLines,
     createSpeedLines,
@@ -181,29 +182,15 @@ function drawBlendedFrames(
     ctx.drawImage(blendCanvas, -size / 2, -size / 2, size, size);
 }
 
-function drawObstacle(ctx: CanvasRenderingContext2D, g: SceneGeometry, o: Obstacle): void {
+function drawObstacle(
+    ctx: CanvasRenderingContext2D,
+    g: SceneGeometry,
+    o: Obstacle,
+    timeMs: number
+): void {
     const p = project(g, laneOffset(o.lane), o.z);
-    const u = p.width;
     ctx.globalAlpha = Math.min(1, Math.max(0, (SPAWN_Z - o.z) / FADE_IN_UNITS));
-    if (o.kind === 'wall') {
-        ctx.fillStyle = 'rgba(255, 40, 140, 0.85)';
-        ctx.strokeStyle = '#ff9ad5';
-        ctx.lineWidth = Math.max(1, 2 * p.scale);
-        ctx.fillRect(p.x - 0.42 * u, p.y - 0.9 * u, 0.84 * u, 0.9 * u);
-        ctx.strokeRect(p.x - 0.42 * u, p.y - 0.9 * u, 0.84 * u, 0.9 * u);
-    } else if (o.kind === 'low') {
-        ctx.fillStyle = '#40f0ff';
-        ctx.fillRect(p.x - 0.45 * u, p.y - 0.22 * u, 0.9 * u, 0.08 * u);
-        ctx.fillRect(p.x - 0.47 * u, p.y - 0.26 * u, 0.04 * u, 0.26 * u);
-        ctx.fillRect(p.x + 0.43 * u, p.y - 0.26 * u, 0.04 * u, 0.26 * u);
-    } else {
-        ctx.fillStyle = '#ffb040';
-        // The bar's bottom edge (-0.30u) sits between the ducking ship's top (about -0.24u)
-        // and the running ship's top (about -0.38u), so only a duck visibly clears it.
-        ctx.fillRect(p.x - 0.47 * u, p.y - 0.62 * u, 0.94 * u, 0.32 * u);
-        ctx.fillRect(p.x - 0.47 * u, p.y - 0.62 * u, 0.05 * u, 0.62 * u);
-        ctx.fillRect(p.x + 0.42 * u, p.y - 0.62 * u, 0.05 * u, 0.62 * u);
-    }
+    drawBarrier(ctx, o.kind, p.x, p.y, p.width, p.scale, barrierPulse(timeMs, o.id));
     ctx.globalAlpha = 1;
 }
 
@@ -468,7 +455,7 @@ export function renderFlight(
     ];
     items.sort((a, b) => b.z - a.z);
     const drawItem = (item: (typeof items)[number]) => {
-        if ('obstacle' in item) drawObstacle(ctx, g, item.obstacle);
+        if ('obstacle' in item) drawObstacle(ctx, g, item.obstacle, timeMs);
         else if ('pickup' in item) drawPickup(ctx, g, item.pickup, timeMs);
         else drawCheckpoint(ctx, g, item.checkpoint, view.gateArt.get(item.checkpoint.id));
     };

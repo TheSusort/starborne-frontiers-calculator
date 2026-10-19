@@ -12,6 +12,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Arcade: your ships now appear as their official 3D models.',
     'Arcade: lanes now line up with the background grid lines.',
     'Arcade: your ship smoothly banks, tilts and aims at the horizon.',
+    'Arcade: neon barriers and speed lines give the track more synthwave flair.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
