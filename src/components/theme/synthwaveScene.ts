@@ -44,12 +44,24 @@ export function createStars(count: number): Star[] {
     return stars;
 }
 
+/** The sun disc, re-rendered at most once per stripe frame into a canvas just big enough for it,
+ *  in device pixels. `left`/`top` are its device-pixel origin on the main canvas, and `key` the
+ *  geometry and pixel ratio it was sized for; a change of either re-creates it. */
 export interface SunCache {
     canvas: HTMLCanvasElement | null;
     frame: number;
+    left: number;
+    top: number;
+    key: string;
 }
 
-export const createSunCache = (): SunCache => ({ canvas: null, frame: -1 });
+export const createSunCache = (): SunCache => ({
+    canvas: null,
+    frame: -1,
+    left: 0,
+    top: 0,
+    key: '',
+});
 
 export interface OverheadShipHit {
     x: number;
@@ -233,17 +245,27 @@ export function drawSun(
 
     const sunFrame = Math.floor(time / 50); // ~20fps for sun stripes
     if (canvas.width === 0 || canvas.height === 0) return;
-    if (!cache.canvas || sunFrame !== cache.frame) {
-        if (!cache.canvas) {
-            cache.canvas = document.createElement('canvas');
-            cache.canvas.width = canvas.width;
-            cache.canvas.height = canvas.height;
-        }
+    const dpr = canvas.width / w;
+    // The disc's device-pixel box, snapped outward so the cache lands 1:1 on the canvas pixels.
+    const left = Math.floor((sunX - sunR) * dpr);
+    const top = Math.floor((sunY - sunR) * dpr);
+    const width = Math.ceil((sunX + sunR) * dpr) - left;
+    const height = Math.ceil((sunY + sunR) * dpr) - top;
+    const key = `${w}x${h}@${dpr}`;
+    if (!cache.canvas || cache.key !== key) {
+        cache.canvas ??= document.createElement('canvas');
+        cache.canvas.width = width;
+        cache.canvas.height = height;
+        cache.left = left;
+        cache.top = top;
+        cache.key = key;
+        cache.frame = -1;
+    }
+    if (sunFrame !== cache.frame) {
         cache.frame = sunFrame;
         const sunCtx = cache.canvas.getContext('2d')!;
-        const dpr = canvas.width / w;
-        sunCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
-        sunCtx.clearRect(0, 0, w, h);
+        sunCtx.setTransform(dpr, 0, 0, dpr, -left, -top);
+        sunCtx.clearRect(sunX - sunR - 1, sunY - sunR - 1, sunR * 2 + 2, sunR * 2 + 2);
 
         sunCtx.save();
         sunCtx.beginPath();
@@ -273,7 +295,8 @@ export function drawSun(
         }
         sunCtx.restore();
     }
-    ctx.drawImage(cache.canvas, 0, 0, canvas.width, canvas.height, 0, 0, w, h);
+    const { width: cw, height: ch } = cache.canvas;
+    ctx.drawImage(cache.canvas, 0, 0, cw, ch, left / dpr, top / dpr, cw / dpr, ch / dpr);
 }
 
 export function drawMountains(ctx: CanvasRenderingContext2D, g: SceneGeometry): void {
