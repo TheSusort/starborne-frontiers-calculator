@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../config/supabase';
 import { Ship } from '../types/ship';
 import { AscensionStat, parseAscensionStats } from '../utils/ship/referenceShip';
@@ -10,6 +10,8 @@ let cachedShips: Ship[] | null = null;
 // Keyed by template id. Ascension stats are per-unit reference data, not part of
 // any one player's Ship, so they ride alongside rather than on the Ship itself.
 let cachedAscensionStats: Map<string, AscensionStat[]> = new Map();
+// Keyed by template id; the official unit id, used to look up the unit's 3D render key.
+let cachedDefinitionIds: Map<string, string> = new Map();
 let inflightFetch: Promise<Ship[]> | null = null;
 
 const fetchShipTemplates = async (): Promise<Ship[]> => {
@@ -27,11 +29,14 @@ const fetchShipTemplates = async (): Promise<Ship[]> => {
 
             const rows = data as ShipTemplate[];
             const ascension = new Map<string, AscensionStat[]>();
+            const definitionIds = new Map<string, string>();
             for (const row of rows) {
                 const stats = parseAscensionStats(row.ascension_stats);
                 if (stats) ascension.set(row.id, stats);
+                if (row.definition_id) definitionIds.set(row.id, row.definition_id);
             }
             cachedAscensionStats = ascension;
+            cachedDefinitionIds = definitionIds;
             cachedShips = rows
                 .map(transformShipTemplate)
                 .filter((ship): ship is Ship => ship !== null);
@@ -102,5 +107,11 @@ export const useShipsData = () => {
     const getAscensionStats = (templateId: string): AscensionStat[] | null =>
         cachedAscensionStats.get(templateId) ?? null;
 
-    return { ships, loading, error, fetchSingleShip, getAscensionStats };
+    /** The unit's official definition id, or null when the template has none. */
+    const getDefinitionId = useCallback(
+        (templateId: string): string | null => cachedDefinitionIds.get(templateId) ?? null,
+        []
+    );
+
+    return { ships, loading, error, fetchSingleShip, getAscensionStats, getDefinitionId };
 };

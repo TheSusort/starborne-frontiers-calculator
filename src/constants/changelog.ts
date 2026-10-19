@@ -6,7 +6,21 @@ export const CURRENT_VERSION = '1.79.0';
 // top of CHANGELOG, bumps CURRENT_VERSION and empties this array — all three together, because a
 // bumped version whose entries are still unreleased shows users a what's-new dialog listing
 // nothing. Do it by hand only if that script cannot.
-export const UNRELEASED_CHANGES: string[] = [];
+export const UNRELEASED_CHANGES: string[] = [
+    'Arcade: choose a ship from your fleet to fly.',
+    'Arcade: duel geared ships from your hangar at random checkpoints.',
+    'Arcade: your ships now appear as their official 3D models.',
+    'Arcade: play the synthwave soundtrack while you fly, toggle with M.',
+    'Arcade: lanes now line up with the background grid lines.',
+    'Arcade: your ship smoothly banks, tilts, dives and aims at the horizon.',
+    'Arcade: neon barriers and speed lines give the track more synthwave flair.',
+    'Arcade: jumps now collect pickups right after take-off and when landing.',
+    'Arcade: speed now keeps climbing in long runs, to a higher top speed.',
+    'Arcade: your shield is now a subtle energy bubble around the ship.',
+    'Arcade: your ship now leaves a neon wake and air-flow streaks.',
+    'Arcade: your ship now explodes, followed by a YOU DIED screen.',
+    'Arcade: the magnet now visibly pulls credits in with a tractor beam.',
+];
 
 export const CHANGELOG: ChangelogEntry[] = [
     {

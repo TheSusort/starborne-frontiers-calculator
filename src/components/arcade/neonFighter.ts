@@ -1,21 +1,28 @@
+import { ARCADE_ACCENT_CSS } from './ships/arcadeAccent';
+import type { NeonAccent } from './ships/factionTint';
+
 /**
  * The arcade player ship: a neon wireframe fighter seen from behind. Every coordinate is a
  * multiple of `s`; the footprint spans x ±2.2s and y -0.8s..+0.6s (flames extend below), which
- * the arch obstacle's bar height in `flightRenderer` is tuned against.
+ * the high obstacle's bottom edge in `barriers` is tuned against.
  */
 export interface NeonFighterPose {
     timeMs: number;
     /** -1..1, positive = banking right. */
     bank: number;
+    /** -1..1, positive = nose turned toward screen right; 0 when omitted. */
+    yaw?: number;
     /** Vertical scale: 1 normal, 0.55 ducking. */
     squash: number;
     /** 0..1 engine intensity. */
     thrust: number;
+    /** Hull outline colour; defaults to the neon pink. */
+    accent?: NeonAccent;
 }
 
 const HULL_FILL_TOP = 'rgba(42, 12, 70, 0.88)';
 const HULL_FILL_BOTTOM = 'rgba(10, 4, 26, 0.92)';
-const NEON_PINK = '#ff4fd8';
+const NEON_PINK = ARCADE_ACCENT_CSS;
 const NEON_PINK_GLOW = 'rgba(255, 79, 216, 0.28)';
 const NEON_CYAN = '#40f0ff';
 const NEON_CYAN_GLOW = 'rgba(64, 240, 255, 0.25)';
@@ -24,6 +31,10 @@ const NAV_RIGHT = '64, 255, 170';
 
 const BANK_ROTATION = 0.25;
 const LOWER_WING_FORESHORTEN = 0.2;
+/** At full yaw the wing swinging toward the camera reads this much longer, the other shorter. */
+const YAW_WING_SCALE = 0.12;
+/** At full yaw the top of the fighter leans this far (in units of its height) toward the nose. */
+const YAW_SKEW = 0.3;
 const NAV_BLINK_MS = 1100;
 
 type Pt = readonly [number, number];
@@ -72,6 +83,66 @@ const WING_LINES_RIGHT: readonly (readonly Pt[])[] = [
 
 const ENGINE_X = 0.32;
 const ENGINE_Y = 0.5;
+const NOZZLE_RX = 0.14;
+
+/** Engine bloom behind the hull, centred on the engines. */
+function drawBloom(ctx: CanvasRenderingContext2D, s: number, t: number, thrust: number): void {
+    const y = s * ENGINE_Y;
+    ctx.globalCompositeOperation = 'lighter';
+    const bloomPulse = 0.85 + 0.15 * Math.sin(t * 0.02);
+    const bloom = ctx.createRadialGradient(0, y, 0, 0, y, s * 1.6);
+    bloom.addColorStop(0, `rgba(255, 90, 220, ${0.45 * thrust * bloomPulse})`);
+    bloom.addColorStop(0.5, `rgba(140, 60, 255, ${0.16 * thrust * bloomPulse})`);
+    bloom.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = bloom;
+    ctx.fillRect(-s * 1.6, y - s * 1.6, s * 3.2, s * 3.2);
+    ctx.globalCompositeOperation = 'source-over';
+}
+
+/** One flickering exhaust flame streaming down from the nozzle at (`nx`, `ny`). */
+function drawFlame(
+    ctx: CanvasRenderingContext2D,
+    s: number,
+    nx: number,
+    ny: number,
+    rx: number,
+    side: number,
+    t: number,
+    thrust: number
+): void {
+    const phase = side * 1.7;
+    const flicker =
+        0.75 + 0.15 * Math.sin(t * 0.031 + phase) + 0.1 * Math.sin(t * 0.097 + phase * 2.3);
+    const len = s * (0.5 + 0.75 * flicker) * thrust;
+    if (len <= 0) return;
+
+    ctx.globalCompositeOperation = 'lighter';
+    const outer = ctx.createLinearGradient(0, ny, 0, ny + len);
+    outer.addColorStop(0, `rgba(255, 80, 210, ${0.85 * flicker})`);
+    outer.addColorStop(0.6, `rgba(150, 60, 255, ${0.45 * flicker})`);
+    outer.addColorStop(1, 'rgba(80, 40, 255, 0)');
+    ctx.fillStyle = outer;
+    ctx.beginPath();
+    ctx.moveTo(nx - rx * 1.05, ny);
+    ctx.quadraticCurveTo(nx - rx * 0.6, ny + len * 0.6, nx, ny + len);
+    ctx.quadraticCurveTo(nx + rx * 0.6, ny + len * 0.6, nx + rx * 1.05, ny);
+    ctx.closePath();
+    ctx.fill();
+
+    const coreLen = len * 0.55;
+    const core = ctx.createLinearGradient(0, ny, 0, ny + coreLen);
+    core.addColorStop(0, `rgba(255, 255, 255, ${0.95 * flicker})`);
+    core.addColorStop(0.5, `rgba(120, 250, 255, ${0.7 * flicker})`);
+    core.addColorStop(1, 'rgba(64, 240, 255, 0)');
+    ctx.fillStyle = core;
+    ctx.beginPath();
+    ctx.moveTo(nx - rx * 0.5, ny);
+    ctx.quadraticCurveTo(nx - rx * 0.25, ny + coreLen * 0.6, nx, ny + coreLen);
+    ctx.quadraticCurveTo(nx + rx * 0.25, ny + coreLen * 0.6, nx + rx * 0.5, ny);
+    ctx.closePath();
+    ctx.fill();
+    ctx.globalCompositeOperation = 'source-over';
+}
 
 /**
  * Draws the fighter centred at the current origin. The caller's `globalAlpha` scales the
@@ -86,10 +157,14 @@ export function drawNeonFighter(
     const thrust = Math.max(0, Math.min(1, pose.thrust));
     const alpha = ctx.globalAlpha;
     const t = pose.timeMs;
+    const pink = pose.accent?.core ?? NEON_PINK;
+    const pinkGlow = pose.accent?.glow ?? NEON_PINK_GLOW;
 
-    // The wing dipping toward the ground turns away from the camera, so it reads shorter.
-    const kRight = 1 - LOWER_WING_FORESHORTEN * Math.max(0, bank);
-    const kLeft = 1 - LOWER_WING_FORESHORTEN * Math.max(0, -bank);
+    const yaw = Math.max(-1, Math.min(1, pose.yaw ?? 0));
+    // The wing dipping toward the ground turns away from the camera, so it reads shorter; a yaw
+    // swings the wing opposite the nose toward the camera, so that one reads longer.
+    const kRight = (1 - LOWER_WING_FORESHORTEN * Math.max(0, bank)) * (1 - YAW_WING_SCALE * yaw);
+    const kLeft = (1 - LOWER_WING_FORESHORTEN * Math.max(0, -bank)) * (1 + YAW_WING_SCALE * yaw);
     const X = (x: number) => s * x * (x >= 0 ? kRight : kLeft);
     const Y = (y: number) => s * y;
     const mirror = (pts: readonly Pt[]): Pt[] => pts.map(([x, y]) => [-x, y]);
@@ -111,20 +186,13 @@ export function drawNeonFighter(
 
     ctx.save();
     ctx.rotate(bank * BANK_ROTATION);
+    // Leaning the top toward the nose's side reads as the nose pointing there.
+    ctx.transform(1, 0, -YAW_SKEW * yaw, 1, 0, 0);
     ctx.scale(1, pose.squash);
     ctx.lineJoin = 'round';
     ctx.lineCap = 'round';
 
-    // Engine bloom behind the hull.
-    ctx.globalCompositeOperation = 'lighter';
-    const bloomPulse = 0.85 + 0.15 * Math.sin(t * 0.02);
-    const bloom = ctx.createRadialGradient(0, Y(ENGINE_Y), 0, 0, Y(ENGINE_Y), s * 1.6);
-    bloom.addColorStop(0, `rgba(255, 90, 220, ${0.45 * thrust * bloomPulse})`);
-    bloom.addColorStop(0.5, `rgba(140, 60, 255, ${0.16 * thrust * bloomPulse})`);
-    bloom.addColorStop(1, 'rgba(0, 0, 0, 0)');
-    ctx.fillStyle = bloom;
-    ctx.fillRect(-s * 1.6, Y(ENGINE_Y) - s * 1.6, s * 3.2, s * 3.2);
-    ctx.globalCompositeOperation = 'source-over';
+    drawBloom(ctx, s, t, thrust);
 
     // Tail fins sit behind the fuselage.
     const hullGrad = ctx.createLinearGradient(0, Y(-0.8), 0, Y(0.6));
@@ -134,7 +202,7 @@ export function drawNeonFighter(
         path(fin, true);
         ctx.fillStyle = hullGrad;
         ctx.fill();
-        neonStroke(NEON_PINK, NEON_PINK_GLOW, 0.045);
+        neonStroke(pink, pinkGlow, 0.045);
     }
 
     // Hull: one closed outline from both mirrored halves.
@@ -142,7 +210,7 @@ export function drawNeonFighter(
     path(hull, true);
     ctx.fillStyle = hullGrad;
     ctx.fill();
-    neonStroke(NEON_PINK, NEON_PINK_GLOW, 0.055);
+    neonStroke(pink, pinkGlow, 0.055);
 
     // Cyan panel lines: wings plus the fuselage spine.
     for (const line of [...WING_LINES_RIGHT, ...WING_LINES_RIGHT.map(mirror)]) {
@@ -196,41 +264,9 @@ export function drawNeonFighter(
     for (const side of [-1, 1]) {
         const nx = X(side * ENGINE_X);
         const ny = Y(ENGINE_Y);
-        const rx = Math.abs(X(side * 0.14));
+        const rx = Math.abs(X(side * NOZZLE_RX));
         const ry = s * 0.1;
-        const phase = side * 1.7;
-        const flicker =
-            0.75 + 0.15 * Math.sin(t * 0.031 + phase) + 0.1 * Math.sin(t * 0.097 + phase * 2.3);
-        const len = s * (0.5 + 0.75 * flicker) * thrust;
-
-        ctx.globalCompositeOperation = 'lighter';
-        if (len > 0) {
-            const outer = ctx.createLinearGradient(0, ny, 0, ny + len);
-            outer.addColorStop(0, `rgba(255, 80, 210, ${0.85 * flicker})`);
-            outer.addColorStop(0.6, `rgba(150, 60, 255, ${0.45 * flicker})`);
-            outer.addColorStop(1, 'rgba(80, 40, 255, 0)');
-            ctx.fillStyle = outer;
-            ctx.beginPath();
-            ctx.moveTo(nx - rx * 1.05, ny);
-            ctx.quadraticCurveTo(nx - rx * 0.6, ny + len * 0.6, nx, ny + len);
-            ctx.quadraticCurveTo(nx + rx * 0.6, ny + len * 0.6, nx + rx * 1.05, ny);
-            ctx.closePath();
-            ctx.fill();
-
-            const coreLen = len * 0.55;
-            const core = ctx.createLinearGradient(0, ny, 0, ny + coreLen);
-            core.addColorStop(0, `rgba(255, 255, 255, ${0.95 * flicker})`);
-            core.addColorStop(0.5, `rgba(120, 250, 255, ${0.7 * flicker})`);
-            core.addColorStop(1, 'rgba(64, 240, 255, 0)');
-            ctx.fillStyle = core;
-            ctx.beginPath();
-            ctx.moveTo(nx - rx * 0.5, ny);
-            ctx.quadraticCurveTo(nx - rx * 0.25, ny + coreLen * 0.6, nx, ny + coreLen);
-            ctx.quadraticCurveTo(nx + rx * 0.25, ny + coreLen * 0.6, nx + rx * 0.5, ny);
-            ctx.closePath();
-            ctx.fill();
-        }
-        ctx.globalCompositeOperation = 'source-over';
+        drawFlame(ctx, s, nx, ny, rx, side, t, thrust);
 
         // Nozzle ring with a hot glowing throat.
         ctx.beginPath();

@@ -12,7 +12,7 @@ import { nextRandom } from './rng';
 import { metersTravelled } from './scoring';
 import type { GameState, Lane, Obstacle, ObstacleKind, Pickup } from './types';
 
-function shuffledLanes(state: GameState): Lane[] {
+export function shuffledLanes(state: GameState): Lane[] {
     const lanes: Lane[] = [0, 1, 2];
     for (let i = lanes.length - 1; i > 0; i--) {
         const j = Math.floor(nextRandom(state) * (i + 1));

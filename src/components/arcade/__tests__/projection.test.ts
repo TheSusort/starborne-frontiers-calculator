@@ -1,12 +1,26 @@
 import { describe, it, expect } from 'vitest';
-import { project, PLAYER_DEPTH, gridOffsetDelta, laneWidthAtPlayer } from '../projection';
 import {
+    arcadeGridColumns,
+    COLUMNS_PER_LANE,
+    DEPTH_PER_UNIT,
+    project,
+    projectInto,
+    PLAYER_DEPTH,
+    gridOffsetDelta,
+    introGridLayers,
+    laneWidthAtPlayer,
+    screenHeadingDeg,
+} from '../projection';
+import {
+    defaultGridColumns,
     sceneGeometry,
     depthToScreenY,
+    gridLineEnds,
     GRID_FAR_PLANE,
     GRID_NEAR_PLANE,
 } from '../../theme/synthwaveScene';
 import { SPAWN_Z } from '../../../utils/arcade/constants';
+import { clampHeadingDeg, HEADING_ANGLES_DEG } from '../ships/spritePoses';
 
 const g = sceneGeometry(1200, 800);
 
@@ -40,5 +54,200 @@ describe('gridOffsetDelta', () => {
         expect(gridOffsetDelta(SPAWN_Z)).toBeCloseTo(
             (GRID_FAR_PLANE - PLAYER_DEPTH) / (GRID_FAR_PLANE - GRID_NEAR_PLANE)
         );
+    });
+});
+
+/** Screen x of drawn grid line `i` at screen row `y`, interpolated between the ends `drawGrid`
+ *  strokes, so the lanes are checked against the lines as drawn, not against `project`'s maths. */
+function drawnLineX(g: ReturnType<typeof sceneGeometry>, i: number, y: number): number {
+    const columns = arcadeGridColumns(g);
+    const { topX, bottomX } = gridLineEnds(g, columns, i / columns.count);
+    return topX + ((bottomX - topX) * (y - g.horizonY)) / g.gridHeight;
+}
+
+describe('lanes on the arcade grid', () => {
+    const screens = [
+        [1200, 800],
+        [1920, 1080],
+        [800, 800],
+        [390, 844],
+    ] as const;
+    const zs = [-2, 0, 3.7, 10, 25, SPAWN_Z];
+
+    for (const [w, h] of screens) {
+        const g = sceneGeometry(w, h);
+        const columns = arcadeGridColumns(g);
+        const middle = (columns.count - COLUMNS_PER_LANE) / 2;
+
+        it(`puts every lane edge on a drawn grid line at ${w}x${h}`, () => {
+            expect(Number.isInteger(middle)).toBe(true);
+            for (const z of zs) {
+                const y = project(g, 0, z).y;
+                for (let edge = -1.5; edge <= 1.5; edge += 1) {
+                    const line = middle + (edge + 0.5) * COLUMNS_PER_LANE;
+                    expect(project(g, edge, z).x).toBeCloseTo(drawnLineX(g, line, y), 6);
+                }
+            }
+        });
+
+        it(`keeps the middle lane on the vanishing point at ${w}x${h}`, () => {
+            for (const z of zs) expect(project(g, 0, z).x).toBeCloseTo(g.vanishX, 9);
+        });
+
+        it(`moves each lane along one straight column at ${w}x${h}`, () => {
+            // Screen x is linear in screen y along a column, so equal y steps give equal x steps.
+            for (const lane of [-1, 1]) {
+                const pts = zs.map((z) => project(g, lane, z));
+                const slope = (pts[1].x - pts[0].x) / (pts[1].y - pts[0].y);
+                for (const p of pts) {
+                    expect(p.x - pts[0].x).toBeCloseTo(slope * (p.y - pts[0].y), 6);
+                }
+            }
+        });
+
+        it(`keeps the lane width at the player row at ${w}x${h}`, () => {
+            expect(project(g, 0, 0).width).toBeCloseTo(laneWidthAtPlayer(g), 6);
+            expect(project(g, 1, 0).x - project(g, 0, 0).x).toBeCloseTo(laneWidthAtPlayer(g), 6);
+        });
+    }
+
+    it('narrows lanes with depth but keeps them apart at the horizon', () => {
+        const near = project(g, 0, 0).width;
+        const far = project(g, 0, SPAWN_Z).width;
+        expect(far).toBeLessThan(near / 5);
+        expect(far).toBeGreaterThan(0);
+        // At the far plane the lane is within a few pixels of the old pure-perspective width.
+        const perspective =
+            (laneWidthAtPlayer(g) * PLAYER_DEPTH) / (PLAYER_DEPTH + SPAWN_Z * DEPTH_PER_UNIT);
+        expect(Math.abs(far - perspective)).toBeLessThan(6);
+    });
+});
+
+describe('screenHeadingDeg', () => {
+    const screens = [
+        [1200, 800],
+        [1920, 1080],
+        [800, 800],
+        [390, 844],
+    ] as const;
+
+    for (const [w, h] of screens) {
+        const g = sceneGeometry(w, h);
+        it(`aims the ship at the vanishing point at ${w}x${h}`, () => {
+            for (const laneX of [-1, -0.4, 0, 0.7, 1]) {
+                const p = project(g, laneX, 0);
+                const a = (screenHeadingDeg(g, laneX) * Math.PI) / 180;
+                // Walking from the ship along the heading reaches the horizon at vanishX.
+                const reach = p.y - g.horizonY;
+                expect(p.x + Math.tan(a) * reach).toBeCloseTo(g.vanishX, 6);
+            }
+        });
+        it(`points the left lane right, the centre straight and the right lane left at ${w}x${h}`, () => {
+            expect(screenHeadingDeg(g, -1)).toBeGreaterThan(0);
+            expect(screenHeadingDeg(g, 0)).toBe(0);
+            expect(screenHeadingDeg(g, 1)).toBeLessThan(0);
+            expect(screenHeadingDeg(g, 1)).toBeCloseTo(-screenHeadingDeg(g, -1), 9);
+        });
+        it(`turns smoothly with the slide at ${w}x${h}`, () => {
+            let last = Infinity;
+            for (let x = -1; x <= 1.0001; x += 0.1) {
+                const a = screenHeadingDeg(g, x);
+                expect(a).toBeLessThan(last);
+                last = a;
+            }
+        });
+    }
+
+    it('clamps onto the frame grid on any screen, and leaves narrow screens exact', () => {
+        for (const [w, h] of screens) {
+            const outer = clampHeadingDeg(screenHeadingDeg(sceneGeometry(w, h), -1));
+            expect(outer).toBeLessThanOrEqual(Math.max(...HEADING_ANGLES_DEG));
+        }
+        const portrait = sceneGeometry(390, 844);
+        expect(clampHeadingDeg(screenHeadingDeg(portrait, -1))).toBe(
+            screenHeadingDeg(portrait, -1)
+        );
+    });
+});
+
+describe('introGridLayers', () => {
+    const screens = [
+        [1200, 800],
+        [390, 844],
+    ] as const;
+
+    for (const [w, h] of screens) {
+        const g = sceneGeometry(w, h);
+        const page = defaultGridColumns(g);
+        const arcade = arcadeGridColumns(g);
+
+        it(`starts as the page background's grid at ${w}x${h}`, () => {
+            expect(introGridLayers(g, 0)).toEqual([{ columns: page, alpha: 1 }]);
+        });
+        it(`ends as the arcade's grid at ${w}x${h}`, () => {
+            expect(introGridLayers(g, 1)).toEqual([{ columns: arcade, alpha: 1 }]);
+            expect(introGridLayers(g, 1.5)).toEqual([{ columns: arcade, alpha: 1 }]);
+        });
+        it(`morphs the fan and cross-fades the line sets in between at ${w}x${h}`, () => {
+            const layers = introGridLayers(g, 0.5);
+            expect(layers.map((l) => [l.columns.count, l.alpha])).toEqual([
+                [page.count, 0.5],
+                [arcade.count, 0.5],
+            ]);
+            for (const { columns } of layers) {
+                expect(columns.topSpread).toBeCloseTo((page.topSpread + arcade.topSpread) / 2, 9);
+                expect(columns.bottomSpread).toBeCloseTo(
+                    (page.bottomSpread + arcade.bottomSpread) / 2,
+                    9
+                );
+                expect(columns.bottomLeft).toBeCloseTo(
+                    (page.bottomLeft + arcade.bottomLeft) / 2,
+                    9
+                );
+            }
+        });
+        it(`moves every line monotonically from page to arcade at ${w}x${h}`, () => {
+            const ends = (k: number) => {
+                const [layer] = introGridLayers(g, k);
+                return gridLineEnds(g, layer.columns, 0).bottomX;
+            };
+            const steps = [0, 0.25, 0.5, 0.75, 0.99].map(ends);
+            const rising = steps[1] > steps[0];
+            for (let i = 1; i < steps.length; i++) expect(steps[i] > steps[i - 1]).toBe(rising);
+        });
+    }
+});
+
+describe('arcadeGridColumns memo', () => {
+    it('returns the same columns for the same geometry and fresh ones after a resize', () => {
+        const a = arcadeGridColumns(sceneGeometry(1200, 800));
+        expect(arcadeGridColumns(sceneGeometry(1200, 800))).toBe(a);
+        const b = arcadeGridColumns(sceneGeometry(390, 844));
+        expect(b).not.toBe(a);
+        expect(b.bottomSpread).not.toBe(a.bottomSpread);
+        // Back to the first size gives the first size's numbers again.
+        expect(arcadeGridColumns(sceneGeometry(1200, 800))).toEqual(a);
+    });
+    it('places objects identically whether or not the columns were remembered', () => {
+        const g = sceneGeometry(1000, 700);
+        const first = project(g, 0.4, 37);
+        arcadeGridColumns(sceneGeometry(640, 480));
+        expect(project(g, 0.4, 37)).toEqual(first);
+        expect(project(g, 0.4, 37)).toEqual(first);
+    });
+});
+
+describe('projectInto', () => {
+    it('writes exactly what project returns into the given object', () => {
+        const g = sceneGeometry(1280, 720);
+        const out = { x: 0, y: 0, scale: 0, width: 0 };
+        for (const [laneX, z] of [
+            [0, 0],
+            [-1.3, -2],
+            [0.7, 40],
+        ]) {
+            expect(projectInto(g, laneX, z, out)).toBe(out);
+            expect(out).toEqual(project(g, laneX, z));
+        }
     });
 });

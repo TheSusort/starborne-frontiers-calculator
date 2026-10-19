@@ -268,6 +268,64 @@
 }
 
 @layer components {
+    /* The arcade's "YOU DIED" screen: a dark band fading in across the middle, and the words in
+       Orbitron with the synthwave sun's purple-to-orange, fading in slowly while they grow. */
+    .arcade-you-died-band {
+        background: linear-gradient(
+            to bottom,
+            rgba(0, 0, 0, 0),
+            rgba(5, 2, 16, 0.82) 24%,
+            rgba(5, 2, 16, 0.82) 76%,
+            rgba(0, 0, 0, 0)
+        );
+        animation: arcade-you-died-fade 0.9s ease-out both;
+    }
+
+    .arcade-you-died-text {
+        font-family: 'Orbitron', sans-serif;
+        font-weight: 700;
+        font-size: clamp(2.25rem, 9vw, 6.5rem);
+        line-height: 1.1;
+        letter-spacing: 0.32em;
+        /* Balances the trailing letter spacing so the words stay centred. */
+        padding-left: 0.32em;
+        background-image: linear-gradient(to bottom, #b06cff 8%, #ff4fd8 52%, #ffa45c 92%);
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+        filter: drop-shadow(0 0 14px rgba(255, 79, 216, 0.45));
+        animation: arcade-you-died-text 3.4s cubic-bezier(0.25, 0.6, 0.3, 1) 0.15s both;
+    }
+
+    @keyframes arcade-you-died-fade {
+        from {
+            opacity: 0;
+        }
+        to {
+            opacity: 1;
+        }
+    }
+
+    @keyframes arcade-you-died-text {
+        0% {
+            opacity: 0;
+            transform: scale(0.93);
+        }
+        52% {
+            opacity: 1;
+        }
+        100% {
+            opacity: 1;
+            transform: scale(1);
+        }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .arcade-you-died-text {
+            animation: arcade-you-died-fade 1.2s ease-out both;
+        }
+    }
+
     .card {
         @apply bg-dark border border-dark-border p-4;
         transition: background-color 0.2s ease;

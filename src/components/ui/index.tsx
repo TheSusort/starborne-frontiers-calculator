@@ -22,6 +22,7 @@ export * from './FeatureCard';
 export * from './IconBadge';
 export * from './InlineNumberEdit';
 export * from './Input';
+export * from './MeterBar';
 export * from './Pagination';
 export * from './ProgressBar';
 export * from './QuickStartCard';

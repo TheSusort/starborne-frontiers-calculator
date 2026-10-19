@@ -57,6 +57,11 @@ export const catalogueUnitSchema = z.object({
     ascensionStats: z.array(ascensionStatSchema),
     skills: z.array(skillSchema).min(1),
     ascensionSkills: z.array(skillSchema),
+    // Becomes a path segment of the official model URLs, so only a plain identifier is accepted.
+    shipVisualKey: z
+        .string()
+        .regex(/^[A-Za-z0-9_]+$/)
+        .optional(),
 });
 export type CatalogueUnit = z.infer<typeof catalogueUnitSchema>;
 
@@ -77,9 +82,7 @@ export const indexDataSchema = z.object({
     props: z.object({
         pageProps: z.object({
             manifest: manifestSchema,
-            units: z
-                .array(z.object({ id: z.string(), slug: z.string(), name: z.string() }))
-                .min(1),
+            units: z.array(z.object({ id: z.string(), slug: z.string(), name: z.string() })).min(1),
         }),
     }),
 });

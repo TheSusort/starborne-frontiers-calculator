@@ -12,6 +12,8 @@ import { isAdmin } from '../../../services/adminService';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { isDemoDataLoaded, clearDemoData } from '../../../utils/demoData';
 import { Button } from '../Button';
+import { useSynthwaveMusic } from '../../../utils/music/useSynthwaveMusic';
+import { usePauseMusicOffTheme } from '../../../utils/music/usePauseMusicOffTheme';
 import { ConfirmModal } from './ConfirmModal';
 import { Offcanvas } from './Offcanvas';
 import { Tooltip } from './Tooltip';
@@ -214,58 +216,16 @@ export const Sidebar: React.FC = () => {
     const { user } = useAuth();
     const { theme, setTheme } = useTheme();
     const isSynthwave = theme === 'synthwave';
-    const [isPlaying, setIsPlaying] = useState(false);
+    const { isPlaying, toggle: toggleMusic } = useSynthwaveMusic();
     const [showThemeTooltip, setShowThemeTooltip] = useState(false);
     const [showMobileThemeTooltip, setShowMobileThemeTooltip] = useState(false);
     const themeButtonRef = useRef<HTMLButtonElement | null>(null);
     const mobileThemeButtonRef = useRef<HTMLButtonElement | null>(null);
-    const audioRef = useRef<HTMLAudioElement | null>(null);
-    const tracksRef = useRef<string[]>([]);
-    const trackIndexRef = useRef(0);
     const [isUserAdmin, setIsUserAdmin] = useState(false);
     const [showClearDemoConfirm, setShowClearDemoConfirm] = useState(false);
     const demoDataActive = !user && isDemoDataLoaded();
 
-    // Initialize audio with shuffled playlist
-    useEffect(() => {
-        const tracks = [
-            '/audio/disco.mp3',
-            '/audio/disco2.mp3',
-            '/audio/disco3.mp3',
-            '/audio/disco4.mp3',
-        ];
-        // Shuffle
-        for (let i = tracks.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [tracks[i], tracks[j]] = [tracks[j], tracks[i]];
-        }
-        tracksRef.current = tracks;
-        trackIndexRef.current = 0;
-
-        const audio = new Audio();
-        audio.preload = 'none';
-        audio.src = tracks[0];
-        audio.volume = 0.3;
-        audio.addEventListener('ended', () => {
-            trackIndexRef.current = (trackIndexRef.current + 1) % tracksRef.current.length;
-            audio.src = tracksRef.current[trackIndexRef.current];
-            void audio.play();
-        });
-        audioRef.current = audio;
-        return () => {
-            audio.pause();
-            audio.removeEventListener('ended', () => {});
-            audio.src = '';
-        };
-    }, []);
-
-    // Pause music when leaving synthwave
-    useEffect(() => {
-        if (!isSynthwave && audioRef.current) {
-            audioRef.current.pause();
-            setIsPlaying(false);
-        }
-    }, [isSynthwave]);
+    usePauseMusicOffTheme(isSynthwave);
 
     // Check if user is admin
     useEffect(() => {
@@ -372,16 +332,7 @@ export const Sidebar: React.FC = () => {
                 <div className="flex items-center gap-2">
                     {isSynthwave && (
                         <button
-                            onClick={() => {
-                                if (audioRef.current) {
-                                    if (isPlaying) {
-                                        audioRef.current.pause();
-                                    } else {
-                                        void audioRef.current.play();
-                                    }
-                                    setIsPlaying(!isPlaying);
-                                }
-                            }}
+                            onClick={toggleMusic}
                             className="text-xs text-theme-text-secondary hover:text-theme-text transition-colors"
                             title={isPlaying ? 'Pause music' : 'Play music'}
                         >
@@ -482,16 +433,7 @@ export const Sidebar: React.FC = () => {
                     <div className="flex items-center gap-2">
                         {isSynthwave && (
                             <button
-                                onClick={() => {
-                                    if (audioRef.current) {
-                                        if (isPlaying) {
-                                            audioRef.current.pause();
-                                        } else {
-                                            void audioRef.current.play();
-                                        }
-                                        setIsPlaying(!isPlaying);
-                                    }
-                                }}
+                                onClick={toggleMusic}
                                 className="text-xs text-theme-text-secondary hover:text-theme-text transition-colors"
                                 title={isPlaying ? 'Pause music' : 'Play music'}
                             >

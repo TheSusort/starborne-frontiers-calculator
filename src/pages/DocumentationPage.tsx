@@ -2530,6 +2530,41 @@ const DocumentationPage: React.FC = () => {
                                 take control of it from any page.
                             </p>
                             <div className="card">
+                                <h4 className="font-semibold text-primary mb-2">Choosing a ship</h4>
+                                <p className="text-theme-text">
+                                    If you have ships in your fleet, a run starts on a ship select
+                                    screen. Search by name or filter by faction, browse with
+                                    Previous / Next, the Left / Right keys or a sideways swipe, and
+                                    press Launch or Enter. The select screen and duels show each
+                                    ship&apos;s official 3D model, with its portrait while the model
+                                    loads or if it cannot be shown. In flight you fly that model;
+                                    until it is ready you fly the neon fighter tinted in the
+                                    ship&apos;s faction colour. Your last choice is listed first
+                                    next time, and Retry keeps the same ship.
+                                </p>
+                            </div>
+                            <div className="card">
+                                <h4 className="font-semibold text-primary mb-2">Duels</h4>
+                                <p className="text-theme-text">
+                                    With at least two other ships with gear equipped in your fleet,
+                                    the first checkpoint appears 200 to 400 metres in, then one
+                                    every 300 to 700 metres. Two of the three lanes hold a gate with
+                                    a random geared ship from your hangar; the third lane is free
+                                    and skips the duel. Flying through a gate starts a one-on-one
+                                    simulator duel between your ship and that opponent, with full
+                                    gear and engineering on both sides. The banner above the gates
+                                    shows what is at stake: <strong>Win or die</strong> (a win adds
+                                    500 points, a loss ends the run unless a shield absorbs it),{' '}
+                                    <strong>Credits on the line</strong> (win 25 credits, or lose a
+                                    quarter of yours) or <strong>Power-up</strong> (a win grants a
+                                    shield or a magnet). Press Space or click to skip the replay.
+                                    The result shows briefly (Space or a click moves on at once),
+                                    then the run resumes after a 3-2-1 countdown. A duel that ends
+                                    the run closes as soon as its replay does, and your ship
+                                    explodes.
+                                </p>
+                            </div>
+                            <div className="card">
                                 <h4 className="font-semibold text-primary mb-2">Controls</h4>
                                 <ul className="text-theme-text space-y-1 list-disc list-inside">
                                     <li>
@@ -2540,10 +2575,13 @@ const DocumentationPage: React.FC = () => {
                                         <strong>Up, W, Space, swipe up</strong> — jump over lasers
                                     </li>
                                     <li>
-                                        <strong>Down, S, swipe down</strong> — duck under arches
+                                        <strong>Down, S, swipe down</strong> — duck through the gap
+                                        under raised blocks
                                     </li>
                                     <li>
-                                        <strong>P</strong> — pause; <strong>Esc</strong> — quit
+                                        <strong>P</strong> — pause; <strong>M</strong> — toggle the
+                                        synthwave music, which starts on by default (your choice is
+                                        remembered); <strong>Esc</strong> — quit
                                     </li>
                                 </ul>
                             </div>
@@ -2551,11 +2589,15 @@ const DocumentationPage: React.FC = () => {
                                 <h4 className="font-semibold text-primary mb-2">Scoring</h4>
                                 <p className="text-theme-text">
                                     Score is metres flown plus 10 points per credit. Walls can only
-                                    be dodged by changing lane. A shield absorbs one hit; a magnet
-                                    collects credits from the neighbouring lanes for 8 seconds.
-                                    Jumping carries you over credits and power-ups, so you miss
-                                    them; an active magnet still pulls in credits. Your personal
-                                    best is saved in this browser.
+                                    be dodged by changing lane, and raised blocks are too tall to
+                                    jump. A shield absorbs one hit; a magnet collects credits from
+                                    the neighbouring lanes for 8 seconds. A jump carries you over
+                                    credits and power-ups at its height, but you still collect them
+                                    just after take-off and as you land; an active magnet pulls in
+                                    credits at any height. Your personal best is saved in this
+                                    browser. When a run ends your ship explodes and a YOU DIED
+                                    screen shows before your score; press Space, Enter or click to
+                                    go straight to the score.
                                 </p>
                             </div>
                             <div className="card">

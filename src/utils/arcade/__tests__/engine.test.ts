@@ -5,8 +5,13 @@ import {
     STEP_SECONDS,
     JUMP_SECONDS,
     MAX_SPEED,
+    ACCELERATION,
+    LATE_ACCELERATION,
+    RAMP_SPEED,
+    START_SPEED,
     MAGNET_SECONDS,
     METERS_PER_UNIT,
+    PICKUP_CATCH_ARC,
     CREDIT_POINTS,
 } from '../constants';
 import type { GameState, ObstacleKind, PickupKind, PlayerAction, Lane } from '../types';
@@ -34,10 +39,16 @@ function withPickup(kind: PickupKind, lane: Lane, playerLane: Lane, magnet: numb
     return step(g, [], STEP_SECONDS);
 }
 
-function withPickupAction(kind: PickupKind, action: PlayerAction, magnet: number): GameState {
+/** `actionTime` defaults to mid-action: the top of a jump. */
+function withPickupAction(
+    kind: PickupKind,
+    action: PlayerAction,
+    magnet: number,
+    actionTime = action === 'run' ? 0 : JUMP_SECONDS / 2
+): GameState {
     const g = quietGame();
     g.player.action = action;
-    g.player.actionTime = action === 'run' ? 0 : 10;
+    g.player.actionTime = actionTime;
     g.player.magnetTime = magnet;
     g.pickups.push({
         id: 98,
@@ -134,11 +145,56 @@ describe('pickups', () => {
     it('a magnet does not pull power-ups from other lanes', () => {
         expect(withPickup('shield', 2, 1, 3).player.shield).toBe(false);
     });
-    it('jumping over a credit in your lane misses it', () => {
+    it('jumping over a credit in your lane misses it at the top of the jump', () => {
         expect(withPickupAction('credit', 'jump', 0).credits).toBe(0);
     });
-    it('jumping over a shield in your lane misses it', () => {
+    it('jumping over a shield in your lane misses it at the top of the jump', () => {
         expect(withPickupAction('shield', 'jump', 0).player.shield).toBe(false);
+    });
+    it('a jump that has only just left the ground collects a credit and a shield', () => {
+        const early = JUMP_SECONDS * 0.95;
+        expect(withPickupAction('credit', 'jump', 0, early).credits).toBe(1);
+        expect(withPickupAction('shield', 'jump', 0, early).player.shield).toBe(true);
+    });
+    it('a jump coming in to land collects a credit and a magnet', () => {
+        const landing = JUMP_SECONDS * 0.05;
+        expect(withPickupAction('credit', 'jump', 0, landing).credits).toBe(1);
+        expect(withPickupAction('magnet', 'jump', 0, landing).player.magnetTime).toBeGreaterThan(0);
+    });
+    it('collects exactly while the jump is low enough to pass through the pickup', () => {
+        const window = (timeLeft: number) =>
+            withPickupAction('credit', 'jump', 0, timeLeft).credits === 1;
+        // The catch height is reached at sin(pi t) = PICKUP_CATCH_ARC.
+        const edge = Math.asin(PICKUP_CATCH_ARC) / Math.PI;
+        expect(window(JUMP_SECONDS * (1 - edge) + 0.01)).toBe(true);
+        expect(window(JUMP_SECONDS * (1 - edge) - 0.02)).toBe(false);
+        expect(window(JUMP_SECONDS * edge - 0.01)).toBe(true);
+        expect(window(JUMP_SECONDS * edge + 0.02)).toBe(false);
+    });
+    it('a magnet still reaches the next lane mid-jump, for credits only', () => {
+        const g = quietGame();
+        g.player.action = 'jump';
+        g.player.actionTime = JUMP_SECONDS / 2;
+        g.player.magnetTime = 3;
+        g.pickups.push({
+            id: 1,
+            kind: 'credit',
+            lane: 2,
+            z: 0.01,
+            resolved: false,
+            collected: false,
+        });
+        g.pickups.push({
+            id: 2,
+            kind: 'shield',
+            lane: 2,
+            z: 0.01,
+            resolved: false,
+            collected: false,
+        });
+        step(g, [], STEP_SECONDS);
+        expect(g.credits).toBe(1);
+        expect(g.player.shield).toBe(false);
     });
     it('an active magnet still collects a credit in your lane while jumping', () => {
         expect(withPickupAction('credit', 'jump', 3).credits).toBe(1);
@@ -214,6 +270,37 @@ describe('speed and score', () => {
         expect(g.speed).toBeGreaterThan(start);
         for (let i = 0; i < 1000; i++) step(g, [], 1);
         expect(g.speed).toBe(MAX_SPEED);
+    });
+
+    it('ramps at ACCELERATION up to RAMP_SPEED, then at LATE_ACCELERATION up to MAX_SPEED', () => {
+        expect([START_SPEED, RAMP_SPEED, MAX_SPEED]).toEqual([20, 48, 72]);
+        expect(LATE_ACCELERATION).toBeLessThan(ACCELERATION);
+        const g = quietGame();
+        step(g, [], 10);
+        expect(g.speed).toBeCloseTo(START_SPEED + ACCELERATION * 10, 6);
+        g.speed = RAMP_SPEED - ACCELERATION;
+        step(g, [], 2);
+        // One second of the early ramp reaches RAMP_SPEED; the second runs at the late rate.
+        expect(g.speed).toBeCloseTo(RAMP_SPEED + LATE_ACCELERATION, 6);
+        step(g, [], 10);
+        expect(g.speed).toBeCloseTo(RAMP_SPEED + LATE_ACCELERATION * 11, 6);
+        g.speed = MAX_SPEED - 0.01;
+        step(g, [], 1);
+        expect(g.speed).toBe(MAX_SPEED);
+    });
+
+    it('reaches RAMP_SPEED and MAX_SPEED at the planned times in fixed steps', () => {
+        const g = quietGame();
+        let t = 0;
+        let rampAt = 0;
+        while (g.speed < MAX_SPEED) {
+            step(g, [], STEP_SECONDS);
+            t += STEP_SECONDS;
+            if (!rampAt && g.speed >= RAMP_SPEED) rampAt = t;
+        }
+        const ramp = (RAMP_SPEED - START_SPEED) / ACCELERATION;
+        expect(rampAt).toBeCloseTo(ramp, 1);
+        expect(t).toBeCloseTo(ramp + (MAX_SPEED - RAMP_SPEED) / LATE_ACCELERATION, 1);
     });
 
     it('score = metres + credits × CREDIT_POINTS', () => {

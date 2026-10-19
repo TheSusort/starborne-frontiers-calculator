@@ -51,9 +51,11 @@ const ArcadePage: React.FC = () => {
             >
                 <div className="card space-y-4">
                     <p className="text-theme-text">
-                        Dodge walls, jump over lasers, duck under arches and collect credits. The
-                        speed keeps rising. Shields absorb one hit; magnets pull in credits from the
-                        next lane.
+                        Dodge walls, jump over lasers, duck under raised blocks and collect credits.
+                        The speed keeps rising. Shields absorb one hit; magnets pull in credits from
+                        the next lane. Pick a ship from your fleet to fly, and fly through a duel
+                        gate at a checkpoint to fight one of your other ships for points, credits or
+                        a power-up.
                     </p>
                     <ul className="text-theme-text space-y-1 list-disc list-inside">
                         <li>
@@ -66,7 +68,8 @@ const ArcadePage: React.FC = () => {
                             <strong>Down, S, swipe down</strong> duck
                         </li>
                         <li>
-                            <strong>P</strong> pauses, <strong>Esc</strong> quits
+                            <strong>P</strong> pauses, <strong>M</strong> toggles music,{' '}
+                            <strong>Esc</strong> quits
                         </li>
                     </ul>
                     <p className="text-theme-text-secondary">
