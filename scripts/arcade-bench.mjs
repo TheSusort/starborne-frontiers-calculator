@@ -19,8 +19,10 @@
  *     rendering (the same numbers as a browser started with accelerated 2D canvas off), so this
  *     is the CPU raster cost: what a device without GPU canvas pays, and a proxy for fill cost.
  *   Each reports mean, p50, p95, p99, max, the number of frames over 1 ms and 8 ms, and
- *   `canvasesBuilt`, the canvases created during the measured frames: a cache rebuilt mid-run
- *   shows there even when it is too quick to show as a spike.
+ *   `canvasesCreated`, the canvases created (`createElement('canvas')`) during the measured
+ *   frames: a cache built mid-run shows there even when it is too quick to show as a spike. A
+ *   cache that resizes an existing canvas (the backdrop layers, the sun cache, `blendCanvas`,
+ *   `hexScratch`) creates none, so a rebuild of that kind is not counted.
  *   The intro (its live grid fan and fly-in) is not measured: the runs' views have no intro
  *   origin, so they start in flight.
  *   Both run with the neon fighter and with a 3D frame grid (synthetic 256 px frames); the
@@ -194,7 +196,7 @@ await page.evaluate(async (DPR) => {
             });
         }
         c.remove();
-        return { ...stats(times), canvasesBuilt: window.__canvases - canvasesBefore };
+        return { ...stats(times), canvasesCreated: window.__canvases - canvasesBefore };
     };
 
     const scene = (count) => {
