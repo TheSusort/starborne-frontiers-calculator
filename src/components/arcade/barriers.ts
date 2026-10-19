@@ -2,13 +2,14 @@ import type { ObstacleKind } from '../../utils/arcade/types';
 
 /**
  * Obstacle silhouettes, in lane widths `u` above the obstacle's ground point (negative is up).
- * A wall fills the lane; a low laser is a bar near the ground to jump over; a high arch is a bar
- * to duck under. The arch bar's bottom edge (-0.30u) sits between the ducking ship's top (about
- * -0.24u) and the running ship's top (about -0.38u), so only a duck visibly clears it.
+ * A wall fills the lane; a low laser is a bar near the ground to jump over; a high block is as
+ * tall as a wall, so it plainly cannot be jumped, with one gap at the bottom to duck under. The
+ * block's bottom edge (-0.30u) sits between the ducking ship's top (about -0.24u) and the running
+ * ship's top (about -0.38u), so only a duck visibly clears it.
  */
 const WALL = { halfWidth: 0.42, top: -0.9 };
 const LOW = { halfWidth: 0.45, barTop: -0.22, barBottom: -0.14, postTop: -0.26, post: 0.04 };
-const HIGH = { halfWidth: 0.47, barTop: -0.62, barBottom: -0.3, post: 0.05 };
+const HIGH = { halfWidth: 0.47, barTop: WALL.top, barBottom: -0.3, post: 0.05 };
 
 interface Palette {
     /** Gradient fill, top to bottom. */
@@ -206,7 +207,7 @@ export function drawBarrier(
         fillGradientRect(ctx, SUNSET, x - half, barTop, 2 * half, barH);
         scanlines(ctx, x - half, barTop, 2 * half, barH, u);
         neonOutline(ctx, SUNSET, x - half, barTop, 2 * half, barH, scale, pulse);
-        // The bottom edge is the clearance a duck passes under; it reads brightest.
+        // The bottom edge is the gap a duck passes under; it reads brightest.
         neonLine(
             ctx,
             PINK,

@@ -3,7 +3,7 @@ import type { NeonAccent } from './ships/factionTint';
 /**
  * The arcade player ship: a neon wireframe fighter seen from behind. Every coordinate is a
  * multiple of `s`; the footprint spans x ±2.2s and y -0.8s..+0.6s (flames extend below), which
- * the arch obstacle's bar height in `flightRenderer` is tuned against.
+ * the high obstacle's bottom edge in `barriers` is tuned against.
  */
 export interface NeonFighterPose {
     timeMs: number;

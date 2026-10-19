@@ -2572,7 +2572,8 @@ const DocumentationPage: React.FC = () => {
                                         <strong>Up, W, Space, swipe up</strong> — jump over lasers
                                     </li>
                                     <li>
-                                        <strong>Down, S, swipe down</strong> — duck under arches
+                                        <strong>Down, S, swipe down</strong> — duck through the gap
+                                        under raised blocks
                                     </li>
                                     <li>
                                         <strong>P</strong> — pause; <strong>Esc</strong> — quit
@@ -2583,11 +2584,11 @@ const DocumentationPage: React.FC = () => {
                                 <h4 className="font-semibold text-primary mb-2">Scoring</h4>
                                 <p className="text-theme-text">
                                     Score is metres flown plus 10 points per credit. Walls can only
-                                    be dodged by changing lane. A shield absorbs one hit; a magnet
-                                    collects credits from the neighbouring lanes for 8 seconds.
-                                    Jumping carries you over credits and power-ups, so you miss
-                                    them; an active magnet still pulls in credits. Your personal
-                                    best is saved in this browser.
+                                    be dodged by changing lane, and raised blocks are too tall to
+                                    jump. A shield absorbs one hit; a magnet collects credits from
+                                    the neighbouring lanes for 8 seconds. Jumping carries you over
+                                    credits and power-ups, so you miss them; an active magnet still
+                                    pulls in credits. Your personal best is saved in this browser.
                                 </p>
                             </div>
                             <div className="card">
