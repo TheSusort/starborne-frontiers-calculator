@@ -90,6 +90,8 @@ const LANE_SLIDE_RATE = 14;
 const FADE_IN_UNITS = 10;
 const GATE_COLOUR = '#b06cff';
 const MIN_TEXT_PX = 8;
+/** The shield pickup's radius against `PICKUP_RADIUS`. */
+const SHIELD_PICKUP_SIZE = 1.2;
 /** Width of the player sprite in fighter units: the neon fighter spans x ±2.2s. */
 const SPRITE_FOOTPRINT = 4.4;
 /** Vertical scale of the neon fighter at the bottom of a duck; it has no pitched frames, so a
@@ -388,7 +390,8 @@ function drawPickup(
         ctx.closePath();
         ctx.fill();
     } else if (pk.kind === 'shield') {
-        drawShieldPickup(ctx, cx, cy, r * 1.2, dpr, p.scale);
+        const atPlayerRow = PICKUP_RADIUS * SHIELD_PICKUP_SIZE * laneWidthAtPlayer(g) * dpr;
+        drawShieldPickup(ctx, cx, cy, r * SHIELD_PICKUP_SIZE, atPlayerRow, p.scale);
     } else {
         ctx.strokeStyle = '#ff60c0';
         ctx.beginPath();

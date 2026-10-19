@@ -1,3 +1,5 @@
+import { JUMP_SCALE_GAIN } from '../../utils/arcade/constants';
+
 /**
  * The player's energy shield: a faint field hugging the ship, lit like glass. Almost clear in the
  * middle, it brightens only toward its edge (a fresnel falloff) in soft cyan with a hint of
@@ -24,8 +26,12 @@ const SHEEN_MS = 4200;
 /** Body images are cached for radii on a geometric ladder of this ratio, from `MIN_BUCKET_PX`. */
 export const BUCKET_RATIO = 1.15;
 export const MIN_BUCKET_PX = 4;
-/** Most body images kept; the oldest is dropped beyond it. */
-export const MAX_CACHED_BUCKETS = 16;
+
+/** The ship's body images kept, least recently used dropped first: the ladder steps one jump
+ *  sweeps through (its scale grows by `JUMP_SCALE_GAIN`), plus one spare for a resize. The
+ *  shield pickup has a body of its own and never touches this cache. */
+export const MAX_CACHED_BUCKETS =
+    Math.ceil(Math.log(1 + JUMP_SCALE_GAIN) / Math.log(BUCKET_RATIO)) + 2;
 
 /** The ladder step for a body `radiusPx` device pixels across: the smallest step at or above it,
  *  so a cached body is never magnified by more than `BUCKET_RATIO`. */
@@ -36,14 +42,17 @@ export function shieldBucket(radiusPx: number): number {
 
 export const bucketRadiusPx = (bucket: number): number => MIN_BUCKET_PX * BUCKET_RATIO ** bucket;
 
+/** The ship's bodies by bucket, in use order: a hit moves its entry to the end. */
 const bodies = new Map<number, HTMLCanvasElement>();
+/** The pickup's one body and its bucket. */
+let pickupBody: HTMLCanvasElement | null = null;
+let pickupBucket = -1;
+/** Scratch for a body's hex texture, shared by every build. */
+let hexScratch: HTMLCanvasElement | null = null;
 
 /** The field's body as a circle of the bucket's radius, stretched to the ellipse when drawn: a
  *  fresnel rim, a magenta lip underneath and a faint hex texture that fades in toward the rim. */
-function bodyImage(radiusPx: number): HTMLCanvasElement | null {
-    const bucket = shieldBucket(radiusPx);
-    const cached = bodies.get(bucket);
-    if (cached) return cached;
+function buildBody(bucket: number): HTMLCanvasElement | null {
     const r = Math.ceil(bucketRadiusPx(bucket));
     const canvas = document.createElement('canvas');
     canvas.width = canvas.height = 2 * r;
@@ -70,9 +79,10 @@ function bodyImage(radiusPx: number): HTMLCanvasElement | null {
     c.fillStyle = lip;
     c.fillRect(0, 0, 2 * r, 2 * r);
 
-    // Hex cells, masked to the outer band so the middle stays clear.
+    // Hex cells, masked to the outer band so the middle stays clear. Resizing the scratch clears
+    // its pixels and resets its context.
     const cell = Math.max(4, r / 7);
-    const hex = document.createElement('canvas');
+    const hex = (hexScratch ??= document.createElement('canvas'));
     hex.width = hex.height = 2 * r;
     const h = hex.getContext('2d');
     if (h) {
@@ -101,7 +111,20 @@ function bodyImage(radiusPx: number): HTMLCanvasElement | null {
         h.fillRect(0, 0, 2 * r, 2 * r);
         c.drawImage(hex, 0, 0);
     }
+    return canvas;
+}
 
+/** The ship's body for a field `radiusPx` device pixels across, through the LRU cache. */
+function bodyImage(radiusPx: number): HTMLCanvasElement | null {
+    const bucket = shieldBucket(radiusPx);
+    const cached = bodies.get(bucket);
+    if (cached) {
+        bodies.delete(bucket);
+        bodies.set(bucket, cached);
+        return cached;
+    }
+    const canvas = buildBody(bucket);
+    if (!canvas) return null;
     bodies.set(bucket, canvas);
     if (bodies.size > MAX_CACHED_BUCKETS) bodies.delete(bodies.keys().next().value as number);
     return canvas;
@@ -276,17 +299,24 @@ export function drawShieldBreak(
 }
 
 /** The shield pickup: a small field of the same make, `r` its radius, at (`x`, `y`). Its rim
- *  is a little stronger than the ship's so it reads at a distance. */
+ *  is a little stronger than the ship's so it reads at a distance. Its body is one image sized
+ *  for `bodyRadiusPx`, its radius in device pixels at the player row, and scaled to `r`: the
+ *  pickup's size sweeps the whole ladder on its way in, so per-size bodies would rebuild every
+ *  few frames. */
 export function drawShieldPickup(
     ctx: CanvasRenderingContext2D,
     x: number,
     y: number,
     r: number,
-    dpr: number,
+    bodyRadiusPx: number,
     scale: number
 ): void {
-    const body = bodyImage(r * dpr);
-    if (body) ctx.drawImage(body, x - r, y - r, 2 * r, 2 * r);
+    const bucket = shieldBucket(bodyRadiusPx);
+    if (bucket !== pickupBucket) {
+        pickupBody = buildBody(bucket);
+        pickupBucket = pickupBody ? bucket : -1;
+    }
+    if (pickupBody) ctx.drawImage(pickupBody, x - r, y - r, 2 * r, 2 * r);
     const alpha = ctx.globalAlpha;
     ctx.beginPath();
     ctx.ellipse(x, y + r * 0.2, r * 0.97, r * 0.22, 0, 0, Math.PI * 2);
