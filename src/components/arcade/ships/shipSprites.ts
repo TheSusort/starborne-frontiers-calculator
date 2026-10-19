@@ -6,7 +6,7 @@ import {
     releaseGpu,
     trimShipModelsToClosedSize,
 } from './shipModelLoader';
-import { addShipLights } from './shipLighting';
+import { lightShipScene, ShipLights, SPRITE_SHADOW_MAPS } from './shipLighting';
 import {
     CHASE_CAMERA,
     FRAME_GRID_POSES,
@@ -29,7 +29,7 @@ const FIT_UNIT_MS = 2;
 interface SpriteStage {
     renderer: THREE.WebGLRenderer;
     scene: THREE.Scene;
-    disposeLights: () => void;
+    lights: ShipLights;
     /** Models whose geometry, material and textures this stage's renderer has uploaded. */
     resident: Set<THREE.Object3D>;
     dropped: boolean;
@@ -44,7 +44,7 @@ function dropStage(s: SpriteStage, release: boolean): void {
     s.dropped = true;
     if (release) for (const model of s.resident) releaseGpu(model);
     s.resident.clear();
-    s.disposeLights();
+    s.lights.dispose();
     s.renderer.dispose();
     if (release) s.renderer.forceContextLoss();
 }
@@ -64,11 +64,11 @@ function spriteStage(): SpriteStage {
     renderer.setPixelRatio(1);
     renderer.setClearColor(0x000000, 0);
     const scene = new THREE.Scene();
-    const disposeLights = addShipLights(scene, renderer);
+    const lights = lightShipScene(scene, renderer, SPRITE_SHADOW_MAPS);
     const created: SpriteStage = {
         renderer,
         scene,
-        disposeLights,
+        lights,
         resident: new Set(),
         dropped: false,
     };
@@ -270,6 +270,7 @@ async function renderModel(
         const current = spriteStage();
         const { renderer, scene } = current;
         markResident(current, model);
+        current.lights.aim(o.camera.position);
         setPose(ship, pose);
         // The shared canvas is resized, drawn and read back within this synchronous block, so
         // other renders never see each other's frames.

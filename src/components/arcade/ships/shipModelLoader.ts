@@ -108,18 +108,27 @@ async function load(key: string): Promise<THREE.Group> {
     emissive.colorSpace = THREE.SRGBColorSpace;
     normal.colorSpace = THREE.NoColorSpace;
     orm.colorSpace = THREE.NoColorSpace;
-    // ORM packs occlusion (R), roughness (G), metalness (B) — the channels MeshStandardMaterial reads.
+    // The material matches the official viewer's: ORM's roughness (G) and metalness (B) at full
+    // scale, its occlusion channel (R) unused, the emissive lights at the game's HDR strength,
+    // and the hull casting and receiving its own shadows.
     const material = new THREE.MeshStandardMaterial({
         map: albedo,
-        emissiveMap: emissive,
-        emissive: new THREE.Color(0xffffff),
         normalMap: normal,
-        aoMap: orm,
         roughnessMap: orm,
         metalnessMap: orm,
+        roughness: 1,
+        metalness: 1,
+        envMapIntensity: 0.35,
+        emissiveMap: emissive,
+        emissive: new THREE.Color(0xffffff),
+        emissiveIntensity: 2,
     });
     object.traverse((child) => {
-        if ((child as THREE.Mesh).isMesh) (child as THREE.Mesh).material = material;
+        const mesh = child as THREE.Mesh;
+        if (!mesh.isMesh) return;
+        mesh.material = material;
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
     });
     // Orient, centre and normalise so callers can frame any ship the same way: nose toward +Z,
     // up +Y, bounding-box diagonal 2.

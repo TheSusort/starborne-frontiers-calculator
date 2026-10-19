@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { useMediaQuery } from '../../../hooks/useMediaQuery';
 import { loadShipModel } from './shipModelLoader';
-import { addShipLights } from './shipLighting';
+import { lightShipScene, VIEW_SHADOW_MAPS } from './shipLighting';
 import { pinModel } from './modelPins';
 
 interface ShipModelViewProps {
@@ -52,7 +52,9 @@ const ShipModelView: React.FC<ShipModelViewProps> = ({ visualKey, fallback }) =>
                 container.appendChild(renderer.domElement);
 
                 const scene = new THREE.Scene();
-                disposeLights = addShipLights(scene, renderer);
+                const lights = lightShipScene(scene, renderer, VIEW_SHADOW_MAPS);
+                lights.aim([CAMERA_POSITION.x, CAMERA_POSITION.y, CAMERA_POSITION.z]);
+                disposeLights = lights.dispose;
                 const camera = new THREE.PerspectiveCamera(30, width / HEIGHT_PX, 0.1, 20);
                 camera.position.copy(CAMERA_POSITION);
                 camera.lookAt(0, 0, 0);
