@@ -177,10 +177,12 @@ function useArcadeFleet() {
 }
 
 /** Holds the arcade closed until its fleet is resolved: the opening phase is chosen once, from
- *  the fleet present at mount. */
+ *  the fleet present at mount. Once resolved it stays open, so a later reload never ends a run. */
 const FlightGame: React.FC<FlightGameProps> = (props) => {
     const { loading } = useArcadeFleet();
-    if (loading) {
+    const resolvedRef = useRef(false);
+    if (!loading) resolvedRef.current = true;
+    if (!resolvedRef.current) {
         return (
             <div
                 className="fixed inset-0 z-50 bg-black"
