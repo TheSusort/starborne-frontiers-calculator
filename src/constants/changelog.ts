@@ -22,6 +22,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Arcade: duel results now continue on their own after a moment.',
     'Arcade: your ship now explodes, followed by a YOU DIED screen.',
     'Arcade: ducking now dives your ship low and back up, like a jump.',
+    'Arcade: the magnet now visibly pulls credits in with a tractor beam.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

@@ -402,9 +402,10 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
         gameRef.current = createGame(newSeed(), { duels: true });
     }, [ships, getGearPiece]);
 
-    // Speed lines and the ship's trail follow a reduced-motion change mid-run.
+    // Speed lines, the ship's trail and the magnet's motion follow a reduced-motion change.
     useEffect(() => {
         const view = viewRef.current;
+        view.reducedMotion = reducedMotion;
         if (reducedMotion) {
             view.speedLines = null;
             view.trail = null;

@@ -14,7 +14,6 @@ import {
 import {
     JUMP_PEAK,
     JUMP_SCALE_GAIN,
-    PICKUP_HEIGHT,
     PICKUP_RADIUS,
     SHIELD_BREAK_FLASH,
     SHIP_RIDE_HEIGHT,
@@ -51,6 +50,17 @@ import {
     fitShield,
 } from './shield';
 import { frameFootprint } from './spriteFootprint';
+import {
+    CreditPull,
+    drawMagnetAura,
+    drawTractorBeam,
+    magnetVisibility,
+    MAGNET_PULL_Z,
+    MAX_BEAMS,
+    nearestPulled,
+    pullCredit,
+    restingPull,
+} from './magnetFx';
 import {
     advanceSpeedLines,
     createSpeedLines,
@@ -147,6 +157,8 @@ export interface FlightView {
     /** Set by `explodeShip`: the ship is gone and its explosion plays where it was. */
     dying: boolean;
     explosion: Explosion;
+    /** `prefers-reduced-motion`: the magnet's beams and field hold still. */
+    reducedMotion: boolean;
 }
 
 /** Lane wedge used before the first frame has measured the screen. */
@@ -176,6 +188,7 @@ export function createFlightView(
         dpr: 0,
         dying: false,
         explosion: createExplosion(),
+        reducedMotion,
     };
 }
 
@@ -364,30 +377,58 @@ function drawCheckpoint(
     ctx.restore();
 }
 
+/** A pickup's drawn centre, rewritten for each pickup rather than allocated. */
+const pickupAt: Projected = { x: 0, y: 0, scale: 0, width: 0 };
+
+/** Fills a credit's diamond of radius `r` centred on (`cx`, `cy`). */
+function fillDiamond(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number): void {
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - r);
+    ctx.lineTo(cx + r * 0.7, cy);
+    ctx.lineTo(cx, cy + r);
+    ctx.lineTo(cx - r * 0.7, cy);
+    ctx.closePath();
+    ctx.fill();
+}
+
+/** Where a pickup's centre is drawn: `pullCredit` sets it; its bob fades out as a pull lands. */
+function pickupCentre(
+    out: Projected,
+    g: SceneGeometry,
+    pk: Pickup,
+    pull: CreditPull,
+    timeMs: number
+): Projected {
+    projectInto(g, pull.laneX, pk.z, out);
+    const bob = Math.sin(timeMs * 0.006 + pk.id) * 0.04 * out.width * (1 - pull.glow);
+    out.y -= pull.height * out.width - bob;
+    return out;
+}
+
+/** Draws a pickup centred on `p` (see `pickupCentre`). */
 function drawPickup(
     ctx: CanvasRenderingContext2D,
     g: SceneGeometry,
     pk: Pickup,
-    timeMs: number,
+    p: Projected,
+    pull: CreditPull,
     dpr: number
 ): void {
-    const p = project(g, laneOffset(pk.lane), pk.z);
     const u = p.width;
-    const bob = Math.sin(timeMs * 0.006 + pk.id) * 0.04 * u;
     const cx = p.x;
-    const cy = p.y - PICKUP_HEIGHT * u + bob;
-    const r = PICKUP_RADIUS * u;
+    const cy = p.y;
+    const r = PICKUP_RADIUS * u * pull.scale;
     ctx.globalAlpha = Math.min(1, Math.max(0, (SPAWN_Z - pk.z) / FADE_IN_UNITS));
     ctx.lineWidth = Math.max(1, 2 * p.scale);
     if (pk.kind === 'credit') {
         ctx.fillStyle = '#ffe04a';
-        ctx.beginPath();
-        ctx.moveTo(cx, cy - r);
-        ctx.lineTo(cx + r * 0.7, cy);
-        ctx.lineTo(cx, cy + r);
-        ctx.lineTo(cx - r * 0.7, cy);
-        ctx.closePath();
-        ctx.fill();
+        fillDiamond(ctx, cx, cy, r);
+        // A pulled credit flashes white as it reaches the ship.
+        if (pull.glow > 0) {
+            ctx.globalAlpha = pull.glow;
+            ctx.fillStyle = '#ffffff';
+            fillDiamond(ctx, cx, cy, r * 0.75);
+        }
     } else if (pk.kind === 'shield') {
         const atPlayerRow = PICKUP_RADIUS * SHIELD_PICKUP_SIZE * laneWidthAtPlayer(g) * dpr;
         drawShieldPickup(ctx, cx, cy, r * SHIELD_PICKUP_SIZE, atPlayerRow, p.scale);
@@ -509,19 +550,43 @@ function placeShield(
     out.bank = view.pose.bank;
 }
 
+/** The magnet's field around the ship, against the shield's fit. */
+const MAGNET_FIELD_SIZE = 1.1;
+/** A tractor beam's half-width at its credit, against the credit's radius. */
+const BEAM_WIDTH = 1.15;
+
+/** A pickup's pull and the frame's beamed credits (see `nearestPulled`), rewritten every frame. */
+const pullAt: CreditPull = { laneX: 0, height: 0, scale: 1, glow: 0 };
+const beamScratch: Pickup[] = [];
+
 function drawPlayer(
     ctx: CanvasRenderingContext2D,
     ship: ShipPlacement,
     game: GameState,
     view: FlightView,
     timeMs: number,
-    dpr: number
+    dpr: number,
+    magnet: number
 ): void {
     const { x, y, s, squash, intro: e } = ship;
     const { pose } = view;
     const shield = shieldAt;
     placeShield(shield, ship, view, dpr);
     if (game.player.shield) drawShieldBack(ctx, shield, timeMs);
+    if (magnet > 0) {
+        const { rx, ry } = shield;
+        const k = MAGNET_FIELD_SIZE;
+        drawMagnetAura(
+            ctx,
+            shield.x,
+            shield.y,
+            rx * k,
+            ry * k,
+            magnet,
+            game.time,
+            view.reducedMotion
+        );
+    }
 
     ctx.save();
     ctx.translate(x, y);
@@ -616,19 +681,40 @@ export function renderFlight(
         ...game.checkpoints.filter((c) => c.z > 0).map((c) => ({ z: c.z, checkpoint: c })),
     ];
     items.sort((a, b) => b.z - a.z);
+    const ship = shipAt;
+    placeShip(ship, g, game, view);
+    const u = laneWidthAtPlayer(g);
+    // The magnet pulls credits toward the ship's drawn centre (see `magnetFx`).
+    const shipY = ship.y + (ship.top + ship.bottom) / 2;
+    const shipHeight = (ship.baseY - shipY) / u;
+    const magnetOn = game.player.magnetTime > 0 && !view.dying && ship.intro === 1;
+    const magnet = magnetOn
+        ? magnetVisibility(game.player.magnetTime, game.time, view.reducedMotion)
+        : 0;
+    const beams = magnetOn ? nearestPulled(game.pickups, game.player, MAX_BEAMS, beamScratch) : 0;
     const wreckFade = Math.max(0, 1 - view.explosion.elapsed / WRECK_FADE_SECONDS);
     const drawItem = (item: (typeof items)[number]) => {
         if ('obstacle' in item) {
             const o = item.obstacle;
             drawObstacle(ctx, g, o, timeMs, view.dying && o.z <= 0 ? wreckFade : 1);
-        } else if ('pickup' in item) drawPickup(ctx, g, item.pickup, timeMs, dpr);
-        else drawCheckpoint(ctx, g, item.checkpoint, view.gateArt.get(item.checkpoint.id));
+        } else if ('pickup' in item) {
+            const pk = item.pickup;
+            if (!magnetOn) restingPull(pullAt, pk);
+            else pullCredit(pullAt, pk, game.player, view.playerX, shipHeight);
+            const c = pickupCentre(pickupAt, g, pk, pullAt, timeMs);
+            // A beam draws under its credit, so the credit stays solid on top of it.
+            const beam = beamScratch.indexOf(pk);
+            if (beam >= 0 && beam < beams) {
+                const t = 1 - pk.z / MAGNET_PULL_Z;
+                const half = BEAM_WIDTH * PICKUP_RADIUS * c.width;
+                const reduced = view.reducedMotion;
+                drawTractorBeam(ctx, ship.x, shipY, c.x, c.y, half, t, magnet, game.time, reduced);
+            }
+            drawPickup(ctx, g, pk, c, pullAt, dpr);
+        } else drawCheckpoint(ctx, g, item.checkpoint, view.gateArt.get(item.checkpoint.id));
     };
     // Items already past the player are nearer the camera, so they draw over it.
     for (const item of items) if (item.z >= 0) drawItem(item);
-    const ship = shipAt;
-    placeShip(ship, g, game, view);
-    const u = laneWidthAtPlayer(g);
     const boom = view.explosion;
     if (view.dying) {
         if (!boom.started) {
@@ -645,7 +731,7 @@ export function renderFlight(
         drawShipTrails(ctx, g, view.trail, game.speed, view.playerX, ship, u, e * e * fade);
     }
     view.trailTravel = 0;
-    if (!view.dying) drawPlayer(ctx, ship, game, view, timeMs, dpr);
+    if (!view.dying) drawPlayer(ctx, ship, game, view, timeMs, dpr, magnet);
     for (const item of items) if (item.z < 0) drawItem(item);
     if (view.dying) drawExplosion(ctx, g, boom, w, h);
 }
