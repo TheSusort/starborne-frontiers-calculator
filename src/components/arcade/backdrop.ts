@@ -51,16 +51,18 @@ export const createBackdrop = (): Backdrop => ({
 });
 
 /** The device-pixel rows each layer covers: the sky down to one row past the horizon (the
- *  ground covers it from the horizon on), the sun's glow down to `sunGlowBottom`, the ground
+ *  ground covers it from the horizon on), the sun's glow down to `sunGlowBottom` but no further
+ *  than the sky, the ground
  *  from one row above the mountains' top, the fan from one row above the horizon. */
 export function backdropRows(
     g: SceneGeometry,
     dpr: number
 ): Record<keyof Backdrop, [number, number]> {
     const canvasRows = Math.round(g.h * dpr);
+    const skyBottom = Math.min(canvasRows, Math.ceil(g.horizonY * dpr) + 1);
     return {
-        sky: [0, Math.min(canvasRows, Math.ceil(g.horizonY * dpr) + 1)],
-        glow: [0, Math.min(canvasRows, Math.ceil(sunGlowBottom(g) * dpr))],
+        sky: [0, skyBottom],
+        glow: [0, Math.min(skyBottom, Math.ceil(sunGlowBottom(g) * dpr))],
         ground: [Math.max(0, Math.floor(mountainsTop(g) * dpr) - 1), canvasRows],
         fan: [Math.max(0, Math.floor(g.horizonY * dpr) - 1), canvasRows],
     };

@@ -74,7 +74,10 @@ describe('backdrop', () => {
             for (const dpr of [1, 1.5, 2]) {
                 const { glow } = backdropRows(g, dpr);
                 expect(glow[0]).toBe(0);
-                expect(glow[1]).toBeGreaterThanOrEqual(Math.min(h, bottom) * dpr);
+                const { sky } = backdropRows(g, dpr);
+                // The ground covers everything below the sky layer, so the glow stops there.
+                expect(glow[1]).toBeGreaterThanOrEqual(Math.min(h, bottom, g.horizonY) * dpr);
+                expect(glow[1]).toBeLessThanOrEqual(sky[1]);
                 expect(glow[1]).toBeLessThanOrEqual(Math.round(h * dpr));
             }
         }
