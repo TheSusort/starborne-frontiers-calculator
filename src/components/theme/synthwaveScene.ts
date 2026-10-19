@@ -264,7 +264,10 @@ function sunCircle(g: SceneGeometry): { sunX: number; sunY: number; sunR: number
     return { sunX: g.w / 2, sunY: g.horizonY - sunR * 0.6, sunR };
 }
 
-/** The sun's outer glow; it changes only with the geometry. */
+/** The lowest y the sun's outer glow paints. */
+export const sunGlowBottom = (g: SceneGeometry): number => g.horizonY + sunCircle(g).sunR;
+
+/** The sun's outer glow, down to `sunGlowBottom`; it changes only with the geometry. */
 export function drawSunGlow(ctx: CanvasRenderingContext2D, g: SceneGeometry): void {
     const { sunX, sunY, sunR } = sunCircle(g);
     const outerGlow = ctx.createRadialGradient(sunX, sunY, sunR, sunX, sunY, sunR * 4);
@@ -272,7 +275,7 @@ export function drawSunGlow(ctx: CanvasRenderingContext2D, g: SceneGeometry): vo
     outerGlow.addColorStop(0.3, 'rgba(200, 80, 150, 0.1)');
     outerGlow.addColorStop(1, 'rgba(0, 0, 0, 0)');
     ctx.fillStyle = outerGlow;
-    ctx.fillRect(0, 0, g.w, g.horizonY + sunR);
+    ctx.fillRect(0, 0, g.w, sunGlowBottom(g));
 }
 
 /** The sun: its outer glow, then its striped disc. */

@@ -37,6 +37,7 @@ import {
     Backdrop,
     createBackdrop,
     drawBackdropFan,
+    drawBackdropGlow,
     drawBackdropGround,
     drawBackdropSky,
 } from './backdrop';
@@ -591,6 +592,7 @@ export function renderFlight(
     ctx.clearRect(0, 0, w, h);
     drawBackdropSky(ctx, g, view.backdrop, dpr);
     drawStars(ctx, g, view.stars, timeMs, true);
+    drawBackdropGlow(ctx, g, view.backdrop, dpr);
     drawSunDisc(ctx, g, view.sun, timeMs, true);
     drawBackdropGround(ctx, g, view.backdrop, dpr);
     drawGridLines(ctx, g, view.gridOffset);

@@ -6,20 +6,27 @@ import {
     drawSunGlow,
     mountainsTop,
     SceneGeometry,
+    sunGlowBottom,
 } from '../theme/synthwaveScene';
 import { introGridLayers } from './projection';
 
 /**
  * The arcade's static scenery, rendered once per screen size into device-pixel caches and
- * blitted 1:1 every frame: the sky (with its nebulae and the sun's glow) down to the horizon,
- * the mountains and ground from the highest peak down, and the grid's vertical fan with its
- * centre glow. The stars and the sun's disc animate, so they draw live between the first two,
- * and the scrolling horizontal grid lines between the last two. Blitting the fan's cached
- * composite over the lines matches drawing its parts over them, since source-over compositing
- * is associative.
+ * blitted 1:1 every frame, in this order:
+ * - the sky and its nebulae, down to the horizon;
+ * - the stars, live;
+ * - the sun's outer glow, on a transparent layer of its own, so the stars sit under it rather
+ *   than brightening it;
+ * - the sun's disc, live;
+ * - the mountains and ground, from the highest peak down;
+ * - the scrolling horizontal grid lines, live;
+ * - the grid's vertical fan with its centre glow.
+ * Blitting a cached composite over live drawing matches drawing its parts over it, since
+ * source-over compositing is associative.
  */
 export interface Backdrop {
     sky: Layer;
+    glow: Layer;
     ground: Layer;
     fan: Layer;
 }
@@ -38,20 +45,22 @@ const emptyLayer = (): Layer => ({ canvas: null, top: 0, w: 0, h: 0, dpr: 0 });
 
 export const createBackdrop = (): Backdrop => ({
     sky: emptyLayer(),
+    glow: emptyLayer(),
     ground: emptyLayer(),
     fan: emptyLayer(),
 });
 
 /** The device-pixel rows each layer covers: the sky down to one row past the horizon (the
- *  ground covers it from the horizon on), the ground from one row above the mountains' top, the
- *  fan from one row above the horizon. */
+ *  ground covers it from the horizon on), the sun's glow down to `sunGlowBottom`, the ground
+ *  from one row above the mountains' top, the fan from one row above the horizon. */
 export function backdropRows(
     g: SceneGeometry,
     dpr: number
-): { sky: [number, number]; ground: [number, number]; fan: [number, number] } {
+): Record<keyof Backdrop, [number, number]> {
     const canvasRows = Math.round(g.h * dpr);
     return {
         sky: [0, Math.min(canvasRows, Math.ceil(g.horizonY * dpr) + 1)],
+        glow: [0, Math.min(canvasRows, Math.ceil(sunGlowBottom(g) * dpr))],
         ground: [Math.max(0, Math.floor(mountainsTop(g) * dpr) - 1), canvasRows],
         fan: [Math.max(0, Math.floor(g.horizonY * dpr) - 1), canvasRows],
     };
@@ -76,6 +85,7 @@ function blit(
         c.setTransform(dpr, 0, 0, dpr, 0, -rows[0]);
         if (which === 'sky') {
             drawSky(c, g);
+        } else if (which === 'glow') {
             drawSunGlow(c, g);
         } else if (which === 'ground') {
             drawMountains(c, g);
@@ -92,13 +102,21 @@ function blit(
     ctx.drawImage(layer.canvas, 0, 0, width, height, 0, layer.top / dpr, width / dpr, height / dpr);
 }
 
-/** The sky, its nebulae and the sun's outer glow. */
+/** The sky and its nebulae. */
 export const drawBackdropSky = (
     ctx: CanvasRenderingContext2D,
     g: SceneGeometry,
     backdrop: Backdrop,
     dpr: number
 ): void => blit(ctx, g, backdrop, dpr, 'sky');
+
+/** The sun's outer glow; drawn after the stars. */
+export const drawBackdropGlow = (
+    ctx: CanvasRenderingContext2D,
+    g: SceneGeometry,
+    backdrop: Backdrop,
+    dpr: number
+): void => blit(ctx, g, backdrop, dpr, 'glow');
 
 /** The mountains, the ground and the horizon's glow line. */
 export const drawBackdropGround = (
