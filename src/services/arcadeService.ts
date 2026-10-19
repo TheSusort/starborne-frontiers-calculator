@@ -40,7 +40,8 @@ export async function submitArcadeScore(
     if (error?.code === 'PGRST202' && withShip) {
         ({ data, error } = await supabase.rpc('submit_arcade_score', base));
     }
-    if (error?.code === '23505') throw new GuestNameTakenError(error.message);
+    // 23505 is a unique violation; with a guest name sent, it is the guest-name index.
+    if (error?.code === '23505' && guestName) throw new GuestNameTakenError(error.message);
     if (error?.message === 'guest_name_required') throw new GuestNameRequiredError(error.message);
     if (error) throw error;
     return parseSubmitResult(data);

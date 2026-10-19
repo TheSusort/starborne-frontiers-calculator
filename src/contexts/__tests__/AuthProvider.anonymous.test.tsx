@@ -1,16 +1,18 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, act, waitFor } from '@testing-library/react';
 import type { AuthUser } from '../../services/auth/types';
 import { StorageKey } from '../../constants/storage';
+import { AuthProvider, useAuth } from '../AuthProvider';
 
 let emit: (u: AuthUser | null) => void = () => {};
+const signInAnonymously = vi.fn();
 vi.mock('../../services/auth/supabaseAuth', () => ({
     SupabaseAuthService: class {
         onAuthStateChanged(cb: (u: AuthUser | null) => void) {
             emit = cb;
             return () => {};
         }
-        signInAnonymously = vi.fn();
+        signInAnonymously = (...a: unknown[]) => signInAnonymously(...a);
     },
 }));
 const usersSelect = vi.fn();
@@ -31,27 +33,35 @@ vi.mock('../../hooks/useNotification', () => ({
 }));
 vi.mock('../../hooks/useStorage', () => ({ removeFromIndexedDB: vi.fn() }));
 
-import { AuthProvider, useAuth } from '../AuthProvider';
-
+let guestSignIn: () => Promise<string> = async () => '';
 const Probe = () => {
-    const { user, guestUserId } = useAuth();
+    const { user, guestUserId, signInAsGuest } = useAuth();
+    guestSignIn = signInAsGuest;
     return <div>{`user=${user?.id ?? 'none'} guest=${guestUserId ?? 'none'}`}</div>;
 };
 
+const events: string[] = [];
+const record = (e: Event) => events.push(e.type);
+
 describe('AuthProvider with an anonymous session', () => {
     beforeEach(() => {
+        events.length = 0;
+        window.addEventListener('app:migration:start', record);
+        window.addEventListener('app:signout', record);
+        signInAnonymously.mockReset();
         localStorage.clear();
         heartbeat.mockClear();
         migrate.mockClear();
         usersSelect.mockReset();
     });
 
+    afterEach(() => {
+        window.removeEventListener('app:migration:start', record);
+        window.removeEventListener('app:signout', record);
+    });
+
     it('exposes the guest uid, keeps user null, and runs no account side effects', async () => {
         localStorage.setItem(StorageKey.DEMO_DATA_LOADED, 'true');
-        const events: string[] = [];
-        const record = (e: Event) => events.push(e.type);
-        window.addEventListener('app:migration:start', record);
-        window.addEventListener('app:signout', record);
         render(
             <AuthProvider>
                 <Probe />
@@ -71,7 +81,27 @@ describe('AuthProvider with an anonymous session', () => {
         await act(async () => emit(null));
         await waitFor(() => expect(screen.getByText('user=none guest=none')).toBeTruthy());
         expect(events).toEqual([]);
-        window.removeEventListener('app:migration:start', record);
-        window.removeEventListener('app:signout', record);
+    });
+
+    it('refuses a guest sign-in while an account is signed in', async () => {
+        usersSelect.mockResolvedValue({ data: null, error: null });
+        signInAnonymously.mockResolvedValue({ id: 'g2' });
+        render(
+            <AuthProvider>
+                <Probe />
+            </AuthProvider>
+        );
+        await act(async () =>
+            emit({
+                id: 'u1',
+                email: 'a@b.c',
+                displayName: null,
+                photoURL: null,
+                isAnonymous: false,
+            })
+        );
+        await waitFor(() => expect(screen.getByText('user=u1 guest=none')).toBeTruthy());
+        await expect(guestSignIn()).rejects.toThrow();
+        expect(signInAnonymously).not.toHaveBeenCalled();
     });
 });

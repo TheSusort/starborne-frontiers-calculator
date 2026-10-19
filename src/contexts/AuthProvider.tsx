@@ -14,7 +14,8 @@ interface AuthContextType {
     loading: boolean;
     /** The arcade guest's uid while an anonymous session is active; null otherwise. */
     guestUserId: string | null;
-    /** Starts an anonymous session (an arcade guest) and resolves to its uid. */
+    /** Starts an anonymous session (an arcade guest) and resolves to its uid. Rejects while an
+     *  account is signed in. */
     signInAsGuest: () => Promise<string>;
     /** `redirectTo` is where Google sign-in returns; defaults to the site root. */
     signInWithGoogle: (redirectTo?: string) => Promise<void>;
@@ -155,7 +156,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
     };
 
+    // An anonymous sign-in replaces the current session, so it never runs over an account.
     const signInAsGuest = async () => {
+        if (user) throw new Error('An account is signed in; a guest session would replace it');
         const guest = await authService.signInAnonymously();
         setGuestUserId(guest.id);
         return guest.id;

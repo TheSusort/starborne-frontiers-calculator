@@ -38,6 +38,7 @@ import { canSkipDeath, deathStage } from './deathSequence';
 import { slowMotion } from './explosion';
 import { useArcadeSubmission, SubmissionStatus, type FinishedRun } from './useArcadeSubmission';
 import { ArcadeUsernameModal } from './ArcadeUsernameModal';
+import { GuestNameModal } from './GuestNameModal';
 import { ArcadeLeaderboard } from './ArcadeLeaderboard';
 import type { FlightOrigin } from './flightEvents';
 import { anyCandidate, canDuel, gearedCandidate, pickOpponents } from './duel/pickOpponents';
@@ -118,13 +119,19 @@ const SubmissionLine: React.FC<{
     status: SubmissionStatus;
     rank: number | null;
     onRetry: () => void;
-}> = ({ status, rank, onRetry }) => {
+    onJoinGuest: () => void;
+}> = ({ status, rank, onRetry, onJoinGuest }) => {
     switch (status) {
-        case 'signed-out':
+        case 'guest-invite':
             return (
-                <p className="text-sm text-theme-text-secondary">
-                    Sign in to join the leaderboard.
-                </p>
+                <div className="space-y-2">
+                    <Button size="sm" onClick={onJoinGuest}>
+                        Join the leaderboard as a guest
+                    </Button>
+                    <p className="text-xs text-theme-text-secondary">
+                        or sign in to use your account name.
+                    </p>
+                </div>
             );
         case 'checking':
         case 'submitting':
@@ -162,7 +169,7 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
     const reducedMotionRef = useRef(reducedMotion);
     reducedMotionRef.current = reducedMotion;
 
-    const { loading: authLoading } = useAuth();
+    const { loading: authLoading, user } = useAuth();
     const { ships: ownedShips, fleetLoaded } = useShips();
     const { ships: templateShips } = useShipsData();
     // `fleetLoaded` reads a session still resolving as signed out, so auth must settle too.
@@ -264,12 +271,13 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
     /** Whether the dying run shows the "YOU DIED" screen yet (see `deathStage`). */
     const [youDied, setYouDied] = useState(false);
     const youDiedRef = useRef(false);
-    const { user } = useAuth();
     const submission = useArcadeSubmission(finished);
 
-    // While the username modal is open, Escape belongs to the modal.
+    // While a name modal is open, Escape belongs to the modal.
     useEffect(() => {
-        escapeBlockedRef.current = phase === 'over' && submission.status === 'needs-username';
+        escapeBlockedRef.current =
+            phase === 'over' &&
+            (submission.status === 'needs-username' || submission.status === 'needs-guest-name');
     }, [phase, submission.status]);
 
     useBodyScrollLock(true);
@@ -1006,6 +1014,7 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
                         status={submission.status}
                         rank={submission.rank}
                         onRetry={submission.retry}
+                        onJoinGuest={submission.joinAsGuest}
                     />
                     <div className="max-h-64 overflow-y-auto text-left">
                         <ArcadeLeaderboard refreshKey={submission.leaderboardVersion} />
@@ -1017,6 +1026,13 @@ const FlightGame: React.FC<FlightGameProps> = ({ origin, onClose }) => {
                     isOpen={phase === 'over' && submission.status === 'needs-username'}
                     userId={user.id}
                     onSaved={submission.onUsernameSaved}
+                    onCancel={submission.skip}
+                />
+            )}
+            {!user && (
+                <GuestNameModal
+                    isOpen={phase === 'over' && submission.status === 'needs-guest-name'}
+                    onSave={submission.saveGuestName}
                     onCancel={submission.skip}
                 />
             )}
