@@ -148,3 +148,38 @@ describe('environment', () => {
         expect(shouldTrack('starborneplanner.com', true)).toBe(false);
     });
 });
+
+describe('tracking primitive robustness', () => {
+    it('fingerprints ignore base64url bundle hashes containing - and _', () => {
+        const a = errorFingerprint(
+            'm',
+            'Error: m\n    at f (https://h/assets/index-Ab-d3_9x.js:1:2)'
+        );
+        const b = errorFingerprint(
+            'm',
+            'Error: m\n    at f (https://h/assets/index-QQQQQQQQ.js:5:6)'
+        );
+        expect(a).toBe(b);
+        expect(topFrame('at f (https://h/assets/vendor-react-Ab12Cd34.js:1:2)')).toBe(
+            'at f (/assets/vendor-react.js)'
+        );
+    });
+
+    it('topFrame skips a header line that contains "at"', () => {
+        const stack = 'Error: failed at position 5\n    at g (https://h/a-AAAAAAAA.js:1:1)';
+        expect(topFrame(stack)).toBe('at g (/a.js)');
+    });
+
+    it('topFrame reads Firefox frames and returns empty without frames', () => {
+        expect(topFrame('g@https://h/assets/index-DQ3x9kLm.js:1:2')).toBe('g@/assets/index.js');
+        expect(topFrame('Error: nothing to see')).toBe('');
+    });
+
+    it('addClick counts inherited key names from zero', () => {
+        expect(addClick({}, 'constructor')).toEqual({ constructor: 1 });
+    });
+
+    it('ActiveTimer total is never negative', () => {
+        expect(new ActiveTimer(1000, true).total(500)).toBe(0);
+    });
+});

@@ -9,11 +9,12 @@ export function isIgnoredError(message: string): boolean {
  * code keeps the same fingerprint.
  */
 export function topFrame(stack: string | undefined): string {
-    const frame = stack?.split('\n').find((line) => /\bat\b|@/.test(line)) ?? '';
+    const frame =
+        stack?.split('\n').find((line) => /^\s*at\s/.test(line) || /^[^\s@]*@/.test(line)) ?? '';
     return frame
         .trim()
         .replace(/https?:\/\/[^/\s)]+/g, '')
-        .replace(/-[A-Za-z0-9_]{8}\.js/g, '.js')
+        .replace(/-[A-Za-z0-9_-]{8}\.js/g, '.js')
         .replace(/(:\d+)+(?=\)|$)/g, '');
 }
 

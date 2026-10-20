@@ -7,7 +7,7 @@ export const MAX_CLICK_COUNT = 999;
 
 export function addClick(map: ClickMap, trackId: string): ClickMap {
     if (!TRACK_ID_PATTERN.test(trackId)) return map;
-    const current = map[trackId];
+    const current = Object.hasOwn(map, trackId) ? map[trackId] : undefined;
     if (current === undefined && Object.keys(map).length >= MAX_CLICK_KEYS) return map;
     return { ...map, [trackId]: Math.min(MAX_CLICK_COUNT, (current ?? 0) + 1) };
 }

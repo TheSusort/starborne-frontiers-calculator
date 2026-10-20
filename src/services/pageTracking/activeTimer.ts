@@ -20,6 +20,6 @@ export class ActiveTimer {
 
     total(now: number): number {
         const running = this.visibleSince === null ? 0 : now - this.visibleSince;
-        return Math.min(MAX_ACTIVE_MS, this.accumulated + running);
+        return Math.max(0, Math.min(MAX_ACTIVE_MS, this.accumulated + running));
     }
 }
