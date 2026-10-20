@@ -1453,7 +1453,8 @@ const DocumentationPage: React.FC = () => {
                                         When none of its first three passes finds a combo that meets
                                         every hard requirement, the algorithm makes up to two more
                                         with fresh random starting points. If no pass produces a
-                                        feasible combo, the closest-to-feasible result is shown
+                                        feasible combo, the result that misses the requirements by
+                                        the least is shown, even if another combo scores higher,
                                         along with a list of which requirements were missed and by
                                         how much &mdash; so you can adjust your limits to something
                                         your inventory can actually hit.

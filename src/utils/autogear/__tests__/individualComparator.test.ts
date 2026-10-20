@@ -16,11 +16,13 @@ describe('compareIndividuals', () => {
         expect(compareIndividuals(b, a)).toBeGreaterThan(0);
     });
 
-    it('among infeasible, higher fitness ranks first', () => {
-        const a = { fitness: 1000, violation: 0.2 };
-        const b = { fitness: 10, violation: 0.1 };
-        expect(compareIndividuals(a, b)).toBeLessThan(0);
-        expect(compareIndividuals(b, a)).toBeGreaterThan(0);
+    it('among infeasible, the build closest to its hard requirements ranks first', () => {
+        // A ship asked for 215 speed: a 200-speed build (smaller miss) beats a 166-speed build
+        // that scores higher on the role formula.
+        const closer = { fitness: 10, violation: 0.07 };
+        const fartherButStronger = { fitness: 1000, violation: 0.23 };
+        expect(compareIndividuals(closer, fartherButStronger)).toBeLessThan(0);
+        expect(compareIndividuals(fartherButStronger, closer)).toBeGreaterThan(0);
     });
 
     it('among infeasible with equal violation, higher fitness ranks first', () => {
@@ -45,7 +47,7 @@ describe('compareIndividuals', () => {
         ];
         arr.sort(compareIndividuals);
         // feasible individuals (violation===0) rank first, sorted by fitness desc: 100, 10
-        // infeasible individuals rank after, sorted by fitness desc: 1000(0.5), 500(0.1)
-        expect(arr.map((x) => x.fitness)).toEqual([100, 10, 1000, 500]);
+        // infeasible individuals rank after, smallest violation first: 500(0.1), 1000(0.5)
+        expect(arr.map((x) => x.fitness)).toEqual([100, 10, 500, 1000]);
     });
 });
