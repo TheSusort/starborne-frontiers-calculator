@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { HOME_FEATURE_GROUPS, NEW_FEATURE_DAYS, isNewFeature } from '../homeFeatures';
+import {
+    HOME_FEATURE_GROUPS,
+    NEW_FEATURE_DAYS,
+    featureTitleForPath,
+    isNewFeature,
+} from '../homeFeatures';
 import { resolveRoutePattern } from '../../../services/pageTracking/resolveRoutePattern';
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -60,5 +65,20 @@ describe('HOME_FEATURE_GROUPS', () => {
     it('has no duplicate destinations', () => {
         const tos = features.map((f) => f.to);
         expect(new Set(tos).size).toBe(tos.length);
+    });
+});
+
+describe('featureTitleForPath', () => {
+    it('names the feature a path opens', () => {
+        expect(featureTitleForPath('/simulator')).toBe('Combat Simulator');
+    });
+
+    it('ignores the query string on both sides', () => {
+        expect(featureTitleForPath('/autogear?ship=abc')).toBe(featureTitleForPath('/autogear'));
+        expect(featureTitleForPath('/autogear')).not.toBeNull();
+    });
+
+    it('is null for a path no feature opens', () => {
+        expect(featureTitleForPath('/ships/some-ship-id')).toBeNull();
     });
 });

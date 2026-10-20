@@ -8,6 +8,7 @@ import { useInventory } from '../../contexts/InventoryProvider';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';
 import { readLastVisitedPath } from '../../hooks/useLastVisitedPath';
 import { formatLastImport, readLastImport } from './fleetPanelState';
+import { featureTitleForPath } from './homeFeatures';
 
 export const FleetPanel: React.FC = () => {
     const { ships } = useShips();
@@ -15,6 +16,7 @@ export const FleetPanel: React.FC = () => {
     const { engineeringStats } = useEngineeringStats();
     const lastImport = formatLastImport(readLastImport(), new Date());
     const lastPath = readLastVisitedPath();
+    const lastTitle = lastPath ? featureTitleForPath(lastPath) : null;
 
     return (
         <section className="space-y-6">
@@ -43,7 +45,7 @@ export const FleetPanel: React.FC = () => {
                     to={lastPath}
                     className="text-primary hover:text-primary-hover text-sm inline-block"
                 >
-                    Continue where you left off
+                    {lastTitle ? `Continue in ${lastTitle}` : 'Continue where you left off'}
                 </Link>
             )}
         </section>

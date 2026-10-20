@@ -215,3 +215,13 @@ export const HOME_FEATURE_GROUPS: HomeFeatureGroup[] = [
         ],
     },
 ];
+
+/** Title of the home feature a pathname opens, ignoring query and hash; null when no feature matches. */
+export const featureTitleForPath = (path: string): string | null => {
+    const pathname = path.split(/[?#]/)[0];
+    for (const group of HOME_FEATURE_GROUPS) {
+        const match = group.features.find((f) => f.to.split(/[?#]/)[0] === pathname);
+        if (match) return match.title;
+    }
+    return null;
+};

@@ -12,20 +12,18 @@ export const HomeFeatureGrid: React.FC = () => {
                     <h3 className="text-lg font-semibold text-theme-text">{group.title}</h3>
                     <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
                         {group.features.map((feature) => (
-                            <div key={feature.to} className="relative flex flex-col">
-                                <FeatureCard
-                                    to={feature.to}
-                                    icon={feature.icon}
-                                    title={feature.title}
-                                    description={feature.description}
-                                    className="h-full"
-                                />
-                                {isNewFeature(feature.addedOn, now) && (
-                                    <Chip variant="accent" className="absolute top-3 right-3">
-                                        New
-                                    </Chip>
-                                )}
-                            </div>
+                            <FeatureCard
+                                key={feature.to}
+                                to={feature.to}
+                                icon={feature.icon}
+                                title={feature.title}
+                                description={feature.description}
+                                badge={
+                                    isNewFeature(feature.addedOn, now) && (
+                                        <Chip variant="accent">New</Chip>
+                                    )
+                                }
+                            />
                         ))}
                     </div>
                 </div>
