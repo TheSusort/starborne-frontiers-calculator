@@ -35,6 +35,7 @@ import { resumeArcadeMusic, writeMusicPref } from './musicPref';
 import { GameOverPanel } from './GameOverPanel';
 import { YouDiedOverlay } from './YouDiedOverlay';
 import { canSkipDeath, deathStage } from './deathSequence';
+import { createDeathCue } from './deathSound';
 import { slowMotion } from './explosion';
 import { useArcadeSubmission, SubmissionStatus, type FinishedRun } from './useArcadeSubmission';
 import { ArcadeUsernameModal } from './ArcadeUsernameModal';
@@ -545,9 +546,12 @@ const FlightGameRun: React.FC<FlightGameProps> = ({ origin, onClose }) => {
         [restart, requestFlownFrames, keyOf, refreshPins]
     );
 
-    /** Ends the run: the result is recorded and submitted now, while the ship explodes and the
-     *  death screen plays before the game-over panel shows it. */
+    const deathCue = useMemo(() => createDeathCue(), []);
+
+    /** Ends the run: the result is recorded and submitted now, while the ship explodes with its
+     *  crash sound and the death screen plays before the game-over panel shows it. */
     const finishRun = useCallback(() => {
+        deathCue.crash(gameRef.current);
         const r = runResult(gameRef.current);
         setFinished({ result: r, shipName: flownRef.current?.name ?? null });
         setPreviousBest(readLocalBest());
@@ -556,7 +560,7 @@ const FlightGameRun: React.FC<FlightGameProps> = ({ origin, onClose }) => {
         youDiedRef.current = false;
         setYouDied(false);
         setPhase('dying');
-    }, [setPhase]);
+    }, [setPhase, deathCue]);
 
     /** Skips the rest of the death sequence to the game-over panel. */
     const skipDeath = useCallback(() => {
