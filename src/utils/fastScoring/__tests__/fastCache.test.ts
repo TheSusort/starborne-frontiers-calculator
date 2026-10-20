@@ -44,6 +44,15 @@ describe('FastCache (two-generation)', () => {
         expect(c.get('k0')).toBeUndefined();
     });
 
+    it('a one-entry cache holds one entry', () => {
+        const c = new FastCache<number>(1);
+        c.set('a', 1);
+        c.set('b', 2);
+        expect(c.size).toBe(1);
+        expect(c.get('a')).toBeUndefined();
+        expect(c.get('b')).toBe(2);
+    });
+
     it('keeps an entry that is read every generation', () => {
         const c = new FastCache<number>(4);
         c.set('hot', 1);

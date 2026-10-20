@@ -16,9 +16,12 @@ export class FastCache<V> {
     private current = new Map<string, V>();
     private previous = new Map<string, V>();
     private readonly generationLimit: number;
+    /** A one-entry cache has no room for a second generation. */
+    private readonly keepsPrevious: boolean;
 
     constructor(limit: number) {
         this.generationLimit = Math.max(1, Math.floor(limit / 2));
+        this.keepsPrevious = limit >= 2;
     }
 
     get(key: string): V | undefined {
@@ -31,7 +34,7 @@ export class FastCache<V> {
 
     set(key: string, value: V): void {
         if (this.current.size >= this.generationLimit && !this.current.has(key)) {
-            this.previous = this.current;
+            this.previous = this.keepsPrevious ? this.current : new Map();
             this.current = new Map();
         }
         this.current.set(key, value);
