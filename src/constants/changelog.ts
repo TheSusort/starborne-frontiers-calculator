@@ -6,7 +6,9 @@ export const CURRENT_VERSION = '1.81.1';
 // top of CHANGELOG, bumps CURRENT_VERSION and empties this array — all three together, because a
 // bumped version whose entries are still unreleased shows users a what's-new dialog listing
 // nothing. Do it by hand only if that script cannot.
-export const UNRELEASED_CHANGES: string[] = [];
+export const UNRELEASED_CHANGES: string[] = [
+    'Home page: refreshed banners featuring Arcade, Combat Simulator, Bounty Credits and Game Basics.',
+];
 
 export const CHANGELOG: ChangelogEntry[] = [
     {
