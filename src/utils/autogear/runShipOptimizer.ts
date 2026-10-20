@@ -58,10 +58,9 @@ export interface ShipOptimizerDeps {
     getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined;
     gearToShipMap: Map<string, string>;
     getShipById: (id: string) => Ship | undefined;
-    /** The strategy is a shared module-level instance, so a caller that cares about
-     *  progress must supply its own callback every call — otherwise a stale one from an
-     *  unrelated earlier run stays attached and fires here instead. Omit it to explicitly want
-     *  no progress reporting for this call. */
+    /** The strategy is a shared module-level instance that holds only the most recent
+     *  callback; every call sets it to this one, or to a no-op when omitted, so a callback
+     *  from an earlier run never fires for this one. */
     onProgress?: (progress: AutogearProgress) => void;
 }
 
