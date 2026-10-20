@@ -144,3 +144,39 @@ describe('PageTracker', () => {
         expect(sent).toEqual([]);
     });
 });
+
+describe('PageTracker robustness and opt-out', () => {
+    it('does not throw when send throws, and later batches are still sent', () => {
+        let calls = 0;
+        const sent: VisitRecord[][] = [];
+        const { tracker } = setup({
+            send: (visits) => {
+                calls++;
+                if (calls === 1) throw new Error('boom');
+                sent.push(visits);
+            },
+        });
+        tracker.startVisit('/a', '/a', true);
+        expect(() => tracker.setVisible(false)).not.toThrow();
+        tracker.startVisit('/b', '/b', true);
+        expect(() => tracker.flush()).not.toThrow();
+        expect(sent.length).toBeGreaterThan(0);
+    });
+
+    it('records nothing while disabled, and a recurring error is sent once enabled', () => {
+        let enabled = false;
+        const { tracker, sent } = setup({ isEnabled: () => enabled });
+        tracker.startVisit('/a', '/a', true);
+        tracker.recordClick('gear.x');
+        tracker.recordError('Boom', 'at f (a.js:1:1)');
+        enabled = true;
+        tracker.flush();
+        expect(sent).toHaveLength(0);
+        tracker.recordError('Boom', 'at f (a.js:1:1)');
+        tracker.startVisit('/b', '/b', true);
+        tracker.flush();
+        expect(sent).toHaveLength(1);
+        expect(sent[0].errors).toHaveLength(1);
+        expect(sent[0].visits.map((v) => v.clicks)).toEqual([{}]);
+    });
+});

@@ -5318,8 +5318,8 @@ const DocumentationPage: React.FC = () => {
                             <div className="p-4 bg-dark-lighter">
                                 <h4 className="font-semibold text-primary mb-2">Usage Tracking</h4>
                                 <p className="text-theme-text mb-2">
-                                    The planner records anonymous usage to see which pages and tools
-                                    are used and which errors people hit:
+                                    The planner records usage to see which pages and tools are used
+                                    and which errors people hit:
                                 </p>
                                 <ul className="text-theme-text list-disc pl-4 space-y-1">
                                     <li>
@@ -5337,11 +5337,16 @@ const DocumentationPage: React.FC = () => {
                                         The site you arrived from and whether you are on desktop,
                                         tablet or mobile
                                     </li>
+                                    <li>
+                                        A random ID stored in this browser, and your account when
+                                        you are signed in
+                                    </li>
                                 </ul>
                                 <p className="text-theme-text mt-2">
-                                    No cookies are used and nothing you type is recorded. Raw
-                                    records are deleted after 7 days; only daily totals are kept. To
-                                    opt out, tick{' '}
+                                    No cookies are used. Error reports include the error message,
+                                    which can quote data the app was working with. Raw records,
+                                    including the browser ID and account link, are deleted after 7
+                                    days; only daily totals are kept. To opt out, tick{' '}
                                     <strong>Don&apos;t track my usage in this browser</strong> on
                                     the Profile page.
                                 </p>

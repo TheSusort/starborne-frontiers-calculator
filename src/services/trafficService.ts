@@ -24,7 +24,7 @@ export async function getTrafficSummary(days: number): Promise<TrafficSummary | 
         console.error('Error loading traffic summary:', error);
         return null;
     }
-    return data as TrafficSummary;
+    return (data as TrafficSummary | null) ?? null;
 }
 
 export function formatDuration(ms: number): string {

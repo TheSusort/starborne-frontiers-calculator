@@ -1,6 +1,6 @@
 export type ClickMap = Record<string, number>;
 
-/** Mirrors the check in `track_page_events`; a key the server would drop is never counted. */
+/** A key the server would drop is never counted; `serverLimits.test.ts` pins this to the migration. */
 export const TRACK_ID_PATTERN = /^[a-z0-9._-]{1,40}$/;
 export const MAX_CLICK_KEYS = 20;
 export const MAX_CLICK_COUNT = 999;

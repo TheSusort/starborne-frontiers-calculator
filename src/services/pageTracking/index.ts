@@ -4,6 +4,7 @@ import { trackIdFromTarget } from './clicks';
 import {
     deviceForWidth,
     loadIdentity,
+    randomId,
     readTrackingOptOut,
     referrerHost,
     safeLocalStorage,
@@ -22,27 +23,37 @@ let accessToken: string | null = null;
  */
 export function getPageTracker(): PageTracker {
     if (tracker) return tracker;
-    void supabase.auth.getSession().then(({ data }) => {
-        accessToken = data.session?.access_token ?? null;
-    });
-    supabase.auth.onAuthStateChange((_event, session) => {
-        accessToken = session?.access_token ?? null;
-    });
-    tracker = new PageTracker({
-        now: () => Date.now(),
-        newId: () => crypto.randomUUID(),
-        identity: loadIdentity(safeLocalStorage(), safeSessionStorage(), () => crypto.randomUUID()),
-        referrerHost: referrerHost(document.referrer, window.location.hostname),
-        device: deviceForWidth(window.innerWidth),
-        appVersion: CURRENT_VERSION,
-        isEnabled: () =>
-            shouldTrack(window.location.hostname, readTrackingOptOut(safeLocalStorage())),
-        send: createRpcSender(
-            import.meta.env.VITE_SUPABASE_URL as string,
-            import.meta.env.VITE_SUPABASE_ANON_KEY as string,
-            () => accessToken
-        ),
-    });
+    try {
+        supabase.auth.onAuthStateChange((_event, session) => {
+            accessToken = session?.access_token ?? null;
+        });
+        tracker = new PageTracker({
+            now: () => Date.now(),
+            newId: randomId,
+            identity: loadIdentity(safeLocalStorage(), safeSessionStorage(), randomId),
+            referrerHost: referrerHost(document.referrer, window.location.hostname),
+            device: deviceForWidth(window.innerWidth),
+            appVersion: CURRENT_VERSION,
+            isEnabled: () =>
+                shouldTrack(window.location.hostname, readTrackingOptOut(safeLocalStorage())),
+            send: createRpcSender(
+                import.meta.env.VITE_SUPABASE_URL as string,
+                import.meta.env.VITE_SUPABASE_ANON_KEY as string,
+                () => accessToken
+            ),
+        });
+    } catch {
+        tracker = new PageTracker({
+            now: () => Date.now(),
+            newId: () => 'inert',
+            identity: { visitorId: 'inert', sessionId: 'inert', isNewSession: false },
+            referrerHost: null,
+            device: 'desktop',
+            appVersion: CURRENT_VERSION,
+            isEnabled: () => false,
+            send: () => undefined,
+        });
+    }
     return tracker;
 }
 

@@ -5,8 +5,8 @@ import { errorFingerprint, isIgnoredError } from './errorFingerprint';
 
 export const MAX_VISITS_PER_FLUSH = 20;
 export const MAX_ERRORS_PER_FLUSH = 10;
-const MAX_MESSAGE_LENGTH = 300;
-const MAX_STACK_LENGTH = 1000;
+export const MAX_MESSAGE_LENGTH = 300;
+export const MAX_STACK_LENGTH = 1000;
 
 /** One page view. The server UPSERTs by `id`, so every snapshot of a visit replaces the last. */
 export interface VisitRecord {
@@ -84,11 +84,12 @@ export class PageTracker {
     }
 
     recordClick(trackId: string): void {
+        if (!this.deps.isEnabled()) return;
         if (this.open) this.open.clicks = addClick(this.open.clicks, trackId);
     }
 
     recordError(message: string, stack: string | undefined): void {
-        if (isIgnoredError(message)) return;
+        if (!this.deps.isEnabled() || isIgnoredError(message)) return;
         const fingerprint = errorFingerprint(message, stack);
         if (this.seenFingerprints.has(fingerprint)) return;
         this.seenFingerprints.add(fingerprint);
@@ -122,13 +123,17 @@ export class PageTracker {
             const visits = [...this.pendingVisits.values()].slice(0, MAX_VISITS_PER_FLUSH);
             visits.forEach((v) => this.pendingVisits.delete(v.id));
             const errors = this.pendingErrors.splice(0, MAX_ERRORS_PER_FLUSH);
-            this.deps.send(visits, errors);
+            try {
+                this.deps.send(visits, errors);
+            } catch {
+                // A failing transport drops this batch; tracking never breaks the app.
+            }
         }
     }
 
     private snapshot(): void {
         const visit = this.open;
-        if (!visit) return;
+        if (!visit || !this.deps.isEnabled()) return;
         this.pendingVisits.set(visit.id, {
             id: visit.id,
             visitor_id: this.deps.identity.visitorId,

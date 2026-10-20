@@ -656,8 +656,9 @@ export const ProfilePage: React.FC = () => {
                                 <p className="text-theme-text-secondary text-sm mb-3">
                                     We record which pages you open, how long they stay on screen,
                                     clicks on main buttons, and errors you run into, to see what to
-                                    improve. No cookies and no personal data; raw records are
-                                    deleted after 7 days.
+                                    improve. This browser gets a random ID, and when you are signed
+                                    in, visits are linked to your account. No cookies; raw records
+                                    are deleted after 7 days and only daily totals are kept.
                                 </p>
                                 <Checkbox
                                     label="Don't track my usage in this browser"

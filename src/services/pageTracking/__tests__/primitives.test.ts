@@ -1,10 +1,11 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { ActiveTimer, MAX_ACTIVE_MS } from '../activeTimer';
 import { addClick, navTrackId, trackIdFromTarget, MAX_CLICK_KEYS } from '../clicks';
 import { errorFingerprint, isIgnoredError, topFrame } from '../errorFingerprint';
 import {
     deviceForWidth,
     loadIdentity,
+    randomId,
     readTrackingOptOut,
     referrerHost,
     shouldTrack,
@@ -181,5 +182,21 @@ describe('tracking primitive robustness', () => {
 
     it('ActiveTimer total is never negative', () => {
         expect(new ActiveTimer(1000, true).total(500)).toBe(0);
+    });
+});
+
+describe('randomId', () => {
+    it('builds a v4 UUID from getRandomValues when randomUUID is missing', () => {
+        const original = globalThis.crypto;
+        vi.stubGlobal('crypto', {
+            getRandomValues: (a: Uint8Array) => original.getRandomValues(a),
+        });
+        try {
+            expect(randomId()).toMatch(
+                /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+            );
+        } finally {
+            vi.unstubAllGlobals();
+        }
     });
 });

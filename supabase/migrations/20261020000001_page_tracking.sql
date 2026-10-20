@@ -237,7 +237,7 @@ BEGIN
       IF NOT (e->>'fingerprint' ~ '^[0-9a-f]{8}$') THEN
         CONTINUE;
       END IF;
-      -- Byte bounds (2 bytes per character on average at the character limits) drop the row outright.
+      -- Byte bounds allow up to 2 bytes per character at the character limits; a row over them is dropped.
       msg := left(coalesce(e->>'message', ''), 300);
       stk := left(coalesce(e->>'stack', ''), 1000);
       IF octet_length(msg) > 600 OR octet_length(stk) > 2000 THEN

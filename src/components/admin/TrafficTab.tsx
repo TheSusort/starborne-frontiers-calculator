@@ -116,7 +116,7 @@ export const TrafficTab: React.FC<TrafficTabProps> = ({ daysBack }) => {
         { key: 'sample_path', label: 'Page' },
         { key: 'app_version', label: 'Version' },
         { key: 'count', label: 'Count', align: 'right' },
-        { key: 'visitors', label: 'Visitors', align: 'right' },
+        { key: 'visitors', label: 'Visitor-days', align: 'right' },
         { key: 'last_seen', label: 'Last seen', align: 'right' },
     ];
 

@@ -12,7 +12,11 @@ interface TrafficChartProps {
 export const TrafficChart: React.FC<TrafficChartProps> = ({ data, title }) => {
     const colors = useThemeColors();
     const chartData = data.map((d) => ({
-        date: new Date(d.day).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        date: new Date(d.day).toLocaleDateString('en-US', {
+            month: 'short',
+            day: 'numeric',
+            timeZone: 'UTC',
+        }),
         'Page Views': d.views,
         Visitors: d.visitors,
         Sessions: d.sessions,
