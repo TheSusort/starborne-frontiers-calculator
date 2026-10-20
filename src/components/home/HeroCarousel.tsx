@@ -67,6 +67,15 @@ const slides: Slide[] = [
     },
 ];
 
+/** Keyboard focus only: a dot clicked with the mouse keeps focus, and must not hold the pause. */
+const isFocusVisible = (el: Element): boolean => {
+    try {
+        return el.matches(':focus-visible');
+    } catch {
+        return false;
+    }
+};
+
 export const HeroCarousel: React.FC = () => {
     const [currentSlide, setCurrentSlide] = useState(0);
     const [loadedSlides, setLoadedSlides] = useState<Set<number>>(() => new Set([0]));
@@ -128,7 +137,7 @@ export const HeroCarousel: React.FC = () => {
             className="relative w-[calc(100%+2rem)] lg:w-[calc(100vw-16rem)] h-[600px] overflow-hidden mb-8 mt-[-2rem] group mx-[-1rem] lg:mx-0 lg:ml-[calc(-1rem-max(0px,((100vw-16rem-80rem-2rem)/2)))]"
             onMouseEnter={() => setIsHovered(true)}
             onMouseLeave={() => setIsHovered(false)}
-            onFocus={() => setIsFocused(true)}
+            onFocus={(e) => setIsFocused(isFocusVisible(e.target))}
             onBlur={(e) => {
                 if (!e.currentTarget.contains(e.relatedTarget)) setIsFocused(false);
             }}
