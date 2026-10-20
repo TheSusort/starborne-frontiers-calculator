@@ -36,3 +36,4 @@ export * from './tables';
 export * from './Textarea';
 export * from './ToggleChipGroup';
 export * from './charts';
+export * from './ArtBackdrop';
