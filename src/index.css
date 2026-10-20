@@ -326,6 +326,69 @@
         }
     }
 
+    /* Arcade duel: a number that rises off the struck ship and fades, and the charged-skill
+       banner's flash. Reduced motion keeps the fade and drops the movement. */
+    .arcade-duel-float {
+        animation: arcade-duel-float 1s ease-out both;
+    }
+
+    .arcade-duel-charged {
+        animation: arcade-duel-charged 0.9s ease-out both;
+    }
+
+    @keyframes arcade-duel-float {
+        0% {
+            opacity: 0;
+            transform: translate(-50%, 0.25rem);
+        }
+        12% {
+            opacity: 1;
+        }
+        70% {
+            opacity: 1;
+        }
+        100% {
+            opacity: 0;
+            transform: translate(-50%, -2.25rem);
+        }
+    }
+
+    @keyframes arcade-duel-fade-out {
+        0%,
+        70% {
+            opacity: 1;
+        }
+        100% {
+            opacity: 0;
+        }
+    }
+
+    @keyframes arcade-duel-charged {
+        0% {
+            opacity: 0;
+            transform: scale(1.15);
+        }
+        20% {
+            opacity: 1;
+            transform: scale(1);
+        }
+        100% {
+            opacity: 1;
+            transform: scale(1);
+        }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .arcade-duel-float {
+            animation: arcade-duel-fade-out 1s ease-out both;
+            transform: translateX(-50%);
+        }
+
+        .arcade-duel-charged {
+            animation: none;
+        }
+    }
+
     .card {
         @apply bg-dark border border-dark-border p-4;
         transition: background-color 0.2s ease;
