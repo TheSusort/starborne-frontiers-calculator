@@ -1329,7 +1329,8 @@ const DocumentationPage: React.FC = () => {
                                             <ul className="text-theme-text list-disc pl-4 space-y-1">
                                                 <li>Speed × 10 (base weight)</li>
                                                 <li>
-                                                    Boost set bonus (30,000 points for 4 pieces)
+                                                    Boost set bonus (45,000 points for 4 or more
+                                                    pieces)
                                                 </li>
                                                 <li>Effective HP (scaled down)</li>
                                             </ul>
@@ -1346,7 +1347,8 @@ const DocumentationPage: React.FC = () => {
                                                 <li>Speed × 10 (base weight)</li>
                                                 <li>Attack power (square root scaled)</li>
                                                 <li>
-                                                    Boost set bonus (30,000 points for 4 pieces)
+                                                    Boost set bonus (45,000 points for 4 or more
+                                                    pieces)
                                                 </li>
                                             </ul>
                                         </div>
@@ -1761,8 +1763,9 @@ const DocumentationPage: React.FC = () => {
                                     <p className="text-theme-text mt-2">
                                         Each run makes three independent passes and keeps the best,
                                         so repeated runs land on the same answer more often. Every
-                                        pass also starts from the gear the ship already wears, so a
-                                        suggestion never scores below the current loadout.
+                                        pass also starts from the gear the ship already wears, so
+                                        unless hard requirements rule it out, a suggestion never
+                                        scores below the current loadout.
                                     </p>
                                 </div>
                             </div>

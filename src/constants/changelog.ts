@@ -7,10 +7,10 @@ export const CURRENT_VERSION = '1.81.0';
 // bumped version whose entries are still unreleased shows users a what's-new dialog listing
 // nothing. Do it by hand only if that script cannot.
 export const UNRELEASED_CHANGES: string[] = [
-    'Autogear: buffer supporters now keep the Boost bonus with 5 or 6 Boost pieces.',
+    'Autogear: buffer and offensive supporters now keep the Boost bonus with 5+ pieces.',
     'Autogear: corrosion debuffers now count Decimation per complete 2-piece set, not per piece.',
     'Autogear: suggestions are now more consistent when you run the same ship again.',
-    'Autogear: suggestions now never score below the gear a ship already wears.',
+    'Autogear: the gear a ship already wears is now always a candidate.',
     'Autogear: runs with hard requirements it cannot meet now finish faster.',
     'Autogear: optimizing no longer stalls when you switch to another browser tab.',
 ];
