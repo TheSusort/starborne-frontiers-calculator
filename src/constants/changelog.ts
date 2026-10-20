@@ -1,25 +1,30 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '1.81.0';
+export const CURRENT_VERSION = '1.81.1';
 
 // Accumulates between releases. `npm run release` folds these into a new ChangelogEntry at the
 // top of CHANGELOG, bumps CURRENT_VERSION and empties this array — all three together, because a
 // bumped version whose entries are still unreleased shows users a what's-new dialog listing
 // nothing. Do it by hand only if that script cannot.
-export const UNRELEASED_CHANGES: string[] = [
-    'Autogear: buffer and offensive supporters now keep the Boost bonus with 5+ pieces.',
-    'Autogear: corrosion debuffers now count Decimation per complete 2-piece set, not per piece.',
-    'Autogear: suggestions are now more consistent when you run the same ship again.',
-    'Autogear: the gear a ship already wears is now always a candidate.',
-    'Autogear: runs with hard requirements it cannot meet now finish faster.',
-    'Autogear: optimizing no longer stalls when you switch to another browser tab.',
-    'Autogear: unmet hard requirements now get the build that comes closest to them.',
-    'Autogear: optimizing with implants now runs about three times faster.',
-    'Autogear: stat priorities no longer hide implants your role would pick.',
-    'Pages that fail to load now show a reload button instead of looping.',
-];
+export const UNRELEASED_CHANGES: string[] = [];
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.81.1',
+        date: '2026-10-20',
+        changes: [
+            'Autogear: buffer and offensive supporters now keep the Boost bonus with 5+ pieces.',
+            'Autogear: corrosion debuffers now count Decimation per complete 2-piece set, not per piece.',
+            'Autogear: suggestions are now more consistent when you run the same ship again.',
+            'Autogear: the gear a ship already wears is now always a candidate.',
+            'Autogear: runs with hard requirements it cannot meet now finish faster.',
+            'Autogear: optimizing no longer stalls when you switch to another browser tab.',
+            'Autogear: unmet hard requirements now get the build that comes closest to them.',
+            'Autogear: optimizing with implants now runs about three times faster.',
+            'Autogear: stat priorities no longer hide implants your role would pick.',
+            'Pages that fail to load now show a reload button instead of looping.',
+        ],
+    },
     {
         version: '1.81.0',
         date: '2026-10-20',
