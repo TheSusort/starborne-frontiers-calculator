@@ -99,7 +99,12 @@ const SeedRunControls: React.FC<Props> = ({
                     Cancel
                 </Button>
             ) : (
-                <Button variant="primary" onClick={onRun} disabled={!canRun}>
+                <Button
+                    variant="primary"
+                    onClick={onRun}
+                    disabled={!canRun}
+                    data-track="simulator.run"
+                >
                     Run Simulation
                 </Button>
             )}

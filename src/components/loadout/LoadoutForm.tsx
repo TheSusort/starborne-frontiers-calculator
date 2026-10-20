@@ -92,6 +92,7 @@ export const LoadoutForm: React.FC<LoadoutFormProps> = ({
                 <Button
                     aria-label={isEditing ? 'Save loadout' : 'Create loadout'}
                     type="submit"
+                    data-track="loadout.save"
                     disabled={!selectedShip || !name.trim()}
                 >
                     {isEditing ? 'Save Loadout' : 'Create Loadout'}

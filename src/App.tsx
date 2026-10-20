@@ -8,6 +8,7 @@ import { AuthProvider } from './contexts/AuthProvider';
 import { InventoryProvider } from './contexts/InventoryProvider';
 import { ShipsProvider } from './contexts/ShipsContext';
 import { StorageKey } from './constants/storage';
+import { PageTracking } from './components/tracking/PageTracking';
 import { CHANGELOG, CURRENT_VERSION, AUTHOR } from './constants';
 import { ChangelogState } from './types/changelog';
 import { EngineeringStatsProvider } from './contexts/EngineeringStatsProvider';
@@ -165,6 +166,7 @@ const App: React.FC = () => {
                                                                 </Suspense>
                                                             </ChunkErrorBoundary>
                                                         )}
+                                                        <PageTracking />
                                                         <main className="flex">
                                                             <Sidebar />
                                                             <div className="flex-1 lg:pl-64 max-w-full">

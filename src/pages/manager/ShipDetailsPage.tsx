@@ -290,6 +290,7 @@ export const ShipDetailsPage: React.FC = () => {
                         </Button>
                         <Button
                             aria-label="Save loadout"
+                            data-track="loadout.save-from-details"
                             type="submit"
                             disabled={!loadoutName.trim()}
                         >

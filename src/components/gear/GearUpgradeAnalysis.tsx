@@ -604,6 +604,7 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({
                                 variant="primary"
                                 onClick={() => void handleSimulateUpgrades()}
                                 disabled={isLoading}
+                                data-track="gear.simulate-upgrades"
                             >
                                 Simulate Upgrades
                             </Button>

@@ -438,6 +438,7 @@ export const ImportButton: React.FC<{
                     onClick={() => document.getElementById(inputDomId)?.click()}
                     className={className}
                     data-import-button
+                    data-track="import.open"
                     title="Click to select a file or drop a .json export here"
                 >
                     {loading ? (

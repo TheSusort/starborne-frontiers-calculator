@@ -1229,6 +1229,7 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                         variant="primary"
                         className="w-full"
                         data-testid="autogear-modal-start"
+                        data-track="autogear.run"
                         disabled={isCustom && isFormulaEmpty(customFormula)}
                     >
                         Find Optimal Gear
