@@ -6,7 +6,7 @@ import {
 } from '../statResolution';
 import { calculatePriorityScore } from '../priorityScore';
 import { customFormulaScore, isBasisStat, usableBasisTerms, FORMULA_STATS } from '../customFormula';
-import { STAT_NORMALIZERS, DERIVED_STAT_LABELS, getLimitStatLabel } from '../../../constants/stats';
+import { DERIVED_STAT_LABELS, getLimitStatLabel } from '../../../constants/stats';
 import type { BaseStats } from '../../../types/stats';
 import type { CustomFormula } from '../../../types/autogear';
 
@@ -82,7 +82,6 @@ describe('critMultiplier as a derived limit stat', () => {
 
     it('has a normalizer near the geared value (~2.0, 100 crit / 100 critDamage)', () => {
         expect(MULTIPLIER_NORMALIZERS.critMultiplier).toBe(2);
-        expect(STAT_NORMALIZERS.critMultiplier).toBe(2);
     });
 
     it('has the Crit Multiplier / CRITx label', () => {

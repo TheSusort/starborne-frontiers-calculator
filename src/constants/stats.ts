@@ -125,22 +125,6 @@ export const SLOT_MAIN_STATS: Record<GearSlotName, StatName[]> = {
 
 export const ALL_STAT_NAMES = Object.keys(STATS) as StatName[];
 
-// Keyed by LimitableStat, not string: a stray key (e.g. "defense" for "defence") silently
-// falls back to a normalizer of 1 at every call site, so let the compiler reject it instead.
-export const STAT_NORMALIZERS: Partial<Record<LimitableStat, number>> = {
-    hp: 10000, // Normalize around 10k
-    attack: 5000, // Normalize around 5k
-    defence: 5000, // Normalize around 5k (StatName is "defence", not "defense")
-    hacking: 100, // Normalize around 100
-    security: 100, // Normalize around 100
-    crit: 25, // Normalize around 25% (StatName is "crit", not "critChance")
-    critDamage: 50, // Normalize around 50%
-    speed: 100, // Normalize around 100
-    effectiveHp: 30000, // effectiveHP runs ~1.3-5x raw hp; normalize above hp's 10k
-    directDamage: 3000, // attack x crit multiplier x def-pen factor; ~the ATTACKER scoring baseline
-    critMultiplier: 2, // ~the geared value: 100 crit / 100 crit power -> 1 + 1.0 x 1.0 = 2
-};
-
 // Labels for derived limit stats (not present in STATS, which is keyed by StatName).
 export const DERIVED_STAT_LABELS: Record<DerivedStatName, { label: string; shortLabel: string }> = {
     effectiveHp: { label: 'Effective HP', shortLabel: 'EHP' },

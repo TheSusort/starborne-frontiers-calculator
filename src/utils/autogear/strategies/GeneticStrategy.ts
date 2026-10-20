@@ -202,8 +202,7 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
             attempts = attempt;
             this.initializeProgress(populationSize * generations);
             this.emitAttemptProgress(attempt, maxAttempts);
-            // Passes share few builds, and a full LRU cache carried into the next pass makes
-            // every miss pay an eviction, which is far slower than starting empty.
+            // Passes share few builds, so each starts with an empty cache.
             fastContext?.cache.clear();
 
             const bestOfThisRun = await this.runSingleGAPass(

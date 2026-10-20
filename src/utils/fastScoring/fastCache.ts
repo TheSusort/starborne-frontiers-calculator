@@ -1,41 +1,50 @@
 /**
- * Tiny LRU cache keyed by string (stringified integer tuple). Map insertion
- * order in JS is LRU-friendly: on hit we delete+reinsert; on overflow we
- * delete the oldest (first) key.
+ * Bounded memo cache keyed by string (stringified integer tuple) that evicts in two generations:
+ * writes go to `current`; when it holds half the limit it becomes `previous` and the old
+ * `previous` is dropped whole. A hit in `previous` is promoted into `current`, so recently used
+ * entries survive a rotation, which approximates LRU.
+ *
+ * It never deletes single keys. A V8 `Map` used as a delete-oldest queue leaves deleted slots at
+ * the front that `keys().next()` must skip, so per-entry eviction slows every miss once the cache
+ * is full; dropping a whole generation costs nothing per entry.
  *
  * We use string keys not BigInt for predictable performance across JS engines.
  * The key is a fixed-length delimited string of small integers, much cheaper
  * than the existing `Object.entries().sort().join()` approach.
  */
 export class FastCache<V> {
-    private readonly store = new Map<string, V>();
-    constructor(private readonly limit: number) {}
+    private current = new Map<string, V>();
+    private previous = new Map<string, V>();
+    private readonly generationLimit: number;
+
+    constructor(limit: number) {
+        this.generationLimit = Math.max(1, Math.floor(limit / 2));
+    }
 
     get(key: string): V | undefined {
-        const v = this.store.get(key);
-        if (v === undefined) return undefined;
-        // Mark as most recently used
-        this.store.delete(key);
-        this.store.set(key, v);
-        return v;
+        const v = this.current.get(key);
+        if (v !== undefined) return v;
+        const old = this.previous.get(key);
+        if (old !== undefined) this.set(key, old);
+        return old;
     }
 
     set(key: string, value: V): void {
-        if (this.store.has(key)) {
-            this.store.delete(key);
-        } else if (this.store.size >= this.limit) {
-            const oldest = this.store.keys().next().value;
-            if (oldest !== undefined) this.store.delete(oldest);
+        if (this.current.size >= this.generationLimit && !this.current.has(key)) {
+            this.previous = this.current;
+            this.current = new Map();
         }
-        this.store.set(key, value);
+        this.current.set(key, value);
     }
 
+    /** Entries held across both generations; a promoted key is counted in each. */
     get size(): number {
-        return this.store.size;
+        return this.current.size + this.previous.size;
     }
 
     clear(): void {
-        this.store.clear();
+        this.current.clear();
+        this.previous.clear();
     }
 }
 

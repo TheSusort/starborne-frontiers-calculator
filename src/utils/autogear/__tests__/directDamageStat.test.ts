@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { calculateDirectDamage, resolveLimitStatValue } from '../priorityScore';
-import { STAT_NORMALIZERS, DERIVED_STAT_LABELS, getLimitStatLabel } from '../../../constants/stats';
+import { DERIVED_STAT_LABELS, getLimitStatLabel } from '../../../constants/stats';
 import type { BaseStats } from '../../../types/stats';
 
 const stats = (over: Partial<BaseStats> = {}): BaseStats => ({
@@ -64,8 +64,7 @@ describe('directDamage derived stat', () => {
         );
     });
 
-    it('has a normalizer and a label', () => {
-        expect(STAT_NORMALIZERS.directDamage).toBe(3000);
+    it('has a label', () => {
         expect(DERIVED_STAT_LABELS.directDamage.label).toBe('Direct Damage');
         expect(getLimitStatLabel('directDamage')).toBe('Direct Damage');
     });

@@ -7,7 +7,7 @@ import {
     calculateEffectiveHP,
 } from '../priorityScore';
 import { BaseStats } from '../../../types/stats';
-import { STAT_NORMALIZERS, STATS, DERIVED_STAT_LABELS } from '../../../constants/stats';
+import { STATS, DERIVED_STAT_LABELS } from '../../../constants/stats';
 import { CustomFormula, RoleBasis, SetPriority, StatPriority } from '../../../types/autogear';
 import type { ShipTypeName } from '../../../constants/shipTypes';
 
@@ -192,21 +192,6 @@ describe('effectiveHp as a limit', () => {
         const scoreUnmet = calculatePriorityScore(stats, unmet, 'DEFENDER');
         const scoreMet = calculatePriorityScore(stats, met, 'DEFENDER');
         expect(scoreUnmet).toBeLessThan(scoreMet);
-    });
-});
-
-describe('STAT_NORMALIZERS keys match real stat names', () => {
-    it('has no entry keyed by a name the type system never produces', () => {
-        const validKeys = new Set([...Object.keys(STATS), ...Object.keys(DERIVED_STAT_LABELS)]);
-        const strays = Object.keys(STAT_NORMALIZERS).filter((key) => !validKeys.has(key));
-        expect(strays).toEqual([]);
-    });
-
-    it('normalizes an implant candidate against the stat scale, not its raw value', () => {
-        // STAT_NORMALIZERS survives only for implant pre-filtering. defence and attack
-        // share a 5000 normalizer, so the same raw roll must rank equally on either stat.
-        expect(STAT_NORMALIZERS.defence).toBe(STAT_NORMALIZERS.attack);
-        expect(STAT_NORMALIZERS.crit).toBe(25);
     });
 });
 

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { FastCache, buildFastCacheKey } from '../fastCache';
 
-describe('FastCache (LRU)', () => {
+describe('FastCache (two-generation)', () => {
     it('stores and retrieves values', () => {
         const c = new FastCache<number>(3);
         c.set('a', 1);
@@ -34,6 +34,32 @@ describe('FastCache (LRU)', () => {
         c.set('c', 3); // should evict 'b'
         expect(c.get('a')).toBe(99);
         expect(c.get('b')).toBeUndefined();
+    });
+
+    it('never holds more than the limit, however many keys pass through', () => {
+        const c = new FastCache<number>(100);
+        for (let i = 0; i < 10_000; i++) c.set(`k${i}`, i);
+        expect(c.size).toBeLessThanOrEqual(100);
+        expect(c.get('k9999')).toBe(9999);
+        expect(c.get('k0')).toBeUndefined();
+    });
+
+    it('keeps an entry that is read every generation', () => {
+        const c = new FastCache<number>(4);
+        c.set('hot', 1);
+        for (let i = 0; i < 50; i++) {
+            c.set(`k${i}`, i);
+            expect(c.get('hot')).toBe(1);
+        }
+    });
+
+    it('a newer write wins over the value in the older generation', () => {
+        const c = new FastCache<number>(4);
+        c.set('a', 1);
+        c.set('b', 2);
+        c.set('c', 3); // rotates: 'a' and 'b' move to the older generation
+        c.set('a', 99);
+        expect(c.get('a')).toBe(99);
     });
 
     it('tracks size correctly', () => {

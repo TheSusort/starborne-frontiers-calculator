@@ -16,7 +16,6 @@ import type { EngineeringStat } from '../../types/stats';
 import type { AutogearProgress, AutogearResult, ScoringInputs } from './AutogearStrategy';
 import { GeneticStrategy } from './strategies/GeneticStrategy';
 import { buildGearScoringInputs } from './gearScoringInputs';
-import { filterTopImplantsPerSlot } from './implantFilter';
 import { seedFormulaFromRole } from './customFormulaSeeds';
 
 /** Every field a single ship's optimizer pass needs to decide WHAT gear counts and HOW it is
@@ -338,20 +337,6 @@ export async function findOptimalGearForShip(
         assumeCalibrated: config.assumeCalibrated,
     });
 
-    // Pre-filter implants to keep only top candidates per slot. Always include currently
-    // equipped implants so the strategy can decide to keep or swap them.
-    const equippedImplantIds = new Set(
-        Object.values(ship.implants || {}).filter((id): id is string => !!id)
-    );
-    const filteredInventory = config.optimizeImplants
-        ? filterTopImplantsPerSlot(
-              scoredInventory,
-              config.statPriorities,
-              equippedImplantIds,
-              config.statBonuses
-          )
-        : scoredInventory;
-
     const strategy = new GeneticStrategy();
     strategy.setProgressCallback(onProgress ?? (() => {}));
 
@@ -370,7 +355,7 @@ export async function findOptimalGearForShip(
         strategy.findOptimalGear(
             ship,
             config.statPriorities,
-            filteredInventory,
+            scoredInventory,
             getGearForShip,
             getEngineeringStatsForShipType,
             scoringInputs
