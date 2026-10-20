@@ -2559,13 +2559,16 @@ const DocumentationPage: React.FC = () => {
                                     500 points, a loss ends the run unless a shield absorbs it),{' '}
                                     <strong>Credits on the line</strong> (win 25 credits, or lose a
                                     quarter of yours) or <strong>Power-up</strong> (a win grants a
-                                    shield or a magnet). Press Space or click to skip the replay.
-                                    The result shows briefly (Space or a click moves on at once),
-                                    then the run resumes after a 3-2-1 countdown. A duel that ends
-                                    the run closes as soon as its replay does, and your ship
-                                    explodes. Flying a bare ship from an empty fleet, the gates hold
-                                    random bare ships instead, and both sides duel with base stats
-                                    only.
+                                    shield or a magnet). The replay plays turn by turn: each ship
+                                    shows its hull, shield and charge, its active buffs and debuffs,
+                                    the damage, misses and repairs each turn lands, and a banner
+                                    when it fires its charged skill. Press Space or click to skip
+                                    the replay. The result shows briefly (Space or a click moves on
+                                    at once), then the run resumes after a 3-2-1 countdown. A duel
+                                    that ends the run closes as soon as its replay does, and your
+                                    ship explodes. Flying a bare ship from an empty fleet, the gates
+                                    hold random bare ships instead, and both sides duel with base
+                                    stats only.
                                 </p>
                             </div>
                             <div className="card">
@@ -2584,8 +2587,9 @@ const DocumentationPage: React.FC = () => {
                                     </li>
                                     <li>
                                         <strong>P</strong> — pause; <strong>M</strong> — toggle the
-                                        synthwave music, which starts on by default (your choice is
-                                        remembered); <strong>Esc</strong> — quit
+                                        synthwave music and the crash sound, which start on by
+                                        default (your choice is remembered); <strong>Esc</strong> —
+                                        quit
                                     </li>
                                 </ul>
                             </div>
