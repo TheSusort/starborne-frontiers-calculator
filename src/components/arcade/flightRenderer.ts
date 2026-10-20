@@ -82,6 +82,14 @@ import {
     startExplosion,
 } from './explosion';
 import { advanceTrail, createShipTrail, drawShipTrails, ShipBox, ShipTrail } from './shipTrails';
+import {
+    advanceScrape,
+    createScrapeFx,
+    drawScrapeSparks,
+    drawScrapeStreak,
+    ScrapeContact,
+    ScrapeFx,
+} from './scrapeFx';
 import type { NeonAccent } from './ships/factionTint';
 import { cachedPortrait } from './ships/portraitSprite';
 import { stakesBanner } from './duel/stakesText';
@@ -114,7 +122,7 @@ const SHIELD_PICKUP_SIZE = 1.2;
 const SPRITE_FOOTPRINT = 4.4;
 /** Vertical scale of the neon fighter at the bottom of a duck; it has no pitched frames, so it
  *  flattens as it dips. A 3D sprite is not squashed: it pitches instead (see `actionPitchDeg`). */
-const DUCK_SQUASH = 0.55;
+export const DUCK_SQUASH = 0.55;
 /** The ship's unit (see `neonFighter`) on the ground, in lane widths at the player row. */
 export const SHIP_UNIT = 0.16;
 
@@ -155,7 +163,10 @@ export interface FlightView {
     laneWedge: number;
     /** The player ship's wake and air-flow streaks; `null` under reduced motion. */
     trail: ShipTrail | null;
-    /** World travel since the last drawn frame, which the trail turns into game time. */
+    /** Sparks and glow where a ducking hull scrapes the track; `null` under reduced motion. */
+    scrape: ScrapeFx | null;
+    /** World travel since the last drawn frame, which the trail and the scrape turn into game
+     *  time. */
     trailTravel: number;
     /** The canvas's device pixel ratio, as its owner set the transform; 0 reads it back from
      *  the canvas size. */
@@ -192,6 +203,7 @@ export function createFlightView(
         speedLines: reducedMotion ? null : createSpeedLines(DEFAULT_LANE_WEDGE),
         laneWedge: DEFAULT_LANE_WEDGE,
         trail: reducedMotion ? null : createShipTrail(),
+        scrape: reducedMotion ? null : createScrapeFx(),
         trailTravel: 0,
         dpr: 0,
         dying: false,
@@ -472,11 +484,15 @@ export const NEON_TOP = -0.8;
 export const NEON_BOTTOM = 0.6;
 
 /** Where the player ship is drawn this frame: its `ShipBox`, its ship unit `s` (see
- *  `neonFighter`), the neon fighter's duck squash and the intro's progress. */
+ *  `neonFighter`), the neon fighter's duck squash and the intro's progress. A ducking ship's hull
+ *  is drawn only above `clipY` (px below its centre: the track line; `Infinity` when nothing is
+ *  clipped), its `bottom` stops at that line, and `sink` is how far below it the hull reaches. */
 interface ShipPlacement extends ShipBox {
     s: number;
     squash: number;
     intro: number;
+    clipY: number;
+    sink: number;
 }
 
 /** The ship's placement, rewritten every frame rather than allocated. */
@@ -491,23 +507,28 @@ const shipAt: ShipPlacement = {
     s: 0,
     squash: 1,
     intro: 1,
+    clipY: Infinity,
+    sink: 0,
 };
 const baseAt: Projected = { x: 0, y: 0, scale: 0, width: 0 };
 
 /**
  * Places the player ship: on its lane at its lift, flown in from the page background during the
  * intro, with its visible extent from the 3D sprite's level frame (so it does not wobble as
- * frames blend) or the neon fighter's outline.
+ * frames blend) or the neon fighter's outline. Once the intro is over, a ducking ship is cut off
+ * at the track line, so the belly a duck sinks into the track reads as under it.
  */
 function placeShip(out: ShipPlacement, g: SceneGeometry, game: GameState, view: FlightView): void {
     const base = projectInto(g, view.playerX, 0, baseAt);
     const u = laneWidthAtPlayer(g);
     const level = view.playerFrames?.[LEVEL_PITCH_ROW]?.[LEVEL_BANK]?.[LEVEL_HEADING];
     const fp = level ? frameFootprint(level) : null;
-    // The duck's depth, from the ship's unsquashed extent on the ground.
+    // The duck's depth, from the ship's extent at the bottom of a duck on the ground.
+    const sprite = SPRITE_FOOTPRINT * SHIP_UNIT;
+    const neon = SHIP_UNIT * DUCK_SQUASH;
     const depth = fp
-        ? duckDepth(fp.bottom * SPRITE_FOOTPRINT * SHIP_UNIT)
-        : duckDepth(NEON_BOTTOM * SHIP_UNIT);
+        ? duckDepth(-fp.top * sprite, fp.bottom * sprite)
+        : duckDepth(-NEON_TOP * neon, NEON_BOTTOM * neon);
     let s = u * SHIP_UNIT;
     let x = base.x;
     let y = base.y - u * shipLift(game, view, depth);
@@ -540,6 +561,14 @@ function placeShip(out: ShipPlacement, g: SceneGeometry, game: GameState, view: 
     out.s = s;
     out.squash = squash;
     out.intro = e;
+    out.clipY = Infinity;
+    out.sink = 0;
+    if (e === 1 && view.pose.duck > 0) {
+        const track = base.y - y;
+        out.clipY = track;
+        out.sink = Math.max(0, out.bottom - track);
+        out.bottom = Math.min(out.bottom, track);
+    }
 }
 
 /** Fits the shield around the placed ship's visible extent. */
@@ -554,6 +583,20 @@ function placeShield(
     out.y = ship.y + (ship.top + ship.bottom) / 2;
     out.dpr = dpr;
     out.bank = view.pose.bank;
+}
+
+/** The hull's contact with the track, rewritten every frame rather than allocated. */
+const contactAt: ScrapeContact = { x: 0, y: 0, halfWidth: 0, u: 1, sink: 0 };
+
+/** The ship's scrape on the track this frame, or `null` when its hull is clear of it. */
+function scrapeContact(ship: ShipPlacement, u: number, dying: boolean): ScrapeContact | null {
+    if (dying || !(ship.sink > 0)) return null;
+    contactAt.x = ship.x;
+    contactAt.y = ship.baseY;
+    contactAt.halfWidth = ship.halfWidth;
+    contactAt.u = u;
+    contactAt.sink = ship.sink;
+    return contactAt;
 }
 
 /** The magnet's field around the ship, against the shield's fit. */
@@ -596,6 +639,12 @@ function drawPlayer(
 
     ctx.save();
     ctx.translate(x, y);
+    if (ship.clipY < Infinity) {
+        const reach = 4 * (ship.halfWidth - ship.top) + 1;
+        ctx.beginPath();
+        ctx.rect(-reach, -reach, 2 * reach, reach + ship.clipY);
+        ctx.clip();
+    }
     // The clicked background silhouette cross-fades into the neon fighter during the intro.
     if (e < 1) {
         ctx.save();
@@ -735,15 +784,20 @@ export function renderFlight(
             advanceExplosion(boom, dt);
         }
     }
+    const seconds = game.speed > 0 ? view.trailTravel / game.speed : 0;
+    const contact = view.scrape ? scrapeContact(ship, u, view.dying) : null;
+    if (view.scrape) advanceScrape(view.scrape, seconds, contact);
     if (view.trail) {
-        const seconds = game.speed > 0 ? view.trailTravel / game.speed : 0;
         advanceTrail(view.trail, seconds, view.playerX);
         const e = ship.intro;
         const fade = view.dying ? Math.max(0, 1 - boom.elapsed / TRAIL_DEATH_FADE_SECONDS) : 1;
         drawShipTrails(ctx, g, view.trail, game.speed, view.playerX, ship, u, e * e * fade);
     }
     view.trailTravel = 0;
+    if (view.scrape && !view.dying)
+        drawScrapeStreak(ctx, g, view.scrape, view.playerX, view.trail, u);
     if (!view.dying) drawPlayer(ctx, ship, game, view, timeMs, dpr, magnet);
+    if (view.scrape && !view.dying) drawScrapeSparks(ctx, view.scrape, contact, u);
     for (const item of items) if (item.z < 0) drawItem(item);
     endPulls(view.pulls);
     if (view.dying) drawExplosion(ctx, g, boom, w, h);

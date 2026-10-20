@@ -35,6 +35,7 @@ import { resumeArcadeMusic, writeMusicPref } from './musicPref';
 import { GameOverPanel } from './GameOverPanel';
 import { YouDiedOverlay } from './YouDiedOverlay';
 import { canSkipDeath, deathStage } from './deathSequence';
+import { createDeathCue, primeDeathAudio } from './deathSound';
 import { slowMotion } from './explosion';
 import { useArcadeSubmission, SubmissionStatus, type FinishedRun } from './useArcadeSubmission';
 import { ArcadeUsernameModal } from './ArcadeUsernameModal';
@@ -44,6 +45,7 @@ import type { FlightOrigin } from './flightEvents';
 import { anyCandidate, canDuel, gearedCandidate, pickOpponents } from './duel/pickOpponents';
 import { createSpeedLines } from './speedLines';
 import { createShipTrail } from './shipTrails';
+import { createScrapeFx } from './scrapeFx';
 import type { DuelResult } from './duel/runDuel';
 import { DuelSummary, type DuelSide } from './duel/DuelSummary';
 import { factionAccent } from './ships/factionTint';
@@ -470,16 +472,19 @@ const FlightGameRun: React.FC<FlightGameProps> = ({ origin, onClose }) => {
         gameRef.current = createGame(newSeed(), { duels: true });
     }, [ships, isCandidate]);
 
-    // Speed lines, the ship's trail and the magnet's motion follow a reduced-motion change.
+    // Speed lines, the ship's trail and scrape and the magnet's motion follow a reduced-motion
+    // change.
     useEffect(() => {
         const view = viewRef.current;
         view.reducedMotion = reducedMotion;
         if (reducedMotion) {
             view.speedLines = null;
             view.trail = null;
+            view.scrape = null;
         } else {
             view.speedLines ??= createSpeedLines(view.laneWedge);
             view.trail ??= createShipTrail();
+            view.scrape ??= createScrapeFx();
         }
     }, [reducedMotion]);
 
@@ -541,9 +546,22 @@ const FlightGameRun: React.FC<FlightGameProps> = ({ origin, onClose }) => {
         [restart, requestFlownFrames, keyOf, refreshPins]
     );
 
-    /** Ends the run: the result is recorded and submitted now, while the ship explodes and the
-     *  death screen plays before the game-over panel shows it. */
+    const deathCue = useMemo(() => createDeathCue(), []);
+
+    // The crash sound plays from the frame loop; every gesture in the arcade unlocks its audio
+    // first (see `primeDeathAudio`).
+    useEffect(() => {
+        const events = ['keydown', 'pointerdown', 'touchstart'] as const;
+        for (const e of events) window.addEventListener(e, primeDeathAudio, { passive: true });
+        return () => {
+            for (const e of events) window.removeEventListener(e, primeDeathAudio);
+        };
+    }, []);
+
+    /** Ends the run: the result is recorded and submitted now, while the ship explodes with its
+     *  crash sound and the death screen plays before the game-over panel shows it. */
     const finishRun = useCallback(() => {
+        deathCue.crash(gameRef.current);
         const r = runResult(gameRef.current);
         setFinished({ result: r, shipName: flownRef.current?.name ?? null });
         setPreviousBest(readLocalBest());
@@ -552,7 +570,7 @@ const FlightGameRun: React.FC<FlightGameProps> = ({ origin, onClose }) => {
         youDiedRef.current = false;
         setYouDied(false);
         setPhase('dying');
-    }, [setPhase]);
+    }, [setPhase, deathCue]);
 
     /** Skips the rest of the death sequence to the game-over panel. */
     const skipDeath = useCallback(() => {
@@ -635,7 +653,7 @@ const FlightGameRun: React.FC<FlightGameProps> = ({ origin, onClose }) => {
                 if (!current()) return;
                 r = runDuel(flown, opponent, statsDepsRef.current, newSeed());
             } catch {
-                r = { outcome: 'skipped', timeline: [] };
+                r = { outcome: 'skipped', beats: [] };
             }
             if (!current()) return;
             const effect = resolveDuel(gameRef.current, r.outcome);

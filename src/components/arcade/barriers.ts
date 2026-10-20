@@ -6,7 +6,7 @@ import { SHIP_RIDE_HEIGHT } from '../../utils/arcade/constants';
  * A wall fills the lane; a low laser is a bar near the ground to jump over; a high block is as
  * tall as a wall, so it plainly cannot be jumped, with one gap at the bottom to duck under. The
  * block's bottom edge (`HIGH_GAP` up) sits under the running ship's top and over the ducking
- * ship's (see `duckDepth`), so only a duck clears it for ships that fit under it.
+ * ship's, which skims the track with its belly sunk into it (see `duckDepth`).
  */
 const WALL = { halfWidth: 0.42, top: -0.9 };
 const LOW = { halfWidth: 0.45, barTop: -0.22, barBottom: -0.14, postTop: -0.26, post: 0.04 };
@@ -14,18 +14,28 @@ const LOW = { halfWidth: 0.45, barTop: -0.22, barBottom: -0.14, postTop: -0.26, 
 export const HIGH_GAP = 0.3;
 const HIGH = { halfWidth: 0.47, barTop: WALL.top, barBottom: -HIGH_GAP, post: 0.05 };
 
-/** What a ducking ship keeps over the track, in lane widths. */
-const DUCK_TRACK_CLEARANCE = 0.03;
+/** The share of a ducking ship's visible height sunk below the track, and the most it sinks to
+ *  fit under the high block. */
+export const DUCK_SINK_SHARE = 0.3;
+export const DUCK_MAX_SINK_SHARE = 0.5;
+/** What a ducking ship keeps under the high block's bottom edge, in lane widths. */
+const DUCK_BAR_CLEARANCE = 0.03;
+/** The least a duck lowers any ship, in lane widths. */
+export const MIN_DUCK_DROP = 0.12;
 
 /**
- * How far the bottom of a duck lowers a ship whose visible pixels reach `bottom` lane widths
- * below its centre at the player row: as deep as keeps it `DUCK_TRACK_CLEARANCE` over the track.
- * A ship taller than the gap (`HIGH_GAP` less the track clearance) cannot also clear the bar;
- * the track wins and its clearance under the bar shrinks, going negative for the tallest,
- * rather than the ship sinking into the track.
+ * How far the bottom of a duck lowers a ship whose visible pixels reach `top` lane widths above
+ * and `bottom` below its centre at the player row (both positive). The ship skims the track: its
+ * belly sinks `DUCK_SINK_SHARE` of its visible height below the track line, or deeper, up to
+ * `DUCK_MAX_SINK_SHARE`, where that is what keeps its top `DUCK_BAR_CLEARANCE` under the high
+ * block's gap. A ship too tall to fit even then sinks the most and stays over the bar's edge;
+ * every ship drops at least `MIN_DUCK_DROP`. The renderer clips the hull at the track line.
  */
-export function duckDepth(bottom: number): number {
-    return Math.max(0, SHIP_RIDE_HEIGHT - bottom - DUCK_TRACK_CLEARANCE);
+export function duckDepth(top: number, bottom: number): number {
+    const height = top + bottom;
+    const underBar = height > 0 ? 1 - (HIGH_GAP - DUCK_BAR_CLEARANCE) / height : 0;
+    const share = Math.min(DUCK_MAX_SINK_SHARE, Math.max(DUCK_SINK_SHARE, underBar));
+    return Math.max(MIN_DUCK_DROP, SHIP_RIDE_HEIGHT - bottom + share * height);
 }
 
 interface Palette {

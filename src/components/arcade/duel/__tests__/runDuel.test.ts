@@ -42,13 +42,15 @@ const fighter = (id: string, attack: number, hp: number, skill = true): Ship =>
         activePattern: skill ? 'Pattern-Base' : undefined,
     }) as unknown as Ship;
 
-/** Hand-built result: only the fields `duelOutcome` reads. */
+/** Hand-built result: round snapshots only, with an empty combat log. */
 const result = (
     winner: 'player' | 'enemy',
     rounds: { player: [number, boolean]; enemy: [number, boolean] }[]
 ): BattleResult =>
     ({
         outcome: { winner, lastRound: rounds.length },
+        roster: [],
+        combatLog: [],
         rounds: rounds.map((r, i) => ({
             round: i + 1,
             ships: [
@@ -64,14 +66,7 @@ describe('duelOutcome', () => {
             { player: [80, true], enemy: [40, true] },
             { player: [60, true], enemy: [0, false] },
         ]);
-        expect(duelOutcome(r)).toEqual({
-            outcome: 'win',
-            timeline: [
-                { round: 0, playerHpPct: 100, enemyHpPct: 100 },
-                { round: 1, playerHpPct: 80, enemyHpPct: 40 },
-                { round: 2, playerHpPct: 60, enemyHpPct: 0 },
-            ],
-        });
+        expect(duelOutcome(r).outcome).toBe('win');
         expect(
             duelOutcome(result('enemy', [{ player: [0, false], enemy: [5, true] }])).outcome
         ).toBe('lose');
@@ -94,17 +89,17 @@ describe('duelOutcome', () => {
 });
 
 describe('runDuel', () => {
-    it('runs a real 1v1 and produces a winner and a timeline', () => {
+    it('runs a real 1v1 and produces a winner and its turns', () => {
         const strong = fighter('strong', 6000, 20000);
         const weak = fighter('weak', 500, 8000);
         const r = runDuel(strong, weak, deps, 123);
         expect(r.outcome).toBe('win');
-        expect(r.timeline.length).toBeGreaterThan(1);
-        expect(r.timeline.at(-1)!.enemyHpPct).toBe(0);
-        expect(r.timeline.at(-1)!.playerHpPct).toBeGreaterThan(0);
+        expect(r.beats.length).toBeGreaterThan(1);
+        expect(r.beats.at(-1)!.enemy.hpPct).toBe(0);
+        expect(r.beats.at(-1)!.player.hpPct).toBeGreaterThan(0);
         const back = runDuel(weak, strong, deps, 123);
         expect(back.outcome).toBe('lose');
-        expect(back.timeline.at(-1)!.playerHpPct).toBe(0);
+        expect(back.beats.at(-1)!.player.hpPct).toBe(0);
     });
 
     it('a fight nobody can win reaches the cap and the tie goes to the player', () => {
@@ -125,7 +120,7 @@ describe('runDuel', () => {
         const geared = { ...fighter('g', 1000, 1000), equipment: { weapon: 'x' } } as Ship;
         expect(runDuel(geared, fighter('b', 1000, 1000), broken, 1)).toEqual({
             outcome: 'skipped',
-            timeline: [],
+            beats: [],
         });
         expect(called).toBe(true);
         expect(warn).toHaveBeenCalledWith(

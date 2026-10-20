@@ -15,6 +15,7 @@ export * from './Callout';
 export * from './Checkbox';
 export * from './CheckboxGroup';
 export * from './Chip';
+export * from './ChipRow';
 export * from './PodiumCard';
 export * from './GroupLabel';
 export * from './IconPlate';
