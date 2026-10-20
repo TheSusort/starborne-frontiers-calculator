@@ -5316,6 +5316,38 @@ const DocumentationPage: React.FC = () => {
                             </div>
 
                             <div className="p-4 bg-dark-lighter">
+                                <h4 className="font-semibold text-primary mb-2">Usage Tracking</h4>
+                                <p className="text-theme-text mb-2">
+                                    The planner records anonymous usage to see which pages and tools
+                                    are used and which errors people hit:
+                                </p>
+                                <ul className="text-theme-text list-disc pl-4 space-y-1">
+                                    <li>
+                                        The pages you open and how long each stays visible on screen
+                                    </li>
+                                    <li>
+                                        Clicks on main buttons such as navigation, import and
+                                        autogear
+                                    </li>
+                                    <li>
+                                        JavaScript errors, with the app version and page they
+                                        happened on
+                                    </li>
+                                    <li>
+                                        The site you arrived from and whether you are on desktop,
+                                        tablet or mobile
+                                    </li>
+                                </ul>
+                                <p className="text-theme-text mt-2">
+                                    No cookies are used and nothing you type is recorded. Raw
+                                    records are deleted after 14 days; only daily totals are kept.
+                                    To opt out, tick{' '}
+                                    <strong>Don&apos;t track my usage in this browser</strong> on
+                                    the Profile page.
+                                </p>
+                            </div>
+
+                            <div className="p-4 bg-dark-lighter">
                                 <h4 className="font-semibold text-primary mb-2">
                                     Backup &amp; Restore
                                 </h4>

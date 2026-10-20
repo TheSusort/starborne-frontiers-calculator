@@ -31,6 +31,11 @@ import Seo from '../components/seo/Seo';
 import { TrophyIcon } from '../components/ui/icons';
 import { AuthModal } from '../components/auth/AuthModal';
 import { BackupRestoreData } from '../components/import/BackupRestoreData';
+import {
+    readTrackingOptOut,
+    safeLocalStorage,
+    writeTrackingOptOut,
+} from '../services/pageTracking/environment';
 import { isSupabaseSyncEnabled, setSupabaseSyncEnabled } from '../utils/syncUtils';
 import {
     deleteUserSupabaseData,
@@ -100,6 +105,9 @@ export const ProfilePage: React.FC = () => {
     // Sync state
     const [syncEnabled, setSyncEnabled] = useState<boolean>(isSupabaseSyncEnabled());
     const [syncOperation, setSyncOperation] = useState<'toggle' | 'clearResync' | null>(null);
+    const [trackingOptOut, setTrackingOptOut] = useState(() =>
+        readTrackingOptOut(safeLocalStorage())
+    );
     const [showSyncOffConfirm, setShowSyncOffConfirm] = useState(false);
     const [showClearReSyncConfirm, setShowClearReSyncConfirm] = useState(false);
 
@@ -640,6 +648,25 @@ export const ProfilePage: React.FC = () => {
                             <div className="card">
                                 <h2 className="text-xl font-semibold mb-4">Backup &amp; Restore</h2>
                                 <BackupRestoreData />
+                            </div>
+
+                            {/* Usage tracking — always visible; the opt-out is per browser */}
+                            <div className="card">
+                                <h2 className="text-xl font-semibold mb-4">Usage Tracking</h2>
+                                <p className="text-theme-text-secondary text-sm mb-3">
+                                    We record which pages you open, how long they stay on screen,
+                                    clicks on main buttons, and errors you run into, to see what to
+                                    improve. No cookies and no personal data; raw records are
+                                    deleted after 14 days.
+                                </p>
+                                <Checkbox
+                                    label="Don't track my usage in this browser"
+                                    checked={trackingOptOut}
+                                    onChange={(optedOut) => {
+                                        setTrackingOptOut(optedOut);
+                                        writeTrackingOptOut(safeLocalStorage(), optedOut);
+                                    }}
+                                />
                             </div>
 
                             {/* Connected Integrations */}

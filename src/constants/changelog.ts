@@ -15,6 +15,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Arcade: crashing plays one of three retro game-over sounds.',
     'Arcade: duels replay turn by turn with hit numbers and charged skills.',
     "Arcade: duels show each ship's shield, buffs and debuffs as they change.",
+    'Privacy: anonymous page and error tracking added; opt out on the Profile page.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
