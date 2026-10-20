@@ -1,4 +1,6 @@
+import { useEffect, useRef, useState } from 'react';
 import { StorageKey } from '../../constants/storage';
+import { IMPORT_START_EVENT } from '../import/importEvents';
 import { useShips } from '../../contexts/ShipsContext';
 import { isDemoDataLoaded } from '../../utils/demoData';
 
@@ -22,8 +24,23 @@ export const readLastImport = (): string | null => {
     }
 };
 
-/** Whether the home page shows the returning-player panel instead of Quick Start. */
+/**
+ * Whether the home page shows the returning-player panel instead of Quick Start. The answer
+ * freezes once an import starts on the page: the import fills `ships` before its summary
+ * dialog opens, and swapping sections would unmount the ImportButton that owns that dialog.
+ */
 export const useShowFleetPanel = (): boolean => {
     const { ships } = useShips();
-    return ships.length > 0 && !isDemoDataLoaded();
+    const live = ships.length > 0 && !isDemoDataLoaded();
+    const liveRef = useRef(live);
+    liveRef.current = live;
+    const [frozen, setFrozen] = useState<boolean | null>(null);
+
+    useEffect(() => {
+        const freeze = () => setFrozen((prev) => prev ?? liveRef.current);
+        window.addEventListener(IMPORT_START_EVENT, freeze);
+        return () => window.removeEventListener(IMPORT_START_EVENT, freeze);
+    }, []);
+
+    return frozen ?? live;
 };
