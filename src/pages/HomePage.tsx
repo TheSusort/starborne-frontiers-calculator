@@ -11,7 +11,7 @@ import { WhatsNewCard } from '../components/home/WhatsNewCard';
 import { FleetPanel } from '../components/home/FleetPanel';
 import { useShowFleetPanel } from '../components/home/fleetPanelState';
 import { ArcadeStrip } from '../components/home/ArcadeStrip';
-import { Button, SectionHeader, IconBadge, QuickStartCard } from '../components/ui';
+import { ArtBackdrop, Button, SectionHeader, IconBadge, QuickStartCard } from '../components/ui';
 
 const HomePage: React.FC = () => {
     const showFleetPanel = useShowFleetPanel();
@@ -106,112 +106,116 @@ const HomePage: React.FC = () => {
                 )}
 
                 {/* Core Features */}
-                <section className="space-y-6">
-                    <SectionHeader
-                        title="Powerful Fleet Management Tools"
-                        subtitle="Everything you need to optimize your Starborne Frontiers fleet"
-                    />
-                    <HomeFeatureGrid />
-                </section>
+                <ArtBackdrop src="/images/section-features.webp">
+                    <section className="space-y-6">
+                        <SectionHeader
+                            title="Powerful Fleet Management Tools"
+                            subtitle="Everything you need to optimize your Starborne Frontiers fleet"
+                        />
+                        <HomeFeatureGrid />
+                    </section>
+                </ArtBackdrop>
 
                 {/* Community & Support */}
-                <section className="space-y-6">
-                    <SectionHeader
-                        title="Community & Support"
-                        subtitle="Get help, share feedback, or contribute to the project"
-                    />
-                    <div className="grid gap-6 md:grid-cols-2">
-                        {/* Discord Community */}
-                        <div className="card">
-                            <div className="flex items-center gap-3 mb-4">
-                                <IconBadge
-                                    icon={MessageCircle}
-                                    gradientFrom="from-indigo-600"
-                                    gradientTo="to-indigo-800"
-                                />
-                                <h3 className="text-xl font-semibold text-theme-text">
-                                    Join the Community
-                                </h3>
-                            </div>
-                            <p className="text-theme-text mb-4">
-                                Get support, share strategies, and discuss features with other
-                                players.
-                            </p>
-                            <div className="space-y-2 text-sm">
-                                <p>
-                                    Contact{' '}
-                                    <span className="text-primary font-semibold">@alvbert</span> on
-                                    Discord
+                <ArtBackdrop src="/images/section-community.webp">
+                    <section className="space-y-6">
+                        <SectionHeader
+                            title="Community & Support"
+                            subtitle="Get help, share feedback, or contribute to the project"
+                        />
+                        <div className="grid gap-6 md:grid-cols-2">
+                            {/* Discord Community */}
+                            <div className="card">
+                                <div className="flex items-center gap-3 mb-4">
+                                    <IconBadge
+                                        icon={MessageCircle}
+                                        gradientFrom="from-indigo-600"
+                                        gradientTo="to-indigo-800"
+                                    />
+                                    <h3 className="text-xl font-semibold text-theme-text">
+                                        Join the Community
+                                    </h3>
+                                </div>
+                                <p className="text-theme-text mb-4">
+                                    Get support, share strategies, and discuss features with other
+                                    players.
                                 </p>
-                                <div className="flex flex-col gap-2">
+                                <div className="space-y-2 text-sm">
+                                    <p>
+                                        Contact{' '}
+                                        <span className="text-primary font-semibold">@alvbert</span>{' '}
+                                        on Discord
+                                    </p>
+                                    <div className="flex flex-col gap-2">
+                                        <a
+                                            href="https://discord.com/invite/playfrontiers"
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="text-primary hover:text-primary-hover inline-flex items-center gap-2"
+                                        >
+                                            <MessageCircle size={16} />
+                                            Starborne Frontiers Discord
+                                        </a>
+                                        <a
+                                            href="https://discord.com/channels/973311773920862308/1315988554534486036"
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="text-primary hover:text-primary-hover inline-flex items-center gap-2"
+                                        >
+                                            <MessageCircle size={16} />
+                                            Autogearing Forum Thread
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Open Source */}
+                            <div className="card">
+                                <div className="flex items-center gap-3 mb-4">
+                                    <IconBadge
+                                        icon={Github}
+                                        gradientFrom="from-dark-lighter"
+                                        gradientTo="to-dark"
+                                    />
+                                    <h3 className="text-xl font-semibold text-theme-text">
+                                        Open Source Project
+                                    </h3>
+                                </div>
+                                <p className="text-theme-text mb-4">
+                                    This project is free and open source. Contributions, bug
+                                    reports, and feature requests are welcome!
+                                </p>
+                                <div className="flex gap-3">
                                     <a
-                                        href="https://discord.com/invite/playfrontiers"
+                                        href="https://github.com/TheSusort/starborne-frontiers-calculator"
                                         target="_blank"
                                         rel="noopener noreferrer"
-                                        className="text-primary hover:text-primary-hover inline-flex items-center gap-2"
                                     >
-                                        <MessageCircle size={16} />
-                                        Starborne Frontiers Discord
+                                        <Button
+                                            variant="secondary"
+                                            className="w-full justify-center gap-2"
+                                        >
+                                            View on GitHub
+                                        </Button>
                                     </a>
                                     <a
-                                        href="https://discord.com/channels/973311773920862308/1315988554534486036"
+                                        href="https://www.buymeacoffee.com/starborneplanner"
                                         target="_blank"
                                         rel="noopener noreferrer"
-                                        className="text-primary hover:text-primary-hover inline-flex items-center gap-2"
                                     >
-                                        <MessageCircle size={16} />
-                                        Autogearing Forum Thread
+                                        <Button
+                                            variant="primary"
+                                            className="w-full justify-center gap-2"
+                                        >
+                                            Buy me a coffee
+                                        </Button>
                                     </a>
                                 </div>
                             </div>
                         </div>
-
-                        {/* Open Source */}
-                        <div className="card">
-                            <div className="flex items-center gap-3 mb-4">
-                                <IconBadge
-                                    icon={Github}
-                                    gradientFrom="from-dark-lighter"
-                                    gradientTo="to-dark"
-                                />
-                                <h3 className="text-xl font-semibold text-theme-text">
-                                    Open Source Project
-                                </h3>
-                            </div>
-                            <p className="text-theme-text mb-4">
-                                This project is free and open source. Contributions, bug reports,
-                                and feature requests are welcome!
-                            </p>
-                            <div className="flex gap-3">
-                                <a
-                                    href="https://github.com/TheSusort/starborne-frontiers-calculator"
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                >
-                                    <Button
-                                        variant="secondary"
-                                        className="w-full justify-center gap-2"
-                                    >
-                                        View on GitHub
-                                    </Button>
-                                </a>
-                                <a
-                                    href="https://www.buymeacoffee.com/starborneplanner"
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                >
-                                    <Button
-                                        variant="primary"
-                                        className="w-full justify-center gap-2"
-                                    >
-                                        Buy me a coffee
-                                    </Button>
-                                </a>
-                            </div>
-                        </div>
-                    </div>
-                    <ArcadeStrip />
-                </section>
+                        <ArcadeStrip />
+                    </section>
+                </ArtBackdrop>
 
                 <DemoDataSection />
             </div>

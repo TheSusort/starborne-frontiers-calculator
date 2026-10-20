@@ -1,7 +1,9 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '../ui/Button';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useMediaQuery } from '../../hooks/useMediaQuery';
+import { swipeDirection } from './swipe';
 
 interface Slide {
     id: number;
@@ -10,7 +12,6 @@ interface Slide {
     ctaText: string;
     ctaLink: string;
     backgroundImage: string;
-    gradientClass: string; // Fallback gradient
 }
 
 const slides: Slide[] = [
@@ -21,7 +22,6 @@ const slides: Slide[] = [
         ctaText: 'Import Game Data',
         ctaLink: '#',
         backgroundImage: '/images/hero-fleet.webp',
-        gradientClass: 'bg-gradient-to-br from-blue-900 via-slate-900 to-orange-900',
     },
     {
         id: 2,
@@ -31,7 +31,6 @@ const slides: Slide[] = [
         ctaText: 'Play Now',
         ctaLink: '/arcade',
         backgroundImage: '/images/hero-arcade.webp',
-        gradientClass: 'bg-gradient-to-br from-fuchsia-900 via-purple-900 to-indigo-900',
     },
     {
         id: 3,
@@ -40,7 +39,6 @@ const slides: Slide[] = [
         ctaText: 'Open Simulator',
         ctaLink: '/simulator',
         backgroundImage: '/images/hero-simulator.webp',
-        gradientClass: 'bg-gradient-to-br from-slate-900 via-indigo-900 to-blue-900',
     },
     {
         id: 4,
@@ -49,7 +47,6 @@ const slides: Slide[] = [
         ctaText: 'Calculate Credits',
         ctaLink: '/bounty-credits',
         backgroundImage: '/images/hero-bounty.webp',
-        gradientClass: 'bg-gradient-to-br from-orange-900 via-red-900 to-slate-900',
     },
     {
         id: 5,
@@ -58,7 +55,6 @@ const slides: Slide[] = [
         ctaText: 'Read Game Basics',
         ctaLink: '/basics',
         backgroundImage: '/images/hero-basics.webp',
-        gradientClass: 'bg-gradient-to-br from-cyan-900 via-teal-900 to-emerald-900',
     },
     {
         id: 6,
@@ -68,40 +64,59 @@ const slides: Slide[] = [
         ctaText: 'Watch on YouTube',
         ctaLink: 'https://www.youtube.com/playlist?list=PLinS17lD0vaA9PcYZwcFCQwglbmogOwqo',
         backgroundImage: '/images/hero1.webp',
-        gradientClass: 'bg-gradient-to-br from-purple-900 via-indigo-900 to-blue-900',
     },
 ];
+
+/** Keyboard focus only: a dot clicked with the mouse keeps focus, and must not hold the pause. */
+const isFocusVisible = (el: Element): boolean => {
+    try {
+        return el.matches(':focus-visible');
+    } catch {
+        return false;
+    }
+};
 
 export const HeroCarousel: React.FC = () => {
     const [currentSlide, setCurrentSlide] = useState(0);
     const [loadedSlides, setLoadedSlides] = useState<Set<number>>(() => new Set([0]));
     const [isHovered, setIsHovered] = useState(false);
+    const [isFocused, setIsFocused] = useState(false);
+    const touchStart = useRef<{ x: number; y: number } | null>(null);
     const { theme } = useTheme();
     const isSynthwave = theme === 'synthwave';
-
-    const nextSlide = useCallback(() => {
-        setCurrentSlide((prev) => {
-            const next = (prev + 1) % slides.length;
-            setLoadedSlides((loaded) => new Set(loaded).add(next));
-            return next;
-        });
-    }, []);
+    const reduceMotion = useMediaQuery('(prefers-reduced-motion: reduce)');
+    const isPaused = isHovered || isFocused;
 
     const goToSlide = useCallback((index: number) => {
         setCurrentSlide(index);
         setLoadedSlides((prev) => new Set(prev).add(index));
     }, []);
 
-    // Auto-advance slides
-    useEffect(() => {
-        if (isHovered) return;
+    const stepSlide = useCallback((step: 1 | -1) => {
+        setCurrentSlide((prev) => {
+            const next = (prev + step + slides.length) % slides.length;
+            setLoadedSlides((loaded) => new Set(loaded).add(next));
+            return next;
+        });
+    }, []);
 
-        const interval = setInterval(() => {
-            nextSlide();
-        }, 5000); // 5 seconds per slide
+    // The active dot's progress animation drives auto-advance: it pauses with the carousel and
+    // restarts on each slide change. Under reduced motion it never runs, so nothing auto-advances.
+    const handleProgressEnd = useCallback(() => stepSlide(1), [stepSlide]);
 
-        return () => clearInterval(interval);
-    }, [isHovered, nextSlide]);
+    const handleTouchStart = (e: React.TouchEvent) => {
+        const touch = e.touches[0];
+        touchStart.current = touch ? { x: touch.clientX, y: touch.clientY } : null;
+    };
+
+    const handleTouchEnd = (e: React.TouchEvent) => {
+        const start = touchStart.current;
+        const touch = e.changedTouches[0];
+        touchStart.current = null;
+        if (!start || !touch) return;
+        const direction = swipeDirection(touch.clientX - start.x, touch.clientY - start.y);
+        if (direction) stepSlide(direction === 'next' ? 1 : -1);
+    };
 
     const handleCtaClick = (link: string, e: React.MouseEvent) => {
         // If link is '#', trigger the Import Game Data modal
@@ -122,27 +137,43 @@ export const HeroCarousel: React.FC = () => {
             className="relative w-[calc(100%+2rem)] lg:w-[calc(100vw-16rem)] h-[600px] overflow-hidden mb-8 mt-[-2rem] group mx-[-1rem] lg:mx-0 lg:ml-[calc(-1rem-max(0px,((100vw-16rem-80rem-2rem)/2)))]"
             onMouseEnter={() => setIsHovered(true)}
             onMouseLeave={() => setIsHovered(false)}
+            onFocus={(e) => setIsFocused(isFocusVisible(e.target))}
+            onBlur={(e) => {
+                if (!e.currentTarget.contains(e.relatedTarget)) setIsFocused(false);
+            }}
+            onTouchStart={handleTouchStart}
+            onTouchEnd={handleTouchEnd}
         >
             {/* Slides */}
             <div className="relative w-full h-full">
                 {slides.map((slide, index) => (
                     <div
                         key={slide.id}
-                        className={`absolute inset-0 transition-opacity duration-700 ease-in-out ${
+                        className={`absolute inset-0 ${
+                            reduceMotion ? '' : 'transition-opacity duration-700 ease-in-out'
+                        } ${
                             index === currentSlide
                                 ? 'opacity-100 pointer-events-auto'
                                 : 'opacity-0 pointer-events-none'
                         }`}
-                        style={
-                            isSynthwave || !loadedSlides.has(index)
-                                ? undefined
-                                : {
-                                      backgroundImage: `url(${slide.backgroundImage})`,
-                                      backgroundSize: 'cover',
-                                      backgroundPosition: 'center top',
-                                  }
-                        }
                     >
+                        {/* Background layer, separate so Ken Burns never scales the text */}
+                        {!isSynthwave && loadedSlides.has(index) && (
+                            <div
+                                className={`absolute inset-0 bg-cover bg-[center_top] ${
+                                    reduceMotion
+                                        ? ''
+                                        : index === currentSlide
+                                          ? 'animate-kenburns'
+                                          : 'scale-[1.08]'
+                                }`}
+                                style={{
+                                    backgroundImage: `url(${slide.backgroundImage})`,
+                                    animationPlayState: isPaused ? 'paused' : 'running',
+                                }}
+                            />
+                        )}
+
                         {/* Gradient overlay for text readability */}
                         {!isSynthwave && (
                             <div className="absolute inset-0 bg-gradient-to-tr from-black/90 via-black/30 to-black/10" />
@@ -211,13 +242,23 @@ export const HeroCarousel: React.FC = () => {
                     <button
                         key={index}
                         onClick={() => goToSlide(index)}
-                        className={`w-3 h-3 rounded-full transition-all duration-300 ${
+                        className={`relative h-3 overflow-hidden rounded-full transition-all duration-300 ${
                             index === currentSlide
-                                ? 'bg-primary w-8'
-                                : 'bg-white/50 hover:bg-white/75'
+                                ? `w-8 ${reduceMotion ? 'bg-primary' : 'bg-white/40'}`
+                                : 'w-3 bg-white/50 hover:bg-white/75'
                         }`}
                         aria-label={`Go to slide ${index + 1}`}
-                    />
+                        aria-current={index === currentSlide ? 'true' : undefined}
+                    >
+                        {index === currentSlide && !reduceMotion && (
+                            <span
+                                key={currentSlide}
+                                className="animate-carousel-progress absolute inset-0 origin-left rounded-full bg-primary"
+                                style={{ animationPlayState: isPaused ? 'paused' : 'running' }}
+                                onAnimationEnd={handleProgressEnd}
+                            />
+                        )}
+                    </button>
                 ))}
             </div>
         </div>

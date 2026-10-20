@@ -179,6 +179,46 @@
         animation-fill-mode: both;
     }
 
+    /* Active hero slide background drifts 1 -> 1.08 over one slide. */
+    .animate-kenburns {
+        animation: kenburns 5s linear forwards;
+    }
+
+    @keyframes kenburns {
+        from {
+            transform: scale(1);
+        }
+        to {
+            transform: scale(1.08);
+        }
+    }
+
+    /* Active carousel dot fills over one slide; its animationend advances the slide. */
+    .animate-carousel-progress {
+        animation: carouselProgress 5s linear forwards;
+    }
+
+    @keyframes carouselProgress {
+        from {
+            transform: scaleX(0);
+        }
+        to {
+            transform: scaleX(1);
+        }
+    }
+
+    /* Fades the art out at every edge so it never meets a hard border. */
+    .art-backdrop-image {
+        mask-image:
+            linear-gradient(to bottom, transparent, #000 25%, #000 75%, transparent),
+            linear-gradient(to right, transparent, #000 20%, #000 80%, transparent);
+        mask-composite: intersect;
+        -webkit-mask-image:
+            linear-gradient(to bottom, transparent, #000 25%, #000 75%, transparent),
+            linear-gradient(to right, transparent, #000 20%, #000 80%, transparent);
+        -webkit-mask-composite: source-in;
+    }
+
     @keyframes fadeIn {
         from {
             opacity: 0;
