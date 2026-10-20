@@ -27,6 +27,37 @@ const stats: BaseStats = {
     defensePenetration: 0,
 };
 
+describe('calculatePriorityScore — set thresholds are "at least", never "exactly"', () => {
+    const scoreWith = (role: ShipTypeName, setCount: Record<string, number>) =>
+        calculatePriorityScore(stats, [], role, setCount);
+
+    it.each(['SUPPORTER_BUFFER', 'SUPPORTER_OFFENSIVE'] as const)(
+        '%s: Boost pays out from 4 pieces and 5 or 6 pieces keep the same bonus',
+        (role) => {
+            const three = scoreWith(role, { BOOST: 3 });
+            const four = scoreWith(role, { BOOST: 4 });
+            const five = scoreWith(role, { BOOST: 5 });
+            const six = scoreWith(role, { BOOST: 6 });
+            expect(three).toBe(scoreWith(role, {}));
+            expect(four).toBeGreaterThan(three);
+            expect(five).toBe(four);
+            expect(six).toBe(four);
+        }
+    );
+
+    it('DEBUFFER_CORROSION: Decimation adds 10% per complete 2-piece set, nothing for a lone piece', () => {
+        const none = scoreWith('DEBUFFER_CORROSION', {});
+        const one = scoreWith('DEBUFFER_CORROSION', { DECIMATION: 1 });
+        const two = scoreWith('DEBUFFER_CORROSION', { DECIMATION: 2 });
+        const three = scoreWith('DEBUFFER_CORROSION', { DECIMATION: 3 });
+        const six = scoreWith('DEBUFFER_CORROSION', { DECIMATION: 6 });
+        expect(one).toBe(none);
+        expect(two).toBeCloseTo(none * 1.1, 6);
+        expect(three).toBe(two);
+        expect(six).toBeCloseTo(none * 1.3, 6);
+    });
+});
+
 describe('calculatePriorityScore — implant set requirements', () => {
     it('applies no penalty when implant type is present', () => {
         const setPriorities: SetPriority[] = [{ setName: 'HASTE', count: 1, kind: 'implant' }];

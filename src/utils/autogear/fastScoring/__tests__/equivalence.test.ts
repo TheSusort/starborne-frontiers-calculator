@@ -3,7 +3,8 @@ import type { StatPriority, RoleBasis } from '../../../../types/autogear';
 import type { GearPiece } from '../../../../types/gear';
 import { GEAR_SLOT_ORDER, SHIP_TYPE_NAMES, type GearSlotName } from '../../../../constants';
 import { type EquipmentSlotName, isEquipmentSlotName } from '../../../../constants/gearTypes';
-import { calculateTotalScore } from '../../scoring';
+import { calculateTotalScore, calculateHardViolation } from '../../scoring';
+import { calculateTotalStats } from '../../../ship/statsCalculator';
 import { fastScore } from '../fastScore';
 import { buildFastScoringContext } from '../context';
 import { roleAxis } from '../../offFormula/roleBasisHost';
@@ -191,6 +192,45 @@ describe('fastScore equivalence with calculateTotalScore', () => {
         const second = fastScore(ctx, gearIds, []);
         expect(second.fitness).toBe(first.fitness);
         expect(ctx.cache.size).toBeGreaterThan(0);
+    });
+
+    it('caches fitness AND violation under a hard requirement', () => {
+        const priorities: StatPriority[] = [
+            { stat: 'attack', weight: 1 },
+            { stat: 'hp', minLimit: 10_000_000, hardRequirement: true },
+        ];
+        const ctx = buildFastScoringContext({
+            ship,
+            availableInventory: inventory,
+            priorities,
+            shipRole: 'ATTACKER',
+            engineeringStats: engineering,
+            arenaModifiers: undefined,
+            resolveGearPiece: getGearPiece,
+        });
+        const gearIds = ctx.gearSlotOrder.map(() => -1);
+        gearIds[0] = ctx.gearRegistry.idOf.get(
+            inventory.filter((p) => p.slot === ctx.gearSlotOrder[0])[0].id
+        )!;
+        const slowStats = calculateTotalStats(
+            ship.baseStats,
+            { [ctx.gearSlotOrder[0]]: ctx.gearRegistry.pieces[gearIds[0]].id },
+            getGearPiece,
+            ship.refits,
+            ship.implants,
+            engineering,
+            ship.id
+        ).final;
+        const expectedViolation = calculateHardViolation(slowStats, priorities);
+        expect(expectedViolation).toBeGreaterThan(0);
+
+        const first = fastScore(ctx, gearIds, []);
+        expect(ctx.cache.size).toBe(1);
+        const second = fastScore(ctx, gearIds, []);
+        expect(ctx.cache.size).toBe(1);
+
+        expect(first.violation).toBeCloseTo(expectedViolation, 9);
+        expect(second).toEqual(first);
     });
 
     it('equivalence when GA is not optimizing implants but ship has them equipped', () => {

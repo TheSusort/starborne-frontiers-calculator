@@ -212,5 +212,5 @@ describe('GeneticStrategy forwards the custom formula', () => {
 
         expect(pick(forAttack)).toBe('gear-attack');
         expect(pick(forSpeed)).toBe('gear-speed');
-    });
+    }, 30_000);
 });

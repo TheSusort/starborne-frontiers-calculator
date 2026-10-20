@@ -7,7 +7,7 @@ import {
     SetPriority,
     StatBonus,
 } from '../../types/autogear';
-import { ShipTypeName, getGearSet } from '../../constants';
+import { ShipTypeName, getGearSet, completeSetCount } from '../../constants';
 import { ENEMY_ATTACK, ENEMY_COUNT, BASE_HEAL_PERCENT } from '../../constants/simulation';
 import {
     calculateEffectiveHP,
@@ -180,10 +180,9 @@ function calculateCorrosionDebufferScore(
     const additiveBonus = applyAdditiveBonuses(stats, statBonuses);
     const multiplierFactor = calculateMultiplierFactor(stats, statBonuses);
 
-    // Hacking is the primary stat (0-500 range) that inflicts the DoT
-    // Decimation sets provide 10% damage increase each (max 3 sets = 30% total)
-    // Formula: base_hacking * (1 + decimation_multiplier) + bonus_score
-    const decimationMultiplier = decimation * 0.1; // 10% per piece
+    // Hacking is the primary stat that inflicts the DoT. Each COMPLETE Decimation set adds 10%
+    // DoT damage (`completeSetCount`), so a lone piece adds nothing and 6 pieces add 30%.
+    const decimationMultiplier = completeSetCount('DECIMATION', decimation) * 0.1;
     const totalDamage = hacking * (1 + decimationMultiplier);
 
     return (totalDamage + additiveBonus) * (1 + multiplierFactor);
@@ -210,6 +209,9 @@ function calculateHealerScore(
     );
 }
 
+/** Bonus a Boost-wanting support role scores for an active Boost set. */
+const BOOST_SET_SCORE = 45000;
+
 function calculateBufferScore(
     stats: BaseStats,
     setCount?: Record<string, number>,
@@ -227,12 +229,8 @@ function calculateBufferScore(
 
     const speedScore = speed * 10; // Base weight for speed
 
-    // Boost set scoring (4 pieces needed for set bonus)
-    // Heavily reward having the full set
-    let boostScore = 0;
-    if (boostCount === 4) {
-        boostScore = 45000; // Major bonus for complete set
-    }
+    // Heavily reward an active Boost set. Extra pieces past a complete set add nothing.
+    const boostScore = completeSetCount('BOOST', boostCount) >= 1 ? BOOST_SET_SCORE : 0;
 
     // Add effective HP as a secondary consideration
     // Scale it down to not overshadow primary stats
@@ -252,10 +250,7 @@ function calculateOffensiveSupporterScore(
     const additiveBonus = applyAdditiveBonuses(stats, statBonuses);
     const multiplierFactor = calculateMultiplierFactor(stats, statBonuses);
 
-    let boostScore = 0;
-    if (boostCount === 4) {
-        boostScore = 45000; // Major bonus for complete set
-    }
+    const boostScore = completeSetCount('BOOST', boostCount) >= 1 ? BOOST_SET_SCORE : 0;
 
     return (speed * 10 + attack + boostScore + additiveBonus) * (1 + multiplierFactor);
 }

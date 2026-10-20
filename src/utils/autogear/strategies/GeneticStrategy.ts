@@ -31,7 +31,7 @@ import { applyFleetBuffs } from '../fleetBuffs';
 import { buildFastScoringContext, type FastScoringContext } from '../fastScoring/context';
 import { USE_FAST_SCORING, VERIFY_FAST_SCORING } from '../fastScoring/featureFlag';
 import { fastScore } from '../fastScoring/fastScore';
-import type { BaseStats } from '../../../types/stats';
+import { yieldToEventLoop } from '../yieldToEventLoop';
 
 /** One GA candidate's full slot assignment — gear AND implant slots together (the "genome"),
  *  not the narrower `Ship.equipment` shape. Split with `splitEquipmentBySlotSpace` before
@@ -81,6 +81,12 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
     description = 'Evolution-inspired approach for finding optimal gear combinations';
 
     private readonly MUTATION_RATE = 0.15; // 15% chance to mutate each gear piece
+
+    /** Independent GA passes per run; the best of them is returned. A single pass lands on
+     *  different local optima from run to run, so several passes make results repeatable. */
+    private readonly MIN_PASSES = 3;
+    /** With hard requirements, passes continue past `MIN_PASSES` until one is feasible. */
+    private readonly MAX_PASSES_WITH_HARD_REQUIREMENTS = 5;
 
     private getPopulationSize(inventorySize: number, hasImplants: boolean): number {
         const multiplier = hasImplants ? 18 : 4.5;
@@ -182,22 +188,28 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
         const generations = this.getGenerations(populationSize, hasImplants);
         const eliteSize = this.getEliteSize(populationSize);
 
-        const MAX_ATTEMPTS = 5;
+        const slotsToOptimize = this.getSlotsToOptimize(availableInventory);
+
         const hasHardRequirements = priorities.some((p) => p.hardRequirement);
-        const attemptCount = hasHardRequirements ? MAX_ATTEMPTS : 1;
+        const maxAttempts = hasHardRequirements
+            ? this.MAX_PASSES_WITH_HARD_REQUIREMENTS
+            : this.MIN_PASSES;
 
         let overallBest: Individual | null = null;
         let attempts = 0;
 
-        for (let attempt = 1; attempt <= attemptCount; attempt++) {
+        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
             attempts = attempt;
             this.initializeProgress(populationSize * generations);
-            this.emitAttemptProgress(attempt, attemptCount);
+            this.emitAttemptProgress(attempt, maxAttempts);
+            // Passes share few builds, and a full LRU cache carried into the next pass makes
+            // every miss pay an eviction, which is far slower than starting empty.
+            fastContext?.cache.clear();
 
             const bestOfThisRun = await this.runSingleGAPass(
                 ship,
                 priorities,
-                availableInventory,
+                slotsToOptimize,
                 inventoryBySlot,
                 cachedGetGearPiece,
                 getEngineeringStatsForShipType,
@@ -211,7 +223,7 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
             if (overallBest === null || compareIndividuals(bestOfThisRun, overallBest) < 0) {
                 overallBest = bestOfThisRun;
             }
-            if (overallBest.violation === 0) break;
+            if (attempt >= this.MIN_PASSES && overallBest.violation === 0) break;
         }
 
         this.completeProgress();
@@ -246,7 +258,7 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
     private async runSingleGAPass(
         ship: Ship,
         priorities: StatPriority[],
-        availableInventory: GearPiece[],
+        slotsToOptimize: readonly EquipmentSlotName[],
         inventoryBySlot: InventoryBySlot,
         cachedGetGearPiece: (id: string) => GearPiece | undefined,
         getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
@@ -258,7 +270,8 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
     ): Promise<Individual> {
         performanceTracker.startTimer('InitializePopulation');
         let population = this.initializePopulation(
-            availableInventory,
+            ship,
+            slotsToOptimize,
             inventoryBySlot,
             cachedGetGearPiece,
             scoringInputs.setPriorities,
@@ -294,7 +307,7 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
                 const child = this.crossover(parent1, parent2);
                 this.mutate(
                     child,
-                    availableInventory,
+                    slotsToOptimize,
                     inventoryBySlot,
                     cachedGetGearPiece,
                     scoringInputs.setPriorities
@@ -327,7 +340,7 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
                 }
             }
 
-            await new Promise((resolve) => setTimeout(resolve, 0));
+            await yieldToEventLoop();
         }
         performanceTracker.endTimer('GeneticGenerations');
 
@@ -392,17 +405,47 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
         });
     }
 
+    /**
+     * Individual 0 is the ship's current loadout, restricted to pieces eligible this run (a slot
+     * whose current piece is not in `inventoryBySlot` gets the usual random pick). Elitism keeps
+     * the best individual of every generation, so a pass never returns a build that ranks below
+     * this seed by `compareIndividuals`. Every other individual is random.
+     */
     private initializePopulation(
-        inventory: GearPiece[],
+        ship: Ship,
+        slotsToOptimize: readonly EquipmentSlotName[],
         inventoryBySlot: InventoryBySlot,
         getGearPiece: (id: string) => GearPiece | undefined,
         setPriorities: SetPriority[] | undefined,
         populationSize: number
     ): Individual[] {
         const population: Individual[] = [];
-        const slotsToOptimize = this.getSlotsToOptimize(inventory);
 
-        for (let i = 0; i < populationSize; i++) {
+        if (populationSize > 0) {
+            const equipment: Partial<Record<EquipmentSlotName, string>> = {};
+            slotsToOptimize.forEach((slot) => {
+                const currentId = isImplantSlotName(slot)
+                    ? ship.implants?.[slot]
+                    : isGearSlotName(slot)
+                      ? ship.equipment[slot]
+                      : undefined;
+                const eligible =
+                    currentId !== undefined &&
+                    (inventoryBySlot.get(slot) ?? EMPTY_PIECES).some((p) => p.id === currentId);
+                equipment[slot] = eligible
+                    ? currentId
+                    : this.getPreferredGearForSlot(
+                          slot,
+                          inventoryBySlot,
+                          equipment,
+                          getGearPiece,
+                          setPriorities
+                      );
+            });
+            population.push({ equipment, fitness: 0, violation: 0 });
+        }
+
+        for (let i = population.length; i < populationSize; i++) {
             const equipment: Partial<Record<EquipmentSlotName, string>> = {};
 
             slotsToOptimize.forEach((slot) => {
@@ -464,13 +507,7 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
 
         if (fastContext) {
             const { gearIds, implantIds } = this.equipmentToIdArrays(equipment, fastContext);
-            const { fitness, finalStats } = fastScore(fastContext, gearIds, implantIds);
-
-            let violation = 0;
-            if (fastContext.hasHardRequirements) {
-                // finalStats is guaranteed defined when hasHardRequirements is true
-                violation = calculateHardViolation(finalStats as BaseStats, priorities);
-            }
+            const { fitness, violation } = fastScore(fastContext, gearIds, implantIds);
 
             if (VERIFY_FAST_SCORING) {
                 this.verifyAgainstSlowPath(
@@ -593,13 +630,11 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
 
     private mutate(
         individual: Individual,
-        inventory: GearPiece[],
+        slotsToOptimize: readonly EquipmentSlotName[],
         inventoryBySlot: InventoryBySlot,
         getGearPiece: (id: string) => GearPiece | undefined,
         setPriorities?: SetPriority[]
     ): void {
-        const slotsToOptimize = this.getSlotsToOptimize(inventory);
-
         slotsToOptimize.forEach((slot) => {
             if (Math.random() < this.MUTATION_RATE) {
                 individual.equipment[slot] = this.getPreferredGearForSlot(

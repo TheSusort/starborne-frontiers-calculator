@@ -16,6 +16,7 @@ import { statVectorToBaseStats, type StatVector } from '../../fastScoring/statVe
 import { buildGearRegistry, type GearRegistry } from './gearRegistry';
 import { computeShipPrefix } from './shipPrefix';
 import { createWorkspace, type FastCalcWorkspace } from './fastCalculateStats';
+import type { FastScoreResult } from './fastScore';
 
 export interface FastScoringContext {
     readonly ship: Ship;
@@ -34,7 +35,8 @@ export interface FastScoringContext {
     readonly shipPrefix: StatVector;
     /** statVectorToBaseStats(shipPrefix). Percentage reference for gear/set/implant. */
     readonly percentRef: BaseStats;
-    readonly cache: FastCache<number>;
+    /** Keyed by the full build, so one entry holds everything `fastScore` returns for it. */
+    readonly cache: FastCache<FastScoreResult>;
     readonly workspace: FastCalcWorkspace;
     /** Ordered list of gear-only slots (no implants). */
     readonly gearSlotOrder: readonly GearSlotName[];
@@ -145,7 +147,7 @@ export function buildFastScoringContext(input: BuildContextInput): FastScoringCo
         implantRegistry,
         shipPrefix,
         percentRef,
-        cache: new FastCache<number>(CACHE_LIMIT),
+        cache: new FastCache<FastScoreResult>(CACHE_LIMIT),
         workspace,
         gearSlotOrder,
         implantSlotOrder,
