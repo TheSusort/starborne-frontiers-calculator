@@ -584,6 +584,7 @@ export const ShipInventory: React.FC<Props> = ({
                         </Button>
                         <Button
                             aria-label="Save loadout"
+                            data-track="loadout.save-from-ship"
                             type="submit"
                             disabled={!loadoutName.trim()}
                         >

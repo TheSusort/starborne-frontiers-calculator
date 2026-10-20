@@ -223,6 +223,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, googleRed
                                             variant="primary"
                                             fullWidth
                                             type="submit"
+                                            data-track="auth.submit"
                                             data-testid={
                                                 isSignUp
                                                     ? 'auth-signup-submit'

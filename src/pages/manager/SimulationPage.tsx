@@ -190,6 +190,7 @@ export const SimulationPage: React.FC = () => {
 
                         <Button
                             aria-label="Run Simulation"
+                            data-track="simulation.run"
                             variant="primary"
                             onClick={handleRunSimulation}
                             disabled={!selectedShip}

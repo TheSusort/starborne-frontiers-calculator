@@ -14,6 +14,7 @@ import { isDemoDataLoaded, clearDemoData } from '../../../utils/demoData';
 import { Button } from '../Button';
 import { useSynthwaveMusic } from '../../../utils/music/useSynthwaveMusic';
 import { usePauseMusicOffTheme } from '../../../utils/music/usePauseMusicOffTheme';
+import { navTrackId } from '../../../services/pageTracking/clicks';
 import { ConfirmModal } from './ConfirmModal';
 import { Offcanvas } from './Offcanvas';
 import { Tooltip } from './Tooltip';
@@ -118,6 +119,7 @@ const NavigationItem: React.FC<{
                     ) : (
                         <Link
                             to={item.path}
+                            data-track={navTrackId(item.path)}
                             onClick={() => setIsMobileMenuOpen(false)}
                             className={`
                             block px-4 py-2

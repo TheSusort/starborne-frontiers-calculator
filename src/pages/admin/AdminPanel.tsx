@@ -19,6 +19,7 @@ import {
     AddShipTemplateForm,
     ShipTemplateFormData,
 } from '../../components/admin/AddShipTemplateForm';
+import { TrafficTab } from '../../components/admin/TrafficTab';
 import { LiveTrafficCard } from '../../components/admin/LiveTrafficCard';
 import { ArenaModifiersTab } from '../../components/admin/ArenaModifiersTab';
 import { SkillAuditSection } from '../../components/admin/SkillAuditSection';
@@ -350,6 +351,7 @@ export const AdminPanel: React.FC = () => {
                 <Tabs
                     tabs={[
                         { id: 'analytics', label: 'Analytics' },
+                        { id: 'traffic', label: 'Traffic' },
                         { id: 'system-health', label: 'System Health' },
                         {
                             id: 'template-proposals',
@@ -436,6 +438,9 @@ export const AdminPanel: React.FC = () => {
                         <AllUsersTable />
                     </div>
                 )}
+
+                {/* Traffic Tab */}
+                {activeTab === 'traffic' && <TrafficTab daysBack={daysBack} />}
 
                 {/* System Health Tab */}
                 {activeTab === 'system-health' && (
