@@ -35,7 +35,7 @@ import { resumeArcadeMusic, writeMusicPref } from './musicPref';
 import { GameOverPanel } from './GameOverPanel';
 import { YouDiedOverlay } from './YouDiedOverlay';
 import { canSkipDeath, deathStage } from './deathSequence';
-import { createDeathCue } from './deathSound';
+import { createDeathCue, primeDeathAudio } from './deathSound';
 import { slowMotion } from './explosion';
 import { useArcadeSubmission, SubmissionStatus, type FinishedRun } from './useArcadeSubmission';
 import { ArcadeUsernameModal } from './ArcadeUsernameModal';
@@ -547,6 +547,16 @@ const FlightGameRun: React.FC<FlightGameProps> = ({ origin, onClose }) => {
     );
 
     const deathCue = useMemo(() => createDeathCue(), []);
+
+    // The crash sound plays from the frame loop; every gesture in the arcade unlocks its audio
+    // first (see `primeDeathAudio`).
+    useEffect(() => {
+        const events = ['keydown', 'pointerdown', 'touchstart'] as const;
+        for (const e of events) window.addEventListener(e, primeDeathAudio, { passive: true });
+        return () => {
+            for (const e of events) window.removeEventListener(e, primeDeathAudio);
+        };
+    }, []);
 
     /** Ends the run: the result is recorded and submitted now, while the ship explodes with its
      *  crash sound and the death screen plays before the game-over panel shows it. */

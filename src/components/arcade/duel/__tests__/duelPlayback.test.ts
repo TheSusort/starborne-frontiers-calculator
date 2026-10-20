@@ -261,6 +261,27 @@ describe('buildDuelBeats (hand-built)', () => {
         expect(beats[0].player).toMatchObject({ hpPct: 70, shieldPct: 25 });
     });
 
+    it('start-of-round effects already in the turn-start snapshot are not counted again', () => {
+        const beats = buildDuelBeats(
+            battle(
+                [
+                    logRound(
+                        1,
+                        [turn(P, [], snap(600, 100)), turn(E, [])],
+                        [],
+                        [
+                            entry('hot-ticked', P, [{ targetId: P, amount: 100 }]),
+                            entry('shield', P, [{ targetId: P, amount: 100 }]),
+                        ]
+                    ),
+                ],
+                [{ player: { hpPct: 60, shieldPct: 10 }, enemy: {} }]
+            )
+        );
+        expect(beats[0].player).toMatchObject({ hpPct: 60, shieldPct: 10 });
+        expect(beats[0].hits.map((h) => h.kind)).toEqual(['heal', 'shield']);
+    });
+
     it('a heal pops its landed amount and raises HP by it over max HP, before the round end', () => {
         const beats = buildDuelBeats(
             battle(

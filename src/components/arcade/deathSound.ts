@@ -57,11 +57,20 @@ export function createDeathAudio(makeContext: ContextFactory = browserContext): 
 
 let shared: DeathAudio | null | undefined;
 
-/** The app-wide crash audio, created on first use: browsers allow a context only after a user
- *  gesture, and a run always starts from one. */
+/** The app-wide crash audio, created on first use. */
 function sharedAudio(): DeathAudio | null {
     if (shared === undefined) shared = createDeathAudio();
     return shared;
+}
+
+/**
+ * Creates and unlocks the crash audio. A crash is detected in the animation-frame loop, outside
+ * any user gesture, and Safari keeps a context suspended unless it is resumed inside one, so this
+ * runs from the arcade's own key, pointer and touch handlers.
+ */
+export function primeDeathAudio(): void {
+    const audio = sharedAudio();
+    if (audio?.ctx.state === 'suspended') void audio.ctx.resume().catch(() => undefined);
 }
 
 const noiseBuffers = new WeakMap<AudioContext, AudioBuffer>();

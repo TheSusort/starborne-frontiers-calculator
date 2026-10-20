@@ -202,10 +202,15 @@ export function buildDuelBeats(result: BattleResult): DuelBeat[] {
         for (const reaction of entry.reactions) apply(reaction, hits);
     };
 
-    const pushBeat = (round: number, turn: CombatLogTurn | null, entries: CombatLogEntry[]) => {
+    /** `hits` may already hold the numbers of entries applied before the turn's snapshot. */
+    const pushBeat = (
+        round: number,
+        turn: CombatLogTurn | null,
+        entries: CombatLogEntry[],
+        hits: DuelHit[] = []
+    ) => {
         const actor = turn ? (sideOf.get(turn.actorId) ?? null) : null;
         const chargedEntry = turn?.entries.find((e) => e.slot === 'charged');
-        const hits: DuelHit[] = [];
         for (const entry of entries) apply(entry, hits);
         if (actor && chargedEntry && state[actor].charge) state[actor].charge.value = 0;
         beats.push({
@@ -232,6 +237,10 @@ export function buildDuelBeats(result: BattleResult): DuelBeat[] {
                 pending = pending.concat(turn.entries);
                 continue;
             }
+            // Entries before the turn are applied first: the turn-start snapshot already
+            // includes them, so applying them after it would count relative changes twice.
+            const earlier: DuelHit[] = [];
+            for (const entry of pending) apply(entry, earlier);
             const snap = turn.statsSnapshot;
             if (snap && snap.maxHp > 0) {
                 const hpPct = clamp((100 * snap.currentHp) / snap.maxHp);
@@ -243,7 +252,7 @@ export function buildDuelBeats(result: BattleResult): DuelBeat[] {
             if (turn.chargeMax > 0) {
                 state[actor].charge = { value: turn.chargeBefore, max: turn.chargeMax };
             }
-            pushBeat(logRound.round, turn, pending.concat(turn.entries));
+            pushBeat(logRound.round, turn, turn.entries, earlier);
             pending = [];
         }
         pending = pending.concat(logRound.endOfRound);
