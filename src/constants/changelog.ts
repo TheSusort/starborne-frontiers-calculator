@@ -16,6 +16,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Autogear: unmet hard requirements now get the build that comes closest to them.',
     'Autogear: optimizing with implants now runs about three times faster.',
     'Autogear: stat priorities no longer hide implants your role would pick.',
+    'Pages that fail to load now show a reload button instead of looping.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
