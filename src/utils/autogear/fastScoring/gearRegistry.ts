@@ -32,7 +32,7 @@ export interface GearRegistry {
 }
 
 /**
- * Build a registry for the pre-filtered inventory of a single run. Piece stats
+ * Build a registry for the eligible inventory of a single run. Piece stats
  * (main + sub, NOT counting set bonuses — those are applied later in the pipeline)
  * are precomputed into statBuffer as Float64 contributions. When `shipId` is
  * provided, calibration bonuses are applied to the main stat of any piece that is

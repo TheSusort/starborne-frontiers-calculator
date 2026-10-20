@@ -352,7 +352,7 @@ describe('findOptimalGearForShip', () => {
         expect(passedInventory.map((g) => g.id)).toEqual(['imp-b']);
     });
 
-    it('trims implant candidates to the top scorers per slot when optimizeImplants is on and priorities are set', async () => {
+    it('passes every implant candidate through when optimizeImplants is on and priorities are set', async () => {
         const implants = Array.from({ length: 30 }, (_, i) =>
             gear({
                 id: `imp-${i}`,
@@ -371,11 +371,11 @@ describe('findOptimalGearForShip', () => {
             { ...baseDeps, inventory: implants }
         );
         const passedInventory = findOptimalGear.mock.calls[0][2];
-        // 30 implants sharing one setBonus: filterTopImplantsPerSlot's K = max(20, ceil(30*0.25)).
-        expect(passedInventory).toHaveLength(20);
+        // Implants are not ranked by priorities: those miss the role formula's stats.
+        expect(passedInventory).toHaveLength(30);
     });
 
-    it('keeps every implant candidate when optimizeImplants is on but no priorities or bonuses rank them', async () => {
+    it('passes every implant candidate through when optimizeImplants is on without priorities', async () => {
         const implants = Array.from({ length: 30 }, (_, i) =>
             gear({ id: `imp-${i}`, slot: 'implant_major', setBonus: 'MARTYRDOM' })
         );
