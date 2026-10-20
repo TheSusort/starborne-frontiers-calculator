@@ -44,6 +44,7 @@ import type { FlightOrigin } from './flightEvents';
 import { anyCandidate, canDuel, gearedCandidate, pickOpponents } from './duel/pickOpponents';
 import { createSpeedLines } from './speedLines';
 import { createShipTrail } from './shipTrails';
+import { createScrapeFx } from './scrapeFx';
 import type { DuelResult } from './duel/runDuel';
 import { DuelSummary, type DuelSide } from './duel/DuelSummary';
 import { factionAccent } from './ships/factionTint';
@@ -470,16 +471,19 @@ const FlightGameRun: React.FC<FlightGameProps> = ({ origin, onClose }) => {
         gameRef.current = createGame(newSeed(), { duels: true });
     }, [ships, isCandidate]);
 
-    // Speed lines, the ship's trail and the magnet's motion follow a reduced-motion change.
+    // Speed lines, the ship's trail and scrape and the magnet's motion follow a reduced-motion
+    // change.
     useEffect(() => {
         const view = viewRef.current;
         view.reducedMotion = reducedMotion;
         if (reducedMotion) {
             view.speedLines = null;
             view.trail = null;
+            view.scrape = null;
         } else {
             view.speedLines ??= createSpeedLines(view.laneWedge);
             view.trail ??= createShipTrail();
+            view.scrape ??= createScrapeFx();
         }
     }, [reducedMotion]);
 
