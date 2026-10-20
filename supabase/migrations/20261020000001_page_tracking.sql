@@ -165,10 +165,13 @@ BEGIN
     SELECT id INTO uid FROM public.users WHERE id = auth.uid();
   END IF;
 
+  -- The row lock holds until this call commits, so concurrent calls cannot all read the same
+  -- remaining budget and overshoot the daily ceilings together.
   INSERT INTO public.tracking_ingest_counts (day) VALUES (today) ON CONFLICT (day) DO NOTHING;
   SELECT greatest(10000 - visits, 0), greatest(1000 - errors, 0)
     INTO visits_left, errors_left
-    FROM public.tracking_ingest_counts WHERE day = today;
+    FROM public.tracking_ingest_counts WHERE day = today
+    FOR UPDATE;
 
   FOR v IN
     SELECT value FROM jsonb_array_elements(p_visits) WITH ORDINALITY AS t(value, n)

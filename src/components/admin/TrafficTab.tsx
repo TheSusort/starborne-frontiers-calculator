@@ -3,6 +3,7 @@ import { Button, CollapsibleAccordion, Select, StatCard } from '../ui';
 import { DataTable, type Column } from '../ui/tables';
 import { Loader } from '../ui/Loader';
 import {
+    averageDailyVisitors,
     formatDuration,
     getTrafficSummary,
     type TrafficSummary,
@@ -55,10 +56,7 @@ export const TrafficTab: React.FC<TrafficTabProps> = ({ daysBack }) => {
 
     const totalViews = summary.daily.reduce((s, d) => s + d.views, 0);
     const totalSessions = summary.daily.reduce((s, d) => s + d.sessions, 0);
-    const avgDailyVisitors =
-        summary.daily.length > 0
-            ? Math.round(summary.daily.reduce((s, d) => s + d.visitors, 0) / summary.daily.length)
-            : 0;
+    const avgDailyVisitors = averageDailyVisitors(summary.daily, daysBack, new Date());
     const totalActive = summary.pages.reduce((s, p) => s + p.avg_active_ms * p.views, 0);
     const deviceTotal = summary.devices.mobile + summary.devices.tablet + summary.devices.desktop;
 

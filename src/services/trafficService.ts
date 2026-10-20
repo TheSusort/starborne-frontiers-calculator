@@ -36,3 +36,21 @@ export function formatDuration(ms: number): string {
     if (minutes > 0) return `${minutes}m ${String(seconds).padStart(2, '0')}s`;
     return `${seconds}s`;
 }
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Visitors per day over the selected range. The RPC returns no row for a day without traffic, so
+ * those days count as zero; days before the first tracked day are not counted at all.
+ */
+export function averageDailyVisitors(
+    daily: TrafficSummary['daily'],
+    daysBack: number,
+    today: Date
+): number {
+    if (daily.length === 0) return 0;
+    const todayUtc = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
+    const sinceFirst = Math.round((todayUtc - Date.parse(daily[0].day)) / DAY_MS) + 1;
+    const days = Math.max(1, Math.min(daysBack, sinceFirst));
+    return Math.round(daily.reduce((s, d) => s + d.visitors, 0) / days);
+}
