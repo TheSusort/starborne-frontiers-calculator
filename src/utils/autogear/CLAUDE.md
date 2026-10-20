@@ -1,8 +1,8 @@
 # Autogear
 
 **Strategy:** `strategies/GeneticStrategy.ts` is the only strategy. It implements
-`AutogearStrategy`, and `runShipOptimizer.ts` holds the one module-level instance every run goes
-through; there is no algorithm choice anywhere (config, saved config, or UI). Old saved configs in
+`AutogearStrategy`, and `findOptimalGearForShip` builds a fresh instance per call (progress state
+lives on the instance); there is no algorithm choice anywhere (config, saved config, or UI). Old saved configs in
 storage may still carry an `algorithm` key; nothing reads it, and restore must keep ignoring it.
 
 **Progress reporting:** `AutogearStrategy` requires `setProgressCallback`. `BaseStrategy`

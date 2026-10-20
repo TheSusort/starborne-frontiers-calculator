@@ -58,9 +58,8 @@ export interface ShipOptimizerDeps {
     getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined;
     gearToShipMap: Map<string, string>;
     getShipById: (id: string) => Ship | undefined;
-    /** The strategy is a shared module-level instance that holds only the most recent
-     *  callback; every call sets it to this one, or to a no-op when omitted, so a callback
-     *  from an earlier run never fires for this one. */
+    /** Receives this run's progress. Every call builds its own strategy instance, so overlapping
+     *  runs never share progress state or callbacks. Omit it for no progress reporting. */
     onProgress?: (progress: AutogearProgress) => void;
 }
 
@@ -308,8 +307,6 @@ function availableInventoryForShip(
         });
 }
 
-const strategy = new GeneticStrategy();
-
 /**
  * Runs one ship through the autogear strategy (`GeneticStrategy`): narrows the shared inventory through
  * {@link availableInventoryForShip}, builds the fast/slow scoring views from that one filtered
@@ -355,6 +352,7 @@ export async function findOptimalGearForShip(
           )
         : scoredInventory;
 
+    const strategy = new GeneticStrategy();
     strategy.setProgressCallback(onProgress ?? (() => {}));
 
     const scoringInputs: ScoringInputs = {

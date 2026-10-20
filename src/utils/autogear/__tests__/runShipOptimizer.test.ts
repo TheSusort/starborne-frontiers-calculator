@@ -44,8 +44,8 @@ const findOptimalGear = vi.fn(
 );
 const setProgressCallback = vi.fn();
 
-// `runShipOptimizer` constructs its strategy at module load, before this file's `const`s are
-// initialised, so the mock's methods look the spies up at call time rather than capturing them.
+// `vi.mock` is hoisted above this file's `const`s, so the mock's methods look the spies up at
+// call time rather than capturing them.
 vi.mock('../strategies/GeneticStrategy', () => ({
     GeneticStrategy: class {
         findOptimalGear(...args: Parameters<typeof findOptimalGear>) {
