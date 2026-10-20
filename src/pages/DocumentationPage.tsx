@@ -1448,13 +1448,13 @@ const DocumentationPage: React.FC = () => {
                                         feasible combo exists in your inventory.
                                     </p>
                                     <p className="text-theme-text">
-                                        When the algorithm can&apos;t find a combo that meets every
-                                        hard requirement on the first try, it retries up to five
-                                        times with fresh random starting points. If no attempt
-                                        produces a feasible combo, the closest-to-feasible result is
-                                        shown along with a list of which requirements were missed
-                                        and by how much &mdash; so you can adjust your limits to
-                                        something your inventory can actually hit.
+                                        When none of its first three passes finds a combo that meets
+                                        every hard requirement, the algorithm makes up to two more
+                                        with fresh random starting points. If no pass produces a
+                                        feasible combo, the closest-to-feasible result is shown
+                                        along with a list of which requirements were missed and by
+                                        how much &mdash; so you can adjust your limits to something
+                                        your inventory can actually hit.
                                     </p>
                                 </div>
 
@@ -1757,6 +1757,12 @@ const DocumentationPage: React.FC = () => {
                                         a population of potential solutions and evolves them over
                                         time. It&apos;s particularly good at finding balanced gear
                                         combinations that satisfy multiple requirements.
+                                    </p>
+                                    <p className="text-theme-text mt-2">
+                                        Each run makes three independent passes and keeps the best,
+                                        so repeated runs land on the same answer more often. Every
+                                        pass also starts from the gear the ship already wears, so a
+                                        suggestion never scores below the current loadout.
                                     </p>
                                 </div>
                             </div>

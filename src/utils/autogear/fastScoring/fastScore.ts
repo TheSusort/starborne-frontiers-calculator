@@ -1,9 +1,8 @@
-import type { BaseStats } from '../../../types/stats';
 import type { StatPriority, SetPriority, StatBonus, FleetBuff } from '../../../types/autogear';
 import { applyArenaModifiers } from '../arenaModifiers';
 import { ARCANE_SIEGE_MULTIPLIERS } from '../arcaneSiegeUtils';
 import { applyFleetBuffs } from '../fleetBuffs';
-import { calculatePriorityScore } from '../priorityScore';
+import { calculateHardViolation, calculatePriorityScore } from '../priorityScore';
 import { roleBasisKeyPart } from '../scoring';
 import { buildFastCacheKey } from '../../fastScoring/fastCache';
 import { statVectorToBaseStats } from '../../fastScoring/statVector';
@@ -12,8 +11,8 @@ import type { FastScoringContext } from './context';
 
 export interface FastScoreResult {
     fitness: number;
-    /** Only populated when context.hasHardRequirements === true. */
-    finalStats?: BaseStats;
+    /** `calculateHardViolation` of the scored stats; 0 when no priority is a hard requirement. */
+    violation: number;
 }
 
 /**
@@ -49,9 +48,7 @@ export function fastScore(
             : buildFastCacheKey(gearIds)) + roleBasisKeyPart(context.roleBasis);
 
     const cached = cache.get(cacheKey);
-    if (cached !== undefined && !hasHardRequirements) {
-        return { fitness: cached };
-    }
+    if (cached !== undefined) return cached;
 
     // Compute stats
     fastCalculateStats(
@@ -130,9 +127,11 @@ export function fastScore(
         context.roleBasis
     );
 
-    if (!hasHardRequirements) {
-        cache.set(cacheKey, fitness);
-    }
+    const violation = hasHardRequirements
+        ? calculateHardViolation(statsForScoring, context.priorities as StatPriority[])
+        : 0;
 
-    return hasHardRequirements ? { fitness, finalStats: statsForScoring } : { fitness };
+    const result: FastScoreResult = { fitness, violation };
+    cache.set(cacheKey, result);
+    return result;
 }

@@ -1089,7 +1089,7 @@ export const AutogearPage: React.FC = () => {
                             current={optimizationProgress.current}
                             total={optimizationProgress.total}
                             percentage={optimizationProgress.percentage}
-                            label={`Optimizing: ${optimizationProgress.currentShip.name} (${optimizationProgress.currentShip.index + 1}/${selectedShips.length})${optimizationProgress.attempt && optimizationProgress.maxAttempts && optimizationProgress.attempt > 1 ? ` — Attempt ${optimizationProgress.attempt} of ${optimizationProgress.maxAttempts}` : ''}`}
+                            label={`Optimizing: ${optimizationProgress.currentShip.name} (${optimizationProgress.currentShip.index + 1}/${selectedShips.length})${optimizationProgress.attempt && optimizationProgress.maxAttempts && optimizationProgress.maxAttempts > 1 ? ` — Pass ${optimizationProgress.attempt} of ${optimizationProgress.maxAttempts}` : ''}`}
                         />
                     )}
 

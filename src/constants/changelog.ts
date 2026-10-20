@@ -9,6 +9,10 @@ export const CURRENT_VERSION = '1.81.0';
 export const UNRELEASED_CHANGES: string[] = [
     'Autogear: buffer supporters now keep the Boost bonus with 5 or 6 Boost pieces.',
     'Autogear: corrosion debuffers now count Decimation per complete 2-piece set, not per piece.',
+    'Autogear: suggestions are now more consistent when you run the same ship again.',
+    'Autogear: suggestions now never score below the gear a ship already wears.',
+    'Autogear: runs with hard requirements it cannot meet now finish faster.',
+    'Autogear: optimizing no longer stalls when you switch to another browser tab.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
