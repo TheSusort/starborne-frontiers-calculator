@@ -1,27 +1,20 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import {
-    Upload,
-    Eye,
-    Zap,
-    Ship,
-    Wrench,
-    Swords,
-    Save,
-    MapPin,
-    BarChart3,
-    Calculator,
-    MessageCircle,
-    Github,
-} from 'lucide-react';
+import { Upload, Eye, Zap, MessageCircle, Github } from 'lucide-react';
 import { DemoDataSection } from '../components/home/DemoDataSection';
 import Seo from '../components/seo/Seo';
 import { SEO_CONFIG } from '../constants/seo';
 import { ImportButton } from '../components/import/ImportButton';
 import { HeroCarousel } from '../components/home/HeroCarousel';
-import { Button, SectionHeader, IconBadge, FeatureCard, QuickStartCard } from '../components/ui';
+import { HomeFeatureGrid } from '../components/home/HomeFeatureGrid';
+import { WhatsNewCard } from '../components/home/WhatsNewCard';
+import { FleetPanel } from '../components/home/FleetPanel';
+import { useShowFleetPanel } from '../components/home/fleetPanelState';
+import { ArcadeStrip } from '../components/home/ArcadeStrip';
+import { Button, SectionHeader, IconBadge, QuickStartCard } from '../components/ui';
 
 const HomePage: React.FC = () => {
+    const showFleetPanel = useShowFleetPanel();
     return (
         <>
             <Seo {...SEO_CONFIG.home} />
@@ -29,82 +22,88 @@ const HomePage: React.FC = () => {
                 {/* Hero Carousel */}
                 <HeroCarousel />
 
-                {/* Quick Start Guide */}
-                <section className="space-y-6">
-                    <SectionHeader
-                        title="Quick Start Guide"
-                        subtitle="Get started in three simple steps"
-                    />
-                    <div className="grid gap-6 md:grid-cols-3">
-                        <QuickStartCard
-                            icon={Upload}
-                            iconGradientFrom="from-blue-600"
-                            iconGradientTo="to-blue-800"
-                            title="1. Import Data"
-                            videoSrc="/videos/export.mp4"
-                            description={
-                                <>
-                                    <Link
-                                        to="/documentation#getting-started"
-                                        className="text-primary hover:text-primary-hover underline"
-                                    >
-                                        Export your game data
-                                    </Link>{' '}
-                                    from Starborne Frontiers and import it here. This will populate
-                                    your ships, gear, and engineering stats.
-                                </>
-                            }
-                            action={<ImportButton className="w-full" />}
+                <WhatsNewCard />
+
+                {/* Returning players get their fleet; new players and demo viewers get Quick Start */}
+                {showFleetPanel ? (
+                    <FleetPanel />
+                ) : (
+                    <section className="space-y-6">
+                        <SectionHeader
+                            title="Quick Start Guide"
+                            subtitle="Get started in three simple steps"
                         />
-                        <QuickStartCard
-                            icon={Eye}
-                            iconGradientFrom="from-purple-600"
-                            iconGradientTo="to-purple-800"
-                            title="2. View Your Fleet"
-                            videoSrc="/videos/ships.mp4"
-                            description={
-                                <>
-                                    Browse your fleet in{' '}
-                                    <Link
-                                        to="/ships"
-                                        className="text-primary hover:text-primary-hover underline"
-                                    >
-                                        Ships
-                                    </Link>{' '}
-                                    and manage your inventory in{' '}
-                                    <Link
-                                        to="/gear"
-                                        className="text-primary hover:text-primary-hover underline"
-                                    >
-                                        Gear
-                                    </Link>
-                                    . Analyze gear, find upgrade suggestions and more.
-                                </>
-                            }
-                        />
-                        <QuickStartCard
-                            icon={Zap}
-                            iconGradientFrom="from-orange-600"
-                            iconGradientTo="to-orange-800"
-                            title="3. Optimize Gear"
-                            videoSrc="/videos/autogear.mp4"
-                            description={
-                                <>
-                                    Use the{' '}
-                                    <Link
-                                        to="/autogear"
-                                        className="text-primary hover:text-primary-hover underline"
-                                    >
-                                        Autogear Tool
-                                    </Link>{' '}
-                                    to automatically calculate the best gear combinations for your
-                                    ships. Check out community suggested configurations or AI
-                                    generated ones, based on ship skills and implants.
-                                </>
-                            }
-                        />
-                    </div>
-                </section>
+                        <div className="grid gap-6 md:grid-cols-3">
+                            <QuickStartCard
+                                icon={Upload}
+                                iconGradientFrom="from-blue-600"
+                                iconGradientTo="to-blue-800"
+                                title="1. Import Data"
+                                videoSrc="/videos/export.mp4"
+                                description={
+                                    <>
+                                        <Link
+                                            to="/documentation#getting-started"
+                                            className="text-primary hover:text-primary-hover underline"
+                                        >
+                                            Export your game data
+                                        </Link>{' '}
+                                        from Starborne Frontiers and import it here. This will
+                                        populate your ships, gear, and engineering stats.
+                                    </>
+                                }
+                                action={<ImportButton className="w-full" />}
+                            />
+                            <QuickStartCard
+                                icon={Eye}
+                                iconGradientFrom="from-purple-600"
+                                iconGradientTo="to-purple-800"
+                                title="2. View Your Fleet"
+                                videoSrc="/videos/ships.mp4"
+                                description={
+                                    <>
+                                        Browse your fleet in{' '}
+                                        <Link
+                                            to="/ships"
+                                            className="text-primary hover:text-primary-hover underline"
+                                        >
+                                            Ships
+                                        </Link>{' '}
+                                        and manage your inventory in{' '}
+                                        <Link
+                                            to="/gear"
+                                            className="text-primary hover:text-primary-hover underline"
+                                        >
+                                            Gear
+                                        </Link>
+                                        . Analyze gear, find upgrade suggestions and more.
+                                    </>
+                                }
+                            />
+                            <QuickStartCard
+                                icon={Zap}
+                                iconGradientFrom="from-orange-600"
+                                iconGradientTo="to-orange-800"
+                                title="3. Optimize Gear"
+                                videoSrc="/videos/autogear.mp4"
+                                description={
+                                    <>
+                                        Use the{' '}
+                                        <Link
+                                            to="/autogear"
+                                            className="text-primary hover:text-primary-hover underline"
+                                        >
+                                            Autogear Tool
+                                        </Link>{' '}
+                                        to automatically calculate the best gear combinations for
+                                        your ships. Check out community suggested configurations or
+                                        AI generated ones, based on ship skills and implants.
+                                    </>
+                                }
+                            />
+                        </div>
+                    </section>
+                )}
 
                 {/* Core Features */}
                 <section className="space-y-6">
@@ -112,56 +111,7 @@ const HomePage: React.FC = () => {
                         title="Powerful Fleet Management Tools"
                         subtitle="Everything you need to optimize your Starborne Frontiers fleet"
                     />
-                    <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-                        <FeatureCard
-                            to="/autogear"
-                            icon={Zap}
-                            title="AI Autogear"
-                            description="Intelligent gear optimization with AI-powered recommendations for maximum performance"
-                        />
-                        <FeatureCard
-                            to="/ships"
-                            icon={Ship}
-                            title="Fleet Manager"
-                            description="Comprehensive ship builder with stats, equipment, refits, and implants"
-                        />
-                        <FeatureCard
-                            to="/gear"
-                            icon={Wrench}
-                            title="Gear Inventory"
-                            description="Advanced filtering, sorting, and upgrade analysis for your entire gear collection"
-                        />
-                        <FeatureCard
-                            to="/simulation"
-                            icon={Swords}
-                            title="Combat Simulator"
-                            description="Test fleet compositions and strategies with detailed battle simulations"
-                        />
-                        <FeatureCard
-                            to="/loadouts"
-                            icon={Save}
-                            title="Loadout System"
-                            description="Save and share gear setups for individual ships or entire team compositions"
-                        />
-                        <FeatureCard
-                            to="/encounters"
-                            icon={MapPin}
-                            title="Encounter Tracker"
-                            description="Document and share fleet formations for PvE encounters and boss fights"
-                        />
-                        <FeatureCard
-                            to="/engineering"
-                            icon={BarChart3}
-                            title="Engineering Bonuses"
-                            description="Track ship type bonuses and achieve 100% stat coverage across your fleet"
-                        />
-                        <FeatureCard
-                            to="/damage"
-                            icon={Calculator}
-                            title="Specialized Calculators"
-                            description="DPS, defense, healing, and damage deconstruction tools for advanced theorycrafting"
-                        />
-                    </div>
+                    <HomeFeatureGrid />
                 </section>
 
                 {/* Community & Support */}
@@ -260,6 +210,7 @@ const HomePage: React.FC = () => {
                             </div>
                         </div>
                     </div>
+                    <ArcadeStrip />
                 </section>
 
                 <DemoDataSection />

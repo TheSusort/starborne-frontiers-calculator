@@ -29,6 +29,7 @@ import { computeImportDiff } from '../../utils/import/computeImportDiff';
 import { useGearWishlistContext } from '../../contexts/GearWishlistProvider';
 import { HangarNameModal } from './HangarNameModal';
 import { ImportDiffModal } from './ImportDiffModal';
+import { IMPORT_START_EVENT } from './importEvents';
 
 export const ImportButton: React.FC<{
     className?: string;
@@ -184,12 +185,18 @@ export const ImportButton: React.FC<{
 
                     // Update all states with the imported data
                     addNotification('info', 'Saving data locally...', 10000);
+                    window.dispatchEvent(new Event(IMPORT_START_EVENT));
                     await setShips(shipsToStore);
                     await setInventory(result.data.inventory);
                     await setEngineeringStats(result.data.engineeringStats);
 
                     // Clear demo data flag if it was set — the user has imported real data
                     localStorage.removeItem(StorageKey.DEMO_DATA_LOADED);
+                    try {
+                        localStorage.setItem(StorageKey.LAST_IMPORT_AT, new Date().toISOString());
+                    } catch {
+                        // Storage unavailable; the home page just hides "Last import".
+                    }
 
                     // Check for template updates BEFORE syncing (so it completes before refresh)
                     if (user) {

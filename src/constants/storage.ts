@@ -14,6 +14,8 @@ export const StorageKey = {
     DEMO_DATA_LOADED: 'demo_data_loaded',
     SHOW_IMPORT_SUMMARY: 'show_import_summary',
     SUPABASE_SYNC_ENABLED: 'supabase_sync_enabled',
+    LAST_IMPORT_AT: 'last_import_at',
+    LAST_VISITED_PATH: 'last_visited_path',
 } as const;
 
 export type StorageKeyType = (typeof StorageKey)[keyof typeof StorageKey];
