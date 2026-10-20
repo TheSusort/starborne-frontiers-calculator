@@ -68,9 +68,3 @@ export interface AutogearStrategy {
     ): Promise<AutogearResult> | AutogearResult;
     setProgressCallback(callback: (progress: AutogearProgress) => void): void;
 }
-
-export enum AutogearAlgorithm {
-    TwoPass = 'twoPass',
-    SetFirst = 'setFirst',
-    Genetic = 'genetic',
-}

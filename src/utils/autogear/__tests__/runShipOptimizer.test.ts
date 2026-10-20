@@ -9,7 +9,7 @@ import {
     type AutogearShipConfig,
     type ShipOptimizerConfig,
 } from '../runShipOptimizer';
-import { AutogearAlgorithm, type ScoringInputs } from '../AutogearStrategy';
+import type { ScoringInputs } from '../AutogearStrategy';
 import type { Ship } from '../../../types/ship';
 import type { GearPiece } from '../../../types/gear';
 import type {
@@ -44,11 +44,17 @@ const findOptimalGear = vi.fn(
 );
 const setProgressCallback = vi.fn();
 
-vi.mock('../getStrategy', () => ({
-    getAutogearStrategy: () => ({
-        findOptimalGear,
-        setProgressCallback,
-    }),
+// `vi.mock` is hoisted above this file's `const`s, so the mock's methods look the spies up at
+// call time rather than capturing them.
+vi.mock('../strategies/GeneticStrategy', () => ({
+    GeneticStrategy: class {
+        findOptimalGear(...args: Parameters<typeof findOptimalGear>) {
+            return findOptimalGear(...args);
+        }
+        setProgressCallback(...args: unknown[]) {
+            return setProgressCallback(...args);
+        }
+    },
 }));
 
 const ship = { id: 'focus', name: 'Focus', type: 'DEBUFFER', implants: {} } as unknown as Ship;
@@ -74,7 +80,6 @@ const baseConfig: ShipOptimizerConfig = {
     ignoreUnleveled: true,
     useUpgradedStats: false,
     tryToCompleteSets: false,
-    selectedAlgorithm: AutogearAlgorithm.Genetic,
     optimizeImplants: false,
     includeCalibratedGear: false,
     assumeCalibrated: false,

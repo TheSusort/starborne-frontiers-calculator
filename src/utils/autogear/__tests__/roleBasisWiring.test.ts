@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { findOptimalGearForShip, type ShipOptimizerConfig } from '../runShipOptimizer';
-import { AutogearAlgorithm } from '../AutogearStrategy';
 import { clearScoreCache } from '../scoring';
 import { makeTestShip } from '../fastScoring/__tests__/fixtures/testInventory';
 import type { GearPiece } from '../../../types/gear';
@@ -16,7 +15,7 @@ import type { FlexibleStats } from '../../../types/stats';
  * ATTACKER formula never reads on its own — `weapon-a` wins the plain `attack` primary,
  * `weapon-b` wins under a `damage` basis on hacking (`calculateDPS`'s `resolveBasisValue`
  * substitutes the basis for `attack` outright). Every other slot has exactly one candidate, so
- * the winner is unambiguous and requires no randomness to observe, even under Genetic.
+ * the winner is unambiguous and needs no seeding, even though `GeneticStrategy` is randomised.
  */
 const ship = makeTestShip({
     id: 'wiring-ship',
@@ -95,7 +94,6 @@ const baseConfig: ShipOptimizerConfig = {
     ignoreUnleveled: true,
     useUpgradedStats: false,
     tryToCompleteSets: false,
-    selectedAlgorithm: AutogearAlgorithm.Genetic,
     optimizeImplants: false,
     includeCalibratedGear: false,
     assumeCalibrated: false,
@@ -115,31 +113,20 @@ const deps = {
     getShipById: (): undefined => undefined,
 };
 
-describe.each([AutogearAlgorithm.Genetic, AutogearAlgorithm.TwoPass, AutogearAlgorithm.SetFirst])(
-    'findOptimalGearForShip roleBasis wiring — %s',
-    (algorithm) => {
-        beforeEach(() => {
-            clearScoreCache();
-        });
+describe('findOptimalGearForShip roleBasis wiring', () => {
+    beforeEach(() => {
+        clearScoreCache();
+    });
 
-        it('picks the plain-attack winner with no roleBasis', async () => {
-            const { result } = await findOptimalGearForShip(
-                ship,
-                { ...baseConfig, selectedAlgorithm: algorithm },
-                deps
-            );
-            const weapon = result.suggestions.find((s) => s.slotName === 'weapon');
-            expect(weapon?.gearId).toBe('weapon-a');
-        });
+    it('picks the plain-attack winner with no roleBasis', async () => {
+        const { result } = await findOptimalGearForShip(ship, baseConfig, deps);
+        const weapon = result.suggestions.find((s) => s.slotName === 'weapon');
+        expect(weapon?.gearId).toBe('weapon-a');
+    });
 
-        it('picks the basis winner when config carries a roleBasis', async () => {
-            const { result } = await findOptimalGearForShip(
-                ship,
-                { ...baseConfig, selectedAlgorithm: algorithm, roleBasis },
-                deps
-            );
-            const weapon = result.suggestions.find((s) => s.slotName === 'weapon');
-            expect(weapon?.gearId).toBe('weapon-b');
-        });
-    }
-);
+    it('picks the basis winner when config carries a roleBasis', async () => {
+        const { result } = await findOptimalGearForShip(ship, { ...baseConfig, roleBasis }, deps);
+        const weapon = result.suggestions.find((s) => s.slotName === 'weapon');
+        expect(weapon?.gearId).toBe('weapon-b');
+    });
+});

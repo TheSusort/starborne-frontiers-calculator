@@ -185,8 +185,8 @@ export function roleBasisKeyPart(roleBasis: RoleBasis | undefined): string {
 // Update calculateTotalScore to include shipRole and setPriorities
 export function calculateTotalScore(
     ship: Ship,
-    // Widened past "real gear only": read only via Object.entries/Object.values, and
-    // `SetFirstStrategy` passes a not-yet-split gear+implant working set through this param.
+    // Widened past "real gear only": read only via Object.entries/Object.values (never keyed
+    // access), so an equipment map that also carries implant slots is safe here.
     equipment: Partial<Record<EquipmentSlotName, string>>,
     priorities: StatPriority[],
     getGearPiece: (id: string) => GearPiece | undefined,

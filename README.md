@@ -92,7 +92,7 @@ src/
 
 **Storage:** A `useStorage` hook abstracts all persistence. Unauthenticated users get localStorage; on sign-in, data syncs to Supabase automatically. Contexts never talk to storage directly.
 
-**Autogear:** Lives in `src/utils/autogear/`. Two strategies — `GreedyStrategy` (fast, single-pass) and `TwoPassStrategy` (default, accounts for set bonuses). Both implement the `AutogearStrategy` interface. Heavy runs use Web Workers to avoid blocking the UI.
+**Autogear:** Lives in `src/utils/autogear/`. One strategy, `GeneticStrategy`, implements the `AutogearStrategy` interface; runs go through `findOptimalGearForShip` (`runShipOptimizer.ts`) on the main thread.
 
 **Auth:** Supabase Auth (Google OAuth). Sign-in triggers `app:migration:start` → localStorage-to-Supabase sync → `app:migration:end`. Contexts listen for `app:signout` to revert to localStorage.
 

@@ -1,9 +1,9 @@
 # Autogear
 
-**Strategies:** each file in `strategies/` implements `AutogearStrategy` and is registered in
-`getStrategy.ts` against a member of the `AutogearAlgorithm` enum — a new strategy needs an
-entry in both. The Autogear page starts on `Genetic`, which is not the first enum member, so
-the default cannot be inferred from the enum.
+**Strategy:** `strategies/GeneticStrategy.ts` is the only strategy. It implements
+`AutogearStrategy`, and `findOptimalGearForShip` builds a fresh instance per call (progress state
+lives on the instance); there is no algorithm choice anywhere (config, saved config, or UI). Old saved configs in
+storage may still carry an `algorithm` key; nothing reads it, and restore must keep ignoring it.
 
 **Progress reporting:** `AutogearStrategy` requires `setProgressCallback`. `BaseStrategy`
 implements it and emits `AutogearProgress` — extend `BaseStrategy` rather than wiring a
@@ -14,7 +14,7 @@ only worker in the project is the workbox service worker registered in `src/inde
 handles PWA auto-update and nothing else.
 
 **`runShipOptimizer.ts`:** `findOptimalGearForShip` is the single entry point that runs one ship
-through its configured strategy — the batch Autogear run calls it, never a strategy directly.
+through the strategy — the batch Autogear run calls it, never a strategy directly.
 `useAutogearShipConfigs` owns the per-ship config map; `toSavedAutogearConfig` is the one mapping
 from it to the persisted shape. Every player-configurable scoring input (role, priorities beyond
 `statPriorities`, formula, etc.) crosses into a strategy's `findOptimalGear` as one `ScoringInputs`

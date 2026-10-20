@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '../../../test-utils/test-utils';
 import { AutogearQuickSettings } from '../AutogearQuickSettings';
 import { Ship } from '../../../types/ship';
-import { AutogearAlgorithm } from '../../../utils/autogear/AutogearStrategy';
 import type { ShipTypeName } from '../../../constants';
 import type { StatPriority, SetPriority, StatBonus, FleetBuff } from '../../../types/autogear';
 import type { SharedAutogearBuild } from '../../../types/communityRecommendation';
@@ -55,7 +54,6 @@ type ShipConfig = {
     ignoreUnleveled: boolean;
     useUpgradedStats: boolean;
     tryToCompleteSets: boolean;
-    selectedAlgorithm: AutogearAlgorithm;
     showSecondaryRequirements: boolean;
     optimizeImplants: boolean;
 };
@@ -71,7 +69,6 @@ const CONFIG: ShipConfig = {
     ignoreUnleveled: true,
     useUpgradedStats: false,
     tryToCompleteSets: false,
-    selectedAlgorithm: AutogearAlgorithm.Genetic,
     showSecondaryRequirements: false,
     optimizeImplants: false,
 };
