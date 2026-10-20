@@ -190,6 +190,11 @@ export const ImportButton: React.FC<{
 
                     // Clear demo data flag if it was set — the user has imported real data
                     localStorage.removeItem(StorageKey.DEMO_DATA_LOADED);
+                    try {
+                        localStorage.setItem(StorageKey.LAST_IMPORT_AT, new Date().toISOString());
+                    } catch {
+                        // Storage unavailable; the home page just hides "Last import".
+                    }
 
                     // Check for template updates BEFORE syncing (so it completes before refresh)
                     if (user) {

@@ -8,6 +8,11 @@ export const CURRENT_VERSION = '1.81.1';
 // nothing. Do it by hand only if that script cannot.
 export const UNRELEASED_CHANGES: string[] = [
     'Home page: refreshed banners featuring Arcade, Combat Simulator, Bounty Credits and Game Basics.',
+    'Home page: features are now grouped by area, with new ones marked.',
+    'Home page: shows the latest changelog entry.',
+    'Home page: returning players now see their fleet, last import and a continue link.',
+    'Home page: the Arcade top score is now shown with a Play button.',
+    'Home page: the Combat Simulator card now opens the combat simulator.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
