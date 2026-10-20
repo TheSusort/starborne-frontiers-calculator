@@ -12,7 +12,6 @@ interface Slide {
     ctaText: string;
     ctaLink: string;
     backgroundImage: string;
-    gradientClass: string; // Fallback gradient
 }
 
 const slides: Slide[] = [
@@ -23,7 +22,6 @@ const slides: Slide[] = [
         ctaText: 'Import Game Data',
         ctaLink: '#',
         backgroundImage: '/images/hero-fleet.webp',
-        gradientClass: 'bg-gradient-to-br from-blue-900 via-slate-900 to-orange-900',
     },
     {
         id: 2,
@@ -33,7 +31,6 @@ const slides: Slide[] = [
         ctaText: 'Play Now',
         ctaLink: '/arcade',
         backgroundImage: '/images/hero-arcade.webp',
-        gradientClass: 'bg-gradient-to-br from-fuchsia-900 via-purple-900 to-indigo-900',
     },
     {
         id: 3,
@@ -42,7 +39,6 @@ const slides: Slide[] = [
         ctaText: 'Open Simulator',
         ctaLink: '/simulator',
         backgroundImage: '/images/hero-simulator.webp',
-        gradientClass: 'bg-gradient-to-br from-slate-900 via-indigo-900 to-blue-900',
     },
     {
         id: 4,
@@ -51,7 +47,6 @@ const slides: Slide[] = [
         ctaText: 'Calculate Credits',
         ctaLink: '/bounty-credits',
         backgroundImage: '/images/hero-bounty.webp',
-        gradientClass: 'bg-gradient-to-br from-orange-900 via-red-900 to-slate-900',
     },
     {
         id: 5,
@@ -60,7 +55,6 @@ const slides: Slide[] = [
         ctaText: 'Read Game Basics',
         ctaLink: '/basics',
         backgroundImage: '/images/hero-basics.webp',
-        gradientClass: 'bg-gradient-to-br from-cyan-900 via-teal-900 to-emerald-900',
     },
     {
         id: 6,
@@ -70,7 +64,6 @@ const slides: Slide[] = [
         ctaText: 'Watch on YouTube',
         ctaLink: 'https://www.youtube.com/playlist?list=PLinS17lD0vaA9PcYZwcFCQwglbmogOwqo',
         backgroundImage: '/images/hero1.webp',
-        gradientClass: 'bg-gradient-to-br from-purple-900 via-indigo-900 to-blue-900',
     },
 ];
 
