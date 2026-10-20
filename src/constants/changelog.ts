@@ -10,6 +10,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Arcade: the leaderboard now shows which ship each best score used.',
     'Arcade: pilots without a fleet now fly and duel any ship, bare.',
     'Arcade: guests can now join the leaderboard without an account.',
+    'Ship leaderboard: the second-place trophy and score bar now read as silver.',
     'Arcade: ducking now drops your ship into the track, throwing sparks.',
     'Arcade: crashing plays one of three retro game-over sounds.',
     'Arcade: duels replay turn by turn with hit numbers and charged skills.',

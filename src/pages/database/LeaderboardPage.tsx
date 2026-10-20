@@ -381,7 +381,7 @@ export const LeaderboardPage: React.FC = () => {
                                                 <TrophyIcon className="w-5 h-5 sm:w-6 sm:h-6 text-yellow-400" />
                                             )}
                                             {entry.rank === 2 && (
-                                                <TrophyIcon className="w-5 h-5 sm:w-6 sm:h-6 text-theme-text" />
+                                                <TrophyIcon className="w-5 h-5 sm:w-6 sm:h-6 text-gray-300" />
                                             )}
                                             {entry.rank === 3 && (
                                                 <TrophyIcon className="w-5 h-5 sm:w-6 sm:h-6 text-amber-600" />
@@ -455,7 +455,7 @@ export const LeaderboardPage: React.FC = () => {
                                                     entry.rank === 1
                                                         ? 'bg-yellow-400'
                                                         : entry.rank === 2
-                                                          ? 'bg-dark-border'
+                                                          ? 'bg-gray-300'
                                                           : entry.rank === 3
                                                             ? 'bg-amber-600'
                                                             : 'bg-primary'
