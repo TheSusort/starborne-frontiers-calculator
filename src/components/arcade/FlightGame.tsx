@@ -635,7 +635,7 @@ const FlightGameRun: React.FC<FlightGameProps> = ({ origin, onClose }) => {
                 if (!current()) return;
                 r = runDuel(flown, opponent, statsDepsRef.current, newSeed());
             } catch {
-                r = { outcome: 'skipped', timeline: [] };
+                r = { outcome: 'skipped', beats: [] };
             }
             if (!current()) return;
             const effect = resolveDuel(gameRef.current, r.outcome);
