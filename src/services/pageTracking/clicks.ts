@@ -2,7 +2,7 @@ export type ClickMap = Record<string, number>;
 
 /** Mirrors the check in `track_page_events`; a key the server would drop is never counted. */
 export const TRACK_ID_PATTERN = /^[a-z0-9._-]{1,64}$/;
-export const MAX_CLICK_KEYS = 50;
+export const MAX_CLICK_KEYS = 20;
 export const MAX_CLICK_COUNT = 999;
 
 export function addClick(map: ClickMap, trackId: string): ClickMap {

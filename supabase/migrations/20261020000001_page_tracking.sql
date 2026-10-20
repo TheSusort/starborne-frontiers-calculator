@@ -2,9 +2,12 @@
 --
 -- Clients never write tables directly: track_page_events (SECURITY DEFINER) validates every row and
 -- silently drops what fails, because the anon key is public and anyone can call it. The daily
--- ceilings in tracking_ingest_counts bound how much junk one day can hold.
+-- ceilings in tracking_ingest_counts (10,000 visit writes and 1,000 error writes per UTC day)
+-- bound how much junk one day can hold, and text and click maps are bounded in bytes.
 --
--- Raw rows live 14 days; rollup_page_tracking() writes the daily tables and prunes. Schedule it
+-- Raw rows live 14 days. rollup_page_tracking() writes the daily tables, keeping per day only the
+-- top 200 pages, 1000 click keys, 100 referrers and 100 errors, and prunes rollup rows older than
+-- 400 days. Schedule it
 -- with pg_cron outside this migration:
 --   select cron.schedule('rollup-page-tracking', '15 3 * * *',
 --                        $$select public.rollup_page_tracking()$$);
@@ -28,6 +31,9 @@ CREATE TABLE IF NOT EXISTS public.page_visits (
 );
 CREATE INDEX IF NOT EXISTS page_visits_created_at_idx ON public.page_visits (created_at);
 CREATE INDEX IF NOT EXISTS page_visits_session_idx ON public.page_visits (session_id, entered_at);
+-- Serves the ON DELETE SET NULL action when a user is deleted.
+CREATE INDEX IF NOT EXISTS page_visits_user_id_idx ON public.page_visits (user_id)
+  WHERE user_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS public.client_errors (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -96,8 +102,9 @@ CREATE TABLE IF NOT EXISTS public.error_daily (
   PRIMARY KEY (day, fingerprint, app_version)
 );
 
--- RLS: admins may read; nobody writes through the REST API. The SECURITY DEFINER functions below
--- bypass RLS and are the only writers.
+-- RLS: admins may read; nobody writes through the REST API. anon has no table privileges and
+-- authenticated has SELECT only, which the policy narrows to admins. The SECURITY DEFINER
+-- functions below bypass RLS and are the only writers.
 DO $$
 DECLARE
   t text;
@@ -110,7 +117,8 @@ BEGIN
     EXECUTE format('DROP POLICY IF EXISTS "Admins can read" ON public.%I', t);
     EXECUTE format(
       'CREATE POLICY "Admins can read" ON public.%I FOR SELECT TO authenticated USING (public.is_admin())', t);
-    EXECUTE format('REVOKE INSERT, UPDATE, DELETE ON public.%I FROM anon, authenticated', t);
+    EXECUTE format('REVOKE ALL ON public.%I FROM anon, authenticated', t);
+    EXECUTE format('GRANT SELECT ON public.%I TO authenticated', t);
   END LOOP;
 END;
 $$;
@@ -126,7 +134,7 @@ CREATE OR REPLACE FUNCTION public.track_page_events(
 RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = public, pg_temp
 AS $$
 DECLARE
   path_re constant text := '^(/[A-Za-z0-9:_-]*)+$|^\*$';
@@ -140,6 +148,8 @@ DECLARE
   e jsonb;
   ts timestamptz;
   clean_clicks jsonb;
+  msg text;
+  stk text;
 BEGIN
   -- Admin browsing would otherwise be the largest single visitor.
   IF public.is_admin() THEN
@@ -155,7 +165,7 @@ BEGIN
   END IF;
 
   INSERT INTO public.tracking_ingest_counts (day) VALUES (today) ON CONFLICT (day) DO NOTHING;
-  SELECT greatest(50000 - visits, 0), greatest(5000 - errors, 0)
+  SELECT greatest(10000 - visits, 0), greatest(1000 - errors, 0)
     INTO visits_left, errors_left
     FROM public.tracking_ingest_counts WHERE day = today;
 
@@ -175,8 +185,11 @@ BEGIN
             FROM jsonb_each(CASE WHEN jsonb_typeof(v->'clicks') = 'object'
                                  THEN v->'clicks' ELSE '{}'::jsonb END)
            WHERE key ~ '^[a-z0-9._-]{1,64}$' AND jsonb_typeof(value) = 'number'
-           LIMIT 50
+           LIMIT 20
         ) c;
+      IF octet_length(clean_clicks::text) > 2048 THEN
+        CONTINUE;
+      END IF;
 
       ts := (v->>'entered_at')::timestamptz;
       IF ts IS NULL OR ts < now() - interval '1 day' OR ts > now() + interval '5 minutes' THEN
@@ -223,12 +236,18 @@ BEGIN
       IF NOT (e->>'fingerprint' ~ '^[0-9a-f]{8}$') THEN
         CONTINUE;
       END IF;
+      -- Byte bounds (4 bytes per UTF-8 character at the character limits) drop the row outright.
+      msg := left(coalesce(e->>'message', ''), 300);
+      stk := left(coalesce(e->>'stack', ''), 2000);
+      IF octet_length(msg) > 1200 OR octet_length(stk) > 8000 THEN
+        CONTINUE;
+      END IF;
       INSERT INTO public.client_errors (
         fingerprint, message, stack, path, app_version, visitor_id, session_id
       ) VALUES (
         e->>'fingerprint',
-        left(coalesce(e->>'message', ''), 300),
-        left(coalesce(e->>'stack', ''), 2000),
+        msg,
+        stk,
         CASE WHEN e->>'path' ~ path_re AND length(e->>'path') <= 100 THEN e->>'path' ELSE '*' END,
         CASE WHEN e->>'app_version' ~ '^[0-9.]{1,20}$' THEN e->>'app_version' ELSE 'unknown' END,
         (e->>'visitor_id')::uuid,
@@ -240,9 +259,11 @@ BEGIN
     END;
   END LOOP;
 
-  UPDATE public.tracking_ingest_counts
-     SET visits = visits + accepted_visits, errors = errors + accepted_errors
-   WHERE day = today;
+  IF accepted_visits + accepted_errors > 0 THEN
+    UPDATE public.tracking_ingest_counts
+       SET visits = visits + accepted_visits, errors = errors + accepted_errors
+     WHERE day = today;
+  END IF;
 END;
 $$;
 
@@ -251,16 +272,21 @@ $$;
 -- ---------------------------------------------------------------------------------------------
 
 -- Rebuilds every rollup row for one UTC day from raw rows. Idempotent: delete, then insert.
+-- A per-day advisory lock serialises concurrent rebuilds of the same day, which would otherwise
+-- both delete and then collide on the primary keys when inserting. Each daily table keeps only
+-- the day's top keys (row_number with the key columns as tiebreak), so junk keys cannot grow it.
 CREATE OR REPLACE FUNCTION public.rollup_page_tracking_day(p_day date)
 RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = public, pg_temp
 AS $$
 DECLARE
   day_start timestamptz := p_day::timestamp AT TIME ZONE 'UTC';
   day_end timestamptz := (p_day + 1)::timestamp AT TIME ZONE 'UTC';
 BEGIN
+  PERFORM pg_advisory_xact_lock(hashtext('rollup_page_tracking_day'), (p_day - date '2000-01-01'));
+
   DELETE FROM public.traffic_daily WHERE day = p_day;
   DELETE FROM public.page_daily WHERE day = p_day;
   DELETE FROM public.referrer_daily WHERE day = p_day;
@@ -277,48 +303,83 @@ BEGIN
   HAVING count(*) > 0;
 
   -- The exit page of a session is its last visit by entered_at.
-  INSERT INTO public.page_daily
+  INSERT INTO public.page_daily (day, path, views, visitors, entries, exits, total_active_ms)
   WITH day_rows AS (
     SELECT * FROM public.page_visits WHERE created_at >= day_start AND created_at < day_end
-  ), exits AS (
+  ), exit_ids AS (
     SELECT DISTINCT ON (session_id) id FROM day_rows ORDER BY session_id, entered_at DESC
+  ), per_path AS (
+    SELECT r.path AS k_path,
+           count(*) AS n_views,
+           count(DISTINCT r.visitor_id) AS n_visitors,
+           count(*) FILTER (WHERE r.is_entry) AS n_entries,
+           count(*) FILTER (WHERE r.id IN (SELECT id FROM exit_ids)) AS n_exits,
+           coalesce(sum(r.active_ms), 0) AS n_active_ms
+      FROM day_rows r
+     GROUP BY r.path
+  ), ranked AS (
+    SELECT per_path.*, row_number() OVER (ORDER BY n_views DESC, k_path) AS rn FROM per_path
   )
-  SELECT p_day, r.path, count(*), count(DISTINCT r.visitor_id),
-         count(*) FILTER (WHERE r.is_entry),
-         count(*) FILTER (WHERE r.id IN (SELECT id FROM exits)),
-         coalesce(sum(r.active_ms), 0)
-    FROM day_rows r
-   GROUP BY r.path;
+  SELECT p_day, k_path, n_views, n_visitors, n_entries, n_exits, n_active_ms
+    FROM ranked
+   WHERE rn <= 200;
 
-  INSERT INTO public.referrer_daily
-  SELECT p_day, coalesce(referrer_host, '(direct)'), count(*)
-    FROM public.page_visits
-   WHERE created_at >= day_start AND created_at < day_end AND is_entry
-   GROUP BY 2;
+  INSERT INTO public.referrer_daily (day, referrer_host, entries)
+  SELECT p_day, k_host, n_entries
+    FROM (
+      SELECT k_host, n_entries, row_number() OVER (ORDER BY n_entries DESC, k_host) AS rn
+        FROM (
+          SELECT coalesce(referrer_host, '(direct)') AS k_host, count(*) AS n_entries
+            FROM public.page_visits
+           WHERE created_at >= day_start AND created_at < day_end AND is_entry
+           GROUP BY 1
+        ) agg
+    ) ranked
+   WHERE rn <= 100;
 
-  INSERT INTO public.click_daily
-  SELECT p_day, pv.path, c.key, sum(c.value::int)
-    FROM public.page_visits pv, jsonb_each_text(pv.clicks) c
-   WHERE pv.created_at >= day_start AND pv.created_at < day_end
-   GROUP BY pv.path, c.key;
+  INSERT INTO public.click_daily (day, path, track_id, clicks)
+  SELECT p_day, k_path, k_track, n_clicks
+    FROM (
+      SELECT k_path, k_track, n_clicks,
+             row_number() OVER (ORDER BY n_clicks DESC, k_path, k_track) AS rn
+        FROM (
+          SELECT pv.path AS k_path, c.key AS k_track, sum(c.value::int) AS n_clicks
+            FROM public.page_visits pv, jsonb_each_text(pv.clicks) c
+           WHERE pv.created_at >= day_start AND pv.created_at < day_end
+           GROUP BY pv.path, c.key
+        ) agg
+    ) ranked
+   WHERE rn <= 1000;
 
-  INSERT INTO public.error_daily
-  SELECT p_day, fingerprint, app_version, count(*), count(DISTINCT visitor_id),
-         (array_agg(message ORDER BY created_at DESC))[1],
-         (array_agg(stack ORDER BY created_at DESC))[1],
-         (array_agg(path ORDER BY created_at DESC))[1]
-    FROM public.client_errors
-   WHERE created_at >= day_start AND created_at < day_end
-   GROUP BY fingerprint, app_version;
+  INSERT INTO public.error_daily (
+    day, fingerprint, app_version, count, visitors, sample_message, sample_stack, sample_path
+  )
+  SELECT p_day, k_fingerprint, k_version, n_count, n_visitors, s_message, s_stack, s_path
+    FROM (
+      SELECT agg.*,
+             row_number() OVER (ORDER BY n_count DESC, k_fingerprint, k_version) AS rn
+        FROM (
+          SELECT fingerprint AS k_fingerprint, app_version AS k_version,
+                 count(*) AS n_count, count(DISTINCT visitor_id) AS n_visitors,
+                 (array_agg(message ORDER BY created_at DESC))[1] AS s_message,
+                 (array_agg(stack ORDER BY created_at DESC))[1] AS s_stack,
+                 (array_agg(path ORDER BY created_at DESC))[1] AS s_path
+            FROM public.client_errors
+           WHERE created_at >= day_start AND created_at < day_end
+           GROUP BY fingerprint, app_version
+        ) agg
+    ) ranked
+   WHERE rn <= 100;
 END;
 $$;
 
--- Nightly: rebuild the last two complete days (late snapshots land after midnight), then prune.
+-- Nightly: rebuild the last two complete days (late snapshots land after midnight), then prune
+-- raw rows after 14 days and rollup rows after 400 days.
 CREATE OR REPLACE FUNCTION public.rollup_page_tracking()
 RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = public, pg_temp
 AS $$
 DECLARE
   today date := (now() AT TIME ZONE 'UTC')::date;
@@ -328,6 +389,11 @@ BEGIN
   DELETE FROM public.page_visits WHERE created_at < now() - interval '14 days';
   DELETE FROM public.client_errors WHERE created_at < now() - interval '14 days';
   DELETE FROM public.tracking_ingest_counts WHERE day < today - 14;
+  DELETE FROM public.traffic_daily WHERE day < today - 400;
+  DELETE FROM public.page_daily WHERE day < today - 400;
+  DELETE FROM public.referrer_daily WHERE day < today - 400;
+  DELETE FROM public.click_daily WHERE day < today - 400;
+  DELETE FROM public.error_daily WHERE day < today - 400;
 END;
 $$;
 
@@ -340,7 +406,7 @@ CREATE OR REPLACE FUNCTION public.get_traffic_summary(p_days integer DEFAULT 7)
 RETURNS jsonb
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = public, pg_temp
 AS $$
 DECLARE
   today date := (now() AT TIME ZONE 'UTC')::date;
@@ -358,13 +424,14 @@ BEGIN
              ORDER BY day)
         FROM public.traffic_daily WHERE day >= since), '[]'::jsonb),
     'pages', coalesce((
-      SELECT jsonb_agg(p ORDER BY (p->>'views')::int DESC) FROM (
+      SELECT jsonb_agg(p ORDER BY (p->>'views')::bigint DESC) FROM (
         SELECT jsonb_build_object(
                  'path', path, 'views', sum(views), 'entries', sum(entries), 'exits', sum(exits),
                  'avg_active_ms', (sum(total_active_ms) / nullif(sum(views), 0))::bigint) AS p
-          FROM public.page_daily WHERE day >= since GROUP BY path) s), '[]'::jsonb),
+          FROM public.page_daily WHERE day >= since
+         GROUP BY path ORDER BY sum(views) DESC, path LIMIT 200) s), '[]'::jsonb),
     'referrers', coalesce((
-      SELECT jsonb_agg(r ORDER BY (r->>'entries')::int DESC) FROM (
+      SELECT jsonb_agg(r ORDER BY (r->>'entries')::bigint DESC) FROM (
         SELECT jsonb_build_object('referrer_host', referrer_host, 'entries', sum(entries)) AS r
           FROM public.referrer_daily WHERE day >= since
          GROUP BY referrer_host ORDER BY sum(entries) DESC LIMIT 50) s), '[]'::jsonb),
@@ -375,12 +442,12 @@ BEGIN
                'desktop', coalesce(sum(visitors_desktop), 0))
         FROM public.traffic_daily WHERE day >= since),
     'clicks', coalesce((
-      SELECT jsonb_agg(c ORDER BY (c->>'clicks')::int DESC) FROM (
+      SELECT jsonb_agg(c ORDER BY (c->>'clicks')::bigint DESC) FROM (
         SELECT jsonb_build_object('path', path, 'track_id', track_id, 'clicks', sum(clicks)) AS c
           FROM public.click_daily WHERE day >= since
          GROUP BY path, track_id ORDER BY sum(clicks) DESC LIMIT 500) s), '[]'::jsonb),
     'errors', coalesce((
-      SELECT jsonb_agg(x ORDER BY (x->>'count')::int DESC) FROM (
+      SELECT jsonb_agg(x ORDER BY (x->>'count')::bigint DESC) FROM (
         SELECT jsonb_build_object(
                  'fingerprint', fingerprint, 'app_version', app_version,
                  'count', sum(count), 'visitors', sum(visitors), 'last_seen', max(day),
