@@ -1,24 +1,29 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '1.80.0';
+export const CURRENT_VERSION = '1.81.0';
 
 // Accumulates between releases. `npm run release` folds these into a new ChangelogEntry at the
 // top of CHANGELOG, bumps CURRENT_VERSION and empties this array — all three together, because a
 // bumped version whose entries are still unreleased shows users a what's-new dialog listing
 // nothing. Do it by hand only if that script cannot.
-export const UNRELEASED_CHANGES: string[] = [
-    'Arcade: the leaderboard now shows which ship each best score used.',
-    'Arcade: pilots without a fleet now fly and duel any ship, bare.',
-    'Arcade: guests can now join the leaderboard without an account.',
-    'Ship leaderboard: the second-place trophy and score bar now read as silver.',
-    'Arcade: ducking now drops your ship into the track, throwing sparks.',
-    'Arcade: crashing plays one of three retro game-over sounds.',
-    'Arcade: duels replay turn by turn with hit numbers and charged skills.',
-    "Arcade: duels show each ship's shield, buffs and debuffs as they change.",
-    'Privacy: page, click and error usage tracking added; opt out on Profile.',
-];
+export const UNRELEASED_CHANGES: string[] = [];
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.81.0',
+        date: '2026-10-20',
+        changes: [
+            'Arcade: the leaderboard now shows which ship each best score used.',
+            'Arcade: pilots without a fleet now fly and duel any ship, bare.',
+            'Arcade: guests can now join the leaderboard without an account.',
+            'Ship leaderboard: the second-place trophy and score bar now read as silver.',
+            'Arcade: ducking now drops your ship into the track, throwing sparks.',
+            'Arcade: crashing plays one of three retro game-over sounds.',
+            'Arcade: duels replay turn by turn with hit numbers and charged skills.',
+            "Arcade: duels show each ship's shield, buffs and debuffs as they change.",
+            'Privacy: page, click and error usage tracking added; opt out on Profile.',
+        ],
+    },
     {
         version: '1.80.0',
         date: '2026-10-19',
