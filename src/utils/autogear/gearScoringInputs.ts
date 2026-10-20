@@ -9,11 +9,12 @@
  *   - the FAST path (`fastScoring/gearRegistry`) precomputes a stat vector per
  *     piece straight off the inventory ARRAY.
  *
- * Which path runs depends only on the algorithm — GeneticStrategy scores via
- * the fast context, the others via `calculateTotalStats`. So any transform
- * applied to one view and not the other makes the same inventory and settings
- * produce different recommendations depending on the algorithm picked. That was
- * issue #338: "Use upgraded stats" wrapped the getter but never the array, so
+ * GeneticStrategy reads both in one run: fitness goes through the fast context
+ * (or the slow path when `USE_FAST_SCORING` is off), while hard-requirement
+ * checks, set counting and the `VERIFY_FAST_SCORING` cross-check resolve gear
+ * through the getter. So any transform applied to one view and not the other
+ * makes a run rank gear on one set of stats and check it against another. That
+ * was issue #338: "Use upgraded stats" wrapped the getter but never the array, so
  * the fast path scored sub-level-16 gear from its raw stored main stat.
  *
  * The fix is structural rather than a second transform: build the array BY

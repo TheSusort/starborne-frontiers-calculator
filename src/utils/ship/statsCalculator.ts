@@ -23,8 +23,8 @@ export interface StatBreakdown {
 export const calculateTotalStats = (
     baseStats: BaseStats,
     // Widened past the "real gear only" GearSlotName: this reads only via Object.values /
-    // Object.entries (never keyed access), and `SetFirstStrategy` passes a not-yet-split
-    // gear+implant working set through this same param rather than splitting first.
+    // Object.entries (never keyed access), so an equipment map that also carries implant
+    // slots is safe here.
     equipment: Partial<Record<EquipmentSlotName, string>>,
     getGearPiece: (id: string) => GearPiece | undefined,
     refits: Refit[] = [],

@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { SetFirstStrategy } from '../SetFirstStrategy';
-import { TwoPassStrategy } from '../TwoPassStrategy';
+import { GeneticStrategy } from '../GeneticStrategy';
 import { Ship } from '../../../../types/ship';
 import { GearPiece } from '../../../../types/gear';
 import { EngineeringStat } from '../../../../types/stats';
@@ -9,8 +8,9 @@ import { clearScoreCache } from '../../scoring';
 import type { ScoringInputs } from '../../AutogearStrategy';
 
 // A stored set name is a raw string (`GearPiece.setBonus`). One that names an inherited
-// Object.prototype property must not reach a plain-object set grouping, where the lookup
-// returns the inherited function and `.push` throws (#569).
+// Object.prototype property must not crash a run that groups or counts gear by set (#569).
+// The set priority makes the GA take its set-aware mutation path, which counts the current
+// build's sets by name.
 const ship: Ship = {
     id: 'ship1',
     name: 'Test Ship',
@@ -59,7 +59,7 @@ const inventory: GearPiece[] = [
 
 const scoringInputs: ScoringInputs = {
     shipRole: 'ATTACKER',
-    setPriorities: undefined,
+    setPriorities: [{ setName: 'ATTACK', count: 2 }],
     statBonuses: undefined,
     tryToCompleteSets: true,
     arenaModifiers: undefined,
@@ -68,7 +68,7 @@ const scoringInputs: ScoringInputs = {
     roleBasis: undefined,
 };
 
-const run = (strategy: SetFirstStrategy | TwoPassStrategy) =>
+const run = (strategy: GeneticStrategy) =>
     strategy.findOptimalGear(
         ship,
         [],
@@ -83,11 +83,7 @@ describe('autogear set grouping with an unrecognised stored set name', () => {
         clearScoreCache();
     });
 
-    it('SetFirstStrategy completes', async () => {
-        await expect(run(new SetFirstStrategy())).resolves.toHaveProperty('suggestions');
-    });
-
-    it('TwoPassStrategy completes', async () => {
-        await expect(run(new TwoPassStrategy())).resolves.toHaveProperty('suggestions');
+    it('GeneticStrategy completes', async () => {
+        await expect(run(new GeneticStrategy())).resolves.toHaveProperty('suggestions');
     });
 });

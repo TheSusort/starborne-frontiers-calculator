@@ -13,13 +13,8 @@ import type {
 } from '../../types/autogear';
 import type { ShipTypeName } from '../../constants/shipTypes';
 import type { EngineeringStat } from '../../types/stats';
-import {
-    AutogearAlgorithm,
-    type AutogearProgress,
-    type AutogearResult,
-    type ScoringInputs,
-} from './AutogearStrategy';
-import { getAutogearStrategy } from './getStrategy';
+import type { AutogearProgress, AutogearResult, ScoringInputs } from './AutogearStrategy';
+import { GeneticStrategy } from './strategies/GeneticStrategy';
 import { buildGearScoringInputs } from './gearScoringInputs';
 import { filterTopImplantsPerSlot } from './implantFilter';
 import { seedFormulaFromRole } from './customFormulaSeeds';
@@ -37,7 +32,6 @@ export interface ShipOptimizerConfig {
     ignoreUnleveled: boolean;
     useUpgradedStats: boolean;
     tryToCompleteSets: boolean;
-    selectedAlgorithm: AutogearAlgorithm;
     optimizeImplants: boolean;
     includeCalibratedGear: boolean;
     assumeCalibrated: boolean;
@@ -64,7 +58,7 @@ export interface ShipOptimizerDeps {
     getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined;
     gearToShipMap: Map<string, string>;
     getShipById: (id: string) => Ship | undefined;
-    /** Strategies are shared singletons (see `getStrategy.ts`), so a caller that cares about
+    /** The strategy is a shared module-level instance, so a caller that cares about
      *  progress must supply its own callback every call — otherwise a stale one from an
      *  unrelated earlier run stays attached and fires here instead. Omit it to explicitly want
      *  no progress reporting for this call. */
@@ -315,8 +309,10 @@ function availableInventoryForShip(
         });
 }
 
+const strategy = new GeneticStrategy();
+
 /**
- * Runs one ship through its configured autogear strategy: narrows the shared inventory through
+ * Runs one ship through the autogear strategy (`GeneticStrategy`): narrows the shared inventory through
  * {@link availableInventoryForShip}, builds the fast/slow scoring views from that one filtered
  * list (see `gearScoringInputs.ts` for why both views must come from the same source), and calls
  * the strategy's `findOptimalGear`.
@@ -360,7 +356,6 @@ export async function findOptimalGearForShip(
           )
         : scoredInventory;
 
-    const strategy = getAutogearStrategy(config.selectedAlgorithm);
     strategy.setProgressCallback(onProgress ?? (() => {}));
 
     const scoringInputs: ScoringInputs = {
