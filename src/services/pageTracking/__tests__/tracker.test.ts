@@ -113,7 +113,7 @@ describe('PageTracker', () => {
         tracker.recordError('m'.repeat(400), 's'.repeat(3000));
         tracker.flush();
         expect(sent[0].errors[0].message).toHaveLength(300);
-        expect(sent[0].errors[0].stack).toHaveLength(2000);
+        expect(sent[0].errors[0].stack).toHaveLength(1000);
         expect(sent[0].errors[0].path).toBe('*');
     });
 

@@ -1,14 +1,15 @@
--- Page tracking: one row per page visit and per distinct client error, rolled up nightly.
+-- Page tracking: one row per page visit and one row per error occurrence, rolled up nightly.
 --
 -- Clients never write tables directly: track_page_events (SECURITY DEFINER) validates every row and
 -- silently drops what fails, because the anon key is public and anyone can call it. The daily
 -- ceilings in tracking_ingest_counts (10,000 visit writes and 1,000 error writes per UTC day)
 -- bound how much junk one day can hold, and text and click maps are bounded in bytes.
 --
--- Raw rows live 14 days. rollup_page_tracking() writes the daily tables, keeping per day only the
--- top 200 pages, 1000 click keys, 100 referrers and 100 errors, and prunes rollup rows older than
--- 400 days. Schedule it
--- with pg_cron outside this migration:
+-- Raw rows (page_visits, client_errors) live 7 days; client_errors holds one row per occurrence
+-- and is rolled up per fingerprint daily. rollup_page_tracking() writes the daily tables, keeping
+-- per day only the top 200 pages, 1000 click keys, 100 referrers and 100 errors. It prunes
+-- click_daily and error_daily after 90 days and the other daily tables after 400 days.
+-- Schedule it with pg_cron outside this migration:
 --   select cron.schedule('rollup-page-tracking', '15 3 * * *',
 --                        $$select public.rollup_page_tracking()$$);
 
@@ -184,10 +185,10 @@ BEGIN
           SELECT key, least(greatest(round((value #>> '{}')::numeric), 1), 999)::int AS cnt
             FROM jsonb_each(CASE WHEN jsonb_typeof(v->'clicks') = 'object'
                                  THEN v->'clicks' ELSE '{}'::jsonb END)
-           WHERE key ~ '^[a-z0-9._-]{1,64}$' AND jsonb_typeof(value) = 'number'
+           WHERE key ~ '^[a-z0-9._-]{1,40}$' AND jsonb_typeof(value) = 'number'
            LIMIT 20
         ) c;
-      IF octet_length(clean_clicks::text) > 2048 THEN
+      IF octet_length(clean_clicks::text) > 1024 THEN
         CONTINUE;
       END IF;
 
@@ -209,7 +210,7 @@ BEGIN
         least(greatest(coalesce(round((v->>'active_ms')::numeric), 0), 0), 1800000)::int,
         clean_clicks,
         coalesce((v->>'is_entry')::boolean, false),
-        CASE WHEN v->>'referrer_host' ~ '^[A-Za-z0-9.-]{1,253}$'
+        CASE WHEN v->>'referrer_host' ~ '^[A-Za-z0-9.-]{1,100}$'
              THEN lower(v->>'referrer_host') END,
         v->>'device',
         CASE WHEN v->>'app_version' ~ '^[0-9.]{1,20}$' THEN v->>'app_version' ELSE 'unknown' END
@@ -236,10 +237,10 @@ BEGIN
       IF NOT (e->>'fingerprint' ~ '^[0-9a-f]{8}$') THEN
         CONTINUE;
       END IF;
-      -- Byte bounds (4 bytes per UTF-8 character at the character limits) drop the row outright.
+      -- Byte bounds (2 bytes per character on average at the character limits) drop the row outright.
       msg := left(coalesce(e->>'message', ''), 300);
-      stk := left(coalesce(e->>'stack', ''), 2000);
-      IF octet_length(msg) > 1200 OR octet_length(stk) > 8000 THEN
+      stk := left(coalesce(e->>'stack', ''), 1000);
+      IF octet_length(msg) > 600 OR octet_length(stk) > 2000 THEN
         CONTINUE;
       END IF;
       INSERT INTO public.client_errors (
@@ -361,8 +362,8 @@ BEGIN
         FROM (
           SELECT fingerprint AS k_fingerprint, app_version AS k_version,
                  count(*) AS n_count, count(DISTINCT visitor_id) AS n_visitors,
-                 (array_agg(message ORDER BY created_at DESC))[1] AS s_message,
-                 (array_agg(stack ORDER BY created_at DESC))[1] AS s_stack,
+                 left((array_agg(message ORDER BY created_at DESC))[1], 300) AS s_message,
+                 left((array_agg(stack ORDER BY created_at DESC))[1], 1000) AS s_stack,
                  (array_agg(path ORDER BY created_at DESC))[1] AS s_path
             FROM public.client_errors
            WHERE created_at >= day_start AND created_at < day_end
@@ -374,7 +375,7 @@ END;
 $$;
 
 -- Nightly: rebuild the last two complete days (late snapshots land after midnight), then prune
--- raw rows after 14 days and rollup rows after 400 days.
+-- raw rows after 7 days, click and error rollups after 90 days and the other rollups after 400.
 CREATE OR REPLACE FUNCTION public.rollup_page_tracking()
 RETURNS void
 LANGUAGE plpgsql
@@ -386,14 +387,14 @@ DECLARE
 BEGIN
   PERFORM public.rollup_page_tracking_day(today - 2);
   PERFORM public.rollup_page_tracking_day(today - 1);
-  DELETE FROM public.page_visits WHERE created_at < now() - interval '14 days';
-  DELETE FROM public.client_errors WHERE created_at < now() - interval '14 days';
-  DELETE FROM public.tracking_ingest_counts WHERE day < today - 14;
+  DELETE FROM public.page_visits WHERE created_at < now() - interval '7 days';
+  DELETE FROM public.client_errors WHERE created_at < now() - interval '7 days';
+  DELETE FROM public.tracking_ingest_counts WHERE day < today - 7;
   DELETE FROM public.traffic_daily WHERE day < today - 400;
   DELETE FROM public.page_daily WHERE day < today - 400;
   DELETE FROM public.referrer_daily WHERE day < today - 400;
-  DELETE FROM public.click_daily WHERE day < today - 400;
-  DELETE FROM public.error_daily WHERE day < today - 400;
+  DELETE FROM public.click_daily WHERE day < today - 90;
+  DELETE FROM public.error_daily WHERE day < today - 90;
 END;
 $$;
 
@@ -434,7 +435,7 @@ BEGIN
       SELECT jsonb_agg(r ORDER BY (r->>'entries')::bigint DESC) FROM (
         SELECT jsonb_build_object('referrer_host', referrer_host, 'entries', sum(entries)) AS r
           FROM public.referrer_daily WHERE day >= since
-         GROUP BY referrer_host ORDER BY sum(entries) DESC LIMIT 50) s), '[]'::jsonb),
+         GROUP BY referrer_host ORDER BY sum(entries) DESC, referrer_host LIMIT 50) s), '[]'::jsonb),
     'devices', (
       SELECT jsonb_build_object(
                'mobile', coalesce(sum(visitors_mobile), 0),
@@ -455,7 +456,7 @@ BEGIN
                  'sample_stack', (array_agg(sample_stack ORDER BY day DESC))[1],
                  'sample_path', (array_agg(sample_path ORDER BY day DESC))[1]) AS x
           FROM public.error_daily WHERE day >= since
-         GROUP BY fingerprint, app_version ORDER BY sum(count) DESC LIMIT 50) s), '[]'::jsonb)
+         GROUP BY fingerprint, app_version ORDER BY sum(count) DESC, fingerprint, app_version LIMIT 50) s), '[]'::jsonb)
   );
 END;
 $$;

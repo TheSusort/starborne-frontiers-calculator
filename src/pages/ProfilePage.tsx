@@ -657,7 +657,7 @@ export const ProfilePage: React.FC = () => {
                                     We record which pages you open, how long they stay on screen,
                                     clicks on main buttons, and errors you run into, to see what to
                                     improve. No cookies and no personal data; raw records are
-                                    deleted after 14 days.
+                                    deleted after 7 days.
                                 </p>
                                 <Checkbox
                                     label="Don't track my usage in this browser"

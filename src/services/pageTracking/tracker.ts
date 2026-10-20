@@ -6,7 +6,7 @@ import { errorFingerprint, isIgnoredError } from './errorFingerprint';
 export const MAX_VISITS_PER_FLUSH = 20;
 export const MAX_ERRORS_PER_FLUSH = 10;
 const MAX_MESSAGE_LENGTH = 300;
-const MAX_STACK_LENGTH = 2000;
+const MAX_STACK_LENGTH = 1000;
 
 /** One page view. The server UPSERTs by `id`, so every snapshot of a visit replaces the last. */
 export interface VisitRecord {

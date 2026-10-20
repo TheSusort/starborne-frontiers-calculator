@@ -5340,8 +5340,8 @@ const DocumentationPage: React.FC = () => {
                                 </ul>
                                 <p className="text-theme-text mt-2">
                                     No cookies are used and nothing you type is recorded. Raw
-                                    records are deleted after 14 days; only daily totals are kept.
-                                    To opt out, tick{' '}
+                                    records are deleted after 7 days; only daily totals are kept. To
+                                    opt out, tick{' '}
                                     <strong>Don&apos;t track my usage in this browser</strong> on
                                     the Profile page.
                                 </p>
