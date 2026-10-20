@@ -13,6 +13,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Autogear: the gear a ship already wears is now always a candidate.',
     'Autogear: runs with hard requirements it cannot meet now finish faster.',
     'Autogear: optimizing no longer stalls when you switch to another browser tab.',
+    'Autogear: unmet hard requirements now get the build that comes closest to them.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
