@@ -4,6 +4,7 @@ import { registerSW } from 'virtual:pwa-register';
 import './index.css';
 import App from './App';
 import reportWebVitals from './reportWebVitals';
+import { installAutogearSessionResets } from './utils/autogear/autogearSession';
 
 // Redirect the legacy netlify.app URL to the canonical custom domain.
 // This fires after the service worker auto-updates and serves new code.
@@ -15,6 +16,8 @@ if (window.location.hostname === 'starborne-planner.netlify.app') {
             window.location.hash
     );
 }
+
+installAutogearSessionResets();
 
 // Register the service worker with auto-update
 registerSW({
