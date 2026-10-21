@@ -1129,6 +1129,60 @@ export const AutogearPage: React.FC = () => {
                                                     }
                                                     hardViolations={results.hardViolations}
                                                     attempts={results.attempts}
+                                                    simulation={
+                                                        results.currentSimulation &&
+                                                        results.suggestedSimulation && (
+                                                            <div>
+                                                                <div className="flex items-center justify-between gap-2">
+                                                                    <h4 className="font-semibold">
+                                                                        Simulation Results
+                                                                        {shipConfig.shipRole &&
+                                                                            ` (${SHIP_TYPES[shipConfig.shipRole].name})`}
+                                                                    </h4>
+                                                                    <Button
+                                                                        variant="secondary"
+                                                                        size="sm"
+                                                                        onClick={() =>
+                                                                            handleFindGearUpgrades(
+                                                                                shipId
+                                                                            )
+                                                                        }
+                                                                    >
+                                                                        Find Gear Upgrades
+                                                                    </Button>
+                                                                </div>
+                                                                <p className="text-xs text-theme-text-secondary">
+                                                                    Damage calculated using skill
+                                                                    damage of 100% against 15k enemy
+                                                                    defense. Changes are against the
+                                                                    current gear.
+                                                                </p>
+                                                                <SimulationResults
+                                                                    currentSimulation={
+                                                                        results.currentSimulation
+                                                                    }
+                                                                    suggestedSimulation={
+                                                                        results.suggestedSimulation
+                                                                    }
+                                                                    arenaSimulation={
+                                                                        results.arenaSimulation
+                                                                    }
+                                                                    role={shipConfig.shipRole}
+                                                                    ship={ship}
+                                                                    suggestions={
+                                                                        results.suggestions
+                                                                    }
+                                                                    getGearPiece={
+                                                                        shipConfig.useUpgradedStats
+                                                                            ? getUpgradedGearPiece
+                                                                            : getGearPiece
+                                                                    }
+                                                                    showCurrent={false}
+                                                                    alwaysColumn
+                                                                />
+                                                            </div>
+                                                        )
+                                                    }
                                                 />
                                             </div>
 
@@ -1208,8 +1262,6 @@ export const AutogearPage: React.FC = () => {
                                 const ship = selectedShips.find((s) => s?.id === shipId);
                                 if (!ship || !results.suggestions.length) return null;
 
-                                const shipConfig = getShipConfig(shipId);
-
                                 // When printing, show all ships; otherwise only show active tab
                                 if (!isPrinting && activeTab !== shipId) return null;
 
@@ -1226,53 +1278,6 @@ export const AutogearPage: React.FC = () => {
                                                 </h3>
                                             </div>
                                         )}
-
-                                        {/* Simulation Results */}
-                                        {results.currentSimulation &&
-                                            results.suggestedSimulation && (
-                                                <div>
-                                                    <div className="flex items-center justify-between mb-2">
-                                                        <h4 className="text-lg font-semibold">
-                                                            Simulation Results (
-                                                            {(shipConfig.shipRole &&
-                                                                SHIP_TYPES[shipConfig.shipRole]
-                                                                    .name) ||
-                                                                ''}
-                                                            )
-                                                        </h4>
-                                                        <Button
-                                                            variant="secondary"
-                                                            size="sm"
-                                                            onClick={() =>
-                                                                handleFindGearUpgrades(shipId)
-                                                            }
-                                                        >
-                                                            Find Gear Upgrades
-                                                        </Button>
-                                                    </div>
-                                                    <p className="text-xs text-theme-text-secondary mb-4">
-                                                        Damage calculated using skill damage of 100%
-                                                        against 15k enemy defense
-                                                    </p>
-                                                    <SimulationResults
-                                                        currentSimulation={
-                                                            results.currentSimulation
-                                                        }
-                                                        suggestedSimulation={
-                                                            results.suggestedSimulation
-                                                        }
-                                                        arenaSimulation={results.arenaSimulation}
-                                                        role={shipConfig.shipRole}
-                                                        ship={ship}
-                                                        suggestions={results.suggestions}
-                                                        getGearPiece={
-                                                            shipConfig.useUpgradedStats
-                                                                ? getUpgradedGearPiece
-                                                                : getGearPiece
-                                                        }
-                                                    />
-                                                </div>
-                                            )}
 
                                         {/* Stat Lists */}
                                         {results.currentStats && results.suggestedStats && (

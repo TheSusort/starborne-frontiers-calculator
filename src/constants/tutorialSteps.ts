@@ -88,7 +88,7 @@ export const AUTOGEAR_RESULTS_TUTORIAL: TutorialGroup = {
             targetId: 'autogear-results-tabs',
             title: 'Results',
             description:
-                "Compare your current stats vs the suggested loadout. The simulation shows estimated DPS, survivability, or healing based on the ship's role. There's built in support for ultimates Code Guard, Cipher Link and Arcane Siege.",
+                "Compare your current stats with the suggested loadout, per ship. The simulation above each ship's gear shows estimated DPS, survivability, or healing based on the ship's role, with built in support for ultimates Code Guard, Cipher Link and Arcane Siege.",
         },
     ],
 };

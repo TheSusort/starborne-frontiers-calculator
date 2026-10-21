@@ -1840,13 +1840,14 @@ const DocumentationPage: React.FC = () => {
 
                             <h4 className="text-lg font-semibold mt-6 mb-2">Simulation Results</h4>
                             <p className="text-theme-text">
-                                The simulation results will show you a comparison of the gear
-                                suggestions, and the current gear on the ship, based on the
-                                different goals of the roles. If the ship&apos;s role has an applied
-                                equation or is scored with a Custom formula, the numbers shown are
-                                computed from that same formula — not the role&apos;s generic one —
-                                so the result matches what the gear was actually picked for. A
-                                Custom-scored ship shows its{' '}
+                                The simulation results sit above each ship&apos;s suggested gear,
+                                showing how the suggestion changes the ship&apos;s numbers against
+                                its current gear, based on the different goals of the roles. The
+                                full stat comparison is in the ship tabs below. If the ship&apos;s
+                                role has an applied equation or is scored with a Custom formula, the
+                                numbers shown are computed from that same formula — not the
+                                role&apos;s generic one — so the result matches what the gear was
+                                actually picked for. A Custom-scored ship shows its{' '}
                                 <span className="text-primary">Formula Score</span>, plus Average
                                 Damage and/or Effective HP when the formula includes a row for them.
                                 <br />

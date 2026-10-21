@@ -31,6 +31,8 @@ interface GearSuggestionsProps {
     hardRequirementsMet?: boolean;
     hardViolations?: HardRequirementViolation[];
     attempts?: number;
+    /** Rendered between the ship name and the gear, so the result is read before equipping. */
+    simulation?: React.ReactNode;
 }
 
 export const GearSuggestions: React.FC<GearSuggestionsProps> = ({
@@ -50,6 +52,7 @@ export const GearSuggestions: React.FC<GearSuggestionsProps> = ({
     hardRequirementsMet = true,
     hardViolations,
     attempts = 1,
+    simulation,
 }) => {
     const { getUpgrade } = useGearUpgrades();
     const [expanded, setExpanded] = useState(() => window.innerWidth >= 768);
@@ -113,6 +116,7 @@ export const GearSuggestions: React.FC<GearSuggestionsProps> = ({
                 <div className="flex justify-between items-center pb-[22px] pt-[6px]">
                     <h3 className="text-lg font-semibold  w-full">{ship?.name}</h3>
                 </div>
+                {simulation && <div className="mb-4">{simulation}</div>}
                 <div className="">
                     {!expanded && !isPrinting ? (
                         <div className="grid grid-cols-3 gap-2 card w-fit mx-auto">
