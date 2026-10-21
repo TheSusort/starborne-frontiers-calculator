@@ -57,6 +57,7 @@ import { BaseStats, LimitableStat } from '../../types/stats';
 import { useGearUpgrades } from '../../hooks/useGearUpgrades';
 import { performanceTracker } from '../../utils/autogear/performanceTimer';
 import { useActiveProfile } from '../../contexts/ActiveProfileProvider';
+import { useAuth } from '../../contexts/AuthProvider';
 import { trackAutogearRun } from '../../services/usageTracking';
 import { ArenaSeason } from '../../types/arena';
 import { getActiveSeason } from '../../services/arenaModifierService';
@@ -66,6 +67,12 @@ import {
     GearSuggestionTarget,
 } from '../../components/autogear/GearSuggestionTargets';
 import { getEmptySlotCount, hasEmptySlots } from '../../utils/ship/missingGear';
+import {
+    AutogearShipResult,
+    loadAutogearSession,
+    saveAutogearSession,
+    SESSION_RESET_EVENTS,
+} from '../../utils/autogear/autogearSession';
 
 interface UnmetPriority {
     stat: LimitableStat;
@@ -100,8 +107,16 @@ export const AutogearPage: React.FC = () => {
     // All hooks
     const { getGearPiece, inventory } = useInventory();
     const { getUpgradedGearPiece, upgrades, simulateUpgrades } = useGearUpgrades();
-    const { getShipById, equipMultipleGear, lockEquipment, gearToShipMap, ships, toggleStarred } =
-        useShips();
+    const {
+        getShipById,
+        equipMultipleGear,
+        lockEquipment,
+        gearToShipMap,
+        ships,
+        fleetLoaded,
+        toggleStarred,
+    } = useShips();
+    const { loading: authLoading } = useAuth();
     const { addNotification } = useNotification();
     const { getEngineeringStatsForShipType } = useEngineeringStats();
     const [searchParams] = useSearchParams();
@@ -123,23 +138,7 @@ export const AutogearPage: React.FC = () => {
     const [selectedShips, setSelectedShips] = useState<(Ship | null)[]>([null]);
     const [activeSeason, setActiveSeason] = useState<ArenaSeason | null>(null);
     const { getShipConfig, updateShipConfig } = useAutogearShipConfigs(getShipById);
-    const [shipResults, setShipResults] = useState<
-        Record<
-            string,
-            {
-                suggestions: GearSuggestion[];
-                currentSimulation: SimulationSummary | null;
-                suggestedSimulation: SimulationSummary | null;
-                arenaSimulation: SimulationSummary | null;
-                currentStats: StatBreakdown;
-                suggestedStats: StatBreakdown;
-                arenaModifiers: Record<string, number> | null;
-                hardRequirementsMet: boolean;
-                hardViolations?: HardRequirementViolation[];
-                attempts: number;
-            }
-        >
-    >({});
+    const [shipResults, setShipResults] = useState<Record<string, AutogearShipResult>>({});
     const [hoveredGear, setHoveredGear] = useState<GearPiece | null>(null);
     const [optimizationProgress, setOptimizationProgress] = useState<{
         current: number;
@@ -392,6 +391,69 @@ export const AutogearPage: React.FC = () => {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [searchParams, getShipById, getConfig, addNotification, hasInitializedFromParams]);
 
+    // The last selection and results are kept for the tab session (`autogearSession.ts`), so a
+    // trip to another page and back, or a reload, does not force a re-run. Restored once ships
+    // have loaded; a selection from URL params wins and keeps only its own ships' results.
+    const sessionRestored = React.useRef(false);
+    useEffect(() => {
+        if (
+            sessionRestored.current ||
+            authLoading ||
+            !fleetLoaded ||
+            !hasInitializedFromParams ||
+            ships.length === 0
+        )
+            return;
+        sessionRestored.current = true;
+        const session = loadAutogearSession(activeProfileId);
+        if (!session) return;
+        const paramShipIds = selectedShips
+            .filter((ship): ship is Ship => ship !== null)
+            .map((ship) => ship.id);
+        const restoredShips =
+            paramShipIds.length > 0
+                ? []
+                : session.shipIds
+                      .map((id) => getShipById(id))
+                      .filter((ship): ship is Ship => ship !== null && ship !== undefined);
+        const keptIds = new Set(
+            paramShipIds.length > 0 ? paramShipIds : restoredShips.map((ship) => ship.id)
+        );
+        const results = Object.fromEntries(
+            Object.entries(session.results).filter(([shipId]) => keptIds.has(shipId))
+        );
+        if (restoredShips.length > 0) setSelectedShips(restoredShips);
+        setShipResults(results);
+        if (session.activeTab && results[session.activeTab]) setActiveTab(session.activeTab);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [authLoading, fleetLoaded, hasInitializedFromParams, ships.length]);
+
+    // An open page drops its selection and results on the same events, or the save below would
+    // store them again. Bumping the generation discards a run that is still in flight.
+    const runGeneration = React.useRef(0);
+    useEffect(() => {
+        const reset = () => {
+            runGeneration.current += 1;
+            setSelectedShips([null]);
+            setShipResults({});
+            setActiveTab(null);
+        };
+        SESSION_RESET_EVENTS.forEach((event) => window.addEventListener(event, reset));
+        return () =>
+            SESSION_RESET_EVENTS.forEach((event) => window.removeEventListener(event, reset));
+    }, []);
+
+    useEffect(() => {
+        if (!sessionRestored.current) return;
+        saveAutogearSession(activeProfileId, {
+            shipIds: selectedShips
+                .filter((ship): ship is Ship => ship !== null)
+                .map((ship) => ship.id),
+            results: shipResults,
+            activeTab,
+        });
+    }, [activeProfileId, selectedShips, shipResults, activeTab]);
+
     // Set initial active tab when results are available
     useEffect(() => {
         const shipIds = Object.keys(shipResults);
@@ -455,6 +517,7 @@ export const AutogearPage: React.FC = () => {
     };
 
     const handleAutogear = async () => {
+        const generation = runGeneration.current;
         // Filter out null ships and get valid ships
         const presentShips = selectedShips.filter((ship): ship is Ship => ship !== null);
         if (presentShips.length === 0) return;
@@ -763,8 +826,8 @@ export const AutogearPage: React.FC = () => {
         // eslint-disable-next-line no-console
         console.log(`Team optimization completed in ${duration.toFixed(2)} seconds`);
 
-        setShipResults(allResults);
         setOptimizationProgress(null);
+        if (generation === runGeneration.current) setShipResults(allResults);
 
         performanceTracker.endTimer('TotalAutogear');
         performanceTracker.printSummary();

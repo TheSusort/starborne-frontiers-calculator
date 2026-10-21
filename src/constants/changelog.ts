@@ -17,6 +17,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Arcade: ducking ships now skid, their tail swinging out to a random side.',
     'Autogear: Find Optimal Gear stays disabled until a ship is selected.',
     'Buttons: the smallest buttons across the site now have readable text.',
+    'Autogear: your last results now stay when you leave the page or reload.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

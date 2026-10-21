@@ -1838,6 +1838,14 @@ const DocumentationPage: React.FC = () => {
                                 once.
                             </p>
 
+                            <h4 className="text-lg font-semibold mt-6 mb-2">Kept Results</h4>
+                            <p className="text-theme-text">
+                                Your last selection and its results stay on the Autogear page while
+                                the browser tab is open, so you can check another page or reload
+                                without running again. A new import, signing out or switching
+                                profile clears them.
+                            </p>
+
                             <h4 className="text-lg font-semibold mt-6 mb-2">Simulation Results</h4>
                             <p className="text-theme-text">
                                 The simulation results will show you a comparison of the gear
