@@ -1,26 +1,31 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '1.81.1';
+export const CURRENT_VERSION = '1.81.2';
 
 // Accumulates between releases. `npm run release` folds these into a new ChangelogEntry at the
 // top of CHANGELOG, bumps CURRENT_VERSION and empties this array — all three together, because a
 // bumped version whose entries are still unreleased shows users a what's-new dialog listing
 // nothing. Do it by hand only if that script cannot.
-export const UNRELEASED_CHANGES: string[] = [
-    'Home page: refreshed banners featuring Arcade, Combat Simulator, Bounty Credits and Game Basics.',
-    'Home page: features are now grouped by area, with new ones marked.',
-    'Home page: shows the latest changelog entry.',
-    'Home page: returning players now see their fleet, last import and a continue link.',
-    'Home page: the Arcade top score is now shown with a Play button.',
-    'Home page: the Combat Simulator card now opens the combat simulator.',
-    'Home page: banner carousel now supports swipe and shows slide progress.',
-    'Arcade: ducking ships now skid, their tail swinging out to a random side.',
-    'Autogear: Find Optimal Gear stays disabled until a ship is selected.',
-    'Buttons: the smallest buttons across the site now have readable text.',
-    'Autogear: your last results now stay when you leave the page or reload.',
-];
+export const UNRELEASED_CHANGES: string[] = [];
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.81.2',
+        date: '2026-10-21',
+        changes: [
+            'Home page: refreshed banners featuring Arcade, Combat Simulator, Bounty Credits and Game Basics.',
+            'Home page: features are now grouped by area, with new ones marked.',
+            'Home page: shows the latest changelog entry.',
+            'Home page: returning players now see their fleet, last import and a continue link.',
+            'Home page: the Arcade top score is now shown with a Play button.',
+            'Home page: the Combat Simulator card now opens the combat simulator.',
+            'Home page: banner carousel now supports swipe and shows slide progress.',
+            'Arcade: ducking ships now skid, their tail swinging out to a random side.',
+            'Autogear: Find Optimal Gear stays disabled until a ship is selected.',
+            'Buttons: the smallest buttons across the site now have readable text.',
+            'Autogear: your last results now stay when you leave the page or reload.',
+        ],
+    },
     {
         version: '1.81.1',
         date: '2026-10-20',
