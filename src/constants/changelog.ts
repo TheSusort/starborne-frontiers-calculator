@@ -14,6 +14,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Home page: the Arcade top score is now shown with a Play button.',
     'Home page: the Combat Simulator card now opens the combat simulator.',
     'Home page: banner carousel now supports swipe and shows slide progress.',
+    'Arcade: ducking ships now skid, their tail swinging out to a random side.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

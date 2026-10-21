@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
     advanceScrape,
+    contactCentre,
+    contactHalf,
     contactStrength,
     createScrapeFx,
     liveSparks,
@@ -20,7 +22,14 @@ const lcg = (seed = 1) => {
 
 const FRAME = 1 / 60;
 const U = 200;
-const contact = (sink: number): ScrapeContact => ({ x: 400, y: 600, halfWidth: 60, u: U, sink });
+const contact = (sink: number, lean = 0): ScrapeContact => ({
+    x: 400,
+    y: 600,
+    halfWidth: 60,
+    u: U,
+    sink,
+    lean,
+});
 const pools = (fx: ReturnType<typeof createScrapeFx>) => [
     fx.px,
     fx.py,
@@ -82,6 +91,27 @@ describe('scrape sparks', () => {
         }
         expect(left).toBeGreaterThan(0);
         expect(right).toBeGreaterThan(0);
+    });
+
+    it('bites under the low wing on a skid lean, throwing most sparks that way', () => {
+        for (const lean of [1, -1]) {
+            const c = contact(0.1 * U, lean);
+            const centre = contactCentre(c);
+            const half = contactHalf(c);
+            expect(Math.sign(centre - c.x)).toBe(lean);
+            expect(half).toBeLessThan(contactHalf(contact(0.1 * U)));
+            const fx = createScrapeFx();
+            advanceScrape(fx, 0.2, c, lcg(9));
+            let low = 0;
+            let high = 0;
+            for (let i = 0; i < SCRAPE_SPARKS; i++) {
+                if (fx.age[i] >= fx.ttl[i]) continue;
+                expect(Math.abs(fx.px[i] - centre)).toBeLessThanOrEqual(half + 1e-3);
+                if (Math.sign(fx.vx[i]) === lean) low++;
+                else high++;
+            }
+            expect(low).toBeGreaterThan(high);
+        }
     });
 
     it('lets sparks fall and burn out once the hull leaves the track', () => {

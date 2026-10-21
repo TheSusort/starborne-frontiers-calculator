@@ -22,6 +22,11 @@ const STREAK_SECONDS = 0.03;
 const GLOW_SECONDS = 0.06;
 /** The share of the hull's half-width the contact line spans. */
 const CONTACT_SPAN = 0.6;
+/** At full lean the contact narrows by this share and its centre moves this share of the
+ *  half-width toward the low wing, which throws this much more of the sparks. */
+const LEAN_NARROW = 0.5;
+const LEAN_SHIFT = 0.45;
+const LEAN_SIDE_BIAS = 0.4;
 /** How sunk the hull must be, in lane widths, for the contact to burn at full strength. */
 const FULL_CONTACT_SINK = 0.02;
 /** The streak behind the ship runs to this world depth (negative: toward the camera). */
@@ -35,14 +40,15 @@ const COLOURS = ['#ff4fd8', '#40f0ff', '#ffc070'] as const;
 const ALPHA_STEPS = 4;
 
 /** The hull's contact with the track this frame (px): the ship's centre x and its visible
- *  half-width, the track line under it, the lane width at the player row and how sunk the belly
- *  is below the line. */
+ *  half-width, the track line under it, the lane width at the player row, how sunk the belly
+ *  is below the line, and its skid lean, -1..1 (see `skidLean`; positive: right side down). */
 export interface ScrapeContact {
     x: number;
     y: number;
     halfWidth: number;
     u: number;
     sink: number;
+    lean: number;
 }
 
 export interface ScrapeFx {
@@ -89,14 +95,24 @@ export function contactStrength(contact: ScrapeContact | null): number {
     return Math.min(1, contact.sink / (FULL_CONTACT_SINK * contact.u));
 }
 
+const clampLean = (c: ScrapeContact): number => Math.max(-1, Math.min(1, c.lean));
+
+/** The contact line's centre x (px), shifted toward the low wing by the lean. */
+export const contactCentre = (c: ScrapeContact): number =>
+    c.x + clampLean(c) * LEAN_SHIFT * c.halfWidth;
+
+/** The contact line's half-length (px), narrowed by the lean. */
+export const contactHalf = (c: ScrapeContact): number =>
+    CONTACT_SPAN * c.halfWidth * (1 - LEAN_NARROW * Math.abs(clampLean(c)));
+
 function spawn(fx: ScrapeFx, c: ScrapeContact, random: () => number): void {
     const i = fx.next;
     fx.next = (i + 1) % SCRAPE_SPARKS;
     const u = c.u;
-    const side = random() < 0.5 ? -1 : 1;
+    const side = random() < 0.5 * (1 - LEAN_SIDE_BIAS * clampLean(c)) ? -1 : 1;
     // Mostly from the hull's flanks, where it cuts the grid widest.
-    const along = Math.sqrt(random()) * CONTACT_SPAN * c.halfWidth;
-    fx.px[i] = c.x + side * along;
+    const along = Math.sqrt(random()) * contactHalf(c);
+    fx.px[i] = contactCentre(c) + side * along;
     fx.py[i] = c.y;
     // Back toward the camera (down the screen) and out to the side, with a little hop.
     fx.vx[i] = side * (0.35 + 1.1 * random()) * u;
@@ -213,10 +229,11 @@ export function drawScrapeSparks(
     ctx.globalCompositeOperation = 'lighter';
     ctx.lineCap = 'round';
     if (contact && fx.glow > 0.01) {
-        const half = CONTACT_SPAN * contact.halfWidth;
+        const centre = contactCentre(contact);
+        const half = contactHalf(contact);
         ctx.beginPath();
-        ctx.moveTo(contact.x - half, contact.y);
-        ctx.lineTo(contact.x + half, contact.y);
+        ctx.moveTo(centre - half, contact.y);
+        ctx.lineTo(centre + half, contact.y);
         for (let pass = 0; pass < 3; pass++) {
             ctx.strokeStyle = pass === 2 ? '#ffffff' : pass === 1 ? COLOURS[2] : COLOURS[0];
             const gain = pass === 0 ? 0.3 : pass === 1 ? 0.6 : 0.95;

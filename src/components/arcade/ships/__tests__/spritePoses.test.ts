@@ -240,8 +240,8 @@ describe('settled poses', () => {
     });
     it('a pose eased onto a resting target draws a single frame', () => {
         // Mid-slide toward the centre lane, whose computed heading is a rounding error off 0.
-        let pose = { headingDeg: 9, bank: 0.6, pitchDeg: 4, duck: 0.3 };
-        const target = { headingDeg: 3e-14, bank: 0, pitchDeg: 0, duck: 0 };
+        let pose = { headingDeg: 9, bank: 0.6, pitchDeg: 4, duck: 0.3, skid: -0.4 };
+        const target = { headingDeg: 3e-14, bank: 0, pitchDeg: 0, duck: 0, skid: 0 };
         for (let i = 0; i < 30; i++) pose = advancePose(pose, target, 1 / 60);
         expect(pose).toEqual(target);
         expect(frameBlend(pose.headingDeg, pose.bank, pose.pitchDeg)).toHaveLength(1);
@@ -253,7 +253,7 @@ describe('settled poses', () => {
 });
 
 describe('advancePose', () => {
-    const target = { headingDeg: 20, bank: 1, pitchDeg: 10, duck: 1 };
+    const target = { headingDeg: 20, bank: 1, pitchDeg: 10, duck: 1, skid: 1 };
 
     it('moves every axis toward its target by its own time constant', () => {
         const pose = advancePose(restingPose(), target, 0.03);
@@ -261,6 +261,7 @@ describe('advancePose', () => {
         expect(pose.bank).toBeCloseTo(easeToward(0, 1, 0.03, POSE_EASE_SECONDS.bank), 12);
         expect(pose.pitchDeg).toBeCloseTo(easeToward(0, 10, 0.03, POSE_EASE_SECONDS.pitch), 12);
         expect(pose.duck).toBeCloseTo(easeToward(0, 1, 0.03, POSE_EASE_SECONDS.duck), 12);
+        expect(pose.skid).toBeCloseTo(easeToward(0, 1, 0.03, POSE_EASE_SECONDS.skid), 12);
     });
     it('glides in and out instead of snapping', () => {
         let pose = restingPose();
@@ -277,6 +278,7 @@ describe('advancePose', () => {
         expect(pose.bank).toBeGreaterThan(0.95);
         expect(pose.pitchDeg).toBeGreaterThan(0.95 * 10);
         expect(pose.duck).toBeGreaterThan(0.95);
+        expect(pose.skid).toBeGreaterThan(0.95);
     });
     it('keeps every time constant between 30 and 150 ms', () => {
         for (const tau of Object.values(POSE_EASE_SECONDS)) {
