@@ -42,7 +42,8 @@ export const Video = memo(
                 play: () => {
                     if (!videoRef.current) return;
                     setIsPlaying(true);
-                    void videoRef.current.play();
+                    // A pause() before playback starts rejects play() with an AbortError; that is expected.
+                    videoRef.current.play().catch(() => {});
                 },
                 pause: () => {
                     if (videoRef.current) {

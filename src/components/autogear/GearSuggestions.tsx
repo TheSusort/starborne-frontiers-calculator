@@ -328,7 +328,12 @@ export const GearSuggestions: React.FC<GearSuggestionsProps> = ({
                             )}
                         </div>
                     )}
-                    <Button aria-label="Equip all suggestions" variant="primary" onClick={onEquip}>
+                    <Button
+                        aria-label="Equip all suggestions"
+                        variant="primary"
+                        onClick={onEquip}
+                        data-track="autogear.equip"
+                    >
                         Equip All Suggestions
                     </Button>
                     {onLockEquipment && ship && (

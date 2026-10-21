@@ -15,6 +15,8 @@ export const UNRELEASED_CHANGES: string[] = [
     'Home page: the Combat Simulator card now opens the combat simulator.',
     'Home page: banner carousel now supports swipe and shows slide progress.',
     'Arcade: ducking ships now skid, their tail swinging out to a random side.',
+    'Autogear: Find Optimal Gear stays disabled until a ship is selected.',
+    'Buttons: the smallest buttons across the site now have readable text.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
