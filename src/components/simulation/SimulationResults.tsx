@@ -117,7 +117,7 @@ export const SimulationResults: React.FC<SimulationResultsProps> = ({
     getGearPiece,
     showCurrent = true,
 }) => {
-    const columnCount = arenaSimulation ? 3 : suggestedSimulation && !alwaysColumn ? 2 : 1;
+    const columnCount = alwaysColumn ? 1 : arenaSimulation ? 3 : suggestedSimulation ? 2 : 1;
     const gridClass =
         columnCount === 3 ? 'md:grid-cols-3' : columnCount === 2 ? 'md:grid-cols-2' : '';
 
