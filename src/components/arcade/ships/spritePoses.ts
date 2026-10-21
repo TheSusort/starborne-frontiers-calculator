@@ -214,16 +214,24 @@ export const SETTLE_EPSILON = 1e-3;
 export const settle = (value: number, target: number): number =>
     Math.abs(value - target) < SETTLE_EPSILON ? target : value;
 
-/** The player ship's drawn pose: screen heading in degrees, bank -1..1, nose pitch in degrees and
- *  duck 0..1 (how deep into a duck's dip the ship is, see `duckDip`). */
+/** The player ship's drawn pose: screen heading in degrees, bank -1..1, nose pitch in degrees,
+ *  duck 0..1 (how deep into a duck's dip the ship is, see `duckDip`) and skid -1..1 (a duck's
+ *  tail slide, positive toward screen right, see `skidTilt`). */
 export interface PlayerPose {
     headingDeg: number;
     bank: number;
     pitchDeg: number;
     duck: number;
+    skid: number;
 }
 
-export const restingPose = (): PlayerPose => ({ headingDeg: 0, bank: 0, pitchDeg: 0, duck: 0 });
+export const restingPose = (): PlayerPose => ({
+    headingDeg: 0,
+    bank: 0,
+    pitchDeg: 0,
+    duck: 0,
+    skid: 0,
+});
 
 /** Time constant of each pose axis's easing, in seconds (90% settled in 2.3×). The heading's
  *  target already turns continuously with the eased lane slide, so it only smooths frame steps;
@@ -233,6 +241,7 @@ export const POSE_EASE_SECONDS = {
     bank: 0.06,
     pitch: 0.05,
     duck: 0.045,
+    skid: 0.05,
 } as const;
 
 /** The pose `dtSeconds` later, each axis eased toward `target` and snapped onto it once within
@@ -245,6 +254,7 @@ export function advancePose(pose: PlayerPose, target: PlayerPose, dtSeconds: num
         bank: ease(pose.bank, target.bank, POSE_EASE_SECONDS.bank),
         pitchDeg: ease(pose.pitchDeg, target.pitchDeg, POSE_EASE_SECONDS.pitch),
         duck: ease(pose.duck, target.duck, POSE_EASE_SECONDS.duck),
+        skid: ease(pose.skid, target.skid, POSE_EASE_SECONDS.skid),
     };
 }
 

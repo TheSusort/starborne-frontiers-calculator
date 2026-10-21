@@ -84,6 +84,7 @@ import {
 import { advanceTrail, createShipTrail, drawShipTrails, ShipBox, ShipTrail } from './shipTrails';
 import {
     advanceScrape,
+    contactStrength,
     createScrapeFx,
     drawScrapeSparks,
     drawScrapeStreak,
@@ -91,6 +92,7 @@ import {
     ScrapeFx,
 } from './scrapeFx';
 import type { NeonAccent } from './ships/factionTint';
+import { DRIFT_YAW_DEG, duckSkid, SKID_TWIST, skidLean, skidRoll } from './skidTilt';
 import { cachedPortrait } from './ships/portraitSprite';
 import { stakesBanner } from './duel/stakesText';
 import {
@@ -249,14 +251,20 @@ function introProgress(view: FlightView): number {
 
 /** The pose the player ship eases toward: the nose aims at the vanishing point from wherever the
  *  ship is in its slide (within `MAX_HEADING_DEG`), the bank follows the slide and levels out
- *  once the ship settles, and the action sets pitch and duck. */
+ *  once the ship settles, and the action sets pitch and duck. A duck's skid swings the nose
+ *  against the sliding tail. */
 function targetPose(g: SceneGeometry, game: GameState, view: FlightView): PlayerPose {
     const { action, actionTime, lane } = game.player;
+    const skid = action === 'duck' ? duckSkid(actionTime, game.time) : 0;
+    // The skid turns the nose from the clamped heading, so an outer lane already at the clamp
+    // still swings inward.
+    const heading = clampHeadingDeg(screenHeadingDeg(g, view.playerX));
     return {
-        headingDeg: clampHeadingDeg(screenHeadingDeg(g, view.playerX)),
+        headingDeg: clampHeadingDeg(heading - DRIFT_YAW_DEG * skid),
         bank: slideBank(laneOffset(lane), view.playerX),
         pitchDeg: actionPitchDeg(action, actionTime),
         duck: action === 'duck' ? duckDip(actionTime) : 0,
+        skid,
     };
 }
 
@@ -486,13 +494,17 @@ export const NEON_BOTTOM = 0.6;
 /** Where the player ship is drawn this frame: its `ShipBox`, its ship unit `s` (see
  *  `neonFighter`), the neon fighter's duck squash and the intro's progress. A ducking ship's hull
  *  is drawn only above `clipY` (px below its centre: the track line; `Infinity` when nothing is
- *  clipped), its `bottom` stops at that line, and `sink` is how far below it the hull reaches. */
+ *  clipped), its `bottom` stops at that line, and `sink` is how far below it the hull reaches.
+ *  `roll` is the skid's extra screen roll (see `skidTilt`), drawn about the ship's centre, and
+ *  `twist` its tail swing, drawn about the nose (`top`); positive turns clockwise. */
 interface ShipPlacement extends ShipBox {
     s: number;
     squash: number;
     intro: number;
     clipY: number;
     sink: number;
+    roll: number;
+    twist: number;
 }
 
 /** The ship's placement, rewritten every frame rather than allocated. */
@@ -509,6 +521,8 @@ const shipAt: ShipPlacement = {
     intro: 1,
     clipY: Infinity,
     sink: 0,
+    roll: 0,
+    twist: 0,
 };
 const baseAt: Projected = { x: 0, y: 0, scale: 0, width: 0 };
 
@@ -563,6 +577,9 @@ function placeShip(out: ShipPlacement, g: SceneGeometry, game: GameState, view: 
     out.intro = e;
     out.clipY = Infinity;
     out.sink = 0;
+    out.roll = 0;
+    // The nose turns against the tail: a tail out to the right turns the ship anticlockwise.
+    out.twist = e === 1 ? -SKID_TWIST * view.pose.skid : 0;
     if (e === 1 && view.pose.duck > 0) {
         const track = base.y - y;
         out.clipY = track;
@@ -586,16 +603,18 @@ function placeShield(
 }
 
 /** The hull's contact with the track, rewritten every frame rather than allocated. */
-const contactAt: ScrapeContact = { x: 0, y: 0, halfWidth: 0, u: 1, sink: 0 };
+const contactAt: ScrapeContact = { x: 0, y: 0, halfWidth: 0, u: 1, sink: 0, lean: 0 };
 
 /** The ship's scrape on the track this frame, or `null` when its hull is clear of it. */
 function scrapeContact(ship: ShipPlacement, u: number, dying: boolean): ScrapeContact | null {
     if (dying || !(ship.sink > 0)) return null;
-    contactAt.x = ship.x;
+    // The belly swings with the tail about the nose.
+    contactAt.x = ship.x - (ship.bottom - ship.top) * Math.sin(ship.twist);
     contactAt.y = ship.baseY;
     contactAt.halfWidth = ship.halfWidth;
     contactAt.u = u;
     contactAt.sink = ship.sink;
+    contactAt.lean = 0;
     return contactAt;
 }
 
@@ -645,6 +664,13 @@ function drawPlayer(
         ctx.rect(-reach, -reach, 2 * reach, reach + ship.clipY);
         ctx.clip();
     }
+    // The track clip stays level; only the hull swings and rolls inside it.
+    if (ship.twist !== 0) {
+        ctx.translate(0, ship.top);
+        ctx.rotate(ship.twist);
+        ctx.translate(0, -ship.top);
+    }
+    if (ship.roll !== 0) ctx.rotate(ship.roll);
     // The clicked background silhouette cross-fades into the neon fighter during the intro.
     if (e < 1) {
         ctx.save();
@@ -785,7 +811,14 @@ export function renderFlight(
         }
     }
     const seconds = game.speed > 0 ? view.trailTravel / game.speed : 0;
-    const contact = view.scrape ? scrapeContact(ship, u, view.dying) : null;
+    const touching = scrapeContact(ship, u, view.dying);
+    if (ship.intro === 1 && view.pose.duck > 0) {
+        const { duck, bank, skid } = view.pose;
+        const strength = contactStrength(touching);
+        ship.roll = skidRoll(duck, bank, skid, strength, game.time, view.reducedMotion);
+        if (touching) touching.lean = skidLean(ship.roll);
+    }
+    const contact = view.scrape ? touching : null;
     if (view.scrape) advanceScrape(view.scrape, seconds, contact);
     if (view.trail) {
         advanceTrail(view.trail, seconds, view.playerX);
