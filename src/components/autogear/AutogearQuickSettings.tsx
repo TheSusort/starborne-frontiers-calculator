@@ -85,7 +85,7 @@ export const AutogearQuickSettings: React.FC<AutogearQuickSettingsProps> = ({
     return (
         <div className="space-y-4 sticky top-2">
             <div className="flex justify-between items-center">
-                <h3 className="text-xl font-bold">Autogear</h3>
+                <h2 className="text-xl font-bold">Ships</h2>
                 <div className="flex flex-wrap justify-end gap-2">
                     {canSaveTeam && (
                         <Button variant="secondary" onClick={onSaveTeam} className="text-sm">
@@ -159,6 +159,7 @@ export const AutogearQuickSettings: React.FC<AutogearQuickSettingsProps> = ({
                                                 size="sm"
                                                 className="flex gap-2 items-center"
                                                 title="View ship details"
+                                                data-track="autogear.ship-info"
                                                 data-tutorial={
                                                     index === 0
                                                         ? 'autogear-ship-info-button'
@@ -206,7 +207,7 @@ export const AutogearQuickSettings: React.FC<AutogearQuickSettingsProps> = ({
             <div className="flex justify-end">
                 <Button
                     onClick={onFindOptimalGear}
-                    disabled={selectedShips.length === 0}
+                    disabled={!selectedShips.some((ship) => ship !== null)}
                     variant="primary"
                     className="w-full"
                     data-tutorial="autogear-optimize-button"

@@ -34,6 +34,7 @@ export const GearSuggestionTargets: React.FC<GearSuggestionTargetsProps> = ({
                             variant="secondary"
                             size="xs"
                             onClick={() => onSelectAll(targets.map((t) => t.ship))}
+                            data-track="autogear.next-select-all"
                         >
                             Select All
                         </Button>
@@ -67,7 +68,12 @@ export const GearSuggestionTargets: React.FC<GearSuggestionTargetsProps> = ({
                                 </span>
                             )}
                         </div>
-                        <Button variant="secondary" size="xs" onClick={() => onSelectShip(ship)}>
+                        <Button
+                            variant="secondary"
+                            size="xs"
+                            onClick={() => onSelectShip(ship)}
+                            data-track="autogear.next-select"
+                        >
                             Select
                         </Button>
                     </div>
