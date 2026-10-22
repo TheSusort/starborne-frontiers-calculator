@@ -1,6 +1,9 @@
 import type { Ship, AffinityName } from '../../src/types/ship';
 import type { Position } from '../../src/types/encounters';
-import type { BattlePlacement, BattleSimulationInput } from '../../src/utils/calculators/battleSimulator';
+import type {
+    BattlePlacement,
+    BattleSimulationInput,
+} from '../../src/utils/calculators/battleSimulator';
 import { mulberry32 } from '../../src/utils/calculators/rateAccumulator';
 
 export interface ScenarioOverrides {
@@ -36,7 +39,12 @@ const placement = (
     },
 });
 
-const fillerBase = (id: string, name: string, type: Ship['type'], stats: Partial<Ship['baseStats']>): Ship => ({
+const fillerBase = (
+    id: string,
+    name: string,
+    type: Ship['type'],
+    stats: Partial<Ship['baseStats']>
+): Ship => ({
     id,
     name,
     rarity: 'legendary',
@@ -44,8 +52,15 @@ const fillerBase = (id: string, name: string, type: Ship['type'], stats: Partial
     type,
     affinity: 'antimatter',
     baseStats: {
-        hp: 260_000, attack: 1500, defence: 300, hacking: 200, security: 150,
-        crit: 50, critDamage: 150, speed: 100, ...stats,
+        hp: 260_000,
+        attack: 1500,
+        defence: 300,
+        hacking: 200,
+        security: 150,
+        crit: 50,
+        critDamage: 150,
+        speed: 100,
+        ...stats,
     },
     equipment: {},
     implants: {},
@@ -62,15 +77,24 @@ const fillerBase = (id: string, name: string, type: Ship['type'], stats: Partial
 // `hasPositionedEnemyRoster`, and SP-4c-2c deleted the gate and the dummy's turn. Kept as-is
 // because a damage active is the simplest thing that co-exists with the reviewed ship.)
 const counterAlly = (): Ship => ({
-    ...fillerBase('trace-ally-counter', 'CounterAlly', 'DEFENDER', { attack: 1200, defence: 500, speed: 95 }),
+    ...fillerBase('trace-ally-counter', 'CounterAlly', 'DEFENDER', {
+        attack: 1200,
+        defence: 500,
+        speed: 95,
+    }),
     firstPassiveSkillText:
         'When this Unit is directly damaged as a primary target, it deals <unit-damage>70% damage</unit-damage> to that enemy.',
 });
 
-const plainAlly = (): Ship => fillerBase('trace-ally-plain', 'PlainAlly', 'ATTACKER', { attack: 1800, speed: 110 });
+const plainAlly = (): Ship =>
+    fillerBase('trace-ally-plain', 'PlainAlly', 'ATTACKER', { attack: 1800, speed: 110 });
 
 const fragileAlly = (): Ship =>
-    fillerBase('trace-ally-fragile', 'FragileAlly', 'ATTACKER', { hp: 40_000, defence: 100, speed: 105 });
+    fillerBase('trace-ally-fragile', 'FragileAlly', 'ATTACKER', {
+        hp: 40_000,
+        defence: 100,
+        speed: 105,
+    });
 
 // Audit-calibration: the enemies carry LOW security (20) so the reviewed ship's hacking-based
 // debuffs/DoTs actually LAND and can be observed. The whole corpus has BASE hacking 64–122
@@ -85,7 +109,12 @@ const fragileAlly = (): Ship =>
 const ENEMY_SECURITY = 20;
 
 const enemyAttacker = (id: string, name: string, affinity: AffinityName, attack: number): Ship => ({
-    ...fillerBase(id, name, 'ATTACKER', { attack, hp: 240_000, speed: 100, security: ENEMY_SECURITY }),
+    ...fillerBase(id, name, 'ATTACKER', {
+        attack,
+        hp: 240_000,
+        speed: 100,
+        security: ENEMY_SECURITY,
+    }),
     affinity,
 });
 
@@ -100,6 +129,20 @@ const enemyDebuffer = (id: string, name: string, attack: number): Ship => ({
     activeSkillText:
         'This Unit deals <unit-damage>100% damage</unit-damage> and inflicts <unit-skill>Defense Down II</unit-skill> for 2 turns.',
 });
+
+/**
+ * `filler`'s kit in `replaced`'s seat: its cell and `statOverrides`, and the `Ship`-level traits
+ * other ships read off it — affinity (the ±25% advantage on every hit and landing roll against it)
+ * and role (role-gated passives such as "adjacent to a supporter"). The filler keeps its own id and
+ * name, so the board still fields distinct ships.
+ */
+export function inertStandIn(filler: Ship, replaced: BattlePlacement): BattlePlacement {
+    return {
+        ship: { ...filler, affinity: replaced.ship.affinity, type: replaced.ship.type },
+        position: replaced.position,
+        statOverrides: replaced.statOverrides,
+    };
+}
 
 /**
  * The differential oracle's BASELINE board: the same battle the composition ran, with every ally
@@ -133,13 +176,14 @@ const enemyDebuffer = (id: string, name: string, attack: number): Ship => ({
  *    asymmetry for this comparison, and — because the rate-gate RNG is keyed by owner id — stops
  *    the crit/landing streams re-drawing between the arms.
  *
- * The fillers inherit the REPLACED ally's `statOverrides` and cell, not their own base stats, so
- * HP, attack, defence and above all SPEED are byte-identical between the arms: same turn order,
- * same incoming-damage budget, same battle length. Only the kit (and with it affinity, faction and
- * role, which ride the `Ship`) changes. "Inert" means an empty interaction-class tag set — the same
- * premise the calibration gate already rests on. It is not a claim of zero influence: an inert ship
- * still deals damage, and a role-reading pre-combat passive on the SUBJECT (Enforcer's
- * "adjacent to a supporter") can notice that its neighbour's role changed.
+ * Each filler is an `inertStandIn` for the ally it replaces: that ally's `statOverrides`, cell,
+ * affinity and role, the filler's kit. HP, attack, defence and above all SPEED are byte-identical
+ * between the arms (same turn order, same incoming-damage budget), affinity advantage against each
+ * enemy is unchanged, and a role-reading passive on the SUBJECT (Enforcer's "adjacent to a
+ * supporter") reads the same neighbour roles. "Inert" means an empty interaction-class tag set —
+ * the same premise the calibration gate rests on. It is not a claim of zero influence: an inert
+ * ship still deals its own damage, so the arms do not always last the same number of rounds (the
+ * oracles compare an alive window, see `lastFullAliveRound`).
  *
  * Filler selection is deterministic in `seed`: same seed, same subject and same pool always build
  * the same board, which is what keeps the oracle reproducible and its ddmin stable. Fillers are
@@ -202,19 +246,16 @@ export function buildInertAllyBaseline(
 
     let nextFiller = 0;
     const baselineTeam = playerTeam.map((original, i) =>
-        i === subjectIndex
-            ? original
-            : {
-                  ship: drawn[nextFiller++],
-                  position: original.position,
-                  statOverrides: original.statOverrides,
-              }
+        i === subjectIndex ? original : inertStandIn(drawn[nextFiller++], original)
     );
 
     return { playerTeam: baselineTeam, enemyTeam: [...enemyTeam], rounds };
 }
 
-export function buildStandardScenario(reviewed: Ship, overrides: ScenarioOverrides = {}): BattleSimulationInput {
+export function buildStandardScenario(
+    reviewed: Ship,
+    overrides: ScenarioOverrides = {}
+): BattleSimulationInput {
     const hpScale = overrides.reviewedHpScale ?? 1;
     const atkScale = overrides.enemyAttackScale ?? 1;
     const enemyAff = overrides.enemyAffinity ?? 'chemical';
@@ -230,9 +271,15 @@ export function buildStandardScenario(reviewed: Ship, overrides: ScenarioOverrid
     if (overrides.includeFragileAlly) playerTeam.push(placement(fragileAlly(), 'B1'));
 
     const enemyTeam: BattlePlacement[] = [
-        placement(enemyAttacker('trace-e-1', 'EnemyA', enemyAff, Math.round(1600 * atkScale)), 'T1'),
+        placement(
+            enemyAttacker('trace-e-1', 'EnemyA', enemyAff, Math.round(1600 * atkScale)),
+            'T1'
+        ),
         placement(enemyDebuffer('trace-e-2', 'EnemyB', Math.round(1600 * atkScale)), 'M2'),
-        placement(enemyAttacker('trace-e-3', 'EnemyC', 'electric', Math.round(1500 * atkScale)), 'B2'),
+        placement(
+            enemyAttacker('trace-e-3', 'EnemyC', 'electric', Math.round(1500 * atkScale)),
+            'B2'
+        ),
     ];
 
     return { playerTeam, enemyTeam, rounds: overrides.rounds ?? 30 };

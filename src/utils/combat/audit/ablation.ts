@@ -1,28 +1,30 @@
 import type { Ship } from '../../../types/ship';
 import type { Position } from '../../../types/encounters';
-import type { BattleResult, BattleSimulationInput } from '../../calculators/battleSimulator';
+import type {
+    BattlePlacement,
+    BattleResult,
+    BattleSimulationInput,
+} from '../../calculators/battleSimulator';
 import type { CombatLogEntryKind } from '../log/types';
 import { buildTraceShip } from '../../../../scripts/lib/traceShipFactory';
+import { inertStandIn } from '../../../../scripts/lib/traceScenario';
 import { runSeededBattle } from '../../simulator/seededRuns';
-import type { AblationResult } from './types';
+import type { AblationResult, BattleRunner } from './types';
 import { canonicalPlacement } from './fixtures';
-import { fingerprintActor } from './fingerprint';
+import { EXCLUDED_KINDS, lastFullAliveRound, MIN_WINDOW, oracleFingerprint } from './oracleKinds';
 
 const ROUNDS = 20;
 
-// Fixed placement slots — the same three slots across all three battles so only the
-// player-side composition (A alone / B alone / A+B) varies.
-const FOCUS_POS: Position = 'T1'; // A (solo) or A-as-focus (combined)
-const ALLY_POS: Position = 'T2'; // B-as-ally (combined only)
-const ENEMY_POS: Position = 'M2'; // the fixed neutral enemy, all three battles
+// Fixed placement slots, the same in all three battles, so only the player-side KITS vary.
+const A_POS: Position = 'T1'; // playerTeam[0]: the focus actor
+const B_POS: Position = 'T2'; // playerTeam[1]: a walked ally
+const ENEMY_POS: Position = 'M2'; // the fixed neutral enemy
 
 let neutralEnemyCache: Ship | null = null;
 
 /** The fixed neutral opponent for all three ablation battles: Bedrock, a plain 90%-damage
- *  attacker with no charge skill and no passives (confirmed in docs/ship-skills.csv — see
- *  classes.test.ts's ship-choice notes: "a plain attacker with no interaction primitives at
- *  all"). Using the SAME opponent across {A}, {B}, {A,B} keeps the enemy from being a source
- *  of the observed divergence — the only variable across the three battles is the player side. */
+ *  attacker with no charge skill and no passives (see classes.test.ts's ship-choice notes). The
+ *  same opponent in every arm keeps the enemy from being a source of divergence. */
 function neutralEnemy(): Ship {
     if (!neutralEnemyCache) {
         const enemy = buildTraceShip('Bedrock');
@@ -38,49 +40,64 @@ function neutralEnemy(): Ship {
     return neutralEnemyCache;
 }
 
-function battleFor(playerTeam: Ship[]): BattleSimulationInput {
-    const positions: Position[] = [FOCUS_POS, ALLY_POS];
+const board = (playerTeam: BattlePlacement[]): BattleSimulationInput => ({
+    playerTeam,
+    enemyTeam: [canonicalPlacement(neutralEnemy(), ENEMY_POS)],
+    rounds: ROUNDS,
+});
+
+export interface AblationBoards {
+    combined: BattleSimulationInput;
+    /** A beside an inert stand-in for B. */
+    baselineA: BattleSimulationInput;
+    /** An inert stand-in for A beside B. */
+    baselineB: BattleSimulationInput;
+}
+
+/**
+ * The three ablation boards. Every board fields two player ships at the same array indices, so A
+ * is `playerTeam[0]` and B is `playerTeam[1]` in BOTH boards each is compared on: each mints the
+ * same actor id in its baseline as in the combined run, and the ownerId-keyed rate-gate RNG deals
+ * it the same crit and landing stream. The stand-in carries the replaced ship's stats, affinity
+ * and role (`inertStandIn`), so only the kit differs.
+ */
+export function ablationBoards(a: Ship, b: Ship, filler: Ship): AblationBoards {
+    const placedA = canonicalPlacement(a, A_POS);
+    const placedB = canonicalPlacement(b, B_POS);
     return {
-        playerTeam: playerTeam.map((ship, i) => canonicalPlacement(ship, positions[i])),
-        enemyTeam: [canonicalPlacement(neutralEnemy(), ENEMY_POS)],
-        rounds: ROUNDS,
+        combined: board([placedA, placedB]),
+        baselineA: board([placedA, inertStandIn(filler, placedB)]),
+        baselineB: board([inertStandIn(filler, placedA), placedB]),
     };
 }
 
-/** Resolve a placed ship's actorId in an already-run result via its roster — NEVER assume
- *  the reserved `'attacker'` id, since that's only guaranteed for playerTeam[0]. Matches by
- *  ship name + the exact slot it was placed in, both of which are under our control here. */
-function resolveActorId(result: BattleResult, shipName: string, position: Position): string {
-    const entry = result.roster.find((r) => r.name === shipName && r.position === position);
-    if (!entry) {
-        throw new Error(
-            `runAblation: could not resolve actorId for "${shipName}"@${position} in the roster`
-        );
-    }
+function playerActorId(result: BattleResult, position: Position): string {
+    const entry = result.roster.find((r) => r.side === 'player' && r.position === position);
+    if (!entry) throw new Error(`runAblation: no player ship at ${position} in the roster`);
     return entry.actorId;
 }
 
-/** Kinds present in `comp` that never appear in `solo` — i.e. behavior the actor does ONLY
- *  in composition. This is the ablation oracle's divergence signal (the reverse direction,
- *  kinds suppressed in composition, is the differential oracle's concern, not this one's). */
+/** Kinds present in `comp` that never appear in `solo`, minus the excluded recipient-booked
+ *  kinds: behaviour the actor shows ONLY beside its partner. (The reverse direction, kinds
+ *  suppressed by the partner, is the differential oracle's concern.) */
 export function extraKinds(
     solo: Set<CombatLogEntryKind>,
     comp: Set<CombatLogEntryKind>
 ): CombatLogEntryKind[] {
-    return [...comp].filter((k) => !solo.has(k));
+    return [...comp].filter((k) => !solo.has(k) && !EXCLUDED_KINDS.has(k));
 }
 
-/** Pure divergence logic, factored out of `runAblation` so it's unit-testable without running
- *  real battles: given each ship's solo and combined per-actor kind fingerprints, decides
- *  whether either ship gained a kind only present in composition, and builds the detail
- *  string. `runAblation` is just this plus the battle-running/fingerprinting I/O around it. */
+/** Pure divergence logic: given each ship's baseline and combined fingerprints, decides whether
+ *  either ship gained a kind only present beside its partner, and builds the detail string.
+ *  `compared` is how many of the two ships had a comparable window. */
 export function computeAblationResult(
     aName: string,
     bName: string,
     soloAKinds: Set<CombatLogEntryKind>,
     soloBKinds: Set<CombatLogEntryKind>,
     combinedAKinds: Set<CombatLogEntryKind>,
-    combinedBKinds: Set<CombatLogEntryKind>
+    combinedBKinds: Set<CombatLogEntryKind>,
+    compared = 2
 ): AblationResult {
     const extraA = extraKinds(soloAKinds, combinedAKinds);
     const extraB = extraKinds(soloBKinds, combinedBKinds);
@@ -98,42 +115,66 @@ export function computeAblationResult(
         ? parts.join('; ')
         : `No divergence: ${aName} and ${bName} each produced only kinds already seen solo.`;
 
-    return { diverges, detail };
+    return { diverges, detail, compared };
+}
+
+/** One ship's baseline and combined fingerprints over the rounds it was alive for in both, or two
+ *  empty sets when that window is shorter than `MIN_WINDOW`. */
+function windowedPair(
+    baseline: BattleResult,
+    combined: BattleResult,
+    position: Position
+): { base: Set<CombatLogEntryKind>; comb: Set<CombatLogEntryKind>; compared: boolean } {
+    const baseId = playerActorId(baseline, position);
+    const combId = playerActorId(combined, position);
+    const window = Math.min(
+        lastFullAliveRound(baseline, baseId),
+        lastFullAliveRound(combined, combId)
+    );
+    if (window < MIN_WINDOW) return { base: new Set(), comb: new Set(), compared: false };
+    return {
+        base: oracleFingerprint(baseline, baseId, window),
+        comb: oracleFingerprint(combined, combId, window),
+        compared: true,
+    };
+}
+
+/** The ablation filler: the first pool ship that is neither subject. */
+export function ablationFiller(a: Ship, b: Ship, inertPool: readonly Ship[]): Ship {
+    const filler = inertPool.find((s) => s.id !== a.id && s.id !== b.id);
+    if (!filler) {
+        throw new Error('runAblation: the inert pool has no ship distinct from both subjects');
+    }
+    return filler;
 }
 
 /**
- * Ablation/superposition oracle: runs `{A}`, `{B}`, and `{A,B}` (A as player focus, B as
- * player ally, all vs the SAME fixed neutral enemy) under the SAME seed via `runSeededBattle`,
- * then checks whether either ship's combined-run fingerprint contains ability-kinds absent
- * from its own solo-run fingerprint.
+ * Ablation/superposition oracle: runs the three `ablationBoards` under the SAME seed and checks
+ * whether either ship, beside its partner, produced a kind it never produced beside an inert
+ * stand-in. Fingerprints use the shared oracle kind policy (`oracleKinds.ts`): excluded kinds,
+ * normalised resists, and only the rounds the ship was alive for in both runs.
  *
- * This is the NOISIEST oracle: the engine's RNG stream is keyed by ownerId, so a ship drawing
- * a different crit sequence as focus (`'attacker'`) vs as ally (`p:<id>:<idx>`) can trigger a
- * crit-gated ability in one run and not the other WITHOUT any real interaction between A and
- * B. That is expected, not a bug in this oracle — `diverges` is a signal for the needs-triage
- * bucket, never a confirmed Finding on its own.
+ * A pure function of (a, b, seed, pool). Its output is needs-triage, never a confirmed finding.
  */
-export function runAblation(a: Ship, b: Ship, seed: number): AblationResult {
-    const soloAResult = runSeededBattle(battleFor([a]), seed);
-    const soloBResult = runSeededBattle(battleFor([b]), seed);
-    const combinedResult = runSeededBattle(battleFor([a, b]), seed);
-
-    const soloAId = resolveActorId(soloAResult, a.name, FOCUS_POS);
-    const soloBId = resolveActorId(soloBResult, b.name, FOCUS_POS);
-    const combinedAId = resolveActorId(combinedResult, a.name, FOCUS_POS);
-    const combinedBId = resolveActorId(combinedResult, b.name, ALLY_POS);
-
-    const soloAKinds = fingerprintActor(soloAResult, soloAId);
-    const soloBKinds = fingerprintActor(soloBResult, soloBId);
-    const combinedAKinds = fingerprintActor(combinedResult, combinedAId);
-    const combinedBKinds = fingerprintActor(combinedResult, combinedBId);
+export function runAblation(
+    a: Ship,
+    b: Ship,
+    seed: number,
+    inertPool: readonly Ship[],
+    run: BattleRunner = runSeededBattle
+): AblationResult {
+    const boards = ablationBoards(a, b, ablationFiller(a, b, inertPool));
+    const combined = run(boards.combined, seed);
+    const pairA = windowedPair(run(boards.baselineA, seed), combined, A_POS);
+    const pairB = windowedPair(run(boards.baselineB, seed), combined, B_POS);
 
     return computeAblationResult(
         a.name,
         b.name,
-        soloAKinds,
-        soloBKinds,
-        combinedAKinds,
-        combinedBKinds
+        pairA.base,
+        pairB.base,
+        pairA.comb,
+        pairB.comb,
+        Number(pairA.compared) + Number(pairB.compared)
     );
 }

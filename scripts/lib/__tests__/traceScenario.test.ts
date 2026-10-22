@@ -88,6 +88,27 @@ describe('buildInertAllyBaseline', () => {
         expect(input.playerTeam[2].statOverrides?.speed).toBe(66);
     });
 
+    // Affinity sets the ±25% advantage on every hit and landing roll against the seat, and a
+    // role-reading passive on the subject reads its neighbours' roles. The replaced ally here is a
+    // thermal SUPPORTER while every pool ship is a chemical ATTACKER, so a filler that kept its
+    // own traits would show here.
+    it('gives each filler the replaced ally’s affinity and role, but keeps its own id and kit', () => {
+        const supporter: Ship = {
+            ...ship('s-ally-sup', 'AllySup'),
+            type: 'SUPPORTER',
+            affinity: 'thermal',
+        };
+        const team = [canonicalPlacement(supporter, 'M3'), subject];
+        const filler = buildInertAllyBaseline(team, 1, enemies, inertPool, 42).playerTeam[0];
+        expect(filler.ship.affinity).toBe('thermal');
+        expect(filler.ship.type).toBe('SUPPORTER');
+        const source = inertPool.find((s) => s.id === filler.ship.id);
+        expect(source).toBeDefined();
+        expect(source!.affinity).toBe('chemical');
+        expect(filler.ship.activeSkillText).toBe(source!.activeSkillText);
+        expect(filler.ship.name).toBe(source!.name);
+    });
+
     it('reuses the caller’s enemy roster verbatim, in order', () => {
         const input = build();
         expect(input.enemyTeam).toHaveLength(2);

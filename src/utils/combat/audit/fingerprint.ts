@@ -96,7 +96,8 @@ function walkEntryTokens(entries: CombatLogEntry[], actorId: string, acc: Set<st
  *  it is a set of behaviours, not a count. Pure over an already-run `BattleResult`.
  *
  *  A REFINEMENT of `fingerprintActor`, not a replacement — that function is consumed by
- *  `ablation.ts`'s differential oracle, which compares bare kind-sets, so it stays as-is. */
+ *  `placementSymmetry.ts`, which compares bare kind-sets, so it stays as-is. The interaction
+ *  oracles read neither: they use `oracleFingerprint` (oracleKinds.ts). */
 export function fingerprintActorTokens(result: BattleResult, actorId: string): string[] {
     const acc = new Set<string>();
     for (const round of result.combatLog) {
