@@ -29,7 +29,7 @@ export const MIN_DUCK_DROP = 0.12;
  * belly sinks `DUCK_SINK_SHARE` of its visible height below the track line, or deeper, up to
  * `DUCK_MAX_SINK_SHARE`, where that is what keeps its top `DUCK_BAR_CLEARANCE` under the high
  * block's gap. A ship too tall to fit even then sinks the most and stays over the bar's edge;
- * every ship drops at least `MIN_DUCK_DROP`. The renderer clips the hull at the track line.
+ * every ship drops at least `MIN_DUCK_DROP`.
  */
 export function duckDepth(top: number, bottom: number): number {
     const height = top + bottom;

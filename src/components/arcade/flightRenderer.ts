@@ -492,16 +492,14 @@ export const NEON_TOP = -0.8;
 export const NEON_BOTTOM = 0.6;
 
 /** Where the player ship is drawn this frame: its `ShipBox`, its ship unit `s` (see
- *  `neonFighter`), the neon fighter's duck squash and the intro's progress. A ducking ship's hull
- *  is drawn only above `clipY` (px below its centre: the track line; `Infinity` when nothing is
- *  clipped), its `bottom` stops at that line, and `sink` is how far below it the hull reaches.
+ *  `neonFighter`), the neon fighter's duck squash and the intro's progress. `sink` is how far
+ *  below the track line a ducking ship's hull reaches; the hull still draws whole, over the track.
  *  `roll` is the skid's extra screen roll (see `skidTilt`), drawn about the ship's centre, and
  *  `twist` its tail swing, drawn about the nose (`top`); positive turns clockwise. */
 interface ShipPlacement extends ShipBox {
     s: number;
     squash: number;
     intro: number;
-    clipY: number;
     sink: number;
     roll: number;
     twist: number;
@@ -519,7 +517,6 @@ const shipAt: ShipPlacement = {
     s: 0,
     squash: 1,
     intro: 1,
-    clipY: Infinity,
     sink: 0,
     roll: 0,
     twist: 0,
@@ -529,8 +526,8 @@ const baseAt: Projected = { x: 0, y: 0, scale: 0, width: 0 };
 /**
  * Places the player ship: on its lane at its lift, flown in from the page background during the
  * intro, with its visible extent from the 3D sprite's level frame (so it does not wobble as
- * frames blend) or the neon fighter's outline. Once the intro is over, a ducking ship is cut off
- * at the track line, so the belly a duck sinks into the track reads as under it.
+ * frames blend) or the neon fighter's outline. The ship always draws whole, over the track, so a
+ * ducking hull's skid twist and roll never cut a wing or tail off at the track line.
  */
 function placeShip(out: ShipPlacement, g: SceneGeometry, game: GameState, view: FlightView): void {
     const base = projectInto(g, view.playerX, 0, baseAt);
@@ -575,17 +572,11 @@ function placeShip(out: ShipPlacement, g: SceneGeometry, game: GameState, view: 
     out.s = s;
     out.squash = squash;
     out.intro = e;
-    out.clipY = Infinity;
     out.sink = 0;
     out.roll = 0;
     // The nose turns against the tail: a tail out to the right turns the ship anticlockwise.
     out.twist = e === 1 ? -SKID_TWIST * view.pose.skid : 0;
-    if (e === 1 && view.pose.duck > 0) {
-        const track = base.y - y;
-        out.clipY = track;
-        out.sink = Math.max(0, out.bottom - track);
-        out.bottom = Math.min(out.bottom, track);
-    }
+    if (e === 1 && view.pose.duck > 0) out.sink = Math.max(0, out.bottom - (base.y - y));
 }
 
 /** Fits the shield around the placed ship's visible extent. */
@@ -658,13 +649,6 @@ function drawPlayer(
 
     ctx.save();
     ctx.translate(x, y);
-    if (ship.clipY < Infinity) {
-        const reach = 4 * (ship.halfWidth - ship.top) + 1;
-        ctx.beginPath();
-        ctx.rect(-reach, -reach, 2 * reach, reach + ship.clipY);
-        ctx.clip();
-    }
-    // The track clip stays level; only the hull swings and rolls inside it.
     if (ship.twist !== 0) {
         ctx.translate(0, ship.top);
         ctx.rotate(ship.twist);
