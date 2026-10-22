@@ -125,7 +125,8 @@ const ACTION_PHRASE_EFFECTS: ReadonlyArray<readonly [RegExp, string]> = [
     [/\bdetonates?\b/i, 'Detonation'],
     [/^damage over time\b/i, 'Damage Over Time effect'],
     [/^reflects?$/i, 'Reflect'],
-    [/^buffs are extended\b/i, 'Buff Duration Extension'],
+    // `\bbuffs\b` never matches inside "debuffs".
+    [/\bbuffs\b.*\bextended\b|\bextends?\b.*\bbuffs\b/i, 'Buff Duration Extension'],
     [/\bextend(?:s|ed)?\b/i, 'Debuff Duration Extension'],
     [/\breduces the duration\b/i, 'Debuff Duration Expiration'],
 ];
