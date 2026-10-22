@@ -354,33 +354,35 @@ export const ImportButton: React.FC<{
 
             setUploadingToCubedweb(true);
             try {
-                // Upload to cubedweb first
-                const { uploadToCubedweb } = await import('../../utils/uploadToCubedweb');
-                const uploadResult = await uploadToCubedweb(selectedFile, hangarName);
+                // A failed upload, including a failed load of the uploader chunk, never blocks
+                // the import itself.
+                try {
+                    const { uploadToCubedweb } = await import('../../utils/uploadToCubedweb');
+                    const uploadResult = await uploadToCubedweb(selectedFile, hangarName);
 
-                if (uploadResult.success && uploadResult.hangarUrl) {
-                    addNotification(
-                        'success',
-                        `Hangar uploaded successfully! View it at: ${uploadResult.hangarUrl}`
-                    );
-                } else {
+                    if (uploadResult.success && uploadResult.hangarUrl) {
+                        addNotification(
+                            'success',
+                            `Hangar uploaded successfully! View it at: ${uploadResult.hangarUrl}`
+                        );
+                    } else {
+                        addNotification(
+                            'error',
+                            `Failed to upload to cubedweb: ${uploadResult.error || 'Unknown error'}`
+                        );
+                    }
+                } catch (error) {
+                    console.error('Error uploading to cubedweb:', error);
                     addNotification(
                         'error',
-                        `Failed to upload to cubedweb: ${uploadResult.error || 'Unknown error'}`
+                        'Failed to upload to cubedweb: ' +
+                            (error instanceof Error ? error.message : 'Unknown error')
                     );
                 }
 
-                // Close modal and proceed with normal import
                 setShowHangarModal(false);
                 setSelectedFile(null);
                 await processFileImport(selectedFile);
-            } catch (error) {
-                console.error('Error uploading to cubedweb:', error);
-                addNotification(
-                    'error',
-                    'Failed to upload to cubedweb: ' +
-                        (error instanceof Error ? error.message : 'Unknown error')
-                );
             } finally {
                 setUploadingToCubedweb(false);
             }
