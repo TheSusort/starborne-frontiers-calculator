@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 /**
- * Reads the current app version from `src/constants/changelog.ts` once per
+ * Reads the current app version from `src/constants/version.ts` once per
  * process. We parse the raw file text instead of importing the module so
  * the e2e tsconfig doesn't need to include `src/**`.
  */
@@ -14,13 +14,13 @@ let cachedVersion: string | null = null;
 function readCurrentVersion(): string {
     if (cachedVersion) return cachedVersion;
     const source = readFileSync(
-        resolve(__dirname, '..', '..', 'src', 'constants', 'changelog.ts'),
+        resolve(__dirname, '..', '..', 'src', 'constants', 'version.ts'),
         'utf8'
     );
     const match = source.match(/CURRENT_VERSION\s*=\s*['"]([^'"]+)['"]/);
     if (!match) {
         throw new Error(
-            'Could not parse CURRENT_VERSION out of src/constants/changelog.ts'
+            'Could not parse CURRENT_VERSION out of src/constants/version.ts'
         );
     }
     cachedVersion = match[1];
@@ -44,7 +44,7 @@ function readCurrentVersion(): string {
  *   Value is `{ lastSeenVersion: string }`. App.tsx shows the modal iff
  *   `savedState.lastSeenVersion !== CURRENT_VERSION`, so we must seed the
  *   exact current version string. We parse it from
- *   `src/constants/changelog.ts` at helper-init time.
+ *   `src/constants/version.ts` at helper-init time.
  */
 export async function silenceFirstVisitOverlays(page: Page): Promise<void> {
     const currentVersion = readCurrentVersion();

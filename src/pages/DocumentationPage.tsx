@@ -3,7 +3,8 @@ import { Link, useLocation } from 'react-router-dom';
 import { PageLayout } from '../components/ui';
 import Seo from '../components/seo/Seo';
 import { SEO_CONFIG } from '../constants/seo';
-import { CHANGELOG, CURRENT_VERSION } from '../constants/changelog';
+import { CHANGELOG } from '../constants/changelog';
+import { CURRENT_VERSION } from '../constants/version';
 
 const DocumentationPage: React.FC = () => {
     const location = useLocation();

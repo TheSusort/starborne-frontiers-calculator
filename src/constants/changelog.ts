@@ -1,16 +1,15 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '1.81.2';
-
 // Accumulates between releases. `npm run release` folds these into a new ChangelogEntry at the
-// top of CHANGELOG, bumps CURRENT_VERSION and empties this array — all three together, because a
-// bumped version whose entries are still unreleased shows users a what's-new dialog listing
-// nothing. Do it by hand only if that script cannot.
+// top of CHANGELOG, bumps CURRENT_VERSION in `version.ts` and empties this array — all three
+// together, because a bumped version whose entries are still unreleased shows users a what's-new
+// dialog listing nothing. Do it by hand only if that script cannot.
 export const UNRELEASED_CHANGES: string[] = [
     'Arcade: ducking ships now draw whole instead of clipping into the track.',
     'Ship database: skill tooltips now explain cleanse, purge, steal, charge and extra-action effects.',
     'Gear scores: now refresh when stat priorities, set priorities or implants change.',
     'Import: stats the calculator does not recognise are now skipped cleanly.',
+    'Site: faster first load and a much smaller offline download.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

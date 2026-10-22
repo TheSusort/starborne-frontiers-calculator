@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, it, expect, vi } from 'vitest';
 import {
     assertVersion,
@@ -7,12 +10,16 @@ import {
     readCurrentVersion,
     readUnreleased,
     rewriteChangelog,
+    rewriteVersion,
 } from '../../../scripts/release';
+
+/** A miniature version.ts with the same shape as the real file. */
+const versionSource = `// The app version.
+export const CURRENT_VERSION = '1.67.0';
+`;
 
 /** A miniature changelog.ts with the same shape as the real file. */
 const source = `import { ChangelogEntry } from '../types/changelog';
-
-export const CURRENT_VERSION = '1.67.0';
 
 export const UNRELEASED_CHANGES: string[] = [
     'Alpha: something changed.',
@@ -78,7 +85,11 @@ describe('decodeLiteral', () => {
 
 describe('reading the current file', () => {
     it('finds the current version', () => {
-        expect(readCurrentVersion(source)).toBe('1.67.0');
+        expect(readCurrentVersion(versionSource)).toBe('1.67.0');
+    });
+
+    it('refuses a file without CURRENT_VERSION', () => {
+        expect(() => readCurrentVersion(source)).toThrow(/CURRENT_VERSION/);
     });
 
     it('reads the unreleased entries in file order, quotes of either kind', () => {
@@ -104,11 +115,6 @@ describe('rewriteChangelog', () => {
             date: '2026-09-15',
             changes: readUnreleased(source),
         });
-
-    it('bumps CURRENT_VERSION', () => {
-        expect(result()).toContain("export const CURRENT_VERSION = '1.68.0'");
-        expect(result()).not.toContain("export const CURRENT_VERSION = '1.67.0'");
-    });
 
     it('empties UNRELEASED_CHANGES', () => {
         expect(readUnreleased(result())).toEqual([]);
@@ -150,6 +156,38 @@ describe('rewriteChangelog', () => {
         expect(() =>
             rewriteChangelog(source, { version: '1.67.0', date: '2026-09-15', changes: ['x'] })
         ).toThrow(/already contains/i);
+    });
+});
+
+describe('rewriteVersion', () => {
+    it('bumps CURRENT_VERSION', () => {
+        const out = rewriteVersion(versionSource, '1.68.0');
+        expect(out).toContain("export const CURRENT_VERSION = '1.68.0'");
+        expect(out).not.toContain("export const CURRENT_VERSION = '1.67.0'");
+    });
+
+    it('refuses a file without CURRENT_VERSION rather than leaving it unbumped', () => {
+        expect(() => rewriteVersion(source, '1.68.0')).toThrow(/CURRENT_VERSION/);
+    });
+});
+
+describe('the real files', () => {
+    // The transforms above run on miniatures; this pins that the shipped files still carry the
+    // markers they match on.
+    const root = join(dirname(fileURLToPath(import.meta.url)), '../../..');
+    const read = (path: string) => readFileSync(join(root, path), 'utf8');
+
+    it('version.ts carries CURRENT_VERSION', () => {
+        expect(() =>
+            assertVersion(readCurrentVersion(read('src/constants/version.ts')), 'version.ts')
+        ).not.toThrow();
+    });
+
+    it('changelog.ts carries UNRELEASED_CHANGES and CHANGELOG but not CURRENT_VERSION', () => {
+        const changelog = read('src/constants/changelog.ts');
+        expect(() => readUnreleased(changelog)).not.toThrow();
+        expect(changelog).toMatch(/export const CHANGELOG: ChangelogEntry\[\] = \[\n/);
+        expect(changelog).not.toMatch(/export const CURRENT_VERSION/);
     });
 });
 

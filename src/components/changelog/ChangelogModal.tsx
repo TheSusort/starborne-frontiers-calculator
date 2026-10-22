@@ -1,12 +1,12 @@
 import React from 'react';
 import { ChangelogEntry } from '../../types/changelog';
 import { Modal } from '../ui';
-import { UNRELEASED_CHANGES } from '../../constants/changelog';
+import { CHANGELOG, UNRELEASED_CHANGES } from '../../constants/changelog';
 
 interface ChangelogModalProps {
     isOpen: boolean;
     onClose: () => void;
-    entries: ChangelogEntry[];
+    entries?: ChangelogEntry[];
     lastSeenVersion: string;
     unreleasedChanges?: string[];
 }
@@ -14,7 +14,7 @@ interface ChangelogModalProps {
 export const ChangelogModal: React.FC<ChangelogModalProps> = ({
     isOpen,
     onClose,
-    entries,
+    entries = CHANGELOG,
     lastSeenVersion,
     unreleasedChanges = UNRELEASED_CHANGES,
 }) => {
