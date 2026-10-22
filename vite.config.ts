@@ -1,9 +1,7 @@
 import { defineConfig } from 'vite';
 import { configDefaults } from 'vitest/config';
 import react from '@vitejs/plugin-react-swc';
-import path from 'path';
 import svgr from 'vite-plugin-svgr';
-import tsconfigPaths from 'vite-tsconfig-paths';
 import { VitePWA } from 'vite-plugin-pwa';
 import PrerenderPlugin from '@prerenderer/rollup-plugin';
 import PuppeteerRenderer from '@prerenderer/renderer-puppeteer';
@@ -24,7 +22,6 @@ export default defineConfig({
     plugins: [
         react(),
         svgr(),
-        tsconfigPaths(),
         VitePWA({
             registerType: 'autoUpdate',
             // Don't generate a manifest — use the existing public/manifest.json
@@ -393,11 +390,6 @@ export default defineConfig({
             },
         }),
     ],
-    resolve: {
-        alias: {
-            '@': path.resolve(__dirname, './src'),
-        },
-    },
     server: {
         port: 3000,
         strictPort: false,
