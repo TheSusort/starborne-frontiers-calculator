@@ -17,8 +17,8 @@ import { loadShipDataByName, shipDataAvailable } from '../../../../scripts/lib/s
 // Permanent regression gate for the interaction-audit harness. Fuzzes a FIXED seed set
 // (1..SEED_COUNT) over the real tagged corpus and asserts `checkInvariants` (audit/invariants.ts)
 // holds for every composition, so a future change that reintroduces an interaction bug fails
-// `npm test`. `checkOpenInvariants` is not asserted here: it fires on the current corpus (see
-// `OPEN_INVARIANTS`), and its unit tests in audit/__tests__/invariants.test.ts keep it honest.
+// `npm test`. `checkOpenInvariants` is not asserted here: it fires on the current corpus by design
+// (see `OPEN_INVARIANTS`), and its unit tests in audit/__tests__/invariants.test.ts keep it honest.
 //
 // Corpus-loading pattern matches compose.test.ts / scripts/auditInteractions.ts: names
 // collected from BOTH docs/ship-skills.csv and docs/ship-data.json (de-duped

@@ -3535,6 +3535,7 @@ export function runCombat(rawInput: CombatEngineInput): {
     // caster is turn-blocked — the status store reads this per call, so the aura vanishes the
     // instant the Stasis lands and returns the instant it is removed. See the setter's doc.
     statusEngine.setTurnBlockedReader(isTurnBlocked);
+    statusEngine.setDestroyedReader((actorId) => !isActorAlive(actorId));
     /** Drop a turn-blocked owner's SHIP-PASSIVE entries from a passive-slot-derived list.
      *
      *  Every list this guards is built by walking `slot.slot === 'passive'` alone, so the only
@@ -5354,6 +5355,9 @@ export function runCombat(rawInput: CombatEngineInput): {
         if (entries.length === 0) return;
         const owner = allRuntimesById.get(sourceId);
         if (!owner) return;
+        // A destroyed ship performs no repair: its DoTs still tick and burst (they outlive their
+        // applier), but its standing leech pays nothing, so no repair row and no repair reaction.
+        if (owner.actor.destroyedRound !== undefined) return;
         const ownerIsEnemy = owner.actor.side === 'enemy';
         // #424: proc-call scope (every entry, every recipient), not per entry — see the emit below.
         const shieldAcc = new ShieldApplyAccumulator();
@@ -10533,6 +10537,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 activePattern: parsedPatternFor(a),
                 chargedPattern: parsedChargedPatternFor(a),
                 sameSideLiving: sameSideLivingFor(a),
+                isActorAlive,
                 // The acting actor's pre-fight modifier baseline (runPlayerTurn's `preFight` doc
                 // says where each channel folds).
                 // Side-agnostic — enemy attackers walk the same path. Conditional spread → an
@@ -12579,7 +12584,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                     // (recordDestroyed fired inside applyIncomingToTarget). It must NOT fall through
                     // and take a full turn — re-run the SAME dead-target skip as the top-of-turn
                     // guard. (With Cheat Death the intercept floored HP at 1 → not dead → false → it
-                    // acts normally.)
+                    // acts normally.) The reactions to the tick and the death resolve first, in this
+                    // turn, the block that holds the death.
+                    if (actor.destroyedRound !== undefined) drainReactions();
                     if (handleDeadTargetSkip(actor)) {
                         continue;
                     }
@@ -12717,8 +12724,11 @@ export function runCombat(rawInput: CombatEngineInput): {
                         }
                         // Lethal turn-start tick → skip the rest of the turn. INTENTIONALLY
                         // follows the heal-target lethal convention (skip the shared post-turn
-                        // block: decrements / turn-ended), NOT the timed-burst convention.
+                        // block: decrements / turn-ended), NOT the timed-burst convention. The
+                        // reactions to the tick and the death resolve first, in this turn, the
+                        // block that holds the death.
                         if (actor.destroyedRound !== undefined) {
+                            drainReactions();
                             if (actor.id === focusActorId) pushSynthesizedFocusSkipTurn();
                             continue;
                         }

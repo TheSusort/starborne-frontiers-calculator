@@ -17,6 +17,10 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: start-of-round stack gains now resolve in turn order.',
     'Combat simulator: hits blocked by Ironclad or Shadowguard now log the damage that landed.',
     'Combat simulator: cleanse rows in the battle log now name the cleansed ships.',
+    'Combat simulator: destroyed ships no longer repair themselves from their lingering DoTs.',
+    'Combat simulator: destroyed ships stop gaining Overload, Blast and other per-round stacks.',
+    'Combat simulator: ally-wide buffs, repairs, charges and debuff trims now skip destroyed allies.',
+    'Combat simulator: ships killed by a DoT tick now trigger death effects immediately.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
