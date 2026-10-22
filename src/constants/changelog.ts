@@ -15,6 +15,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: skills that deal no damage no longer count as critical hits.',
     "Healing calculator: the round chart's Crit marker now shows critical repairs.",
     'Combat simulator: destroyed ships no longer repair themselves from their lingering DoTs.',
+    'Combat simulator: destroyed ships stop gaining Overload, Blast and other per-round stacks.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

@@ -3534,6 +3534,7 @@ export function runCombat(rawInput: CombatEngineInput): {
     // caster is turn-blocked — the status store reads this per call, so the aura vanishes the
     // instant the Stasis lands and returns the instant it is removed. See the setter's doc.
     statusEngine.setTurnBlockedReader(isTurnBlocked);
+    statusEngine.setDestroyedReader((actorId) => !isActorAlive(actorId));
     /** Drop a turn-blocked owner's SHIP-PASSIVE entries from a passive-slot-derived list.
      *
      *  Every list this guards is built by walking `slot.slot === 'passive'` alone, so the only
