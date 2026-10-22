@@ -188,11 +188,24 @@ const EXTENDED_BY_ONE = {
     accumulator: 2,
 };
 
+/** The damage clause every crit-gated kit below carries, as the real Lev, Asphyxiator and
+ *  Wisteria casts do: a crit needs damage (owner ruling 2026-10-22), so a damage-free cast would
+ *  never crit. */
+const castHit: Ability = {
+    id: 'cast-hit',
+    type: 'damage',
+    target: 'enemy',
+    trigger: 'on-cast',
+    conditions: [],
+    config: { type: 'damage', multiplier: 100 },
+};
+
 const levSkills = (buffName?: string): ShipSkills => ({
     slots: [
         {
             slot: 'charged',
             abilities: [
+                castHit,
                 {
                     id: 'lev-extend',
                     type: 'extend-status',
@@ -398,7 +411,7 @@ describe('R109/R112: inflicted-scope extensions over what the cast applied', () 
                 slots: [
                     {
                         slot: 'charged',
-                        abilities: [corrosionClause, bombClause, echoClause, extend],
+                        abilities: [castHit, corrosionClause, bombClause, echoClause, extend],
                     },
                 ],
             },
@@ -503,7 +516,7 @@ describe("Wisteria's crit extension grows only the Corrosion it just inflicted",
         };
         const runtime = makeRuntime(
             'wisteria',
-            { slots: [{ slot: 'charged', abilities: [corrosion, inferno, parsed] }] },
+            { slots: [{ slot: 'charged', abilities: [castHit, corrosion, inferno, parsed] }] },
             { chargedCritGate: () => true }
         );
         runtime.critDamage = 100;

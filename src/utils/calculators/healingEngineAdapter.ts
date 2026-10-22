@@ -5,7 +5,7 @@ import type { ShipTypeName } from '../../constants/shipTypes';
 import type { FactionName } from '../../constants/factions';
 import type { Position } from '../../types/encounters';
 import type { ActiveBuff } from '../combat/statusEngine';
-import type { CombatEventBus } from '../combat/events';
+import { createEventBus, type CombatEventBus } from '../combat/events';
 import { runCombat, EnemyRoundEffects } from '../combat/engine';
 import { selectFiringSkill } from '../abilities/applyAbilities';
 import type { ParsedTarget, ParsedPattern, ShipTargeting } from '../targetingParser';
@@ -23,6 +23,9 @@ import {
     DEFAULT_ENEMY_SECURITY,
     DEFAULT_ENEMY_SPEED,
 } from './healingDefaultEnemy';
+
+/** The engine's id for the focus actor — the healer this adapter simulates. */
+const HEALER_ACTOR_ID = 'attacker';
 
 export interface HealerStats {
     hp: number;
@@ -683,6 +686,26 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
         };
     });
 
+    // The healer's own repair crits, by round. A round's `didCrit` is the DAMAGE crit of the cast,
+    // and a cast that deals no damage never crits (owner ruling 2026-10-22); a repair crits on its
+    // own heal-crit roll. The chart's crit marker shows either. The engine registers its own
+    // listeners on `engineBus` and emits through it; the caller's bus still hears every event.
+    const repairCritRounds = new Set<number>();
+    const engineListeners = createEventBus();
+    const engineBus: CombatEventBus = {
+        on: engineListeners.on,
+        emit(event) {
+            engineListeners.emit(event);
+            input.bus?.emit(event);
+        },
+    };
+    engineListeners.on('heal-performed', (e) => {
+        if (e.casterId === HEALER_ACTOR_ID && (e.critHits ?? 0) >= 1) repairCritRounds.add(e.round);
+    });
+    engineListeners.on('reactive-heal-performed', (e) => {
+        if (e.casterId === HEALER_ACTOR_ID && (e.critHits ?? 0) >= 1) repairCritRounds.add(e.round);
+    });
+
     const { rounds: engineRounds, healing } = runCombat({
         attack: healer.attack,
         crit: healer.crit,
@@ -722,7 +745,7 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
         enemyAttackers: engineEnemyAttackers,
         mode: 'healing',
         teamActors: engineTeamActors,
-        bus: input.bus,
+        bus: engineBus,
         // Positional plumbing (SP-3). Both position AND target AND pattern are required: with a
         // target but no pattern the cast resolves onto the real enemy yet skips the per-victim
         // apply, so `perTargetDealt` comes back EMPTY while the damage number looks plausible.
@@ -877,7 +900,7 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
             action: rd.action,
             charges: rd.charges,
             chargeCount: rd.chargeCount,
-            didCrit: rd.didCrit,
+            didCrit: rd.didCrit || repairCritRounds.has(rd.round),
             directHeal: Math.round(directHealRaw),
             hotHeal: Math.round(hotHealRaw),
             shield: Math.round(shieldRaw),

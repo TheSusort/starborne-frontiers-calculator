@@ -57,7 +57,6 @@ function actor(): CombatActor {
         },
         currentHp: 10000,
         shieldPool: 0,
-        turnMeter: 0,
         charges: 0,
         chargeCount: 0,
         corrosionEntries: [],

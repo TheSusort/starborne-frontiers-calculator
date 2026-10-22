@@ -155,12 +155,18 @@ describe('resolvePositionalTarget — stealth + forced targeting (statusOf)', ()
         const so = statusFrom({ front: { stealthed: true } });
         expect(resolvePositionalTarget('M4', enemyTarget('front'), enemies, so)?.id).toBe('back');
     });
-    it('all-stealthed fallback: every enemy stealthed → still targetable (front → front)', () => {
+    // Owner ruling 2026-10-22 (ledger row 9.15): when every enemy is stealthed, normal targeting
+    // rules apply — the cast is not wasted.
+    it('RULED: every enemy stealthed → normal targeting applies (front → front)', () => {
         const so = statusFrom({ front: { stealthed: true }, back: { stealthed: true } });
         expect(resolvePositionalTarget('M4', enemyTarget('front'), enemies, so)?.id).toBe('front');
     });
     it('Taunt forces the taunting actor even when it is not the default anchor', () => {
         const so = statusFrom({ back: { taunting: true } });
+        expect(resolvePositionalTarget('M4', enemyTarget('front'), enemies, so)?.id).toBe('back');
+    });
+    it('a STEALTHED taunter is still force-targeted (Taunt resolves before the stealth filter)', () => {
+        const so = statusFrom({ back: { stealthed: true, taunting: true } });
         expect(resolvePositionalTarget('M4', enemyTarget('front'), enemies, so)?.id).toBe('back');
     });
     it('Concentrate Fire forces the marked actor and reaches it through stealth', () => {

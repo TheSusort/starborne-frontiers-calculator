@@ -20,14 +20,14 @@
  * NOT charge counts, so `runCombat` is the only entry point that can pin the per-round charge ledger
  * (same reason the Chrono Reaver / Phase-1 charge goldens use it).
  *
- * ─── CRITICAL TIMING (baked into the Part 1 ledger) ───────────────────────────────────────────
- * There is NO pre-action drain between the focus's `turn-started` and its action body. The
- * `start-of-turn` charge intent is ENQUEUED on `turn-started` (triggers.ts) but DRAINS at the
- * post-action point (~engine.ts / round-end). So Cobalt's +1 proc lands AFTER its own turn's
- * cast decision (one-turn alignment) — within the SAME round, reflected in that round's reported
- * `charges`. Charges carry forward across rounds, so accrual is correct. Net effect at full HP: the
- * bar advances by +2 each active turn (baseline +1 from advanceChargeCadence, plus Cobalt's +1
- * proc), so the charged skill fills ~twice as fast as a no-passive baseline.
+ * ─── TIMING (baked into the ledgers) ─────────────────────────────────────────────────────────
+ * Charges are live (owner ruling 2026-10-22): the `start-of-turn` charge intent is enqueued on
+ * `turn-started` and drains BEFORE the skill pick (`drainStartOfTurnGrants` in engine.ts), so
+ * Cobalt's +1 proc counts toward the skill he uses that same turn. The +1/turn baseline
+ * (advanceChargeCadence) still banks after an active cast. Net effect at full HP: the bar
+ * advances by +2 each active turn, so the charged skill fills ~twice as fast as a no-passive
+ * baseline; and a Cobalt one charge short at turn start fires his charged skill that turn. A
+ * proc landing on an already-full bar is lost at the cap.
  *
  * ─── SELF-HP LIVENESS (drives Part 2's approach) ──────────────────────────────────────────────
  * The drain-time `hpSubject:'self'` gate reads `selfHpPctFor(ownerId)`. On the player side that
@@ -41,6 +41,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { runCombat, CombatEngineInput } from '../engine';
+import { createEventBus, CombatEvent } from '../events';
 import { buildShipAbilities } from '../../abilities/buildShipAbilities';
 import { parseChargeGain } from '../../skillTextParser';
 import { Ability, ShipSkills } from '../../../types/abilities';
@@ -184,18 +185,18 @@ const ledger = (r: ReturnType<typeof runCombat>): Array<[string, number]> =>
 describe('Cobalt start-of-turn charge — full-HP proc', () => {
     it('banks an EXTRA +1/turn beyond baseline; charged fills ~twice as fast', () => {
         // chargeCount 8 so the cadence is visible across 8 rounds. At full HP the gate is always
-        // true, so the bar advances by +2 each active turn: baseline +1 (advanceChargeCadence) PLUS
-        // Cobalt's +1 proc (banked within the same round per the one-turn-alignment timing note).
+        // true, so the bar advances by +2 each active turn: Cobalt's +1 proc BEFORE the skill pick,
+        // then the +1 baseline (advanceChargeCadence) after the active cast.
         //
-        // Per-round ledger (focus turnsTaken === round; proc banks within the SAME round):
-        //   R1 (t1): active, baseline 0→1, proc +1            → charges 2
-        //   R2 (t2): active 2<8, baseline 2→3, proc +1        → charges 4
-        //   R3 (t3): active 4<8, baseline 4→5, proc +1        → charges 6
-        //   R4 (t4): active 6<8, baseline 6→7, proc +1 (= cap, fills bar exactly)  → charges 8
-        //   R5 (t5): charges 8≥8 → CHARGED, reset 0, proc +1  → charges 1
-        //   R6 (t6): active 1<8, baseline 1→2, proc +1        → charges 3
-        //   R7 (t7): active 3<8, baseline 3→4, proc +1        → charges 5
-        //   R8 (t8): active 5<8, baseline 5→6, proc +1        → charges 7
+        // Per-round ledger (focus turnsTaken === round):
+        //   R1 (t1): proc 0→1, active 1<8, baseline 1→2              → charges 2
+        //   R2 (t2): proc 2→3, active 3<8, baseline 3→4              → charges 4
+        //   R3 (t3): proc 4→5, active 5<8, baseline 5→6              → charges 6
+        //   R4 (t4): proc 6→7, active 7<8, baseline 7→8 (fills bar)  → charges 8
+        //   R5 (t5): proc lost at the cap, 8≥8 → CHARGED, reset      → charges 0
+        //   R6 (t6): proc 0→1, active, baseline 1→2                  → charges 2
+        //   R7 (t7): proc 2→3, active, baseline 3→4                  → charges 4
+        //   R8 (t8): proc 4→5, active, baseline 5→6                  → charges 6
         const charge = resolveCobaltCharge(COBALT_P1);
         const proc = runCombat(
             buildInput({ chargeCount: 8, numRounds: 8, passiveAbilities: [charge] })
@@ -206,10 +207,10 @@ describe('Cobalt start-of-turn charge — full-HP proc', () => {
             ['active', 4],
             ['active', 6],
             ['active', 8],
-            ['charged', 1],
-            ['active', 3],
-            ['active', 5],
-            ['active', 7],
+            ['charged', 0],
+            ['active', 2],
+            ['active', 4],
+            ['active', 6],
         ]);
 
         // No-passive baseline: pure +1/turn cadence — it only just reaches the cap on R8 (→ charged
@@ -280,8 +281,8 @@ describe('Cobalt start-of-turn charge — damaged focus suppresses the proc (liv
             ['active', 4],
             ['active', 6],
             ['active', 8],
-            ['charged', 1],
-            ['active', 3],
+            ['charged', 0],
+            ['active', 2],
         ]);
         for (let i = 0; i < 4; i++) {
             // R1..R4 (pre-control-reset window): damaged strictly fewer charges than the full-HP run.
@@ -373,12 +374,10 @@ describe('Cobalt second passive — charge AND Out. Damage Up II coexist (no cla
     });
 });
 
-// ─── SP-G G2: the start-of-turn grant now precedes the owner's cast ──────────────────────────
+// ─── The start-of-turn grant precedes the owner's cast ───────────────────────────────────────
 //
-// FIXED: a pre-cast drain of the acting owner's start-of-turn GRANT intents runs
-// between the turn-started emit and the cast, so the Out. Damage Up II buff boosts the SAME turn
-// it is granted — every turn, not every other turn. (The CHARGE half is excluded from this drain
-// and still banks post-cast, so the Part 1/Part 2 charge ledgers are unchanged.)
+// The acting owner's start-of-turn grants drain between the turn-started emit and the cast, so the
+// Out. Damage Up II buff boosts the SAME turn it is granted — every turn, not every other turn.
 describe('Cobalt Out. Damage Up II — engine consumption (recurring, every turn)', () => {
     // SP-4c-2a (B1): `dummySink()` (buildInput's default enemy) carries no `stats.hp`, so the
     // targetable-HP floor (normalizeRoster.ts) now raises it to MIN_TARGETABLE_MAX_HP and the run
@@ -412,5 +411,57 @@ describe('Cobalt Out. Damage Up II — engine consumption (recurring, every turn
         expect(boosted[1]).toBeGreaterThan(control[1]);
         expect(boosted[2]).toBeGreaterThan(control[2]);
         expect(boosted[3]).toBeGreaterThan(control[3]);
+    });
+});
+
+// ─── Charges are live: a start-of-turn charge counts toward that turn's skill ───────────────────
+//
+// Owner ruling 2026-10-22 (ledger row 3.3): Cobalt at full HP, one charge short of a full bar at
+// the start of his turn, fires his CHARGED skill that turn. chargeCount 3 puts him in exactly that
+// state on every second turn: R1 proc 0→1, active, baseline →2; R2 starts one short, proc 2→3,
+// CHARGED. Banking the proc after the cast instead would give R2 an active (2<3) and push every
+// charged cast one round later (R3/R5 instead of R2/R4/R6).
+describe('Cobalt one charge short at turn start fires his charged skill that turn', () => {
+    const chargedRounds = (input: CombatEngineInput, actorId: string): number[] => {
+        const bus = createEventBus();
+        const rounds: number[] = [];
+        bus.on('skill-fired', (e: Extract<CombatEvent, { type: 'skill-fired' }>) => {
+            if (e.actorId === actorId && e.slot === 'charged') rounds.push(e.round);
+        });
+        runCombat({ ...input, bus });
+        return rounds;
+    };
+
+    it('PLAYER side: charged on R2/R4/R6, and the no-proc baseline fires on R4 only', () => {
+        const charge = resolveCobaltCharge(COBALT_P1);
+        const input = buildInput({ chargeCount: 3, numRounds: 6, passiveAbilities: [charge] });
+        expect(chargedRounds(input, 'attacker')).toEqual([2, 4, 6]);
+        expect(ledger(runCombat(input)).slice(0, 2)).toEqual([
+            ['active', 2],
+            ['charged', 0],
+        ]);
+        // Without the proc the bar fills by the baseline alone: 1, 2, 3 → charged on R4.
+        expect(chargedRounds(buildInput({ chargeCount: 3, numRounds: 6 }), 'attacker')).toEqual([
+            4,
+        ]);
+    });
+
+    it('ENEMY side (team symmetry): an enemy Cobalt fires on R2/R4/R6 too', () => {
+        const charge = resolveCobaltCharge(COBALT_P1);
+        const enemyCobalt: EnemyAttacker = {
+            id: 'e-cobalt',
+            stats: { attack: 1, crit: 0, critDamage: 0, speed: 40, hp: 1_000_000_000 },
+            chargeCount: 3,
+            startCharged: false,
+            shipSkills: {
+                slots: [
+                    { slot: 'active', abilities: [damage(1, 'ec-a')] },
+                    { slot: 'charged', abilities: [damage(1, 'ec-c')] },
+                    { slot: 'passive', abilities: [charge] },
+                ],
+            },
+        };
+        const input = buildInput({ chargeCount: 0, numRounds: 6, enemyAttackers: [enemyCobalt] });
+        expect(chargedRounds(input, 'e-cobalt')).toEqual([2, 4, 6]);
     });
 });

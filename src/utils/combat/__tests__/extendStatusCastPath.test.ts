@@ -110,6 +110,17 @@ function makeRuntime(
     };
 }
 
+/** The damage clause every crit-gated kit below carries, as the real Lev and Asphyxiator casts
+ *  do: a crit needs damage (owner ruling 2026-10-22), so a damage-free cast would never crit. */
+const castHit: Ability = {
+    id: 'cast-hit',
+    type: 'damage',
+    target: 'enemy',
+    trigger: 'on-cast',
+    conditions: [],
+    config: { type: 'damage', multiplier: 100 },
+};
+
 function makeEnemy(id: string, side: 'player' | 'enemy' = 'enemy'): CombatActor {
     return createActor({
         id,
@@ -373,7 +384,7 @@ const levExtendDebuff = (turns = 1): Ability => ({
 });
 
 const levSkills = (): ShipSkills => ({
-    slots: [{ slot: 'charged', abilities: [levExtendDebuff(1)] }],
+    slots: [{ slot: 'charged', abilities: [castHit, levExtendDebuff(1)] }],
 });
 
 describe('Lev — on-cast charged all-enemies debuff-extend gated on self-crit', () => {
@@ -485,7 +496,12 @@ const asphyxiatorDebuffStatus = (): TimedStatus => ({
 });
 
 const asphyxiatorSkills = (): ShipSkills => ({
-    slots: [{ slot: 'charged', abilities: [asphyxiatorDebuffAbility, asphyxiatorExtend(1)] }],
+    slots: [
+        {
+            slot: 'charged',
+            abilities: [castHit, asphyxiatorDebuffAbility, asphyxiatorExtend(1)],
+        },
+    ],
 });
 
 /** Seeds a debuff from a family the cast never touches, so a tier overwrite cannot eat it. */
@@ -631,7 +647,10 @@ function runAsphyxiatorDeferred(
         'asphyxiator',
         {
             slots: [
-                { slot: 'charged', abilities: [asphyxiatorDeferredAbility, asphyxiatorExtend(1)] },
+                {
+                    slot: 'charged',
+                    abilities: [castHit, asphyxiatorDeferredAbility, asphyxiatorExtend(1)],
+                },
             ],
         },
         { chargedCritGate: () => crit }
@@ -689,7 +708,12 @@ const asphyxiatorInfernoAbility: Ability = {
 };
 
 const asphyxiatorDoTSkills = (): ShipSkills => ({
-    slots: [{ slot: 'charged', abilities: [asphyxiatorInfernoAbility, asphyxiatorExtend(1)] }],
+    slots: [
+        {
+            slot: 'charged',
+            abilities: [castHit, asphyxiatorInfernoAbility, asphyxiatorExtend(1)],
+        },
+    ],
 });
 
 describe('Asphyxiator — the inflicted DoT is extended too', () => {

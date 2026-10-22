@@ -10,6 +10,10 @@ export const UNRELEASED_CHANGES: string[] = [
     'Gear scores: now refresh when stat priorities, set priorities or implants change.',
     'Import: stats the calculator does not recognise are now skipped cleanly.',
     'Site: faster first load and a much smaller offline download.',
+    'Combat simulator: Meatshield now gains one DoT per hit, not per Protection stack.',
+    "Combat simulator: Cobalt's start-of-turn charge now counts toward that turn's skill.",
+    'Combat simulator: skills that deal no damage no longer count as critical hits.',
+    "Healing calculator: the round chart's Crit marker now shows critical repairs.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
