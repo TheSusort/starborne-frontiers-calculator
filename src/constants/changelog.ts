@@ -9,6 +9,7 @@ export const CURRENT_VERSION = '1.81.2';
 export const UNRELEASED_CHANGES: string[] = [
     'Arcade: ducking ships now draw whole instead of clipping into the track.',
     'Ship database: skill tooltips now explain cleanse, purge, steal, charge and extra-action effects.',
+    'Combat simulator: Meatshield now gains one DoT per hit, not per Protection stack.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

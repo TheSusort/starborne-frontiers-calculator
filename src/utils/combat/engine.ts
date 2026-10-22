@@ -2175,9 +2175,26 @@ function convertHitToSelfDot(
     /** Who threw the hit being converted. Omitted/empty (an aggregate intake with no single
      *  attacker) leaves `dealtCreditId` absent, and every display reader falls back to
      *  `sourceId`. */
-    attackerId?: string
+    attackerId?: string,
+    /** Folds this conversion into the DoT an earlier conversion of the SAME hit created, instead
+     *  of adding a second DoT. `key` names the hit; `entries` remembers which DoT each key made.
+     *  Only Protection-redirected chunks pass it (owner ruling 2026-10-22: Meatshield gains ONE
+     *  DoT per direct hit on an ally, however many Protection stacks or protected allies that hit
+     *  touches, carrying the summed damage). A remembered DoT that has already ticked, or was
+     *  cleansed, starts a fresh one. */
+    coalesce?: { key: string; entries: Map<string, ActiveDoTStack> }
 ): number {
     if (rounds <= 0) return 0;
+    const sameHit = coalesce ? coalesce.entries.get(coalesce.key) : undefined;
+    if (
+        sameHit &&
+        sameHit.remainingRounds === rounds &&
+        victim.genericDoTEntries.includes(sameHit)
+    ) {
+        sameHit.perTickAmount = (sameHit.perTickAmount ?? 0) + damage / rounds;
+        sink.addIncoming(-damage, victim.id);
+        return damage;
+    }
     victim.genericDoTEntries.push({
         stacks: 1,
         tier: 0,
@@ -2199,6 +2216,9 @@ function convertHitToSelfDot(
         // ticks from counting it a second time.
         perTickPreMitigation: 0,
     });
+    if (coalesce) {
+        coalesce.entries.set(coalesce.key, victim.genericDoTEntries.at(-1) as ActiveDoTStack);
+    }
     sink.addIncoming(-damage, victim.id);
     return damage;
 }
@@ -5938,6 +5958,11 @@ export function runCombat(rawInput: CombatEngineInput): {
      * unique for the whole run.
      */
     const primaryHitsSpent = new Set<string>();
+    /** The DoT each direct hit's Protection-redirected chunks were converted into, keyed by
+     *  `protectionHitKey` — read `convertHitToSelfDot`'s `coalesce`. */
+    const protectionDotByHit = new Map<string, ActiveDoTStack>();
+    /** Names a root-less hit for `protectionHitKey` (a direct hit applied with no chain root). */
+    let rootlessProtectionHitSeq = 0;
     /** Spends `victimId`'s primary-target allowance in chain `root`; true when it was unspent. */
     const spendPrimaryHit = (victimId: string, root: string): boolean => {
         const key = `${victimId}|${root}`;
@@ -6473,6 +6498,11 @@ export function runCombat(rawInput: CombatEngineInput): {
                  *  chunk. The transfer block skips when set → a redirected chunk's own
                  *  cascade was already precomputed, so it never re-triggers (loop-safe). */
                 isProtectionTransfer?: boolean;
+                /** Set with `isProtectionTransfer`: names the direct hit this chunk was cut from
+                 *  — the cast sub-attack (or reaction chain) root plus the attacker — so every
+                 *  chunk of one hit converts into ONE protector DoT (`convertHitToSelfDot`'s
+                 *  `coalesce`), however many Protection stacks or covered allies it spans. */
+                protectionHitKey?: string;
                 /** The victim-side factors the CALLER already folded into `rawDamage` for this
                  *  victim (defence and incoming composition) and the hit's crit outcome. Read ONLY
                  *  by the Protection transfer block, which divides by exactly these factors and
@@ -6741,12 +6771,18 @@ export function runCombat(rawInput: CombatEngineInput): {
                     );
                     protectionSplit = cascade.targetRetainedFraction < 1;
                     fullyRedirected = cascade.targetRetainedFraction <= 0;
+                    // One direct hit = one key: an area cast's covered victims share their
+                    // sub-attack's root, so their chunks land on the same key too.
+                    const protectionHitKey = `${
+                        hitRootInScope() ?? `rootless:${++rootlessProtectionHitSeq}`
+                    }|${cause.killerId ?? ''}`;
                     // Redirect each protector's chunk BEFORE the victim's own HP is touched.
                     protectors.forEach((p, i) => {
                         const chunk = cascade.chunks[i];
                         if (!chunk || chunk.total <= 0) return;
-                        // Apply as `stacks` equal sub-hits (matches the in-game per-stack procs and
-                        // sets up the deferred DoT-transform, which acts per redirected chunk).
+                        // Apply as `stacks` equal sub-hits (matches the in-game per-stack procs).
+                        // A protector that converts its share into a DoT still gains ONE DoT for
+                        // the whole hit — `protectionHitKey` coalesces the sub-hits.
                         // `sink` serves both sides (ids are globally unique), so no
                         // per-side selection is needed here.
                         //
@@ -6766,6 +6802,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 killerId: cause.killerId,
                                 byDirectDamage: true,
                                 isProtectionTransfer: true,
+                                protectionHitKey,
                                 // The protector is not directly damaged by its share (R139), so
                                 // the chunk is no primary-target hit on it and never reflects.
                                 isPrimaryTarget: false,
@@ -6979,7 +7016,13 @@ export function runCombat(rawInput: CombatEngineInput): {
                             damage,
                             transform.config.turns,
                             statusEngine.nextAppliedSeq,
-                            attackerId
+                            attackerId,
+                            cause?.isProtectionTransfer && cause.protectionHitKey
+                                ? {
+                                      key: `${cause.protectionHitKey}|${victim.id}`,
+                                      entries: protectionDotByHit,
+                                  }
+                                : undefined
                         );
                         // Only zero `damage` on a REAL conversion (see convertHitToSelfDot's
                         // CALLER CONTRACT). `turns` is parser-derived; `detectTransformToDot`
