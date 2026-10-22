@@ -520,7 +520,6 @@ export interface CombatActor {
     currentHp: number;
     /** Absorption pool (healing mode): additive, capped at max HP, drains before HP. */
     shieldPool: number;
-    turnMeter: number;
     /** Banked charges toward this actor's charged skill (attacker + team). */
     charges: number;
     /** Charges required to fire this actor's charged skill; 0 = no charged skill. */
@@ -616,7 +615,6 @@ export function createActor(
         // already post-leader (the pre-fight stat pass mutated plan stats before actor
         // construction). Absent preFight → 0.
         shieldPool: partial.stats.hp * ((partial.preFight?.startingShieldPctOfHp ?? 0) / 100),
-        turnMeter: 0,
         charges: startCharged ? chargeCount : 0,
         chargeCount,
         corrosionEntries: [],
@@ -652,44 +650,9 @@ export function recordDestroyed(
     bus.emit({ type: 'ship-destroyed', actorId: actor.id, round, killerId, byDirectDamage });
 }
 
-/** Turn meter an actor must reach to act (docs/combat-system.md section 1). */
-export const TURN_METER_THRESHOLD = 1000;
-
-/** Safety cap on selection iterations — converts a non-terminating selection into a
- *  debuggable error. Used both by `selectNextActor` (all-zero-speed hang) and by the
- *  engine round loop's `selectNextBySpeed` pool drain (runaway pending actions). */
+/** Safety cap on the engine round loop's `selectNextBySpeed` pool drain — converts a runaway
+ *  pending-action loop into a debuggable error rather than an infinite loop. */
 export const MAX_SELECTION_TICKS = 10000;
-
-/**
- * Turn-meter selection per docs/combat-system.md section 1: tick every actor's
- * meter by its speed until someone reaches TURN_METER_THRESHOLD; highest meter
- * acts. With a single speed > 0 actor it degenerates to "that actor acts every round".
- *
- * Callers must include at least one actor with speed > 0; otherwise no actor's
- * meter ever advances. The MAX_SELECTION_TICKS cap converts that all-zero-speed
- * hang into a debuggable error rather than an infinite loop.
- *
- * Reserved for future turn-meter manipulation phases; the engine round loop uses
- * `selectNextBySpeed` (order-only, dynamic effective speed) instead.
- */
-export function selectNextActor(actors: CombatActor[]): CombatActor {
-    if (actors.length === 0) {
-        throw new Error('selectNextActor: actors must not be empty');
-    }
-    const eligible = () => actors.filter((a) => a.turnMeter >= TURN_METER_THRESHOLD);
-    let ticks = 0;
-    while (eligible().length === 0) {
-        if (++ticks > MAX_SELECTION_TICKS) {
-            throw new Error(
-                `selectNextActor: no actor reached the turn meter after ${MAX_SELECTION_TICKS} ticks — ` +
-                    'at least one actor must have speed > 0.'
-            );
-        }
-        // eslint-disable-next-line no-restricted-syntax -- not the engine's turn order: the engine orders turns with selectNextBySpeed over live speed
-        for (const a of actors) a.turnMeter += a.stats.speed;
-    }
-    return eligible().reduce((best, a) => (a.turnMeter > best.turnMeter ? a : best));
-}
 
 /**
  * Turn order: each game round every living actor acts exactly once,
