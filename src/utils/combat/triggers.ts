@@ -5072,8 +5072,9 @@ function makeReactiveStampingBus(bus: CombatEventBus, duringTurnOf?: string): Co
     };
 }
 
-/** What a reactive damage hit reports back: the hit as thrown, and — when a Protection cascade
- *  split it — what its victim took. */
+/** What a reactive damage hit reports back: the hit as thrown (`dealt`) and what its victim took
+ *  (`taken` — after its incoming-block proc and any Protection split). The log row reads `taken`
+ *  when present. */
 export interface ReactiveHitOutcome {
     dealt: number;
     didCrit: boolean;
@@ -5100,11 +5101,7 @@ function emitReactiveDamageLog(
             sourceId: ownerId,
             targetId: victimId,
             round: ctx.round,
-            amount: outcome.convertedToDot
-                ? 0
-                : outcome.protectionSplit
-                  ? (outcome.taken ?? outcome.dealt)
-                  : outcome.dealt,
+            amount: outcome.convertedToDot ? 0 : (outcome.taken ?? outcome.dealt),
             didCrit: outcome.didCrit,
             ...(outcome.convertedToDot ? { convertedToDot: true as const } : {}),
         });

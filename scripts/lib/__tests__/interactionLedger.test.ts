@@ -163,6 +163,7 @@ describe('interactionLedger', () => {
             for (const spot of LEDGER_BLIND_SPOTS) expect(markdown).toContain(spot);
             expect(LEDGER_BLIND_SPOTS.join(' ')).toMatch(/OWN HP/);
             expect(LEDGER_BLIND_SPOTS.join(' ')).toMatch(/wipes a side/);
+            expect(LEDGER_BLIND_SPOTS.join(' ')).toMatch(/SUBJECT_HP_SCALE/);
         });
     });
 });

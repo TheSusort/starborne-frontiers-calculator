@@ -1,5 +1,11 @@
 import type { Ship } from '../../../types/ship';
-import type { Ability, AbilityConfig, AbilityType, Skill } from '../../../types/abilities';
+import type {
+    Ability,
+    AbilityConfig,
+    AbilityTarget,
+    AbilityType,
+    Skill,
+} from '../../../types/abilities';
 import { LIVE_TRIGGERS } from '../../../types/abilities';
 import { buildShipAbilities } from '../../abilities/buildShipAbilities';
 import { PERSISTENT_STACKING_BUFFS } from '../../../constants/persistentStackingBuffs';
@@ -81,6 +87,24 @@ function ignoresStealthPerCast(ability: Ability): boolean {
 function isLeaderAuraSkill(skill: Skill): boolean {
     if (skill.slot !== 'passive') return false;
     return skill.abilities.some((a) => a.type === 'modifier' && a.target === 'all-allies');
+}
+
+const ALLY_REACHING_TARGETS = new Set<AbilityTarget>([
+    'ally',
+    'all-allies',
+    'adjacent-allies',
+    'lowest-hp-ally',
+]);
+
+/** True when any of the ship's abilities, in any slot and under any trigger, is aimed at an ally
+ *  other than the caster itself: a buff, repair, shield, charge or cleanse that changes what the
+ *  ships beside it experience. Read from the parsed kit's own `target`, so it follows the parser
+ *  rather than a name list. A baseline filler with this property is not inert for the ally it
+ *  stands beside. */
+export function reachesAllies(ship: Ship): boolean {
+    return buildShipAbilities(ship).slots.some((skill) =>
+        skill.abilities.some((a) => ALLY_REACHING_TARGETS.has(a.target))
+    );
 }
 
 export function tagShip(ship: Ship): Set<InteractionClass> {
