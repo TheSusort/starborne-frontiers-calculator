@@ -48,6 +48,7 @@
         "audit:skills": "tsx scripts/auditSkills.ts",
         "trace:ship": "tsx scripts/traceShip.ts",
         "audit:kit-ledger": "tsx scripts/writeKitLedger.ts",
+        "audit:catalogue-stats": "tsx scripts/auditCatalogueStats.ts",
         "audit:interactions": "tsx scripts/auditInteractions.ts",
         "audit:placement-symmetry": "tsx scripts/auditPlacementSymmetry.ts",
         "audit:gated-buffs": "tsx scripts/auditGatedBuffs.ts",
