@@ -375,4 +375,11 @@ describe.skipIf(!haveCorpus)('runCalibration', () => {
         expect(r.detail).toContain('+steal');
         expect([...EXCLUDED_KINDS]).toEqual(before);
     });
+
+    it('fails when no inert placement was comparable, instead of passing on a 0% rate', () => {
+        const r = runCalibration(corpus(), 1, 0);
+        expect(r.comparablePlacements).toBe(0);
+        expect(r.passed).toBe(false);
+        expect(r.detail).toContain('measured nothing');
+    });
 });

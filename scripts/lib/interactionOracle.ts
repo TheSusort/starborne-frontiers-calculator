@@ -264,6 +264,15 @@ export function runCalibration(
         return fail(invariantFailures.join(' | '), comparablePlacements, placementsChecked);
     }
 
+    // A gate that compared nothing has measured nothing; a 0% rate over zero placements is not a pass.
+    if (comparablePlacements === 0) {
+        return fail(
+            `no comparable inert placements (0/${placementsChecked} checked), so the gate measured nothing`,
+            comparablePlacements,
+            placementsChecked
+        );
+    }
+
     const verdict = calibrationVerdict(rawDiffs, comparablePlacements, tolerance);
     const residualSummary =
         `${verdict.residual.length}/${comparablePlacements} inert placement(s) left a residual ` +
