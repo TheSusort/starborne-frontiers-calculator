@@ -271,14 +271,24 @@ describe('checkInvariants — the wiping turn ends the fight', () => {
 
 describe('checkInvariants vs checkOpenInvariants', () => {
     it('reports each open invariant only through checkOpenInvariants', () => {
-        const result = logResult([
-            round(1, [killB(), turn('C', [entry('attack', 'C', ['B'])]), turn('D', [])], [], []),
-            round(2, [], [entry('buff', 'B', ['B'])]),
-        ]);
+        const killD = (): CombatLogTurn =>
+            turn('C', [entry('death', 'D', ['C'], [entry('attack', 'C', ['D'])])]);
+        const result = logResult([round(1, [killB(), killD()], [], [entry('buff', 'C', ['C'])])]);
         const open = checkOpenInvariants(result).map((v) => v.invariant);
-        expect(open).toContain('corpse-hostile-target');
-        expect(open).toContain('corpse-acts');
+        expect(open).toEqual(['entry-after-wipe']);
         expect(open.every((id) => OPEN_INVARIANTS.has(id))).toBe(true);
         expect(checkInvariants(result).filter((v) => OPEN_INVARIANTS.has(v.invariant))).toEqual([]);
+    });
+
+    it('gates the corpse invariants: checkInvariants reports them', () => {
+        const result = logResult([
+            round(1, [killB(), turn('C', [entry('attack', 'C', ['B'])]), turn('D', [])], [], []),
+            round(2, [], [entry('buff', 'B', ['B']), entry('heal', 'C', ['B'])]),
+        ]);
+        const gated = checkInvariants(result).map((v) => v.invariant);
+        expect(gated).toContain('corpse-hostile-target');
+        expect(gated).toContain('corpse-acts');
+        expect(gated).toContain('corpse-ally-grant');
+        expect(checkOpenInvariants(result)).toEqual([]);
     });
 });

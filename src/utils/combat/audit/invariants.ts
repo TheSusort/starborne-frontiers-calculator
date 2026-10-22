@@ -357,16 +357,11 @@ function logWalk(result: BattleResult): InvariantViolation[] {
     return out;
 }
 
-/** The log-walk invariants that fire on the current real corpus. Each is an open finding awaiting
- *  an engine fix or an owner ruling, not an accepted behaviour, so they are reported by
- *  `checkOpenInvariants` and kept out of `checkInvariants`. Move an id out of this set once the
- *  corpus holds it. */
-export const OPEN_INVARIANTS: ReadonlySet<string> = new Set([
-    'corpse-hostile-target',
-    'corpse-ally-grant',
-    'corpse-acts',
-    'entry-after-wipe',
-]);
+/** The log-walk invariants the real corpus does not hold, reported by `checkOpenInvariants` and
+ *  kept out of `checkInvariants`. `entry-after-wipe` fires by design: the round-tail drain still
+ *  resolves after a wiping turn (#329), so Chimei's end-of-round Stealth logs after a wipe. Move an
+ *  id out of this set once the corpus holds it. */
+export const OPEN_INVARIANTS: ReadonlySet<string> = new Set(['entry-after-wipe']);
 
 export interface InvariantOptions {
     /** Actors allowed more than one turn per round — see `extraActionActorIds`. Default: none, so
