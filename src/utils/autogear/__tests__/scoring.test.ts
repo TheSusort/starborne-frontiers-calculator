@@ -476,10 +476,9 @@ describe('roleBasisKeyPart — malformed roleBasis behaves as no basis', () => {
 });
 
 describe('calculateTotalScore cache — inputs outside the key', () => {
-    // The cache key describes the ship id, equipment ids, implant ids (memoised per ship id),
-    // role, stat bonuses, arena modifiers, fleet buffs and formula. Anything else reaches the
-    // cache only through `clearScoreCache()`, which the genetic strategy and the Autogear page
-    // call before a run; ship-view callers (`analyzeStatDistribution`, the leaderboard) do not.
+    // The cache key describes the ship id, equipment ids, implant loadout, priorities, set
+    // priorities, role, stat bonuses, arena modifiers, fleet buffs and formula. A gear piece's
+    // own stats are not in it: callers that can see an edited piece clear the cache first.
     const weapon: GearPiece = {
         id: 'w-key',
         slot: 'weapon',
