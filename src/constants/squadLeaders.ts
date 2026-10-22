@@ -59,6 +59,7 @@ export type SquadLeaderModifierChannel =
     | 'outgoingDamage' // dealt damage; + = deals more
     | 'incomingDamage' // taken damage; on enemies + = they take more, on allies - = they take less
     | 'outgoingCritDamage' // crit damage dealt; + = bigger crits
+    | 'outgoingCritDamageInStealth' // crit damage dealt while the unit holds Stealth
     | 'incomingCritDamage' // crit damage taken; on enemies - = they take smaller crits
     | 'outgoingRepair' // healing/repair output; on enemies - = reduced enemy repair output
     | 'outgoingHeal' // alias of outgoingRepair (game term is "Repair"); kept for compatibility
@@ -1334,9 +1335,8 @@ export const SQUAD_LEADERS: Record<FactionName, SquadLeader[]> = {
                     {
                         kind: 'modifier',
                         target: 'all-allies',
-                        channel: 'outgoingCritDamage',
+                        channel: 'outgoingCritDamageInStealth',
                         value: 10,
-                        condition: { text: 'while in Stealth' },
                         text: '+10% outgoing crit damage while in Stealth.',
                     },
                 ],
@@ -1370,9 +1370,8 @@ export const SQUAD_LEADERS: Record<FactionName, SquadLeader[]> = {
                     {
                         kind: 'modifier',
                         target: 'all-allies',
-                        channel: 'outgoingCritDamage',
+                        channel: 'outgoingCritDamageInStealth',
                         value: 15,
-                        condition: { text: 'while in Stealth' },
                         text: '+15% outgoing crit damage while in Stealth.',
                     },
                 ],

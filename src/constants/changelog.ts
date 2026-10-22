@@ -18,6 +18,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Squad leaders: Gelecek Medusa and Cerberus now repair after inflicting a debuff.',
     'Squad leaders: Legion per-ally attack bonus now counts living allies, dropping as they die.',
     'Squad leaders: Binderburg Pollinator and Swarmcaller now grant security from defence in fights.',
+    'Squad leaders: Tianchao Cipher and Serpent now boost crit damage while Stealthed.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

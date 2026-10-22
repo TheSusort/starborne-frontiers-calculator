@@ -55,6 +55,9 @@ export interface PreFightCombatModifiers {
     attackPctPerOtherFactionAlly: number;
     outgoingDamage: number;
     outgoingCritDamage: number;
+    /** `outgoingCritDamage` that applies only while the unit holds Stealth ("+10% outgoing crit
+     *  damage while in Stealth"), read live at each hit. */
+    outgoingCritDamageInStealth: number;
     incomingDamage: number;
     incomingCritDamage: number;
     outgoingHeal: number;
@@ -69,6 +72,7 @@ export function emptyPreFightModifiers(): PreFightCombatModifiers {
         attackPctPerOtherFactionAlly: 0,
         outgoingDamage: 0,
         outgoingCritDamage: 0,
+        outgoingCritDamageInStealth: 0,
         incomingDamage: 0,
         incomingCritDamage: 0,
         outgoingHeal: 0,

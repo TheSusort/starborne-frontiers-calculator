@@ -1446,6 +1446,60 @@ const LEADER_ROWS: LeaderRow[] = [
                 (firstTurnStats(w, 'W')?.security ?? 0) - (firstTurnStats(c, 'W')?.security ?? 0)
             ).toBeCloseTo(132, 6),
     },
+    {
+        // "+10% outgoing crit damage while in Stealth": a Tianchao ship that starts the fight
+        // Stealthed (Cloaking) crits 10% harder.
+        line: 'Tianchao Cipher III: +10% crit damage while in Stealth',
+        ...stagePair(
+            solo(
+                {
+                    faction: 'TIANCHAO',
+                    stats: { crit: 100, critDamage: 50 },
+                    set: { name: 'CLOAKING', pieces: 2 },
+                },
+                IDLE
+            ),
+            'TIANCHAO',
+            'Cipher',
+            3,
+            2
+        ),
+        check: (w, c) => {
+            expect(buffCount('Stealth', 'W')(w)).toBe(1);
+            expect(firstHit('W', 'O')(w) / firstHit('W', 'O')(c)).toBeCloseTo(1.1, 6);
+        },
+    },
+    {
+        // Without Stealth the line does nothing.
+        line: 'Tianchao Cipher III: no bonus outside Stealth',
+        ...stagePair(
+            solo({ faction: 'TIANCHAO', stats: { crit: 100, critDamage: 50 } }, IDLE),
+            'TIANCHAO',
+            'Cipher',
+            3,
+            2
+        ),
+        check: scales(firstHit('W', 'O'), 1, 6),
+    },
+    {
+        // Serpent II: +15%.
+        line: 'Tianchao Serpent II: +15% crit damage while in Stealth',
+        ...stagePair(
+            solo(
+                {
+                    faction: 'TIANCHAO',
+                    stats: { crit: 100, critDamage: 50 },
+                    set: { name: 'CLOAKING', pieces: 2 },
+                },
+                IDLE
+            ),
+            'TIANCHAO',
+            'Serpent',
+            2,
+            1
+        ),
+        check: scales(firstHit('W', 'O'), 1.15, 6),
+    },
 ];
 
 describe('non-kit census: squad leaders', () => {

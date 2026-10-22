@@ -535,6 +535,7 @@ const enemyGatedBreaker = (startingShieldPctOfHp: number, hits: number): EnemyAt
         outgoingDamage: 0,
         incomingDamage: 0,
         outgoingCritDamage: 0,
+        outgoingCritDamageInStealth: 0,
         incomingCritDamage: 0,
         outgoingHeal: 0,
         incomingHeal: 0,
