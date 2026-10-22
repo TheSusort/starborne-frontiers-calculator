@@ -33,9 +33,13 @@ export default defineConfig({
                 importScripts: ['sw-redirect.js'],
                 // Exclude the imported script from precaching (it has no content hash), and the
                 // arcade's three.js and ship-model chunks, which only arcade players download.
+                // The prerendered route pages (`<route>/index.html`) are excluded too: the
+                // NavigationRoute answers every SW-controlled navigation with the root
+                // `index.html`, so they would only ever be downloaded, never served.
                 globIgnores: [
                     '**/node_modules/**/*',
                     'sw-redirect.js',
+                    '**/*/index.html',
                     `**/${THREE_CHUNK}-*.js`,
                     '**/{shipSprites,shipModelLoader,shipLighting,ShipModelView}-*.js',
                 ],

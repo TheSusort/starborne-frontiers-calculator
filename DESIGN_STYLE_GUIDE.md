@@ -42,7 +42,7 @@ rarityText-uncommon/rare/epic/legendary: rgb(229 231 235)
 
 ### Background Images
 
-- Sidebar/header: `bg-[url('/images/Deep_crevasse_01.png')] bg-cover bg-right`
+- Sidebar/header: `bg-[url('/images/Deep_crevasse_01.webp')] bg-cover bg-right`
 
 ## Typography
 
