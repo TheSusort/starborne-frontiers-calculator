@@ -213,9 +213,16 @@ const formatters: Record<
         return amount !== undefined ? `${head} ${fmt(amount)}` : head;
     },
     control: noteLine,
-    // A reactive cleanse carries the cleansed ally as a target → "AEGIS → Ally: cleansed N";
-    // a cast-time cleanse has no target → collapses to "AEGIS: cleansed N" (unchanged).
-    cleanse: sourceTargetNoteLine,
+    // A cleanse row carries every recipient that lost a debuff → "AEGIS → Ally, Ally2: cleansed N";
+    // a self-cleanse collapses to "AEGIS: cleansed N".
+    cleanse: (entry, ctx) => {
+        const src = ctx.nameOf(entry.actorId);
+        const label = entry.note ?? '';
+        const others = entry.targets.filter((t) => t.targetId !== entry.actorId);
+        if (others.length === 0) return label ? `${src}: ${label}` : src;
+        const tgts = entry.targets.map((t) => ctx.nameOf(t.targetId)).join(', ');
+        return label ? `${src} → ${tgts}: ${label}` : `${src} → ${tgts}`;
+    },
     purge: noteLine,
     // "{thief} → {source}: stole Protection" — the source→target shape, because unlike a purge a
     // steal has a destination that matters.

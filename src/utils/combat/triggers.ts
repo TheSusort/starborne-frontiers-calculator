@@ -71,7 +71,13 @@ import {
 } from './bombCountdown';
 import { liveGateConditions } from './abilityStatusGating';
 import { leaderScaledAttack } from './preFight/types';
-import { CombatEvent, CombatEventBus, CombatEventType, ShieldApplyAccumulator } from './events';
+import {
+    CombatEvent,
+    CombatEventBus,
+    CombatEventType,
+    ShieldApplyAccumulator,
+    type StatusDuration,
+} from './events';
 import {
     CombatActor,
     ActiveDoTStack,
@@ -3732,6 +3738,35 @@ export function selfBuffNamesForOwners(statusEngine: StatusEngine, ownerIds: str
         }
     }
     return [...names];
+}
+
+/** The remaining turns of every timed status `actorId` holds: its self-buff store and its
+ *  per-victim debuff store, both scheduled and ability-sourced entries (`snapshot` plus
+ *  `timedAbilityStatuses`, which together cover each timed map). Only finite numeric windows are
+ *  reported — the `'recurring'` and `'permanent'` sentinels and a hit-counted status's Infinity
+ *  have no countdown. A pure read. */
+export function timedStatusDurations(
+    statusEngine: StatusEngine,
+    actorId: string
+): { buffs: StatusDuration[]; debuffs: StatusDuration[] } {
+    const finite = (rows: ActiveBuff[]): StatusDuration[] =>
+        rows.flatMap((ab) =>
+            typeof ab.turnsRemaining === 'number' && Number.isFinite(ab.turnsRemaining)
+                ? [{ buffName: ab.buffName, turnsRemaining: ab.turnsRemaining }]
+                : []
+        );
+    const self = statusEngine.snapshot(actorId);
+    const enemy = statusEngine.snapshot(undefined, actorId);
+    return {
+        buffs: finite([
+            ...self.activeSelfBuffs,
+            ...statusEngine.timedAbilityStatuses('self', actorId).map((s) => s.active),
+        ]),
+        debuffs: finite([
+            ...enemy.activeEnemyDebuffs,
+            ...statusEngine.timedAbilityStatuses('enemy', undefined, actorId).map((s) => s.active),
+        ]),
+    };
 }
 
 /** Count of DISTINCT owners (out of the given owner ids) currently

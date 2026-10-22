@@ -2,6 +2,9 @@ import type { Ship } from '../../../types/ship';
 import type { BattleResult, BattleSimulationInput } from '../../calculators/battleSimulator';
 import { buildShipAbilities } from '../../abilities/buildShipAbilities';
 import { deriveFamilyKey, stacksIndependently } from '../statusEngine';
+import { isPersistentByName } from '../../../constants/oneShotPersistentBuffs';
+import { NON_DEFENCE_REDUCTION_CAP_PCT } from '../../damageComposition';
+import type { StatusDuration } from '../events';
 import type { CombatLogEntry, CombatLogEntryKind } from '../log/types';
 import type { InvariantViolation } from './types';
 
@@ -357,6 +360,226 @@ function logWalk(result: BattleResult): InvariantViolation[] {
     return out;
 }
 
+type StatusKind = 'buff' | 'debuff';
+
+/** Which status kinds a ship's own kit can extend: the `statusKind` of each `extend-status`
+ *  ability (Ripper, Fuying: buffs; Lev, Asphyxiator: debuffs). An extension adds turns to a held
+ *  status and logs no row, so it is the one duration rise no apply row explains. */
+export function shipDurationExtensionKinds(ship: Ship): Set<StatusKind> {
+    const kinds = new Set<StatusKind>();
+    for (const slot of buildShipAbilities(ship).slots) {
+        for (const a of slot.abilities) {
+            if (a.config.type === 'extend-status') kinds.add(a.config.statusKind);
+        }
+    }
+    return kinds;
+}
+
+/** Per roster actor, the status kinds its kit can extend (`shipDurationExtensionKinds`); actors
+ *  with none are absent. `result.roster` lists `input.playerTeam` then `input.enemyTeam`. */
+export function durationExtenderKinds(
+    input: BattleSimulationInput,
+    result: BattleResult,
+    extensionKinds: (ship: Ship) => ReadonlySet<StatusKind> = shipDurationExtensionKinds
+): Map<string, ReadonlySet<StatusKind>> {
+    const ships = [...input.playerTeam, ...input.enemyTeam].map((p) => p.ship);
+    const out = new Map<string, ReadonlySet<StatusKind>>();
+    result.roster.forEach((entry, i) => {
+        const kinds = ships[i] ? extensionKinds(ships[i]) : new Set<StatusKind>();
+        if (kinds.size > 0) out.set(entry.actorId, kinds);
+    });
+    return out;
+}
+
+/** A status the duration checks follow one entry of: not an independently stacking family
+ *  (`stacksIndependently` — several copies share a name) and not a persistent stacking status
+ *  (`isPersistentByName` — it has no duration). */
+const tracksOneDuration = (name: string): boolean =>
+    !stacksIndependently(name) && !isPersistentByName(name);
+
+/** The names a `steal` row moved, read back from its `stole A, B x2` note. */
+function stolenNames(note: string | undefined): string[] {
+    if (!note?.startsWith('stole ')) return [];
+    return note
+        .slice('stole '.length)
+        .split(', ')
+        .map((part) => part.replace(/ x\d+$/, ''));
+}
+
+/** What one round's combat log says about statuses changing hands, keyed for lookup. */
+interface RoundStatusRows {
+    /** `${kind}|${holderId}|${name}` for each buff/debuff application row. */
+    applied: Set<string>;
+    /** Names any steal row moved this round. A steal row targets the SOURCE, so its recipients
+     *  are not named. */
+    stolen: Set<string>;
+    /** Holders a cleanse, purge or steal row reached this round, and every ship that cheated
+     *  death (Cheat Death clears its removable statuses, `lethalHp.ts`). */
+    removalTouched: Set<string>;
+    /** `${holderId}|${name}` for each `buff-expired` row. */
+    expired: Set<string>;
+    /** Turns each actor took this round: one Post-Turn countdown each. */
+    turns: Map<string, number>;
+}
+
+function roundStatusRows(result: BattleResult): Map<number, RoundStatusRows> {
+    const byRound = new Map<number, RoundStatusRows>();
+    for (const lr of result.combatLog) {
+        const rows: RoundStatusRows = {
+            applied: new Set(),
+            stolen: new Set(),
+            removalTouched: new Set(),
+            expired: new Set(),
+            turns: new Map(),
+        };
+        for (const t of lr.turns) rows.turns.set(t.actorId, (rows.turns.get(t.actorId) ?? 0) + 1);
+        const entries = flatten([
+            ...lr.startOfRound,
+            ...lr.turns.flatMap((t) => t.entries),
+            ...lr.endOfRound,
+        ]);
+        for (const e of entries) {
+            if ((e.kind === 'buff' || e.kind === 'debuff') && e.note !== undefined) {
+                for (const t of e.targets) rows.applied.add(`${e.kind}|${t.targetId}|${e.note}`);
+            } else if (e.kind === 'steal') {
+                for (const name of stolenNames(e.note)) rows.stolen.add(name);
+                for (const t of e.targets) rows.removalTouched.add(t.targetId);
+            } else if (e.kind === 'cleanse' || e.kind === 'purge' || e.kind === 'cheat-death') {
+                for (const t of e.targets) rows.removalTouched.add(t.targetId);
+            } else if (e.kind === 'buff-expired' && e.note?.endsWith(' expired')) {
+                rows.expired.add(`${e.actorId}|${e.note.slice(0, -' expired'.length)}`);
+            }
+        }
+        byRound.set(lr.round, rows);
+    }
+    return byRound;
+}
+
+/** The longest remaining window per name on one snapshot list, for the names `tracksOneDuration`
+ *  follows. */
+function durationsByName(rows: readonly StatusDuration[]): Map<string, number> {
+    const out = new Map<string, number>();
+    for (const r of rows) {
+        if (!tracksOneDuration(r.buffName)) continue;
+        out.set(r.buffName, Math.max(out.get(r.buffName) ?? -Infinity, r.turnsRemaining));
+    }
+    return out;
+}
+
+type DurationSnapshot = NonNullable<BattleResult['audit']>['statusDurations'][number];
+
+/**
+ * The duration invariants, over `result.audit.statusDurations` (absent → nothing checked).
+ * Consecutive end-of-round snapshots of one holder are compared, with the combat log of the
+ * later round as the account of what happened in between.
+ *
+ *  - `status-duration-rises`: a status's remaining turns only count down. A rise needs an
+ *    application row of that exact name onto that holder in the round (a re-application or
+ *    refresh replaces the held copy), a steal row that moved that name, or — the one rise with
+ *    no row — a duration extension: buff rises on a side fielding a buff extender, debuff rises
+ *    on the side opposing a debuff extender (`durationExtenderKinds`).
+ *  - `status-tier-drop`: highest tier wins, so a family's held tier falls only once the higher
+ *    copy is gone — its window ran out (no more turns left than the holder's Post-Turns this
+ *    round), a `buff-expired` row named it, a cleanse, purge or steal row reached the holder, or
+ *    the holder cheated death.
+ */
+function statusDurations(
+    result: BattleResult,
+    extenders: ReadonlyMap<string, ReadonlySet<StatusKind>>
+): InvariantViolation[] {
+    const audit = result.audit;
+    if (!audit) return [];
+    const out: InvariantViolation[] = [];
+    const sideOf = new Map(result.roster.map((r) => [r.actorId, r.side]));
+    const nameOf = new Map(result.roster.map((r) => [r.actorId, r.name]));
+    const buffExtendedSides = new Set<string>();
+    const debuffExtendedSides = new Set<string>();
+    for (const [actorId, kinds] of extenders) {
+        const side = sideOf.get(actorId);
+        if (side === undefined) continue;
+        if (kinds.has('buff')) buffExtendedSides.add(side);
+        if (kinds.has('debuff')) debuffExtendedSides.add(side === 'player' ? 'enemy' : 'player');
+    }
+    const rowsByRound = roundStatusRows(result);
+    const previous = new Map<string, DurationSnapshot>();
+    for (const snap of audit.statusDurations) {
+        const prev = previous.get(snap.actorId);
+        previous.set(snap.actorId, snap);
+        if (!prev || prev.round !== snap.round - 1) continue;
+        const rows = rowsByRound.get(snap.round);
+        const holder = snap.actorId;
+        const label = `${nameOf.get(holder) ?? holder} (${holder})`;
+        const side = sideOf.get(holder);
+        for (const kind of ['buff', 'debuff'] as const) {
+            const before = durationsByName(kind === 'buff' ? prev.buffs : prev.debuffs);
+            const after = durationsByName(kind === 'buff' ? snap.buffs : snap.debuffs);
+            const extended =
+                side !== undefined &&
+                (kind === 'buff' ? buffExtendedSides : debuffExtendedSides).has(side);
+            for (const [name, turns] of after) {
+                const was = before.get(name);
+                if (was === undefined || turns <= was) continue;
+                if (rows?.applied.has(`${kind}|${holder}|${name}`)) continue;
+                if (kind === 'buff' && rows?.stolen.has(name)) continue;
+                if (extended) continue;
+                out.push({
+                    invariant: 'status-duration-rises',
+                    round: snap.round,
+                    actorId: holder,
+                    detail: `${kind} ${name} on ${label} rose from ${was} to ${turns} turns with no application row`,
+                });
+            }
+            const familiesBefore = new Map<string, { name: string; tier: number; turns: number }>();
+            for (const [name, turns] of before) {
+                const { familyKey, tier } = deriveFamilyKey(name);
+                familiesBefore.set(familyKey, { name, tier, turns });
+            }
+            for (const name of after.keys()) {
+                const { familyKey, tier } = deriveFamilyKey(name);
+                const held = familiesBefore.get(familyKey);
+                if (!held || tier >= held.tier) continue;
+                if (held.turns <= (rows?.turns.get(holder) ?? 0)) continue;
+                if (rows?.expired.has(`${holder}|${held.name}`)) continue;
+                if (rows?.removalTouched.has(holder)) continue;
+                out.push({
+                    invariant: 'status-tier-drop',
+                    round: snap.round,
+                    actorId: holder,
+                    detail: `${kind} ${held.name} (${held.turns} turns left) on ${label} became ${name} with no expiry or removal`,
+                });
+            }
+        }
+    }
+    return out;
+}
+
+/** Slack on the cap comparison, for the float products the factor is composed of. */
+const CAP_EPSILON = 1e-9;
+
+/**
+ * Non-defence damage reduction is capped at 70%: every direct hit's composed incoming factor
+ * (`result.audit.hitIncomingFactors`, absent → nothing checked) is at least 0.30. The factor
+ * includes a partial incoming block (Ironclad), which composes inside the cap. A full block
+ * (Shadowguard) zeroes the hit outside the cap and leaves the factor as composed, so it is held
+ * to the same floor.
+ */
+function incomingReductionCap(result: BattleResult): InvariantViolation[] {
+    const audit = result.audit;
+    if (!audit) return [];
+    const floor = 1 - NON_DEFENCE_REDUCTION_CAP_PCT / 100;
+    const out: InvariantViolation[] = [];
+    for (const h of audit.hitIncomingFactors) {
+        if (h.factor >= floor - CAP_EPSILON) continue;
+        out.push({
+            invariant: 'incoming-reduction-cap',
+            round: h.round,
+            actorId: h.victimId,
+            detail: `hit by ${h.attackerId ?? 'unknown'} on ${h.victimId} priced at incoming factor ${h.factor} (block: ${h.block}), below the ${floor} floor`,
+        });
+    }
+    return out;
+}
+
 /** The log-walk invariants the real corpus does not hold, reported by `checkOpenInvariants` and
  *  kept out of `checkInvariants`. `entry-after-wipe` fires by design: the round-tail drain still
  *  resolves after a wiping turn (#329), so Chimei's end-of-round Stealth logs after a wipe. Move an
@@ -367,6 +590,9 @@ export interface InvariantOptions {
     /** Actors allowed more than one turn per round — see `extraActionActorIds`. Default: none, so
      *  a caller fielding a ship with an extra-action kit must pass it. */
     extraActionActorIds?: ReadonlySet<string>;
+    /** Actors whose kit can extend a status duration — see `durationExtenderKinds`. Default:
+     *  none, so a caller fielding a ship with an extension kit must pass it. */
+    durationExtenders?: ReadonlyMap<string, ReadonlySet<StatusKind>>;
 }
 
 /** The invariants the real corpus holds — a violation here is a regression. */
@@ -381,6 +607,8 @@ export function checkInvariants(
         ...singleTierFamily(result),
         ...shieldNonNegative(result),
         ...noExtraTurns(result, options.extraActionActorIds ?? new Set()),
+        ...statusDurations(result, options.durationExtenders ?? new Map()),
+        ...incomingReductionCap(result),
         ...logWalk(result).filter((v) => !OPEN_INVARIANTS.has(v.invariant)),
     ];
 }

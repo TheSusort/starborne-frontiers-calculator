@@ -49,6 +49,12 @@ export interface ReactiveStamp {
     triggerActorId?: string;
 }
 
+/** One timed status's remaining turns, as a `status-snapshot` reports it. */
+export interface StatusDuration {
+    buffName: string;
+    turnsRemaining: number;
+}
+
 export type CombatEvent =
     | {
           type: 'round-started';
@@ -985,6 +991,31 @@ export type CombatEvent =
           round: number;
           buffNames: string[];
           debuffNames: string[];
+          /** The remaining turns of every timed status in the actor's own self-buff and
+           *  per-victim debuff stores (`timedStatusDurations` in triggers.ts). Finite numeric
+           *  windows only: aura, accumulating and persistent statuses, hit-counted statuses with
+           *  no turn window, and the DoT/Bomb/Echoing Burst entry containers are absent. One row
+           *  per store entry, so an independently stacking status can appear more than once.
+           *  Absent on hand-built event streams. */
+          buffDurations?: StatusDuration[];
+          debuffDurations?: StatusDuration[];
+      }
+    /** LOG-ONLY. The non-defence incoming factor one direct hit was priced with, read in the
+     *  damage funnel after a partial incoming block (Ironclad) is folded in — the product
+     *  `composeIncomingFactor` / `composeIncomingFactorWithBlock` floor at the 70% reduction cap.
+     *  `block` names the incoming-block outcome: a `'full'` block (Shadowguard) zeroes the hit
+     *  outside the cap and leaves `factor` as composed. Emitted only for a hit whose caller
+     *  supplied its victim-side factors (`cause.redirectBasis`); a hit kind that folds no
+     *  incoming composition emits nothing. A Protection chunk of such a hit emits one row per
+     *  protector, `victimId` = the protector, with the protector's own factor and `block:
+     *  'none'` (a share rolls no block). No combat listener subscribes. */
+    | {
+          type: 'hit-incoming-factor';
+          attackerId?: string;
+          victimId: string;
+          round: number;
+          factor: number;
+          block: 'none' | 'partial' | 'full';
       }
     /** Emitted when a player actor is attacked. `targetId` is the attacked actor;
      *  `attackerId` is the attacker. `didCrit` is the individual hit's crit outcome

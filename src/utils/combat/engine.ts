@@ -213,6 +213,7 @@ import {
     hitRootInScope,
     eventSeqWatermark,
     selfBuffNamesForOwners,
+    timedStatusDurations,
     selfBuffStacksForOwner,
     victimEnemyBuffs,
     victimIncomingDotDamagePct,
@@ -6596,6 +6597,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             // The victim-side factors in `damage`, as the Protection cascade reads them: the
             // caller's `cause.redirectBasis`, with a partial block folded into `incomingFactor`.
             let redirectBasis = cause?.redirectBasis;
+            let blockOutcome: 'none' | 'partial' | 'full' = 'none';
             // Proc block on DIRECT damage only, when not fully Barrier-immune. Reduces the
             // hit before it is recorded/absorbed (silent reduction — no separate surface this PR).
             // Fully inert (no counter touch, no roll) when the victim has no incoming-block
@@ -6654,7 +6656,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                     if (blocked >= 1) {
                         // A FULL block (Shadowguard) is outside the 70% cap: the hit deals 0.
                         damage = 0;
+                        blockOutcome = 'full';
                     } else if (blocked > 0) {
+                        blockOutcome = 'partial';
                         // A PARTIAL block (Ironclad) composes inside the cap (R202; read
                         // `composeIncomingFactorWithBlock`). `damage` carries the caller's composed
                         // factor, so it is rescaled from that factor to the blocked one, and the
@@ -6696,6 +6700,18 @@ export function runCombat(rawInput: CombatEngineInput): {
             // #293). Reported separately so a sub-attack can reconstruct the FULL amount the attack
             // delivered, which is the locked basis for damage-proportional effects (protector damage
             // + target remainder).
+            // LOG-ONLY: the non-defence incoming factor this hit was priced with (see the
+            // `hit-incoming-factor` doc in events.ts).
+            if (redirectBasis) {
+                bus.emit({
+                    type: 'hit-incoming-factor',
+                    ...(cause?.killerId !== undefined ? { attackerId: cause.killerId } : {}),
+                    victimId: victim.id,
+                    round: currentRound,
+                    factor: redirectBasis.incomingFactor,
+                    block: blockOutcome,
+                });
+            }
             let protectionRedirected = 0;
             let protectionSplit = false;
             let fullyRedirected = false;
@@ -6753,10 +6769,13 @@ export function runCombat(rawInput: CombatEngineInput): {
                             hitReductionFor(cause.killerId ?? '', protectorId, basis.didCrit).parts
                         );
                     };
+                    const protectorFactors = protectors.map((p) =>
+                        protectorIncomingFactor(p.actor.id)
+                    );
                     const cascade = protectionCascade(
                         damage,
                         targetMit,
-                        protectors.map((p) => {
+                        protectors.map((p, i) => {
                             const protectorDef = effectiveStatsOf(
                                 statusEngine,
                                 selfBuffLookup,
@@ -6768,7 +6787,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                     protectorDef > 0
                                         ? 1 - calculateDamageReduction(protectorDef) / 100
                                         : 1,
-                                incomingFactor: protectorIncomingFactor(p.actor.id),
+                                incomingFactor: protectorFactors[i],
                             };
                         }),
                         basis?.incomingFactor ?? 1
@@ -6784,6 +6803,20 @@ export function runCombat(rawInput: CombatEngineInput): {
                     protectors.forEach((p, i) => {
                         const chunk = cascade.chunks[i];
                         if (!chunk || chunk.total <= 0) return;
+                        // LOG-ONLY: the protector's own incoming factor its chunk was priced with.
+                        // The chunk's sub-hits carry no `redirectBasis`, so this is its only row.
+                        if (basis) {
+                            bus.emit({
+                                type: 'hit-incoming-factor',
+                                ...(cause.killerId !== undefined
+                                    ? { attackerId: cause.killerId }
+                                    : {}),
+                                victimId: p.actor.id,
+                                round: currentRound,
+                                factor: protectorFactors[i],
+                                block: 'none',
+                            });
+                        }
                         // Apply as `stacks` equal sub-hits (matches the in-game per-stack procs).
                         // A protector that converts its share into a DoT still gains ONE DoT for
                         // the whole hit — `protectionHitKey` coalesces the sub-hits.
@@ -14075,12 +14108,15 @@ export function runCombat(rawInput: CombatEngineInput): {
             // `enemyDebuffNamesForTarget` already folds the DoT/bomb families from the actor's own
             // entry containers using the same synthesized base names the assembler labels with
             // (Corrosion / Inferno / Bomb / Damage over Time).
+            const durations = timedStatusDurations(statusEngine, a.id);
             bus.emit({
                 type: 'status-snapshot',
                 actorId: a.id,
                 round: r,
                 buffNames: selfBuffNamesForOwners(statusEngine, [a.id]),
                 debuffNames: enemyDebuffNamesForTarget(a),
+                buffDurations: durations.buffs,
+                debuffDurations: durations.debuffs,
             });
             // #372: the same tail instant, for the same reason — the Simulator must REPORT HP,
             // not re-derive it. Every actor in `allActors` is read the same way, so this is
