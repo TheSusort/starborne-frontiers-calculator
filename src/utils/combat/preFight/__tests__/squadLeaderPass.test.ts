@@ -347,6 +347,25 @@ describe('squadLeaderPass — per-ally lines', () => {
     });
 });
 
+describe('squadLeaderPass — "% of own stat" lines', () => {
+    it('Pollinator III adds 0.8% of the post-leader defence as flat security', () => {
+        const player = [makeUnit('p1', 'player', 'BINDERBURG'), makeUnit('p2', 'player', 'MPL')];
+        runPass(player, [], { player: { faction: 'BINDERBURG', name: 'Pollinator', stage: 3 } });
+        // Defence 500 × 1.08 (stage II) = 540; security 100 + 0.8% × 540.
+        expect(player[0].stats.defence).toBeCloseTo(540);
+        expect(player[0].stats.security).toBeCloseTo(100 + 4.32);
+        expect(player[0].unsimulated).toEqual([]);
+        expect(player[1].stats.security).toBe(100);
+    });
+
+    it('Swarmcaller II adds 1.2% of the post-leader defence as flat security', () => {
+        const player = [makeUnit('p1', 'player', 'BINDERBURG')];
+        runPass(player, [], { player: { faction: 'BINDERBURG', name: 'Swarmcaller', stage: 2 } });
+        // Defence 500 × 1.10 (stage I) = 550; security 100 + 1.2% × 550.
+        expect(player[0].stats.security).toBeCloseTo(100 + 6.6);
+    });
+});
+
 describe('squadLeaderPass — side symmetry', () => {
     it('mirroring the selection (player ↔ enemy) yields mirrored results', () => {
         const build = () => ({

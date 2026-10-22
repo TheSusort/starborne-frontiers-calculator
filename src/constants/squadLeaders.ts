@@ -104,6 +104,10 @@ export type SquadLeaderEffect =
            *  ("+5% attack for each other alive Legion ally"), recounted as allies die. Simulated
            *  for percentage attack only. */
           perOtherAliveFactionAlly?: true;
+          /** The line grants `value`% OF THE RECIPIENT'S OWN `fromStat`, added to `stat` as a
+           *  flat amount ("Gain security equal to 0.8% of the units defense value"). Read from
+           *  the recipient's post-leader stats. */
+          fromStat?: StatName;
       })
     | (SquadLeaderEffectBase & {
           kind: 'modifier';
@@ -360,13 +364,14 @@ export const SQUAD_LEADERS: Record<FactionName, SquadLeader[]> = {
                     },
                 ],
                 // III — Gain security equal to 0.8% of the units defense value
-                // TODO: needs a derived-value shape (flat security from % of the unit's
-                // OWN defence) before it can be structured; 'other' surfaces it as
-                // unsimulated instead of mis-folding it as a % security increase.
                 [
                     {
-                        kind: 'other',
+                        kind: 'stat',
                         target: 'all-allies',
+                        stat: 'security',
+                        value: 0.8,
+                        valueType: 'percentage',
+                        fromStat: 'defence',
                         text: 'Gain security equal to of 0.8% defense',
                     },
                 ],
@@ -396,13 +401,14 @@ export const SQUAD_LEADERS: Record<FactionName, SquadLeader[]> = {
                     },
                 ],
                 // II — Gain security equal to 1.2% of the units defense value
-                // TODO: needs a derived-value shape (flat security from % of the unit's
-                // OWN defence) before it can be structured; 'other' surfaces it as
-                // unsimulated instead of mis-folding it as a % security increase.
                 [
                     {
-                        kind: 'other',
+                        kind: 'stat',
                         target: 'all-allies',
+                        stat: 'security',
+                        value: 1.2,
+                        valueType: 'percentage',
+                        fromStat: 'defence',
                         text: 'Gain security equal to 1.2% of the units defense value',
                     },
                 ],

@@ -68,6 +68,13 @@ const isPreFightStat = (stat: string): stat is PreFightStatKey =>
 const isPerAllyAttack = (effect: Extract<SquadLeaderEffect, { kind: 'stat' }>): boolean =>
     effect.stat === 'attack' && effect.valueType === 'percentage';
 
+/** A "% of the unit's own stat" line the pass can fold: both stats in the pre-fight block. */
+const isDerivedStat = (effect: Extract<SquadLeaderEffect, { kind: 'stat' }>): boolean =>
+    effect.valueType === 'percentage' &&
+    isPreFightStat(effect.stat) &&
+    effect.fromStat !== undefined &&
+    isPreFightStat(effect.fromStat);
+
 const isPercentageOnlyStat = (stat: PreFightStatKey): boolean =>
     (PERCENTAGE_ONLY_STATS as readonly string[]).includes(stat);
 
@@ -91,6 +98,13 @@ const MODIFIER_FIELD_BY_CHANNEL: Partial<
 /** Per-recipient per-stat accumulation buckets (summed before the single apply). */
 type StatAccumulator = Map<PreFightStatKey, { pct: number; flat: number }>;
 type SideStatAcc = Map<PreFightUnit, StatAccumulator>;
+/** "`pct`% of the unit's own `fromStat`, added flat to `stat`", applied after the stat fold. */
+type DerivedStatAcc = {
+    unit: PreFightUnit;
+    stat: PreFightStatKey;
+    fromStat: PreFightStatKey;
+    pct: number;
+}[];
 
 // ---------------------------------------------------------------------------
 // Shared targeting/classification helpers — the SINGLE source of truth for both
@@ -142,6 +156,7 @@ export function isSquadLeaderEffectSimulated(effect: SquadLeaderEffect): boolean
     }
     if (effect.kind === 'stat') {
         if (effect.perOtherAliveFactionAlly) return isPerAllyAttack(effect);
+        if (effect.fromStat !== undefined) return isDerivedStat(effect);
         return isPreFightStat(effect.stat);
     }
     if (effect.kind === 'ability') return true;
@@ -157,7 +172,8 @@ function applyLeaderForSide(
     own: PreFightUnit[],
     opposing: PreFightUnit[],
     sel: SquadLeaderSelection,
-    statAcc: SideStatAcc
+    statAcc: SideStatAcc,
+    derivedAcc: DerivedStatAcc
 ): void {
     // Trust boundary (mirrors simulateBattle's input validation): the selection comes
     // from persisted/user state, so an unknown faction or leader name must throw loudly.
@@ -224,6 +240,17 @@ function applyLeaderForSide(
                 }
                 continue;
             }
+            if (effect.fromStat !== undefined) {
+                const { stat, fromStat } = effect;
+                if (!isDerivedStat(effect) || !isPreFightStat(stat) || !isPreFightStat(fromStat)) {
+                    for (const unit of recipients) unit.unsimulated.push(effect.text);
+                    continue;
+                }
+                for (const unit of recipients) {
+                    derivedAcc.push({ unit, stat, fromStat, pct: effect.value });
+                }
+                continue;
+            }
             // Defensive: a stat name outside the pre-fight block cannot be folded.
             if (!isPreFightStat(effect.stat)) {
                 for (const unit of recipients) unit.unsimulated.push(effect.text);
@@ -277,8 +304,13 @@ export function squadLeaderPass(selections: {
         // (base×(1+(a+b)/100)), not per-side sequential multiplies with intermediate
         // clamping — which would also let apply order break team symmetry.
         const statAcc: SideStatAcc = new Map();
-        if (selections.player) applyLeaderForSide(player, enemy, selections.player, statAcc);
-        if (selections.enemy) applyLeaderForSide(enemy, player, selections.enemy, statAcc);
+        const derivedAcc: DerivedStatAcc = [];
+        if (selections.player) {
+            applyLeaderForSide(player, enemy, selections.player, statAcc, derivedAcc);
+        }
+        if (selections.enemy) {
+            applyLeaderForSide(enemy, player, selections.enemy, statAcc, derivedAcc);
+        }
 
         // Apply the accumulated stat math ONCE per recipient per stat (order-independent).
         for (const [unit, perStat] of statAcc) {
@@ -289,5 +321,14 @@ export function squadLeaderPass(selections: {
                 unit.stats[stat] = Math.max(0, scaled + flat);
             }
         }
+        // "% of the unit's own stat" lines read the source stat AFTER every other leader line
+        // (Pollinator III's security reads the defence its stage II raised). All of them read
+        // before any is added, so one line cannot feed another.
+        const derivedGrants = derivedAcc.map(
+            ({ unit, fromStat, pct }) => (unit.stats[fromStat] * pct) / 100
+        );
+        derivedAcc.forEach(({ unit, stat }, i) => {
+            unit.stats[stat] = Math.max(0, unit.stats[stat] + derivedGrants[i]);
+        });
     };
 }

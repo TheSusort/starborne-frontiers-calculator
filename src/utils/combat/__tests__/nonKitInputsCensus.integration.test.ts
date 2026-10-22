@@ -1214,6 +1214,11 @@ const MEDUSA_REPAIR = stagePair(
     2
 );
 
+/** W's stat sheet at its first turn (the turn's `statsSnapshot`). */
+const firstTurnStats = (r: BoardRun, name: string) =>
+    r.result.combatLog.flatMap((round) => round.turns).find((t) => t.actorId === r.id(name))
+        ?.statsSnapshot;
+
 const LEADER_ROWS: LeaderRow[] = [
     {
         line: 'Xaoc Viper II: +7.5% Outgoing direct damage',
@@ -1406,6 +1411,40 @@ const LEADER_ROWS: LeaderRow[] = [
             expect(grossTo(c, 'heal', { target: 'W' })).toBe(0);
             expect(grossTo(w, 'heal', { actor: 'W', target: 'W' })).toBeCloseTo(82_500, 6);
         },
+    },
+    {
+        // "Gain security equal to 0.8% of defense": a Binderburg ship with 10,000 defence, raised
+        // to 10,800 by Pollinator II, gains 86.4 security.
+        line: 'Binderburg Pollinator III: security equal to 0.8% of defence',
+        ...stagePair(
+            solo({ ...IDLE, faction: 'BINDERBURG', stats: { defence: 10_000 } }, IDLE),
+            'BINDERBURG',
+            'Pollinator',
+            3,
+            2
+        ),
+        check: (w, c) => {
+            expect(firstTurnStats(c, 'W')?.defence).toBeCloseTo(10_800, 6);
+            expect(firstTurnStats(w, 'W')?.defence).toBeCloseTo(10_800, 6);
+            expect(
+                (firstTurnStats(w, 'W')?.security ?? 0) - (firstTurnStats(c, 'W')?.security ?? 0)
+            ).toBeCloseTo(86.4, 6);
+        },
+    },
+    {
+        // Swarmcaller II: 1.2% of 11,000 defence (Swarmcaller I's +10%) = 132 security.
+        line: 'Binderburg Swarmcaller II: security equal to 1.2% of defence',
+        ...stagePair(
+            solo({ ...IDLE, faction: 'BINDERBURG', stats: { defence: 10_000 } }, IDLE),
+            'BINDERBURG',
+            'Swarmcaller',
+            2,
+            1
+        ),
+        check: (w, c) =>
+            expect(
+                (firstTurnStats(w, 'W')?.security ?? 0) - (firstTurnStats(c, 'W')?.security ?? 0)
+            ).toBeCloseTo(132, 6),
     },
 ];
 
