@@ -9,7 +9,13 @@ import {
     roleBasisKeyPart,
 } from '../scoring';
 import { BaseStats } from '../../../types/stats';
-import { CustomFormula, RoleBasis, StatBonus, StatPriority } from '../../../types/autogear';
+import {
+    CustomFormula,
+    RoleBasis,
+    SetPriority,
+    StatBonus,
+    StatPriority,
+} from '../../../types/autogear';
 import { makeTestShip } from '../fastScoring/__tests__/fixtures/testInventory';
 import { GearPiece } from '../../../types/gear';
 
@@ -466,5 +472,111 @@ describe('roleBasisKeyPart — malformed roleBasis behaves as no basis', () => {
             terms: [{ stat: 'attack', weight: 1 }],
         } as unknown as RoleBasis;
         expect(roleBasisKeyPart(malformed)).toBe('');
+    });
+});
+
+describe('calculateTotalScore cache — inputs outside the key', () => {
+    // The cache key describes the ship id, equipment ids, implant ids (memoised per ship id),
+    // role, stat bonuses, arena modifiers, fleet buffs and formula. Anything else reaches the
+    // cache only through `clearScoreCache()`, which the genetic strategy and the Autogear page
+    // call before a run; ship-view callers (`analyzeStatDistribution`, the leaderboard) do not.
+    const weapon: GearPiece = {
+        id: 'w-key',
+        slot: 'weapon',
+        level: 16,
+        stars: 6,
+        rarity: 'legendary',
+        mainStat: { name: 'attack', value: 1000, type: 'flat' },
+        subStats: [],
+        setBonus: 'ATTACK',
+    };
+    const implant: GearPiece = {
+        id: 'imp-key',
+        slot: 'implant_minor_alpha',
+        level: 16,
+        stars: 6,
+        rarity: 'legendary',
+        mainStat: null,
+        subStats: [{ name: 'attack', value: 4000, type: 'flat' }],
+        setBonus: null,
+    };
+    const lookup = (id: string) => [weapon, implant].find((p) => p.id === id);
+    const noEngineering = () => undefined;
+    const equipment = { weapon: weapon.id } as const;
+    const unreachableFloor: StatPriority[] = [{ stat: 'attack', weight: 1, minLimit: 1_000_000 }];
+    const needFourAttack: SetPriority[] = [{ setName: 'ATTACK', count: 4 }];
+
+    const score = (
+        ship: ReturnType<typeof makeTestShip>,
+        priorities: StatPriority[] = [],
+        setPriorities?: SetPriority[]
+    ) =>
+        calculateTotalScore(
+            ship,
+            equipment,
+            priorities,
+            lookup,
+            noEngineering,
+            'ATTACKER',
+            setPriorities
+        );
+
+    it('returns the cached score for the same key even after the gear piece changed', () => {
+        clearScoreCache();
+        const ship = makeTestShip({ id: 'key-gear' });
+        const first = score(ship);
+        const original = weapon.mainStat!.value;
+        weapon.mainStat!.value = 9000;
+        try {
+            expect(score(ship)).toBe(first);
+            clearScoreCache();
+            expect(score(ship)).toBeGreaterThan(first);
+        } finally {
+            weapon.mainStat!.value = original;
+            clearScoreCache();
+        }
+    });
+
+    it('scores a missed stat floor, a missed set requirement and an added implant differently', () => {
+        const ship = makeTestShip({ id: 'key-control' });
+        clearScoreCache();
+        const free = score(ship);
+        clearScoreCache();
+        expect(score(ship, unreachableFloor)).toBeLessThan(free);
+        clearScoreCache();
+        expect(score(ship, [], needFourAttack)).toBeLessThan(free);
+        clearScoreCache();
+        expect(score({ ...ship, implants: { implant_minor_alpha: implant.id } })).toBeGreaterThan(
+            free
+        );
+    });
+
+    // Suspected bug: `priorities` is not part of the cache key, so a score cached under one set
+    // of stat limits is returned for a call with different limits on the same ship and gear.
+    it.fails('re-scores when only the stat priorities change', () => {
+        clearScoreCache();
+        const ship = makeTestShip({ id: 'key-priorities' });
+        const free = score(ship);
+        expect(score(ship, unreachableFloor)).toBeLessThan(free);
+    });
+
+    // Suspected bug: `setPriorities` (and `tryToCompleteSets`) are not part of the cache key.
+    it.fails('re-scores when only the set priorities change', () => {
+        clearScoreCache();
+        const ship = makeTestShip({ id: 'key-sets' });
+        const free = score(ship);
+        expect(score(ship, [], needFourAttack)).toBeLessThan(free);
+    });
+
+    // Suspected bug: the implant part of the key is memoised per ship id, so a ship whose
+    // implants changed keeps the key, and the score, of its old implants until a clear. An
+    // empty implant map keys as '' and is never memoised, so only a ship that HAD implants
+    // goes stale.
+    it.fails('re-scores when an equipped implant is removed', () => {
+        clearScoreCache();
+        const bare = makeTestShip({ id: 'key-implants' });
+        const withImplant = { ...bare, implants: { implant_minor_alpha: implant.id } };
+        const before = score(withImplant);
+        expect(score(bare)).toBeLessThan(before);
     });
 });

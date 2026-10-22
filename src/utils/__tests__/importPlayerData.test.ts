@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { importPlayerData } from '../importPlayerData';
+import { calculateMainStatValue } from '../gear/mainStatValueFetcher';
 import { ExportedPlayData } from '../../types/exportedPlayData';
 import {
     NIL_UUID,
@@ -576,6 +577,348 @@ describe('importPlayerData', () => {
 
             expect(result.success).toBe(false);
             expect(result.error).toBeDefined();
+        });
+    });
+});
+
+describe('importPlayerData field mappings', () => {
+    const importOne = async (overrides: Partial<ExportedPlayData>) => {
+        const result = await importPlayerData(makeExportData(overrides));
+        expect(result.success).toBe(true);
+        return result.data!;
+    };
+
+    describe('ship base stats', () => {
+        it('ignores ShieldPoints: the imported shield stat stays 0', async () => {
+            const unit = makeUnit({
+                Attributes: {
+                    ...makeUnit().Attributes,
+                    BaseWithLevelAndRank: baseAttributes({ ShieldPoints: 5000 }),
+                },
+            });
+            const { ships } = await importOne({ Units: [unit] });
+            expect(ships[0].baseStats.shield).toBe(0);
+        });
+
+        it('converts ShieldPenetration and CritBoost fractions to integer percentages', async () => {
+            const unit = makeUnit({
+                Attributes: {
+                    ...makeUnit().Attributes,
+                    BaseWithLevelAndRank: baseAttributes({
+                        ShieldPenetration: 0.15,
+                        CritBoost: 0.85,
+                    }),
+                },
+            });
+            const { ships } = await importOne({ Units: [unit] });
+            expect(ships[0].baseStats.shieldPenetration).toBe(15);
+            expect(ships[0].baseStats.critDamage).toBe(85);
+        });
+
+        it('reads base stats from BaseWithLevelAndRank, not Total or WithRefitAndEngineering', async () => {
+            const unit = makeUnit({
+                Attributes: {
+                    ...makeUnit().Attributes,
+                    BaseWithLevelAndRank: baseAttributes({ Power: 111 }),
+                    WithRefitAndEngineering: baseAttributes({ Power: 222 }),
+                    Total: baseAttributes({ Power: 333 }),
+                },
+            });
+            const { ships } = await importOne({ Units: [unit] });
+            expect(ships[0].baseStats.attack).toBe(111);
+        });
+    });
+
+    describe('ship enums', () => {
+        it.each([
+            ['Attacker', 'ATTACKER'],
+            ['defender', 'DEFENDER'],
+            ['Supporter', 'SUPPORTER'],
+            ['Debuffer', 'DEBUFFER'],
+            ['Wizard', 'ATTACKER'],
+        ])('ShipType %s maps to %s', async (shipType, expected) => {
+            const { ships } = await importOne({ Units: [makeUnit({ ShipType: shipType })] });
+            expect(ships[0].type).toBe(expected);
+        });
+
+        it.each([
+            ['Blue', 'electric'],
+            ['Green', 'chemical'],
+            ['Red', 'thermal'],
+            ['Purple', 'antimatter'],
+        ])('Affinity %s maps to %s', async (affinity, expected) => {
+            const { ships } = await importOne({ Units: [makeUnit({ Affinity: affinity })] });
+            expect(ships[0].affinity).toBe(expected);
+        });
+
+        it.each([
+            ['Atlas', 'ATLAS_SYNDICATE'],
+            ['Legion', 'FRONTIER_LEGION'],
+            ['Tianchao', 'TIANCHAO'],
+            ['Tianchen', 'TIANCHAO'],
+            ['XAOC', 'XAOC'],
+            ['Unheard Of', 'TERRAN_COMBINE'],
+        ])('Faction %s maps to %s', async (faction, expected) => {
+            const { ships } = await importOne({ Units: [makeUnit({ Faction: faction })] });
+            expect(ships[0].faction).toBe(expected);
+        });
+
+        it.each([
+            ['Legendary', 'legendary'],
+            ['rare', 'rare'],
+            ['Mythic', 'common'],
+        ])('Rarity %s maps to %s', async (rarity, expected) => {
+            const { ships } = await importOne({ Units: [makeUnit({ Rarity: rarity })] });
+            expect(ships[0].rarity).toBe(expected);
+        });
+    });
+
+    describe('deduplication key', () => {
+        it('does not merge ships that differ only in rank', async () => {
+            const { ships } = await importOne({
+                Units: [makeUnit({ Id: 'ship-1', Rank: 5 }), makeUnit({ Id: 'ship-2', Rank: 6 })],
+            });
+            expect(ships).toHaveLength(2);
+            expect(ships.every((s) => s.copies === 1)).toBe(true);
+        });
+
+        it('does not merge ships that differ only in refit count', async () => {
+            const { ships } = await importOne({
+                Units: [makeUnit({ Id: 'ship-1', Refit: 1 }), makeUnit({ Id: 'ship-2', Refit: 2 })],
+            });
+            expect(ships).toHaveLength(2);
+        });
+
+        it('counts every identical copy, not just pairs', async () => {
+            const { ships } = await importOne({
+                Units: [
+                    makeUnit({ Id: 'ship-1' }),
+                    makeUnit({ Id: 'ship-2' }),
+                    makeUnit({ Id: 'ship-3' }),
+                ],
+            });
+            expect(ships).toHaveLength(1);
+            expect(ships[0].copies).toBe(3);
+        });
+    });
+
+    describe('refit stats', () => {
+        const withRefits = (
+            refit: number,
+            stats: ExportedPlayData['Units'][0]['Attributes']['Refit']
+        ) =>
+            makeUnit({
+                Refit: refit,
+                Attributes: { ...makeUnit().Attributes, Refit: stats },
+            });
+
+        it('folds refit stats into base stats when the ship has no refit slots', async () => {
+            const { ships } = await importOne({
+                Units: [withRefits(0, [{ Attribute: 'Power', Type: 'Flat', Value: 500 }])],
+            });
+            expect(ships[0].refits).toHaveLength(0);
+            expect(ships[0].baseStats.attack).toBe(10500);
+        });
+
+        it('cycles refit stats across refits when there are more stats than refits', async () => {
+            const { ships } = await importOne({
+                Units: [
+                    withRefits(2, [
+                        { Attribute: 'Power', Type: 'Flat', Value: 100 },
+                        { Attribute: 'HullPoints', Type: 'Flat', Value: 200 },
+                        { Attribute: 'Defense', Type: 'Flat', Value: 300 },
+                    ]),
+                ],
+            });
+            const names = ships[0].refits.map((r) => r.stats.map((s) => s.name));
+            expect(names).toEqual([['attack', 'defence'], ['hp']]);
+        });
+
+        it('drops a refit stat whose attribute this app does not model', async () => {
+            const { ships } = await importOne({
+                Units: [
+                    withRefits(1, [
+                        { Attribute: 'CritResistance', Type: 'Flat', Value: 0.1 },
+                        { Attribute: 'Power', Type: 'Flat', Value: 100 },
+                    ]),
+                ],
+            });
+            const stats = ships[0].refits.flatMap((r) => r.stats);
+            expect(stats).toEqual([{ name: 'attack', value: 100, type: 'flat' }]);
+        });
+
+        it('converts a percentage-typed refit stat to an integer percentage', async () => {
+            const { ships } = await importOne({
+                Units: [
+                    withRefits(1, [{ Attribute: 'HullPoints', Type: 'Percentage', Value: 0.08 }]),
+                ],
+            });
+            expect(ships[0].refits[0].stats).toEqual([
+                { name: 'hp', value: 8, type: 'percentage' },
+            ]);
+        });
+
+        it('stores a Flat-typed crit refit stat as a percentage (x100)', async () => {
+            const { ships } = await importOne({
+                Units: [withRefits(1, [{ Attribute: 'CritChance', Type: 'Flat', Value: 0.05 }])],
+            });
+            expect(ships[0].refits[0].stats).toEqual([
+                { name: 'crit', value: 5, type: 'percentage' },
+            ]);
+        });
+    });
+
+    describe('engineering stats', () => {
+        const engineeringFor = async (stat: Partial<ExportedPlayData['Engineering'][0]>) => {
+            const { engineeringStats } = await importOne({
+                Engineering: [makeEngineeringStat(stat)],
+            });
+            return engineeringStats.stats[0].stats[0];
+        };
+
+        it('stores a flat engineering level as its raw value', async () => {
+            expect(
+                await engineeringFor({ Attribute: 'Manipulation', ModifierType: 'Flat', Level: 24 })
+            ).toEqual({ name: 'hacking', value: 24, type: 'flat' });
+        });
+
+        it('stores a percentage engineering level as an integer percentage', async () => {
+            expect(
+                await engineeringFor({
+                    Attribute: 'HullPoints',
+                    ModifierType: 'Percentage',
+                    Level: 0.12,
+                })
+            ).toEqual({ name: 'hp', value: 12, type: 'percentage' });
+        });
+
+        it('stores Flat-typed CritBoost engineering as a percentage (x100)', async () => {
+            expect(
+                await engineeringFor({ Attribute: 'CritBoost', ModifierType: 'Flat', Level: 0.1 })
+            ).toEqual({ name: 'critDamage', value: 10, type: 'percentage' });
+        });
+
+        // Suspected bug: transformEngineeringStats pushes `getStatName(stat.Attribute)` without
+        // the null guard the refit path has, so an attribute outside the app's vocabulary is
+        // stored as a Stat with `name: null`. The schema types `Attribute` as `z.string()`.
+        it.fails('drops an engineering stat whose attribute this app does not model', async () => {
+            const { engineeringStats } = await importOne({
+                Engineering: [
+                    makeEngineeringStat({ Attribute: 'Power', Level: 10 }),
+                    makeEngineeringStat({ Attribute: 'CritResistance', Level: 10 }),
+                ],
+            });
+            const names = engineeringStats.stats[0].stats.map((s) => s.name);
+            expect(names).toEqual(['attack']);
+        });
+    });
+
+    describe('gear', () => {
+        it('replaces a calibrated piece main stat with its uncalibrated base value', async () => {
+            const gear = makeGearItem({
+                Id: 'gear-1',
+                Level: 16,
+                Rank: 6,
+                CalibratedForUnitId: 'ship-1',
+                MainStats: [
+                    { Level: 16, Attribute: { Attribute: 'Power', Type: 'Flat', Value: 99999 } },
+                ],
+            });
+            const { inventory } = await importOne({
+                Units: [makeUnit({ Id: 'ship-1' })],
+                Equipment: [gear],
+            });
+            const expected = calculateMainStatValue('attack', 'flat', 6, 16);
+            expect(expected).toBeGreaterThan(0);
+            expect(inventory[0].mainStat).toEqual({
+                name: 'attack',
+                value: expected,
+                type: 'flat',
+            });
+        });
+
+        it('keeps the exported main stat value on an uncalibrated piece', async () => {
+            const gear = makeGearItem({
+                CalibratedForUnitId: NIL_UUID,
+                MainStats: [
+                    { Level: 16, Attribute: { Attribute: 'Power', Type: 'Flat', Value: 1234 } },
+                ],
+            });
+            const { inventory } = await importOne({ Equipment: [gear] });
+            expect(inventory[0].mainStat!.value).toBe(1234);
+        });
+
+        it('skips an item in a slot that is neither gear nor implant', async () => {
+            const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+            try {
+                const { inventory } = await importOne({
+                    Equipment: [
+                        makeGearItem({ Id: 'mystery-1', Slot: 'Thruster' }),
+                        makeGearItem(),
+                    ],
+                });
+                expect(inventory.map((g) => g.id)).toEqual(['gear-aaa-111']);
+                expect(warn).toHaveBeenCalledWith(expect.stringContaining('Thruster'));
+            } finally {
+                warn.mockRestore();
+            }
+        });
+
+        it.each([
+            ['HullPoints', 'FORTITUDE'],
+            ['Defense_DebuffResistance', 'PROTECTION'],
+            ['Attack_Speed', 'AMBUSH'],
+            ['Crafted_All_Stats', 'OMNICORE'],
+            ['Inc_Crit_Down', 'HARDENED'],
+            ['Some_Future_Set', null],
+        ])('gear Set %s maps to %s', async (set, expected) => {
+            const { inventory } = await importOne({ Equipment: [makeGearItem({ Set: set })] });
+            expect(inventory[0].setBonus).toBe(expected);
+        });
+
+        it.each([
+            ['Implant_Ultimate_Startof_Combat_Security_To_Hacking', 'CODE_GUARD'],
+            ['Implant_Ultimate_Startof_Combat_Hacking_To_Security', 'CIPHER_LINK'],
+            ['Implant_Major_Startof_Round_Stealth_Crit_Dmg_Up', 'AMBUSH'],
+            ['Implant_Minor_Sigma_Power_Perc', 'ONSLAUGHT'],
+            ['Implant_Minor_Gamma_Future', null],
+        ])('implant Set %s maps to %s', async (set, expected) => {
+            const { inventory } = await importOne({ Equipment: [makeImplantItem({ Set: set })] });
+            expect(inventory[0].setBonus).toBe(expected);
+        });
+
+        it('stores an implant main stat and sub stats together as sub stats', async () => {
+            const implant = makeImplantItem({
+                MainStats: [
+                    { Level: 1, Attribute: { Attribute: 'Power', Type: 'Percentage', Value: 0.1 } },
+                ],
+                SubStats: [
+                    { Level: 1, Attribute: { Attribute: 'Initiative', Type: 'Flat', Value: 4 } },
+                ],
+            });
+            const { inventory } = await importOne({ Equipment: [implant] });
+            expect(inventory[0].mainStat).toBeNull();
+            expect(inventory[0].subStats).toEqual([
+                { name: 'attack', value: 10, type: 'percentage' },
+                { name: 'speed', value: 4, type: 'flat' },
+            ]);
+        });
+
+        // Suspected bug: transformInventory maps gear sub stats with `getStatName(...) as StatName`
+        // and no null guard, so a sub stat outside the app's vocabulary becomes a Stat with
+        // `name: null`. The schema types `Attribute` as `z.string()`.
+        it.fails('drops a gear sub stat whose attribute this app does not model', async () => {
+            const gear = makeGearItem({
+                SubStats: [
+                    { Level: 1, Attribute: { Attribute: 'Power', Type: 'Flat', Value: 50 } },
+                    {
+                        Level: 1,
+                        Attribute: { Attribute: 'CritResistance', Type: 'Flat', Value: 1 },
+                    },
+                ],
+            });
+            const { inventory } = await importOne({ Equipment: [gear] });
+            expect(inventory[0].subStats.map((s) => s.name)).toEqual(['attack']);
         });
     });
 });
