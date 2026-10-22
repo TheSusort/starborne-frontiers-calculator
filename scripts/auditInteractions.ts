@@ -18,7 +18,7 @@ import {
 import { tagShip } from '../src/utils/combat/audit/classes';
 import { composeBattle, type TaggedShip } from '../src/utils/combat/audit/compose';
 import { runSeededBattle } from '../src/utils/simulator/seededRuns';
-import { checkInvariants } from '../src/utils/combat/audit/invariants';
+import { checkInvariants, extraActionActorIds } from '../src/utils/combat/audit/invariants';
 import { checkReproducibility } from '../src/utils/combat/audit/reproducibility';
 import { runAblation } from '../src/utils/combat/audit/ablation';
 import { minimizeComposition } from '../src/utils/combat/audit/minimize';
@@ -197,7 +197,9 @@ function minimizeInvariant(input: BattleSimulationInput, v: InvariantViolation, 
             }
             const result = safeRun(candidate, seed);
             if (!result) return false;
-            return checkInvariants(result).some(
+            return checkInvariants(result, {
+                extraActionActorIds: extraActionActorIds(candidate, result),
+            }).some(
                 (x) =>
                     x.invariant === v.invariant &&
                     (v.actorId === undefined || x.actorId === v.actorId)
@@ -317,7 +319,8 @@ function main(): void {
         compositionsRun++;
 
         try {
-            for (const v of checkInvariants(compResult)) {
+            const extraActionIds = extraActionActorIds(compInput, compResult);
+            for (const v of checkInvariants(compResult, { extraActionActorIds: extraActionIds })) {
                 const min = minimizeInvariant(compInput, v, s);
                 findings.push({
                     ...invariantFinding(v, compResult, s),
