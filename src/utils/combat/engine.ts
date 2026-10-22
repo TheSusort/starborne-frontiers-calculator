@@ -12532,7 +12532,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                     // (recordDestroyed fired inside applyIncomingToTarget). It must NOT fall through
                     // and take a full turn — re-run the SAME dead-target skip as the top-of-turn
                     // guard. (With Cheat Death the intercept floored HP at 1 → not dead → false → it
-                    // acts normally.)
+                    // acts normally.) The reactions to the tick and the death resolve first, in this
+                    // turn, the block that holds the death.
+                    if (actor.destroyedRound !== undefined) drainReactions();
                     if (handleDeadTargetSkip(actor)) {
                         continue;
                     }
@@ -12670,8 +12672,11 @@ export function runCombat(rawInput: CombatEngineInput): {
                         }
                         // Lethal turn-start tick → skip the rest of the turn. INTENTIONALLY
                         // follows the heal-target lethal convention (skip the shared post-turn
-                        // block: decrements / turn-ended), NOT the timed-burst convention.
+                        // block: decrements / turn-ended), NOT the timed-burst convention. The
+                        // reactions to the tick and the death resolve first, in this turn, the
+                        // block that holds the death.
                         if (actor.destroyedRound !== undefined) {
+                            drainReactions();
                             if (actor.id === focusActorId) pushSynthesizedFocusSkipTurn();
                             continue;
                         }

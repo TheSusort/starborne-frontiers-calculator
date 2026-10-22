@@ -17,6 +17,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: destroyed ships no longer repair themselves from their lingering DoTs.',
     'Combat simulator: destroyed ships stop gaining Overload, Blast and other per-round stacks.',
     'Combat simulator: ally-wide buffs, repairs, charges and debuff trims now skip destroyed allies.',
+    'Combat simulator: a ship killed by its own DoT tick resolves its death that turn.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
