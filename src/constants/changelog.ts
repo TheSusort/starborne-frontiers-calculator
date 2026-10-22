@@ -15,6 +15,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: skills that deal no damage no longer count as critical hits.',
     "Healing calculator: the round chart's Crit marker now shows critical repairs.",
     "Combat simulator: a killing blow's Bomb or debuff no longer lands on the wreck.",
+    "Combat simulator: Voron's and Meatshield's converted-hit DoTs can no longer be cleansed.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
