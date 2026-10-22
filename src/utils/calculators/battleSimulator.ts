@@ -73,6 +73,7 @@ import type { CombatLogRound } from '../combat/log/types';
 import { asFactionName } from '../../constants/factions';
 import {
     runPreFight,
+    liveLeaderAttackPct,
     squadLeaderPass,
     emptyPreFightModifiers,
     hasAnyPreFightModifier,
@@ -1113,8 +1114,15 @@ export function simulateBattle(
         if (passive) passive.abilities.push(...granted);
         else plan.shipSkills.slots.push({ slot: 'passive', abilities: [...granted] });
     }
-    const leaderAttackPctOf = (id: string): number =>
-        preFightById.get(id)?.modifiers.attackPct ?? 0;
+    // Every ship is alive before round 1, so the per-ally leader term counts the unit's whole
+    // same-side, same-faction squad (the engine recounts it live once the fight starts).
+    const leaderAttackPctOf = (id: string): number => {
+        const unit = preFightById.get(id);
+        if (!unit) return 0;
+        const side = unit.side === 'player' ? preFightPlayer : preFightEnemy;
+        const others = side.filter((u) => u.id !== id && u.faction === unit.faction).length;
+        return liveLeaderAttackPct(unit.modifiers, others);
+    };
     applyPreCombatShipPassives(playerPlans, leaderAttackPctOf);
     applyPreCombatShipPassives(enemyPlans, leaderAttackPctOf);
     // F3: a unit's accumulated modifier channels ride onto its engine actor as the

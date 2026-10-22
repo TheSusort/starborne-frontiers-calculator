@@ -45,8 +45,14 @@ export interface PreFightStatBlock {
  *   - startingShieldPctOfHp: the starting shieldPool.
  */
 export interface PreFightCombatModifiers {
-    /** Squad-leader attack %, summed over both leaders (own buff, opposing debuff). */
+    /** Squad-leader attack %, summed over both leaders (own buff, opposing debuff). Inside a
+     *  fight the engine keeps it LIVE: it includes `attackPctPerOtherFactionAlly` times the
+     *  number of this unit's other living same-faction allies (`liveLeaderAttackPct`). */
     attackPct: number;
+    /** Squad-leader attack % granted for EACH other living ally of this unit's own faction
+     *  ("+5% attack for each other alive Legion ally"). Not folded on its own: the engine adds it
+     *  into `attackPct`, recounting allies at the start of the fight and on every death. */
+    attackPctPerOtherFactionAlly: number;
     outgoingDamage: number;
     outgoingCritDamage: number;
     incomingDamage: number;
@@ -60,6 +66,7 @@ export interface PreFightCombatModifiers {
 export function emptyPreFightModifiers(): PreFightCombatModifiers {
     return {
         attackPct: 0,
+        attackPctPerOtherFactionAlly: 0,
         outgoingDamage: 0,
         outgoingCritDamage: 0,
         incomingDamage: 0,
@@ -76,6 +83,15 @@ export function emptyPreFightModifiers(): PreFightCombatModifiers {
  *  structurally identical to a no-leader run). */
 export function hasAnyPreFightModifier(m: PreFightCombatModifiers): boolean {
     return Object.values(m).some((v) => v !== 0);
+}
+
+/** The squad-leader attack % with the per-ally term resolved for `otherFactionAlliesAlive` (this
+ *  unit's other living same-side allies of its own faction). */
+export function liveLeaderAttackPct(
+    modifiers: Pick<PreFightCombatModifiers, 'attackPct' | 'attackPctPerOtherFactionAlly'>,
+    otherFactionAlliesAlive: number
+): number {
+    return modifiers.attackPct + modifiers.attackPctPerOtherFactionAlly * otherFactionAlliesAlive;
 }
 
 /**

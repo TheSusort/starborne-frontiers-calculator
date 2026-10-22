@@ -16,6 +16,7 @@ export const UNRELEASED_CHANGES: string[] = [
     "Healing calculator: the round chart's Crit marker now shows critical repairs.",
     'Squad leaders: crit, crit power and penetration bonuses now add as points, like gear.',
     'Squad leaders: Gelecek Medusa and Cerberus now repair after inflicting a debuff.',
+    'Squad leaders: Legion per-ally attack bonus now counts living allies, dropping as they die.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

@@ -100,6 +100,10 @@ export type SquadLeaderEffect =
           /** Signed. Negative = decrease (use for enemy stat reductions). */
           value: number;
           valueType: StatType; // 'flat' | 'percentage'
+          /** The value is granted once for EACH other living ally of the recipient's faction
+           *  ("+5% attack for each other alive Legion ally"), recounted as allies die. Simulated
+           *  for percentage attack only. */
+          perOtherAliveFactionAlly?: true;
       })
     | (SquadLeaderEffectBase & {
           kind: 'modifier';
@@ -623,7 +627,6 @@ export const SQUAD_LEADERS: Record<FactionName, SquadLeader[]> = {
                     },
                 ],
                 // III — +5% attack for each other alive Legion ally
-                // TODO: add an effect for this
                 [
                     {
                         kind: 'stat',
@@ -631,6 +634,7 @@ export const SQUAD_LEADERS: Record<FactionName, SquadLeader[]> = {
                         stat: 'attack',
                         value: 5,
                         valueType: 'percentage',
+                        perOtherAliveFactionAlly: true,
                         text: '+5% attack for each other alive Legion ally',
                     },
                 ],
@@ -667,6 +671,7 @@ export const SQUAD_LEADERS: Record<FactionName, SquadLeader[]> = {
                         stat: 'attack',
                         value: 7.5,
                         valueType: 'percentage',
+                        perOtherAliveFactionAlly: true,
                         text: '+7.5% attack for each other alive Legion ally',
                     },
                 ],

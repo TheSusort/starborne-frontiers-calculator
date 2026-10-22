@@ -4841,6 +4841,12 @@ const DocumentationPage: React.FC = () => {
                                         many debuffs that skill lands
                                     </li>
                                     <li>
+                                        Frontier Legion&apos;s &quot;attack for each other alive
+                                        Legion ally&quot; counts the ship&apos;s living Legion
+                                        allies throughout the fight, so it drops as they are
+                                        destroyed
+                                    </li>
+                                    <li>
                                         Effects the simulator cannot model yet (conditional bonuses,
                                         per-round effects, and damage/heal/shield modifiers) are
                                         marked &quot;Not simulated&quot; in the picker preview and

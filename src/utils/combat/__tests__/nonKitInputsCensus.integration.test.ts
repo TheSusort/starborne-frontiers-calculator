@@ -1178,6 +1178,17 @@ const LEGION_TRIO: BoardSpec = {
     rounds: 1,
 };
 
+/** The trio again, but a faster enemy one-shots Legion ally A before W's first turn. */
+const LEGION_TRIO_ONE_DIES: BoardSpec = {
+    player: [
+        unit('W', 'M3', { faction: 'FRONTIER_LEGION' }),
+        unit('A', 'M4', IDLE, { faction: 'FRONTIER_LEGION', stats: { hp: 100 } }),
+        unit('B', 'M2', IDLE, { faction: 'FRONTIER_LEGION' }),
+    ],
+    enemy: [unit('O', 'M4', { stats: { speed: 200 } })],
+    rounds: 1,
+};
+
 const LIEUTENANT_DEFPEN = stagePair(
     solo({ faction: 'FRONTIER_LEGION' }, { ...IDLE, stats: { defence: 5000 } }),
     'FRONTIER_LEGION',
@@ -1293,12 +1304,50 @@ const LEADER_ROWS: LeaderRow[] = [
         },
     },
     {
-        // DIVERGES (ledger): "+5% attack for each other alive Legion ally" folds as a flat +5%.
-        // Three Legion ships: today 8% → 13%, by the text 8% → 18%.
-        line: 'Legion Lieutenant III: +5% attack per other alive Legion ally (flat today)',
+        // "+5% attack for each other alive Legion ally": three Legion ships each get
+        // 8% + 2 × 5% = 18% attack.
+        line: 'Legion Lieutenant III: +5% attack per other alive Legion ally',
         ...stagePair(LEGION_TRIO, 'FRONTIER_LEGION', 'Lieutenant', 3, 2),
         check: (w, c) =>
-            expect(firstHit('W', 'O')(w) / firstHit('W', 'O')(c)).toBeCloseTo(1.13 / 1.08, 6),
+            expect(firstHit('W', 'O')(w) / firstHit('W', 'O')(c)).toBeCloseTo(1.18 / 1.08, 6),
+    },
+    {
+        // The count is live: once ally A is destroyed, W has one other Legion ally left and hits
+        // with 8% + 5% = 13%.
+        line: 'Legion Lieutenant III: the bonus drops when a Legion ally dies',
+        ...stagePair(LEGION_TRIO_ONE_DIES, 'FRONTIER_LEGION', 'Lieutenant', 3, 2),
+        check: (w, c) => {
+            // A dies before W's hit lands, in both arms.
+            for (const r of [w, c]) {
+                const death = r.entries.findIndex(
+                    (e) =>
+                        e.kind === 'death' &&
+                        (e.actorId === r.id('A') || e.targets.some((t) => t.targetId === r.id('A')))
+                );
+                const hit = r.entries.indexOf(entriesOf(r, 'attack', { actor: 'W' })[0]);
+                expect(death).toBeGreaterThanOrEqual(0);
+                expect(death).toBeLessThan(hit);
+            }
+            expect(firstHit('W', 'O')(w) / firstHit('W', 'O')(c)).toBeCloseTo(1.13 / 1.08, 6);
+        },
+    },
+    {
+        // A lone Legion ship has no other Legion ally: stage III adds nothing.
+        line: 'Legion Lieutenant III: no bonus without another Legion ally',
+        ...stagePair(
+            solo({ faction: 'FRONTIER_LEGION' }, IDLE),
+            'FRONTIER_LEGION',
+            'Lieutenant',
+            3,
+            2
+        ),
+        check: scales(firstHit('W', 'O'), 1, 6),
+    },
+    {
+        // Colonel II: 10% + 2 × 7.5% = 25% with two other Legion allies, against Colonel I's 10%.
+        line: 'Legion Colonel II: +7.5% attack per other alive Legion ally',
+        ...stagePair(LEGION_TRIO, 'FRONTIER_LEGION', 'Colonel', 2, 1),
+        check: scales(firstHit('W', 'O'), 1.25 / 1.1, 6),
     },
     {
         // "+8% Defense Penetration" adds 8 points: a ship with none hits a 5,000-defence enemy
@@ -1372,13 +1421,4 @@ describe('non-kit census: squad leaders', () => {
             });
         }
     }
-
-    // The text's numbers, failing today. Each flips to a plain `it` when the engine matches.
-    it.fails('TEXT: Legion Lieutenant III gives +10% attack with two other Legion allies', () => {
-        const { board, control } = stagePair(LEGION_TRIO, 'FRONTIER_LEGION', 'Lieutenant', 3, 2);
-        const ratio =
-            firstHit('W', 'O')(runForcedBattle(board, true)) /
-            firstHit('W', 'O')(runForcedBattle(control, true));
-        expect(ratio).toBeCloseTo(1.18 / 1.08, 6);
-    });
 });

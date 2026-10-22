@@ -63,6 +63,11 @@ type PreFightStatKey = (typeof PRE_FIGHT_STAT_KEYS)[number];
 const isPreFightStat = (stat: string): stat is PreFightStatKey =>
     (PRE_FIGHT_STAT_KEYS as readonly string[]).includes(stat);
 
+/** A per-ally line the engine can scale live: only percentage attack has a live channel
+ *  (`PreFightCombatModifiers.attackPctPerOtherFactionAlly`). */
+const isPerAllyAttack = (effect: Extract<SquadLeaderEffect, { kind: 'stat' }>): boolean =>
+    effect.stat === 'attack' && effect.valueType === 'percentage';
+
 const isPercentageOnlyStat = (stat: PreFightStatKey): boolean =>
     (PERCENTAGE_ONLY_STATS as readonly string[]).includes(stat);
 
@@ -135,7 +140,10 @@ export function isSquadLeaderEffectSimulated(effect: SquadLeaderEffect): boolean
     ) {
         return false;
     }
-    if (effect.kind === 'stat') return isPreFightStat(effect.stat);
+    if (effect.kind === 'stat') {
+        if (effect.perOtherAliveFactionAlly) return isPerAllyAttack(effect);
+        return isPreFightStat(effect.stat);
+    }
     if (effect.kind === 'ability') return true;
     // kind === 'modifier': mapped channels are consumed by the engine.
     return MODIFIER_FIELD_BY_CHANNEL[effect.channel] !== undefined;
@@ -206,6 +214,16 @@ function applyLeaderForSide(
         }
 
         if (effect.kind === 'stat') {
+            if (effect.perOtherAliveFactionAlly) {
+                if (!isPerAllyAttack(effect)) {
+                    for (const unit of recipients) unit.unsimulated.push(effect.text);
+                    continue;
+                }
+                for (const unit of recipients) {
+                    unit.modifiers.attackPctPerOtherFactionAlly += effect.value;
+                }
+                continue;
+            }
             // Defensive: a stat name outside the pre-fight block cannot be folded.
             if (!isPreFightStat(effect.stat)) {
                 for (const unit of recipients) unit.unsimulated.push(effect.text);

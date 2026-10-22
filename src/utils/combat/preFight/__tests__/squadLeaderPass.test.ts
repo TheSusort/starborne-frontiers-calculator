@@ -9,7 +9,13 @@
  * vi.importActual so it stays a pure real-data audit.
  */
 import { describe, it, expect, vi } from 'vitest';
-import { squadLeaderPass, emptyPreFightModifiers, leaderScaledAttack, runPreFight } from '../index';
+import {
+    squadLeaderPass,
+    emptyPreFightModifiers,
+    leaderScaledAttack,
+    liveLeaderAttackPct,
+    runPreFight,
+} from '../index';
 import type { PreFightUnit } from '../index';
 import { FACTION_NAMES, type FactionName } from '../../../../constants/factions';
 import { SQUAD_LEADERS } from '../../../../constants/squadLeaders';
@@ -322,6 +328,25 @@ describe('squadLeaderPass — ability lines', () => {
     });
 });
 
+describe('squadLeaderPass — per-ally lines', () => {
+    it('Lieutenant III puts its +5% on the per-ally channel, not the flat attack %', () => {
+        const player = [
+            makeUnit('p1', 'player', 'FRONTIER_LEGION'),
+            makeUnit('p2', 'player', 'FRONTIER_LEGION'),
+        ];
+        runPass(player, [], {
+            player: { faction: 'FRONTIER_LEGION', name: 'Lieutenant', stage: 3 },
+        });
+        for (const u of player) {
+            expect(u.modifiers.attackPct).toBe(8);
+            expect(u.modifiers.attackPctPerOtherFactionAlly).toBe(5);
+            expect(u.unsimulated).toEqual([]);
+        }
+        // One other living Legion ally → 8 + 5.
+        expect(liveLeaderAttackPct(player[0].modifiers, 1)).toBe(13);
+    });
+});
+
 describe('squadLeaderPass — side symmetry', () => {
     it('mirroring the selection (player ↔ enemy) yields mirrored results', () => {
         const build = () => ({
@@ -365,10 +390,11 @@ describe('squadLeaderPass — dual leaders (both sides selected)', () => {
         expect(attackSheet(player[0])).not.toBeCloseTo(1000 * 1.1 * 0.85, 5);
         // hp only sees the own leader's +10%.
         expect(player[0].stats.hp).toBeCloseTo(10000 * 1.1);
-        // The Legion foe gets its own leader's ally boosts (stage I +10% + stage II
-        // +7.5% attack, summed before the single multiply); Midas stage 1 has no
-        // enemy-facing effects.
-        expect(attackSheet(enemy[0])).toBeCloseTo(1000 * 1.175);
+        // The Legion foe gets its own leader's ally boosts: stage I's +10% attack, and stage
+        // II's +7.5% per other alive Legion ally on the per-ally channel (it has none, so the
+        // engine resolves it to 0). Midas stage 1 has no enemy-facing effects.
+        expect(attackSheet(enemy[0])).toBeCloseTo(1000 * 1.1);
+        expect(enemy[0].modifiers.attackPctPerOtherFactionAlly).toBe(7.5);
     });
 });
 

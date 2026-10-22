@@ -232,6 +232,7 @@ import { holdsRoguesLiberty } from './rogueLiberty';
 import { holdsToxicOverflow, toxicOverflowApplierOf } from './toxicOverflowStatus';
 import { supportFootprintAllyIds } from './supportFootprint';
 import type { PreFightCombatModifiers } from './preFight/types';
+import { liveLeaderAttackPct } from './preFight/types';
 import { protectionCascade, type RedirectBasis } from './protectionTransfer';
 
 /** Tripwire for NON-chainable extra-action grants: a non-once-per-round grant whose conditions
@@ -3272,6 +3273,41 @@ export function runCombat(rawInput: CombatEngineInput): {
         const dead = allActorsById.get(e.actorId);
         if (dead) dead.destroyedInHitRoot = hitRootInScope();
     });
+
+    // Squad-leader "+X% attack for each other alive <faction> ally" is LIVE. Each such actor's
+    // `preFight` becomes an engine-owned copy whose `attackPct` includes the per-ally term for the
+    // same-side allies of its own faction alive now (`liveLeaderAttackPct`), set here and redone
+    // on every death. Every `preFight.attackPct` reader therefore sees the live count; the
+    // caller's input block is never mutated.
+    const leaderAllyAttackBase = new Map<string, PreFightCombatModifiers>();
+    for (const a of allActors) {
+        if (a.preFight && a.preFight.attackPctPerOtherFactionAlly !== 0) {
+            leaderAllyAttackBase.set(a.id, a.preFight);
+        }
+    }
+    const refreshLeaderAllyAttack = (): void => {
+        for (const [id, base] of leaderAllyAttackBase) {
+            const self = allActorsById.get(id);
+            if (!self) continue;
+            const faction = factionOf(id);
+            const others =
+                faction === undefined
+                    ? 0
+                    : allActors.filter(
+                          (x) =>
+                              x.side === self.side &&
+                              x.id !== id &&
+                              x.currentHp > 0 &&
+                              x.destroyedRound === undefined &&
+                              factionOf(x.id) === faction
+                      ).length;
+            self.preFight = { ...base, attackPct: liveLeaderAttackPct(base, others) };
+        }
+    };
+    if (leaderAllyAttackBase.size > 0) {
+        refreshLeaderAllyAttack();
+        bus.on('ship-destroyed', refreshLeaderAllyAttack);
+    }
 
     /** Prophet (#591): each actor's LIVE, per-fight shield-penetration bonus — permanent and
      *  stacking, added on top of the static base at `attackerShieldPenOf`. Combat-wide (persists
