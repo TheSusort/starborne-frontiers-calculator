@@ -6,8 +6,9 @@
  * neither counts nor uses it. Each sub-attack of a multi-hit skill brings its own allowance.
  * Plain "when directly damaged" triggers (Isha's repair) fire on every hit.
  *
- * Carriers: Stalwart (counter + Legion Discipline II), Nosorog and the Reflect gear set (reflect),
- * Malvex (shield). Incinerator's end-of-round hit is a primary-target hit.
+ * Carriers: Stalwart (counter + Legion Discipline II), Nosorog (reflect), Malvex (shield).
+ * The Reflect gear set carries no such gate: it reflects every direct hit, splash included.
+ * Incinerator's end-of-round hit is a primary-target hit.
  *
  * Real parsed kits (refit 4), every board run with the carrier on the player side and on the
  * enemy side.
@@ -345,13 +346,13 @@ describe.each(SIDES)('Reflect gear set (attackers on the %s side)', (placement) 
         };
     };
 
-    it('Ripper crits the wearer as primary → ONE reflect, onto Ripper, not onto Sentinel’s tap', () => {
+    it('Ripper crits the wearer as primary → reflect onto Ripper, and Sentinel’s tap is reflected onto Sentinel', () => {
         const { obs } = run(placement, ripper(), [sentinel], [reflectWearerAt('M4')], 'wearer');
         expect(obs.reflected.ripper ?? 0).toBeGreaterThan(0);
-        expect(obs.reflected.sentinel ?? 0).toBe(0);
+        expect(obs.reflected.sentinel ?? 0).toBeGreaterThan(0);
     });
 
-    it('an area hit covers the wearer as a non-primary victim → no reflect onto Ripper', () => {
+    it('an area hit covers the wearer as a non-primary victim → the splash is reflected onto Ripper', () => {
         const { obs } = run(
             placement,
             ripper({ aoe: true }),
@@ -359,11 +360,11 @@ describe.each(SIDES)('Reflect gear set (attackers on the %s side)', (placement) 
             [frontFiller, reflectWearerAt('M3')],
             'wearer'
         );
-        expect(obs.reflected.ripper ?? 0).toBe(0);
+        expect(obs.reflected.ripper ?? 0).toBeGreaterThan(0);
         expect(obs.reflected.sentinel ?? 0).toBeGreaterThan(0);
     });
 
-    it('Incinerator: her active covering the wearer reflects nothing; her end-of-round hit does', () => {
+    it('Incinerator: her active covering the wearer is reflected, and her end-of-round hit adds another', () => {
         const board = (passive: boolean) =>
             run(
                 placement,
@@ -372,8 +373,9 @@ describe.each(SIDES)('Reflect gear set (attackers on the %s side)', (placement) 
                 [frontFiller, reflectWearerAt('M3')],
                 'wearer'
             ).obs;
-        expect(board(false).reflected.incinerator ?? 0).toBe(0);
-        expect(board(true).reflected.incinerator ?? 0).toBeGreaterThan(0);
+        const activeOnly = board(false).reflected.incinerator ?? 0;
+        expect(activeOnly).toBeGreaterThan(0);
+        expect(board(true).reflected.incinerator ?? 0).toBeGreaterThan(activeOnly);
     });
 });
 
