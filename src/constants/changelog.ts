@@ -15,6 +15,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: skills that deal no damage no longer count as critical hits.',
     "Healing calculator: the round chart's Crit marker now shows critical repairs.",
     'Combat simulator: start-of-round stack gains now resolve in turn order.',
+    'Combat simulator: hits blocked by Ironclad or Shadowguard now log the damage that landed.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

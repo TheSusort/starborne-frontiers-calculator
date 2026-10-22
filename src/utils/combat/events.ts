@@ -971,7 +971,8 @@ export type CombatEvent =
            *  passive slot) landing on one victim, right after the firing hit. It
            *  emits no `attacked` — it is not a separate attack — so the combat log adds `damage`
            *  to the open attack row's entry for `targetId`. `damage` is on the same basis as
-           *  `attacked.damage`: post-victim-defence, pre-funnel. No combat listener subscribes. */
+           *  `attacked.takenDamage`: what the victim took (`loggedHitFigures`), emitted after the
+           *  funnel resolved the instance. No combat listener subscribes. */
           type: 'passive-slot-damage';
           attackerId: string;
           targetId: string;
@@ -1005,8 +1006,9 @@ export type CombatEvent =
            *  aggregate, and NOT what the victim ended up taking. Pre-funnel: a Protection cascade
            *  may have moved a slice of it to a protector, an incoming-block proc may have shaved
            *  one. Present only when a damage aggregate is in scope. The combat log's row
-           *  `amount` reads this, for the primary target and splash alike, except on a `protectionSplit` hit. Anything sized on what the victim TOOK reads `takenDamage`
-           *  below. */
+           *  `amount` reads `takenDamage` below and falls back to this only where that is absent
+           *  (the non-positional path). Anything sized on what the victim TOOK reads
+           *  `takenDamage`. */
           damage?: number;
           /** What this victim actually TOOK from this sub-attack: the funnel's own recorded
            *  intake (`VictimDamageOutcome.incomingBooked`) — post-Protection-cascade,
