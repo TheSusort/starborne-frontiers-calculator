@@ -4,6 +4,7 @@ import { PROTECTION_SHARE_NOTE } from '../log/buildCombatLog';
 import { controlEffectLabel, dotFamilyLabel } from '../debuffImmunity';
 import type { ControlEffect } from '../../../types/abilities';
 import type { DoTType } from '../../../types/calculator';
+import { OVERCLOCK_HANGOVER_DEBUFFS } from '../overclockHangover';
 import type { FingerprintDiff } from './types';
 
 /**
@@ -63,6 +64,17 @@ export function resistedAttemptKind(label: string | undefined): CombatLogEntryKi
     return 'debuff';
 }
 
+const HANGOVER_DEBUFFS: ReadonlySet<string> = new Set(OVERCLOCK_HANGOVER_DEBUFFS);
+
+function isOverclockHangoverRow(entry: CombatLogEntry): boolean {
+    return (
+        entry.kind === 'debuff' &&
+        HANGOVER_DEBUFFS.has(entry.note ?? '') &&
+        entry.targets.length === 1 &&
+        entry.targets[0].targetId === entry.actorId
+    );
+}
+
 /**
  * The kind an entry contributes to its actor's oracle fingerprint, or null when it contributes
  * nothing.
@@ -72,11 +84,17 @@ export function resistedAttemptKind(label: string | undefined): CombatLogEntryKi
  *  - A landed control effect logs a `control` row AND a `debuff` row named after the effect; a
  *    resisted one logs a single resist. Both read as `control`, so landing and resisting the same
  *    Provoke fingerprint alike.
+ *  - An Overclock hangover debuff is stamped on the holder with the holder as its caster, so an
+ *    ally's Overclock expiring on the subject would read as the subject's own debuff. No kit
+ *    inflicts a named debuff on its own caster, so a debuff row whose only target is its actor
+ *    and whose name is one of `OVERCLOCK_HANGOVER_DEBUFFS` is that hangover and contributes
+ *    nothing.
  *  - A protection share row is an `attack` booked to the PROTECTOR for damage it absorbed on an
  *    ally's behalf, not an attack it made.
  */
 export function oracleKind(entry: CombatLogEntry): CombatLogEntryKind | null {
     if (entry.kind === 'attack' && entry.note === PROTECTION_SHARE_NOTE) return null;
+    if (isOverclockHangoverRow(entry)) return null;
     if (entry.kind === 'debuff' && CONTROL_LABELS.has(entry.note ?? '')) return 'control';
     if (entry.kind === 'debuff-resisted' && entry.targets[0]?.targetId !== entry.actorId) {
         return resistedAttemptKind(entry.note);

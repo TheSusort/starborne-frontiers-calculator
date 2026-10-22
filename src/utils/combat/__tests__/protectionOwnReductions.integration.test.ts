@@ -12,6 +12,9 @@
  */
 import { describe, it, expect } from 'vitest';
 import { runCombat, CombatEngineInput, TeamActorEngineInput } from '../engine';
+import { createEventBus, type CombatEvent } from '../events';
+import { checkInvariants } from '../audit/invariants';
+import { buildAuditTrail, type BattleResult } from '../../calculators/battleSimulator';
 import type { SelectedGameBuff } from '../../../types/calculator';
 import type { Ability, ShipSkills } from '../../../types/abilities';
 import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
@@ -48,12 +51,12 @@ const protectionAura = (stacks: number): Slot =>
         isStackable: true,
     });
 
-/** An always-on Inc. Damage Down II (−30% incoming direct damage) on its holder. */
-const incDamageDownAura = (): Slot =>
+/** An always-on Inc. Damage Down (default −30%, the II tier) on its holder. */
+const incDamageDownAura = (pct = -30): Slot =>
     passive({
         type: 'buff',
         buffName: 'Inc. Damage Down II',
-        parsedEffects: { incomingDamage: -30 },
+        parsedEffects: { incomingDamage: pct },
         stacks: 1,
         isStackable: true,
     });
@@ -259,3 +262,54 @@ describe.each(sides)('Protection: each ship prices its own part ($side)', (s) =>
         expect(run[s.target] / run[s.protector]).toBeCloseTo(base[s.target] / base[s.protector], 6);
     });
 });
+
+/** One run's incoming totals and its `hit-incoming-factor` rows, as the audit trail reads them. */
+const auditedRun = (input: CombatEngineInput) => {
+    const bus = createEventBus();
+    const events: CombatEvent[] = [];
+    bus.on('hit-incoming-factor', (e) => events.push(e));
+    const incoming: Record<string, number> = {};
+    for (const rd of runCombat({ ...input, bus }).rounds) {
+        for (const [id, b] of Object.entries(rd.perActorIncoming ?? {})) {
+            incoming[id] = (incoming[id] ?? 0) + (b?.incoming ?? 0);
+        }
+    }
+    const result: BattleResult = {
+        rounds: [],
+        outcome: { winner: 'enemy', lastRound: input.numRounds },
+        roster: [],
+        combatLog: [],
+        audit: buildAuditTrail(events),
+    };
+    return { incoming, result };
+};
+
+describe.each(sides)(
+    'Protection: the protector chunk is audited against the 70% cap ($side)',
+    (s) => {
+        const base = auditedRun(s.board({}));
+        // −60 Inc. Damage Down × a 40% passive is 0.24, which floors to 0.30.
+        const capped = auditedRun(
+            s.board({ protector: [incDamageDownAura(-60), directReductionPassive(40)] })
+        );
+        const protectorRows = (r: ReturnType<typeof auditedRun>) =>
+            r.result.audit!.hitIncomingFactors.filter((h) => h.victimId === s.protector);
+
+        it('an unreduced protector chunk has a factor row at 1', () => {
+            const rows = protectorRows(base);
+            expect(rows.length).toBeGreaterThan(0);
+            for (const h of rows) {
+                expect(h.factor).toBe(1);
+                expect(h.block).toBe('none');
+            }
+        });
+
+        it('a protector past the cap is priced at 0.30, its rows say so, and the gate holds', () => {
+            expect(capped.incoming[s.protector]).toBeCloseTo(base.incoming[s.protector] * 0.3, 6);
+            const rows = protectorRows(capped);
+            expect(rows.length).toBeGreaterThan(0);
+            for (const h of rows) expect(h.factor).toBeCloseTo(0.3, 12);
+            expect(checkInvariants(capped.result)).toEqual([]);
+        });
+    }
+);

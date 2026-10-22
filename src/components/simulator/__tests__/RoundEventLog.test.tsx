@@ -414,6 +414,38 @@ describe('RoundEventLog', () => {
         expect(screen.getByText(/^Nova: Attack Up$/)).toBeInTheDocument();
     });
 
+    it('cleanse: names every recipient that lost a debuff', () => {
+        render(
+            <RoundEventLog
+                round={oneEntryRound({
+                    kind: 'cleanse',
+                    actorId: 'nova',
+                    targets: [{ targetId: 'nova' }, { targetId: 'graphite' }],
+                    reactions: [],
+                    note: 'cleansed 2',
+                })}
+                roster={roster}
+            />
+        );
+        expect(screen.getByText(/^Nova → Nova, Graphite: cleansed 2$/)).toBeInTheDocument();
+    });
+
+    it('cleanse: collapses to just the actor on a self-cleanse', () => {
+        render(
+            <RoundEventLog
+                round={oneEntryRound({
+                    kind: 'cleanse',
+                    actorId: 'nova',
+                    targets: [{ targetId: 'nova' }],
+                    reactions: [],
+                    note: 'cleansed 1',
+                })}
+                roster={roster}
+            />
+        );
+        expect(screen.getByText(/^Nova: cleansed 1$/)).toBeInTheDocument();
+    });
+
     it('shows a collapsed stats summary under a turn and expands to the full block', async () => {
         const round: CombatLogRound = {
             round: 1,

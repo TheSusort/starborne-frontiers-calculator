@@ -48,6 +48,7 @@ export const LEDGER_BLIND_SPOTS: readonly string[] = [
     "Gates on the subject's OWN HP (below-X% HP, would-be-destroyed, cheat death): the differential scales the subject's HP, so these fire later or never.",
     'On-kill and on-death effects in the round that wipes a side: that round is partial and is not compared.',
     'Anything after the subject dies, or after the shorter of the two arms ends.',
+    "Outputs that scale with the subject's max HP (shields, reflect hits): `SUBJECT_HP_SCALE` multiplies them equally in both arms.",
     'Recipient-booked kinds (`EXCLUDED_KINDS` in oracleKinds.ts): an ally changing what is done TO the subject is not reported.',
 ];
 

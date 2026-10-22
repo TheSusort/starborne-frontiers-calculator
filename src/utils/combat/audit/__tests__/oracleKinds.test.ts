@@ -8,6 +8,7 @@ import {
     restrictDiff,
     windowedDiff,
 } from '../oracleKinds';
+import { OVERCLOCK_HANGOVER_DEBUFFS } from '../../overclockHangover';
 import type { BattleResult } from '../../../calculators/battleSimulator';
 import type { CombatLogEntry, CombatLogEntryKind } from '../../log/types';
 import type { FingerprintDiff } from '../types';
@@ -243,6 +244,33 @@ describe('oracleKind: protection share rows', () => {
 
     it('keeps an ordinary attack', () => {
         expect(oracleKind(entry({ kind: 'attack' }))).toBe('attack');
+    });
+});
+
+describe('oracleKind: Overclock hangover rows', () => {
+    const selfTarget = [{ targetId: SUBJECT }];
+
+    it.each(OVERCLOCK_HANGOVER_DEBUFFS)(
+        'drops %s booked to a holder that is its own sole target',
+        (note) => {
+            const comp = result(
+                rounds(3, { entries: [attack, { kind: 'debuff', note, targets: selfTarget }] })
+            );
+            const baseline = result(rounds(3, { entries: [attack] }));
+            expect(oracleKind(entry({ kind: 'debuff', note, targets: selfTarget }))).toBeNull();
+            expect(diff(baseline, comp).raw).toBeNull();
+        }
+    );
+
+    it('keeps the same debuff inflicted on an enemy: that is the subject acting', () => {
+        const note = OVERCLOCK_HANGOVER_DEBUFFS[0];
+        expect(oracleKind(entry({ kind: 'debuff', note }))).toBe('debuff');
+    });
+
+    it('keeps a self-targeted debuff that is not a hangover debuff', () => {
+        expect(
+            oracleKind(entry({ kind: 'debuff', note: 'Defense Down II', targets: selfTarget }))
+        ).toBe('debuff');
     });
 });
 

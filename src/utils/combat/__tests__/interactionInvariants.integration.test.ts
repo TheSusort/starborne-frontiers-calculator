@@ -1,5 +1,11 @@
 import { describe, it, expect, beforeAll } from 'vitest';
-import { checkInvariants, extraActionActorIds, shipGrantsExtraAction } from '../audit/invariants';
+import {
+    checkInvariants,
+    durationExtenderKinds,
+    extraActionActorIds,
+    shipDurationExtensionKinds,
+    shipGrantsExtraAction,
+} from '../audit/invariants';
 import { checkReproducibility } from '../audit/reproducibility';
 import { composeBattle, type TaggedShip } from '../audit/compose';
 import { tagShip } from '../audit/classes';
@@ -11,8 +17,8 @@ import { loadShipDataByName, shipDataAvailable } from '../../../../scripts/lib/s
 // Permanent regression gate for the interaction-audit harness. Fuzzes a FIXED seed set
 // (1..SEED_COUNT) over the real tagged corpus and asserts `checkInvariants` (audit/invariants.ts)
 // holds for every composition, so a future change that reintroduces an interaction bug fails
-// `npm test`. `checkOpenInvariants` is not asserted here: it fires on the current corpus (see
-// `OPEN_INVARIANTS`), and its unit tests in audit/__tests__/invariants.test.ts keep it honest.
+// `npm test`. `checkOpenInvariants` is not asserted here: it fires on the current corpus by design
+// (see `OPEN_INVARIANTS`), and its unit tests in audit/__tests__/invariants.test.ts keep it honest.
 //
 // Corpus-loading pattern matches compose.test.ts / scripts/auditInteractions.ts: names
 // collected from BOTH docs/ship-skills.csv and docs/ship-data.json (de-duped
@@ -54,11 +60,15 @@ describe.skipIf(!csvAvailable() || !shipDataAvailable())(
     () => {
         let tagged: TaggedShip[];
         let grantsExtraAction: Map<string, boolean>;
+        let extensionKinds: Map<string, ReadonlySet<'buff' | 'debuff'>>;
 
         beforeAll(() => {
             tagged = buildTaggedCorpus();
             grantsExtraAction = new Map(
                 tagged.map((t) => [t.ship.id, shipGrantsExtraAction(t.ship)])
+            );
+            extensionKinds = new Map(
+                tagged.map((t) => [t.ship.id, shipDurationExtensionKinds(t.ship)])
             );
         });
 
@@ -69,12 +79,17 @@ describe.skipIf(!csvAvailable() || !shipDataAvailable())(
         for (let seed = 1; seed <= SEED_COUNT; seed++) {
             it(`seed ${seed} composition holds all invariants`, () => {
                 const input = composeBattle(seed, tagged);
-                const result = runSeededBattle(input, seed);
+                const result = runSeededBattle({ ...input, __auditTrail: true }, seed);
                 const violations = checkInvariants(result, {
                     extraActionActorIds: extraActionActorIds(
                         input,
                         result,
                         (ship) => grantsExtraAction.get(ship.id) ?? shipGrantsExtraAction(ship)
+                    ),
+                    durationExtenders: durationExtenderKinds(
+                        input,
+                        result,
+                        (ship) => extensionKinds.get(ship.id) ?? shipDurationExtensionKinds(ship)
                     ),
                 });
                 expect(violations).toEqual([]);

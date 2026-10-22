@@ -1,8 +1,6 @@
 /* eslint-disable no-console */
 import { parseAuditArgs } from './lib/auditArgs';
-import { loadShipSkillRecords, csvAvailable } from './lib/shipSkillCsv';
-import { loadShipDataByName, shipDataAvailable } from './lib/shipDataSnapshot';
-import { buildTraceShip } from './lib/traceShipFactory';
+import { loadTaggedCorpus } from './lib/taggedCorpus';
 import {
     formatCoverage,
     writeLedger,
@@ -10,13 +8,13 @@ import {
     type LedgerCoverage,
 } from './lib/interactionLedger';
 import {
+    baselineFillerPool,
     minimizeDifferential,
     playerDifferential,
     residualHistogram,
     runCalibration,
 } from './lib/interactionOracle';
-import { tagShip } from '../src/utils/combat/audit/classes';
-import { composeBattle, type TaggedShip } from '../src/utils/combat/audit/compose';
+import { composeBattle } from '../src/utils/combat/audit/compose';
 import { runSeededBattle } from '../src/utils/simulator/seededRuns';
 import { checkInvariants, extraActionActorIds } from '../src/utils/combat/audit/invariants';
 import { checkReproducibility } from '../src/utils/combat/audit/reproducibility';
@@ -31,34 +29,6 @@ import type {
 } from '../src/utils/calculators/battleSimulator';
 import type { Position } from '../src/types/encounters';
 import type { Ship } from '../src/types/ship';
-
-// ---------------------------------------------------------------------------
-// Corpus loading — same pattern as compose.test.ts's buildTaggedCorpus: names collected from
-// BOTH the CSV and the snapshot (de-duped case-insensitively), resolved via buildTraceShip, and
-// the (should-be-zero) names that resolve from neither source are dropped.
-// ---------------------------------------------------------------------------
-
-function loadTaggedCorpus(): TaggedShip[] {
-    if (!csvAvailable() || !shipDataAvailable()) {
-        console.error(
-            'docs/ship-skills.csv and/or docs/ship-data.json are missing from this worktree ' +
-                '(gitignored reference data) — cannot build the ship corpus.'
-        );
-        process.exit(1);
-    }
-    const namesByUpper = new Map<string, string>();
-    for (const r of loadShipSkillRecords()) namesByUpper.set(r.name.toUpperCase(), r.name);
-    for (const [upper, data] of loadShipDataByName()) {
-        if (!namesByUpper.has(upper)) namesByUpper.set(upper, data.name);
-    }
-    const tagged: TaggedShip[] = [];
-    for (const name of namesByUpper.values()) {
-        const ship = buildTraceShip(name);
-        if (!ship) continue;
-        tagged.push({ ship, classes: tagShip(ship) });
-    }
-    return tagged;
-}
 
 // ---------------------------------------------------------------------------
 // Roster resolution
@@ -279,13 +249,13 @@ function main(): void {
         histogram: residualHistogram(calibration.residual),
     };
 
-    // Baseline fillers: the same inert set the calibration gate is built from, threaded
+    // Baseline fillers: the inert, non-supportive subset of the calibration gate's set, threaded
     // explicitly so the oracle and its ddmin stay a pure function of (seed, subject, pool).
-    const inertPool = tagged.filter((t) => t.classes.size === 0).map((t) => t.ship);
-    if (inertPool.length === 0) {
-        console.error(
-            'no inert ships (empty class tag set) in the corpus — cannot build baselines'
-        );
+    let inertPool: Ship[];
+    try {
+        inertPool = baselineFillerPool(tagged);
+    } catch (err) {
+        console.error(err instanceof Error ? err.message : String(err));
         process.exit(1);
     }
     console.log(`Inert baseline filler pool: ${inertPool.length} ships.`);

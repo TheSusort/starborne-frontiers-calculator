@@ -14,6 +14,13 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator: Cobalt's start-of-turn charge now counts toward that turn's skill.",
     'Combat simulator: skills that deal no damage no longer count as critical hits.',
     "Healing calculator: the round chart's Crit marker now shows critical repairs.",
+    'Combat simulator: start-of-round stack gains now resolve in turn order.',
+    'Combat simulator: hits blocked by Ironclad or Shadowguard now log the damage that landed.',
+    'Combat simulator: cleanse rows in the battle log now name the cleansed ships.',
+    'Combat simulator: destroyed ships no longer repair themselves from their lingering DoTs.',
+    'Combat simulator: destroyed ships stop gaining Overload, Blast and other per-round stacks.',
+    'Combat simulator: ally-wide buffs, repairs, charges and debuff trims now skip destroyed allies.',
+    'Combat simulator: ships killed by a DoT tick now trigger death effects immediately.',
     "Combat simulator: a killing blow's Bomb or debuff no longer lands on the wreck.",
     "Combat simulator: Voron's and Meatshield's converted-hit DoTs can no longer be cleansed.",
 ];
