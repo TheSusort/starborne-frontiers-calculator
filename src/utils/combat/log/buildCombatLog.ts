@@ -1014,6 +1014,20 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
         ctx.openBurst = { victimId: e.victimId, target: entry.targets[0] };
     },
 
+    // A landing the cast's own damage pre-empted by destroying its target. No row of its own: it is
+    // recorded on the attack row of this turn that struck that ship, newest first.
+    'landing-dropped': (e, ctx) => {
+        const entries = ctx.currentTurn?.entries ?? [];
+        for (let i = entries.length - 1; i >= 0; i--) {
+            const entry = entries[i];
+            if (entry.kind !== 'attack' || entry.actorId !== e.sourceId) continue;
+            const target = entry.targets.find((t) => t.targetId === e.targetId);
+            if (!target) continue;
+            target.droppedLandings = [...(target.droppedLandings ?? []), e.label];
+            return;
+        }
+    },
+
     // The splash a dying bomb carrier threw at an adjacent ally. Booked to the bomb's APPLIER, the
     // actor credited with the damage, with the splashed ally as the target.
     'bomb-splash-log': (e, ctx) => {

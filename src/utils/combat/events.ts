@@ -738,6 +738,19 @@ export type CombatEvent =
           affectedIds: string[];
           round: number;
       } & ReactiveStamp)
+    /** LOG-ONLY: a landing this cast decided against `targetId` was dropped because the cast's
+     *  damage destroyed that ship first (owner ruling 2026-10-22 — see
+     *  `DeferredEnemyApplication.landsOnId`). `label` names what did not land: a debuff's buff
+     *  name, or a DoT/Bomb's resist label (`dotResistLabel`). NO combat listener subscribes to it,
+     *  so nothing reacts to a landing that did not happen; the combat log records it on the
+     *  attack row that struck the ship (`CombatLogTarget.droppedLandings`). */
+    | {
+          type: 'landing-dropped';
+          sourceId: string;
+          targetId: string;
+          round: number;
+          label: string;
+      }
     /** LOG-ONLY: a bomb carrier died with the bomb still pending and its death splash landed on
      *  an adjacent same-side ally. `actorId` = the bomb's applier (credited with the damage),
      *  `victimId` = the splashed ally, `damage` = the intake the funnel recorded for the ally.

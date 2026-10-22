@@ -185,6 +185,41 @@ describe('oracleKind: resist as attempt', () => {
     });
 });
 
+describe("oracleFingerprint: a landing the hit's own kill dropped", () => {
+    const killed = (labels: string[]) =>
+        result(
+            rounds(3, {
+                entries: [
+                    { kind: 'attack', targets: [{ targetId: ENEMY, droppedLandings: labels }] },
+                ],
+            })
+        );
+
+    it('counts as the attempt it was, like a resist', () => {
+        const landed = result(
+            rounds(3, {
+                entries: [
+                    attack,
+                    { kind: 'debuff', note: 'Defense Down II' },
+                    { kind: 'dot-applied', note: 'bomb ×1' },
+                    { kind: 'control', note: 'concentrate-fire' },
+                    { kind: 'debuff', note: 'Concentrate Fire' },
+                ],
+            })
+        );
+        expect(
+            diff(landed, killed(['Defense Down II', 'Bomb', 'Concentrate Fire'])).raw
+        ).toBeNull();
+        expect(oracleFingerprint(killed(['Bomb']), SUBJECT)).toEqual(
+            new Set(['attack', 'dot-applied'])
+        );
+    });
+
+    it('control: an attack with nothing dropped contributes only the attack', () => {
+        expect(oracleFingerprint(killed([]), SUBJECT)).toEqual(new Set(['attack']));
+    });
+});
+
 describe('oracleKind: protection share rows', () => {
     it('drops an attack row noted Protection: damage absorbed for an ally, not an attack made', () => {
         const comp = result(rounds(3, { entries: [{ kind: 'attack', note: 'Protection' }] }));
