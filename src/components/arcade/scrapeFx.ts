@@ -213,36 +213,50 @@ export function drawScrapeStreak(
 }
 
 /**
- * The contact line where the hull meets the track, and the sparks as short streaks along their
- * motion batched by colour and opacity step, all added light. Drawn over the ship; `contact` is
- * `null` once the hull has left the track, and the line goes with it.
+ * The glowing contact line where the hull meets the track, as added light. Drawn before the ship,
+ * so it lies on the track under the hull; `contact` is `null` once the hull has left the track,
+ * and the line goes with it.
  */
-export function drawScrapeSparks(
+export function drawScrapeContact(
     ctx: CanvasRenderingContext2D,
     fx: ScrapeFx,
     contact: ScrapeContact | null,
     u: number
 ): void {
+    if (!contact || fx.glow <= 0.01) return;
     const alpha = ctx.globalAlpha;
     const op = ctx.globalCompositeOperation;
     const cap = ctx.lineCap;
     ctx.globalCompositeOperation = 'lighter';
     ctx.lineCap = 'round';
-    if (contact && fx.glow > 0.01) {
-        const centre = contactCentre(contact);
-        const half = contactHalf(contact);
-        ctx.beginPath();
-        ctx.moveTo(centre - half, contact.y);
-        ctx.lineTo(centre + half, contact.y);
-        for (let pass = 0; pass < 3; pass++) {
-            ctx.strokeStyle = pass === 2 ? '#ffffff' : pass === 1 ? COLOURS[2] : COLOURS[0];
-            const gain = pass === 0 ? 0.3 : pass === 1 ? 0.6 : 0.95;
-            const width = pass === 0 ? 0.06 : pass === 1 ? 0.022 : 0.007;
-            ctx.globalAlpha = alpha * fx.glow * gain;
-            ctx.lineWidth = Math.max(1, width * u);
-            ctx.stroke();
-        }
+    const centre = contactCentre(contact);
+    const half = contactHalf(contact);
+    ctx.beginPath();
+    ctx.moveTo(centre - half, contact.y);
+    ctx.lineTo(centre + half, contact.y);
+    for (let pass = 0; pass < 3; pass++) {
+        ctx.strokeStyle = pass === 2 ? '#ffffff' : pass === 1 ? COLOURS[2] : COLOURS[0];
+        const gain = pass === 0 ? 0.3 : pass === 1 ? 0.6 : 0.95;
+        const width = pass === 0 ? 0.06 : pass === 1 ? 0.022 : 0.007;
+        ctx.globalAlpha = alpha * fx.glow * gain;
+        ctx.lineWidth = Math.max(1, width * u);
+        ctx.stroke();
     }
+    ctx.globalAlpha = alpha;
+    ctx.globalCompositeOperation = op;
+    ctx.lineCap = cap;
+}
+
+/**
+ * The sparks as short streaks along their motion, batched by colour and opacity step, all added
+ * light. Drawn over the ship.
+ */
+export function drawScrapeSparks(ctx: CanvasRenderingContext2D, fx: ScrapeFx, u: number): void {
+    const alpha = ctx.globalAlpha;
+    const op = ctx.globalCompositeOperation;
+    const cap = ctx.lineCap;
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.lineCap = 'round';
     const sparkWidth = Math.max(1, 0.012 * u);
     ctx.lineWidth = sparkWidth;
     for (let c = 0; c < COLOURS.length; c++) {

@@ -86,6 +86,7 @@ import {
     advanceScrape,
     contactStrength,
     createScrapeFx,
+    drawScrapeContact,
     drawScrapeSparks,
     drawScrapeStreak,
     ScrapeContact,
@@ -811,10 +812,12 @@ export function renderFlight(
         drawShipTrails(ctx, g, view.trail, game.speed, view.playerX, ship, u, e * e * fade);
     }
     view.trailTravel = 0;
-    if (view.scrape && !view.dying)
+    if (view.scrape && !view.dying) {
         drawScrapeStreak(ctx, g, view.scrape, view.playerX, view.trail, u);
+        drawScrapeContact(ctx, view.scrape, contact, u);
+    }
     if (!view.dying) drawPlayer(ctx, ship, game, view, timeMs, dpr, magnet);
-    if (view.scrape && !view.dying) drawScrapeSparks(ctx, view.scrape, contact, u);
+    if (view.scrape && !view.dying) drawScrapeSparks(ctx, view.scrape, u);
     for (const item of items) if (item.z < 0) drawItem(item);
     endPulls(view.pulls);
     if (view.dying) drawExplosion(ctx, g, boom, w, h);
