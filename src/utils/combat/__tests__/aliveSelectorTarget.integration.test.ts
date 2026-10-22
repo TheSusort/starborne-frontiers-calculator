@@ -344,3 +344,28 @@ describe('#407: a dead ship is never named by an enemy selector', () => {
         expect(probe.enemyStores[CORPSE_ID]).not.toContain('Probe Mark');
     });
 });
+
+// Stealth hides a ship from being picked as an ATTACK target, never from a selector (ruling R3 in
+// `targetableActors.ts`; flowchart ledger row 9.17). The stealthed enemy is the highest-attack one
+// AND sits in the back column, so the mark landing on it cannot be the anchor fall-through.
+describe('the enemy selectors ignore Stealth', () => {
+    it('enemy-highest-attack marks a STEALTHED highest-attack enemy', () => {
+        const probe = runProbe(
+            [damageClause()],
+            [selectorDebuff('enemy-highest-attack')],
+            [
+                { id: ANCHOR_ID, position: 'M4', speed: 5, attack: 10 },
+                {
+                    id: LIVING_ID,
+                    position: 'M1',
+                    speed: 150,
+                    attack: 9000,
+                    abilities: [selfBuff('Stealth')],
+                },
+            ]
+        );
+        expect(probe.enemySelfStores[LIVING_ID]).toContain('Stealth');
+        expect(probe.enemyStores[LIVING_ID]).toContain('Probe Mark');
+        expect(probe.enemyStores[ANCHOR_ID]).not.toContain('Probe Mark');
+    });
+});
