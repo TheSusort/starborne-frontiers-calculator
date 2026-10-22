@@ -1,7 +1,7 @@
 import { buildInertAllyBaseline } from './traceScenario';
 import { composeBattle, type TaggedShip } from '../../src/utils/combat/audit/compose';
 import { runSeededBattle } from '../../src/utils/simulator/seededRuns';
-import { checkInvariants } from '../../src/utils/combat/audit/invariants';
+import { checkInvariants, extraActionActorIds } from '../../src/utils/combat/audit/invariants';
 import { checkReproducibility } from '../../src/utils/combat/audit/reproducibility';
 import { minimizeComposition } from '../../src/utils/combat/audit/minimize';
 import { diffPersists, restrictDiff, windowedDiff } from '../../src/utils/combat/audit/oracleKinds';
@@ -238,7 +238,8 @@ export function runCalibration(
         try {
             const compInput = composeBattle(s, inert);
             const compResult = runSeededBattle(compInput, s);
-            for (const v of checkInvariants(compResult)) {
+            const extraActionIds = extraActionActorIds(compInput, compResult);
+            for (const v of checkInvariants(compResult, { extraActionActorIds: extraActionIds })) {
                 invariantFailures.push(`seed ${s}: ${v.detail}`);
             }
             for (const v of checkReproducibility(compInput, s)) {

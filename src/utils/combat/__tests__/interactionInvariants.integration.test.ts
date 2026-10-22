@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll } from 'vitest';
-import { checkInvariants } from '../audit/invariants';
+import { checkInvariants, extraActionActorIds, shipGrantsExtraAction } from '../audit/invariants';
 import { checkReproducibility } from '../audit/reproducibility';
 import { composeBattle, type TaggedShip } from '../audit/compose';
 import { tagShip } from '../audit/classes';
@@ -8,10 +8,11 @@ import { buildTraceShip } from '../../../../scripts/lib/traceShipFactory';
 import { loadShipSkillRecords, csvAvailable } from '../../../../scripts/lib/shipSkillCsv';
 import { loadShipDataByName, shipDataAvailable } from '../../../../scripts/lib/shipDataSnapshot';
 
-// Permanent regression gate for the interaction-audit harness. Fuzzes a FIXED small
-// seed set (1..25) over the real tagged corpus and asserts the pure result invariants
-// (hp-bounds, no-dead-acts, damage-conservation — see audit/invariants.ts) hold for every
-// composition, so a future change that reintroduces an interaction bug fails `npm test`.
+// Permanent regression gate for the interaction-audit harness. Fuzzes a FIXED seed set
+// (1..SEED_COUNT) over the real tagged corpus and asserts `checkInvariants` (audit/invariants.ts)
+// holds for every composition, so a future change that reintroduces an interaction bug fails
+// `npm test`. `checkOpenInvariants` is not asserted here: it fires on the current corpus (see
+// `OPEN_INVARIANTS`), and its unit tests in audit/__tests__/invariants.test.ts keep it honest.
 //
 // Corpus-loading pattern matches compose.test.ts / scripts/auditInteractions.ts: names
 // collected from BOTH docs/ship-skills.csv and docs/ship-data.json (de-duped
@@ -30,6 +31,8 @@ import { loadShipDataByName, shipDataAvailable } from '../../../../scripts/lib/s
 // draws. If this gate goes red immediately after such a data refresh (with no engine/oracle
 // code changed), treat it as a DATA change to investigate first — not necessarily a real
 // engine regression.
+const SEED_COUNT = 300;
+
 function buildTaggedCorpus(): TaggedShip[] {
     const namesByUpper = new Map<string, string>();
     for (const r of loadShipSkillRecords()) namesByUpper.set(r.name.toUpperCase(), r.name);
@@ -50,20 +53,31 @@ describe.skipIf(!csvAvailable() || !shipDataAvailable())(
     'interaction invariants regression gate',
     () => {
         let tagged: TaggedShip[];
+        let grantsExtraAction: Map<string, boolean>;
 
         beforeAll(() => {
             tagged = buildTaggedCorpus();
+            grantsExtraAction = new Map(
+                tagged.map((t) => [t.ship.id, shipGrantsExtraAction(t.ship)])
+            );
         });
 
         it('corpus is non-empty', () => {
             expect(tagged.length).toBeGreaterThan(0);
         });
 
-        for (let seed = 1; seed <= 25; seed++) {
+        for (let seed = 1; seed <= SEED_COUNT; seed++) {
             it(`seed ${seed} composition holds all invariants`, () => {
                 const input = composeBattle(seed, tagged);
                 const result = runSeededBattle(input, seed);
-                expect(checkInvariants(result)).toEqual([]);
+                const violations = checkInvariants(result, {
+                    extraActionActorIds: extraActionActorIds(
+                        input,
+                        result,
+                        (ship) => grantsExtraAction.get(ship.id) ?? shipGrantsExtraAction(ship)
+                    ),
+                });
+                expect(violations).toEqual([]);
             });
         }
 
