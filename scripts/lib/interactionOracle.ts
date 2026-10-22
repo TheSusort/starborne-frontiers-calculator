@@ -1,4 +1,5 @@
 import { buildInertAllyBaseline } from './traceScenario';
+import { reachesAllies } from '../../src/utils/combat/audit/classes';
 import { composeBattle, type TaggedShip } from '../../src/utils/combat/audit/compose';
 import { runSeededBattle } from '../../src/utils/simulator/seededRuns';
 import { checkInvariants, extraActionActorIds } from '../../src/utils/combat/audit/invariants';
@@ -23,6 +24,29 @@ import type { Ship } from '../../src/types/ship';
  * header (`LEDGER_BLIND_SPOTS`).
  */
 export const SUBJECT_HP_SCALE = 5;
+
+/** Fewest baseline fillers a corpus must offer. A baseline needs one distinct filler per ally
+ *  seat, so a pool below this is too thin to draw varied fillers from. */
+export const MIN_FILLER_POOL = 12;
+
+/**
+ * The ships a baseline may draw its stand-in allies from: inert (empty class tag set) AND not
+ * aimed at an ally (`reachesAllies`). An ally-buffing, repairing or shielding filler changes the
+ * subject's baseline (a filler's buff sitting atop the subject's Taunt absorbs an enemy purge
+ * meant for it), and the inert-vs-inert calibration battery cannot see that. Throws when fewer
+ * than `MIN_FILLER_POOL` remain.
+ */
+export function baselineFillerPool(tagged: readonly TaggedShip[]): Ship[] {
+    const pool = tagged
+        .filter((t) => t.classes.size === 0 && !reachesAllies(t.ship))
+        .map((t) => t.ship);
+    if (pool.length < MIN_FILLER_POOL) {
+        throw new Error(
+            `baselineFillerPool: ${pool.length} usable filler(s), need at least ${MIN_FILLER_POOL}`
+        );
+    }
+    return pool;
+}
 
 /** `input` with `playerTeam[subjectIndex]`'s HP multiplied by `scale`. */
 export function scaleSubjectHp(
@@ -209,8 +233,7 @@ export function runCalibration(
     tolerance: number = CALIBRATION_RESIDUAL_TOLERANCE
 ): CalibrationResult {
     const inert = tagged.filter((t) => t.classes.size === 0);
-    // The battery AND the baseline fillers come from the same inert set, in corpus order.
-    const inertPool = inert.map((t) => t.ship);
+    // The battery is the inert set; the baseline fillers are its non-supportive subset.
     const fail = (
         detail: string,
         comparablePlacements: number,
@@ -226,6 +249,12 @@ export function runCalibration(
     });
     if (inert.length === 0) {
         return fail('no inert ships (empty class tag set) found in the corpus', 0, 0);
+    }
+    let inertPool: Ship[];
+    try {
+        inertPool = baselineFillerPool(tagged);
+    } catch (err) {
+        return fail(err instanceof Error ? err.message : String(err), 0, 0);
     }
 
     const invariantFailures: string[] = [];

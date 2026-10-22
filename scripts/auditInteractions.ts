@@ -8,6 +8,7 @@ import {
     type LedgerCoverage,
 } from './lib/interactionLedger';
 import {
+    baselineFillerPool,
     minimizeDifferential,
     playerDifferential,
     residualHistogram,
@@ -248,13 +249,13 @@ function main(): void {
         histogram: residualHistogram(calibration.residual),
     };
 
-    // Baseline fillers: the same inert set the calibration gate is built from, threaded
+    // Baseline fillers: the inert, non-supportive subset of the calibration gate's set, threaded
     // explicitly so the oracle and its ddmin stay a pure function of (seed, subject, pool).
-    const inertPool = tagged.filter((t) => t.classes.size === 0).map((t) => t.ship);
-    if (inertPool.length === 0) {
-        console.error(
-            'no inert ships (empty class tag set) in the corpus — cannot build baselines'
-        );
+    let inertPool: Ship[];
+    try {
+        inertPool = baselineFillerPool(tagged);
+    } catch (err) {
+        console.error(err instanceof Error ? err.message : String(err));
         process.exit(1);
     }
     console.log(`Inert baseline filler pool: ${inertPool.length} ships.`);

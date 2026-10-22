@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import {
     CALIBRATION_RESIDUAL_TOLERANCE,
+    MIN_FILLER_POOL,
+    baselineFillerPool,
     calibrationVerdict,
     minimizeDifferential,
     playerDifferential,
@@ -11,7 +13,7 @@ import {
 import { buildTraceShip } from '../traceShipFactory';
 import { loadShipSkillRecords, csvAvailable } from '../shipSkillCsv';
 import { loadShipDataByName, shipDataAvailable } from '../shipDataSnapshot';
-import { tagShip } from '../../../src/utils/combat/audit/classes';
+import { reachesAllies, tagShip } from '../../../src/utils/combat/audit/classes';
 import { composeBattle, type TaggedShip } from '../../../src/utils/combat/audit/compose';
 import { canonicalPlacement } from '../../../src/utils/combat/audit/fixtures';
 import {
@@ -47,10 +49,7 @@ function corpus(): TaggedShip[] {
     corpusCache = tagged;
     return tagged;
 }
-const inertPool = (): Ship[] =>
-    corpus()
-        .filter((t) => t.classes.size === 0)
-        .map((t) => t.ship);
+const inertPool = (): Ship[] => baselineFillerPool(corpus());
 
 /** A runner that records each arm's result. `playerDifferential` runs the composition arm
  *  first, then the baseline. */
@@ -303,6 +302,46 @@ describe.skipIf(!haveCorpus)('playerDifferential on the real corpus', () => {
             }
         }
         expect(checked).toBe(true);
+    });
+});
+
+describe.skipIf(!haveCorpus)('baselineFillerPool', () => {
+    const named = (name: string): TaggedShip => {
+        const t = corpus().find((c) => c.ship.name === name);
+        if (!t) throw new Error(`${name} missing from the corpus`);
+        return t;
+    };
+    const pad = (n: number): TaggedShip[] =>
+        corpus()
+            .filter((t) => t.classes.size === 0 && !reachesAllies(t.ship))
+            .slice(0, n);
+
+    it('rejects a supportive filler: Tormenter is class-inert but buffs adjacent allies', () => {
+        const tormenter = named('Tormenter');
+        expect(tormenter.classes.size).toBe(0);
+        expect(reachesAllies(tormenter.ship)).toBe(true);
+        const pool = baselineFillerPool([tormenter, ...corpus()]);
+        expect(pool.some((s) => s.id === tormenter.ship.id)).toBe(false);
+    });
+
+    it('keeps a plain attacker', () => {
+        expect(baselineFillerPool(corpus()).some((s) => s.name === 'Bedrock')).toBe(true);
+    });
+
+    it('never offers an ally-reaching or class-tagged ship over the real corpus', () => {
+        const ids = new Set(baselineFillerPool(corpus()).map((s) => s.id));
+        for (const t of corpus()) {
+            if (t.classes.size > 0 || reachesAllies(t.ship)) expect(ids.has(t.ship.id)).toBe(false);
+        }
+    });
+
+    it('keeps a usable minimum size over the real corpus', () => {
+        expect(baselineFillerPool(corpus()).length).toBeGreaterThanOrEqual(MIN_FILLER_POOL);
+    });
+
+    it('throws when too few fillers remain', () => {
+        expect(() => baselineFillerPool(pad(MIN_FILLER_POOL - 1))).toThrow(/need at least/);
+        expect(baselineFillerPool(pad(MIN_FILLER_POOL))).toHaveLength(MIN_FILLER_POOL);
     });
 });
 
