@@ -16,6 +16,7 @@ export const UNRELEASED_CHANGES: string[] = [
     "Healing calculator: the round chart's Crit marker now shows critical repairs.",
     'Combat simulator: start-of-round stack gains now resolve in turn order.',
     'Combat simulator: hits blocked by Ironclad or Shadowguard now log the damage that landed.',
+    'Combat simulator: cleanse rows in the battle log now name the cleansed ships.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
