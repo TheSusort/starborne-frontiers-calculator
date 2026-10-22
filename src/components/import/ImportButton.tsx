@@ -117,7 +117,7 @@ export const ImportButton: React.FC<{
                             critDamage: template.base_stats.crit_damage,
                             speed: template.base_stats.speed,
                             healModifier: 0,
-                            hpRegen: 0,
+                            hpRegen: template.base_stats.hp_regen || 0,
                             shield: template.base_stats.shield || 0,
                             shieldPenetration: template.base_stats.shield_penetration || 0,
                             defensePenetration: template.base_stats.defense_penetration || 0,
