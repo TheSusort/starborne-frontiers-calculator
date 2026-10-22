@@ -12033,6 +12033,18 @@ export function runCombat(rawInput: CombatEngineInput): {
         };
 
         /**
+         * Ends a turn whose own start-of-turn DoT tick destroyed the acting ship. The reactions
+         * queued so far — above all the ship's own on-death effects (Salvation's "When this Unit
+         * is destroyed it repairs 60% of its max HP to all allies") — resolve now, in the dying
+         * ship's turn and before the next ship acts (owner ruling 2026-10-22): this is that turn's
+         * drain point (b). The Post Turn decrements and `turn-ended` do not run for it.
+         */
+        const endTurnAtLethalTick = (): void => {
+            drainReactions();
+            setHitRoot(undefined);
+        };
+
+        /**
          * The acting ship's turn-start Bombs and Echoing Bursts (`applyPositionedTimedBurst`), then
          * the reactions to them, before the ship acts (owner ruling R127): a Bomb exploding at
          * Akula's turn start lets Demolisher take 2 charges first, so a charged skill that was ready
@@ -12527,8 +12539,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                     // (recordDestroyed fired inside applyIncomingToTarget). It must NOT fall through
                     // and take a full turn — re-run the SAME dead-target skip as the top-of-turn
                     // guard. (With Cheat Death the intercept floored HP at 1 → not dead → false → it
-                    // acts normally.)
+                    // acts normally.) Its turn ends at the tick; read `endTurnAtLethalTick`.
                     if (handleDeadTargetSkip(actor)) {
+                        endTurnAtLethalTick();
                         continue;
                     }
                 } else {
@@ -12663,11 +12676,11 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 creditDealt(sourceId, actor.id, dealt);
                             }
                         }
-                        // Lethal turn-start tick → skip the rest of the turn. INTENTIONALLY
-                        // follows the heal-target lethal convention (skip the shared post-turn
-                        // block: decrements / turn-ended), NOT the timed-burst convention.
+                        // Lethal turn-start tick → the turn ends here, exactly as the heal-target
+                        // branch's lethal tick does (read `endTurnAtLethalTick`).
                         if (actor.destroyedRound !== undefined) {
                             if (actor.id === focusActorId) pushSynthesizedFocusSkipTurn();
+                            endTurnAtLethalTick();
                             continue;
                         }
                     }
