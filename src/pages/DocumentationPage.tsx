@@ -4831,6 +4831,11 @@ const DocumentationPage: React.FC = () => {
                                         multiplies on its own instead of adding to Out. Damage buffs
                                     </li>
                                     <li>
+                                        Percentage bonuses to crit rate, crit power and penetration
+                                        add as points, the way gear does: +10% Crit Power on a ship
+                                        with 50% crit power gives 60%
+                                    </li>
+                                    <li>
                                         Effects the simulator cannot model yet (conditional bonuses,
                                         per-round effects, and damage/heal/shield modifiers) are
                                         marked &quot;Not simulated&quot; in the picker preview and

@@ -14,6 +14,7 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator: Cobalt's start-of-turn charge now counts toward that turn's skill.",
     'Combat simulator: skills that deal no damage no longer count as critical hits.',
     "Healing calculator: the round chart's Crit marker now shows critical repairs.",
+    'Squad leaders: crit, crit power and penetration bonuses now add as points, like gear.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

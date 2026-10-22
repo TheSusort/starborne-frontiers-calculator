@@ -13,11 +13,14 @@
  * Both sides run through ONE shared `applyLeaderForSide`, so team symmetry holds by
  * construction. Stat math is order-independent ACROSS BOTH LEADERS: per recipient per
  * stat, ALL active contributions from BOTH sides' leaders accumulate first (Σpct and
- * Σflat, into one accumulator owned by the pass), then apply exactly once as
- * `final = base × (1 + Σpct/100) + Σflat`, floored at 0. A unit hit by its own leader's
- * buff AND the opposing leader's debuff therefore folds them additively
- * (base×(1+(a+b)/100)), never as sequential multiplies — and no intermediate clamp can
- * break side symmetry.
+ * Σflat, into one accumulator owned by the pass), then apply exactly once, floored at 0:
+ *   - a flat stat (hp, defence, hacking, …): `final = base × (1 + Σpct/100) + Σflat`;
+ *   - a percentage-only stat (`PERCENTAGE_ONLY_STATS`: crit, crit power, penetration, …):
+ *     `final = base + Σpct + Σflat`, the points the gear path (`addStatModifier`) adds for the
+ *     same line. "+10% Crit Power" on 50% crit power gives 60%, not 55% (owner ruling 2026-10-22).
+ * A unit hit by its own leader's buff AND the opposing leader's debuff therefore folds them
+ * additively, never as sequential per-side applies, so no intermediate clamp can break side
+ * symmetry.
  *
  * Attack % is the exception to the stat apply: it accumulates into `modifiers.attackPct`
  * (same Σ over both leaders) and `stats.attack` keeps the base, because the engine adds the
@@ -31,6 +34,7 @@ import type {
     SquadLeaderModifierChannel,
 } from '../../../constants/squadLeaders';
 import type { FactionName } from '../../../constants/factions';
+import { PERCENTAGE_ONLY_STATS } from '../../../types/stats';
 import type {
     PreFightCombatModifiers,
     PreFightPass,
@@ -58,6 +62,9 @@ type PreFightStatKey = (typeof PRE_FIGHT_STAT_KEYS)[number];
 
 const isPreFightStat = (stat: string): stat is PreFightStatKey =>
     (PRE_FIGHT_STAT_KEYS as readonly string[]).includes(stat);
+
+const isPercentageOnlyStat = (stat: PreFightStatKey): boolean =>
+    (PERCENTAGE_ONLY_STATS as readonly string[]).includes(stat);
 
 /** Data channel → `PreFightCombatModifiers` field. `outgoingRepair` is the game's term
  *  for heal output ('outgoingHeal' is its data alias — both fold into `outgoingHeal`);
@@ -242,7 +249,10 @@ export function squadLeaderPass(selections: {
         // Apply the accumulated stat math ONCE per recipient per stat (order-independent).
         for (const [unit, perStat] of statAcc) {
             for (const [stat, { pct, flat }] of perStat) {
-                unit.stats[stat] = Math.max(0, unit.stats[stat] * (1 + pct / 100) + flat);
+                const scaled = isPercentageOnlyStat(stat)
+                    ? unit.stats[stat] + pct
+                    : unit.stats[stat] * (1 + pct / 100);
+                unit.stats[stat] = Math.max(0, scaled + flat);
             }
         }
     };

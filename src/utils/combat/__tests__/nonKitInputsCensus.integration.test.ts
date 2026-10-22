@@ -34,6 +34,7 @@ import type { GearPiece } from '../../../types/gear';
 import type { Ship } from '../../../types/ship';
 import type { EngineeringStat } from '../../../types/stats';
 import type { SquadLeaderSelection } from '../preFight';
+import { calculateDamageReduction } from '../../autogear/statResolution';
 
 // ---------------------------------------------------------------------------------------------
 // Kits
@@ -1270,10 +1271,10 @@ const LEADER_ROWS: LeaderRow[] = [
         check: scales(firstHit('O', 'W'), 0.85),
     },
     {
-        // NEEDS RULING (ledger): the pass MULTIPLIES a crit-power line; gear ADDS the same "+10%
-        // Crit Power" as 10 points. Pinned at today's value: a 50% crit-power ship under
-        // Negotiator I (+10% attack, +10% crit power) crits for 1100 × 155%, not 1100 × 160%.
-        line: 'Atlas Negotiator I: +10% Crit Power (multiplicative today)',
+        // A percentage-only leader line adds as points, like gear (owner ruling 2026-10-22): a
+        // 50% crit-power ship under Negotiator I (+10% attack, +10% crit power) crits for
+        // 1100 × 160%.
+        line: 'Atlas Negotiator I: +10% Crit Power adds 10 points',
         ...stagePair(
             solo({ faction: 'ATLAS_SYNDICATE', stats: { crit: 100, critDamage: 50 } }, IDLE),
             'ATLAS_SYNDICATE',
@@ -1283,7 +1284,7 @@ const LEADER_ROWS: LeaderRow[] = [
         ),
         check: (w, c) => {
             expect(firstHit('W', 'O')(c)).toBeCloseTo(1500, 6);
-            expect(firstHit('W', 'O')(w)).toBeCloseTo(1100 * 1.55, 6);
+            expect(firstHit('W', 'O')(w)).toBeCloseTo(1100 * 1.6, 6);
         },
     },
     {
@@ -1295,14 +1296,16 @@ const LEADER_ROWS: LeaderRow[] = [
             expect(firstHit('W', 'O')(w) / firstHit('W', 'O')(c)).toBeCloseTo(1.13 / 1.08, 6),
     },
     {
-        // DIVERGES (ledger): "+8% Defense Penetration" multiplies the ship's own defence
-        // penetration, so a ship with none gains none: today stage II changes nothing.
-        line: 'Legion Lieutenant II: +8% Defense Penetration (x0 today)',
+        // "+8% Defense Penetration" adds 8 points: a ship with none hits a 5,000-defence enemy
+        // as if it had 4,600 defence.
+        line: 'Legion Lieutenant II: +8% Defense Penetration on a 0-pen ship',
         ...LIEUTENANT_DEFPEN,
-        check: (w, c) => {
-            expect(firstHit('W', 'O')(c)).toBeGreaterThan(0);
-            expect(firstHit('W', 'O')(w)).toBeCloseTo(firstHit('W', 'O')(c), 6);
-        },
+        check: scales(
+            firstHit('W', 'O'),
+            (1 - calculateDamageReduction(5000 * 0.92) / 100) /
+                (1 - calculateDamageReduction(5000) / 100),
+            6
+        ),
     },
     {
         // DIVERGES (ledger): "Repairs 5% HP after inflicting a debuff on an enemy" is modelled as
@@ -1337,11 +1340,6 @@ describe('non-kit census: squad leaders', () => {
             firstHit('W', 'O')(runForcedBattle(board, true)) /
             firstHit('W', 'O')(runForcedBattle(control, true));
         expect(ratio).toBeCloseTo(1.18 / 1.08, 6);
-    });
-    it.fails('TEXT: Legion Lieutenant II defense penetration raises damage into defence', () => {
-        const w = runForcedBattle(LIEUTENANT_DEFPEN.board, true);
-        const c = runForcedBattle(LIEUTENANT_DEFPEN.control, true);
-        expect(firstHit('W', 'O')(w)).toBeGreaterThan(firstHit('W', 'O')(c));
     });
     it.fails('TEXT: Gelecek Medusa III repairs the debuffer 5% of max HP', () => {
         const w = runForcedBattle(MEDUSA_REPAIR.board, true);

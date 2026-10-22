@@ -104,7 +104,9 @@ vi.mock('../../../../constants/squadLeaders', async (importOriginal) => {
 const BASE_STATS = {
     attack: 1000,
     crit: 50,
-    critDamage: 100,
+    // Not 100: at 100 the additive (+5 points) and multiplicative (×1.05) readings of a
+    // percentage-only line give the same number.
+    critDamage: 50,
     defensePenetration: 10,
     shieldPenetration: 0,
     hacking: 200,
@@ -181,7 +183,7 @@ describe('squadLeaderPass — stage additivity (ATLAS_SYNDICATE "Intern")', () =
             player: { faction: 'ATLAS_SYNDICATE', name: 'Intern', stage: 1 },
         });
         expect(attackSheet(player[0])).toBeCloseTo(1000 * 1.03);
-        expect(player[0].stats.critDamage).toBe(100);
+        expect(player[0].stats.critDamage).toBe(50);
     });
 
     it('stage 3 = stages[0] + [1] + [2], same-stat pcts summed BEFORE the single multiply', () => {
@@ -193,8 +195,8 @@ describe('squadLeaderPass — stage additivity (ATLAS_SYNDICATE "Intern")', () =
         expect(player[0].modifiers.attackPct).toBe(5);
         expect(attackSheet(player[0])).toBeCloseTo(1050);
         expect(attackSheet(player[0])).not.toBeCloseTo(1000 * 1.03 * 1.02, 10);
-        // critDamage: 2% + 3% → ×1.05.
-        expect(player[0].stats.critDamage).toBeCloseTo(105);
+        // critDamage: 2% + 3% add as 5 points, like gear: 50 → 55 (not 50 × 1.05 = 52.5).
+        expect(player[0].stats.critDamage).toBeCloseTo(55);
     });
 });
 
@@ -263,6 +265,29 @@ describe('squadLeaderPass — stat math', () => {
         });
         expect(player[0].stats.hp).toBeCloseTo(10000 * 1.1);
         expect(player[0].stats.security).toBeCloseTo(100 + 25);
+    });
+
+    it('percentage-only stats add the line as points (Negotiator I: +10% crit power, 50 → 60)', () => {
+        const player = [makeUnit('p1', 'player', 'ATLAS_SYNDICATE')];
+        runPass(player, [], {
+            player: { faction: 'ATLAS_SYNDICATE', name: 'Negotiator', stage: 1 },
+        });
+        expect(player[0].stats.critDamage).toBeCloseTo(60);
+    });
+
+    it('defense penetration adds as points (Lieutenant II: +8% on a 0-pen ship → 8)', () => {
+        const player = [makeUnit('p1', 'player', 'FRONTIER_LEGION', { defensePenetration: 0 })];
+        runPass(player, [], {
+            player: { faction: 'FRONTIER_LEGION', name: 'Lieutenant', stage: 2 },
+        });
+        expect(player[0].stats.defensePenetration).toBe(8);
+    });
+
+    it('an enemy crit-rate loss subtracts points (Midas III: 50% crit → 35%, not 42.5%)', () => {
+        const player = [makeUnit('p1', 'player', 'MPL')];
+        const enemy = [makeUnit('e1', 'enemy', 'XAOC')];
+        runPass(player, enemy, { player: { faction: 'MPL', name: 'Midas', stage: 3 } });
+        expect(enemy[0].stats.crit).toBeCloseTo(35);
     });
 
     it('clamps a negative result at 0 (Swarmcaller stage 3: enemies lose 30 flat hacking)', () => {
