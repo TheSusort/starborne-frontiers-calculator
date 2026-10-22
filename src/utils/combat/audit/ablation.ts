@@ -58,8 +58,8 @@ export interface AblationBoards {
  * The three ablation boards. Every board fields two player ships at the same array indices, so A
  * is `playerTeam[0]` and B is `playerTeam[1]` in BOTH boards each is compared on: each mints the
  * same actor id in its baseline as in the combined run, and the ownerId-keyed rate-gate RNG deals
- * it the same crit and landing stream. The stand-in carries the replaced ship's stats, affinity
- * and role (`inertStandIn`), so only the kit differs.
+ * it the same crit and landing stream. The stand-in carries the replaced ship's stats, affinity,
+ * role and id (`inertStandIn`), so it rolls that ship's dice too and only the kit differs.
  */
 export function ablationBoards(a: Ship, b: Ship, filler: Ship): AblationBoards {
     const placedA = canonicalPlacement(a, A_POS);

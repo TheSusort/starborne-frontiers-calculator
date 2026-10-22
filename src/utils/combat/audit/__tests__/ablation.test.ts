@@ -82,15 +82,19 @@ describe('ablationBoards', () => {
         expect(playerIdOf(combined, b.name)).not.toBe('attacker');
         expect(playerIdOf(baseB, b.name)).toBe(playerIdOf(combined, b.name));
         expect(playerIdOf(baseA, a.name)).toBe(playerIdOf(combined, a.name));
+        // The stand-ins roll the dice of the ship they replace, too.
+        expect(playerIdOf(baseA, 'Crusher')).toBe(playerIdOf(combined, b.name));
+        expect(playerIdOf(baseB, 'Crusher')).toBe(playerIdOf(combined, a.name));
     });
 
-    it('seats the stand-in with the replaced ship’s stats, affinity and role', () => {
+    it('seats the stand-in with the replaced ship’s stats, affinity, role and id', () => {
         const a = real('Hermes');
         const b = real('Vanguard');
         const filler = real('Crusher');
         const boards = ablationBoards(a, b, filler);
         const standInForA = boards.baselineB.playerTeam[0];
-        expect(standInForA.ship.id).toBe(filler.id);
+        expect(standInForA.ship.name).toBe(filler.name);
+        expect(standInForA.ship.id).toBe(a.id);
         expect(standInForA.position).toBe(boards.combined.playerTeam[0].position);
         expect(standInForA.statOverrides).toEqual(boards.combined.playerTeam[0].statOverrides);
         expect(standInForA.ship.affinity).toBe(a.affinity);
@@ -109,9 +113,9 @@ function rewriting(
 ): BattleRunner {
     return (input: BattleSimulationInput, seed: number) => {
         const r = runSeededBattle(input, seed);
-        const [first, second] = input.playerTeam.map((p) => p.ship.id);
-        if (first !== a.id) return r;
-        const rewrite = second === b.id ? rewrites.combined : rewrites.baselineA;
+        const [first, second] = input.playerTeam.map((p) => p.ship.name);
+        if (first !== a.name) return r;
+        const rewrite = second === b.name ? rewrites.combined : rewrites.baselineA;
         return rewrite ? rewrite(r, playerIdOf(r, a.name)) : r;
     };
 }

@@ -247,11 +247,9 @@ function allPositions(input: BattleSimulationInput): Position[] {
 // ---------------------------------------------------------------------------
 
 function main(): void {
-    const { seed, count, allowCalibrationResidual } = parseAuditArgs(process.argv.slice(2));
+    const { seed, count } = parseAuditArgs(process.argv.slice(2));
     if (!Number.isFinite(seed) || !Number.isFinite(count) || count <= 0) {
-        console.error(
-            'Usage: npm run audit:interactions -- --seed <N> --count <M> [--allow-calibration-residual]'
-        );
+        console.error('Usage: npm run audit:interactions -- --seed <N> --count <M>');
         process.exit(1);
     }
 
@@ -265,33 +263,19 @@ function main(): void {
         total: calibration.placementsChecked,
     };
     console.log(`CALIBRATION coverage: ${formatCoverage(calibrationCoverage)} inert placements`);
-    // A residual is an inert-battery diff the exclusion set did not absorb: the oracle's own
-    // false-positive floor for this sample. It fails the run unless explicitly accepted; it never
-    // widens the exclusion set. A crash or invariant failure always fails.
-    let calibrationResidual: CalibrationResidual | undefined;
-    if (!calibration.clean) {
-        const residualOnly = calibration.residual.length > 0;
-        if (!residualOnly || !allowCalibrationResidual) {
-            console.error(`CALIBRATION FAILED: ${calibration.detail}`);
-            if (residualOnly) {
-                console.error(
-                    'Each residual is a diff on a board with no interaction kits. Investigate it, ' +
-                        'or rerun with --allow-calibration-residual to fuzz anyway and record it ' +
-                        'in the ledger header.'
-                );
-            }
-            process.exit(1);
-        }
-        calibrationResidual = {
-            count: calibration.residual.length,
-            histogram: residualHistogram(calibration.residual),
-        };
-        console.warn(
-            `CALIBRATION RESIDUAL ACCEPTED (--allow-calibration-residual): ${calibration.detail}`
-        );
-    } else {
-        console.log(`CALIBRATION: clean (${calibration.detail})`);
+    // The gate passes while the inert-battery residual stays within its tolerance
+    // (`CALIBRATION_RESIDUAL_TOLERANCE`); a crash or invariant failure always fails.
+    if (!calibration.passed) {
+        console.error(`CALIBRATION FAILED: ${calibration.detail}`);
+        process.exit(1);
     }
+    console.log(`CALIBRATION: passed (${calibration.detail})`);
+    const calibrationResidual: CalibrationResidual = {
+        count: calibration.residual.length,
+        rate: calibration.residualRate,
+        tolerance: calibration.tolerance,
+        histogram: residualHistogram(calibration.residual),
+    };
 
     // Baseline fillers: the same inert set the calibration gate is built from, threaded
     // explicitly so the oracle and its ddmin stay a pure function of (seed, subject, pool).

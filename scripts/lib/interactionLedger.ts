@@ -19,19 +19,25 @@ export interface LedgerCoverage {
     ablation: Coverage;
 }
 
-/** Inert-battery diffs the exclusion set did not absorb, accepted for this run with
- *  `--allow-calibration-residual`. They measure the oracle's own false-positive floor. */
+/** Inert-battery diffs the exclusion set did not absorb: the oracle's own false-positive floor
+ *  for this sample, which the calibration gate held within `tolerance`. */
 export interface CalibrationResidual {
     count: number;
-    /** `+kind×n` / `-kind×n`, most frequent first (`residualHistogram`). */
+    /** `count` over comparable calibration placements. */
+    rate: number;
+    /** The rate the gate tolerates (`CALIBRATION_RESIDUAL_TOLERANCE`). */
+    tolerance: number;
+    /** `+kind×n` / `-kind×n`, most frequent first (`residualHistogram`); empty when none. */
     histogram: string;
 }
 
 export interface LedgerMeta {
     compositionsRun: number;
     coverage: LedgerCoverage;
-    calibrationResidual?: CalibrationResidual;
+    calibrationResidual: CalibrationResidual;
 }
+
+const pct2 = (rate: number): string => `${(100 * rate).toFixed(2)}%`;
 
 /**
  * What the differential and ablation oracles cannot see, by construction of their setup: they
@@ -55,7 +61,7 @@ export const formatCoverage = (c: Coverage): string =>
 export interface LedgerJson {
     compositionsRun: number;
     coverage: LedgerCoverage;
-    calibrationResidual?: CalibrationResidual;
+    calibrationResidual: CalibrationResidual;
     blindSpots: readonly string[];
     confirmed: Finding[];
     needsTriage: Finding[];
@@ -77,7 +83,7 @@ export function buildLedgerJson(findings: Finding[], meta: LedgerMeta): LedgerJs
     return {
         compositionsRun: meta.compositionsRun,
         coverage: meta.coverage,
-        ...(meta.calibrationResidual ? { calibrationResidual: meta.calibrationResidual } : {}),
+        calibrationResidual: meta.calibrationResidual,
         blindSpots: LEDGER_BLIND_SPOTS,
         confirmed,
         needsTriage,
@@ -111,12 +117,12 @@ export function renderLedgerMarkdown(findings: Finding[], meta: LedgerMeta): str
     lines.push(
         `- Calibration: **${formatCoverage(meta.coverage.calibration)}** inert placements compared`
     );
-    if (meta.calibrationResidual) {
-        lines.push(
-            `- Calibration residual: **${meta.calibrationResidual.count}** inert diff(s) ` +
-                `(${meta.calibrationResidual.histogram}), accepted with --allow-calibration-residual`
-        );
-    }
+    const res = meta.calibrationResidual;
+    lines.push(
+        `- Calibration residual: **${res.count}** inert diff(s), **${pct2(res.rate)}** of compared ` +
+            `placements (tolerance ${pct2(res.tolerance)})` +
+            (res.histogram ? `: ${res.histogram}` : '')
+    );
     lines.push('');
     lines.push('## Blind spots');
     lines.push('');

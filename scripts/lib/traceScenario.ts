@@ -133,12 +133,22 @@ const enemyDebuffer = (id: string, name: string, attack: number): Ship => ({
 /**
  * `filler`'s kit in `replaced`'s seat: its cell and `statOverrides`, and the `Ship`-level traits
  * other ships read off it — affinity (the ±25% advantage on every hit and landing roll against it)
- * and role (role-gated passives such as "adjacent to a supporter"). The filler keeps its own id and
- * name, so the board still fields distinct ships.
+ * and role (role-gated passives such as "adjacent to a supporter").
+ *
+ * It also takes `replaced`'s ship ID. The engine mints a player actor id from the ship id and the
+ * array index (`p:<shipId>:<idx>`), and the rate-gate RNG is keyed by actor id, so the stand-in
+ * draws the SAME crit and landing rolls the replaced ally drew: every slot's dice are identical
+ * across the arms and only the kit differs. The filler keeps its own NAME, which is how a reader
+ * tells the two apart.
  */
 export function inertStandIn(filler: Ship, replaced: BattlePlacement): BattlePlacement {
     return {
-        ship: { ...filler, affinity: replaced.ship.affinity, type: replaced.ship.type },
+        ship: {
+            ...filler,
+            id: replaced.ship.id,
+            affinity: replaced.ship.affinity,
+            type: replaced.ship.type,
+        },
         position: replaced.position,
         statOverrides: replaced.statOverrides,
     };
@@ -177,7 +187,7 @@ export function inertStandIn(filler: Ship, replaced: BattlePlacement): BattlePla
  *    the crit/landing streams re-drawing between the arms.
  *
  * Each filler is an `inertStandIn` for the ally it replaces: that ally's `statOverrides`, cell,
- * affinity and role, the filler's kit. HP, attack, defence and above all SPEED are byte-identical
+ * affinity, role and actor id (so its RNG stream), the filler's kit. HP, attack, defence and above all SPEED are byte-identical
  * between the arms (same turn order, same incoming-damage budget), affinity advantage against each
  * enemy is unchanged, and a role-reading passive on the SUBJECT (Enforcer's "adjacent to a
  * supporter") reads the same neighbour roles. "Inert" means an empty interaction-class tag set —

@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import {
+    CALIBRATION_RESIDUAL_TOLERANCE,
+    calibrationVerdict,
     minimizeDifferential,
     playerDifferential,
     runCalibration,
@@ -158,6 +160,67 @@ describe.skipIf(!haveCorpus)('playerDifferential on the real corpus', () => {
         }
     });
 
+    // The rate-gate RNG is keyed by actor id. Every slot — subject and stand-ins — must mint the
+    // same id in both arms, so an ally's crit and landing rolls are the same dice in both.
+    it('gives every player slot the same actor id in both arms', () => {
+        let checked = 0;
+        for (let seed = 1; seed <= 10; seed++) {
+            const compInput = composeBattle(seed, corpus());
+            if (compInput.playerTeam.length < 2) continue;
+            const rec = recordingRunner();
+            const { boards } = playerDifferential(0, compInput, seed, inertPool(), rec.run);
+            const [comp, base] = rec.results;
+            for (const p of boards.comp.playerTeam) {
+                expect(playerId(base, p.position)).toBe(playerId(comp, p.position));
+            }
+            expect(boards.baseline.playerTeam[1].ship.name).not.toBe(
+                compInput.playerTeam[1].ship.name
+            );
+            checked++;
+        }
+        expect(checked).toBeGreaterThan(0);
+    });
+
+    // Liveness for the test above: the stand-in's id is not cosmetic. Re-minting it from the
+    // filler's OWN id changes which of its hits crit, on a real board.
+    it('a stand-in rolling under its own id would crit on different hits', () => {
+        const critTrail = (r: BattleResult, position: string): string => {
+            const id = playerId(r, position);
+            const out: string[] = [];
+            const walkRows = (es: CombatLogEntry[]) => {
+                for (const e of es) {
+                    if (e.actorId === id && e.kind === 'attack') {
+                        out.push(e.targets.map((t) => (t.didCrit ? 'C' : '.')).join(''));
+                    }
+                    walkRows(e.reactions ?? []);
+                }
+            };
+            for (const round of r.combatLog) {
+                walkRows(round.startOfRound);
+                for (const t of round.turns) walkRows(t.entries);
+                walkRows(round.endOfRound);
+            }
+            return out.join('|');
+        };
+        let differs = false;
+        for (let seed = 1; seed <= 20 && !differs; seed++) {
+            const compInput = composeBattle(seed, corpus());
+            if (compInput.playerTeam.length < 2) continue;
+            const { boards } = playerDifferential(0, compInput, seed, inertPool());
+            const ownIds: BattleSimulationInput = {
+                ...boards.baseline,
+                playerTeam: boards.baseline.playerTeam.map((p, i) =>
+                    i === 0 ? p : { ...p, ship: { ...p.ship, id: `own:${p.ship.name}` } }
+                ),
+            };
+            const inherited = runSeededBattle(boards.baseline, seed);
+            const own = runSeededBattle(ownIds, seed);
+            const pos = boards.baseline.playerTeam[1].position;
+            differs = critTrail(inherited, pos) !== critTrail(own, pos);
+        }
+        expect(differs).toBe(true);
+    });
+
     // Derived, not pinned: the first placement whose two arms last a DIFFERENT number of rounds
     // and that reads a diff over all rounds but none inside the alive window. That is the false
     // positive the window exists to remove; asserting both halves keeps it from passing vacuously.
@@ -219,7 +282,7 @@ describe.skipIf(!haveCorpus)('playerDifferential on the real corpus', () => {
                     (input, s) => {
                         const r = runSeededBattle(input, s);
                         const isComp = input.playerTeam.every(
-                            (p, i) => p.ship.id === compInput.playerTeam[i].ship.id
+                            (p, i) => p.ship.name === compInput.playerTeam[i].ship.name
                         );
                         return isComp ? dropKind(r, subjectId, kind) : r;
                     };
@@ -243,16 +306,48 @@ describe.skipIf(!haveCorpus)('playerDifferential on the real corpus', () => {
     });
 });
 
+describe('calibrationVerdict', () => {
+    const residualDiff: FingerprintDiff = {
+        actorId: 'x',
+        shipName: 'Rys',
+        missingInComposition: [],
+        extraInComposition: ['buff'],
+    };
+    const excludedOnly: FingerprintDiff = { ...residualDiff, extraInComposition: ['buff-expired'] };
+    const diffs = (n: number) => Array.from({ length: n }, () => residualDiff);
+
+    it('passes at the tolerance: 1 residual in 100 comparable placements is 1%', () => {
+        const v = calibrationVerdict(diffs(1), 100);
+        expect(v.rate).toBeCloseTo(0.01);
+        expect(v.passed).toBe(true);
+    });
+
+    it('fails just above it: 2 residuals in 100 comparable placements', () => {
+        expect(calibrationVerdict(diffs(2), 100).passed).toBe(false);
+    });
+
+    it('does not count a diff the exclusion set empties', () => {
+        const v = calibrationVerdict([...diffs(1), excludedOnly, excludedOnly], 100);
+        expect(v.residual).toHaveLength(1);
+        expect(v.passed).toBe(true);
+    });
+
+    it('defaults to CALIBRATION_RESIDUAL_TOLERANCE', () => {
+        expect(CALIBRATION_RESIDUAL_TOLERANCE).toBe(0.01);
+    });
+});
+
 describe.skipIf(!haveCorpus)('runCalibration', () => {
-    it('is clean on the inert battery, and compares most placements', () => {
+    it('passes on the inert battery, and compares most placements', () => {
         const r = runCalibration(corpus(), 1, 3);
-        expect(r.clean).toBe(true);
+        expect(r.passed).toBe(true);
+        expect(r.tolerance).toBe(CALIBRATION_RESIDUAL_TOLERANCE);
         expect(r.comparablePlacements).toBeGreaterThan(r.placementsChecked / 2);
     });
 
-    // An inert battery that DOES show a non-excluded diff must fail the gate and name the
-    // residual. The exclusion set is never widened to absorb it.
-    it('fails loudly on a residual instead of widening the exclusion set', () => {
+    // An inert battery where every placement shows a non-excluded diff is far over tolerance: the
+    // gate must fail and name the residual. The exclusion set is never widened to absorb it.
+    it('fails loudly on a residual over tolerance instead of widening the exclusion set', () => {
         const before = [...EXCLUDED_KINDS];
         let call = 0;
         const plantSteal: BattleRunner = (input, s) => {
@@ -273,7 +368,8 @@ describe.skipIf(!haveCorpus)('runCalibration', () => {
             };
         };
         const r = runCalibration(corpus(), 1, 2, plantSteal);
-        expect(r.clean).toBe(false);
+        expect(r.passed).toBe(false);
+        expect(r.residualRate).toBeGreaterThan(CALIBRATION_RESIDUAL_TOLERANCE);
         expect(r.residual.length).toBeGreaterThan(0);
         expect(r.residual.every((d) => d.extraInComposition.includes('steal'))).toBe(true);
         expect(r.detail).toContain('+steal');

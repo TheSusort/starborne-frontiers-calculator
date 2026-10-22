@@ -132,31 +132,53 @@ export function minimizeDifferential(
 
 // ---------------------------------------------------------------------------
 // Calibration gate: runs BEFORE any fuzzing. A battery of compositions built only from inert
-// ships (empty class tag set) has no interaction primitives, so any differential that survives
-// `EXCLUDED_KINDS` there is harness noise by construction, and the gate fails rather than trust
-// the oracle on the real corpus.
+// ships (empty class tag set) has no interaction primitives, so a differential that survives
+// `EXCLUDED_KINDS` there is the oracle's own false-positive floor.
 // ---------------------------------------------------------------------------
 
+/**
+ * The residual rate the gate tolerates: residual diffs over COMPARABLE calibration placements.
+ *
+ * Inert is not zero influence. Inert kits deal different damage, which moves kill timing and so
+ * target selection, and a target-conditioned clause on the subject can flip with it (Rys "when
+ * damaging a debuffer or supporter", Thresh's buff steal that logs only when there is a buff to
+ * take). Excluding those kinds would hide real findings of the same kinds, so the gate bounds the
+ * rate instead. Measured on the inert battery at count 500 (2026-10-22): 3/1926 at seed 1,
+ * 10/1929 at seed 5000; the threshold sits above that floor and fails a run that drifts well past it.
+ */
+export const CALIBRATION_RESIDUAL_TOLERANCE = 0.01;
+
 export interface CalibrationVerdict {
-    clean: boolean;
+    /** True when the residual rate is within `CALIBRATION_RESIDUAL_TOLERANCE`. */
+    passed: boolean;
     /** Inert-battery diffs that survived the exclusion set. */
     residual: FingerprintDiff[];
+    /** `residual.length / comparablePlacements`; 0 when nothing was compared. */
+    rate: number;
 }
 
-/** The gate's verdict over the battery's raw diffs: clean iff `restrictDiff` empties every one.
- *  The exclusion set is fixed; a residual is reported, never absorbed into the set. */
-export function calibrationVerdict(rawDiffs: readonly FingerprintDiff[]): CalibrationVerdict {
+/** The gate's verdict over the battery's raw diffs. The exclusion set is fixed: a residual is
+ *  measured against the tolerance, never absorbed into the set. */
+export function calibrationVerdict(
+    rawDiffs: readonly FingerprintDiff[],
+    comparablePlacements: number,
+    tolerance: number = CALIBRATION_RESIDUAL_TOLERANCE
+): CalibrationVerdict {
     const residual = rawDiffs
         .map((d) => restrictDiff(d))
         .filter((d): d is FingerprintDiff => d !== null);
-    return { clean: residual.length === 0, residual };
+    const rate = comparablePlacements === 0 ? 0 : residual.length / comparablePlacements;
+    return { passed: rate <= tolerance, residual, rate };
 }
 
 export interface CalibrationResult {
-    clean: boolean;
+    /** False on a residual rate over tolerance, and always on a crash or invariant failure. */
+    passed: boolean;
     detail: string;
     residual: FingerprintDiff[];
-    /** How many placements the differential arm of the gate actually COMPARED. A clean verdict
+    residualRate: number;
+    tolerance: number;
+    /** How many placements the differential arm of the gate actually COMPARED. A passing verdict
      *  backed by zero comparisons is vacuous. */
     comparablePlacements: number;
     placementsChecked: number;
@@ -175,21 +197,30 @@ export function residualHistogram(residual: readonly FingerprintDiff[]): string 
         .join(', ');
 }
 
+const formatRate = (rate: number): string => `${(100 * rate).toFixed(2)}%`;
+
 /** `run` drives the differential arms only; the invariant and reproducibility checks always run
  *  the real engine. */
 export function runCalibration(
     tagged: TaggedShip[],
     seed: number,
     count: number,
-    run: BattleRunner = runSeededBattle
+    run: BattleRunner = runSeededBattle,
+    tolerance: number = CALIBRATION_RESIDUAL_TOLERANCE
 ): CalibrationResult {
     const inert = tagged.filter((t) => t.classes.size === 0);
     // The battery AND the baseline fillers come from the same inert set, in corpus order.
     const inertPool = inert.map((t) => t.ship);
-    const fail = (detail: string, comparablePlacements: number, placementsChecked: number) => ({
-        clean: false,
+    const fail = (
+        detail: string,
+        comparablePlacements: number,
+        placementsChecked: number
+    ): CalibrationResult => ({
+        passed: false,
         detail,
         residual: [],
+        residualRate: 0,
+        tolerance,
         comparablePlacements,
         placementsChecked,
     });
@@ -233,22 +264,19 @@ export function runCalibration(
         return fail(invariantFailures.join(' | '), comparablePlacements, placementsChecked);
     }
 
-    const verdict = calibrationVerdict(rawDiffs);
-    if (!verdict.clean) {
-        return {
-            clean: false,
-            detail:
-                `${verdict.residual.length} inert differential(s) survive the exclusion set ` +
-                `(${residualHistogram(verdict.residual)}); first: ${JSON.stringify(verdict.residual[0])}`,
-            residual: verdict.residual,
-            comparablePlacements,
-            placementsChecked,
-        };
-    }
+    const verdict = calibrationVerdict(rawDiffs, comparablePlacements, tolerance);
+    const residualSummary =
+        `${verdict.residual.length}/${comparablePlacements} inert placement(s) left a residual ` +
+        `diff (${formatRate(verdict.rate)}, tolerance ${formatRate(tolerance)})` +
+        (verdict.residual.length > 0 ? `: ${residualHistogram(verdict.residual)}` : '');
     return {
-        clean: true,
-        detail: `${rawDiffs.length} raw inert diff(s), all emptied by the exclusion set`,
-        residual: [],
+        passed: verdict.passed,
+        detail: verdict.passed
+            ? residualSummary
+            : `${residualSummary}; first: ${JSON.stringify(verdict.residual[0])}`,
+        residual: verdict.residual,
+        residualRate: verdict.rate,
+        tolerance,
         comparablePlacements,
         placementsChecked,
     };
