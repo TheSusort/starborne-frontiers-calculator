@@ -1066,7 +1066,9 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
         const entry: CombatLogEntry = {
             kind: 'cleanse',
             actorId: e.casterId,
-            targets: [],
+            // The recipients that actually lost a debuff, so the log reads "Caster → Ally:
+            // cleansed N" like the reactive row above, and `status-tier-drop` sees the holder.
+            targets: (e.targets ?? []).map((targetId) => ({ targetId })),
             reactions: [],
             note: `cleansed ${e.count}`,
             ...(ctx.consumePendingSkill() ?? {}),

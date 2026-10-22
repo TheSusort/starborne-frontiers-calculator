@@ -6765,10 +6765,13 @@ export function runCombat(rawInput: CombatEngineInput): {
                             hitReductionFor(cause.killerId ?? '', protectorId, basis.didCrit).parts
                         );
                     };
+                    const protectorFactors = protectors.map((p) =>
+                        protectorIncomingFactor(p.actor.id)
+                    );
                     const cascade = protectionCascade(
                         damage,
                         targetMit,
-                        protectors.map((p) => {
+                        protectors.map((p, i) => {
                             const protectorDef = effectiveStatsOf(
                                 statusEngine,
                                 selfBuffLookup,
@@ -6780,7 +6783,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                     protectorDef > 0
                                         ? 1 - calculateDamageReduction(protectorDef) / 100
                                         : 1,
-                                incomingFactor: protectorIncomingFactor(p.actor.id),
+                                incomingFactor: protectorFactors[i],
                             };
                         }),
                         basis?.incomingFactor ?? 1
@@ -6796,6 +6799,20 @@ export function runCombat(rawInput: CombatEngineInput): {
                     protectors.forEach((p, i) => {
                         const chunk = cascade.chunks[i];
                         if (!chunk || chunk.total <= 0) return;
+                        // LOG-ONLY: the protector's own incoming factor its chunk was priced with.
+                        // The chunk's sub-hits carry no `redirectBasis`, so this is its only row.
+                        if (basis) {
+                            bus.emit({
+                                type: 'hit-incoming-factor',
+                                ...(cause.killerId !== undefined
+                                    ? { attackerId: cause.killerId }
+                                    : {}),
+                                victimId: p.actor.id,
+                                round: currentRound,
+                                factor: protectorFactors[i],
+                                block: 'none',
+                            });
+                        }
                         // Apply as `stacks` equal sub-hits (matches the in-game per-stack procs).
                         // A protector that converts its share into a DoT still gains ONE DoT for
                         // the whole hit — `protectionHitKey` coalesces the sub-hits.

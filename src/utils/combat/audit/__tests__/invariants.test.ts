@@ -13,6 +13,7 @@ import { stacksIndependently } from '../../statusEngine';
 import { runSeededBattle } from '../../../simulator/seededRuns';
 import { canonicalPlacement } from '../fixtures';
 import { buildTraceShip } from '../../../../../scripts/lib/traceShipFactory';
+import { buildCombatLog } from '../../log/buildCombatLog';
 import type { BattleResult, BattleSimulationInput } from '../../../calculators/battleSimulator';
 import type {
     CombatLogEntry,
@@ -433,6 +434,26 @@ describe('checkInvariants — a lower tier never replaces a higher one', () => {
         const expiry =
             row.kind === 'buff-expired' ? { ...row, note: 'Defense Down II expired' } : row;
         expect(ids(drop([turn('A', [expiry])]), 'status-tier-drop')).toEqual([]);
+    });
+
+    it('allows a tier drop when a cast cleanse reached the holder, read through buildCombatLog', () => {
+        // The cleanse row comes from the engine's own event, not a hand-built entry, so the
+        // invariant sees the recipients the log builder actually records.
+        const roster = logResult([]).roster;
+        const [round2] = buildCombatLog(
+            [
+                { type: 'round-started', round: 2 },
+                { type: 'turn-started', actorId: 'A', round: 2 },
+                { type: 'turn-ended', actorId: 'A', round: 2 },
+                { type: 'turn-started', actorId: 'C', round: 2 },
+                { type: 'cleanse-performed', casterId: 'C', count: 1, round: 2, targets: ['A'] },
+                { type: 'turn-ended', actorId: 'C', round: 2 },
+                { type: 'round-ended', round: 2 },
+            ],
+            roster,
+            new Map()
+        );
+        expect(ids(drop(round2.turns), 'status-tier-drop')).toEqual([]);
     });
 });
 

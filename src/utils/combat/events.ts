@@ -1006,7 +1006,9 @@ export type CombatEvent =
      *  `block` names the incoming-block outcome: a `'full'` block (Shadowguard) zeroes the hit
      *  outside the cap and leaves `factor` as composed. Emitted only for a hit whose caller
      *  supplied its victim-side factors (`cause.redirectBasis`); a hit kind that folds no
-     *  incoming composition emits nothing. No combat listener subscribes. */
+     *  incoming composition emits nothing. A Protection chunk of such a hit emits one row per
+     *  protector, `victimId` = the protector, with the protector's own factor and `block:
+     *  'none'` (a share rolls no block). No combat listener subscribes. */
     | {
           type: 'hit-incoming-factor';
           attackerId?: string;
