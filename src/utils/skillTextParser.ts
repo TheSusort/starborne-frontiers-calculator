@@ -113,11 +113,48 @@ export function classifyEnemyEffect(name: string): 'buff' | 'debuff' {
     return found?.type === 'buff' ? 'buff' : 'debuff';
 }
 
+// Action phrases the game tags as effects ("cleanses 2 debuffs", "adds 1 charge") mapped to the
+// BUFFS entry the official unit catalogue links them to. First match wins, so buff extension is
+// tested before the debuff-extension catch-all.
+const ACTION_PHRASE_EFFECTS: ReadonlyArray<readonly [RegExp, string]> = [
+    [/\bcleanses?\b/i, 'Cleanse'],
+    [/\bpurge[sd]?\b/i, 'Purge'],
+    [/\bsteals?\b/i, 'Steal Buff'],
+    [/\bcharge[sd]?\b/i, 'Charge Manipulation'],
+    [/\bextra\b.*\baction\b/i, 'Extra Action'],
+    [/\bdetonates?\b/i, 'Detonation'],
+    [/^damage over time\b/i, 'Damage Over Time effect'],
+    [/^reflects?$/i, 'Reflect'],
+    [/^buffs are extended\b/i, 'Buff Duration Extension'],
+    [/\bextend(?:s|ed)?\b/i, 'Debuff Duration Extension'],
+    [/\breduces the duration\b/i, 'Debuff Duration Expiration'],
+];
+
+/**
+ * The effect a `<unit-skill>` tag refers to: a named status resolves first and keeps the tag's own
+ * spelling as its title; otherwise an action phrase resolves to its effect, titled by the effect's
+ * name. A name like "Charged Overdrive II" would also match an action pattern, which is why the
+ * named lookup must run first.
+ */
+export function resolveTaggedEffect(
+    tagText: string
+): { title: string; description: string } | undefined {
+    const description = findNamedBuffDescription(tagText);
+    if (description !== undefined) return { title: tagText, description };
+    const effectName = ACTION_PHRASE_EFFECTS.find(([re]) => re.test(tagText.trim()))?.[1];
+    const effect = effectName && BUFFS.find((buff) => buff.name === effectName);
+    return effect ? { title: effect.name, description: effect.description } : undefined;
+}
+
+export function findBuffDescription(tagText: string): string | undefined {
+    return resolveTaggedEffect(tagText)?.description;
+}
+
 /**
  * Finds buff description from the BUFFS constant
  * Handles exact matches and partial matches (e.g., "Corrosion I" matches "Corrosion 1")
  */
-export function findBuffDescription(rawBuffName: string): string | undefined {
+function findNamedBuffDescription(rawBuffName: string): string | undefined {
     const buffName = canonicalStatusName(rawBuffName);
     // Try exact match first
     const exactMatch = BUFFS.find((buff) => buff.name === buffName);
