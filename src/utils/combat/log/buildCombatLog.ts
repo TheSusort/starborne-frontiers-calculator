@@ -490,7 +490,7 @@ function createBuildContext(
 }
 
 /** The label on a protector's share row. */
-const PROTECTION_SHARE_NOTE = 'Protection';
+export const PROTECTION_SHARE_NOTE = 'Protection';
 
 /** Events a burst's own funnel raises right after the burst is announced: the protectors' shares
  *  and the HP, shield and death consequences of landing it. Anything else ends the burst. */
