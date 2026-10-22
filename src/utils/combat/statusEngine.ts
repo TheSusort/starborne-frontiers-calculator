@@ -45,12 +45,16 @@ export interface AccumGain {
 }
 
 /** Announces the cadence gains `engine` has banked as `buff-applied` events. Called where the tick
- *  happened, so the log nests each under the turn or round that earned it. */
+ *  happened, so the log nests each under the turn or round that earned it. `order` re-sequences
+ *  the batch before it is emitted (the round-start tick orders it by turn priority); without it
+ *  gains are announced in banking order. */
 export function announceAccumGains(
     engine: Pick<StatusEngine, 'takeAccumGains'>,
-    bus: Pick<CombatEventBus, 'emit'>
+    bus: Pick<CombatEventBus, 'emit'>,
+    order?: (gains: AccumGain[]) => AccumGain[]
 ): void {
-    for (const g of engine.takeAccumGains()) {
+    const banked = engine.takeAccumGains();
+    for (const g of order ? order(banked) : banked) {
         bus.emit({
             type: 'buff-applied',
             actorId: g.ownerId,

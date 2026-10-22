@@ -12197,7 +12197,24 @@ export function runCombat(rawInput: CombatEngineInput): {
         })();
 
         bus.emit({ type: 'round-started', round: r });
-        announceAccumGains(statusEngine, bus);
+        // The round's stack gains (Overload, Blast, Warding Screen…) are a start-of-round effect,
+        // so they are announced granter by granter in turn order, both sides interleaved; one
+        // granter's gains keep their banking order. Reactions they wake follow the same order
+        // (`drainReactions` resolves by event order).
+        announceAccumGains(statusEngine, bus, (gains) =>
+            orderByTurnPriority(
+                gains.map((gain) => {
+                    const granter =
+                        allActorsById.get(gain.granterId) ?? allActorsById.get(gain.ownerId);
+                    return {
+                        gain,
+                        speed: granter ? effectiveSpeedOf(granter) : 0,
+                        side: granter?.side ?? 'player',
+                        position: granter?.position,
+                    };
+                })
+            ).map((entry) => entry.gain)
+        );
         drainStartOfRound();
 
         // §4.5 Stasis reductions (`stasisBreakPending`, declared before the round loop). An entry
