@@ -7728,7 +7728,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 // ability-performed already exists → emit inline. Stamp
                                 // duringTurnOf with the acting attacker either way; didCrit omitted
                                 // (reflects don't crit).
-                                const reflectRow = loggedHitFigures(reflectOutcome, reflected);
+                                const reflectRow = loggedHitFigures(reflectOutcome);
                                 if (deferReflectLogs) {
                                     pendingReflectLogs.push({
                                         sourceId: victim.id,
@@ -8071,17 +8071,17 @@ export function runCombat(rawInput: CombatEngineInput): {
             return { root, isPrimary: !primaryHitsSpent.has(`${victimId}|${root}`) };
         };
 
-        /** A Protection-split reactive hit also reports what its victim took, so the log rows the
-         *  victim at that rather than the hit as thrown; a hit converted into a DoT is flagged so
-         *  the log shows no damage number for it. */
+        /** A reactive hit reports what its victim took (`incomingBooked`: after its incoming-block
+         *  proc, and only the kept share of a Protection split), which the log rows the victim at
+         *  rather than the hit as thrown; a hit converted into a DoT is flagged so the log shows
+         *  no damage number for it. */
         const splitFigures = (
             outcome: AppliedVictimDamage | undefined
         ): { protectionSplit?: true; taken?: number; convertedToDot?: true } | undefined =>
             outcome
                 ? {
-                      ...(outcome.protectionSplit
-                          ? { protectionSplit: true as const, taken: outcome.incomingBooked }
-                          : {}),
+                      taken: outcome.incomingBooked,
+                      ...(outcome.protectionSplit ? { protectionSplit: true as const } : {}),
                       ...((outcome.transformedToDot ?? 0) > 0
                           ? { convertedToDot: true as const }
                           : {}),
@@ -8306,11 +8306,9 @@ export function runCombat(rawInput: CombatEngineInput): {
             // The counter is damage its owner dealt, so the owner's standing "% of damage dealt"
             // leech pays on it (R144), on the dealt basis `procLeechesForVictim` documents.
             payReactiveHitLeech(owner, counterOutcome);
-            // `dealt` stays the FULL counter, converted or not: it feeds only the log row
-            // (triggers.ts emitReactiveDamageLog) and the reactive dealt-amount slot, and the main
-            // cast path likewise logs its computed `directDamage` when a victim converts the hit
-            // (playerTurn's deferredAbilityPerformed). Suppressing it would erase the counter from
-            // the play-by-play entirely — a conversion emits no event of its own.
+            // `dealt` stays the FULL counter, converted or not: emitReactiveDamageLog gates the
+            // row on it, so a converted or fully blocked counter still appears in the
+            // play-by-play (a conversion emits no event of its own). The row's number is `taken`.
             return { dealt: raw, didCrit, ...splitFigures(counterOutcome) };
         };
 
@@ -8497,7 +8495,6 @@ export function runCombat(rawInput: CombatEngineInput): {
                 reactiveDealtByOwner.set(ownerId, 0);
                 return;
             }
-            reactiveDealtByOwner.set(ownerId, raw);
             // A reactive proc REDUCES the resolved victim's real HP through the SAME
             // shared funnel counters use (applyVictimDamage) — surfacing on the victim's HP curve
             // (roundPerTargetDamage → damageTaken) and attributed to the owner (creditDealt →
@@ -8581,7 +8578,11 @@ export function runCombat(rawInput: CombatEngineInput): {
             // A reactive proc is damage its owner dealt: the standing leech pays on it (R144). A
             // splash copy of a Bomb burst is not a direct hit, so it does not.
             if (!splashCopy) payReactiveHitLeech(owner, procOutcome);
-            // `dealt` stays the full proc — log/dealt-slot only, as in applyCounterAttack.
+            // The dealt-amount slot a paired basis:'damage-dealt' shield (FrontLine) reads is the
+            // damage this proc DEALT, on the same basis as the leech above: after the victim's
+            // incoming-block proc, a Protection redirect counted, a DoT transform not.
+            reactiveDealtByOwner.set(ownerId, procOutcome ? detonationDelivered(procOutcome) : 0);
+            // `dealt` stays the full proc, as in applyCounterAttack.
             return { dealt: raw, didCrit, ...splitFigures(procOutcome) };
         };
 
@@ -9529,14 +9530,6 @@ export function runCombat(rawInput: CombatEngineInput): {
                     );
                     const damage = damageParts.damage;
                     if (!(damage > 0)) continue;
-                    // The log row: folded into the cast's row for this victim (buildCombatLog).
-                    bus.emit({
-                        type: 'passive-slot-damage',
-                        attackerId: actor.id,
-                        targetId: victim.id,
-                        round: currentRound,
-                        damage,
-                    });
                     // Read before the funnel, as a counter or proc reads them: the Stasis this hit
                     // meets (earlier hits' queued reductions land first) and its primary-target
                     // allowance (R92).
@@ -9573,6 +9566,15 @@ export function runCombat(rawInput: CombatEngineInput): {
                     // number, and re-crediting the pre-funnel hit would double-count.
                     const booked = outcome.incomingBooked ?? damage;
                     const applied: AppliedVictimDamage = { ...outcome, incomingBooked: booked };
+                    // The log row: folded into the cast's row for this victim (buildCombatLog), at
+                    // what the victim took — after its incoming-block proc.
+                    bus.emit({
+                        type: 'passive-slot-damage',
+                        attackerId: actor.id,
+                        targetId: victim.id,
+                        round: currentRound,
+                        damage: loggedHitFigures(applied).amount,
+                    });
                     if (booked > 1e-9) {
                         roundPerTargetDamage.set(
                             victim.id,
@@ -12202,7 +12204,24 @@ export function runCombat(rawInput: CombatEngineInput): {
         })();
 
         bus.emit({ type: 'round-started', round: r });
-        announceAccumGains(statusEngine, bus);
+        // The round's stack gains (Overload, Blast, Warding Screen…) are a start-of-round effect,
+        // so they are announced granter by granter in turn order, both sides interleaved; one
+        // granter's gains keep their banking order. Reactions they wake follow the same order
+        // (`drainReactions` resolves by event order).
+        announceAccumGains(statusEngine, bus, (gains) =>
+            orderByTurnPriority(
+                gains.map((gain) => {
+                    const granter =
+                        allActorsById.get(gain.granterId) ?? allActorsById.get(gain.ownerId);
+                    return {
+                        gain,
+                        speed: granter ? effectiveSpeedOf(granter) : 0,
+                        side: granter?.side ?? 'player',
+                        position: granter?.position,
+                    };
+                })
+            ).map((entry) => entry.gain)
+        );
         drainStartOfRound();
 
         // §4.5 Stasis reductions (`stasisBreakPending`, declared before the round loop). An entry
