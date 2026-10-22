@@ -85,6 +85,10 @@ function bucketKey(r: PairRecord, d: MirrorDivergence): string {
 
 function main(): void {
     const args = parseAuditArgs(process.argv.slice(2));
+    if (!Number.isFinite(args.seed) || !Number.isFinite(args.count) || args.count <= 0) {
+        console.error('Usage: npm run audit:side-mirror -- --seed <N> --count <M>');
+        process.exit(1);
+    }
     const tagged = loadTaggedCorpus();
     const started = performance.now();
 
@@ -340,14 +344,14 @@ function renderMarkdown(
         const nudged = b.sample.nudges.length
             ? `, speed-nudged ${b.sample.nudges.map((l) => `${l} +${TIE_NUDGE}`).join(', ')}`
             : '';
-        lines.push(
-            `- Sample (seed ${b.sample.seed}${nudged}, round ${d.round}, ${d.section ?? d.kind}):`
-        );
         if (b.nudgedSeeds.length > 0) {
             lines.push(
                 `- Speed-nudged seeds (see the JSON \`nudges\` to reproduce): ${b.nudgedSeeds.join(', ')}`
             );
         }
+        lines.push(
+            `- Sample (seed ${b.sample.seed}${nudged}, round ${d.round}, ${d.section ?? d.kind}):`
+        );
         lines.push(`  - original: \`${d.original}\``);
         lines.push(`  - swapped:  \`${d.swapped}\``);
         const roster = Object.entries(b.sample.ships)

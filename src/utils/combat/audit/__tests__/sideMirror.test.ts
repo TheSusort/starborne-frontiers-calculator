@@ -297,7 +297,7 @@ function realInput(): BattleSimulationInput {
     };
 }
 
-describe('sideMirror — real engine', () => {
+describe.skipIf(!csvAvailable() || !shipDataAvailable())('sideMirror — real engine', () => {
     it('pairs every draw to an actor-keyed stream', () => {
         const { stats } = runSwappedPaired(realInput(), 12);
         expect(stats).toEqual({ unkeyedDraws: 0, unmappedKeyedDraws: 0 });
