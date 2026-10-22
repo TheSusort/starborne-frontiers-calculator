@@ -580,6 +580,19 @@ export type CombatEvent =
           waveTotal?: number;
           waveLead?: boolean;
       } & ReactiveStamp)
+    /** LOG-ONLY: a reactive purge (`triggers.ts`'s purge executor) was aimed at an enemy holding
+     *  at least one removable buff and removed nothing, because the purger is at an affinity
+     *  disadvantage against it (a purge lands like an 'apply' debuff). `reason` names why. NO
+     *  combat listener subscribes to it, so a purge that did not happen wakes nothing; it opens a
+     *  `purge` row of 0 so the attempt is visible. Suppressed under the same depth-1 chain guard
+     *  as `purge-performed`. */
+    | ({
+          type: 'purge-blocked-log';
+          casterId: string;
+          targetId: string;
+          round: number;
+          reason: 'affinity';
+      } & ReactiveStamp)
     /** A buff STEAL moved something. Sibling of `purge-performed`, and like it, SUPPRESSED when
      *  nothing actually moved (an empty return from `statusEngine.steal` / `stealStacks` opens no
      *  log row).

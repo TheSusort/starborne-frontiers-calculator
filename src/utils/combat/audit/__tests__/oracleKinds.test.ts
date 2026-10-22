@@ -220,6 +220,19 @@ describe("oracleFingerprint: a landing the hit's own kill dropped", () => {
     });
 });
 
+describe('oracleKind: a purge an affinity disadvantage blocked', () => {
+    it('reads as the purge it attempted', () => {
+        const blocked = result(
+            rounds(3, { entries: [attack, { kind: 'purge', note: 'purged 0 (affinity)' }] })
+        );
+        const landed = result(
+            rounds(3, { entries: [attack, { kind: 'purge', note: 'purged 2' }] })
+        );
+        expect(diff(landed, blocked).raw).toBeNull();
+        expect(oracleFingerprint(blocked, SUBJECT)).toEqual(new Set(['attack', 'purge']));
+    });
+});
+
 describe('oracleKind: protection share rows', () => {
     it('drops an attack row noted Protection: damage absorbed for an ally, not an attack made', () => {
         const comp = result(rounds(3, { entries: [{ kind: 'attack', note: 'Protection' }] }));

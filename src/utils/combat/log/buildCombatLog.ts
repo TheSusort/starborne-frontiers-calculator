@@ -1099,6 +1099,18 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
         ctx.attachEntry(entry);
     },
 
+    // A reactive purge an affinity disadvantage stopped: the attempt, as a purge of 0.
+    'purge-blocked-log': (e, ctx) => {
+        if (!ctx.currentTurn && !ctx.currentRound) return;
+        ctx.attachEntry({
+            kind: 'purge',
+            actorId: e.casterId,
+            targets: [{ targetId: e.targetId }],
+            reactions: [],
+            note: `purged 0 (${e.reason})`,
+        });
+    },
+
     /**
      * A steal NAMES what it took, where a purge only counts it. That asymmetry is deliberate: a
      * purge destroys anonymous "buffs" and the count is the whole story, but a player whose

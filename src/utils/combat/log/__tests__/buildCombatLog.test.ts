@@ -22,6 +22,31 @@ const roster: RosterEntry[] = [
 const initialCharge = new Map<string, { charge: number; max: number }>();
 
 describe('buildCombatLog', () => {
+    it('logs a purge an affinity disadvantage blocked as a purge row of 0', () => {
+        const events: CombatEvent[] = [
+            ev({ type: 'round-started', round: 1 }),
+            ev({ type: 'turn-started', actorId: 'A', round: 1 }),
+            ev({
+                type: 'purge-blocked-log',
+                casterId: 'A',
+                targetId: 'B',
+                round: 1,
+                reason: 'affinity',
+            }),
+            ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
+            ev({ type: 'round-ended', round: 1 }),
+        ];
+        const entries = buildCombatLog(events, roster, initialCharge)[0].turns[0].entries;
+        expect(entries).toEqual([
+            expect.objectContaining({
+                kind: 'purge',
+                actorId: 'A',
+                targets: [{ targetId: 'B' }],
+                note: 'purged 0 (affinity)',
+            }),
+        ]);
+    });
+
     it('records a landing the kill dropped on the attack row that struck the ship, as no row of its own', () => {
         const events: CombatEvent[] = [
             ev({ type: 'round-started', round: 1 }),

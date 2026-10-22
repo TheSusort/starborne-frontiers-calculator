@@ -464,6 +464,9 @@ export interface StatusEngine {
     /** Remove up to `count` removable BUFFS from `actorId`'s self store, newest first;
      *  `'all'` = all; respects UNREMOVABLE_STATUSES + 'permanent'; returns count removed. */
     purge(actorId: string, count: number | 'all'): number;
+    /** How many buffs on `actorId` a purge could remove (the pool `purge` takes from, Buff
+     *  Protection aside), without removing any. */
+    removableBuffCount(actorId: string): number;
     /** Buff steal: move up to `count` removable TIMED self-buffs from `sourceId` to
      *  EVERY id in `recipientIds`, newest-applied first (same ordering as purge). The REMAINING
      *  duration travels with each moved buff — NOT reset to a fresh window. Skips the same
@@ -2004,6 +2007,21 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         extra: readonly CleanseCandidate[] = [],
         namedToo = true
     ): number => {
+        const candidates = removalCandidates(actorId, side, extra, namedToo);
+        candidates.sort((a, b) => b.seq - a.seq);
+        const limit =
+            count === 'all' ? candidates.length : Math.max(0, Math.min(count, candidates.length));
+        for (let i = 0; i < limit; i++) candidates[i].remove();
+        return limit;
+    };
+
+    /** The pool `removeNewestFirst` removes from, gathered without removing anything. */
+    const removalCandidates = (
+        actorId: string,
+        side: 'debuffs' | 'buffs',
+        extra: readonly CleanseCandidate[],
+        namedToo: boolean
+    ): CleanseCandidate[] => {
         const timedMap = !namedToo
             ? undefined
             : side === 'debuffs'
@@ -2051,11 +2069,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
                 }
             }
         }
-        candidates.sort((a, b) => b.seq - a.seq);
-        const limit =
-            count === 'all' ? candidates.length : Math.max(0, Math.min(count, candidates.length));
-        for (let i = 0; i < limit; i++) candidates[i].remove();
-        return limit;
+        return candidates;
     };
 
     /** Remove up to `count` removable debuffs from `actorId`'s per-victim enemy store, newest
@@ -2209,6 +2223,9 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         if ([...selfBuffNames].some(isBuffProtection)) return 0;
         return removeNewestFirst(actorId, 'buffs', count);
     };
+
+    const removableBuffCount = (actorId: string): number =>
+        removalCandidates(actorId, 'buffs', [], true).length;
 
     /** Move up to `count` removable TIMED self-buffs from `sourceId` to EVERY id in
      *  `recipientIds`, newest-applied first (mirrors removeNewestFirst's ordering, but
@@ -2745,6 +2762,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         extendAllDebuffsDuration,
         extendAllBuffsDuration,
         purge,
+        removableBuffCount,
         steal,
         stealStacks,
         adjustSelfBuffStacks,
