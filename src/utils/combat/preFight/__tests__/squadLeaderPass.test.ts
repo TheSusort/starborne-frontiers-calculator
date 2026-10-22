@@ -128,6 +128,7 @@ const makeUnit = (
     stats: { ...BASE_STATS, ...stats },
     modifiers: emptyPreFightModifiers(),
     unsimulated: [],
+    abilities: [],
 });
 
 /** The unit's pre-buff attack sheet: base × (1 + leader attack %). The pass leaves
@@ -298,6 +299,26 @@ describe('squadLeaderPass — stat math', () => {
         });
         // 10 - 30 = -20 → floored at 0.
         expect(enemy[0].stats.hacking).toBe(0);
+    });
+});
+
+describe('squadLeaderPass — ability lines', () => {
+    it('Medusa III grants each Gelecek ally a self-repair on debuff inflicted, nothing else', () => {
+        const player = [makeUnit('p1', 'player', 'GELECEK'), makeUnit('p2', 'player', 'MPL')];
+        runPass(player, [], { player: { faction: 'GELECEK', name: 'Medusa', stage: 3 } });
+        expect(player[0].abilities).toHaveLength(1);
+        expect(player[0].abilities[0]).toMatchObject({
+            type: 'heal',
+            target: 'self',
+            trigger: 'on-debuff-inflicted',
+            triggerApplicationFilter: 'inflict',
+            oncePerRootCast: 'cast',
+            source: 'equipment',
+            config: { type: 'heal', pct: 5, basis: 'hp' },
+        });
+        expect(player[0].modifiers.incomingHeal).toBe(0);
+        expect(player[0].unsimulated).toEqual([]);
+        expect(player[1].abilities).toEqual([]);
     });
 });
 

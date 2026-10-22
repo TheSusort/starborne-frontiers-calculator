@@ -1186,6 +1186,11 @@ const LIEUTENANT_DEFPEN = stagePair(
     1
 );
 
+const INFLICT_TWO_DEBUFFS: Partial<UnitSpec> = {
+    active: 'This Unit inflicts <unit-skill>Defense Down II</unit-skill> and <unit-skill>Attack Down II</unit-skill> for 2 turns.',
+    stats: { hacking: 1000 },
+};
+
 const MEDUSA_REPAIR = stagePair(
     {
         player: [unit('W', 'M4', INFLICT_DEFENSE_DOWN, { faction: 'GELECEK', startHpFrac: 0.5 })],
@@ -1308,14 +1313,49 @@ const LEADER_ROWS: LeaderRow[] = [
         ),
     },
     {
-        // DIVERGES (ledger): "Repairs 5% HP after inflicting a debuff on an enemy" is modelled as
-        // +5% incoming repair. Today a Gelecek ship that inflicts a debuff repairs nothing.
-        line: 'Gelecek Medusa III: repairs 5% HP after inflicting a debuff (no repair today)',
+        // "Repairs 5% HP after inflicting a debuff on an enemy": a Gelecek ship at half HP that
+        // inflicts Defense Down II repairs 5% of its 1,080,000 max HP (Medusa II's +8% HP).
+        line: 'Gelecek Medusa III: repairs 5% HP after inflicting a debuff',
         ...MEDUSA_REPAIR,
         check: (w, c) => {
             expect(debuffCount('Defense Down II', 'O')(w)).toBeGreaterThan(0);
             expect(grossTo(c, 'heal', { target: 'W' })).toBe(0);
-            expect(grossTo(w, 'heal', { target: 'W' })).toBe(0);
+            expect(entriesOf(w, 'heal', { actor: 'W', target: 'W' })).toHaveLength(1);
+            expect(grossTo(w, 'heal', { actor: 'W', target: 'W' })).toBeCloseTo(54_000, 6);
+        },
+    },
+    {
+        // One repair per skill cast that lands a debuff, however many it lands: two casts that
+        // each land Defense Down II and Attack Down II repair twice, not four times.
+        line: 'Gelecek Medusa III: one repair per debuffing cast',
+        ...stagePair(
+            {
+                player: [
+                    unit('W', 'M4', INFLICT_TWO_DEBUFFS, { faction: 'GELECEK', startHpFrac: 0.5 }),
+                ],
+                enemy: [unit('O', 'M4', IDLE)],
+                rounds: 2,
+            },
+            'GELECEK',
+            'Medusa',
+            3,
+            2
+        ),
+        check: (w, c) => {
+            expect(debuffCount('Attack Down II', 'O')(w)).toBe(2);
+            expect(debuffCount('Defense Down II', 'O')(w)).toBe(2);
+            expect(grossTo(c, 'heal', { target: 'W' })).toBe(0);
+            expect(entriesOf(w, 'heal', { actor: 'W', target: 'W' })).toHaveLength(2);
+            expect(grossTo(w, 'heal', { actor: 'W', target: 'W' })).toBeCloseTo(108_000, 6);
+        },
+    },
+    {
+        // Cerberus II: 7.5% of a 1,100,000 max HP (Cerberus I's +10% HP).
+        line: 'Gelecek Cerberus II: repairs 7.5% HP after inflicting a debuff',
+        ...stagePair(MEDUSA_REPAIR.board, 'GELECEK', 'Cerberus', 2, 1),
+        check: (w, c) => {
+            expect(grossTo(c, 'heal', { target: 'W' })).toBe(0);
+            expect(grossTo(w, 'heal', { actor: 'W', target: 'W' })).toBeCloseTo(82_500, 6);
         },
     },
 ];
@@ -1340,9 +1380,5 @@ describe('non-kit census: squad leaders', () => {
             firstHit('W', 'O')(runForcedBattle(board, true)) /
             firstHit('W', 'O')(runForcedBattle(control, true));
         expect(ratio).toBeCloseTo(1.18 / 1.08, 6);
-    });
-    it.fails('TEXT: Gelecek Medusa III repairs the debuffer 5% of max HP', () => {
-        const w = runForcedBattle(MEDUSA_REPAIR.board, true);
-        expect(grossTo(w, 'heal', { target: 'W' })).toBeGreaterThan(0);
     });
 });

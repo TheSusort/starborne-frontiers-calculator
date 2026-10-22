@@ -138,6 +138,7 @@ describe('applyPreCombatShipPassives — squad-leader attack % (R200)', () => {
             stats: plan.stats,
             modifiers: emptyPreFightModifiers(),
             unsimulated: [],
+            abilities: [],
         }));
         runPreFight({ player: units, enemy: [] }, [
             squadLeaderPass({ player: { faction: 'MPL', name: 'Midas', stage: 1 } }),

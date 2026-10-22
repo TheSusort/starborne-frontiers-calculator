@@ -4836,6 +4836,11 @@ const DocumentationPage: React.FC = () => {
                                         with 50% crit power gives 60%
                                     </li>
                                     <li>
+                                        Gelecek&apos;s &quot;repairs after inflicting a debuff&quot;
+                                        repairs the ship once per skill that lands a debuff, however
+                                        many debuffs that skill lands
+                                    </li>
+                                    <li>
                                         Effects the simulator cannot model yet (conditional bonuses,
                                         per-round effects, and damage/heal/shield modifiers) are
                                         marked &quot;Not simulated&quot; in the picker preview and

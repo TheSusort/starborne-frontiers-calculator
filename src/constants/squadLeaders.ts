@@ -1,4 +1,5 @@
 import type { StatName, StatType } from '../types/stats';
+import type { Ability } from '../types/abilities';
 import type { ShipRoleCategory } from './shipTypes';
 import type { FactionName } from './factions';
 
@@ -105,6 +106,13 @@ export type SquadLeaderEffect =
           channel: SquadLeaderModifierChannel;
           /** Signed percentage unless the channel is noted otherwise. */
           value: number;
+      })
+    | (SquadLeaderEffectBase & {
+          kind: 'ability';
+          /** An engine ability each recipient carries for the fight, for a line that reacts to a
+           *  combat event ("Repairs 5% HP after inflicting a debuff"). The pre-fight pass mints its
+           *  id and appends it to the recipient's passive slot. */
+          ability: Omit<Ability, 'id' | 'source' | 'equipmentEffectId'>;
       })
     | (SquadLeaderEffectBase & {
           // Escape hatch: capture something not yet expressible above. Fill `text`; model later.
@@ -751,13 +759,24 @@ export const SQUAD_LEADERS: Record<FactionName, SquadLeader[]> = {
                     },
                 ],
                 // III — Repairs 5% HP after inflicting a debuff on an enemy
-                // TODO: add an effect for this
                 [
                     {
-                        kind: 'modifier',
+                        kind: 'ability',
                         target: 'all-allies',
-                        channel: 'incomingHeal',
-                        value: 5,
+                        // "after inflicting a debuff" is an outgoing reaction: one repair per skill
+                        // cast that lands a debuff, however many it lands — the same reading as
+                        // Hemlock's "adds 1 charge … after it inflicts a debuff" (see
+                        // `Ability.oncePerRootCast`). "inflicting" → the 'inflict' verb filter.
+                        ability: {
+                            type: 'heal',
+                            target: 'self',
+                            trigger: 'on-debuff-inflicted',
+                            triggerApplicationFilter: 'inflict',
+                            oncePerRootCast: 'cast',
+                            conditions: [],
+                            config: { type: 'heal', pct: 5, basis: 'hp' },
+                            autoFilled: true,
+                        },
                         text: 'Repairs 5% HP after inflicting a debuff on an enemy',
                     },
                 ],
@@ -789,10 +808,22 @@ export const SQUAD_LEADERS: Record<FactionName, SquadLeader[]> = {
                 // II — Repairs 7.5% HP after inflicting a debuff on an enemy
                 [
                     {
-                        kind: 'modifier',
+                        kind: 'ability',
                         target: 'all-allies',
-                        channel: 'incomingHeal',
-                        value: 7.5,
+                        // "after inflicting a debuff" is an outgoing reaction: one repair per skill
+                        // cast that lands a debuff, however many it lands — the same reading as
+                        // Hemlock's "adds 1 charge … after it inflicts a debuff" (see
+                        // `Ability.oncePerRootCast`). "inflicting" → the 'inflict' verb filter.
+                        ability: {
+                            type: 'heal',
+                            target: 'self',
+                            trigger: 'on-debuff-inflicted',
+                            triggerApplicationFilter: 'inflict',
+                            oncePerRootCast: 'cast',
+                            conditions: [],
+                            config: { type: 'heal', pct: 7.5, basis: 'hp' },
+                            autoFilled: true,
+                        },
                         text: 'Repairs 7.5% HP after inflicting a debuff on an enemy',
                     },
                 ],

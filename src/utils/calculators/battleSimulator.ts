@@ -1086,6 +1086,7 @@ export function simulateBattle(
         stats: plan.stats,
         modifiers: emptyPreFightModifiers(),
         unsimulated: [],
+        abilities: [],
     });
     const preFightPlayer = playerPlans.map((plan) => toPreFightUnit(plan, 'player'));
     const preFightEnemy = enemyPlans.map((plan) => toPreFightUnit(plan, 'enemy'));
@@ -1102,6 +1103,16 @@ export function simulateBattle(
     const preFightById = new Map<string, PreFightUnit>(
         [...preFightPlayer, ...preFightEnemy].map((u) => [u.id, u])
     );
+    // Pre-fight abilities (squad-leader reactions) join the unit's passive slot, the way
+    // `buildShipAbilitiesWithEquipment` adds gear and implant abilities. `planPlacement` builds a
+    // fresh `ShipSkills` per run, so the push never reaches another run.
+    for (const plan of [...playerPlans, ...enemyPlans]) {
+        const granted = preFightById.get(plan.id)?.abilities ?? [];
+        if (granted.length === 0) continue;
+        const passive = plan.shipSkills.slots.find((sl) => sl.slot === 'passive');
+        if (passive) passive.abilities.push(...granted);
+        else plan.shipSkills.slots.push({ slot: 'passive', abilities: [...granted] });
+    }
     const leaderAttackPctOf = (id: string): number =>
         preFightById.get(id)?.modifiers.attackPct ?? 0;
     applyPreCombatShipPassives(playerPlans, leaderAttackPctOf);

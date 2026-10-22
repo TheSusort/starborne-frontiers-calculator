@@ -8,6 +8,7 @@
  * pass input the layer is an exact no-op — the engine is untouched.
  */
 import type { FactionName } from '../../../constants/factions';
+import type { Ability } from '../../../types/abilities';
 
 /** The 10 numeric combat stats the pre-fight layer can modify. Structural — the battle
  *  simulator's private `DerivedCombatStats` satisfies it as-is. */
@@ -105,6 +106,9 @@ export interface PreFightUnit {
     modifiers: PreFightCombatModifiers;
     /** Verbatim effect texts that landed on this unit but are NOT simulated (yet). */
     unsimulated: string[];
+    /** Engine abilities passes grant this unit for the fight (a squad-leader line that reacts to
+     *  a combat event). The battle simulator appends them to the unit's passive slot. */
+    abilities: Ability[];
 }
 
 /** A pre-fight pass: mutates the units of both sides in place. */

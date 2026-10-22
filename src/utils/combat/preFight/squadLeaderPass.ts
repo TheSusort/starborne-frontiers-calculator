@@ -136,6 +136,7 @@ export function isSquadLeaderEffectSimulated(effect: SquadLeaderEffect): boolean
         return false;
     }
     if (effect.kind === 'stat') return isPreFightStat(effect.stat);
+    if (effect.kind === 'ability') return true;
     // kind === 'modifier': mapped channels are consumed by the engine.
     return MODIFIER_FIELD_BY_CHANNEL[effect.channel] !== undefined;
 }
@@ -162,7 +163,7 @@ function applyLeaderForSide(
     // Stages are additive deltas: everything up to and including the selected stage is live.
     const effects = activeSquadLeaderEffects(leader, sel.stage);
 
-    for (const effect of effects) {
+    for (const [effectIndex, effect] of effects.entries()) {
         // Recipients by the shared targeting rule. 'self' has no deployed unit to land on
         // (squad leaders are not on the board — 0 occurrences in data), so it attributes
         // its unsimulated text to the own-side faction units, same as 'all-allies'. The
@@ -186,6 +187,21 @@ function applyLeaderForSide(
             effect.target === 'self'
         ) {
             for (const unit of recipients) unit.unsimulated.push(effect.text);
+            continue;
+        }
+
+        if (effect.kind === 'ability') {
+            // `source: 'equipment'` marks it as not the ship's own skill (`Ability.source`): it
+            // keeps working while the ship is stasised, and keys its own reaction lineage.
+            const effectId = `leader-${sel.faction}-${leader.name}-${effectIndex}`;
+            for (const unit of recipients) {
+                unit.abilities.push({
+                    ...effect.ability,
+                    id: effectId,
+                    source: 'equipment',
+                    equipmentEffectId: effectId,
+                });
+            }
             continue;
         }
 
