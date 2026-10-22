@@ -798,10 +798,9 @@ describe('importPlayerData field mappings', () => {
             ).toEqual({ name: 'critDamage', value: 10, type: 'percentage' });
         });
 
-        // Suspected bug: transformEngineeringStats pushes `getStatName(stat.Attribute)` without
-        // the null guard the refit path has, so an attribute outside the app's vocabulary is
-        // stored as a Stat with `name: null`. The schema types `Attribute` as `z.string()`.
-        it.fails('drops an engineering stat whose attribute this app does not model', async () => {
+        // The schema types `Attribute` as `z.string()`, so the export can carry names outside
+        // the app's vocabulary; those must not become a Stat with `name: null`.
+        it('drops an engineering stat whose attribute this app does not model', async () => {
             const { engineeringStats } = await importOne({
                 Engineering: [
                     makeEngineeringStat({ Attribute: 'Power', Level: 10 }),
@@ -904,10 +903,7 @@ describe('importPlayerData field mappings', () => {
             ]);
         });
 
-        // Suspected bug: transformInventory maps gear sub stats with `getStatName(...) as StatName`
-        // and no null guard, so a sub stat outside the app's vocabulary becomes a Stat with
-        // `name: null`. The schema types `Attribute` as `z.string()`.
-        it.fails('drops a gear sub stat whose attribute this app does not model', async () => {
+        it('drops a gear sub stat whose attribute this app does not model', async () => {
             const gear = makeGearItem({
                 SubStats: [
                     { Level: 1, Attribute: { Attribute: 'Power', Type: 'Flat', Value: 50 } },

@@ -551,28 +551,21 @@ describe('calculateTotalScore cache — inputs outside the key', () => {
         );
     });
 
-    // Suspected bug: `priorities` is not part of the cache key, so a score cached under one set
-    // of stat limits is returned for a call with different limits on the same ship and gear.
-    it.fails('re-scores when only the stat priorities change', () => {
+    it('re-scores when only the stat priorities change', () => {
         clearScoreCache();
         const ship = makeTestShip({ id: 'key-priorities' });
         const free = score(ship);
         expect(score(ship, unreachableFloor)).toBeLessThan(free);
     });
 
-    // Suspected bug: `setPriorities` (and `tryToCompleteSets`) are not part of the cache key.
-    it.fails('re-scores when only the set priorities change', () => {
+    it('re-scores when only the set priorities change', () => {
         clearScoreCache();
         const ship = makeTestShip({ id: 'key-sets' });
         const free = score(ship);
         expect(score(ship, [], needFourAttack)).toBeLessThan(free);
     });
 
-    // Suspected bug: the implant part of the key is memoised per ship id, so a ship whose
-    // implants changed keeps the key, and the score, of its old implants until a clear. An
-    // empty implant map keys as '' and is never memoised, so only a ship that HAD implants
-    // goes stale.
-    it.fails('re-scores when an equipped implant is removed', () => {
+    it('re-scores when an equipped implant is removed', () => {
         clearScoreCache();
         const bare = makeTestShip({ id: 'key-implants' });
         const withImplant = { ...bare, implants: { implant_minor_alpha: implant.id } };
