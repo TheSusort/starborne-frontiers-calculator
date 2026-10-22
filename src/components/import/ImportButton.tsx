@@ -1,23 +1,15 @@
-import React, { useCallback, useEffect, useId, useState } from 'react';
+import React, { Suspense, lazy, useCallback, useEffect, useId, useState } from 'react';
 import { Button } from '../ui/Button';
 import { useShips } from '../../contexts/ShipsContext';
 import { useInventory } from '../../contexts/InventoryProvider';
 import { useEngineeringStats } from '../../contexts/EngineeringStatsProvider';
-import { importPlayerData } from '../../utils/importPlayerData';
 import { useNotification } from '../../hooks/useNotification';
-import { validateExportedPlayData } from '../../schemas/exportedPlayData';
 import { ExportedPlayData } from '../../types/exportedPlayData';
 import { syncMigratedDataToSupabase } from '../../utils/migratePlayerData';
 import { useAuth } from '../../contexts/AuthProvider';
 import { useActiveProfile } from '../../contexts/ActiveProfileProvider';
 import { Checkbox } from '../ui/Checkbox';
-import { uploadToCubedweb } from '../../utils/uploadToCubedweb';
 import { trackDataImport } from '../../services/usageTracking';
-import {
-    extractLevel60Ships,
-    compareShipsAgainstTemplates,
-} from '../../utils/shipTemplateComparison';
-import { submitTemplateProposal } from '../../services/shipTemplateProposalService';
 import { supabase } from '../../config/supabase';
 import { Ship } from '../../types/ship';
 import { isRarityName } from '../../constants/rarities';
@@ -25,11 +17,26 @@ import { ShipTypeName, isShipTypeName } from '../../constants/shipTypes';
 import { toAffinityName } from '../../constants/affinities';
 import { StorageKey } from '../../constants/storage';
 import { ImportDiff } from '../../types/importDiff';
-import { computeImportDiff } from '../../utils/import/computeImportDiff';
 import { useGearWishlistContext } from '../../contexts/GearWishlistProvider';
 import { HangarNameModal } from './HangarNameModal';
-import { ImportDiffModal } from './ImportDiffModal';
 import { IMPORT_START_EVENT } from './importEvents';
+
+// The import pipeline (zod schema, parser, diff, template proposals) and the summary modal load
+// on first use, so the Sidebar's always-mounted button keeps them out of the entry chunk.
+const loadImportPipeline = () =>
+    Promise.all([
+        import('../../schemas/exportedPlayData'),
+        import('../../utils/importPlayerData'),
+        import('../../utils/import/computeImportDiff'),
+    ]);
+const loadTemplateProposals = () =>
+    Promise.all([
+        import('../../utils/shipTemplateComparison'),
+        import('../../services/shipTemplateProposalService'),
+    ]);
+const ImportDiffModal = lazy(() =>
+    import('./ImportDiffModal').then((m) => ({ default: m.ImportDiffModal }))
+);
 
 export const ImportButton: React.FC<{
     className?: string;
@@ -160,6 +167,8 @@ export const ImportButton: React.FC<{
                     setLoading(false);
                     return;
                 }
+                const [{ validateExportedPlayData }, { importPlayerData }, { computeImportDiff }] =
+                    await loadImportPipeline();
                 const text = await file.text();
                 const validation = validateExportedPlayData(JSON.parse(text));
                 if (!validation.success) {
@@ -205,6 +214,10 @@ export const ImportButton: React.FC<{
                             const templateShips = await fetchTemplateShips();
 
                             if (templateShips.length > 0) {
+                                const [
+                                    { extractLevel60Ships, compareShipsAgainstTemplates },
+                                    { submitTemplateProposal },
+                                ] = await loadTemplateProposals();
                                 const level60Ships = extractLevel60Ships(data);
                                 const proposals = compareShipsAgainstTemplates(
                                     level60Ships,
@@ -342,6 +355,7 @@ export const ImportButton: React.FC<{
             setUploadingToCubedweb(true);
             try {
                 // Upload to cubedweb first
+                const { uploadToCubedweb } = await import('../../utils/uploadToCubedweb');
                 const uploadResult = await uploadToCubedweb(selectedFile, hangarName);
 
                 if (uploadResult.success && uploadResult.hangarUrl) {
@@ -471,14 +485,18 @@ export const ImportButton: React.FC<{
                 loading={uploadingToCubedweb}
                 fileSize={selectedFile?.size}
             />
-            <ImportDiffModal
-                diff={diffResult}
-                fileTimestamp={importFileTimestamp}
-                onClose={() => {
-                    setDiffResult(null);
-                    setImportFileTimestamp(null);
-                }}
-            />
+            {diffResult && (
+                <Suspense fallback={null}>
+                    <ImportDiffModal
+                        diff={diffResult}
+                        fileTimestamp={importFileTimestamp}
+                        onClose={() => {
+                            setDiffResult(null);
+                            setImportFileTimestamp(null);
+                        }}
+                    />
+                </Suspense>
+            )}
         </div>
     );
 };
