@@ -879,4 +879,15 @@ export const BUFFS: Buff[] = [
         description: "Increases Attack by 100% of the unit's own Attack, stackable.",
         type: 'buff',
     },
+    {
+        name: 'Steal Buff',
+        description:
+            'Removes a removable and obtainable buff not labeled as unstealable and grants it to the stealer. Does not require hacking to take effect and does not affect enemies with an affinity advantage.',
+        type: 'effect',
+    },
+    {
+        name: 'Extra Action',
+        description: 'Allows the Unit to perform another action this round.',
+        type: 'effect',
+    },
 ];

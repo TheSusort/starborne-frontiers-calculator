@@ -1,5 +1,9 @@
 import React from 'react';
-import { parseSkillText, extractSkillNames } from '../../utils/skillTextParser';
+import {
+    parseSkillText,
+    extractSkillNames,
+    resolveTaggedEffect,
+} from '../../utils/skillTextParser';
 import { ClockIcon } from '../ui/icons';
 import { SkillTargeting } from '../../utils/targetingParser';
 import { BuffTooltip } from './BuffTooltip';
@@ -21,7 +25,16 @@ export const SkillTooltip: React.FC<SkillTooltipProps> = ({
     targeting,
 }) => {
     const segments = parseSkillText(skillText);
-    const skillNames = extractSkillNames(skillText);
+    // One box per effect: two action phrases for the same effect ("cleanses 2 debuffs",
+    // "cleanses a debuff") share the title Cleanse.
+    const describedEffects = [
+        ...new Map(
+            extractSkillNames(skillText).flatMap((name) => {
+                const effect = resolveTaggedEffect(name);
+                return effect ? [[effect.title, effect] as const] : [];
+            })
+        ).values(),
+    ];
 
     // Helper to render text with line breaks
     const renderTextWithBreaks = (text: string) => {
@@ -59,7 +72,8 @@ export const SkillTooltip: React.FC<SkillTooltipProps> = ({
                                 {segment.buffDescription && (
                                     <div className="skill-tooltip">
                                         <div className="font-semibold text-sm text-primary capitalize">
-                                            {segment.text}
+                                            {resolveTaggedEffect(segment.text)?.title ??
+                                                segment.text}
                                         </div>
                                         <div className="text-sm text-theme-text">
                                             {segment.buffDescription}
@@ -111,16 +125,13 @@ export const SkillTooltip: React.FC<SkillTooltipProps> = ({
             </div>
 
             {/* Show buff tooltips below for skills that have descriptions */}
-            {skillNames
-                .filter((name) => {
-                    const segment = segments.find(
-                        (s) => s.type === 'unit-skill' && s.text === name
-                    );
-                    return segment?.buffDescription;
-                })
-                .map((buffName) => (
-                    <BuffTooltip key={buffName} buffName={buffName} />
-                ))}
+            {describedEffects.map((effect) => (
+                <BuffTooltip
+                    key={effect.title}
+                    title={effect.title}
+                    description={effect.description}
+                />
+            ))}
         </>
     );
 };

@@ -25,8 +25,8 @@ function loadShipNames(): string[] {
     return parsed.map((s) => s.name);
 }
 
-// Implant-only buffs that never appear in ship-buff fetch data and so are never
-// produced upstream — re-added here so a regen preserves them. (D-PR9: Font of Power.)
+// Statuses the upstream fetch never produces — implant-only buffs, and action effects whose
+// wording comes from the official unit catalogue — re-added here so a regen preserves them.
 const MANUAL_BUFFS: Array<{
     name: string;
     description: string;
@@ -46,6 +46,17 @@ const MANUAL_BUFFS: Array<{
         name: 'Buff Protection',
         description: "Protects this unit's buffs from being removed",
         type: 'buff',
+    },
+    {
+        name: 'Steal Buff',
+        description:
+            'Removes a removable and obtainable buff not labeled as unstealable and grants it to the stealer. Does not require hacking to take effect and does not affect enemies with an affinity advantage.',
+        type: 'effect',
+    },
+    {
+        name: 'Extra Action',
+        description: 'Allows the Unit to perform another action this round.',
+        type: 'effect',
     },
 ];
 

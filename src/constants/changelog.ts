@@ -8,6 +8,7 @@ export const CURRENT_VERSION = '1.81.2';
 // nothing. Do it by hand only if that script cannot.
 export const UNRELEASED_CHANGES: string[] = [
     'Arcade: ducking ships now draw whole instead of clipping into the track.',
+    'Ship database: skill tooltips now explain cleanse, purge, steal, charge and extra-action effects.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
