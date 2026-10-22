@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { CatalogueUnit } from '../catalogueSchema';
-import { auditUnits, expectedStats } from '../catalogueStatsAudit';
+import { auditUnits, expectedStats, injectionCaused } from '../catalogueStatsAudit';
 
 const unit = (overrides: Partial<CatalogueUnit> = {}): CatalogueUnit =>
     ({
@@ -57,7 +57,10 @@ describe('auditUnits', () => {
                     { level: 5, attribute: 'Power', type: 'Percentage', value: 0.1 },
                 ],
             });
-            expect(auditUnits([withRefit5], injection).mismatches.length).toBeGreaterThan(0);
+            expect(
+                injectionCaused(auditUnits([withRefit5]), auditUnits([withRefit5], injection))
+                    .length
+            ).toBeGreaterThan(0);
         }
     );
 });

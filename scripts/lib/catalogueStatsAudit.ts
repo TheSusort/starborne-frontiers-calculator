@@ -40,11 +40,7 @@ export type StatBlock = Record<AuditStat, number>;
 
 /** Deliberate faults, used to prove the comparison can fail (instrument validity). */
 export type Injection =
-    | 'none'
-    | 'drop-innate'
-    | 'swap-hp-attack'
-    | 'drop-refit-5'
-    | 'swap-affinity';
+    'none' | 'drop-innate' | 'swap-hp-attack' | 'drop-refit-5' | 'swap-affinity';
 
 export const INJECTIONS: readonly Injection[] = [
     'drop-innate',
@@ -169,9 +165,7 @@ const applyInjectionToRow = (row: ShipTemplate, injection: Injection): ShipTempl
     if (injection === 'swap-affinity') {
         next.affinity = row.affinity === 'thermal' ? 'electric' : 'thermal';
     }
-    const rows = Array.isArray(row.ascension_stats)
-        ? (row.ascension_stats as AscensionStat[])
-        : [];
+    const rows = Array.isArray(row.ascension_stats) ? (row.ascension_stats as AscensionStat[]) : [];
     if (injection === 'drop-innate') next.ascension_stats = rows.filter((r) => r.level !== 0);
     if (injection === 'drop-refit-5') next.ascension_stats = rows.filter((r) => r.level !== 5);
     return next;
@@ -320,4 +314,13 @@ export const auditUnits = (units: CatalogueUnit[], injection: Injection = 'none'
         }
     }
     return { compared, skipped, metaCompared, unitCount: units.length, mismatches };
+};
+
+const mismatchKey = (m: Mismatch) => `${m.definitionId}|${m.refits}|${m.field}|${m.ours}|${m.kind}`;
+
+/** The non-rounding mismatches an injected run reports that the clean run does not: the evidence
+ *  that the injection itself is what the audit caught, not a pre-existing catalogue mismatch. */
+export const injectionCaused = (clean: AuditResult, injected: AuditResult): Mismatch[] => {
+    const before = new Set(clean.mismatches.map(mismatchKey));
+    return injected.mismatches.filter((m) => m.kind !== 'rounding' && !before.has(mismatchKey(m)));
 };

@@ -11,6 +11,7 @@ import path from 'path';
 import { catalogueUnitSchema, type CatalogueUnit } from './lib/catalogueSchema';
 import {
     auditUnits,
+    injectionCaused,
     INJECTIONS,
     STAT_KEYS,
     type AuditResult,
@@ -63,7 +64,13 @@ const snapshotDrift = (units: CatalogueUnit[]) => {
     const extraInSnapshot = records
         .filter((r) => !names.has(r.name.toUpperCase()))
         .map((r) => r.name);
-    return { drift, missingFromSnapshot, extraInSnapshot, snapshotCount: records.length };
+    return {
+        available: records.length > 0,
+        drift,
+        missingFromSnapshot,
+        extraInSnapshot,
+        snapshotCount: records.length,
+    };
 };
 
 const group = (mismatches: Mismatch[]) => {
@@ -109,8 +116,10 @@ const renderMarkdown = (
     lines.push(
         '## docs/ship-data.json snapshot vs catalogue (name-joined)',
         '',
-        `Snapshot units ${snap.snapshotCount}; drifted fields ${snap.drift.length}; ` +
-            `missing from snapshot ${snap.missingFromSnapshot.length}; extra in snapshot ${snap.extraInSnapshot.length}.`,
+        snap.available
+            ? `Snapshot units ${snap.snapshotCount}; drifted fields ${snap.drift.length}; ` +
+                  `missing from snapshot ${snap.missingFromSnapshot.length}; extra in snapshot ${snap.extraInSnapshot.length}.`
+            : 'Snapshot UNAVAILABLE: docs/ship-data.json is missing or holds no records, so nothing was compared.',
         ''
     );
     for (const d of snap.drift.slice(0, 80)) {
@@ -143,8 +152,10 @@ function main(): void {
 
     const result = auditUnits(units, injection);
     if (injection !== 'none') {
-        const real = result.mismatches.filter((m) => m.kind !== 'rounding');
-        console.log(`INJECTED ${injection}: ${real.length} mismatches reported (must be > 0).`);
+        const real = injectionCaused(auditUnits(units), result);
+        console.log(
+            `INJECTED ${injection}: ${real.length} mismatches the clean run does not report (must be > 0).`
+        );
         process.exit(real.length > 0 ? 0 : 1);
     }
 
@@ -173,7 +184,7 @@ function main(): void {
         renderMarkdown(result, snap, build)
     );
     console.log(
-        `compared ${result.compared}/${result.unitCount * 7}; mismatches ${result.mismatches.length}; snapshot drift ${snap.drift.length}`
+        `compared ${result.compared}/${result.unitCount * 7}; mismatches ${result.mismatches.length}; snapshot drift ${snap.available ? snap.drift.length : 'UNAVAILABLE'}`
     );
 }
 
