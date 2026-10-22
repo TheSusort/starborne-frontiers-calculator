@@ -5353,6 +5353,9 @@ export function runCombat(rawInput: CombatEngineInput): {
         if (entries.length === 0) return;
         const owner = allRuntimesById.get(sourceId);
         if (!owner) return;
+        // A destroyed ship performs no repair: its DoTs still tick and burst (they outlive their
+        // applier), but its standing leech pays nothing, so no repair row and no repair reaction.
+        if (owner.actor.destroyedRound !== undefined) return;
         const ownerIsEnemy = owner.actor.side === 'enemy';
         // #424: proc-call scope (every entry, every recipient), not per entry — see the emit below.
         const shieldAcc = new ShieldApplyAccumulator();
