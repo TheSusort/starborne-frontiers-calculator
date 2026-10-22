@@ -1089,6 +1089,9 @@ export interface PlayerTurnArgs {
     chargedPattern?: ParsedPattern;
     /** Living same-side roster for support footprint resolution (positional mode). */
     sameSideLiving?: CombatActor[];
+    /** False for a destroyed ship (`destroyedRound` set). Narrows every cast-path ally grant to
+     *  living recipients. Absent → nobody is treated as destroyed. */
+    isActorAlive?: (actorId: string) => boolean;
     /** Pre-fight combat-modifier baseline for THIS acting actor.
      *  attackPct/outgoingHeal/incomingHeal fold additively into the `extras` totals right after
      *  resolveSelfBuffTotals, flowing through effectiveDamageStatsOf into every existing
@@ -2131,6 +2134,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         activePattern,
         chargedPattern,
         sameSideLiving,
+        isActorAlive,
     } = args;
     // The bound target's DoT containers. Arrays mutate in place over the turn, so each context
     // below reads `dotReadings(boundTargetDoTs)` at its own point in the turn.
@@ -2349,6 +2353,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     //
     // Everything left over — a plain `'ally'`, `'all-allies'`, `'adjacent-allies'` on the cast slot
     // — IS narrowed, plain `'ally'` included (see `recipientsFor`).
+    const livingOnly = (ids: string[]): string[] =>
+        isActorAlive === undefined ? ids : ids.filter(isActorAlive);
     const scopedByFootprint = (ability: Ability | undefined, fromPassive: boolean): boolean =>
         !fromPassive || ability?.patternScoped === true;
     const supportRecipients = (
@@ -2366,7 +2372,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         resolveSupportRecipients({
             target,
             casterId: actor.id,
-            baseRecipients: base,
+            // A destroyed ally receives nothing a cast grants, whatever the footprint says.
+            baseRecipients: livingOnly(base),
             footprintAllyIds:
                 source === undefined || scopedByFootprint(source.ability, source.fromPassive)
                     ? footprintAllyIds

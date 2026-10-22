@@ -10502,6 +10502,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 activePattern: parsedPatternFor(a),
                 chargedPattern: parsedChargedPatternFor(a),
                 sameSideLiving: sameSideLivingFor(a),
+                isActorAlive,
                 // The acting actor's pre-fight modifier baseline (runPlayerTurn's `preFight` doc
                 // says where each channel folds).
                 // Side-agnostic — enemy attackers walk the same path. Conditional spread → an

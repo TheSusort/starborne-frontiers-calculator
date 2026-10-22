@@ -16,6 +16,7 @@ export const UNRELEASED_CHANGES: string[] = [
     "Healing calculator: the round chart's Crit marker now shows critical repairs.",
     'Combat simulator: destroyed ships no longer repair themselves from their lingering DoTs.',
     'Combat simulator: destroyed ships stop gaining Overload, Blast and other per-round stacks.',
+    'Combat simulator: ally-wide buffs, repairs, charges and debuff trims now skip destroyed allies.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

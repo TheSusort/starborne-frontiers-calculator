@@ -46,6 +46,8 @@ const place = (s: CorpseShipSpec): Placed => {
 
 export interface CorpseRow {
     round: number;
+    /** Index of the log block (a start-of-round drain, one turn, or an end-of-round drain). */
+    block: number;
     entry: CombatLogEntry;
 }
 
@@ -56,6 +58,10 @@ export interface CorpseRun {
     idOf: (name: string) => string;
     /** The round `name`'s `death` row sits in, or undefined if it survived. */
     deathRound: (name: string) => number | undefined;
+    /** Rows in the log blocks after the one holding `name`'s `death` row (none if it survived).
+     *  The engine stamps a death at cast completion, so the rest of the killing block still sees
+     *  the ship alive. */
+    afterDeathOf: (name: string) => CorpseRow[];
 }
 
 /** `subject` and `other` teams; `mirror` mounts `subject` on the ENEMY side. */
@@ -71,16 +77,22 @@ export const corpseBattle = (
         : { playerTeam: a, enemyTeam: b, rounds: opts.rounds };
     const result = runSeededBattle(input, opts.seed ?? 1);
     const rows: CorpseRow[] = [];
+    let block = 0;
     const walk = (round: number, entries: CombatLogEntry[]): void => {
         for (const entry of entries) {
-            rows.push({ round, entry });
+            rows.push({ round, block, entry });
             walk(round, entry.reactions);
         }
     };
     for (const lr of result.combatLog) {
         walk(lr.round, lr.startOfRound);
-        for (const t of lr.turns) walk(lr.round, t.entries);
+        block++;
+        for (const t of lr.turns) {
+            walk(lr.round, t.entries);
+            block++;
+        }
         walk(lr.round, lr.endOfRound);
+        block++;
     }
     const idOf = (name: string): string => {
         const hit = result.roster.filter((r) => r.name === name);
@@ -88,7 +100,12 @@ export const corpseBattle = (
             throw new Error(`expected one ${name} on the board, got ${hit.length}`);
         return hit[0].actorId;
     };
-    const deathRound = (name: string): number | undefined =>
-        rows.find((r) => r.entry.kind === 'death' && r.entry.actorId === idOf(name))?.round;
-    return { result, rows, idOf, deathRound };
+    const deathRow = (name: string): CorpseRow | undefined =>
+        rows.find((r) => r.entry.kind === 'death' && r.entry.actorId === idOf(name));
+    const deathRound = (name: string): number | undefined => deathRow(name)?.round;
+    const afterDeathOf = (name: string): CorpseRow[] => {
+        const d = deathRow(name);
+        return d === undefined ? [] : rows.filter((r) => r.block > d.block);
+    };
+    return { result, rows, idOf, deathRound, afterDeathOf };
 };

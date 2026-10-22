@@ -4517,7 +4517,9 @@ export function footprintFilteredRecipients(
     // same terms and for the same reason, so it is applied on ALL THREE branches. This is where
     // Chimei's R2 lands: both of its clauses are reactive (`end-of-round` Stealth grant,
     // `start-of-round` repair), so they never touch the cast-path seam.
-    const stateFiltered = narrowByRecipientFilter(baseRecipients, intent.ability.recipientFilter, {
+    // A destroyed ship receives nothing (`isAliveTarget`), whichever event named it.
+    const living = baseRecipients.filter((id) => ctx.isActorAlive?.(id) ?? true);
+    const stateFiltered = narrowByRecipientFilter(living, intent.ability.recipientFilter, {
         holdsStatus: (id, buffName) => ownerHoldsSelfBuff(ctx.statusEngine, id, buffName),
         roleOf: ctx.roleOf,
         // Buff-aware max HP where the healing ctx supplies one (requirement (b) on
