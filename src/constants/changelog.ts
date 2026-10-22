@@ -10,6 +10,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Arcade: ducking ships now draw whole instead of clipping into the track.',
     'Ship database: skill tooltips now explain cleanse, purge, steal, charge and extra-action effects.',
     'Combat simulator: Meatshield now gains one DoT per hit, not per Protection stack.',
+    "Combat simulator: Cobalt's start-of-turn charge now counts toward that turn's skill.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

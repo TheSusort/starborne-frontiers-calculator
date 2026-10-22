@@ -12005,21 +12005,19 @@ export function runCombat(rawInput: CombatEngineInput): {
             settleStasisHits();
         };
 
-        // Start-of-turn GRANTS (buffs/shields/heals) must apply BEFORE the acting owner
-        // casts, so a self-buff boosts the same turn it is granted (matching the game). Scoped to
-        // the acting owner only. CHARGE intents are EXCLUDED — they keep their post-cast drain
-        // (see the drainReactions calls in the turn loop
-        // below), on which the Cobalt charge ledger depends. Team-symmetric: drains both side
-        // queues, so a ship on either side gets the same pre-cast ordering. Turn-block
-        // suppression is inherited from drainQueue's isTurnBlocked filter — a stunned owner's
-        // grant is dropped, matching every other reactive.
+        // Start-of-turn GRANTS (buffs/shields/heals/charges) apply BEFORE the acting owner
+        // casts, so a self-buff boosts the same turn it is granted (matching the game), and a
+        // charge counts toward this turn's skill pick (owner ruling 2026-10-22: charges are live —
+        // Cobalt one charge short at turn start fires his charged skill that turn). Scoped to
+        // the acting owner only. Team-symmetric: drains both side queues, so a ship on either
+        // side gets the same pre-cast ordering. Turn-block suppression is inherited from
+        // drainQueue's isTurnBlocked filter — a stunned owner's grant is dropped, matching every
+        // other reactive.
         const drainStartOfTurnGrants = (ownerId: string): void => {
             // The spliced batch (p/e) is drained in isolation; any follow-up intents a grant
             // chain-enqueues land on the global queues and drain at the normal post-cast point.
             const isGrant = (i: Intent): boolean =>
-                i.ownerId === ownerId &&
-                i.ability.trigger === 'start-of-turn' &&
-                i.ability.type !== 'charge';
+                i.ownerId === ownerId && i.ability.trigger === 'start-of-turn';
             const take = (queue: Intent[]): Intent[] => {
                 const ready: Intent[] = [];
                 for (let i = 0; i < queue.length;) {
