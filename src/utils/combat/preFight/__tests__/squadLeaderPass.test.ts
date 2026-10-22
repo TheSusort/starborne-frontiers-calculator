@@ -14,6 +14,7 @@ import {
     emptyPreFightModifiers,
     leaderScaledAttack,
     liveLeaderAttackPct,
+    isSquadLeaderEffectSimulated,
     runPreFight,
 } from '../index';
 import type { PreFightUnit } from '../index';
@@ -449,13 +450,13 @@ describe('squadLeaderPass — skip rules (synthetic leader)', () => {
         expect(offFaction.modifiers).toEqual(emptyPreFightModifiers());
     });
 
-    it('a real conditional effect (Reaper stage 3 secondary-target damage) goes to unsimulated', () => {
+    it('Reaper III secondary-target damage lands on its own channel, not outgoingDamage', () => {
         const player = [makeUnit('p1', 'player', 'MARAUDERS')];
         runPass(player, [], {
             player: { faction: 'MARAUDERS', name: 'Reaper', stage: 3 },
         });
-        expect(player[0].unsimulated).toContain('+20% direct damage to secondary targets');
-        // The conditional modifier must NOT have been folded into the channel.
+        expect(player[0].unsimulated).toEqual([]);
+        expect(player[0].modifiers.outgoingDamageSecondaryTargets).toBe(20);
         expect(player[0].modifiers.outgoingDamage).toBe(0);
     });
 
@@ -527,6 +528,20 @@ describe('squadLeaderPass — full-data sweep (real, unmocked SQUAD_LEADERS)', (
                 }
             }
         }
+    });
+});
+
+describe('SQUAD_LEADERS data invariant — coverage', () => {
+    it('every real leader line is simulated (the in-app docs say so)', async () => {
+        const { SQUAD_LEADERS: REAL } = await vi.importActual<
+            typeof import('../../../../constants/squadLeaders')
+        >('../../../../constants/squadLeaders');
+        const unsimulated = Object.values(REAL)
+            .flat()
+            .flatMap((leader) => leader.stages.flat())
+            .filter((effect) => !isSquadLeaderEffectSimulated(effect))
+            .map((effect) => effect.text);
+        expect(unsimulated).toEqual([]);
     });
 });
 

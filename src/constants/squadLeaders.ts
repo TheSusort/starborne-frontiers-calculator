@@ -60,6 +60,7 @@ export type SquadLeaderModifierChannel =
     | 'incomingDamage' // taken damage; on enemies + = they take more, on allies - = they take less
     | 'outgoingCritDamage' // crit damage dealt; + = bigger crits
     | 'outgoingCritDamageInStealth' // crit damage dealt while the unit holds Stealth
+    | 'outgoingDamageSecondaryTargets' // direct damage dealt to an attack's secondary targets
     | 'incomingCritDamage' // crit damage taken; on enemies - = they take smaller crits
     | 'outgoingRepair' // healing/repair output; on enemies - = reduced enemy repair output
     | 'outgoingHeal' // alias of outgoingRepair (game term is "Repair"); kept for compatibility
@@ -144,7 +145,7 @@ export interface SquadLeader {
 //   - 'all-allies' = all Marauder units,
 //   - enemy reductions use target 'all-enemies' + negative values,
 //   - "crit power" maps to the `critDamage` stat,
-//   - "direct damage to secondary targets" is a conditional `outgoingDamage` modifier.
+//   - "direct damage to secondary targets" is the `outgoingDamageSecondaryTargets` modifier.
 // ---------------------------------------------------------------------------
 
 export const SQUAD_LEADERS: Record<FactionName, SquadLeader[]> = {
@@ -1057,9 +1058,8 @@ export const SQUAD_LEADERS: Record<FactionName, SquadLeader[]> = {
                     {
                         kind: 'modifier',
                         target: 'all-allies',
-                        channel: 'outgoingDamage',
+                        channel: 'outgoingDamageSecondaryTargets',
                         value: 20,
-                        condition: { text: 'direct damage to secondary targets' },
                         text: '+20% direct damage to secondary targets',
                     },
                 ],
@@ -1093,9 +1093,8 @@ export const SQUAD_LEADERS: Record<FactionName, SquadLeader[]> = {
                     {
                         kind: 'modifier',
                         target: 'all-allies',
-                        channel: 'outgoingDamage',
+                        channel: 'outgoingDamageSecondaryTargets',
                         value: 25,
-                        condition: { text: 'direct damage to secondary targets' },
                         text: '+25% direct damage to secondary targets',
                     },
                 ],

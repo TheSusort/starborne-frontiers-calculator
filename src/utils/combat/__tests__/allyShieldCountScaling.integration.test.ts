@@ -80,6 +80,7 @@ const preFightShield = (pct: number): NonNullable<CombatEngineInput['preFight']>
     incomingDamage: 0,
     outgoingCritDamage: 0,
     outgoingCritDamageInStealth: 0,
+    outgoingDamageSecondaryTargets: 0,
     incomingCritDamage: 0,
     outgoingHeal: 0,
     incomingHeal: 0,

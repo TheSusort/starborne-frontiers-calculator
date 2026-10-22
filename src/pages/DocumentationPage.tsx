@@ -4847,10 +4847,14 @@ const DocumentationPage: React.FC = () => {
                                         destroyed
                                     </li>
                                     <li>
-                                        Effects the simulator cannot model yet (conditional bonuses,
-                                        per-round effects, and damage/heal/shield modifiers) are
-                                        marked &quot;Not simulated&quot; in the picker preview and
-                                        listed after each run
+                                        &quot;Secondary targets&quot; are the other ships an area
+                                        attack covers, not its primary target; &quot;while in
+                                        Stealth&quot; is checked at each hit
+                                    </li>
+                                    <li>
+                                        Every current leader effect is simulated. An effect the
+                                        simulator cannot model is marked &quot;Not simulated&quot;
+                                        in the picker preview and listed after each run
                                     </li>
                                 </ul>
                             </div>

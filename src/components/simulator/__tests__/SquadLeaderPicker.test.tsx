@@ -5,6 +5,19 @@ import type { BoardState } from '../PlacementBoard';
 import type { Ship } from '../../../types/ship';
 import type { SquadLeaderSelection } from '../../../utils/combat/preFight';
 
+// Every real leader line is simulated, so the Not-simulated tag test marks one line
+// unsimulated through this hook; every other test sees the real classifier.
+const { forcedUnsimulated } = vi.hoisted(() => ({ forcedUnsimulated: new Set<string>() }));
+vi.mock('../../../utils/combat/preFight', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('../../../utils/combat/preFight')>();
+    return {
+        ...actual,
+        isSquadLeaderEffectSimulated: (
+            effect: Parameters<typeof actual.isSquadLeaderEffectSimulated>[0]
+        ) => !forcedUnsimulated.has(effect.text) && actual.isSquadLeaderEffectSimulated(effect),
+    };
+});
+
 const marauderShip = (id: string): Ship => ({ id, name: id, faction: 'MARAUDERS' }) as Ship;
 const atlasShip = (id: string): Ship => ({ id, name: id, faction: 'ATLAS_SYNDICATE' }) as Ship;
 
@@ -109,12 +122,20 @@ describe('SquadLeaderPicker applied-effects preview', () => {
         expect(screen.getAllByText(/all enemy ships/)).toHaveLength(2);
     });
 
-    it('marks effects the sim cannot model with a Not simulated tag', () => {
+    it('shows no Not simulated tag when every effect is simulated', () => {
         renderPicker({ selection: brandisherStage3, board: marauderBoard });
-        // Stage II "+25% direct damage to secondary targets" is conditional → unsimulated;
-        // the four stat effects (I ally buffs + III enemy debuffs) are simulated.
         expect(screen.getByText('+25% direct damage to secondary targets')).toBeInTheDocument();
-        expect(screen.getAllByText('Not simulated')).toHaveLength(1);
+        expect(screen.queryByText('Not simulated')).not.toBeInTheDocument();
+    });
+
+    it('marks effects the sim cannot model with a Not simulated tag', () => {
+        forcedUnsimulated.add('+25% direct damage to secondary targets');
+        try {
+            renderPicker({ selection: brandisherStage3, board: marauderBoard });
+            expect(screen.getAllByText('Not simulated')).toHaveLength(1);
+        } finally {
+            forcedUnsimulated.clear();
+        }
     });
 
     it('scopes the preview to the selected stage', () => {

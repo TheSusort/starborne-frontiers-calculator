@@ -1189,6 +1189,13 @@ const LEGION_TRIO_ONE_DIES: BoardSpec = {
     rounds: 1,
 };
 
+/** A Marauder whose circle attack on O also covers P. */
+const MARAUDER_SPLASH: BoardSpec = {
+    player: [unit('W', 'M4', { faction: 'MARAUDERS', pattern: 'Pattern-Circle-Range-1' })],
+    enemy: [unit('O', 'M4', IDLE), unit('P', 'M3', IDLE)],
+    rounds: 1,
+};
+
 const LIEUTENANT_DEFPEN = stagePair(
     solo({ faction: 'FRONTIER_LEGION' }, { ...IDLE, stats: { defence: 5000 } }),
     'FRONTIER_LEGION',
@@ -1499,6 +1506,25 @@ const LEADER_ROWS: LeaderRow[] = [
             1
         ),
         check: scales(firstHit('W', 'O'), 1.15, 6),
+    },
+    {
+        // "+20% direct damage to secondary targets": a Marauder's circle attack on O hits the
+        // covered P 20% harder; the primary target O takes the same hit.
+        line: 'Marauders Reaper III: +20% direct damage to secondary targets',
+        ...stagePair(MARAUDER_SPLASH, 'MARAUDERS', 'Reaper', 3, 2),
+        check: (w, c) => {
+            scales(firstHit('W', 'O'), 1, 6)(w, c);
+            scales(firstHit('W', 'P'), 1.2, 6)(w, c);
+        },
+    },
+    {
+        // Brandisher II: +25%.
+        line: 'Marauders Brandisher II: +25% direct damage to secondary targets',
+        ...stagePair(MARAUDER_SPLASH, 'MARAUDERS', 'Brandisher', 2, 1),
+        check: (w, c) => {
+            scales(firstHit('W', 'O'), 1, 6)(w, c);
+            scales(firstHit('W', 'P'), 1.25, 6)(w, c);
+        },
     },
 ];
 

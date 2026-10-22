@@ -89,6 +89,7 @@ const MODIFIER_FIELD_BY_CHANNEL: Partial<
     incomingDamage: 'incomingDamage',
     outgoingCritDamage: 'outgoingCritDamage',
     outgoingCritDamageInStealth: 'outgoingCritDamageInStealth',
+    outgoingDamageSecondaryTargets: 'outgoingDamageSecondaryTargets',
     incomingCritDamage: 'incomingCritDamage',
     outgoingRepair: 'outgoingHeal',
     outgoingHeal: 'outgoingHeal',

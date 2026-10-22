@@ -58,6 +58,9 @@ export interface PreFightCombatModifiers {
     /** `outgoingCritDamage` that applies only while the unit holds Stealth ("+10% outgoing crit
      *  damage while in Stealth"), read live at each hit. */
     outgoingCritDamageInStealth: number;
+    /** Direct damage to an attack's SECONDARY targets (the covered cells of its pattern, never
+     *  the origin): its own `(1 + x/100)` factor on those hits, like `outgoingDamage` (R199). */
+    outgoingDamageSecondaryTargets: number;
     incomingDamage: number;
     incomingCritDamage: number;
     outgoingHeal: number;
@@ -73,6 +76,7 @@ export function emptyPreFightModifiers(): PreFightCombatModifiers {
         outgoingDamage: 0,
         outgoingCritDamage: 0,
         outgoingCritDamageInStealth: 0,
+        outgoingDamageSecondaryTargets: 0,
         incomingDamage: 0,
         incomingCritDamage: 0,
         outgoingHeal: 0,
