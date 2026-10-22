@@ -142,11 +142,12 @@ export function squadLeaderEffectTargeting<T extends { faction: string }>(
 }
 
 /** Whether the pass SIMULATES an effect (folds it into stats / a consumed modifier
- *  channel) or surfaces it via `unsimulated`. Mirrors the pass's branch order exactly:
- *  conditional / 'other' / per-round / 'self' effects are unsimulated; stat effects are
- *  simulated iff the stat is in the pre-fight block; modifier effects are simulated iff
- *  their channel maps onto a `PreFightCombatModifiers` field (`MODIFIER_FIELD_BY_CHANNEL`);
- *  unmapped channels stay unsimulated. */
+ *  channel / a granted ability) or surfaces it via `unsimulated`. Mirrors the pass's branch
+ *  order exactly: conditional / 'other' / per-round / 'self' effects are unsimulated;
+ *  ability effects are simulated; a per-ally stat line is simulated iff it is percentage
+ *  attack; a `fromStat` line iff it is percentage and both stats are in the pre-fight block;
+ *  any other stat effect iff the stat is in the pre-fight block; modifier effects iff their
+ *  channel maps onto a `PreFightCombatModifiers` field (`MODIFIER_FIELD_BY_CHANNEL`). */
 export function isSquadLeaderEffectSimulated(effect: SquadLeaderEffect): boolean {
     if (
         effect.condition !== undefined ||

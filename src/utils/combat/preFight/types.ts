@@ -36,12 +36,18 @@ export interface PreFightStatBlock {
  *   - attackPct: into the additive attack-buff term of every effective-attack fold (R200), so
  *     it adds with Attack Up/Down rather than pre-multiplying the base. A reader that wants the
  *     pre-buff attack sheet reads `leaderScaledAttack`.
+ *   - attackPctPerOtherFactionAlly: resolved by the engine into `attackPct` from the live ally
+ *     count (`liveLeaderAttackPct`), never folded on its own.
  *   - outgoingDamage: its own `(1 + x/100)` factor on direct hits, outside the Out. Damage
  *     buff sum (R199).
  *   - outgoingHeal/incomingHeal: into the heal-buff totals.
  *   - incomingDamage: a separate factor composed in `hitReductionFor`.
  *   - incoming/outgoingCritDamage: at the crit-family damage sites (crit-conditional damage
- *     modifiers — NOT the Crit Power stat).
+ *     modifiers — NOT the Crit Power stat). outgoingCritDamageInStealth joins
+ *     outgoingCritDamage there while the attacker holds Stealth (engine.ts
+ *     `leaderOutgoingCritDamagePct`).
+ *   - outgoingDamageSecondaryTargets: its own `(1 + x/100)` factor on covered footprint cells
+ *     only, via the positional scalars' `secondaryTargetFactor` (`victimHitDamageParts`).
  *   - startingShieldPctOfHp: the starting shieldPool.
  */
 export interface PreFightCombatModifiers {

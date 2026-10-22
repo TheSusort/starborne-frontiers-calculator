@@ -1125,11 +1125,9 @@ describe('non-kit census: stat-path inputs reach the engine input', () => {
 });
 
 // ---------------------------------------------------------------------------------------------
-// Squad leaders: one fight per pre-fight channel, both sides, stage N against stage N-1 of the
-// same leader so the only difference is that stage's line. The lines whose MODEL does not match
-// their text are pinned twice: a row holding today's number, and an `it.fails` holding the
-// text's number (it passes while the engine diverges and fails once it is fixed). The row is
-// what keeps the `it.fails` from passing on a broken board.
+// Squad leaders: one fight per leader line or channel, both sides, stage N against stage N-1 of
+// the same leader so the only difference is that stage's line. Each row asserts the number the
+// line's game text names.
 // ---------------------------------------------------------------------------------------------
 
 const leader = (
