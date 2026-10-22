@@ -11,6 +11,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Ship database: skill tooltips now explain cleanse, purge, steal, charge and extra-action effects.',
     'Combat simulator: Meatshield now gains one DoT per hit, not per Protection stack.',
     "Combat simulator: Cobalt's start-of-turn charge now counts toward that turn's skill.",
+    'Combat simulator: skills that deal no damage no longer count as critical hits.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

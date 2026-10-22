@@ -4854,9 +4854,16 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     const deferAmplificationToEngine =
         args.deferAbilityPerformedToEngine === true && hasDamageAbility;
     for (let h = 0; h < drawHits; h++) {
-        const didCritHit = critGate(effectiveCrit / 100);
+        const drawnCrit = critGate(effectiveCrit / 100);
+        // A crit needs damage (owner ruling 2026-10-22): a cast whose firing skill deals no
+        // damage — one that only inflicts Attack Down — never crits, so it raises no crit gate,
+        // crit-landed debuff, or on-crit reaction (Hermes's "When an ally critically hits an
+        // enemy"). The draw still happens so the RNG schedule is the same either way. Repair
+        // crits roll on their own heal-crit gate and are untouched.
+        const didCritHit = drawnCrit && hasDamageAbility;
         if (didCritHit) critHits += 1;
-        if (h === 0) firstDrawCrit = didCritHit;
+        // The passive-slot damage instance is itself a hit, so it keeps the raw draw.
+        if (h === 0) firstDrawCrit = drawnCrit;
         // Only collect per-hit outcomes when a damage ability actually exists.
         // The draw still happens regardless, so the per-hit RNG draw count is stable.
         if (hasDamageAbility) hitCrits.push(didCritHit);

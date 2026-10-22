@@ -33,6 +33,15 @@ const scriptedGate =
     () =>
         outcomes.length > 0 ? outcomes.shift()! : true;
 
+const castHit: Ability = {
+    id: 'cast-hit',
+    type: 'damage',
+    target: 'enemy',
+    trigger: 'on-cast',
+    conditions: [],
+    config: { type: 'damage', multiplier: 100 },
+};
+
 function makeRuntime(
     side: 'player' | 'enemy',
     abilities: Ability[],
@@ -49,7 +58,8 @@ function makeRuntime(
     return {
         actor,
         focus: true,
-        castSkills: { slots: [{ slot: 'charged', abilities }] },
+        // A damage clause, as the real cast has: a crit needs damage (owner ruling 2026-10-22).
+        castSkills: { slots: [{ slot: 'charged', abilities: [castHit, ...abilities] }] },
         reactiveAbilities: [],
         timedSelfBySlot: [],
         timedEnemyBySlot: [],

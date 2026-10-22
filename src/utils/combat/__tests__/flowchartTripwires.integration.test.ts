@@ -6,7 +6,8 @@
  *  - a turn that is not blocked uses exactly ONE skill (active or charged); a stasised turn uses
  *    none;
  *  - a buff is always applied: it draws no landing roll;
- *  - a debuff never crits: a debuff-only cast draws no crit roll.
+ *  - a debuff never crits: its landing draws no crit roll, and a cast that only inflicts debuffs
+ *    is no critical hit (a crit needs damage).
  * Every case runs with the acting ship on both sides.
  */
 import { describe, it, expect, afterEach } from 'vitest';
@@ -208,6 +209,25 @@ for (const placement of PLACEMENTS) {
             expect(count(debuffKeys, crit)).toBe(count(plainKeys, crit));
             expect(count(plainKeys, landing)).toBe(0);
             expect(count(debuffKeys, landing)).toBe(1);
+        });
+
+        it('row 8.7, cast level: a 100%-crit cast that only inflicts a debuff logs no crit (a hit does)', () => {
+            const caster = { crit: 100, critDamage: 50, hacking: 1e6 };
+            const castCrit = (kit: ShipSkills): boolean => {
+                const d = duel(placement, { ...caster, kit });
+                const bus = createEventBus();
+                let crit = false;
+                bus.on(
+                    'ability-performed',
+                    (e: Extract<CombatEvent, { type: 'ability-performed' }>) => {
+                        if (e.actorId === d.casterId && e.didCrit) crit = true;
+                    }
+                );
+                runCombat({ ...d.input, bus });
+                return crit;
+            };
+            expect(castCrit(active([inflict('Attack Down I', 2)]))).toBe(false);
+            expect(castCrit(active([hit]))).toBe(true);
         });
     });
 }
