@@ -50,6 +50,8 @@ const transformEngineeringStats = (data: ExportedPlayData['Engineering']): Engin
             // would overwrite the player's real Attacker engineering stats.
             const shipType = stat.Type.toUpperCase();
             if (!isShipTypeName(shipType)) return acc;
+            // An attribute this app does not model has no stat to carry it, same as refits.
+            if (!getStatName(stat.Attribute)) return acc;
             if (!acc[shipType]) {
                 acc[shipType] = {
                     shipType,
@@ -201,16 +203,17 @@ function transformInventory(items: ExportedPlayData['Equipment']): TransformInve
                 stars: item.Rank,
                 rarity: toRarityName(item.Rarity),
                 mainStat: createStat(mainStatName, mainStatValue, mainStatType),
-                subStats: item.SubStats.map((stat) =>
-                    createStat(
-                        getStatName(stat.Attribute.Attribute) as StatName,
-                        getPercentageStatValue(
-                            stat.Attribute.Value,
-                            stat.Attribute.Type,
-                            stat.Attribute.Attribute
-                        ),
-                        getStatType(stat.Attribute.Type, stat.Attribute.Attribute)
-                    )
+                subStats: item.SubStats.filter((stat) => getStatName(stat.Attribute.Attribute)).map(
+                    (stat) =>
+                        createStat(
+                            getStatName(stat.Attribute.Attribute) as StatName,
+                            getPercentageStatValue(
+                                stat.Attribute.Value,
+                                stat.Attribute.Type,
+                                stat.Attribute.Attribute
+                            ),
+                            getStatType(stat.Attribute.Type, stat.Attribute.Attribute)
+                        )
                 ),
                 setBonus: getSetBonus(item.Set),
                 shipId: item.EquippedOnUnit || undefined,
@@ -246,17 +249,19 @@ function transformInventory(items: ExportedPlayData['Equipment']): TransformInve
                 stars: item.Rank,
                 rarity: toRarityName(item.Rarity),
                 mainStat: null,
-                subStats: [...item.MainStats, ...item.SubStats].map((stat) =>
-                    createStat(
-                        getStatName(stat.Attribute.Attribute) as StatName,
-                        getPercentageStatValue(
-                            stat.Attribute.Value,
-                            stat.Attribute.Type,
-                            stat.Attribute.Attribute
-                        ),
-                        getStatType(stat.Attribute.Type, stat.Attribute.Attribute)
-                    )
-                ),
+                subStats: [...item.MainStats, ...item.SubStats]
+                    .filter((stat) => getStatName(stat.Attribute.Attribute))
+                    .map((stat) =>
+                        createStat(
+                            getStatName(stat.Attribute.Attribute) as StatName,
+                            getPercentageStatValue(
+                                stat.Attribute.Value,
+                                stat.Attribute.Type,
+                                stat.Attribute.Attribute
+                            ),
+                            getStatType(stat.Attribute.Type, stat.Attribute.Attribute)
+                        )
+                    ),
                 shipId: item.EquippedOnUnit || undefined,
                 setBonus: getImplantSetBonus(item.Set),
             });

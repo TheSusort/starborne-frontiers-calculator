@@ -9,6 +9,8 @@ export const CURRENT_VERSION = '1.81.2';
 export const UNRELEASED_CHANGES: string[] = [
     'Arcade: ducking ships now draw whole instead of clipping into the track.',
     'Ship database: skill tooltips now explain cleanse, purge, steal, charge and extra-action effects.',
+    'Gear scores: now refresh when stat priorities, set priorities or implants change.',
+    'Import: stats the calculator does not recognise are now skipped cleanly.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
