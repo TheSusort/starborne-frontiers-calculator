@@ -1,6 +1,6 @@
 //
-// Cuts a release: folds UNRELEASED_CHANGES into CHANGELOG, bumps CURRENT_VERSION,
-// commits, tags, and fast-forwards `production` — the branch Netlify builds.
+// Cuts a release: folds UNRELEASED_CHANGES into CHANGELOG, bumps CURRENT_VERSION
+// (src/constants/version.ts), commits, tags, and fast-forwards `production` — the branch Netlify builds.
 //
 // `main` is continuously integrated and NOT deployed. Every deploy costs build minutes, so
 // the site advances once per release rather than once per merge.
@@ -24,6 +24,7 @@ import { dirname, join } from 'node:path';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const CHANGELOG_PATH = join(ROOT, 'src/constants/changelog.ts');
+const VERSION_PATH = join(ROOT, 'src/constants/version.ts');
 
 const git = (...args: string[]): string =>
     execFileSync('git', args, { cwd: ROOT, encoding: 'utf8' }).trim();
@@ -49,8 +50,18 @@ export function nextVersion(current: string, bump: string): string {
 
 export function readCurrentVersion(source: string): string {
     const match = source.match(/export const CURRENT_VERSION = '([^']+)'/);
-    if (!match) throw new Error('CURRENT_VERSION not found in changelog.ts');
+    if (!match) throw new Error('CURRENT_VERSION not found in version.ts');
     return match[1];
+}
+
+/** Rewrite version.ts so CURRENT_VERSION becomes `version`. Throws on a file without one rather
+ *  than returning it unchanged. */
+export function rewriteVersion(source: string, version: string): string {
+    readCurrentVersion(source);
+    return source.replace(
+        /export const CURRENT_VERSION = '[^']+'/,
+        `export const CURRENT_VERSION = '${version}'`
+    );
 }
 
 /** The strings in UNRELEASED_CHANGES, in file order. Returns [] for an empty array literal. */
@@ -83,8 +94,9 @@ export function readUnreleased(source: string): string[] {
 }
 
 /**
- * Rewrite changelog.ts for a release: CURRENT_VERSION becomes `version`, a new entry goes to the
- * TOP of CHANGELOG (newest first, matching the existing file), and UNRELEASED_CHANGES empties.
+ * Rewrite changelog.ts for a release: a new entry goes to the TOP of CHANGELOG (newest first,
+ * matching the existing file), and UNRELEASED_CHANGES empties. CURRENT_VERSION lives in
+ * version.ts; `rewriteVersion` bumps it in the same release commit.
  *
  * All three happen together or not at all — a bumped version with its entries still unreleased
  * shows users a "what's new" dialog listing nothing.
@@ -111,10 +123,6 @@ export function rewriteChangelog(source: string, { version, date, changes }: Rel
         `    },\n`;
 
     let next = source.replace(
-        /export const CURRENT_VERSION = '[^']+'/,
-        `export const CURRENT_VERSION = '${version}'`
-    );
-    next = next.replace(
         /export const UNRELEASED_CHANGES: string\[\] = \[[\s\S]*?\];/,
         'export const UNRELEASED_CHANGES: string[] = [];'
     );
@@ -180,20 +188,28 @@ function main() {
     const bump = argv.includes('--major') ? 'major' : argv.includes('--patch') ? 'patch' : 'minor';
     const explicit = argv.indexOf('--version');
     const source = readFileSync(CHANGELOG_PATH, 'utf8');
+    const versionSource = readFileSync(VERSION_PATH, 'utf8');
 
     assertReleasable();
 
     const version =
         explicit !== -1
             ? assertVersion(argv[explicit + 1], '--version')
-            : nextVersion(readCurrentVersion(source), bump);
+            : nextVersion(readCurrentVersion(versionSource), bump);
     const changes = readUnreleased(source);
     const date = new Date().toISOString().slice(0, 10);
 
-    writeFileSync(CHANGELOG_PATH, rewriteChangelog(source, { version, date, changes }));
-    execFileSync('npx', ['prettier', '--write', CHANGELOG_PATH], { cwd: ROOT, stdio: 'ignore' });
+    // Both rewrites run before either file is written, so a throw leaves neither changed.
+    const nextChangelog = rewriteChangelog(source, { version, date, changes });
+    const nextVersionSource = rewriteVersion(versionSource, version);
+    writeFileSync(CHANGELOG_PATH, nextChangelog);
+    writeFileSync(VERSION_PATH, nextVersionSource);
+    execFileSync('npx', ['prettier', '--write', CHANGELOG_PATH, VERSION_PATH], {
+        cwd: ROOT,
+        stdio: 'ignore',
+    });
 
-    git('add', CHANGELOG_PATH);
+    git('add', CHANGELOG_PATH, VERSION_PATH);
     commitRelease(version);
     git('tag', `v${version}`);
 

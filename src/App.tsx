@@ -9,7 +9,7 @@ import { InventoryProvider } from './contexts/InventoryProvider';
 import { ShipsProvider } from './contexts/ShipsContext';
 import { StorageKey } from './constants/storage';
 import { PageTracking } from './components/tracking/PageTracking';
-import { CHANGELOG, CURRENT_VERSION, AUTHOR } from './constants';
+import { CURRENT_VERSION, AUTHOR } from './constants';
 import { ChangelogState } from './types/changelog';
 import { EngineeringStatsProvider } from './contexts/EngineeringStatsProvider';
 import Seo from './components/seo/Seo';
@@ -81,6 +81,9 @@ const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
 
 const App: React.FC = () => {
     const [showChangelog, setShowChangelog] = useState(false);
+    // The modal (and the CHANGELOG it imports) is fetched only once there is something to show,
+    // then stays mounted so its close transition can run.
+    const [changelogMounted, setChangelogMounted] = useState(false);
     const [lastSeenVersion, setLastSeenVersion] = useState(CURRENT_VERSION);
     const [flight, setFlight] = useState<FlightStartDetail | null>(null);
 
@@ -111,6 +114,7 @@ const App: React.FC = () => {
 
         if (currentState.lastSeenVersion !== CURRENT_VERSION) {
             setShowChangelog(true);
+            setChangelogMounted(true);
             setLastSeenVersion(currentState.lastSeenVersion);
         }
     }, []);
@@ -411,12 +415,15 @@ const App: React.FC = () => {
                                                                     </footer>
                                                                 </div>
                                                             </div>
-                                                            <ChangelogModal
-                                                                isOpen={showChangelog}
-                                                                onClose={handleCloseChangelog}
-                                                                entries={CHANGELOG}
-                                                                lastSeenVersion={lastSeenVersion}
-                                                            />
+                                                            {changelogMounted && (
+                                                                <ChangelogModal
+                                                                    isOpen={showChangelog}
+                                                                    onClose={handleCloseChangelog}
+                                                                    lastSeenVersion={
+                                                                        lastSeenVersion
+                                                                    }
+                                                                />
+                                                            )}
                                                             <NotificationContainer />
                                                             <div className="fixed bottom-4 right-4 z-40 flex flex-col items-end gap-2">
                                                                 <JokeCorner />

@@ -1,5 +1,4 @@
 import { JSDOM } from 'jsdom';
-import fetch from 'node-fetch';
 
 export interface BuffData {
     name: string;

@@ -62,14 +62,22 @@ const CACHE_SIZE_LIMIT = 50000; // Increased cache size for better hit rates
 // Instead, we'll use a more efficient key generation that avoids JSON.stringify
 const equipmentKeyCache = new Map<string, string>();
 
-// Cache for implants key per ship (implants don't change during gear optimization)
-const implantsKeyCache = new Map<string, string>();
+// Arcane Siege implant info, keyed by the ship's implant loadout (`implantsKeyOf`) rather than
+// the ship id, so re-implanting a ship between runs is never answered from a stale entry.
+const arcaneSiegeCache = new Map<string, number | null>(); // loadout -> multiplier or null if no implant
 
-// Cache for Arcane Siege implant info per ship (implants don't change during gear optimization)
-const arcaneSiegeCache = new Map<string, number | null>(); // ship.id -> multiplier or null if no implant
+function implantsKeyOf(ship: Ship): string {
+    return ship.implants
+        ? Object.entries(ship.implants)
+              .filter(([_, implantId]) => implantId !== undefined)
+              .sort(([a], [b]) => a.localeCompare(b))
+              .map(([slot, implantId]) => `${slot}:${implantId}`)
+              .join('|')
+        : 'none';
+}
 
 /**
- * Get the Arcane Siege multiplier for a ship (cached, since implants don't change).
+ * Get the Arcane Siege multiplier for a ship (cached per implant loadout).
  * Returns the multiplier percentage (0-20) if ship has ARCANE_SIEGE implant, otherwise null.
  * This is the base multiplier - still need to check shield count separately.
  */
@@ -77,7 +85,7 @@ function getArcaneSiegeBaseMultiplier(
     ship: Ship,
     getGearPiece: (id: string) => GearPiece | undefined
 ): number | null {
-    const cacheKey = ship.id;
+    const cacheKey = implantsKeyOf(ship);
 
     if (arcaneSiegeCache.has(cacheKey)) {
         return arcaneSiegeCache.get(cacheKey)!;
@@ -224,19 +232,16 @@ export function calculateTotalScore(
         }
     }
 
-    // Cache implants key per ship (implants don't change during gear optimization)
-    const shipImplantsKey = `${ship.id}_implants`;
-    let implantsKey = implantsKeyCache.get(shipImplantsKey);
-    if (!implantsKey) {
-        implantsKey = ship.implants
-            ? Object.entries(ship.implants)
-                  .filter(([_, implantId]) => implantId !== undefined)
-                  .sort(([a], [b]) => a.localeCompare(b))
-                  .map(([slot, implantId]) => `${slot}:${implantId}`)
-                  .join('|')
-            : 'none';
-        implantsKeyCache.set(shipImplantsKey, implantsKey);
-    }
+    const implantsKey = implantsKeyOf(ship);
+    const prioritiesKey = priorities
+        .map(
+            (p) =>
+                `${p.stat}:${p.weight ?? ''}:${p.minLimit ?? ''}:${p.maxLimit ?? ''}:${p.hardRequirement ? 1 : 0}`
+        )
+        .join(',');
+    const setPrioritiesKey = setPriorities?.length
+        ? setPriorities.map((p) => `${p.setName}:${p.count}:${p.kind ?? ''}`).join(',')
+        : 'none';
 
     // Include implants and stat bonuses in cache key to properly differentiate configurations
     const bonusesKey = statBonuses?.length
@@ -259,9 +264,8 @@ export function calculateTotalScore(
               )
               .join(',')
         : 'none';
-    // Appended directly (no `|` separator) so an absent `roleBasis` — which contributes '' —
-    // leaves the key byte-for-byte identical to before this parameter existed.
-    const cacheKey = `${ship.id}|${equipmentKey}|${implantsKey}|${shipRole || 'none'}|${bonusesKey}|${arenaKey}|${fleetBuffsKey}|${formulaKey}${roleBasisKeyPart(roleBasis)}`;
+    // Appended directly (no `|` separator): an absent `roleBasis` contributes ''.
+    const cacheKey = `${ship.id}|${equipmentKey}|${implantsKey}|${prioritiesKey}|${setPrioritiesKey}|${tryToCompleteSets ? 1 : 0}|${shipRole || 'none'}|${bonusesKey}|${arenaKey}|${fleetBuffsKey}|${formulaKey}${roleBasisKeyPart(roleBasis)}`;
     performanceTracker.endTimer('CreateCacheKey');
 
     // Check cache first
@@ -354,6 +358,5 @@ export function calculateTotalScore(
 export function clearScoreCache(): void {
     scoreCache.clear();
     equipmentKeyCache.clear();
-    implantsKeyCache.clear();
     arcaneSiegeCache.clear();
 }

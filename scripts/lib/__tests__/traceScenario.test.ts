@@ -69,13 +69,21 @@ describe('buildInertAllyBaseline', () => {
         const input = build();
         expect(input.playerTeam[0].position).toBe('M3');
         expect(input.playerTeam[0].statOverrides).toBe(allyA.statOverrides);
-        expect(input.playerTeam[0].ship.id).not.toBe('s-ally-a');
+        expect(input.playerTeam[0].ship.name).not.toBe('AllyA');
         expect(input.playerTeam[2].position).toBe('B2');
         expect(input.playerTeam[2].statOverrides).toBe(allyB.statOverrides);
-        expect(input.playerTeam[2].ship.id).not.toBe('s-ally-b');
+        expect(input.playerTeam[2].ship.name).not.toBe('AllyB');
         for (const i of [0, 2]) {
-            expect(inertPool.map((s) => s.id)).toContain(input.playerTeam[i].ship.id);
+            expect(inertPool.map((s) => s.name)).toContain(input.playerTeam[i].ship.name);
         }
+    });
+
+    // The engine mints `p:<shipId>:<idx>` and keys the rate-gate RNG by it. A filler that kept its
+    // own id would roll different crits and landings from the ally it replaced.
+    it('gives each filler the replaced ally’s ship id, so its actor id and RNG stream match', () => {
+        const input = build();
+        expect(input.playerTeam[0].ship.id).toBe('s-ally-a');
+        expect(input.playerTeam[2].ship.id).toBe('s-ally-b');
     });
 
     // Speed decides turn order and HP/defence decide the incoming-damage budget. If the fillers
@@ -86,6 +94,26 @@ describe('buildInertAllyBaseline', () => {
         expect(input.playerTeam[0].statOverrides?.speed).toBe(77);
         expect(input.playerTeam[0].statOverrides?.hp).toBe(55_555);
         expect(input.playerTeam[2].statOverrides?.speed).toBe(66);
+    });
+
+    // Affinity sets the ±25% advantage on every hit and landing roll against the seat, and a
+    // role-reading passive on the subject reads its neighbours' roles. The replaced ally here is a
+    // thermal SUPPORTER while every pool ship is a chemical ATTACKER, so a filler that kept its
+    // own traits would show here.
+    it('gives each filler the replaced ally’s affinity and role, but keeps its own name and kit', () => {
+        const supporter: Ship = {
+            ...ship('s-ally-sup', 'AllySup'),
+            type: 'SUPPORTER',
+            affinity: 'thermal',
+        };
+        const team = [canonicalPlacement(supporter, 'M3'), subject];
+        const filler = buildInertAllyBaseline(team, 1, enemies, inertPool, 42).playerTeam[0];
+        expect(filler.ship.affinity).toBe('thermal');
+        expect(filler.ship.type).toBe('SUPPORTER');
+        const source = inertPool.find((s) => s.name === filler.ship.name);
+        expect(source).toBeDefined();
+        expect(source!.affinity).toBe('chemical');
+        expect(filler.ship.activeSkillText).toBe(source!.activeSkillText);
     });
 
     it('reuses the caller’s enemy roster verbatim, in order', () => {
@@ -108,8 +136,8 @@ describe('buildInertAllyBaseline', () => {
     });
 
     it('is deterministic in the seed — same seed, same board', () => {
-        const a = build(9).playerTeam.map((p) => p.ship.id);
-        const b = build(9).playerTeam.map((p) => p.ship.id);
+        const a = build(9).playerTeam.map((p) => p.ship.name);
+        const b = build(9).playerTeam.map((p) => p.ship.name);
         expect(a).toEqual(b);
     });
 
@@ -120,7 +148,7 @@ describe('buildInertAllyBaseline', () => {
         for (let seed = 0; seed < 30; seed++) {
             boards.add(
                 build(seed)
-                    .playerTeam.map((p) => p.ship.id)
+                    .playerTeam.map((p) => p.ship.name)
                     .join('|')
             );
         }
@@ -129,8 +157,11 @@ describe('buildInertAllyBaseline', () => {
 
     it('never repeats a ship on the player side (duplicate actor ids make runCombat throw)', () => {
         for (let seed = 0; seed < 40; seed++) {
-            const ids = build(seed).playerTeam.map((p) => p.ship.id);
+            const team = build(seed).playerTeam;
+            const ids = team.map((p) => p.ship.id);
+            const names = team.map((p) => p.ship.name);
             expect(new Set(ids).size).toBe(ids.length);
+            expect(new Set(names).size).toBe(names.length);
         }
     });
 
@@ -139,8 +170,8 @@ describe('buildInertAllyBaseline', () => {
         for (let seed = 0; seed < 40; seed++) {
             const fillers = build(seed, playerTeam, SUBJECT_INDEX, poolWithSubject)
                 .playerTeam.filter((_, i) => i !== SUBJECT_INDEX)
-                .map((p) => p.ship.id);
-            expect(fillers).not.toContain('s-subject');
+                .map((p) => p.ship.name);
+            expect(fillers).not.toContain('Subject');
         }
     });
 

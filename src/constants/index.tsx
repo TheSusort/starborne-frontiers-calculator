@@ -1,4 +1,3 @@
-export * from './changelog';
 export * from './config';
 export * from './engineeringStats';
 export * from './factions';
@@ -11,3 +10,4 @@ export * from './shipTypes';
 export * from './stats';
 export * from './statValues';
 export * from './storage';
+export * from './version';

@@ -622,7 +622,7 @@ const NotFoundPage: React.FC = () => {
                 <div className="absolute inset-0 bg-[url('/images/Deep_crevasse_01_extended.webp')] bg-cover bg-top" />
 
                 {/* Layer 2: BG2 HUD chrome */}
-                <div className="absolute inset-0 bg-[url('/images/BG2.png')] bg-cover opacity-[0.15] mix-blend-screen" />
+                <div className="absolute inset-0 bg-[url('/images/BG2.webp')] bg-cover opacity-[0.15] mix-blend-screen" />
 
                 {/* Layer 3: Dark readability overlay */}
                 <div className="absolute inset-0 bg-black/40" />

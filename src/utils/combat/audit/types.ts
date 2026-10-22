@@ -1,4 +1,5 @@
 import type { Position } from '../../../types/encounters';
+import type { BattleResult, BattleSimulationInput } from '../../calculators/battleSimulator';
 import type { CombatLogEntryKind } from '../log/types';
 
 export type InteractionClass =
@@ -32,10 +33,17 @@ export interface FingerprintDiff {
     extraInComposition: CombatLogEntryKind[];
 }
 
+/** Runs one seeded battle. The oracles take one so a test can plant a defect in a single arm;
+ *  production passes `runSeededBattle`. */
+export type BattleRunner = (input: BattleSimulationInput, seed: number) => BattleResult;
+
 export interface AblationResult {
     /** True when {A+B} per-actor fingerprint is NOT explained by {A}∪{B}. */
     diverges: boolean;
     detail: string;
+    /** How many of the two ships had a comparable alive window (0–2). A run that compared
+     *  neither cannot diverge, and must not read as a clean pass. */
+    compared: number;
 }
 
 export interface Finding {

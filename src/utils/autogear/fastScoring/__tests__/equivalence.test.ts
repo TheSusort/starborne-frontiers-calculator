@@ -3,7 +3,7 @@ import type { StatPriority, RoleBasis } from '../../../../types/autogear';
 import type { GearPiece } from '../../../../types/gear';
 import { GEAR_SLOT_ORDER, SHIP_TYPE_NAMES, type GearSlotName } from '../../../../constants';
 import { type EquipmentSlotName, isEquipmentSlotName } from '../../../../constants/gearTypes';
-import { calculateTotalScore, calculateHardViolation } from '../../scoring';
+import { calculateTotalScore, calculateHardViolation, clearScoreCache } from '../../scoring';
 import { calculateTotalStats } from '../../../ship/statsCalculator';
 import { fastScore } from '../fastScore';
 import { buildFastScoringContext } from '../context';
@@ -281,6 +281,67 @@ describe('fastScore equivalence with calculateTotalScore', () => {
         const fast = fastScore(ctx, gearIds, []);
         expect(scoresEqual(slow, fast.fitness)).toBe(true);
     });
+
+    it.each([
+        ['CODE_GUARD', 'DEFENDER_SECURITY'],
+        ['CIPHER_LINK', 'DEBUFFER'],
+    ] as const)(
+        'equivalence with an equipped %s ultimate implant scored as %s',
+        (setBonus, role) => {
+            clearScoreCache();
+            const priorities: StatPriority[] = [];
+            const implantPiece = {
+                id: `ultimate-${setBonus}`,
+                slot: 'implant_ultimate',
+                setBonus,
+                rarity: 'epic',
+                level: 16,
+                stars: 6,
+                mainStat: null,
+                subStats: [],
+            } as unknown as GearPiece;
+            const lookup = (id: string): GearPiece | undefined =>
+                id === implantPiece.id ? implantPiece : inventory.find((p) => p.id === id);
+
+            const slowScore = (target: typeof ship) =>
+                calculateTotalScore(
+                    target,
+                    {},
+                    priorities,
+                    lookup,
+                    getEng,
+                    role,
+                    undefined,
+                    undefined,
+                    false,
+                    null
+                );
+
+            const withImplant = makeTestShip({
+                id: `ship-${setBonus}`,
+                implants: { implant_ultimate: implantPiece.id },
+            });
+            const without = makeTestShip({ id: `ship-${setBonus}-bare` });
+            const slow = slowScore(withImplant);
+            expect(slow).not.toBeCloseTo(slowScore(without), 3);
+
+            const ctx = buildFastScoringContext({
+                ship: withImplant,
+                availableInventory: inventory,
+                priorities,
+                shipRole: role,
+                engineeringStats: engineering,
+                arenaModifiers: undefined,
+                resolveGearPiece: lookup,
+            });
+            const fast = fastScore(
+                ctx,
+                ctx.gearSlotOrder.map(() => -1),
+                []
+            );
+            expect(scoresEqual(slow, fast.fitness)).toBe(true);
+        }
+    );
 
     it('equivalence holds with arena modifiers active', () => {
         const ctx = buildFastScoringContext({

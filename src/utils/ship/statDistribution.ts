@@ -1,7 +1,7 @@
 import { BaseStats, EngineeringStat } from '../../types/stats';
 import { GearPiece } from '../../types/gear';
 import { GearSlotName, GEAR_SLOTS, ShipTypeName } from '../../constants';
-import { calculateTotalScore } from '../autogear/scoring';
+import { calculateTotalScore, clearScoreCache } from '../autogear/scoring';
 import { Ship } from '../../types/ship';
 import { calculateTotalStats } from '../ship/statsCalculator';
 
@@ -22,6 +22,10 @@ export function analyzeStatDistribution(
     ship: Ship,
     getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined
 ): SlotContribution[] {
+    // The score cache keys gear by id, so a piece edited in place (same id, new stats) would
+    // otherwise read its old score here.
+    clearScoreCache();
+
     // Calculate total score with all equipment using ship's role
     const totalScore = calculateTotalScore(
         ship,

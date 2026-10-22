@@ -221,7 +221,7 @@ export default function ClassifiedPage() {
             <div className="not-found-scanlines fixed inset-0 z-[110] font-secondary overflow-y-auto">
                 {/* Background layers */}
                 <div className="absolute inset-0 bg-[url('/images/Broken_Derelict_01.webp')] bg-cover bg-center" />
-                <div className="absolute inset-0 bg-[url('/images/BG2.png')] bg-cover opacity-[0.15] mix-blend-screen" />
+                <div className="absolute inset-0 bg-[url('/images/BG2.webp')] bg-cover opacity-[0.15] mix-blend-screen" />
                 <div className="absolute inset-0 bg-black/60" />
 
                 {/* Corruption static overlay */}
