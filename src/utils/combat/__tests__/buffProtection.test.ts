@@ -45,6 +45,16 @@ describe('statusEngine.purge — Buff Protection holder-state guard', () => {
         expect(names).toContain('Attack Up I');
     });
 
+    it('removableBuffCount reads 0 under Buff Protection, as purge would remove nothing', () => {
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        eng.beginRound(1);
+        eng.applyTimedAbilityStatus(1, mkTimedBuff('Attack Up I'), 'e1');
+        expect(eng.removableBuffCount('e1')).toBe(1);
+
+        eng.applyTimedAbilityStatus(1, mkTimedBuff('Buff Protection'), 'e1');
+        expect(eng.removableBuffCount('e1')).toBe(0);
+    });
+
     it('control: without Buff Protection, purge removes buffs (returns > 0)', () => {
         const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
         eng.beginRound(1);

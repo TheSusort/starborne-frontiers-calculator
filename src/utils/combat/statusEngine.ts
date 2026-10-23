@@ -45,12 +45,16 @@ export interface AccumGain {
 }
 
 /** Announces the cadence gains `engine` has banked as `buff-applied` events. Called where the tick
- *  happened, so the log nests each under the turn or round that earned it. */
+ *  happened, so the log nests each under the turn or round that earned it. `order` re-sequences
+ *  the batch before it is emitted (the round-start tick orders it by turn priority); without it
+ *  gains are announced in banking order. */
 export function announceAccumGains(
     engine: Pick<StatusEngine, 'takeAccumGains'>,
-    bus: Pick<CombatEventBus, 'emit'>
+    bus: Pick<CombatEventBus, 'emit'>,
+    order?: (gains: AccumGain[]) => AccumGain[]
 ): void {
-    for (const g of engine.takeAccumGains()) {
+    const banked = engine.takeAccumGains();
+    for (const g of order ? order(banked) : banked) {
         bus.emit({
             type: 'buff-applied',
             actorId: g.ownerId,
@@ -464,6 +468,9 @@ export interface StatusEngine {
     /** Remove up to `count` removable BUFFS from `actorId`'s self store, newest first;
      *  `'all'` = all; respects UNREMOVABLE_STATUSES + 'permanent'; returns count removed. */
     purge(actorId: string, count: number | 'all'): number;
+    /** How many buffs on `actorId` a purge could remove at neutral affinity (the pool `purge`
+     *  takes from, 0 under Buff Protection), without removing any. */
+    removableBuffCount(actorId: string): number;
     /** Buff steal: move up to `count` removable TIMED self-buffs from `sourceId` to
      *  EVERY id in `recipientIds`, newest-applied first (same ordering as purge). The REMAINING
      *  duration travels with each moved buff — NOT reset to a fresh window. Skips the same
@@ -576,6 +583,10 @@ export interface StatusEngine {
      *  are exempt (`AbilityStatusBase.source`). Unset → nothing is suppressed, which is what the
      *  statusEngine's own unit fixtures want. */
     setTurnBlockedReader(fn: (actorId: string) => boolean): void;
+    /** Install the engine's destroyed-ship reader. A destroyed ship banks no further per-round
+     *  or per-turn accumulating stacks, neither as the holder nor as the granter; stacks it banked
+     *  before dying stay. Unset → nobody is destroyed. */
+    setDestroyedReader(fn: (actorId: string) => boolean): void;
     /** Aura + accumulating ability statuses whose conditions pass THIS ROUND, with payloads,
      *  for effect folding and snapshot inclusion. `ownerId` selects the player-side carrier
      *  (defaults to 'attacker'). Each status's gate evaluates against ITS CASTER's context —
@@ -928,6 +939,10 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
     const setTurnBlockedReader = (fn: (actorId: string) => boolean): void => {
         isTurnBlockedReader = fn;
     };
+    let isDestroyedReader: (actorId: string) => boolean = () => false;
+    const setDestroyedReader = (fn: (actorId: string) => boolean): void => {
+        isDestroyedReader = fn;
+    };
     let readingTurnBlock = false;
     /** A passive-slot status from a SHIP skill contributes nothing while its caster is
      *  turn-blocked. The two exemptions are the ruling's own: a status from EQUIPMENT, and any
@@ -1279,6 +1294,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
             (c) =>
                 c.trigger === 'per-round' &&
                 (granterId === undefined || c.granterId === granterId) &&
+                !isDestroyedReader(c.granterId) &&
                 !(
                     c.sourceSlot !== undefined &&
                     shipPassiveSuppressed({
@@ -1298,6 +1314,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         shares: Map<string, number>,
         tick?: number
     ): void => {
+        if (isDestroyedReader(ownerId)) return;
         let total = 0;
         for (const n of shares.values()) total += n;
         const before = state.stacks;
@@ -2004,6 +2021,21 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         extra: readonly CleanseCandidate[] = [],
         namedToo = true
     ): number => {
+        const candidates = removalCandidates(actorId, side, extra, namedToo);
+        candidates.sort((a, b) => b.seq - a.seq);
+        const limit =
+            count === 'all' ? candidates.length : Math.max(0, Math.min(count, candidates.length));
+        for (let i = 0; i < limit; i++) candidates[i].remove();
+        return limit;
+    };
+
+    /** The pool `removeNewestFirst` removes from, gathered without removing anything. */
+    const removalCandidates = (
+        actorId: string,
+        side: 'debuffs' | 'buffs',
+        extra: readonly CleanseCandidate[],
+        namedToo: boolean
+    ): CleanseCandidate[] => {
         const timedMap = !namedToo
             ? undefined
             : side === 'debuffs'
@@ -2051,11 +2083,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
                 }
             }
         }
-        candidates.sort((a, b) => b.seq - a.seq);
-        const limit =
-            count === 'all' ? candidates.length : Math.max(0, Math.min(count, candidates.length));
-        for (let i = 0; i < limit; i++) candidates[i].remove();
-        return limit;
+        return candidates;
     };
 
     /** Remove up to `count` removable debuffs from `actorId`'s per-victim enemy store, newest
@@ -2192,12 +2220,9 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         return affected;
     };
 
-    /** Remove up to `count` removable BUFFS from `actorId`'s self store, newest first
-     *  (see removeNewestFirst). `'all'` removes every removable buff. Respects
-     *  UNREMOVABLE_STATUSES + 'permanent'; returns count removed. Unknown id → no-op (returns 0). */
-    const purge = (actorId: string, count: number | 'all'): number => {
-        // Holder-state guard: a unit carrying Buff Protection cannot have its buffs purged.
-        // Purge-only — `cleanse` (removeNewestFirst(_, 'debuffs', _)) does NOT call this.
+    /** Holder-state guard: a unit carrying Buff Protection cannot have its buffs purged.
+     *  Purge-only — `cleanse` (removeNewestFirst(_, 'debuffs', _)) and `steal` do NOT consult it. */
+    const holdsBuffProtection = (actorId: string): boolean => {
         const selfBuffNames = new Set<string>();
         for (const ab of snapshot(actorId).activeSelfBuffs) {
             if (ab.stacks === undefined || ab.stacks > 0) selfBuffNames.add(ab.buffName);
@@ -2206,9 +2231,17 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         // NOTE: deliberately omits the aura/accum channel (`activeAbilityStatuses('self', …)`) that
         // `selfBuffNamesForOwners` also reads — Buff Protection is only ever granted as a TIMED buff,
         // so the timed + scheduled channels cover every real grant. Revisit if an aura grant appears.
-        if ([...selfBuffNames].some(isBuffProtection)) return 0;
-        return removeNewestFirst(actorId, 'buffs', count);
+        return [...selfBuffNames].some(isBuffProtection);
     };
+
+    /** Remove up to `count` removable BUFFS from `actorId`'s self store, newest first
+     *  (see removeNewestFirst). `'all'` removes every removable buff. Respects
+     *  UNREMOVABLE_STATUSES + 'permanent'; returns count removed. Unknown id → no-op (returns 0). */
+    const purge = (actorId: string, count: number | 'all'): number =>
+        holdsBuffProtection(actorId) ? 0 : removeNewestFirst(actorId, 'buffs', count);
+
+    const removableBuffCount = (actorId: string): number =>
+        holdsBuffProtection(actorId) ? 0 : removalCandidates(actorId, 'buffs', [], true).length;
 
     /** Move up to `count` removable TIMED self-buffs from `sourceId` to EVERY id in
      *  `recipientIds`, newest-applied first (mirrors removeNewestFirst's ordering, but
@@ -2727,6 +2760,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         sourceFired,
         setLandsTimedEnemyApplication,
         setTurnBlockedReader,
+        setDestroyedReader,
         setBeforeTimedEnemyApplication,
         snapshot,
         decrementPlayer,
@@ -2745,6 +2779,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         extendAllDebuffsDuration,
         extendAllBuffsDuration,
         purge,
+        removableBuffCount,
         steal,
         stealStacks,
         adjustSelfBuffStacks,

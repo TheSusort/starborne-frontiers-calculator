@@ -71,7 +71,13 @@ import {
 } from './bombCountdown';
 import { liveGateConditions } from './abilityStatusGating';
 import { leaderScaledAttack } from './preFight/types';
-import { CombatEvent, CombatEventBus, CombatEventType, ShieldApplyAccumulator } from './events';
+import {
+    CombatEvent,
+    CombatEventBus,
+    CombatEventType,
+    ShieldApplyAccumulator,
+    type StatusDuration,
+} from './events';
 import {
     CombatActor,
     ActiveDoTStack,
@@ -3734,6 +3740,35 @@ export function selfBuffNamesForOwners(statusEngine: StatusEngine, ownerIds: str
     return [...names];
 }
 
+/** The remaining turns of every timed status `actorId` holds: its self-buff store and its
+ *  per-victim debuff store, both scheduled and ability-sourced entries (`snapshot` plus
+ *  `timedAbilityStatuses`, which together cover each timed map). Only finite numeric windows are
+ *  reported — the `'recurring'` and `'permanent'` sentinels and a hit-counted status's Infinity
+ *  have no countdown. A pure read. */
+export function timedStatusDurations(
+    statusEngine: StatusEngine,
+    actorId: string
+): { buffs: StatusDuration[]; debuffs: StatusDuration[] } {
+    const finite = (rows: ActiveBuff[]): StatusDuration[] =>
+        rows.flatMap((ab) =>
+            typeof ab.turnsRemaining === 'number' && Number.isFinite(ab.turnsRemaining)
+                ? [{ buffName: ab.buffName, turnsRemaining: ab.turnsRemaining }]
+                : []
+        );
+    const self = statusEngine.snapshot(actorId);
+    const enemy = statusEngine.snapshot(undefined, actorId);
+    return {
+        buffs: finite([
+            ...self.activeSelfBuffs,
+            ...statusEngine.timedAbilityStatuses('self', actorId).map((s) => s.active),
+        ]),
+        debuffs: finite([
+            ...enemy.activeEnemyDebuffs,
+            ...statusEngine.timedAbilityStatuses('enemy', undefined, actorId).map((s) => s.active),
+        ]),
+    };
+}
+
 /** Count of DISTINCT owners (out of the given owner ids) currently
  *  holding the named self-buff. Reads the SAME three sources as {@link selfBuffNamesForOwners}
  *  (scheduled activeSelfBuffs + timed ability statuses + aura/accum ability statuses) but per
@@ -4517,7 +4552,9 @@ export function footprintFilteredRecipients(
     // same terms and for the same reason, so it is applied on ALL THREE branches. This is where
     // Chimei's R2 lands: both of its clauses are reactive (`end-of-round` Stealth grant,
     // `start-of-round` repair), so they never touch the cast-path seam.
-    const stateFiltered = narrowByRecipientFilter(baseRecipients, intent.ability.recipientFilter, {
+    // A destroyed ship receives nothing (`isAliveTarget`), whichever event named it.
+    const living = baseRecipients.filter((id) => ctx.isActorAlive?.(id) ?? true);
+    const stateFiltered = narrowByRecipientFilter(living, intent.ability.recipientFilter, {
         holdsStatus: (id, buffName) => ownerHoldsSelfBuff(ctx.statusEngine, id, buffName),
         roleOf: ctx.roleOf,
         // Buff-aware max HP where the healing ctx supplies one (requirement (b) on
@@ -4931,7 +4968,8 @@ export type StampedEventType =
     | 'shield-applied-log'
     | 'cheat-death-log'
     | 'reversed-repair-log'
-    | 'bomb-splash-log';
+    | 'bomb-splash-log'
+    | 'purge-blocked-log';
 
 /** Forces the array literal passed to it to contain every member of `T` exactly once — a
  *  missing or duplicated tag is a compile error, not a silent gap. Standard TS
@@ -4998,6 +5036,7 @@ const REACTIVE_STAMPED_EVENT_TYPE_LIST = exhaustiveArrayOf<StampedEventType>()([
     'cheat-death-log',
     'reversed-repair-log',
     'bomb-splash-log',
+    'purge-blocked-log',
 ]);
 
 const REACTIVE_STAMPED_EVENT_TYPES: ReadonlySet<CombatEventType> = new Set<StampedEventType>(
@@ -5037,8 +5076,9 @@ function makeReactiveStampingBus(bus: CombatEventBus, duringTurnOf?: string): Co
     };
 }
 
-/** What a reactive damage hit reports back: the hit as thrown, and — when a Protection cascade
- *  split it — what its victim took. */
+/** What a reactive damage hit reports back: the hit as thrown (`dealt`) and what its victim took
+ *  (`taken` — after its incoming-block proc and any Protection split). The log row reads `taken`
+ *  when present. */
 export interface ReactiveHitOutcome {
     dealt: number;
     didCrit: boolean;
@@ -5065,11 +5105,7 @@ function emitReactiveDamageLog(
             sourceId: ownerId,
             targetId: victimId,
             round: ctx.round,
-            amount: outcome.convertedToDot
-                ? 0
-                : outcome.protectionSplit
-                  ? (outcome.taken ?? outcome.dealt)
-                  : outcome.dealt,
+            amount: outcome.convertedToDot ? 0 : (outcome.taken ?? outcome.dealt),
             didCrit: outcome.didCrit,
             ...(outcome.convertedToDot ? { convertedToDot: true as const } : {}),
         });
@@ -7403,7 +7439,8 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
             intent.ability.trigger === 'on-deal-damage'
                 ? enemyRoleConditionsOf(intent.ability)
                 : NO_CONDITIONS;
-        const removals: { targetId: string; removed: number }[] = [];
+        /** `blocked`: the affinity disadvantage alone stopped a purge that had buffs to take. */
+        const removals: { targetId: string; removed: number; blocked: boolean }[] = [];
         for (const targetId of targetIds) {
             // Reachable: Rhodium's end-of-round purge in any round where no enemy carries a buff
             // (`mostBuffsAmong` returns undefined there, `engine.ts`). Its `damage` half on the
@@ -7421,6 +7458,7 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
             removals.push({
                 targetId,
                 removed: disadvantaged ? 0 : ctx.statusEngine.purge(targetId, cfg.count),
+                blocked: disadvantaged && ctx.statusEngine.removableBuffCount(targetId) > 0,
             });
         }
         // Emit purge-performed UNLESS this purge was itself triggered by a purge (depth-1
@@ -7428,7 +7466,17 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
         if (!intent.eventCtx?.fromPurgeEvent) {
             const waveTotal = removals.reduce((sum, x) => sum + x.removed, 0);
             let waveLead = true;
-            for (const { targetId, removed } of removals) {
+            for (const { targetId, removed, blocked } of removals) {
+                if (blocked) {
+                    ctx.bus.emit({
+                        type: 'purge-blocked-log',
+                        casterId: intent.ownerId,
+                        targetId,
+                        round: ctx.round,
+                        reason: 'affinity',
+                    });
+                    continue;
+                }
                 if (removed <= 0) continue;
                 ctx.bus.emit({
                     type: 'purge-performed',

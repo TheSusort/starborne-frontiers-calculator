@@ -22,6 +22,71 @@ const roster: RosterEntry[] = [
 const initialCharge = new Map<string, { charge: number; max: number }>();
 
 describe('buildCombatLog', () => {
+    it('logs a purge an affinity disadvantage blocked as a purge row of 0', () => {
+        const events: CombatEvent[] = [
+            ev({ type: 'round-started', round: 1 }),
+            ev({ type: 'turn-started', actorId: 'A', round: 1 }),
+            ev({
+                type: 'purge-blocked-log',
+                casterId: 'A',
+                targetId: 'B',
+                round: 1,
+                reason: 'affinity',
+            }),
+            ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
+            ev({ type: 'round-ended', round: 1 }),
+        ];
+        const entries = buildCombatLog(events, roster, initialCharge)[0].turns[0].entries;
+        expect(entries).toEqual([
+            expect.objectContaining({
+                kind: 'purge',
+                actorId: 'A',
+                targets: [{ targetId: 'B' }],
+                note: 'purged 0 (affinity)',
+            }),
+        ]);
+    });
+
+    it('records a landing the kill dropped on the attack row that struck the ship, as no row of its own', () => {
+        const events: CombatEvent[] = [
+            ev({ type: 'round-started', round: 1 }),
+            ev({ type: 'turn-started', actorId: 'A', round: 1 }),
+            ev({
+                type: 'ability-performed',
+                actorId: 'A',
+                targetId: 'B',
+                round: 1,
+                abilityType: 'damage',
+                damage: 1000,
+                didCrit: false,
+                critHits: 0,
+                didHit: true,
+            }),
+            ev({
+                type: 'attacked',
+                attackerId: 'A',
+                targetId: 'B',
+                round: 1,
+                damage: 1000,
+                didCrit: false,
+                isPrimaryTarget: true,
+            }),
+            ev({ type: 'landing-dropped', sourceId: 'A', targetId: 'B', round: 1, label: 'Bomb' }),
+            ev({
+                type: 'landing-dropped',
+                sourceId: 'A',
+                targetId: 'B',
+                round: 1,
+                label: 'Defense Down II',
+            }),
+            ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
+            ev({ type: 'round-ended', round: 1 }),
+        ];
+        const entries = buildCombatLog(events, roster, initialCharge)[0].turns[0].entries;
+        expect(entries.map((e) => e.kind)).toEqual(['attack']);
+        expect(entries[0].targets[0].droppedLandings).toEqual(['Bomb', 'Defense Down II']);
+    });
+
     it('groups events into rounds and turns with a single-target attack entry', () => {
         const events: CombatEvent[] = [
             ev({ type: 'round-started', round: 1 }),
@@ -1446,7 +1511,7 @@ describe('buildCombatLog', () => {
         expect(entry.note).toBe('stasis');
     });
 
-    it('cleanse-performed: casterId → actorId, targets empty, note has count', () => {
+    it('cleanse-performed: casterId → actorId, recipients → targets, note has count', () => {
         const events: CombatEvent[] = [
             ev({ type: 'round-started', round: 1 }),
             ev({ type: 'turn-started', actorId: 'A', round: 1 }),
@@ -1455,6 +1520,7 @@ describe('buildCombatLog', () => {
                 casterId: 'A',
                 count: 2,
                 round: 1,
+                targets: ['A', 'B'],
             }),
             ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
             ev({ type: 'round-ended', round: 1 }),
@@ -1465,7 +1531,7 @@ describe('buildCombatLog', () => {
         const entry = entries[0];
         expect(entry.kind).toBe('cleanse');
         expect(entry.actorId).toBe('A');
-        expect(entry.targets).toEqual([]);
+        expect(entry.targets).toEqual([{ targetId: 'A' }, { targetId: 'B' }]);
         expect(entry.note).toContain('2');
     });
 

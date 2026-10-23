@@ -178,6 +178,7 @@ import { buildBuffDurationExtensionByOwner } from './buffDurationExtension';
 import { isDamageClause } from './castClauseOrder';
 import {
     CastNamesBeforeDamage,
+    DeferredEnemyApplication,
     HealingRuntimeCtx,
     PlayerActorRuntime,
     PlayerRoundCtx,
@@ -213,6 +214,7 @@ import {
     hitRootInScope,
     eventSeqWatermark,
     selfBuffNamesForOwners,
+    timedStatusDurations,
     selfBuffStacksForOwner,
     victimEnemyBuffs,
     victimIncomingDotDamagePct,
@@ -3534,6 +3536,7 @@ export function runCombat(rawInput: CombatEngineInput): {
     // caster is turn-blocked — the status store reads this per call, so the aura vanishes the
     // instant the Stasis lands and returns the instant it is removed. See the setter's doc.
     statusEngine.setTurnBlockedReader(isTurnBlocked);
+    statusEngine.setDestroyedReader((actorId) => !isActorAlive(actorId));
     /** Drop a turn-blocked owner's SHIP-PASSIVE entries from a passive-slot-derived list.
      *
      *  Every list this guards is built by walking `slot.slot === 'passive'` alone, so the only
@@ -5353,6 +5356,9 @@ export function runCombat(rawInput: CombatEngineInput): {
         if (entries.length === 0) return;
         const owner = allRuntimesById.get(sourceId);
         if (!owner) return;
+        // A destroyed ship performs no repair: its DoTs still tick and burst (they outlive their
+        // applier), but its standing leech pays nothing, so no repair row and no repair reaction.
+        if (owner.actor.destroyedRound !== undefined) return;
         const ownerIsEnemy = owner.actor.side === 'enemy';
         // #424: proc-call scope (every entry, every recipient), not per entry — see the emit below.
         const shieldAcc = new ShieldApplyAccumulator();
@@ -6592,6 +6598,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             // The victim-side factors in `damage`, as the Protection cascade reads them: the
             // caller's `cause.redirectBasis`, with a partial block folded into `incomingFactor`.
             let redirectBasis = cause?.redirectBasis;
+            let blockOutcome: 'none' | 'partial' | 'full' = 'none';
             // Proc block on DIRECT damage only, when not fully Barrier-immune. Reduces the
             // hit before it is recorded/absorbed (silent reduction — no separate surface this PR).
             // Fully inert (no counter touch, no roll) when the victim has no incoming-block
@@ -6650,7 +6657,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                     if (blocked >= 1) {
                         // A FULL block (Shadowguard) is outside the 70% cap: the hit deals 0.
                         damage = 0;
+                        blockOutcome = 'full';
                     } else if (blocked > 0) {
+                        blockOutcome = 'partial';
                         // A PARTIAL block (Ironclad) composes inside the cap (R202; read
                         // `composeIncomingFactorWithBlock`). `damage` carries the caller's composed
                         // factor, so it is rescaled from that factor to the blocked one, and the
@@ -6692,6 +6701,18 @@ export function runCombat(rawInput: CombatEngineInput): {
             // #293). Reported separately so a sub-attack can reconstruct the FULL amount the attack
             // delivered, which is the locked basis for damage-proportional effects (protector damage
             // + target remainder).
+            // LOG-ONLY: the non-defence incoming factor this hit was priced with (see the
+            // `hit-incoming-factor` doc in events.ts).
+            if (redirectBasis) {
+                bus.emit({
+                    type: 'hit-incoming-factor',
+                    ...(cause?.killerId !== undefined ? { attackerId: cause.killerId } : {}),
+                    victimId: victim.id,
+                    round: currentRound,
+                    factor: redirectBasis.incomingFactor,
+                    block: blockOutcome,
+                });
+            }
             let protectionRedirected = 0;
             let protectionSplit = false;
             let fullyRedirected = false;
@@ -6749,10 +6770,13 @@ export function runCombat(rawInput: CombatEngineInput): {
                             hitReductionFor(cause.killerId ?? '', protectorId, basis.didCrit).parts
                         );
                     };
+                    const protectorFactors = protectors.map((p) =>
+                        protectorIncomingFactor(p.actor.id)
+                    );
                     const cascade = protectionCascade(
                         damage,
                         targetMit,
-                        protectors.map((p) => {
+                        protectors.map((p, i) => {
                             const protectorDef = effectiveStatsOf(
                                 statusEngine,
                                 selfBuffLookup,
@@ -6764,7 +6788,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                     protectorDef > 0
                                         ? 1 - calculateDamageReduction(protectorDef) / 100
                                         : 1,
-                                incomingFactor: protectorIncomingFactor(p.actor.id),
+                                incomingFactor: protectorFactors[i],
                             };
                         }),
                         basis?.incomingFactor ?? 1
@@ -6780,6 +6804,20 @@ export function runCombat(rawInput: CombatEngineInput): {
                     protectors.forEach((p, i) => {
                         const chunk = cascade.chunks[i];
                         if (!chunk || chunk.total <= 0) return;
+                        // LOG-ONLY: the protector's own incoming factor its chunk was priced with.
+                        // The chunk's sub-hits carry no `redirectBasis`, so this is its only row.
+                        if (basis) {
+                            bus.emit({
+                                type: 'hit-incoming-factor',
+                                ...(cause.killerId !== undefined
+                                    ? { attackerId: cause.killerId }
+                                    : {}),
+                                victimId: p.actor.id,
+                                round: currentRound,
+                                factor: protectorFactors[i],
+                                block: 'none',
+                            });
+                        }
                         // Apply as `stacks` equal sub-hits (matches the in-game per-stack procs).
                         // A protector that converts its share into a DoT still gains ONE DoT for
                         // the whole hit — `protectionHitKey` coalesces the sub-hits.
@@ -7724,7 +7762,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 // ability-performed already exists → emit inline. Stamp
                                 // duringTurnOf with the acting attacker either way; didCrit omitted
                                 // (reflects don't crit).
-                                const reflectRow = loggedHitFigures(reflectOutcome, reflected);
+                                const reflectRow = loggedHitFigures(reflectOutcome);
                                 if (deferReflectLogs) {
                                     pendingReflectLogs.push({
                                         sourceId: victim.id,
@@ -8067,17 +8105,17 @@ export function runCombat(rawInput: CombatEngineInput): {
             return { root, isPrimary: !primaryHitsSpent.has(`${victimId}|${root}`) };
         };
 
-        /** A Protection-split reactive hit also reports what its victim took, so the log rows the
-         *  victim at that rather than the hit as thrown; a hit converted into a DoT is flagged so
-         *  the log shows no damage number for it. */
+        /** A reactive hit reports what its victim took (`incomingBooked`: after its incoming-block
+         *  proc, and only the kept share of a Protection split), which the log rows the victim at
+         *  rather than the hit as thrown; a hit converted into a DoT is flagged so the log shows
+         *  no damage number for it. */
         const splitFigures = (
             outcome: AppliedVictimDamage | undefined
         ): { protectionSplit?: true; taken?: number; convertedToDot?: true } | undefined =>
             outcome
                 ? {
-                      ...(outcome.protectionSplit
-                          ? { protectionSplit: true as const, taken: outcome.incomingBooked }
-                          : {}),
+                      taken: outcome.incomingBooked,
+                      ...(outcome.protectionSplit ? { protectionSplit: true as const } : {}),
                       ...((outcome.transformedToDot ?? 0) > 0
                           ? { convertedToDot: true as const }
                           : {}),
@@ -8302,11 +8340,9 @@ export function runCombat(rawInput: CombatEngineInput): {
             // The counter is damage its owner dealt, so the owner's standing "% of damage dealt"
             // leech pays on it (R144), on the dealt basis `procLeechesForVictim` documents.
             payReactiveHitLeech(owner, counterOutcome);
-            // `dealt` stays the FULL counter, converted or not: it feeds only the log row
-            // (triggers.ts emitReactiveDamageLog) and the reactive dealt-amount slot, and the main
-            // cast path likewise logs its computed `directDamage` when a victim converts the hit
-            // (playerTurn's deferredAbilityPerformed). Suppressing it would erase the counter from
-            // the play-by-play entirely — a conversion emits no event of its own.
+            // `dealt` stays the FULL counter, converted or not: emitReactiveDamageLog gates the
+            // row on it, so a converted or fully blocked counter still appears in the
+            // play-by-play (a conversion emits no event of its own). The row's number is `taken`.
             return { dealt: raw, didCrit, ...splitFigures(counterOutcome) };
         };
 
@@ -8493,7 +8529,6 @@ export function runCombat(rawInput: CombatEngineInput): {
                 reactiveDealtByOwner.set(ownerId, 0);
                 return;
             }
-            reactiveDealtByOwner.set(ownerId, raw);
             // A reactive proc REDUCES the resolved victim's real HP through the SAME
             // shared funnel counters use (applyVictimDamage) — surfacing on the victim's HP curve
             // (roundPerTargetDamage → damageTaken) and attributed to the owner (creditDealt →
@@ -8577,7 +8612,11 @@ export function runCombat(rawInput: CombatEngineInput): {
             // A reactive proc is damage its owner dealt: the standing leech pays on it (R144). A
             // splash copy of a Bomb burst is not a direct hit, so it does not.
             if (!splashCopy) payReactiveHitLeech(owner, procOutcome);
-            // `dealt` stays the full proc — log/dealt-slot only, as in applyCounterAttack.
+            // The dealt-amount slot a paired basis:'damage-dealt' shield (FrontLine) reads is the
+            // damage this proc DEALT, on the same basis as the leech above: after the victim's
+            // incoming-block proc, a Protection redirect counted, a DoT transform not.
+            reactiveDealtByOwner.set(ownerId, procOutcome ? detonationDelivered(procOutcome) : 0);
+            // `dealt` stays the full proc, as in applyCounterAttack.
             return { dealt: raw, didCrit, ...splitFigures(procOutcome) };
         };
 
@@ -9525,14 +9564,6 @@ export function runCombat(rawInput: CombatEngineInput): {
                     );
                     const damage = damageParts.damage;
                     if (!(damage > 0)) continue;
-                    // The log row: folded into the cast's row for this victim (buildCombatLog).
-                    bus.emit({
-                        type: 'passive-slot-damage',
-                        attackerId: actor.id,
-                        targetId: victim.id,
-                        round: currentRound,
-                        damage,
-                    });
                     // Read before the funnel, as a counter or proc reads them: the Stasis this hit
                     // meets (earlier hits' queued reductions land first) and its primary-target
                     // allowance (R92).
@@ -9569,6 +9600,15 @@ export function runCombat(rawInput: CombatEngineInput): {
                     // number, and re-crediting the pre-funnel hit would double-count.
                     const booked = outcome.incomingBooked ?? damage;
                     const applied: AppliedVictimDamage = { ...outcome, incomingBooked: booked };
+                    // The log row: folded into the cast's row for this victim (buildCombatLog), at
+                    // what the victim took — after its incoming-block proc.
+                    bus.emit({
+                        type: 'passive-slot-damage',
+                        attackerId: actor.id,
+                        targetId: victim.id,
+                        round: currentRound,
+                        damage: loggedHitFigures(applied).amount,
+                    });
                     if (booked > 1e-9) {
                         roundPerTargetDamage.set(
                             victim.id,
@@ -10498,6 +10538,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 activePattern: parsedPatternFor(a),
                 chargedPattern: parsedChargedPatternFor(a),
                 sameSideLiving: sameSideLivingFor(a),
+                isActorAlive,
                 // The acting actor's pre-fight modifier baseline (runPlayerTurn's `preFight` doc
                 // says where each channel folds).
                 // Side-agnostic — enemy attackers walk the same path. Conditional spread → an
@@ -10611,8 +10652,10 @@ export function runCombat(rawInput: CombatEngineInput): {
          * Intra-cast clause order: apply the landings this cast held back because their clause
          * follows its damage clause (playerTurn's `deferredEnemyApplications`). Called at every
          * turn site once that turn's damage has landed — and unconditionally, so a cast
-         * that resolved non-positionally, whiffed, or killed its target still applies its debuff
-         * rather than dropping it. Runs BEFORE the actor's Post-Turn decrement, so the status keeps
+         * that resolved non-positionally or whiffed still applies its debuff rather than dropping
+         * it. A pair aimed at an enemy that damage destroyed is dropped whole (`landsOnLiving`),
+         * leaving only its `landing-dropped` record.
+         * Runs BEFORE the actor's Post-Turn decrement, so the status keeps
          * its normal window; and before the turn's intent drain, so reactions to the
          * `debuff-applied` still resolve within this turn (just after the damage, as the rule says).
          *
@@ -10633,11 +10676,21 @@ export function runCombat(rawInput: CombatEngineInput): {
          * matters only where the engine deliberately separates them (the sub-attack boundary
          * wiring).
          */
+        /** Whether a held after-damage landing still lands: its enemy (`landsOnId`) was not
+         *  destroyed by the cast's damage. Owner ruling 2026-10-22 — see
+         *  `DeferredEnemyApplication.landsOnId`. */
+        const landsOnLiving = (pending: DeferredEnemyApplication): boolean =>
+            pending.landsOnId === undefined ||
+            allActorsById.get(pending.landsOnId)?.destroyedRound === undefined;
         const flushDeferredEnemyApplications = (
             deferred: PlayerTurnResult['deferredEnemyApplications']
         ): void => {
             if (deferred.length === 0) return;
             for (const pending of deferred.splice(0, deferred.length)) {
+                if (!landsOnLiving(pending)) {
+                    pending.onDropped?.();
+                    continue;
+                }
                 pending.applyState();
                 pending.emitEvents();
             }
@@ -11113,10 +11166,18 @@ export function runCombat(rawInput: CombatEngineInput): {
                         // them: with one sub-attack there is no next reader, so the write and the
                         // emission both stay at the flush site.
                         if (sub.index < sel.scalars.hits - 1) {
-                            const pending = sel.deferredEnemyApplications.splice(
-                                0,
-                                sel.deferredEnemyApplications.length
-                            );
+                            // A landing on a ship this sub-attack destroyed is dropped, and only
+                            // its `landing-dropped` record rides this sub-attack's emission step.
+                            const pending = sel.deferredEnemyApplications
+                                .splice(0, sel.deferredEnemyApplications.length)
+                                .map((pair): DeferredEnemyApplication =>
+                                    landsOnLiving(pair)
+                                        ? pair
+                                        : {
+                                              applyState: () => {},
+                                              emitEvents: () => pair.onDropped?.(),
+                                          }
+                                );
                             for (const pair of pending) pair.applyState();
                             bufferDebuffEmitters(sub.index, pending);
                         }
@@ -12033,18 +12094,6 @@ export function runCombat(rawInput: CombatEngineInput): {
         };
 
         /**
-         * Ends a turn whose own start-of-turn DoT tick destroyed the acting ship. The reactions
-         * queued so far — above all the ship's own on-death effects (Salvation's "When this Unit
-         * is destroyed it repairs 60% of its max HP to all allies") — resolve now, in the dying
-         * ship's turn and before the next ship acts (owner ruling 2026-10-22): this is that turn's
-         * drain point (b). The Post Turn decrements and `turn-ended` do not run for it.
-         */
-        const endTurnAtLethalTick = (): void => {
-            drainReactions();
-            setHitRoot(undefined);
-        };
-
-        /**
          * The acting ship's turn-start Bombs and Echoing Bursts (`applyPositionedTimedBurst`), then
          * the reactions to them, before the ship acts (owner ruling R127): a Bomb exploding at
          * Akula's turn start lets Demolisher take 2 charges first, so a charged skill that was ready
@@ -12209,7 +12258,24 @@ export function runCombat(rawInput: CombatEngineInput): {
         })();
 
         bus.emit({ type: 'round-started', round: r });
-        announceAccumGains(statusEngine, bus);
+        // The round's stack gains (Overload, Blast, Warding Screen…) are a start-of-round effect,
+        // so they are announced granter by granter in turn order, both sides interleaved; one
+        // granter's gains keep their banking order. Reactions they wake follow the same order
+        // (`drainReactions` resolves by event order).
+        announceAccumGains(statusEngine, bus, (gains) =>
+            orderByTurnPriority(
+                gains.map((gain) => {
+                    const granter =
+                        allActorsById.get(gain.granterId) ?? allActorsById.get(gain.ownerId);
+                    return {
+                        gain,
+                        speed: granter ? effectiveSpeedOf(granter) : 0,
+                        side: granter?.side ?? 'player',
+                        position: granter?.position,
+                    };
+                })
+            ).map((entry) => entry.gain)
+        );
         drainStartOfRound();
 
         // §4.5 Stasis reductions (`stasisBreakPending`, declared before the round loop). An entry
@@ -12539,9 +12605,10 @@ export function runCombat(rawInput: CombatEngineInput): {
                     // (recordDestroyed fired inside applyIncomingToTarget). It must NOT fall through
                     // and take a full turn — re-run the SAME dead-target skip as the top-of-turn
                     // guard. (With Cheat Death the intercept floored HP at 1 → not dead → false → it
-                    // acts normally.) Its turn ends at the tick; read `endTurnAtLethalTick`.
+                    // acts normally.) The reactions to the tick and the death resolve first, in this
+                    // turn, the block that holds the death.
+                    if (actor.destroyedRound !== undefined) drainReactions();
                     if (handleDeadTargetSkip(actor)) {
-                        endTurnAtLethalTick();
                         continue;
                     }
                 } else {
@@ -12676,11 +12743,14 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 creditDealt(sourceId, actor.id, dealt);
                             }
                         }
-                        // Lethal turn-start tick → the turn ends here, exactly as the heal-target
-                        // branch's lethal tick does (read `endTurnAtLethalTick`).
+                        // Lethal turn-start tick → skip the rest of the turn. INTENTIONALLY
+                        // follows the heal-target lethal convention (skip the shared post-turn
+                        // block: decrements / turn-ended), NOT the timed-burst convention. The
+                        // reactions to the tick and the death resolve first, in this turn, the
+                        // block that holds the death.
                         if (actor.destroyedRound !== undefined) {
+                            drainReactions();
                             if (actor.id === focusActorId) pushSynthesizedFocusSkipTurn();
-                            endTurnAtLethalTick();
                             continue;
                         }
                     }
@@ -14059,12 +14129,15 @@ export function runCombat(rawInput: CombatEngineInput): {
             // `enemyDebuffNamesForTarget` already folds the DoT/bomb families from the actor's own
             // entry containers using the same synthesized base names the assembler labels with
             // (Corrosion / Inferno / Bomb / Damage over Time).
+            const durations = timedStatusDurations(statusEngine, a.id);
             bus.emit({
                 type: 'status-snapshot',
                 actorId: a.id,
                 round: r,
                 buffNames: selfBuffNamesForOwners(statusEngine, [a.id]),
                 debuffNames: enemyDebuffNamesForTarget(a),
+                buffDurations: durations.buffs,
+                debuffDurations: durations.debuffs,
             });
             // #372: the same tail instant, for the same reason — the Simulator must REPORT HP,
             // not re-derive it. Every actor in `allActors` is read the same way, so this is

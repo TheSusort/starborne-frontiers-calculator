@@ -604,9 +604,11 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
         // A counter or proc's hit is logged by its own `reactive-damage-performed` row.
         if (e.reactiveHitId !== undefined) return;
         if (!ctx.openAttackEntry) return;
-        // A hit a Protection cascade split shows only the share this victim kept; the protectors'
-        // shares are their own rows, so the pre-redirect figure would count them twice.
-        const rowDamage = e.protectionSplit ? (e.takenDamage ?? e.damage) : e.damage;
+        // The row shows what this victim took (`takenDamage`): after its incoming-block proc
+        // (Ironclad, Shadowguard), and — on a Protection split — only the share it kept, since
+        // the protectors' shares are their own rows. The non-positional path stamps no funnel
+        // figure and falls back to the hit as thrown.
+        const rowDamage = e.takenDamage ?? e.damage;
         // Find-or-create the target for this victim (dedup by targetId).
         const existing = ctx.openAttackEntry.targets.find((t) => t.targetId === e.targetId);
         // A hit turned into a DoT landed nothing: the row shows no number and no HP, only that it
@@ -637,8 +639,8 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
             ctx.claimHp(existing);
             return;
         }
-        // New victim — primary and splash alike show what this victim was dealt, after its own
-        // defence and incoming reductions (`attacked.damage`). A primary hit with no figure (the
+        // New victim — primary and splash alike show what this victim took, after its own
+        // defence, incoming reductions and block (`rowDamage`). A primary hit with no figure (the
         // engine's 0-damage cast fallback) reads 0.
         const target: CombatLogTarget = {
             targetId: e.targetId,
@@ -1014,6 +1016,20 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
         ctx.openBurst = { victimId: e.victimId, target: entry.targets[0] };
     },
 
+    // A landing the cast's own damage pre-empted by destroying its target. No row of its own: it is
+    // recorded on the attack row of this turn that struck that ship, newest first.
+    'landing-dropped': (e, ctx) => {
+        const entries = ctx.currentTurn?.entries ?? [];
+        for (let i = entries.length - 1; i >= 0; i--) {
+            const entry = entries[i];
+            if (entry.kind !== 'attack' || entry.actorId !== e.sourceId) continue;
+            const target = entry.targets.find((t) => t.targetId === e.targetId);
+            if (!target) continue;
+            target.droppedLandings = [...(target.droppedLandings ?? []), e.label];
+            return;
+        }
+    },
+
     // The splash a dying bomb carrier threw at an adjacent ally. Booked to the bomb's APPLIER, the
     // actor credited with the damage, with the splashed ally as the target.
     'bomb-splash-log': (e, ctx) => {
@@ -1064,7 +1080,9 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
         const entry: CombatLogEntry = {
             kind: 'cleanse',
             actorId: e.casterId,
-            targets: [],
+            // The recipients that actually lost a debuff, so the log reads "Caster → Ally:
+            // cleansed N" like the reactive row above, and `status-tier-drop` sees the holder.
+            targets: (e.targets ?? []).map((targetId) => ({ targetId })),
             reactions: [],
             note: `cleansed ${e.count}`,
             ...(ctx.consumePendingSkill() ?? {}),
@@ -1083,6 +1101,18 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
             ...(ctx.consumePendingSkill() ?? {}),
         };
         ctx.attachEntry(entry);
+    },
+
+    // A reactive purge an affinity disadvantage stopped: the attempt, as a purge of 0.
+    'purge-blocked-log': (e, ctx) => {
+        if (!ctx.currentTurn && !ctx.currentRound) return;
+        ctx.attachEntry({
+            kind: 'purge',
+            actorId: e.casterId,
+            targets: [{ targetId: e.targetId }],
+            reactions: [],
+            note: `purged 0 (${e.reason})`,
+        });
     },
 
     /**
