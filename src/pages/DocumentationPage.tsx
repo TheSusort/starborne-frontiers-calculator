@@ -3484,20 +3484,24 @@ const DocumentationPage: React.FC = () => {
                                         as it does a counter-attack. It is damage Nosorog dealt, so
                                         his own damage-dealt leech (the Leech set) repairs off it,
                                         as it does off a counter-attack. The Reflect gear set&apos;s
-                                        bounce works the same way in every respect: the same
-                                        reactions answer it (Warden, Isha, every counter-attacker),
-                                        the attacker&apos;s Inc. Damage Up and Down, Defense Down
-                                        and Exposed change it, Protection redirects it, it uses the
-                                        wearer&apos;s defence and shield penetration, it spends
-                                        Exposed and Titanite Plating, and the wearer&apos;s Leech
-                                        set repairs off it. A ship with both reflects twice, one
-                                        bounce per source. A hit that Protection moves entirely onto
-                                        the protector (Lionheart&apos;s 10 stacks) is not direct
-                                        damage to the ship it was aimed at: that ship does not
-                                        counter or react, and its Stasis does not drop, but the
-                                        skill&apos;s debuffs and other effects still land on it.
-                                        When only part of the hit is moved (Meatshield&apos;s 30%),
-                                        the share it keeps is still direct damage.
+                                        bounce also fires on splash hits, not only on a hit aimed at
+                                        the wearer. In every other respect it works the same way:
+                                        the same reactions answer it (Warden, Isha, every
+                                        counter-attacker), the attacker&apos;s Inc. Damage Up and
+                                        Down, Defense Down and Exposed change it, Protection
+                                        redirects it, it uses the wearer&apos;s defence penetration
+                                        and shield penetration against the attacker&apos;s Defense,
+                                        it spends Exposed and Titanite Plating, and the
+                                        wearer&apos;s Leech set repairs off it. A ship with both
+                                        reflects a hit aimed at it twice, one bounce per source; a
+                                        splash hit bounces only the set&apos;s reflect. A hit that
+                                        Protection moves entirely onto the protector
+                                        (Lionheart&apos;s 10 stacks) is not direct damage to the
+                                        ship it was aimed at: that ship does not counter or react,
+                                        and its Stasis does not drop, but the skill&apos;s debuffs
+                                        and other effects still land on it. When only part of the
+                                        hit is moved (Meatshield&apos;s 30%), the share it keeps is
+                                        still direct damage.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">
@@ -5165,25 +5169,25 @@ const DocumentationPage: React.FC = () => {
                                     a flat amount plus 100% of its attack, capped at max HP — before
                                     the hit lands, once per battle). Three more gear-set and implant
                                     effects are also modeled: the <strong>Reflect</strong> gear set
-                                    (reflects 7% per set of each incoming hit back at the attacker),
-                                    the <strong>Revenge</strong> gear set (the wearer deals
-                                    increasing damage as its HP drops, up to +25% per set near
-                                    death), and the <strong>Smokescreen</strong> implant (a chance
-                                    to gain Stealth when directly hit), and the{' '}
+                                    (reflects 7% per set of each incoming hit, splash included, back
+                                    at the attacker), the <strong>Revenge</strong> gear set (the
+                                    wearer deals increasing damage as its HP drops, up to +25% per
+                                    set near death), and the <strong>Smokescreen</strong> implant (a
+                                    chance to gain Stealth when directly hit), and the{' '}
                                     <strong>Boost</strong> gear set (each timed buff the wearer
-                                    applies — to itself or allies — lasts one extra turn, modeled in
-                                    both the combat and DPS simulators). The{' '}
-                                    <strong>Voidfire Catalyst</strong> implant is also modeled: it
-                                    increases detonation damage (bomb bursts, Inferno detonations,
-                                    and Corrosion detonations) and bomb splash damage by a
-                                    percentage based on rarity — its rare and legendary variants
-                                    amplify bomb splash damage only. Counterattacks are now modeled
-                                    too: one of your ships with a &quot;when directly damaged&quot;
-                                    passive (such as <strong>Stalwart</strong>) retaliates against
-                                    the attacker for a share of its own attack — a full hit that can
-                                    crit and kill. Different counterattackers have their own
-                                    triggers: <strong>Nyxen</strong> strikes back only when its
-                                    shield is the part that takes the hit, and{' '}
+                                    casts itself — on itself or allies, never one an ally gives it —
+                                    lasts one extra turn, modeled in both the combat and DPS
+                                    simulators). The <strong>Voidfire Catalyst</strong> implant is
+                                    also modeled: it increases detonation damage (bomb bursts,
+                                    Inferno detonations, and Corrosion detonations) and bomb splash
+                                    damage by a percentage based on rarity — its rare and legendary
+                                    variants amplify bomb splash damage only. Counterattacks are now
+                                    modeled too: one of your ships with a &quot;when directly
+                                    damaged&quot; passive (such as <strong>Stalwart</strong>)
+                                    retaliates against the attacker for a share of its own attack —
+                                    a full hit that can crit and kill. Different counterattackers
+                                    have their own triggers: <strong>Nyxen</strong> strikes back
+                                    only when its shield is the part that takes the hit, and{' '}
                                     <strong>Centurion</strong> retaliates when it or an adjacent
                                     ally is directly damaged. These reactions now fire for{' '}
                                     <strong>both teams</strong>: enemy ships react when you hit them

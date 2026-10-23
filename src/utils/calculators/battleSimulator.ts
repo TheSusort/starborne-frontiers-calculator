@@ -411,6 +411,8 @@ export const LOG_EVENT_TYPES = [
     'cheat-death-log',
     'reversed-repair-log',
     'bomb-splash-log',
+    'landing-dropped',
+    'purge-blocked-log',
     'shield-stripped',
     'buff-applied',
     'buff-expired',

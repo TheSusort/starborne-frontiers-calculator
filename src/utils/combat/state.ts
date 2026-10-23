@@ -99,6 +99,9 @@ export interface ActiveDoTStack {
      * Distinct from `dealtCreditId`, which is absent whenever the conversion had no single
      * attacker (an aggregate intake) and so cannot stand in for this flag.
      *
+     * Owner ruling 2026-10-22: a converted DoT cannot be cleansed (`dotCleanseCandidates` offers
+     * none of its stacks).
+     *
      * Absent on every applied DoT (corrosion, inferno, any applied generic), where the tick is its
      * applier's damage dealt in the ordinary way.
      */
@@ -185,7 +188,9 @@ export function burstContainerWiped(
  * dated by its entry's `appliedSeq` (absent → 0, older than anything stamped). The cleanse takes
  * candidates newest first together with the named debuffs (`StatusEngine.cleanse`). Removing one
  * decrements its entry's `stacks` and splices the entry out at 0, in place, so every holder of a
- * reference sees it. An `unremovable` entry (Acidic Decay) offers none.
+ * reference sees it. An `unremovable` entry (Acidic Decay) offers none, and neither does a
+ * converted hit (`convertedFromHit`: Voron's transformed hit, Meatshield's Protection share) —
+ * owner ruling 2026-10-22, a converted DoT cannot be cleansed.
  *
  * Each Echoing Burst accumulator is one candidate too (owner ruling R109); removing it splices it
  * out, so its gathered damage never bursts.
@@ -200,7 +205,12 @@ export function dotCleanseCandidates(
     holder: DebuffEntryHolder,
     debuffType?: 'bomb' | 'dot'
 ): { seq: number; remove: () => void }[] {
-    const containers: { stacks: number; unremovable?: boolean; appliedSeq?: number }[][] =
+    const containers: {
+        stacks: number;
+        unremovable?: boolean;
+        convertedFromHit?: boolean;
+        appliedSeq?: number;
+    }[][] =
         debuffType === 'bomb'
             ? [holder.pendingBombs]
             : debuffType === 'dot'
@@ -215,7 +225,7 @@ export function dotCleanseCandidates(
     for (const entries of containers) {
         for (let i = entries.length - 1; i >= 0; i--) {
             const e = entries[i];
-            if (e.unremovable) continue;
+            if (e.unremovable || e.convertedFromHit) continue;
             for (let s = 0; s < e.stacks; s++) {
                 out.push({
                     seq: e.appliedSeq ?? 0,

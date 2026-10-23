@@ -16,6 +16,18 @@ import { createEventBus } from '../events';
 import { makeRateGate, setupKeyedRng } from '../../calculators/rateAccumulator';
 import type { Ability } from '../../../types/abilities';
 
+/** One cast as the engine runs it: `runPlayerTurn`, then the post-damage flush of the landings
+ *  held for after the damage (engine.ts `flushDeferredEnemyApplications`) — where a DoT or Bomb
+ *  clause written after the damage clause is written. */
+const castAndLand = (args: PlayerTurnArgs): ReturnType<typeof runPlayerTurn> => {
+    const turn = runPlayerTurn(args);
+    for (const pending of turn.deferredEnemyApplications.splice(0)) {
+        pending.applyState();
+        pending.emitEvents();
+    }
+    return turn;
+};
+
 const baseStats = () => ({
     attack: 5000,
     crit: 0,
@@ -142,7 +154,7 @@ const cast = (side: 'player' | 'enemy', abilities: Ability[], landingOutcomes: b
         aoeVictimIds: [victim.id],
         opposingVictimById: new Map([[victim.id, victim]]),
     };
-    runPlayerTurn(args);
+    castAndLand(args);
     return victim;
 };
 

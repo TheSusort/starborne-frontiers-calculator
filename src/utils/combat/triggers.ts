@@ -4968,7 +4968,8 @@ export type StampedEventType =
     | 'shield-applied-log'
     | 'cheat-death-log'
     | 'reversed-repair-log'
-    | 'bomb-splash-log';
+    | 'bomb-splash-log'
+    | 'purge-blocked-log';
 
 /** Forces the array literal passed to it to contain every member of `T` exactly once — a
  *  missing or duplicated tag is a compile error, not a silent gap. Standard TS
@@ -5035,6 +5036,7 @@ const REACTIVE_STAMPED_EVENT_TYPE_LIST = exhaustiveArrayOf<StampedEventType>()([
     'cheat-death-log',
     'reversed-repair-log',
     'bomb-splash-log',
+    'purge-blocked-log',
 ]);
 
 const REACTIVE_STAMPED_EVENT_TYPES: ReadonlySet<CombatEventType> = new Set<StampedEventType>(
@@ -7437,7 +7439,8 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
             intent.ability.trigger === 'on-deal-damage'
                 ? enemyRoleConditionsOf(intent.ability)
                 : NO_CONDITIONS;
-        const removals: { targetId: string; removed: number }[] = [];
+        /** `blocked`: the affinity disadvantage alone stopped a purge that had buffs to take. */
+        const removals: { targetId: string; removed: number; blocked: boolean }[] = [];
         for (const targetId of targetIds) {
             // Reachable: Rhodium's end-of-round purge in any round where no enemy carries a buff
             // (`mostBuffsAmong` returns undefined there, `engine.ts`). Its `damage` half on the
@@ -7455,6 +7458,7 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
             removals.push({
                 targetId,
                 removed: disadvantaged ? 0 : ctx.statusEngine.purge(targetId, cfg.count),
+                blocked: disadvantaged && ctx.statusEngine.removableBuffCount(targetId) > 0,
             });
         }
         // Emit purge-performed UNLESS this purge was itself triggered by a purge (depth-1
@@ -7462,7 +7466,17 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
         if (!intent.eventCtx?.fromPurgeEvent) {
             const waveTotal = removals.reduce((sum, x) => sum + x.removed, 0);
             let waveLead = true;
-            for (const { targetId, removed } of removals) {
+            for (const { targetId, removed, blocked } of removals) {
+                if (blocked) {
+                    ctx.bus.emit({
+                        type: 'purge-blocked-log',
+                        casterId: intent.ownerId,
+                        targetId,
+                        round: ctx.round,
+                        reason: 'affinity',
+                    });
+                    continue;
+                }
                 if (removed <= 0) continue;
                 ctx.bus.emit({
                     type: 'purge-performed',

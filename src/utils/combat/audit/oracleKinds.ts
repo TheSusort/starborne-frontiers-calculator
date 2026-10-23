@@ -107,6 +107,11 @@ function walk(entries: CombatLogEntry[], actorId: string, acc: Set<CombatLogEntr
         if (e.actorId === actorId) {
             const kind = oracleKind(e);
             if (kind) acc.add(kind);
+            // A landing the hit's own kill pre-empted is an infliction attempt, like a resist:
+            // whether the target died to it hinges on the damage its allies dealt first.
+            for (const t of e.targets) {
+                for (const label of t.droppedLandings ?? []) acc.add(resistedAttemptKind(label));
+            }
         }
         if (e.reactions?.length) walk(e.reactions, actorId, acc);
     }

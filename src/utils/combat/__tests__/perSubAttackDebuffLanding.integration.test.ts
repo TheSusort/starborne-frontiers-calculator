@@ -594,26 +594,27 @@ describe('PR8 — overkill retargeting', () => {
             [enemyAt('frontling', 'M4', [], 5_000), enemyAt('survivor', 'M3')]
         );
 
-    it('when sub-attack 1 kills its victim, sub-attacks 2–3 land their stacks on the NEW victim and the dead one holds exactly one', () => {
+    it('when sub-attack 1 kills its victim, sub-attacks 2–3 land their stacks on the NEW victim and the dead one holds none', () => {
         // DERIVATION: one plain slice delivers 10,000 against `frontling`'s 5,000 HP, so it dies
-        // on sub-attack 0 having taken exactly one landing (the cast-time one). Sub-attacks 1 and
-        // 2 re-resolve their own anchor, find `survivor` at the front, and land there — the
-        // footprint `applyDebuffsForSubAttack` passes is the victims THAT sub-attack actually
-        // struck, which is what makes retargeting correct for free.
+        // on sub-attack 0, and the clause written after that damage does not land on the ship it
+        // destroyed (owner ruling 2026-10-22). Sub-attacks 1 and 2 re-resolve their own anchor,
+        // find `survivor` at the front, and land there — the footprint `applyDebuffsForSubAttack`
+        // passes is the victims THAT sub-attack actually struck, which is what makes retargeting
+        // correct for free.
         // ANTI-VACUITY: the survivor's count is asserted non-zero AND the total is asserted to be
-        // 3, so a silently-dropped landing cannot pass by shifting a count from one victim to the
-        // other. The N=1 control pins that the split only appears over a multi-hit cast.
-        // KILLED BY: `applyDebuffsForSubAttack` returning [] (survivor drops to 0, total 1) and by
-        // no-oping `onSubAttackEnd`. Forcing `sub.index < sel.scalars.hits - 1` to false leaves
-        // the counts intact — this test is about WHO, not about when the state write lands.
+        // 2, so a silently-dropped landing cannot pass by shifting a count from one victim to the
+        // other. The N=1 control pins that the survivor's landings come from the later hits.
+        // KILLED BY: `applyDebuffsForSubAttack` returning [] (survivor drops to 0) and by no-oping
+        // `onSubAttackEnd`; dropping the destroyed-victim gate (`landsOnLiving`) puts one landing
+        // back on `frontling`.
         const counts = debuffApplicationsByTarget(overkillCast(3), 'Corrode');
-        expect(counts.frontling).toBe(1);
+        expect(counts.frontling).toBeUndefined();
         expect(counts.survivor).toBe(2);
         expect(counts.survivor).toBeGreaterThan(0);
-        expect(sum(Object.values(counts))).toBe(3);
+        expect(sum(Object.values(counts))).toBe(2);
 
         const one = debuffApplicationsByTarget(overkillCast(1), 'Corrode');
-        expect(one.frontling).toBe(1);
+        expect(one.frontling).toBeUndefined();
         expect(one.survivor).toBeUndefined();
     });
 });
@@ -644,29 +645,28 @@ describe('PR8 — the per-sub-attack FOOTPRINT', () => {
         //   the `all` shape scales every cell at 1.0, so one sub-attack delivers 10,000 to EACH of
         //   the two enemies. `frontling`'s 5,000 HP is below that DOUBLED slice (crit 100 /
         //   critDamage 100 doubles every hit — the per-hit slice is 10,000, not 5,000), so:
-        //   sub-attack 0: footprint [survivor, frontling] -> one landing EACH; frontling DIES
+        //   sub-attack 0: footprint [survivor, frontling] -> survivor lands; frontling DIES, so the
+        //                 clause written after the damage does not land on it (owner ruling
+        //                 2026-10-22)
         //   sub-attack 1: footprint re-expands over the LIVING roster -> [survivor] only
         //   sub-attack 2: [survivor] only
-        //   => frontling exactly 1, survivor exactly 3, four `debuff-applied` in total.
-        // Under the mutation the later sub-attacks reuse the cast-time footprint, which still holds
-        // the dead `frontling`, and its count reads 3.
+        //   => frontling none, survivor exactly 3, three `debuff-applied` in total.
         //
-        // ANTI-VACUITY: `survivor: 3` alone would also be produced by an anchor-collapsing
-        // resolution (sub-attacks 1-2 re-resolve `front` to `survivor` anyway), so the load-bearing
-        // legs are `frontling: 1` — which pins that the footprint SHRANK — and the total of 4, which
-        // pins that sub-attack 0 fanned over BOTH cells and no landing was silently dropped.
-        // KILLED BY: `aoeVictimIds: sub.victimIds` -> the cast's `aoeVictimIds` (playerTurn.ts
-        // ~1774), and by `applyDebuffsForSubAttack` returning [].
+        // ANTI-VACUITY: the total of 3 with all of them on `survivor` pins that sub-attack 0 fanned
+        // over the struck cells and no survivor landing was silently dropped. A destroyed victim
+        // is skipped before its roll (`landStatusOnRecipients`), so a later sub-attack reusing the
+        // cast-time footprint would land nothing on the dead `frontling` either.
+        // KILLED BY: `applyDebuffsForSubAttack` returning [] (survivor drops to 1); dropping the
+        // destroyed-victim gate puts landings back on `frontling`.
         const counts = debuffApplicationsByTarget(footprintCast(3), 'Corrode');
-        expect(counts.frontling).toBe(1);
+        expect(counts.frontling).toBeUndefined();
         expect(counts.survivor).toBe(3);
-        expect(sum(Object.values(counts))).toBe(4);
+        expect(sum(Object.values(counts))).toBe(3);
 
         // N=1 control: a single sub-attack fans over the cast-time footprint and nothing more, so
-        // both enemies take exactly one landing. This is what pins the 1-vs-3 split above as a
-        // multi-hit effect rather than a property of the `all-enemies` fan-out itself.
+        // the survivor takes exactly one landing and the ship it killed none.
         const one = debuffApplicationsByTarget(footprintCast(1), 'Corrode');
-        expect(one.frontling).toBe(1);
+        expect(one.frontling).toBeUndefined();
         expect(one.survivor).toBe(1);
     });
 });
@@ -761,9 +761,10 @@ describe('PR8 — sub-attack 0 recipient equivalence', () => {
         // The OVERKILL fixture is what makes this discriminating rather than tautological. With
         // both enemies alive every sub-attack resolves the same anchor, so dropping sub-attack 0's
         // landing entirely would still leave `frontling` as the first name. Sizing `frontling`
-        // below one slice means sub-attacks 1 and 2 resolve `survivor` instead, so if the k=0
-        // draw were absent or resolved off a later anchor the first `debuff-applied` would read
-        // `survivor` and this test goes red.
+        // between one and two slices means it survives sub-attack 0 (and takes its landing), dies
+        // to sub-attack 1 (whose after-damage landing on it is dropped) and sub-attack 2 resolves
+        // `survivor` — so if the k=0 draw were absent or resolved off a later anchor the first
+        // `debuff-applied` would read `survivor` and this test goes red.
         // KILLED BY: passing `anchorId: undefined` at the cast-time
         // `resolveDebuffRecipientIds` call (playerTurn.ts ~1748) — sub-attack 0 then lands
         // nothing and the first `debuff-applied` names `survivor`. ALSO killed (measured, not
@@ -773,13 +774,24 @@ describe('PR8 — sub-attack 0 recipient equivalence', () => {
         const overkill = firstNamedVictims(
             focusCast(
                 [activeWithDebuffClause(3)],
-                [enemyAt('frontling', 'M4', [], 5_000), enemyAt('survivor', 'M3')]
+                [enemyAt('frontling', 'M4', [], 15_000), enemyAt('survivor', 'M3')]
             ),
             'Corrode'
         );
         expect(overkill.debuffed).toBe('frontling');
         expect(overkill.struck).toBe('frontling');
         expect(overkill.cast).toBe('frontling');
+        // The fixture premise: `frontling` takes sub-attack 0's landing, dies to sub-attack 1 (so
+        // that landing is dropped), and sub-attack 2 lands on `survivor`.
+        expect(
+            debuffApplicationsByTarget(
+                focusCast(
+                    [activeWithDebuffClause(3)],
+                    [enemyAt('frontling', 'M4', [], 15_000), enemyAt('survivor', 'M3')]
+                ),
+                'Corrode'
+            )
+        ).toEqual({ frontling: 1, survivor: 1 });
 
         // The brief's own literal shape, with both enemies surviving: `front` is column 4, so the
         // three paths must agree on `frontling` here too.

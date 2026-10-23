@@ -34,6 +34,18 @@ import { makeRateGate } from '../../calculators/rateAccumulator';
 import { Ability, ShipSkills } from '../../../types/abilities';
 import { AffinityName } from '../../../types/ship';
 
+/** One cast as the engine runs it: `runPlayerTurn`, then the post-damage flush of the landings
+ *  held for after the damage (engine.ts `flushDeferredEnemyApplications`) — where a DoT or Bomb
+ *  clause written after the damage clause is written. */
+const castAndLand = (args: PlayerTurnArgs): ReturnType<typeof runPlayerTurn> => {
+    const turn = runPlayerTurn(args);
+    for (const pending of turn.deferredEnemyApplications.splice(0)) {
+        pending.applyState();
+        pending.emitEvents();
+    }
+    return turn;
+};
+
 const ATTACKER_AFFINITY: AffinityName = 'thermal';
 
 const baseStats = () => ({
@@ -726,7 +738,7 @@ describe('Asphyxiator — the inflicted DoT is extended too', () => {
             chargedCritGate: () => true,
         });
 
-        runPlayerTurn(
+        castAndLand(
             makeArgs(runtime, main, statusEngine, {
                 infernoEntries,
                 aoeVictimIds: [main.id],
@@ -750,7 +762,7 @@ describe('Asphyxiator — the inflicted DoT is extended too', () => {
             chargedCritGate: () => true,
         });
 
-        runPlayerTurn(
+        castAndLand(
             makeArgs(runtime, main, statusEngine, {
                 infernoEntries,
                 aoeVictimIds: [main.id],
@@ -771,7 +783,7 @@ describe('Asphyxiator — the inflicted DoT is extended too', () => {
             chargedCritGate: () => true,
         });
 
-        runPlayerTurn(
+        castAndLand(
             makeArgs(runtime, main, statusEngine, {
                 infernoEntries: [],
                 aoeVictimIds: [main.id, neighbour.id],
@@ -795,7 +807,7 @@ describe('Asphyxiator — the inflicted DoT is extended too', () => {
             chargedCritGate: () => false,
         });
 
-        runPlayerTurn(
+        castAndLand(
             makeArgs(runtime, main, statusEngine, {
                 infernoEntries,
                 aoeVictimIds: [main.id],

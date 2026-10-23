@@ -105,6 +105,10 @@ export interface CombatLogTarget {
     /** The hit struck this target and was turned into a damage-over-time effect on it, so it landed
      *  no damage: `amount` and `resultingHpPct` are absent and the later ticks carry the damage. */
     convertedToDot?: boolean;
+    /** What this hit's cast would have landed on this target after its damage, but did not,
+     *  because the damage destroyed it (`landing-dropped`): a debuff's name, or a DoT/Bomb's resist
+     *  label. Present only when non-empty. */
+    droppedLandings?: string[];
     /** The #418 follow-up, `heal` entries only: the portion of this repair wasted on an HP bar
      *  that was already full (`heal-performed` / `reactive-heal-performed`'s `perTarget.overheal`).
      *  Present only when > 0.

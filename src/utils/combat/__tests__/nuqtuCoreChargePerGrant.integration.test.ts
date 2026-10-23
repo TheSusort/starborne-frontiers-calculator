@@ -71,7 +71,9 @@ const withoutCharged = (ship: string): ShipSkills => ({
     slots: realKit(ship).slots.filter((s) => s.slot !== 'charged'),
 });
 
-const nuqtuUnit = (): BoardUnit => {
+/** `withoutCleanse` drops his every-turn cleanse, for a fixture whose premise is a debuff that
+ *  stands from one of the attacker's turns to the next. */
+const nuqtuUnit = (withoutCleanse = false): BoardUnit => {
     const kit = realKit('Nuqtu');
     return {
         id: 'nuqtu',
@@ -79,7 +81,13 @@ const nuqtuUnit = (): BoardUnit => {
             ...kit,
             slots: [
                 { slot: 'active', abilities: hitKit(100).slots[0].abilities },
-                ...kit.slots.filter((s) => s.slot === 'passive'),
+                ...kit.slots
+                    .filter((s) => s.slot === 'passive')
+                    .map((s) =>
+                        withoutCleanse
+                            ? { ...s, abilities: s.abilities.filter((a) => a.type !== 'cleanse') }
+                            : s
+                    ),
             ],
         },
         position: 'M4',
@@ -123,9 +131,10 @@ const run = (
     placement: Placement,
     gainers: Gainer[],
     numRounds = 1,
-    nuqtuRole?: ShipTypeName
+    nuqtuRole?: ShipTypeName,
+    withoutCleanse = false
 ): Result => {
-    const nuqtu = nuqtuUnit();
+    const nuqtu = nuqtuUnit(withoutCleanse);
     const { input, id } = boardInput(placement, nuqtu, [], gainers.map(gainerUnit), numRounds);
     if (nuqtuRole !== undefined) {
         if (placement === 'player') input.role = nuqtuRole;
@@ -460,8 +469,10 @@ describe.each(PLACEMENTS)('Nuqtu on the %s side: a passive buff riding a cast (R
 
 // R177: one passive skill is one activation, however many of its sentences fire. Sha Xing's
 // passive carries two ("gains Stealth when damaging a debuffer or supporter"; "gains Tianchen
-// Precision II when damaging a debuffed enemy"). Her active inflicts Inc. Repair Down on Nuqtu, so
-// from the second turn she strikes a debuffed debuffer and both sentences fire in one firing.
+// Precision II when damaging a debuffed enemy"). Her active leaves a Bomb on Nuqtu, so from the
+// second turn she strikes a debuffed debuffer and both sentences fire in one firing. Nuqtu's own
+// every-turn cleanse is dropped: it takes the newest debuff, and her Bomb (written after her
+// 1-turn Inc. Repair Down, so landing after it) is that one.
 describe.each(PLACEMENTS)('Nuqtu on the %s side: a two-sentence passive firing (R177)', (p) => {
     const shaXing = (): Gainer => ({
         id: 'shaxing',
@@ -479,7 +490,7 @@ describe.each(PLACEMENTS)('Nuqtu on the %s side: a two-sentence passive firing (
     });
 
     it('a debuffed debuffer fires both sentences in ONE firing: one Core Charge', () => {
-        const r = run(p, [shaXing()], 2, 'DEBUFFER');
+        const r = run(p, [shaXing()], 2, 'DEBUFFER', true);
         // Both statuses landed on turn two (a vacuous run would show Stealth alone).
         expect(gainedNames(r)).toEqual(['Stealth', 'Stealth', 'Tianchao Precision II']);
         // One charge for turn one's firing, one for turn two's — not one per granted buff.
