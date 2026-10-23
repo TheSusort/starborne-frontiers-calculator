@@ -63,7 +63,7 @@ import {
     announceAccumGains,
     createStatusEngine,
 } from './statusEngine';
-import { CombatEventBus, ShieldApplyAccumulator } from './events';
+import { CombatEventBus, ShieldApplyAccumulator, type CombatEvent } from './events';
 import { detonateContainers, type DetonationRecipe } from './detonation';
 import { synthesizeResisted } from './shared';
 import {
@@ -380,6 +380,20 @@ export interface DeferredEnemyApplication {
      *  read can address. Both cases are correctly skipped by the extension. */
     victimId?: string;
     buffName?: string;
+    /** The enemy an after-damage clause's landing (its state AND its event) is aimed at. Owner
+     *  ruling 2026-10-22: damage resolves first, so a Bomb, DoT, named debuff or control written
+     *  after the damage clause does not land on a ship that damage destroyed — no state, no
+     *  `debuff-applied` / `dot-applied` / `control-applied`, so no on-inflict reaction either. The
+     *  engine drops the whole pair when this enemy is destroyed by the time it drains
+     *  (`landsOnLiving` in engine.ts), and runs `onDropped` in its place. Absent on a pair aimed
+     *  at no single enemy, which always runs. */
+    landsOnId?: string;
+    /** Records the dropped landing (`landing-dropped`, log-only) when the engine drops this pair. */
+    onDropped?: () => void;
+    /** The firing slot's DoT clauses written before this landing's clause
+     *  (`TimedStatus.afterDotClauseIds`): a held DoT among them is written ahead of this pair
+     *  (`landCastDots`), so the slot's landings keep their written order. */
+    afterDotClauseIds?: readonly string[];
 }
 
 /**
@@ -449,10 +463,10 @@ export interface PlayerTurnResult {
     castStasisStandsOn: (victimId: string) => boolean;
     resistedEnemyDebuffs: ActiveBuff[];
     /**
-     * Enemy-debuff landings this cast decided but held back, because their clause follows a damage
-     * clause in the same firing slot (user-confirmed game rule: "deals X% damage and inflicts
-     * Defense Down" resolves the damage first). Each pair's `applyState` performs the deferred
-     * `applyTimedAbilityStatus` write; `emitEvents` emits its discrete `debuff-applied`. The
+     * Enemy-debuff, DoT and Bomb landings this cast decided but held back, because their clause
+     * follows a damage clause in the same firing slot (user-confirmed game rule: "deals X% damage
+     * and inflicts Defense Down" resolves the damage first). Each pair's `applyState` performs the
+     * deferred write; `emitEvents` emits its discrete `debuff-applied` / `dot-applied`. The
      * landing roll already happened.
      *
      * The ENGINE must flush these once this turn's damage has landed (`flushDeferredEnemyApplications`),
@@ -2484,6 +2498,19 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             ...(preDecidedProcs !== undefined ? { preDecidedProcs } : {}),
         });
 
+    /** The `landing-dropped` record of one landing on `victimId` its cast's damage pre-empted
+     *  (`DeferredEnemyApplication.onDropped`). Log-only: no listener reacts to it. */
+    const landingDropped = (victimId: string, labels: readonly string[]) => (): void => {
+        for (const label of labels)
+            bus.emit({
+                type: 'landing-dropped',
+                sourceId: actor.id,
+                targetId: victimId,
+                round: r,
+                label,
+            });
+    };
+
     // LIVE per-target debuff-landing chance. The sole producer of
     // landing chance: recomputed each turn from the acting actor's effective hacking (× this
     // actor's affinity) vs the TURN TARGET's effective security. `liveDebuffLandingChance` is
@@ -3905,7 +3932,12 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     /** Cast-time statuses that had recipients but whose gate every one of them turned away — the
      *  clause did not happen, so its paired control must not announce one. */
     const castGateRejectedStatusNames = new Set<string>();
-    const castLandedRecipients = new Map<string, { id: string; victim: CombatActor }[]>();
+    /** `held` is the landing's pair when its clause follows the damage clause — the paired
+     *  `control-applied` waits with it and is dropped with it (`DeferredEnemyApplication.landsOnId`). */
+    const castLandedRecipients = new Map<
+        string,
+        { id: string; victim: CombatActor; held?: DeferredEnemyApplication }[]
+    >();
     /** Which timed debuffs THIS cast landed on which victim — the input an inflicted-scope
      *  `extend-status` needs (Asphyxiator). Written at the one landing funnel below, read by the
      *  extension block near the end of the turn. */
@@ -4006,6 +4038,17 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 anyGateRejected = true;
                 continue;
             }
+            // A sub-attack's after-damage clause rolls once its damage has resolved, so a victim
+            // that damage destroyed gets nothing from it (see `DeferredEnemyApplication.landsOnId`)
+            // — no roll, no landing, no resist, only the `landing-dropped` record. A passive riding
+            // the hits is a reaction to them and still lands on the dying ship (R141).
+            if (resolvedVictim.destroyedRound !== undefined && status.perHit !== true) {
+                collect?.push({
+                    applyState: () => {},
+                    emitEvents: landingDropped(resolvedVictim.id, [status.payload.buffName]),
+                });
+                continue;
+            }
             anyAttempted = true;
 
             // #590 R1: a weaker same-family debuff onto a victim already holding a stronger one
@@ -4097,6 +4140,17 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                     },
                     victimId: vid,
                     buffName: status.payload.buffName,
+                    ...(status.afterDotClauseIds
+                        ? { afterDotClauseIds: status.afterDotClauseIds }
+                        : {}),
+                    ...(status.perHit !== true
+                        ? {
+                              landsOnId: resolvedVictim.id,
+                              onDropped: landingDropped(resolvedVictim.id, [
+                                  status.payload.buffName,
+                              ]),
+                          }
+                        : {}),
                 };
                 if (collect) {
                     collect.push(pair);
@@ -4157,7 +4211,11 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                         landedOn = [];
                         castLandedRecipients.set(status.payload.buffName, landedOn);
                     }
-                    landedOn.push({ id: emitTargetId, victim: resolvedVictim });
+                    landedOn.push({
+                        id: emitTargetId,
+                        victim: resolvedVictim,
+                        ...(status.afterDamageClause === true ? { held: pair } : {}),
+                    });
                 }
                 anyLanded = true;
             } else if (collect) {
@@ -5107,7 +5165,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             const paired = timedEnemyBySlot.find(
                 (s) => ridesThisCast(s) && s.payload.buffName === pairedName
             );
-            for (const { id, victim } of castLandedRecipients.get(pairedName) ?? []) {
+            for (const { id, victim, held } of castLandedRecipients.get(pairedName) ?? []) {
                 const victimCtx = paired
                     ? statusGateOverlay(recipientGateCtx(victim), victim.id, paired)
                     : recipientGateCtx(victim);
@@ -5115,12 +5173,20 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 // the way the status's gate read it (`castSelfShieldOverlay`).
                 const casterAndVictim = withVictimHalf(ctx, victimCtx);
                 if (
-                    conditionsMet(
+                    !conditionsMet(
                         ctrl.conditions,
                         paired ? castSelfShieldOverlay(casterAndVictim, paired) : casterAndVictim
                     )
                 )
-                    emitControl(effect, id);
+                    continue;
+                if (held) {
+                    // Announced just ahead of its held status's `debuff-applied`.
+                    const emitStatus = held.emitEvents;
+                    held.emitEvents = (subAttackIndex) => {
+                        emitControl(effect, id);
+                        emitStatus(subAttackIndex);
+                    };
+                } else emitControl(effect, id);
             }
             continue;
         }
@@ -5662,13 +5728,14 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // engine detonates each footprint victim's own containers, adding each victim's own live
         // Inc. DoT Damage Up to the recipe's `incomingDotPct`. detonationDamage stays 0.
         //
-        // OWN-STACK PROTECTION: the engine consumes this recipe at the END of the positional apply,
-        // i.e. AFTER Step 3 (applyNewDoTs) below has appended this cast's own DoTs — so without a
-        // guard a detonate-and-reinflict skill would eat the very stack it just planted (the exact
-        // hazard Step 2.95's before-Step-3 ordering prevents on the non-positional path: a bomb
-        // planted by such a skill could then NEVER survive to count down and burst). Snapshot the
-        // entries that exist RIGHT NOW — identities, so it holds across every victim this cast may
-        // append to (the anchor's containers plus any splash victim's) regardless of order.
+        // OWN-STACK PROTECTION: the engine consumes this recipe at the END of the positional apply.
+        // A DoT clause written ahead of the damage is appended by Step 3 below before then, and a
+        // multi-hit cast's after-damage DoTs are written at its first sub-attack's end — so without
+        // a guard a detonate-and-reinflict skill would eat the very stack it just planted (the
+        // exact hazard Step 2.95's before-Step-3 ordering prevents on the non-positional path: a
+        // bomb planted by such a skill could then NEVER survive to count down and burst). Snapshot
+        // the entries that exist RIGHT NOW — identities, so it holds across every victim this cast
+        // may append to (the anchor's containers plus any splash victim's) regardless of order.
         const detonatable = new Set<ActiveDoTStack | PendingBomb>();
         const collectDetonatable = (v: {
             corrosionEntries: ActiveDoTStack[];
@@ -5722,6 +5789,62 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 }),
         });
     }
+
+    /** A DoT or Bomb clause written after the firing skill's damage clause. */
+    const dotAfterDamage = (dot: DoTApplicationEntry): boolean => {
+        const ab = firingSkill?.abilities.find((a) => a.id === dot.id);
+        return ab !== undefined && clausePhase(firingSkill!.abilities, ab) === 'after-damage';
+    };
+    /**
+     * Lands this cast's landed `dots` on enemy `victimId` in written order: a clause written ahead
+     * of the damage clause now, one written after it with the after-damage landings, so the damage
+     * resolves first and a ship it destroys takes none of them (`DeferredEnemyApplication.landsOnId`).
+     * `land` appends the entries and announces each `dot-applied` through the emitter it is handed.
+     * Returns whether any were held.
+     */
+    const landCastDots = (
+        victimId: string,
+        dots: DoTApplicationConfig,
+        land: (dots: DoTApplicationConfig, emit: (event: CombatEvent) => void) => void
+    ): boolean => {
+        const now = dots.filter((d) => !dotAfterDamage(d));
+        const held = dots.filter(dotAfterDamage);
+        if (now.length > 0) land(now, (event) => bus.emit(event));
+        if (held.length === 0) return false;
+        const events: CombatEvent[] = [];
+        const pair: DeferredEnemyApplication = {
+            applyState: () => land(held, (event) => events.push(event)),
+            emitEvents: () => {
+                for (const event of events.splice(0, events.length)) bus.emit(event);
+            },
+            landsOnId: victimId,
+            onDropped: landingDropped(
+                victimId,
+                held.map((d) => dotResistLabel(d.type, d.tier))
+            ),
+        };
+        // Ahead of the first held debuff written after these DoTs ("inflicts Corrosion II … and
+        // Stasis"), so the DoT is written, announced and dated (`appliedSeq`) before it.
+        const at = deferredEnemyApplications.findIndex((p) =>
+            p.afterDotClauseIds?.some((id) => held.some((d) => d.id === id))
+        );
+        if (at < 0) deferredEnemyApplications.push(pair);
+        else deferredEnemyApplications.splice(at, 0, pair);
+        return true;
+    };
+    /** Runs an inflicted-scope extension over enemy `victimId`'s fresh entries once they exist:
+     *  now, or after its held DoTs are written when `held` (`landCastDots`). */
+    const afterCastDots = (victimId: string, held: boolean, extend: () => void): void => {
+        if (!held) {
+            extend();
+            return;
+        }
+        deferredEnemyApplications.push({
+            applyState: extend,
+            emitEvents: () => {},
+            landsOnId: victimId,
+        });
+    };
 
     // Step 3: Apply new DoT stacks from this round's skill (subject to landing roll).
     // Block Debuff: when the turn target is immune, every cast-side DoT is BLOCKED whole — one
@@ -5786,32 +5909,34 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // was never resisted here.
         dotsLanded = !dotsConfig.some(rollsOnPrimary) || landedPrimaryDots.length > 0;
         if (landedPrimaryDots.length > 0) reportedDots = landedPrimaryDots;
-        applyNewDoTs({
-            dotsConfig: landedPrimaryDots,
-            effectiveAttack,
-            detonationDamageModifier: dmgStats.detonationDamageModifier,
-            splashModifier: dmgStats.bombSplashModifier,
-            sourceId: actor.id,
-            corrosionEntries,
-            infernoEntries,
-            genericDoTEntries,
-            pendingBombs,
-            nextAppliedSeq: statusEngine.nextAppliedSeq,
-            emitDotApplied: (dotType, stacks, tier, appliedSeq, preDecidedProcsPerStack) =>
-                bus.emit({
-                    type: 'dot-applied',
-                    sourceId: actor.id,
-                    targetId: enemy.id,
-                    round: r,
-                    dotType,
-                    stacks,
-                    tier,
-                    appliedSeq,
-                    ...(critHits > 0 ? { viaCrit: true } : {}),
-                    sourceSlot: action,
-                    ...(preDecidedProcsPerStack ? { preDecidedProcsPerStack } : {}),
-                }),
-        });
+        const primaryDotsHeld = landCastDots(enemy.id, landedPrimaryDots, (dots, emit) =>
+            applyNewDoTs({
+                dotsConfig: dots,
+                effectiveAttack,
+                detonationDamageModifier: dmgStats.detonationDamageModifier,
+                splashModifier: dmgStats.bombSplashModifier,
+                sourceId: actor.id,
+                corrosionEntries,
+                infernoEntries,
+                genericDoTEntries,
+                pendingBombs,
+                nextAppliedSeq: statusEngine.nextAppliedSeq,
+                emitDotApplied: (dotType, stacks, tier, appliedSeq, preDecidedProcsPerStack) =>
+                    emit({
+                        type: 'dot-applied',
+                        sourceId: actor.id,
+                        targetId: enemy.id,
+                        round: r,
+                        dotType,
+                        stacks,
+                        tier,
+                        appliedSeq,
+                        ...(critHits > 0 ? { viaCrit: true } : {}),
+                        sourceSlot: action,
+                        ...(preDecidedProcsPerStack ? { preDecidedProcsPerStack } : {}),
+                    }),
+            })
+        );
 
         // Accumulators each draw their own landing decision. Applied before the
         // inflicted-scope extensions below so those reach them.
@@ -5836,6 +5961,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                             action,
                             preDecidedProcs
                         ),
+                    landsOnId: enemy.id,
+                    onDropped: landingDropped(enemy.id, [buffName]),
                 });
             },
             blocked: () =>
@@ -5861,21 +5988,29 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // either: nothing was appended, and skipping keeps the deterministic extendChanceGate
         // schedule free of phantom draws.
         if (castRoll || landedPrimaryDots.length > 0 || accumulatorsLanded > 0) {
-            extendInflictedDoTs({
-                abilities: [...(firingSkill?.abilities ?? []), ...(passiveSkill?.abilities ?? [])],
-                ctx,
-                effectiveCritDamage,
-                extendChanceGate,
-                holder: primaryHolder,
-                before: primaryBefore,
-                immune: extensionImmune(undefined),
-            });
-            extendInflictedStatusDoTs({
-                abilities: [...(firingSkill?.abilities ?? []), ...(passiveSkill?.abilities ?? [])],
-                ctx,
-                holder: primaryHolder,
-                before: primaryBefore,
-                immune: extensionImmune(undefined),
+            afterCastDots(enemy.id, primaryDotsHeld, () => {
+                extendInflictedDoTs({
+                    abilities: [
+                        ...(firingSkill?.abilities ?? []),
+                        ...(passiveSkill?.abilities ?? []),
+                    ],
+                    ctx,
+                    effectiveCritDamage,
+                    extendChanceGate,
+                    holder: primaryHolder,
+                    before: primaryBefore,
+                    immune: extensionImmune(undefined),
+                });
+                extendInflictedStatusDoTs({
+                    abilities: [
+                        ...(firingSkill?.abilities ?? []),
+                        ...(passiveSkill?.abilities ?? []),
+                    ],
+                    ctx,
+                    holder: primaryHolder,
+                    before: primaryBefore,
+                    immune: extensionImmune(undefined),
+                });
             });
         }
     }
@@ -5980,6 +6115,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         const victimDots = coveredDots.get(rid) ?? [];
         /** Whether this enemy's DoT landing was attempted and not wholly resisted. */
         let dotsReached = false;
+        /** Whether its landed DoTs wait for the cast's damage (`landCastDots`). */
+        let victimDotsHeld = false;
         if (victimDots.length > 0) {
             const plan = planCoveredDots(victim, victimDots);
             if (plan.blocked) {
@@ -5990,32 +6127,40 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 }
             } else if (plan.firstLanded || plan.landed.length > 0) {
                 dotsReached = true;
-                applyNewDoTs({
-                    dotsConfig: plan.landed,
-                    effectiveAttack,
-                    detonationDamageModifier: dmgStats.detonationDamageModifier,
-                    splashModifier: dmgStats.bombSplashModifier,
-                    sourceId: actor.id,
-                    corrosionEntries: victim.corrosionEntries,
-                    infernoEntries: victim.infernoEntries,
-                    genericDoTEntries: victim.genericDoTEntries,
-                    pendingBombs: victim.pendingBombs,
-                    nextAppliedSeq: statusEngine.nextAppliedSeq,
-                    emitDotApplied: (dotType, stacks, tier, appliedSeq, preDecidedProcsPerStack) =>
-                        bus.emit({
-                            type: 'dot-applied',
-                            sourceId: actor.id,
-                            targetId: rid,
-                            round: r,
+                victimDotsHeld = landCastDots(rid, plan.landed, (dots, emit) =>
+                    applyNewDoTs({
+                        dotsConfig: dots,
+                        effectiveAttack,
+                        detonationDamageModifier: dmgStats.detonationDamageModifier,
+                        splashModifier: dmgStats.bombSplashModifier,
+                        sourceId: actor.id,
+                        corrosionEntries: victim.corrosionEntries,
+                        infernoEntries: victim.infernoEntries,
+                        genericDoTEntries: victim.genericDoTEntries,
+                        pendingBombs: victim.pendingBombs,
+                        nextAppliedSeq: statusEngine.nextAppliedSeq,
+                        emitDotApplied: (
                             dotType,
                             stacks,
                             tier,
                             appliedSeq,
-                            ...(victimCrit ? { viaCrit: true } : {}),
-                            sourceSlot: action,
-                            ...(preDecidedProcsPerStack ? { preDecidedProcsPerStack } : {}),
-                        }),
-                });
+                            preDecidedProcsPerStack
+                        ) =>
+                            emit({
+                                type: 'dot-applied',
+                                sourceId: actor.id,
+                                targetId: rid,
+                                round: r,
+                                dotType,
+                                stacks,
+                                tier,
+                                appliedSeq,
+                                ...(victimCrit ? { viaCrit: true } : {}),
+                                sourceSlot: action,
+                                ...(preDecidedProcsPerStack ? { preDecidedProcsPerStack } : {}),
+                            }),
+                    })
+                );
             }
         }
         // The same accumulator apply the primary runs, against this enemy's own containers,
@@ -6038,6 +6183,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                             action,
                             preDecidedProcs
                         ),
+                    landsOnId: rid,
+                    onDropped: landingDropped(rid, [buffName]),
                 });
             },
             blocked: () =>
@@ -6057,21 +6204,23 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         if (!dotsReached && victimAccumulatorsLanded === 0) continue;
         // A covered enemy's fresh DoT, Bomb or Echoing Burst is extended too (owner ruling
         // 2026-09-02), its crit gate reading that enemy's own crit.
-        extendInflictedDoTs({
-            abilities: [...(firingSkill?.abilities ?? []), ...(passiveSkill?.abilities ?? [])],
-            ctx: victimCtx,
-            effectiveCritDamage,
-            extendChanceGate,
-            holder: victim,
-            before: victimBefore,
-            immune: extensionImmune(rid),
-        });
-        extendInflictedStatusDoTs({
-            abilities: [...(firingSkill?.abilities ?? []), ...(passiveSkill?.abilities ?? [])],
-            ctx: victimCtx,
-            holder: victim,
-            before: victimBefore,
-            immune: extensionImmune(rid),
+        afterCastDots(rid, victimDotsHeld, () => {
+            extendInflictedDoTs({
+                abilities: [...(firingSkill?.abilities ?? []), ...(passiveSkill?.abilities ?? [])],
+                ctx: victimCtx,
+                effectiveCritDamage,
+                extendChanceGate,
+                holder: victim,
+                before: victimBefore,
+                immune: extensionImmune(rid),
+            });
+            extendInflictedStatusDoTs({
+                abilities: [...(firingSkill?.abilities ?? []), ...(passiveSkill?.abilities ?? [])],
+                ctx: victimCtx,
+                holder: victim,
+                before: victimBefore,
+                immune: extensionImmune(rid),
+            });
         });
     }
 

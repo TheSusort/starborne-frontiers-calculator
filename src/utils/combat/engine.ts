@@ -178,6 +178,7 @@ import { buildBuffDurationExtensionByOwner } from './buffDurationExtension';
 import { isDamageClause } from './castClauseOrder';
 import {
     CastNamesBeforeDamage,
+    DeferredEnemyApplication,
     HealingRuntimeCtx,
     PlayerActorRuntime,
     PlayerRoundCtx,
@@ -10651,8 +10652,10 @@ export function runCombat(rawInput: CombatEngineInput): {
          * Intra-cast clause order: apply the landings this cast held back because their clause
          * follows its damage clause (playerTurn's `deferredEnemyApplications`). Called at every
          * turn site once that turn's damage has landed — and unconditionally, so a cast
-         * that resolved non-positionally, whiffed, or killed its target still applies its debuff
-         * rather than dropping it. Runs BEFORE the actor's Post-Turn decrement, so the status keeps
+         * that resolved non-positionally or whiffed still applies its debuff rather than dropping
+         * it. A pair aimed at an enemy that damage destroyed is dropped whole (`landsOnLiving`),
+         * leaving only its `landing-dropped` record.
+         * Runs BEFORE the actor's Post-Turn decrement, so the status keeps
          * its normal window; and before the turn's intent drain, so reactions to the
          * `debuff-applied` still resolve within this turn (just after the damage, as the rule says).
          *
@@ -10673,11 +10676,21 @@ export function runCombat(rawInput: CombatEngineInput): {
          * matters only where the engine deliberately separates them (the sub-attack boundary
          * wiring).
          */
+        /** Whether a held after-damage landing still lands: its enemy (`landsOnId`) was not
+         *  destroyed by the cast's damage. Owner ruling 2026-10-22 — see
+         *  `DeferredEnemyApplication.landsOnId`. */
+        const landsOnLiving = (pending: DeferredEnemyApplication): boolean =>
+            pending.landsOnId === undefined ||
+            allActorsById.get(pending.landsOnId)?.destroyedRound === undefined;
         const flushDeferredEnemyApplications = (
             deferred: PlayerTurnResult['deferredEnemyApplications']
         ): void => {
             if (deferred.length === 0) return;
             for (const pending of deferred.splice(0, deferred.length)) {
+                if (!landsOnLiving(pending)) {
+                    pending.onDropped?.();
+                    continue;
+                }
                 pending.applyState();
                 pending.emitEvents();
             }
@@ -11153,10 +11166,18 @@ export function runCombat(rawInput: CombatEngineInput): {
                         // them: with one sub-attack there is no next reader, so the write and the
                         // emission both stay at the flush site.
                         if (sub.index < sel.scalars.hits - 1) {
-                            const pending = sel.deferredEnemyApplications.splice(
-                                0,
-                                sel.deferredEnemyApplications.length
-                            );
+                            // A landing on a ship this sub-attack destroyed is dropped, and only
+                            // its `landing-dropped` record rides this sub-attack's emission step.
+                            const pending = sel.deferredEnemyApplications
+                                .splice(0, sel.deferredEnemyApplications.length)
+                                .map((pair): DeferredEnemyApplication =>
+                                    landsOnLiving(pair)
+                                        ? pair
+                                        : {
+                                              applyState: () => {},
+                                              emitEvents: () => pair.onDropped?.(),
+                                          }
+                                );
                             for (const pair of pending) pair.applyState();
                             bufferDebuffEmitters(sub.index, pending);
                         }

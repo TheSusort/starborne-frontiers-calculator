@@ -35,6 +35,7 @@ export function formatCombatLogText(
         let text = label(t.targetId);
         if (t.amount !== undefined) text += ` ${Math.round(t.amount)}`;
         if (t.convertedToDot) text += ' converted to DoT';
+        if (t.droppedLandings) text += ` (destroyed before ${t.droppedLandings.join(', ')})`;
         if (t.didCrit) text += ' crit';
         if (t.didHit === false) text += ' miss';
         if (t.overheal) text += ` overheal ${Math.round(t.overheal)}`;

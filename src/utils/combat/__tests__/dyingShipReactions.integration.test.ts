@@ -13,11 +13,17 @@
  * those debuffs do not fire (Provider is silent). The next sub-attack moves on to the next enemy,
  * where Provider reacts as normal.
  *
+ * Owner ruling 2026-10-22: a debuff CLAUSE of the cast written after its damage clause (Curator's
+ * "deals 60% damage to all enemies, then inflicts Attack Down III and Crit Power Down III") does
+ * not land on a ship that damage destroyed. R141 is about a passive reacting to the hit
+ * (Enforcer's crit Shred), which still lands.
+ *
  * Hayyan ("When a debuff is inflicted on an ally, this Unit repairs the ally for 6% of this Unit's
- * max HP") under the same two rulings: an ally killed by the debuffing hit keeps the debuffs and
- * gets no repair (R141; a reaction cannot revive a destroyed ship, R167), a living ally struck by
- * the same cast still gets its one repair, and Hayyan killed by the debuffing hit still repairs
- * the others for that cast (R117) and never again.
+ * max HP") under these rulings: an ally killed by Curator's hit takes none of its debuffs and gets
+ * no repair (a reaction cannot revive a destroyed ship, R167), a living ally struck by the same
+ * cast still gets its one repair, and Hayyan killed by the debuffing hit still repairs the others
+ * for that cast (R117) and never again. Enforcer's lethal crit Shred on an ally lands (R141) and
+ * draws no repair.
  *
  * Real parsed kits (buildTraceShip, refit 4). Every scenario runs with the subject on the player
  * side and mirrored onto the enemy side; each has a control in which the victim survives.
@@ -282,10 +288,11 @@ describe.each<Placement>(['player', 'enemy'])('Hayyan on the %s side', (placemen
             return { events, id, h, a, b, c };
         };
 
-        it('the dead ally keeps its debuffs and gets no repair; the living ally gets one', () => {
+        it('the dead ally takes none of the debuffs and gets no repair; the living ally gets one', () => {
             const s = setup(500);
             expect(destroyed(s.events, s.id(s.a))).toBe(true);
-            expect(landed(s.events, s.id(s.c), s.id(s.a))).toEqual([
+            expect(landed(s.events, s.id(s.c), s.id(s.a))).toEqual([]);
+            expect(landed(s.events, s.id(s.c), s.id(s.b))).toEqual([
                 'Attack Down III',
                 'Crit Power Down III',
             ]);
@@ -368,10 +375,7 @@ describe.each<Placement>(['player', 'enemy'])('Hayyan on the %s side', (placemen
         it('she repairs B for that cast (R117), never herself, and not in round 2', () => {
             const s = setup(500);
             expect(destroyed(s.events, s.id(s.h))).toBe(true);
-            expect(landed(s.events, s.id(s.c), s.id(s.h))).toEqual([
-                'Attack Down III',
-                'Crit Power Down III',
-            ]);
+            expect(landed(s.events, s.id(s.c), s.id(s.h))).toEqual([]);
             expect(repairsBy(s.events, s.id(s.h), s.id(s.b), 1)).toBe(1);
             expect(repairsBy(s.events, s.id(s.h), s.id(s.h))).toBe(0);
             // Curator debuffs B again in round 2; dead Hayyan does not answer it.

@@ -9,9 +9,12 @@
  *
  * FIXTURE STRATEGY (mirrors positionalDamage.integration.test.ts):
  * A positional player attacker at M4 fires a basic attack at the FRONT enemy with a BASE
- * (origin-only) pattern, AND its active also applies a Blast bomb to that same anchor enemy.
- * The firing hit kills the bombed front enemy (HP sized at/below the direct damage) WHILE the
- * bomb is still pending (countdown ≥ 1 — never decremented before death). On death the front
+ * (origin-only) pattern, AND its active also applies a Blast bomb to that same anchor enemy. The
+ * Bomb clause is written AHEAD of the damage clause, so it lands before the hit (clauses resolve
+ * in written order); a Bomb written after the damage does not land on a ship that damage
+ * destroys (owner ruling 2026-10-22, pinned at the end of this file). The firing hit kills the
+ * bombed front enemy (HP sized at/below the direct damage) WHILE the bomb is still pending
+ * (countdown ≥ 1 — never decremented before death). On death the front
  * enemy splashes to its LIVING adjacent same-side ally (a high-HP enemy at M3, which is OUTSIDE
  * the origin-only footprint so it takes NO direct damage — isolating the splash). The splash to
  * M3 is observed via `round.perTargetDamage['enemy-mid']`, which the engine writes for the splash
@@ -48,23 +51,32 @@ const BOMB_TIER = 200; // splashPct = tier/4 = 50%
 const BOMB_STACKS = 2;
 const BOMB_DURATION = 3; // countdown ≥ 1 → still pending at the round-1 kill
 
-// A single-hit basic attack that ALSO applies a Blast bomb to the target on cast.
+const bombClause = (): Ability =>
+    ab({
+        type: 'dot',
+        target: 'enemy',
+        config: {
+            type: 'dot',
+            dotType: 'bomb',
+            tier: BOMB_TIER,
+            stacks: BOMB_STACKS,
+            duration: BOMB_DURATION,
+        },
+    });
+const strikeClause = (): Ability =>
+    ab({ type: 'damage', target: 'enemy', config: { type: 'damage', multiplier: 100 } });
+
+// A single-hit basic attack that applies a Blast bomb to the target first ("inflicts Bomb and
+// deals 100% damage").
 const bombAndStrike = (): ShipSkills['slots'][number] => ({
     slot: 'active',
-    abilities: [
-        ab({ type: 'damage', target: 'enemy', config: { type: 'damage', multiplier: 100 } }),
-        ab({
-            type: 'dot',
-            target: 'enemy',
-            config: {
-                type: 'dot',
-                dotType: 'bomb',
-                tier: BOMB_TIER,
-                stacks: BOMB_STACKS,
-                duration: BOMB_DURATION,
-            },
-        }),
-    ],
+    abilities: [bombClause(), strikeClause()],
+});
+
+// The same two clauses in the corpus's order ("deals 100% damage and inflicts Bomb").
+const strikeThenBomb = (): ShipSkills['slots'][number] => ({
+    slot: 'active',
+    abilities: [strikeClause(), bombClause()],
 });
 
 const parsedTarget = (selection: ParsedTarget['selection']): ParsedTarget => ({
@@ -585,5 +597,48 @@ describe('bomb-splash-on-death (positional core mechanic)', () => {
 
         // The splash must be 1.5× the default (splashModifier flows through to the helper).
         expect(round.perActorSplash?.['enemy-mid']).toBe(expectedSplash);
+    });
+
+    // Owner ruling 2026-10-22: damage resolves first, so a Bomb written AFTER the damage clause
+    // never reaches a ship that damage destroys — nothing to splash, no `dot-applied` naming it.
+    describe('a Bomb written after the lethal damage clause', () => {
+        const strikeThenBombInput = (frontHp: number) => {
+            const bus = createEventBus();
+            const bombed: string[] = [];
+            const destroyed: string[] = [];
+            bus.on('dot-applied', (e: Extract<CombatEvent, { type: 'dot-applied' }>) => {
+                if (e.dotType === 'bomb') bombed.push(e.targetId);
+            });
+            bus.on('ship-destroyed', (e: Extract<CombatEvent, { type: 'ship-destroyed' }>) =>
+                destroyed.push(e.actorId)
+            );
+            const input = BASE({
+                shipSkills: { slots: [strikeThenBomb()] },
+                enemyAttackers: [
+                    enemyAt('enemy-front', 'M4', frontHp),
+                    enemyAt('enemy-mid', 'M3', 1_000_000_000),
+                ],
+                bus,
+            });
+            return { input, bombed, destroyed };
+        };
+
+        it('does not land on the ship the hit destroys, so nothing splashes', () => {
+            idc = 0;
+            const { input, bombed, destroyed } = strikeThenBombInput(5000);
+            const round = runCombat(input).rounds[0];
+            expect(destroyed).toEqual(['enemy-front']);
+            expect(bombed).toEqual([]);
+            expect(round.perActorSplash).toBeUndefined();
+            expect(round.perTargetDamage?.['enemy-mid']).toBeUndefined();
+        });
+
+        it('control: lands on a ship the hit leaves standing', () => {
+            idc = 0;
+            const { input, bombed, destroyed } = strikeThenBombInput(1_000_000_000);
+            runCombat(input);
+            expect(destroyed).toEqual([]);
+            expect(bombed).toEqual(['enemy-front']);
+        });
     });
 });
