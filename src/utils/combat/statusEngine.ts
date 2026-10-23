@@ -45,12 +45,16 @@ export interface AccumGain {
 }
 
 /** Announces the cadence gains `engine` has banked as `buff-applied` events. Called where the tick
- *  happened, so the log nests each under the turn or round that earned it. */
+ *  happened, so the log nests each under the turn or round that earned it. `order` re-sequences
+ *  the batch before it is emitted (the round-start tick orders it by turn priority); without it
+ *  gains are announced in banking order. */
 export function announceAccumGains(
     engine: Pick<StatusEngine, 'takeAccumGains'>,
-    bus: Pick<CombatEventBus, 'emit'>
+    bus: Pick<CombatEventBus, 'emit'>,
+    order?: (gains: AccumGain[]) => AccumGain[]
 ): void {
-    for (const g of engine.takeAccumGains()) {
+    const banked = engine.takeAccumGains();
+    for (const g of order ? order(banked) : banked) {
         bus.emit({
             type: 'buff-applied',
             actorId: g.ownerId,
@@ -576,6 +580,10 @@ export interface StatusEngine {
      *  are exempt (`AbilityStatusBase.source`). Unset → nothing is suppressed, which is what the
      *  statusEngine's own unit fixtures want. */
     setTurnBlockedReader(fn: (actorId: string) => boolean): void;
+    /** Install the engine's destroyed-ship reader. A destroyed ship banks no further per-round
+     *  or per-turn accumulating stacks, neither as the holder nor as the granter; stacks it banked
+     *  before dying stay. Unset → nobody is destroyed. */
+    setDestroyedReader(fn: (actorId: string) => boolean): void;
     /** Aura + accumulating ability statuses whose conditions pass THIS ROUND, with payloads,
      *  for effect folding and snapshot inclusion. `ownerId` selects the player-side carrier
      *  (defaults to 'attacker'). Each status's gate evaluates against ITS CASTER's context —
@@ -928,6 +936,10 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
     const setTurnBlockedReader = (fn: (actorId: string) => boolean): void => {
         isTurnBlockedReader = fn;
     };
+    let isDestroyedReader: (actorId: string) => boolean = () => false;
+    const setDestroyedReader = (fn: (actorId: string) => boolean): void => {
+        isDestroyedReader = fn;
+    };
     let readingTurnBlock = false;
     /** A passive-slot status from a SHIP skill contributes nothing while its caster is
      *  turn-blocked. The two exemptions are the ruling's own: a status from EQUIPMENT, and any
@@ -1279,6 +1291,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
             (c) =>
                 c.trigger === 'per-round' &&
                 (granterId === undefined || c.granterId === granterId) &&
+                !isDestroyedReader(c.granterId) &&
                 !(
                     c.sourceSlot !== undefined &&
                     shipPassiveSuppressed({
@@ -1298,6 +1311,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         shares: Map<string, number>,
         tick?: number
     ): void => {
+        if (isDestroyedReader(ownerId)) return;
         let total = 0;
         for (const n of shares.values()) total += n;
         const before = state.stacks;
@@ -2727,6 +2741,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         sourceFired,
         setLandsTimedEnemyApplication,
         setTurnBlockedReader,
+        setDestroyedReader,
         setBeforeTimedEnemyApplication,
         snapshot,
         decrementPlayer,

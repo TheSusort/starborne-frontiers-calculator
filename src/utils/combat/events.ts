@@ -49,6 +49,12 @@ export interface ReactiveStamp {
     triggerActorId?: string;
 }
 
+/** One timed status's remaining turns, as a `status-snapshot` reports it. */
+export interface StatusDuration {
+    buffName: string;
+    turnsRemaining: number;
+}
+
 export type CombatEvent =
     | {
           type: 'round-started';
@@ -971,7 +977,8 @@ export type CombatEvent =
            *  passive slot) landing on one victim, right after the firing hit. It
            *  emits no `attacked` — it is not a separate attack — so the combat log adds `damage`
            *  to the open attack row's entry for `targetId`. `damage` is on the same basis as
-           *  `attacked.damage`: post-victim-defence, pre-funnel. No combat listener subscribes. */
+           *  `attacked.takenDamage`: what the victim took (`loggedHitFigures`), emitted after the
+           *  funnel resolved the instance. No combat listener subscribes. */
           type: 'passive-slot-damage';
           attackerId: string;
           targetId: string;
@@ -984,6 +991,31 @@ export type CombatEvent =
           round: number;
           buffNames: string[];
           debuffNames: string[];
+          /** The remaining turns of every timed status in the actor's own self-buff and
+           *  per-victim debuff stores (`timedStatusDurations` in triggers.ts). Finite numeric
+           *  windows only: aura, accumulating and persistent statuses, hit-counted statuses with
+           *  no turn window, and the DoT/Bomb/Echoing Burst entry containers are absent. One row
+           *  per store entry, so an independently stacking status can appear more than once.
+           *  Absent on hand-built event streams. */
+          buffDurations?: StatusDuration[];
+          debuffDurations?: StatusDuration[];
+      }
+    /** LOG-ONLY. The non-defence incoming factor one direct hit was priced with, read in the
+     *  damage funnel after a partial incoming block (Ironclad) is folded in — the product
+     *  `composeIncomingFactor` / `composeIncomingFactorWithBlock` floor at the 70% reduction cap.
+     *  `block` names the incoming-block outcome: a `'full'` block (Shadowguard) zeroes the hit
+     *  outside the cap and leaves `factor` as composed. Emitted only for a hit whose caller
+     *  supplied its victim-side factors (`cause.redirectBasis`); a hit kind that folds no
+     *  incoming composition emits nothing. A Protection chunk of such a hit emits one row per
+     *  protector, `victimId` = the protector, with the protector's own factor and `block:
+     *  'none'` (a share rolls no block). No combat listener subscribes. */
+    | {
+          type: 'hit-incoming-factor';
+          attackerId?: string;
+          victimId: string;
+          round: number;
+          factor: number;
+          block: 'none' | 'partial' | 'full';
       }
     /** Emitted when a player actor is attacked. `targetId` is the attacked actor;
      *  `attackerId` is the attacker. `didCrit` is the individual hit's crit outcome
@@ -1005,8 +1037,9 @@ export type CombatEvent =
            *  aggregate, and NOT what the victim ended up taking. Pre-funnel: a Protection cascade
            *  may have moved a slice of it to a protector, an incoming-block proc may have shaved
            *  one. Present only when a damage aggregate is in scope. The combat log's row
-           *  `amount` reads this, for the primary target and splash alike, except on a `protectionSplit` hit. Anything sized on what the victim TOOK reads `takenDamage`
-           *  below. */
+           *  `amount` reads `takenDamage` below and falls back to this only where that is absent
+           *  (the non-positional path). Anything sized on what the victim TOOK reads
+           *  `takenDamage`. */
           damage?: number;
           /** What this victim actually TOOK from this sub-attack: the funnel's own recorded
            *  intake (`VictimDamageOutcome.incomingBooked`) — post-Protection-cascade,

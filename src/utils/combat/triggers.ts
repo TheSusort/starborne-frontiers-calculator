@@ -71,7 +71,13 @@ import {
 } from './bombCountdown';
 import { liveGateConditions } from './abilityStatusGating';
 import { leaderScaledAttack } from './preFight/types';
-import { CombatEvent, CombatEventBus, CombatEventType, ShieldApplyAccumulator } from './events';
+import {
+    CombatEvent,
+    CombatEventBus,
+    CombatEventType,
+    ShieldApplyAccumulator,
+    type StatusDuration,
+} from './events';
 import {
     CombatActor,
     ActiveDoTStack,
@@ -3734,6 +3740,35 @@ export function selfBuffNamesForOwners(statusEngine: StatusEngine, ownerIds: str
     return [...names];
 }
 
+/** The remaining turns of every timed status `actorId` holds: its self-buff store and its
+ *  per-victim debuff store, both scheduled and ability-sourced entries (`snapshot` plus
+ *  `timedAbilityStatuses`, which together cover each timed map). Only finite numeric windows are
+ *  reported — the `'recurring'` and `'permanent'` sentinels and a hit-counted status's Infinity
+ *  have no countdown. A pure read. */
+export function timedStatusDurations(
+    statusEngine: StatusEngine,
+    actorId: string
+): { buffs: StatusDuration[]; debuffs: StatusDuration[] } {
+    const finite = (rows: ActiveBuff[]): StatusDuration[] =>
+        rows.flatMap((ab) =>
+            typeof ab.turnsRemaining === 'number' && Number.isFinite(ab.turnsRemaining)
+                ? [{ buffName: ab.buffName, turnsRemaining: ab.turnsRemaining }]
+                : []
+        );
+    const self = statusEngine.snapshot(actorId);
+    const enemy = statusEngine.snapshot(undefined, actorId);
+    return {
+        buffs: finite([
+            ...self.activeSelfBuffs,
+            ...statusEngine.timedAbilityStatuses('self', actorId).map((s) => s.active),
+        ]),
+        debuffs: finite([
+            ...enemy.activeEnemyDebuffs,
+            ...statusEngine.timedAbilityStatuses('enemy', undefined, actorId).map((s) => s.active),
+        ]),
+    };
+}
+
 /** Count of DISTINCT owners (out of the given owner ids) currently
  *  holding the named self-buff. Reads the SAME three sources as {@link selfBuffNamesForOwners}
  *  (scheduled activeSelfBuffs + timed ability statuses + aura/accum ability statuses) but per
@@ -4517,7 +4552,9 @@ export function footprintFilteredRecipients(
     // same terms and for the same reason, so it is applied on ALL THREE branches. This is where
     // Chimei's R2 lands: both of its clauses are reactive (`end-of-round` Stealth grant,
     // `start-of-round` repair), so they never touch the cast-path seam.
-    const stateFiltered = narrowByRecipientFilter(baseRecipients, intent.ability.recipientFilter, {
+    // A destroyed ship receives nothing (`isAliveTarget`), whichever event named it.
+    const living = baseRecipients.filter((id) => ctx.isActorAlive?.(id) ?? true);
+    const stateFiltered = narrowByRecipientFilter(living, intent.ability.recipientFilter, {
         holdsStatus: (id, buffName) => ownerHoldsSelfBuff(ctx.statusEngine, id, buffName),
         roleOf: ctx.roleOf,
         // Buff-aware max HP where the healing ctx supplies one (requirement (b) on
@@ -5037,8 +5074,9 @@ function makeReactiveStampingBus(bus: CombatEventBus, duringTurnOf?: string): Co
     };
 }
 
-/** What a reactive damage hit reports back: the hit as thrown, and — when a Protection cascade
- *  split it — what its victim took. */
+/** What a reactive damage hit reports back: the hit as thrown (`dealt`) and what its victim took
+ *  (`taken` — after its incoming-block proc and any Protection split). The log row reads `taken`
+ *  when present. */
 export interface ReactiveHitOutcome {
     dealt: number;
     didCrit: boolean;
@@ -5065,11 +5103,7 @@ function emitReactiveDamageLog(
             sourceId: ownerId,
             targetId: victimId,
             round: ctx.round,
-            amount: outcome.convertedToDot
-                ? 0
-                : outcome.protectionSplit
-                  ? (outcome.taken ?? outcome.dealt)
-                  : outcome.dealt,
+            amount: outcome.convertedToDot ? 0 : (outcome.taken ?? outcome.dealt),
             didCrit: outcome.didCrit,
             ...(outcome.convertedToDot ? { convertedToDot: true as const } : {}),
         });

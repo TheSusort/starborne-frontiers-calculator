@@ -1446,7 +1446,7 @@ describe('buildCombatLog', () => {
         expect(entry.note).toBe('stasis');
     });
 
-    it('cleanse-performed: casterId → actorId, targets empty, note has count', () => {
+    it('cleanse-performed: casterId → actorId, recipients → targets, note has count', () => {
         const events: CombatEvent[] = [
             ev({ type: 'round-started', round: 1 }),
             ev({ type: 'turn-started', actorId: 'A', round: 1 }),
@@ -1455,6 +1455,7 @@ describe('buildCombatLog', () => {
                 casterId: 'A',
                 count: 2,
                 round: 1,
+                targets: ['A', 'B'],
             }),
             ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
             ev({ type: 'round-ended', round: 1 }),
@@ -1465,7 +1466,7 @@ describe('buildCombatLog', () => {
         const entry = entries[0];
         expect(entry.kind).toBe('cleanse');
         expect(entry.actorId).toBe('A');
-        expect(entry.targets).toEqual([]);
+        expect(entry.targets).toEqual([{ targetId: 'A' }, { targetId: 'B' }]);
         expect(entry.note).toContain('2');
     });
 

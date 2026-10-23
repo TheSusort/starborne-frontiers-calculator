@@ -115,17 +115,17 @@ export function directlyDamagesVictim(
 
 /**
  * What a combat-log row for a reactive hit (a counter, a proc, a reflect) shows for its victim:
- * the hit as thrown, the share the victim kept when Protection split it, or no damage at all for
- * a hit converted into a DoT (`convertedToDot`, `amount` 0).
+ * what the victim took (`incomingBooked` — after its incoming-block proc, and only the share it
+ * kept when Protection split the hit), or no damage at all for a hit converted into a DoT
+ * (`convertedToDot`, `amount` 0).
  */
 export function loggedHitFigures(
-    outcome: Pick<VictimDamageOutcome, 'transformedToDot' | 'protectionSplit'> & {
+    outcome: Pick<VictimDamageOutcome, 'transformedToDot'> & {
         incomingBooked: number;
-    },
-    thrown: number
+    }
 ): { amount: number; convertedToDot?: true } {
     if ((outcome.transformedToDot ?? 0) > 0) return { amount: 0, convertedToDot: true };
-    return { amount: outcome.protectionSplit ? outcome.incomingBooked : thrown };
+    return { amount: outcome.incomingBooked };
 }
 
 /** Whether a hit DID DAMAGE to the ship it struck, for "when damaging X" gains (owner ruling
@@ -381,12 +381,12 @@ export function applyPositionalDamage(args: {
      * whole thing into a DoT. A consumer that needs a damage-proportional BASIS must derive it from
      * `outcome` — {@link VictimDamageOutcome.incomingBooked} for what this victim took, plus
      * {@link VictimDamageOutcome.protectionRedirected} for what the attacker dealt elsewhere. It is
-     * left as the raw hit because the hook's other consumers legitimately want it: the combat
-     * log's splash `amount` reports the hit as thrown.
+     * left as the raw hit because the hook's other consumers legitimately want it (the
+     * shield-was-hit test compares the HP that moved against the hit as thrown).
      *
-     * The engine's own `attacked` signal reads BOTH: `damage` for the log-facing field and
-     * `incomingBooked` for `attacked.takenDamage`, which is what a damage-taken reactive and the
-     * >25%-max-HP gate scale off (owner ruling 2026-09-03).
+     * The engine's own `attacked` signal reads BOTH: `damage` for `attacked.damage` and
+     * `incomingBooked` for `attacked.takenDamage`, which is what the combat log's row amount, a
+     * damage-taken reactive and the >25%-max-HP gate read (owner ruling 2026-09-03).
      */
     onVictimResolved?: (
         victim: CombatActor,
