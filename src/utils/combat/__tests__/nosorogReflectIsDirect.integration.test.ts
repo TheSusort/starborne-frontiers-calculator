@@ -679,7 +679,8 @@ describe.each(SIDES)('Nosorog wearing the Reflect set, on the %s side', (placeme
         const obs = bounceOf(placement, nosorogWithReflectSet(), {
             hitter: unit('hitter', hitterWith('Stalwart')),
         });
-        expect(obs.rows).toHaveLength(2);
+        // Two shares, plus the Reflect set bouncing the counter-attack that answers the first.
+        expect(obs.rows).toHaveLength(3);
         expect(obs.counters).toEqual(['hitter>reflector']);
     });
 });

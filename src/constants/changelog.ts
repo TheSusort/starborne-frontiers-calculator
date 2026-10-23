@@ -23,6 +23,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: ships killed by a DoT tick now trigger death effects immediately.',
     "Combat simulator: a killing blow's Bomb or debuff no longer lands on the wreck.",
     "Combat simulator: Voron's and Meatshield's converted-hit DoTs can no longer be cleansed.",
+    'Combat simulator: the Reflect set now also reflects splash damage.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
