@@ -4827,6 +4827,11 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // squad-leader outgoing bonus (R199) and Arcane Siege (R201).
     const outgoingSeparateFactor =
         (1 + (args.preFight?.outgoingDamage ?? 0) / 100) * dmgStats.outgoingSeparateFactor;
+    // The squad-leader secondary-target bonus rides the positional scalars; only covered
+    // footprint cells read it (`victimHitDamageParts`).
+    const secondaryTargetPct = args.preFight?.outgoingDamageSecondaryTargets ?? 0;
+    const secondaryTargetScalar =
+        secondaryTargetPct !== 0 ? { secondaryTargetFactor: 1 + secondaryTargetPct / 100 } : {};
     // Full buff total at the final fold (named layers, extras and layer 4).
     const effectiveCrit =
         args.deferAbilityPerformedToEngine === true
@@ -7483,6 +7488,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
               effectiveCritDamage,
               outgoingDamageBuffPct: dmgStats.totals.outgoingDamageBuff,
               outgoingSeparateFactor,
+              ...secondaryTargetScalar,
               incomingDamageModifierPct: incomingDamageModifier,
               defensePenetrationPct: effectivePen,
               attackerAffinity: attackerAffinity ?? actor.affinity ?? 'antimatter',
@@ -7571,6 +7577,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                       effectiveCritDamage,
                       outgoingDamageBuffPct: dmgStats.totals.outgoingDamageBuff,
                       outgoingSeparateFactor,
+                      ...secondaryTargetScalar,
                       incomingDamageModifierPct: incomingDamageModifier,
                       defensePenetrationPct: effectivePen,
                       attackerAffinity: attackerAffinity ?? actor.affinity ?? 'antimatter',

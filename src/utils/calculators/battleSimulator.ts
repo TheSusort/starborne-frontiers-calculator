@@ -73,6 +73,7 @@ import type { CombatLogRound } from '../combat/log/types';
 import { asFactionName } from '../../constants/factions';
 import {
     runPreFight,
+    liveLeaderAttackPct,
     squadLeaderPass,
     emptyPreFightModifiers,
     hasAnyPreFightModifier,
@@ -1142,6 +1143,7 @@ export function simulateBattle(
         stats: plan.stats,
         modifiers: emptyPreFightModifiers(),
         unsimulated: [],
+        abilities: [],
     });
     const preFightPlayer = playerPlans.map((plan) => toPreFightUnit(plan, 'player'));
     const preFightEnemy = enemyPlans.map((plan) => toPreFightUnit(plan, 'enemy'));
@@ -1158,8 +1160,25 @@ export function simulateBattle(
     const preFightById = new Map<string, PreFightUnit>(
         [...preFightPlayer, ...preFightEnemy].map((u) => [u.id, u])
     );
-    const leaderAttackPctOf = (id: string): number =>
-        preFightById.get(id)?.modifiers.attackPct ?? 0;
+    // Pre-fight abilities (squad-leader reactions) join the unit's passive slot, the way
+    // `buildShipAbilitiesWithEquipment` adds gear and implant abilities. `planPlacement` builds a
+    // fresh `ShipSkills` per run, so the push never reaches another run.
+    for (const plan of [...playerPlans, ...enemyPlans]) {
+        const granted = preFightById.get(plan.id)?.abilities ?? [];
+        if (granted.length === 0) continue;
+        const passive = plan.shipSkills.slots.find((sl) => sl.slot === 'passive');
+        if (passive) passive.abilities.push(...granted);
+        else plan.shipSkills.slots.push({ slot: 'passive', abilities: [...granted] });
+    }
+    // Every ship is alive before round 1, so the per-ally leader term counts the unit's whole
+    // same-side, same-faction squad (the engine recounts it live once the fight starts).
+    const leaderAttackPctOf = (id: string): number => {
+        const unit = preFightById.get(id);
+        if (!unit) return 0;
+        const side = unit.side === 'player' ? preFightPlayer : preFightEnemy;
+        const others = side.filter((u) => u.id !== id && u.faction === unit.faction).length;
+        return liveLeaderAttackPct(unit.modifiers, others);
+    };
     applyPreCombatShipPassives(playerPlans, leaderAttackPctOf);
     applyPreCombatShipPassives(enemyPlans, leaderAttackPctOf);
     // F3: a unit's accumulated modifier channels ride onto its engine actor as the

@@ -1309,7 +1309,8 @@ export interface Ability {
     target: AbilityTarget;
     trigger: AbilityTrigger;
     conditions: Condition[];
-    /** Where this ability came from. `'equipment'` marks a gear-set bonus or an implant effect;
+    /** Where this ability came from. `'equipment'` marks an effect that is NOT the ship's own
+     *  skill: a gear-set bonus, an implant effect, or a squad-leader line (`squadLeaderPass`);
      *  ABSENT marks a ship's own skill, which is the safe default for every fixture that omits it.
      *
      *  Load-bearing, not bookkeeping: a ship's PASSIVE SKILL is inactive while its owner is
@@ -1318,7 +1319,8 @@ export interface Ability {
      *  so the slot alone cannot tell the two apart. Every suppression site reads this field.
      *  `equipmentAbilityProvenance.test.ts` pins both directions over the real corpus. */
     source?: 'equipment';
-    /** The one gear-set bonus or implant an equipment ability came from (`source: 'equipment'`),
+    /** The one gear-set bonus, implant or squad-leader line an equipment ability came from
+     *  (`source: 'equipment'`),
      *  shared by every ability that one effect builds — Warpstrike's two halves carry one. The
      *  lineage rule keys an equipment effect on it (`reactionKey` in triggers.ts). Absent on a
      *  ship's own skill. */

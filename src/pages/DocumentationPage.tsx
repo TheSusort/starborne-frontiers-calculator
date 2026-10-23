@@ -4835,10 +4835,30 @@ const DocumentationPage: React.FC = () => {
                                         multiplies on its own instead of adding to Out. Damage buffs
                                     </li>
                                     <li>
-                                        Effects the simulator cannot model yet (conditional bonuses,
-                                        per-round effects, and damage/heal/shield modifiers) are
-                                        marked &quot;Not simulated&quot; in the picker preview and
-                                        listed after each run
+                                        Percentage bonuses to crit rate, crit power and penetration
+                                        add as points, the way gear does: +10% Crit Power on a ship
+                                        with 50% crit power gives 60%
+                                    </li>
+                                    <li>
+                                        Gelecek&apos;s &quot;repairs after inflicting a debuff&quot;
+                                        repairs the ship once per skill that lands a debuff, however
+                                        many debuffs that skill lands
+                                    </li>
+                                    <li>
+                                        Frontier Legion&apos;s &quot;attack for each other alive
+                                        Legion ally&quot; counts the ship&apos;s living Legion
+                                        allies throughout the fight, so it drops as they are
+                                        destroyed
+                                    </li>
+                                    <li>
+                                        &quot;Secondary targets&quot; are the other ships an area
+                                        attack covers, not its primary target; &quot;while in
+                                        Stealth&quot; is checked at each hit
+                                    </li>
+                                    <li>
+                                        Every current leader effect is simulated. An effect the
+                                        simulator cannot model is marked &quot;Not simulated&quot;
+                                        in the picker preview and listed after each run
                                     </li>
                                 </ul>
                             </div>

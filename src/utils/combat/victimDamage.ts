@@ -58,6 +58,9 @@ export interface AttackerDamageScalars {
      * Absent → 1: a counter or reactive proc carries neither.
      */
     outgoingSeparateFactor?: number;
+    /** Extra outgoing factor on a SECONDARY target only — a covered cell, `roleScale < 1` — from
+     *  the squad leader's "direct damage to secondary targets". Absent → 1. */
+    secondaryTargetFactor?: number;
     incomingDamageModifierPct: number;
     defensePenetrationPct: number;
     /** Attacker affinity; matched against the victim's affinity via
@@ -269,7 +272,10 @@ export function victimHitDamageParts(
     // attacker-fixed outgoing buff are additive contributions to the SAME `(1 + x/100)`
     // multiplier; the squad-leader and Arcane Siege factors multiply outside it.
     const outgoingPct = s.outgoingDamageBuffPct + (v.outgoingDamageDeltaPct ?? 0);
-    const outgoingFactor = (1 + outgoingPct / 100) * (s.outgoingSeparateFactor ?? 1);
+    const outgoingFactor =
+        (1 + outgoingPct / 100) *
+        (s.outgoingSeparateFactor ?? 1) *
+        (roleScale < 1 ? (s.secondaryTargetFactor ?? 1) : 1);
     const nonCritFactor =
         defenceMitigation * outgoingFactor * incomingFactor * attackerCritFactor * affinityMult;
     // The same product with every victim-side reduction removed: the defence term is an exact 1

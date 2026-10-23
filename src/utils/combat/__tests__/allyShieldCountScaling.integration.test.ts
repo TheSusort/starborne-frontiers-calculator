@@ -75,9 +75,12 @@ const zenithKit = (): ShipSkills => ({
 /** A shield pool seeded at construction, as a % of max HP — no ability, no trigger, no decay. */
 const preFightShield = (pct: number): NonNullable<CombatEngineInput['preFight']> => ({
     attackPct: 0,
+    attackPctPerOtherFactionAlly: 0,
     outgoingDamage: 0,
     incomingDamage: 0,
     outgoingCritDamage: 0,
+    outgoingCritDamageInStealth: 0,
+    outgoingDamageSecondaryTargets: 0,
     incomingCritDamage: 0,
     outgoingHeal: 0,
     incomingHeal: 0,

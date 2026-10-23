@@ -13,11 +13,14 @@
  * Both sides run through ONE shared `applyLeaderForSide`, so team symmetry holds by
  * construction. Stat math is order-independent ACROSS BOTH LEADERS: per recipient per
  * stat, ALL active contributions from BOTH sides' leaders accumulate first (Σpct and
- * Σflat, into one accumulator owned by the pass), then apply exactly once as
- * `final = base × (1 + Σpct/100) + Σflat`, floored at 0. A unit hit by its own leader's
- * buff AND the opposing leader's debuff therefore folds them additively
- * (base×(1+(a+b)/100)), never as sequential multiplies — and no intermediate clamp can
- * break side symmetry.
+ * Σflat, into one accumulator owned by the pass), then apply exactly once, floored at 0:
+ *   - a flat stat (hp, defence, hacking, …): `final = base × (1 + Σpct/100) + Σflat`;
+ *   - a percentage-only stat (`PERCENTAGE_ONLY_STATS`: crit, crit power, penetration, …):
+ *     `final = base + Σpct + Σflat`, the points the gear path (`addStatModifier`) adds for the
+ *     same line. "+10% Crit Power" on 50% crit power gives 60%, not 55% (owner ruling 2026-10-22).
+ * A unit hit by its own leader's buff AND the opposing leader's debuff therefore folds them
+ * additively, never as sequential per-side applies, so no intermediate clamp can break side
+ * symmetry.
  *
  * Attack % is the exception to the stat apply: it accumulates into `modifiers.attackPct`
  * (same Σ over both leaders) and `stats.attack` keeps the base, because the engine adds the
@@ -31,6 +34,7 @@ import type {
     SquadLeaderModifierChannel,
 } from '../../../constants/squadLeaders';
 import type { FactionName } from '../../../constants/factions';
+import { PERCENTAGE_ONLY_STATS } from '../../../types/stats';
 import type {
     PreFightCombatModifiers,
     PreFightPass,
@@ -59,6 +63,21 @@ type PreFightStatKey = (typeof PRE_FIGHT_STAT_KEYS)[number];
 const isPreFightStat = (stat: string): stat is PreFightStatKey =>
     (PRE_FIGHT_STAT_KEYS as readonly string[]).includes(stat);
 
+/** A per-ally line the engine can scale live: only percentage attack has a live channel
+ *  (`PreFightCombatModifiers.attackPctPerOtherFactionAlly`). */
+const isPerAllyAttack = (effect: Extract<SquadLeaderEffect, { kind: 'stat' }>): boolean =>
+    effect.stat === 'attack' && effect.valueType === 'percentage';
+
+/** A "% of the unit's own stat" line the pass can fold: both stats in the pre-fight block. */
+const isDerivedStat = (effect: Extract<SquadLeaderEffect, { kind: 'stat' }>): boolean =>
+    effect.valueType === 'percentage' &&
+    isPreFightStat(effect.stat) &&
+    effect.fromStat !== undefined &&
+    isPreFightStat(effect.fromStat);
+
+const isPercentageOnlyStat = (stat: PreFightStatKey): boolean =>
+    (PERCENTAGE_ONLY_STATS as readonly string[]).includes(stat);
+
 /** Data channel → `PreFightCombatModifiers` field. `outgoingRepair` is the game's term
  *  for heal output ('outgoingHeal' is its data alias — both fold into `outgoingHeal`);
  *  `shieldGeneration` seeds the starting shield pool as % of max HP. `damageReduction`
@@ -69,6 +88,8 @@ const MODIFIER_FIELD_BY_CHANNEL: Partial<
     outgoingDamage: 'outgoingDamage',
     incomingDamage: 'incomingDamage',
     outgoingCritDamage: 'outgoingCritDamage',
+    outgoingCritDamageInStealth: 'outgoingCritDamageInStealth',
+    outgoingDamageSecondaryTargets: 'outgoingDamageSecondaryTargets',
     incomingCritDamage: 'incomingCritDamage',
     outgoingRepair: 'outgoingHeal',
     outgoingHeal: 'outgoingHeal',
@@ -79,6 +100,13 @@ const MODIFIER_FIELD_BY_CHANNEL: Partial<
 /** Per-recipient per-stat accumulation buckets (summed before the single apply). */
 type StatAccumulator = Map<PreFightStatKey, { pct: number; flat: number }>;
 type SideStatAcc = Map<PreFightUnit, StatAccumulator>;
+/** "`pct`% of the unit's own `fromStat`, added flat to `stat`", applied after the stat fold. */
+type DerivedStatAcc = {
+    unit: PreFightUnit;
+    stat: PreFightStatKey;
+    fromStat: PreFightStatKey;
+    pct: number;
+}[];
 
 // ---------------------------------------------------------------------------
 // Shared targeting/classification helpers — the SINGLE source of truth for both
@@ -114,11 +142,12 @@ export function squadLeaderEffectTargeting<T extends { faction: string }>(
 }
 
 /** Whether the pass SIMULATES an effect (folds it into stats / a consumed modifier
- *  channel) or surfaces it via `unsimulated`. Mirrors the pass's branch order exactly:
- *  conditional / 'other' / per-round / 'self' effects are unsimulated; stat effects are
- *  simulated iff the stat is in the pre-fight block; modifier effects are simulated iff
- *  their channel maps onto a `PreFightCombatModifiers` field (`MODIFIER_FIELD_BY_CHANNEL`);
- *  unmapped channels stay unsimulated. */
+ *  channel / a granted ability) or surfaces it via `unsimulated`. Mirrors the pass's branch
+ *  order exactly: conditional / 'other' / per-round / 'self' effects are unsimulated;
+ *  ability effects are simulated; a per-ally stat line is simulated iff it is percentage
+ *  attack; a `fromStat` line iff it is percentage and both stats are in the pre-fight block;
+ *  any other stat effect iff the stat is in the pre-fight block; modifier effects iff their
+ *  channel maps onto a `PreFightCombatModifiers` field (`MODIFIER_FIELD_BY_CHANNEL`). */
 export function isSquadLeaderEffectSimulated(effect: SquadLeaderEffect): boolean {
     if (
         effect.condition !== undefined ||
@@ -128,7 +157,12 @@ export function isSquadLeaderEffectSimulated(effect: SquadLeaderEffect): boolean
     ) {
         return false;
     }
-    if (effect.kind === 'stat') return isPreFightStat(effect.stat);
+    if (effect.kind === 'stat') {
+        if (effect.perOtherAliveFactionAlly) return isPerAllyAttack(effect);
+        if (effect.fromStat !== undefined) return isDerivedStat(effect);
+        return isPreFightStat(effect.stat);
+    }
+    if (effect.kind === 'ability') return true;
     // kind === 'modifier': mapped channels are consumed by the engine.
     return MODIFIER_FIELD_BY_CHANNEL[effect.channel] !== undefined;
 }
@@ -141,7 +175,8 @@ function applyLeaderForSide(
     own: PreFightUnit[],
     opposing: PreFightUnit[],
     sel: SquadLeaderSelection,
-    statAcc: SideStatAcc
+    statAcc: SideStatAcc,
+    derivedAcc: DerivedStatAcc
 ): void {
     // Trust boundary (mirrors simulateBattle's input validation): the selection comes
     // from persisted/user state, so an unknown faction or leader name must throw loudly.
@@ -155,7 +190,7 @@ function applyLeaderForSide(
     // Stages are additive deltas: everything up to and including the selected stage is live.
     const effects = activeSquadLeaderEffects(leader, sel.stage);
 
-    for (const effect of effects) {
+    for (const [effectIndex, effect] of effects.entries()) {
         // Recipients by the shared targeting rule. 'self' has no deployed unit to land on
         // (squad leaders are not on the board — 0 occurrences in data), so it attributes
         // its unsimulated text to the own-side faction units, same as 'all-allies'. The
@@ -182,7 +217,43 @@ function applyLeaderForSide(
             continue;
         }
 
+        if (effect.kind === 'ability') {
+            // `source: 'equipment'` marks it as not the ship's own skill (`Ability.source`): it
+            // keeps working while the ship is stasised, and keys its own reaction lineage.
+            const effectId = `leader-${sel.faction}-${leader.name}-${effectIndex}`;
+            for (const unit of recipients) {
+                unit.abilities.push({
+                    ...effect.ability,
+                    id: effectId,
+                    source: 'equipment',
+                    equipmentEffectId: effectId,
+                });
+            }
+            continue;
+        }
+
         if (effect.kind === 'stat') {
+            if (effect.perOtherAliveFactionAlly) {
+                if (!isPerAllyAttack(effect)) {
+                    for (const unit of recipients) unit.unsimulated.push(effect.text);
+                    continue;
+                }
+                for (const unit of recipients) {
+                    unit.modifiers.attackPctPerOtherFactionAlly += effect.value;
+                }
+                continue;
+            }
+            if (effect.fromStat !== undefined) {
+                const { stat, fromStat } = effect;
+                if (!isDerivedStat(effect) || !isPreFightStat(stat) || !isPreFightStat(fromStat)) {
+                    for (const unit of recipients) unit.unsimulated.push(effect.text);
+                    continue;
+                }
+                for (const unit of recipients) {
+                    derivedAcc.push({ unit, stat, fromStat, pct: effect.value });
+                }
+                continue;
+            }
             // Defensive: a stat name outside the pre-fight block cannot be folded.
             if (!isPreFightStat(effect.stat)) {
                 for (const unit of recipients) unit.unsimulated.push(effect.text);
@@ -236,14 +307,31 @@ export function squadLeaderPass(selections: {
         // (base×(1+(a+b)/100)), not per-side sequential multiplies with intermediate
         // clamping — which would also let apply order break team symmetry.
         const statAcc: SideStatAcc = new Map();
-        if (selections.player) applyLeaderForSide(player, enemy, selections.player, statAcc);
-        if (selections.enemy) applyLeaderForSide(enemy, player, selections.enemy, statAcc);
+        const derivedAcc: DerivedStatAcc = [];
+        if (selections.player) {
+            applyLeaderForSide(player, enemy, selections.player, statAcc, derivedAcc);
+        }
+        if (selections.enemy) {
+            applyLeaderForSide(enemy, player, selections.enemy, statAcc, derivedAcc);
+        }
 
         // Apply the accumulated stat math ONCE per recipient per stat (order-independent).
         for (const [unit, perStat] of statAcc) {
             for (const [stat, { pct, flat }] of perStat) {
-                unit.stats[stat] = Math.max(0, unit.stats[stat] * (1 + pct / 100) + flat);
+                const scaled = isPercentageOnlyStat(stat)
+                    ? unit.stats[stat] + pct
+                    : unit.stats[stat] * (1 + pct / 100);
+                unit.stats[stat] = Math.max(0, scaled + flat);
             }
         }
+        // "% of the unit's own stat" lines read the source stat AFTER every other leader line
+        // (Pollinator III's security reads the defence its stage II raised). All of them read
+        // before any is added, so one line cannot feed another.
+        const derivedGrants = derivedAcc.map(
+            ({ unit, fromStat, pct }) => (unit.stats[fromStat] * pct) / 100
+        );
+        derivedAcc.forEach(({ unit, stat }, i) => {
+            unit.stats[stat] = Math.max(0, unit.stats[stat] + derivedGrants[i]);
+        });
     };
 }

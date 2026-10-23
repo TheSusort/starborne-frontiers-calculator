@@ -1,4 +1,5 @@
 import type { StatName, StatType } from '../types/stats';
+import type { Ability } from '../types/abilities';
 import type { ShipRoleCategory } from './shipTypes';
 import type { FactionName } from './factions';
 
@@ -58,6 +59,8 @@ export type SquadLeaderModifierChannel =
     | 'outgoingDamage' // dealt damage; + = deals more
     | 'incomingDamage' // taken damage; on enemies + = they take more, on allies - = they take less
     | 'outgoingCritDamage' // crit damage dealt; + = bigger crits
+    | 'outgoingCritDamageInStealth' // crit damage dealt while the unit holds Stealth
+    | 'outgoingDamageSecondaryTargets' // direct damage dealt to an attack's secondary targets
     | 'incomingCritDamage' // crit damage taken; on enemies - = they take smaller crits
     | 'outgoingRepair' // healing/repair output; on enemies - = reduced enemy repair output
     | 'outgoingHeal' // alias of outgoingRepair (game term is "Repair"); kept for compatibility
@@ -99,12 +102,27 @@ export type SquadLeaderEffect =
           /** Signed. Negative = decrease (use for enemy stat reductions). */
           value: number;
           valueType: StatType; // 'flat' | 'percentage'
+          /** The value is granted once for EACH other living ally of the recipient's faction
+           *  ("+5% attack for each other alive Legion ally"), recounted as allies die. Simulated
+           *  for percentage attack only. */
+          perOtherAliveFactionAlly?: true;
+          /** The line grants `value`% OF THE RECIPIENT'S OWN `fromStat`, added to `stat` as a
+           *  flat amount ("Gain security equal to 0.8% of the units defense value"). Read from
+           *  the recipient's post-leader stats. */
+          fromStat?: StatName;
       })
     | (SquadLeaderEffectBase & {
           kind: 'modifier';
           channel: SquadLeaderModifierChannel;
           /** Signed percentage unless the channel is noted otherwise. */
           value: number;
+      })
+    | (SquadLeaderEffectBase & {
+          kind: 'ability';
+          /** An engine ability each recipient carries for the fight, for a line that reacts to a
+           *  combat event ("Repairs 5% HP after inflicting a debuff"). The pre-fight pass mints its
+           *  id and appends it to the recipient's passive slot. */
+          ability: Omit<Ability, 'id' | 'source' | 'equipmentEffectId'>;
       })
     | (SquadLeaderEffectBase & {
           // Escape hatch: capture something not yet expressible above. Fill `text`; model later.
@@ -127,7 +145,7 @@ export interface SquadLeader {
 //   - 'all-allies' = all Marauder units,
 //   - enemy reductions use target 'all-enemies' + negative values,
 //   - "crit power" maps to the `critDamage` stat,
-//   - "direct damage to secondary targets" is a conditional `outgoingDamage` modifier.
+//   - "direct damage to secondary targets" is the `outgoingDamageSecondaryTargets` modifier.
 // ---------------------------------------------------------------------------
 
 export const SQUAD_LEADERS: Record<FactionName, SquadLeader[]> = {
@@ -348,13 +366,14 @@ export const SQUAD_LEADERS: Record<FactionName, SquadLeader[]> = {
                     },
                 ],
                 // III — Gain security equal to 0.8% of the units defense value
-                // TODO: needs a derived-value shape (flat security from % of the unit's
-                // OWN defence) before it can be structured; 'other' surfaces it as
-                // unsimulated instead of mis-folding it as a % security increase.
                 [
                     {
-                        kind: 'other',
+                        kind: 'stat',
                         target: 'all-allies',
+                        stat: 'security',
+                        value: 0.8,
+                        valueType: 'percentage',
+                        fromStat: 'defence',
                         text: 'Gain security equal to of 0.8% defense',
                     },
                 ],
@@ -384,13 +403,14 @@ export const SQUAD_LEADERS: Record<FactionName, SquadLeader[]> = {
                     },
                 ],
                 // II — Gain security equal to 1.2% of the units defense value
-                // TODO: needs a derived-value shape (flat security from % of the unit's
-                // OWN defence) before it can be structured; 'other' surfaces it as
-                // unsimulated instead of mis-folding it as a % security increase.
                 [
                     {
-                        kind: 'other',
+                        kind: 'stat',
                         target: 'all-allies',
+                        stat: 'security',
+                        value: 1.2,
+                        valueType: 'percentage',
+                        fromStat: 'defence',
                         text: 'Gain security equal to 1.2% of the units defense value',
                     },
                 ],
@@ -615,7 +635,6 @@ export const SQUAD_LEADERS: Record<FactionName, SquadLeader[]> = {
                     },
                 ],
                 // III — +5% attack for each other alive Legion ally
-                // TODO: add an effect for this
                 [
                     {
                         kind: 'stat',
@@ -623,6 +642,7 @@ export const SQUAD_LEADERS: Record<FactionName, SquadLeader[]> = {
                         stat: 'attack',
                         value: 5,
                         valueType: 'percentage',
+                        perOtherAliveFactionAlly: true,
                         text: '+5% attack for each other alive Legion ally',
                     },
                 ],
@@ -659,6 +679,7 @@ export const SQUAD_LEADERS: Record<FactionName, SquadLeader[]> = {
                         stat: 'attack',
                         value: 7.5,
                         valueType: 'percentage',
+                        perOtherAliveFactionAlly: true,
                         text: '+7.5% attack for each other alive Legion ally',
                     },
                 ],
@@ -751,13 +772,24 @@ export const SQUAD_LEADERS: Record<FactionName, SquadLeader[]> = {
                     },
                 ],
                 // III — Repairs 5% HP after inflicting a debuff on an enemy
-                // TODO: add an effect for this
                 [
                     {
-                        kind: 'modifier',
+                        kind: 'ability',
                         target: 'all-allies',
-                        channel: 'incomingHeal',
-                        value: 5,
+                        // "after inflicting a debuff" is an outgoing reaction: one repair per skill
+                        // cast that lands a debuff, however many it lands — the same reading as
+                        // Hemlock's "adds 1 charge … after it inflicts a debuff" (see
+                        // `Ability.oncePerRootCast`). "inflicting" → the 'inflict' verb filter.
+                        ability: {
+                            type: 'heal',
+                            target: 'self',
+                            trigger: 'on-debuff-inflicted',
+                            triggerApplicationFilter: 'inflict',
+                            oncePerRootCast: 'cast',
+                            conditions: [],
+                            config: { type: 'heal', pct: 5, basis: 'hp' },
+                            autoFilled: true,
+                        },
                         text: 'Repairs 5% HP after inflicting a debuff on an enemy',
                     },
                 ],
@@ -789,10 +821,22 @@ export const SQUAD_LEADERS: Record<FactionName, SquadLeader[]> = {
                 // II — Repairs 7.5% HP after inflicting a debuff on an enemy
                 [
                     {
-                        kind: 'modifier',
+                        kind: 'ability',
                         target: 'all-allies',
-                        channel: 'incomingHeal',
-                        value: 7.5,
+                        // "after inflicting a debuff" is an outgoing reaction: one repair per skill
+                        // cast that lands a debuff, however many it lands — the same reading as
+                        // Hemlock's "adds 1 charge … after it inflicts a debuff" (see
+                        // `Ability.oncePerRootCast`). "inflicting" → the 'inflict' verb filter.
+                        ability: {
+                            type: 'heal',
+                            target: 'self',
+                            trigger: 'on-debuff-inflicted',
+                            triggerApplicationFilter: 'inflict',
+                            oncePerRootCast: 'cast',
+                            conditions: [],
+                            config: { type: 'heal', pct: 7.5, basis: 'hp' },
+                            autoFilled: true,
+                        },
                         text: 'Repairs 7.5% HP after inflicting a debuff on an enemy',
                     },
                 ],
@@ -1014,9 +1058,8 @@ export const SQUAD_LEADERS: Record<FactionName, SquadLeader[]> = {
                     {
                         kind: 'modifier',
                         target: 'all-allies',
-                        channel: 'outgoingDamage',
+                        channel: 'outgoingDamageSecondaryTargets',
                         value: 20,
-                        condition: { text: 'direct damage to secondary targets' },
                         text: '+20% direct damage to secondary targets',
                     },
                 ],
@@ -1050,9 +1093,8 @@ export const SQUAD_LEADERS: Record<FactionName, SquadLeader[]> = {
                     {
                         kind: 'modifier',
                         target: 'all-allies',
-                        channel: 'outgoingDamage',
+                        channel: 'outgoingDamageSecondaryTargets',
                         value: 25,
-                        condition: { text: 'direct damage to secondary targets' },
                         text: '+25% direct damage to secondary targets',
                     },
                 ],
@@ -1292,9 +1334,8 @@ export const SQUAD_LEADERS: Record<FactionName, SquadLeader[]> = {
                     {
                         kind: 'modifier',
                         target: 'all-allies',
-                        channel: 'outgoingCritDamage',
+                        channel: 'outgoingCritDamageInStealth',
                         value: 10,
-                        condition: { text: 'while in Stealth' },
                         text: '+10% outgoing crit damage while in Stealth.',
                     },
                 ],
@@ -1328,9 +1369,8 @@ export const SQUAD_LEADERS: Record<FactionName, SquadLeader[]> = {
                     {
                         kind: 'modifier',
                         target: 'all-allies',
-                        channel: 'outgoingCritDamage',
+                        channel: 'outgoingCritDamageInStealth',
                         value: 15,
-                        condition: { text: 'while in Stealth' },
                         text: '+15% outgoing crit damage while in Stealth.',
                     },
                 ],

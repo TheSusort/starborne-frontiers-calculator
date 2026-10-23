@@ -8,6 +8,7 @@
  * pass input the layer is an exact no-op — the engine is untouched.
  */
 import type { FactionName } from '../../../constants/factions';
+import type { Ability } from '../../../types/abilities';
 
 /** The 10 numeric combat stats the pre-fight layer can modify. Structural — the battle
  *  simulator's private `DerivedCombatStats` satisfies it as-is. */
@@ -35,19 +36,37 @@ export interface PreFightStatBlock {
  *   - attackPct: into the additive attack-buff term of every effective-attack fold (R200), so
  *     it adds with Attack Up/Down rather than pre-multiplying the base. A reader that wants the
  *     pre-buff attack sheet reads `leaderScaledAttack`.
+ *   - attackPctPerOtherFactionAlly: resolved by the engine into `attackPct` from the live ally
+ *     count (`liveLeaderAttackPct`), never folded on its own.
  *   - outgoingDamage: its own `(1 + x/100)` factor on direct hits, outside the Out. Damage
  *     buff sum (R199).
  *   - outgoingHeal/incomingHeal: into the heal-buff totals.
  *   - incomingDamage: a separate factor composed in `hitReductionFor`.
  *   - incoming/outgoingCritDamage: at the crit-family damage sites (crit-conditional damage
- *     modifiers — NOT the Crit Power stat).
+ *     modifiers — NOT the Crit Power stat). outgoingCritDamageInStealth joins
+ *     outgoingCritDamage there while the attacker holds Stealth (engine.ts
+ *     `leaderOutgoingCritDamagePct`).
+ *   - outgoingDamageSecondaryTargets: its own `(1 + x/100)` factor on covered footprint cells
+ *     only, via the positional scalars' `secondaryTargetFactor` (`victimHitDamageParts`).
  *   - startingShieldPctOfHp: the starting shieldPool.
  */
 export interface PreFightCombatModifiers {
-    /** Squad-leader attack %, summed over both leaders (own buff, opposing debuff). */
+    /** Squad-leader attack %, summed over both leaders (own buff, opposing debuff). Inside a
+     *  fight the engine keeps it LIVE: it includes `attackPctPerOtherFactionAlly` times the
+     *  number of this unit's other living same-faction allies (`liveLeaderAttackPct`). */
     attackPct: number;
+    /** Squad-leader attack % granted for EACH other living ally of this unit's own faction
+     *  ("+5% attack for each other alive Legion ally"). Not folded on its own: the engine adds it
+     *  into `attackPct`, recounting allies at the start of the fight and on every death. */
+    attackPctPerOtherFactionAlly: number;
     outgoingDamage: number;
     outgoingCritDamage: number;
+    /** `outgoingCritDamage` that applies only while the unit holds Stealth ("+10% outgoing crit
+     *  damage while in Stealth"), read live at each hit. */
+    outgoingCritDamageInStealth: number;
+    /** Direct damage to an attack's SECONDARY targets (the covered cells of its pattern, never
+     *  the origin): its own `(1 + x/100)` factor on those hits, like `outgoingDamage` (R199). */
+    outgoingDamageSecondaryTargets: number;
     incomingDamage: number;
     incomingCritDamage: number;
     outgoingHeal: number;
@@ -59,8 +78,11 @@ export interface PreFightCombatModifiers {
 export function emptyPreFightModifiers(): PreFightCombatModifiers {
     return {
         attackPct: 0,
+        attackPctPerOtherFactionAlly: 0,
         outgoingDamage: 0,
         outgoingCritDamage: 0,
+        outgoingCritDamageInStealth: 0,
+        outgoingDamageSecondaryTargets: 0,
         incomingDamage: 0,
         incomingCritDamage: 0,
         outgoingHeal: 0,
@@ -75,6 +97,15 @@ export function emptyPreFightModifiers(): PreFightCombatModifiers {
  *  structurally identical to a no-leader run). */
 export function hasAnyPreFightModifier(m: PreFightCombatModifiers): boolean {
     return Object.values(m).some((v) => v !== 0);
+}
+
+/** The squad-leader attack % with the per-ally term resolved for `otherFactionAlliesAlive` (this
+ *  unit's other living same-side allies of its own faction). */
+export function liveLeaderAttackPct(
+    modifiers: Pick<PreFightCombatModifiers, 'attackPct' | 'attackPctPerOtherFactionAlly'>,
+    otherFactionAlliesAlive: number
+): number {
+    return modifiers.attackPct + modifiers.attackPctPerOtherFactionAlly * otherFactionAlliesAlive;
 }
 
 /**
@@ -105,6 +136,9 @@ export interface PreFightUnit {
     modifiers: PreFightCombatModifiers;
     /** Verbatim effect texts that landed on this unit but are NOT simulated (yet). */
     unsimulated: string[];
+    /** Engine abilities passes grant this unit for the fight (a squad-leader line that reacts to
+     *  a combat event). The battle simulator appends them to the unit's passive slot. */
+    abilities: Ability[];
 }
 
 /** A pre-fight pass: mutates the units of both sides in place. */

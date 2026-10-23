@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { fetchEngineeringStats, fetchGearByIds, fetchShips } from '../../services/fleetReads';
 import { runSeedSet } from '../../utils/simulator/seededRuns';
 import { runStatSweep, sweepSteps } from '../../utils/simulator/statSweep';
@@ -78,9 +78,44 @@ const withoutNames = (out: unknown) => {
     return { ...battle, ships: battle.ships.map(({ name: _name, ...rest }) => rest) };
 };
 
+// Every real leader line is simulated, so the unsimulated-list tests use a synthetic
+// Marauders leader whose one line carries a condition the pass does not model.
+const { UNMODELLED_TEXT } = vi.hoisted(() => ({
+    UNMODELLED_TEXT: '+25% direct damage while below 50% HP',
+}));
+vi.mock('../../constants/squadLeaders', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('../../constants/squadLeaders')>();
+    return {
+        ...actual,
+        SQUAD_LEADERS: {
+            ...actual.SQUAD_LEADERS,
+            MARAUDERS: [
+                ...actual.SQUAD_LEADERS.MARAUDERS,
+                {
+                    name: 'Test Unsimulated',
+                    rarity: 'rare',
+                    stages: [
+                        [],
+                        [
+                            {
+                                kind: 'modifier',
+                                target: 'all-allies',
+                                channel: 'outgoingDamage',
+                                value: 25,
+                                condition: { text: 'while below 50% HP' },
+                                text: UNMODELLED_TEXT,
+                            },
+                        ],
+                        [],
+                    ],
+                },
+            ],
+        },
+    };
+});
+
 /** A Marauders leader whose stage-2 effect the simulator does not model. */
-const BRANDISHER = { faction: 'MARAUDERS', name: 'Brandisher', stage: 2 };
-const BRANDISHER_UNSIMULATED = '+25% direct damage to secondary targets';
+const UNMODELLED_LEADER = { faction: 'MARAUDERS', name: 'Test Unsimulated', stage: 2 };
 
 describe('simulate_battle', () => {
     it('runs 20 battles by default and reports both sides', async () => {
@@ -159,11 +194,11 @@ describe('simulate_battle', () => {
 
         const out = (await call(
             simulateBattle,
-            vsAtlas('m1', { player_leader: BRANDISHER }),
+            vsAtlas('m1', { player_leader: UNMODELLED_LEADER }),
             ctx
         )) as BattleOut;
 
-        expect(out.unsimulated).toEqual([{ ship: 'Marauder', texts: [BRANDISHER_UNSIMULATED] }]);
+        expect(out.unsimulated).toEqual([{ ship: 'Marauder', texts: [UNMODELLED_TEXT] }]);
     });
 
     it("lists the effects of the enemy's squad leader the simulator does not model", async () => {
@@ -174,14 +209,12 @@ describe('simulate_battle', () => {
             {
                 player: [{ position: 'T1', ship_id: 's2' }],
                 enemy: [{ position: 'T1', ship_id: 'm2' }],
-                enemy_leader: BRANDISHER,
+                enemy_leader: UNMODELLED_LEADER,
             },
             ctx
         )) as BattleOut;
 
-        expect(out.unsimulated).toEqual([
-            { ship: 'Other Marauder', texts: [BRANDISHER_UNSIMULATED] },
-        ]);
+        expect(out.unsimulated).toEqual([{ ship: 'Other Marauder', texts: [UNMODELLED_TEXT] }]);
     });
 
     it('refuses a profile that is not one of yours', async () => {
@@ -335,11 +368,11 @@ describe('battle_log', () => {
 
         const out = (await call(
             battleLog,
-            vsAtlas('m1', { player_leader: BRANDISHER }),
+            vsAtlas('m1', { player_leader: UNMODELLED_LEADER }),
             ctx
         )) as LogOut;
 
-        expect(out.unsimulated).toEqual([{ ship: 'Marauder', texts: [BRANDISHER_UNSIMULATED] }]);
+        expect(out.unsimulated).toEqual([{ ship: 'Marauder', texts: [UNMODELLED_TEXT] }]);
     });
 
     it('takes no runs', () => {
@@ -410,11 +443,14 @@ describe('sweep_stat', () => {
 
         const out = (await call(
             sweepStat,
-            sweep({ player: [{ position: 'T1', ship_id: 'm1' }], player_leader: BRANDISHER }),
+            sweep({
+                player: [{ position: 'T1', ship_id: 'm1' }],
+                player_leader: UNMODELLED_LEADER,
+            }),
             ctx
         )) as SweepOut;
 
-        expect(out.unsimulated).toEqual([{ ship: 'Marauder', texts: [BRANDISHER_UNSIMULATED] }]);
+        expect(out.unsimulated).toEqual([{ ship: 'Marauder', texts: [UNMODELLED_TEXT] }]);
     });
 
     it('reports no unsimulated effects without a squad leader', async () => {

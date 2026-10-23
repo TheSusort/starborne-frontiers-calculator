@@ -234,6 +234,7 @@ import { holdsRoguesLiberty } from './rogueLiberty';
 import { holdsToxicOverflow, toxicOverflowApplierOf } from './toxicOverflowStatus';
 import { supportFootprintAllyIds } from './supportFootprint';
 import type { PreFightCombatModifiers } from './preFight/types';
+import { liveLeaderAttackPct } from './preFight/types';
 import { protectionCascade, type RedirectBasis } from './protectionTransfer';
 
 /** Tripwire for NON-chainable extra-action grants: a non-once-per-round grant whose conditions
@@ -3275,6 +3276,41 @@ export function runCombat(rawInput: CombatEngineInput): {
         if (dead) dead.destroyedInHitRoot = hitRootInScope();
     });
 
+    // Squad-leader "+X% attack for each other alive <faction> ally" is LIVE. Each such actor's
+    // `preFight` becomes an engine-owned copy whose `attackPct` includes the per-ally term for the
+    // same-side allies of its own faction alive now (`liveLeaderAttackPct`), set here and redone
+    // on every death. Every `preFight.attackPct` reader therefore sees the live count; the
+    // caller's input block is never mutated.
+    const leaderAllyAttackBase = new Map<string, PreFightCombatModifiers>();
+    for (const a of allActors) {
+        if (a.preFight && a.preFight.attackPctPerOtherFactionAlly !== 0) {
+            leaderAllyAttackBase.set(a.id, a.preFight);
+        }
+    }
+    const refreshLeaderAllyAttack = (): void => {
+        for (const [id, base] of leaderAllyAttackBase) {
+            const self = allActorsById.get(id);
+            if (!self) continue;
+            const faction = factionOf(id);
+            const others =
+                faction === undefined
+                    ? 0
+                    : allActors.filter(
+                          (x) =>
+                              x.side === self.side &&
+                              x.id !== id &&
+                              x.currentHp > 0 &&
+                              x.destroyedRound === undefined &&
+                              factionOf(x.id) === faction
+                      ).length;
+            self.preFight = { ...base, attackPct: liveLeaderAttackPct(base, others) };
+        }
+    };
+    if (leaderAllyAttackBase.size > 0) {
+        refreshLeaderAllyAttack();
+        bus.on('ship-destroyed', refreshLeaderAllyAttack);
+    }
+
     /** Prophet (#591): each actor's LIVE, per-fight shield-penetration bonus — permanent and
      *  stacking, added on top of the static base at `attackerShieldPenOf`. Combat-wide (persists
      *  across every round, like `allActorsById`), keyed by actor id so it serves either side
@@ -5163,6 +5199,18 @@ export function runCombat(rawInput: CombatEngineInput): {
     const isStealthed = (actorId: string): boolean =>
         selfBuffNamesForOwners(statusEngine, [actorId]).includes('Stealth');
 
+    /** The attacker's squad-leader crit-damage modifier, percent: `outgoingCritDamage`, plus
+     *  `outgoingCritDamageInStealth` while the attacker holds Stealth (Tianchao Cipher III). The
+     *  one place both are read. */
+    const leaderOutgoingCritDamagePct = (attackerId: string): number => {
+        const pre = allActorsById.get(attackerId)?.preFight;
+        if (!pre) return 0;
+        const inStealth = pre.outgoingCritDamageInStealth;
+        return (
+            pre.outgoingCritDamage + (inStealth !== 0 && isStealthed(attackerId) ? inStealth : 0)
+        );
+    };
+
     // Does the given actor currently carry a live Corrosion or Inferno DoT
     // stack? (Anemone — "takes 25% less direct damage from enemies debuffed with a Damage
     // over Time effect", evaluated against the ATTACKER of an incoming hit.) Sibling to
@@ -5263,9 +5311,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             leader.length === 0
                 ? kit
                 : mergeIncomingReductionParts(kit, { passivePct: 0, separatePcts: leader });
-        const attackerCritPenaltyPct = didCrit
-            ? -(allActorsById.get(attackerId)?.preFight?.outgoingCritDamage ?? 0)
-            : 0;
+        const attackerCritPenaltyPct = didCrit ? -leaderOutgoingCritDamagePct(attackerId) : 0;
         return { parts, attackerCritPenaltyPct };
     };
 
@@ -10216,7 +10262,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             incomingReductionCrit: tgt
                 ? hitReductionFor(actor.id, tgt.id, true).parts
                 : NO_INCOMING_REDUCTION,
-            attackerCritPenaltyPct: -(actor.preFight?.outgoingCritDamage ?? 0),
+            attackerCritPenaltyPct: -leaderOutgoingCritDamagePct(actor.id),
         });
         const buildTurnArgs = (a: CombatActor, tgt: CombatActor | undefined) => {
             castStartSeq = statusEngine.lastAppliedSeq();

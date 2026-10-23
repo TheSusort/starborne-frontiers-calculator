@@ -35,6 +35,7 @@ import type { GearPiece } from '../../../types/gear';
 import type { Ship } from '../../../types/ship';
 import type { EngineeringStat } from '../../../types/stats';
 import type { SquadLeaderSelection } from '../preFight';
+import { calculateDamageReduction } from '../../autogear/statResolution';
 
 // ---------------------------------------------------------------------------------------------
 // Kits
@@ -1193,11 +1194,9 @@ describe('non-kit census: stat-path inputs reach the engine input', () => {
 });
 
 // ---------------------------------------------------------------------------------------------
-// Squad leaders: one fight per pre-fight channel, both sides, stage N against stage N-1 of the
-// same leader so the only difference is that stage's line. The lines whose MODEL does not match
-// their text are pinned twice: a row holding today's number, and an `it.fails` holding the
-// text's number (it passes while the engine diverges and fails once it is fixed). The row is
-// what keeps the `it.fails` from passing on a broken board.
+// Squad leaders: one fight per leader line or channel, both sides, stage N against stage N-1 of
+// the same leader so the only difference is that stage's line. Each row asserts the number the
+// line's game text names.
 // ---------------------------------------------------------------------------------------------
 
 const leader = (
@@ -1246,6 +1245,24 @@ const LEGION_TRIO: BoardSpec = {
     rounds: 1,
 };
 
+/** The trio again, but a faster enemy one-shots Legion ally A before W's first turn. */
+const LEGION_TRIO_ONE_DIES: BoardSpec = {
+    player: [
+        unit('W', 'M3', { faction: 'FRONTIER_LEGION' }),
+        unit('A', 'M4', IDLE, { faction: 'FRONTIER_LEGION', stats: { hp: 100 } }),
+        unit('B', 'M2', IDLE, { faction: 'FRONTIER_LEGION' }),
+    ],
+    enemy: [unit('O', 'M4', { stats: { speed: 200 } })],
+    rounds: 1,
+};
+
+/** A Marauder whose circle attack on O also covers P. */
+const MARAUDER_SPLASH: BoardSpec = {
+    player: [unit('W', 'M4', { faction: 'MARAUDERS', pattern: 'Pattern-Circle-Range-1' })],
+    enemy: [unit('O', 'M4', IDLE), unit('P', 'M3', IDLE)],
+    rounds: 1,
+};
+
 const LIEUTENANT_DEFPEN = stagePair(
     solo({ faction: 'FRONTIER_LEGION' }, { ...IDLE, stats: { defence: 5000 } }),
     'FRONTIER_LEGION',
@@ -1253,6 +1270,11 @@ const LIEUTENANT_DEFPEN = stagePair(
     2,
     1
 );
+
+const INFLICT_TWO_DEBUFFS: Partial<UnitSpec> = {
+    active: 'This Unit inflicts <unit-skill>Defense Down II</unit-skill> and <unit-skill>Attack Down II</unit-skill> for 2 turns.',
+    stats: { hacking: 1000 },
+};
 
 const MEDUSA_REPAIR = stagePair(
     {
@@ -1265,6 +1287,11 @@ const MEDUSA_REPAIR = stagePair(
     3,
     2
 );
+
+/** W's stat sheet at its first turn (the turn's `statsSnapshot`). */
+const firstTurnStats = (r: BoardRun, name: string) =>
+    r.result.combatLog.flatMap((round) => round.turns).find((t) => t.actorId === r.id(name))
+        ?.statsSnapshot;
 
 const LEADER_ROWS: LeaderRow[] = [
     {
@@ -1339,10 +1366,10 @@ const LEADER_ROWS: LeaderRow[] = [
         check: scales(firstHit('O', 'W'), 0.85),
     },
     {
-        // NEEDS RULING (ledger): the pass MULTIPLIES a crit-power line; gear ADDS the same "+10%
-        // Crit Power" as 10 points. Pinned at today's value: a 50% crit-power ship under
-        // Negotiator I (+10% attack, +10% crit power) crits for 1100 × 155%, not 1100 × 160%.
-        line: 'Atlas Negotiator I: +10% Crit Power (multiplicative today)',
+        // A percentage-only leader line adds as points, like gear (owner ruling 2026-10-22): a
+        // 50% crit-power ship under Negotiator I (+10% attack, +10% crit power) crits for
+        // 1100 × 160%.
+        line: 'Atlas Negotiator I: +10% Crit Power adds 10 points',
         ...stagePair(
             solo({ faction: 'ATLAS_SYNDICATE', stats: { crit: 100, critDamage: 50 } }, IDLE),
             'ATLAS_SYNDICATE',
@@ -1352,36 +1379,218 @@ const LEADER_ROWS: LeaderRow[] = [
         ),
         check: (w, c) => {
             expect(firstHit('W', 'O')(c)).toBeCloseTo(1500, 6);
-            expect(firstHit('W', 'O')(w)).toBeCloseTo(1100 * 1.55, 6);
+            expect(firstHit('W', 'O')(w)).toBeCloseTo(1100 * 1.6, 6);
         },
     },
     {
-        // DIVERGES (ledger): "+5% attack for each other alive Legion ally" folds as a flat +5%.
-        // Three Legion ships: today 8% → 13%, by the text 8% → 18%.
-        line: 'Legion Lieutenant III: +5% attack per other alive Legion ally (flat today)',
+        // "+5% attack for each other alive Legion ally": three Legion ships each get
+        // 8% + 2 × 5% = 18% attack.
+        line: 'Legion Lieutenant III: +5% attack per other alive Legion ally',
         ...stagePair(LEGION_TRIO, 'FRONTIER_LEGION', 'Lieutenant', 3, 2),
         check: (w, c) =>
-            expect(firstHit('W', 'O')(w) / firstHit('W', 'O')(c)).toBeCloseTo(1.13 / 1.08, 6),
+            expect(firstHit('W', 'O')(w) / firstHit('W', 'O')(c)).toBeCloseTo(1.18 / 1.08, 6),
     },
     {
-        // DIVERGES (ledger): "+8% Defense Penetration" multiplies the ship's own defence
-        // penetration, so a ship with none gains none: today stage II changes nothing.
-        line: 'Legion Lieutenant II: +8% Defense Penetration (x0 today)',
-        ...LIEUTENANT_DEFPEN,
+        // The count is live: once ally A is destroyed, W has one other Legion ally left and hits
+        // with 8% + 5% = 13%.
+        line: 'Legion Lieutenant III: the bonus drops when a Legion ally dies',
+        ...stagePair(LEGION_TRIO_ONE_DIES, 'FRONTIER_LEGION', 'Lieutenant', 3, 2),
         check: (w, c) => {
-            expect(firstHit('W', 'O')(c)).toBeGreaterThan(0);
-            expect(firstHit('W', 'O')(w)).toBeCloseTo(firstHit('W', 'O')(c), 6);
+            // A dies before W's hit lands, in both arms.
+            for (const r of [w, c]) {
+                const death = r.entries.findIndex(
+                    (e) =>
+                        e.kind === 'death' &&
+                        (e.actorId === r.id('A') || e.targets.some((t) => t.targetId === r.id('A')))
+                );
+                const hit = r.entries.indexOf(entriesOf(r, 'attack', { actor: 'W' })[0]);
+                expect(death).toBeGreaterThanOrEqual(0);
+                expect(death).toBeLessThan(hit);
+            }
+            expect(firstHit('W', 'O')(w) / firstHit('W', 'O')(c)).toBeCloseTo(1.13 / 1.08, 6);
         },
     },
     {
-        // DIVERGES (ledger): "Repairs 5% HP after inflicting a debuff on an enemy" is modelled as
-        // +5% incoming repair. Today a Gelecek ship that inflicts a debuff repairs nothing.
-        line: 'Gelecek Medusa III: repairs 5% HP after inflicting a debuff (no repair today)',
+        // A lone Legion ship has no other Legion ally: stage III adds nothing.
+        line: 'Legion Lieutenant III: no bonus without another Legion ally',
+        ...stagePair(
+            solo({ faction: 'FRONTIER_LEGION' }, IDLE),
+            'FRONTIER_LEGION',
+            'Lieutenant',
+            3,
+            2
+        ),
+        check: scales(firstHit('W', 'O'), 1, 6),
+    },
+    {
+        // Colonel II: 10% + 2 × 7.5% = 25% with two other Legion allies, against Colonel I's 10%.
+        line: 'Legion Colonel II: +7.5% attack per other alive Legion ally',
+        ...stagePair(LEGION_TRIO, 'FRONTIER_LEGION', 'Colonel', 2, 1),
+        check: scales(firstHit('W', 'O'), 1.25 / 1.1, 6),
+    },
+    {
+        // "+8% Defense Penetration" adds 8 points: a ship with none hits a 5,000-defence enemy
+        // as if it had 4,600 defence.
+        line: 'Legion Lieutenant II: +8% Defense Penetration on a 0-pen ship',
+        ...LIEUTENANT_DEFPEN,
+        check: scales(
+            firstHit('W', 'O'),
+            (1 - calculateDamageReduction(5000 * 0.92) / 100) /
+                (1 - calculateDamageReduction(5000) / 100),
+            6
+        ),
+    },
+    {
+        // "Repairs 5% HP after inflicting a debuff on an enemy": a Gelecek ship at half HP that
+        // inflicts Defense Down II repairs 5% of its 1,080,000 max HP (Medusa II's +8% HP).
+        line: 'Gelecek Medusa III: repairs 5% HP after inflicting a debuff',
         ...MEDUSA_REPAIR,
         check: (w, c) => {
             expect(debuffCount('Defense Down II', 'O')(w)).toBeGreaterThan(0);
             expect(grossTo(c, 'heal', { target: 'W' })).toBe(0);
-            expect(grossTo(w, 'heal', { target: 'W' })).toBe(0);
+            expect(entriesOf(w, 'heal', { actor: 'W', target: 'W' })).toHaveLength(1);
+            expect(grossTo(w, 'heal', { actor: 'W', target: 'W' })).toBeCloseTo(54_000, 6);
+        },
+    },
+    {
+        // One repair per skill cast that lands a debuff, however many it lands: two casts that
+        // each land Defense Down II and Attack Down II repair twice, not four times.
+        line: 'Gelecek Medusa III: one repair per debuffing cast',
+        ...stagePair(
+            {
+                player: [
+                    unit('W', 'M4', INFLICT_TWO_DEBUFFS, { faction: 'GELECEK', startHpFrac: 0.5 }),
+                ],
+                enemy: [unit('O', 'M4', IDLE)],
+                rounds: 2,
+            },
+            'GELECEK',
+            'Medusa',
+            3,
+            2
+        ),
+        check: (w, c) => {
+            expect(debuffCount('Attack Down II', 'O')(w)).toBe(2);
+            expect(debuffCount('Defense Down II', 'O')(w)).toBe(2);
+            expect(grossTo(c, 'heal', { target: 'W' })).toBe(0);
+            expect(entriesOf(w, 'heal', { actor: 'W', target: 'W' })).toHaveLength(2);
+            expect(grossTo(w, 'heal', { actor: 'W', target: 'W' })).toBeCloseTo(108_000, 6);
+        },
+    },
+    {
+        // Cerberus II: 7.5% of a 1,100,000 max HP (Cerberus I's +10% HP).
+        line: 'Gelecek Cerberus II: repairs 7.5% HP after inflicting a debuff',
+        ...stagePair(MEDUSA_REPAIR.board, 'GELECEK', 'Cerberus', 2, 1),
+        check: (w, c) => {
+            expect(grossTo(c, 'heal', { target: 'W' })).toBe(0);
+            expect(grossTo(w, 'heal', { actor: 'W', target: 'W' })).toBeCloseTo(82_500, 6);
+        },
+    },
+    {
+        // "Gain security equal to 0.8% of defense": a Binderburg ship with 10,000 defence, raised
+        // to 10,800 by Pollinator II, gains 86.4 security.
+        line: 'Binderburg Pollinator III: security equal to 0.8% of defence',
+        ...stagePair(
+            solo({ ...IDLE, faction: 'BINDERBURG', stats: { defence: 10_000 } }, IDLE),
+            'BINDERBURG',
+            'Pollinator',
+            3,
+            2
+        ),
+        check: (w, c) => {
+            expect(firstTurnStats(c, 'W')?.defence).toBeCloseTo(10_800, 6);
+            expect(firstTurnStats(w, 'W')?.defence).toBeCloseTo(10_800, 6);
+            expect(
+                (firstTurnStats(w, 'W')?.security ?? 0) - (firstTurnStats(c, 'W')?.security ?? 0)
+            ).toBeCloseTo(86.4, 6);
+        },
+    },
+    {
+        // Swarmcaller II: 1.2% of 11,000 defence (Swarmcaller I's +10%) = 132 security.
+        line: 'Binderburg Swarmcaller II: security equal to 1.2% of defence',
+        ...stagePair(
+            solo({ ...IDLE, faction: 'BINDERBURG', stats: { defence: 10_000 } }, IDLE),
+            'BINDERBURG',
+            'Swarmcaller',
+            2,
+            1
+        ),
+        check: (w, c) =>
+            expect(
+                (firstTurnStats(w, 'W')?.security ?? 0) - (firstTurnStats(c, 'W')?.security ?? 0)
+            ).toBeCloseTo(132, 6),
+    },
+    {
+        // "+10% outgoing crit damage while in Stealth": a Tianchao ship that starts the fight
+        // Stealthed (Cloaking) crits 10% harder.
+        line: 'Tianchao Cipher III: +10% crit damage while in Stealth',
+        ...stagePair(
+            solo(
+                {
+                    faction: 'TIANCHAO',
+                    stats: { crit: 100, critDamage: 50 },
+                    set: { name: 'CLOAKING', pieces: 2 },
+                },
+                IDLE
+            ),
+            'TIANCHAO',
+            'Cipher',
+            3,
+            2
+        ),
+        check: (w, c) => {
+            expect(buffCount('Stealth', 'W')(w)).toBe(1);
+            expect(firstHit('W', 'O')(w) / firstHit('W', 'O')(c)).toBeCloseTo(1.1, 6);
+        },
+    },
+    {
+        // Without Stealth the line does nothing.
+        line: 'Tianchao Cipher III: no bonus outside Stealth',
+        ...stagePair(
+            solo({ faction: 'TIANCHAO', stats: { crit: 100, critDamage: 50 } }, IDLE),
+            'TIANCHAO',
+            'Cipher',
+            3,
+            2
+        ),
+        check: scales(firstHit('W', 'O'), 1, 6),
+    },
+    {
+        // Serpent II: +15%.
+        line: 'Tianchao Serpent II: +15% crit damage while in Stealth',
+        ...stagePair(
+            solo(
+                {
+                    faction: 'TIANCHAO',
+                    stats: { crit: 100, critDamage: 50 },
+                    set: { name: 'CLOAKING', pieces: 2 },
+                },
+                IDLE
+            ),
+            'TIANCHAO',
+            'Serpent',
+            2,
+            1
+        ),
+        check: scales(firstHit('W', 'O'), 1.15, 6),
+    },
+    {
+        // "+20% direct damage to secondary targets": a Marauder's circle attack on O hits the
+        // covered P 20% harder; the primary target O takes the same hit.
+        line: 'Marauders Reaper III: +20% direct damage to secondary targets',
+        ...stagePair(MARAUDER_SPLASH, 'MARAUDERS', 'Reaper', 3, 2),
+        check: (w, c) => {
+            scales(firstHit('W', 'O'), 1, 6)(w, c);
+            scales(firstHit('W', 'P'), 1.2, 6)(w, c);
+        },
+    },
+    {
+        // Brandisher II: +25%.
+        line: 'Marauders Brandisher II: +25% direct damage to secondary targets',
+        ...stagePair(MARAUDER_SPLASH, 'MARAUDERS', 'Brandisher', 2, 1),
+        check: (w, c) => {
+            scales(firstHit('W', 'O'), 1, 6)(w, c);
+            scales(firstHit('W', 'P'), 1.25, 6)(w, c);
         },
     },
 ];
@@ -1398,22 +1607,4 @@ describe('non-kit census: squad leaders', () => {
             });
         }
     }
-
-    // The text's numbers, failing today. Each flips to a plain `it` when the engine matches.
-    it.fails('TEXT: Legion Lieutenant III gives +10% attack with two other Legion allies', () => {
-        const { board, control } = stagePair(LEGION_TRIO, 'FRONTIER_LEGION', 'Lieutenant', 3, 2);
-        const ratio =
-            firstHit('W', 'O')(runForcedBattle(board, true)) /
-            firstHit('W', 'O')(runForcedBattle(control, true));
-        expect(ratio).toBeCloseTo(1.18 / 1.08, 6);
-    });
-    it.fails('TEXT: Legion Lieutenant II defense penetration raises damage into defence', () => {
-        const w = runForcedBattle(LIEUTENANT_DEFPEN.board, true);
-        const c = runForcedBattle(LIEUTENANT_DEFPEN.control, true);
-        expect(firstHit('W', 'O')(w)).toBeGreaterThan(firstHit('W', 'O')(c));
-    });
-    it.fails('TEXT: Gelecek Medusa III repairs the debuffer 5% of max HP', () => {
-        const w = runForcedBattle(MEDUSA_REPAIR.board, true);
-        expect(grossTo(w, 'heal', { target: 'W' })).toBeGreaterThan(0);
-    });
 });

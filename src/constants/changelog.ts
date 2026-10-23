@@ -24,6 +24,12 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator: a killing blow's Bomb or debuff no longer lands on the wreck.",
     "Combat simulator: Voron's and Meatshield's converted-hit DoTs can no longer be cleansed.",
     'Combat simulator: the Reflect set now also reflects splash damage.',
+    'Squad leaders: crit, crit power and penetration bonuses now add as points, like gear.',
+    'Squad leaders: Gelecek Medusa and Cerberus now repair after inflicting a debuff.',
+    'Squad leaders: Legion per-ally attack bonus now counts living allies, dropping as they die.',
+    'Squad leaders: Binderburg Pollinator and Swarmcaller now grant security from defence in fights.',
+    'Squad leaders: Tianchao Cipher and Serpent now boost crit damage while Stealthed.',
+    'Squad leaders: Marauders Reaper and Brandisher now boost damage to secondary targets.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

@@ -531,9 +531,12 @@ const enemyGatedBreaker = (startingShieldPctOfHp: number, hits: number): EnemyAt
     stasisBreakExemptWhen: SELF_SHIELD_GATE,
     preFight: {
         attackPct: 0,
+        attackPctPerOtherFactionAlly: 0,
         outgoingDamage: 0,
         incomingDamage: 0,
         outgoingCritDamage: 0,
+        outgoingCritDamageInStealth: 0,
+        outgoingDamageSecondaryTargets: 0,
         incomingCritDamage: 0,
         outgoingHeal: 0,
         incomingHeal: 0,

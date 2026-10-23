@@ -9,7 +9,14 @@
  * vi.importActual so it stays a pure real-data audit.
  */
 import { describe, it, expect, vi } from 'vitest';
-import { squadLeaderPass, emptyPreFightModifiers, leaderScaledAttack, runPreFight } from '../index';
+import {
+    squadLeaderPass,
+    emptyPreFightModifiers,
+    leaderScaledAttack,
+    liveLeaderAttackPct,
+    isSquadLeaderEffectSimulated,
+    runPreFight,
+} from '../index';
 import type { PreFightUnit } from '../index';
 import { FACTION_NAMES, type FactionName } from '../../../../constants/factions';
 import { SQUAD_LEADERS } from '../../../../constants/squadLeaders';
@@ -104,7 +111,9 @@ vi.mock('../../../../constants/squadLeaders', async (importOriginal) => {
 const BASE_STATS = {
     attack: 1000,
     crit: 50,
-    critDamage: 100,
+    // Not 100: at 100 the additive (+5 points) and multiplicative (×1.05) readings of a
+    // percentage-only line give the same number.
+    critDamage: 50,
     defensePenetration: 10,
     shieldPenetration: 0,
     hacking: 200,
@@ -126,6 +135,7 @@ const makeUnit = (
     stats: { ...BASE_STATS, ...stats },
     modifiers: emptyPreFightModifiers(),
     unsimulated: [],
+    abilities: [],
 });
 
 /** The unit's pre-buff attack sheet: base × (1 + leader attack %). The pass leaves
@@ -181,7 +191,7 @@ describe('squadLeaderPass — stage additivity (ATLAS_SYNDICATE "Intern")', () =
             player: { faction: 'ATLAS_SYNDICATE', name: 'Intern', stage: 1 },
         });
         expect(attackSheet(player[0])).toBeCloseTo(1000 * 1.03);
-        expect(player[0].stats.critDamage).toBe(100);
+        expect(player[0].stats.critDamage).toBe(50);
     });
 
     it('stage 3 = stages[0] + [1] + [2], same-stat pcts summed BEFORE the single multiply', () => {
@@ -193,8 +203,8 @@ describe('squadLeaderPass — stage additivity (ATLAS_SYNDICATE "Intern")', () =
         expect(player[0].modifiers.attackPct).toBe(5);
         expect(attackSheet(player[0])).toBeCloseTo(1050);
         expect(attackSheet(player[0])).not.toBeCloseTo(1000 * 1.03 * 1.02, 10);
-        // critDamage: 2% + 3% → ×1.05.
-        expect(player[0].stats.critDamage).toBeCloseTo(105);
+        // critDamage: 2% + 3% add as 5 points, like gear: 50 → 55 (not 50 × 1.05 = 52.5).
+        expect(player[0].stats.critDamage).toBeCloseTo(55);
     });
 });
 
@@ -265,6 +275,29 @@ describe('squadLeaderPass — stat math', () => {
         expect(player[0].stats.security).toBeCloseTo(100 + 25);
     });
 
+    it('percentage-only stats add the line as points (Negotiator I: +10% crit power, 50 → 60)', () => {
+        const player = [makeUnit('p1', 'player', 'ATLAS_SYNDICATE')];
+        runPass(player, [], {
+            player: { faction: 'ATLAS_SYNDICATE', name: 'Negotiator', stage: 1 },
+        });
+        expect(player[0].stats.critDamage).toBeCloseTo(60);
+    });
+
+    it('defense penetration adds as points (Lieutenant II: +8% on a 0-pen ship → 8)', () => {
+        const player = [makeUnit('p1', 'player', 'FRONTIER_LEGION', { defensePenetration: 0 })];
+        runPass(player, [], {
+            player: { faction: 'FRONTIER_LEGION', name: 'Lieutenant', stage: 2 },
+        });
+        expect(player[0].stats.defensePenetration).toBe(8);
+    });
+
+    it('an enemy crit-rate loss subtracts points (Midas III: 50% crit → 35%, not 42.5%)', () => {
+        const player = [makeUnit('p1', 'player', 'MPL')];
+        const enemy = [makeUnit('e1', 'enemy', 'XAOC')];
+        runPass(player, enemy, { player: { faction: 'MPL', name: 'Midas', stage: 3 } });
+        expect(enemy[0].stats.crit).toBeCloseTo(35);
+    });
+
     it('clamps a negative result at 0 (Swarmcaller stage 3: enemies lose 30 flat hacking)', () => {
         const player = [makeUnit('p1', 'player', 'BINDERBURG')];
         const enemy = [makeUnit('e1', 'enemy', 'MPL', { hacking: 10 })];
@@ -273,6 +306,64 @@ describe('squadLeaderPass — stat math', () => {
         });
         // 10 - 30 = -20 → floored at 0.
         expect(enemy[0].stats.hacking).toBe(0);
+    });
+});
+
+describe('squadLeaderPass — ability lines', () => {
+    it('Medusa III grants each Gelecek ally a self-repair on debuff inflicted, nothing else', () => {
+        const player = [makeUnit('p1', 'player', 'GELECEK'), makeUnit('p2', 'player', 'MPL')];
+        runPass(player, [], { player: { faction: 'GELECEK', name: 'Medusa', stage: 3 } });
+        expect(player[0].abilities).toHaveLength(1);
+        expect(player[0].abilities[0]).toMatchObject({
+            type: 'heal',
+            target: 'self',
+            trigger: 'on-debuff-inflicted',
+            triggerApplicationFilter: 'inflict',
+            oncePerRootCast: 'cast',
+            source: 'equipment',
+            config: { type: 'heal', pct: 5, basis: 'hp' },
+        });
+        expect(player[0].modifiers.incomingHeal).toBe(0);
+        expect(player[0].unsimulated).toEqual([]);
+        expect(player[1].abilities).toEqual([]);
+    });
+});
+
+describe('squadLeaderPass — per-ally lines', () => {
+    it('Lieutenant III puts its +5% on the per-ally channel, not the flat attack %', () => {
+        const player = [
+            makeUnit('p1', 'player', 'FRONTIER_LEGION'),
+            makeUnit('p2', 'player', 'FRONTIER_LEGION'),
+        ];
+        runPass(player, [], {
+            player: { faction: 'FRONTIER_LEGION', name: 'Lieutenant', stage: 3 },
+        });
+        for (const u of player) {
+            expect(u.modifiers.attackPct).toBe(8);
+            expect(u.modifiers.attackPctPerOtherFactionAlly).toBe(5);
+            expect(u.unsimulated).toEqual([]);
+        }
+        // One other living Legion ally → 8 + 5.
+        expect(liveLeaderAttackPct(player[0].modifiers, 1)).toBe(13);
+    });
+});
+
+describe('squadLeaderPass — "% of own stat" lines', () => {
+    it('Pollinator III adds 0.8% of the post-leader defence as flat security', () => {
+        const player = [makeUnit('p1', 'player', 'BINDERBURG'), makeUnit('p2', 'player', 'MPL')];
+        runPass(player, [], { player: { faction: 'BINDERBURG', name: 'Pollinator', stage: 3 } });
+        // Defence 500 × 1.08 (stage II) = 540; security 100 + 0.8% × 540.
+        expect(player[0].stats.defence).toBeCloseTo(540);
+        expect(player[0].stats.security).toBeCloseTo(100 + 4.32);
+        expect(player[0].unsimulated).toEqual([]);
+        expect(player[1].stats.security).toBe(100);
+    });
+
+    it('Swarmcaller II adds 1.2% of the post-leader defence as flat security', () => {
+        const player = [makeUnit('p1', 'player', 'BINDERBURG')];
+        runPass(player, [], { player: { faction: 'BINDERBURG', name: 'Swarmcaller', stage: 2 } });
+        // Defence 500 × 1.10 (stage I) = 550; security 100 + 1.2% × 550.
+        expect(player[0].stats.security).toBeCloseTo(100 + 6.6);
     });
 });
 
@@ -319,10 +410,11 @@ describe('squadLeaderPass — dual leaders (both sides selected)', () => {
         expect(attackSheet(player[0])).not.toBeCloseTo(1000 * 1.1 * 0.85, 5);
         // hp only sees the own leader's +10%.
         expect(player[0].stats.hp).toBeCloseTo(10000 * 1.1);
-        // The Legion foe gets its own leader's ally boosts (stage I +10% + stage II
-        // +7.5% attack, summed before the single multiply); Midas stage 1 has no
-        // enemy-facing effects.
-        expect(attackSheet(enemy[0])).toBeCloseTo(1000 * 1.175);
+        // The Legion foe gets its own leader's ally boosts: stage I's +10% attack, and stage
+        // II's +7.5% per other alive Legion ally on the per-ally channel (it has none, so the
+        // engine resolves it to 0). Midas stage 1 has no enemy-facing effects.
+        expect(attackSheet(enemy[0])).toBeCloseTo(1000 * 1.1);
+        expect(enemy[0].modifiers.attackPctPerOtherFactionAlly).toBe(7.5);
     });
 });
 
@@ -358,13 +450,13 @@ describe('squadLeaderPass — skip rules (synthetic leader)', () => {
         expect(offFaction.modifiers).toEqual(emptyPreFightModifiers());
     });
 
-    it('a real conditional effect (Reaper stage 3 secondary-target damage) goes to unsimulated', () => {
+    it('Reaper III secondary-target damage lands on its own channel, not outgoingDamage', () => {
         const player = [makeUnit('p1', 'player', 'MARAUDERS')];
         runPass(player, [], {
             player: { faction: 'MARAUDERS', name: 'Reaper', stage: 3 },
         });
-        expect(player[0].unsimulated).toContain('+20% direct damage to secondary targets');
-        // The conditional modifier must NOT have been folded into the channel.
+        expect(player[0].unsimulated).toEqual([]);
+        expect(player[0].modifiers.outgoingDamageSecondaryTargets).toBe(20);
         expect(player[0].modifiers.outgoingDamage).toBe(0);
     });
 
@@ -436,6 +528,20 @@ describe('squadLeaderPass — full-data sweep (real, unmocked SQUAD_LEADERS)', (
                 }
             }
         }
+    });
+});
+
+describe('SQUAD_LEADERS data invariant — coverage', () => {
+    it('every real leader line is simulated (the in-app docs say so)', async () => {
+        const { SQUAD_LEADERS: REAL } = await vi.importActual<
+            typeof import('../../../../constants/squadLeaders')
+        >('../../../../constants/squadLeaders');
+        const unsimulated = Object.values(REAL)
+            .flat()
+            .flatMap((leader) => leader.stages.flat())
+            .filter((effect) => !isSquadLeaderEffectSimulated(effect))
+            .map((effect) => effect.text);
+        expect(unsimulated).toEqual([]);
     });
 });
 
