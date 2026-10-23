@@ -18,7 +18,9 @@ import {
     type IncomingReductionParts,
 } from '../victimDamage';
 import { runCombat, CombatEngineInput } from '../engine';
-import { createEventBus } from '../events';
+import { createEventBus, type CombatEvent } from '../events';
+import { checkInvariants } from '../audit/invariants';
+import { buildAuditTrail, type BattleResult } from '../../calculators/battleSimulator';
 import { runPlayerTurn, PlayerActorRuntime, PlayerTurnArgs } from '../playerTurn';
 import { createActor } from '../state';
 import { createStatusEngine } from '../statusEngine';
@@ -546,6 +548,51 @@ describe('positional path end to end: both victim sides compose and land at the 
     });
     it('enemy victim: -69 is unchanged (0.31)', () => {
         expectLanded(enemySide({ gear: 69 }), 'enemy-victim', 1550);
+    });
+});
+
+// ── The invariants gate reads the floor off the funnel ──────────────────────────────────
+
+/** The `hit-incoming-factor` rows a run emits, as an audit-only result `checkInvariants` reads. */
+const auditedRun = (input: CombatEngineInput): BattleResult => {
+    const bus = createEventBus();
+    const events: CombatEvent[] = [];
+    bus.on('hit-incoming-factor', (e) => events.push(e));
+    runCombat({ ...input, bus });
+    return {
+        rounds: [],
+        outcome: { winner: 'enemy', lastRound: input.numRounds },
+        roster: [],
+        combatLog: [],
+        audit: buildAuditTrail(events),
+    };
+};
+
+describe('incoming-reduction-cap invariant: every direct hit is priced at or above 0.30', () => {
+    const cases: [string, CombatEngineInput, string][] = [
+        [
+            'player victim, -80 gear',
+            BASE({
+                teamActors: [playerVictim(1_000_000, { gear: 80 })],
+                enemyAttackers: [PLAYER_VICTIM_ATTACKER('M1')],
+            }),
+            'victim',
+        ],
+        [
+            'enemy victim, -60 Inc. Damage Down × passive 40',
+            BASE({
+                ...playerAttacker(),
+                enemyAttackers: [enemyVictim(1_000_000, { status: -60, gear: 40 })],
+            }),
+            'enemy-victim',
+        ],
+    ];
+    it.each(cases)('%s: the hit sits on the floor and the invariant holds', (_, input, id) => {
+        const result = auditedRun(input);
+        const hits = result.audit!.hitIncomingFactors.filter((h) => h.victimId === id);
+        expect(hits.length).toBeGreaterThan(0);
+        for (const h of hits) expect(h.factor).toBeCloseTo(0.3, 12);
+        expect(checkInvariants(result)).toEqual([]);
     });
 });
 

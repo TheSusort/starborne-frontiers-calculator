@@ -50,7 +50,7 @@
  *
  * `simulateBattle` (the runCombat wrapper that produces these inputs) is Task 3 — NOT here.
  */
-import type { CombatEvent } from '../combat/events';
+import type { CombatEvent, StatusDuration } from '../combat/events';
 import type { CombatActor } from '../combat/state';
 import type { Position } from '../../types/encounters';
 import type { Ship, AffinityName } from '../../types/ship';
@@ -280,6 +280,57 @@ export interface BattleResult {
      * deep-equal to the pre-F shape.
      */
     preFight?: { unsimulated: { actorId: string; name: string; texts: string[] }[] };
+    /** Present ONLY when the input set `__auditTrail` — see {@link BattleAuditTrail}. */
+    audit?: BattleAuditTrail;
+}
+
+/**
+ * Engine state the combat-sim invariants read (`checkInvariants` in combat/audit/invariants.ts)
+ * that neither `rounds` nor `combatLog` carries. Log-only: built from the `status-snapshot` and
+ * `hit-incoming-factor` events, it feeds nothing back into the fight.
+ */
+export interface BattleAuditTrail {
+    /** One row per actor per round, at the round tail (the `status-snapshot` instant): the
+     *  remaining turns of each timed status the actor holds. */
+    statusDurations: {
+        round: number;
+        actorId: string;
+        buffs: StatusDuration[];
+        debuffs: StatusDuration[];
+    }[];
+    /** One row per direct hit that carried its victim-side factors: the composed non-defence
+     *  incoming factor it was priced with (the `hit-incoming-factor` event). */
+    hitIncomingFactors: {
+        round: number;
+        attackerId?: string;
+        victimId: string;
+        factor: number;
+        block: 'none' | 'partial' | 'full';
+    }[];
+}
+
+/** Folds an event stream into its {@link BattleAuditTrail}. */
+export function buildAuditTrail(events: readonly CombatEvent[]): BattleAuditTrail {
+    const trail: BattleAuditTrail = { statusDurations: [], hitIncomingFactors: [] };
+    for (const e of events) {
+        if (e.type === 'status-snapshot') {
+            trail.statusDurations.push({
+                round: e.round,
+                actorId: e.actorId,
+                buffs: e.buffDurations ?? [],
+                debuffs: e.debuffDurations ?? [],
+            });
+        } else if (e.type === 'hit-incoming-factor') {
+            trail.hitIncomingFactors.push({
+                round: e.round,
+                ...(e.attackerId !== undefined ? { attackerId: e.attackerId } : {}),
+                victimId: e.victimId,
+                factor: e.factor,
+                block: e.block,
+            });
+        }
+    }
+    return trail;
 }
 
 interface RosterEntry {
@@ -829,6 +880,9 @@ export interface BattleSimulationInput {
      *  fingerprint scenarios (richEnemy / hurtAllies) need. Never set by production callers.
      *  Mutates the LIVE roster; the engine hands out `allActors` itself, not a copy. */
     __testTapActors?: (actors: CombatActor[]) => void;
+    /** AUDIT-ONLY: attach `BattleResult.audit` (the invariants' read of engine state the result
+     *  does not otherwise carry). Never set by production callers. */
+    __auditTrail?: boolean;
 }
 
 /** The combat stats simulateBattle resolves per placement. Derived from the ship's
@@ -1247,6 +1301,11 @@ export function simulateBattle(
     for (const t of LOG_EVENT_TYPES) {
         bus.on(t, (e) => events.push(e as CombatEvent));
     }
+    const auditEvents: CombatEvent[] = [];
+    if (input.__auditTrail) {
+        bus.on('hit-incoming-factor', (e) => auditEvents.push(e));
+        bus.on('status-snapshot', (e) => auditEvents.push(e));
+    }
 
     const { rounds: engineRounds } = runCombat({
         /* eslint-disable no-restricted-syntax -- the plan's pre-fight stat sheet seeds the engine input; the engine folds buffs live */
@@ -1396,7 +1455,7 @@ export function simulateBattle(
         initialCharge.set(plan.id, { charge: plan.startCharged ? max : 0, max });
     }
 
-    const result = assembleBattleResult({
+    const assembled = assembleBattleResult({
         events,
         perRoundPerTarget,
         perRoundPerShield,
@@ -1406,6 +1465,9 @@ export function simulateBattle(
         numRounds,
         initialCharge,
     });
+    const result: BattleResult = input.__auditTrail
+        ? { ...assembled, audit: buildAuditTrail(auditEvents) }
+        : assembled;
 
     // Attach the pre-fight unsimulated report ONLY when a leader was actually selected
     // AND at least one effect text was recorded — a no-leader run returns the assembler's

@@ -26,7 +26,9 @@
  */
 import { describe, it, expect } from 'vitest';
 import { runCombat, CombatEngineInput } from '../engine';
-import { createEventBus } from '../events';
+import { createEventBus, type CombatEvent } from '../events';
+import { checkInvariants } from '../audit/invariants';
+import { buildAuditTrail, type BattleResult } from '../../calculators/battleSimulator';
 import { ShipSkills, Ability } from '../../../types/abilities';
 import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
 import type { Position } from '../../../types/encounters';
@@ -448,5 +450,78 @@ describe('R202 — a partial block composes INSIDE the 70% non-defence cap', () 
             });
         expect(diesAt(build, 300, 'victim')).toBe(true);
         expect(diesAt(build, 301, 'victim')).toBe(false);
+    });
+});
+
+describe('incoming-reduction-cap invariant: a block composes inside the 70% cap', () => {
+    /** A passive slot carrying an 80% direct-hit reduction (floored to 0.30) and a block. */
+    const cappedBlockSlot = (
+        cfg: Parameters<typeof blockPassiveSlot>[1]
+    ): ShipSkills['slots'][number] => ({
+        slot: 'passive',
+        abilities: [
+            ...blockPassiveSlot('block-test', cfg).abilities,
+            {
+                id: 'gear-80',
+                type: 'incoming-reduction',
+                target: 'self',
+                trigger: 'on-cast',
+                conditions: [],
+                config: {
+                    type: 'incoming-reduction',
+                    scope: 'direct',
+                    condition: 'always',
+                    pct: 80,
+                    critFamily: false,
+                },
+            },
+        ],
+    });
+    const auditedRun = (input: CombatEngineInput): BattleResult => {
+        const bus = createEventBus();
+        const events: CombatEvent[] = [];
+        bus.on('hit-incoming-factor', (e) => events.push(e));
+        runCombat({ ...input, bus });
+        return {
+            rounds: [],
+            outcome: { winner: 'enemy', lastRound: input.numRounds },
+            roster: [],
+            combatLog: [],
+            audit: buildAuditTrail(events),
+        };
+    };
+    const twoHits = (passive: ShipSkills['slots'][number], stealth: boolean): CombatEngineInput =>
+        BASE({
+            teamActors: [playerVictim('victim', 'M4', 1_000_000, { passive, stealth })],
+            enemyAttackers: [
+                offensiveEnemy('enemy-1', 'M1', 'front', 1000),
+                offensiveEnemy('enemy-2', 'M2', 'front', 1000),
+            ],
+        });
+
+    it('a partial block (Ironclad) on a floored victim stays at 0.30', () => {
+        const result = auditedRun(
+            twoHits(
+                cappedBlockSlot({ condition: 'nth-hit-2plus', blockPct: 0.5, oncePerRound: false }),
+                false
+            )
+        );
+        const hits = result.audit!.hitIncomingFactors.filter((h) => h.victimId === 'victim');
+        expect(hits.map((h) => h.block)).toEqual(['none', 'partial']);
+        for (const h of hits) expect(h.factor).toBeCloseTo(0.3, 12);
+        expect(checkInvariants(result)).toEqual([]);
+    });
+
+    it('a full block (Shadowguard) zeroes the hit outside the cap and leaves the factor composed', () => {
+        const result = auditedRun(
+            twoHits(
+                cappedBlockSlot({ condition: 'self-stealth', blockPct: 1, oncePerRound: true }),
+                true
+            )
+        );
+        const hits = result.audit!.hitIncomingFactors.filter((h) => h.victimId === 'victim');
+        expect(hits.map((h) => h.block)).toEqual(['full', 'none']);
+        for (const h of hits) expect(h.factor).toBeCloseTo(0.3, 12);
+        expect(checkInvariants(result)).toEqual([]);
     });
 });
