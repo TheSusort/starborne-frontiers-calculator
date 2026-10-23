@@ -1423,6 +1423,26 @@ const LEADER_ROWS: LeaderRow[] = [
         check: scales(firstHit('W', 'O'), 1, 6),
     },
     {
+        // "Other alive Legion ally" means W's own side: Legion ships on the opposing board add
+        // nothing.
+        line: 'Legion Lieutenant III: opposing Legion ships do not count',
+        ...stagePair(
+            {
+                player: [unit('W', 'M4', { faction: 'FRONTIER_LEGION' })],
+                enemy: [
+                    unit('O', 'M4', IDLE, { faction: 'FRONTIER_LEGION' }),
+                    unit('P', 'M3', IDLE, { faction: 'FRONTIER_LEGION' }),
+                ],
+                rounds: 1,
+            },
+            'FRONTIER_LEGION',
+            'Lieutenant',
+            3,
+            2
+        ),
+        check: scales(firstHit('W', 'O'), 1, 6),
+    },
+    {
         // Colonel II: 10% + 2 × 7.5% = 25% with two other Legion allies, against Colonel I's 10%.
         line: 'Legion Colonel II: +7.5% attack per other alive Legion ally',
         ...stagePair(LEGION_TRIO, 'FRONTIER_LEGION', 'Colonel', 2, 1),
@@ -1573,6 +1593,39 @@ const LEADER_ROWS: LeaderRow[] = [
             1
         ),
         check: scales(firstHit('W', 'O'), 1.15, 6),
+    },
+    {
+        // Stealth is read on each hit, not once per cast: W enters the cast unstealthed, its
+        // first hit crits and grants it Stealth, so only the two later hits carry the bonus.
+        line: 'Tianchao Cipher III: Stealth gained mid-cast counts from the next hit',
+        ...stagePair(
+            solo(
+                {
+                    faction: 'TIANCHAO',
+                    active: 'This Unit attacks three times with each attack dealing <unit-damage>50% damage</unit-damage>.',
+                    passives: [
+                        'This Unit gains <unit-skill>Stealth</unit-skill> for 1 turn after critically damaging an enemy.',
+                    ],
+                    stats: { crit: 100, critDamage: 50 },
+                },
+                IDLE
+            ),
+            'TIANCHAO',
+            'Cipher',
+            3,
+            2
+        ),
+        check: (w, c) => {
+            const withLine = hitAmounts(w, 'W', 'O');
+            const without = hitAmounts(c, 'W', 'O');
+            expect(withLine).toHaveLength(3);
+            expect(without).toHaveLength(3);
+            expect(withLine.map((h, i) => h / without[i])).toEqual([
+                expect.closeTo(1, 6),
+                expect.closeTo(1.1, 6),
+                expect.closeTo(1.1, 6),
+            ]);
+        },
     },
     {
         // "+20% direct damage to secondary targets": a Marauder's circle attack on O hits the
