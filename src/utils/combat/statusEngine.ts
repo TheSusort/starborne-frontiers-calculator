@@ -468,8 +468,8 @@ export interface StatusEngine {
     /** Remove up to `count` removable BUFFS from `actorId`'s self store, newest first;
      *  `'all'` = all; respects UNREMOVABLE_STATUSES + 'permanent'; returns count removed. */
     purge(actorId: string, count: number | 'all'): number;
-    /** How many buffs on `actorId` a purge could remove (the pool `purge` takes from, Buff
-     *  Protection aside), without removing any. */
+    /** How many buffs on `actorId` a purge could remove at neutral affinity (the pool `purge`
+     *  takes from, 0 under Buff Protection), without removing any. */
     removableBuffCount(actorId: string): number;
     /** Buff steal: move up to `count` removable TIMED self-buffs from `sourceId` to
      *  EVERY id in `recipientIds`, newest-applied first (same ordering as purge). The REMAINING
@@ -2220,12 +2220,9 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         return affected;
     };
 
-    /** Remove up to `count` removable BUFFS from `actorId`'s self store, newest first
-     *  (see removeNewestFirst). `'all'` removes every removable buff. Respects
-     *  UNREMOVABLE_STATUSES + 'permanent'; returns count removed. Unknown id → no-op (returns 0). */
-    const purge = (actorId: string, count: number | 'all'): number => {
-        // Holder-state guard: a unit carrying Buff Protection cannot have its buffs purged.
-        // Purge-only — `cleanse` (removeNewestFirst(_, 'debuffs', _)) does NOT call this.
+    /** Holder-state guard: a unit carrying Buff Protection cannot have its buffs purged.
+     *  Purge-only — `cleanse` (removeNewestFirst(_, 'debuffs', _)) and `steal` do NOT consult it. */
+    const holdsBuffProtection = (actorId: string): boolean => {
         const selfBuffNames = new Set<string>();
         for (const ab of snapshot(actorId).activeSelfBuffs) {
             if (ab.stacks === undefined || ab.stacks > 0) selfBuffNames.add(ab.buffName);
@@ -2234,12 +2231,17 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         // NOTE: deliberately omits the aura/accum channel (`activeAbilityStatuses('self', …)`) that
         // `selfBuffNamesForOwners` also reads — Buff Protection is only ever granted as a TIMED buff,
         // so the timed + scheduled channels cover every real grant. Revisit if an aura grant appears.
-        if ([...selfBuffNames].some(isBuffProtection)) return 0;
-        return removeNewestFirst(actorId, 'buffs', count);
+        return [...selfBuffNames].some(isBuffProtection);
     };
 
+    /** Remove up to `count` removable BUFFS from `actorId`'s self store, newest first
+     *  (see removeNewestFirst). `'all'` removes every removable buff. Respects
+     *  UNREMOVABLE_STATUSES + 'permanent'; returns count removed. Unknown id → no-op (returns 0). */
+    const purge = (actorId: string, count: number | 'all'): number =>
+        holdsBuffProtection(actorId) ? 0 : removeNewestFirst(actorId, 'buffs', count);
+
     const removableBuffCount = (actorId: string): number =>
-        removalCandidates(actorId, 'buffs', [], true).length;
+        holdsBuffProtection(actorId) ? 0 : removalCandidates(actorId, 'buffs', [], true).length;
 
     /** Move up to `count` removable TIMED self-buffs from `sourceId` to EVERY id in
      *  `recipientIds`, newest-applied first (mirrors removeNewestFirst's ordering, but
