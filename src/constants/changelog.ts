@@ -21,6 +21,8 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: destroyed ships stop gaining Overload, Blast and other per-round stacks.',
     'Combat simulator: ally-wide buffs, repairs, charges and debuff trims now skip destroyed allies.',
     'Combat simulator: ships killed by a DoT tick now trigger death effects immediately.',
+    "Combat simulator: a killing blow's Bomb or debuff no longer lands on the wreck.",
+    "Combat simulator: Voron's and Meatshield's converted-hit DoTs can no longer be cleansed.",
     'Combat simulator: the Reflect set now also reflects splash damage.',
 ];
 

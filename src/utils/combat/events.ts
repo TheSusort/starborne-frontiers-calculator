@@ -586,6 +586,19 @@ export type CombatEvent =
           waveTotal?: number;
           waveLead?: boolean;
       } & ReactiveStamp)
+    /** LOG-ONLY: a reactive purge (`triggers.ts`'s purge executor) was aimed at an enemy holding
+     *  at least one removable buff and removed nothing, because the purger is at an affinity
+     *  disadvantage against it (a purge lands like an 'apply' debuff). `reason` names why. NO
+     *  combat listener subscribes to it, so a purge that did not happen wakes nothing; it opens a
+     *  `purge` row of 0 so the attempt is visible. Suppressed under the same depth-1 chain guard
+     *  as `purge-performed`. */
+    | ({
+          type: 'purge-blocked-log';
+          casterId: string;
+          targetId: string;
+          round: number;
+          reason: 'affinity';
+      } & ReactiveStamp)
     /** A buff STEAL moved something. Sibling of `purge-performed`, and like it, SUPPRESSED when
      *  nothing actually moved (an empty return from `statusEngine.steal` / `stealStacks` opens no
      *  log row).
@@ -744,6 +757,19 @@ export type CombatEvent =
           affectedIds: string[];
           round: number;
       } & ReactiveStamp)
+    /** LOG-ONLY: a landing this cast decided against `targetId` was dropped because the cast's
+     *  damage destroyed that ship first (owner ruling 2026-10-22 — see
+     *  `DeferredEnemyApplication.landsOnId`). `label` names what did not land: a debuff's buff
+     *  name, or a DoT/Bomb's resist label (`dotResistLabel`). NO combat listener subscribes to it,
+     *  so nothing reacts to a landing that did not happen; the combat log records it on the
+     *  attack row that struck the ship (`CombatLogTarget.droppedLandings`). */
+    | {
+          type: 'landing-dropped';
+          sourceId: string;
+          targetId: string;
+          round: number;
+          label: string;
+      }
     /** LOG-ONLY: a bomb carrier died with the bomb still pending and its death splash landed on
      *  an adjacent same-side ally. `actorId` = the bomb's applier (credited with the damage),
      *  `victimId` = the splashed ally, `damage` = the intake the funnel recorded for the ally.

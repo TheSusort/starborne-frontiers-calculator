@@ -22,6 +22,18 @@ import { AffinityName, Ship } from '../../../types/ship';
 import { buildShipAbilities } from '../../abilities/buildShipAbilities';
 import { csvAvailable, loadShipSkillRecords } from '../../../../scripts/lib/shipSkillCsv';
 
+/** One cast as the engine runs it: `runPlayerTurn`, then the post-damage flush of the landings
+ *  held for after the damage (engine.ts `flushDeferredEnemyApplications`) — where a DoT or Bomb
+ *  clause written after the damage clause is written. */
+const castAndLand = (args: PlayerTurnArgs): ReturnType<typeof runPlayerTurn> => {
+    const turn = runPlayerTurn(args);
+    for (const pending of turn.deferredEnemyApplications.splice(0)) {
+        pending.applyState();
+        pending.emitEvents();
+    }
+    return turn;
+};
+
 const ATTACKER_AFFINITY: AffinityName = 'thermal';
 
 const baseStats = () => ({
@@ -238,7 +250,7 @@ function castLev(opts: {
     const statusEngine = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
     statusEngine.beginRound(1);
     const victim = makeLoadedVictim('victim', victimSide, statusEngine, opts.victimAffinity);
-    runPlayerTurn(makeArgs(runtime, victim, statusEngine));
+    castAndLand(makeArgs(runtime, victim, statusEngine));
     return durations(statusEngine, victim);
 }
 
@@ -314,7 +326,7 @@ describe("R112: Provider's DoT extension reaches every DoT but no Bomb or Echoin
             statusEngine.beginRound(1);
             const victimSide = casterSide === 'player' ? 'enemy' : 'player';
             const victim = makeLoadedVictim('victim', victimSide, statusEngine);
-            runPlayerTurn(makeArgs(runtime, victim, statusEngine));
+            castAndLand(makeArgs(runtime, victim, statusEngine));
             expect(durations(statusEngine, victim)).toEqual({
                 ...UNMOVED,
                 corrosion: 2,
@@ -332,7 +344,7 @@ describe("R109: Lev's extension reaches a covered enemy's DoTs, not only the aim
         statusEngine.beginRound(1);
         const aimed = makeLoadedVictim('aimed', 'enemy', statusEngine);
         const covered = makeLoadedVictim('covered', 'enemy', statusEngine);
-        runPlayerTurn({
+        castAndLand({
             ...makeArgs(runtime, aimed, statusEngine),
             aoeVictimIds: [aimed.id, covered.id],
             opposingVictimById: new Map([
@@ -421,7 +433,7 @@ describe('R109/R112: inflicted-scope extensions over what the cast applied', () 
         statusEngine.beginRound(1);
         const victimSide = casterSide === 'player' ? 'enemy' : 'player';
         const victim = makeLoadedVictim('victim', victimSide, statusEngine);
-        runPlayerTurn(makeArgs(runtime, victim, statusEngine));
+        castAndLand(makeArgs(runtime, victim, statusEngine));
         return victim;
     };
 
@@ -529,7 +541,7 @@ describe("Wisteria's crit extension grows only the Corrosion it just inflicted",
             kind: 'enemy',
             stats: { ...baseStats(), attack: 0, hp: 1_000_000 },
         });
-        runPlayerTurn(makeArgs(runtime, victim, statusEngine));
+        castAndLand(makeArgs(runtime, victim, statusEngine));
         // Instrument: both DoTs landed this cast.
         expect(victim.corrosionEntries).toHaveLength(1);
         expect(victim.infernoEntries).toHaveLength(1);

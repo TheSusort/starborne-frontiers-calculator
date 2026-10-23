@@ -28,6 +28,7 @@ import {
 } from '../__testutils__/equipmentBoard';
 import { buildEquipmentAbilities } from '../../abilities/buildEquipmentAbilities';
 import { buildTeam } from '../../simulator/buildTeam';
+import { simulateBattle } from '../../calculators/battleSimulator';
 import { GEAR_SETS } from '../../../constants/gearSets';
 import { IMPLANTS } from '../../../constants/implants';
 import type { GearPiece } from '../../../types/gear';
@@ -172,13 +173,25 @@ const GEAR_SET_ROWS: Row[] = [
         },
     },
     {
-        // "10% extra DoT damage"
+        // "10% extra DoT damage". A Bomb is not a DoT (owner ruling 2026-10-22): the wearer's
+        // Inferno ticks are boosted, its Bomb III detonates for the unboosted amount.
         key: 'DECIMATION',
         board: {
-            player: [unit('W', 'M4', { set: { name: 'DECIMATION', pieces: 2 } }, INFLICT_INFERNO)],
+            player: [
+                unit('W', 'M4', {
+                    set: { name: 'DECIMATION', pieces: 2 },
+                    active: 'This Unit inflicts <unit-skill>Inferno III</unit-skill> and <unit-skill>Bomb III</unit-skill> for 3 turns.',
+                    stats: { hacking: 1000 },
+                }),
+            ],
             enemy: [unit('O', 'M4', IDLE)],
+            // A bomb counts down on its holder's turns: five rounds detonate one on either side.
+            rounds: 5,
         },
-        check: scales((r) => grossTo(r, 'dot-ticked', { target: 'O' }), 1.1),
+        check: (w, c) => {
+            scales((r) => grossTo(r, 'dot-ticked', { target: 'O' }), 1.1)(w, c);
+            scales((r) => grossTo(r, 'bomb', { actor: 'W', target: 'O' }), 1)(w, c);
+        },
     },
     {
         // "Applies Inferno 1 for 2 turns."
@@ -1056,6 +1069,8 @@ describe('non-kit census: stat-path inputs reach the engine input', () => {
     const piece = (over: Record<string, unknown>): GearPiece =>
         ({ subStats: [], mainStat: null, rarity: 'legendary', ...over }) as unknown as GearPiece;
 
+    // The simulator applies the player's engineering on BOTH boards (owner ruling 2026-10-22):
+    // pinned at the hook that builds them, `hooks/__tests__/useSimulatorRunsEngineering.test.ts`.
     it('engineering: +10% attack on the ship type reaches the attack the engine reads', () => {
         const eng: EngineeringStat = {
             shipType: 'ATTACKER',
@@ -1121,6 +1136,60 @@ describe('non-kit census: stat-path inputs reach the engine input', () => {
             expect(statsOf(ship, pieces)[stat]).toBe(Math.round(own + (other * pct) / 100));
         }
     );
+
+    // Code Guard applies BEFORE the squad leader (owner ruling 2026-10-22): a 300-hacking ship in
+    // legendary Code Guard under Gelecek Cerberus I (+25 hacking) gains 40% of 300 = 120 security,
+    // not 40% of 325 = 130. The fight reads the leader's hacking on top of the folded security.
+    for (const side of ['player', 'enemy'] as const) {
+        it(`Code Guard reads hacking before the leader's +25 — ${side}-side leader`, () => {
+            const pieces = { u: piece({ id: 'u', setBonus: 'CODE_GUARD', rarity: 'legendary' }) };
+            const ship = baseShip({
+                faction: 'GELECEK',
+                baseStats: { ...BASE, hacking: 300, security: 200 },
+                implants: { implant_ultimate: 'u' },
+                activeSkillText: IDLE.active,
+                activeTarget: IDLE.target,
+                activePattern: IDLE.pattern,
+            });
+            const stats = statsOf(ship, pieces);
+            expect(stats.security).toBe(320);
+            const wearer = { ship, position: 'M4' as const, statOverrides: stats };
+            const other = {
+                ship: baseShip({
+                    id: 'other-ship',
+                    name: 'Other',
+                    activeSkillText: IDLE.active,
+                    activeTarget: IDLE.target,
+                    activePattern: IDLE.pattern,
+                }),
+                position: 'M4' as const,
+                statOverrides: { ...BASE },
+            };
+            const cerberus = leader('GELECEK', 'Cerberus', 1);
+            const result = simulateBattle(
+                side === 'player'
+                    ? {
+                          playerTeam: [wearer],
+                          enemyTeam: [other],
+                          rounds: 1,
+                          playerSquadLeader: cerberus,
+                      }
+                    : {
+                          playerTeam: [other],
+                          enemyTeam: [wearer],
+                          rounds: 1,
+                          enemySquadLeader: cerberus,
+                      },
+                (id) => pieces[id as 'u']
+            );
+            const wearerId = result.roster.find((r) => r.name === 'StatShip')?.actorId;
+            const snapshot = result.combatLog[0].turns.find(
+                (t) => t.actorId === wearerId
+            )?.statsSnapshot;
+            expect(snapshot?.hacking).toBe(325);
+            expect(snapshot?.security).toBe(320);
+        });
+    }
 });
 
 // ---------------------------------------------------------------------------------------------
