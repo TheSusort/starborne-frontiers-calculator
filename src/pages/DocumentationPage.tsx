@@ -3489,17 +3489,19 @@ const DocumentationPage: React.FC = () => {
                                         the same reactions answer it (Warden, Isha, every
                                         counter-attacker), the attacker&apos;s Inc. Damage Up and
                                         Down, Defense Down and Exposed change it, Protection
-                                        redirects it, it uses the wearer&apos;s defence and shield
-                                        penetration, it spends Exposed and Titanite Plating, and the
+                                        redirects it, it uses the wearer&apos;s defence penetration
+                                        and shield penetration against the attacker&apos;s Defense,
+                                        it spends Exposed and Titanite Plating, and the
                                         wearer&apos;s Leech set repairs off it. A ship with both
-                                        reflects twice, one bounce per source. A hit that Protection
-                                        moves entirely onto the protector (Lionheart&apos;s 10
-                                        stacks) is not direct damage to the ship it was aimed at:
-                                        that ship does not counter or react, and its Stasis does not
-                                        drop, but the skill&apos;s debuffs and other effects still
-                                        land on it. When only part of the hit is moved
-                                        (Meatshield&apos;s 30%), the share it keeps is still direct
-                                        damage.
+                                        reflects a hit aimed at it twice, one bounce per source; a
+                                        splash hit bounces only the set&apos;s reflect. A hit that
+                                        Protection moves entirely onto the protector
+                                        (Lionheart&apos;s 10 stacks) is not direct damage to the
+                                        ship it was aimed at: that ship does not counter or react,
+                                        and its Stasis does not drop, but the skill&apos;s debuffs
+                                        and other effects still land on it. When only part of the
+                                        hit is moved (Meatshield&apos;s 30%), the share it keeps is
+                                        still direct damage.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">
