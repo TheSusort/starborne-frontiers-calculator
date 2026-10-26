@@ -6,6 +6,7 @@ import {
     assertVersion,
     commitRelease,
     decodeLiteral,
+    foldChanges,
     nextVersion,
     readCurrentVersion,
     readUnreleased,
@@ -200,5 +201,39 @@ describe('commitRelease', () => {
         expect(file).toBe('git');
         expect(args).toEqual(['commit', '-m', 'chore(release): cut 1.68.0']);
         expect(options.stdio).toBe('inherit');
+    });
+});
+
+describe('foldChanges', () => {
+    it('folds each listed area into one count line where its first entry stood', () => {
+        expect(
+            foldChanges([
+                'Arcade: ducking ships draw whole.',
+                'Combat simulator: one fix.',
+                'Squad leaders: one change.',
+                'Combat log: a log fix.',
+                'Import: a fix.',
+                'Combat simulator: another fix.',
+                'Squad leaders: another change.',
+            ])
+        ).toEqual([
+            'Arcade: ducking ships draw whole.',
+            '3 combat simulator fixes and adjustments.',
+            '2 squad leader fixes and adjustments.',
+            'Import: a fix.',
+        ]);
+    });
+
+    it('keeps a lone entry of a listed area as written', () => {
+        expect(foldChanges(['Combat simulator: one fix.', 'Import: a fix.'])).toEqual([
+            'Combat simulator: one fix.',
+            'Import: a fix.',
+        ]);
+    });
+
+    it('matches the area prefix only before its colon', () => {
+        expect(
+            foldChanges(['Combat simulators are fun.', 'Combat simulators are fun too.'])
+        ).toEqual(['Combat simulators are fun.', 'Combat simulators are fun too.']);
     });
 });
