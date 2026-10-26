@@ -16,7 +16,11 @@ import {
 } from './lib/interactionOracle';
 import { composeBattle } from '../src/utils/combat/audit/compose';
 import { runSeededBattle } from '../src/utils/simulator/seededRuns';
-import { checkInvariants, extraActionActorIds } from '../src/utils/combat/audit/invariants';
+import {
+    checkInvariants,
+    durationExtenderKinds,
+    extraActionActorIds,
+} from '../src/utils/combat/audit/invariants';
 import { checkReproducibility } from '../src/utils/combat/audit/reproducibility';
 import { runAblation } from '../src/utils/combat/audit/ablation';
 import { minimizeComposition } from '../src/utils/combat/audit/minimize';
@@ -159,9 +163,23 @@ function ablationFinding(
 // Minimization
 // ---------------------------------------------------------------------------
 
+/** A seeded run carrying `BattleResult.audit`, which the duration and reduction-cap invariants
+ *  read. */
+function auditedRun(input: BattleSimulationInput, seed: number): BattleResult {
+    return runSeededBattle({ ...input, __auditTrail: true }, seed);
+}
+
+/** `checkInvariants` with the per-roster exemptions the composition's kits earn. */
+function invariantViolations(input: BattleSimulationInput, result: BattleResult) {
+    return checkInvariants(result, {
+        extraActionActorIds: extraActionActorIds(input, result),
+        durationExtenders: durationExtenderKinds(input, result),
+    });
+}
+
 function safeRun(input: BattleSimulationInput, seed: number): BattleResult | null {
     try {
-        return runSeededBattle(input, seed);
+        return auditedRun(input, seed);
     } catch {
         return null;
     }
@@ -175,9 +193,7 @@ function minimizeInvariant(input: BattleSimulationInput, v: InvariantViolation, 
             }
             const result = safeRun(candidate, seed);
             if (!result) return false;
-            return checkInvariants(result, {
-                extraActionActorIds: extraActionActorIds(candidate, result),
-            }).some(
+            return invariantViolations(candidate, result).some(
                 (x) =>
                     x.invariant === v.invariant &&
                     (v.actorId === undefined || x.actorId === v.actorId)
@@ -288,7 +304,7 @@ function main(): void {
 
         let compResult: BattleResult;
         try {
-            compResult = runSeededBattle(compInput, s);
+            compResult = auditedRun(compInput, s);
         } catch (err) {
             findings.push(crashFinding(allNames(compInput), allPositions(compInput), s, err));
             compositionsRun++;
@@ -297,8 +313,7 @@ function main(): void {
         compositionsRun++;
 
         try {
-            const extraActionIds = extraActionActorIds(compInput, compResult);
-            for (const v of checkInvariants(compResult, { extraActionActorIds: extraActionIds })) {
+            for (const v of invariantViolations(compInput, compResult)) {
                 const min = minimizeInvariant(compInput, v, s);
                 findings.push({
                     ...invariantFinding(v, compResult, s),
