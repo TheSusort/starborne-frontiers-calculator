@@ -1063,9 +1063,8 @@ export type CombatEvent =
            *  aggregate, and NOT what the victim ended up taking. Pre-funnel: a Protection cascade
            *  may have moved a slice of it to a protector, an incoming-block proc may have shaved
            *  one. Present only when a damage aggregate is in scope. The combat log's row
-           *  `amount` reads `takenDamage` below and falls back to this only where that is absent
-           *  (the non-positional path). Anything sized on what the victim TOOK reads
-           *  `takenDamage`. */
+           *  `amount` reads `takenDamage` below; this is its fallback for a hand-built event only.
+           *  Anything sized on what the victim TOOK reads `takenDamage`. */
           damage?: number;
           /** What this victim actually TOOK from this sub-attack: the funnel's own recorded
            *  intake (`VictimDamageOutcome.incomingBooked`) — post-Protection-cascade,
@@ -1080,9 +1079,8 @@ export type CombatEvent =
            *  A SEPARATE field from `damage` for the same reason `ability-performed` carries
            *  `deliveredDamage` beside its own `damage`: `damage` has its own consumers, the
            *  combat log among them. Legitimately 0 (a fully redirected hit), so consumers must
-           *  test for `undefined`, never falsiness. Present only on the positional path — the
-           *  non-positional emit has no funnel outcome in scope, so consumers fall back to
-           *  `damage` there. */
+           *  test for `undefined`, never falsiness. Every engine emit carries it;
+           *  consumers fall back to `damage` only for a hand-built event. */
           takenDamage?: number;
           /** True when this hit is a PRIMARY-TARGET hit (owner ruling R92): a cast's hit on its
            *  anchor, or a counter's / proc's hit that is the first aimed hit on this victim in

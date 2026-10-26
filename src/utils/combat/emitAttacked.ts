@@ -28,9 +28,8 @@ export function emitAttacked(args: {
      */
     damage: number;
     /**
-     * What the victim actually TOOK from that attack — the funnel's recorded intake. Supplied by
-     * the positional callers, which have the funnel outcome in scope; OMITTED by the
-     * non-positional one, whose consumers fall back to `damage`. Read the event field's own doc
+     * What the victim actually TOOK from that attack — the funnel's recorded intake. Every engine
+     * caller supplies it; consumers fall back to `damage` only for a hand-built event. Read the event field's own doc
      * for the ruling that makes it the basis for damage-taken reactives and the >25%-max-HP gate.
      *
      * Emitted whenever supplied, INCLUDING 0 — a fully redirected hit really is 0 taken, and
