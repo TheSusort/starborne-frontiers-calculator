@@ -337,6 +337,15 @@ export function applyPositionalDamage(args: {
     opposingLiving: CombatActor[];
     statusOf?: (id: string) => ActorTargetingStatus | undefined;
     acting?: PositionalActing;
+    /**
+     * The anchor the cast picked when its turn began. Sub-attack 0 lands on it while it is still
+     * alive on the board, so a clause the cast resolves before its damage (a purge or steal that
+     * strips Taunt or Stealth, a cleanse of the caster's own Provoke) does not move the hit it
+     * precedes. Sub-attacks 1+ re-resolve from the live board. Owner ruling 2026-10-26, for a purged
+     * Taunt: the hit stays, and a multi-hit purger retargets after its first hit.
+     * Unsupplied, or the actor is gone → sub-attack 0 resolves like every other.
+     */
+    firstAnchorId?: string;
     /** `didCrit` is this victim's own crit on the hit being read (a per-enemy crit bonus scales
      *  off it — Crucialis). */
     defenseProfileOf: (v: CombatActor, didCrit: boolean) => VictimDefenseProfile;
@@ -514,6 +523,7 @@ export function applyPositionalDamage(args: {
         opposingLiving,
         statusOf,
         acting,
+        firstAnchorId,
         defenseProfileOf,
         applyToVictim,
         emitHit,
@@ -545,13 +555,15 @@ export function applyPositionalDamage(args: {
         if (h > 0 && attackerStanding && !attackerStanding()) break;
         // Re-resolve the anchor against the LIVE roster (a victim killed on an earlier hit
         // is already gone from opposingLiving via currentHp === 0 filtering).
-        const anchorActor = resolvePositionalTarget(
-            actorPosition,
-            target,
-            opposingLiving,
-            statusOf,
-            acting
-        );
+        const lockedAnchor =
+            h === 0 && firstAnchorId !== undefined
+                ? opposingLiving.find(
+                      (a) => a.id === firstAnchorId && a.currentHp > 0 && a.position !== undefined
+                  )
+                : undefined;
+        const anchorActor =
+            lockedAnchor ??
+            resolvePositionalTarget(actorPosition, target, opposingLiving, statusOf, acting);
         if (anchorActor === null || anchorActor.position === undefined) {
             // WHIFF — no living target resolvable for this sub-attack. Skip entirely, but still
             // record an entry so `subAttacks[h]` stays aligned with the loop index.

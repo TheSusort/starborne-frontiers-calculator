@@ -9162,7 +9162,8 @@ export function runCombat(rawInput: CombatEngineInput): {
             /** Ship-wide stealth-targeting bypass. */
             ignoresStealth?: boolean;
             actingId: string;
-            /** The cast's resolved target: a Concentrate Fire pick made at selection time. */
+            /** The cast's turn-start target (`selectTurnTarget`): its first hit's anchor
+             *  (`applyPositionalDamage`'s `firstAnchorId`) and its Concentrate Fire pick. */
             castTargetId?: string;
             opposingLiving: CombatActor[];
             /** This turn's landed scheduled enemy effects, from the acting
@@ -9281,6 +9282,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                         attackerId: args.actingId,
                         concentrateFirePickId: args.castTargetId,
                     },
+                    firstAnchorId: args.castTargetId,
                     defenseProfileOf: (v, didCrit) => ({
                         ...victimDefenseProfileOf(v, {
                             scheduledEnemyEffects: args.scheduledEnemyEffects,

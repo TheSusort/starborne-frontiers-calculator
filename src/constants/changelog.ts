@@ -7,6 +7,7 @@ import { ChangelogEntry } from '../types/changelog';
 export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator: Nyxen's shield retaliation no longer fires on fully blocked hits.",
     'Combat simulator: Vindicator no longer reports Provoke when no adjacent enemy exists.',
+    'Combat simulator: purging or stealing Taunt no longer moves the hit that follows.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
