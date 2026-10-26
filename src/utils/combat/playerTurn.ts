@@ -96,7 +96,6 @@ import {
 } from './supportRecipients';
 import { resolveDebuffRecipientIds } from './debuffRecipients';
 import { clausePhase, isRemovalBeforeDamage } from './castClauseOrder';
-import { isAliveTarget } from './targetableActors';
 import { supportFootprintAllyIds } from './supportFootprint';
 import {
     composeIncomingFactor,
@@ -2720,6 +2719,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             : `ship:${status.sourceSlot}`) +
         `:hit${hitIndex}`;
     // ── Status removals: buff steals and purges ─────────────────────────────────────────────
+    /** The living enemies as the cast resolves, before its damage: a board-wide purge written
+     *  after the damage still reaches an enemy that damage destroyed (`purgeStruck`). */
+    const castOpposingIds = aliveOpposingIds?.();
     // Each helper performs the removal's STATE change and returns its events as a thunk, so a
     // clause written after the damage can hold the events back with the write (see
     // `deferredEnemyApplications`). Side-symmetric: player and enemy casters run the same code.
@@ -2730,8 +2732,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
      *  the same resolver as every direct enemy clause: "steals 1 buff from the primary target" on
      *  a pattern skill steals `count` from EACH struck enemy (owner ruling 2026-10-03 — Tithonus
      *  on Circle hitting A, B and C takes one from each), and every stolen buff goes to every
-     *  recipient. Each source is stolen from and logged on its own. A source that is no longer
-     *  alive is not stolen from, as for `purgeStruck`. */
+     *  recipient. Each source is stolen from and logged on its own. A source the cast's own hit
+     *  destroyed is still stolen from, as for `purgeStruck`. */
     const stealFromStruck = (
         abTarget: Ability['target'],
         count: number,
@@ -2752,7 +2754,6 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             const source =
                 opposingVictimById?.get(sourceId) ??
                 (hasVictim && sourceId === enemy.id ? enemy : undefined);
-            if (source !== undefined && !isAliveTarget(source)) continue;
             if (extensionImmune(sourceId)) continue;
             // How many stacks of each STACK-STEALABLE status the source holds right now.
             // Computed HERE and passed in, rather than inside statusEngine.steal: the count
@@ -2817,10 +2818,12 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
      * through `resolveDebuffRecipientIds`; this purge differs on purpose. If you are aligning
      * them, change this one and say so in the commit.
      *
-     * A victim that is no longer alive is not purged: a purge written after the damage resolves
-     * after a hit that may have destroyed its victim. Every victim is purged before any
-     * purge-performed is emitted, so each event carries the whole wave's total
-     * (`purge-performed.waveTotal`).
+     * A victim the cast's own hit destroyed is still purged (owner ruling 2026-10-26: Sefuba kills
+     * a buffed ship, purges it and repairs). Removals reach the wreck; applications written after
+     * the damage do not (#738). Every recipient was alive when the cast resolved its footprint —
+     * the selectors never pick a dead ship — so a dead one here died to this cast. Every victim
+     * is purged before any purge-performed is emitted, so each event carries the whole wave's
+     * total (`purge-performed.waveTotal`).
      */
     const purgeStruck = (
         abTarget: Ability['target'],
@@ -2829,7 +2832,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         boardWide: boolean | undefined
     ): { waveTotal: number; emit: () => void } => {
         if (targetId === undefined) return { waveTotal: 0, emit: () => {} };
-        const footprint = boardWide && aliveOpposingIds ? aliveOpposingIds() : aoeVictimIds;
+        const footprint = boardWide && castOpposingIds ? castOpposingIds : aoeVictimIds;
         const recipients =
             (abTarget === 'all-enemies' || abTarget === 'enemy') && footprint
                 ? footprint
@@ -2840,15 +2843,11 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // anchor id for `vid` to match.
         const victimOf = (vid: string): CombatActor | undefined =>
             opposingVictimById?.get(vid) ?? (hasVictim && vid === enemy.id ? enemy : undefined);
-        const removals = recipients.map((vid) => {
-            const victim = victimOf(vid);
-            const reachable = victim === undefined || isAliveTarget(victim);
-            return {
-                vid,
-                victim,
-                removed: !reachable || extensionImmune(vid) ? 0 : statusEngine.purge(vid, count),
-            };
-        });
+        const removals = recipients.map((vid) => ({
+            vid,
+            victim: victimOf(vid),
+            removed: extensionImmune(vid) ? 0 : statusEngine.purge(vid, count),
+        }));
         const waveTotal = removals.reduce((sum, x) => sum + x.removed, 0);
         return {
             waveTotal,

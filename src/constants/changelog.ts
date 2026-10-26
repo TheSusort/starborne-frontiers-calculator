@@ -5,6 +5,8 @@ import { ChangelogEntry } from '../types/changelog';
 // together, because a bumped version whose entries are still unreleased shows users a what's-new
 // dialog listing nothing. Do it by hand only if that script cannot.
 export const UNRELEASED_CHANGES: string[] = [
+    'Combat simulator: purges and steals now reach a ship the same hit destroys.',
+    "Combat simulator: duration cuts no longer shorten Voron's converted damage-over-time effects.",
     'Arcade: ducking ships now draw whole instead of clipping into the track.',
     'Ship database: skill tooltips now explain cleanse, purge, steal, charge and extra-action effects.',
     'Gear scores: now refresh when stat priorities, set priorities or implants change.',

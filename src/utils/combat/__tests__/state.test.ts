@@ -13,6 +13,7 @@ import {
     shortenDotDurations,
     ActorStats,
     CombatActor,
+    type ActiveDoTStack,
 } from '../state';
 import type { Position } from '../../../types/encounters';
 
@@ -446,5 +447,26 @@ describe('Echoing Burst accumulators are debuffs in the DoT-container helpers (R
         expect(h.pendingAccumulators[0].roundsRemaining).toBe(2);
         expect(h.pendingBombs[0].countdown).toBe(3);
         expect(h.corrosionEntries[1].remainingRounds).toBe(1);
+    });
+
+    it('neither cut shortens a converted hit (owner ruling 2026-10-26, Heliodor on Voron)', () => {
+        const withConverted = () => {
+            const generic: ActiveDoTStack[] = [
+                { stacks: 1, tier: 1, remainingRounds: 3, sourceId: 'v', appliedSeq: 4 },
+                {
+                    stacks: 1,
+                    tier: 1,
+                    remainingRounds: 3,
+                    sourceId: 'v',
+                    appliedSeq: 5,
+                    convertedFromHit: true,
+                },
+            ];
+            return { ...holder(), genericDoTEntries: generic };
+        };
+        expect(dotDurationCutCandidates(withConverted()).map((c) => c.seq)).toEqual([1, 1, 0, 4]);
+        const h = withConverted();
+        expect(shortenDotDurations(h, 1)).toBe(2 + 1 + 1);
+        expect(h.genericDoTEntries.map((e) => e.remainingRounds)).toEqual([2, 3]);
     });
 });
