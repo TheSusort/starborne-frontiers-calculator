@@ -4,37 +4,23 @@ import { ChangelogEntry } from '../types/changelog';
 // top of CHANGELOG, bumps CURRENT_VERSION in `version.ts` and empties this array — all three
 // together, because a bumped version whose entries are still unreleased shows users a what's-new
 // dialog listing nothing. Do it by hand only if that script cannot.
-export const UNRELEASED_CHANGES: string[] = [
-    'Combat simulator: purges and steals now reach a ship the same hit destroys.',
-    "Combat simulator: duration cuts no longer shorten Voron's converted damage-over-time effects.",
-    'Arcade: ducking ships now draw whole instead of clipping into the track.',
-    'Ship database: skill tooltips now explain cleanse, purge, steal, charge and extra-action effects.',
-    'Gear scores: now refresh when stat priorities, set priorities or implants change.',
-    'Import: stats the calculator does not recognise are now skipped cleanly.',
-    'Site: faster first load and a much smaller offline download.',
-    'Combat simulator: Meatshield now gains one DoT per hit, not per Protection stack.',
-    "Combat simulator: Cobalt's start-of-turn charge now counts toward that turn's skill.",
-    'Combat simulator: skills that deal no damage no longer count as critical hits.',
-    "Healing calculator: the round chart's Crit marker now shows critical repairs.",
-    'Combat simulator: start-of-round stack gains now resolve in turn order.',
-    'Combat simulator: hits blocked by Ironclad or Shadowguard now log the damage that landed.',
-    'Combat simulator: cleanse rows in the battle log now name the cleansed ships.',
-    'Combat simulator: destroyed ships no longer repair themselves from their lingering DoTs.',
-    'Combat simulator: destroyed ships stop gaining Overload, Blast and other per-round stacks.',
-    'Combat simulator: ally-wide buffs, repairs, charges and debuff trims now skip destroyed allies.',
-    'Combat simulator: ships killed by a DoT tick now trigger death effects immediately.',
-    "Combat simulator: a killing blow's Bomb or debuff no longer lands on the wreck.",
-    "Combat simulator: Voron's and Meatshield's converted-hit DoTs can no longer be cleansed.",
-    'Combat simulator: the Reflect set now also reflects splash damage.',
-    'Squad leaders: crit, crit power and penetration bonuses now add as points, like gear.',
-    'Squad leaders: Gelecek Medusa and Cerberus now repair after inflicting a debuff.',
-    'Squad leaders: Legion per-ally attack bonus now counts living allies, dropping as they die.',
-    'Squad leaders: Binderburg Pollinator and Swarmcaller now grant security from defence in fights.',
-    'Squad leaders: Tianchao Cipher and Serpent now boost crit damage while Stealthed.',
-    'Squad leaders: Marauders Reaper and Brandisher now boost damage to secondary targets.',
-];
+export const UNRELEASED_CHANGES: string[] = [];
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.82.0',
+        date: '2026-10-26',
+        changes: [
+            '15 combat simulator fixes and adjustments.',
+            'Arcade: ducking ships now draw whole instead of clipping into the track.',
+            'Ship database: skill tooltips now explain cleanse, purge, steal, charge and extra-action effects.',
+            'Gear scores: now refresh when stat priorities, set priorities or implants change.',
+            'Import: stats the calculator does not recognise are now skipped cleanly.',
+            'Site: faster first load and a much smaller offline download.',
+            "Healing calculator: the round chart's Crit marker now shows critical repairs.",
+            '6 squad leader fixes and adjustments.',
+        ],
+    },
     {
         version: '1.81.2',
         date: '2026-10-21',
