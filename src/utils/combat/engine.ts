@@ -111,6 +111,7 @@ import {
     applyPositionalDamage,
     damagedVictim,
     directlyDamagesVictim,
+    hitReachedShield,
     loggedHitFigures,
     footprintVictims,
     isWholeBattlefieldPattern,
@@ -7341,6 +7342,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 return {
                     shieldBefore: victim.shieldPool,
                     hpDamage: 0,
+                    shieldAbsorbed: 0,
                     barriered: true,
                     converted: false,
                     // Barrier nullifies the hit's EFFECT but does not un-record it: `.incoming` holds
@@ -7921,6 +7923,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // reads a nullify-and-grow as "the shield absorbed part of this hit".
                 shieldBefore: shieldPoolBeforeConversion ?? shieldBefore,
                 hpDamage,
+                shieldAbsorbed: absorbed,
                 barriered: false,
                 // Structurally excludes a converted hit from `shieldWasHit` detection at every
                 // consumer site (see the field doc on VictimDamageOutcome.converted) — set whenever
@@ -8220,11 +8223,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                         attackerId: owner.id,
                         hitOutcomes: [didCrit],
                         isPrimaryTarget: aim.isPrimary,
-                        shieldWasHit:
-                            !outcome.barriered &&
-                            !outcome.converted &&
-                            outcome.shieldBefore > 0 &&
-                            outcome.hpDamage < raw,
+                        shieldWasHit: hitReachedShield(outcome, raw),
                         damage: raw,
                         takenDamage: outcome.incomingBooked,
                         subAttackIndex: 0,
@@ -11158,12 +11157,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                         // `positionalApply`'s own for a caller that supplies none.
                         prev.takenDamage +=
                             outcome.incomingBooked ?? damage - (outcome.transformedToDot ?? 0);
-                        prev.shieldWasHit =
-                            prev.shieldWasHit ||
-                            (!outcome.barriered &&
-                                !outcome.converted &&
-                                outcome.shieldBefore > 0 &&
-                                outcome.hpDamage < damage);
+                        prev.shieldWasHit = prev.shieldWasHit || hitReachedShield(outcome, damage);
                         prev.hitOutcomes.push(didCrit);
                         bySubAttack.set(victim.id, prev);
                     }

@@ -37,15 +37,17 @@ export interface FootprintHit {
 export interface VictimDamageOutcome {
     shieldBefore: number;
     hpDamage: number;
+    /** What this hit drained from the victim's shield pool. 0 when nothing reached the pool — a
+     *  Barrier, a full incoming block, a Protection redirect of the whole hit, full penetration.
+     *  Absent only on outcomes from callers that don't set it (test stubs of `applyToVictim`);
+     *  `applyVictimDamage` always sets it. Read through {@link hitReachedShield}. */
+    shieldAbsorbed?: number;
     barriered: boolean;
     /** `Shield Converter` nullified this hit and deposited it into the victim's shield pool instead
-     *  of letting it land. Structurally excludes a converted hit from `shieldWasHit` detection at
-     *  every consumer site, the same way `barriered` excludes a Barrier-nullified hit and
-     *  `transformedToDot` excludes a Hit-Mitigation-transformed one: a converted hit's `shieldBefore`
-     *  is deliberately reported as the PRE-deposit pool (see `shieldPoolBeforeConversion` in
-     *  `applyVictimDamage`), so without this flag `shieldBefore > 0 && hpDamage < damage` still reads
-     *  TRUE whenever the victim already held ANY shield before the conversion — its normal state for
-     *  a unit that grants itself shield every turn (e.g. Quixilver). Absent/false for every other hit. */
+     *  of letting it land. Excludes a converted hit from `shieldWasHit` ({@link hitReachedShield}),
+     *  as `barriered` excludes a Barrier-nullified hit: a converted hit's `shieldBefore` is
+     *  deliberately reported as the PRE-deposit pool (see `shieldPoolBeforeConversion` in
+     *  `applyVictimDamage`). Absent/false for every other hit. */
     converted?: boolean;
     /** Voron/Orel: the portion of this hit that was CONVERTED into a Damage-over-Time
      *  effect instead of landing as damage this turn (the converted amount arrives over time via
@@ -111,6 +113,26 @@ export function directlyDamagesVictim(
     outcome: Pick<VictimDamageOutcome, 'transformedToDot' | 'fullyRedirected'>
 ): boolean {
     return (outcome.transformedToDot ?? 0) <= 0 && outcome.fullyRedirected !== true;
+}
+
+/**
+ * Whether a hit struck the victim's shield (`attacked.shieldWasHit`, the log's shield-hit marker,
+ * Nyxen's "when its shield is directly damaged"): the victim held a shield before the hit and the
+ * hit drained some of it. A hit stopped before the pool — Barrier, a full incoming block (Shadowguard),
+ * Shield Converter — drained none. `thrown` is the hit as thrown, read only for an outcome that
+ * carries no `shieldAbsorbed` (a test stub).
+ */
+export function hitReachedShield(
+    outcome: Pick<
+        VictimDamageOutcome,
+        'shieldBefore' | 'hpDamage' | 'barriered' | 'converted' | 'shieldAbsorbed'
+    >,
+    thrown: number
+): boolean {
+    if (outcome.barriered || outcome.converted || !(outcome.shieldBefore > 0)) return false;
+    return outcome.shieldAbsorbed !== undefined
+        ? outcome.shieldAbsorbed > 0
+        : outcome.hpDamage < thrown;
 }
 
 /**
@@ -381,8 +403,8 @@ export function applyPositionalDamage(args: {
      * whole thing into a DoT. A consumer that needs a damage-proportional BASIS must derive it from
      * `outcome` — {@link VictimDamageOutcome.incomingBooked} for what this victim took, plus
      * {@link VictimDamageOutcome.protectionRedirected} for what the attacker dealt elsewhere. It is
-     * left as the raw hit because the hook's other consumers legitimately want it (the
-     * shield-was-hit test compares the HP that moved against the hit as thrown).
+     * left as the raw hit because the hook's other consumers legitimately want it
+     * (`attacked.damage`, and {@link hitReachedShield} for an outcome with no `shieldAbsorbed`).
      *
      * The engine's own `attacked` signal reads BOTH: `damage` for `attacked.damage` and
      * `incomingBooked` for `attacked.takenDamage`, which is what the combat log's row amount, a

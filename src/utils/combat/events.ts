@@ -1090,12 +1090,11 @@ export type CombatEvent =
            *  splash/covered AoE victims and for a later hit in the same chain. Every "directly
            *  damaged as a primary target" trigger gates on this. */
           isPrimaryTarget?: boolean;
-          /** True when this hit actually reduced the victim's shield pool
-           *  (absorbed > 0). Sourced from the shield-first drain at the emit
-           *  (shieldBefore > 0 && hpDamage < damage && !barriered && !converted). Nyxen's counter
-           *  gates on this. False/absent when no shield was present, the hit fully
-           *  penetrated to HP, a Barrier blocked it (shield untouched), or Shield Converter
-           *  converted the hit (shield gained, not drained). */
+          /** True when this hit actually reduced the victim's shield pool — read
+           *  `hitReachedShield` (positionalApply.ts). Nyxen's counter gates on this. False/absent
+           *  when no shield was present, the hit fully penetrated to HP, a Barrier or a full
+           *  incoming block (Shadowguard) stopped it, or Shield Converter converted it (shield
+           *  gained, not drained). */
           shieldWasHit?: boolean;
           /** The 0-based sub-attack of the ATTACKER's cast that produced this hit. The engine emits
            *  one `attacked` per (sub-attack, victim); this names which sub-attack, so a victim-side once-per-attack guard can reset between the
