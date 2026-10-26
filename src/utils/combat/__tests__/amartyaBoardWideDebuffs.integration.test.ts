@@ -125,6 +125,28 @@ describe.each(['player', 'enemy'] as const)('Amartya on the %s side', (side) => 
         runCombat({ ...input, bus });
         expect([...purged].sort()).toEqual(ENEMY_IDS.map(idOf).sort());
     });
+
+    it('her charged purge still strips the enemy her hit destroys (owner ruling 2026-10-26)', () => {
+        const teams: MirrorTeams = {
+            caster: [{ ...amartyaCharged(), attack: 10_000 }],
+            other: enemies(true).map((e) => (e.id === 'm2' ? { ...e, hp: 1 } : e)),
+            numRounds: 1,
+        };
+        const { input, idOf } = mirrorBoard(teams, side);
+        const caster = idOf('amartya');
+        const purged = new Set<string>();
+        const destroyed = new Set<string>();
+        const bus = createEventBus();
+        bus.on('purge-performed', (e: Extract<CombatEvent, { type: 'purge-performed' }>) => {
+            if (e.casterId === caster && e.count > 0) purged.add(e.targetId);
+        });
+        bus.on('ship-destroyed', (e: Extract<CombatEvent, { type: 'ship-destroyed' }>) => {
+            destroyed.add(e.actorId);
+        });
+        runCombat({ ...input, bus });
+        expect([...destroyed]).toEqual([idOf('m2')]);
+        expect([...purged].sort()).toEqual(ENEMY_IDS.map(idOf).sort());
+    });
 });
 
 describe('the parser flags a clause by ITS OWN recipient', () => {

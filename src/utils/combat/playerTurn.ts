@@ -2719,6 +2719,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             : `ship:${status.sourceSlot}`) +
         `:hit${hitIndex}`;
     // ── Status removals: buff steals and purges ─────────────────────────────────────────────
+    /** The living enemies as the cast resolves, before its damage: a board-wide purge written
+     *  after the damage still reaches an enemy that damage destroyed (`purgeStruck`). */
+    const castOpposingIds = aliveOpposingIds?.();
     // Each helper performs the removal's STATE change and returns its events as a thunk, so a
     // clause written after the damage can hold the events back with the write (see
     // `deferredEnemyApplications`). Side-symmetric: player and enemy casters run the same code.
@@ -2829,7 +2832,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         boardWide: boolean | undefined
     ): { waveTotal: number; emit: () => void } => {
         if (targetId === undefined) return { waveTotal: 0, emit: () => {} };
-        const footprint = boardWide && aliveOpposingIds ? aliveOpposingIds() : aoeVictimIds;
+        const footprint = boardWide && castOpposingIds ? castOpposingIds : aoeVictimIds;
         const recipients =
             (abTarget === 'all-enemies' || abTarget === 'enemy') && footprint
                 ? footprint
