@@ -8,7 +8,8 @@
  * A 1,000-HP ship there dies to the 2,400 hit; a sturdy one survives (control). A sturdy
  * bystander at B1 keeps the side alive. The covered-victim path runs the same with a Circle
  * pattern: the M4 anchor survives and a 1,000-HP ship at M3 dies to the covered half-hit.
- * Every case runs with Valkyrie on both sides.
+ * Every case runs with Valkyrie on both sides; the round's debuff display list belongs to the
+ * focus actor, so it is read on the player mount only.
  */
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { runCombat } from '../engine';
@@ -56,7 +57,7 @@ const run = (side: 'player' | 'enemy', foes: ShipSpec[], chargedPattern?: string
         if (e.buffName === 'Echoing Burst') inflicted.push(specOf(e.targetId));
     });
     let actors: CombatActor[] = [];
-    runCombat({
+    const result = runCombat({
         ...input,
         bus,
         __testTapActors: (all: CombatActor[]) => {
@@ -69,6 +70,8 @@ const run = (side: 'player' | 'enemy', foes: ShipSpec[], chargedPattern?: string
         destroyed: (spec: string) => ship(spec)?.destroyedRound !== undefined,
         dropped,
         inflicted,
+        /** The round's enemy-debuff display list (the focus actor's casts only). */
+        listed: (result.rounds[0]?.activeEnemyDebuffs ?? []).map((b) => b.buffName),
     };
 };
 
@@ -82,6 +85,7 @@ describe('an Echoing Burst written after the damage does not land on a ship that
             expect(r.destroyed('target')).toBe(false);
             expect(r.held('target')).toBe(1);
             expect(r.inflicted).toEqual(['target']);
+            if (side === 'player') expect(r.listed).toContain('Echoing Burst');
         });
         it(`${side}-side: the hit destroys the target, which holds no Echoing Burst`, () => {
             const r = run(side, [target(1000), bystander]);
@@ -89,6 +93,7 @@ describe('an Echoing Burst written after the damage does not land on a ship that
             expect(r.held('target')).toBe(0);
             expect(r.inflicted).toEqual([]);
             expect(r.dropped).toContainEqual({ target: 'target', label: 'Echoing Burst' });
+            if (side === 'player') expect(r.listed).not.toContain('Echoing Burst');
         });
         it(`${side}-side covered victim: the half-hit destroys it, which holds no Echoing Burst`, () => {
             const covered: ShipSpec = { id: 'covered', position: 'M3', speed: 1, hp: 1000 };

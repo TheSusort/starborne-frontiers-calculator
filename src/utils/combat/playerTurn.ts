@@ -2513,16 +2513,26 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
 
     /** The `onDropped` of an Echoing Burst landing. The accumulator is written into its holder's
      *  container when its landing is decided, ahead of the damage it is written after, so a drop
-     *  takes it back out as well as recording the dropped landing: the wreck holds none. */
+     *  takes it back out as well as recording the dropped landing: the wreck holds none. On the
+     *  aimed target (`listed`) it also leaves the round's debuff display list, which listed it at
+     *  the end of the cast. Runs only from the engine's drain, after runPlayerTurn has returned,
+     *  so the later `const landedEnemyDebuffs` is initialised (see `landStatusOnRecipients`). */
     const accumulatorDropped =
         (
             container: PendingAccumulator[],
             acc: PendingAccumulator,
             victimId: string,
-            label: string
+            label: string,
+            listed: boolean
         ) =>
         (): void => {
             spliceOut(container, acc);
+            if (listed) {
+                const at = landedEnemyDebuffs.findLastIndex(
+                    (ab) => ab.buffName === label && ab.turnsRemaining === acc.roundsRemaining
+                );
+                if (at >= 0) landedEnemyDebuffs.splice(at, 1);
+            }
             landingDropped(victimId, [label])();
         };
 
@@ -5998,7 +6008,13 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                             preDecidedProcs
                         ),
                     landsOnId: enemy.id,
-                    onDropped: accumulatorDropped(pendingAccumulators, acc, enemy.id, buffName),
+                    onDropped: accumulatorDropped(
+                        pendingAccumulators,
+                        acc,
+                        enemy.id,
+                        buffName,
+                        true
+                    ),
                 });
             },
             blocked: () =>
@@ -6220,7 +6236,13 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                             preDecidedProcs
                         ),
                     landsOnId: rid,
-                    onDropped: accumulatorDropped(victim.pendingAccumulators, acc, rid, buffName),
+                    onDropped: accumulatorDropped(
+                        victim.pendingAccumulators,
+                        acc,
+                        rid,
+                        buffName,
+                        false
+                    ),
                 });
             },
             blocked: () =>
