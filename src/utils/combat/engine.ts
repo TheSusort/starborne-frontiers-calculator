@@ -14162,6 +14162,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         // `allActors`, both sides. Note that the side-wide SCHEDULED enemy-debuff bucket is keyed
         // under the sentinel store (`DEFAULT_ENEMY_TARGET`), not under any actor id, so it never
         // shows up in these per-actor lists — this loop reports only per-actor stores.
+        const writes = statusEngine.takeTimedWrites();
         for (const a of allActors) {
             // Reuses the engine's established three-source name reads (scheduled snapshot +
             // payload-carrying timed + aura/accum ability statuses) rather than a bespoke store
@@ -14170,6 +14171,10 @@ export function runCombat(rawInput: CombatEngineInput): {
             // entry containers using the same synthesized base names the assembler labels with
             // (Corrosion / Inferno / Bomb / Damage over Time).
             const durations = timedStatusDurations(statusEngine, a.id);
+            const writtenTo = (side: 'self' | 'enemy') =>
+                writes
+                    .filter((w) => w.holderId === a.id && w.side === side)
+                    .map((w) => ({ buffName: w.buffName, turnsRemaining: w.turnsRemaining }));
             bus.emit({
                 type: 'status-snapshot',
                 actorId: a.id,
@@ -14178,6 +14183,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                 debuffNames: enemyDebuffNamesForTarget(a),
                 buffDurations: durations.buffs,
                 debuffDurations: durations.debuffs,
+                buffWrites: writtenTo('self'),
+                debuffWrites: writtenTo('enemy'),
             });
             // #372: the same tail instant, for the same reason — the Simulator must REPORT HP,
             // not re-derive it. Every actor in `allActors` is read the same way, so this is

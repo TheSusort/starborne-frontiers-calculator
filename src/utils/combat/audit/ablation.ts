@@ -110,12 +110,16 @@ export function computeAblationResult(
         parts.push(`${bName} gained kinds only present in composition: ${extraB.join(', ')}`);
     }
 
+    const gained = [
+        ...(extraA.length > 0 ? [{ ship: aName, kinds: extraA }] : []),
+        ...(extraB.length > 0 ? [{ ship: bName, kinds: extraB }] : []),
+    ];
     const diverges = parts.length > 0;
     const detail = diverges
         ? parts.join('; ')
         : `No divergence: ${aName} and ${bName} each produced only kinds already seen solo.`;
 
-    return { diverges, detail, compared };
+    return { diverges, detail, compared, gained };
 }
 
 /** One ship's baseline and combined fingerprints over the rounds it was alive for in both, or two
@@ -139,11 +143,34 @@ function windowedPair(
     };
 }
 
-/** The ablation filler: the first pool ship that is neither subject. */
+/** A kit of one active skill and nothing else: no charged skill, no passive. */
+export const isPlainKit = (ship: Ship): boolean =>
+    !ship.chargeSkillText &&
+    !ship.firstPassiveSkillText &&
+    !ship.secondPassiveSkillText &&
+    !ship.thirdPassiveSkillText;
+
+/**
+ * The ablation stand-in: the first plain-kit pool ship (`isPlainKit`) that is neither subject nor
+ * the neutral enemy.
+ *
+ * One stand-in serves every pair, so its kit sets the baseline arm's pace for the whole run. The
+ * fight ends when the lone neutral enemy dies, and the arms are compared over the rounds both
+ * lasted, so a stand-in that deals more than a plain attack (a charged skill, a damage passive,
+ * a start-of-combat full charge) ends the baseline early. That shortens the compared window, drops
+ * comparable runs, and turns a partner that only HASTENS a subject's kind (a bomb countdown cut
+ * short) into a kind seen only beside the partner.
+ */
 export function ablationFiller(a: Ship, b: Ship, inertPool: readonly Ship[]): Ship {
-    const filler = inertPool.find((s) => s.id !== a.id && s.id !== b.id);
+    const enemyId = neutralEnemy().id;
+    const filler = inertPool.find(
+        (s) => s.id !== a.id && s.id !== b.id && s.id !== enemyId && isPlainKit(s)
+    );
     if (!filler) {
-        throw new Error('runAblation: the inert pool has no ship distinct from both subjects');
+        throw new Error(
+            'runAblation: the inert pool has no plain-kit ship distinct from both subjects and ' +
+                'the neutral enemy'
+        );
     }
     return filler;
 }

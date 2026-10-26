@@ -2,7 +2,11 @@ import { buildInertAllyBaseline } from './traceScenario';
 import { reachesAllies } from '../../src/utils/combat/audit/classes';
 import { composeBattle, type TaggedShip } from '../../src/utils/combat/audit/compose';
 import { runSeededBattle } from '../../src/utils/simulator/seededRuns';
-import { checkInvariants, extraActionActorIds } from '../../src/utils/combat/audit/invariants';
+import {
+    checkInvariants,
+    durationExtenderKinds,
+    extraActionActorIds,
+} from '../../src/utils/combat/audit/invariants';
 import { checkReproducibility } from '../../src/utils/combat/audit/reproducibility';
 import { minimizeComposition } from '../../src/utils/combat/audit/minimize';
 import { diffPersists, restrictDiff, windowedDiff } from '../../src/utils/combat/audit/oracleKinds';
@@ -266,9 +270,11 @@ export function runCalibration(
         const s = seed + i;
         try {
             const compInput = composeBattle(s, inert);
-            const compResult = runSeededBattle(compInput, s);
-            const extraActionIds = extraActionActorIds(compInput, compResult);
-            for (const v of checkInvariants(compResult, { extraActionActorIds: extraActionIds })) {
+            const compResult = runSeededBattle({ ...compInput, __auditTrail: true }, s);
+            for (const v of checkInvariants(compResult, {
+                extraActionActorIds: extraActionActorIds(compInput, compResult),
+                durationExtenders: durationExtenderKinds(compInput, compResult),
+            })) {
                 invariantFailures.push(`seed ${s}: ${v.detail}`);
             }
             for (const v of checkReproducibility(compInput, s)) {

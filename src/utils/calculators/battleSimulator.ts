@@ -298,6 +298,10 @@ export interface BattleAuditTrail {
         actorId: string;
         buffs: StatusDuration[];
         debuffs: StatusDuration[];
+        /** The timed windows written into those stores during the round, as stored (the
+         *  `status-snapshot`'s `buffWrites`/`debuffWrites`). Absent when the stream carried none. */
+        buffWrites?: StatusDuration[];
+        debuffWrites?: StatusDuration[];
     }[];
     /** One row per direct hit that carried its victim-side factors: the composed non-defence
      *  incoming factor it was priced with (the `hit-incoming-factor` event). */
@@ -320,6 +324,8 @@ export function buildAuditTrail(events: readonly CombatEvent[]): BattleAuditTrai
                 actorId: e.actorId,
                 buffs: e.buffDurations ?? [],
                 debuffs: e.debuffDurations ?? [],
+                ...(e.buffWrites !== undefined ? { buffWrites: e.buffWrites } : {}),
+                ...(e.debuffWrites !== undefined ? { debuffWrites: e.debuffWrites } : {}),
             });
         } else if (e.type === 'hit-incoming-factor') {
             trail.hitIncomingFactors.push({

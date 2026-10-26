@@ -1,11 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import {
     buildLedgerJson,
+    groupFindings,
     LEDGER_BLIND_SPOTS,
     renderLedgerMarkdown,
     type LedgerCoverage,
 } from '../interactionLedger';
 import type { Finding } from '../../../src/utils/combat/audit/types';
+import type { CombatLogEntryKind } from '../../../src/utils/combat/log/types';
 
 const coverage: LedgerCoverage = {
     calibration: { comparable: 151, total: 160 },
@@ -62,6 +64,10 @@ describe('interactionLedger', () => {
                 blindSpots: LEDGER_BLIND_SPOTS,
                 confirmed: [invariantFinding, differentialFinding],
                 needsTriage: [ablationFinding],
+                groups: {
+                    confirmed: groupFindings([invariantFinding, differentialFinding]),
+                    needsTriage: groupFindings([ablationFinding]),
+                },
                 refuted: [],
             });
         });
@@ -164,6 +170,93 @@ describe('interactionLedger', () => {
             expect(LEDGER_BLIND_SPOTS.join(' ')).toMatch(/OWN HP/);
             expect(LEDGER_BLIND_SPOTS.join(' ')).toMatch(/wipes a side/);
             expect(LEDGER_BLIND_SPOTS.join(' ')).toMatch(/SUBJECT_HP_SCALE/);
+        });
+
+        it('renders one row per (ships, kind) group, not one per finding', () => {
+            const again = { ...differentialFinding, seed: 777 };
+            const markdown = renderLedgerMarkdown([differentialFinding, again], {
+                compositionsRun: 2,
+                coverage,
+                calibrationResidual,
+            });
+
+            expect(markdown).toContain('Confirmed findings: **2** in **2** (ships, kind) group(s)');
+            expect(markdown).toContain('### Ship3: -attack (×2)');
+            expect(markdown).toContain('**Seeds:** 54321, 777');
+            expect(markdown.match(/### Ship3: -attack/g)).toHaveLength(1);
+        });
+    });
+
+    describe('groupFindings', () => {
+        const diff = (
+            seed: number,
+            missing: CombatLogEntryKind[],
+            repro?: Finding['minimalRepro']
+        ): Finding => ({
+            oracle: 'differential',
+            ships: ['Mangler'],
+            slots: ['T3'],
+            seed,
+            fingerprintDiff: {
+                actorId: 'a',
+                shipName: 'Mangler',
+                missingInComposition: missing,
+                extraInComposition: [],
+            },
+            ...(repro ? { minimalRepro: repro } : {}),
+            severity: 'med',
+        });
+
+        it('collapses one (ship, kind) across seeds and keeps the smallest repro as the sample', () => {
+            const big = { playerShips: ['Mangler', 'A', 'B'], enemyShips: ['X', 'Y'] };
+            const small = { playerShips: ['Mangler', 'A'], enemyShips: ['X'] };
+            const groups = groupFindings([diff(5, ['bomb'], big), diff(9, ['bomb'], small)]);
+
+            expect(groups).toHaveLength(1);
+            expect(groups[0]).toMatchObject({ kind: '-bomb', count: 2, seeds: [5, 9] });
+            expect(groups[0].sample.seed).toBe(9);
+        });
+
+        it('files a finding naming two kinds under both, and keeps directions apart', () => {
+            const groups = groupFindings([diff(1, ['bomb', 'buff'])]);
+            expect(groups.map((g) => g.kind).sort()).toEqual(['-bomb', '-buff']);
+
+            const extra: Finding = {
+                ...diff(2, []),
+                fingerprintDiff: {
+                    actorId: 'a',
+                    shipName: 'Mangler',
+                    missingInComposition: [],
+                    extraInComposition: ['bomb'],
+                },
+            };
+            expect(
+                groupFindings([diff(1, ['bomb']), extra])
+                    .map((g) => g.kind)
+                    .sort()
+            ).toEqual(['+bomb', '-bomb']);
+        });
+
+        it('keys an ablation pair regardless of order, per gaining ship and kind', () => {
+            const ab = (ships: string[], seed: number): Finding => ({
+                oracle: 'ablation',
+                ships,
+                slots: ['T1', 'T2'],
+                seed,
+                ablationGained: [{ ship: 'Sha Xing', kinds: ['buff'] }],
+                severity: 'low',
+            });
+            const groups = groupFindings([
+                ab(['Huanying', 'Sha Xing'], 1),
+                ab(['Sha Xing', 'Huanying'], 2),
+            ]);
+
+            expect(groups).toHaveLength(1);
+            expect(groups[0]).toMatchObject({
+                ships: ['Huanying', 'Sha Xing'],
+                kind: 'Sha Xing +buff',
+                count: 2,
+            });
         });
     });
 });

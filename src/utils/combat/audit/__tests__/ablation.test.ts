@@ -1,5 +1,11 @@
 import { describe, it, expect, beforeAll } from 'vitest';
-import { ablationBoards, computeAblationResult, runAblation } from '../ablation';
+import {
+    ablationBoards,
+    ablationFiller,
+    computeAblationResult,
+    isPlainKit,
+    runAblation,
+} from '../ablation';
 import { tagShip } from '../classes';
 import { buildTraceShip } from '../../../../../scripts/lib/traceShipFactory';
 import { csvAvailable } from '../../../../../scripts/lib/shipSkillCsv';
@@ -32,7 +38,35 @@ const real = (name: string): Ship => {
 };
 
 /** Plain attackers with no interaction primitives: the inert pool the fillers come from. */
-const pool = (): Ship[] => ['Crusher', 'Custodian', 'Bedrock'].map(real);
+const pool = (): Ship[] => ['Crusher', 'Custodian', 'Bedrock', 'Rookie'].map(real);
+
+describe('ablationFiller', () => {
+    beforeAll(requireCsv);
+
+    // Akula starts combat fully charged and opens with its 220% charged skill. As the stand-in it
+    // kills the lone neutral enemy a round early in the baseline arm (see `ablationFiller`).
+    it('skips a stand-in with more than a plain active skill, and the neutral enemy', () => {
+        const akula = real('Akula');
+        expect(isPlainKit(akula)).toBe(false);
+        const filler = ablationFiller(real('Huanying'), real('Lingshe'), [
+            akula,
+            real('Bedrock'),
+            real('Crusher'),
+        ]);
+        expect(filler.name).toBe('Crusher');
+    });
+
+    it('never picks either subject', () => {
+        const crusher = real('Crusher');
+        expect(ablationFiller(crusher, real('Custodian'), pool()).name).toBe('Rookie');
+    });
+
+    it('throws when no plain-kit ship is left', () => {
+        expect(() => ablationFiller(real('Huanying'), real('Lingshe'), [real('Akula')])).toThrow(
+            /plain-kit/
+        );
+    });
+});
 
 describe('runAblation', () => {
     beforeAll(() => {

@@ -16,7 +16,11 @@ import {
 } from './lib/interactionOracle';
 import { composeBattle } from '../src/utils/combat/audit/compose';
 import { runSeededBattle } from '../src/utils/simulator/seededRuns';
-import { checkInvariants, extraActionActorIds } from '../src/utils/combat/audit/invariants';
+import {
+    checkInvariants,
+    durationExtenderKinds,
+    extraActionActorIds,
+} from '../src/utils/combat/audit/invariants';
 import { checkReproducibility } from '../src/utils/combat/audit/reproducibility';
 import { runAblation } from '../src/utils/combat/audit/ablation';
 import { minimizeComposition } from '../src/utils/combat/audit/minimize';
@@ -27,6 +31,7 @@ import type {
     BattleResult,
     BattleSimulationInput,
 } from '../src/utils/calculators/battleSimulator';
+import type { CombatLogEntryKind } from '../src/utils/combat/log/types';
 import type { Position } from '../src/types/encounters';
 import type { Ship } from '../src/types/ship';
 
@@ -123,12 +128,18 @@ function ablationFinding(
     let diverged = 0;
     let compared = 0;
     let firstDetail = '';
+    const gained = new Map<string, Set<CombatLogEntryKind>>();
     for (const offset of ABLATION_SEED_OFFSETS) {
         const result = runAblation(a.ship, b.ship, compositionSeed + offset, inertPool);
         compared += result.compared;
         if (result.diverges) {
             diverged++;
             if (!firstDetail) firstDetail = result.detail;
+        }
+        for (const g of result.gained) {
+            const kinds = gained.get(g.ship) ?? new Set<CombatLogEntryKind>();
+            for (const k of g.kinds) kinds.add(k);
+            gained.set(g.ship, kinds);
         }
     }
     const total = 2 * ABLATION_SEED_OFFSETS.length;
@@ -140,6 +151,7 @@ function ablationFinding(
             slots: [a.position, b.position],
             seed: compositionSeed,
             ablationDetail: `${diverged}/${ABLATION_SEED_OFFSETS.length} seeds diverged; sample: ${firstDetail}`,
+            ablationGained: [...gained].map(([ship, kinds]) => ({ ship, kinds: [...kinds] })),
             severity: 'low',
         },
         compared,
@@ -151,9 +163,23 @@ function ablationFinding(
 // Minimization
 // ---------------------------------------------------------------------------
 
+/** A seeded run carrying `BattleResult.audit`, which the duration and reduction-cap invariants
+ *  read. */
+function auditedRun(input: BattleSimulationInput, seed: number): BattleResult {
+    return runSeededBattle({ ...input, __auditTrail: true }, seed);
+}
+
+/** `checkInvariants` with the per-roster exemptions the composition's kits earn. */
+function invariantViolations(input: BattleSimulationInput, result: BattleResult) {
+    return checkInvariants(result, {
+        extraActionActorIds: extraActionActorIds(input, result),
+        durationExtenders: durationExtenderKinds(input, result),
+    });
+}
+
 function safeRun(input: BattleSimulationInput, seed: number): BattleResult | null {
     try {
-        return runSeededBattle(input, seed);
+        return auditedRun(input, seed);
     } catch {
         return null;
     }
@@ -167,9 +193,7 @@ function minimizeInvariant(input: BattleSimulationInput, v: InvariantViolation, 
             }
             const result = safeRun(candidate, seed);
             if (!result) return false;
-            return checkInvariants(result, {
-                extraActionActorIds: extraActionActorIds(candidate, result),
-            }).some(
+            return invariantViolations(candidate, result).some(
                 (x) =>
                     x.invariant === v.invariant &&
                     (v.actorId === undefined || x.actorId === v.actorId)
@@ -280,7 +304,7 @@ function main(): void {
 
         let compResult: BattleResult;
         try {
-            compResult = runSeededBattle(compInput, s);
+            compResult = auditedRun(compInput, s);
         } catch (err) {
             findings.push(crashFinding(allNames(compInput), allPositions(compInput), s, err));
             compositionsRun++;
@@ -289,8 +313,7 @@ function main(): void {
         compositionsRun++;
 
         try {
-            const extraActionIds = extraActionActorIds(compInput, compResult);
-            for (const v of checkInvariants(compResult, { extraActionActorIds: extraActionIds })) {
+            for (const v of invariantViolations(compInput, compResult)) {
                 const min = minimizeInvariant(compInput, v, s);
                 findings.push({
                     ...invariantFinding(v, compResult, s),
@@ -351,7 +374,7 @@ function main(): void {
     }
 
     const coverage: LedgerCoverage = { calibration: calibrationCoverage, differential, ablation };
-    const { confirmed, needsTriage } = writeLedger(
+    const { confirmed, needsTriage, groups } = writeLedger(
         findings,
         { compositionsRun, coverage, calibrationResidual },
         'docs'
@@ -359,8 +382,10 @@ function main(): void {
     console.log(`compositionsRun: ${compositionsRun}`);
     console.log(`differential coverage: ${formatCoverage(differential)} player placements`);
     console.log(`ablation coverage: ${formatCoverage(ablation)} subject-runs`);
-    console.log(`confirmed: ${confirmed.length}`);
-    console.log(`needsTriage: ${needsTriage.length}`);
+    console.log(`confirmed: ${confirmed.length} (${groups.confirmed.length} (ships, kind) groups)`);
+    console.log(
+        `needsTriage: ${needsTriage.length} (${groups.needsTriage.length} (ships, kind) groups)`
+    );
     console.log('Wrote docs/interaction-audit-ledger.{json,md}');
 }
 
