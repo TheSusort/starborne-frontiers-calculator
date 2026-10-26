@@ -276,6 +276,16 @@ export interface DurationCutCandidate {
     cut: (turns: number) => void;
 }
 
+/** One timed window written into a store (`StatusEngine.takeTimedWrites`). */
+export interface TimedWrite {
+    /** The store's key: the holder's actor id (or a sentinel store such as `'attacker'`). */
+    holderId: string;
+    /** `'self'`: the holder's self-buff store; `'enemy'`: the debuffs landed on it. */
+    side: 'self' | 'enemy';
+    buffName: string;
+    turnsRemaining: number;
+}
+
 export interface StatusEngine {
     /** Advance the round counter (strictly sequential, 1-based). Increments
      *  per-round accumulating stacks — each granter's FIRST turn of the round; `beginTurn` adds
@@ -286,6 +296,10 @@ export interface StatusEngine {
      *  `buff-applied` where the tick happened. A status already at its stack cap gains nothing
      *  and is not announced (R159). */
     takeAccumGains(): AccumGain[];
+    /** Takes (and clears) every finite timed window written into a holder's self-buff or
+     *  per-victim debuff store since the last call — an application, a refresh or a steal, with
+     *  the turns it was stored at — in write order. Log-only: read for `status-snapshot`. */
+    takeTimedWrites(): TimedWrite[];
     /** Notification that a source actually fired a slot this round. 'attacker'
      *  covers the attacker's own cadence AND all legacy/merged scheduled buffs
      *  (per-buff sourceChargeCount/sourceStartCharged are IGNORED — superseded by
@@ -1272,6 +1286,21 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
     let accumTickSeq = 0;
     const takeAccumGains = (): AccumGain[] => accumGains.splice(0, accumGains.length);
 
+    // Timed windows written since the last `takeTimedWrites`. A timed store write that skips
+    // `recordTimedWrite` and refreshes a held status reads as a rise in the
+    // `status-duration-rises` invariant (combat/audit/invariants.ts).
+    const timedWrites: TimedWrite[] = [];
+    const takeTimedWrites = (): TimedWrite[] => timedWrites.splice(0, timedWrites.length);
+    const recordTimedWrite = (
+        holderId: string,
+        side: 'self' | 'enemy',
+        buffName: string,
+        turnsRemaining: number | 'recurring' | 'permanent'
+    ): void => {
+        if (typeof turnsRemaining !== 'number' || !Number.isFinite(turnsRemaining)) return;
+        timedWrites.push({ holderId, side, buffName, turnsRemaining });
+    };
+
     /** The per-granter stacks one tick adds to `state`: the `'per-round'` contributions (every
      *  granter's, or only `granterId`'s when given) or the `per-active`/`per-charge` ones the
      *  `slot` cast triggers. A turn-blocked granter's SHIP passive banks nothing further; stacks
@@ -1443,6 +1472,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         const extension = side === 'self' && casterId ? buffDurationExtensionFor(casterId) : 0;
         const duration = buff.skillDuration + extension;
         const appliedThisTurn = side === 'self' && landsOnActingHolder('attacker');
+        const holderId = side === 'self' ? 'attacker' : DEFAULT_ENEMY_TARGET;
         if (isIndependentInstance(buff.buffName)) {
             const seq = nextAppliedSeq();
             map.set(independentKey(familyKey, seq), {
@@ -1454,10 +1484,12 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
                 sourceId: casterId,
                 pickIndex,
             });
+            recordTimedWrite(holderId, side, buff.buffName, duration);
             return;
         }
         const existing = map.get(familyKey);
         if (!familyApplicationWins(existing, tier, duration, appliedThisTurn)) return;
+        recordTimedWrite(holderId, side, buff.buffName, duration);
         map.set(familyKey, {
             buffName: buff.buffName,
             turnsRemaining: duration,
@@ -2315,6 +2347,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
                 )
                     continue;
                 const seq = nextAppliedSeq();
+                recordTimedWrite(recipientId, 'self', st.buffName, st.turnsRemaining);
                 recipientMap.set(independent ? independentKey(familyKey, seq) : familyKey, {
                     buffName: st.buffName,
                     turnsRemaining: st.turnsRemaining,
@@ -2530,13 +2563,13 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         if (status.side === 'enemy') {
             beforeTimedEnemyApplication(enemyEffectiveId, status.payload.buffName);
         }
-        const appliedThisTurn = landsOnActingHolder(
-            status.side === 'self' ? selfEffectiveId : enemyEffectiveId
-        );
+        const holderId = status.side === 'self' ? selfEffectiveId : enemyEffectiveId;
+        const appliedThisTurn = landsOnActingHolder(holderId);
         // An independent instance is never contested by the family rule and never merges stacks
         // with a held copy: it is a store entry of its own (`isIndependentInstance`).
         if (isIndependentInstance(status.payload.buffName)) {
             const seq = nextAppliedSeq();
+            recordTimedWrite(holderId, status.side, status.payload.buffName, duration);
             map.set(independentKey(familyKey, seq), {
                 buffName: status.payload.buffName,
                 turnsRemaining: duration,
@@ -2578,6 +2611,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
                       status.maxStacks ?? Infinity
                   )
                 : declaredStacks;
+        recordTimedWrite(holderId, status.side, status.payload.buffName, duration);
         map.set(familyKey, {
             buffName: status.payload.buffName,
             turnsRemaining: duration,
@@ -2755,6 +2789,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
     return {
         beginRound,
         takeAccumGains,
+        takeTimedWrites,
         nextAppliedSeq,
         lastAppliedSeq: () => appliedSeqCounter,
         sourceFired,

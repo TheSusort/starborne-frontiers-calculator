@@ -1025,6 +1025,14 @@ export type CombatEvent =
            *  Absent on hand-built event streams. */
           buffDurations?: StatusDuration[];
           debuffDurations?: StatusDuration[];
+          /** Every finite timed window written into the same two stores during this round (an
+           *  application, a refresh or a steal), at the turns it was stored with, in write order
+           *  (`StatusEngine.takeTimedWrites`). A write the store kept is one the countdown then
+           *  only lowers, so a held window above every write of its name this round and above
+           *  the previous round's window was raised some other way. Absent on hand-built event
+           *  streams. */
+          buffWrites?: StatusDuration[];
+          debuffWrites?: StatusDuration[];
       }
     /** LOG-ONLY. The non-defence incoming factor one direct hit was priced with, read in the
      *  damage funnel after a partial incoming block (Ironclad) is folded in — the product

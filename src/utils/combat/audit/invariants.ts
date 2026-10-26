@@ -473,11 +473,15 @@ type DurationSnapshot = NonNullable<BattleResult['audit']>['statusDurations'][nu
  * Consecutive end-of-round snapshots of one holder are compared, with the combat log of the
  * later round as the account of what happened in between.
  *
- *  - `status-duration-rises`: a status's remaining turns only count down. A rise needs an
- *    application row of that exact name onto that holder in the round (a re-application or
- *    refresh replaces the held copy), a steal row that moved that name, or — the one rise with
- *    no row — a duration extension: buff rises on a side fielding a buff extender, debuff rises
- *    on the side opposing a debuff extender (`durationExtenderKinds`).
+ *  - `status-duration-rises`: a status's remaining turns only count down from where they were
+ *    stored. When the snapshot carries the round's store writes (`buffWrites`/`debuffWrites`),
+ *    a held window may not exceed the larger of its previous round's window and its longest
+ *    write this round, which also holds a status applied this round to the turns it was applied
+ *    with. Without writes, a rise needs an application row of that exact name onto that holder
+ *    in the round (a re-application or refresh replaces the held copy) or a steal row that
+ *    moved that name. Either way the one rise with no record is a duration extension: buff
+ *    rises on a side fielding a buff extender, debuff rises on the side opposing a debuff
+ *    extender (`durationExtenderKinds`).
  *  - `status-tier-drop`: highest tier wins, so a family's held tier falls only once the higher
  *    copy is gone — its window ran out (no more turns left than the holder's Post-Turns this
  *    round), a `buff-expired` row named it, a cleanse, purge or steal row reached the holder, or
@@ -503,21 +507,44 @@ function statusDurations(
     const rowsByRound = roundStatusRows(result);
     const previous = new Map<string, DurationSnapshot>();
     for (const snap of audit.statusDurations) {
-        const prev = previous.get(snap.actorId);
+        const held = previous.get(snap.actorId);
         previous.set(snap.actorId, snap);
-        if (!prev || prev.round !== snap.round - 1) continue;
+        // Without the previous round's snapshot there is nothing to rise from or drop from;
+        // only the write ceiling is checked.
+        const prev = held && held.round === snap.round - 1 ? held : undefined;
+        if (!prev && !snap.buffWrites && !snap.debuffWrites) continue;
         const rows = rowsByRound.get(snap.round);
         const holder = snap.actorId;
         const label = `${nameOf.get(holder) ?? holder} (${holder})`;
         const side = sideOf.get(holder);
         for (const kind of ['buff', 'debuff'] as const) {
-            const before = durationsByName(kind === 'buff' ? prev.buffs : prev.debuffs);
+            const before = prev
+                ? durationsByName(kind === 'buff' ? prev.buffs : prev.debuffs)
+                : new Map<string, number>();
             const after = durationsByName(kind === 'buff' ? snap.buffs : snap.debuffs);
             const extended =
                 side !== undefined &&
                 (kind === 'buff' ? buffExtendedSides : debuffExtendedSides).has(side);
+            const writeRows = kind === 'buff' ? snap.buffWrites : snap.debuffWrites;
+            const written = writeRows ? durationsByName(writeRows) : undefined;
             for (const [name, turns] of after) {
                 const was = before.get(name);
+                if (written) {
+                    const wrote = written.get(name);
+                    if (was === undefined && wrote === undefined) continue;
+                    const ceiling = Math.max(was ?? -Infinity, wrote ?? -Infinity);
+                    if (turns <= ceiling || extended) continue;
+                    out.push({
+                        invariant: 'status-duration-rises',
+                        round: snap.round,
+                        actorId: holder,
+                        detail:
+                            `${kind} ${name} on ${label} holds ${turns} turns, above ` +
+                            `${was === undefined ? 'no prior window' : `its prior ${was}`} and ` +
+                            `${wrote === undefined ? 'no write' : `its longest write ${wrote}`} this round`,
+                    });
+                    continue;
+                }
                 if (was === undefined || turns <= was) continue;
                 if (rows?.applied.has(`${kind}|${holder}|${name}`)) continue;
                 if (kind === 'buff' && rows?.stolen.has(name)) continue;

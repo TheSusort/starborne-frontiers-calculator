@@ -402,6 +402,90 @@ describe('checkInvariants — status durations only count down', () => {
     });
 });
 
+describe('checkInvariants — a held window never exceeds what was written', () => {
+    const toRows = (pairs: [string, number][]) =>
+        pairs.map(([buffName, turnsRemaining]) => ({ buffName, turnsRemaining }));
+    /** `snap` plus the round's store writes. */
+    const written = (
+        n: number,
+        actorId: string,
+        statuses: { buffs?: [string, number][]; debuffs?: [string, number][] },
+        writes: { buffs?: [string, number][]; debuffs?: [string, number][] }
+    ): DurationSnap => ({
+        ...snap(n, actorId, statuses),
+        buffWrites: toRows(writes.buffs ?? []),
+        debuffWrites: toRows(writes.debuffs ?? []),
+    });
+    const oneRound = [round(1, [turn('A', [])])];
+    const twoRounds = [round(1, [turn('A', [])]), round(2, [turn('A', [])])];
+
+    // The own-turn reprieve skips the holder's first Post-Turn countdown; a skip that also added a
+    // turn leaves a fresh status one turn above the turns it was applied with.
+    it('flags a status applied this round that holds more turns than it was written with', () => {
+        const result = audited(oneRound, [
+            written(1, 'A', { buffs: [['Stealth', 3]] }, { buffs: [['Stealth', 2]] }),
+        ]);
+        const v = ids(result, 'status-duration-rises');
+        expect(v).toHaveLength(1);
+        expect(v[0].detail).toContain('its longest write 2');
+    });
+
+    it('flags it on the debuff store just the same', () => {
+        const result = audited(oneRound, [
+            written(1, 'B', { debuffs: [['Speed Down I', 2]] }, { debuffs: [['Speed Down I', 1]] }),
+        ]);
+        expect(ids(result, 'status-duration-rises')).toHaveLength(1);
+    });
+
+    it('allows a status held at or below its write, and a refresh up to the longer write', () => {
+        const result = audited(twoRounds, [
+            written(1, 'A', { buffs: [['Stealth', 2]] }, { buffs: [['Stealth', 2]] }),
+            written(
+                2,
+                'A',
+                { buffs: [['Stealth', 2]] },
+                {
+                    buffs: [
+                        ['Stealth', 1],
+                        ['Stealth', 2],
+                    ],
+                }
+            ),
+        ]);
+        expect(ids(result, 'status-duration-rises')).toEqual([]);
+    });
+
+    it('flags a rise an application row names but no store write backs', () => {
+        const result = audited(
+            [
+                round(1, [turn('A', [])]),
+                round(2, [turn('C', [noted('buff', 'C', ['A'], 'Attack Up II')])]),
+            ],
+            [
+                written(1, 'A', { buffs: [['Attack Up II', 1]] }, {}),
+                written(2, 'A', { buffs: [['Attack Up II', 3]] }, {}),
+            ]
+        );
+        expect(ids(result, 'status-duration-rises')).toHaveLength(1);
+    });
+
+    it('reads nothing into a status with neither a prior window nor a write', () => {
+        const result = audited(oneRound, [written(1, 'A', { buffs: [['Stealth', 9]] }, {})]);
+        expect(ids(result, 'status-duration-rises')).toEqual([]);
+    });
+
+    it('still exempts a side fielding a duration extender', () => {
+        const result = audited(oneRound, [
+            written(1, 'A', { buffs: [['Stealth', 3]] }, { buffs: [['Stealth', 2]] }),
+        ]);
+        const extenders = new Map([['C', new Set<'buff' | 'debuff'>(['buff'])]]);
+        const v = checkInvariants(result, { durationExtenders: extenders }).filter(
+            (x) => x.invariant === 'status-duration-rises'
+        );
+        expect(v).toEqual([]);
+    });
+});
+
 describe('checkInvariants — a lower tier never replaces a higher one', () => {
     const drop = (round2: CombatLogTurn[], heldTurns = 3): BattleResult =>
         audited(
