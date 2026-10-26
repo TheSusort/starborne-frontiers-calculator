@@ -97,7 +97,9 @@ the budget bites.
 - **A release is `npm run release`**, run from a clean `main` that matches `origin/main`. It folds
   `UNRELEASED_CHANGES` into a new `CHANGELOG` entry, bumps `CURRENT_VERSION`, commits, and tags
   `vX.Y.Z`. It prints the push commands; `--push` runs them. `--patch` / `--major` /
-  `--version X.Y.Z` override the default minor bump.
+  `--version X.Y.Z` override the default minor bump. It folds the areas in `FOLDED_AREAS`
+  (`scripts/release.ts`) into one "N <area> fixes and adjustments." line each; add an area there
+  rather than editing the release commit by hand.
 - **The deploy is `git push origin main:production`** — a fast-forward. If it is ever rejected,
   `production` has diverged from `main`; work out why rather than forcing it, because forcing
   overwrites what is live.

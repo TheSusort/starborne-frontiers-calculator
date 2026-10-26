@@ -133,6 +133,42 @@ export function rewriteChangelog(source: string, { version, date, changes }: Rel
     return next;
 }
 
+/**
+ * Areas whose entries a release folds into one count line, so a run of small fixes does not drown
+ * the headline changes. Each entry still goes into UNRELEASED_CHANGES on its own; only the release
+ * folds. An entry belongs to an area when it starts with one of its prefixes followed by `:`.
+ */
+export const FOLDED_AREAS: { prefixes: string[]; label: string }[] = [
+    { prefixes: ['Combat simulator', 'Combat log'], label: 'combat simulator' },
+    { prefixes: ['Squad leaders'], label: 'squad leader' },
+];
+
+/** Folds each FOLDED_AREAS area with two or more entries into one line ("15 combat simulator
+ *  fixes and adjustments."), placed where the area's first entry stood. An area with a single
+ *  entry keeps it as written. Every other entry keeps its place and wording. */
+export function foldChanges(changes: string[], areas = FOLDED_AREAS): string[] {
+    const areaOf = (change: string) =>
+        areas.findIndex((a) => a.prefixes.some((p) => change.startsWith(`${p}:`)));
+    const counts = new Map<number, number>();
+    for (const change of changes) {
+        const area = areaOf(change);
+        if (area >= 0) counts.set(area, (counts.get(area) ?? 0) + 1);
+    }
+    const placed = new Set<number>();
+    const out: string[] = [];
+    for (const change of changes) {
+        const area = areaOf(change);
+        const count = counts.get(area) ?? 0;
+        if (area < 0 || count < 2) {
+            out.push(change);
+        } else if (!placed.has(area)) {
+            placed.add(area);
+            out.push(`${count} ${areas[area].label} fixes and adjustments.`);
+        }
+    }
+    return out;
+}
+
 type Run = (file: string, args: string[], options: ExecFileSyncOptions) => unknown;
 
 /**
@@ -196,7 +232,7 @@ function main() {
         explicit !== -1
             ? assertVersion(argv[explicit + 1], '--version')
             : nextVersion(readCurrentVersion(versionSource), bump);
-    const changes = readUnreleased(source);
+    const changes = foldChanges(readUnreleased(source));
     const date = new Date().toISOString().slice(0, 10);
 
     // Both rewrites run before either file is written, so a throw leaves neither changed.
