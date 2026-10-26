@@ -12,6 +12,9 @@
  *  - Cheat Death wipes a converted DoT, although no cleanse can remove one: Voron ("When directly
  *    damaged, this Unit transforms the damage into a damage over time effect lasting for 3 turns")
  *    saved by Cheat Death ends with no DoT left.
+ *  - Owner ruling 2026-10-26 (read in game): Heliodor ("When directly damaged, this Unit reduces
+ *    the duration of all active debuffs on all allies by 1 turn") does not shorten Voron's
+ *    converted DoT, while she still shortens a DoT applied to him.
  *
  * Real parsed kits (buildTraceShip, refit 4). Every scenario runs with the subject on the player
  * side and mirrored onto the enemy side, each with a control arm.
@@ -288,5 +291,85 @@ describe.each(PLACEMENTS)('Voron saved by Cheat Death on the %s side', (placemen
         const s = setup(false);
         expect(destroyed(s.events, s.id(s.voron))).toBe(true);
         expect(s.convertedAtSave).toBeUndefined();
+    });
+});
+
+describe.each(PLACEMENTS)('Heliodor cuts debuffs next to Voron on the %s side', (placement) => {
+    /** One Curator-style area hit strikes Voron and Heliodor; Voron converts his share into a DoT
+     *  and Heliodor's passive then cuts every ally's debuffs by 1 turn. A 5-turn DoT applied to
+     *  Voron before the fight is the instrument: it shows the cut reached him. */
+    const setup = (withHeliodor: boolean) => {
+        const voron: BoardUnit = {
+            id: 'voron',
+            kit: {
+                slots: [
+                    { slot: 'active', abilities: [] },
+                    ...realKit('Voron').slots.filter((s) => s.slot === 'passive'),
+                ],
+            },
+            position: 'M4',
+            speed: 1,
+            hp: 1e9,
+        };
+        const heliodor: BoardUnit = {
+            id: 'heliodor',
+            kit: withHeliodor
+                ? {
+                      slots: [
+                          { slot: 'active', abilities: [] },
+                          ...realKit('Heliodor').slots.filter((s) => s.slot === 'passive'),
+                      ],
+                  }
+                : NO_KIT,
+            position: 'M3',
+            speed: 2,
+            hp: 1e9,
+        };
+        const hitter: BoardUnit = {
+            id: 'hitter',
+            kit: hitKit(100),
+            position: 'M4',
+            speed: 100,
+            attack: 3000,
+            pattern: parsePattern('Pattern-All'),
+            target: parseTarget('all'),
+        };
+        const voronId = placement === 'player' ? FOCUS_ID : voron.id;
+        let convertedAtHit: number | undefined;
+        const r = run(
+            placement,
+            voron,
+            [heliodor],
+            [hitter],
+            1,
+            (e, actors) => {
+                if (e.type !== 'attacked' || convertedAtHit !== undefined) return;
+                const v = actors.get(voronId);
+                const converted = v?.genericDoTEntries.find((d) => d.convertedFromHit);
+                if (converted) convertedAtHit = converted.remainingRounds;
+            },
+            (actors) => {
+                actors.get(voronId)!.genericDoTEntries.push({
+                    stacks: 1,
+                    tier: 0,
+                    remainingRounds: 5,
+                    sourceId: 'seeded',
+                    perTickAmount: 1,
+                });
+            }
+        );
+        const v = r.actors.get(voronId)!;
+        const applied = v.genericDoTEntries.find((d) => d.sourceId === 'seeded');
+        const converted = v.genericDoTEntries.find((d) => d.convertedFromHit);
+        return { applied, converted, convertedAtHit };
+    };
+
+    it('the cut shortens the applied DoT but not the converted one', () => {
+        const cut = setup(true);
+        const uncut = setup(false);
+        expect(cut.convertedAtHit).toBe(3);
+        expect(uncut.applied!.remainingRounds - cut.applied!.remainingRounds).toBe(1);
+        expect(cut.converted).toBeDefined();
+        expect(cut.converted!.remainingRounds).toBe(uncut.converted!.remainingRounds);
     });
 });

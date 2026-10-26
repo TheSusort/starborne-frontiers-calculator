@@ -100,7 +100,8 @@ export interface ActiveDoTStack {
      * attacker (an aggregate intake) and so cannot stand in for this flag.
      *
      * Owner ruling 2026-10-22: a converted DoT cannot be cleansed (`dotCleanseCandidates` offers
-     * none of its stacks).
+     * none of its stacks). Owner ruling 2026-10-26: no duration cut shortens it
+     * (`shortenDotDurations`, `dotDurationCutCandidates`).
      *
      * Absent on every applied DoT (corrosion, inferno, any applied generic), where the tick is its
      * applier's damage dealt in the ordinary way.
@@ -260,7 +261,8 @@ export function dotCleanseCandidates(
  * The DoT half of a single random duration cut's pool (Warpstrike, owner ruling R35): one
  * candidate per Corrosion, Inferno and generic STACK `holder` carries (R26 — each stack is one
  * debuff), dated by its entry's `appliedSeq` (absent → 0). An `unremovable` entry (Acidic Decay)
- * offers its stacks like any other (R173). Bombs and Echoing Burst accumulators come from
+ * offers its stacks like any other (R173); a converted hit (`convertedFromHit`) offers none, as in
+ * `shortenDotDurations`. Bombs and Echoing Burst accumulators come from
  * `bombDurationCutCandidates` and `accumulatorDurationCutCandidates`, which detonate one cut to 0
  * (owner ruling R113).
  *
@@ -277,6 +279,7 @@ export function dotDurationCutCandidates(holder: DotEntryHolder): DurationCutCan
         holder.genericDoTEntries,
     ]) {
         for (const e of entries) {
+            if (e.convertedFromHit) continue;
             for (let s = 0; s < e.stacks; s++) {
                 out.push({
                     seq: e.appliedSeq ?? 0,
@@ -307,7 +310,9 @@ export function dotDurationCutCandidates(holder: DotEntryHolder): DurationCutCan
 /**
  * The DoT half of a duration cut on "all active debuffs" (Heliodor, Pestilence — owner ruling
  * 2026-10-04: DoTs are debuffs): takes `turns` off every Corrosion, Inferno and generic entry
- * `holder` carries, an `unremovable` entry (Acidic Decay) included (R173). An entry cut to 0 is
+ * `holder` carries, an `unremovable` entry (Acidic Decay) included (R173). A converted hit
+ * (`convertedFromHit`: Voron's transformed hit) is not shortened — owner ruling 2026-10-26, Heliodor
+ * cutting all of Voron's debuffs leaves his converted DoT at its full length. An entry cut to 0 is
  * spliced out in place, as its own expiry does after a tick (`expireStacks`) — so it does not
  * tick again. Bombs and Echoing Burst accumulators are not touched here: their cuts are
  * `reduceBombsOnVictim` and `reduceAccumulatorsOnVictim`, which detonate one driven to 0 (owner
@@ -324,6 +329,7 @@ export function shortenDotDurations(holder: DotEntryHolder, turns: number): numb
     ]) {
         for (let i = entries.length - 1; i >= 0; i--) {
             const e = entries[i];
+            if (e.convertedFromHit) continue;
             e.remainingRounds -= delta;
             shortened += e.stacks;
             if (e.remainingRounds <= 0) entries.splice(i, 1);

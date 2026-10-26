@@ -1,7 +1,7 @@
 /**
  * Sefuba's purge is written after her damage, so it lands after a hit that may have destroyed its
- * victim. A victim the hit KILLED is not purged and wakes no repair; a surviving victim is purged
- * and repairs her as usual.
+ * victim. Owner ruling 2026-10-26 (read in game): a victim the hit KILLED is still purged and
+ * still pays her repair, exactly as a surviving victim does.
  *
  * Real parsed Sefuba kit (buildTraceShip, refit 4). Her pattern strikes M4 and M3. The enemy side's
  * buffers act first and hold removable self-buffs. Run on both sides.
@@ -128,31 +128,23 @@ describe.each<Placement>(['player', 'enemy'])('Sefuba on the %s side', (placemen
         expect(hpPct(carrier)).toBeCloseTo(50 + 24, 5);
     });
 
-    it('an enemy the hit kills is not purged and adds nothing to the repair', () => {
+    it('an enemy the hit kills is purged too, and counts toward the repair', () => {
         const opponents = victims([DOOMED_HP, SURVIVOR_HP]);
-        const {
-            purges,
-            repairs,
-            hpPct,
-            carrier,
-            buffsLeft,
-            id,
-            hpPct: pct,
-        } = run(placement, opponents);
-        // Instrument: the doomed enemy really was struck dead, holding the buffs it gave itself.
-        expect(pct(opponents[0])).toBe(0);
-        expect(buffsLeft(opponents[0])).toBe(4);
-        expect(purges.map((p) => p.targetId)).toEqual([id(opponents[1])]);
-        expect(buffsLeft(opponents[1])).toBe(4 - 1 - 1);
+        const { purges, repairs, hpPct, carrier, buffsLeft, id } = run(placement, opponents);
+        // Instrument: the doomed enemy really was struck dead.
+        expect(hpPct(opponents[0])).toBe(0);
+        expect(purges.map((p) => p.targetId)).toEqual(opponents.map(id));
+        for (const o of opponents) expect(buffsLeft(o)).toBe(4 - 1 - 1);
         expect(repairs).toHaveLength(1);
-        expect(hpPct(carrier)).toBeCloseTo(50 + 12, 5);
+        expect(hpPct(carrier)).toBeCloseTo(50 + 24, 5);
     });
 
-    it('every struck enemy killed: no purge, no repair', () => {
+    it('every struck enemy killed: both purged, one repair for both buffs', () => {
         const opponents = victims([DOOMED_HP, DOOMED_HP]);
-        const { purges, repairs, hpPct, carrier } = run(placement, opponents);
-        expect(purges).toEqual([]);
-        expect(repairs).toEqual([]);
-        expect(hpPct(carrier)).toBeCloseTo(50, 5);
+        const { purges, repairs, hpPct, carrier, id } = run(placement, opponents);
+        for (const o of opponents) expect(hpPct(o)).toBe(0);
+        expect(purges.map((p) => p.targetId)).toEqual(opponents.map(id));
+        expect(repairs).toHaveLength(1);
+        expect(hpPct(carrier)).toBeCloseTo(50 + 24, 5);
     });
 });

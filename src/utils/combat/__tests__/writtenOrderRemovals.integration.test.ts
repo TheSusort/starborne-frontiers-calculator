@@ -413,9 +413,10 @@ describe('a purge resolves where it is written relative to the damage', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────────────────────
-describe('a steal written after the damage takes nothing from the enemy that hit destroyed', () => {
+describe('a steal written after the damage still takes from the enemy that hit destroyed', () => {
     // "deals 160% damage and steals 1 buff": the body re-gains Defense Up III before the subject
-    // acts. With 1e12 hull it survives and the steal lands; with 1,000 hull the hit destroys it.
+    // acts. With 1e12 hull it survives; with 1,000 hull the hit destroys it, and the steal lands
+    // on the wreck all the same, as Sefuba's purge does (owner ruling 2026-10-26).
     const thief: Spec = {
         id: 'S',
         name: 'Bedrock',
@@ -445,7 +446,7 @@ describe('a steal written after the damage takes nothing from the enemy that hit
         expect(stole(run([thief], [body(1e12)], side, 1))).toBe(true);
         const killed = run([thief], [body(1000)], side, 1);
         expect(killed.events.some((e) => e.type === 'ship-destroyed' && e.round === 1)).toBe(true);
-        expect(stole(killed)).toBe(false);
+        expect(stole(killed)).toBe(true);
     });
 });
 
