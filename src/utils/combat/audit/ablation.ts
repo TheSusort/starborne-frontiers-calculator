@@ -110,12 +110,16 @@ export function computeAblationResult(
         parts.push(`${bName} gained kinds only present in composition: ${extraB.join(', ')}`);
     }
 
+    const gained = [
+        ...(extraA.length > 0 ? [{ ship: aName, kinds: extraA }] : []),
+        ...(extraB.length > 0 ? [{ ship: bName, kinds: extraB }] : []),
+    ];
     const diverges = parts.length > 0;
     const detail = diverges
         ? parts.join('; ')
         : `No divergence: ${aName} and ${bName} each produced only kinds already seen solo.`;
 
-    return { diverges, detail, compared };
+    return { diverges, detail, compared, gained };
 }
 
 /** One ship's baseline and combined fingerprints over the rounds it was alive for in both, or two

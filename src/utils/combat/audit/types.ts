@@ -41,6 +41,8 @@ export interface AblationResult {
     /** True when {A+B} per-actor fingerprint is NOT explained by {A}∪{B}. */
     diverges: boolean;
     detail: string;
+    /** Per ship that diverged, the kinds it gained only beside its partner. Empty when none. */
+    gained: { ship: string; kinds: CombatLogEntryKind[] }[];
     /** How many of the two ships had a comparable alive window (0–2). A run that compared
      *  neither cannot diverge, and must not read as a clean pass. */
     compared: number;
@@ -55,6 +57,9 @@ export interface Finding {
     invariant?: string;
     fingerprintDiff?: FingerprintDiff;
     ablationDetail?: string;
+    /** Ablation only: per diverging ship, the kinds it gained beside its partner, unioned over
+     *  the sampled seeds. */
+    ablationGained?: { ship: string; kinds: CombatLogEntryKind[] }[];
     minimalRepro?: { playerShips: string[]; enemyShips: string[] };
     severity: 'high' | 'med' | 'low';
 }

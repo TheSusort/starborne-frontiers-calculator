@@ -27,6 +27,7 @@ import type {
     BattleResult,
     BattleSimulationInput,
 } from '../src/utils/calculators/battleSimulator';
+import type { CombatLogEntryKind } from '../src/utils/combat/log/types';
 import type { Position } from '../src/types/encounters';
 import type { Ship } from '../src/types/ship';
 
@@ -123,12 +124,18 @@ function ablationFinding(
     let diverged = 0;
     let compared = 0;
     let firstDetail = '';
+    const gained = new Map<string, Set<CombatLogEntryKind>>();
     for (const offset of ABLATION_SEED_OFFSETS) {
         const result = runAblation(a.ship, b.ship, compositionSeed + offset, inertPool);
         compared += result.compared;
         if (result.diverges) {
             diverged++;
             if (!firstDetail) firstDetail = result.detail;
+        }
+        for (const g of result.gained) {
+            const kinds = gained.get(g.ship) ?? new Set<CombatLogEntryKind>();
+            for (const k of g.kinds) kinds.add(k);
+            gained.set(g.ship, kinds);
         }
     }
     const total = 2 * ABLATION_SEED_OFFSETS.length;
@@ -140,6 +147,7 @@ function ablationFinding(
             slots: [a.position, b.position],
             seed: compositionSeed,
             ablationDetail: `${diverged}/${ABLATION_SEED_OFFSETS.length} seeds diverged; sample: ${firstDetail}`,
+            ablationGained: [...gained].map(([ship, kinds]) => ({ ship, kinds: [...kinds] })),
             severity: 'low',
         },
         compared,
@@ -351,7 +359,7 @@ function main(): void {
     }
 
     const coverage: LedgerCoverage = { calibration: calibrationCoverage, differential, ablation };
-    const { confirmed, needsTriage } = writeLedger(
+    const { confirmed, needsTriage, groups } = writeLedger(
         findings,
         { compositionsRun, coverage, calibrationResidual },
         'docs'
@@ -359,8 +367,10 @@ function main(): void {
     console.log(`compositionsRun: ${compositionsRun}`);
     console.log(`differential coverage: ${formatCoverage(differential)} player placements`);
     console.log(`ablation coverage: ${formatCoverage(ablation)} subject-runs`);
-    console.log(`confirmed: ${confirmed.length}`);
-    console.log(`needsTriage: ${needsTriage.length}`);
+    console.log(`confirmed: ${confirmed.length} (${groups.confirmed.length} (ships, kind) groups)`);
+    console.log(
+        `needsTriage: ${needsTriage.length} (${groups.needsTriage.length} (ships, kind) groups)`
+    );
     console.log('Wrote docs/interaction-audit-ledger.{json,md}');
 }
 

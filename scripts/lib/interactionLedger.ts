@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import type { Finding } from '../../src/utils/combat/audit/types';
+import type { Finding, OracleKind } from '../../src/utils/combat/audit/types';
 
 /** `comparable` of `total` checks the oracle actually compared. */
 export interface Coverage {
@@ -59,6 +59,82 @@ export const formatCoverage = (c: Coverage): string =>
     `${c.comparable}/${c.total} (${pct(c)})` +
     (c.comparable === 0 ? ' VACUOUS: compared nothing' : '');
 
+/**
+ * Every finding of one (ships, kind): the same interaction reported on several seeds collapses to
+ * one row. A finding naming several kinds joins one group per kind.
+ */
+export interface FindingGroup {
+    oracle: OracleKind;
+    /** The subject (differential), the pair in name order (ablation), or the ships the violation
+     *  named (invariant). */
+    ships: string[];
+    /** `-k`: suppressed beside the subject's allies; `+k`: only beside them (differential).
+     *  `<ship> +k`: that ship gained k beside its partner (ablation). The invariant id. */
+    kind: string;
+    count: number;
+    seeds: number[];
+    /** Each distinct placement the group was seen at, slots comma-joined. */
+    positions: string[];
+    /** The member with the smallest minimal repro, lowest seed first among equals. */
+    sample: Finding;
+}
+
+/** The kinds `finding` is grouped under (`FindingGroup.kind`). */
+export function findingKinds(finding: Finding): string[] {
+    if (finding.fingerprintDiff) {
+        return [
+            ...finding.fingerprintDiff.missingInComposition.map((k) => `-${k}`),
+            ...finding.fingerprintDiff.extraInComposition.map((k) => `+${k}`),
+        ];
+    }
+    if (finding.ablationGained?.length) {
+        return finding.ablationGained.flatMap((g) => g.kinds.map((k) => `${g.ship} +${k}`));
+    }
+    return [finding.invariant ?? finding.ablationDetail ?? 'unspecified'];
+}
+
+const reproSize = (f: Finding): number =>
+    f.minimalRepro
+        ? f.minimalRepro.playerShips.length + f.minimalRepro.enemyShips.length
+        : Number.POSITIVE_INFINITY;
+
+/** `findings` grouped by (oracle, ships, kind), most frequent first. */
+export function groupFindings(findings: readonly Finding[]): FindingGroup[] {
+    const groups = new Map<string, FindingGroup>();
+    for (const f of findings) {
+        const ships = f.oracle === 'ablation' ? [...f.ships].sort() : [...f.ships];
+        const placed = f.slots.join(',');
+        for (const kind of findingKinds(f)) {
+            const key = `${f.oracle}|${ships.join('+')}|${kind}`;
+            const g = groups.get(key);
+            if (!g) {
+                groups.set(key, {
+                    oracle: f.oracle,
+                    ships,
+                    kind,
+                    count: 1,
+                    seeds: [f.seed],
+                    positions: [placed],
+                    sample: f,
+                });
+                continue;
+            }
+            g.count++;
+            if (!g.seeds.includes(f.seed)) g.seeds.push(f.seed);
+            if (!g.positions.includes(placed)) g.positions.push(placed);
+            const size = reproSize(f);
+            const held = reproSize(g.sample);
+            if (size < held || (size === held && f.seed < g.sample.seed)) g.sample = f;
+        }
+    }
+    return [...groups.values()].sort(
+        (x, y) =>
+            y.count - x.count ||
+            x.ships.join('+').localeCompare(y.ships.join('+')) ||
+            x.kind.localeCompare(y.kind)
+    );
+}
+
 export interface LedgerJson {
     compositionsRun: number;
     coverage: LedgerCoverage;
@@ -66,6 +142,8 @@ export interface LedgerJson {
     blindSpots: readonly string[];
     confirmed: Finding[];
     needsTriage: Finding[];
+    /** `confirmed` and `needsTriage` grouped by (ships, kind) — see `groupFindings`. */
+    groups: { confirmed: FindingGroup[]; needsTriage: FindingGroup[] };
     // Reserved for future use: nothing currently produces a "refuted" Finding (there's no
     // re-triage workflow yet that would move a needsTriage entry here), so this is always `[]`.
     // Kept in the shape rather than dropped since ledger consumers (docs/interaction-audit-
@@ -88,6 +166,7 @@ export function buildLedgerJson(findings: Finding[], meta: LedgerMeta): LedgerJs
         blindSpots: LEDGER_BLIND_SPOTS,
         confirmed,
         needsTriage,
+        groups: { confirmed: groupFindings(confirmed), needsTriage: groupFindings(needsTriage) },
         refuted: [],
     };
 }
@@ -99,6 +178,8 @@ export function buildLedgerJson(findings: Finding[], meta: LedgerMeta): LedgerJs
 export function renderLedgerMarkdown(findings: Finding[], meta: LedgerMeta): string {
     const confirmed = findings.filter((f) => f.oracle !== 'ablation');
     const needsTriage = findings.filter((f) => f.oracle === 'ablation');
+    const confirmedGroups = groupFindings(confirmed);
+    const triageGroups = groupFindings(needsTriage);
 
     const lines: string[] = [];
 
@@ -106,8 +187,12 @@ export function renderLedgerMarkdown(findings: Finding[], meta: LedgerMeta): str
     lines.push('# Interaction Audit Ledger');
     lines.push('');
     lines.push(`- Compositions run: **${meta.compositionsRun}**`);
-    lines.push(`- Confirmed findings: **${confirmed.length}**`);
-    lines.push(`- Findings needing triage: **${needsTriage.length}**`);
+    lines.push(
+        `- Confirmed findings: **${confirmed.length}** in **${confirmedGroups.length}** (ships, kind) group(s)`
+    );
+    lines.push(
+        `- Findings needing triage: **${needsTriage.length}** in **${triageGroups.length}** (ships, kind) group(s)`
+    );
     lines.push('');
     lines.push('## Coverage');
     lines.push('');
@@ -130,43 +215,34 @@ export function renderLedgerMarkdown(findings: Finding[], meta: LedgerMeta): str
     for (const spot of LEDGER_BLIND_SPOTS) lines.push(`- ${spot}`);
     lines.push('');
 
-    // Confirmed findings section
-    if (confirmed.length > 0) {
+    if (confirmedGroups.length > 0) {
         lines.push('## Confirmed');
         lines.push('');
-        confirmed.forEach((finding) => {
-            lines.push(renderFinding(finding));
-        });
+        for (const g of confirmedGroups) lines.push(renderGroup(g));
     }
 
-    // Needs triage section
-    if (needsTriage.length > 0) {
+    if (triageGroups.length > 0) {
         lines.push('## Needs Triage');
         lines.push('');
-        needsTriage.forEach((finding) => {
-            lines.push(renderFinding(finding));
-        });
+        for (const g of triageGroups) lines.push(renderGroup(g));
     }
 
     return lines.join('\n');
 }
 
-/**
- * Render a single finding entry in markdown format.
- */
-function renderFinding(finding: Finding): string {
+/** One group: its key and spread, then its sample finding's payload. */
+function renderGroup(group: FindingGroup): string {
+    const finding = group.sample;
     const lines: string[] = [];
 
-    lines.push(`### ${finding.ships.join(', ')} (Seed: ${finding.seed})`);
+    lines.push(`### ${group.ships.join(', ')}: ${group.kind} (×${group.count})`);
     lines.push('');
-
-    // Oracle type and severity
-    lines.push(`**Oracle:** ${finding.oracle}`);
+    lines.push(`**Oracle:** ${group.oracle}`);
     lines.push(`**Severity:** ${finding.severity}`);
+    lines.push(`**Seeds:** ${group.seeds.join(', ')}`);
+    lines.push(`**Positions:** ${group.positions.join('; ')}`);
     lines.push('');
-
-    // Slots/positions
-    lines.push(`**Positions:** ${finding.slots.join(', ')}`);
+    lines.push(`Sample (seed ${finding.seed}, positions ${finding.slots.join(', ')}):`);
     lines.push('');
 
     // Oracle-specific payload
