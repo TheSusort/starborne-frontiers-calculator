@@ -606,8 +606,8 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
         if (!ctx.openAttackEntry) return;
         // The row shows what this victim took (`takenDamage`): after its incoming-block proc
         // (Ironclad, Shadowguard), and — on a Protection split — only the share it kept, since
-        // the protectors' shares are their own rows. The non-positional path stamps no funnel
-        // figure and falls back to the hit as thrown.
+        // the protectors' shares are their own rows. Every engine `attacked` carries it; the
+        // fallback to the hit as thrown serves hand-built event streams only.
         const rowDamage = e.takenDamage ?? e.damage;
         // Find-or-create the target for this victim (dedup by targetId).
         const existing = ctx.openAttackEntry.targets.find((t) => t.targetId === e.targetId);

@@ -55,6 +55,7 @@ import {
     extendDebuffEntries,
     debuffEntriesNamed,
     dotEntriesOf,
+    positionTurnRank,
 } from './state';
 import {
     ActiveBuff,
@@ -84,7 +85,7 @@ import {
     type ReactiveAbility,
 } from './triggers';
 import { STACK_STEALABLE_STATUSES } from './cheatDeathBuffs';
-import { reduceBombsOnVictim } from './bombCountdown';
+import { reduceBombsOnVictim, spliceOut } from './bombCountdown';
 import { recipientCarriesBlockBuff } from './blockBuffBuffs';
 import { BARRIER_BUFFS } from './barrierBuffs';
 import { BARRIER_RECHARGING, holdsBarrierRecharging } from './barrierRecharging';
@@ -1927,8 +1928,8 @@ function applyAccumulators(args: {
     sourceId: string;
     /** Stamps each new accumulator's `appliedSeq` (`StatusEngine.nextAppliedSeq`). */
     nextAppliedSeq: () => number;
-    /** Reports each landed accumulator as an inflicted debuff. */
-    emitInflicted: (buffName: string) => void;
+    /** Reports each landed accumulator as an inflicted debuff; `acc` is the entry just added. */
+    emitInflicted: (buffName: string, acc: PendingAccumulator) => void;
     /** Whether the target is under Block Debuff now, a Firewall proc on an earlier debuff of
      *  this skill included (R149): the accumulator is a debuff (R112), so it is blocked before
      *  any landing roll is drawn. */
@@ -1958,7 +1959,7 @@ function applyAccumulators(args: {
             sourceId: args.sourceId,
             appliedSeq: args.nextAppliedSeq(),
         });
-        args.emitInflicted('Echoing Burst');
+        args.emitInflicted('Echoing Burst', args.pendingAccumulators.at(-1)!);
         landed++;
     }
     return landed;
@@ -2509,6 +2510,31 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 label,
             });
     };
+
+    /** The `onDropped` of an Echoing Burst landing. The accumulator is written into its holder's
+     *  container when its landing is decided, ahead of the damage it is written after, so a drop
+     *  takes it back out as well as recording the dropped landing: the wreck holds none. On the
+     *  aimed target (`listed`) it also leaves the round's debuff display list, which listed it at
+     *  the end of the cast. Runs only from the engine's drain, after runPlayerTurn has returned,
+     *  so the later `const landedEnemyDebuffs` is initialised (see `landStatusOnRecipients`). */
+    const accumulatorDropped =
+        (
+            container: PendingAccumulator[],
+            acc: PendingAccumulator,
+            victimId: string,
+            label: string,
+            listed: boolean
+        ) =>
+        (): void => {
+            spliceOut(container, acc);
+            if (listed) {
+                const at = landedEnemyDebuffs.findLastIndex(
+                    (ab) => ab.buffName === label && ab.turnsRemaining === acc.roundsRemaining
+                );
+                if (at >= 0) landedEnemyDebuffs.splice(at, 1);
+            }
+            landingDropped(victimId, [label])();
+        };
 
     // LIVE per-target debuff-landing chance. The sole producer of
     // landing chance: recomputed each turn from the acting actor's effective hacking (× this
@@ -3953,10 +3979,26 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // decrement, so either way the status keeps its normal window.
     const deferredEnemyApplications: DeferredEnemyApplication[] = [];
     // The stacks this cast's own cadence banked (`sourceFired`) are announced once the damage has
-    // resolved, so the log's attack row keeps the skill tag ahead of them.
+    // resolved, so the log's attack row keeps the skill tag ahead of them. A cast that banks on
+    // several ships of its side (Centurion's charged Core Charge I) announces them holder by
+    // holder in board position order (`positionTurnRank`); a holder with no known cell keeps its
+    // banking order after the placed ones.
+    const castGainRank = (ownerId: string): number =>
+        positionTurnRank(
+            ownerId === actor.id
+                ? actor.position
+                : sameSideLiving?.find((a) => a.id === ownerId)?.position
+        );
     deferredEnemyApplications.push({
         applyState: () => {},
-        emitEvents: () => announceAccumGains(statusEngine, bus),
+        emitEvents: () =>
+            announceAccumGains(statusEngine, bus, (gains) =>
+                [...gains].sort((a, b) => {
+                    const ra = castGainRank(a.ownerId);
+                    const rb = castGainRank(b.ownerId);
+                    return ra === rb ? 0 : ra < rb ? -1 : 1;
+                })
+            ),
     });
     /** Holds a firing-slot status removal written AFTER the damage clause ("deals 160% damage and
      *  purges 1 buff") back with the after-damage debuff landings, so the buff it removes still
@@ -5952,7 +5994,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             // Announced with the cast's other after-damage landings, so the log rows the
             // infliction beneath the skill's own attack row. The target's Firewall rolls as the
             // burst lands (R149); the roll rides the `debuff-applied` to the drain.
-            emitInflicted: (buffName) => {
+            emitInflicted: (buffName, acc) => {
                 const preDecidedProcs = decideBlockDebuffAtLanding?.(enemy.id);
                 deferredEnemyApplications.push({
                     applyState: () => {},
@@ -5966,7 +6008,13 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                             preDecidedProcs
                         ),
                     landsOnId: enemy.id,
-                    onDropped: landingDropped(enemy.id, [buffName]),
+                    onDropped: accumulatorDropped(
+                        pendingAccumulators,
+                        acc,
+                        enemy.id,
+                        buffName,
+                        true
+                    ),
                 });
             },
             blocked: () =>
@@ -6174,7 +6222,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             pendingAccumulators: victim.pendingAccumulators,
             sourceId: actor.id,
             nextAppliedSeq: statusEngine.nextAppliedSeq,
-            emitInflicted: (buffName) => {
+            emitInflicted: (buffName, acc) => {
                 const preDecidedProcs = decideBlockDebuffAtLanding?.(rid);
                 deferredEnemyApplications.push({
                     applyState: () => {},
@@ -6188,7 +6236,13 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                             preDecidedProcs
                         ),
                     landsOnId: rid,
-                    onDropped: landingDropped(rid, [buffName]),
+                    onDropped: accumulatorDropped(
+                        victim.pendingAccumulators,
+                        acc,
+                        rid,
+                        buffName,
+                        false
+                    ),
                 });
             },
             blocked: () =>

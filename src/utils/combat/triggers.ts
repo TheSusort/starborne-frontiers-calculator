@@ -1968,9 +1968,8 @@ export function registerReactiveListeners(args: {
                         if (ra.ability.triggerPrimaryTargetOnly && e.isPrimaryTarget !== true)
                             return;
                         // What the owner actually TOOK from this hit — owner ruling 2026-09-03,
-                        // the basis for BOTH consumers below. `?? e.damage` is the
-                        // non-positional path, which stamps no funnel figure. Read
-                        // `attacked.takenDamage`'s doc in `events.ts`.
+                        // the basis for BOTH consumers below. `?? e.damage` serves a hand-built
+                        // event only. Read `attacked.takenDamage`'s doc in `events.ts`.
                         const taken = e.takenDamage ?? e.damage;
                         const fracGate = ra.ability.requireIncomingDamageFracOfMaxHp;
                         if (fracGate !== undefined) {
