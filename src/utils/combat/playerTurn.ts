@@ -55,6 +55,7 @@ import {
     extendDebuffEntries,
     debuffEntriesNamed,
     dotEntriesOf,
+    positionTurnRank,
 } from './state';
 import {
     ActiveBuff,
@@ -3953,10 +3954,26 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // decrement, so either way the status keeps its normal window.
     const deferredEnemyApplications: DeferredEnemyApplication[] = [];
     // The stacks this cast's own cadence banked (`sourceFired`) are announced once the damage has
-    // resolved, so the log's attack row keeps the skill tag ahead of them.
+    // resolved, so the log's attack row keeps the skill tag ahead of them. A cast that banks on
+    // several ships of its side (Centurion's charged Core Charge I) announces them holder by
+    // holder in board position order (`positionTurnRank`); a holder with no known cell keeps its
+    // banking order after the placed ones.
+    const castGainRank = (ownerId: string): number =>
+        positionTurnRank(
+            ownerId === actor.id
+                ? actor.position
+                : sameSideLiving?.find((a) => a.id === ownerId)?.position
+        );
     deferredEnemyApplications.push({
         applyState: () => {},
-        emitEvents: () => announceAccumGains(statusEngine, bus),
+        emitEvents: () =>
+            announceAccumGains(statusEngine, bus, (gains) =>
+                [...gains].sort((a, b) => {
+                    const ra = castGainRank(a.ownerId);
+                    const rb = castGainRank(b.ownerId);
+                    return ra === rb ? 0 : ra < rb ? -1 : 1;
+                })
+            ),
     });
     /** Holds a firing-slot status removal written AFTER the damage clause ("deals 160% damage and
      *  purges 1 buff") back with the after-damage debuff landings, so the buff it removes still
