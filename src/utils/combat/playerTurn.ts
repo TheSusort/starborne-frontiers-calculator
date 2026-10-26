@@ -515,6 +515,22 @@ export interface PlayerTurnResult {
         /** The sub-attack's victims its hit did damage to — `damagedVictim` (positionalApply.ts). */
         directVictimIds: string[];
     }) => void;
+    /**
+     * The enemy half of the passive clauses that ride each hit (`TimedStatus.perHit` on the enemy
+     * side — Bayah's Speed Down II, Bizon's Block Buff), for ONE sub-attack: rolled and landed
+     * only on the recipients that sub-attack did damage to (`directVictimIds`, #655), so a hit a
+     * Barrier, a Block Attacks charge, a full Protection transfer or a hit-mitigation conversion
+     * left at 0 draws nothing on that enemy. The engine calls it at every sub-attack's end, the
+     * first included. Returns the landings' pairs with `applyState` already run; the caller only
+     * emits. Present only on a positional cast carrying such a clause, which then rides no
+     * cast-time roll.
+     */
+    applyPerHitEnemyStatusesForSubAttack?: (sub: {
+        index: number;
+        anchorId: string;
+        victimIds: string[];
+        directVictimIds: string[];
+    }) => DeferredEnemyApplication[];
     /** Present ONLY when this cast deferred its heal/shield/cleanse pass because it carries a
      *  firing-slot `damage-dealt` rider, whose basis is the damage the cast DELIVERED and so is
      *  unknowable until the engine's per-victim funnel has run.
@@ -4309,6 +4325,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         abTarget: Ability['target'] | undefined;
         boardWide: boolean;
     }[] = [];
+    /** The enemy-side passive clauses riding this positional cast's hits — see
+     *  `applyPerHitEnemyStatusesForSubAttack`. */
+    const perHitEnemyRecipes: typeof perSubAttackDebuffRecipes = [];
 
     for (const status of timedEnemyBySlot) {
         if (!ridesThisCast(status)) continue;
@@ -4346,6 +4365,17 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // `undefined` sink). Do not restate the branch rules here — two copies is exactly how the
         // cast-time and per-sub-attack paths would drift.
         const abTarget = matchingAbility?.target;
+        // A passive clause riding the hits reacts to the damage each one did, so on a positional
+        // cast it is rolled per sub-attack once that damage is known
+        // (`applyPerHitEnemyStatusesForSubAttack`), never here.
+        if (status.perHit === true && positionalLanding) {
+            perHitEnemyRecipes.push({
+                status,
+                abTarget,
+                boardWide: matchingAbility?.boardWide === true,
+            });
+            continue;
+        }
         // The mapping lives in ./debuffRecipients so the
         // per-sub-attack path resolves recipients by exactly the same rules,
         // keyed off ITS OWN re-resolved anchor and footprint instead of the cast's.
@@ -4371,33 +4401,36 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             });
     }
 
+    /** One clause's recipients for one sub-attack, resolved against that sub-attack's own anchor
+     *  and footprint. */
+    const subAttackRecipientIds = (
+        { abTarget, boardWide }: (typeof perSubAttackDebuffRecipes)[number],
+        sub: { anchorId: string; victimIds: string[] }
+    ): (string | undefined)[] =>
+        resolveDebuffRecipientIds({
+            abTarget,
+            anchorId: sub.anchorId,
+            // THIS sub-attack's real footprint, not the cast's — so an `all-enemies` or
+            // `enemy` clause fans over who it actually struck and a killed victim drops out.
+            // A board-wide clause reads the living roster instead (`Ability.boardWide`).
+            aoeVictimIds: boardWide && aliveOpposingIds ? aliveOpposingIds() : sub.victimIds,
+            adjacentEnemyIdsFor,
+            positionalLanding: true,
+            firingClause: true,
+            selectorEnemyIdFor,
+        });
+
     /** Sub-attacks ≥ 1 re-roll every gated clause against their own anchor + footprint. */
     const applyDebuffsForSubAttack = (
         sub: { index: number; anchorId: string; victimIds: string[] },
         phase: 'before-damage' | 'after-damage'
     ): DeferredEnemyApplication[] => {
         const collected: DeferredEnemyApplication[] = [];
-        for (const { status, abTarget, boardWide } of perSubAttackDebuffRecipes) {
-            const isAfter = status.afterDamageClause === true;
+        for (const recipe of perSubAttackDebuffRecipes) {
+            const isAfter = recipe.status.afterDamageClause === true;
             if (isAfter !== (phase === 'after-damage')) continue;
             const before = collected.length;
-            landStatusOnRecipients(
-                status,
-                resolveDebuffRecipientIds({
-                    abTarget,
-                    anchorId: sub.anchorId,
-                    // THIS sub-attack's real footprint, not the cast's — so an `all-enemies` or
-                    // `enemy` clause fans over who it actually struck and a killed victim drops out.
-                    // A board-wide clause reads the living roster instead (`Ability.boardWide`).
-                    aoeVictimIds:
-                        boardWide && aliveOpposingIds ? aliveOpposingIds() : sub.victimIds,
-                    adjacentEnemyIdsFor,
-                    positionalLanding: true,
-                    firingClause: true,
-                    selectorEnemyIdFor,
-                }),
-                collected
-            );
+            landStatusOnRecipients(recipe.status, subAttackRecipientIds(recipe, sub), collected);
             // Write THIS clause's landings before the next clause resolves, mirroring the cast-time
             // path — where a before-damage clause applies inline and after-damage clauses run
             // sequentially at the flush, so clause 2 always evaluates against clause 1's store
@@ -4406,6 +4439,30 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             // clause 2's landing roll reads the victim's live status (the Block-Debuff gate in
             // `landsDebuffOnVictim`), so it must see what clause 1 just applied. Latent today —
             // no corpus ship has that shape (CodeRabbit, PR #314).
+            for (let i = before; i < collected.length; i++) collected[i].applyState();
+        }
+        return collected;
+    };
+
+    /** See `PlayerTurnResult.applyPerHitEnemyStatusesForSubAttack`. Each clause's landings are
+     *  written before the next clause rolls, as in `applyDebuffsForSubAttack`. */
+    const applyPerHitEnemyStatusesForSubAttack = (sub: {
+        index: number;
+        anchorId: string;
+        victimIds: string[];
+        directVictimIds: string[];
+    }): DeferredEnemyApplication[] => {
+        const damaged = new Set(sub.directVictimIds);
+        const collected: DeferredEnemyApplication[] = [];
+        for (const recipe of perHitEnemyRecipes) {
+            const before = collected.length;
+            landStatusOnRecipients(
+                recipe.status,
+                subAttackRecipientIds(recipe, sub).filter(
+                    (id) => id !== undefined && damaged.has(id)
+                ),
+                collected
+            );
             for (let i = before; i < collected.length; i++) collected[i].applyState();
         }
         return collected;
@@ -7737,6 +7794,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         applyPerHitSelfStatusesForSubAttack: perHitGainsFireFromEngine
             ? applyPerHitSelfStatusesForSubAttack
             : undefined,
+        applyPerHitEnemyStatusesForSubAttack:
+            perHitEnemyRecipes.length > 0 ? applyPerHitEnemyStatusesForSubAttack : undefined,
         // Set ONLY when this cast's support pass deferred (a firing-slot `damage-dealt` rider on an
         // engine-resolved cast). The engine MUST invoke it after the funnel — the repair/shield has
         // not happened yet. Undefined on every other path, where the pass already ran inline.

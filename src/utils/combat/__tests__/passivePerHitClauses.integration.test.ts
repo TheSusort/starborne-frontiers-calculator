@@ -405,3 +405,141 @@ describe('DPS calculator: the one enemy is the struck set', () => {
         });
     });
 });
+
+/**
+ * The enemy half needs the hit to DO damage to that enemy (#655, owner ruling 2026-10-26): Bayah's
+ * hit on a Barriered enemy with 2+ debuffs does 0, so neither Speed Down II nor Out. Damage Down II
+ * is rolled — nothing lands, nothing is resisted — and she gains no Terran Bolster. Her active's
+ * own debuff clauses still land on the Barriered ship. A hit fully soaked by a SHIELD is damage,
+ * so the rider lands. Pattern-Base on A at M4.
+ */
+describe('Bayah: the per-hit passive needs the hit to do damage to that enemy', () => {
+    const barrier3: ShipSkills = {
+        slots: [
+            { slot: 'active', abilities: [] },
+            {
+                slot: 'passive',
+                abilities: [
+                    {
+                        id: 'barrier3',
+                        type: 'buff',
+                        target: 'self',
+                        trigger: 'pre-combat',
+                        conditions: [],
+                        config: {
+                            type: 'buff',
+                            buffName: 'Barrier',
+                            parsedEffects: {},
+                            stacks: 1,
+                            isStackable: false,
+                            duration: 3,
+                        },
+                    },
+                ],
+            },
+        ],
+    };
+    type Guard = 'barrier' | 'shield' | 'none';
+    /** Barrier as a combat-start self buff on the guarded ship; a shield as a seeded pool. */
+    const guardSkills = (guard: Guard): ShipSkills => (guard === 'barrier' ? barrier3 : NO_SKILLS);
+
+    const run = (
+        input: CombatEngineInput,
+        casterId: string,
+        guardedId: string,
+        guard: Guard,
+        security = 0
+    ) => {
+        const bus = createEventBus();
+        const applied: string[] = [];
+        const resisted: string[] = [];
+        let guardedActor: { currentHp: number; maxHp?: number } | undefined;
+        bus.on('debuff-applied', (e: Extract<CombatEvent, { type: 'debuff-applied' }>) => {
+            if (e.sourceId === casterId && e.round === 1 && e.targetId === guardedId)
+                applied.push(e.buffName);
+        });
+        bus.on('debuff-resisted', (e: Extract<CombatEvent, { type: 'debuff-resisted' }>) => {
+            if (e.sourceId === casterId && e.round === 1 && e.targetId === guardedId)
+                resisted.push(e.buffName);
+        });
+        const selfBuffs: string[] = [];
+        bus.on('buff-applied', (e: Extract<CombatEvent, { type: 'buff-applied' }>) => {
+            if (e.actorId === casterId) selfBuffs.push(e.buffName);
+        });
+        runCombat({
+            ...input,
+            bus,
+            __testTapActors: (all) => {
+                for (const a of all) {
+                    if (a.id !== guardedId) continue;
+                    guardedActor = a;
+                    a.corrosionEntries.push(...corrosion(2));
+                    if (guard === 'shield') a.shieldPool = 1e12;
+                    a.stats = { ...a.stats, security };
+                }
+            },
+        });
+        return {
+            applied,
+            resisted,
+            hpLost: guardedActor ? 1e9 - guardedActor.currentHp : NaN,
+            bolster: selfBuffs.filter((b) => b === BOLSTER).length,
+        };
+    };
+
+    const playerInput = (guard: Guard) =>
+        base({
+            shipSkills: realKit('Bayah'),
+            pattern: single(),
+            enemyAttackers: ENEMY_POSITIONS.map(([id, p]) => ({
+                ...enemyAt(id, p),
+                ...(id === 'enemy-a' ? { shipSkills: guardSkills(guard) } : {}),
+            })),
+        });
+    const enemyInput = (guard: Guard): CombatEngineInput => {
+        const b = enemyBoard('Bayah', single());
+        return { ...b, shipSkills: guardSkills(guard) };
+    };
+
+    const sides = [
+        { side: 'player', input: playerInput, caster: 'attacker', guarded: 'enemy-a' },
+        { side: 'enemy', input: enemyInput, caster: 'enemy-caster', guarded: 'attacker' },
+    ] as const;
+
+    for (const { side, input, caster, guarded } of sides) {
+        it(`${side}-side: Barrier → her own debuffs land, the rider is neither landed nor resisted, no Bolster`, () => {
+            const m = run(input('barrier'), caster, guarded, 'barrier');
+            expect(m.hpLost).toBe(0);
+            expect(m.applied).toEqual(['Crit Power Down II', 'Attack Down II']);
+            expect(m.resisted).toEqual([]);
+            expect(m.bolster).toBe(0);
+        });
+
+        it(`${side}-side: Barrier against a resisting enemy → only her own debuffs are rolled (and resisted)`, () => {
+            const m = run(input('barrier'), caster, guarded, 'barrier', 1e9);
+            expect(m.applied).toEqual([]);
+            expect(m.resisted).toEqual(['Crit Power Down II', 'Attack Down II']);
+        });
+
+        it(`${side}-side control: no Barrier against a resisting enemy → the rider is rolled and resisted`, () => {
+            const m = run(input('none'), caster, guarded, 'none', 1e9);
+            expect(m.resisted).toEqual([
+                'Crit Power Down II',
+                'Attack Down II',
+                'Speed Down II',
+                'Out. Damage Down II',
+            ]);
+        });
+
+        it(`${side}-side: a hit fully soaked by a shield is damage → the rider lands and she gains Bolster`, () => {
+            const m = run(input('shield'), caster, guarded, 'shield');
+            expect(m.applied).toEqual([
+                'Crit Power Down II',
+                'Attack Down II',
+                'Speed Down II',
+                'Out. Damage Down II',
+            ]);
+            expect(m.bolster).toBe(1);
+        });
+    }
+});
