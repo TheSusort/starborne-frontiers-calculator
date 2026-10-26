@@ -5182,11 +5182,11 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // GATED OFF: a paired status whose gate every recipient turned away did not happen, so its
     // control emits nothing (`castGateRejectedStatusNames`).
     //
-    // OTHERWISE — no paired status reached the gate at cast time — it emits ONCE, naming
-    // the cast's bound target (the caster for a self control such as Taunt), gated by the payload
-    // `ctx`. An enemy-side control there needs a victim. A plain-'enemy' one is further
-    // suppressed by Block-Debuff immunity on the target and by its name among the scheduled-path
-    // resists.
+    // OTHERWISE — no paired status reached the gate at cast time — a self or single-target
+    // 'enemy' control emits ONCE, naming the cast's bound target (the caster for a self control
+    // such as Taunt), gated by the payload `ctx`. The 'enemy' one needs a victim and is suppressed
+    // by Block-Debuff immunity on the target and by its name among the scheduled-path resists. A
+    // fan-out control emits nothing there.
     const resistedEnemyDebuffNames = new Set([
         ...resistedTimedEnemyNames,
         ...resistedScheduledTimedNames,
@@ -5248,12 +5248,14 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // false, and only the scheduled resist list can populate `resistedEnemyDebuffNames`), and
         // the event is not inert — it wakes `on-stasis-applied` reactions.
         if (!hasVictim) continue;
-        if (ctrl.target === 'enemy') {
-            // Standalone control with no named status: only Block-Debuff immunity gates it.
-            if (targetImmuneToDebuffs) continue;
-            // Paired named status resisted on the scheduled path → suppress the success event.
-            if (resistedEnemyDebuffNames.has(pairedName)) continue;
-        }
+        // A fan-out scope (adjacent / all enemies …) controls only the recipients its paired
+        // status landed on, handled above; with none it controlled nobody. Only the single-target
+        // 'enemy' scope names the bound target here.
+        if (ctrl.target !== 'enemy') continue;
+        // Standalone control with no named status: only Block-Debuff immunity gates it.
+        if (targetImmuneToDebuffs) continue;
+        // Paired named status resisted on the scheduled path → suppress the success event.
+        if (resistedEnemyDebuffNames.has(pairedName)) continue;
         emitControl(effect, enemy.id);
     }
 
