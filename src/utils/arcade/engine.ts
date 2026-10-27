@@ -11,7 +11,6 @@ import {
     LANE_COUNT,
     MAGNET_SECONDS,
     MAX_SPEED,
-    NEAR_MISS_CHAIN_SECONDS,
     NEAR_MISS_MAX_POINTS,
     NEAR_MISS_POINTS,
     NEAR_MISS_SECONDS,
@@ -41,7 +40,6 @@ export function createGame(seed: number, options: GameOptions = {}): GameState {
         bonus: 0,
         events: [],
         nearMissChain: 0,
-        lastNearMissTime: Number.NEGATIVE_INFINITY,
         bestNearMissChain: 0,
         nearMissPoints: 0,
         creditStreak: 0,
@@ -152,7 +150,6 @@ function isNearMiss(state: GameState, o: Obstacle): boolean {
 function payNearMiss(state: GameState, lane: Lane): void {
     const chain = ++state.nearMissChain;
     const points = Math.min(NEAR_MISS_POINTS * chain, NEAR_MISS_MAX_POINTS);
-    state.lastNearMissTime = state.time;
     state.bestNearMissChain = Math.max(state.bestNearMissChain, chain);
     state.nearMissPoints += points;
     state.bonus += points;
@@ -207,7 +204,6 @@ export function step(state: GameState, inputs: readonly InputAction[], dt: numbe
     state.shieldBreakTime = Math.max(0, state.shieldBreakTime - dt);
 
     state.time += dt;
-    if (state.time - state.lastNearMissTime > NEAR_MISS_CHAIN_SECONDS) state.nearMissChain = 0;
     state.speed = nextSpeed(state.speed, dt);
     const travel = state.speed * dt;
     state.distance += travel;
@@ -221,11 +217,19 @@ export function step(state: GameState, inputs: readonly InputAction[], dt: numbe
         state.untilNextRow += ROW_GAP;
     }
 
+    // A row's obstacles share one z, and rows are ROW_GAP apart, so the obstacles crossing in
+    // one step are one row. A row with no near miss in it ends the chain.
+    let crossed = false;
+    let nearMissed = false;
     for (const o of state.obstacles) {
         if (o.resolved || o.z > 0) continue;
         o.resolved = true;
+        crossed = true;
         if (o.lane !== player.lane || !blocks(o.kind, player.action)) {
-            if (isNearMiss(state, o)) payNearMiss(state, o.lane);
+            if (isNearMiss(state, o)) {
+                payNearMiss(state, o.lane);
+                nearMissed = true;
+            }
             continue;
         }
         state.nearMissChain = 0;
@@ -236,6 +240,7 @@ export function step(state: GameState, inputs: readonly InputAction[], dt: numbe
             state.status = 'over';
         }
     }
+    if (crossed && !nearMissed) state.nearMissChain = 0;
 
     if (state.status === 'over') return state;
 

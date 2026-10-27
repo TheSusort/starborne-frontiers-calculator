@@ -2641,9 +2641,9 @@ const DocumentationPage: React.FC = () => {
                                     bonus points: change lane, or start the jump or duck that clears
                                     an obstacle, within 0.2 seconds of reaching it. Near misses
                                     chain: the first pays 25, the next 50, and so on up to 150 each.
-                                    The chain ends after 3 seconds without one, or when a hit breaks
-                                    your shield. The game-over screen shows your best chain and the
-                                    points near misses earned.
+                                    The chain ends when a row of obstacles passes without a near
+                                    miss, or when a hit breaks your shield. The game-over screen
+                                    shows your best chain and the points near misses earned.
                                 </p>
                                 <p className="text-theme-text mt-2">
                                     <strong>Credit streak.</strong> Collect every credit of two

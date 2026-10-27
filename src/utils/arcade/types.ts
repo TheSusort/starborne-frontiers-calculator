@@ -102,10 +102,9 @@ export interface GameState {
     bonus: number;
     /** Appended to by `step`; the caller reads and clears it. */
     events: RunEvent[];
-    /** Near misses in the current chain, which ends NEAR_MISS_CHAIN_SECONDS after the last one
-     *  (`lastNearMissTime`) and on any hit. */
+    /** Near misses in the current chain, which ends when an obstacle row passes with no near
+     *  miss in it, and on any hit. */
     nearMissChain: number;
-    lastNearMissTime: number;
     bestNearMissChain: number;
     /** Points near misses have paid into `bonus` this run. */
     nearMissPoints: number;

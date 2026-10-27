@@ -51,8 +51,10 @@ is a near miss if, within `NEAR_MISS_SECONDS = 0.2` before the crossing, either:
 A wall only counts lane changes. Two obstacles in one row can each be a near miss.
 
 **Chain:** the n-th near miss in a chain pays `min(25 · n, 150)` points (25, 50, 75, … 150, 150).
-The chain resets after `NEAR_MISS_CHAIN_SECONDS = 3` with no near miss, and when an obstacle hits
-the player (a shield break). Points go into `state.bonus`, so `computeScore` is unchanged.
+The chain continues only over consecutive obstacle rows: it resets when a row passes with no
+near miss in it (a double row with one near-missed barrier keeps it), and when an obstacle hits
+the player (a shield break). Time alone never ends it, and the empty rows around a duel gate do
+not count as rows. (Owner playtest 2026-10-27 replaced the original 3 s timeout.) Points go into `state.bonus`, so `computeScore` is unchanged.
 
 ### Credit streak
 
@@ -100,7 +102,8 @@ Engine unit tests in `src/utils/arcade/__tests__/`:
   mid-duck jumps at once.
 - Near miss: a lane change 0.19 s before the crossing pays, 0.21 s does not; a jump started in the
   window clears a low barrier and pays; a wall with a jump does not count; chain values 25 → 150
-  cap; the chain resets after 3 s and on a shield break; a hit pays nothing.
+  cap; a row without a near miss resets the chain, time alone does not, a double row with one near
+  miss keeps it; the chain resets on a shield break; a hit pays nothing.
 - Streak: two finished trails switch it on; an untouched trail resets it; a magnet-collected trail
   counts as finished; credits count double only while it is on; duel credits are not doubled.
 - Determinism: the same seed and inputs give the same score and events.

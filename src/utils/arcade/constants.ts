@@ -39,8 +39,6 @@ export const NEAR_MISS_SECONDS = 0.2;
 /** The n-th near miss of a chain pays `min(NEAR_MISS_POINTS · n, NEAR_MISS_MAX_POINTS)`. */
 export const NEAR_MISS_POINTS = 25;
 export const NEAR_MISS_MAX_POINTS = 150;
-/** A chain ends after this long with no near miss, and on any hit. */
-export const NEAR_MISS_CHAIN_SECONDS = 3;
 /** Finished credit trails in a row that switch the streak on. */
 export const STREAK_TRAILS = 2;
 /** Credits each credit pickup is worth while the streak is on. */

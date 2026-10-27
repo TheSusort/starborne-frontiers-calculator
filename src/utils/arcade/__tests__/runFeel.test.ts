@@ -276,17 +276,37 @@ describe('near miss', () => {
         expect(runResult(g)).toMatchObject({ bestNearMissChain: 8, nearMissPoints: total });
     });
 
-    it('a chain resets after 3 s with no near miss', () => {
+    it('a row that passes with no near miss ends the chain', () => {
         const g = quietGame();
         laneNearMiss(g);
-        run(g, steps(2.9));
         laneNearMiss(g);
         expect(g.nearMissChain).toBe(2);
-        run(g, steps(3.1));
+        pressThenCross(g, [], 1, [['wall', g.player.lane === 0 ? 2 : 0]]);
         expect(g.nearMissChain).toBe(0);
         laneNearMiss(g);
         expect(nearMisses(g).map((e) => e.points)).toEqual([25, 50, 25]);
         expect(g.bestNearMissChain).toBe(2);
+    });
+
+    it('time alone does not end a chain', () => {
+        const g = quietGame();
+        laneNearMiss(g);
+        run(g, steps(10));
+        laneNearMiss(g);
+        expect(nearMisses(g).map((e) => e.points)).toEqual([25, 50]);
+    });
+
+    it('a double row with one near miss and one far barrier keeps the chain', () => {
+        const g = quietGame();
+        laneNearMiss(g);
+        const from = g.player.lane;
+        const far = ([0, 1, 2] as Lane[]).find((l) => Math.abs(l - from) === 2) ?? 2;
+        pressThenCross(g, [from === 0 ? 'right' : 'left'], 2 * STEP_SECONDS, [
+            ['wall', from],
+            ['wall', far === from ? 0 : far],
+        ]);
+        expect(nearMisses(g).map((e) => e.points)).toEqual([25, 50]);
+        expect(g.nearMissChain).toBe(2);
     });
 
     it('a chain resets on a shield break, and the hit pays nothing', () => {
