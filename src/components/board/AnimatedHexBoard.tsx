@@ -97,7 +97,7 @@ const ShipCell: React.FC<{
                     />
                 )}
             </HexTile>
-            <div className="pointer-events-none absolute inset-x-0 top-[2%] flex justify-center gap-px">
+            <div className="pointer-events-none absolute inset-x-[2%] top-[26%] flex justify-between">
                 <ChipRow items={ship.buffs} label={`${ship.name} buffs`} max={0} variant="buff" />
                 <ChipRow
                     items={ship.debuffs}
@@ -170,7 +170,7 @@ export const AnimatedHexBoard: React.FC<AnimatedHexBoardProps> = ({
                     <div
                         key={cell}
                         data-cell={cell}
-                        className="absolute"
+                        className="absolute p-[1%]"
                         style={{
                             left: `${b.left}%`,
                             top: `${b.top}%`,
