@@ -154,4 +154,35 @@ describe('RoundStepper', () => {
             expect(screen.getByRole('button', { name: /play/i })).toBeInTheDocument();
         });
     });
+
+    it('with `play`, the button reports presses and shows the parent’s state, with no timer', () => {
+        vi.useFakeTimers();
+        try {
+            const onChange = vi.fn();
+            const onToggle = vi.fn();
+            const { rerender } = render(
+                <RoundStepper
+                    round={1}
+                    total={5}
+                    onChange={onChange}
+                    play={{ playing: false, onToggle }}
+                />
+            );
+            fireEvent.click(screen.getByRole('button', { name: 'Play' }));
+            expect(onToggle).toHaveBeenCalledTimes(1);
+            rerender(
+                <RoundStepper
+                    round={1}
+                    total={5}
+                    onChange={onChange}
+                    play={{ playing: true, onToggle }}
+                />
+            );
+            expect(screen.getByRole('button', { name: 'Pause' })).toBeInTheDocument();
+            act(() => void vi.advanceTimersByTime(5000));
+            expect(onChange).not.toHaveBeenCalled();
+        } finally {
+            vi.useRealTimers();
+        }
+    });
 });

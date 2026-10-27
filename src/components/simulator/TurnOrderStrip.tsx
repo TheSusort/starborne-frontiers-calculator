@@ -6,6 +6,8 @@ interface TurnOrderStripProps {
     order: string[];
     /** Roster mapping actorId → { name, side } for labeling each entry. */
     roster: BattleResult['roster'];
+    /** The ship whose turn the board is showing; its entry is outlined and marked current. */
+    actingId?: string | null;
 }
 
 /**
@@ -13,7 +15,7 @@ interface TurnOrderStripProps {
  * with a side-colored chip; enemy-side ships are prefixed "Enemy " so the two teams read apart.
  * Fed by the current round's `turnOrder` from BattlePlayback.
  */
-const TurnOrderStrip: React.FC<TurnOrderStripProps> = ({ order, roster }) => {
+const TurnOrderStrip: React.FC<TurnOrderStripProps> = ({ order, roster, actingId = null }) => {
     const byId = React.useMemo(() => {
         const map = new Map<string, BattleResult['roster'][number]>();
         for (const entry of roster) map.set(entry.actorId, entry);
@@ -35,6 +37,7 @@ const TurnOrderStrip: React.FC<TurnOrderStripProps> = ({ order, roster }) => {
                 {entries.map((entry, index) => (
                     <li
                         key={`${entry.actorId}-${index}`}
+                        aria-current={entry.actorId === actingId ? 'step' : undefined}
                         className="flex items-center gap-1.5 text-xs"
                     >
                         <span className="text-theme-text-secondary w-4 text-right">
@@ -42,6 +45,8 @@ const TurnOrderStrip: React.FC<TurnOrderStripProps> = ({ order, roster }) => {
                         </span>
                         <span
                             className={`px-2 py-1 rounded border ${
+                                entry.actorId === actingId ? 'ring-2 ring-primary' : ''
+                            } ${
                                 entry.side === 'enemy'
                                     ? 'border-red-500/50 text-red-300 bg-red-500/10'
                                     : 'border-green-500/50 text-green-300 bg-green-500/10'

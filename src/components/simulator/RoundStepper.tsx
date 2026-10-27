@@ -9,6 +9,9 @@ interface RoundStepperProps {
     total: number;
     /** Called with the clamped target round when the user steps/plays. */
     onChange: (round: number) => void;
+    /** Hands Play/Pause to the parent: the button shows `playing` and reports a press, and the
+     *  stepper runs no timer of its own. Without it, Play advances one round per tick. */
+    play?: { playing: boolean; onToggle: () => void };
 }
 
 const STEP_INTERVAL_MS = 800;
@@ -20,8 +23,10 @@ const STEP_INTERVAL_MS = 800;
  * playing — this reads the latest `round`/`total` from props on every render, so
  * there is no stale-closure interval that keeps advancing from the initial round.
  */
-const RoundStepper: React.FC<RoundStepperProps> = ({ round, total, onChange }) => {
-    const [playing, setPlaying] = useState(false);
+const RoundStepper: React.FC<RoundStepperProps> = ({ round, total, onChange, play }) => {
+    const [ownPlaying, setOwnPlaying] = useState(false);
+    const controlled = play !== undefined;
+    const playing = play ? play.playing : ownPlaying;
 
     const clamp = (r: number) => Math.max(1, Math.min(total, r));
     const go = (r: number) => onChange(clamp(r));
@@ -29,26 +34,27 @@ const RoundStepper: React.FC<RoundStepperProps> = ({ round, total, onChange }) =
     const atStart = round <= 1;
     const atEnd = round >= total;
 
-    // Auto-play: a single re-armed timeout. Re-runs on every change to
-    // [playing, round, total] because the effect deps capture the latest values,
+    // Uncontrolled auto-play: a single re-armed timeout. Re-runs on every change to
+    // [ownPlaying, round, total] because the effect deps capture the latest values,
     // so the timeout always advances from the current round and stops at total.
     useEffect(() => {
-        if (!playing) return;
+        if (controlled || !ownPlaying) return;
         if (round >= total) {
-            setPlaying(false);
+            setOwnPlaying(false);
             return;
         }
         const id = setTimeout(() => {
             onChange(Math.min(total, round + 1));
         }, STEP_INTERVAL_MS);
         return () => clearTimeout(id);
-        // onChange intentionally excluded — parent passes a stable setter; including
-        // it would not change correctness since the timeout reads round/total fresh.
+        // onChange is left out: the timer runs only uncontrolled, and the timeout reads
+        // round/total fresh, so a new onChange identity changes nothing.
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [playing, round, total]);
+    }, [ownPlaying, round, total, controlled]);
 
     const togglePlay = () => {
-        setPlaying((p) => !p);
+        if (play) play.onToggle();
+        else setOwnPlaying((p) => !p);
     };
 
     return (

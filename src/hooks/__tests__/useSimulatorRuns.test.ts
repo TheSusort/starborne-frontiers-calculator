@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useSimulatorRuns } from '../useSimulatorRuns';
+import type { GridMode } from '../../utils/simulator/gridMode';
 import { snapshotOverrides } from '../../utils/simulator/compareRuns';
 import type { BoardState } from '../../components/simulator/PlacementBoard';
 import type { Position } from '../../types/encounters';
@@ -96,6 +97,7 @@ const baseArgs = (overrides: Partial<Parameters<typeof useSimulatorRuns>[0]> = {
     getGearPiece: undefined,
     seed: 42,
     runCount: 5,
+    gridMode: 'normal' as GridMode,
     ...overrides,
 });
 
@@ -264,6 +266,29 @@ describe('useSimulatorRuns', () => {
         });
 
         expect(result.current.baseline?.input).toBe(ranInput);
+    });
+
+    it('records the grid a run was set up on, and the baseline keeps it after the setup moves on', async () => {
+        const { result, rerender } = renderHook(
+            (props: Parameters<typeof useSimulatorRuns>[0]) => useSimulatorRuns(props),
+            { initialProps: baseArgs({ gridMode: 'small' }) }
+        );
+        expect(result.current.currentGridMode).toBe('normal');
+        await act(async () => {
+            result.current.handleRun();
+        });
+        act(() => {
+            result.current.handlePinBaseline();
+        });
+        rerender(baseArgs({ gridMode: 'normal' }));
+        // Nothing re-ran: the displayed run and the baseline still name the small grid.
+        expect(result.current.currentGridMode).toBe('small');
+        expect(result.current.baselineGridMode).toBe('small');
+        await act(async () => {
+            result.current.handleRun();
+        });
+        expect(result.current.currentGridMode).toBe('normal');
+        expect(result.current.baselineGridMode).toBe('small');
     });
 
     it('handleOpenSeed reports an error instead of throwing when there is no run to replay', () => {

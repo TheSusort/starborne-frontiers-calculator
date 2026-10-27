@@ -52,6 +52,8 @@ interface PlacementBoardProps {
     /** Hands FormationGrid the ship this board already holds for a cell — required here, since
      *  a simulator board can carry a reference unit the player does not own. */
     resolveShip: (position: Position) => Ship | null;
+    /** The cells ships can be placed on (see FormationGrid's `cells`). */
+    cells?: readonly Position[];
 }
 
 /** One placement board: a side heading, an optional "load encounter" dropdown, a FormationGrid,
@@ -71,6 +73,7 @@ const PlacementBoard: React.FC<PlacementBoardProps> = ({
     onEditStats,
     hasOverrides,
     resolveShip,
+    cells,
 }) => {
     const { encounters, addEncounter } = useEncounterNotes();
     const resolveStoredShip = useShipIdResolver();
@@ -157,6 +160,7 @@ const PlacementBoard: React.FC<PlacementBoardProps> = ({
                 onEditStats={onEditStats}
                 hasOverrides={hasOverrides}
                 resolveShip={resolveShip}
+                cells={cells}
             />
             {/* Picker contract: mounted ONLY while a cell is selected. Mount/unmount drives the
                 modal — it opens on mount; onClose clears the selection, which unmounts this and

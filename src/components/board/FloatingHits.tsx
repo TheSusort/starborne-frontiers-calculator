@@ -43,7 +43,7 @@ const hitClass = (hit: FloatingHit, small: boolean) => {
     }
 };
 
-/** One turn's numbers rising off a ship (`.arcade-duel-float`; reduced motion keeps only the
+/** One turn's numbers rising off a ship (`.board-float`; reduced motion keeps only the
  *  fade). Key it by the turn so a new turn mounts fresh ones. Place it in a positioned box. */
 export const FloatingHits: React.FC<{
     turn: number | string;
@@ -55,7 +55,7 @@ export const FloatingHits: React.FC<{
             <span
                 key={`${turn}-${i}`}
                 data-testid="duel-hit"
-                className={`arcade-duel-float absolute whitespace-nowrap drop-shadow ${hitClass(hit, small)}`}
+                className={`board-float absolute whitespace-nowrap drop-shadow ${hitClass(hit, small)}`}
                 style={{
                     left: `${50 + (i % 2 === 0 ? 1 : -1) * Math.ceil(i / 2) * 18}%`,
                     top: `${35 - i * 8}%`,

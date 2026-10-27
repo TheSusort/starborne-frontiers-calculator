@@ -70,6 +70,7 @@ const runWith = (engineering: EngineeringStat | undefined): BattleSimulationInpu
             getGearPiece: undefined,
             seed: 1,
             runCount: 1,
+            gridMode: 'normal',
         })
     );
     act(() => {

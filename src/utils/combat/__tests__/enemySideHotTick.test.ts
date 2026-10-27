@@ -704,7 +704,7 @@ describe("#369 — a HoT tick counts as being repaired this round ('target-repai
 // `maxHp − hpLost + healed`, and `healed` was accumulated exclusively from
 // `heal-performed.perTarget`. This block emits no `heal-performed` (R2, asserted in sections 1–4)
 // and `RoundData` carries no healing buckets, so a HoT tick moved the engine's HP and moved
-// NOTHING the UI shows: the bar width, its low-HP colour (`boardOverlays.ts` → `BattleBoard.tsx`),
+// NOTHING the UI shows: the bar width, its low-HP colour on the playback board,
 // its `N% HP` aria-label and the round card's HP figure all stayed at the damaged value.
 //
 // #369 is what made that general. While the block was wrapped in `if (!healEventOnly)` and

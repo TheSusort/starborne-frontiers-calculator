@@ -23,6 +23,7 @@ const args = {
     enemySquadLeader: undefined,
     seed: 424242,
     runCount: 20,
+    gridMode: 'small' as const,
     savedAt: 1_700_000_000_000,
 };
 
@@ -92,5 +93,18 @@ describe('deserializeSetup', () => {
         expect(result.playerBoard).toEqual({});
         expect(result.enemyBoard).toEqual({});
         expect(result.dropped).toHaveLength(4);
+    });
+});
+
+describe('grid mode', () => {
+    it('round-trips', () => {
+        const setup = serializeSetup(args);
+        expect(setup.gridMode).toBe('small');
+        expect(deserializeSetup(setup, resolveAll).gridMode).toBe('small');
+    });
+
+    it('a stored setup without the field reads as the normal board', () => {
+        const { gridMode: _omitted, ...legacy } = serializeSetup(args);
+        expect(deserializeSetup(legacy, resolveAll).gridMode).toBe('normal');
     });
 });

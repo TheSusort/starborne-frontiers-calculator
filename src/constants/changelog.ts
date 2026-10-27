@@ -10,6 +10,8 @@ export const UNRELEASED_CHANGES: string[] = [
     'Arcade: time slows before each checkpoint so you can read the challenge.',
     'Arcade: checkpoint gates now show the rival ships as portraits.',
     'Arcade: tied checkpoint challenges are now a draw with no reward or penalty.',
+    'Combat simulator: battles now play turn by turn on animated hex boards.',
+    'Combat simulator: new small grid option places both teams on seven cells.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

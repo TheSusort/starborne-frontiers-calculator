@@ -3,6 +3,7 @@ import type { Ship } from '../../types/ship';
 import type { BoardState } from '../../components/simulator/PlacementBoard';
 import type { SquadLeaderSelection } from '../combat/preFight';
 import { hasAnyOverride, type StatOverrides } from './statOverrides';
+import { DEFAULT_GRID_MODE, type GridMode } from './gridMode';
 
 /** Discriminator for future migrations. A stored value carrying any other version is discarded,
  *  not upgraded. */
@@ -34,6 +35,8 @@ export interface SimulatorSetup {
     enemySquadLeader?: SquadLeaderSelection;
     seed: number;
     runCount: number;
+    /** Absent on a setup stored before the small grid existed, which reads as `'normal'`. */
+    gridMode?: GridMode;
     /** Epoch ms; orders the saved list. */
     savedAt: number;
 }
@@ -46,6 +49,7 @@ export interface SerializeSetupArgs {
     enemySquadLeader?: SquadLeaderSelection;
     seed: number;
     runCount: number;
+    gridMode: GridMode;
     savedAt: number;
 }
 
@@ -75,6 +79,7 @@ export function serializeSetup(args: SerializeSetupArgs): SimulatorSetup {
         enemySquadLeader: args.enemySquadLeader,
         seed: args.seed,
         runCount: args.runCount,
+        gridMode: args.gridMode,
         savedAt: args.savedAt,
     };
 }
@@ -91,6 +96,7 @@ export interface DeserializedSetup {
     enemySquadLeader?: SquadLeaderSelection;
     seed: number;
     runCount: number;
+    gridMode: GridMode;
     /** Cells whose ship id no longer resolves. Reported to the user; never thrown. */
     dropped: DroppedCell[];
 }
@@ -139,6 +145,7 @@ export function deserializeSetup(
         enemySquadLeader: setup.enemySquadLeader,
         seed: setup.seed,
         runCount: setup.runCount,
+        gridMode: setup.gridMode ?? DEFAULT_GRID_MODE,
         dropped,
     };
 }

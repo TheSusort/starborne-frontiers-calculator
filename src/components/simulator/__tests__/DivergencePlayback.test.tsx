@@ -3,6 +3,8 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import DivergencePlayback from '../DivergencePlayback';
 import type { BattleResult } from '../../../utils/calculators/battleSimulator';
 
+vi.mock('../../../hooks/useMediaQuery', () => ({ useMediaQuery: () => false }));
+
 const shipState = (actorId: string, side: 'player' | 'enemy', hpPct: number) => ({
     actorId,
     side,

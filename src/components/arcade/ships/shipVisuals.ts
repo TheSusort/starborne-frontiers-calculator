@@ -1,9 +1,5 @@
-import { Cloudinary } from '@cloudinary/url-gen';
 import type { Ship } from '../../../types/ship';
-
-const cld = new Cloudinary({
-    cloud: { cloudName: import.meta.env.VITE_CLOUDINARY_CLOUD_NAME },
-});
+import { shipPortraitUrl } from '../../board/shipPortrait';
 
 export interface ShipVisual {
     /** Absolute Cloudinary URL; `imageKey` is a Cloudinary public id, not a URL. */
@@ -19,9 +15,8 @@ export function resolveShipVisual(
     definitionId: string | null,
     keys: Readonly<Record<string, string>>
 ): ShipVisual {
-    const imageKey = ship.imageKey || template?.imageKey;
     return {
-        portraitUrl: imageKey ? cld.image(`${imageKey}_BigPortrait.jpg`).toURL() : null,
+        portraitUrl: shipPortraitUrl(ship.imageKey || template?.imageKey),
         visualKey: (definitionId && keys[definitionId]) || null,
     };
 }

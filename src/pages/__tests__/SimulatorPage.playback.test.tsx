@@ -203,6 +203,7 @@ vi.mock('../../components/simulator/PlacementBoard', () => ({
 }));
 
 vi.mock('../../components/ui/layout/Sidebar', () => ({ Sidebar: () => null }));
+vi.mock('../../hooks/useMediaQuery', () => ({ useMediaQuery: () => false }));
 vi.mock('../../components/seo/Seo', () => ({ default: () => null }));
 vi.mock('../../contexts/ShipsContext', () => ({
     useShips: () => ({ ships: [], getShipById: () => undefined }),
@@ -241,13 +242,10 @@ describe('SimulatorPage playback', () => {
 
         // Outcome surfaced.
         expect(screen.getByText('Your team wins')).toBeInTheDocument();
-        // Boards render the roster ships at their positions. "Nova" also appears in the
-        // turn-order strip below the boards, so assert at least one (board) occurrence.
-        expect(screen.getAllByText('Nova').length).toBeGreaterThan(0);
-        expect(screen.getByText('Hexa')).toBeInTheDocument();
-        // HP bars present (player full, enemy at 40%).
-        expect(screen.getByTestId('hp-bar-T1')).toHaveStyle({ width: '100%' });
-        expect(screen.getByTestId('hp-bar-T4')).toHaveStyle({ width: '40%' });
+        // Boards render the roster ships at their positions with their round-end HP (player
+        // full, enemy at 40%).
+        expect(screen.getByLabelText('Nova at T1, 100% HP')).toBeInTheDocument();
+        expect(screen.getByLabelText('Hexa at T4, 40% HP')).toBeInTheDocument();
         // Stepper reports two rounds, starting on round 1.
         expect(screen.getByText('Round 1 / 2')).toBeInTheDocument();
 
@@ -259,7 +257,7 @@ describe('SimulatorPage playback', () => {
         // Step to round 2: the enemy is destroyed (HP 0%).
         fireEvent.click(screen.getByRole('button', { name: /Next round/i }));
         expect(screen.getByText('Round 2 / 2')).toBeInTheDocument();
-        expect(screen.getByTestId('hp-bar-T4')).toHaveStyle({ width: '0%' });
+        expect(screen.getByLabelText('Hexa at T4, 0% HP, destroyed')).toBeInTheDocument();
         // The event log re-renders for round 2 (the killing blow), not the round-1 content.
         expect(screen.getByText(/Nova \[active\] → Enemy Hexa: 1,500 → 0%/)).toBeInTheDocument();
     });

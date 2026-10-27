@@ -38,6 +38,9 @@ interface FormationGridProps {
      * to nothing and render empty.
      */
     resolveShip?: (position: Position) => Ship | null;
+    /** Opt-in: the cells drawn. A cell left out keeps its place in the 3x4 layout as an empty,
+     *  hidden slot, so a subset such as the small grid keeps its hex shape. Default: all 12. */
+    cells?: readonly Position[];
 }
 
 const FormationGrid: React.FC<FormationGridProps> = ({
@@ -51,6 +54,7 @@ const FormationGrid: React.FC<FormationGridProps> = ({
     onEditStats,
     hasOverrides,
     resolveShip,
+    cells,
 }) => {
     const { ships } = useShips();
     const { ships: templateShips } = useShipsData();
@@ -143,6 +147,15 @@ const FormationGrid: React.FC<FormationGridProps> = ({
                     }`}
                 >
                     {(mirrored ? [...row].reverse() : row).map((pos) => {
+                        if (cells && !cells.includes(pos)) {
+                            return (
+                                <div
+                                    key={pos}
+                                    className="invisible w-full aspect-[1.15/1]"
+                                    aria-hidden="true"
+                                />
+                            );
+                        }
                         const shipPosition = formation.find((s) => s.position === pos);
                         const ship = getShipForPosition(pos);
                         const fullShip = ship && isFullShip(ship) ? ship : null;

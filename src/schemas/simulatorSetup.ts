@@ -9,6 +9,7 @@ import {
     type SimulatorSetup,
 } from '../utils/simulator/simulatorSetup';
 import { MAX_RUN_COUNT, MIN_RUN_COUNT } from '../utils/simulator/seedRunInputs';
+import { GRID_MODES } from '../utils/simulator/gridMode';
 
 // `z.record` over an enum key is EXHAUSTIVE — it requires every key present. A board and an
 // override set are both sparse by design, so both take `partialRecord`.
@@ -76,6 +77,8 @@ const setupSchema = z.object({
         .min(0)
         .max(2 ** 31 - 1),
     runCount: z.number().int().min(MIN_RUN_COUNT).max(MAX_RUN_COUNT),
+    // Optional so a setup stored before the field existed still loads (as the normal board).
+    gridMode: z.enum(GRID_MODES).optional(),
     savedAt: z.number().finite(),
 });
 
