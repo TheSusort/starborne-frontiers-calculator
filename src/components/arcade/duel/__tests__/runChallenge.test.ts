@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeAll, vi } from 'vitest';
 import { runChallenge, runRace } from '../runChallenge';
 import {
+    cumulativeSide,
+    hpLeftSide,
     isRace,
     raceOutcome,
     skippedChallenge,
@@ -38,6 +40,46 @@ describe('raceOutcome', () => {
         expect(raceOutcome(side(0), side(1))).toBe('lose');
         expect(raceOutcome(side(1), side(0))).toBe('win');
         expect(raceOutcome(side(0), side(0))).toBe('win');
+    });
+});
+
+/** A survivability run's rounds, each read at the round's top. */
+const survivability = (hpAtTop: number[], destroyedRound?: number) => ({
+    rounds: hpAtTop.map((hpPct, i) => ({
+        round: i + 1,
+        incomingDamage: 0,
+        incomingDamageRaw: 0,
+        shieldAbsorbed: 0,
+        barrierAbsorbed: 0,
+        convertedToShield: 0,
+        hpPct,
+        shieldPool: 0,
+    })),
+    destroyedRound,
+});
+
+describe('race figures', () => {
+    it('damage and healing add up round by round; the total is the calculator total', () => {
+        expect(cumulativeSide([100, 0, 250, 50, 0], 400)).toEqual({
+            byRound: [100, 100, 350, 400, 400],
+            total: 400,
+        });
+        expect(cumulativeSide([0, 0, 0, 0, 0], 0).byRound).toEqual([0, 0, 0, 0, 0]);
+    });
+
+    it('HP left after round r is the reading entering round r + 1', () => {
+        const side = hpLeftSide(survivability([100, 90, 80, 70, 60, 50]), 5);
+        expect(side).toEqual({ byRound: [90, 80, 70, 60, 50], total: 50 });
+    });
+
+    it('a ship destroyed inside the race has 0 HP left from that round on', () => {
+        const side = hpLeftSide(survivability([100, 60, 20, 0, 0, 0], 3), 5);
+        expect(side).toEqual({ byRound: [60, 20, 0, 0, 0], total: 0 });
+    });
+
+    it('a ship destroyed only in the extra round survived the race', () => {
+        const side = hpLeftSide(survivability([100, 80, 60, 40, 20, 5], 6), 5);
+        expect(side).toEqual({ byRound: [80, 60, 40, 20, 5], total: 5 });
     });
 });
 

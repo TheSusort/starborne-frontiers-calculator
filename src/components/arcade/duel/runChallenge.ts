@@ -28,6 +28,8 @@ import {
 import type { RowPicks } from './pickOpponents';
 import { CHALLENGE_ROUNDS, runDuel, runTeamDuel } from './runDuel';
 import {
+    cumulativeSide,
+    hpLeftSide,
     raceOutcome,
     skippedChallenge,
     type ChallengeResult,
@@ -45,11 +47,6 @@ function seeded<T>(seed: number, run: () => T): T {
         resetRateGateRng();
     }
 }
-
-const running = (perRound: number[]) => {
-    let sum = 0;
-    return perRound.map((v) => (sum += v));
-};
 
 /** `ship` against the DPS page's default enemy for CHALLENGE_ROUNDS, built as the page builds a
  *  picked ship; compares total damage dealt. */
@@ -113,10 +110,10 @@ export function dpsRace(ship: Ship, deps: CombatStatsDeps): RaceSide {
             },
         ],
     });
-    return {
-        byRound: running(result.rounds.map((r) => r.totalRoundDamage)),
-        total: result.summary.totalDamage,
-    };
+    return cumulativeSide(
+        result.rounds.map((r) => r.totalRoundDamage),
+        result.summary.totalDamage
+    );
 }
 
 /** `ship` healing itself under the healing page's default enemy for CHALLENGE_ROUNDS, built as
@@ -162,18 +159,15 @@ export function healRace(ship: Ship, deps: CombatStatsDeps): RaceSide {
         healerPosition: DEFAULT_HEALER_SLOT,
         healerTargeting: targetingOf(ship),
     });
-    return {
-        byRound: running(result.rounds.map((r) => r.totalRoundHealing)),
-        total: result.summary.totalHealing,
-    };
+    return cumulativeSide(
+        result.rounds.map((r) => r.totalRoundHealing),
+        result.summary.totalHealing
+    );
 }
 
 /** `ship` under the defence page's first added attacker for CHALLENGE_ROUNDS, built as the page
- *  builds a picked defender; compares HP% left (0 once destroyed).
- *
- *  A round's `hpPct` is read at the top of that round, so the run lasts one extra round and the
- *  HP left after round `r` is the reading entering round `r + 1`. Nothing in that extra round
- *  reaches the readings before it. */
+ *  builds a picked defender; compares HP% left (0 once destroyed). The run lasts one round more
+ *  than the race; see `hpLeftSide`. */
 export function tankRace(ship: Ship, deps: CombatStatsDeps): RaceSide {
     const fields = defenderFieldsFromShip(ship, shipFinalStats(ship, deps), deps.getGearPiece);
     const result = simulateDefenseSurvivability({
@@ -202,12 +196,7 @@ export function tankRace(ship: Ship, deps: CombatStatsDeps): RaceSide {
         enemies: [enemyAttackerInput(defaultEnemyAttacker())],
         rounds: CHALLENGE_ROUNDS + 1,
     });
-    const byRound = Array.from({ length: CHALLENGE_ROUNDS }, (_, i) => {
-        const round = i + 1;
-        if (result.destroyedRound !== undefined && result.destroyedRound <= round) return 0;
-        return result.rounds[round]?.hpPct ?? 0;
-    });
-    return { byRound, total: byRound[CHALLENGE_ROUNDS - 1] };
+    return hpLeftSide(result, CHALLENGE_ROUNDS);
 }
 
 const RACES: Record<RaceKind, (ship: Ship, deps: CombatStatsDeps) => RaceSide> = {
