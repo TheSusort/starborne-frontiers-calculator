@@ -1,5 +1,6 @@
 import type { BattleResult, BattleSimulationInput } from '../calculators/battleSimulator';
 import type { BoardState } from '../../components/simulator/PlacementBoard';
+import type { GridMode } from './gridMode';
 import type { StatOverrides } from './statOverrides';
 import type { SeedRunSummary, SeedSetAggregate } from './seededRuns';
 import { assertPairedSeedSets } from './deltaStats';
@@ -18,6 +19,8 @@ export interface PinnedBaseline {
     aggregate: SeedSetAggregate;
     overrides: OverrideSnapshot;
     input: BattleSimulationInput;
+    /** The grid the baseline was set up on; absent reads as the normal board. */
+    gridMode?: GridMode;
 }
 
 /** Take a snapshot of both boards' overrides. Placements with no override are omitted — a

@@ -16,6 +16,7 @@ import {
 import { effectiveRunParams } from '../utils/simulator/effectiveRunParams';
 import type { BoardState } from '../components/simulator/PlacementBoard';
 import type { SquadLeaderSelection } from '../utils/combat/preFight';
+import { DEFAULT_GRID_MODE, type GridMode } from '../utils/simulator/gridMode';
 
 /** What produced the currently displayed `battleResult`/`aggregate`: the fully-resolved engine
  *  input and the override snapshot at the moment the run started. Frozen at that moment —
@@ -24,6 +25,8 @@ import type { SquadLeaderSelection } from '../utils/combat/preFight';
 export interface RunProvenance {
     input: BattleSimulationInput;
     overrides: OverrideSnapshot;
+    /** The grid the boards were on, which the playback draws. */
+    gridMode: GridMode;
 }
 
 interface UseSimulatorRunsArgs {
@@ -35,6 +38,7 @@ interface UseSimulatorRunsArgs {
     getGearPiece?: (id: string) => GearPiece | undefined;
     seed: number;
     runCount: number;
+    gridMode: GridMode;
 }
 
 export interface UseSimulatorRunsResult {
@@ -50,6 +54,11 @@ export interface UseSimulatorRunsResult {
      *  or `null` before any run. Read this instead of snapshotting the live boards — see
      *  `RunProvenance`'s doc. */
     currentOverrides: OverrideSnapshot | null;
+    /** The grid of the run behind the displayed `battleResult`/`aggregate` (and the current side
+     *  of `divergence`), and of the pinned baseline. Recorded at run time like
+     *  `currentOverrides`, never read off the live setup. */
+    currentGridMode: GridMode;
+    baselineGridMode: GridMode;
     canRun: boolean;
     /** The fully-resolved engine input for the boards as they stand right now. Exposed so another
      *  consumer (the stat sweep) runs the same input this hook's own runs do, from one
@@ -94,6 +103,7 @@ export function useSimulatorRuns({
     getGearPiece,
     seed,
     runCount,
+    gridMode,
 }: UseSimulatorRunsArgs): UseSimulatorRunsResult {
     const [battleResult, setBattleResult] = useState<BattleResult | null>(null);
     const [aggregate, setAggregate] = useState<SeedSetAggregate | null>(null);
@@ -148,6 +158,7 @@ export function useSimulatorRuns({
         // snapshot (or vice versa) from two separate reads of live state.
         const input = buildInput();
         const overrides = snapshotOverrides(playerBoard, enemyBoard);
+        const runGridMode = gridMode;
 
         // Every run supersedes whatever is in flight, sync or async: abort the previous
         // controller and bump the generation so a still-running async run's `.then`/`.catch`
@@ -165,7 +176,7 @@ export function useSimulatorRuns({
                 setAggregate(null);
                 setDivergence(null);
                 setBattleResult(runSeededBattle(input, effectiveSeed, getGearPiece));
-                setProvenance({ input, overrides });
+                setProvenance({ input, overrides, gridMode: runGridMode });
             } catch (err) {
                 setBattleResult(null);
                 setAggregate(null);
@@ -199,7 +210,7 @@ export function useSimulatorRuns({
                 setDivergence(null);
                 setBattleResult(null);
                 setAggregate(result);
-                setProvenance({ input, overrides });
+                setProvenance({ input, overrides, gridMode: runGridMode });
             })
             .catch((err) => {
                 if (!isCurrent()) return;
@@ -261,7 +272,12 @@ export function useSimulatorRuns({
         // comparison. `RunComparison` throws rather than render one.
         if (isRunning) return;
         if (!aggregate || !provenance) return;
-        setBaseline({ aggregate, overrides: provenance.overrides, input: provenance.input });
+        setBaseline({
+            aggregate,
+            overrides: provenance.overrides,
+            input: provenance.input,
+            gridMode: provenance.gridMode,
+        });
     };
 
     const handleUnpinBaseline = () => {
@@ -313,6 +329,8 @@ export function useSimulatorRuns({
         effectiveSeed,
         effectiveRunCount,
         currentOverrides: provenance?.overrides ?? null,
+        currentGridMode: provenance?.gridMode ?? DEFAULT_GRID_MODE,
+        baselineGridMode: baseline?.gridMode ?? DEFAULT_GRID_MODE,
         canRun,
         buildInput,
         handleRun,

@@ -28,6 +28,15 @@ import {
 } from '../utils/simulator/squadLeaderSelection';
 import SimulatorSetupBar from '../components/simulator/SimulatorSetupBar';
 import { shipPortraitUrl } from '../components/board/shipPortrait';
+import { Select } from '../components/ui/Select';
+import {
+    DEFAULT_GRID_MODE,
+    fitBoardToCells,
+    fitNotice,
+    gridCells,
+    type GridMode,
+} from '../utils/simulator/gridMode';
+import { SMALL_GRID_POSITIONS } from '../utils/targeting/board';
 import { useShipIdResolver } from '../hooks/useShipIdResolver';
 import { useShips } from '../contexts/ShipsContext';
 import { useShipsData } from '../hooks/useShipsData';
@@ -90,6 +99,9 @@ const SimulatorPage: React.FC = () => {
     const [enemySelected, setEnemySelected] = useState<Position | undefined>(undefined);
     const [seed, setSeed] = useState<number>(() => randomSeed());
     const [runCount, setRunCount] = useState(1);
+    // Both sides share one grid; the cells a side can use come from `gridCells(gridMode)`.
+    const [gridMode, setGridMode] = useState<GridMode>(DEFAULT_GRID_MODE);
+    const [gridNotice, setGridNotice] = useState<string | null>(null);
     // Per-side squad-leader selections (pre-fight faction auras), persisted to
     // localStorage (validated on read — stale/hand-edited values fall back to none).
     const [playerSquadLeader, setPlayerSquadLeader] = useState<SquadLeaderSelection | undefined>(
@@ -245,6 +257,8 @@ const SimulatorPage: React.FC = () => {
         effectiveSeed,
         effectiveRunCount,
         currentOverrides,
+        currentGridMode,
+        baselineGridMode,
         canRun,
         buildInput,
         handleRun,
@@ -264,6 +278,7 @@ const SimulatorPage: React.FC = () => {
         getGearPiece,
         seed,
         runCount,
+        gridMode,
     });
 
     /** The one place a stored setup becomes live state. */
@@ -274,6 +289,8 @@ const SimulatorPage: React.FC = () => {
         setEnemySelected(undefined);
         setSeed(result.seed);
         setRunCount(result.runCount);
+        setGridMode(result.gridMode);
+        setGridNotice(null);
         // Leaders route through the change handler: it is what write-throughs to
         // SQUAD_LEADER_STORAGE_KEYS, so the live selection and the stored one cannot diverge.
         handleSquadLeaderChange('player', result.playerSquadLeader);
@@ -326,6 +343,7 @@ const SimulatorPage: React.FC = () => {
                     enemySquadLeader,
                     seed,
                     runCount,
+                    gridMode,
                     savedAt: Date.now(),
                 })
             );
@@ -338,9 +356,41 @@ const SimulatorPage: React.FC = () => {
         enemySquadLeader,
         seed,
         runCount,
+        gridMode,
         playerCount,
         enemyCount,
     ]);
+
+    // The one place the small grid is enforced: whatever wrote the boards (a toggle, a loaded
+    // setup or encounter, a copy), a ship off the grid moves to a free cell, or is left out once
+    // the grid is full.
+    useEffect(() => {
+        if (gridMode !== 'small') return;
+        const cells = gridCells(gridMode);
+        const player = fitBoardToCells(playerBoard, cells);
+        const enemy = fitBoardToCells(enemyBoard, cells);
+        if (player.board === playerBoard && enemy.board === enemyBoard) return;
+        if (player.board !== playerBoard) setPlayerBoard(player.board);
+        if (enemy.board !== enemyBoard) setEnemyBoard(enemy.board);
+        setGridNotice(fitNotice(player.moved + enemy.moved, player.dropped + enemy.dropped));
+    }, [gridMode, playerBoard, enemyBoard]);
+
+    const handleGridModeChange = (value: string) => {
+        const mode: GridMode = value === 'small' ? 'small' : 'normal';
+        if (mode === gridMode) return;
+        // Switching never removes ships: a team too big for the small grid stays on the normal
+        // board until some are taken off.
+        if (mode === 'small' && Math.max(playerCount, enemyCount) > SMALL_GRID_POSITIONS.length) {
+            setGridNotice(
+                `The small grid holds ${SMALL_GRID_POSITIONS.length} ships per team. Remove some first.`
+            );
+            return;
+        }
+        setGridNotice(null);
+        setPlayerSelected(undefined);
+        setEnemySelected(undefined);
+        setGridMode(mode);
+    };
 
     const handleSaveSetup = (name: string) => {
         const setup = serializeSetup({
@@ -351,6 +401,7 @@ const SimulatorPage: React.FC = () => {
             enemySquadLeader,
             seed,
             runCount,
+            gridMode,
             savedAt: Date.now(),
         });
         // Name-keyed: saving under an existing name replaces that entry rather than growing the
@@ -402,8 +453,21 @@ const SimulatorPage: React.FC = () => {
                         canSave={playerCount > 0 || enemyCount > 0}
                         canLoad={!shipsLoading && !unitsLoading}
                     />
-                    <div aria-live="polite">
+                    <div className="max-w-xs">
+                        <Select
+                            label="Board"
+                            value={gridMode}
+                            onChange={handleGridModeChange}
+                            options={[
+                                { value: 'normal', label: 'Normal (12 cells)' },
+                                { value: 'small', label: 'Small grid (7 cells)' },
+                            ]}
+                            helpLabel="The small grid is the middle cell and the six around it, for both teams."
+                        />
+                    </div>
+                    <div aria-live="polite" className="space-y-1">
                         {loadNotice && <p className="text-sm text-amber-400">{loadNotice}</p>}
+                        {gridNotice && <p className="text-sm text-amber-400">{gridNotice}</p>}
                     </div>
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                         <div className="space-y-4">
@@ -416,6 +480,7 @@ const SimulatorPage: React.FC = () => {
                                 onPickShip={(ship) => handlePickShip('player', ship)}
                                 onCloseSelector={() => setPlayerSelected(undefined)}
                                 resolveShip={(pos) => playerBoard[pos]?.ship ?? null}
+                                cells={gridCells(gridMode)}
                                 onLoadEncounter={(board) => handleLoadEncounter('player', board)}
                                 onCopyToOtherSide={() => handleCopyBoard('player')}
                                 copyLabel="Copy to enemy"
@@ -439,6 +504,7 @@ const SimulatorPage: React.FC = () => {
                                 onPickShip={(ship) => handlePickShip('enemy', ship)}
                                 onCloseSelector={() => setEnemySelected(undefined)}
                                 resolveShip={(pos) => enemyBoard[pos]?.ship ?? null}
+                                cells={gridCells(gridMode)}
                                 onLoadEncounter={(board) => handleLoadEncounter('enemy', board)}
                                 onCopyToOtherSide={() => handleCopyBoard('enemy')}
                                 copyLabel="Copy to your team"
@@ -569,10 +635,16 @@ const SimulatorPage: React.FC = () => {
                             current={divergence.current}
                             onClose={handleCloseDivergence}
                             portraitFor={portraitFor}
+                            baselineCells={gridCells(baselineGridMode)}
+                            currentCells={gridCells(currentGridMode)}
                         />
                     ) : (
                         battleResult && (
-                            <BattlePlayback result={battleResult} portraitFor={portraitFor} />
+                            <BattlePlayback
+                                result={battleResult}
+                                portraitFor={portraitFor}
+                                cells={gridCells(currentGridMode)}
+                            />
                         )
                     )}
                 </div>

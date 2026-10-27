@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import type { BattleResult } from '../../utils/calculators/battleSimulator';
+import type { Position } from '../../types/encounters';
 import { Button } from '../ui/Button';
 import RoundStepper from './RoundStepper';
 import BattlePlayback, { outcomeLabel } from './BattlePlayback';
@@ -13,6 +14,9 @@ interface DivergencePlaybackProps {
     onClose: () => void;
     /** Passed to each `BattlePlayback`. */
     portraitFor?: (name: string) => string | null;
+    /** The grid each fight was set up on. */
+    baselineCells?: readonly Position[];
+    currentCells?: readonly Position[];
 }
 
 /**
@@ -31,6 +35,8 @@ const DivergencePlayback: React.FC<DivergencePlaybackProps> = ({
     current,
     onClose,
     portraitFor,
+    baselineCells,
+    currentCells,
 }) => {
     const [round, setRound] = useState(1);
     const total = Math.max(baseline.rounds.length, current.rounds.length);
@@ -62,11 +68,21 @@ const DivergencePlayback: React.FC<DivergencePlaybackProps> = ({
             <div className="space-y-4">
                 <section className="space-y-4">
                     <h3 className="text-base font-semibold">Baseline</h3>
-                    <BattlePlayback result={baseline} round={round} portraitFor={portraitFor} />
+                    <BattlePlayback
+                        result={baseline}
+                        round={round}
+                        portraitFor={portraitFor}
+                        cells={baselineCells}
+                    />
                 </section>
                 <section className="space-y-4">
                     <h3 className="text-base font-semibold">Current</h3>
-                    <BattlePlayback result={current} round={round} portraitFor={portraitFor} />
+                    <BattlePlayback
+                        result={current}
+                        round={round}
+                        portraitFor={portraitFor}
+                        cells={currentCells}
+                    />
                 </section>
             </div>
         </div>

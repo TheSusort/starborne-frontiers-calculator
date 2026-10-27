@@ -4731,6 +4731,19 @@ const DocumentationPage: React.FC = () => {
                                         duplicates a whole board — ships and any stat overrides —
                                         onto the other side
                                     </li>
+                                    <li>
+                                        The Board option switches both teams between the normal
+                                        12-cell board and the small grid: the middle cell and the
+                                        six around it. On the small grid, ships standing elsewhere
+                                        move to the nearest free cell, and the battle is shown on
+                                        the small grid too
+                                    </li>
+                                    <li>
+                                        The small grid holds 7 ships per team, so a team with more
+                                        has to lose some before you can switch; a loaded encounter
+                                        that does not fit keeps the first 7 and says how many were
+                                        left out
+                                    </li>
                                 </ul>
                             </div>
 
@@ -4739,8 +4752,8 @@ const DocumentationPage: React.FC = () => {
                                 <ul className="text-theme-text list-disc pl-4 space-y-1">
                                     <li>
                                         Both boards, every stat override, both squad leaders, the
-                                        seed and the run count are kept as you work and come back
-                                        when you reload the page
+                                        seed, the run count and the board size are kept as you work
+                                        and come back when you reload the page
                                     </li>
                                     <li>
                                         Type a name and press &quot;Save&quot; to keep a setup you

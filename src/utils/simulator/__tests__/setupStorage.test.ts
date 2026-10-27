@@ -65,6 +65,24 @@ describe('autosave', () => {
     });
 });
 
+describe('grid mode', () => {
+    it('round-trips a small-grid setup and still reads one stored without the field', () => {
+        writeAutosavedSetup({ ...setup('auto'), gridMode: 'small' });
+        expect(readAutosavedSetup()?.gridMode).toBe('small');
+        writeAutosavedSetup(setup('legacy'));
+        expect(readAutosavedSetup()?.name).toBe('legacy');
+        expect(readAutosavedSetup()?.gridMode).toBeUndefined();
+    });
+
+    it('rejects an unknown grid mode', () => {
+        localStorage.setItem(
+            SETUP_STORAGE_KEYS.autosave,
+            JSON.stringify({ ...setup('auto'), gridMode: 'tiny' })
+        );
+        expect(readAutosavedSetup()).toBeNull();
+    });
+});
+
 describe('saved list', () => {
     it('round-trips a list', () => {
         writeSavedSetups([setup('a'), setup('b')]);
