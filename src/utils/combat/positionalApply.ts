@@ -341,8 +341,8 @@ export function applyPositionalDamage(args: {
      * The anchor the cast picked when its turn began. Sub-attack 0 lands on it while it is still
      * alive on the board, so a clause the cast resolves before its damage (a purge or steal that
      * strips Taunt or Stealth, a cleanse of the caster's own Provoke) does not move the hit it
-     * precedes. Sub-attacks 1+ re-resolve from the live board. Owner ruling 2026-10-26, for a purged
-     * Taunt: the hit stays, and a multi-hit purger retargets after its first hit.
+     * precedes. Sub-attacks 1+ re-resolve from the live board. Owner rulings 2026-10-26/27: the hit
+     * stays for every such clause of the same skill, and a multi-hit cast retargets after its first hit.
      * Unsupplied, or the actor is gone → sub-attack 0 resolves like every other.
      */
     firstAnchorId?: string;
