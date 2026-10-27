@@ -11,7 +11,10 @@ import {
     type RaceSide,
 } from '../challengeResult';
 import { challengeSeed } from '../../../../utils/arcade/rng';
-import { CHALLENGE_ROUNDS, duelOutcome } from '../runDuel';
+import { CHALLENGE_ROUNDS, duelOutcome, runTeamDuel, teamPlacements } from '../runDuel';
+import { teamCells } from '../teamCells';
+import { ALL_POSITIONS } from '../../../../utils/targeting/board';
+import { runSeededBattle } from '../../../../utils/simulator/seededRuns';
 import type { RowPicks } from '../pickOpponents';
 import type { Ship } from '../../../../types/ship';
 import type { BattleResult } from '../../../../utils/calculators/battleSimulator';
@@ -499,5 +502,49 @@ describe('races on real template ships', () => {
                 CHALLENGE_ROUNDS
             );
         }
+    });
+
+    it('team: random cells, and the flown ship stays ship 0 wherever it stands', () => {
+        const [flown, b, c, d, h, i] = [
+            'Akula',
+            'Faust',
+            'Bedrock',
+            'Flamel',
+            'Cobalt',
+            'Anemone',
+        ].map(template);
+        const boardIndex = (cell: (typeof ALL_POSITIONS)[number]) => ALL_POSITIONS.indexOf(cell);
+        // A seed whose flown ship is NOT first in board order, so a board-order roster would
+        // name an ally as ship 0.
+        const seed = Array.from({ length: 50 }, (_, k) => challengeSeed(99, k)).find((s) => {
+            const [own, ...rest] = teamCells(s).player;
+            return rest.some((cell) => boardIndex(cell) < boardIndex(own));
+        });
+        expect(seed).toBeDefined();
+        const cells = teamCells(seed!);
+
+        const teams = teamPlacements(flown, [h, i], [b, c, d], deps, seed!);
+        expect(teams.playerTeam.map((p) => [p.ship, p.position])).toEqual([
+            [flown, cells.player[0]],
+            [h, cells.player[1]],
+            [i, cells.player[2]],
+        ]);
+        expect(teams.enemyTeam.map((p) => p.position)).toEqual([...cells.enemy]);
+        const battle = runSeededBattle({ ...teams, rounds: CHALLENGE_ROUNDS }, seed!);
+        expect(battle.roster[0]).toMatchObject({
+            actorId: 'attacker',
+            side: 'player',
+            name: 'Akula',
+            position: cells.player[0],
+        });
+
+        const r = runTeamDuel(flown, [h, i], [b, c, d], deps, seed!);
+        expect(r.outcome).not.toBe('skipped');
+        expect(r.beats.length).toBeGreaterThan(0);
+        for (const beat of r.beats) {
+            expect(beat.player.map((s) => s.position)).toEqual([...cells.player]);
+            expect(beat.enemy.map((s) => s.position)).toEqual([...cells.enemy]);
+        }
+        expect(runTeamDuel(flown, [h, i], [b, c, d], deps, seed!)).toEqual(r);
     });
 });

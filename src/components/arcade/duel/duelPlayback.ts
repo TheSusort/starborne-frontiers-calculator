@@ -1,5 +1,7 @@
 import type { BattleResult } from '../../../utils/calculators/battleSimulator';
 import type { CombatLogEntry, CombatLogTurn } from '../../../utils/combat/log/types';
+import type { Position } from '../../../types/encounters';
+import type { FloatingHit } from '../../board/FloatingHits';
 
 export type DuelSideKey = 'player' | 'enemy';
 
@@ -10,6 +12,8 @@ export interface DuelCharge {
 }
 
 export interface DuelSideState {
+    /** The board cell the ship stands on, from the battle's roster. */
+    position: Position;
     hpPct: number;
     /** The shield pool as a percentage of max HP, 0..100. */
     shieldPct: number;
@@ -22,17 +26,11 @@ export interface DuelSideState {
     charge: DuelCharge | null;
 }
 
-export type DuelHitKind = 'damage' | 'miss' | 'heal' | 'shield';
-
 /** One number that pops over a ship: `side` and `ship` (its index in `DuelBeat[side]`) name the
  *  ship it landed on. */
-export interface DuelHit {
+export interface DuelHit extends FloatingHit {
     side: DuelSideKey;
     ship: number;
-    kind: DuelHitKind;
-    /** 0 for a miss. */
-    amount: number;
-    crit: boolean;
 }
 
 /** One turn of the fight, with every ship's state after it. */
@@ -46,7 +44,8 @@ export interface DuelBeat {
     charged: { skillName?: string } | null;
     /** In the order they happened, including the round's start- and end-of-round effects. */
     hits: DuelHit[];
-    /** Each side's ships in roster order, which is board order (see `buildTeam`). */
+    /** Each side's ships in roster order: the order the side's placements were given to the
+     *  battle (see `runTeamDuel`), not board order. */
     player: DuelSideState[];
     enemy: DuelSideState[];
 }
@@ -96,7 +95,8 @@ const DAMAGE_KINDS = new Set<CombatLogEntry['kind']>([
 ]);
 const HEAL_KINDS = new Set<CombatLogEntry['kind']>(['heal', 'hot-ticked']);
 
-const freshSide = (): DuelSideState => ({
+const freshSide = (position: Position): DuelSideState => ({
+    position,
     hpPct: 100,
     shieldPct: 0,
     buffs: [],
@@ -121,7 +121,7 @@ interface Seat {
 /**
  * The fight as one beat per turn, in order, for rounds up to `outcome.lastRound` (the combat log
  * is not trimmed with `rounds`, so later log rounds are ignored). Every ship of each side has its
- * own state, in roster order.
+ * own state, in roster order, with the cell it stands on.
  *
  * Where each value comes from:
  * - HP: a struck target's `resultingHpPct`; a heal's landed `amount` over the ship's max HP; a
@@ -141,8 +141,11 @@ interface Seat {
 export function buildDuelBeats(result: BattleResult): DuelBeat[] {
     const lastRound = result.outcome.lastRound;
     const seats = new Map<string, Seat>();
-    const count: Record<DuelSideKey, number> = { player: 0, enemy: 0 };
-    for (const r of result.roster) seats.set(r.actorId, { side: r.side, ship: count[r.side]++ });
+    const state: Record<DuelSideKey, DuelSideState[]> = { player: [], enemy: [] };
+    for (const r of result.roster) {
+        seats.set(r.actorId, { side: r.side, ship: state[r.side].length });
+        state[r.side].push(freshSide(r.position));
+    }
     const maxHp = new Map<string, number>();
     for (const round of result.combatLog) {
         for (const turn of round.turns) {
@@ -157,10 +160,6 @@ export function buildDuelBeats(result: BattleResult): DuelBeat[] {
         return hp ? (100 * amount) / hp : undefined;
     };
 
-    const state: Record<DuelSideKey, DuelSideState[]> = {
-        player: Array.from({ length: count.player }, freshSide),
-        enemy: Array.from({ length: count.enemy }, freshSide),
-    };
     const stateOf = (seat: Seat) => state[seat.side][seat.ship];
     const copyAll = () => ({
         player: state.player.map(copySide),

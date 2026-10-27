@@ -12,6 +12,7 @@ const player = { name: 'Nova', level: 60, imageUrl: null };
 const opponent = { name: 'Rook', level: 60, imageUrl: null };
 
 const sideState = (s: Partial<DuelSideState> = {}): DuelSideState => ({
+    position: 'M2',
     hpPct: 100,
     shieldPct: 0,
     buffs: [],
@@ -287,7 +288,7 @@ describe('DuelSummary playback', () => {
 describe('DuelSummary team fight', () => {
     fakeTimers();
 
-    it('shows three ships a side, each with its own bars and numbers', () => {
+    it('puts each ship on its cell of a seven-hex board, each with its own bars and numbers', () => {
         const allies = [
             player,
             { name: 'Ash', level: 50, imageUrl: null },
@@ -305,8 +306,16 @@ describe('DuelSummary team fight', () => {
                 beat({
                     actorShip: 1,
                     hits: [{ side: 'enemy', ship: 2, kind: 'damage', amount: 777, crit: false }],
-                    player: [sideState(), sideState({ hpPct: 80 }), sideState()],
-                    enemy: [sideState(), sideState(), sideState({ hpPct: 30, buffs: ['Stealth'] })],
+                    player: [
+                        sideState({ position: 'B3' }),
+                        sideState({ position: 'T2', hpPct: 80 }),
+                        sideState({ position: 'M4' }),
+                    ],
+                    enemy: [
+                        sideState({ position: 'M3' }),
+                        sideState({ position: 'T3' }),
+                        sideState({ position: 'B2', hpPct: 30, buffs: ['Stealth', 'Taunt'] }),
+                    ],
                 }),
             ],
         };
@@ -335,12 +344,37 @@ describe('DuelSummary team fight', () => {
             'aria-valuenow',
             '100'
         );
-        expect(getByText('777').closest('.relative')?.parentElement).toHaveTextContent('Dax');
+        const mine = getByRole('group', { name: 'Your board' });
+        const theirs = getByRole('group', { name: 'Enemy board' });
+        const cell = (board: HTMLElement, position: string) =>
+            board.querySelector<HTMLElement>(`[data-cell="${position}"]`)!;
+        for (const board of [mine, theirs]) {
+            expect(board.querySelectorAll('[data-cell]')).toHaveLength(7);
+        }
+        // The flown ship is ship 0 of `player` and stands where its state says, not first.
         expect(
-            within(getByRole('list', { name: 'Dax buffs' }))
+            within(cell(mine, 'B3')).getByRole('progressbar', { name: 'Nova hull' })
+        ).toBeTruthy();
+        expect(
+            within(cell(mine, 'T2')).getByRole('progressbar', { name: 'Ash hull' })
+        ).toBeTruthy();
+        expect(within(cell(mine, 'M2')).queryByRole('progressbar')).toBeNull();
+        const dax = cell(theirs, 'B2');
+        expect(within(dax).getByText('777')).toBeTruthy();
+        expect(within(dax).getByRole('progressbar', { name: 'Dax hull' })).toBeTruthy();
+        // A board cell shows the count of its buffs, the names in the tooltip.
+        const buffs = within(dax).getByRole('list', { name: 'Dax buffs' });
+        expect(
+            within(buffs)
                 .getAllByRole('listitem')
                 .map((i) => i.textContent)
-        ).toEqual(['Stealth']);
+        ).toEqual(['+2']);
+        expect(within(buffs).getByRole('listitem')).toHaveAttribute('title', 'Stealth, Taunt');
+        // Both fronts face the middle: the player's front (M4) is right of its back (M2), the
+        // enemy's left of it.
+        const left = (el: HTMLElement) => parseFloat(el.style.left);
+        expect(left(cell(mine, 'M4'))).toBeGreaterThan(left(cell(mine, 'M2')));
+        expect(left(cell(theirs, 'M4'))).toBeLessThan(left(cell(theirs, 'M2')));
     });
 });
 

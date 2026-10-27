@@ -618,6 +618,10 @@ describe('buildDuelBeats (three ships a side)', () => {
         expect(last.player).toHaveLength(3);
         expect(last.enemy.map((s) => s.alive)).toEqual([true, false, true]);
         expect(last.enemy.map((s) => s.hpPct)).toEqual([100, 0, 40]);
+        for (const b of beats) {
+            expect(b.player.map((s) => s.position)).toEqual(['T2', 'M2', 'B2']);
+            expect(b.enemy.map((s) => s.position)).toEqual(['T2', 'M2', 'B2']);
+        }
     });
 
     it('a real 3v3 shows all six ships, each matching its round-end snapshot', () => {

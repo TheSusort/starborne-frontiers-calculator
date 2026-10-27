@@ -2602,10 +2602,12 @@ const DocumentationPage: React.FC = () => {
                                     </li>
                                     <li>
                                         <strong>3v3</strong> — you and two random geared ships from
-                                        your fleet against the three ships on the gate. The last
-                                        team standing wins, or the one with more total HP left after
-                                        5 rounds. It only appears when your fleet has at least eight
-                                        other geared ships.
+                                        your fleet against the three ships on the gate. Each team
+                                        stands on a small seven-hex grid, its three ships on random
+                                        cells that are the same every time for that checkpoint. The
+                                        last team standing wins, or the one with more total HP left
+                                        after 5 rounds. It only appears when your fleet has at least
+                                        eight other geared ships.
                                     </li>
                                 </ul>
                                 <p className="text-theme-text mt-2">
@@ -2630,15 +2632,16 @@ const DocumentationPage: React.FC = () => {
                                     A 1v1 or 3v3 replays turn by turn: each ship shows its hull,
                                     shield and charge, its active buffs and debuffs, the damage,
                                     misses and repairs each turn lands, and a banner when it fires
-                                    its charged skill. A race fills a bar for each ship round by
-                                    round with its damage dealt, healing done or HP left, then
-                                    stamps WIN, LOSE or DRAW. Press Space or click to skip the
-                                    replay. The result shows briefly (Space or a click moves on at
-                                    once), then the run resumes after a 3-2-1 countdown. A challenge
-                                    that ends the run closes as soon as its replay does, and your
-                                    ship explodes. Flying a bare ship from an empty fleet, the gates
-                                    hold random bare ships instead, and every ship uses base stats
-                                    only.
+                                    its charged skill. A 3v3 shows both grids facing each other,
+                                    each ship on its hex, with buff and debuff counts (hover for the
+                                    names). A race fills a bar for each ship round by round with its
+                                    damage dealt, healing done or HP left, then stamps WIN, LOSE or
+                                    DRAW. Press Space or click to skip the replay. The result shows
+                                    briefly (Space or a click moves on at once), then the run
+                                    resumes after a 3-2-1 countdown. A challenge that ends the run
+                                    closes as soon as its replay does, and your ship explodes.
+                                    Flying a bare ship from an empty fleet, the gates hold random
+                                    bare ships instead, and every ship uses base stats only.
                                 </p>
                             </div>
                             <div className="card">

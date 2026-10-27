@@ -7,6 +7,7 @@ import {
     axialToPosition,
     rowOf,
     colOf,
+    SMALL_GRID_POSITIONS,
 } from './board';
 
 describe('board adjacency', () => {
@@ -72,5 +73,12 @@ describe('rowOf / colOf', () => {
         expect(colOf('T1')).toBe(1);
         expect(colOf('M3')).toBe(3);
         expect(colOf('B4')).toBe(4);
+    });
+});
+
+describe('SMALL_GRID_POSITIONS', () => {
+    it('is M3 and its six neighbours, each once', () => {
+        expect(SMALL_GRID_POSITIONS).toHaveLength(7);
+        expect(new Set(SMALL_GRID_POSITIONS)).toEqual(new Set(['M3', ...neighbors('M3')]));
     });
 });

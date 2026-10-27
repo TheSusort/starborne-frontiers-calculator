@@ -18,6 +18,10 @@ choosing a lane, and gates show ship portraits instead of 3D models.
 - **One challenge type per row**: both gates of a row share the type; the player picks the rival.
   The free lane still skips.
 - **3v3**: the flown ship plus 2 random geared fleet ships, against the trio on the chosen gate.
+  Each side stands on the small grid (`SMALL_GRID_POSITIONS`: M3 and its six neighbours, T2 T3 /
+  M2 M3 M4 / B2 B3), its three ships on 3 distinct random cells drawn from the row's challenge
+  seed (`teamCells`, its own RNG stream, not the combat RNG), so a row always gives the same
+  layout. 1v1 duels stay M2 vs M2.
 - **Slow-motion preview** the player can steer through, not a pause.
 - **Portraits** replace the 3D models / sprites on the gates.
 - **Short fights**: every challenge is capped at 5 rounds, so playback fits the existing ~10 s
@@ -59,7 +63,7 @@ shows "Draw", DRAW stamps and "No reward, no penalty".
 | `dps` | `simulateDPS` (`src/utils/calculators/dpsSimulator.ts`) against the DPS page's default enemy (`SYNTHESIZED_DPS_ENEMY_ID` setup) | total damage over 5 rounds |
 | `heal` | `simulateHealing` (`healingEngineAdapter.ts`) with the healing page's default enemy (`healingDefaultEnemy.ts`) | total healing done over 5 rounds |
 | `tank` | `simulateDefenseSurvivability` (`defenseSurvivabilitySim.ts`) with the defence page's default attacker | HP % left when the race ends: at the first destruction (the survivor wins), else after 5 rounds |
-| `team` | `runSeededBattle` with `buildTeam` of 3 per side, `rounds` capped at 5 | sim winner; both wiped in the same round → draw; at the cap, higher summed HP% wins, equal → draw |
+| `team` | `runSeededBattle` with 3 per side on the cells `teamCells` draws (flown ship first, so it is the focus), `rounds` capped at 5 | sim winner; both wiped in the same round → draw; at the cap, higher summed HP% wins, equal → draw |
 
 - Each ship's inputs (stats, skills, gear, engineering) are built the same way the matching
   calculator page builds them for a selected ship; reuse those builders rather than re-deriving
@@ -72,7 +76,10 @@ shows "Draw", DRAW stamps and "No reward, no penalty".
 ## Playback
 
 - `duel` and `team` use the existing turn-by-turn duel screen (`DuelSummary`, `duelPlayback`);
-  `team` shows three ships per side, each with its own HP/shield bars and buff chips.
+  `team` shows two small hex grids facing each other (`AnimatedHexBoard`, player on the left
+  with its front on the right, enemy mirrored), each ship on its cell with its HP/shield/charge
+  bars, buff/debuff counts, floating numbers, a hit flash and the charged banner; empty cells are
+  faint outlines. Only the fight screen shows the grid, not the preview.
 - Races (`dps`, `heal`, `tank`) show both ships side by side with a bar per ship that fills round
   by round with the compared number (damage dealt, healing done, HP left), the running figure
   beside it, and a WIN/LOSE/DRAW stamp at the end; the playback stops at the race's last round. Same ~10 s cap, reduced motion → no bar animation.

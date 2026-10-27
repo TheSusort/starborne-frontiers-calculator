@@ -1,6 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ChipRow } from '../../ui/ChipRow';
 import { MeterBar } from '../../ui/MeterBar';
+import { AnimatedHexBoard, type HexBoardShip } from '../../board/AnimatedHexBoard';
+import { FloatingHits } from '../../board/FloatingHits';
+import type { Position } from '../../../types/encounters';
 import type { ChallengeKind, DuelEffect, DuelStakes } from '../../../utils/arcade/types';
 import {
     beatSeconds,
@@ -18,6 +21,7 @@ import {
     raceRoundSeconds,
     raceStamp,
 } from './racePlayback';
+import { TEAM_FIELD } from './teamCells';
 import {
     afterPlayback,
     challengeBanner,
@@ -25,11 +29,8 @@ import {
     outcomeEffectText,
 } from './stakesText';
 
-/** Floating numbers shown per ship per turn; a multi-hit turn shows only its first ones. */
-const MAX_FLOATS = 4;
-/** Status chips shown per row before the rest fold into "+N"; fewer on a three-ship side. */
+/** Status chips shown per ship before the rest fold into "+N"; a 3v3 cell shows the count only. */
 const MAX_CHIPS = 2;
-const MAX_TEAM_CHIPS = 1;
 
 export interface DuelSide {
     name: string;
@@ -41,9 +42,9 @@ export interface DuelSide {
 
 interface DuelSummaryProps {
     challenge: ChallengeKind;
-    /** The flown ship first, then its allies, in board order. */
+    /** The flown ship first, then its allies, in the order of each beat's `player` ships. */
     players: DuelSide[];
-    /** The gate's ship, or its trio in board order. */
+    /** The gate's ship, or its trio in the order of each beat's `enemy` ships. */
     opponents: DuelSide[];
     stakes: DuelStakes;
     /** `null` while the challenge is still being run. */
@@ -55,55 +56,6 @@ interface DuelSummaryProps {
 }
 
 const hpFill = (hp: number) => (hp < 30 ? 'bg-red-500' : 'bg-green-500');
-
-const NUMBER = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 });
-
-const hitText = (hit: DuelHit) => {
-    switch (hit.kind) {
-        case 'miss':
-            return 'MISS';
-        case 'damage':
-            return `${NUMBER.format(hit.amount)}${hit.crit ? '!' : ''}`;
-        case 'heal':
-        case 'shield':
-            return `+${NUMBER.format(hit.amount)}`;
-    }
-};
-
-const hitClass = (hit: DuelHit) => {
-    switch (hit.kind) {
-        case 'miss':
-            return 'text-sm font-semibold text-theme-text-secondary';
-        case 'damage':
-            return hit.crit
-                ? 'text-2xl font-extrabold text-yellow-300'
-                : 'text-lg font-bold text-white';
-        case 'heal':
-            return 'text-base font-bold text-green-400';
-        case 'shield':
-            return 'text-base font-bold text-sky-300';
-    }
-};
-
-/** One turn's numbers over a ship, keyed by the turn so a new turn mounts fresh ones. */
-const FloatingHits: React.FC<{ beat: number; hits: DuelHit[] }> = ({ beat, hits }) => (
-    <>
-        {hits.slice(0, MAX_FLOATS).map((hit, i) => (
-            <span
-                key={`${beat}-${i}`}
-                data-testid="duel-hit"
-                className={`arcade-duel-float absolute whitespace-nowrap drop-shadow ${hitClass(hit)}`}
-                style={{
-                    left: `${50 + (i % 2 === 0 ? 1 : -1) * Math.ceil(i / 2) * 18}%`,
-                    top: `${35 - i * 8}%`,
-                    animationDelay: `${i * 90}ms`,
-                }}
-            >
-                {hitText(hit)}
-            </span>
-        ))}
-    </>
-);
 
 /** A ship's image, or its name where it has none; `mirrored` flips an image that does not already
  *  face the opponent (a portrait). */
@@ -127,89 +79,83 @@ interface ShipProps {
     /** Set on the turn this ship fires its charged skill. */
     charged: { beat: number; skillName?: string } | null;
     mirrored: boolean;
-    /** One of three ships on its side: a smaller image beside the bars. */
-    compact: boolean;
 }
 
-/** Every row is always rendered (an empty one invisible) so the card keeps its height. */
-const Ship: React.FC<ShipProps> = ({ side, state, floats, charged, mirrored, compact }) => {
+const chargedText = (charged: { skillName?: string }) =>
+    charged.skillName ? `CHARGED: ${charged.skillName}` : 'CHARGED SKILL';
+
+/** One ship of a 1v1. Every row is always rendered (an empty one invisible) so the card keeps
+ *  its height. */
+const Ship: React.FC<ShipProps> = ({ side, state, floats, charged, mirrored }) => {
     const hp = state.hpPct;
     const shield = state.shieldPct;
-    const image = (
-        <div
-            className={`relative flex items-center justify-center ${compact ? 'h-16 w-24 shrink-0' : 'h-28'}`}
-        >
-            <ShipImage side={side} mirrored={mirrored} />
-            <div className="absolute inset-0 pointer-events-none" aria-hidden="true">
-                {floats.map((f) => (
-                    <FloatingHits key={f.beat} beat={f.beat} hits={f.hits} />
-                ))}
-            </div>
-            {charged && (
-                <div
-                    key={charged.beat}
-                    role="status"
-                    className="arcade-duel-charged absolute inset-x-0 top-0 truncate border border-primary/70 bg-primary/20 px-1 py-0.5 text-xs font-bold tracking-widest text-primary"
-                >
-                    {charged.skillName ? `CHARGED: ${charged.skillName}` : 'CHARGED SKILL'}
-                </div>
-            )}
-        </div>
-    );
-    const bars = (
-        <div className={`min-w-0 ${compact ? 'flex-1 space-y-1' : 'space-y-2'}`}>
-            <div className={`truncate font-semibold ${compact ? 'text-sm' : ''}`}>{side.name}</div>
-            {!compact && side.level !== undefined && (
-                <div className="text-sm text-theme-text-secondary">Lv {side.level}</div>
-            )}
-            <MeterBar percentage={hp} label={`${side.name} hull`} fillClassName={hpFill(hp)} />
-            <div className={shield > 0 ? '' : 'invisible'}>
-                <MeterBar
-                    percentage={shield}
-                    label={`${side.name} shield`}
-                    fillClassName="bg-sky-400"
-                />
-            </div>
-            <div className="flex justify-between gap-2 text-xs text-theme-text-secondary">
-                <span>{Math.round(hp)}% HP</span>
-                {shield > 0 && <span className="text-sky-300">{Math.round(shield)}% shield</span>}
-            </div>
-            <div className={state.charge ? '' : 'invisible'}>
-                <MeterBar
-                    percentage={state.charge ? (100 * state.charge.value) / state.charge.max : 0}
-                    label={`${side.name} charge`}
-                    fillClassName="bg-primary"
-                    className="!h-1"
-                />
-            </div>
-            <ChipRow
-                items={state.buffs}
-                label={`${side.name} buffs`}
-                max={compact ? MAX_TEAM_CHIPS : MAX_CHIPS}
-                variant="buff"
-            />
-            <ChipRow
-                items={state.debuffs}
-                label={`${side.name} debuffs`}
-                max={compact ? MAX_TEAM_CHIPS : MAX_CHIPS}
-                variant="debuff"
-            />
-        </div>
-    );
-    return compact ? (
-        <div className={`flex items-center gap-2 ${mirrored ? 'flex-row-reverse text-right' : ''}`}>
-            {image}
-            {bars}
-        </div>
-    ) : (
+    return (
         <div className="space-y-2">
-            {image}
-            {bars}
+            <div className="relative flex h-28 items-center justify-center">
+                <ShipImage side={side} mirrored={mirrored} />
+                <div className="absolute inset-0 pointer-events-none" aria-hidden="true">
+                    {floats.map((f) => (
+                        <FloatingHits key={f.beat} turn={f.beat} hits={f.hits} />
+                    ))}
+                </div>
+                {charged && (
+                    <div
+                        key={charged.beat}
+                        role="status"
+                        className="arcade-duel-charged absolute inset-x-0 top-0 truncate border border-primary/70 bg-primary/20 px-1 py-0.5 text-xs font-bold tracking-widest text-primary"
+                    >
+                        {chargedText(charged)}
+                    </div>
+                )}
+            </div>
+            <div className="min-w-0 space-y-2">
+                <div className="truncate font-semibold">{side.name}</div>
+                {side.level !== undefined && (
+                    <div className="text-sm text-theme-text-secondary">Lv {side.level}</div>
+                )}
+                <MeterBar percentage={hp} label={`${side.name} hull`} fillClassName={hpFill(hp)} />
+                <div className={shield > 0 ? '' : 'invisible'}>
+                    <MeterBar
+                        percentage={shield}
+                        label={`${side.name} shield`}
+                        fillClassName="bg-sky-400"
+                    />
+                </div>
+                <div className="flex justify-between gap-2 text-xs text-theme-text-secondary">
+                    <span>{Math.round(hp)}% HP</span>
+                    {shield > 0 && (
+                        <span className="text-sky-300">{Math.round(shield)}% shield</span>
+                    )}
+                </div>
+                <div className={state.charge ? '' : 'invisible'}>
+                    <MeterBar
+                        percentage={
+                            state.charge ? (100 * state.charge.value) / state.charge.max : 0
+                        }
+                        label={`${side.name} charge`}
+                        fillClassName="bg-primary"
+                        className="!h-1"
+                    />
+                </div>
+                <ChipRow
+                    items={state.buffs}
+                    label={`${side.name} buffs`}
+                    max={MAX_CHIPS}
+                    variant="buff"
+                />
+                <ChipRow
+                    items={state.debuffs}
+                    label={`${side.name} debuffs`}
+                    max={MAX_CHIPS}
+                    variant="debuff"
+                />
+            </div>
         </div>
     );
 };
 
 const IDLE: DuelSideState = {
+    position: 'M2',
     hpPct: 100,
     shieldPct: 0,
     buffs: [],
@@ -235,7 +181,88 @@ const floatsFor = (beats: DuelBeat[], index: number, side: DuelSideKey, ship: nu
         }))
         .filter((f) => f.hits.length > 0);
 
-/** A fight's ships, each side a column; the player's side is on the left. */
+const shipProps = (
+    beats: DuelBeat[],
+    index: number,
+    playing: boolean,
+    key: DuelSideKey,
+    ship: number
+) => {
+    const beat = index >= 0 ? beats[index] : null;
+    const acting = playing && beat?.actor === key && beat.actorShip === ship;
+    return {
+        state: beat?.[key][ship] ?? IDLE,
+        floats: playing ? floatsFor(beats, index, key, ship) : [],
+        charged:
+            acting && beat?.charged ? { beat: index, skillName: beat.charged.skillName } : null,
+        acting,
+    };
+};
+
+const landsDamage = (hits: readonly DuelHit[]) => hits.some((h) => h.kind === 'damage');
+
+/** What ship `ship` of side `key` shows on its hex while beat `index` plays. */
+const boardShip = (
+    side: DuelSide,
+    beats: DuelBeat[],
+    index: number,
+    playing: boolean,
+    key: DuelSideKey,
+    ship: number
+): HexBoardShip => {
+    const { state, floats, charged, acting } = shipProps(beats, index, playing, key, ship);
+    const struck = floats.find((f) => f.beat === index && landsDamage(f.hits));
+    return {
+        name: side.name,
+        imageUrl: side.imageUrl,
+        facesOpponent: side.facesOpponent,
+        hpPct: state.hpPct,
+        shieldPct: state.shieldPct,
+        chargePct: state.charge ? (100 * state.charge.value) / state.charge.max : null,
+        buffs: state.buffs,
+        debuffs: state.debuffs,
+        alive: state.alive,
+        acting,
+        floats: floats.map((f) => ({ turn: f.beat, hits: f.hits })),
+        flash: struck ? index : null,
+        banner: charged && {
+            key: charged.beat,
+            text: chargedText(charged),
+            short: 'CHARGED',
+        },
+    };
+};
+
+/** One side of a 3v3 on the small grid, each ship on the cell its beat state names. The
+ *  player's board (left) has its front on the right and the enemy's (right) is mirrored, so both
+ *  fronts face the middle. Before the first beat the board is empty. */
+const TeamBoard: React.FC<{
+    sides: DuelSide[];
+    sideKey: DuelSideKey;
+    beats: DuelBeat[];
+    index: number;
+    playing: boolean;
+}> = ({ sides, sideKey, beats, index, playing }) => {
+    const states = beats[Math.max(0, index)]?.[sideKey] ?? [];
+    const ships: Partial<Record<Position, HexBoardShip>> = {};
+    states.forEach((s, i) => {
+        const side = sides[i];
+        if (side) ships[s.position] = boardShip(side, beats, index, playing, sideKey, i);
+    });
+    return (
+        <AnimatedHexBoard
+            cells={TEAM_FIELD}
+            ships={ships}
+            mirrored={sideKey === 'enemy'}
+            tone={sideKey}
+            label={sideKey === 'player' ? 'Your board' : 'Enemy board'}
+            className="min-w-0 flex-1"
+        />
+    );
+};
+
+/** A fight's ships: a 1v1 as two columns, a 3v3 as two hex boards; the player's side is on the
+ *  left, matching the renders `FlightGame` asks for (the flown side faces right). */
 const FightBody: React.FC<{
     players: DuelSide[];
     opponents: DuelSide[];
@@ -243,25 +270,33 @@ const FightBody: React.FC<{
     index: number;
     playing: boolean;
 }> = ({ players, opponents, beats, index, playing }) => {
-    const beat = index >= 0 ? beats[index] : null;
-    const compact = players.length > 1 || opponents.length > 1;
+    if (players.length > 1 || opponents.length > 1) {
+        const board = (sides: DuelSide[], key: DuelSideKey) => (
+            <TeamBoard sides={sides} sideKey={key} beats={beats} index={index} playing={playing} />
+        );
+        return (
+            <div className="flex items-center gap-1 sm:gap-3">
+                {board(players, 'player')}
+                <div className="text-xs font-bold text-theme-text-secondary sm:text-xl">VS</div>
+                {board(opponents, 'enemy')}
+            </div>
+        );
+    }
     const column = (sides: DuelSide[], key: DuelSideKey) => (
-        <div className={`flex-1 min-w-0 ${compact ? 'space-y-3' : ''}`}>
-            {sides.map((side, ship) => (
-                <Ship
-                    key={ship}
-                    side={side}
-                    state={beat?.[key][ship] ?? IDLE}
-                    floats={playing ? floatsFor(beats, index, key, ship) : []}
-                    charged={
-                        playing && beat?.actor === key && beat.actorShip === ship && beat.charged
-                            ? { beat: index, skillName: beat.charged.skillName }
-                            : null
-                    }
-                    mirrored={key === 'enemy'}
-                    compact={compact}
-                />
-            ))}
+        <div className="flex-1 min-w-0">
+            {sides.map((side, ship) => {
+                const { state, floats, charged } = shipProps(beats, index, playing, key, ship);
+                return (
+                    <Ship
+                        key={ship}
+                        side={side}
+                        state={state}
+                        floats={floats}
+                        charged={charged}
+                        mirrored={key === 'enemy'}
+                    />
+                );
+            })}
         </div>
     );
     return (
@@ -347,7 +382,7 @@ const RaceBody: React.FC<{
  * In-game challenge overlay: "Simulating…" until `result` arrives, then its playback. A fight
  * (`duel`, `team`) plays back turn by turn (`beatSeconds`) with each ship's HP, shield, charge,
  * buffs and debuffs, the numbers each turn lands and a banner on a charged skill; a `team` fight
- * shows three ships a side. A race (`dps`, `heal`, `tank`) fills a bar per ship round by round
+ * shows each side's three ships on its hex board (`TeamBoard`). A race (`dps`, `heal`, `tank`) fills a bar per ship round by round
  * (`raceRoundSeconds`) with the figure it compares, then stamps each ship WIN, LOSE or DRAW.
  * After the playback the outcome and its effect are shown for `DUEL_RESULT_HOLD_MS` before
  * `onDone` is called (see `afterPlayback`: a loss that ends the run calls it as soon as the
@@ -466,11 +501,11 @@ export const DuelSummary: React.FC<DuelSummaryProps> = ({
 
     return (
         <div
-            className="absolute inset-0 z-[55] flex items-center justify-center p-4 bg-black/70"
+            className={`absolute inset-0 z-[55] flex items-center justify-center bg-black/70 ${team ? 'p-2 sm:p-4' : 'p-4'}`}
             onClick={advance}
         >
             <div
-                className={`card w-full ${team ? 'max-w-2xl' : 'max-w-lg'} max-h-full overflow-y-auto space-y-4 text-center`}
+                className={`card w-full ${team ? 'max-w-2xl !p-3 sm:!p-4' : 'max-w-lg'} max-h-full overflow-y-auto space-y-4 text-center`}
             >
                 <div className="text-sm font-semibold tracking-widest text-primary">
                     {challengeBanner(challenge, stakes)}

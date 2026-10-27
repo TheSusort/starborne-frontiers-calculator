@@ -1,12 +1,11 @@
 import type { Ship } from '../../../types/ship';
-import type { Position } from '../../../types/encounters';
 import type { DuelOutcome } from '../../../utils/arcade/types';
-import type { BattleResult } from '../../../utils/calculators/battleSimulator';
+import type { BattlePlacement, BattleResult } from '../../../utils/calculators/battleSimulator';
 import type { CombatStatsDeps } from '../../../utils/ship/combatStats';
-import type { BoardState } from '../../simulator/PlacementBoard';
 import { buildTeam } from '../../../utils/simulator/buildTeam';
 import { runSeededBattle } from '../../../utils/simulator/seededRuns';
 import { buildDuelBeats, type DuelBeat } from './duelPlayback';
+import { teamCells, type TeamTrio } from './teamCells';
 
 /** Every arcade challenge, fight or race, lasts at most this many rounds. */
 export const CHALLENGE_ROUNDS = 5;
@@ -43,19 +42,17 @@ export function duelOutcome(result: BattleResult): DuelResult {
     return { outcome, beats };
 }
 
-/** Runs a capped fight between two boards; any error → skipped. */
-function runFight(
-    player: BoardState,
-    enemy: BoardState,
-    deps: CombatStatsDeps,
-    seed: number
-): DuelResult {
+interface Sides {
+    playerTeam: BattlePlacement[];
+    enemyTeam: BattlePlacement[];
+}
+
+/** Runs a capped fight between two sides; any error → skipped. The first player placement is
+ *  the engine's focus, and the result's roster (so every beat's ships) keeps each side's
+ *  placement order. */
+function runFight(teams: () => Sides, deps: CombatStatsDeps, seed: number): DuelResult {
     try {
-        const input = {
-            playerTeam: buildTeam(player, deps),
-            enemyTeam: buildTeam(enemy, deps),
-            rounds: CHALLENGE_ROUNDS,
-        };
+        const input = { ...teams(), rounds: CHALLENGE_ROUNDS };
         return duelOutcome(runSeededBattle(input, seed, deps.getGearPiece));
     } catch (error) {
         if (import.meta.env.DEV) console.warn('arcade duel skipped: the simulation threw', error);
@@ -71,17 +68,36 @@ export function runDuel(
     deps: CombatStatsDeps,
     seed: number
 ): DuelResult {
-    return runFight({ M2: { ship: player } }, { M2: { ship: opponent } }, deps, seed);
+    const teams = () => ({
+        playerTeam: buildTeam({ M2: { ship: player } }, deps),
+        enemyTeam: buildTeam({ M2: { ship: opponent } }, deps),
+    });
+    return runFight(teams, deps, seed);
 }
 
-/** A side's three cells, in board order: the first is the engine's focus on the player side. */
-const TEAM_CELLS: readonly [Position, Position, Position] = ['T2', 'M2', 'B2'];
+/** One side's placements in the order of `ships`, ship `i` on `cells[i]`. */
+const placeInOrder = (ships: readonly Ship[], cells: TeamTrio, deps: CombatStatsDeps) =>
+    ships.flatMap((ship, i) => buildTeam({ [cells[i]]: { ship } }, deps));
 
-const teamBoard = (ships: readonly [Ship, Ship, Ship]): BoardState =>
-    Object.fromEntries(TEAM_CELLS.map((cell, i) => [cell, { ship: ships[i] }]));
+/** A 3v3's two sides on the cells `teamCells(seed)` draws. Each side keeps the order given here,
+ *  whatever cells its ships stand on: the flown ship first, so it is the engine's focus and ship
+ *  0 of every beat's `player`. */
+export function teamPlacements(
+    player: Ship,
+    allies: readonly [Ship, Ship],
+    opponents: readonly [Ship, Ship, Ship],
+    deps: CombatStatsDeps,
+    seed: number
+): Sides {
+    const cells = teamCells(seed);
+    return {
+        playerTeam: placeInOrder([player, ...allies], cells.player, deps),
+        enemyTeam: placeInOrder(opponents, cells.enemy, deps),
+    };
+}
 
-/** A 3v3: the flown ship (first in board order) and its two allies against `opponents`, capped at
- *  CHALLENGE_ROUNDS. Won as `duelOutcome` decides, on summed HP%. Any error → skipped. */
+/** A 3v3 laid out by `teamPlacements`, capped at CHALLENGE_ROUNDS; each beat's `position` says
+ *  where every ship stands. Won as `duelOutcome` decides, on summed HP%. Any error → skipped. */
 export function runTeamDuel(
     player: Ship,
     allies: readonly [Ship, Ship],
@@ -89,5 +105,5 @@ export function runTeamDuel(
     deps: CombatStatsDeps,
     seed: number
 ): DuelResult {
-    return runFight(teamBoard([player, ...allies]), teamBoard(opponents), deps, seed);
+    return runFight(() => teamPlacements(player, allies, opponents, deps, seed), deps, seed);
 }
