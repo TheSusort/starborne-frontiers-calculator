@@ -12,17 +12,22 @@ import {
     SPAWN_Z,
     STEP_SECONDS,
 } from '../constants';
-import type { GameState, InputAction, RunEvent } from '../types';
+import type { GameState, InputAction, Lane, RunEvent } from '../types';
 
-/** A quiet game at top speed with one checkpoint row at `z`, gates outside the player's lane. */
-function rowAhead(z = SPAWN_Z): GameState {
+/** Steps that would carry a row from SPAWN_Z past the player many times over; a loop that
+ *  reaches it has stalled. */
+const MAX_STEPS = 120 * 60;
+
+/** A quiet game at top speed with one checkpoint row at `z`, by default with its gates outside
+ *  the player's lane. */
+function rowAhead(z = SPAWN_Z, gates: [Lane, Lane] = [0, 2]): GameState {
     const g = createGame(1, { duels: true });
     g.untilNextRow = Number.POSITIVE_INFINITY;
     g.speed = MAX_SPEED;
     g.checkpoints.push({
         id: 7,
         z,
-        gates: [0, 2],
+        gates,
         stakes: 'power-up',
         challenge: 'dps',
         previewed: false,
@@ -54,7 +59,7 @@ describe('checkpoint preview', () => {
         let min = 1;
         let started = false;
         let held = 0;
-        while (!row.resolved) {
+        for (let i = 0; i < MAX_STEPS && !row.resolved; i++) {
             step(g, [], STEP_SECONDS);
             if (g.preview) {
                 started = true;
@@ -77,10 +82,12 @@ describe('checkpoint preview', () => {
         const g = rowAhead(PREVIEW_Z + 1);
         step(g, [], STEP_SECONDS);
         expect(g.preview).toBeNull();
-        while (g.checkpoints[0].z > PREVIEW_Z) step(g, [], STEP_SECONDS);
+        for (let i = 0; i < MAX_STEPS && g.checkpoints[0].z > PREVIEW_Z; i++) {
+            step(g, [], STEP_SECONDS);
+        }
         expect(g.preview).toEqual({ checkpointId: 7, elapsed: 0 });
         let starts = 0;
-        while (g.checkpoints.length && !g.checkpoints[0].resolved) {
+        for (let i = 0; i < MAX_STEPS && !g.checkpoints[0]?.resolved; i++) {
             const before = g.preview;
             step(g, [], STEP_SECONDS);
             if (!before && g.preview) starts++;
@@ -102,7 +109,8 @@ describe('checkpoint preview', () => {
     });
 
     it('applies lane changes and jumps during the preview, a jump lasting longer in real time', () => {
-        const g = rowAhead(PREVIEW_Z);
+        // The player leaves its gate lane for the free one, so crossing the row starts no duel.
+        const g = rowAhead(PREVIEW_Z, [1, 2]);
         step(g, [], STEP_SECONDS);
         for (let t = 0; t < PREVIEW_EASE_SECONDS + 0.1; t += STEP_SECONDS)
             step(g, [], STEP_SECONDS);
@@ -113,7 +121,7 @@ describe('checkpoint preview', () => {
         expect(g.player.action).toBe('jump');
         const startedAt = g.time;
         let steps = 0;
-        while (g.player.action === 'jump') {
+        while (g.player.action === 'jump' && steps < MAX_STEPS) {
             step(g, [], STEP_SECONDS);
             steps++;
         }
