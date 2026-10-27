@@ -2565,29 +2565,74 @@ const DocumentationPage: React.FC = () => {
                                 </p>
                             </div>
                             <div className="card">
-                                <h4 className="font-semibold text-primary mb-2">Duels</h4>
+                                <h4 className="font-semibold text-primary mb-2">
+                                    Checkpoint challenges
+                                </h4>
                                 <p className="text-theme-text">
                                     With at least two other ships with gear equipped in your fleet,
                                     the first checkpoint appears 200 to 400 metres in, then one
-                                    every 300 to 700 metres. Two of the three lanes hold a gate with
-                                    a random geared ship from your hangar; the third lane is free
-                                    and skips the duel. Flying through a gate starts a one-on-one
-                                    simulator duel between your ship and that opponent, with full
-                                    gear and engineering on both sides. The banner above the gates
-                                    shows what is at stake: <strong>Win or die</strong> (a win adds
-                                    500 points, a loss ends the run unless a shield absorbs it),{' '}
+                                    every 300 to 700 metres. Two of the three lanes hold a gate
+                                    showing the portrait of a random geared ship from your hangar;
+                                    the third lane is free and skips the challenge. Your flown ship
+                                    always takes the challenge, with full gear and engineering on
+                                    both sides, and every challenge lasts at most 5 rounds. Both
+                                    gates of a row share one challenge type:
+                                </p>
+                                <ul className="text-theme-text space-y-1 list-disc list-inside mt-2">
+                                    <li>
+                                        <strong>1v1</strong> — a simulator duel against the gate
+                                        ship. The winner is the last ship standing, or the one with
+                                        more HP left after 5 rounds.
+                                    </li>
+                                    <li>
+                                        <strong>DPS</strong> — a race: your ship and the gate ship
+                                        each attack the Damage Calculator&apos;s default enemy for 5
+                                        rounds. More damage dealt wins.
+                                    </li>
+                                    <li>
+                                        <strong>HEAL</strong> — a race: each ship heals under the
+                                        Healing Calculator&apos;s default enemy for 5 rounds. More
+                                        healing done wins.
+                                    </li>
+                                    <li>
+                                        <strong>TANK</strong> — a race: each ship takes the Defense
+                                        Calculator&apos;s default attacker for 5 rounds. More HP
+                                        left wins; a destroyed ship has none.
+                                    </li>
+                                    <li>
+                                        <strong>3v3</strong> — you and two random geared ships from
+                                        your fleet against the three ships on the gate. The last
+                                        team standing wins, or the one with more total HP left after
+                                        5 rounds. It only appears when your fleet has at least eight
+                                        other geared ships.
+                                    </li>
+                                </ul>
+                                <p className="text-theme-text mt-2">
+                                    Your ship wins every tie, including a race where neither ship
+                                    scores anything (an attacker in a healing race, say). As a
+                                    checkpoint row comes into view, time slows down for about two
+                                    seconds: a banner names the challenge and what is at stake (and,
+                                    for 3v3, your two allies), and a card over each gate shows the
+                                    rivals&apos; portraits, names and roles. You can still steer,
+                                    jump and duck while it is slowed. The stakes are{' '}
+                                    <strong>Win or die</strong> (a win adds 500 points, a loss ends
+                                    the run unless a shield absorbs it),{' '}
                                     <strong>Credits on the line</strong> (win 25 credits, or lose a
                                     quarter of yours) or <strong>Power-up</strong> (a win grants a
-                                    shield or a magnet). The replay plays turn by turn: each ship
-                                    shows its hull, shield and charge, its active buffs and debuffs,
-                                    the damage, misses and repairs each turn lands, and a banner
-                                    when it fires its charged skill. Press Space or click to skip
-                                    the replay. The result shows briefly (Space or a click moves on
-                                    at once), then the run resumes after a 3-2-1 countdown. A duel
-                                    that ends the run closes as soon as its replay does, and your
-                                    ship explodes. Flying a bare ship from an empty fleet, the gates
-                                    hold random bare ships instead, and both sides duel with base
-                                    stats only.
+                                    shield or a magnet).
+                                </p>
+                                <p className="text-theme-text mt-2">
+                                    A 1v1 or 3v3 replays turn by turn: each ship shows its hull,
+                                    shield and charge, its active buffs and debuffs, the damage,
+                                    misses and repairs each turn lands, and a banner when it fires
+                                    its charged skill. A race fills a bar for each ship round by
+                                    round with its damage dealt, healing done or HP left, then
+                                    stamps WIN or LOSE. Press Space or click to skip the replay. The
+                                    result shows briefly (Space or a click moves on at once), then
+                                    the run resumes after a 3-2-1 countdown. A challenge that ends
+                                    the run closes as soon as its replay does, and your ship
+                                    explodes. Flying a bare ship from an empty fleet, the gates hold
+                                    random bare ships instead, and every ship uses base stats only.
                                 </p>
                             </div>
                             <div className="card">
