@@ -3,6 +3,9 @@ export type ObstacleKind = 'wall' | 'low' | 'high';
 export type PickupKind = 'credit' | 'shield' | 'magnet';
 export type DuelStakes = 'win-or-die' | 'bonus-or-penalty' | 'power-up';
 export type DuelOutcome = 'win' | 'lose' | 'skipped';
+/** What a checkpoint row asks of the flown ship: a 1v1 (`duel`), a race against the gate ship
+ *  (`dps`, `tank`, `heal`) or a 3v3 (`team`). Both gates of a row share it. */
+export type ChallengeKind = 'duel' | 'dps' | 'tank' | 'heal' | 'team';
 
 /** A row of two duel gates; the lane in neither gate is free. `gates[slot]` is opponent `slot`. */
 export interface Checkpoint {
@@ -10,6 +13,9 @@ export interface Checkpoint {
     z: number;
     gates: [Lane, Lane];
     stakes: DuelStakes;
+    challenge: ChallengeKind;
+    /** Set once the slow-motion preview for this row has started; each row previews once. */
+    previewed: boolean;
     resolved: boolean;
 }
 
@@ -17,6 +23,14 @@ export interface PendingDuel {
     checkpointId: number;
     slot: 0 | 1;
     stakes: DuelStakes;
+    challenge: ChallengeKind;
+}
+
+/** The slow-motion preview of one checkpoint row; `elapsed` is real (unscaled) seconds since it
+ *  started. See `previewScale`. */
+export interface Preview {
+    checkpointId: number;
+    elapsed: number;
 }
 
 /** What `resolveDuel` did, for the duel summary to show. */
@@ -92,7 +106,15 @@ export interface TrailProgress {
 }
 
 export interface GameState {
+    /** The seed the run was created with; `rngState` moves on from it. */
+    seed: number;
     rngState: number;
+    /** Whether checkpoint rows may draw the `team` challenge (see `GameOptions.teamChallenges`). */
+    teamChallenges: boolean;
+    /** The factor `step` multiplies its `dt` by: 1, or less during a checkpoint preview. */
+    timeScale: number;
+    /** The running checkpoint preview, if any; `preview.checkpointId` is the row being shown. */
+    preview: Preview | null;
     time: number;
     speed: number;
     /** World units travelled; see `metersTravelled` for the displayed figure. */

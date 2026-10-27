@@ -42,7 +42,7 @@ function spawnRows(state: GameState, rows: number) {
 function gameAtDuel(stakes: DuelStakes): GameState {
     const g = createGame(7, { duels: true });
     g.status = 'duel';
-    g.pendingDuel = { checkpointId: 1, slot: 0, stakes };
+    g.pendingDuel = { checkpointId: 1, slot: 0, stakes, challenge: 'duel' };
     return g;
 }
 
@@ -139,14 +139,27 @@ describe('crossing a checkpoint', () => {
         g.player.lane = lane;
         g.player.action = action;
         g.player.actionTime = action === 'run' ? 0 : 10;
-        g.checkpoints.push({ id: 50, z: 0.01, gates, stakes: 'power-up', resolved: false });
+        g.checkpoints.push({
+            id: 50,
+            z: 0.01,
+            gates,
+            stakes: 'power-up',
+            challenge: 'tank',
+            previewed: true,
+            resolved: false,
+        });
         return step(g, [], STEP_SECONDS);
     }
 
     it('requests a duel when the player is in a gate lane', () => {
         const g = crossing([0, 2], 2);
         expect(g.status).toBe('duel');
-        expect(g.pendingDuel).toEqual({ checkpointId: 50, slot: 1, stakes: 'power-up' });
+        expect(g.pendingDuel).toEqual({
+            checkpointId: 50,
+            slot: 1,
+            stakes: 'power-up',
+            challenge: 'tank',
+        });
     });
 
     it('requests a duel whether jumping or ducking', () => {

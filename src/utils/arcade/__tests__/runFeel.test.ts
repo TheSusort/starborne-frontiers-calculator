@@ -442,7 +442,7 @@ describe('credit streak', () => {
         g.creditStreak = 2;
         g.credits = 10;
         g.status = 'duel';
-        g.pendingDuel = { checkpointId: 1, slot: 0, stakes: 'bonus-or-penalty' };
+        g.pendingDuel = { checkpointId: 1, slot: 0, stakes: 'bonus-or-penalty', challenge: 'duel' };
         resolveDuel(g, 'win');
         expect(g.credits).toBe(10 + DUEL_CREDIT_REWARD);
         expect(g.creditStreak).toBe(2);

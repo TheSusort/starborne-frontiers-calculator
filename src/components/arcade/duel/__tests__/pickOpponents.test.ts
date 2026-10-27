@@ -2,9 +2,14 @@ import { describe, it, expect } from 'vitest';
 import {
     anyCandidate,
     canDuel,
+    canTeam,
     gearedCandidate,
     isDuelCandidate,
+    pickBundle,
     pickOpponents,
+    rowPicks,
+    shipsOfPicks,
+    TEAM_PICK_SHIPS,
 } from '../pickOpponents';
 import type { Ship } from '../../../../types/ship';
 import type { GearPiece } from '../../../../types/gear';
@@ -117,5 +122,52 @@ describe('anyCandidate (bare templates)', () => {
     });
     it('still needs two ships besides the flown one', () => {
         expect(canDuel(bare.slice(0, 2), 'a', anyCandidate)).toBe(false);
+    });
+});
+
+describe('team picks', () => {
+    const big = 'abcdefghij'.split('').map((id) => ship(id, []));
+
+    it('canTeam needs eight candidates besides the flown ship', () => {
+        expect(canTeam(big.slice(0, 9), 'a', anyCandidate)).toBe(true);
+        expect(canTeam(big.slice(0, 8), 'a', anyCandidate)).toBe(false);
+        expect(canTeam(big, null, anyCandidate)).toBe(false);
+        // A flown ship outside the fleet leaves all nine as candidates.
+        expect(canTeam(big.slice(0, 9), 'z', anyCandidate)).toBe(true);
+        expect(canTeam(big.slice(0, 9), 'z', (s) => s.id !== 'b')).toBe(true);
+        expect(canTeam(big.slice(0, 9), 'z', (s) => s.id !== 'b' && s.id !== 'c')).toBe(false);
+    });
+
+    it('gives two disjoint trios and two allies, all distinct and never the flown ship', () => {
+        for (let k = 0; k < 200; k++) {
+            const bundle = pickBundle(big, 'c', Math.random, anyCandidate, TEAM_PICK_SHIPS)!;
+            const picks = rowPicks('team', bundle)!;
+            expect(picks.kind).toBe('team');
+            if (picks.kind !== 'team') continue;
+            const ids = [...picks.gates[0], ...picks.gates[1], ...picks.allies].map((s) => s.id);
+            expect(ids).toHaveLength(8);
+            expect(new Set(ids).size).toBe(8);
+            expect(ids).not.toContain('c');
+            expect(shipsOfPicks(picks).map((s) => s.id)).toEqual(ids);
+        }
+    });
+
+    it('a one-ship row takes the first two of the same bundle', () => {
+        const bundle = pickBundle(big, 'a', seq(0), anyCandidate, TEAM_PICK_SHIPS)!;
+        expect(bundle.map((s) => s.id)).toEqual(['b', 'c', 'd', 'e', 'f', 'g', 'h', 'i']);
+        for (const kind of ['duel', 'dps', 'tank', 'heal'] as const) {
+            expect(rowPicks(kind, bundle)).toEqual({
+                kind: 'single',
+                gates: [bundle[0], bundle[1]],
+            });
+        }
+    });
+
+    it('a bundle too small for a team row gives no team picks', () => {
+        const bundle = pickBundle(big.slice(0, 8), 'a', Math.random, anyCandidate, 8)!;
+        expect(bundle).toHaveLength(7);
+        expect(rowPicks('team', bundle)).toBeNull();
+        expect(rowPicks('duel', bundle)?.kind).toBe('single');
+        expect(rowPicks('duel', bundle.slice(0, 1))).toBeNull();
     });
 });

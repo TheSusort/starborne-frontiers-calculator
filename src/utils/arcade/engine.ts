@@ -14,6 +14,10 @@ import {
     NEAR_MISS_MAX_POINTS,
     NEAR_MISS_POINTS,
     NEAR_MISS_SECONDS,
+    PREVIEW_EASE_SECONDS,
+    PREVIEW_SCALE,
+    PREVIEW_SECONDS,
+    PREVIEW_Z,
     RAMP_SPEED,
     ROW_GAP,
     SHIELD_BREAK_FLASH,
@@ -28,11 +32,18 @@ import type { GameState, InputAction, Lane, Obstacle, Pickup } from './types';
 export interface GameOptions {
     /** Schedules duel checkpoints. Off unless the caller has two opponents to offer. */
     duels?: boolean;
+    /** Lets checkpoint rows draw the `team` challenge. Off unless the caller can field its picks
+     *  (see `canTeam`). */
+    teamChallenges?: boolean;
 }
 
 export function createGame(seed: number, options: GameOptions = {}): GameState {
     const state: GameState = {
+        seed: seed >>> 0,
         rngState: seed >>> 0,
+        teamChallenges: !!options.teamChallenges,
+        timeScale: 1,
+        preview: null,
         time: 0,
         speed: START_SPEED,
         distance: 0,
@@ -71,6 +82,42 @@ export function createGame(seed: number, options: GameOptions = {}): GameState {
     };
     if (options.duels) state.rowsUntilCheckpoint = drawFirstCheckpointRows(state);
     return state;
+}
+
+/** Real seconds a whole checkpoint preview lasts: both eases and the hold. */
+export const PREVIEW_TOTAL_SECONDS = PREVIEW_SECONDS + 2 * PREVIEW_EASE_SECONDS;
+
+/** The time scale `elapsed` real seconds into a checkpoint preview: a linear ease from 1 down to
+ *  PREVIEW_SCALE, the hold, a linear ease back up, then 1. */
+export function previewScale(elapsed: number): number {
+    const ease = (t: number) => 1 - (1 - PREVIEW_SCALE) * Math.min(1, Math.max(0, t));
+    if (elapsed < PREVIEW_EASE_SECONDS) return ease(elapsed / PREVIEW_EASE_SECONDS);
+    const out = elapsed - PREVIEW_EASE_SECONDS - PREVIEW_SECONDS;
+    if (out <= 0) return PREVIEW_SCALE;
+    return ease(1 - out / PREVIEW_EASE_SECONDS);
+}
+
+/** Moves the running preview on by `realDt` real seconds, ending it once it has run its course,
+ *  and returns the time scale for this step. */
+function advancePreview(state: GameState, realDt: number): number {
+    const preview = state.preview;
+    if (preview) {
+        preview.elapsed += realDt;
+        if (preview.elapsed >= PREVIEW_TOTAL_SECONDS) state.preview = null;
+    }
+    state.timeScale = state.preview ? previewScale(state.preview.elapsed) : 1;
+    return state.timeScale;
+}
+
+/** Starts the preview of the first row to come within PREVIEW_Z, unless one is running. */
+function startPreview(state: GameState): void {
+    if (state.preview) return;
+    for (const c of state.checkpoints) {
+        if (c.previewed || c.resolved || c.z > PREVIEW_Z) continue;
+        c.previewed = true;
+        state.preview = { checkpointId: c.id, elapsed: 0 };
+        return;
+    }
 }
 
 /** Speed after `dt` seconds of the two-phase ramp described at RAMP_SPEED. */
@@ -177,11 +224,14 @@ function settleTrail(state: GameState, p: Pickup): void {
 }
 
 /**
- * Advances `state` by `dt` seconds in place and returns it. The loop calls it with
- * `STEP_SECONDS`, so behaviour does not depend on the display's frame rate.
+ * Advances `state` by `realDt` real seconds in place and returns it. The loop calls it with
+ * `STEP_SECONDS`, so behaviour does not depend on the display's frame rate. Every rule runs on
+ * engine time, `realDt` times the time scale (see `previewScale`); only the preview's own clock
+ * counts real time.
  */
-export function step(state: GameState, inputs: readonly InputAction[], dt: number): GameState {
+export function step(state: GameState, inputs: readonly InputAction[], realDt: number): GameState {
     if (state.status !== 'running') return state;
+    const dt = realDt * advancePreview(state, realDt);
     const player = state.player;
     for (const input of inputs) applyInput(state, input);
 
@@ -210,6 +260,7 @@ export function step(state: GameState, inputs: readonly InputAction[], dt: numbe
     for (const o of state.obstacles) o.z -= travel;
     for (const p of state.pickups) p.z -= travel;
     for (const c of state.checkpoints) c.z -= travel;
+    startPreview(state);
 
     state.untilNextRow -= travel;
     while (state.untilNextRow <= 0) {
@@ -263,7 +314,12 @@ export function step(state: GameState, inputs: readonly InputAction[], dt: numbe
         const slot = c.gates.indexOf(player.lane);
         if (slot === -1) continue;
         state.status = 'duel';
-        state.pendingDuel = { checkpointId: c.id, slot: slot as 0 | 1, stakes: c.stakes };
+        state.pendingDuel = {
+            checkpointId: c.id,
+            slot: slot as 0 | 1,
+            stakes: c.stakes,
+            challenge: c.challenge,
+        };
     }
 
     state.obstacles = state.obstacles.filter((o) => o.z > DESPAWN_Z);
