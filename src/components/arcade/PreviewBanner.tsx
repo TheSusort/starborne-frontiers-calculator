@@ -27,7 +27,7 @@ export const PreviewBanner: React.FC<{ content: PreviewBannerContent | null; sho
     if (!content) return null;
     return (
         <div
-            className={`absolute inset-x-0 top-1/4 flex justify-center px-4 pointer-events-none transition-opacity duration-300 ${shown ? 'opacity-100' : 'opacity-0'}`}
+            className={`absolute inset-x-0 top-20 flex justify-center px-4 pointer-events-none transition-opacity duration-300 ${shown ? 'opacity-100' : 'opacity-0'}`}
             role="status"
             aria-live="polite"
         >

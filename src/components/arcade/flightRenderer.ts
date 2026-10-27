@@ -450,9 +450,10 @@ const PREVIEW_PORTRAIT_PX = 64;
 const PREVIEW_TEAM_PORTRAIT_PX = 44;
 const PREVIEW_PAD_PX = 6;
 const PREVIEW_GAP_PX = 12;
-/** Keeps a preview label clear of the screen edges and the HUD. */
+/** Keeps a preview label clear of the screen edges, and its top below the preview banner (see
+ *  `PreviewBanner`, placed under the HUD). */
 const PREVIEW_MARGIN_PX = 8;
-const PREVIEW_TOP_PX = 96;
+const PREVIEW_TOP_PX = 236;
 
 /**
  * Over each gate of the previewed row, a card with each rival's portrait, name and role, joined
