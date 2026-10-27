@@ -63,9 +63,11 @@ describe('interactionLedger', () => {
                 calibrationResidual,
                 blindSpots: LEDGER_BLIND_SPOTS,
                 confirmed: [invariantFinding, differentialFinding],
+                drift: [],
                 needsTriage: [ablationFinding],
                 groups: {
                     confirmed: groupFindings([invariantFinding, differentialFinding]),
+                    drift: [],
                     needsTriage: groupFindings([ablationFinding]),
                 },
                 refuted: [],
@@ -184,6 +186,59 @@ describe('interactionLedger', () => {
             expect(markdown).toContain('### Ship3: -attack (×2)');
             expect(markdown).toContain('**Seeds:** 54321, 777');
             expect(markdown.match(/### Ship3: -attack/g)).toHaveLength(1);
+        });
+    });
+
+    describe('drift tier', () => {
+        const meta = { compositionsRun: 3, coverage, calibrationResidual };
+        const kindFinding = (seed: number, missing: CombatLogEntryKind[]): Finding => ({
+            ...differentialFinding,
+            seed,
+            fingerprintDiff: {
+                actorId: 'a1',
+                shipName: 'Ship3',
+                missingInComposition: missing,
+                extraInComposition: [],
+            },
+        });
+        const demoted = (seed: number, reason: 'timing' | 'filler'): Finding => ({
+            ...kindFinding(seed, ['buff']),
+            drift: [{ kind: 'buff', sign: '-', reason }],
+            severity: 'low',
+        });
+
+        it('lists a (ships, kind) under drift only when every finding of it was demoted', () => {
+            const ledger = buildLedgerJson([demoted(1, 'timing'), demoted(2, 'filler')], meta);
+            expect(ledger.confirmed).toEqual([]);
+            expect(ledger.drift).toHaveLength(2);
+            expect(ledger.groups.drift).toHaveLength(1);
+            expect(ledger.groups.drift[0]).toMatchObject({
+                kind: '-buff',
+                count: 2,
+                drift: { timing: 1, filler: 1 },
+            });
+            const md = renderLedgerMarkdown([demoted(1, 'timing')], meta);
+            expect(md).toContain('## Drift');
+            expect(md).toContain('**Demoted:** timing×1');
+            expect(md).toContain('Confirmed findings: **0**');
+        });
+
+        it('keeps the group confirmed when one finding survives, noting its demoted siblings', () => {
+            const ledger = buildLedgerJson(
+                [demoted(1, 'timing'), demoted(2, 'timing'), kindFinding(3, ['buff'])],
+                meta
+            );
+            expect(ledger.groups.drift).toEqual([]);
+            expect(ledger.groups.confirmed).toHaveLength(1);
+            expect(ledger.groups.confirmed[0]).toMatchObject({
+                kind: '-buff',
+                count: 1,
+                seeds: [3],
+                drift: { timing: 2 },
+            });
+            expect(renderLedgerMarkdown(ledger.confirmed.concat(ledger.drift), meta)).not.toContain(
+                '## Drift'
+            );
         });
     });
 

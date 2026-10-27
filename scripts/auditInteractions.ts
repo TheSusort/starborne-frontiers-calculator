@@ -24,7 +24,7 @@ import {
 import { checkReproducibility } from '../src/utils/combat/audit/reproducibility';
 import { runAblation } from '../src/utils/combat/audit/ablation';
 import { minimizeComposition } from '../src/utils/combat/audit/minimize';
-import { EXCLUDED_KINDS } from '../src/utils/combat/audit/oracleKinds';
+import { EXCLUDED_KINDS, onlyKinds } from '../src/utils/combat/audit/oracleKinds';
 import type { Finding, FingerprintDiff, InvariantViolation } from '../src/utils/combat/audit/types';
 import type {
     BattlePlacement,
@@ -339,19 +339,32 @@ function main(): void {
         for (let idx = 0; idx < compInput.playerTeam.length; idx++) {
             const placement = compInput.playerTeam[idx];
             try {
-                const { comparable, restricted } = playerDifferential(idx, compInput, s, inertPool);
+                const { comparable, restricted, reported, demoted } = playerDifferential(
+                    idx,
+                    compInput,
+                    s,
+                    inertPool
+                );
                 differential.total++;
                 if (comparable) differential.comparable++;
-                if (!restricted) continue;
+                const drifted = onlyKinds(restricted, demoted);
+                if (drifted) {
+                    findings.push({
+                        ...differentialFinding(placement, drifted, s),
+                        drift: demoted,
+                        severity: 'low',
+                    });
+                }
+                if (!reported) continue;
                 const min = minimizeDifferential(
                     compInput,
                     placement.ship.id,
-                    restricted,
+                    reported,
                     (candidate, candidateIdx) =>
-                        playerDifferential(candidateIdx, candidate, s, inertPool).restricted
+                        playerDifferential(candidateIdx, candidate, s, inertPool).reported
                 );
                 findings.push({
-                    ...differentialFinding(placement, restricted, s),
+                    ...differentialFinding(placement, reported, s),
                     minimalRepro: toMinimalRepro(min),
                 });
             } catch (err) {
@@ -374,7 +387,7 @@ function main(): void {
     }
 
     const coverage: LedgerCoverage = { calibration: calibrationCoverage, differential, ablation };
-    const { confirmed, needsTriage, groups } = writeLedger(
+    const { confirmed, drift, needsTriage, groups } = writeLedger(
         findings,
         { compositionsRun, coverage, calibrationResidual },
         'docs'
@@ -383,6 +396,9 @@ function main(): void {
     console.log(`differential coverage: ${formatCoverage(differential)} player placements`);
     console.log(`ablation coverage: ${formatCoverage(ablation)} subject-runs`);
     console.log(`confirmed: ${confirmed.length} (${groups.confirmed.length} (ships, kind) groups)`);
+    console.log(
+        `drift: ${drift.length} (${groups.drift.length} (ships, kind) groups with no confirmed finding)`
+    );
     console.log(
         `needsTriage: ${needsTriage.length} (${groups.needsTriage.length} (ships, kind) groups)`
     );

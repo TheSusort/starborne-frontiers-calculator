@@ -288,6 +288,10 @@ describe.skipIf(!haveCorpus)('playerDifferential on the real corpus', () => {
 
                 const planted = playerDifferential(idx, compInput, seed, inertPool(), plant(own));
                 expect(planted.restricted?.missingInComposition).toContain(own);
+                // Neither drift rule may swallow it: the kind is gone from the composition arm
+                // for good, and both baselines show it.
+                expect(planted.reported?.missingInComposition).toContain(own);
+                expect(planted.demoted).toEqual([]);
 
                 const plantedExcluded = playerDifferential(
                     idx,
@@ -302,6 +306,85 @@ describe.skipIf(!haveCorpus)('playerDifferential on the real corpus', () => {
             }
         }
         expect(checked).toBe(true);
+    });
+});
+
+describe.skipIf(!haveCorpus)('playerDifferential: second filler draw', () => {
+    const names = (input: BattleSimulationInput) =>
+        input.playerTeam.map((p) => p.ship.name).join('|');
+    /** A fake `steal` row booked to the subject in round 1, added to the arms `pick` selects. */
+    const plantStealIn =
+        (pick: (input: BattleSimulationInput) => boolean, subjectPosition: string): BattleRunner =>
+        (input, s) => {
+            const r = runSeededBattle(input, s);
+            if (!pick(input)) return r;
+            const fake: CombatLogEntry = {
+                kind: 'steal',
+                actorId: playerId(r, subjectPosition),
+                targets: [],
+                reactions: [],
+            };
+            return {
+                ...r,
+                combatLog: r.combatLog.map((round, i) =>
+                    i === 0 ? { ...round, startOfRound: [...round.startOfRound, fake] } : round
+                ),
+            };
+        };
+
+    /** The first placement that compares cleanly, has a distinct second draw, and never steals. */
+    function cleanPlacement() {
+        for (let seed = 1; seed <= 60; seed++) {
+            const compInput = composeBattle(seed, corpus());
+            if (compInput.playerTeam.length < 2) continue;
+            for (let idx = 0; idx < compInput.playerTeam.length; idx++) {
+                const rec = recordingRunner();
+                const d = playerDifferential(idx, compInput, seed, inertPool(), rec.run);
+                if (!d.comparable || d.restricted !== null || !d.boards.secondBaseline) continue;
+                const subjectPosition = compInput.playerTeam[idx].position;
+                const [comp] = rec.results;
+                if (oracleFingerprint(comp, playerId(comp, subjectPosition)).has('steal')) continue;
+                return { seed, idx, compInput, d, subjectPosition };
+            }
+        }
+        throw new Error('no clean placement with a distinct second draw in seeds 1-60');
+    }
+
+    it('draws different stand-ins for the second baseline, keeping the subject and the enemies', () => {
+        const { d, idx } = cleanPlacement();
+        const second = d.boards.secondBaseline!;
+        expect(names(second)).not.toBe(names(d.boards.baseline));
+        expect(second.playerTeam[idx]).toBe(d.boards.baseline.playerTeam[idx]);
+        expect(second.enemyTeam).toEqual(d.boards.baseline.enemyTeam);
+    });
+
+    it('demotes a kind only the FIRST draw of stand-ins produces', () => {
+        const { seed, idx, compInput, d, subjectPosition } = cleanPlacement();
+        const firstOnly = names(d.boards.baseline);
+        const r = playerDifferential(
+            idx,
+            compInput,
+            seed,
+            inertPool(),
+            plantStealIn((input) => names(input) === firstOnly, subjectPosition)
+        );
+        expect(r.restricted?.missingInComposition).toEqual(['steal']);
+        expect(r.demoted).toEqual([{ kind: 'steal', sign: '-', reason: 'filler' }]);
+        expect(r.reported).toBeNull();
+    });
+
+    it('keeps a kind BOTH draws produce and the composition does not', () => {
+        const { seed, idx, compInput, d, subjectPosition } = cleanPlacement();
+        const baselines = new Set([names(d.boards.baseline), names(d.boards.secondBaseline!)]);
+        const r = playerDifferential(
+            idx,
+            compInput,
+            seed,
+            inertPool(),
+            plantStealIn((input) => baselines.has(names(input)), subjectPosition)
+        );
+        expect(r.reported?.missingInComposition).toEqual(['steal']);
+        expect(r.demoted).toEqual([]);
     });
 });
 
@@ -388,10 +471,13 @@ describe.skipIf(!haveCorpus)('runCalibration', () => {
     // gate must fail and name the residual. The exclusion set is never widened to absorb it.
     it('fails loudly on a residual over tolerance instead of widening the exclusion set', () => {
         const before = [...EXCLUDED_KINDS];
-        let call = 0;
+        // A stand-in keeps the id of the ship it replaces, so only the composition arm has every
+        // player ship under its own id. Both baselines stay untouched.
+        const idByName = new Map(corpus().map((t) => [t.ship.name, t.ship.id] as const));
         const plantSteal: BattleRunner = (input, s) => {
             const r = runSeededBattle(input, s);
-            if (call++ % 2 !== 0) return r; // baseline arm untouched
+            const isComp = input.playerTeam.every((p) => idByName.get(p.ship.name) === p.ship.id);
+            if (!isComp) return r;
             const players = r.roster.filter((x) => x.side === 'player').map((x) => x.actorId);
             const fake: CombatLogEntry[] = players.map((actorId) => ({
                 kind: 'steal',
