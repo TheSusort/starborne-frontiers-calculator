@@ -861,15 +861,12 @@ export function renderFlight(
     const beat = view.beat;
 
     ctx.clearRect(0, 0, w, h);
-    // The shield breaking shakes everything drawn on the canvas, zoomed just enough that the
-    // shaken edges stay covered.
+    // The shield breaking shakes everything drawn on the canvas. The offset snaps to whole device
+    // pixels, so the cached layers still blit 1:1 instead of being resampled.
     const shake = shakeOffset(shakeAt, game.shieldBreakTime, h, view.reducedMotion);
     if (shake > 0) {
-        const zoom = 1 + (2 * shake) / Math.min(w, h);
         ctx.save();
-        ctx.translate(w / 2 + shakeAt.x, h / 2 + shakeAt.y);
-        ctx.scale(zoom, zoom);
-        ctx.translate(-w / 2, -h / 2);
+        ctx.translate(Math.round(shakeAt.x * dpr) / dpr, Math.round(shakeAt.y * dpr) / dpr);
     }
     drawBackdropSky(ctx, g, view.backdrop, dpr, scene);
     drawStars(ctx, g, view.stars, timeMs, true);

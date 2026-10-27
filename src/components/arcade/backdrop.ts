@@ -168,6 +168,8 @@ export const drawBackdropSky = (
 export const GLOW_BEAT_ALPHA = 0.7;
 export const FAN_BEAT_ALPHA = 0.55;
 export const GLOW_BEAT_SWELL = 0.12;
+/** A beat pulse below this draws no copy: it would add only a few percent of opacity. */
+const MIN_BEAT_PULSE = 0.03;
 
 /** The sun's outer glow; drawn after the stars. A beat `pulse` (0..1) brightens it and, with
  *  `swell`, grows it about the sun's centre. */
@@ -181,7 +183,7 @@ export function drawBackdropGlow(
     swell = false
 ): void {
     blit(ctx, g, backdrop, dpr, 'glow', palette);
-    if (pulse <= 0) return;
+    if (pulse < MIN_BEAT_PULSE) return;
     const { sunX, sunY } = sunCircle(g);
     const scale = swell ? 1 + GLOW_BEAT_SWELL * pulse : 1;
     blitOver(ctx, backdrop.glow, dpr, GLOW_BEAT_ALPHA * pulse, scale, sunX, sunY);
@@ -207,5 +209,5 @@ export function drawBackdropFan(
     pulse = 0
 ): void {
     blit(ctx, g, backdrop, dpr, 'fan', palette);
-    if (pulse > 0) blitOver(ctx, backdrop.fan, dpr, FAN_BEAT_ALPHA * pulse, 1, 0, 0);
+    if (pulse >= MIN_BEAT_PULSE) blitOver(ctx, backdrop.fan, dpr, FAN_BEAT_ALPHA * pulse, 1, 0, 0);
 }
