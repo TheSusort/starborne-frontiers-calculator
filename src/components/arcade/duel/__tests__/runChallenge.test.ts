@@ -417,14 +417,17 @@ describe('races on real template ships', () => {
     ];
 
     for (const { kind, strong, weak } of cases) {
-        it(`${kind}: finite figures over ${CHALLENGE_ROUNDS} rounds and a decided winner`, () => {
+        it(`${kind}: finite figures, at most ${CHALLENGE_ROUNDS} rounds, and a decided winner`, () => {
             const a = template(strong);
             const b = template(weak);
             const r = runRace(kind, a, b, deps, challengeSeed(1234, 5));
             expect(r.kind).toBe(kind);
             expect(r.outcome).not.toBe('skipped');
+            const length = r.flown.byRound.length;
+            expect(length).toBeGreaterThan(0);
+            expect(length).toBeLessThanOrEqual(CHALLENGE_ROUNDS);
             for (const s of [r.flown, r.rival]) {
-                expect(s.byRound).toHaveLength(CHALLENGE_ROUNDS);
+                expect(s.byRound).toHaveLength(length);
                 expect(s.byRound.every(Number.isFinite)).toBe(true);
                 expect(Number.isFinite(s.total)).toBe(true);
                 expect(s.byRound.at(-1)).toBeCloseTo(s.total, 0);

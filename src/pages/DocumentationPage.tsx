@@ -2595,10 +2595,10 @@ const DocumentationPage: React.FC = () => {
                                         healing done wins.
                                     </li>
                                     <li>
-                                        <strong>TANK</strong> — a race: each ship takes the Defense
-                                        Calculator&apos;s default attacker for 5 rounds. It ends as
-                                        soon as one ship is destroyed, and the survivor wins;
-                                        otherwise more HP left wins.
+                                        <strong>TANK</strong> — a race: each ship takes a
+                                        10,000-attack attacker for 5 rounds. It ends as soon as one
+                                        ship is destroyed, and the survivor wins; otherwise more HP
+                                        left wins.
                                     </li>
                                     <li>
                                         <strong>3v3</strong> — you and two random geared ships from
