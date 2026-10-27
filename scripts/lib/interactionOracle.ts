@@ -106,8 +106,9 @@ export interface PlacementDifferential {
     reported: FingerprintDiff | null;
     /** Restricted kinds moved to the drift tier, with the rule that moved each. */
     demoted: DemotedKind[];
-    /** The boards actually run, subject HP scale applied. `secondBaseline` is null when the
-     *  second draw picked the same stand-ins as the first. */
+    /** The boards built, subject HP scale applied. `secondBaseline` is null when the second draw
+     *  picked the same stand-ins as the first; it is built but NOT run when the first comparison
+     *  reported nothing. */
     boards: {
         comp: BattleSimulationInput;
         baseline: BattleSimulationInput;
@@ -186,6 +187,8 @@ export function playerDifferential(
     );
     const demoted = [...first.demoted];
     if (second.comparable) {
+        // Read against `reported`: a kind the second baseline shows only shifted in time is also
+        // decided by which stand-ins were drawn, so it is `filler` here.
         const confirmedBySecond = (sign: '-' | '+', k: CombatLogEntryKind) =>
             (sign === '-'
                 ? second.reported?.missingInComposition
