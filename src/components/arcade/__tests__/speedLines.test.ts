@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
     activeSpeedLines,
     advanceSpeedLines,
+    BLUR_EXTRA_LINES,
+    blurStrength,
     createSpeedLines,
     laneWedge,
     MAX_ACTIVE_LINES,
@@ -38,6 +40,16 @@ describe('speed lines', () => {
         expect(streakLength(START_SPEED)).toBeCloseTo(MIN_STREAK);
         expect(streakLength(MAX_SPEED)).toBeCloseTo(MAX_STREAK);
         expect(MAX_ACTIVE_LINES).toBeLessThanOrEqual(SPEED_LINE_POOL);
+    });
+
+    it('starts the speed blur at 60% of the speed range and peaks at MAX_SPEED', () => {
+        const at = (share: number) => START_SPEED + (MAX_SPEED - START_SPEED) * share;
+        expect(blurStrength(at(0))).toBe(0);
+        expect(blurStrength(at(0.6))).toBeCloseTo(0);
+        expect(blurStrength(at(0.8))).toBeCloseTo(0.5);
+        expect(blurStrength(at(1))).toBeCloseTo(1);
+        expect(blurStrength(MAX_SPEED * 2)).toBe(1);
+        expect(MAX_ACTIVE_LINES + BLUR_EXTRA_LINES).toBeLessThanOrEqual(SPEED_LINE_POOL);
     });
 
     it('holds still without travel', () => {

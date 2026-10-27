@@ -15,6 +15,10 @@ export const UNRELEASED_CHANGES: string[] = [
     'Arcade: last-moment dodges now pay chained near-miss bonus points.',
     'Arcade: collecting two full credit trails in a row now doubles credits.',
     'Arcade: the game-over screen now shows your best near-miss chain.',
+    'Arcade: the scenery now changes colour zone every 1,000 metres.',
+    'Arcade: the grid and sun now pulse in time with the music.',
+    'Arcade: speed lines stretch and screen edges fringe near top speed.',
+    'Arcade: the screen now shakes when your shield breaks.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

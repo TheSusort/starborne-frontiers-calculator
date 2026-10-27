@@ -40,7 +40,10 @@ import {
     drawBackdropGround,
     drawBackdropSky,
 } from './backdrop';
-import { barrierPulse, drawBarrier, duckDepth } from './barriers';
+import { barrierPulse, BarrierColours, drawBarrier, duckDepth } from './barriers';
+import { zonePaletteAt } from './zones';
+import { shakeOffset, ShakeOffset } from './shake';
+import { createFringe, drawSpeedFringe, Fringe } from './speedFringe';
 import {
     drawShieldBack,
     drawShieldBreak,
@@ -69,6 +72,7 @@ import {
 } from './magnetFx';
 import {
     advanceSpeedLines,
+    blurStrength,
     createSpeedLines,
     drawSpeedLines,
     laneWedge,
@@ -181,6 +185,11 @@ export interface FlightView {
     reducedMotion: boolean;
     /** The credits the magnet pulled lately, to ease back to their lanes if let go. */
     pulls: PullMemory;
+    /** The music's beat pulse this frame, 0..1 (see `beatPulse`), set by the view's owner: it
+     *  brightens the grid and the sun's glow, and swells the glow unless `reducedMotion`. */
+    beat: number;
+    /** The speed blur's edge fringe cache. */
+    fringe: Fringe;
 }
 
 /** Lane wedge used before the first frame has measured the screen. */
@@ -213,6 +222,8 @@ export function createFlightView(
         explosion: createExplosion(),
         reducedMotion,
         pulls: createPullMemory(),
+        beat: 0,
+        fringe: createFringe(),
     };
 }
 
@@ -308,11 +319,12 @@ function drawObstacle(
     g: SceneGeometry,
     o: Obstacle,
     timeMs: number,
-    fade: number
+    fade: number,
+    colours: BarrierColours
 ): void {
     const p = project(g, laneOffset(o.lane), o.z);
     ctx.globalAlpha = fade * Math.min(1, Math.max(0, (SPAWN_Z - o.z) / FADE_IN_UNITS));
-    drawBarrier(ctx, o.kind, p.x, p.y, p.width, p.scale, barrierPulse(timeMs, o.id));
+    drawBarrier(ctx, o.kind, p.x, p.y, p.width, p.scale, barrierPulse(timeMs, o.id), colours);
     ctx.globalAlpha = 1;
 }
 
@@ -780,6 +792,8 @@ interface ItemFrame {
     beams: number;
     /** The opacity of the barriers at or past the ship while it explodes. */
     wreckFade: number;
+    /** The zone's barrier colours. */
+    barriers: BarrierColours;
 }
 
 const itemFrame = {} as ItemFrame;
@@ -788,7 +802,7 @@ function drawItem(f: ItemFrame, item: DrawItem): void {
     const { ctx, g, game, view, timeMs } = f;
     if (item.obstacle) {
         const o = item.obstacle;
-        drawObstacle(ctx, g, o, timeMs, view.dying && o.z <= 0 ? f.wreckFade : 1);
+        drawObstacle(ctx, g, o, timeMs, view.dying && o.z <= 0 ? f.wreckFade : 1, f.barriers);
     } else if (item.pickup) {
         const pk = item.pickup;
         const { magnetOn, magnet, ship } = f;
@@ -816,6 +830,12 @@ function drawItem(f: ItemFrame, item: DrawItem): void {
     }
 }
 
+/** How much the beat brightens the floor grid's horizontal lines at a pulse of 1. */
+const GRID_BEAT_GAIN = 0.8;
+
+/** The canvas shake, rewritten every frame rather than allocated. */
+const shakeAt: ShakeOffset = { x: 0, y: 0, amplitude: 0 };
+
 export function renderFlight(
     ctx: CanvasRenderingContext2D,
     game: GameState,
@@ -836,18 +856,32 @@ export function renderFlight(
     );
     view.pose = advancePose(view.pose, targetPose(g, game, view), dt);
 
+    const palette = zonePaletteAt(game.distance);
+    const scene = palette.scene;
+    const beat = view.beat;
+
     ctx.clearRect(0, 0, w, h);
-    drawBackdropSky(ctx, g, view.backdrop, dpr);
+    // The shield breaking shakes everything drawn on the canvas, zoomed just enough that the
+    // shaken edges stay covered.
+    const shake = shakeOffset(shakeAt, game.shieldBreakTime, h, view.reducedMotion);
+    if (shake > 0) {
+        const zoom = 1 + (2 * shake) / Math.min(w, h);
+        ctx.save();
+        ctx.translate(w / 2 + shakeAt.x, h / 2 + shakeAt.y);
+        ctx.scale(zoom, zoom);
+        ctx.translate(-w / 2, -h / 2);
+    }
+    drawBackdropSky(ctx, g, view.backdrop, dpr, scene);
     drawStars(ctx, g, view.stars, timeMs, true);
-    drawBackdropGlow(ctx, g, view.backdrop, dpr);
-    drawSunDisc(ctx, g, view.sun, timeMs, true);
-    drawBackdropGround(ctx, g, view.backdrop, dpr);
-    drawGridLines(ctx, g, view.gridOffset);
+    drawBackdropGlow(ctx, g, view.backdrop, dpr, scene, beat, !view.reducedMotion);
+    drawSunDisc(ctx, g, view.sun, timeMs, true, scene);
+    drawBackdropGround(ctx, g, view.backdrop, dpr, scene);
+    drawGridLines(ctx, g, view.gridOffset, scene, 1 + GRID_BEAT_GAIN * beat);
     const intro = introProgress(view);
-    if (intro < 1) drawGridFan(ctx, g, introGridLayers(g, intro));
-    else drawBackdropFan(ctx, g, view.backdrop, dpr);
+    if (intro < 1) drawGridFan(ctx, g, introGridLayers(g, intro), scene);
+    else drawBackdropFan(ctx, g, view.backdrop, dpr, scene, beat);
     view.laneWedge = laneWedge(g);
-    if (view.speedLines) drawSpeedLines(ctx, g, view.speedLines, game.speed);
+    if (view.speedLines) drawSpeedLines(ctx, g, view.speedLines, game.speed, palette.speedLines);
 
     const count = collectItems(game, drawList);
     const ship = shipAt;
@@ -869,6 +903,7 @@ export function renderFlight(
     f.beams = f.magnetOn ? nearestPulled(game.pickups, game.player, MAX_BEAMS, beamScratch) : 0;
     beginPulls(view.pulls);
     f.wreckFade = Math.max(0, 1 - view.explosion.elapsed / WRECK_FADE_SECONDS);
+    f.barriers = palette.barriers;
     // Items already past the player are nearer the camera, so they draw over it.
     for (let i = 0; i < count; i++) if (drawList[i].z >= 0) drawItem(f, drawList[i]);
     const boom = view.explosion;
@@ -905,4 +940,6 @@ export function renderFlight(
     for (let i = 0; i < count; i++) if (drawList[i].z < 0) drawItem(f, drawList[i]);
     endPulls(view.pulls);
     if (view.dying) drawExplosion(ctx, g, boom, w, h);
+    if (shake > 0) ctx.restore();
+    drawSpeedFringe(ctx, g, view.fringe, dpr, view.laneWedge, blurStrength(game.speed));
 }

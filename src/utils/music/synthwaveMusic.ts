@@ -5,6 +5,8 @@ export const SYNTHWAVE_TRACKS = [
     '/audio/disco4.mp3',
 ] as const;
 
+export type SynthwaveTrack = (typeof SYNTHWAVE_TRACKS)[number];
+
 const VOLUME = 0.3;
 
 /** The slice of `HTMLAudioElement` the controller drives; tests supply a fake. */
@@ -12,10 +14,20 @@ export interface AudioLike {
     src: string;
     volume: number;
     preload: string;
+    currentTime: number;
+    readonly paused: boolean;
     play(): Promise<void> | void;
     pause(): void;
     addEventListener(type: 'ended', listener: () => void): void;
     removeEventListener(type: 'ended', listener: () => void): void;
+}
+
+/** Where playback is: the current track, its position in seconds and whether it is audibly
+ *  playing (requested and not paused by the browser). */
+export interface MusicClock {
+    track: SynthwaveTrack;
+    time: number;
+    playing: boolean;
 }
 
 export interface MusicSnapshot {
@@ -96,6 +108,14 @@ export function createMusicController(
             };
         },
         getSnapshot: () => snapshot,
+        /** Writes the playback position into `out` and returns it; it reads the audio element
+         *  directly, so a per-frame caller neither re-renders nor allocates. */
+        clock(out: MusicClock): MusicClock {
+            out.track = tracks[index];
+            out.time = audio ? audio.currentTime : 0;
+            out.playing = snapshot.isPlaying && !!audio && !audio.paused;
+            return out;
+        },
         play() {
             if (snapshot.isPlaying) return;
             publish({ isPlaying: true });

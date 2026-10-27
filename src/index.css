@@ -427,6 +427,27 @@
         animation: arcade-duel-fade-out 0.6s ease-out both;
     }
 
+    /* Fades in and out once; opacity only, so reduced motion keeps it. */
+    .arcade-zone-banner {
+        text-shadow: 0 0 8px currentColor;
+        animation: arcade-zone-banner 1.5s ease-out both;
+    }
+
+    @keyframes arcade-zone-banner {
+        0% {
+            opacity: 0;
+        }
+        20% {
+            opacity: 1;
+        }
+        70% {
+            opacity: 1;
+        }
+        100% {
+            opacity: 0;
+        }
+    }
+
     @keyframes arcade-near-miss-pop {
         0% {
             transform: scale(1.6);

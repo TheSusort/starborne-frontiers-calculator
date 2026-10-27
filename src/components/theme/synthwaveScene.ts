@@ -20,6 +20,39 @@ export function depthToScreenY(g: SceneGeometry, depth: number): number {
     return g.horizonY + g.gridHeight * (GRID_NEAR_PLANE / depth);
 }
 
+/**
+ * The scene's colours. `SUNSET_SCENE` is the page background's look; the arcade's zones pass
+ * others. The channel triples (`horizon`, `horizonCore`, `grid`) are `"r, g, b"` strings, each
+ * drawn at several opacities.
+ */
+export interface ScenePalette {
+    /** Sky gradient stops at 0, 0.4, 0.7 and 1 of the way down to the horizon. */
+    sky: readonly [string, string, string, string];
+    nebulaLeft: string;
+    nebulaRight: string;
+    /** The sun's outer glow at its rim and 0.3 of the way out. */
+    sunGlow: readonly [string, string];
+    /** Sun disc gradient stops at 0, 0.3, 0.6 and 1, top to bottom. */
+    sun: readonly [string, string, string, string];
+    /** Ground gradient stops at 0, 0.05 and 1, horizon to bottom. */
+    ground: readonly [string, string, string];
+    horizon: string;
+    horizonCore: string;
+    grid: string;
+}
+
+export const SUNSET_SCENE: ScenePalette = {
+    sky: ['#0a0515', '#1a0a30', '#2a1045', '#3d1555'],
+    nebulaLeft: 'rgba(180, 40, 100, 0.15)',
+    nebulaRight: 'rgba(120, 30, 80, 0.1)',
+    sunGlow: ['rgba(255, 150, 180, 0.25)', 'rgba(200, 80, 150, 0.1)'],
+    sun: ['#ffccaa', '#ff99aa', '#ee6688', '#aa3366'],
+    ground: ['#1a0835', '#0d0420', '#050210'],
+    horizon: '200, 100, 255',
+    horizonCore: '220, 120, 255',
+    grid: '180, 80, 255',
+};
+
 export interface Star {
     x: number;
     y: number;
@@ -56,6 +89,8 @@ export interface SunCache {
     w: number;
     h: number;
     dpr: number;
+    /** The palette the disc was last drawn in; another one redraws it. */
+    palette: ScenePalette | null;
 }
 
 export const createSunCache = (): SunCache => ({
@@ -66,6 +101,7 @@ export const createSunCache = (): SunCache => ({
     w: 0,
     h: 0,
     dpr: 0,
+    palette: null,
 });
 
 export interface OverheadShipHit {
@@ -168,13 +204,17 @@ export function drawContrail(
     }
 }
 
-export function drawSky(ctx: CanvasRenderingContext2D, g: SceneGeometry): void {
+export function drawSky(
+    ctx: CanvasRenderingContext2D,
+    g: SceneGeometry,
+    palette: ScenePalette = SUNSET_SCENE
+): void {
     const { w, horizonY } = g;
     const skyGrad = ctx.createLinearGradient(0, 0, 0, horizonY);
-    skyGrad.addColorStop(0, '#0a0515');
-    skyGrad.addColorStop(0.4, '#1a0a30');
-    skyGrad.addColorStop(0.7, '#2a1045');
-    skyGrad.addColorStop(1, '#3d1555');
+    skyGrad.addColorStop(0, palette.sky[0]);
+    skyGrad.addColorStop(0.4, palette.sky[1]);
+    skyGrad.addColorStop(0.7, palette.sky[2]);
+    skyGrad.addColorStop(1, palette.sky[3]);
     ctx.fillStyle = skyGrad;
     ctx.fillRect(0, 0, w, horizonY);
 
@@ -187,7 +227,7 @@ export function drawSky(ctx: CanvasRenderingContext2D, g: SceneGeometry): void {
         horizonY * 0.6,
         w * 0.25
     );
-    nebulaLeft.addColorStop(0, 'rgba(180, 40, 100, 0.15)');
+    nebulaLeft.addColorStop(0, palette.nebulaLeft);
     nebulaLeft.addColorStop(1, 'rgba(0, 0, 0, 0)');
     ctx.fillStyle = nebulaLeft;
     ctx.fillRect(0, 0, w * 0.4, horizonY);
@@ -200,7 +240,7 @@ export function drawSky(ctx: CanvasRenderingContext2D, g: SceneGeometry): void {
         horizonY * 0.5,
         w * 0.2
     );
-    nebulaRight.addColorStop(0, 'rgba(120, 30, 80, 0.1)');
+    nebulaRight.addColorStop(0, palette.nebulaRight);
     nebulaRight.addColorStop(1, 'rgba(0, 0, 0, 0)');
     ctx.fillStyle = nebulaRight;
     ctx.fillRect(w * 0.6, 0, w * 0.4, horizonY);
@@ -264,7 +304,7 @@ export function drawStars(
     }
 }
 
-function sunCircle(g: SceneGeometry): { sunX: number; sunY: number; sunR: number } {
+export function sunCircle(g: SceneGeometry): { sunX: number; sunY: number; sunR: number } {
     const sunR = g.h * 0.18;
     return { sunX: g.w / 2, sunY: g.horizonY - sunR * 0.6, sunR };
 }
@@ -273,11 +313,15 @@ function sunCircle(g: SceneGeometry): { sunX: number; sunY: number; sunR: number
 export const sunGlowBottom = (g: SceneGeometry): number => g.horizonY + sunCircle(g).sunR;
 
 /** The sun's outer glow, down to `sunGlowBottom`; it changes only with the geometry. */
-export function drawSunGlow(ctx: CanvasRenderingContext2D, g: SceneGeometry): void {
+export function drawSunGlow(
+    ctx: CanvasRenderingContext2D,
+    g: SceneGeometry,
+    palette: ScenePalette = SUNSET_SCENE
+): void {
     const { sunX, sunY, sunR } = sunCircle(g);
     const outerGlow = ctx.createRadialGradient(sunX, sunY, sunR, sunX, sunY, sunR * 4);
-    outerGlow.addColorStop(0, 'rgba(255, 150, 180, 0.25)');
-    outerGlow.addColorStop(0.3, 'rgba(200, 80, 150, 0.1)');
+    outerGlow.addColorStop(0, palette.sunGlow[0]);
+    outerGlow.addColorStop(0.3, palette.sunGlow[1]);
     outerGlow.addColorStop(1, 'rgba(0, 0, 0, 0)');
     ctx.fillStyle = outerGlow;
     ctx.fillRect(0, 0, g.w, sunGlowBottom(g));
@@ -301,7 +345,8 @@ export function drawSunDisc(
     g: SceneGeometry,
     cache: SunCache,
     timeMs: number,
-    animate: boolean
+    animate: boolean,
+    palette: ScenePalette = SUNSET_SCENE
 ): void {
     const { w, h } = g;
     const time = timeMs;
@@ -327,8 +372,9 @@ export function drawSunDisc(
         cache.dpr = dpr;
         cache.frame = -1;
     }
-    if (sunFrame !== cache.frame) {
+    if (sunFrame !== cache.frame || palette !== cache.palette) {
         cache.frame = sunFrame;
+        cache.palette = palette;
         const sunCtx = cache.canvas.getContext('2d')!;
         sunCtx.setTransform(dpr, 0, 0, dpr, -left, -top);
         sunCtx.clearRect(sunX - sunR - 1, sunY - sunR - 1, sunR * 2 + 2, sunR * 2 + 2);
@@ -339,10 +385,10 @@ export function drawSunDisc(
         sunCtx.clip();
 
         const sunGrad = sunCtx.createLinearGradient(sunX, sunY - sunR, sunX, sunY + sunR);
-        sunGrad.addColorStop(0, '#ffccaa');
-        sunGrad.addColorStop(0.3, '#ff99aa');
-        sunGrad.addColorStop(0.6, '#ee6688');
-        sunGrad.addColorStop(1, '#aa3366');
+        sunGrad.addColorStop(0, palette.sun[0]);
+        sunGrad.addColorStop(0.3, palette.sun[1]);
+        sunGrad.addColorStop(0.6, palette.sun[2]);
+        sunGrad.addColorStop(1, palette.sun[3]);
         sunCtx.fillStyle = sunGrad;
         sunCtx.fillRect(sunX - sunR, sunY - sunR, sunR * 2, sunR * 2);
 
@@ -422,22 +468,27 @@ export function drawMountains(ctx: CanvasRenderingContext2D, g: SceneGeometry): 
 /** How far above the horizon the horizon glow line starts. */
 const HORIZON_GLOW_ABOVE = 8;
 
-export function drawGround(ctx: CanvasRenderingContext2D, g: SceneGeometry): void {
+export function drawGround(
+    ctx: CanvasRenderingContext2D,
+    g: SceneGeometry,
+    palette: ScenePalette = SUNSET_SCENE
+): void {
     const { w, h, horizonY } = g;
     const groundGrad = ctx.createLinearGradient(0, horizonY, 0, h);
-    groundGrad.addColorStop(0, '#1a0835');
-    groundGrad.addColorStop(0.05, '#0d0420');
-    groundGrad.addColorStop(1, '#050210');
+    groundGrad.addColorStop(0, palette.ground[0]);
+    groundGrad.addColorStop(0.05, palette.ground[1]);
+    groundGrad.addColorStop(1, palette.ground[2]);
     ctx.fillStyle = groundGrad;
     ctx.fillRect(0, horizonY, w, h - horizonY);
 
     // === HORIZON GLOW LINE ===
     const horizGlow = ctx.createLinearGradient(0, horizonY - HORIZON_GLOW_ABOVE, 0, horizonY + 15);
-    horizGlow.addColorStop(0, 'rgba(200, 100, 255, 0)');
-    horizGlow.addColorStop(0.4, 'rgba(200, 100, 255, 0.6)');
-    horizGlow.addColorStop(0.5, 'rgba(220, 120, 255, 0.9)');
-    horizGlow.addColorStop(0.6, 'rgba(200, 100, 255, 0.6)');
-    horizGlow.addColorStop(1, 'rgba(200, 100, 255, 0)');
+    const { horizon, horizonCore } = palette;
+    horizGlow.addColorStop(0, `rgba(${horizon}, 0)`);
+    horizGlow.addColorStop(0.4, `rgba(${horizon}, 0.6)`);
+    horizGlow.addColorStop(0.5, `rgba(${horizonCore}, 0.9)`);
+    horizGlow.addColorStop(0.6, `rgba(${horizon}, 0.6)`);
+    horizGlow.addColorStop(1, `rgba(${horizon}, 0)`);
     ctx.fillStyle = horizGlow;
     ctx.fillRect(0, horizonY - HORIZON_GLOW_ABOVE, w, HORIZON_GLOW_ABOVE + 15);
 }
@@ -495,21 +546,22 @@ export function gridLineX(
 }
 
 /** Fill colours of the fan's lines, glow and core, by line index: they depend only on the line
- *  count, so they are built once per count. */
-const fanColours = new Map<number, { glow: string[]; core: string[] }>();
+ *  count and the grid colour, so they are built once per pair. */
+const fanColours = new Map<string, { glow: string[]; core: string[] }>();
 
-function fanColoursFor(count: number): { glow: string[]; core: string[] } {
-    let colours = fanColours.get(count);
+function fanColoursFor(count: number, grid: string): { glow: string[]; core: string[] } {
+    const key = `${count}|${grid}`;
+    let colours = fanColours.get(key);
     if (!colours) {
         colours = { glow: [], core: [] };
         for (let i = 0; i <= count; i++) {
             const absFromCenter = Math.abs(i / count - 0.5);
             const glow = Math.max(0.35 - absFromCenter * 0.35, 0.02);
             const core = Math.max(0.55 - absFromCenter * 0.5, 0.05);
-            colours.glow.push(`rgba(180, 80, 255, ${glow})`);
-            colours.core.push(`rgba(180, 80, 255, ${core})`);
+            colours.glow.push(`rgba(${grid}, ${glow})`);
+            colours.core.push(`rgba(${grid}, ${core})`);
         }
-        fanColours.set(count, colours);
+        fanColours.set(key, colours);
     }
     return colours;
 }
@@ -517,13 +569,14 @@ function fanColoursFor(count: number): { glow: string[]; core: string[] } {
 function drawGridColumns(
     ctx: CanvasRenderingContext2D,
     g: SceneGeometry,
-    columns: GridColumns
+    columns: GridColumns,
+    grid: string
 ): void {
     // Vertical grid lines — NO shadowBlur, double-draw for glow
     const { horizonY, h } = g;
     const gridBottom = h;
     const numVLines = columns.count;
-    const colours = fanColoursFor(numVLines);
+    const colours = fanColoursFor(numVLines, grid);
 
     // Glow pass
     for (let i = 0; i <= numVLines; i++) {
@@ -565,45 +618,50 @@ function drawGridColumns(
 
 /** The horizontal lines' edge-fading gradients for a screen `w` wide, at full opacity: a line
  *  is stroked with one under `globalAlpha` set to its own opacity. A horizontal gradient is the
- *  same at every y, so one per pass serves every line. Built once per context and width. */
+ *  same at every y, so one per pass serves every line. Built once per context, width and grid
+ *  colour. */
 const lineGradients = new WeakMap<
     CanvasRenderingContext2D,
-    { w: number; glow: CanvasGradient; core: CanvasGradient }
+    { w: number; grid: string; glow: CanvasGradient; core: CanvasGradient }
 >();
 
 function lineGradientsFor(
     ctx: CanvasRenderingContext2D,
-    w: number
+    w: number,
+    grid: string
 ): { glow: CanvasGradient; core: CanvasGradient } {
     let cached = lineGradients.get(ctx);
-    if (!cached || cached.w !== w) {
+    if (!cached || cached.w !== w || cached.grid !== grid) {
         const glow = ctx.createLinearGradient(0, 0, w, 0);
-        glow.addColorStop(0, 'rgba(180, 80, 255, 0)');
-        glow.addColorStop(0.3, 'rgba(180, 80, 255, 1)');
-        glow.addColorStop(0.7, 'rgba(180, 80, 255, 1)');
-        glow.addColorStop(1, 'rgba(180, 80, 255, 0)');
+        glow.addColorStop(0, `rgba(${grid}, 0)`);
+        glow.addColorStop(0.3, `rgba(${grid}, 1)`);
+        glow.addColorStop(0.7, `rgba(${grid}, 1)`);
+        glow.addColorStop(1, `rgba(${grid}, 0)`);
         const core = ctx.createLinearGradient(0, 0, w, 0);
-        core.addColorStop(0, 'rgba(180, 80, 255, 0)');
-        core.addColorStop(0.25, 'rgba(180, 80, 255, 1)');
-        core.addColorStop(0.75, 'rgba(180, 80, 255, 1)');
-        core.addColorStop(1, 'rgba(180, 80, 255, 0)');
-        cached = { w, glow, core };
+        core.addColorStop(0, `rgba(${grid}, 0)`);
+        core.addColorStop(0.25, `rgba(${grid}, 1)`);
+        core.addColorStop(0.75, `rgba(${grid}, 1)`);
+        core.addColorStop(1, `rgba(${grid}, 0)`);
+        cached = { w, grid, glow, core };
         lineGradients.set(ctx, cached);
     }
     return cached;
 }
 
-/** The floor grid's horizontal lines, scrolled by `gridOffset` (0..1). */
+/** The floor grid's horizontal lines, scrolled by `gridOffset` (0..1). `brightness` scales
+ *  every line's opacity, capped at fully opaque. */
 export function drawGridLines(
     ctx: CanvasRenderingContext2D,
     g: SceneGeometry,
-    gridOffset: number
+    gridOffset: number,
+    palette: ScenePalette = SUNSET_SCENE,
+    brightness = 1
 ): void {
     const { w } = g;
     // Horizontal grid lines — NO shadowBlur, use double-draw for glow
     const numHLines = 20;
     const gridSpeed = gridOffset;
-    const gradients = lineGradientsFor(ctx, w);
+    const gradients = lineGradientsFor(ctx, w, palette.grid);
     const alpha = ctx.globalAlpha;
 
     // First pass: wide faint "glow" lines — fade toward edges
@@ -613,7 +671,7 @@ export function drawGridLines(
             GRID_FAR_PLANE - ((i / numHLines + gridSpeed) % 1) * (GRID_FAR_PLANE - GRID_NEAR_PLANE);
         const screenY = depthToScreenY(g, depth);
         const closeness = 1 - (depth - GRID_NEAR_PLANE) / (GRID_FAR_PLANE - GRID_NEAR_PLANE);
-        ctx.globalAlpha = alpha * Math.min(closeness * 0.15, 0.12);
+        ctx.globalAlpha = alpha * Math.min(1, brightness * Math.min(closeness * 0.15, 0.12));
         ctx.lineWidth = 2 + closeness * 6;
         ctx.beginPath();
         ctx.moveTo(0, screenY);
@@ -627,7 +685,7 @@ export function drawGridLines(
             GRID_FAR_PLANE - ((i / numHLines + gridSpeed) % 1) * (GRID_FAR_PLANE - GRID_NEAR_PLANE);
         const screenY = depthToScreenY(g, depth);
         const closeness = 1 - (depth - GRID_NEAR_PLANE) / (GRID_FAR_PLANE - GRID_NEAR_PLANE);
-        ctx.globalAlpha = alpha * Math.min(closeness * 0.8, 0.7);
+        ctx.globalAlpha = alpha * Math.min(1, brightness * Math.min(closeness * 0.8, 0.7));
         ctx.lineWidth = 0.3 + closeness * 2;
         ctx.beginPath();
         ctx.moveTo(0, screenY);
@@ -642,7 +700,8 @@ export function drawGridLines(
 export function drawGridFan(
     ctx: CanvasRenderingContext2D,
     g: SceneGeometry,
-    gridColumns?: GridColumns | readonly GridLayer[]
+    gridColumns?: GridColumns | readonly GridLayer[],
+    palette: ScenePalette = SUNSET_SCENE
 ): void {
     const { w, horizonY, gridHeight, vanishX } = g;
     if (Array.isArray(gridColumns)) {
@@ -650,11 +709,16 @@ export function drawGridFan(
             if (alpha <= 0) continue;
             ctx.save();
             ctx.globalAlpha *= alpha;
-            drawGridColumns(ctx, g, columns);
+            drawGridColumns(ctx, g, columns, palette.grid);
             ctx.restore();
         }
     } else {
-        drawGridColumns(ctx, g, (gridColumns as GridColumns | undefined) ?? defaultGridColumns(g));
+        drawGridColumns(
+            ctx,
+            g,
+            (gridColumns as GridColumns | undefined) ?? defaultGridColumns(g),
+            palette.grid
+        );
     }
 
     // Center glow on grid
@@ -666,7 +730,7 @@ export function drawGridFan(
         horizonY + gridHeight * 0.3,
         w * 0.4
     );
-    centerGlow.addColorStop(0, 'rgba(180, 80, 255, 0.15)');
+    centerGlow.addColorStop(0, `rgba(${palette.grid}, 0.15)`);
     centerGlow.addColorStop(1, 'rgba(0, 0, 0, 0)');
     ctx.fillStyle = centerGlow;
     ctx.fillRect(0, horizonY, w, gridHeight);

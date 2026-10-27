@@ -13,6 +13,8 @@ function fakeAudio() {
         src: '',
         volume: 1,
         preload: '',
+        currentTime: 0,
+        paused: true as boolean,
         play: vi.fn(() => Promise.resolve()),
         pause: vi.fn(),
         addEventListener: (_t: 'ended', l: () => void) => handlers.push(l),
@@ -41,6 +43,27 @@ describe('synthwave music controller', () => {
             seen.add(audio.src);
         }
         expect(seen.size).toBe(4);
+    });
+
+    it('reports the playing track and its position for the beat clock', () => {
+        const { c, audio } = make();
+        const out = { track: SYNTHWAVE_TRACKS[0], time: -1, playing: true };
+        expect(c.clock(out)).toBe(out);
+        expect(out.time).toBe(0);
+        expect(out.playing).toBe(false);
+        c.play();
+        audio.paused = false;
+        audio.currentTime = 12.5;
+        c.clock(out);
+        expect(out).toEqual({ track: audio.src, time: 12.5, playing: true });
+        // The browser pausing it (or a refused play) is not playing, whatever was requested.
+        audio.paused = true;
+        expect(c.clock(out).playing).toBe(false);
+        audio.paused = false;
+        c.pause();
+        expect(c.clock(out).playing).toBe(false);
+        c.next();
+        expect(c.clock(out).track).toBe(audio.src);
     });
 
     it('next wraps around the playlist', () => {
