@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { previewAlpha, previewAlphaFor, previewBannerContent, spreadLabels } from '../previewHud';
+import {
+    previewAlpha,
+    previewAlphaFor,
+    previewBannerContent,
+    previewCardSize,
+    spreadLabels,
+} from '../previewHud';
 import type { Ship } from '../../../types/ship';
 import { createGame, PREVIEW_TOTAL_SECONDS } from '../../../utils/arcade/engine';
 import { PREVIEW_EASE_SECONDS } from '../../../utils/arcade/constants';
@@ -73,5 +79,24 @@ describe('previewBannerContent', () => {
             { name: 'G', portraitUrl: 'img/g' },
             { name: 'H', portraitUrl: 'img/h' },
         ]);
+    });
+});
+
+describe('previewCardSize', () => {
+    const space = { pad: 6, gap: 12, margin: 8 };
+
+    it('fits two three-portrait team cards on a phone-width screen', () => {
+        for (const wanted of [44, 80, 160]) {
+            const { colW, portrait, width } = previewCardSize(390, 3, wanted, true, space);
+            expect(2 * width + space.gap + 2 * space.margin).toBeLessThanOrEqual(390);
+            expect(portrait).toBeLessThanOrEqual(colW);
+        }
+    });
+
+    it('keeps the wanted size when the screen has room', () => {
+        const { colW, portrait } = previewCardSize(1400, 3, 44, true, space);
+        expect(portrait).toBe(44);
+        expect(colW).toBe(60);
+        expect(previewCardSize(1400, 1, 64, false, space).colW).toBe(120);
     });
 });

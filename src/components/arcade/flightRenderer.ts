@@ -100,7 +100,7 @@ import type { NeonAccent } from './ships/factionTint';
 import { DRIFT_YAW_DEG, duckSkid, SKID_TWIST, skidLean, skidRoll } from './skidTilt';
 import { cachedPortrait } from './ships/portraitSprite';
 import { stakesBanner } from './duel/stakesText';
-import { previewAlphaFor, spreadLabels } from './previewHud';
+import { previewAlphaFor, previewCardSize, spreadLabels } from './previewHud';
 import {
     actionPitchDeg,
     duckDip,
@@ -471,12 +471,15 @@ function drawPreviewLabels(
     if (alpha <= 0) return;
     const team = art[0].ships.length > 1;
     const shapes = c.gates.map((lane) => gateShape(g, lane, c.z));
-    const portrait = team
+    const wanted = team
         ? Math.max(PREVIEW_TEAM_PORTRAIT_PX, 0.24 * shapes[0].u)
         : Math.max(PREVIEW_PORTRAIT_PX, 0.5 * shapes[0].u);
     const n = art[0].ships.length;
-    const colW = team ? portrait + 16 : Math.max(portrait, 120);
-    const width = n * colW + (n - 1) * PREVIEW_PAD_PX + 2 * PREVIEW_PAD_PX;
+    const { colW, portrait, width } = previewCardSize(g.w, n, wanted, team, {
+        pad: PREVIEW_PAD_PX,
+        gap: PREVIEW_GAP_PX,
+        margin: PREVIEW_MARGIN_PX,
+    });
     const namePx = team ? 11 : 14;
     const rolePx = team ? 10 : 12;
     const height = 2 * PREVIEW_PAD_PX + portrait * (team ? 1.3 : 1) + 4 + namePx + 2 + rolePx;

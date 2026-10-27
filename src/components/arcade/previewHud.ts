@@ -65,3 +65,20 @@ export function previewBannerContent(
                 : [],
     };
 }
+
+/** A preview card's column width, portrait size and total width for `n` ships, each portrait
+ *  `wanted` pixels wide at most: capped so two cards, the `gap` between them and a `margin` on
+ *  each side fit inside `screenW`, with no portrait wider than its column. */
+export function previewCardSize(
+    screenW: number,
+    n: number,
+    wanted: number,
+    team: boolean,
+    { pad, gap, margin }: { pad: number; gap: number; margin: number }
+): { colW: number; portrait: number; width: number } {
+    const maxWidth = (screenW - 2 * margin - gap) / 2;
+    const maxColW = Math.max(0, (maxWidth - (n + 1) * pad) / n);
+    const colW = Math.min(team ? wanted + 16 : Math.max(wanted, 120), maxColW);
+    const portrait = Math.min(wanted, colW);
+    return { colW, portrait, width: n * colW + (n + 1) * pad };
+}
